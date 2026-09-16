@@ -26,6 +26,7 @@ from app.modules.accounts.schemas import (
     HomeWorkspaceRequest,
     ReferenceOut,
     RejectRequest,
+    SignupPolicyOut,
     SignupRequest,
     SystemAdminRequest,
     TemporaryPasswordResponse,
@@ -33,6 +34,13 @@ from app.modules.accounts.schemas import (
 from app.shared.auth import require_system_admin
 
 router = APIRouter(prefix="/accounts", tags=["accounts"])
+
+
+@router.get("/signup-policy", response_model=SignupPolicyOut)
+def signup_policy() -> SignupPolicyOut:
+    """가입 신청 규칙 — 허용 메일 도메인. `/workspaces/options` 처럼 로그인 전에 읽는다.
+    도메인 목록은 비밀이 아니다(가입 화면이 어차피 안내한다)."""
+    return SignupPolicyOut(email_domains=services.allowed_signup_domains())
 
 
 @router.post("/signup", response_model=AccountOut, status_code=201)

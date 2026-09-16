@@ -124,6 +124,20 @@ def _isolated_filestore(tmp_path_factory: pytest.TempPathFactory) -> Iterator[No
         settings.filestore_dir = original
 
 
+@pytest.fixture(autouse=True)
+def _open_signup() -> Iterator[None]:
+    """가입 도메인 제한을 **시험에서는 푼다.** 시험 계정은 `hong`·`member` 처럼 도메인
+    없는 아이디라, 운영 기본값(@samsung.com)이 켜져 있으면 가입 시험 전부가 422 로
+    죽는다. 제한 자체는 `test_accounts.py::Test가입_도메인` 이 켜서 시험한다."""
+    settings = get_settings()
+    original = settings.signup_email_domains
+    settings.signup_email_domains = []
+    try:
+        yield
+    finally:
+        settings.signup_email_domains = original
+
+
 @pytest.fixture(scope="session")
 def engine():  # type: ignore[no-untyped-def]
     url = _test_url()

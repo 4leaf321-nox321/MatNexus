@@ -21,6 +21,13 @@ class SignupRequest(BaseModel):
     """희망 부서. 승인 시 이 부서의 멤버가 된다."""
 
 
+class SignupPolicyOut(BaseModel):
+    """가입 화면이 **치기 전에** 규칙을 보여 주려고 읽는다. 로그인 전이라 인증이 없다."""
+
+    email_domains: list[str]
+    """비어 있으면 제한 없음."""
+
+
 class AccountIdsOut(BaseModel):
     """가입한 사람의 아이디를 **한 줄로** — 메일 수신자 칸이나 다른 시스템의 계정 등록에
     붙여 넣는 용도(2026-09-15). 목록은 쪽 단위(최대 100)라 화면이 모으면 뒤가 잘린다 —

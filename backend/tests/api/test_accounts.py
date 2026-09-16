@@ -7,11 +7,14 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Iterator
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.config import get_settings
 from app.modules.accounts.models import User
 
 SIGNUP = {
@@ -48,6 +51,45 @@ def test_signup_rejects_duplicate_id(client: TestClient, workspace) -> None:  # 
     again = signup(client)
     assert again.status_code == 409
     assert again.json()["error"]["code"] == "MNX-ACCOUNTS-0002"
+
+
+class Test가입_도메인:
+    """회사 메일로만 신청받는다(2026-09-16). **`@` 뒤를 통째로** 견준다 — 끝이 같기만
+    한 `x@notsamsung.com`·`x@samsung.com.evil` 이 통과하면 제한이 없는 것과 같다."""
+
+    @pytest.fixture(autouse=True)
+    def _restrict(self) -> Iterator[None]:
+        settings = get_settings()
+        settings.signup_email_domains = ["@Samsung.com"]  # 앞 @·대문자도 받아 준다
+        yield
+        settings.signup_email_domains = []
+
+    def test_회사_메일은_들어온다(self, client: TestClient, workspace) -> None:  # type: ignore[no-untyped-def]
+        assert signup(client, email="Hong.GD@Samsung.com").status_code == 201
+        assert client.get("/api/accounts/signup-policy").json() == {
+            "email_domains": ["samsung.com"]
+        }
+
+    @pytest.mark.parametrize(
+        "email", ["hong", "hong@gmail.com", "x@notsamsung.com", "x@samsung.com.evil"]
+    )
+    def test_다른_아이디는_422(self, client: TestClient, workspace, email: str) -> None:  # type: ignore[no-untyped-def]
+        response = signup(client, email=email)
+        assert response.status_code == 422, response.text
+        body = response.json()["error"]
+        assert body["code"] == "MNX-ACCOUNTS-0017"
+        assert "@samsung.com" in body["message"]
+
+    def test_관리자가_만드는_계정은_제한이_없다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        """`admin` 같은 아이디는 이 길로만 생긴다 — 관리자가 일부러 만드는 것이다."""
+        made = client.post(
+            "/api/accounts",
+            json={"email": "park", "display_name": "박연구", "workspace_slug": "metal"},
+            headers=admin_headers,
+        )
+        assert made.status_code == 201, made.text
 
 
 def test_signup_rejects_unknown_workspace(client: TestClient, workspace) -> None:  # type: ignore[no-untyped-def]

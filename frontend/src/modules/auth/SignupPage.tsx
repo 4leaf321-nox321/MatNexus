@@ -30,9 +30,24 @@ import { useResource } from '@/shared/hooks/useResource'
 
 const MIN_PASSWORD = 10
 
+function domainHint(domains: string[]): string {
+  return `회사 메일 주소(${domains.map((d) => `@${d}`).join(' · ')})로만 신청할 수 있습니다.`
+}
+
+/** 서버와 같은 규칙 — `@` 뒤를 통째로 견준다. 도메인 목록이 비면 제한 없음. */
+function matchesDomain(email: string, domains: string[]): boolean {
+  if (domains.length === 0) return true
+  const at = email.trim().toLowerCase().lastIndexOf('@')
+  return at >= 0 && domains.includes(email.trim().toLowerCase().slice(at + 1))
+}
+
 export default function SignupPage() {
   const navigate = useNavigate()
   const workspaces = useResource(() => workspacesApi.options(), [])
+  // **치기 전에 규칙을 보여 준다.** 서버도 같은 규칙으로 막지만(422), 다 치고 나서
+  // 아이디부터 틀렸다고 듣는 것은 사람을 두 번 일하게 한다. 못 읽었으면 서버에 맡긴다.
+  const policy = useResource(() => accountsApi.signupPolicy(), [])
+  const domains = policy.data?.email_domains ?? []
 
   const [email, setEmail] = useState('')
   const [displayName, setDisplayName] = useState('')
@@ -45,6 +60,10 @@ export default function SignupPage() {
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (!matchesDomain(email, domains)) {
+      setError(new Error(domainHint(domains)))
+      return
+    }
     if (password !== confirm) {
       setError(new Error('비밀번호가 서로 다릅니다.'))
       return
@@ -116,12 +135,15 @@ export default function SignupPage() {
                 id="email"
                 type="text"
                 autoComplete="username"
-                placeholder="이메일 또는 아이디"
+                placeholder={domains.length > 0 ? `이름@${domains[0]}` : '이메일 또는 아이디'}
                 required
                 autoFocus
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
               />
+              {domains.length > 0 && (
+                <p className="text-muted-foreground text-xs">{domainHint(domains)}</p>
+              )}
             </div>
 
             <div className="space-y-1.5">

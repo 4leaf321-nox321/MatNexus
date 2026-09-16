@@ -13,6 +13,7 @@ from datetime import UTC, datetime
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.config import get_settings
 from app.jobs import kinds, queue
 from app.modules.accounts.models import User
 from app.modules.accounts.schemas import AccountOut
@@ -67,10 +68,41 @@ def account_out(db: Session, user: User) -> AccountOut:
 # --- 가입 ---------------------------------------------------------------------
 
 
+def allowed_signup_domains() -> list[str]:
+    """설정의 도메인을 **소문자·앞 `@` 없이** 정리한 것. `@Samsung.com` 으로 적어도 된다."""
+    return [
+        one.strip().lstrip("@").lower()
+        for one in get_settings().signup_email_domains
+        if one.strip().lstrip("@")
+    ]
+
+
+def require_signup_domain(email: str) -> None:
+    """가입 신청 아이디가 허용 도메인으로 끝나는지. 아니면 422.
+
+    `endswith("samsung.com")` 이 아니라 `@` 뒤를 통째로 견준다 — `x@notsamsung.com`
+    이나 `x@samsung.com.evil` 이 통과하면 안 된다.
+    """
+    domains = allowed_signup_domains()
+    if not domains:
+        return
+    _, at, domain = email.strip().lower().rpartition("@")
+    if at and domain in domains:
+        return
+    shown = " · ".join(f"@{one}" for one in domains)
+    raise AppError(
+        "MNX-ACCOUNTS-0017",
+        f"회사 메일 주소({shown})로만 가입을 신청할 수 있습니다.",
+        status=422,
+        details={"email_domains": domains},
+    )
+
+
 def signup(
     db: Session, *, email: str, password: str, display_name: str, workspace_slug: str
 ) -> User:
     normalized = email.strip().lower()
+    require_signup_domain(normalized)
     workspace = _workspace_by_slug(db, workspace_slug)
 
     if db.scalar(select(User).where(User.email == normalized)) is not None:

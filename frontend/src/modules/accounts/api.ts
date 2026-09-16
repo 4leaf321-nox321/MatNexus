@@ -15,6 +15,7 @@ export type Reference = components['schemas']['ReferenceOut']
 type DeleteResult = components['schemas']['DeleteAccountResponse']
 type TemporaryPassword = components['schemas']['TemporaryPasswordResponse']
 type SignupRequest = components['schemas']['SignupRequest']
+export type SignupPolicy = components['schemas']['SignupPolicyOut']
 type CreateAccountRequest = components['schemas']['CreateAccountRequest']
 export type AccountSummary = components['schemas']['AccountSummaryOut']
 export type AccountIds = components['schemas']['AccountIdsOut']
@@ -22,6 +23,9 @@ type SystemAdminRequest = components['schemas']['SystemAdminRequest']
 
 export const accountsApi = {
   signup: (payload: SignupRequest) => api.post<Account>('/accounts/signup', payload),
+
+  /** 가입 규칙(허용 메일 도메인). 로그인 전에 읽는다 — 치기 전에 알려 준다. */
+  signupPolicy: () => api.get<SignupPolicy>('/accounts/signup-policy'),
 
   list: (status?: AccountStatus) =>
     api.get<Account[]>(status ? `/accounts?status=${status}` : '/accounts'),

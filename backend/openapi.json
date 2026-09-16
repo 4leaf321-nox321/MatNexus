@@ -21472,6 +21472,23 @@
         "title": "ShiftOut",
         "type": "object"
       },
+      "SignupPolicyOut": {
+        "description": "가입 화면이 **치기 전에** 규칙을 보여 주려고 읽는다. 로그인 전이라 인증이 없다.",
+        "properties": {
+          "email_domains": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Email Domains",
+            "type": "array"
+          }
+        },
+        "required": [
+          "email_domains"
+        ],
+        "title": "SignupPolicyOut",
+        "type": "object"
+      },
       "SignupRequest": {
         "properties": {
           "display_name": {
@@ -27367,6 +27384,28 @@
           }
         },
         "summary": "Signup",
+        "tags": [
+          "accounts"
+        ]
+      }
+    },
+    "/api/accounts/signup-policy": {
+      "get": {
+        "description": "가입 신청 규칙 — 허용 메일 도메인. `/workspaces/options` 처럼 로그인 전에 읽는다.\n도메인 목록은 비밀이 아니다(가입 화면이 어차피 안내한다).",
+        "operationId": "signup_policy_api_accounts_signup_policy_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignupPolicyOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Signup Policy",
         "tags": [
           "accounts"
         ]

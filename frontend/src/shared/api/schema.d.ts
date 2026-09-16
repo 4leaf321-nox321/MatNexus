@@ -64,6 +64,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/accounts/signup-policy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Signup Policy
+         * @description 가입 신청 규칙 — 허용 메일 도메인. `/workspaces/options` 처럼 로그인 전에 읽는다.
+         *     도메인 목록은 비밀이 아니다(가입 화면이 어차피 안내한다).
+         */
+        get: operations["signup_policy_api_accounts_signup_policy_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/accounts/summary": {
         parameters: {
             query?: never;
@@ -14631,6 +14652,14 @@ export interface components {
             /** Temperature K */
             temperature_k: number;
         };
+        /**
+         * SignupPolicyOut
+         * @description 가입 화면이 **치기 전에** 규칙을 보여 주려고 읽는다. 로그인 전이라 인증이 없다.
+         */
+        SignupPolicyOut: {
+            /** Email Domains */
+            email_domains: string[];
+        };
         /** SignupRequest */
         SignupRequest: {
             /** Display Name */
@@ -17007,6 +17036,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    signup_policy_api_accounts_signup_policy_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SignupPolicyOut"];
                 };
             };
         };
