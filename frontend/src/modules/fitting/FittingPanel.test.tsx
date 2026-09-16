@@ -48,6 +48,9 @@ vi.mock('@/modules/fitting/api', async (importOriginal) => ({
     // 카드 목록이 비어 있어도 화면은 형식·블록 선언을 먼저 읽는다.
     formats: () => Promise.resolve([]),
     blocks: () => Promise.resolve([]),
+    // 「낼 수 있는 형식」 표 — 이 시험은 카드 만들기를 본다, 준비도는 제 시험이 있다.
+    deckReadiness: () =>
+      Promise.resolve({ material_id: 'm', card_count: 0, formats: [], note: '' }),
     // 「탄소성 카드」 단추가 연 모달은 그 블록의 식만 견준다 — 식 목록은 서버가 준다.
     families: () =>
       Promise.resolve([

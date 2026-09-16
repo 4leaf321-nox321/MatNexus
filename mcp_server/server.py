@@ -1118,6 +1118,32 @@ def _deck_body(text: str, include_text: bool) -> dict[str, Any]:
 
 
 @mcp.tool()
+async def deck_readiness(ctx: Context, material_id: str) -> dict[str, Any]:
+    """이 재료로 **어느 솔버 형식이 나오나 · 안 나오면 무엇이 없나 · 어디서 채우나** — 한 번에.
+
+    덱을 시도하기 **전에** 본다. 전에는 카드를 열어 `available_formats` 를 봐야 「나오나」 를
+    알았고, 「왜 안 나오나」 는 렌더 실패 메시지로만 알았다.
+
+        formats[].ready            이 형식이 나온다 (확정 카드 먼저 대어 봄)
+        formats[].card_id          나오면 그 카드 — 그대로 build_deck / render_card_deck 에
+        formats[].missing[]        안 나오면 빠진 블록마다:
+            .what                    무엇이 없나 (「소성 표」 「탄성 · 푸아송비」 …)
+            .tests[]                 그 블록을 내는 시험 종류 — test_type_ids 가 비면 그 시험을
+                                     만든 부서가 아직 없다
+            .catalog                 이어진 문헌 재료에서 채택할 수 있는 값의 수 (adopt_catalog_values)
+            .declarable_values       사람이 적어 넣을 수 있는 값 (create_declared_card)
+
+    ## 사람에게 말하는 법
+
+    「MAT_024 는 나옵니다(카드 「대표 TD」). Abaqus 점탄성은 Prony 표가 없어 안 나옵니다 —
+    DMA 를 하면 생기고(등록된 시험 종류: 동적 점탄성), 문헌에는 채택할 값이 0건입니다.」
+    처럼 **형식 · 빠진 것 · 채울 길**을 한 문장씩. 판정 규칙은 렌더와 같다 — 준비도가
+    「나온다」 인데 덱이 안 나오면 그것은 버그다.
+    """
+    return await _get(ctx, f"/fitting/materials/{material_id}/deck-readiness")
+
+
+@mcp.tool()
 async def build_deck(
     ctx: Context,
     rows: list[dict[str, Any]],
@@ -3136,6 +3162,13 @@ _RECIPES: list[dict[str, str]] = [
         "steps": 'search_all(q=제목, kind="source", mode="similar") → '
         'related(kind="source", id=…, relation="cited_by")',
         "note": "출처가 마디라서 한 홉이다. 값을 하나씩 뒤지지 마라.",
+    },
+    {
+        "question": "이 재료로 이 솔버 형식(MAT_024·Abaqus…)이 나오나 / 안 나오면 왜 · 어디서 채우나",
+        "steps": "deck_readiness(material_id) → ready 면 build_deck(rows=[{mid, material_id}], "
+        "format=…) · 아니면 missing[].tests / .catalog / .declarable_values 를 사람에게",
+        "note": "카드를 열어 available_formats 를 보지 마라 — 준비도가 형식마다 한 번에 답한다. "
+        "지도의 deck_requirements 가 그 규칙(형식→블록, 블록→시험·문헌)이다.",
     },
     {
         "question": "점탄성·Prony·경화식 같은 갈래가 카드에 있나",

@@ -79,6 +79,7 @@ VISCOELASTIC = register_block(
         ),
         order=40,
         kind_priority=4,
+        from_tests=("dma_sweep",),
     )
 )
 
@@ -134,5 +135,6 @@ LVE = register_block(
         ),
         order=45,
         kind_priority=5,
+        from_tests=("dma_sweep",),
     )
 )

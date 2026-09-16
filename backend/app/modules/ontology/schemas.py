@@ -27,11 +27,28 @@ class OntologyRelationOut(BaseModel):
     note: str = ""
 
 
+class DeckRequirementsOut(BaseModel):
+    """**코드에 있던 관계 셋**을 지도에 싣는다(2026-09-16, [계획] 온톨로지 고도화 §2-A).
+
+    표가 아니라 레지스트리에 사는 사실이라 `relations` 의 마디·관계로는 못 걷는다 —
+    대신 여기 정적으로 적어 AI 가 「이 형식엔 무엇이 필요하고, 그 블록은 어느 시험이
+    내고, 어느 문헌 물성이 채우나」 를 한 번에 읽는다. 재료 하나에 대어 본 답은
+    `GET /fitting/materials/{id}/deck-readiness`."""
+
+    format_needs: dict[str, list[str]]
+    """형식 key → 반드시 있어야 하는 블록."""
+    block_from_tests: dict[str, list[str]]
+    """블록 → 그 블록을 내는 시험 종류 키."""
+    block_fills: dict[str, list[str]]
+    """블록 → 그 블록의 값을 채우는 문헌 물성 키(`catalog_definitions.key`)."""
+
+
 class OntologyOut(BaseModel):
     """지도 전체. **AI 는 이걸 읽고 다음 질문을 만든다.**"""
 
     kinds: list[OntologyKindOut]
     relations: list[OntologyRelationOut]
+    deck_requirements: DeckRequirementsOut
 
 
 class GraphNodeOut(BaseModel):

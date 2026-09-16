@@ -23,6 +23,8 @@ export type UnitSystemBaseUnits = components['schemas']['UnitSystemBaseUnitsOut'
 export type PropertyCardSaveRequest = components['schemas']['PropertyCardSaveRequest']
 type PropertyCardUpdate = components['schemas']['PropertyCardUpdateRequest']
 export type ExportFormat = components['schemas']['ExportFormatOut']
+export type DeckReadiness = components['schemas']['DeckReadinessOut']
+export type ReadinessMissing = components['schemas']['ReadinessMissingOut']
 export type ResampleMethod = components['schemas']['ResampleMethodOut']
 export type BlockSpec = components['schemas']['BlockSpecOut']
 export type Produced = components['schemas']['CardValueOut']
@@ -243,6 +245,10 @@ export const fittingApi = {
 
   /** 솔버 목록. **화면이 손으로 적지 않는다** — 새 솔버가 붙으면 따라온다. */
   formats: () => api.get<ExportFormat[]>('/fitting/formats'),
+
+  /** 이 재료로 어느 형식이 나오나 · 왜 안 나오나 · 어디서 채우나 — 판정은 내보내기와 같다. */
+  deckReadiness: (materialId: string) =>
+    api.get<DeckReadiness>(`/fitting/materials/${materialId}/deck-readiness`),
 
   /**
    * 솔버 카드를 내려받는다.

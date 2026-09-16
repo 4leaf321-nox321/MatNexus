@@ -60,6 +60,7 @@ ELASTIC = register_block(
         # 못 먹는 형식이 그것을 쓰고, 목록이 대푯값 하나를 보일 때도 쓴다.
         order=10,
         kind_priority=None,
+        from_tests=("tensile",),
     )
 )
 
@@ -109,6 +110,7 @@ HARDENING = register_block(
         # **덱에 안 실린다.** 실리지 않는다고 쓸모없는 것이 아니라 실리는 자리가
         order=20,
         kind_priority=3,
+        from_tests=("tensile",),
     )
 )
 
@@ -163,6 +165,7 @@ TABLE = register_block(
         curve=("plastic_strain", "true_stress"),
         order=30,
         kind_priority=None,
+        from_tests=("tensile",),
     )
 )
 
@@ -214,5 +217,6 @@ RATE_TABLE = register_block(
         ),
         order=35,
         kind_priority=1,
+        from_tests=("tensile",),
     )
 )

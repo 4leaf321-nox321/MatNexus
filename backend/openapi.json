@@ -6861,6 +6861,81 @@
         "title": "DeckPreviewOut",
         "type": "object"
       },
+      "DeckReadinessOut": {
+        "description": "이 재료로 어느 솔버 형식이 **나오나 · 왜 안 나오나 · 어디서 채우나.**\n\n연결된 플랫폼과 AI 가 덱을 시도하기 전에 본다 — 렌더 실패 메시지로 알던 것을\n질의 한 번으로(2026-09-16).",
+        "properties": {
+          "card_count": {
+            "title": "Card Count",
+            "type": "integer"
+          },
+          "formats": {
+            "items": {
+              "$ref": "#/components/schemas/ReadinessFormatOut"
+            },
+            "title": "Formats",
+            "type": "array"
+          },
+          "material_id": {
+            "format": "uuid",
+            "title": "Material Id",
+            "type": "string"
+          },
+          "note": {
+            "title": "Note",
+            "type": "string"
+          }
+        },
+        "required": [
+          "material_id",
+          "card_count",
+          "formats",
+          "note"
+        ],
+        "title": "DeckReadinessOut",
+        "type": "object"
+      },
+      "DeckRequirementsOut": {
+        "description": "**코드에 있던 관계 셋**을 지도에 싣는다(2026-09-16, [계획] 온톨로지 고도화 §2-A).\n\n표가 아니라 레지스트리에 사는 사실이라 `relations` 의 마디·관계로는 못 걷는다 —\n대신 여기 정적으로 적어 AI 가 「이 형식엔 무엇이 필요하고, 그 블록은 어느 시험이\n내고, 어느 문헌 물성이 채우나」 를 한 번에 읽는다. 재료 하나에 대어 본 답은\n`GET /fitting/materials/{id}/deck-readiness`.",
+        "properties": {
+          "block_fills": {
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "title": "Block Fills",
+            "type": "object"
+          },
+          "block_from_tests": {
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "title": "Block From Tests",
+            "type": "object"
+          },
+          "format_needs": {
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "title": "Format Needs",
+            "type": "object"
+          }
+        },
+        "required": [
+          "format_needs",
+          "block_from_tests",
+          "block_fills"
+        ],
+        "title": "DeckRequirementsOut",
+        "type": "object"
+      },
       "DeckScanIn": {
         "description": "예제 덱 하나. **저장하지 않는다** — 읽고 초안만 돌려준다.",
         "properties": {
@@ -15356,6 +15431,9 @@
       "OntologyOut": {
         "description": "지도 전체. **AI 는 이걸 읽고 다음 질문을 만든다.**",
         "properties": {
+          "deck_requirements": {
+            "$ref": "#/components/schemas/DeckRequirementsOut"
+          },
           "kinds": {
             "items": {
               "$ref": "#/components/schemas/OntologyKindOut"
@@ -15373,7 +15451,8 @@
         },
         "required": [
           "kinds",
-          "relations"
+          "relations",
+          "deck_requirements"
         ],
         "title": "OntologyOut",
         "type": "object"
@@ -18813,6 +18892,168 @@
           "denominator"
         ],
         "title": "RatioCheckOut",
+        "type": "object"
+      },
+      "ReadinessCatalogWayOut": {
+        "properties": {
+          "property_keys": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Property Keys",
+            "type": "array"
+          },
+          "values_available": {
+            "title": "Values Available",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "property_keys",
+          "values_available"
+        ],
+        "title": "ReadinessCatalogWayOut",
+        "type": "object"
+      },
+      "ReadinessFormatOut": {
+        "properties": {
+          "card_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Card Id"
+          },
+          "card_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Card Label"
+          },
+          "extension": {
+            "title": "Extension",
+            "type": "string"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "missing": {
+            "items": {
+              "$ref": "#/components/schemas/ReadinessMissingOut"
+            },
+            "title": "Missing",
+            "type": "array"
+          },
+          "ready": {
+            "title": "Ready",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "extension",
+          "ready",
+          "card_id",
+          "card_label",
+          "missing"
+        ],
+        "title": "ReadinessFormatOut",
+        "type": "object"
+      },
+      "ReadinessMissingOut": {
+        "properties": {
+          "block": {
+            "title": "Block",
+            "type": "string"
+          },
+          "catalog": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReadinessCatalogWayOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "declarable_values": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Declarable Values",
+            "type": "array"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "tests": {
+            "items": {
+              "$ref": "#/components/schemas/ReadinessTestWayOut"
+            },
+            "title": "Tests",
+            "type": "array"
+          },
+          "what": {
+            "items": {
+              "type": "string"
+            },
+            "title": "What",
+            "type": "array"
+          }
+        },
+        "required": [
+          "block",
+          "label",
+          "what",
+          "tests",
+          "catalog",
+          "declarable_values"
+        ],
+        "title": "ReadinessMissingOut",
+        "type": "object"
+      },
+      "ReadinessTestWayOut": {
+        "properties": {
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "test_type_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Test Type Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "test_type_ids"
+        ],
+        "title": "ReadinessTestWayOut",
         "type": "object"
       },
       "RecipeCreateRequest": {
@@ -32642,6 +32883,50 @@
           }
         },
         "summary": "List Formats",
+        "tags": [
+          "fitting"
+        ]
+      }
+    },
+    "/api/fitting/materials/{material_id}/deck-readiness": {
+      "get": {
+        "description": "이 재료로 어느 형식이 나오나 — 카드마다 열어 보지 않고 한 번에.\n\n확정된 카드 먼저 대어 본다. 안 나오는 형식은 **빠진 블록마다 채울 길**을 붙인다:\n그 블록을 내는 시험 종류(부서에 등록된 것), 이어진 문헌 재료에서 채택할 수 있는\n값의 수, 사람이 적어 넣을 수 있는지.",
+        "operationId": "deck_readiness_api_fitting_materials__material_id__deck_readiness_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "material_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Material Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeckReadinessOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Deck Readiness",
         "tags": [
           "fitting"
         ]

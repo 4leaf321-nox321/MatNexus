@@ -37,6 +37,7 @@ import { DeclaredCardDialog } from '@/modules/fitting/DeclaredCardDialog'
 import { GroupsPanel } from '@/modules/materials/GroupsPanel'
 import { groupsApi } from '@/modules/materials/api.groups'
 import { InheritedFields, densityToSi } from '@/modules/fitting/InheritedFields'
+import { DeckReadinessTable } from '@/modules/fitting/DeckReadinessTable'
 import { ExportMenu } from '@/modules/fitting/ExportMenu'
 import { STATUS_LABELS, fittingApi } from '@/modules/fitting/api'
 import { RunPicker } from '@/modules/fitting/RunPicker'
@@ -665,6 +666,10 @@ export function FittingPanel({ materialId }: Props) {
           }}
         />
       )}
+      {/* 카드 목록 아래 — 「이 재료로 어느 솔버 형식이 나오나」. 카드를 하나씩 열어 내보내기
+          메뉴를 보지 않아도 형식마다 한 줄로 답한다(2026-09-16). */}
+      <DeckReadinessTable materialId={materialId} />
+
       <DeclaredCardDialog
         materialId={materialId}
         open={declaring}

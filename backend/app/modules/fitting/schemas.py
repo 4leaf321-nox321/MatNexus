@@ -252,6 +252,48 @@ class ExportFormatOut(BaseModel):
     내려받기를 누른 뒤에 "푸아송비가 없습니다" 를 보는 것은 늦다."""
 
 
+class ReadinessTestWayOut(BaseModel):
+    key: str
+    label: str
+    test_type_ids: list[uuid.UUID]
+
+
+class ReadinessCatalogWayOut(BaseModel):
+    property_keys: list[str]
+    values_available: int
+
+
+class ReadinessMissingOut(BaseModel):
+    block: str
+    label: str
+    what: list[str]
+    tests: list[ReadinessTestWayOut]
+    catalog: ReadinessCatalogWayOut | None
+    declarable_values: list[str]
+
+
+class ReadinessFormatOut(BaseModel):
+    key: str
+    label: str
+    extension: str
+    ready: bool
+    card_id: uuid.UUID | None
+    card_label: str | None
+    missing: list[ReadinessMissingOut]
+
+
+class DeckReadinessOut(BaseModel):
+    """이 재료로 어느 솔버 형식이 **나오나 · 왜 안 나오나 · 어디서 채우나.**
+
+    연결된 플랫폼과 AI 가 덱을 시도하기 전에 본다 — 렌더 실패 메시지로 알던 것을
+    질의 한 번으로(2026-09-16)."""
+
+    material_id: uuid.UUID
+    card_count: int
+    formats: list[ReadinessFormatOut]
+    note: str
+
+
 class ExportProfileOut(BaseModel):
     """저장된 해석용 물성 정의 하나."""
 

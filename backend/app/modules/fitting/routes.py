@@ -28,7 +28,7 @@ from app import version
 from app.database import get_db
 from app.modules.accounts.models import User
 from app.modules.catalog.models import CatalogMaterial
-from app.modules.fitting import bundle, renderers
+from app.modules.fitting import bundle, readiness, renderers
 from app.modules.fitting.models import ExportProfile, PropertyCard, UnitSystemDef
 from app.modules.fitting.schemas import (
     BlockSpecOut,
@@ -46,6 +46,7 @@ from app.modules.fitting.schemas import (
     DeckKeysOut,
     DeckPreviewIn,
     DeckPreviewOut,
+    DeckReadinessOut,
     DeckScanIn,
     DeckScanOut,
     DeckTableOut,
@@ -3910,6 +3911,30 @@ def _pick_card_deck(
     return None, "카드로 낼 수 있는 형식이 없습니다 — " + "; ".join(
         export.missing_for(first, targets[0])
     )
+
+
+@router.get("/materials/{material_id}/deck-readiness", response_model=DeckReadinessOut)
+def deck_readiness(
+    material_id: uuid.UUID,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> DeckReadinessOut:
+    """이 재료로 어느 형식이 나오나 — 카드마다 열어 보지 않고 한 번에.
+
+    확정된 카드 먼저 대어 본다. 안 나오는 형식은 **빠진 블록마다 채울 길**을 붙인다:
+    그 블록을 내는 시험 종류(부서에 등록된 것), 이어진 문헌 재료에서 채택할 수 있는
+    값의 수, 사람이 적어 넣을 수 있는지.
+    """
+    cards.load_builtin()
+    rows = _cards_for_material(db, user, material_id)
+    decks = [(item, _deck_for_card(db, user, item.id)) for item in rows]
+    made = readiness.assess(
+        db,
+        material_id=material_id,
+        decks=decks,
+        renderers=renderers.all_renderers(db, user.home_workspace_id),
+    )
+    return DeckReadinessOut.model_validate(made, from_attributes=True)
 
 
 @router.post("/decks/bom", response_model=BomDeckOut)

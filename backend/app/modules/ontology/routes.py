@@ -23,6 +23,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.modules.accounts.models import User
 from app.modules.ontology.schemas import (
+    DeckRequirementsOut,
     GraphEdgeOut,
     GraphNodeOut,
     OntologyKindOut,
@@ -31,7 +32,7 @@ from app.modules.ontology.schemas import (
     PathOut,
     RelatedOut,
 )
-from app.shared import graph, relations
+from app.shared import deckmap, graph, relations
 from app.shared.auth import current_user
 from app.shared.errors import AppError
 
@@ -65,16 +66,29 @@ def _node(one: graph.Node) -> GraphNodeOut:
 
 
 @router.get("", response_model=OntologyOut)
-def get_ontology(user: User = Depends(current_user)) -> OntologyOut:
+def get_ontology(
+    user: User = Depends(current_user), db: Session = Depends(get_db)
+) -> OntologyOut:
     """**지도 전체.** 어떤 종류가 있고 무엇이 무엇과 어떤 사이인가.
 
     AI 가 길을 찾으려면 스키마를 먼저 알아야 한다 — 사람은 화면에서 링크를 눌러
     다니지만 AI 에게는 이 응답이 지도의 전부다.
     """
     shape = relations.describe()
+    sources = deckmap.block_sources()
     return OntologyOut(
         kinds=[OntologyKindOut(**one) for one in shape["kinds"]],
         relations=[OntologyRelationOut(**one) for one in shape["relations"]],
+        deck_requirements=DeckRequirementsOut(
+            format_needs={
+                key: list(blocks)
+                for key, blocks in deckmap.format_needs(
+                    deckmap.all_renderers(db, user.home_workspace_id)
+                ).items()
+            },
+            block_from_tests={key: list(one["from_tests"]) for key, one in sources.items()},
+            block_fills={key: list(one["fills"]) for key, one in sources.items()},
+        ),
     )
 
 

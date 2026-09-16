@@ -2137,6 +2137,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/fitting/materials/{material_id}/deck-readiness": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Deck Readiness
+         * @description 이 재료로 어느 형식이 나오나 — 카드마다 열어 보지 않고 한 번에.
+         *
+         *     확정된 카드 먼저 대어 본다. 안 나오는 형식은 **빠진 블록마다 채울 길**을 붙인다:
+         *     그 블록을 내는 시험 종류(부서에 등록된 것), 이어진 문헌 재료에서 채택할 수 있는
+         *     값의 수, 사람이 적어 넣을 수 있는지.
+         */
+        get: operations["deck_readiness_api_fitting_materials__material_id__deck_readiness_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/fitting/preview": {
         parameters: {
             query?: never;
@@ -9172,6 +9196,49 @@ export interface components {
             text?: string | null;
         };
         /**
+         * DeckReadinessOut
+         * @description 이 재료로 어느 솔버 형식이 **나오나 · 왜 안 나오나 · 어디서 채우나.**
+         *
+         *     연결된 플랫폼과 AI 가 덱을 시도하기 전에 본다 — 렌더 실패 메시지로 알던 것을
+         *     질의 한 번으로(2026-09-16).
+         */
+        DeckReadinessOut: {
+            /** Card Count */
+            card_count: number;
+            /** Formats */
+            formats: components["schemas"]["ReadinessFormatOut"][];
+            /**
+             * Material Id
+             * Format: uuid
+             */
+            material_id: string;
+            /** Note */
+            note: string;
+        };
+        /**
+         * DeckRequirementsOut
+         * @description **코드에 있던 관계 셋**을 지도에 싣는다(2026-09-16, [계획] 온톨로지 고도화 §2-A).
+         *
+         *     표가 아니라 레지스트리에 사는 사실이라 `relations` 의 마디·관계로는 못 걷는다 —
+         *     대신 여기 정적으로 적어 AI 가 「이 형식엔 무엇이 필요하고, 그 블록은 어느 시험이
+         *     내고, 어느 문헌 물성이 채우나」 를 한 번에 읽는다. 재료 하나에 대어 본 답은
+         *     `GET /fitting/materials/{id}/deck-readiness`.
+         */
+        DeckRequirementsOut: {
+            /** Block Fills */
+            block_fills: {
+                [key: string]: string[];
+            };
+            /** Block From Tests */
+            block_from_tests: {
+                [key: string]: string[];
+            };
+            /** Format Needs */
+            format_needs: {
+                [key: string]: string[];
+            };
+        };
+        /**
          * DeckScanIn
          * @description 예제 덱 하나. **저장하지 않는다** — 읽고 초안만 돌려준다.
          */
@@ -12208,6 +12275,7 @@ export interface components {
          * @description 지도 전체. **AI 는 이걸 읽고 다음 질문을 만든다.**
          */
         OntologyOut: {
+            deck_requirements: components["schemas"]["DeckRequirementsOut"];
             /** Kinds */
             kinds: components["schemas"]["OntologyKindOut"][];
             /** Relations */
@@ -13639,6 +13707,53 @@ export interface components {
             minimum?: number | null;
             /** Numerator */
             numerator: string;
+        };
+        /** ReadinessCatalogWayOut */
+        ReadinessCatalogWayOut: {
+            /** Property Keys */
+            property_keys: string[];
+            /** Values Available */
+            values_available: number;
+        };
+        /** ReadinessFormatOut */
+        ReadinessFormatOut: {
+            /** Card Id */
+            card_id: string | null;
+            /** Card Label */
+            card_label: string | null;
+            /** Extension */
+            extension: string;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Missing */
+            missing: components["schemas"]["ReadinessMissingOut"][];
+            /** Ready */
+            ready: boolean;
+        };
+        /** ReadinessMissingOut */
+        ReadinessMissingOut: {
+            /** Block */
+            block: string;
+            catalog: components["schemas"]["ReadinessCatalogWayOut"] | null;
+            /** Declarable Values */
+            declarable_values: string[];
+            /** Label */
+            label: string;
+            /** Tests */
+            tests: components["schemas"]["ReadinessTestWayOut"][];
+            /** What */
+            what: string[];
+        };
+        /** ReadinessTestWayOut */
+        ReadinessTestWayOut: {
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Test Type Ids */
+            test_type_ids: string[];
         };
         /** RecipeCreateRequest */
         RecipeCreateRequest: {
@@ -20434,6 +20549,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ExportFormatOut"][];
+                };
+            };
+        };
+    };
+    deck_readiness_api_fitting_materials__material_id__deck_readiness_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                material_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeckReadinessOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
