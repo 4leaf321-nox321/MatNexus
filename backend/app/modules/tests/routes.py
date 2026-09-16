@@ -23,6 +23,7 @@ from app.config import get_settings
 from app.database import get_db
 from app.jobs import kinds, queue
 from app.modules.accounts.models import User
+from app.modules.commissions.models import Commission, CommissionItem
 from app.modules.materials.models import Material, Sample, Specimen
 from app.modules.processing.models import ProcessingResult
 from app.modules.tests import formats, importing, services
@@ -51,6 +52,7 @@ from app.modules.tests.schemas import (
     RetypeRequest,
     RunBulkUpdateOut,
     RunBulkUpdateRequest,
+    RunCommissionOut,
     RunDeleteOut,
     RunDeleteRequest,
     RunFacetOut,
@@ -1443,9 +1445,25 @@ def get_run(
         .join(MasterCurve, MasterCurve.id == PronyFit.master_curve_id)
         .where(MasterCurve.test_run_id == run.id)
     )
+    commission_out = None
+    if run.commission_item_id is not None:
+        found = db.execute(
+            select(Commission, CommissionItem.position)
+            .join(CommissionItem, CommissionItem.commission_id == Commission.id)
+            .where(CommissionItem.id == run.commission_item_id)
+        ).first()
+        if found is not None:
+            commission_out = RunCommissionOut(
+                id=found[0].id,
+                seq=found[0].seq,
+                title=found[0].title,
+                status=found[0].status,
+                item_position=int(found[1]),
+            )
     return TestRunDetailOut(
         **base.model_dump(),
         prony_fit_count=int(fits or 0),
+        commission=commission_out,
         summary=[
             TestSummaryOut(
                 key=s.key,

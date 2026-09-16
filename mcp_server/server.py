@@ -2841,6 +2841,44 @@ async def list_processing_inputs(ctx: Context, test_run_id: str) -> dict[str, An
 
 
 @mcp.tool()
+async def list_commissions(
+    ctx: Context,
+    scope: str = "all",
+    status: str | None = None,
+    q: str | None = None,
+    limit: int = 20,
+) -> dict[str, Any]:
+    """측정 의뢰 목록 — 「누가 무엇을 왜 재 달라고 했고 어디까지 됐나」(v1.234).
+
+        scope   mine(우리 부서가 낸 것) · received(우리 부서가 받은 것) · all
+        status  draft · submitted(접수 대기) · accepted · in_progress · on_hold ·
+                delivered(결과 전달) · closed · rejected
+
+    **낸 부서·받는 부서만 본다** — 두 부서 사이의 약속이라 제3부서 것은 목록에 없다.
+    남의 의뢰가 안 보이는 것은 정상이고 「없다」 고 말하면 틀린다 — 「내가 볼 수 있는
+    범위에는 없다」 로 말해라. 한 건을 열려면 `get_commission`. 의뢰에서 시험·값으로
+    내려가는 길은 `get_ontology` 의 레시피(`commission` → `item_of` → `requested_by`).
+    """
+    params: dict[str, Any] = {"scope": scope, "limit": max_limit(limit)}
+    if status:
+        params["status"] = status
+    if q:
+        params["q"] = q
+    return await _get(ctx, "/commissions", params)
+
+
+@mcp.tool()
+async def get_commission(ctx: Context, commission_id: str) -> dict[str, Any]:
+    """의뢰 한 건 — 항목(시험 종류·조건·수량·받을 것)·붙은 시험·진행률·이력.
+
+    `progress` 가 {total, linked, done} 이다: 항목 수량 합 · 붙은 시험 · 채택된 결과.
+    `items[].runs` 에 붙은 시험이, `events` 에 누가 언제 무슨 말로 옮겼는지가 있다.
+    **상태를 옮기는 도구는 없다** — 접수·보류·결과 전달은 사람이 화면에서 말과 함께 한다.
+    """
+    return await _get(ctx, f"/commissions/{commission_id}")
+
+
+@mcp.tool()
 async def list_recipes(ctx: Context, test_type: str | None = None) -> dict[str, Any]:
     """저장된 처리 레시피들 — **사람이 이미 합의해 둔 단계 묶음.**
 

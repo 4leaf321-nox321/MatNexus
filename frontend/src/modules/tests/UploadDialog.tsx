@@ -13,10 +13,11 @@ import { useEffect, useState } from 'react'
 import { Loader2, Upload } from 'lucide-react'
 
 import { SpecimenPicker } from '@/modules/materials/SpecimenPicker'
+import { LENGTH_UNIT, materialsApi } from '@/modules/materials/api'
 import type { Specimen } from '@/modules/materials/api'
 import { testsApi } from '@/modules/tests/api'
 import { VocabularyField } from '@/modules/vocabulary/VocabularyField'
-import type { TestType } from '@/modules/tests/api'
+import type { TestRun, TestType } from '@/modules/tests/api'
 import { conditionUnits, display } from '@/shared/units'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { FileDrop } from '@/shared/components/FileDrop'
@@ -44,12 +45,30 @@ interface Props {
   /** 정해져 있으면 고르는 단계를 건너뛴다(시편 줄에서 열 때). 없으면 직접 고른다. */
   specimenId?: string
   specimenName?: string
+  /** 시료가 정해진 채로 열 때(측정 의뢰 항목에서) — 그 시료의 시편 중에서 고르거나 하나 만든다. */
+  sampleId?: string
+  /** 시험 종류를 미리 고른 채로(의뢰 항목의 종류). */
+  presetTestType?: string
+  /** 조건을 미리 채운 채로 — **표시 단위 값**. 의뢰 항목이 적은 조건이 그대로 온다. */
+  presetConditions?: Record<string, string>
   open: boolean
   onClose: () => void
   onDone: () => void
+  /** 등록된 시험을 돌려준다 — 의뢰 항목이 그 자리에서 붙인다. */
+  onUploaded?: (run: TestRun) => void
 }
 
-export function UploadDialog({ specimenId, specimenName, open, onClose, onDone }: Props) {
+export function UploadDialog({
+  specimenId,
+  specimenName,
+  sampleId,
+  presetTestType,
+  presetConditions,
+  open,
+  onClose,
+  onDone,
+  onUploaded,
+}: Props) {
   const types = useResource(() => (open ? testsApi.types() : Promise.resolve([])), [open])
   const [typeKey, setTypeKey] = useState('')
   const [file, setFile] = useState<File | null>(null)
@@ -60,6 +79,13 @@ export function UploadDialog({ specimenId, specimenName, open, onClose, onDone }
   const [error, setError] = useState<Error | null>(null)
   const [saving, setSaving] = useState(false)
   const [picked, setPicked] = useState<Specimen | null>(null)
+  // 시료가 정해진 채로 열렸을 때 — 그 시료의 시편 목록과 「새 시편」.
+  const sampleSpecimens = useResource(
+    () => (open && sampleId ? materialsApi.specimens(sampleId) : Promise.resolve([])),
+    [open, sampleId]
+  )
+  const [newOrientation, setNewOrientation] = useState('MD')
+  const [making, setMaking] = useState(false)
 
   const targetId = specimenId ?? picked?.id ?? null
   const targetName = specimenName ?? picked?.record_name
@@ -71,16 +97,37 @@ export function UploadDialog({ specimenId, specimenName, open, onClose, onDone }
   useEffect(() => {
     if (open) {
       setFile(null)
-      setConditions({})
+      setConditions(presetConditions ?? {})
       setOperator('')
       setError(null)
       setPicked(null)
+      if (presetTestType) setTypeKey(presetTestType)
     }
-  }, [open])
+  }, [open, presetTestType, presetConditions])
 
   useEffect(() => {
     if (selected && !typeKey) setTypeKey(selected.key)
   }, [selected, typeKey])
+
+  async function makeSpecimen() {
+    if (!sampleId) return
+    setMaking(true)
+    setError(null)
+    try {
+      // 치수는 비운다 — 두께·폭은 시편 줄에서 나중에 적는다(측정값이 있어야 응력이 나오지만,
+      // 등록을 막을 일은 아니다). 단위 칸은 서버 규약(mm)을 그대로.
+      const made = await materialsApi.createSpecimen(sampleId, {
+        orientation: newOrientation,
+        length_unit: LENGTH_UNIT,
+      })
+      await sampleSpecimens.reload()
+      setPicked(made)
+    } catch (caught) {
+      setError(caught instanceof Error ? caught : new Error('시편을 만들지 못했습니다.'))
+    } finally {
+      setMaking(false)
+    }
+  }
 
   async function submit() {
     if (!file || !selected || !targetId) return
@@ -96,7 +143,7 @@ export function UploadDialog({ specimenId, specimenName, open, onClose, onDone }
             return [key, field?.value_type === 'number' ? Number(value) : value]
           })
       )
-      await testsApi.upload({
+      const run = await testsApi.upload({
         specimenId: targetId,
         testType: selected.key,
         file,
@@ -106,6 +153,7 @@ export function UploadDialog({ specimenId, specimenName, open, onClose, onDone }
         instrument: instrument || undefined,
         division: division || undefined,
       })
+      onUploaded?.(run)
       onDone()
     } catch (caught) {
       setError(caught instanceof Error ? caught : new Error('업로드에 실패했습니다.'))
@@ -129,7 +177,47 @@ export function UploadDialog({ specimenId, specimenName, open, onClose, onDone }
 
         <ErrorNotice error={types.error} />
 
-        {!specimenId && (
+        {!specimenId && sampleId && (
+          <div className="space-y-1.5">
+            <Label htmlFor="upload-specimen">시편 (이 의뢰의 시료)</Label>
+            {/* **시료는 의뢰가 정했다.** 다른 시료의 시편을 고르게 두면 의뢰가 재지도 않은
+                것을 잰 것으로 적는다 — 그 시료의 시편 중에서 고르거나, 없으면 하나 만든다. */}
+            <div className="flex flex-wrap items-center gap-2">
+              <select
+                id="upload-specimen"
+                className="border-input bg-background h-9 flex-1 rounded-md border px-2 text-sm"
+                value={picked?.id ?? ''}
+                onChange={(event) =>
+                  setPicked(
+                    (sampleSpecimens.data ?? []).find((one) => one.id === event.target.value) ??
+                      null
+                  )
+                }
+              >
+                <option value="">
+                  {(sampleSpecimens.data ?? []).length > 0
+                    ? '— 시편을 고르세요 —'
+                    : '시편이 없습니다 — 아래에서 만드세요'}
+                </option>
+                {(sampleSpecimens.data ?? []).map((one) => (
+                  <option key={one.id} value={one.id}>
+                    {one.record_name}
+                  </option>
+                ))}
+              </select>
+              <Input
+                className="h-9 w-20 font-mono"
+                aria-label="새 시편 방향"
+                value={newOrientation}
+                onChange={(event) => setNewOrientation(event.target.value.toUpperCase())}
+              />
+              <Button size="sm" variant="outline" disabled={making} onClick={() => void makeSpecimen()}>
+                {making ? <Loader2 className="size-3.5 animate-spin" /> : null}새 시편
+              </Button>
+            </div>
+          </div>
+        )}
+        {!specimenId && !sampleId && (
           <div className="space-y-1.5">
             <Label>시편</Label>
             <SpecimenPicker onChange={setPicked} />

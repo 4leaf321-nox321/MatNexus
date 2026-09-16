@@ -428,8 +428,22 @@ class CurveOut(BaseModel):
     channels: list[str]
 
 
+class RunCommissionOut(BaseModel):
+    """이 시험이 답하는 측정 의뢰 — 시험 상세의 배지(2026-09-16). 붙은 시험만 갖는다."""
+
+    id: uuid.UUID
+    seq: int
+    title: str
+    status: str
+    item_position: int
+    """의뢰 안에서 몇 번 항목인가(0부터)."""
+
+
 class TestRunDetailOut(TestRunOut):
     prony_fit_count: int = 0
+    commission: RunCommissionOut | None = None
+    """붙은 의뢰. 없으면 None — 「없다」 와 「안 보인다」 를 갈라 말할 자리는 아니다: 의뢰는
+    두 부서만 보지만 시험을 볼 수 있는 사람이면 그 시험이 어느 의뢰 것인지는 볼 수 있다."""
     """이 시험의 마스터커브에 맞춘 계수가 몇 벌인가.
 
     **진행 띠가 「어디까지 됐나」 를 말하려면 필요하다.** 목록에는 안 싣는다 —

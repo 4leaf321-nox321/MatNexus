@@ -18,6 +18,7 @@ from sqlalchemy import ColumnElement, Select, or_, select, true
 from sqlalchemy.orm import InstrumentedAttribute, Session
 
 from app.modules.accounts.models import User
+from app.modules.commissions.models import Commission
 from app.modules.materials.models import Material, Sample, Specimen
 from app.modules.pipelines.models import PipelineConnector
 from app.modules.tests.models import TestRun
@@ -179,6 +180,26 @@ def visible_materials(db: Session, user: User) -> Select[tuple[Material]]:
     if user.is_system_admin:
         return query
     return query.where(_material_visibility(user))
+
+
+def visible_commissions(db: Session, user: User) -> Select[tuple[Commission]]:
+    """측정 의뢰 — 낸 부서 멤버 + 받는 부서 멤버 + 시스템 관리자. 작성 중은 낸 사람만.
+
+    시료의 가시 범위를 따르지 않는다: 의뢰는 두 부서 사이의 약속이라 제3부서가 볼 것이
+    아니다 — 시료가 열린 부서 것이어도 그렇다. 의뢰 목록·그래프·홈 요약이 **같은 규칙**을
+    쓰려고 여기 둔다(2026-09-16) — 두 벌이면 「홈에는 세는데 목록엔 없다」 가 생긴다.
+    """
+    query = select(Commission)
+    if user.is_system_admin:
+        return query
+    mine = select(WorkspaceMember.workspace_id).where(WorkspaceMember.user_id == user.id)
+    return query.where(
+        or_(
+            Commission.requester_workspace_id.in_(mine),
+            Commission.lab_workspace_id.in_(mine),
+        ),
+        or_(Commission.status != "draft", Commission.created_by_id == user.id),
+    )
 
 
 def visible_material_ids(db: Session, user: User) -> Select[tuple[uuid.UUID]]:

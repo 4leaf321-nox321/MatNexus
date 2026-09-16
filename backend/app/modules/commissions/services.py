@@ -10,7 +10,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import Select, and_, func, or_, select
+from sqlalchemy import Select, and_, func, select
 from sqlalchemy.orm import Session
 
 from app.jobs import kinds, queue
@@ -62,17 +62,8 @@ def visible(db: Session, user: User) -> Select[tuple[Commission]]:
     시료의 가시 범위를 따르지 않는 이유: 의뢰는 두 부서 사이의 약속이라 제3부서가
     볼 것이 아니다 — 시료가 열린 부서 것이어도 그렇다.
     """
-    query = select(Commission)
-    if user.is_system_admin:
-        return query
-    mine = select(WorkspaceMember.workspace_id).where(WorkspaceMember.user_id == user.id)
-    return query.where(
-        or_(
-            Commission.requester_workspace_id.in_(mine),
-            Commission.lab_workspace_id.in_(mine),
-        ),
-        or_(Commission.status != "draft", Commission.created_by_id == user.id),
-    )
+    # 규칙은 `shared/permissions.visible_commissions` 한 곳 — 그래프·홈 요약이 같은 것을 쓴다.
+    return permissions.visible_commissions(db, user)
 
 
 def get(db: Session, user: User, commission_id: uuid.UUID) -> Commission:

@@ -11,7 +11,7 @@
  */
 
 import { useState } from 'react'
-import { ArrowLeft, Link2, Pencil, Trash2, Unlink } from 'lucide-react'
+import { ArrowLeft, Link2, Pencil, Trash2, Unlink, Upload } from 'lucide-react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 
 import { Progress, StatusBadge } from '@/modules/commissions/CommissionsPage'
@@ -30,6 +30,7 @@ import type { CommissionDetail, CommissionEvent, CommissionItem } from '@/module
 import { fittingApi } from '@/modules/fitting/api'
 import type { BlockSpec } from '@/modules/fitting/api'
 import type { Sample } from '@/modules/materials/api'
+import { UploadDialog } from '@/modules/tests/UploadDialog'
 import { testsApi } from '@/modules/tests/api'
 import type { TestType } from '@/modules/tests/api'
 import { workspacesApi } from '@/modules/workspaces/api'
@@ -276,6 +277,23 @@ export default function CommissionDetailPage() {
 }
 
 /** 조건을 사람 단위로 — 입력 단위(`input_units`)가 있으면 그것으로, 없으면 정의의 표시 단위로. */
+/** 항목의 조건(SI)을 등록 창의 칸(표시 단위 글자)으로. 단위 없는 칸은 그대로. */
+function presetConditions(
+  item: CommissionItem,
+  testType: TestType | undefined
+): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const field of testType?.conditions ?? []) {
+    const raw = item.conditions[field.key]
+    if (raw === undefined || raw === null || raw === '') continue
+    out[field.key] =
+      typeof raw === 'number' && field.si_unit
+        ? String(Number(toDisplay(raw, field.si_unit, field.dimension).toPrecision(6)))
+        : String(raw)
+  }
+  return out
+}
+
 function conditionText(item: CommissionItem, testType: TestType | undefined): string {
   const parts: string[] = []
   for (const field of testType?.conditions ?? []) {
@@ -321,6 +339,7 @@ function ItemCard({
 }) {
   const [picked, setPicked] = useState('')
   const [pickedType, setPickedType] = useState('')
+  const [uploading, setUploading] = useState(false)
   const candidates = item.candidates ?? []
   const conditions = conditionText(item, testType)
   const done = item.done >= item.count
@@ -438,6 +457,22 @@ function ItemCard({
                 <Link2 className="size-3.5" />
                 붙이기
               </Button>
+              {/* **등록이 의뢰에서 시작된다**(2단계, 2026-09-16). 전에는 재료 상세로 가서
+                  시편·시험을 만들고 돌아와 붙였다 — 두 화면을 오가다 연결을 빼먹었다.
+                  여기서 열면 시료·종류·조건이 채워진 채 뜨고, 등록되면 그 자리에서 붙는다. */}
+              <Button size="sm" variant="outline" disabled={busy} onClick={() => setUploading(true)}>
+                <Upload className="size-3.5" />
+                시험 등록
+              </Button>
+              <UploadDialog
+                open={uploading}
+                sampleId={detail.sample.id}
+                presetTestType={item.test_type_key}
+                presetConditions={presetConditions(item, testType)}
+                onClose={() => setUploading(false)}
+                onDone={() => setUploading(false)}
+                onUploaded={(run) => onLink(run.id)}
+              />
               {detail.sample && (
                 <Link
                   to={`/materials/${detail.sample.material_id}`}

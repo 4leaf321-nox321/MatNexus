@@ -12573,6 +12573,16 @@ export interface components {
             card_published: number;
             /** Card Total */
             card_total: number;
+            /**
+             * Commissions Mine Open
+             * @default 0
+             */
+            commissions_mine_open: number;
+            /**
+             * Commissions Received Waiting
+             * @default 0
+             */
+            commissions_received_waiting: number;
             /** Families */
             families: components["schemas"]["TallyOut"][];
             /** Inbox Waiting */
@@ -14394,6 +14404,25 @@ export interface components {
             /** Value */
             value?: string | null;
         };
+        /**
+         * RunCommissionOut
+         * @description 이 시험이 답하는 측정 의뢰 — 시험 상세의 배지(2026-09-16). 붙은 시험만 갖는다.
+         */
+        RunCommissionOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Item Position */
+            item_position: number;
+            /** Seq */
+            seq: number;
+            /** Status */
+            status: string;
+            /** Title */
+            title: string;
+        };
         /** RunCreateRequest */
         RunCreateRequest: {
             /** Note */
@@ -16177,6 +16206,7 @@ export interface components {
             adopted_result_id?: string | null;
             /** Channels */
             channels: string[];
+            commission?: components["schemas"]["RunCommissionOut"] | null;
             /** Conditions */
             conditions: {
                 [key: string]: unknown;

@@ -12,7 +12,7 @@
 
 import { useState } from 'react'
 import { ClipboardPlus, MessageSquare, Search, Trash2 } from 'lucide-react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 
 import { DeleteBody } from '@/modules/commissions/DeleteBody'
 import { STATUS_TONES, commissionsApi } from '@/modules/commissions/api'
@@ -69,8 +69,14 @@ export function Progress({ progress }: { progress: Commission['progress'] }) {
 
 export default function CommissionsPage() {
   const navigate = useNavigate()
-  const [scope, setScope] = useState<Scope>('all')
-  const [status, setStatus] = useState<string>('')
+  // **홈이 지목해 보낸다** — 「받은 의뢰 대기 3」 을 누르면 그 목록이 떠야 한다. 주소에 안
+  // 실으면 링크가 늘 「전체」 로 떨어지고, 사람은 안내가 말한 자리를 스스로 찾아야 한다.
+  const [asked] = useSearchParams()
+  const askedScope = asked.get('scope')
+  const [scope, setScope] = useState<Scope>(
+    askedScope === 'mine' || askedScope === 'received' ? askedScope : 'all'
+  )
+  const [status, setStatus] = useState<string>(asked.get('status') ?? '')
   const [typed, setTyped] = useState('')
   const [q, setQ] = useState('')
   const [offset, setOffset] = useState(0)

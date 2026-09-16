@@ -98,7 +98,9 @@ export function OverviewPanel({
       {(data.waiting_to_process > 0 ||
         data.parse_failed > 0 ||
         data.card_draft > 0 ||
-        data.inbox_waiting > 0) && (
+        data.inbox_waiting > 0 ||
+        data.commissions_received_waiting > 0 ||
+        data.commissions_mine_open > 0) && (
         <div className="flex flex-wrap items-center gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm dark:border-amber-900 dark:bg-amber-950/40">
           <AlertTriangle className="size-4 shrink-0 text-amber-600 dark:text-amber-500" />
           <span className="text-muted-foreground text-xs">남은 일</span>
@@ -115,6 +117,17 @@ export function OverviewPanel({
             <Pending to="/settings/connectors?tab=inbox">
               붙일 파일 {data.inbox_waiting}
             </Pending>
+          )}
+          {/* **의뢰는 받는 부서 관리자가 봐야 움직인다.** 접수 대기가 목록 안에만 있으면
+              메일이 오기 전까지 아무도 모른다(2단계, 2026-09-16). 낸 쪽에는 「내 의뢰
+              어디까지」 — 둘은 다른 사람이 보는 다른 숫자라 줄을 가른다. */}
+          {data.commissions_received_waiting > 0 && (
+            <Pending to="/commissions?scope=received&status=submitted">
+              받은 의뢰 접수 대기 {data.commissions_received_waiting}
+            </Pending>
+          )}
+          {data.commissions_mine_open > 0 && (
+            <Pending to="/commissions?scope=mine">낸 의뢰 진행 중 {data.commissions_mine_open}</Pending>
           )}
           {data.waiting_to_process > 0 && (
             <Pending to={`/w/${workspaceSlug}/tests`}>처리 대기 {data.waiting_to_process}</Pending>

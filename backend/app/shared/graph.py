@@ -165,9 +165,9 @@ def visible_ids(db: Session, user: User, kind: relations.EntityKind) -> Select[A
     if kind.slug in ("commission", "commission_item"):
         # **의뢰의 가시 규칙을 베끼지 않는다** — 낸 부서·받는 부서·작성 중은 낸 사람만은
         # `commissions.services.visible` 의 것이다. 여기서는 열만 좁힌다.
-        from app.modules.commissions import services as commission_services
-
-        commissions = commission_services.visible(db, user).with_only_columns(Commission.id)
+        commissions = permissions.visible_commissions(db, user).with_only_columns(
+            Commission.id
+        )
         if kind.slug == "commission":
             return commissions
         return select(CommissionItem.id).where(CommissionItem.commission_id.in_(commissions))

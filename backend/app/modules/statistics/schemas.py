@@ -475,6 +475,12 @@ class OverviewOut(BaseModel):
     읽힌다."""
     ops: OpsWarningsOut | None = None
     """시스템 관리자에게만 실린다. 아니면 `None` — 0 으로 두면 「문제없다」 로 읽힌다."""
+    commissions_received_waiting: int = 0
+    """우리 부서가 **받은** 측정 의뢰 중 접수 대기(`submitted`). 받는 부서 관리자가 봐야
+    움직인다(2026-09-16). 의뢰 목록과 같은 가시 규칙(`visible_commissions`)이다."""
+    commissions_mine_open: int = 0
+    """우리 부서가 **낸** 의뢰 중 아직 닫히지 않은 것(초안·완료·반려 제외) — 「내 의뢰
+    어디까지 됐나」."""
     inbox_waiting: int
     """장비가 보냈는데 **사람이 붙여야** 하는 파일. 시편을 못 정한 것과 후보가
     정해져 승인을 기다리는 것을 함께 센다 — 둘 다 사람이 한 번 봐야 한다.

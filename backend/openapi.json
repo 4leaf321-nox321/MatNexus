@@ -15837,6 +15837,16 @@
             "title": "Card Total",
             "type": "integer"
           },
+          "commissions_mine_open": {
+            "default": 0,
+            "title": "Commissions Mine Open",
+            "type": "integer"
+          },
+          "commissions_received_waiting": {
+            "default": 0,
+            "title": "Commissions Received Waiting",
+            "type": "integer"
+          },
           "families": {
             "items": {
               "$ref": "#/components/schemas/TallyOut"
@@ -20299,6 +20309,41 @@
           "field"
         ],
         "title": "RunBulkUpdateRequest",
+        "type": "object"
+      },
+      "RunCommissionOut": {
+        "description": "이 시험이 답하는 측정 의뢰 — 시험 상세의 배지(2026-09-16). 붙은 시험만 갖는다.",
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "item_position": {
+            "title": "Item Position",
+            "type": "integer"
+          },
+          "seq": {
+            "title": "Seq",
+            "type": "integer"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "seq",
+          "title",
+          "status",
+          "item_position"
+        ],
+        "title": "RunCommissionOut",
         "type": "object"
       },
       "RunCreateRequest": {
@@ -24783,6 +24828,16 @@
             },
             "title": "Channels",
             "type": "array"
+          },
+          "commission": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RunCommissionOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "conditions": {
             "additionalProperties": true,

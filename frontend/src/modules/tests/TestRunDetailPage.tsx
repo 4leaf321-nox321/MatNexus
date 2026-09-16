@@ -449,6 +449,16 @@ export default function TestRunDetailPage() {
           <Badge variant={item.status === 'failed' ? 'destructive' : 'secondary'}>
             {RUN_STATUS_LABEL[item.status] ?? item.status}
           </Badge>
+          {/* **이 시험이 어느 의뢰의 것인지.** 의뢰 상세에서는 보이는데 시험 쪽에서는 보이지
+              않으면, 결과를 채택하는 사람이 「이게 그 의뢰 건이었나」 를 모른다(2단계). */}
+          {item.commission && (
+            <Link
+              to={`/commissions/${item.commission.id}`}
+              className="hover:text-foreground text-muted-foreground text-xs underline underline-offset-2"
+            >
+              의뢰 #{item.commission.seq} · {item.commission.title} ({item.commission.item_position + 1}번 항목)
+            </Link>
+          )}
           {item.specimen_name && (
             <span className="text-muted-foreground font-mono text-xs">
               {item.specimen_name}

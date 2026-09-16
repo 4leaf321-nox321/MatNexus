@@ -39,6 +39,8 @@ const REAL: Overview = {
   waiting_to_process: 71,
   parse_failed: 0,
   inbox_waiting: 0,
+  commissions_received_waiting: 0,
+  commissions_mine_open: 0,
   ops: null,
 }
 
@@ -203,6 +205,25 @@ describe('붙일 파일', () => {
   it('0 이면 안 보인다 — 0 을 그리면 그것도 상태처럼 읽힌다', () => {
     panel({ inbox_waiting: 0 })
     expect(screen.queryByText(/붙일 파일/)).not.toBeInTheDocument()
+  })
+})
+
+describe('측정 의뢰 줄', () => {
+  it('받은 의뢰 대기와 낸 의뢰 진행을 갈라 세우고 그 목록으로 데려간다', () => {
+    panel({ commissions_received_waiting: 2, commissions_mine_open: 1 })
+    expect(screen.getByRole('link', { name: /받은 의뢰 접수 대기 2/ })).toHaveAttribute(
+      'href',
+      '/commissions?scope=received&status=submitted'
+    )
+    expect(screen.getByRole('link', { name: /낸 의뢰 진행 중 1/ })).toHaveAttribute(
+      'href',
+      '/commissions?scope=mine'
+    )
+  })
+
+  it('0 이면 줄이 없다', () => {
+    panel({ commissions_received_waiting: 0, commissions_mine_open: 0 })
+    expect(screen.queryByText(/받은 의뢰/)).toBeNull()
   })
 })
 

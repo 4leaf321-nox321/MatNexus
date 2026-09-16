@@ -17,12 +17,13 @@ from statistics import fmean, stdev
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import Select, func, select
+from sqlalchemy import Select, func, select, true
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.database import get_db
 from app.modules.accounts.models import User
+from app.modules.commissions.models import Commission
 from app.modules.fitting.models import PropertyCard
 from app.modules.materials.models import Material, Sample, Specimen
 from app.modules.pipelines.models import PipelineConnector, PipelineInboxItem
@@ -64,6 +65,7 @@ from app.modules.statistics.schemas import (
     YearTallyOut,
 )
 from app.modules.tests.models import TestRun, TestType
+from app.modules.workspaces.models import WorkspaceMember
 from app.shared import alias_candidates, curvedata, ops, permissions
 from app.shared import divisions as divisions_order
 from app.shared.auth import current_user
@@ -859,6 +861,40 @@ def overview(
         ),
         # **커넥터의 가시성을 그대로 쓴다.** 여기서 범위 규칙을 새로 만들면 홈의
         # 숫자와 커넥터 화면의 숫자가 갈리고, 그때 어느 쪽이 맞는지 알 수 없다.
+        # **의뢰 목록과 같은 가시 규칙.** 받은 것은 우리 부서가 받는 쪽인 접수 대기, 낸 것은
+        # 우리 부서가 낸 쪽인 진행 중 — 시스템 관리자는 전부를 본다.
+        commissions_received_waiting=count(
+            select(Commission.id).where(
+                Commission.id.in_(
+                    permissions.visible_commissions(db, user).with_only_columns(Commission.id)
+                ),
+                Commission.status == "submitted",
+                Commission.lab_workspace_id.in_(
+                    select(WorkspaceMember.workspace_id).where(
+                        WorkspaceMember.user_id == user.id
+                    )
+                )
+                if not user.is_system_admin
+                else true(),
+            )
+        ),
+        commissions_mine_open=count(
+            select(Commission.id).where(
+                Commission.id.in_(
+                    permissions.visible_commissions(db, user).with_only_columns(Commission.id)
+                ),
+                Commission.status.in_(
+                    ("submitted", "accepted", "in_progress", "on_hold", "delivered")
+                ),
+                Commission.requester_workspace_id.in_(
+                    select(WorkspaceMember.workspace_id).where(
+                        WorkspaceMember.user_id == user.id
+                    )
+                )
+                if not user.is_system_admin
+                else true(),
+            )
+        ),
         inbox_waiting=count(
             select(PipelineInboxItem.id).where(
                 PipelineInboxItem.status.in_(("needs_specimen", "suggested")),

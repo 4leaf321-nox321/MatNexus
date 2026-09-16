@@ -832,3 +832,54 @@ class Test온톨로지:
             ).status_code
             == 404
         )
+
+
+class Test시험과_홈:
+    """시험 상세가 어느 의뢰의 것인지 말하고, 홈이 「받은 의뢰 대기 · 낸 의뢰 진행」 을 센다
+    (2단계, 2026-09-16)."""
+
+    def test_시험_상세에_의뢰가_붙고_홈이_센다(
+        self, client: TestClient, db: Session, world: dict[str, Any]
+    ) -> None:
+        kim, lee, oh = world["kim"], world["lee"], world["oh"]
+        made = _create(client, kim, world["sample"]["id"])
+
+        # 받는 부서(lee) 홈: 접수 대기 1. 낸 부서(kim) 홈: 진행 중 1. 제3부서(oh): 둘 다 0.
+        def home(headers: dict[str, str]) -> dict[str, Any]:
+            got = client.get("/api/statistics/overview", headers=headers)
+            assert got.status_code == 200, got.text
+            body: dict[str, Any] = got.json()
+            return body
+
+        assert home(lee)["commissions_received_waiting"] == 1
+        assert home(lee)["commissions_mine_open"] == 0
+        assert home(kim)["commissions_mine_open"] == 1
+        assert home(kim)["commissions_received_waiting"] == 0
+        assert home(oh)["commissions_received_waiting"] == 0
+        assert home(oh)["commissions_mine_open"] == 0
+
+        accepted = _move(client, lee, made["id"], "accepted", "다음 주").json()
+        assert home(lee)["commissions_received_waiting"] == 0  # 접수했으니 대기가 아니다
+        assert home(kim)["commissions_mine_open"] == 1  # 아직 닫히지 않았다
+
+        run = _run(client, lee, world["sample"]["id"])
+        item_id = accepted["items"][0]["id"]
+        client.post(
+            f"/api/commissions/{made['id']}/items/{item_id}/runs",
+            json={"run_id": run["id"]},
+            headers=lee,
+        )
+        detail = client.get(f"/api/test-runs/{run['id']}", headers=lee).json()
+        assert detail["commission"] == {
+            "id": made["id"],
+            "seq": made["seq"],
+            "title": made["title"],
+            "status": "in_progress",
+            "item_position": 0,
+        }
+        # 안 붙은 시험은 None.
+        other = _run(client, lee, world["sample"]["id"], orientation="TD")
+        assert (
+            client.get(f"/api/test-runs/{other['id']}", headers=lee).json()["commission"]
+            is None
+        )

@@ -7,7 +7,15 @@
  */
 
 import { useState } from 'react'
-import { ChevronLeft, ChevronRight, Globe2, ListTree, Pencil, Plus } from 'lucide-react'
+import {
+  ChevronLeft,
+  ChevronRight,
+  ClipboardList,
+  Globe2,
+  ListTree,
+  Pencil,
+  Plus,
+} from 'lucide-react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 
 import { DeleteMaterialDialog } from '@/modules/materials/DeleteMaterialDialog'
@@ -116,6 +124,17 @@ export default function MaterialDetailPage() {
               <ListTree className="size-4" />
               값 출처
             </Button>
+            {/* **의뢰는 재료를 보다가 낸다.** 「이 재료의 80 °C 탄성계수가 없네」 는 이 화면에서
+                알게 되는데, 의뢰 화면으로 가서 재료를 다시 찾게 하면 그 길에서 반이 샌다
+                (2단계, 2026-09-16). 재료를 미리 채워 보낸다. */}
+            {item && (
+              <Button variant="outline" asChild>
+                <Link to={`/commissions/new?material=${item.id}`}>
+                  <ClipboardList className="size-4" />
+                  측정 의뢰
+                </Link>
+              </Button>
+            )}
             <Button variant="outline" onClick={() => setEditing(true)} disabled={!item}>
               <Pencil className="size-4" />
               수정
