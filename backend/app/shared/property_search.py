@@ -39,7 +39,8 @@ from app.modules.catalog import parameters
 from app.modules.catalog.models import CatalogDefinition, CatalogMaterial, CatalogValue
 from app.modules.materials.models import Material, Sample, Specimen
 from app.modules.processing.models import ProcessingResult
-from app.modules.tests.models import TestRun
+from app.modules.tests.models import TestConditionField, TestRun
+from app.shared import standard_conditions, tiers
 from app.shared.errors import AppError
 from matcore import registry, units
 
@@ -48,6 +49,69 @@ NEAR_RATIO = 0.10
 
 #: 한 번에 돌려주는 최대. 서버가 상한을 강제한다(AGENTS.md).
 MAX_ROWS = 200
+
+
+@dataclass(frozen=True)
+class ConditionFilter:
+    """「어떤 조건에서」 — 표준 조건 하나의 SI 범위(2026-09-16).
+
+    조건은 값의 **한정자**라 값처럼 범위로 건다. 어느 키가 그 조건인지는 세계마다
+    다르게 풀린다: 시험은 조건 칸의 `canonical_key`, 문헌은 `conditions` 의 별칭
+    (`temperature_k` · `temperature_c`), 선언은 점의 `temperature_k`.
+    """
+
+    key: str
+    low: float
+    high: float
+
+    @property
+    def standard(self) -> standard_conditions.StandardCondition:
+        return standard_conditions.STANDARD[self.key]
+
+
+def condition_bounds(
+    *,
+    key: str,
+    unit: str,
+    near: float | None = None,
+    minimum: float | None = None,
+    maximum: float | None = None,
+    tolerance: float | None = None,
+) -> ConditionFilter:
+    """조건의 물음을 SI 범위로. **단위는 필수**다 — 값과 같은 이유.
+
+    「근처」 의 폭은 표준 조건이 정한다(온도 ±5 K). `tolerance` 를 주면(물은 단위로)
+    그것이 이긴다. 폭이 0 인 조건(속도·주파수)은 값처럼 ±10% 다.
+    """
+    standard = standard_conditions.STANDARD.get(key)
+    if standard is None:
+        known = ", ".join(standard_conditions.STANDARD)
+        raise AppError(
+            "MNX-CATALOG-0051",
+            f"모르는 조건입니다: {key}. 있는 것: {known}",
+            status=422,
+        )
+    if units.canonical(unit) is None:
+        raise AppError("MNX-CATALOG-0032", f"모르는 단위입니다: '{unit}'.", status=422)
+    if near is None and minimum is None and maximum is None:
+        raise AppError(
+            "MNX-CATALOG-0051",
+            f"조건 {standard.label} 의 값을 주세요 — condition_near 또는 condition_min/max.",
+            status=422,
+        )
+    if near is not None:
+        center = units.to_si(near, unit)
+        if tolerance is not None:
+            # 폭은 차이라, 영점이 있는 단위(°C)는 두 점의 차로 환산한다.
+            width = abs(units.to_si(near + tolerance, unit) - center)
+        elif standard.near_tolerance_si > 0:
+            width = standard.near_tolerance_si
+        else:
+            width = abs(center) * NEAR_RATIO
+        return ConditionFilter(key=key, low=center - width, high=center + width)
+    low = units.to_si(minimum, unit) if minimum is not None else float("-inf")
+    high = units.to_si(maximum, unit) if maximum is not None else float("inf")
+    return ConditionFilter(key=key, low=low, high=high)
 
 
 @dataclass(frozen=True)
@@ -169,11 +233,16 @@ def catalog_hits(
     limit: int,
     term: str | None = None,
     convert: bool = True,
+    condition: ConditionFilter | None = None,
+    min_tier: int | None = None,
 ) -> list[Hit]:
     """문헌 값에서 찾는다.
 
     `term` 은 **파라미터형 물성에서 어느 변수인가**다(ADR 0029). 안 주고 찾으면
     Anand 의 `A`(1/s)와 `h0`(MPa)를 섞어서 답하게 된다.
+
+    조건은 `conditions` JSON 의 별칭으로 푼다 — 온도는 `temperature_k` 또는
+    `temperature_c`(+273.15). 그 키가 없는 값은 **그 조건에서 잰 것이 아니라** 안 걸린다.
     """
     query: Select[Any] = (
         select(CatalogValue, CatalogMaterial)
@@ -189,6 +258,12 @@ def catalog_hits(
     )
     if term:
         query = query.where(CatalogValue.conditions[parameters.TERM].astext == term)
+    if min_tier is not None:
+        query = query.where(CatalogValue.quality_tier <= min_tier)
+    if condition is not None:
+        query = query.where(
+            _catalog_condition_si(condition.key).between(condition.low, condition.high)
+        )
     made: list[Hit] = []
     for value, material in db.execute(query).all():
         made.append(
@@ -209,6 +284,20 @@ def catalog_hits(
     return made
 
 
+def _catalog_condition_si(key: str) -> Any:
+    """문헌 `conditions` 에서 표준 조건 값을 SI 로 읽는 SQL 식. 없으면 NULL(= 안 걸림)."""
+    standard = standard_conditions.STANDARD[key]
+    pieces: list[Any] = []
+    for alias in (key, *standard.aliases):
+        if not alias.isascii():
+            continue
+        raw: Any = cast(CatalogValue.conditions[alias].astext, Float)
+        if key == "temperature" and alias == "temperature_c":
+            raw = raw + 273.15
+        pieces.append(raw)
+    return func.coalesce(*pieces)
+
+
 def measured_hits(
     db: Session,
     *,
@@ -219,6 +308,8 @@ def measured_hits(
     limit: int,
     visible: Select[Any] | None = None,
     convert: bool = True,
+    condition: ConditionFilter | None = None,
+    min_tier: int | None = None,
 ) -> list[Hit]:
     """**시험으로 잰 값**에서 찾는다 — 채택된 처리 결과의 스칼라.
 
@@ -259,6 +350,20 @@ def measured_hits(
     )
     if visible is not None:
         query = query.where(Material.id.in_(visible))
+    if condition is not None:
+        # 시험의 조건은 **그 시험 종류의 조건 칸 이름**으로 저장돼 있다. 어느 칸이 이 표준
+        # 조건인지는 정의(`canonical_key`)가 말한다 — 부서마다 `temp`·`temperature` 로
+        # 갈려도 여기서 한 키로 모인다. 칸을 안 이은 시험 종류는 안 걸린다.
+        field = TestConditionField
+        query = query.join(
+            field,
+            (field.test_type_id == TestRun.test_type_id)
+            & (field.canonical_key == condition.key),
+        ).where(
+            cast(TestRun.conditions[field.key].astext, Float).between(
+                condition.low, condition.high
+            )
+        )
 
     # **재료·방법별로 묶는다.** 시편 3장이면 값이 셋인데 그것을 3줄로 내면 사람은
     # 「같은 재료가 왜 셋이지」 가 되고, 방법을 안 가르고 묶으면 0.2% 와 0.5%
@@ -280,6 +385,9 @@ def measured_hits(
             else None
         )
         runs = ", ".join(run for _, run in values[:3]) + (" …" if len(values) > 3 else "")
+        tier = tiers.measured_tier(len(values))
+        if min_tier is not None and tier > min_tier:
+            continue
         made.append(
             Hit(
                 world="measured",
@@ -288,6 +396,7 @@ def measured_hits(
                 value_si=mean,
                 value_shown=units.from_si(mean, unit) if convert else mean,
                 unit_shown=unit,
+                quality_tier=tier,
                 source_detail=f"{key} · {runs}",
                 count=len(values),
                 spread_si=spread,
@@ -355,6 +464,8 @@ def internal_hits(
     visible: Select[Any] | None = None,
     scale: str | None = None,
     convert: bool = True,
+    condition: ConditionFilter | None = None,
+    min_tier: int | None = None,
 ) -> list[Hit]:
     """사내 재료의 선언 물성에서 찾는다.
 
@@ -399,10 +510,22 @@ def internal_hits(
             # **눈금이 다르면 다른 값이다.** HRC 60 은 비커스 검색에 안 낀다.
             if scale is not None and entry.get("scale") != scale:
                 continue
+            tier = tiers.declared_tier(entry.get("source"))
+            if min_tier is not None and tier > min_tier:
+                continue
             for point in entry.get("points") or []:
                 value = point.get("value_si")
                 if not isinstance(value, int | float):
                     continue
+                if condition is not None:
+                    # 선언 점이 아는 조건은 온도(`temperature_k`)뿐이다. 다른 조건을 물으면
+                    # 선언값은 **그 조건에서 잰 것이 아니라** 안 걸린다 — 없는 것을 있는 척하지
+                    # 않는다.
+                    at = point.get("temperature_k") if condition.key == "temperature" else None
+                    if not isinstance(at, int | float) or not (
+                        condition.low <= float(at) <= condition.high
+                    ):
+                        continue
                 if low <= value <= high:
                     made.append(
                         Hit(
@@ -410,6 +533,7 @@ def internal_hits(
                             material_id=material_id,
                             material_name=name,
                             value_si=float(value),
+                            quality_tier=tier,
                             # 표가 모르는 눈금(HV)은 환산 없이 — 저장된 값이 그 눈금이다.
                             value_shown=units.from_si(value, unit)
                             if convert

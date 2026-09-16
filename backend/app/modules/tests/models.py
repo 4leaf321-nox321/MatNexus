@@ -212,6 +212,10 @@ class TestConditionField(Base):
     choices: Mapped[list[str] | None] = mapped_column(JSONB, nullable=True)
     is_required: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     sort_order: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    canonical_key: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)
+    """이 조건 칸이 **어느 표준 조건인가**(`shared/standard_conditions`) — `temperature` ·
+    `strain_rate` …. 부서마다 `temp`·`temperature` 로 갈려 적어도 검색은 이 키로 한다.
+    비우면 「이 시험만의 조건」 — 저장은 되되 조건 검색에는 안 걸린다(2026-09-16)."""
 
 
 class TestRun(Base):

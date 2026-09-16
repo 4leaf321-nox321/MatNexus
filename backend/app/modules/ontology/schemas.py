@@ -43,12 +43,23 @@ class DeckRequirementsOut(BaseModel):
     """블록 → 그 블록의 값을 채우는 문헌 물성 키(`catalog_definitions.key`)."""
 
 
+class StandardConditionMapOut(BaseModel):
+    """표준 시험 조건 — 값 검색의 `condition=` 에 쓰는 키와 그 단위(2026-09-16)."""
+
+    key: str
+    label: str
+    si_unit: str
+    aliases: list[str]
+
+
 class OntologyOut(BaseModel):
     """지도 전체. **AI 는 이걸 읽고 다음 질문을 만든다.**"""
 
     kinds: list[OntologyKindOut]
     relations: list[OntologyRelationOut]
     deck_requirements: DeckRequirementsOut
+    conditions: list[StandardConditionMapOut]
+    """조건은 마디가 아니라 **값의 한정자**다 — 관계로 걷지 않고 값 검색에서 거른다."""
 
 
 class GraphNodeOut(BaseModel):

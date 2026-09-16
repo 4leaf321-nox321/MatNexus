@@ -34,6 +34,8 @@ class TestConditionFieldOut(BaseModel):
     choices: list[str] | None
     is_required: bool
     sort_order: int
+    canonical_key: str | None = None
+    """어느 표준 조건인가(`GET /tests/standard-conditions`). 비면 조건 검색에 안 걸린다."""
 
 
 class TestTypeOut(BaseModel):
@@ -589,6 +591,19 @@ class ConditionInput(BaseModel):
     choices: list[str] | None = None
     is_required: bool = False
     sort_order: int = 0
+    canonical_key: str | None = Field(default=None, max_length=40)
+    """표준 조건 키. 비우면 서버가 `key`·별칭으로 짐작해 잇는다(`temperature`·`temp` 는
+    온도로). 못 잇으면 비운 채 저장한다 — 막지 않는다."""
+
+
+class StandardConditionOut(BaseModel):
+    """표준 시험 조건 한 항목 — 조건 칸 정의가 고르는 것, 값 검색이 거르는 것."""
+
+    key: str
+    label: str
+    si_unit: str
+    aliases: list[str]
+    help: str
 
 
 class TestTypeCapabilityOut(BaseModel):

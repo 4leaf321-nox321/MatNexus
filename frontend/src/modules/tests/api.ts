@@ -7,6 +7,7 @@ export type TestType = components['schemas']['TestTypeOut']
 export type TestChannel = components['schemas']['TestChannelOut']
 export type TestTypeCapability = components['schemas']['TestTypeCapabilityOut']
 export type TestConditionField = components['schemas']['TestConditionFieldOut']
+export type StandardCondition = components['schemas']['StandardConditionOut']
 export type TestRun = components['schemas']['TestRunOut']
 export type TestRunUpdate = components['schemas']['TestRunUpdateRequest']
 export type SourceReplaceOut = components['schemas']['SourceReplaceOut']
@@ -195,6 +196,9 @@ export const testsApi = {
    * 「이 기능이 없구나」 로 읽는다.
    */
   capabilities: () => api.get<TestTypeCapability[]>('/test-types/capabilities'),
+
+  /** 표준 시험 조건 — 조건 칸이 고른다. 값 검색이 이 키로 거른다(2026-09-16). */
+  standardConditions: () => api.get<StandardCondition[]>('/test-types/standard-conditions'),
 
   /**
    * 이 파일이 어느 시험 종류인가. 프로파일 지문 → 확장자 순으로 본다.

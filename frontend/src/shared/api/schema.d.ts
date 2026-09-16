@@ -904,6 +904,16 @@ export interface paths {
          * Search By Property
          * @description **값으로 재료를 찾는다** — 「항복응력이 200MPa 근처인 재료」.
          *
+         *     ## 조건 · 등급 · 세계 (2026-09-16)
+         *
+         *     「80 °C 에서」 는 `condition=temperature&condition_unit=degC&condition_near=80` —
+         *     조건 값도 단위가 필수다. 시험은 조건 칸의 표준 키(`canonical_key`)로, 문헌은
+         *     `conditions` 의 별칭으로, 선언은 점의 온도로 푼다. **조건을 모르는 값은 안 걸린다** —
+         *     「그 조건에서 잰 것」 만 답이다.
+         *
+         *     `min_tier` 는 문헌·사내를 같은 1~4 척도로 거른다(`shared/tiers`). `origins` 는
+         *     세계를 고른다 — 「사내 실측만」 은 `measured`.
+         *
          *     ## 단위가 필수인 이유
          *
          *     값은 SI 로 저장돼 있어 200MPa 는 `200,000,000` 이다. 사람은 「200」 이라고
@@ -5319,6 +5329,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/test-types/standard-conditions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Standard Conditions
+         * @description 표준 시험 조건 — 조건 칸 정의가 고르고, 값 검색이 거르는 축(2026-09-16).
+         *
+         *     인증 없이 연다: 가리는 값이 없는 어휘이고, 시험 종류 편집 화면이 목록을 손으로 적지
+         *     않게 하는 것이 목적이다 — 적어 두면 조건을 더할 때 화면이 뒤처진다.
+         */
+        get: operations["list_standard_conditions_api_test_types_standard_conditions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/test-types/{key}": {
         parameters: {
             query?: never;
@@ -8685,6 +8718,8 @@ export interface components {
         };
         /** ConditionInput */
         ConditionInput: {
+            /** Canonical Key */
+            canonical_key?: string | null;
             /** Choices */
             choices?: string[] | null;
             /** Dimension */
@@ -12275,6 +12310,8 @@ export interface components {
          * @description 지도 전체. **AI 는 이걸 읽고 다음 질문을 만든다.**
          */
         OntologyOut: {
+            /** Conditions */
+            conditions: components["schemas"]["StandardConditionMapOut"][];
             deck_requirements: components["schemas"]["DeckRequirementsOut"];
             /** Kinds */
             kinds: components["schemas"]["OntologyKindOut"][];
@@ -15388,6 +15425,36 @@ export interface components {
             ][];
         };
         /**
+         * StandardConditionMapOut
+         * @description 표준 시험 조건 — 값 검색의 `condition=` 에 쓰는 키와 그 단위(2026-09-16).
+         */
+        StandardConditionMapOut: {
+            /** Aliases */
+            aliases: string[];
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Si Unit */
+            si_unit: string;
+        };
+        /**
+         * StandardConditionOut
+         * @description 표준 시험 조건 한 항목 — 조건 칸 정의가 고르는 것, 값 검색이 거르는 것.
+         */
+        StandardConditionOut: {
+            /** Aliases */
+            aliases: string[];
+            /** Help */
+            help: string;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Si Unit */
+            si_unit: string;
+        };
+        /**
          * StandardImportItem
          * @description 가져올 규격 하나.
          *
@@ -15896,6 +15963,8 @@ export interface components {
         };
         /** TestConditionFieldOut */
         TestConditionFieldOut: {
+            /** Canonical Key */
+            canonical_key?: string | null;
             /** Choices */
             choices: string[] | null;
             /** Dimension */
@@ -18532,6 +18601,19 @@ export interface operations {
                 /** @description `all` · `catalog` · `internal` */
                 scope?: string;
                 limit?: number;
+                /** @description 표준 조건 키 — `temperature` · `strain_rate` … (`GET /test-types/standard-conditions`) */
+                condition?: string | null;
+                /** @description 조건 값의 단위 — 「degC」·「K」 */
+                condition_unit?: string | null;
+                condition_near?: number | null;
+                condition_min?: number | null;
+                condition_max?: number | null;
+                /** @description 근처의 폭(조건 단위). 비우면 조건이 정한 기본(온도 ±5 K) */
+                condition_tol?: number | null;
+                /** @description 이 등급 이상만(1 이 가장 좋다). 사내 값도 등급이 있다 */
+                min_tier?: number | null;
+                /** @description `catalog` · `internal` · `measured` 를 쉼표로 — 이 세계만. 비우면 전부 */
+                origins?: string | null;
             };
             header?: never;
             path?: never;
@@ -25738,6 +25820,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ParserOut"][];
+                };
+            };
+        };
+    };
+    list_standard_conditions_api_test_types_standard_conditions_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StandardConditionOut"][];
                 };
             };
         };

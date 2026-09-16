@@ -20,7 +20,7 @@ import { Lock, Plus, Rows3, Trash2 } from 'lucide-react'
 import { WorkspacePicker } from '@/modules/workspaces/WorkspacePicker'
 import { testsApi } from '@/modules/tests/api'
 import { useAuth } from '@/shared/auth/AuthContext'
-import type { Parser, TestType, TestTypeCapability } from '@/modules/tests/api'
+import type { Parser, StandardCondition, TestType, TestTypeCapability } from '@/modules/tests/api'
 import { CAPABILITIES, missingFor } from '@/modules/tests/capabilities'
 import { toChannelKey } from '@/modules/tests/keys'
 import { DIMENSIONS, SI_BY_DIMENSION, VALUE_TYPES, display } from '@/shared/units'
@@ -65,6 +65,8 @@ interface ConditionRow {
   dimension: string | null
   si_unit: string | null
   is_required: boolean
+  /** 어느 표준 조건인가. **비우면 서버가 이름으로 짐작한다**(`temp` → 온도). */
+  canonical_key: string | null
   existing: boolean
 }
 
@@ -80,6 +82,11 @@ export function TestTypeEditor({ type, open, onClose, onSaved }: Props) {
   const { user } = useAuth()
   const parsers = useResource(
     () => (open ? testsApi.parsers() : Promise.resolve([])),
+    [open]
+  )
+  // **표준 조건 목록은 서버가 준다.** 화면이 적어 두면 조건을 더할 때 화면이 뒤처진다.
+  const standardConditions = useResource(
+    () => (open ? testsApi.standardConditions() : Promise.resolve([])),
     [open]
   )
   /** 내가 관리자인 부서만. 아닌 부서 것으로 만들면 서버가 거절한다. */
@@ -140,6 +147,7 @@ export function TestTypeEditor({ type, open, onClose, onSaved }: Props) {
         dimension: field.dimension,
         si_unit: field.si_unit,
         is_required: field.is_required,
+        canonical_key: field.canonical_key ?? null,
         existing: true,
       }))
     )
@@ -177,6 +185,7 @@ export function TestTypeEditor({ type, open, onClose, onSaved }: Props) {
           choices: null,
           is_required: field.is_required,
           sort_order: index * 10,
+          canonical_key: field.canonical_key,
         })),
       }
       if (creating) {
@@ -368,6 +377,7 @@ export function TestTypeEditor({ type, open, onClose, onSaved }: Props) {
                   dimension: row.dimension,
                   si_unit: row.si_unit,
                   is_required: row.is_required,
+                  canonical_key: null,
                   // **새 줄이다.** 잠금은 이미 저장돼 있던 줄에만 걸린다.
                   existing: false,
                 })),
@@ -427,6 +437,7 @@ export function TestTypeEditor({ type, open, onClose, onSaved }: Props) {
           rows={conditions}
           locked={locked}
           withValueType
+          standardConditions={standardConditions.data ?? []}
           onAdd={() =>
             setConditions((current) => [
               ...current,
@@ -437,6 +448,7 @@ export function TestTypeEditor({ type, open, onClose, onSaved }: Props) {
                 dimension: 'temperature',
                 si_unit: 'K',
                 is_required: false,
+                canonical_key: null,
                 existing: false,
               },
             ])
@@ -477,8 +489,12 @@ interface RowLike {
   si_unit: string | null
   is_required: boolean
   value_type?: string
+  canonical_key?: string | null
   existing: boolean
 }
+
+/** 셀렉트는 빈 문자열을 못 담는다 — 「비움(서버가 짐작)」 을 이 값으로 나른다. */
+const AUTO_CONDITION = '__auto__'
 
 /**
  * **이 채널을 넣으면 무엇이 열리나.**
@@ -570,6 +586,7 @@ function RowEditor({
   rows,
   locked,
   withValueType,
+  standardConditions,
   onAdd,
   onBulk,
   onRemove,
@@ -580,6 +597,8 @@ function RowEditor({
   rows: RowLike[]
   locked: boolean
   withValueType?: boolean
+  /** 조건 줄에만 — 어느 표준 조건인지 고르는 칸. 안 주면 안 그린다. */
+  standardConditions?: StandardCondition[]
   onAdd: () => void
   /** 여러 개 넣기. 안 주면 그 단추를 안 그린다. */
   onBulk?: () => void
@@ -660,6 +679,32 @@ function RowEditor({
                     {VALUE_TYPES.map((item) => (
                       <SelectItem key={item.value} value={item.value}>
                         {item.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            {standardConditions && row.value_type === 'number' && (
+              <div className="w-36 space-y-1">
+                <Label className="text-muted-foreground text-xs">표준 조건</Label>
+                {/* **값 검색이 이 키로 거른다.** 부서마다 `temp`·`temperature` 로 갈려 적어도
+                    여기서 한 키로 모인다. 비우면 서버가 이름으로 짐작한다. */}
+                <Select
+                  value={row.canonical_key ?? AUTO_CONDITION}
+                  onValueChange={(value) =>
+                    onChange(index, { canonical_key: value === AUTO_CONDITION ? null : value })
+                  }
+                >
+                  <SelectTrigger className="h-8" aria-label={`${row.key || '조건'} 표준 조건`}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={AUTO_CONDITION}>(이름으로 짐작)</SelectItem>
+                    {standardConditions.map((item) => (
+                      <SelectItem key={item.key} value={item.key}>
+                        {item.label} · {item.si_unit}
                       </SelectItem>
                     ))}
                   </SelectContent>

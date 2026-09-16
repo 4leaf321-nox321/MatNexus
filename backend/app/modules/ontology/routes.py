@@ -31,8 +31,9 @@ from app.modules.ontology.schemas import (
     OntologyRelationOut,
     PathOut,
     RelatedOut,
+    StandardConditionMapOut,
 )
-from app.shared import deckmap, graph, relations
+from app.shared import deckmap, graph, relations, standard_conditions
 from app.shared.auth import current_user
 from app.shared.errors import AppError
 
@@ -89,6 +90,12 @@ def get_ontology(
             block_from_tests={key: list(one["from_tests"]) for key, one in sources.items()},
             block_fills={key: list(one["fills"]) for key, one in sources.items()},
         ),
+        conditions=[
+            StandardConditionMapOut(
+                key=one.key, label=one.label, si_unit=one.si_unit, aliases=list(one.aliases)
+            )
+            for one in standard_conditions.STANDARD.values()
+        ],
     )
 
 

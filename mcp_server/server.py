@@ -2181,8 +2181,36 @@ async def find_by_property(
     term: str | None = None,
     scope: str = "all",
     limit: int = 20,
+    condition: str | None = None,
+    condition_unit: str | None = None,
+    condition_near: float | None = None,
+    condition_min: float | None = None,
+    condition_max: float | None = None,
+    min_tier: int | None = None,
+    origins: str | None = None,
 ) -> dict[str, Any]:
     """**값으로 재료를 찾는다** — 「항복응력이 200MPa 근처인 재료」.
+
+    ## 조건 · 등급 · 세계 (2026-09-16)
+
+        「80 °C 에서」        condition="temperature", condition_unit="degC", condition_near=80
+        「믿을 만한 것만」     min_tier=2      (1 이 가장 좋다 — 아래 표)
+        「사내 실측만」        origins="measured"   (catalog · internal · measured 를 쉼표로)
+
+    조건 키는 `get_ontology().conditions` 에 있다(`temperature` · `strain_rate` · `frequency`
+    …). **조건 값도 단위가 필수다** — 「80」 만으로는 °C 인지 K 인지 모른다. 조건을 적지
+    않은 값은 **그 조건에서 잰 것이 아니라 안 걸린다** — 상온 값을 80 °C 의 답으로 내지
+    않는다. 조건을 걸었는데 빈손이면 「그 조건의 값이 없다」 고 말하고, 조건을 빼고 다시
+    찾아 「상온 값은 있다」 를 덧붙여라.
+
+    등급은 **문헌과 사내가 같은 척도**다(사내 값은 근거에서 자동 산출):
+
+        1  실측 — 제품 문서에 인쇄된 값 · 시험 표본 3 이상 · 밀시트/데이터시트 선언
+        2  규격·공인 DB · 시험 표본 1~2
+        3  대표값 · 2차 인용 · 문헌에서 옮겨 적음
+        4  계산·추정·가정
+
+    답할 때 등급을 함께 말해라 — 「등급 1(표본 3) 305 MPa」.
 
     `property` 는 사람이 부르는 이름 그대로 준다(「항복응력」·「UTS」·「탄성계수」).
     서버가 `resolve_property` 와 같은 규칙으로 푼다.
@@ -2237,6 +2265,17 @@ async def find_by_property(
         params["min"] = min
     if max is not None:
         params["max"] = max
+    for key, value in (
+        ("condition", condition),
+        ("condition_unit", condition_unit),
+        ("condition_near", condition_near),
+        ("condition_min", condition_min),
+        ("condition_max", condition_max),
+        ("min_tier", min_tier),
+        ("origins", origins),
+    ):
+        if value is not None:
+            params[key] = value
     return await _get(ctx, "/catalog/properties/search", params)
 
 
@@ -3199,6 +3238,9 @@ async def get_ontology(ctx: Context) -> dict[str, Any]:
     ## 읽는 법
 
         kinds       마디 종류. `material`·`property`·`instrument` …
+        conditions  표준 시험 조건 — 값 검색의 `condition=` 에 쓰는 키와 단위. **마디가
+                    아니다** — 값의 한정자라 관계로 걷지 않고 `find_by_property` 로 거른다
+        deck_requirements  형식→필요한 블록 · 블록→내는 시험 · 블록→채우는 문헌 물성
         relations   사이. `src` 에서 `dst` 로 `label` 을 읽는다
 
     `source` 는 그 관계가 DB 어디에 실려 있나다(`fk:…` · `table:…`). **답에 옮길

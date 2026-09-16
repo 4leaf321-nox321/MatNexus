@@ -5675,6 +5675,18 @@
       },
       "ConditionInput": {
         "properties": {
+          "canonical_key": {
+            "anyOf": [
+              {
+                "maxLength": 40,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Canonical Key"
+          },
           "choices": {
             "anyOf": [
               {
@@ -15431,6 +15443,13 @@
       "OntologyOut": {
         "description": "지도 전체. **AI 는 이걸 읽고 다음 질문을 만든다.**",
         "properties": {
+          "conditions": {
+            "items": {
+              "$ref": "#/components/schemas/StandardConditionMapOut"
+            },
+            "title": "Conditions",
+            "type": "array"
+          },
           "deck_requirements": {
             "$ref": "#/components/schemas/DeckRequirementsOut"
           },
@@ -15452,7 +15471,8 @@
         "required": [
           "kinds",
           "relations",
-          "deck_requirements"
+          "deck_requirements",
+          "conditions"
         ],
         "title": "OntologyOut",
         "type": "object"
@@ -23171,6 +23191,75 @@
         "title": "StagePointsOut",
         "type": "object"
       },
+      "StandardConditionMapOut": {
+        "description": "표준 시험 조건 — 값 검색의 `condition=` 에 쓰는 키와 그 단위(2026-09-16).",
+        "properties": {
+          "aliases": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Aliases",
+            "type": "array"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "si_unit": {
+            "title": "Si Unit",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "si_unit",
+          "aliases"
+        ],
+        "title": "StandardConditionMapOut",
+        "type": "object"
+      },
+      "StandardConditionOut": {
+        "description": "표준 시험 조건 한 항목 — 조건 칸 정의가 고르는 것, 값 검색이 거르는 것.",
+        "properties": {
+          "aliases": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Aliases",
+            "type": "array"
+          },
+          "help": {
+            "title": "Help",
+            "type": "string"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "si_unit": {
+            "title": "Si Unit",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "si_unit",
+          "aliases",
+          "help"
+        ],
+        "title": "StandardConditionOut",
+        "type": "object"
+      },
       "StandardImportItem": {
         "description": "가져올 규격 하나.\n\n**이름을 바꿔 한 벌 더 만들 수 있어야 한다.** 이 기능이 가장 값을 하는 때가\n그때다 — 같은 규격을 부서가 자기 치수로 쓰는 경우다. 규격서가 범위나 최소만\n주는 칸이 많아서(`R >= 25`, `폭 5~25.4`) 실제 값은 부서마다 갈린다.\n\n그때 **이름이 그 차이를 말해야 한다.** `ASTM E8/E8M 박판형` 이 둘이면 어느\n것이 무엇인지 시편에 붙은 이름만 보고는 알 수 없다.",
         "properties": {
@@ -24362,6 +24451,17 @@
       },
       "TestConditionFieldOut": {
         "properties": {
+          "canonical_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Canonical Key"
+          },
           "choices": {
             "anyOf": [
               {
@@ -29647,7 +29747,7 @@
     },
     "/api/catalog/properties/search": {
       "get": {
-        "description": "**값으로 재료를 찾는다** — 「항복응력이 200MPa 근처인 재료」.\n\n## 단위가 필수인 이유\n\n값은 SI 로 저장돼 있어 200MPa 는 `200,000,000` 이다. 사람은 「200」 이라고\n치는데 그대로 걸면 **8 Pa 짜리가 나온다.** 짐작해서 답하면 조용히 틀린다.\n\n## 갈리면 값을 안 찾는다\n\n「항복응력」 은 금속 항복강도(486건)와 유변학 항복응력(9건) 둘에 걸린다.\n어느 쪽인지 모른 채 찾은 값은 **엉뚱한 물성의 정답**이다 — 후보만 돌려주고\n부르는 쪽이 고르게 한다.",
+        "description": "**값으로 재료를 찾는다** — 「항복응력이 200MPa 근처인 재료」.\n\n## 조건 · 등급 · 세계 (2026-09-16)\n\n「80 °C 에서」 는 `condition=temperature&condition_unit=degC&condition_near=80` —\n조건 값도 단위가 필수다. 시험은 조건 칸의 표준 키(`canonical_key`)로, 문헌은\n`conditions` 의 별칭으로, 선언은 점의 온도로 푼다. **조건을 모르는 값은 안 걸린다** —\n「그 조건에서 잰 것」 만 답이다.\n\n`min_tier` 는 문헌·사내를 같은 1~4 척도로 거른다(`shared/tiers`). `origins` 는\n세계를 고른다 — 「사내 실측만」 은 `measured`.\n\n## 단위가 필수인 이유\n\n값은 SI 로 저장돼 있어 200MPa 는 `200,000,000` 이다. 사람은 「200」 이라고\n치는데 그대로 걸면 **8 Pa 짜리가 나온다.** 짐작해서 답하면 조용히 틀린다.\n\n## 갈리면 값을 안 찾는다\n\n「항복응력」 은 금속 항복강도(486건)와 유변학 항복응력(9건) 둘에 걸린다.\n어느 쪽인지 모른 채 찾은 값은 **엉뚱한 물성의 정답**이다 — 후보만 돌려주고\n부르는 쪽이 고르게 한다.",
         "operationId": "search_by_property_api_catalog_properties_search_get",
         "parameters": [
           {
@@ -29764,6 +29864,146 @@
               "minimum": 1,
               "title": "Limit",
               "type": "integer"
+            }
+          },
+          {
+            "description": "표준 조건 키 — `temperature` · `strain_rate` … (`GET /test-types/standard-conditions`)",
+            "in": "query",
+            "name": "condition",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "표준 조건 키 — `temperature` · `strain_rate` … (`GET /test-types/standard-conditions`)",
+              "title": "Condition"
+            }
+          },
+          {
+            "description": "조건 값의 단위 — 「degC」·「K」",
+            "in": "query",
+            "name": "condition_unit",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "조건 값의 단위 — 「degC」·「K」",
+              "title": "Condition Unit"
+            }
+          },
+          {
+            "in": "query",
+            "name": "condition_near",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Condition Near"
+            }
+          },
+          {
+            "in": "query",
+            "name": "condition_min",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Condition Min"
+            }
+          },
+          {
+            "in": "query",
+            "name": "condition_max",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Condition Max"
+            }
+          },
+          {
+            "description": "근처의 폭(조건 단위). 비우면 조건이 정한 기본(온도 ±5 K)",
+            "in": "query",
+            "name": "condition_tol",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "근처의 폭(조건 단위). 비우면 조건이 정한 기본(온도 ±5 K)",
+              "title": "Condition Tol"
+            }
+          },
+          {
+            "description": "이 등급 이상만(1 이 가장 좋다). 사내 값도 등급이 있다",
+            "in": "query",
+            "name": "min_tier",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 4,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "이 등급 이상만(1 이 가장 좋다). 사내 값도 등급이 있다",
+              "title": "Min Tier"
+            }
+          },
+          {
+            "description": "`catalog` · `internal` · `measured` 를 쉼표로 — 이 세계만. 비우면 전부",
+            "in": "query",
+            "name": "origins",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "`catalog` · `internal` · `measured` 를 쉼표로 — 이 세계만. 비우면 전부",
+              "title": "Origins"
             }
           }
         ],
@@ -41100,6 +41340,32 @@
           }
         },
         "summary": "List Parsers",
+        "tags": [
+          "tests"
+        ]
+      }
+    },
+    "/api/test-types/standard-conditions": {
+      "get": {
+        "description": "표준 시험 조건 — 조건 칸 정의가 고르고, 값 검색이 거르는 축(2026-09-16).\n\n인증 없이 연다: 가리는 값이 없는 어휘이고, 시험 종류 편집 화면이 목록을 손으로 적지\n않게 하는 것이 목적이다 — 적어 두면 조건을 더할 때 화면이 뒤처진다.",
+        "operationId": "list_standard_conditions_api_test_types_standard_conditions_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/StandardConditionOut"
+                  },
+                  "title": "Response List Standard Conditions Api Test Types Standard Conditions Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Standard Conditions",
         "tags": [
           "tests"
         ]

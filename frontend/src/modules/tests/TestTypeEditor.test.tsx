@@ -26,6 +26,10 @@ vi.mock('@/modules/tests/api', async (importOriginal) => ({
     createType: (...args: unknown[]) => createType(...args),
     parsers: () => Promise.resolve([]),
     capabilities: () => capabilities(),
+    standardConditions: () =>
+      Promise.resolve([
+        { key: 'temperature', label: '온도', si_unit: 'K', aliases: ['temp'], help: '' },
+      ]),
   },
 }))
 

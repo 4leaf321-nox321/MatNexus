@@ -22,6 +22,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.modules.tests.models import TestChannel, TestConditionField, TestType
+from app.shared import standard_conditions
 
 #: 시험 종류 → 채널 · 조건 항목.
 #:
@@ -202,6 +203,10 @@ def refresh_builtin_test_types(db: Session) -> list[str]:
                     choices=choices,
                     is_required=required,
                     sort_order=order * 10,
+                    # 표준 조건에 잇는다 — `temperature` 는 온도. 정의 편집과 같은 판정.
+                    canonical_key=standard_conditions.resolve(key, si_unit=si_unit)
+                    if value_type == "number"
+                    else None,
                 )
             )
             touched = True
@@ -262,6 +267,10 @@ def ensure_builtin_test_types(db: Session) -> list[str]:
                     choices=choices,
                     is_required=required,
                     sort_order=order * 10,
+                    # 표준 조건에 잇는다 — `temperature` 는 온도. 정의 편집과 같은 판정.
+                    canonical_key=standard_conditions.resolve(key, si_unit=si_unit)
+                    if value_type == "number"
+                    else None,
                 )
             )
 

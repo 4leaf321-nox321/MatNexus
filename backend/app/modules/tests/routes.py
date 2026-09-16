@@ -57,6 +57,7 @@ from app.modules.tests.schemas import (
     RunFacetsOut,
     SourceReplaceOut,
     SourceVersionOut,
+    StandardConditionOut,
     StorageReportOut,
     SummaryImportItemOut,
     SummaryImportOut,
@@ -85,6 +86,7 @@ from app.shared import (
     revision,
     sorting,
     specimen_size,
+    standard_conditions,
 )
 from app.shared import divisions as divisions_order
 from app.shared.auth import current_user, require_system_admin
@@ -100,6 +102,27 @@ from matcore.groups import prony as _prony_group  # noqa: F401  (등록시킨다
 from matcore.readers import profile as profiles
 
 router = APIRouter(prefix="/test-types", tags=["tests"])
+
+
+@router.get("/standard-conditions", response_model=list[StandardConditionOut])
+def list_standard_conditions() -> list[StandardConditionOut]:
+    """표준 시험 조건 — 조건 칸 정의가 고르고, 값 검색이 거르는 축(2026-09-16).
+
+    인증 없이 연다: 가리는 값이 없는 어휘이고, 시험 종류 편집 화면이 목록을 손으로 적지
+    않게 하는 것이 목적이다 — 적어 두면 조건을 더할 때 화면이 뒤처진다.
+    """
+    return [
+        StandardConditionOut(
+            key=one.key,
+            label=one.label,
+            si_unit=one.si_unit,
+            aliases=list(one.aliases),
+            help=one.help,
+        )
+        for one in standard_conditions.STANDARD.values()
+    ]
+
+
 runs_router = APIRouter(prefix="/test-runs", tags=["tests"])
 maintenance_router = APIRouter(prefix="/maintenance", tags=["tests"])
 
@@ -245,6 +268,7 @@ def _type_out(db: Session, test_type: TestType) -> TestTypeOut:
                 choices=f.choices,
                 is_required=f.is_required,
                 sort_order=f.sort_order,
+                canonical_key=f.canonical_key,
             )
             for f in conditions
         ],
@@ -589,6 +613,7 @@ def list_test_types(
                     choices=f.choices,
                     is_required=f.is_required,
                     sort_order=f.sort_order,
+                    canonical_key=f.canonical_key,
                 )
                 for f in conditions[t.id]
             ],

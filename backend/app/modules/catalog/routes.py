@@ -1469,10 +1469,46 @@ def search_by_property(
     ),
     scope: str = Query(default="all", description="`all` · `catalog` · `internal`"),
     limit: int = Query(default=50, ge=1, le=200),
+    condition: str | None = Query(
+        default=None,
+        description=(
+            "표준 조건 키 — `temperature` · `strain_rate` … "
+            "(`GET /test-types/standard-conditions`)"
+        ),
+    ),
+    condition_unit: str | None = Query(
+        default=None, description="조건 값의 단위 — 「degC」·「K」"
+    ),
+    condition_near: float | None = Query(default=None),
+    condition_min: float | None = Query(default=None),
+    condition_max: float | None = Query(default=None),
+    condition_tol: float | None = Query(
+        default=None, description="근처의 폭(조건 단위). 비우면 조건이 정한 기본(온도 ±5 K)"
+    ),
+    min_tier: int | None = Query(
+        default=None,
+        ge=1,
+        le=4,
+        description="이 등급 이상만(1 이 가장 좋다). 사내 값도 등급이 있다",
+    ),
+    origins: str | None = Query(
+        default=None,
+        description="`catalog` · `internal` · `measured` 를 쉼표로 — 이 세계만. 비우면 전부",
+    ),
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> PropertySearchOut:
     """**값으로 재료를 찾는다** — 「항복응력이 200MPa 근처인 재료」.
+
+    ## 조건 · 등급 · 세계 (2026-09-16)
+
+    「80 °C 에서」 는 `condition=temperature&condition_unit=degC&condition_near=80` —
+    조건 값도 단위가 필수다. 시험은 조건 칸의 표준 키(`canonical_key`)로, 문헌은
+    `conditions` 의 별칭으로, 선언은 점의 온도로 푼다. **조건을 모르는 값은 안 걸린다** —
+    「그 조건에서 잰 것」 만 답이다.
+
+    `min_tier` 는 문헌·사내를 같은 1~4 척도로 거른다(`shared/tiers`). `origins` 는
+    세계를 고른다 — 「사내 실측만」 은 `measured`.
 
     ## 단위가 필수인 이유
 
@@ -1543,8 +1579,45 @@ def search_by_property(
         convert=not grouped and not raw_scale,
     )
 
+    cond: property_search.ConditionFilter | None = None
+    if condition is not None:
+        if not condition_unit:
+            raise AppError(
+                "MNX-CATALOG-0051",
+                "조건의 단위(condition_unit)를 주세요 — 「80」 만으로는 °C 인지 K 인지 "
+                "모릅니다.",
+                status=422,
+            )
+        cond = property_search.condition_bounds(
+            key=condition,
+            unit=condition_unit,
+            near=condition_near,
+            minimum=condition_min,
+            maximum=condition_max,
+            tolerance=condition_tol,
+        )
+    wanted_worlds: set[str] | None = None
+    if origins:
+        wanted_worlds = {one.strip() for one in origins.split(",") if one.strip()}
+        unknown = wanted_worlds - {"catalog", "internal", "measured"}
+        if unknown:
+            raise AppError(
+                "MNX-CATALOG-0051",
+                f"모르는 세계입니다: {', '.join(sorted(unknown))} — "
+                "catalog · internal · measured",
+                status=422,
+            )
+
     hits: list[property_search.Hit] = []
     notes: list[str] = []
+    if cond is not None:
+        std = cond.standard
+        shown_unit = condition_unit or std.si_unit
+        notes.append(
+            f"조건 {std.label} {units.from_si(cond.low, shown_unit):g}"
+            f"~{units.from_si(cond.high, shown_unit):g} {shown_unit} 에서 잰 값만 — "
+            "조건을 적지 않은 값은 걸리지 않습니다."
+        )
     if chosen.deprecated:
         notes.append(
             f"'{chosen.name}' ({chosen.key}) 은 폐기된 키입니다"
@@ -1554,7 +1627,7 @@ def search_by_property(
                 else "."
             )
         )
-    if scope in ("all", "catalog"):
+    if scope in ("all", "catalog") and (wanted_worlds is None or "catalog" in wanted_worlds):
         hits += property_search.catalog_hits(
             db,
             property_key=chosen.key,
@@ -1564,13 +1637,15 @@ def search_by_property(
             limit=limit,
             term=term,
             convert=not grouped and not raw_scale,
+            condition=cond,
+            min_tier=min_tier,
         )
     if scope in ("all", "internal") and grouped:
         # 파라미터 집합은 아직 사내로 받아 가는 길이 열리지 않았다(ADR 0029 2단계).
         notes.append("사내 재료는 안 봤습니다 — 모델 파라미터는 아직 채택 경로가 없습니다.")
     elif scope in ("all", "internal"):
         # **시험으로 잰 값이 먼저다.** 셋 중 제일 믿을 만한 값인데 전에는 이것만 빠졌다.
-        if chosen.measured:
+        if chosen.measured and (wanted_worlds is None or "measured" in wanted_worlds):
             hits += property_search.measured_hits(
                 db,
                 scalar_keys=chosen.measured,
@@ -1580,8 +1655,10 @@ def search_by_property(
                 limit=limit,
                 visible=visible_material_ids(db, user),
                 convert=not raw_scale,
+                condition=cond,
+                min_tier=min_tier,
             )
-        if chosen.item_filters:
+        if chosen.item_filters and (wanted_worlds is None or "internal" in wanted_worlds):
             for item, scale in chosen.item_filters:
                 hits += property_search.internal_hits(
                     db,
@@ -1593,6 +1670,8 @@ def search_by_property(
                     visible=visible_material_ids(db, user),
                     scale=scale,
                     convert=not raw_scale,
+                    condition=cond,
+                    min_tier=min_tier,
                 )
         else:
             # **못 찾은 게 아니라 이어져 있지 않은 것이다.** 그 차이를 말한다.

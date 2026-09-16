@@ -48,6 +48,7 @@ from app.shared import (
     parse_hooks,
     permissions,
     specimen_size,
+    standard_conditions,
 )
 from app.shared.errors import AppError, NotFound
 from matcore import curves, parsers, readers, registry, units, viscoelastic
@@ -470,6 +471,21 @@ def _replace_children(
             )
         )
     for order, item in enumerate(conditions):
+        # **표준 조건에 잇는다.** 준 것이 있으면 그것(모르는 키는 거절 — 조용히 비우면
+        # 「이었는 줄」 안다), 없으면 이름·단위로 짐작한다(`temp`·`temperature` → 온도).
+        given = item.get("canonical_key")
+        if given and given not in standard_conditions.STANDARD:
+            known = ", ".join(standard_conditions.STANDARD)
+            raise AppError(
+                "MNX-TESTS-0041",
+                f"모르는 표준 조건입니다: {given}. 있는 것: {known}",
+                status=422,
+            )
+        canonical = given or (
+            standard_conditions.resolve(str(item["key"]), si_unit=item.get("si_unit"))
+            if str(item["value_type"]) == "number"
+            else None
+        )
         db.add(
             TestConditionField(
                 test_type_id=test_type.id,
@@ -481,6 +497,7 @@ def _replace_children(
                 choices=item.get("choices"),
                 is_required=bool(item.get("is_required", False)),
                 sort_order=int(item.get("sort_order", order * 10)),
+                canonical_key=canonical,
             )
         )
 
