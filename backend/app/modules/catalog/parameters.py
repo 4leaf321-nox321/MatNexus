@@ -46,6 +46,11 @@ UNIT_OF_TERM = "unit_of_term"
 
 #: 파라미터형으로 볼 최소 변수 수. 하나뿐이면 그냥 그 물성이다.
 MIN_TERMS = 2
+#: 변수를 든 값이 그 키 전체의 이 비율 이상일 때만 파라미터형이다. 영률 2,140건 중 셋이
+#: Prony 급수의 E0 로 변수를 달고 있었는데, 그것만으로 키 전체가 파라미터형이 되어 값 검색이
+#: `term` 없이는 영률을 통째로 거절했다(평가 세트 search-04, 2026-09-16). **소수의 변수 값은
+#: 그 키의 예외**다 — 스칼라 검색에서는 빼고, 그 사실을 말한다(`catalog_hits`).
+PARAMETERIZED_RATIO = 0.5
 
 #: 벌을 가르는 축을 찾을 때 **거들떠보지 않는 조건 칸.**
 #:
@@ -124,10 +129,28 @@ def _load(db: Session) -> dict[str, list[str]]:
         """)
     ).all()
     found: dict[str, list[str]] = {}
-    for key, term, _count in rows:
+    termed: dict[str, int] = {}
+    for key, term, count in rows:
         found.setdefault(key, []).append(term)
-    # 변수가 하나뿐인 키는 파라미터형이 아니다 — 조건을 적어 뒀을 뿐이다.
-    _cache = {key: sorted(terms) for key, terms in found.items() if len(terms) >= MIN_TERMS}
+        termed[key] = termed.get(key, 0) + int(count)
+    totals: dict[str, int] = {}
+    if found:
+        for key, total in db.execute(
+            text(
+                "SELECT property_key, count(*) FROM catalog_values "
+                "WHERE property_key = ANY(:keys) GROUP BY 1"
+            ),
+            {"keys": list(found)},
+        ).all():
+            totals[str(key)] = int(total)
+    # 변수가 하나뿐인 키는 파라미터형이 아니다 — 조건을 적어 뒀을 뿐이다. 변수 값이 소수인
+    # 키도 아니다 — 그 몇 건은 스칼라 물성의 예외이고, 키 전체를 잠그면 나머지를 못 찾는다.
+    _cache = {
+        key: sorted(terms)
+        for key, terms in found.items()
+        if len(terms) >= MIN_TERMS
+        and termed.get(key, 0) >= PARAMETERIZED_RATIO * int(totals.get(key, 0) or 0)
+    }
     return _cache
 
 

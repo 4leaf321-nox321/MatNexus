@@ -30,7 +30,7 @@ import uuid
 from dataclasses import dataclass
 from typing import Any
 
-from sqlalchemy import Float, Select, cast, func, select, true
+from sqlalchemy import Float, Select, cast, func, or_, select, true
 from sqlalchemy import null as sa_null
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Session
@@ -258,6 +258,15 @@ def catalog_hits(
     )
     if term:
         query = query.where(CatalogValue.conditions[parameters.TERM].astext == term)
+    else:
+        # **변수 달린 값은 스칼라가 아니다.** 영률 키에 Prony 급수의 E0 가 몇 건 섞여 있다 —
+        # 그 값은 「영률」 이 아니라 「그 식의 E0」 다. 같은 범위에 넣으면 조용히 섞인다.
+        query = query.where(
+            or_(
+                CatalogValue.conditions.is_(None),
+                ~CatalogValue.conditions.has_key(parameters.TERM),
+            )
+        )
     if min_tier is not None:
         query = query.where(CatalogValue.quality_tier <= min_tier)
     if condition is not None:

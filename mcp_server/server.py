@@ -2188,7 +2188,9 @@ async def resolve_property(ctx: Context, name: str) -> dict[str, Any]:
             "candidates": [],
             "hint": (
                 f"'{name}' 로 물성을 찾지 못했습니다. `get_taxonomy` 로 어떤 물성 "
-                "도메인이 있는지 보거나, 다른 이름으로 다시 물어보세요."
+                "도메인이 있는지 보거나, 다른 이름으로 다시 물어보세요. **이 이름은 서버가 "
+                "별칭 후보로 남겨 두었습니다** — 관리자가 기준정보 화면에서 어느 물성인지 "
+                "이어 주면 다음부터 이 말로 찾힙니다. 사람에게 그렇게 말해라."
             ),
         }
     return got

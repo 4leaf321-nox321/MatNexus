@@ -403,3 +403,68 @@ class Test한_이름_아래_여러_벌:
         # **그 조건의 값이 담겼다.** 다른 벌 값이 섞이면 여기서 걸린다.
         values = {row["term"]: row["value"] for row in picked.json()["terms"]}
         assert values == {"C10": 1e5 + 10.0, "C01": 2e5 + 10.0}
+
+
+class Test소수의_변수값:
+    """스칼라 물성에 변수 달린 값이 몇 건 섞여 있어도 **그 키는 스칼라다**(평가 세트
+    search-04, 2026-09-16). 영률 2,140건 중 셋이 Prony 급수의 E0 로 변수를 달고 있었는데,
+    그것만으로 키 전체가 파라미터형이 되어 값 검색이 영률을 통째로 거절했다."""
+
+    def test_변수_값이_소수면_스칼라로_찾고_그_값은_뺀다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str]
+    ) -> None:
+        parameters.forget()
+        key = "mechanical.test_scalar_mostly"
+        db.add(
+            CatalogDefinition(
+                mt_id=990201,
+                key=key,
+                name="시험용 영률",
+                domain="mechanical",
+                si_unit="Pa",
+                value_type="number",
+            )
+        )
+        material = CatalogMaterial(mt_id=990202, name="시험용 강", category="metal")
+        db.add(material)
+        db.flush()
+        for at in range(8):
+            db.add(
+                CatalogValue(
+                    mt_id=990300 + at,
+                    material_id=material.id,
+                    property_key=key,
+                    value_num=200e9 + at * 1e9,
+                    unit="Pa",
+                    quality_tier=2,
+                    conditions={},
+                )
+            )
+        # 변수 달린 값 둘 — Prony 의 E0(215 GPa). 스칼라 범위 안이라 값만 보면 섞일 자리다.
+        for at, term in enumerate(("E0 (glassy)", "E0 (Prony)")):
+            db.add(
+                CatalogValue(
+                    mt_id=990400 + at,
+                    material_id=material.id,
+                    property_key=key,
+                    value_num=215e9,
+                    unit="Pa",
+                    quality_tier=2,
+                    conditions={"term": term, "unit_of_term": "Pa"},
+                )
+            )
+        db.commit()
+        parameters.forget()
+
+        assert not parameters.is_parameterized(db, key), "둘/열이면 파라미터형이 아니다"
+        answer = client.get(
+            "/api/catalog/properties/search",
+            params={"q": "시험용 영률", "unit": "GPa", "min": 190, "max": 220},
+            headers=admin_headers,
+        )
+        assert answer.status_code == 200, answer.text
+        body = answer.json()
+        # 스칼라 여덟만 — 변수 달린 둘(215 GPa)은 범위 안이어도 안 섞인다.
+        assert body["total"] == 8, body["hits"]
+        assert all(abs(one["value"] - 215.0) > 1e-6 for one in body["hits"])
+        parameters.forget()
