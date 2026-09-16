@@ -13,6 +13,12 @@ export type MergeConflict = components['schemas']['MergeConflictOut']
 export type WorkspaceImportResult = components['schemas']['ImportResultOut']
 export type WorkspaceImportRow = components['schemas']['ImportRowOut']
 
+function csvForm(text: string): FormData {
+  const form = new FormData()
+  form.append('file', new File([text], '부서정보.csv', { type: 'text/csv' }))
+  return form
+}
+
 export const workspacesApi = {
   /**
    * 이 부서의 자료를 전부 다른 부서로 옮기고 원본을 보관한다.
@@ -24,19 +30,16 @@ export const workspacesApi = {
   /**
    * ReportArchive 부서 내보내기 CSV 로 무엇이 만들어질지 먼저 본다.
    * 조직도는 한 번 잘못 들어가면 지우기 어렵다 — 계획을 보고 사람이 누른다.
+   *
+   * 받는 것은 **글자**다. 화면은 붙여넣기 칸 하나이고 파일은 그 칸을 채우는 수단일
+   * 뿐이라(TestScope 와 같은 모양), 서버로는 그 글자를 CSV 파일로 싸서 보낸다 —
+   * 서버 쪽 판정 코드는 그대로다.
    */
-  previewImport: (file: File) => {
-    const form = new FormData()
-    form.append('file', file)
-    return api.postForm<WorkspaceImportResult>('/workspaces/import/preview', form)
-  },
+  previewImport: (text: string) =>
+    api.postForm<WorkspaceImportResult>('/workspaces/import/preview', csvForm(text)),
 
   /** 미리보기와 같은 코드로 판정해 만든다. */
-  runImport: (file: File) => {
-    const form = new FormData()
-    form.append('file', file)
-    return api.postForm<WorkspaceImportResult>('/workspaces/import', form)
-  },
+  runImport: (text: string) => api.postForm<WorkspaceImportResult>('/workspaces/import', csvForm(text)),
 
   /** 가입 화면용. 로그인 전에 부른다. */
   options: () => api.get<WorkspaceOption[]>('/workspaces/options'),
