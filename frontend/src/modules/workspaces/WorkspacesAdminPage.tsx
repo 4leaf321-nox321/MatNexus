@@ -26,6 +26,7 @@ import {
   Building2,
   ChevronDown,
   ChevronUp,
+  Download,
   FileUp,
   Loader2,
   Pencil,
@@ -71,6 +72,7 @@ export default function WorkspacesAdminPage() {
   const [moving, setMoving] = useState<Workspace | null>(null)
   const [query, setQuery] = useState('')
   const [busySlug, setBusySlug] = useState<string | null>(null)
+  const [exporting, setExporting] = useState(false)
   const [error, setError] = useState<Error | null>(null)
 
   const rows = workspaces.data ?? []
@@ -82,6 +84,18 @@ export default function WorkspacesAdminPage() {
     if (words.length === 0) return true
     const haystack = `${workspace.path} ${workspace.slug}`.toLowerCase()
     return words.every((word) => haystack.includes(word))
+  }
+
+  async function exportCsv() {
+    setExporting(true)
+    setError(null)
+    try {
+      await workspacesApi.exportCsv()
+    } catch (caught) {
+      setError(caught instanceof Error ? caught : new Error('내보내지 못했습니다.'))
+    } finally {
+      setExporting(false)
+    }
   }
 
   async function run(slug: string, action: () => Promise<unknown>) {
@@ -107,7 +121,16 @@ export default function WorkspacesAdminPage() {
           <span className="flex items-center gap-2">
             {/* **조직도를 두 번 치지 않는다.** ReportArchive 에 이미 있는 트리를
                 내보내기 한 장으로 들여온다 — 양쪽에 손으로 치면 오타 하나로
-                「같은 부서가 다른 이름」 이 된다. */}
+                「같은 부서가 다른 이름」 이 된다. 내보내기는 그 반대 방향 — 열·순서가
+                같아 양쪽으로 오간다. 한쪽으로만 들어가는 것은 호환이 아니라 이사다. */}
+            <Button variant="outline" onClick={() => void exportCsv()} disabled={exporting}>
+              {exporting ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Download className="size-4" />
+              )}
+              내보내기
+            </Button>
             <Button variant="outline" onClick={() => setImporting(true)}>
               <FileUp className="size-4" />
               가져오기

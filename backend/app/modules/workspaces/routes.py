@@ -6,7 +6,10 @@
 
 from __future__ import annotations
 
+import csv
+import io
 import uuid
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, Query, Response, UploadFile
 from sqlalchemy.exc import IntegrityError
@@ -55,6 +58,44 @@ def list_workspaces(
             "MNX-WORKSPACES-0011", "전체 부서 목록은 시스템 관리자만 볼 수 있습니다."
         )
     return services.list_for(db, user, all_workspaces=all_workspaces)
+
+
+@router.get("/export.csv", include_in_schema=False)
+def export_csv(
+    _: User = Depends(require_system_admin), db: Session = Depends(get_db)
+) -> Response:
+    """부서 정보를 CSV 로 — **ReportArchive 와 같은 형식.**
+
+    컬럼도 순서도 저쪽 `/api/workspaces/export.csv` 와 같다(TestScope 도 같다).
+    한쪽으로만 들어가는 것은 호환이 아니라 이사다 — 여기서 낸 파일이 저쪽
+    가져오기에도, 이쪽 가져오기에도 그대로 들어간다.
+
+    ## BOM 을 붙인다
+
+    안 붙이면 Excel 이 한글을 깬다. 저쪽과 같은 규약이고, 이쪽 가져오기도
+    `utf-8-sig` 로 읽는다.
+
+    ## 스키마에 안 싣는다
+
+    `include_in_schema=False` — 생성되는 프론트 타입에 CSV 응답이 끼면 그 타입은
+    `unknown` 이 되고, 그것을 쓰는 화면이 타입 검사를 통과해 버린다. 이 경로는
+    파일을 내려받는 자리지 데이터를 읽는 자리가 아니다.
+    """
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow(services.EXPORT_HEADER)
+    writer.writerows(services.export_rows(db))
+
+    # 파일 이름은 둘로 낸다 — ASCII 는 옛 브라우저용, UTF-8 은 한글 이름용.
+    # f-string 을 안 쓴다: 이 값에는 따옴표가 섞여 있어 읽기 어려워진다.
+    disposition = "attachment; filename=\"workspaces.csv\"; filename*=UTF-8''" + quote(
+        "부서정보.csv"
+    )
+    return Response(
+        content="\ufeff" + buffer.getvalue(),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": disposition},
+    )
 
 
 @router.post("", response_model=WorkspaceOut, status_code=201)

@@ -142,6 +142,85 @@ def ordered_tree(db: Session) -> list[tuple[Workspace, int, str]]:
     return out
 
 
+#: ReportArchive 「부서 정보 내보내기」 와 **같은 열, 같은 순서.** 가져오기가 읽는
+#: 것(`imports.REQUIRED_COLUMNS`)의 상위 집합이라 여기서 내보낸 파일이 저쪽에도,
+#: TestScope 에도, 다시 이쪽에도 그대로 들어간다.
+EXPORT_HEADER = (
+    "slug",
+    "name",
+    "parent_slug",
+    "parent_name",
+    "depth",
+    "path",
+    "kind",
+    "status",
+    "description",
+    "sort_order",
+    "external_view_default",
+    "member_count",
+    "managers",
+    "created_at",
+)
+
+
+def export_rows(db: Session) -> list[list[object]]:
+    """부서 정보를 CSV 행으로. **트리 순서 그대로** — 화면과 같은 순서다.
+
+    ## 우리가 모르는 칸은 아는 척하지 않는다
+
+    `description` 과 `external_view_default` 는 **비운다.** 이쪽 부서에는 설명 칸이
+    없고, `restricted` 는 물성 열람 제한이라 저쪽의 보고서 공개 정책과 다른 물음이다
+    — 채워 보내면 그 값이 저쪽에서 정책이 된다.
+
+    `kind` 는 실제 값(org·personal)을 낸다. 개인 공간을 빼고 내면 「부서 수」 가
+    화면과 달라 사람이 헷갈리고, 받는 쪽 가져오기는 어차피 personal 을 건너뛴다.
+    """
+    rows = ordered_tree(db)
+    by_id = {row.id: row for row, _, _ in rows}
+
+    counts = {
+        workspace_id: int(total)
+        for workspace_id, total in db.execute(
+            select(WorkspaceMember.workspace_id, func.count(WorkspaceMember.id)).group_by(
+                WorkspaceMember.workspace_id
+            )
+        )
+    }
+    managers: dict[uuid.UUID, list[str]] = {}
+    for workspace_id, label in db.execute(
+        select(WorkspaceMember.workspace_id, User.display_name)
+        .join(User, User.id == WorkspaceMember.user_id)
+        .where(WorkspaceMember.role == "manager")
+        .order_by(User.display_name)
+    ):
+        managers.setdefault(workspace_id, []).append(label)
+
+    out: list[list[object]] = []
+    for workspace, depth, path in rows:
+        parent = by_id.get(workspace.parent_id) if workspace.parent_id else None
+        out.append(
+            [
+                workspace.slug,
+                workspace.name,
+                parent.slug if parent else "",
+                parent.name if parent else "",
+                depth,
+                # 저쪽은 " > " 로 잇는다. 우리 화면은 " / " 지만 **내보내는 파일은
+                # 받는 쪽 규약을 따른다.**
+                path.replace(" / ", " > "),
+                workspace.kind,
+                "active" if workspace.is_active else "archived",
+                "",
+                workspace.sort_order,
+                "",
+                counts.get(workspace.id, 0),
+                "; ".join(managers.get(workspace.id, [])),
+                workspace.created_at.isoformat() if workspace.created_at else "",
+            ]
+        )
+    return out
+
+
 def _descendant_ids(db: Session, workspace_id: uuid.UUID) -> set[uuid.UUID]:
     """자신 + 모든 하위. 부모를 바꿀 때 순환을 막는 데 쓴다."""
     rows = list(db.scalars(select(Workspace)))

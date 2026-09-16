@@ -1,6 +1,6 @@
 /** 부서 API. */
 
-import { api } from '@/shared/api/client'
+import { api, downloadFile } from '@/shared/api/client'
 import type { components } from '@/shared/api/schema'
 
 export type Workspace = components['schemas']['WorkspaceOut']
@@ -26,6 +26,12 @@ export const workspacesApi = {
    */
   merge: (slug: string, targetSlug: string) =>
     api.post<Reference[]>(`/workspaces/${slug}/merge`, { target_slug: targetSlug }),
+
+  /**
+   * 부서 정보를 CSV 로 — ReportArchive·TestScope 의 「부서 정보 내보내기」 와 같은 열,
+   * 같은 순서. 여기서 낸 파일이 저쪽 가져오기에도, 이쪽 가져오기에도 그대로 들어간다.
+   */
+  exportCsv: () => downloadFile('/workspaces/export.csv', '부서정보.csv'),
 
   /**
    * ReportArchive 부서 내보내기 CSV 로 무엇이 만들어질지 먼저 본다.
