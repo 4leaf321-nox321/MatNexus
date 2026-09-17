@@ -191,6 +191,19 @@ class Test맞추기:
                 [np.zeros(5), np.zeros(5)],
             )
 
+    def test_같은_x_가_되풀이돼도_맞춘다(self) -> None:
+        """**실제 곡선이 그렇다** — 진소성변형률은 탄성 구간에서 0 이 수백 점 이어진다(clip).
+        되풀이 자리는 y 평균 한 점으로 접고 보간한다."""
+        grids = [np.asarray([0.0, 0.0, 0.0, 0.1, 0.2, 0.3]), np.linspace(0, 0.25, 6)]
+        values = [np.asarray([100.0, 200.0, 300.0, 310.0, 320.0, 330.0]), np.full(6, 250.0)]
+        aligned = st.align_grids(grids, values)
+        assert aligned.changed
+        # x=0 의 값은 100·200·300 의 평균이다.
+        assert aligned.values[0][0] == pytest.approx(200.0)
+        assert aligned.values[0][-1] == pytest.approx(
+            float(np.interp(0.25, [0.0, 0.1, 0.2, 0.3], [200.0, 310.0, 320.0, 330.0]))
+        )
+
     def test_오름차순이_아니면_거부한다(self) -> None:
         # np.interp 는 x 가 오름차순이라고 믿는다 — 아니면 조용히 엉뚱한 값을 준다.
         with pytest.raises(st.StatisticsError, match="오름차순"):

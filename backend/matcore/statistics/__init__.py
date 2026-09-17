@@ -391,7 +391,7 @@ def align_grids(
     for index, (grid, value) in enumerate(zip(grids, values, strict=True)):
         if len(grid) != len(value):
             raise StatisticsError(f"{index + 1}번째 곡선의 x 와 y 점 수가 다릅니다.")
-        if len(grid) < 2 or not np.all(np.diff(grid) > 0):
+        if len(grid) < 2 or not np.all(np.diff(grid) >= 0):
             raise StatisticsError(
                 f"{index + 1}번째 곡선의 x 가 오름차순이 아닙니다 — "
                 f"레시피에 '정렬·중복 제거' 단계가 있는지 보세요."
@@ -420,7 +420,13 @@ def align_grids(
     if points < 2:
         raise StatisticsError(f"점 수는 2 이상이어야 합니다: {points}")
     grid = np.linspace(check.common_start, check.common_end, points)
-    aligned = [np.interp(grid, one, value) for one, value in zip(grids, values, strict=True)]
+    # **같은 x 가 되풀이되는 곡선이 실제로 있다** — 진소성변형률은 탄성 구간에서 0 이 수백
+    # 점 이어진다(clip). `np.interp` 는 x 가 늘어나기만 하면 되지만 되풀이 자리의 값은
+    # 정의가 흐리니, 같은 x 는 y 의 평균 한 점으로 접고 보간한다.
+    aligned = [
+        np.interp(grid, *_collapse(one, value))
+        for one, value in zip(grids, values, strict=True)
+    ]
     return Alignment(
         grids=[grid.copy() for _ in grids],
         values=aligned,
@@ -435,6 +441,16 @@ def align_grids(
             f"그 밖의 측정점은 대표 곡선에 안 들어갑니다."
         ),
     )
+
+
+def _collapse(grid: np.ndarray, value: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """같은 x 의 점들을 y 평균 한 점으로. x 는 이미 오름차순(같은 값 허용)이다."""
+    unique, inverse = np.unique(grid, return_inverse=True)
+    if len(unique) == len(grid):
+        return grid, value
+    summed = np.bincount(inverse, weights=value, minlength=len(unique))
+    counts = np.bincount(inverse, minlength=len(unique))
+    return unique, summed / counts
 
 
 def short_curves(grids: list[np.ndarray], *, ratio: float = SHORT_CURVE_RATIO) -> list[int]:
