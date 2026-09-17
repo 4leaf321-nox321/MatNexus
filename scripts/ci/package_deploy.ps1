@@ -12,7 +12,7 @@
     run_server.ps1       기동
     deploy.ps1 / rollback.ps1 / venv_sync.ps1 / install.ps1 / precheck.ps1 /
     setup_ollama.ps1 / build_pgvector.ps1 / install_pgvector.ps1 /
-    backup.ps1 / restore.ps1
+    backup.ps1 / restore.ps1 / service.ps1 / watchdog.ps1
     배포.md              초기 배포·업데이트 배포 절차
     BUILD_INFO.txt       wheel 을 만든 파이썬 마이너 버전
 
@@ -163,6 +163,7 @@ Copy-Item -Force .\scripts\deploy\backup.ps1 .\deploy\backup.ps1
 Copy-Item -Force .\scripts\deploy\restore.ps1 .\deploy\restore.ps1
 # 재부팅해도 뜨게 — Windows 서비스 등록(NSSM 동봉). 폐쇄망이라 바이너리도 zip 에 넣는다.
 Copy-Item -Force .\scripts\deploy\service.ps1 .\deploy\service.ps1
+Copy-Item -Force .\scripts\deploy\watchdog.ps1 .\deploy\watchdog.ps1
 New-Item -ItemType Directory -Force -Path .\deploy\bin | Out-Null
 Copy-Item -Force .\scripts\deploy\bin\nssm.exe .\deploy\bin\nssm.exe
 Copy-Item -Force .\scripts\deploy\bin\README.md .\deploy\bin\README.md

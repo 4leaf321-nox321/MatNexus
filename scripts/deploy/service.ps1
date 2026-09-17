@@ -32,7 +32,9 @@ MCP_ALLOWED_HOSTS 를 `server.py` 가 직접 읽는다(환경변수가 비어 �
 값을 박아 두면 .env 를 고쳐도 서비스는 옛 포트를 보기 때문이다. `-NoMcp` 로 뺀다.
 
 둘 다 지연 자동 시작(부팅 뒤 PostgreSQL 이 먼저 뜰 시간을 준다), PostgreSQL 서비스가
-있으면 그것에 의존을 걸고, 죽으면 10초 뒤 되살린다. stdout/stderr 는
+있으면 그것에 의존을 걸고, 죽으면 10초 뒤 되살린다. **떠 있는데 멈춘 것**은 SCM 이
+못 알아채므로 `watchdog.ps1` 을 작업 스케줄러에 함께 등록한다(1분마다 `/api/health`,
+잇달아 세 번 답이 없으면 MatNexus 재시작 — 그 스크립트의 머리 참조). `-NoWatchdog` 로 뺀다. stdout/stderr 는
 `<AppPath>_data\logs\service-*.log` 로 가고 10 MB 마다 돌린다 — 앱 로그(app.log)와는
 별도다. 콘솔이 없으므로 `PYTHONUTF8=1` 을 준다(한글 배너가 cp949 로 깨지지 않게).
 
@@ -54,7 +56,9 @@ param(
     # MCP(AI 연결)를 서비스로 안 두고 싶을 때. 없어도 앱은 멀쩡히 돈다.
     [switch]$NoMcp,
     # PostgreSQL 서비스 이름. 비우면 'postgresql*' 로 찾는다. 'none' 이면 의존을 안 건다.
-    [string]$DbService
+    [string]$DbService,
+    # 감시 작업(watchdog.ps1)을 등록하지 않는다 — 다른 감시가 이미 있을 때.
+    [switch]$NoWatchdog
 )
 
 $ErrorActionPreference = 'Stop'
@@ -211,6 +215,9 @@ function Install-Services {
     }
     Write-Log '등록 완료'
     Start-Services
+    if (-not $NoWatchdog) {
+        & (Join-Path $PSScriptRoot 'watchdog.ps1') -AppPath $AppPath -Register
+    }
 }
 
 function Start-Services {
@@ -250,6 +257,9 @@ function Uninstall-Services {
         Invoke-Native "$name 제거 실패" { & $nssm remove $name confirm }
         Write-Log "$name 제거"
     }
+    if (Get-ScheduledTask -TaskName 'MatNexus-Watchdog' -ErrorAction SilentlyContinue) {
+        & (Join-Path $PSScriptRoot 'watchdog.ps1') -AppPath $AppPath -Unregister
+    }
     Write-Host ''
     Write-Host '서비스를 뺐습니다. 이제부터는 창에서 run_server.ps1 · run_worker.ps1 로 띄웁니다.'
 }
@@ -265,6 +275,8 @@ function Show-Status {
         $mode = (Get-CimInstance Win32_Service -Filter "Name='$($svc.Name)'" -ErrorAction SilentlyContinue).StartMode
         Write-Host ("  {0,-16} {1,-10} 시작 방식: {2}   로그: {3}" -f $svc.Name, $found.Status, $mode, (Join-Path $logDir $svc.Log))
     }
+    $watch = Get-ScheduledTask -TaskName 'MatNexus-Watchdog' -ErrorAction SilentlyContinue
+    Write-Host ("  {0,-16} {1}" -f '감시(작업)', $(if ($watch) { "$($watch.State) — 1분마다 /api/health, 로그: $(Join-Path $logDir 'watchdog.log')" } else { '등록 안 됨 — .\watchdog.ps1 -AppPath … -Register' }))
     Write-Host ''
     if (Get-ServiceOrNull 'MatNexus') {
         Write-Host '  멈추기/시작:  Stop-Service MatNexus ; Start-Service MatNexus   (워커는 MatNexusWorker, MCP 는 MatNexusMcp)'
