@@ -3721,3 +3721,151 @@ class Test정의_형식도_카드가_안다:
         db.commit()
         shown = client.get(f"/api/fitting/cards/{item.id}", headers=admin_headers).json()
         assert shown["problem"] and "응력이 떨어집니다" in shown["problem"]
+
+
+class Test구간이_다른_시편:
+    """**구간이 달라도 맞춰서 만든다 — 그리고 맞췄다는 문장이 남는다** (2026-09-18 요청).
+
+    전에는 시편마다 재샘플 끝이 다르면 「레시피의 재샘플 구간을 고정한 뒤 다시 처리
+    하세요」 로 막았고, 시편 열 개면 그것이 열 번의 일이었다. 유난히 짧은 시편은 자동으로
+    빼지 않고 표시한다 — 빼는 것은 사람이 정한다.
+    """
+
+    def _adopt_one(
+        self,
+        client: TestClient,
+        headers: dict[str, str],
+        db: Session,
+        material_id: str,
+        steps: list[dict[str, Any]],
+    ) -> str:
+        sample = client.post(
+            f"/api/materials/{material_id}/samples", json={}, headers=headers
+        ).json()
+        specimen = client.post(
+            f"/api/samples/{sample['id']}/specimens",
+            json={"orientation": "MD"},
+            headers=headers,
+        ).json()
+        run = client.post(
+            "/api/test-runs",
+            data={"specimen_id": specimen["id"], "test_type": "tensile", "conditions": "{}"},
+            files={"file": ("Example.tra", TRA.read_bytes())},
+            headers=headers,
+        ).json()
+        assert services.parse_run(db, uuid.UUID(run["id"])) == "parsed"
+        stored = client.post(
+            "/api/processing/results",
+            json={"test_run_id": run["id"], "steps": steps},
+            headers=headers,
+        )
+        assert stored.status_code == 201, stored.text
+        client.post(f"/api/processing/results/{stored.json()['id']}/adopt", headers=headers)
+        return str(run["id"])
+
+    def _plastic_max(self, client: TestClient, headers: dict[str, str], run_id: str) -> float:
+        results = client.get(
+            "/api/processing/results", params={"test_run_id": run_id}, headers=headers
+        ).json()
+        result_id = results[0]["id"]
+        curve = client.get(
+            f"/api/processing/results/{result_id}/curve",
+            params={"x": "strain_true_plastic", "y": "stress_true"},
+            headers=headers,
+        ).json()
+        return max(float(px) for px, _ in curve["points"])
+
+    @pytest.fixture
+    def mixed(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        db: Session,
+        material: dict[str, Any],
+    ) -> dict[str, Any]:
+        """같은 파일 셋 + 소성변형률 구간을 3할에서 잘라 재샘플한 하나."""
+        full = [
+            self._adopt_one(client, admin_headers, db, material["id"], STEPS) for _ in range(3)
+        ]
+        top = self._plastic_max(client, admin_headers, full[0])
+        short_steps = [
+            *STEPS,
+            {
+                "plugin": "curve.resample",
+                "options": {"x": "strain_true_plastic", "count": 30, "end": top * 0.3},
+            },
+        ]
+        short = self._adopt_one(client, admin_headers, db, material["id"], short_steps)
+        return {"material": material, "full": full, "short": short, "top": top}
+
+    def _preview(
+        self,
+        client: TestClient,
+        headers: dict[str, str],
+        material_id: str,
+        run_ids: list[str] | None = None,
+    ) -> Any:
+        body: dict[str, Any] = {
+            "material_id": material_id,
+            "test_type_key": "tensile",
+            "orientation": "MD",
+            "families": ["voce"],
+        }
+        if run_ids is not None:
+            body["test_run_ids"] = run_ids
+        return client.post("/api/fitting/preview", json=body, headers=headers)
+
+    def test_구간이_달라도_맞춰서_만들고_그_사실을_적는다(
+        self, client: TestClient, admin_headers: dict[str, str], mixed: dict[str, Any]
+    ) -> None:
+        response = self._preview(client, admin_headers, mixed["material"]["id"])
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["sample_count"] == 4
+        # 대표 곡선은 가장 짧은 시편의 끝까지만 간다 — 그리고 그 사실을 말한다.
+        assert max(x for x, _ in body["source_points"]) <= mixed["top"] * 0.3 * 1.001
+        assert any("공통 구간" in note and "보간" in note for note in body["notes"])
+        assert any("절반이 안 됩니다" in note for note in body["notes"])
+
+    def test_유난히_짧은_시편을_표시하되_빼지는_않는다(
+        self, client: TestClient, admin_headers: dict[str, str], mixed: dict[str, Any]
+    ) -> None:
+        body = self._preview(client, admin_headers, mixed["material"]["id"]).json()
+        flagged = [item["test_run_id"] for item in body["short_runs"]]
+        assert flagged == [mixed["short"]]
+        short = body["short_runs"][0]
+        assert short["span"] < 0.5 * short["typical_span"]
+        # 빼지 않았다 — 표본 수는 넷 그대로다.
+        assert body["sample_count"] == 4
+
+    def test_빼고_다시_맞추면_구간이_돌아오고_표시는_남는다(
+        self, client: TestClient, admin_headers: dict[str, str], mixed: dict[str, Any]
+    ) -> None:
+        body = self._preview(
+            client, admin_headers, mixed["material"]["id"], run_ids=mixed["full"]
+        ).json()
+        assert body["sample_count"] == 3
+        assert max(x for x, _ in body["source_points"]) == pytest.approx(
+            mixed["top"], rel=1e-3
+        )
+        # 같은 파일 셋이라 격자가 같다 — 맞출 것이 없었으니 맞췄다는 말도 없다.
+        assert not any("공통 구간" in note for note in body["notes"])
+        # **묶음 전체에서 본다** — 뺀 시편의 표시가 사라지면 왜 뺐는지 알 수 없다.
+        assert [item["test_run_id"] for item in body["short_runs"]] == [mixed["short"]]
+
+    def test_카드_근거에도_맞췄다는_문장이_남는다(
+        self, client: TestClient, admin_headers: dict[str, str], mixed: dict[str, Any]
+    ) -> None:
+        response = client.post(
+            "/api/fitting/cards",
+            json={
+                "material_id": mixed["material"]["id"],
+                "test_type_key": "tensile",
+                "orientation": "MD",
+                "label": "맞춰서",
+            },
+            headers=admin_headers,
+        )
+        assert response.status_code == 201, response.text
+        text = str(response.json()["source"])
+        assert "공통 구간" in text and "보간" in text

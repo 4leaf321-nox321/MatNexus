@@ -14,6 +14,11 @@
  * 표를 달아 두고 빼는 것은 사람이 정한다. 자동으로 빼면 n 이 왜 그 수인지
  * 카드를 보는 사람이 알 수 없고, 그 판단이 어디에도 안 남는다.
  *
+ * 표는 두 가지다 — 통계가 찾은 **이상치 후보**(값이 튄다)와 미리보기가 찾은
+ * **구간 짧음**(일찍 끊어져 x 폭이 나머지의 절반이 안 된다). 구간이 다른 시편은
+ * 서버가 공통 구간으로 맞춰 주므로, 짧은 것을 넣은 채면 대표 곡선이 거기까지만
+ * 간다 — 그래서 빼기 전에 알아야 한다(2026-09-18).
+ *
  * ## 기본은 전부다
  *
  * 아무것도 안 건드리면 전과 똑같이 채택된 전부로 만들어진다. 고르는 칸은
@@ -86,7 +91,7 @@ export function RunPicker({
               )
             }
           >
-            이상치 후보 {suspects.length}건 제거
+            표시된 {suspects.length}건 빼기
           </Button>
         )}
       </div>
@@ -108,7 +113,11 @@ export function RunPicker({
                 <Badge
                   variant="outline"
                   className="gap-1 text-[10px] text-amber-700 dark:text-amber-500"
-                  title={`${run.flags.join(' · ')} 에서 이상치 후보입니다. 버려진 것이 아닙니다.`}
+                  title={
+                    run.flags.includes('구간 짧음')
+                      ? '측정 구간이 나머지의 절반이 안 됩니다 — 넣은 채면 대표 곡선이 여기까지만 갑니다. 버려진 것이 아닙니다.'
+                      : `${run.flags.join(' · ')} 에서 이상치 후보입니다. 버려진 것이 아닙니다.`
+                  }
                 >
                   <AlertTriangle className="size-3" />
                   {run.flags.join(' · ')}

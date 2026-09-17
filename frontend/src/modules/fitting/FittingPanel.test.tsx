@@ -771,3 +771,27 @@ describe('카드 목록은 접혀 있다', () => {
     expect(screen.queryByText('문헌 카드')).not.toBeInTheDocument()
   })
 })
+
+describe('구간이 짧은 시편', () => {
+  it('미리보기가 찾은 짧은 시편에 표를 달고, 한 번에 뺄 수 있다', async () => {
+    // **자동으로 빼지 않는다.** 구간이 다른 시편은 서버가 공통 구간으로 맞춰 주고,
+    // 일찍 끊어진 하나가 그 끝을 정하면 나머지가 잘린다 — 빼는 것은 사람이 정한다.
+    preview.mockResolvedValue({
+      ...body([fit()]),
+      short_runs: [
+        { test_run_id: 'r-2', record_name: 'SECC__02', span: 0.04, typical_span: 0.15 },
+      ],
+    })
+    panel()
+    await compare()
+    const badge = await screen.findByText('구간 짧음')
+    expect(badge).toBeInTheDocument()
+    expect(screen.getByLabelText('SECC__02 쓰기')).toBeChecked()
+    await userEvent.click(screen.getByRole('button', { name: /표시된 1건 빼기/ }))
+    await waitFor(() =>
+      expect(preview).toHaveBeenLastCalledWith(
+        expect.objectContaining({ test_run_ids: ['r-1', 'r-3'] })
+      )
+    )
+  })
+})

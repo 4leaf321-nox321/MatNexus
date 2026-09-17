@@ -326,10 +326,71 @@ def member_curves(
     return found
 
 
+@dataclass(frozen=True)
+class ShortMember:
+    """x 폭이 나머지에 견주어 유난히 짧은 시편 — **표시만 한다.**"""
+
+    member: Member
+    span: float
+    typical_span: float
+
+
+def _load_curves(
+    group: Group, *, x: str, y: str
+) -> tuple[list[np.ndarray], list[np.ndarray], dict[str, str]] | str:
+    """시편마다 채택 결과의 x·y 열. 없으면 **어느 시편에서 무엇이 없는지** 문장으로."""
+    grids: list[np.ndarray] = []
+    values: list[np.ndarray] = []
+    units: dict[str, str] = {}
+    for member in group.members:
+        data = filestore.read_bytes(member.result.storage_path)
+        raw = curves.read_columns(data)
+        # 첫 시편의 것을 쓴다. 축이 같아야 대표 곡선이 나오므로 단위도 같다 —
+        # 다르면 `curve_stats` 가 그 전에 멈춘다.
+        units = units or curves.read_units(data)
+        if x not in raw or y not in raw:
+            return (
+                f"'{member.run.record_name}' 에서 채택된 처리 결과에 '{x}' 또는 "
+                f"'{y}' 열이 없습니다. 같은 레시피로 처리했는지, 그리고 다시 처리한 뒤 "
+                f"'결과' 탭에서 채택을 옮겼는지 보세요 — 채택이 예전 결과에 남아 "
+                f"있으면 새로 만든 열은 쓰이지 않습니다."
+            )
+        grids.append(np.asarray([0.0 if v is None else v for v in raw[x]], dtype=np.float64))
+        values.append(np.asarray([0.0 if v is None else v for v in raw[y]], dtype=np.float64))
+    return grids, values, units
+
+
+def short_members(group: Group, *, x: str, y: str) -> list[ShortMember]:
+    """x 폭이 유난히 짧은 시편들(`statistics.short_curves`).
+
+    **묶음 전체를 본다** — 고른 것만 보면 짧은 시편을 뺀 순간 표시가 사라져 왜 뺐는지
+    화면에서 알 수 없다. 축이 없는 시편이 있으면 빈 목록(그 사실은 대표 곡선 쪽이 말한다).
+    """
+    loaded = _load_curves(group, x=x, y=y)
+    if isinstance(loaded, str):
+        return []
+    grids, _, _ = loaded
+    return [
+        ShortMember(
+            member=group.members[index],
+            span=float(grids[index][-1]) - float(grids[index][0]),
+            typical_span=statistics.typical_span(grids, excluding=index),
+        )
+        for index in statistics.short_curves(grids)
+    ]
+
+
 def curve_table(
-    db: Session, group: Group, *, x: str, y: str
+    db: Session, group: Group, *, x: str, y: str, align: bool = False
 ) -> tuple[dict[str, Any] | None, list[str]]:
-    """점별 곡선 통계. 격자가 다르면 계산하지 않고 이유를 돌려준다."""
+    """점별 곡선 통계. 격자가 다르면 계산하지 않고 이유를 돌려준다.
+
+    `align=True` 면 격자가 달라도 **공통 구간으로 보간해 맞추고, 그 사실을 노트에 적는다**
+    (`statistics.align_grids`). 통계 화면은 안 켠다 — 그 화면은 「있는 그대로」 를 보는
+    자리라 맞추는 대신 이유를 말한다(ADR 0008). 카드를 만드는 쪽(적합)이 켠다: 시편
+    열 개의 재샘플 끝을 하나씩 고쳐 다시 돌리는 것은 일이 되고, 맞췄다는 문장이 카드
+    근거에 남으면 조용히 섞이는 것이 아니다(2026-09-18 요청).
+    """
     if len(group.members) == 1:
         # **1건이면 그 곡선이 곧 대표다.**
         #
@@ -375,24 +436,24 @@ def curve_table(
             ],
         )
 
-    grids: list[np.ndarray] = []
-    values: list[np.ndarray] = []
-    units: dict[str, str] = {}
-    for member in group.members:
-        data = filestore.read_bytes(member.result.storage_path)
-        raw = curves.read_columns(data)
-        # 첫 시편의 것을 쓴다. 축이 같아야 대표 곡선이 나오므로 단위도 같다 —
-        # 다르면 `curve_stats` 가 그 전에 멈춘다.
-        units = units or curves.read_units(data)
-        if x not in raw or y not in raw:
-            return None, [
-                f"'{member.run.record_name}' 에서 채택된 처리 결과에 '{x}' 또는 "
-                f"'{y}' 열이 없습니다. 같은 레시피로 처리했는지, 그리고 다시 처리한 뒤 "
-                f"'결과' 탭에서 채택을 옮겼는지 보세요 — 채택이 예전 결과에 남아 "
-                f"있으면 새로 만든 열은 쓰이지 않습니다."
-            ]
-        grids.append(np.asarray([0.0 if v is None else v for v in raw[x]], dtype=np.float64))
-        values.append(np.asarray([0.0 if v is None else v for v in raw[y]], dtype=np.float64))
+    loaded = _load_curves(group, x=x, y=y)
+    if isinstance(loaded, str):
+        return None, [loaded]
+    grids, values, units = loaded
+
+    aligned_notes: list[str] = []
+    if align:
+        try:
+            fitted = statistics.align_grids(grids, values)
+        except statistics.StatisticsError as exc:
+            return None, [str(exc)]
+        if fitted.changed:
+            grids, values = fitted.grids, fitted.values
+            shortest = group.members[fitted.shortest_index].run.record_name
+            aligned_notes.append(
+                f"{fitted.note} 구간의 끝을 정한 것은 '{shortest}' 입니다 — 유난히 짧으면 "
+                f"「쓸 시험」 에서 빼고 다시 맞춰 보세요."
+            )
 
     try:
         stats = statistics.curve_stats(grids, values)
@@ -414,7 +475,7 @@ def curve_table(
             "sd": [(point.x, point.y.sample_sd) for point in stats.points],
             "count": [(point.x, float(point.y.count)) for point in stats.points],
         },
-        list(stats.notes),
+        [*aligned_notes, *stats.notes],
     )
 
 

@@ -10716,6 +10716,11 @@ export interface components {
             notes: string[];
             /** Sample Count */
             sample_count: number;
+            /**
+             * Short Runs
+             * @default []
+             */
+            short_runs: components["schemas"]["ShortRunOut"][];
             /** Source Points */
             source_points: [
                 number,
@@ -15040,6 +15045,27 @@ export interface components {
             source: string;
             /** Temperature K */
             temperature_k: number;
+        };
+        /**
+         * ShortRunOut
+         * @description x 폭이 나머지의 절반이 안 되는 시편 — **화면이 표를 달고, 빼는 것은 사람이 정한다.**
+         *
+         *     구간이 다른 시편들은 공통 구간으로 보간해 맞추는데(`statistics.align_grids`), 일찍
+         *     끊어진 시편 하나가 그 끝을 정하면 나머지의 뒤쪽이 통째로 잘린다. 묶음 전체에서
+         *     본다 — 고른 것만 보면 뺀 순간 표시가 사라져 왜 뺐는지 알 수 없다.
+         */
+        ShortRunOut: {
+            /** Record Name */
+            record_name: string;
+            /** Span */
+            span: number;
+            /**
+             * Test Run Id
+             * Format: uuid
+             */
+            test_run_id: string;
+            /** Typical Span */
+            typical_span: number;
         };
         /**
          * SignupPolicyOut

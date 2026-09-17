@@ -70,6 +70,7 @@ from app.modules.fitting.schemas import (
     PropertyCardUpdateRequest,
     RateCardSaveRequest,
     ResampleMethodOut,
+    ShortRunOut,
     SyntheticPlasticOut,
     UnitSystemBaseUnitsOut,
     UnitSystemCreate,
@@ -889,7 +890,20 @@ def _representative(
     group = _chosen(group, test_run_ids)
     x_column = family.x_column if family else FIT_X
     y_column = family.y_column if family else FIT_Y
-    curve, notes = statistics_services.curve_table(db, group, x=x_column, y=y_column)
+    # **구간이 달라도 맞춰서 만든다** — 그리고 맞췄다는 문장이 근거에 남는다. 전에는
+    # 「레시피의 재샘플 구간을 고정한 뒤 다시 처리하세요」 로 막았고, 시편 열 개면
+    # 그것이 열 번의 일이었다(2026-09-18 요청).
+    curve, notes = statistics_services.curve_table(
+        db, group, x=x_column, y=y_column, align=True
+    )
+    # **유난히 짧은 시편은 자동으로 빼지 않고 말한다.** 그 시편이 공통 구간의 끝을
+    # 정하면 나머지의 뒤쪽이 통째로 잘린다 — 빼는 것은 사람이 정한다.
+    for short in statistics_services.short_members(group, x=x_column, y=y_column):
+        notes.append(
+            f"'{short.member.run.record_name}' 의 '{x_column}' 폭이 {short.span:.4g} 로 "
+            f"나머지(보통 {short.typical_span:.4g})의 절반이 안 됩니다 — 일찍 끊어진 시편이면 "
+            f"「쓸 시험」 에서 빼세요. 넣은 채면 대표 곡선이 거기까지만 갑니다."
+        )
     if len(group.members) != total:
         # **뺐다는 사실이 카드에 남아야 한다.** 표본 수만 적으면 「원래 8건이었나
         # 둘을 뺐나」 를 나중에 아무도 답할 수 없다.
@@ -1104,9 +1118,32 @@ def preview(
     # API 를 따로 불러 나름대로 판정하면 규칙이 두 벌이 되고, 어긋나는 순간
     # 화면이 거짓말을 한다.
     samples = _samples_of(db, group)
+    # **묶음 전체에서 본다** — 고른 것만 보면 짧은 시편을 뺀 순간 표시가 사라진다.
+    _, all_groups = statistics_services.groups_for_material(db, user, payload.material_id)
+    whole = next(
+        (
+            item
+            for item in all_groups
+            if item.test_type.key == payload.test_type_key
+            and item.orientation == payload.orientation
+        ),
+        group,
+    )
+    short_runs = [
+        ShortRunOut(
+            test_run_id=short.member.run.id,
+            record_name=short.member.run.record_name,
+            span=short.span,
+            typical_span=short.typical_span,
+        )
+        for short in statistics_services.short_members(
+            whole, x=axis_family.x_column, y=axis_family.y_column
+        )
+    ]
     return FitPreviewOut(
         source_points=[(float(x), float(y)) for x, y in zip(strain, stress, strict=True)],
         members=drawn_members,
+        short_runs=short_runs,
         sample_count=len(group.members),
         fits=[_fit_out(item, extrapolate_to=payload.extrapolate_to) for item in drawn],
         elastic=[
@@ -2956,6 +2993,10 @@ def list_formats(
     코드 렌더러와 **부서의 해석용 물성 정의**가 함께 온다(ADR 0023). 정의를 고치면 다음
     요청부터 먹는다 — 기동 때 얹지 않는 이유는 `renderers.py` 에 적었다.
     """
+    # **블록 이름은 레지스트리가 안다** — 안 실려 있으면 `requires` 가 「밀도」 대신
+    # `elastic.density` 로 나간다. 이 요청이 첫 요청일 수 있다(실측: 이 라우트만 도는
+    # 시험이 순서에 따라 갈렸다, 2026-09-18).
+    cards.load_builtin()
     return [
         ExportFormatOut(
             key=item.key,

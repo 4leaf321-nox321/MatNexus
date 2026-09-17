@@ -342,6 +342,10 @@ export function FittingPanel({ materialId }: Props) {
   /**
    * 고른 묶음의 시험들. **이상치 후보에 표를 달아 둔다** — 통계 화면과 같은
    * 규칙으로, 표시만 하고 버리지는 않는다.
+   *
+   * 미리보기가 찾은 **구간이 유난히 짧은 시편**도 같은 표다(2026-09-18). 구간이
+   * 다른 시편들은 서버가 공통 구간으로 맞춰 주는데, 일찍 끊어진 하나가 그 끝을
+   * 정하면 나머지의 뒤쪽이 통째로 잘린다 — 빼는 것은 여기서 사람이 정한다.
    */
   const runChoices: RunChoice[] = useMemo(() => {
     const found = (stats.data?.groups ?? []).find(
@@ -357,12 +361,16 @@ export function FittingPanel({ materialId }: Props) {
         flagged.set(at, [...(flagged.get(at) ?? []), scalar.label])
       }
     }
+    for (const short of preview?.short_runs ?? []) {
+      const at = String(short.test_run_id)
+      flagged.set(at, [...(flagged.get(at) ?? []), '구간 짧음'])
+    }
     return (found.test_run_ids ?? []).map((id, at) => ({
       id: String(id),
       name: found.record_names?.[at] ?? String(id),
       flags: flagged.get(String(id)) ?? [],
     }))
-  }, [stats.data, group?.test_type_key, group?.orientation])
+  }, [stats.data, group?.test_type_key, group?.orientation, preview?.short_runs])
 
   // 묶음도 없고 카드도 없다 — 무엇을 하라고 할지가 갈리는 자리다.
   const nothing = !stats.loading && groups.length === 0 && cardRows.length === 0

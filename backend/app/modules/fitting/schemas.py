@@ -149,11 +149,29 @@ class MemberCurveOut(BaseModel):
     """그리기 좋게 솎은 점. **줄였다는 것은 화면이 말한다.**"""
 
 
+class ShortRunOut(BaseModel):
+    """x 폭이 나머지의 절반이 안 되는 시편 — **화면이 표를 달고, 빼는 것은 사람이 정한다.**
+
+    구간이 다른 시편들은 공통 구간으로 보간해 맞추는데(`statistics.align_grids`), 일찍
+    끊어진 시편 하나가 그 끝을 정하면 나머지의 뒤쪽이 통째로 잘린다. 묶음 전체에서
+    본다 — 고른 것만 보면 뺀 순간 표시가 사라져 왜 뺐는지 알 수 없다.
+    """
+
+    test_run_id: uuid.UUID
+    record_name: str
+    span: float
+    """이 시편의 x 폭(끝 - 시작), 그 축의 SI."""
+    typical_span: float
+    """나머지 시편 x 폭의 중앙값."""
+
+
 class FitPreviewOut(BaseModel):
     source_points: list[tuple[float, float]]
     """적합에 쓴 점(소성변형률, 진응력). 대표 곡선에서 왔다."""
     members: list[MemberCurveOut] = []
     """대표를 만든 시편들의 원곡선. 같은 축이다."""
+    short_runs: list[ShortRunOut] = []
+    """유난히 짧은 시편들. 비면 없다."""
     sample_count: int
     fits: list[FitOut]
     elastic: list[InheritedValueOut] = []

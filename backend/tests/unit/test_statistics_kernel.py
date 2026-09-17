@@ -149,3 +149,68 @@ class Test곡선통계:
         stats = st.curve_stats([grid, grid.copy()], [np.zeros(7), np.zeros(7)])
         assert stats.notes
         assert "시편 2개" in stats.notes[0]
+
+
+class Test맞추기:
+    """**맞추는 일은 따로, 드러나게.** 통계는 여전히 거부하고, 부르는 쪽이 일부러 맞춘다."""
+
+    def test_구간이_다르면_공통_구간의_균등_격자로_보간한다(self) -> None:
+        grids = [np.linspace(0, 0.30, 11), np.linspace(0, 0.28, 11), np.linspace(0, 0.20, 6)]
+        values = [
+            np.linspace(300, 500, 11),
+            np.linspace(310, 490, 11),
+            np.linspace(300, 400, 6),
+        ]
+        aligned = st.align_grids(grids, values)
+        assert aligned.changed
+        assert aligned.start == pytest.approx(0.0)
+        assert aligned.end == pytest.approx(0.20)
+        # 점 수는 가장 촘촘한 곡선의 것 — 줄이면 잰 점이 사라진다.
+        assert aligned.count == 11
+        assert aligned.shortest_index == 2
+        assert "공통 구간" in aligned.note and "보간" in aligned.note
+        # 맞춘 것은 통계가 받는다.
+        stats = st.curve_stats(aligned.grids, aligned.values)
+        assert len(stats.points) == 11
+        # 보간은 이웃한 두 점 사이에서만 — 첫 곡선의 0.20 에서 값은 원곡선과 같다.
+        assert aligned.values[0][-1] == pytest.approx(
+            float(np.interp(0.20, grids[0], values[0]))
+        )
+
+    def test_이미_같은_격자면_손대지_않는다(self) -> None:
+        grid = np.linspace(0, 0.3, 7)
+        aligned = st.align_grids([grid, grid.copy()], [np.zeros(7), np.ones(7)])
+        assert not aligned.changed
+        assert aligned.note == ""
+        assert aligned.grids[0] is grid
+
+    def test_공통_구간이_없으면_거부한다(self) -> None:
+        with pytest.raises(st.StatisticsError, match="공통 구간이 없습니다"):
+            st.align_grids(
+                [np.linspace(0, 0.1, 5), np.linspace(0.2, 0.3, 5)],
+                [np.zeros(5), np.zeros(5)],
+            )
+
+    def test_오름차순이_아니면_거부한다(self) -> None:
+        # np.interp 는 x 가 오름차순이라고 믿는다 — 아니면 조용히 엉뚱한 값을 준다.
+        with pytest.raises(st.StatisticsError, match="오름차순"):
+            st.align_grids(
+                [np.asarray([0.0, 0.2, 0.1]), np.linspace(0, 0.3, 3)],
+                [np.zeros(3), np.zeros(3)],
+            )
+
+
+class Test짧은_곡선:
+    """**버리지 않고 표시한다.** 일찍 끊어진 시편이 공통 구간의 끝을 정하면 나머지가 잘린다."""
+
+    def test_나머지_중앙값의_절반이_안_되면_표시한다(self) -> None:
+        grids = [np.linspace(0, 0.30, 11), np.linspace(0, 0.28, 11), np.linspace(0, 0.10, 6)]
+        assert st.short_curves(grids) == [2]
+        assert st.typical_span(grids, excluding=2) == pytest.approx(0.29)
+
+    def test_흩어짐_수준이면_표시하지_않는다(self) -> None:
+        grids = [np.linspace(0, 0.30, 11), np.linspace(0, 0.25, 11), np.linspace(0, 0.22, 6)]
+        assert st.short_curves(grids) == []
+
+    def test_둘뿐이면_어느_쪽이_짧은지_말할_수_없다(self) -> None:
+        assert st.short_curves([np.linspace(0, 0.30, 11), np.linspace(0, 0.05, 11)]) == []

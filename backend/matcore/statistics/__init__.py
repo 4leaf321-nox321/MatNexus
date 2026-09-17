@@ -12,6 +12,12 @@
 다만 **거부하고 끝내지 않는다.** 어디까지가 공통 구간인지 계산해 알려 준다 —
 그 값이 있어야 사람이 레시피를 고칠 수 있다.
 
+**맞추는 일은 따로, 드러나게 한다**(`align_grids`, 2026-09-18). 시편 열 개의 구간이
+제각각일 때 레시피의 재샘플 끝을 하나씩 고쳐 다시 돌리는 것은 일이 된다 — 그래서
+공통 구간의 균등 격자로 선형 보간해 주는 함수를 둔다. 통계(`curve_stats`)는 여전히
+맞춰 주지 않는다: 부르는 쪽이 이 함수를 **일부러** 부르고, 돌려받은 문장을 근거에
+적는다. 조용히 섞이는 것과 적어 두고 하는 것은 다르다.
+
 **이상치를 버리지 않는다.** 표시만 한다. 시편 하나가 낮은 것이 재료 특성인지
 시험 실수인지는 곡선을 본 사람이 안다. 65 의 같은 모듈이 두 시편이 어긋났을 때
 **양쪽 다** 검토 대상으로 표시하는 것과 같은 판단이다 — 둘만으로는 어느 쪽이
@@ -48,6 +54,14 @@ DEFAULT_OUTLIER_THRESHOLD = 3.5
 
 #: 정규분포에서 MAD 를 표준편차로 맞추는 계수(0.6745 = Φ⁻¹(0.75)).
 MODIFIED_Z_SCALE = 0.6745
+
+#: 곡선의 x 폭이 나머지의 중앙값에 견주어 이보다 짧으면 「유난히 짧다」 로 표시한다.
+#:
+#: 인장에서 일찍 끊어진 시편이 그렇다 — 그 시편이 공통 구간의 끝을 정하면 나머지
+#: 아홉의 뒤쪽이 통째로 잘린다. 자동으로 빼지는 않는다(이상치와 같은 규칙) — 표시하고
+#: 빼는 것은 사람이 정한다. 0.5 는 「절반도 못 갔다」 다: 균일연신율의 시편 간 흩어짐은
+#: 보통 10~20% 라 절반이면 재료 특성이 아니라 시험 사고 쪽이다.
+SHORT_CURVE_RATIO = 0.5
 
 #: 양측 95% 신뢰구간의 t 값. 인덱스는 자유도(n-1) - 1.
 #:
@@ -340,6 +354,115 @@ def grid_check(grids: list[np.ndarray]) -> GridCheck:
         common_end=common_end,
         shortest_index=shortest,
     )
+
+
+@dataclass(frozen=True)
+class Alignment:
+    """공통 구간의 균등 격자로 맞춘 곡선들. `note` 를 근거에 적는다."""
+
+    grids: list[np.ndarray]
+    values: list[np.ndarray]
+    start: float
+    end: float
+    count: int
+    changed: bool
+    """실제로 보간했나. 이미 같은 격자였으면 거짓 — 그때 note 는 비어 있다."""
+    shortest_index: int
+    note: str
+
+
+def align_grids(
+    grids: list[np.ndarray], values: list[np.ndarray], *, count: int | None = None
+) -> Alignment:
+    """공통 구간 [max(시작), min(끝)] 의 균등 격자로 **선형 보간해** 맞춘다.
+
+    `curve_stats` 가 거부하는 바로 그 경우를 위한 것이다. 격자가 이미 같으면 손대지
+    않는다(`changed=False`). 점 수는 안 주면 가장 촘촘한 곡선의 점 수 — 줄이면 잰
+    점이 사라지고, 늘려 봐야 새 정보는 없다.
+
+    **측정 구간 밖으로는 한 점도 나가지 않는다.** 공통 구간은 모든 곡선이 실제로 잰
+    구간의 교집합이라, 보간은 이웃한 두 측정점 사이에서만 일어난다(`resample` 과 같은
+    규칙). 공통 구간이 비면(한 곡선이 끝나기 전에 다른 곡선이 시작하지 않으면) 거부한다.
+    """
+    if len(grids) < MIN_SAMPLES:
+        raise StatisticsError(f"맞출 곡선이 {len(grids)}개뿐입니다.")
+    if len(grids) != len(values):
+        raise StatisticsError("x 와 y 의 곡선 수가 다릅니다.")
+    for index, (grid, value) in enumerate(zip(grids, values, strict=True)):
+        if len(grid) != len(value):
+            raise StatisticsError(f"{index + 1}번째 곡선의 x 와 y 점 수가 다릅니다.")
+        if len(grid) < 2 or not np.all(np.diff(grid) > 0):
+            raise StatisticsError(
+                f"{index + 1}번째 곡선의 x 가 오름차순이 아닙니다 — "
+                f"레시피에 '정렬·중복 제거' 단계가 있는지 보세요."
+            )
+
+    check = grid_check(grids)
+    assert check.common_start is not None and check.common_end is not None
+    assert check.shortest_index is not None
+    if check.ok:
+        return Alignment(
+            grids=grids,
+            values=values,
+            start=check.common_start,
+            end=check.common_end,
+            count=len(grids[0]),
+            changed=False,
+            shortest_index=check.shortest_index,
+            note="",
+        )
+    if check.common_start >= check.common_end:
+        raise StatisticsError(
+            f"공통 구간이 없습니다 — 한 곡선은 {check.common_start:.6g} 에서 시작하는데 "
+            f"다른 곡선은 {check.common_end:.6g} 에서 끝납니다. 곡선을 보고 빼세요."
+        )
+    points = count or max(len(grid) for grid in grids)
+    if points < 2:
+        raise StatisticsError(f"점 수는 2 이상이어야 합니다: {points}")
+    grid = np.linspace(check.common_start, check.common_end, points)
+    aligned = [np.interp(grid, one, value) for one, value in zip(grids, values, strict=True)]
+    return Alignment(
+        grids=[grid.copy() for _ in grids],
+        values=aligned,
+        start=check.common_start,
+        end=check.common_end,
+        count=points,
+        changed=True,
+        shortest_index=check.shortest_index,
+        note=(
+            f"시편마다 x 구간이 달라 공통 구간 [{check.common_start:.6g}, "
+            f"{check.common_end:.6g}] 의 {points}점 균등 격자로 선형 보간해 맞췄습니다 — "
+            f"그 밖의 측정점은 대표 곡선에 안 들어갑니다."
+        ),
+    )
+
+
+def short_curves(grids: list[np.ndarray], *, ratio: float = SHORT_CURVE_RATIO) -> list[int]:
+    """x 폭이 나머지의 중앙값에 견주어 `ratio` 보다 짧은 곡선의 번호.
+
+    **버리지 않는다** — 표시만 한다. 둘뿐이면 어느 쪽이 짧은지 말할 수 없어 빈 목록이다
+    (이상치와 같은 이유, `MIN_FOR_SPREAD`).
+    """
+    if len(grids) < MIN_FOR_SPREAD:
+        return []
+    spans = [float(grid[-1]) - float(grid[0]) for grid in grids]
+    found: list[int] = []
+    for index, span in enumerate(spans):
+        others = spans[:index] + spans[index + 1 :]
+        typical = float(np.median(others))
+        if typical > 0 and span < ratio * typical:
+            found.append(index)
+    return found
+
+
+def typical_span(grids: list[np.ndarray], *, excluding: int | None = None) -> float:
+    """나머지 곡선 x 폭의 중앙값 — 「보통 어디까지 가나」."""
+    spans = [
+        float(grid[-1]) - float(grid[0])
+        for index, grid in enumerate(grids)
+        if index != excluding
+    ]
+    return float(np.median(spans)) if spans else 0.0
 
 
 @dataclass(frozen=True)
