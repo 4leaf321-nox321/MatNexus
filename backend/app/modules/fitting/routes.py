@@ -1009,14 +1009,37 @@ def preview(
     """
     fitting.load_builtin()
     material = db.get(Material, payload.material_id)
-    chosen = [
-        item
-        for item in fitting.families_for(material.family if material else None)
-        if not payload.families or item.key in payload.families
-    ]
-    if not chosen:
-        raise NotFound("MNX-FITTING-0013", "고른 식이 이 재료군에 없습니다.")
     notes: list[str] = []
+    if payload.families:
+        # **고른 식은 재료군으로 거르지 않는다.** 「탄소성 카드」 단추는 고른 것 자체가
+        # 뜻이다 — 열가소성 수지도 소성 표를 내고 MAT_024 로 돌린다. 전에는 재료군에
+        # 선언된 식(Polymer → 초탄성)과 교집합을 냈고, 그것이 비면 404 「고른 식이 이
+        # 재료군에 없습니다」 였다(2026-09-18 실사용, EXAMPLE-MIX). 선언된 것이 아니면
+        # 그 사실만 적는다.
+        unknown = [key for key in payload.families if key not in fitting.FAMILIES]
+        if unknown:
+            raise NotFound("MNX-FITTING-0013", "모르는 적합식입니다: " + ", ".join(unknown))
+        chosen = [fitting.FAMILIES[key] for key in payload.families]
+        declared = {
+            item.key for item in fitting.families_for(material.family if material else None)
+        }
+        foreign = [item for item in chosen if item.key not in declared]
+        if (
+            material is not None
+            and material.family
+            and foreign
+            and len(foreign) == len(chosen)
+        ):
+            notes.append(
+                f"'{material.family}' 재료군에 선언된 식이 아닙니다(선언된 것: "
+                + ", ".join(sorted(declared))
+                + ") — 고른 대로 맞췄습니다. 이 재료가 정말 소성 표로 해석되는지는 "
+                "해석하는 사람이 압니다."
+            )
+    else:
+        chosen = list(fitting.families_for(material.family if material else None))
+    if not chosen:
+        raise NotFound("MNX-FITTING-0013", "고른 식이 없습니다.")
     if not payload.families:
         # **식을 안 골랐으면 이 묶음의 열에 맞는 식만 견준다.** 「전부」 에는 축이 다른
         # 식이 섞여 있다 — 레오미터 묶음에 경화식을 물리면 진소성변형률이 없어서 첫

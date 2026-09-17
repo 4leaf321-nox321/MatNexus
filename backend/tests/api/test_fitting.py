@@ -3869,3 +3869,81 @@ class Test구간이_다른_시편:
         assert response.status_code == 201, response.text
         text = str(response.json()["source"])
         assert "공통 구간" in text and "보간" in text
+
+
+class Test재료군과_고른_식:
+    """**고른 식은 재료군으로 거르지 않는다** (2026-09-18 실사용).
+
+    열가소성 수지(Polymer)의 인장에서 「탄소성 카드」 를 누르면 화면이 경화식 키를 보내는데,
+    서버가 재료군에 선언된 식(초탄성)과 교집합을 내서 404 「고른 식이 이 재료군에
+    없습니다」 였다. 고른 것 자체가 뜻이다 — 선언된 식이 아니면 그 사실만 적는다.
+    """
+
+    @pytest.fixture
+    def polymer(
+        self, client: TestClient, admin_headers: dict[str, str], db: Session
+    ) -> dict[str, Any]:
+        ensure_builtin_test_types(db)
+        db.commit()
+        made: dict[str, Any] = client.post(
+            "/api/materials",
+            json={
+                "family": "Polymer",
+                "category": "Thermoplastic",
+                "grade": "PC-FIT",
+                "details": "예제",
+                "spec_thickness": 1.0,
+            },
+            headers=admin_headers,
+        ).json()
+        _adopted(client, admin_headers, db, made["id"], 2)
+        return made
+
+    def test_고른_경화식은_재료군이_달라도_맞추고_그_사실을_적는다(
+        self, client: TestClient, admin_headers: dict[str, str], polymer: dict[str, Any]
+    ) -> None:
+        response = client.post(
+            "/api/fitting/preview",
+            json={
+                "material_id": polymer["id"],
+                "test_type_key": "tensile",
+                "orientation": "MD",
+                "families": ["voce", "swift"],
+            },
+            headers=admin_headers,
+        )
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert {item["family"] for item in body["fits"]} >= {"voce", "swift"}
+        assert any("선언된 식이 아닙니다" in note for note in body["notes"])
+
+    def test_모르는_식은_이름을_대고_막는다(
+        self, client: TestClient, admin_headers: dict[str, str], polymer: dict[str, Any]
+    ) -> None:
+        response = client.post(
+            "/api/fitting/preview",
+            json={
+                "material_id": polymer["id"],
+                "test_type_key": "tensile",
+                "orientation": "MD",
+                "families": ["voce", "no_such_law"],
+            },
+            headers=admin_headers,
+        )
+        assert response.status_code == 404
+        assert "no_such_law" in response.json()["error"]["message"]
+
+    def test_안_고르면_재료군에_선언된_식만_견준다(
+        self, client: TestClient, admin_headers: dict[str, str], polymer: dict[str, Any]
+    ) -> None:
+        # 기본 목록은 전과 같다 — 금속 경화식과 고무 초탄성을 한 줄에 세우지 않는다.
+        body = client.post(
+            "/api/fitting/preview",
+            json={
+                "material_id": polymer["id"],
+                "test_type_key": "tensile",
+                "orientation": "MD",
+            },
+            headers=admin_headers,
+        ).json()
+        assert "voce" not in {item["family"] for item in body.get("fits", [])}
