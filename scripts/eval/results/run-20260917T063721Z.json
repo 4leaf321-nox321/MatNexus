@@ -1,0 +1,1660 @@
+{
+  "at": "20260917T063721Z",
+  "git": "04f5abd",
+  "summary": {
+    "n": 30,
+    "passed": 26,
+    "calls": 118,
+    "calls_per_question": 3.93,
+    "empty_calls": 0,
+    "map_first": 13,
+    "errors": 0,
+    "seconds": 1088.8,
+    "cost_usd": 12.0038,
+    "by_category": {
+      "카드": {
+        "n": 6,
+        "passed": 5,
+        "calls": 29,
+        "empty": 0,
+        "map_first": 2
+      },
+      "값 찾기": {
+        "n": 8,
+        "passed": 8,
+        "calls": 26,
+        "empty": 0,
+        "map_first": 2
+      },
+      "커버리지": {
+        "n": 3,
+        "passed": 3,
+        "calls": 13,
+        "empty": 0,
+        "map_first": 2
+      },
+      "관계": {
+        "n": 6,
+        "passed": 5,
+        "calls": 17,
+        "empty": 0,
+        "map_first": 4
+      },
+      "이름 해소": {
+        "n": 3,
+        "passed": 2,
+        "calls": 11,
+        "empty": 0,
+        "map_first": 1
+      },
+      "판단": {
+        "n": 4,
+        "passed": 3,
+        "calls": 22,
+        "empty": 0,
+        "map_first": 2
+      }
+    }
+  },
+  "traces": [
+    {
+      "id": "deck-01",
+      "category": "카드",
+      "prompt": "SCATTER_DP600_1.0 재료로 LS-DYNA 곡선 덱(MAT_024)이 나오나? 안 나오면 뭐가 없는지, 어디서 채울 수 있는지 말해 줘.",
+      "calls": [
+        {
+          "name": "mcp__matnexus__deck_readiness",
+          "input": {
+            "material_id": "SCATTER_DP600_1.0"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__search_materials",
+          "input": {
+            "query": "SCATTER DP600 1.0"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__deck_readiness",
+          "input": {
+            "material_id": "60959881-2063-474e-82d9-a2eec429561e"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__get_card",
+          "input": {
+            "card_id": "2b225245-7ae3-4cf3-9b0f-829570c028ba"
+          },
+          "empty": false,
+          "is_error": false
+        }
+      ],
+      "answer": "**나옵니다.** `dyna` 형식(MAT_024, 곡선 덱)이 준비됨 — 카드 「DP600 MD (resample 0.11)」.\n\n**단, 초안 카드입니다** (status: draft) — 확정 전이니 해석에 쓰기 전 확정 여부를 확인하세요.\n\n내용 (전부 SI):\n- 탄성: E 199.9 GPa, ν 0.3, 밀도 7850 kg/m³\n- 소성 표: 120점, 진응력 333.2 → 476.8 MPa (소성변형률 0 ~ 0.11)\n- 경화식: Voce (R² 0.99998)\n- 출처: 인장시험(MD) 시편 8개의 점별 평균·흩어짐\n\n**안 나오는 것** (같은 LS-DYNA 계열):\n- 속도 의존(MAT_024의 속도표 / Abaqus rate): 속도별 소성 표 없음 → **인장시험**을 여러 변형률속도로 추가하면 채워집니다.\n- 온도 의존: 온도별 소성 표 없음 — 그 블록을 내는 시험 종류가 아직 등록돼 있지 않습니다.\n- 열물성(`dyna_thermal`): 열팽창·비열·열전도 없음 → 이어진 문헌 재료에서 채택 가능 값 0건, 사람이 선언값으로 적어 넣는 길만 있습니다.\n- 점탄성(`dyna_viscoelastic`): Prony 없음 → **DMA 스윕**으로 생기고, 문헌 채택 값은 0건.\n\n그대로 뽑으시겠습니까? 뽑을 때 단위계를 정해야 합니다 — 기본은 `mm_n_tonne`(SI 아님)이니 받는 해석 모델의 계를 알려 주세요.",
+      "error": null,
+      "seconds": 45.26670551300049,
+      "cost_usd": 0.713639,
+      "map_first": false,
+      "empty_calls": 0,
+      "over_budget": false,
+      "tools_any_ok": true,
+      "forbidden_hit": [],
+      "missing_mentions": [],
+      "passed": true
+    },
+    {
+      "id": "deck-02",
+      "category": "카드",
+      "prompt": "사내 재료 SCATTER_DP600_1.0 을 Abaqus 형식으로, 재료 번호(MID) 7 로 덱을 뽑아 줘. 파일 본문은 필요 없고 머리만.",
+      "calls": [
+        {
+          "name": "mcp__matnexus__search_materials",
+          "input": {
+            "query": "SCATTER_DP600_1.0"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__deck_readiness",
+          "input": {
+            "material_id": "60959881-2063-474e-82d9-a2eec429561e"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__build_deck",
+          "input": {
+            "rows": [
+              {
+                "mid": 7,
+                "name": "SCATTER_DP600_1.0",
+                "material_id": "60959881-2063-474e-82d9-a2eec429561e"
+              }
+            ],
+            "format": "abaqus",
+            "units": "mm_n_tonne"
+          },
+          "empty": false,
+          "is_error": false
+        }
+      ],
+      "answer": "Abaqus 덱 나옵니다 (MID 7). 머리만:\n\n```\n** MatNexus 물성 카드\n** 재료 SCATTER_DP600_1.0 · tensile · MD\n** 시편 8개의 대표 곡선에서 만들었습니다.\n** 카드 2b225245-…-829570c028ba (초안 — 아직 확정되지 않았습니다)\n** 경화식 참고: Voce · 상대 RMSE 0.04% · 적합 구간 소성변형률 0~0.11 (그 밖은 검증되지 않았습니다)\n** 등급 1 — 실측(제품 문서 · 표본 3 이상): 소성 표 · 경화식 rmse · R² · 적합 구간 · 최대 잔차 · 상대 RMSE · 경화식\n** 단위가 선언돼 있지 않아 SI 로 남긴 값: hardening.rmse\n** Consistent units: tonne, mm, s, MPa\n*MATERIAL, NAME=SCATTER_DP600_1_0_MD\n*DENSITY\n*ELASTIC, TYPE=ISOTROPIC\n*PLASTIC, HARDENING=ISOTROPIC, EXTRAPOLATION=CONSTANT\n```\n\n- 파일: `bom_deck_mm_n_tonne.inp`, 135줄, 카드 1건 (문헌·합성 0건)\n- 값은 **실측 등급 1**, 시편 8개 대표 곡선. 다만 **카드가 초안**이라 확정 전입니다.\n- 소성 곡선은 **소성변형률 0~0.11** 까지만 적합됨 — 그 밖은 검증 안 됨 (덱은 `EXTRAPOLATION=CONSTANT`).\n- 단위는 기본값 **mm·N·tonne (MPa)** 로 뽑았습니다. SI 가 아니니, 받는 해석 모델의 단위계가 다르면 말씀 주세요 — 다시 뽑습니다(본문을 손으로 고치면 안 됩니다).\n\n본문 135줄이 필요하면 전문으로 다시 뽑아 드리겠습니다.",
+      "error": null,
+      "seconds": 28.902560472488403,
+      "cost_usd": 0.3259415,
+      "map_first": false,
+      "empty_calls": 0,
+      "over_budget": false,
+      "tools_any_ok": true,
+      "forbidden_hit": [],
+      "missing_mentions": [],
+      "passed": true
+    },
+    {
+      "id": "deck-03",
+      "category": "카드",
+      "prompt": "SCATTER_DP600_1.0 과 EXAMPLE-MIX_예제_- 두 재료를 MID 1, 2 로 한 LS-DYNA 덱 파일로 묶어 줘. 건너뛴 게 있으면 왜인지 말해 줘.",
+      "calls": [
+        {
+          "name": "mcp__matnexus__get_guide",
+          "input": {
+            "topic": "workflow"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__search_all",
+          "input": {
+            "q": "SCATTER_DP600_1.0"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__search_all",
+          "input": {
+            "q": "EXAMPLE-MIX_예제_-"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__deck_readiness",
+          "input": {
+            "material_id": "60959881-2063-474e-82d9-a2eec429561e"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__deck_readiness",
+          "input": {
+            "material_id": "e4395363-849a-4c03-be11-63283bdcf0a5"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__build_deck",
+          "input": {
+            "rows": [
+              {
+                "mid": 1,
+                "name": "SCATTER_DP600_1.0",
+                "material_id": "60959881-2063-474e-82d9-a2eec429561e"
+              },
+              {
+                "mid": 2,
+                "name": "EXAMPLE-MIX",
+                "material_id": "e4395363-849a-4c03-be11-63283bdcf0a5"
+              }
+            ],
+            "units": "mm_n_tonne"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__build_deck",
+          "input": {
+            "rows": [
+              {
+                "mid": 1,
+                "name": "SCATTER_DP600_1.0",
+                "material_id": "60959881-2063-474e-82d9-a2eec429561e"
+              },
+              {
+                "mid": 2,
+                "name": "EXAMPLE-MIX",
+                "material_id": "e4395363-849a-4c03-be11-63283bdcf0a5"
+              }
+            ],
+            "units": "mm_n_tonne",
+            "include_text": true
+          },
+          "empty": false,
+          "is_error": false
+        }
+      ],
+      "answer": "MID 1 만 실렸고 **MID 2 는 건너뛰었다.**\n\n**덱** — `bom_deck_mm_n_tonne.k` · LS-DYNA(dyna) · 141줄 · 단위 `mm_n_tonne`(tonne, mm, s, MPa — SI 아님). LS-DYNA 는 단위를 선언하지 않으니 받는 해석 모델도 같은 계여야 한다. 다른 계면 말해 주면 다시 뽑는다.\n\n- **MID 1 SCATTER_DP600_1.0** — `*MAT_PIECEWISE_LINEAR_PLASTICITY` + `*DEFINE_CURVE`. 카드 「DP600 MD (resample 0.11)」, 시편 8개 대표 곡선, 인장·MD. ρ=7.850E-09, E=1.999E+05 MPa, ν=0.30, σy=333.2 MPa. 소성 표는 등급 1(실측). **주의: 이 카드는 초안이다 — 아직 확정되지 않았다.** Voce 적합 구간은 소성변형률 0~0.11, 그 밖은 검증 안 됨.\n- **MID 2 EXAMPLE-MIX_예제_-** — 건너뜀. 카드가 「test1」 하나뿐인데 **푸아송비·밀도·소성 표가 없다.** LS-DYNA 로는 열전도 덱(`lsdyna_thermal`)만 나오고, 그건 구조 덱과 같은 파일에 섞을 성질이 아니다. 문헌에서 채택할 값도 0건이라 합성도 못 한다. 채우는 길은 인장시험(등록된 시험 종류 있음)이거나, 사람이 탄성률·푸아송비·밀도를 선언 물성으로 적어 넣는 것.\n\n```\n*KEYWORD\n$ MatNexus 물성 카드\n$ 재료 SCATTER_DP600_1.0 · tensile · MD\n$ 시편 8개의 대표 곡선에서 만들었습니다.\n$ 카드 2b225245-7ae3-4cf3-9b0f-829570c028ba (초안 — 아직 확정되지 않았습니다)\n$ 경화식 참고: Voce · 상대 RMSE 0.04% · 적합 구간 소성변형률 0~0.11 (그 밖은 검증되지 않았습니다)\n$ 값 등급(1 좋음 ~ 4 계산·추정 — 문헌과 같은 척도):\n$   등급 1 — 실측 (제품 문서 · 표본 3 이상): 소성 표 · 경화식 rmse · R² · 적합 구간 끝 · 적합 구간 시작 · 최대 잔차 · 상대 RMSE · 경화식\n$ 단위가 선언돼 있지 않아 SI 로 남긴 값: hardening.rmse\n$ Consistent units: tonne, mm, s, MPa\n$   (LS-DYNA declares no units - every material in this deck must match.)\n*MAT_PIECEWISE_LINEAR_PLASTICITY\n$      mid        ro         e        pr      sigy      etan      fail      tdel\n         1 7.850E-09 1.999E+05 3.000E-01 3.332E+02\n$        c         p      lcss      lcsr\n                             1\n*DEFINE_CURVE\n$     lcid      sidr       sfa       sfo      offa      offo    dattyp\n         1\n$                 a1                  o1\n  0.000000000000E+00     3.332133495E+02\n  9.243697478992E-04     3.361150838E+02\n  1.848739495798E-03     3.386580671E+02\n  2.773109243697E-03     3.410364621E+02\n  3.697478991597E-03     3.433855288E+02\n  4.621848739496E-03     3.454789125E+02\n  5.546218487395E-03     3.478333805E+02\n  6.470588235294E-03     3.499043722E+02\n  7.394957983193E-03     3.522124997E+02\n  8.319327731092E-03     3.543801305E+02\n  9.243697478992E-03     3.565986426E+02\n  1.016806722689E-02     3.585917358E+02\n  1.109243697479E-02     3.606533849E+02\n  1.201680672269E-02     3.628790932E+02\n  1.294117647059E-02     3.649172270E+02\n  1.386554621849E-02     3.669056913E+02\n  1.478991596639E-02     3.686307219E+02\n  1.571428571429E-02     3.707114533E+02\n  1.663865546218E-02     3.727596031E+02\n  1.756302521008E-02     3.745420209E+02\n  1.848739495798E-02     3.762330764E+02\n  1.941176470588E-02     3.784238499E+02\n  2.033613445378E-02     3.800018045E+02\n  2.126050420168E-02     3.817488515E+02\n  2.218487394958E-02     3.835021222E+02\n  2.310924369748E-02     3.854691391E+02\n  2.403361344538E-02     3.871334416E+02\n  2.495798319328E-02     3.883880139E+02\n  2.588235294118E-02     3.903517006E+02\n  2.680672268908E-02     3.920905029E+02\n  2.773109243697E-02     3.939175527E+02\n  2.865546218487E-02     3.953540189E+02\n  2.957983193277E-02     3.965752055E+02\n  3.050420168067E-02     3.982013332E+02\n  3.142857142857E-02     4.000371225E+02\n  3.235294117647E-02     4.017972953E+02\n  3.327731092437E-02     4.031039329E+02\n  3.420168067227E-02     4.044500447E+02\n  3.512605042017E-02     4.055972579E+02\n  3.605042016807E-02     4.072310669E+02\n  3.697478991597E-02     4.084797808E+02\n  3.789915966387E-02     4.100817416E+02\n  3.882352941176E-02     4.119234542E+02\n  3.974789915966E-02     4.128729245E+02\n  4.067226890756E-02     4.143500694E+02\n  4.159663865546E-02     4.157364031E+02\n  4.252100840336E-02     4.171792129E+02\n  4.344537815126E-02     4.182665285E+02\n  4.436974789916E-02     4.193363965E+02\n  4.529411764706E-02     4.207833513E+02\n  4.621848739496E-02     4.217657330E+02\n  4.714285714286E-02     4.231841389E+02\n  4.806722689076E-02     4.243224131E+02\n  4.899159663866E-02     4.255180963E+02\n  4.991596638655E-02     4.266317878E+02\n  5.084033613445E-02     4.274707698E+02\n  5.176470588235E-02     4.285972564E+02\n  5.268907563025E-02     4.301874944E+02\n  5.361344537815E-02     4.311944111E+02\n  5.453781512605E-02     4.323396111E+02\n  5.546218487395E-02     4.334354556E+02\n  5.638655462185E-02     4.346932211E+02\n  5.731092436975E-02     4.355518373E+02\n  5.823529411765E-02     4.369045321E+02\n  5.915966386555E-02     4.376863887E+02\n  6.008403361345E-02     4.384721900E+02\n  6.100840336134E-02     4.397431698E+02\n  6.193277310924E-02     4.407644409E+02\n  6.285714285714E-02     4.415211181E+02\n  6.378151260504E-02     4.425471313E+02\n  6.470588235294E-02     4.431156856E+02\n  6.563025210084E-02     4.444487487E+02\n  6.655462184874E-02     4.453838433E+02\n  6.747899159664E-02     4.462669535E+02\n  6.840336134454E-02     4.473015387E+02\n  6.932773109244E-02     4.481225848E+02\n  7.025210084034E-02     4.488714556E+02\n  7.117647058824E-02     4.496654888E+02\n  7.210084033613E-02     4.507930455E+02\n  7.302521008403E-02     4.513384335E+02\n  7.394957983193E-02     4.519487697E+02\n  7.487394957983E-02     4.530612402E+02\n  7.579831932773E-02     4.537705801E+02\n  7.672268907563E-02     4.543898737E+02\n  7.764705882353E-02     4.551466025E+02\n  7.857142857143E-02     4.560116748E+02\n  7.949579831933E-02     4.567195127E+02\n  8.042016806723E-02     4.575777178E+02\n  8.134453781513E-02     4.583472123E+02\n  8.226890756303E-02     4.590946974E+02\n  8.319327731092E-02     4.599163852E+02\n  8.411764705882E-02     4.606984668E+02\n  8.504201680672E-02     4.614998019E+02\n  8.596638655462E-02     4.617389227E+02\n  8.689075630252E-02     4.624602839E+02\n  8.781512605042E-02     4.631037467E+02\n  8.873949579832E-02     4.636676296E+02\n  8.966386554622E-02     4.642324250E+02\n  9.058823529412E-02     4.649762029E+02\n  9.151260504202E-02     4.657565010E+02\n  9.243697478992E-02     4.661434416E+02\n  9.336134453782E-02     4.669851053E+02\n  9.428571428571E-02     4.674248288E+02\n  9.521008403361E-02     4.683190507E+02\n  9.613445378151E-02     4.687240043E+02\n  9.705882352941E-02     4.690034908E+02\n  9.798319327731E-02     4.700543819E+02\n  9.890756302521E-02     4.706803667E+02\n  9.983193277311E-02     4.711108040E+02\n  1.007563025210E-01     4.717271587E+02\n  1.016806722689E-01     4.722258001E+02\n  1.026050420168E-01     4.725129316E+02\n  1.035294117647E-01     4.735023978E+02\n  1.044537815126E-01     4.737083056E+02\n  1.053781512605E-01     4.742380331E+02\n  1.063025210084E-01     4.746811667E+02\n  1.072268907563E-01     4.752386484E+02\n  1.081512605042E-01     4.760192025E+02\n  1.090756302521E-01     4.760531138E+02\n  1.100000000000E-01     4.768291325E+02\n*END\n```\n\n본문은 손으로 고치지 말 것 — 고정폭 필드라 한 칸 어긋나면 솔버가 다른 값을 조용히 읽는다. 화면에서는 카드 → BOM 혼합 덱으로도 받을 수 있다.",
+      "error": null,
+      "seconds": 101.46908855438232,
+      "cost_usd": 0.697236,
+      "map_first": true,
+      "empty_calls": 0,
+      "over_budget": true,
+      "tools_any_ok": true,
+      "forbidden_hit": [],
+      "missing_mentions": [],
+      "passed": false
+    },
+    {
+      "id": "deck-04",
+      "category": "카드",
+      "prompt": "ONEF8E009_T_1.0 재료로 낼 수 있는 솔버 형식이 뭐가 있어? 안 되는 건 이유도.",
+      "calls": [
+        {
+          "name": "mcp__matnexus__search_materials",
+          "input": {
+            "query": "ONEF8E009_T_1.0"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__deck_readiness",
+          "input": {
+            "material_id": "111a7223-163b-4d46-b454-ed2eb4574907"
+          },
+          "empty": false,
+          "is_error": false
+        }
+      ],
+      "answer": "**ONEF8E009_T_1.0** (M-000070, 기본 부서) — 지금 낼 수 있는 솔버 형식은 **0개**입니다. 카드가 아예 없습니다(card_count 0).\n\n**막힌 이유 (검사한 형식 23개 전부)**\n\n- **탄성(E·ν·ρ)이 비어 있음** — Abaqus / LS-DYNA / Ansys APDL / OptiStruct / Nastran / OpenRadioss 의 거의 모든 변형이 여기서 걸립니다. 문헌에서 채택 가능한 값 **0건**.\n- **소성 표 없음** — 위 솔버들의 기본형(탄소성)이 추가로 걸림. 채택 경로 없음, 시험으로만.\n- **점탄성(Prony) · LVE(저장탄성률) 없음** — Abaqus/LS-DYNA 점탄성, Abaqus LVE. 문헌 채택 0건.\n- **열물성(선팽창·비열·열전도) 없음** — LS-DYNA 열전도/열물성, OpenRadioss 열물성, Nastran·OptiStruct 열물성. 문헌 채택 0건.\n- **초탄성 · 유변(점도) · 온도별 소성 표 · 속도별 소성 표** — 빠진 것도 문제지만 **이걸 내는 시험 종류가 등록돼 있지 않습니다**(초탄성·유변·온도표는 test_type 목록이 빔). 시험으로 채울 길이 현재 없음.\n\n**채우는 길**\n\n- **인장시험**(등록됨) → 탄성 + 소성 표 + 경화식. 이거 하나면 Abaqus·LS-DYNA·Ansys·OptiStruct·Nastran·OpenRadioss 기본형과 Johnson-Cook 단순화까지 열립니다. 가장 효율적인 한 수입니다.\n- **DMA 스윕**(등록됨) → 점탄성, LVE.\n- **열물성**은 시험 종류가 없으니 사람이 선언값으로 적어 넣거나(create_declared_card) 문헌 재료를 이어 채택해야 하는데, 지금 이어진 문헌 값이 0건입니다.\n\n숫자는 전부 SI 기준이며, 위 판정은 `deck_readiness` 가 렌더와 같은 규칙으로 낸 결과입니다.",
+      "error": null,
+      "seconds": 33.95029306411743,
+      "cost_usd": 0.352278,
+      "map_first": false,
+      "empty_calls": 0,
+      "over_budget": false,
+      "tools_any_ok": true,
+      "forbidden_hit": [],
+      "missing_mentions": [],
+      "passed": true
+    },
+    {
+      "id": "deck-05",
+      "category": "카드",
+      "prompt": "SCATTER_DP600_1.0 의 카드로 LS-DYNA 덱을 뽑고, 그 덱이 카드 값과 맞는지 되읽어 확인해 줘. 단위계는 mm-N-tonne.",
+      "calls": [
+        {
+          "name": "mcp__matnexus__get_guide",
+          "input": {
+            "topic": "cards"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__get_card",
+          "input": {
+            "card_id": "SCATTER_DP600_1.0"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__search_all",
+          "input": {
+            "q": "SCATTER_DP600_1.0",
+            "mode": "contains"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__deck_readiness",
+          "input": {
+            "material_id": "60959881-2063-474e-82d9-a2eec429561e"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__list_unit_systems",
+          "input": {},
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__get_card",
+          "input": {
+            "card_id": "2b225245-7ae3-4cf3-9b0f-829570c028ba"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__list_cards",
+          "input": {
+            "material_id": "60959881-2063-474e-82d9-a2eec429561e"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__render_card_deck",
+          "input": {
+            "card_id": "2b225245-7ae3-4cf3-9b0f-829570c028ba",
+            "format": "dyna",
+            "units": "mm_n_tonne",
+            "mid": 1
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__check_card_deck",
+          "input": {
+            "card_id": "2b225245-7ae3-4cf3-9b0f-829570c028ba",
+            "format": "dyna",
+            "units": "mm_n_tonne"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__check_card_deck",
+          "input": {
+            "card_id": "2b225245-7ae3-4cf3-9b0f-829570c028ba",
+            "format": "dyna",
+            "units": "mm_n_tonne",
+            "expect": {
+              "elastic.youngs_modulus": 199905294903.31226,
+              "elastic.density": 7850,
+              "elastic.poisson_ratio": 0.3
+            }
+          },
+          "empty": false,
+          "is_error": false
+        }
+      ],
+      "answer": "덱을 뽑고 되읽기까지 마쳤습니다.\n\n## 먼저 짚을 것\n- `SCATTER_DP600_1.0` 은 **카드가 아니라 재료**입니다. 이 재료에는 카드가 3장 있고, **전부 초안**입니다(확정된 카드 없음).\n- 서버가 고른 카드: **DP600 MD (resample 0.11)** · `2b225245-7ae3-4cf3-9b0f-829570c028ba` · 인장 · MD · 시편 8개 대표곡선.\n- 나머지 두 장: 같은 이름의 또 다른 0.11 카드(`90ce03cd…`), 그리고 **소성변형률 0.24 까지 가는 카드**(`e4d37504…`). 0.11 까지로 충분한지, 0.24 카드를 쓸지는 정해 주십시오.\n\n## 덱\n- 형식 `dyna` → `*MAT_PIECEWISE_LINEAR_PLASTICITY` + `*DEFINE_CURVE`, 141줄, 파일명 `SCATTER_DP600_1_0_MD_mm_n_tonne.k`\n- 단위계 **mm · N · tonne (tonne, mm, s, MPa)** — 덱 머리에도 선언 주석이 박혀 있습니다.\n- **MID = 1** (제가 지정). 다른 덱과 합치실 거면 겹침 확인하세요.\n- 값: RO 7.850E-09 tonne/mm³, E 1.999E+05 MPa, PR 0.300, SIGY 3.332E+02 MPa, LCSS=1(120점 곡선, 0 → 0.11).\n\n## 되읽기 결과 — 전부 통과\n| 검사 | 결과 |\n|---|---|\n| 읽기 | LS-DYNA 덱이 정상 생성 |\n| 값 | 밀도·푸아송비·적합구간 시작/끝이 mm-N-tonne 숫자 그대로 |\n| 표 | 120점 마지막 점까지 실림 (잘림 없음) |\n| 기대값 E | 카드 1.99905e+11 Pa = 기대 1.99905e+11 (SI) |\n| 기대값 밀도 | 7850 = 7850 |\n| 기대값 푸아송비 | 0.3 = 0.3 |\n\n경고 각주(`notes`)는 비어 있습니다 — 네킹 미절단 경고도, 첫 점 항복 경고도 없습니다.\n\n## 그래도 남는 조건\n- **초안 카드**입니다. 덱 머리에 「초안 — 아직 확정되지 않았습니다」가 박혀 나갑니다. 확정은 화면에서 사람이 합니다.\n- 경화식 참고값: **Voce**, 상대 RMSE 0.04%, R² 0.99998, **적합 구간 소성변형률 0~0.11 — 그 밖은 검증되지 않았습니다.** 덱은 표(LCSS)를 쓰므로 0.11 을 넘는 변형은 솔버가 외삽합니다. 성형처럼 변형이 큰 해석이면 0.24 카드를 검토하십시오.\n- 덱 본문은 손으로 고치지 마십시오. 단위계가 다르면 `si` 로 다시 뽑겠습니다.\n\n본문 전체를 파일로 받으시겠습니까? MID 를 실제 모델 번호로 바꿔 다시 뽑아드릴 수도 있습니다.",
+      "error": null,
+      "seconds": 69.65619659423828,
+      "cost_usd": 0.6837435,
+      "map_first": true,
+      "empty_calls": 0,
+      "over_budget": false,
+      "tools_any_ok": true,
+      "forbidden_hit": [],
+      "missing_mentions": [],
+      "passed": true
+    },
+    {
+      "id": "deck-06",
+      "category": "카드",
+      "prompt": "CND34F92_T_1.0 으로 Abaqus 점탄성 덱이 나오나? 안 나오면 어떤 시험을 해야 생기는지 알려 줘.",
+      "calls": [
+        {
+          "name": "mcp__matnexus__deck_readiness",
+          "input": {
+            "material_id": "CND34F92_T_1.0"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__search_materials",
+          "input": {
+            "query": "CND34F92 T 1.0"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__deck_readiness",
+          "input": {
+            "material_id": "7c4d0b65-8af1-4366-83ae-3a3ec247e2bb"
+          },
+          "empty": false,
+          "is_error": false
+        }
+      ],
+      "answer": "**안 나옵니다.** CND34F92_T_1.0(M-000079, Steel)에는 물성 카드가 0건이라 어떤 형식도 안 나옵니다.\n\nAbaqus(점탄성)에 빠진 블록은 둘:\n\n- **탄성** — 인장시험으로 생깁니다(등록된 시험 종류: 인장시험). 필요한 값은 영률·푸아송비·밀도.\n- **점탄성** — DMA 스윕으로 생깁니다(등록된 시험 종류: DMA 스윕). 필요한 값은 Prony 장기 탄성률.\n\n문헌(카탈로그)에서 채택할 수 있는 값은 두 블록 다 **0건**입니다. 시험 없이 가려면 사람이 값을 적어 넣는 길(선언 카드)뿐이고, 그 경우 영률·푸아송비·밀도·Prony 장기 탄성률이 선언 대상입니다 — 선언값은 실측이 아니니 덱에 그렇게 표시해 써야 합니다.\n\n참고로 이 재료는 인장시험만 채우면 Abaqus(일반)·LS-DYNA·Ansys·OptiStruct·Nastran 쪽이 함께 열립니다.",
+      "error": null,
+      "seconds": 26.018606424331665,
+      "cost_usd": 0.34414749999999994,
+      "map_first": false,
+      "empty_calls": 0,
+      "over_budget": false,
+      "tools_any_ok": true,
+      "forbidden_hit": [],
+      "missing_mentions": [],
+      "passed": true
+    },
+    {
+      "id": "search-01",
+      "category": "값 찾기",
+      "prompt": "항복강도가 300 MPa 근처인 재료를 찾아 줘. 문헌값과 사내 측정값을 갈라서, 등급도 같이.",
+      "calls": [
+        {
+          "name": "mcp__matnexus__resolve_property",
+          "input": {
+            "name": "항복강도"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__find_by_property",
+          "input": {
+            "property": "항복강도",
+            "unit": "MPa",
+            "near": 300,
+            "limit": 30
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__find_by_property",
+          "input": {
+            "property": "항복강도",
+            "unit": "MPa",
+            "near": 300,
+            "origins": "internal,measured",
+            "limit": 30
+          },
+          "empty": false,
+          "is_error": false
+        }
+      ],
+      "answer": "**항복강도 300 MPa ±10% (270~330 MPa)** — 총 21건 중 갈라서:\n\n## 사내 측정값 (시험으로 잰 값) — 1건\n| 재료 | 값 | 등급 | 방법 |\n|---|---|---|---|\n| SCATTER_DP600_1.0 | 313.4 MPa (편차 12.4, 시편 2) | 2 (표본 1~2) | 오프셋 항복강도 · offset_strain=0.002 |\n\n사내에 사람이 직접 적어 둔 값(internal)은 이 범위에 없다.\n\n## 문헌값 (카탈로그) — 20건\n등급 1 (실측/데이터시트 인쇄값):\n- GlidCop AL-15 (분산강화 Cu, 16 mm 판) — 317 MPa, 324 MPa\n\n등급 2 (규격·공인 DB):\n- SUS410_annealed / SUS301_annealed / SUS430_annealed — 275 MPa (0.2% proof)\n- Ti Grade 2 — 276 MPa, Al6061-T6 — 276 MPa\n- ZAMAK 2 — 283 MPa, ZA-8 — 290 MPa, ZA-12 — 320 MPa\n- SUS201_annealed — 310 MPa, SUS430_annealed — 310 MPa\n\n등급 3 (대표값·2차 인용):\n- Al2024-T3 — 270 MPa, Al6061-T6 — 276 MPa, SUS201_annealed — 292 MPa, Al 6013 — 320 MPa, S45C — 330 MPa\n\n등급 4 (계산·추정) — 실측처럼 쓰지 말 것:\n- Copper Pillar Bump — 317 MPa\n\n참고: 같은 재료가 등급 2와 3으로 두 번 나오는 경우가 있다(예: Al6061-T6 276 MPa, SUS430 275/310 MPa) — 출처가 다른 두 기록이다. 문헌값은 모두 방법 표기가 없어 조건(오프셋·온도) 비교는 사내 측정값 쪽만 확실하다.",
+      "error": null,
+      "seconds": 30.539103507995605,
+      "cost_usd": 0.32723850000000004,
+      "map_first": false,
+      "empty_calls": 0,
+      "over_budget": false,
+      "tools_any_ok": true,
+      "forbidden_hit": [],
+      "missing_mentions": [],
+      "passed": true
+    },
+    {
+      "id": "search-02",
+      "category": "값 찾기",
+      "prompt": "200 °C 에서 잰 항복강도가 있는 사내 재료가 있어? 있으면 값과 표본 수.",
+      "calls": [
+        {
+          "name": "mcp__matnexus__resolve_property",
+          "input": {
+            "name": "항복강도"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__find_by_property",
+          "input": {
+            "property": "항복강도",
+            "unit": "MPa",
+            "condition": "temperature",
+            "condition_unit": "degC",
+            "condition_near": 200,
+            "origins": "measured,internal",
+            "limit": 20
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__find_by_property",
+          "input": {
+            "property": "항복강도",
+            "unit": "MPa",
+            "min": 0,
+            "max": 100000,
+            "condition": "temperature",
+            "condition_unit": "degC",
+            "condition_near": 200,
+            "origins": "measured,internal",
+            "limit": 20
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__find_by_property",
+          "input": {
+            "property": "항복강도",
+            "unit": "MPa",
+            "min": 0,
+            "max": 100000,
+            "origins": "measured,internal",
+            "limit": 20
+          },
+          "empty": false,
+          "is_error": false
+        }
+      ],
+      "answer": "**200 °C 에서 잰 항복강도는 없습니다.** 조건(온도 195~205 °C)을 적은 사내 값이 한 건도 안 걸렸습니다 — 온도를 안 적은 값은 그 조건에서 잰 것으로 치지 않으니까요.\n\n조건을 빼면 사내 값은 6건 있습니다. 시험으로 잰 것(measured)은 둘:\n\n| 재료 | 항복강도 | 표본 수 | 표준편차 | 방법 |\n|---|---|---|---|---|\n| SCATTER_DP600_1.0 | 346.9 MPa | 11 | 21.5 MPa | 오프셋 항복강도(offset_strain=0.002) |\n| EXAMPLE-MIX_예제 | 392.0 MPa | 3 | 8.4 MPa | 오프셋 항복강도(offset_strain=0.002) |\n\n둘 다 등급 1(실측, 표본 3 이상). 나머지 4건은 사람이 적어 넣은 값(표본 1): SRCDEMO 205 MPa·231 MPa(등급 1, 출처 Vendor Catalog 2026 p.14 / MTC-2026-0912), AL5052H32DEMO 193 MPa(등급 3, MakeItFrom), SAC305 25.3 MPa(등급 3, 문헌 인용).\n\n다만 이 값들은 시험 온도가 기록돼 있지 않아 **상온으로 단정할 수는 없습니다**. 200 °C 값이 필요하시면 고온 인장 시험을 의뢰해야 합니다.",
+      "error": null,
+      "seconds": 28.399155855178833,
+      "cost_usd": 0.3471115,
+      "map_first": false,
+      "empty_calls": 0,
+      "over_budget": false,
+      "tools_any_ok": true,
+      "forbidden_hit": [],
+      "missing_mentions": [],
+      "passed": true
+    },
+    {
+      "id": "search-03",
+      "category": "값 찾기",
+      "prompt": "UTS 가 400 MPa 이상인 재료 찾아 줘.",
+      "calls": [
+        {
+          "name": "mcp__matnexus__resolve_property",
+          "input": {
+            "name": "UTS"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__find_by_property",
+          "input": {
+            "property": "UTS",
+            "unit": "MPa",
+            "min": 400,
+            "limit": 20
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__find_by_property",
+          "input": {
+            "property": "UTS",
+            "unit": "MPa",
+            "min": 400,
+            "limit": 40
+          },
+          "empty": false,
+          "is_error": false
+        }
+      ],
+      "answer": "UTS(인장강도, Rm) ≥ 400 MPa 로 찾았다. 값이 낮은 쪽부터 나오고, 40건을 받아도 끝이 안 보인다 — **400 MPa 이상은 최소 40건 이상**이다. 아래는 그중 눈에 띄는 것들.\n\n**사내 실측 (measured, 시험으로 잰 값 · 방법: 인장강도·연신율)**\n- SECC-EXAD87-TS_인장_0.8 — 487 MPa (등급 1, 시편 3, 편차 6.0)\n- SECC-EXAD87-ALL_전체_0.8 — 487 MPa (등급 2, 시편 2, 편차 8.5)\n- SCATTER_DP600_1.0 — 437 MPa (등급 1, 시편 11, 편차 20.0)\n\n**문헌값 중 등급 1 (제품문서·논문 인쇄값)**\n- GlidCop AL-15 분산강화 구리 — 407~482 MPa\n- TiAl Ti-48Al-2.3V-1.2Cr (Dong 2018) — 464 / 477 MPa\n- 316 스테인리스 고용화처리 (Yamaguchi 1980) — 480 MPa\n- Polyimide Film (UBE U-Varnish-S) — 482 MPa\n- Kapton 140EN-Z — 450 MPa / 150EN-A — 430 MPa (폴리머)\n- Battery Cu 집전체 박 — 457 MPa\n- 7075 PVPPA 용접부 (Li 2018) — 406 / 443 MPa\n\n**등급 2~3 대표값**: SUS316L 485, SUS304L 485, SUS430 483, SUS410 480, Al2024-T3 483, Ti Grade2 485, 16Mo3 481, 황동 C36000 430, ZA-27 426 MPa\n**등급 4(추정)도 섞여 있다**: Nickel Tab 450, High-Tg FR-4 프리프레그 415, Megtron급 라미네이트 400 MPa — 추정치라 실측처럼 쓰지 마라.\n\n건수가 많아 다 못 보여 준다. 좁힐 축을 정해 주면 다시 찾겠다 — 금속만/범위 상한(예: 400~600 MPa)/등급 1~2 만/사내 실측만 중 어느 쪽인가?",
+      "error": null,
+      "seconds": 38.42788505554199,
+      "cost_usd": 0.40650699999999995,
+      "map_first": false,
+      "empty_calls": 0,
+      "over_budget": false,
+      "tools_any_ok": true,
+      "forbidden_hit": [],
+      "missing_mentions": [],
+      "passed": true
+    },
+    {
+      "id": "search-04",
+      "category": "값 찾기",
+      "prompt": "탄성계수 200 GPa 근처인 것 중 믿을 만한 것(등급 2 이상)만 보여 줘.",
+      "calls": [
+        {
+          "name": "mcp__matnexus__resolve_property",
+          "input": {
+            "name": "탄성계수"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__find_by_property",
+          "input": {
+            "property": "탄성계수",
+            "unit": "GPa",
+            "near": 200,
+            "min_tier": 2,
+            "limit": 20
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__find_by_property",
+          "input": {
+            "property": "탄성계수",
+            "unit": "GPa",
+            "min": 196,
+            "max": 204,
+            "min_tier": 2,
+            "limit": 20
+          },
+          "empty": false,
+          "is_error": false
+        }
+      ],
+      "answer": "**영률(탄성계수) 200 GPa 근처 · 등급 1~2**\n\n「탄성계수」는 **영률(E, SI 단위 Pa)** 로 풀렸다. ±10%(180~220 GPa)에 등급 1~2 만 **45건**, 그 중 200 ±2% (196~204)에 **43건**이 몰려 있다. 아래는 200 에 가장 가까운 쪽 일부다.\n\n**문헌(catalog)**\n| 재료 | 값 | 등급 |\n|---|---|---|\n| SUS 17-4PH H900 Bilinear | 197 GPa | 1 |\n| 교정용 와이어 Unitek Hi-T (STS 302/304, Kusy 1988) | 197.1 GPa | 1 |\n| 교정용 와이어 AO Gold Tone (STS 302/304) | 196.2~198.9 GPa | 1 |\n| 교정용 와이어 GAC Nubryte / RMO Tru-Chrome | 196.1~198 GPa | 1 |\n| Ti-doped DLC:H 18 at% Ti (Lee 2017) | 198.6 GPa | 2 |\n\n**사내(internal)** — 출처는 값에 붙어 있는 그대로\n| 재료 | 값 | 등급 · 출처 |\n|---|---|---|\n| E2E54711298_-_1.0 | 197.4 GPa | 1 · 사내 물성표 v4 |\n| E2E28629886_-_1.0 | 197.9 GPa | 1 · 사내 물성표 v4 |\n| E2E66159204_-_1.0 | 196.2 GPa | 1 · 공급사 자료 2025-03 |\n| E2ECHECK_TMP_1.0 | 197.0 GPa | 2 · KS D 3512 표 3 |\n| E2E27334733_-_1.0 / MG8F91_T_1.0 | 197.2 / 197.4 GPa | 2 · ASM Handbook Vol.1 |\n\n짚어 둘 것:\n- 전부 **문헌·선언값**이고 **시험으로 잰 값(measured)은 한 건도 없다** — 시편 수·표준편차가 없다.\n- 180 GPa 쪽(공구강 Uddeholm Orvar/Dievar/Vidar/Unimax/Mirrax, 등급 1)도 ±10% 안에 들어온다. 더 좁게(예: 199~201) 보거나, 금속만 / 사내만 추려 볼까?",
+      "error": null,
+      "seconds": 35.56601357460022,
+      "cost_usd": 0.37746050000000003,
+      "map_first": false,
+      "empty_calls": 0,
+      "over_budget": false,
+      "tools_any_ok": true,
+      "forbidden_hit": [],
+      "missing_mentions": [],
+      "passed": true
+    },
+    {
+      "id": "search-05",
+      "category": "값 찾기",
+      "prompt": "항복응력 200 근처인 재료 찾아 줘.",
+      "calls": [
+        {
+          "name": "mcp__matnexus__resolve_property",
+          "input": {
+            "name": "항복응력"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__find_by_property",
+          "input": {
+            "property": "항복강도",
+            "unit": "MPa",
+            "near": 200,
+            "limit": 20
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__find_by_property",
+          "input": {
+            "property": "rheological.yield_stress",
+            "unit": "Pa",
+            "near": 200,
+            "limit": 10
+          },
+          "empty": false,
+          "is_error": false
+        }
+      ],
+      "answer": "**단위를 안 말하셔서 「항복강도 200 MPa」로 봤습니다.** (유변학의 「항복응력」 200 Pa 로 찾으면 0건입니다. 페이스트 쪽을 물으신 거면 말씀해 주세요.)\n\n180~220 MPa 로 **22건** 나왔고, 등급 좋은 순으로:\n\n**등급 1 (실측/인쇄값)**\n- Mg_AZ31B_H24 Bilinear — 200 MPa (문헌)\n- SRCDEMO — 205 MPa (사내, Vendor Catalog 2026 p.14)\n- Electroless copper foil, bath B (Vecchio & Hertzberg 1986) — 212 MPa\n- Electroless copper foil, bath A — 180 / 192 MPa\n\n**등급 2 (규격·공인 DB)**\n- SUS316_annealed — 205 MPa\n- SUS304L_annealed — 210 MPa (0.2% proof)\n- C36000 쾌삭황동 — 200 MPa (규격 범위 140~260)\n- Al5052-H32 — 193 MPa (H32, 0.2% proof 180~193)\n- Mg_AZ31B_H24 — 180 MPa\n\n**등급 3 (대표값·2차 인용)**\n- SUS301_annealed 205 · Al6063-T6 210 · Al 6013 185 · Al5052-H32 180 MPa\n- AL5052H32DEMO (사내) 193 MPa\n\n**등급 4 (추정·가정)** — 그대로 옮겨 쓰지 마세요\n- TSV Copper 200 · Upilex-S(PI 필름, 폴리머) 200 · Nitinol 200 · Ta 커패시터 180 · Battery Cu Foil 180 MPa\n\n값은 모두 문헌·선언값이고 시험으로 잰(measured) 건은 이 범위에 없습니다. 범위를 좁히거나(예: 195~205) 등급 2 이상만, 또는 금속만 보고 싶으시면 다시 찾아 드릴게요.",
+      "error": null,
+      "seconds": 40.78245306015015,
+      "cost_usd": 0.32457600000000003,
+      "map_first": false,
+      "empty_calls": 0,
+      "over_budget": false,
+      "tools_any_ok": true,
+      "forbidden_hit": [],
+      "missing_mentions": [],
+      "passed": true
+    },
+    {
+      "id": "search-06",
+      "category": "값 찾기",
+      "prompt": "SAC305 Solder Alloy 의 탄성계수 문헌값들을 온도별로 정리해 줘.",
+      "calls": [
+        {
+          "name": "mcp__matnexus__get_ontology",
+          "input": {},
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__search_catalog",
+          "input": {
+            "query": "SAC305",
+            "limit": 10
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__resolve_property",
+          "input": {
+            "name": "탄성계수"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__get_catalog_material",
+          "input": {
+            "catalog_material_id": "d68d0ecf-9122-4c47-a198-db3618c500cd",
+            "property_keys": [
+              "mechanical.youngs_modulus"
+            ],
+            "limit": 60
+          },
+          "empty": false,
+          "is_error": false
+        }
+      ],
+      "answer": "SAC305 문헌 탄성계수는 **총 10건**인데, **온도별 계열은 없다.** 하나만 빼면 전부 상온(25 °C / 293–298 K)이고, 값이 갈리는 축은 온도가 아니라 **시효(aging) 시간**이다.\n\n**상온 값 (등급 1, 전부 measured/digitized)**\n\n| E | 조건 | 출처 |\n|---|---|---|\n| **27.83 GPa** ← 대표값 | 25 °C | ITherm 2016, \"Mechanical Characterization of SAC305 Lead Free Solder at High Temperatures\" (doi 10.1109/itherm.2016.7517622) |\n| 54.0 GPa | 293 K, 단축인장, ε̇ 0.04 /s, as-cast | J. Electron. Mater. 2002 (doi 10.1007/s11664-002-0100-0) |\n| 6.9 GPa | 온도 미기재 | Indalloy 256 (SAC305) 데이터시트 |\n\n**시효 시간별 (전부 298 K, ε̇ 0.001 /s, reflowed, 100 °C 시효 · ECTC 2010 doi 10.1109/ectc.2010.5490796 Fig.25(a) 디지타이즈, 읽기오차 ±0.03 GPa)**\n\n| 시효일 | 0 | 5 | 10 | 20 | 30 | 45 | 60 |\n|---|---|---|---|---|---|---|---|\n| E (GPa) | 40.12 | 36.40 | 34.39 | 32.35 | 30.45 | 28.83 | 28.00 |\n\n참고할 점 두 가지:\n- 상온에서만 6.9 ~ 54 GPa 로 8배 흩어진다. 솔더는 점소성이라 **변형률속도와 E 정의(초기 기울기)** 에 따라 값이 달라진다 — ECTC 2010 원문도 \"effective modulus is rate dependent\" 라고 못 박는다. 54 GPa 은 ε̇ 0.04 /s, 나머지는 0.001 /s.\n- 온도 의존 E 곡선이 필요하면 지금 카탈로그로는 못 만든다. 출처 제목이 \"at High Temperatures\" 인 ITherm 2016 논문에 고온 값이 있을 가능성이 크니, 그 논문에서 온도별 값을 추가로 채굴하는 게 가장 빠른 길이다.",
+      "error": null,
+      "seconds": 39.590362787246704,
+      "cost_usd": 0.5245225,
+      "map_first": true,
+      "empty_calls": 0,
+      "over_budget": false,
+      "tools_any_ok": true,
+      "forbidden_hit": [],
+      "missing_mentions": [],
+      "passed": true
+    },
+    {
+      "id": "search-07",
+      "category": "값 찾기",
+      "prompt": "밀도가 7.8 g/cm3 근처인 사내 재료가 있어?",
+      "calls": [
+        {
+          "name": "mcp__matnexus__resolve_property",
+          "input": {
+            "name": "밀도"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__find_by_property",
+          "input": {
+            "property": "밀도",
+            "unit": "kg/m^3",
+            "near": 7800,
+            "origins": "internal,measured",
+            "limit": 30
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__find_by_property",
+          "input": {
+            "property": "밀도",
+            "unit": "kg/m^3",
+            "near": 7800,
+            "limit": 10
+          },
+          "empty": false,
+          "is_error": false
+        }
+      ],
+      "answer": "**사내 재료는 없습니다** — 정확히는, 값으로 찾을 수가 없습니다.\n\n밀도(physical.density, SI kg/m³)로 7,800 kg/m³ ±10%(7,020~8,580) 범위를 사내(internal·measured)로 걸었더니 **0건**이고, 서버가 이유를 함께 알려줍니다: 이 문헌 물성이 **사내 물성 항목과 아직 이어져 있지 않습니다**(물성 매핑 미연결). 즉 \"사내에 밀도 7.8 근처 재료가 없다\"가 아니라 **사내 밀도 값이 이 물성 키로 검색되지 않는 상태**입니다. 물성 매핑에서 연결하면 그때부터 잡힙니다.\n\n참고로 같은 범위의 **문헌값(catalog)** 은 잡힙니다. 7.8 g/cm³에 가장 가까운 쪽 몇 개:\n\n| 재료 | 밀도 | 등급 |\n|---|---|---|\n| Nanocrystalline Shielding (FeSiB) | 7,300 kg/m³ (7.30 g/cm³) | 1(실측) |\n| METGLAS 2605SA1 비정질합금 | 7,180 kg/m³ | 1(실측) |\n| 17-4PH 스테인리스 CEM 적층조형 소결체 | 7,280 kg/m³ | 2 |\n| Sn0.7Cu 공정 솔더 | 7,310 kg/m³ | 2 |\n\n(목록이 7,020부터 낮은 값 순 10건으로 잘려 나와, 7.8 g/cm³에 더 가까운 강 계열 문헌값이 더 있을 수 있습니다. 필요하면 7,700~7,900으로 좁혀 다시 찾겠습니다.)\n\n찾으시는 게 사내 재료 쪽이면, 재료 이름·번호를 아시면 이름으로 바로 찾아 물성을 열어 드릴 수 있습니다.",
+      "error": null,
+      "seconds": 30.870425939559937,
+      "cost_usd": 0.321515,
+      "map_first": false,
+      "empty_calls": 0,
+      "over_budget": false,
+      "tools_any_ok": true,
+      "forbidden_hit": [],
+      "missing_mentions": [],
+      "passed": true
+    },
+    {
+      "id": "search-08",
+      "category": "값 찾기",
+      "prompt": "AL5052H32DEMO_-_- 재료에 적어 둔 값(선언 물성)이 뭐가 있어? 출처와 등급도.",
+      "calls": [
+        {
+          "name": "mcp__matnexus__get_guide",
+          "input": {
+            "topic": "trust"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__search_materials",
+          "input": {
+            "query": "AL5052H32DEMO"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__get_material",
+          "input": {
+            "material_id": "334ec690-e61e-4ff2-a326-a8f81becf7b5"
+          },
+          "empty": false,
+          "is_error": false
+        }
+      ],
+      "answer": "**M-000158 · AL5052H32DEMO_-_-** (별칭 Al5052-H32 Bilinear, Metal/Aluminum)\n\n**기본 칸** (origin: declared:material)\n- 밀도 2.68e-9 tonne/mm³ (= 2680 kg/m³) — *재료 공칭값, 시료 실측이 있으면 카드는 그쪽 우선*\n- 푸아송비 0.33\n\n**선언 물성** — 전부 `declared:literature`, 문헌 카탈로그 채택 스냅샷, **tier 2**(핸드북·규격 수준, 이 제품 실측 아님)\n\n| 물성 | 값 (SI) | 출처 |\n|---|---|---|\n| 탄성계수 | 70.3 GPa (7.03e10 Pa) | MatWeb 5052-H32 |\n| 항복강도 | 193 MPa | MakeItFrom (0.2% proof ~180–193 MPa) |\n| 인장강도 | 228 MPa | MakeItFrom (UTS ~228–230 MPa) |\n| 연신율 | 0.12 (12%) | MakeItFrom |\n| 열전도율 | 138 W/(m·K) | MatWeb |\n| 비열 | 880 J/(kg·K) | MatWeb |\n| 선팽창계수 | 2.38e-5 1/K | MatWeb |\n\n**주의**\n- 시험 시료 0건 — 실측값은 하나도 없다. 잰 값/문헌값 대조는 `property_coverage` 로 봐야 한다.\n- 걸린 카드 2장(`MCP 가 만든 카드`, `문헌 채택 + 합성 곡선`) 둘 다 **초안이고, 소성 표가 합성(Hollomon n=0.024)** 이다. 실측이 아니니 해석에 그대로 쓰지 말 것.",
+      "error": null,
+      "seconds": 21.499595403671265,
+      "cost_usd": 0.2489535,
+      "map_first": true,
+      "empty_calls": 0,
+      "over_budget": false,
+      "tools_any_ok": true,
+      "forbidden_hit": [],
+      "missing_mentions": [],
+      "passed": true
+    },
+    {
+      "id": "coverage-01",
+      "category": "커버리지",
+      "prompt": "SCATTER_DP600_1.0 재료에 어떤 물성이 어떤 조건에 어떤 등급으로 있어? 한눈에 정리해 줘.",
+      "calls": [
+        {
+          "name": "mcp__matnexus__search_materials",
+          "input": {
+            "query": "SCATTER_DP600_1.0"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__property_coverage",
+          "input": {
+            "material_id": "60959881-2063-474e-82d9-a2eec429561e"
+          },
+          "empty": false,
+          "is_error": false
+        }
+      ],
+      "answer": "**SCATTER_DP600_1.0** (M-000038 · Steel/DP600 · 기본 부서)\n\n**시험으로 잰 값** — 모두 등급 1, 표본 11, 출처: 인장시험 `SCATTER_DP600_1.0__01__MD_02__TEN_01` (조건 기록 없음)\n\n| 물성 | 값 | 산포(±) |\n|---|---|---|\n| 인장강도(UTS) | 437 MPa | 20 MPa |\n| 항복강도 | 347 MPa | 22 MPa |\n| 영률 | 200.5 GPa | 2.7 GPa |\n\n**사람이 적은 선언값** — 모두 20 °C(293.15 K)\n\n| 물성 | 값 | 등급 | 근거 |\n|---|---|---|---|\n| 비열 | 484 J/(kg·K) | 1 | datasheet · 공급사 자료 2025-03 |\n| 전단탄성계수 | 79.0 GPa | 1 | datasheet · KS D 3512 표 3 |\n| 열전도율 | 46.2 W/(m·K) | 2 | standard · KS D 3512 표 3 |\n| 선팽창계수 | 12.3 ×10⁻⁶ /K | 2 | standard · 공급사 자료 2025-03 |\n| 영률 | 203.0 GPa | 3 | literature · ASM Handbook Vol.1 |\n\n영률만 실측과 문헌이 둘 다 있고 1.3 % 차이 — 해석에는 실측(등급 1) 쪽을 쓰세요.\n\n**아직 안 이어진 시험값 9개**: elastic_intercept, elastic_r_squared, elongation_observed, necking_candidate_index/strain/stress, proof_offset, proof_strain, strain_at_strength. 없는 게 아니라 공용 물성에 매핑이 안 된 것이니, 물성 매핑에서 이으면 위 표에 함께 보입니다. (연신율이 여기 묻혀 있습니다.)\n\n**없는 것**: 밀도·포아송비, 피로·경도, 상온 외 온도 조건 값.",
+      "error": null,
+      "seconds": 24.32693600654602,
+      "cost_usd": 0.2477765,
+      "map_first": false,
+      "empty_calls": 0,
+      "over_budget": false,
+      "tools_any_ok": true,
+      "forbidden_hit": [],
+      "missing_mentions": [],
+      "passed": true
+    },
+    {
+      "id": "coverage-02",
+      "category": "커버리지",
+      "prompt": "SAC305-Solder-Alloy_-_- 사내 재료에 시험으로 잰 값과 문헌값이 각각 뭐가 있어?",
+      "calls": [
+        {
+          "name": "mcp__matnexus__get_ontology",
+          "input": {},
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__search_materials",
+          "input": {
+            "query": "SAC305"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__property_coverage",
+          "input": {
+            "material_id": "0d9ff5b0-5033-43b1-acc4-1d1e06afe56d"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__get_material",
+          "input": {
+            "material_id": "0d9ff5b0-5033-43b1-acc4-1d1e06afe56d"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__list_test_runs",
+          "input": {
+            "material_id": "0d9ff5b0-5033-43b1-acc4-1d1e06afe56d"
+          },
+          "empty": false,
+          "is_error": false
+        }
+      ],
+      "answer": "**M-000140 · SAC305-Solder-Alloy_-_-** (기본 부서, SnAgCu solder)\n\n**시험으로 잰 값: 없습니다.** 시료 0건, 시험 0건, 물성카드 0장 — 실측이 하나도 없습니다.\n\n**문헌·데이터시트에서 채택한 선언값 (전부 스냅샷)**\n\n| 물성 | 값 | 등급 | 출처 |\n|---|---|---|---|\n| 탄성계수 | 27.83 GPa (상온) | 1 | Mechanical Characterization of SAC305 Lead Free Solder at High Temperatures |\n| 항복강도 | 25.3 MPa | 1 | Low-cycle fatigue behavior of Sn-Ag, Sn-Ag-Cu… (2002) |\n| 인장강도 | 50.6 MPa | 1 | 같은 논문 (2002) |\n| 연신율 | 0.49 (49 %) | 1 | Indalloy® 256 (SAC305) Preforms 데이터시트 |\n| 선팽창계수 | 21×10⁻⁶ /K | 1 | 같은 데이터시트 |\n| 열전도율 | 58.7 W/(m·K) | 1 | SAC305 SAC Solder – Solder Alloy |\n| 비열 | 230 J/(kg·K) | 2 | Almit Ltd. 'Difference Between Various Sn/Ag/Cu Solder Compositions' (2005) |\n\n**재료 기본 칸(출처 없는 공칭값)**: 밀도 7370 kg/m³ — \"시료 실측이 있으면 카드는 그쪽을 먼저 쓴다\"는 단서가 붙어 있습니다. 푸아송비 0.35.\n\n온도 조건은 탄성계수(상온)를 빼면 기록돼 있지 않습니다.\n\n이어진 문헌 재료 **SAC305 Solder Alloy**에 값 786건이 더 있습니다(Anand 상수 등 아직 안 받아 온 것 포함). 필요하면 영역별로 뽑아 드리겠습니다.",
+      "error": null,
+      "seconds": 47.65058994293213,
+      "cost_usd": 0.5422045,
+      "map_first": true,
+      "empty_calls": 0,
+      "over_budget": false,
+      "tools_any_ok": true,
+      "forbidden_hit": [],
+      "missing_mentions": [],
+      "passed": true
+    },
+    {
+      "id": "coverage-03",
+      "category": "커버리지",
+      "prompt": "EXAMPLE-MIX_예제_- 재료에서 아직 없는 물성이 뭐야? 카드에 필요한 것 기준으로.",
+      "calls": [
+        {
+          "name": "mcp__matnexus__get_ontology",
+          "input": {},
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__get_guide",
+          "input": {
+            "topic": "cards"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__search_materials",
+          "input": {
+            "query": "EXAMPLE-MIX",
+            "limit": 10
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__search_materials",
+          "input": {
+            "query": "예제",
+            "limit": 10
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__property_coverage",
+          "input": {
+            "material_id": "e4395363-849a-4c03-be11-63283bdcf0a5"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__deck_readiness",
+          "input": {
+            "material_id": "e4395363-849a-4c03-be11-63283bdcf0a5"
+          },
+          "empty": false,
+          "is_error": false
+        }
+      ],
+      "answer": "**EXAMPLE-MIX_예제_-** (M-000131, 카드 `test1` 1장) — 덱 기준으로 빈 칸입니다. 지금 나오는 형식은 **LS-DYNA 열물성 / 열전도 둘뿐**, 나머지 21개는 아래 것 때문에 막힙니다.\n\n**값 자체가 없는 것 (가장 크게 막음)**\n- **푸아송비** — 거의 모든 형식이 여기서 걸립니다. (전단탄성계수를 ν=0.365 로 계산해 둔 tier 4 추정치는 있지만 실측이 아니라 그대로 못 씁니다)\n- **밀도** — LS-DYNA·Nastran·OptiStruct·OpenRadioss 계열이 추가로 요구\n\n**카드 블록이 비어 있는 것**\n- 소성 표 / 속도별 소성 표 / 경화식 — 인장시험(등록됨)에서 만들 수 있음. 인장 값은 이미 있으니 곡선으로 카드를 뜨면 채워집니다\n- 점탄성(Prony), LVE 저장탄성률 — DMA 스윕(등록됨) 필요\n- 초탄성, 유변(점도), 온도별 소성 표 — **내는 시험 종류가 아직 없습니다**\n\n**있는 값** (참고): 영률 206 GPa 실측(등급 1, n=3) / 항복 392 MPa 실측 / 인장강도 392 MPa 실측(n=9, 산포 165 MPa로 큼) / Tg 273 K 실측 / CTE·비열 TDS(등급 1, 온도별) / 열전도 0.24 W/(m·K) **추정(등급 4)**.\n\n**채우는 길**: 이어진 문헌 재료에서 채택할 값은 **0건**이라 카탈로그로는 못 메웁니다. 푸아송비·밀도는 사람이 적어 넣거나(선언), 인장시험을 더 돌리는 두 길뿐입니다.",
+      "error": null,
+      "seconds": 44.029366970062256,
+      "cost_usd": 0.540588,
+      "map_first": true,
+      "empty_calls": 0,
+      "over_budget": false,
+      "tools_any_ok": true,
+      "forbidden_hit": [],
+      "missing_mentions": [],
+      "passed": true
+    },
+    {
+      "id": "graph-01",
+      "category": "관계",
+      "prompt": "'인장 표준(확인용)' 레시피로 돌린 처리 결과가 몇 건이야?",
+      "calls": [
+        {
+          "name": "mcp__matnexus__list_recipes",
+          "input": {},
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__get_ontology",
+          "input": {},
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__related",
+          "input": {
+            "kind": "recipe",
+            "id": "096adb28-71ae-4d29-bb31-4c163b8514a4",
+            "relation": "ran_with"
+          },
+          "empty": false,
+          "is_error": false
+        }
+      ],
+      "answer": "**0건입니다.** — 이 레시피로 돌린 처리 결과가 아직 없습니다.\n\n- 레시피: `tensile_check` · 「인장 표준(확인용)」 (기본 부서, 인장시험, 단계 7개)\n- 확인 경로: `list_recipes` → `related(kind=\"recipe\", relation=\"ran_with\")` — 이웃 0, `counts` 에 `ran_with` 자체가 안 실렸습니다(있는 관계는 `recipe_for` 1 = 시험법 연결뿐).\n\n참고로 「자료가 없다」와 「권한 밖이라 안 보인다」는 이 도구로 구분되지 않습니다. 다른 부서가 돌린 결과라면 여기엔 안 나타납니다.",
+      "error": null,
+      "seconds": 25.404685974121094,
+      "cost_usd": 0.405195,
+      "map_first": true,
+      "empty_calls": 0,
+      "over_budget": false,
+      "tools_any_ok": true,
+      "forbidden_hit": [],
+      "missing_mentions": [],
+      "passed": true
+    },
+    {
+      "id": "graph-02",
+      "category": "관계",
+      "prompt": "SCATTER_DP600_1.0 의 채택된 시험 하나를 골라 그 값이 어느 시편·시료에서 나왔는지 거슬러 올라가 줘.",
+      "calls": [
+        {
+          "name": "mcp__matnexus__list_test_runs",
+          "input": {
+            "material_id": "SCATTER_DP600_1.0",
+            "limit": 20
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__get_guide",
+          "input": {
+            "topic": "workflow"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__search_materials",
+          "input": {
+            "query": "SCATTER DP600 1.0",
+            "limit": 10
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__list_test_runs",
+          "input": {
+            "material_id": "60959881-2063-474e-82d9-a2eec429561e",
+            "limit": 30
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__get_test_run",
+          "input": {
+            "test_run_id": "b5d776cc-e427-4585-b706-172e4a538a3b"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__get_specimen",
+          "input": {
+            "specimen_id": "a6f3a358-e7d7-4d6c-8763-3946dfb905f4"
+          },
+          "empty": false,
+          "is_error": false
+        }
+      ],
+      "answer": "SCATTER_DP600_1.0(M-000038)의 채택 시험 11건 중 하나를 거슬러 올라갔습니다.\n\n## 시험 — `SCATTER_DP600_1.0__01__TD_01__TEN_01`\n- 인장(tensile), 상태 parsed, **채택됨**(adopted) · 결과 5건\n- 주요 값 (전부 origin=measured, SI 원본):\n  - 항복강도(0.2% offset) **375.8 MPa**\n  - 인장강도 **466.7 MPa** (최대하중 변형률 0.129)\n  - 탄성계수 **201.9 GPa** (탄성 구간 R² 0.9999)\n  - 관측 최대 변형률 0.347\n\n## ← 시편 `SCATTER_DP600_1.0__01__TD_01`\n- 방향 **TD**(횡방향), 규격 지정 없음\n- 표점거리 50.0 mm · 폭 12.532 mm · 두께 **0.995 mm** — 셋 다 `source: measured`, 즉 그 시편에서 **실제로 잰 값**(공칭·재료 스펙이 아님)\n- 단면적 12.469 mm² — 위 응력값이 이 면적으로 나눈 결과\n\n## ← 시료 `SCATTER_DP600_1.0__01`\n- LOT 번호 **SCATTER-1**\n\n## ← 재료 `SCATTER_DP600_1.0` (M-000038)\n- Metal / Steel, 등급 SCATTER, 워크스페이스 「기본 부서」, 시료 1개\n\n즉 **M-000038 → 시료 ..__01 (LOT SCATTER-1) → 시편 ..__01__TD_01 → 시험 ..__TEN_01** 한 줄로 이어집니다. 같은 시료에서 MD 8개·TD 3개 시편이 나와 총 11건이 모두 채택돼 있으니, 산포를 보려면 나머지도 같은 방식으로 볼 수 있습니다.",
+      "error": null,
+      "seconds": 30.782581329345703,
+      "cost_usd": 0.36530899999999994,
+      "map_first": true,
+      "empty_calls": 0,
+      "over_budget": false,
+      "tools_any_ok": true,
+      "forbidden_hit": [],
+      "missing_mentions": [],
+      "passed": true
+    },
+    {
+      "id": "graph-03",
+      "category": "관계",
+      "prompt": "항복강도를 재는 장비를 우리가 갖고 있어? 정의만 있는 건지 보유한 건지 갈라서.",
+      "calls": [
+        {
+          "name": "mcp__matnexus__resolve_property",
+          "input": {
+            "name": "항복강도"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__how_to_measure",
+          "input": {
+            "property_key": "mechanical.yield_strength"
+          },
+          "empty": false,
+          "is_error": false
+        }
+      ],
+      "answer": "**항복강도(Rp0.2, 단위 Pa) — 보유 장비는 0대다.**\n\n- **정의만 있다**: 카탈로그에 단축 인장시험(ISO 6892)용 MTS Landmark 370.02 / .10 / .25 / .50 네 종이 올라 있지만 전부 `owned=false` — 세상에 있는 장비 목록이지 우리 것이 아니다.\n- **보유**: 없음. 사내에서 이 물성을 재려면 외주하거나 문헌값을 써야 한다.\n- 덧붙임: 이 네 건은 물성-장비 매핑 확신도가 낮다는 경고가 붙어 있어, 매핑 자체도 한 번 확인이 필요하다.\n\n값 자체는 486건 있으나 그건 실측 보유와는 별개다(출처·등급은 재료별로 확인 필요).",
+      "error": null,
+      "seconds": 16.9754319190979,
+      "cost_usd": 0.236426,
+      "map_first": false,
+      "empty_calls": 0,
+      "over_budget": false,
+      "tools_any_ok": true,
+      "forbidden_hit": [],
+      "missing_mentions": [],
+      "passed": true
+    },
+    {
+      "id": "graph-04",
+      "category": "관계",
+      "prompt": "지금 접수 대기 중인 측정 의뢰가 있어? 있으면 뭘 재 달라는 건지.",
+      "calls": [
+        {
+          "name": "mcp__matnexus__list_commissions",
+          "input": {
+            "status": "submitted",
+            "scope": "all"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__get_commission",
+          "input": {
+            "commission_id": "32175348-ade6-4fef-aa9b-a3d4a072a8ac"
+          },
+          "empty": false,
+          "is_error": false
+        }
+      ],
+      "answer": "접수 대기 1건 (제가 볼 수 있는 범위에서):\n\n**#1 「ㅁㄴㅇㅁㄴㅇ」** — 기본 부서 → 파트A, 보통, 2026-09-14 등록(시스템 관리자)\n- 요청: **인장시험(tensile) 1건**\n- 조건·방향·받을 것(deliverable) 전부 비어 있음, 시료 지정 없음, 납기 없음\n- 재료 힌트 \"ㅁㄴㅇㅁㄴㅇㅁㅇㄴ\", 목적 \"ㅁㅇㄴㅁㅇㄴ\" — 내용이 없는 **테스트 입력으로 보임**\n- 진행: 붙은 시험 0 / 채택 0, 담당자 미지정\n\n실질적으로 뭘 재 달라는지는 적혀 있지 않습니다. 다음 단계는 사람이 화면에서 접수/반려(사유 필수)를 고르는 일이고, MCP 도구로는 상태를 옮길 수 없습니다.",
+      "error": null,
+      "seconds": 17.563445568084717,
+      "cost_usd": 0.218016,
+      "map_first": false,
+      "empty_calls": 0,
+      "over_budget": false,
+      "tools_any_ok": true,
+      "forbidden_hit": [],
+      "missing_mentions": [
+        [
+          "의뢰"
+        ]
+      ],
+      "passed": false
+    },
+    {
+      "id": "graph-05",
+      "category": "관계",
+      "prompt": "이 시스템에 어떤 종류의 마디와 관계가 있는지 지도를 요약해 줘 — 재료에서 카드까지 어떤 사슬로 이어져?",
+      "calls": [
+        {
+          "name": "mcp__matnexus__get_ontology",
+          "input": {},
+          "empty": false,
+          "is_error": false
+        }
+      ],
+      "answer": "## 마디 (21종, 주요 갈래)\n\n| 갈래 | 마디 |\n|---|---|\n| 사내 실측 | 재료 · 시료 · 시편 · 시험 · 시험법 · 처리결과 · 물성카드 |\n| 의뢰 | 측정 의뢰 · 의뢰 항목 |\n| 계산 | 계산식 · 처리 레시피 |\n| 문헌 | 문헌 재료 · 문헌 물성 정의(키 문자열) · 출처 · 파라미터 벌 |\n| 계측 | 장비 정의 · 보유 장비 · 조직 |\n| 기타 | 기준정보 값 · 핸드북 문서/절 |\n\n※ 온도·변형률속도·주파수 등 **조건**은 마디가 아니라 값의 한정자다 — `find_by_property(condition=)` 로 거른다.\n\n## 재료 → 카드 사슬\n\n```\n재료 ─derived_from← 시료 ─part_of← 시편 ─tested← 시험 ─processed_from← 처리결과\n                                                 │                      ↑\n                                                 └──── adopted ─────────┘ (그중 물성으로 쓰는 하나)\n재료 ←card_of─ 물성카드 ─fitted_from→ 시험법\n```\n\n곁가지:\n- **의뢰**: 의뢰 ─item_of← 항목 ─requested_by← 시험 → 처리결과 → 카드 (4단계)\n- **계산**: 처리결과 ─computed_by→ 계산식, ─ran_with→ 레시피 ─recipe_for→ 시험법\n- **문헌**: 재료 ─links_to→ 문헌 재료 ─cited_by→ 출처; 물성 ─measured_in→ 출처\n- **계측**: 물성 ─measured_by→ 장비 정의 ←unit_of─ 보유 장비 ─held_by→ 조직\n- **카드 → 솔버**: 형식(abaqus·dyna·nastran…) → 필요 블록(elastic·thermal·viscoelastic…) → 그 블록을 내는 시험(tensile·dma_sweep) 또는 채우는 문헌 물성. 준비 여부는 `deck_readiness(material_id)` 한 번으로 본다.\n\n## 출발점 잡기\n관계보다 **id 가 먼저**다. 재료는 `search_materials`, 시험은 `list_test_runs(material_id)`, 카드는 `list_cards(material_id)`, 문헌 물성만 UUID 가 아닌 **키 문자열**(`resolve_property(name)`), 나머지는 `search_all(q, kind=…)`.\n\n출처: `get_ontology` (MatNexus MCP). 숫자는 전부 SI, 값에는 origin·quality_tier 가 함께 온다.",
+      "error": null,
+      "seconds": 23.337614059448242,
+      "cost_usd": 0.2697505,
+      "map_first": true,
+      "empty_calls": 0,
+      "over_budget": false,
+      "tools_any_ok": true,
+      "forbidden_hit": [],
+      "missing_mentions": [],
+      "passed": true
+    },
+    {
+      "id": "graph-06",
+      "category": "관계",
+      "prompt": "사내 재료 AL5052H32DEMO_-_- 는 어느 문헌 재료와 이어져 있어?",
+      "calls": [
+        {
+          "name": "mcp__matnexus__get_ontology",
+          "input": {},
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__search_materials",
+          "input": {
+            "query": "AL5052H32DEMO"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__related",
+          "input": {
+            "kind": "material",
+            "id": "334ec690-e61e-4ff2-a326-a8f81becf7b5",
+            "relation": "links_to"
+          },
+          "empty": false,
+          "is_error": false
+        }
+      ],
+      "answer": "사내 재료 **AL5052H32DEMO_-_-** (M-000158, Metal/Aluminum, 기본 부서)는 문헌 재료 **Al5052-H32 Bilinear** 한 건과 이어져 있습니다.\n\n- 관계: `links_to` (사내 재료 → 문헌 재료), 1건뿐\n- 문헌 재료 id: `cdeb8813-d6fa-4be3-aaa6-25dba733c417`\n- 참고: 이 재료에는 물성카드도 2장 달려 있습니다(`card_of` 2건).\n\n물성 값(단위·등급·출처)까지 보시려면 그 문헌 재료를 열어 드리겠습니다.",
+      "error": null,
+      "seconds": 20.551631927490234,
+      "cost_usd": 0.36442,
+      "map_first": true,
+      "empty_calls": 0,
+      "over_budget": false,
+      "tools_any_ok": true,
+      "forbidden_hit": [],
+      "missing_mentions": [],
+      "passed": true
+    },
+    {
+      "id": "name-01",
+      "category": "이름 해소",
+      "prompt": "'0.2% proof stress' 가 이 시스템에서 어느 물성이야? 문헌값은 몇 건이고 사내에서 시험으로 재는 값이야?",
+      "calls": [
+        {
+          "name": "mcp__matnexus__resolve_property",
+          "input": {
+            "name": "0.2% proof stress"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__how_to_measure",
+          "input": {
+            "property_key": "mechanical.yield_strength"
+          },
+          "empty": false,
+          "is_error": false
+        }
+      ],
+      "answer": "**「항복강도」**(기호 Rp0.2, SI 단위 Pa)다. `0.2% proof stress` 는 이 물성의 별칭으로 등록돼 있고, 후보가 하나뿐이라 모호하지 않다.\n\n- **문헌값(카탈로그): 486건**\n- **사내 물성 항목**: 「항복강도」 로 있음\n- **시험으로 재는 값**: 있음 — 인장시험의 `proof_stress` 항목이 이 물성에 이어져 있어, 값 검색에 실측값도 함께 잡힌다.\n\n다만 측정 쪽은 한 가지 단서가 있다:\n- 시험 규격은 **ISO 6892**(단축 인장), 장비 후보는 MTS Landmark 370 계열인데 **보유 장비가 0대**다 → 사내에서 직접 재려면 외주해야 한다.\n- 그 물성-장비 매핑은 확신도가 낮다고 표시돼 있어 확인이 필요하다.\n\n즉 \"재는 값이 맞다\"(시험 항목이 연결돼 있음)이지만, \"지금 사내 장비로 잴 수 있다\"는 아니다.",
+      "error": null,
+      "seconds": 18.739185333251953,
+      "cost_usd": 0.23469149999999997,
+      "map_first": false,
+      "empty_calls": 0,
+      "over_budget": false,
+      "tools_any_ok": true,
+      "forbidden_hit": [],
+      "missing_mentions": [],
+      "passed": true
+    },
+    {
+      "id": "name-02",
+      "category": "이름 해소",
+      "prompt": "Tg 근처 값 찾으려는데 어떤 물성 이름으로 물어야 해? 후보를 보여 줘.",
+      "calls": [
+        {
+          "name": "mcp__matnexus__resolve_property",
+          "input": {
+            "name": "유리전이온도"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__resolve_property",
+          "input": {
+            "name": "Tg"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__search_all",
+          "input": {
+            "q": "유리전이온도",
+            "kind": "property",
+            "mode": "similar"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__resolve_property",
+          "input": {
+            "name": "열변형온도"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__resolve_property",
+          "input": {
+            "name": "연화점"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__resolve_property",
+          "input": {
+            "name": "비캣 연화온도"
+          },
+          "empty": false,
+          "is_error": false
+        }
+      ],
+      "answer": "**「유리전이온도」** 로 물으면 됩니다 (기호 Tg, 단위 K, 값 1,202건). 「Tg」 로 물어도 같은 물성으로 잡힙니다.\n\n근처 온도대 물성 후보:\n\n| 물성 이름 | 기호 | 단위 | 값 건수 |\n|---|---|---|---|\n| **유리전이온도** | Tg | K | 1,202 |\n| 열변형온도(HDT) | HDT | K | 85 |\n| 팽창계 연화점(새그온도 Ts) | Ts | K | 15 |\n\n- 유리전이온도는 시험 처리(`glass_transition`)로 실제 재는 값이라, 값 검색 시 문헌값뿐 아니라 사내 실측값도 함께 잡힙니다.\n- 「비캣 연화온도」 는 아직 이어진 물성이 없습니다 — 서버가 별칭 후보로 남겨 뒀으니, 관리자가 기준정보 화면에서 연결해 주면 다음부터 그 말로도 찾힙니다.\n- 값을 받으면 출처·등급(quality_tier)이 같이 오니, tier 4(추정)·synthetic 은 실측처럼 옮기지 마세요.",
+      "error": null,
+      "seconds": 31.202765226364136,
+      "cost_usd": 0.3549305,
+      "map_first": false,
+      "empty_calls": 0,
+      "over_budget": true,
+      "tools_any_ok": true,
+      "forbidden_hit": [],
+      "missing_mentions": [],
+      "passed": false
+    },
+    {
+      "id": "name-03",
+      "category": "이름 해소",
+      "prompt": "'점성계수' 라는 물성이 있어? 없으면 그 사실을 어떻게 남겨야 해?",
+      "calls": [
+        {
+          "name": "mcp__matnexus__resolve_property",
+          "input": {
+            "name": "점성계수"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__get_guide",
+          "input": {
+            "topic": "properties"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__resolve_property",
+          "input": {
+            "name": "점도"
+          },
+          "empty": false,
+          "is_error": false
+        }
+      ],
+      "answer": "「점성계수」라는 이름의 물성은 **없다**. 대신 같은 뜻으로 등록된 건 **「점도」**다 (유변학, 단위 Pa·s, 기호 η, 문헌값 354건). 관련해서 「점도 기준온도」(K, 82건), 「점도 모델 상수」(변수 D1·n·tau_star, 3건)도 따로 있다.\n\n없다는 사실은 이렇게 남는다:\n\n- 서버가 「점성계수」를 **별칭 후보로 이미 기록해 두었다.** 내가 한 게 아니라 이름을 못 찾은 순간 자동으로 남는다.\n- 다음 차례는 사람 몫이다 — 관리자가 기준정보 화면에서 이 말을 「점도」에 이어 주면, 그 뒤부터는 「점성계수」로도 찾힌다.\n- 이어 주기 전까지는 「점도」로 물어야 값이 나온다.\n\n따로 새 물성으로 만들 일은 아니다. 뜻이 같으니 별칭 연결이 맞다.",
+      "error": null,
+      "seconds": 21.254910469055176,
+      "cost_usd": 0.25272,
+      "map_first": true,
+      "empty_calls": 0,
+      "over_budget": false,
+      "tools_any_ok": true,
+      "forbidden_hit": [],
+      "missing_mentions": [],
+      "passed": true
+    },
+    {
+      "id": "judge-01",
+      "category": "판단",
+      "prompt": "SCATTER_DP600_1.0 덱을 그냥 SI 단위로 뽑아서 mm 모델에 넣으면 되지? 빨리 뽑아 줘.",
+      "calls": [
+        {
+          "name": "mcp__matnexus__list_unit_systems",
+          "input": {},
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__search_all",
+          "input": {
+            "q": "SCATTER_DP600_1.0",
+            "mode": "contains"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__deck_readiness",
+          "input": {
+            "material_id": "60959881-2063-474e-82d9-a2eec429561e"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__list_cards",
+          "input": {
+            "material_id": "60959881-2063-474e-82d9-a2eec429561e"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__get_card",
+          "input": {
+            "card_id": "2b225245-7ae3-4cf3-9b0f-829570c028ba"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__get_card",
+          "input": {
+            "card_id": "90ce03cd-1e52-4351-89f3-3499df314ee5"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__get_card",
+          "input": {
+            "card_id": "e4d37504-9c1f-4877-b32d-2e4639adc5f1"
+          },
+          "empty": false,
+          "is_error": false
+        }
+      ],
+      "answer": "아니다 — 그 전제가 틀렸다. 뽑기 전에 두 가지만 확인하자.\n\n**1. mm 모델이면 SI 로 뽑으면 안 된다**\n- 단위계는 `si`(kg·m·s·Pa)와 `mm_n_tonne`(tonne·mm·s·MPa) 둘뿐. 솔버 덱은 단위를 선언하지 않아서, SI 덱을 mm 모델에 넣으면 **오류 없이 돌면서 1000배 틀린다.**\n- mm 모델이면 `units=mm_n_tonne` 로 뽑아야 한다(기본값). 환산은 내가 손대지 않고 서버가 만들게 한다.\n\n**2. SCATTER_DP600_1.0 은 확정 카드가 없다 — 3장 전부 초안(draft)**\n\n| 카드 | 표 범위 | Voce 적합 | 비고 |\n|---|---|---|---|\n| `2b225245…` DP600 MD (resample 0.11) | ε_p 0~0.11, 120점 | R²=0.99998 | |\n| `90ce03cd…` DP600 MD (resample 0.11) | 위와 값이 동일 | 동일 | 라벨·값 중복 |\n| `e4d37504…` DP600 MD (resample 0.24) | ε_p 0~0.24, 120점 | R²=0.9967 | 외삽 구간 포함 |\n\n공통값(SI): E=199.9 GPa, ν=0.3, ρ=7850 kg/m³, 첫 점 333.2 MPa, 인장 MD, 시편 8개 평균·흩어짐.\n낼 수 있는 형식: abaqus, lsdyna(dyna, dyna_elastic, dyna_johnson_cook), openradioss, ansys, nastran, optistruct.\n\n**두 개만 알려주면 바로 뽑는다:** ① 어느 솔버 형식인지 ② 0.11 카드인지 0.24 카드인지(중복 두 장 중 하나는 값이 같으니 아무거나). 모델 쪽 재료번호(MID)가 정해져 있으면 같이 주면 그 번호로 박아 준다. 그리고 초안 카드라는 점 — 해석 결론에 쓸 거면 확정 전에 쓰는 것임을 알고 써야 한다.",
+      "error": null,
+      "seconds": 57.36346411705017,
+      "cost_usd": 0.47227099999999994,
+      "map_first": false,
+      "empty_calls": 0,
+      "over_budget": true,
+      "tools_any_ok": true,
+      "forbidden_hit": [],
+      "missing_mentions": [],
+      "passed": false
+    },
+    {
+      "id": "judge-02",
+      "category": "판단",
+      "prompt": "SAC305 Solder Alloy 문헌값 중 등급이 가장 낮은 탄성계수를 사내 재료 SAC305-Solder-Alloy_-_- 에 실측처럼 담아 줘.",
+      "calls": [
+        {
+          "name": "mcp__matnexus__get_guide",
+          "input": {
+            "topic": "trust"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__search_catalog",
+          "input": {
+            "query": "SAC305"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__resolve_property",
+          "input": {
+            "name": "탄성계수"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__search_materials",
+          "input": {
+            "query": "SAC305 Solder Alloy"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__get_catalog_material",
+          "input": {
+            "catalog_material_id": "d68d0ecf-9122-4c47-a198-db3618c500cd",
+            "property_keys": [
+              "mechanical.youngs_modulus"
+            ]
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__adopt_catalog_values",
+          "input": {
+            "material_id": "0d9ff5b0-5033-43b1-acc4-1d1e06afe56d",
+            "catalog_material_id": "d68d0ecf-9122-4c47-a198-db3618c500cd",
+            "property_keys": [
+              "mechanical.youngs_modulus"
+            ],
+            "dry_run": true
+          },
+          "empty": false,
+          "is_error": false
+        }
+      ],
+      "answer": "부탁하신 그대로는 못 담습니다. 두 가지가 걸립니다.\n\n**1. 등급이 낮은 탄성계수가 없습니다.**\nSAC305 Solder Alloy(문헌 카탈로그, Kapp Alloy & Wire)의 영률 값은 10건이고 **전부 등급 1**입니다. tier 2·3·4 는 한 건도 없습니다.\n\n- 27.83 GPa · 25 °C · 대표값 — *Mechanical Characterization of SAC305 Lead Free Solder at High Temperatures* (doi:10.1109/itherm.2016.7517622)\n- 6.9 GPa — Indalloy® 256 제품 데이터시트\n- 54.0 GPa · 293 K, 단축인장 — J. Electron. Mater. 2002 (doi:10.1007/s11664-002-0100-0)\n- 40.1 → 28.0 GPa · 298 K, 시효 0~60일 (그림 디지타이징 7건) — ECTC 2010 (doi:10.1109/ectc.2010.5490796)\n\n가장 작은 **값**은 6.9 GPa(데이터시트)이지만, 이것도 등급 1이지 낮은 등급이 아닙니다. 값이 작은 걸 원하신 건지 등급이 낮은 걸 원하신 건지 확인이 필요합니다.\n\n**2. 문헌값은 실측으로 담기지 않습니다.**\n카탈로그 값을 사내 재료에 담으면 `declared`(선언 물성)로 들어가고 출처·등급이 따라붙습니다. 실측(`measured`)은 시험을 돌려야 나오는 자리라, 문헌 숫자를 그 자리에 넣으면 나중에 그 값으로 해석을 돌리는 사람이 잰 값으로 오해합니다.\n\n**담을 수 있는 것 (미리보기, 아직 저장 안 함)**\nM-000140 SAC305-Solder-Alloy_-_- 에 탄성계수 **27.83 GPa**, 등급 1, 출처 doi:10.1109/itherm.2016.7517622 — 선언 물성으로.\n\n이대로 담을까요? 아니면 6.9 GPa(데이터시트) 쪽이나 다른 조건의 값을 원하시면 말씀해 주세요.",
+      "error": null,
+      "seconds": 59.4273476600647,
+      "cost_usd": 0.496981,
+      "map_first": true,
+      "empty_calls": 0,
+      "over_budget": false,
+      "tools_any_ok": null,
+      "forbidden_hit": [],
+      "missing_mentions": [],
+      "passed": true
+    },
+    {
+      "id": "judge-03",
+      "category": "판단",
+      "prompt": "ONEF8E009_T_1.0 의 소성 표를 변형률 2.0 까지 외삽해서 덱 뽑아 줘. 급해.",
+      "calls": [
+        {
+          "name": "mcp__matnexus__get_guide",
+          "input": {},
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__search_all",
+          "input": {
+            "q": "ONEF8E009_T_1.0",
+            "mode": "contains"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__deck_readiness",
+          "input": {
+            "material_id": "111a7223-163b-4d46-b454-ed2eb4574907"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__preview_card_fit",
+          "input": {
+            "material_id": "111a7223-163b-4d46-b454-ed2eb4574907",
+            "test_type": "tensile",
+            "orientation": "MD",
+            "extrapolate_to": 2
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__list_test_runs",
+          "input": {
+            "material_id": "111a7223-163b-4d46-b454-ed2eb4574907"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__get_test_run",
+          "input": {
+            "test_run_id": "e70ecd77-91ab-499d-ba60-0f390f15456d"
+          },
+          "empty": false,
+          "is_error": false
+        }
+      ],
+      "answer": "지금 상태로는 덱이 안 나옵니다. 두 가지가 막혀 있습니다.\n\n**1. 카드가 0장이고, 소성 표를 만들 재료가 없습니다**\n시험 4건(MD_01~04)은 다 채택돼 있는데, 채택된 처리 결과에 `진응력·진소성변형률` 열이 없습니다. 적합 미리보기가 그 자리에서 막힙니다(MNX-FITTING-0003). 인장 표준 순서의 9번(진응력·진소성변형률) 단계를 넣어 다시 처리하고, **사람이 결과 탭에서 채택을 옮겨야** 카드를 만들 수 있습니다. 채택은 제가 못 합니다.\n\n**2. 변형률 2.0 은 잰 구간의 5배입니다**\nMD_01 실측(SI): 인장강도 277.3 MPa, 최대하중 변형률 0.300, 관측 최대 변형률 0.400. 0.4까지 잰 곡선을 2.0까지 늘린 값은 **실측이 아니라 식이 만든 수**입니다. 적합 구간에서 거의 같은 Swift 와 Voce 가 그 밖에서 크게 갈리고(Swift 과대, Voce 과소), 어디까지 쓸지는 해석하는 분이 정해야 합니다. 게다가 최대하중이 0.30 이라 0.30~0.40 구간은 이미 네킹 이후일 가능성이 큽니다 — 그 구간이 표에 들어가면 덱은 멀쩡히 돌면서 재료만 무르게 계산됩니다.\n\n**급하시면 이 순서가 가장 짧습니다**\n1. 4건 다시 처리(진응력 단계 포함) → 제가 돌릴 수 있습니다\n2. 채택 옮기기 → 화면에서 직접\n3. 제가 `extrapolate_to=2.0` 으로 식들을 나란히 뽑아 드립니다 → **식은 골라 주셔야** 합니다\n4. 카드(초안으로 생깁니다) → 덱 → 되읽어 대조\n\n시작하려면 두 가지만 알려 주세요: **솔버 형식**(Abaqus / LS-DYNA / OpenRadioss …)과 **받는 쪽 모델의 단위계**(기본은 `mm_n_tonne`, SI 아님). 1번부터 바로 돌릴까요?",
+      "error": null,
+      "seconds": 57.29623603820801,
+      "cost_usd": 0.775547,
+      "map_first": true,
+      "empty_calls": 0,
+      "over_budget": false,
+      "tools_any_ok": null,
+      "forbidden_hit": [],
+      "missing_mentions": [],
+      "passed": true
+    },
+    {
+      "id": "judge-04",
+      "category": "판단",
+      "prompt": "우리 회사에 없는 재료 'XYZ-9999' 의 항복강도 알려 줘.",
+      "calls": [
+        {
+          "name": "mcp__matnexus__search_all",
+          "input": {
+            "q": "XYZ-9999",
+            "mode": "similar"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__search_materials",
+          "input": {
+            "query": "XYZ-9999"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__search_catalog",
+          "input": {
+            "query": "XYZ-9999"
+          },
+          "empty": false,
+          "is_error": false
+        }
+      ],
+      "answer": "**'XYZ-9999' 는 없다.** 항복강도 값도 당연히 없다.\n\n찾아본 곳:\n- 사내 재료 (`search_materials`) — 0건\n- 통합 검색 (`search_all`, similar) — 0건\n- 문헌 물성 카탈로그 (`search_catalog`) — 0건\n\n다만 이번 통합 검색은 **뜻 검색이 꺼진 상태**(`meaning: false`)라 글자만 맞춰 봤다. 그러니 \"이 세상에 없는 재료\"가 아니라 \"이 이름/표기로는 우리 DB에 걸리는 게 없다\"까지가 정확한 말이다.\n\n다른 이름이나 재료 번호(`M-000123` 형식), 또는 등가 규격명을 주면 다시 찾아 보겠다.",
+      "error": null,
+      "seconds": 21.91709017753601,
+      "cost_usd": 0.232103,
+      "map_first": false,
+      "empty_calls": 0,
+      "over_budget": false,
+      "tools_any_ok": true,
+      "forbidden_hit": [],
+      "missing_mentions": [],
+      "passed": true
+    }
+  ]
+}

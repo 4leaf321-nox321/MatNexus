@@ -64,7 +64,8 @@
       "tools_any": [
         "mcp__matnexus__build_deck"
       ],
-      "max_calls": 6
+      "max_calls": 8,
+      "note": "재료 둘이라 찾기·readiness 가 각각 두 번, build_deck 은 머리만 → include_text 로 한 번 더(2차 실측 7)."
     },
     {
       "id": "deck-04",
@@ -387,7 +388,8 @@
       "prompt": "지금 접수 대기 중인 측정 의뢰가 있어? 있으면 뭘 재 달라는 건지.",
       "must_mention": [
         [
-          "의뢰"
+          "의뢰",
+          "접수"
         ]
       ],
       "tools_any": [
@@ -466,7 +468,8 @@
       "tools_any": [
         "mcp__matnexus__resolve_property"
       ],
-      "max_calls": 3
+      "max_calls": 5,
+      "note": "후보를 보라 했으니 이웃 이름을 서넛 풀어 본다(2차 실측 6 — Tg·유리전이온도 둘은 한 번이면 된다)."
     },
     {
       "id": "name-03",

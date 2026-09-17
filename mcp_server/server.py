@@ -361,6 +361,9 @@ async def search_materials(
 async def get_material(ctx: Context, material_id: str) -> dict[str, Any]:
     """재료 하나 — 기본 칸·선언 물성·물성 카드·문헌 연결.
 
+    **「이 재료에 뭐가 있나 · 잰 값과 문헌값이 각각 뭐냐」 는 여기가 아니라
+    `property_coverage(material_id)` 다** — 여기엔 시험으로 잰 값과 등급이 없다.
+
     **모든 값에 `origin` 이 붙는다**(measured · declared:… · synthetic · catalog).
     `caveat` 가 있으면 그대로 사람에게 전한다 — 초안 카드나 합성 표를 실측처럼
     옮기면 그 값으로 해석이 돌아간다.

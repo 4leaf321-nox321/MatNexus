@@ -110,6 +110,10 @@ GPa·mm)로 바꿔 보여 주지만 그것은 표시일 뿐이다.
 **tier 4 나 synthetic 값을 실측처럼 말하지 않는다.** 물어본 사람이 그 값으로
 해석을 돌린다 — 무게를 잘못 전하는 것이 이 서버가 낼 수 있는 가장 큰 해다.
 
+**「이 재료에 잰 값이 뭐가 있고 문헌값이 뭐가 있나」 는 `property_coverage(material_id)`
+한 번이다.** `get_material` 은 선언 물성만 보이고 시험으로 잰 값·등급이 없어서, 거기서
+`list_test_runs`·`list_specimens` 로 이어 가면 다섯 번을 불러도 등급 열이 안 나온다.
+
 ### 문헌 값을 **넣을** 때 — 찾은 숫자는 출처와 함께만
 
 문헌 카탈로그에 없는 물성·재료·값은 직접 넣을 수 있다(`add_catalog_property` ·
@@ -372,7 +376,8 @@ GPa·mm)로 바꿔 보여 주지만 그것은 표시일 뿐이다.
 
     0. 이 재료에 뭐가 있나         property_coverage(material_id) ← 물성 × 조건 × 등급 한 장
     0. 이 재료로 그 형식이 나오나   deck_readiness(material_id) ← 형식마다 나옴/빠진 것/채울 길
-    1. 카드가 이미 있나        list_cards / get_card
+    1. 카드가 이미 있나        deck_readiness 가 ready 면 formats[].card_id 가 그 카드다 —
+                            list_cards / get_card 를 다시 열지 마라. 없을 때만 list_cards
     2. 없으면 적합을 견준다     preview_card_fit  ← 저장 안 함
     3. 사람이 식을 고른다       **네가 고르지 마라**
     4. 초안을 만든다           create_card_from_tests (dry_run 기본)
@@ -434,6 +439,8 @@ GPa·mm)로 바꿔 보여 주지만 그것은 표시일 뿐이다.
 1. **재료 찾기** — `search_materials(q=...)` → `get_material(id)`
    재료 번호(`M-000123`)는 안 바뀌는 손잡이다. 이름(`record_name`)은 기준정보
    개명을 따라 바뀔 수 있으니, 문서에 적을 때는 번호를 함께 적는다.
+   물음이 「뭐가 있나 · 어떤 조건에 · 믿을 만한가」 면 `get_material` 대신
+   `property_coverage(id)` 로 간다 — 시험·선언·문헌을 물성마다 등급과 함께 한 장으로 준다.
 2. **값이 비었으면 문헌으로** — 문헌 카탈로그에서 같은 등급을 찾아 채운다.
 3. **해석용 덱** — 카드가 있으면 카드로, 없으면 문헌 스칼라로.
 
