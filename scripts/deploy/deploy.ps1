@@ -601,8 +601,21 @@ if ($installedServices.Count -gt 0) {
     if ($stayed.Count -gt 0) {
         Write-Host ("배포 전에 멈춰 있던 서비스는 그대로 둡니다: " + ($stayed -join ', ') + " — 띄우려면 .\service.ps1 -Action Start")
     }
+    # 감시(watchdog.ps1)는 서비스가 있을 때만 뜻이 있다 — 서비스가 등록돼 있으면 배포가
+    # 알아서 붙인다(없으면 등록, 있으면 이번 패키지의 스크립트로 갱신). 사람이 service.ps1
+    # -Action Install 을 한 번 더 돌릴 것을 기억해야 한다면 그것은 안 붙는 것과 같다(2026-09-17).
+    if ($installedServices -contains 'MatNexus') {
+        $watchdog = Join-Path $PSScriptRoot 'watchdog.ps1'
+        if (Test-Path $watchdog) {
+            try {
+                & $watchdog -AppPath $AppPath -Register   # 스크립트가 등록 한 줄을 찍고 watchdog.log 에도 남긴다
+            } catch {
+                Write-Warning "감시 작업을 등록하지 못했습니다: $_ — 관리자 PowerShell 에서 .\watchdog.ps1 -AppPath '$AppPath' -Register"
+            }
+        }
+    }
     Write-Host "  상태:  .\service.ps1 -AppPath '$AppPath' -Action Status"
-    Write-Host "  로그:  $($AppPath)_data\logs\service-server.log · service-worker.log · service-mcp.log"
+    Write-Host "  로그:  $($AppPath)_data\logs\service-server.log · service-worker.log · service-mcp.log · watchdog.log"
     if ($installedServices -notcontains 'MatNexusWorker') {
         Write-Host '  워커는 서비스가 아닙니다 — 창에서 .\run_worker.ps1 을 다시 띄우세요(옛 워커는 새 작업 종류를 모릅니다).'
     }
