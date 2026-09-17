@@ -217,12 +217,25 @@ describe('점 수 적합', () => {
     await userEvent.click(await screen.findByRole('button', { name: /이 값으로 카드 생성/ }))
   }
 
-  it('안 켜면 안 건다 — 측정 그대로 나간다', async () => {
-    // **서버가 기본값을 두면 그 값이 곧 결정이 된다.** 아무도 그것을 결정이라고
-    // 인식하지 않는다.
+  it('기본은 곡률 50점이다 — 솔버는 20~60점이면 충분하다', async () => {
+    // 전에는 「안 고르면 안 건다」 였고 처리 단계의 300점 표가 그대로 나갔다(2026-09-18 요청).
+    // 결정은 카드 근거(`source.resample`)와 덱 머리글에 남는다.
     create.mockResolvedValue({})
     await openSave()
     await userEvent.click(await screen.findByRole('button', { name: '초안으로 저장' }))
+    await waitFor(() => expect(create).toHaveBeenCalled())
+    expect(create.mock.calls[0][0]).toMatchObject({
+      resample_method: 'curvature',
+      resample_points: 50,
+    })
+  })
+
+  it('끄면 안 건다 — 측정 그대로 나간다', async () => {
+    create.mockResolvedValue({})
+    await openSave()
+    await userEvent.click(await screen.findByLabelText('소성 표의 점 수 일치'))
+    expect(screen.getByText(/측정 그대로/)).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: '초안으로 저장' }))
     await waitFor(() => expect(create).toHaveBeenCalled())
     expect(create.mock.calls[0][0]).toMatchObject({
       resample_method: null,
@@ -230,10 +243,9 @@ describe('점 수 적합', () => {
     })
   })
 
-  it('켜면 방법과 점 수를 함께 보낸다', async () => {
+  it('방법과 점 수를 바꾸면 그대로 보낸다', async () => {
     create.mockResolvedValue({})
     await openSave()
-    await userEvent.click(await screen.findByLabelText('소성 표의 점 수 일치'))
     await userEvent.selectOptions(screen.getByLabelText('어떻게 고를까'), 'uniform')
     const points = screen.getByLabelText('점 수')
     await userEvent.clear(points)
@@ -249,8 +261,7 @@ describe('점 수 적합', () => {
   it('무엇을 하는 방법인지 서버가 적은 설명을 보여 준다', async () => {
     // 화면이 베껴 두면 새 방법이 붙을 때 설명만 옛것으로 남는다.
     await openSave()
-    await userEvent.click(await screen.findByLabelText('소성 표의 점 수 일치'))
-    expect(screen.getByText('무릎에 점을 몰아 줍니다.')).toBeInTheDocument()
+    expect(await screen.findByText('무릎에 점을 몰아 줍니다.')).toBeInTheDocument()
   })
 })
 

@@ -380,7 +380,7 @@ GPa·mm)로 바꿔 보여 주지만 그것은 표시일 뿐이다.
                             list_cards / get_card 를 다시 열지 마라. 없을 때만 list_cards
     2. 없으면 적합을 견준다     preview_card_fit  ← 저장 안 함
     3. 사람이 식을 고른다       **네가 고르지 마라**
-    4. 초안을 만든다           create_card_from_tests (dry_run 기본)
+    4. 초안을 만든다           create_card_from_tests (dry_run 기본 · 소성 표는 곡률 50점으로 굳힘)
     5. 덱을 뽑는다             render_card_deck(card, format, **units**, mid=받는 쪽 번호)
     6. 되읽어 대조한다          check_card_deck(...)  ← 건네기 전에
 

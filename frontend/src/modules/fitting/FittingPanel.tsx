@@ -696,6 +696,7 @@ export function FittingPanel({ materialId }: Props) {
           materialId={materialId}
           group={group}
           family={chosen}
+          block={fitBlock ?? 'hardening'}
           testRunIds={usedRuns}
           elastic={preview?.elastic ?? []}
           onClose={() => setSaving(false)}
@@ -1393,6 +1394,7 @@ function SaveDialog({
   group,
   family,
   testRunIds,
+  block,
   elastic,
   onClose,
   onSaved,
@@ -1413,6 +1415,8 @@ function SaveDialog({
   testRunIds: string[] | null
   group: GroupKey
   family: string | null
+  /** 어느 블록의 카드인가 — 소성 표를 다시 고르는 것은 탄소성(hardening)에만 뜻이 있다. */
+  block: string
   /** 비워 두면 카드에 들어갈 값들. **적합 응답이 준 그대로다.** */
   elastic: InheritedValue[]
   onClose: () => void
@@ -1422,11 +1426,16 @@ function SaveDialog({
   const [poisson, setPoisson] = useState('')
   const [density, setDensity] = useState('')
   const [note, setNote] = useState('')
-  // **안 고르면 안 건다.** 측정 그대로가 기본이고, 점 수를 맞추는 것은 해석 쪽
-  // 요구라 사람이 켠다.
-  const [resampleOn, setResampleOn] = useState(false)
+  // **기본은 곡률 50점**(2026-09-18 요청). 전에는 「안 고르면 안 건다」 였고, 그래서
+  // 처리 단계의 300점 표가 그대로 솔버로 나갔다 — 솔버는 20~60점이 보통이고, 300점은
+  // 실측 잡음을 그대로 실어 접선계수가 뒤집히는 구간을 만든다. 처리 단계의 300 은
+  // 통계·적합의 입력이라 그대로 두고, 카드에 굳힐 때 줄인다. 결정이 안 보이는 것은
+  // 아니다 — `source.resample` 과 덱 머리글에 「300점에서 50점으로(곡률)」 가 남는다.
+  // 소성 표가 없는 블록(초탄성·유변)에는 뜻이 없어 안 건다.
+  const plasticTable = block === 'hardening'
+  const [resampleOn, setResampleOn] = useState(plasticTable)
   const [resampleMethod, setResampleMethod] = useState('')
-  const [resamplePoints, setResamplePoints] = useState('40')
+  const [resamplePoints, setResamplePoints] = useState('50')
   // 방법 목록은 서버가 준다 — 차례가 곧 추천 순서라 첫 것을 기본으로 든다.
   const methods = useResource(() => fittingApi.resampleMethods(), [])
   useEffect(() => {
@@ -1458,10 +1467,9 @@ function SaveDialog({
         blend_with: blendWith === '' ? null : blendWith,
         blend_weight: blendWith === '' ? null : blendWeight,
         extrapolate_to: extrapolate === '' ? null : Number(extrapolate),
-        // **점 수는 안 고르면 안 건다.** 서버가 기본값을 두면 그 값이 곧 결정이
-        // 되는데, 아무도 그것을 결정이라고 인식하지 않는다.
-        resample_method: resampleOn ? resampleMethod : null,
-        resample_points: resampleOn ? Number(resamplePoints) : null,
+        // 끄면 안 건다 — 측정 그대로(처리 단계의 점 수) 나간다.
+        resample_method: plasticTable && resampleOn ? resampleMethod : null,
+        resample_points: plasticTable && resampleOn ? Number(resamplePoints) : null,
         note: note === '' ? null : note,
       })
       onSaved()
@@ -1541,63 +1549,66 @@ function SaveDialog({
 
               카드에 굳힌다 — 내보낼 때마다 다시 뽑으면 같은 카드가 형식마다 다른
               표를 낸다. */}
-          <div className="space-y-2 rounded-md border p-3">
-            <label className="flex items-center gap-2 text-sm font-medium">
-              <input
-                type="checkbox"
-                checked={resampleOn}
-                onChange={(event) => setResampleOn(event.target.checked)}
-              />
-              소성 표의 점 수 일치
-            </label>
-            {!resampleOn && (
-              <p className="text-muted-foreground text-xs">
-                안 걸면 <b>측정 그대로</b> 나갑니다. 시험마다 점 수가 다른 것이
-                거슬리거나, 솔버가 받을 표를 가볍게 하고 싶을 때 켜세요.
-              </p>
-            )}
-            {resampleOn && (
-              <div className="space-y-2">
-                <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_120px]">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="resample-method">어떻게 고를까</Label>
-                    <select
-                      id="resample-method"
-                      className="border-input bg-background h-9 w-full rounded-md border px-2 text-sm"
-                      value={resampleMethod}
-                      onChange={(event) => setResampleMethod(event.target.value)}
-                    >
-                      {(methods.data ?? []).map((one) => (
-                        <option key={one.key} value={one.key}>
-                          {one.label}
-                        </option>
-                      ))}
-                    </select>
+          {plasticTable && (
+            <div className="space-y-2 rounded-md border p-3">
+              <label className="flex items-center gap-2 text-sm font-medium">
+                <input
+                  type="checkbox"
+                  checked={resampleOn}
+                  onChange={(event) => setResampleOn(event.target.checked)}
+                />
+                소성 표의 점 수 일치
+              </label>
+              {!resampleOn && (
+                <p className="text-muted-foreground text-xs">
+                  끄면 <b>측정 그대로</b>(처리 단계의 점 수, 보통 300점) 나갑니다. 솔버는
+                  20~60점이면 충분하고, 점이 많으면 실측 잡음이 표에 그대로 실립니다.
+                </p>
+              )}
+              {resampleOn && (
+                <div className="space-y-2">
+                  <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_120px]">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="resample-method">어떻게 고를까</Label>
+                      <select
+                        id="resample-method"
+                        className="border-input bg-background h-9 w-full rounded-md border px-2 text-sm"
+                        value={resampleMethod}
+                        onChange={(event) => setResampleMethod(event.target.value)}
+                      >
+                        {(methods.data ?? []).map((one) => (
+                          <option key={one.key} value={one.key}>
+                            {one.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="resample-points">점 수</Label>
+                      <Input
+                        id="resample-points"
+                        type="number"
+                        min={2}
+                        max={2000}
+                        value={resamplePoints}
+                        onChange={(event) => setResamplePoints(event.target.value)}
+                      />
+                    </div>
                   </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="resample-points">점 수</Label>
-                    <Input
-                      id="resample-points"
-                      type="number"
-                      min={2}
-                      max={2000}
-                      value={resamplePoints}
-                      onChange={(event) => setResamplePoints(event.target.value)}
-                    />
-                  </div>
+                  {/* **무엇을 하는 방법인지 서버가 적어 준다.** 화면이 베껴 두면 새
+                      방법이 붙을 때 설명만 옛것으로 남는다. */}
+                  <p className="text-muted-foreground text-xs">
+                    {(methods.data ?? []).find((one) => one.key === resampleMethod)?.help}
+                  </p>
+                  <p className="text-muted-foreground text-xs">
+                    측정 구간 <b>안에서만</b> 고릅니다 — 늘리는 것은 위의 「늘릴 한계」 가
+                    하는 다른 일입니다. 몇 점에서 몇 점으로 줄였는지는 카드 근거와 덱
+                    머리글에 남습니다.
+                  </p>
                 </div>
-                {/* **무엇을 하는 방법인지 서버가 적어 준다.** 화면이 베껴 두면 새
-                    방법이 붙을 때 설명만 옛것으로 남는다. */}
-                <p className="text-muted-foreground text-xs">
-                  {(methods.data ?? []).find((one) => one.key === resampleMethod)?.help}
-                </p>
-                <p className="text-muted-foreground text-xs">
-                  측정 구간 <b>안에서만</b> 고릅니다 — 늘리는 것은 위의 「늘릴 한계」 가
-                  하는 다른 일입니다.
-                </p>
-              </div>
-            )}
-          </div>
+              )}
+            </div>
+          )}
 
           <div className="space-y-1.5">
             <Label htmlFor="note">메모</Label>

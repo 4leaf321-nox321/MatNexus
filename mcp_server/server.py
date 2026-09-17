@@ -1519,6 +1519,8 @@ async def create_card_from_tests(
     test_run_ids: list[str] | None = None,
     poisson_ratio: float | None = None,
     density: float | None = None,
+    resample_points: int | None = 50,
+    resample_method: str = "curvature",
     dry_run: bool = True,
 ) -> dict[str, Any]:
     """시험에서 나온 값으로 **물성 카드(초안)** 를 만든다.
@@ -1550,6 +1552,16 @@ async def create_card_from_tests(
     `test_run_ids` 를 주면 그 시험들만 쓴다. 비우면 채택된 것 전부 — 카드는 자기가
     무엇으로 나왔는지 들고 있으므로(`source.test_run_ids`), 「10건짜리」와 「8건
     짜리」를 나란히 두고 견줄 수 있다.
+
+    ## 소성 표는 기본 **곡률 50점**으로 줄여 굳힌다
+
+    처리 단계의 표는 300점 안팎이다 — 통계·적합의 입력이라 촘촘해야 한다. 그런데
+    솔버가 받는 표는 20~60점이 보통이고, 300점은 실측 잡음을 그대로 실어 접선계수가
+    뒤집히는 구간을 만든다. 그래서 카드에 굳힐 때 `resample_method`(기본 `curvature`,
+    무릎에 점을 몰아 줌; 그 밖에 `log`·`uniform`·`keep_source`)로 `resample_points`(기본 50)만
+    남긴다. 화면의 기본과 같다. **측정 그대로** 굳히려면 `resample_points=None`.
+    몇 점에서 몇 점으로 줄였는지는 카드 근거(`source.resample`)와 덱 머리글에 남는다.
+    소성 표가 없는 식(초탄성·유변)에는 걸지 않는다.
     """
     body: dict[str, Any] = {
         "material_id": material_id,
@@ -1561,6 +1573,17 @@ async def create_card_from_tests(
         "poisson_ratio": poisson_ratio,
         "density": density,
     }
+    if resample_points:
+        # 소성 표를 만드는 식(hardening)일 때만 — 서버가 다른 블록에는 거절한다.
+        block = "hardening"
+        if family:
+            families = await _get(ctx, "/fitting/families")
+            if isinstance(families, list):
+                found = next((one for one in families if one.get("key") == family), None)
+                block = str((found or {}).get("block") or "hardening")
+        if block == "hardening":
+            body["resample_method"] = resample_method
+            body["resample_points"] = resample_points
     if dry_run:
         return {
             "dry_run": True,
