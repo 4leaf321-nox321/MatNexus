@@ -1353,11 +1353,13 @@ class Test초탄성:
         # **D=0 은 요소 종류를 강제한다.** 모르면 "덱이 안 돌아간다" 로만 보인다.
         assert "hybrid elements" in deck.text
 
-    def test_금속_식은_고무에_안_준다(
+    def test_금속_식을_고무에_대면_그_사실을_말한다(
         self, client: TestClient, admin_headers: dict[str, str], rubber: dict[str, Any]
     ) -> None:
         """섞이면 **조용히 틀린 카드**가 나온다 — 진응력 축에 맞춘 값이 고무 카드에
-        들어앉는다. 여기서는 대표 곡선을 못 만들거나 목록에 없다고 말해야 한다."""
+        들어앉는다. 전에는 404 로 막았는데, 같은 재료군(Polymer)의 열가소성 수지가
+        소성 표로 해석되는 정상 작업까지 막았다(2026-09-18). 이제 **고른 대로 맞추되
+        조용히는 아니다** — 재료군에 선언된 식이 아니라는 문장이 노트에 선다."""
         made = client.post(
             "/api/fitting/preview",
             json={
@@ -1368,8 +1370,8 @@ class Test초탄성:
             },
             headers=admin_headers,
         )
-        assert made.status_code == 404
-        assert "재료군" in made.text
+        assert made.status_code == 200, made.text
+        assert any("재료군에 선언된 식이 아닙니다" in note for note in made.json()["notes"])
 
 
 class Test외삽:
