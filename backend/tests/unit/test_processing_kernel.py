@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import ClassVar
 
 import numpy as np
 import pytest
@@ -1347,3 +1348,77 @@ class Test항복_강하_정리:
             result.frame.columns["strain_true_plastic"] > 0
         ]
         assert plastic[0] == pytest.approx(278e6, rel=0.02)
+
+
+def plateau() -> Frame:
+    """항복 뒤 응력이 **그대로**인 곡선 — 내려가지는 않는데 접선계수가 0 이다."""
+    strain = np.linspace(0.0, 0.10, 201)
+    stress = np.minimum(E_TRUE * strain, YIELD_TRUE)
+    return Frame(
+        {"strain_engineering": strain, "stress_engineering": stress},
+        {"strain_engineering": "1", "stress_engineering": "Pa"},
+    )
+
+
+class Test단조_증가_보정:
+    """**변형률이 늘어도 응력이 그대로면 솔버가 거부한다**(2026-09-18 요청) — 하강만
+    문제가 아니다. 평탄부까지 아주 조금씩 올려 엄격히 증가로 만든다."""
+
+    OPTIONS: ClassVar[dict[str, object]] = {
+        "column": "stress_engineering",
+        "x": "strain_engineering",
+    }
+
+    def test_평탄부를_엄격히_증가로_만든다(self) -> None:
+        result = processing.apply([Step("curve.monotone", dict(self.OPTIONS))], plateau())
+        fixed = result.frame.columns["stress_engineering"]
+        assert np.all(np.diff(fixed) > 0)
+        # 올린 폭은 물성으로는 없는 값이다 — 400 MPa 곡선에서 점당 400 Pa.
+        assert scalar(result, "monotone_max_lift") < 1e-3 * YIELD_TRUE
+        assert scalar(result, "monotone_points") > 0
+        assert any("엄격히 증가" in note for note in result.notes)
+
+    def test_최소_기울기를_주면_그만큼_오른다(self) -> None:
+        result = processing.apply(
+            [Step("curve.monotone", {**self.OPTIONS, "min_slope": 1e7})], plateau()
+        )
+        fixed = result.frame.columns["stress_engineering"]
+        strain = result.frame.columns["strain_engineering"]
+        slopes = np.diff(fixed) / np.diff(strain)
+        assert np.all(slopes >= 1e7 * (1 - 1e-9))
+
+    def test_엄격을_끄면_평탄부를_둔다(self) -> None:
+        result = processing.apply(
+            [Step("curve.monotone", {**self.OPTIONS, "strict": False})], plateau()
+        )
+        fixed = result.frame.columns["stress_engineering"]
+        assert np.all(np.diff(fixed) >= 0)
+        assert scalar(result, "monotone_points") == 0
+        assert any("손대지 않았습니다" in note for note in result.notes)
+
+    def test_내려간_곳은_고른_방법으로_올리고_폭을_말한다(self) -> None:
+        result = processing.apply(
+            [Step("curve.monotone", {**self.OPTIONS, "method": "isotonic"})], polymer_neck()
+        )
+        fixed = result.frame.columns["stress_engineering"]
+        assert np.all(np.diff(fixed) > 0)
+        # 15 MPa 를 내려갔던 곡선 — 최대 폭이 크고, 이유를 가르라는 말이 선다.
+        assert scalar(result, "monotone_max_lift") > 1e6
+        assert any("tensile.yield_drop" in note for note in result.notes)
+
+    def test_이미_증가하면_손대지_않는다(self) -> None:
+        result = processing.apply([Step("curve.monotone", dict(self.OPTIONS))], synthetic())
+        assert scalar(result, "monotone_points") == 0
+        assert np.array_equal(
+            result.frame.columns["stress_engineering"],
+            synthetic().columns["stress_engineering"],
+        )
+
+    def test_항복_강하_정리도_하강_없이_최소_기울기를_건다(self) -> None:
+        # 전에는 「하강이 없다」 로 일찍 돌아가 min_slope 가 무시됐다.
+        result = processing.apply(
+            [Step("tensile.yield_drop", {"method": "envelope", "min_slope": 1e7})], plateau()
+        )
+        fixed = result.frame.columns["stress_engineering"]
+        assert np.all(np.diff(fixed) > 0)
+        assert scalar(result, "yield_drop_points") > 0

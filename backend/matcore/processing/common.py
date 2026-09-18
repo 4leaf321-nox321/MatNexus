@@ -15,6 +15,7 @@ from matcore import ParamSpec, Produced, register
 from matcore.processing import (
     Frame,
     ProcessingError,
+    Scalar,
     StepResult,
     option_float,
     option_int,
@@ -348,4 +349,188 @@ def smooth(frame: Frame, options: dict[str, Any]) -> StepResult:
             {f"{key}_smoothed": smoothed}, {f"{key}_smoothed": frame.units[key]}
         ),
         notes=(f"'{key}' 를 {window}점 이동평균으로 평활해 '{key}_smoothed' 로 더했습니다.",),
+    )
+
+
+# ── 단조 증가 보정 ────────────────────────────────────────────────────────────
+
+#: 엄격히 올리기 — 점마다 최소 이만큼(y 최댓값의 비율)은 앞 점보다 커야 한다.
+MONOTONE_STEP_RATIO = 1e-6
+
+MONOTONE_METHODS = ("envelope", "isotonic")
+
+
+def monotone_isotonic(values: np.ndarray) -> np.ndarray:
+    """단조 비감소 최소제곱 회귀(PAVA). `tensile.yield_drop` 과 같은 알고리즘이다."""
+    level: list[float] = []
+    weight: list[int] = []
+    for value in values.tolist():
+        level.append(float(value))
+        weight.append(1)
+        while len(level) > 1 and level[-2] > level[-1]:
+            total = weight[-2] + weight[-1]
+            merged = (level[-2] * weight[-2] + level[-1] * weight[-1]) / total
+            level[-2:] = [merged]
+            weight[-2:] = [total]
+    out = np.empty(len(values), dtype=np.float64)
+    at = 0
+    for value, count in zip(level, weight, strict=True):
+        out[at : at + count] = value
+        at += count
+    return out
+
+
+def strictly_increasing(
+    x: np.ndarray, y: np.ndarray, *, step_ratio: float, min_slope: float
+) -> np.ndarray:
+    """평탄한 자리에도 오름을 준다 — 앞 점보다 `max(step, min_slope·Δx)` 만큼은 크게.
+
+    `step` 은 y 최댓값의 `step_ratio` 배라 단위가 없다(1e-6 이면 400 MPa 곡선에서 400 Pa —
+    솔버에는 0 과 구별되는 값이고 물성으로는 없는 값이다). 앞에서부터 한 번 훑는다.
+    """
+    out = y.astype(np.float64).copy()
+    step = float(np.max(np.abs(out))) * step_ratio if len(out) else 0.0
+    for index in range(1, len(out)):
+        floor = out[index - 1] + max(step, min_slope * float(x[index] - x[index - 1]))
+        if out[index] < floor:
+            out[index] = floor
+    return out
+
+
+@register(
+    id="curve.monotone",
+    kind="processing",
+    label="단조 증가 보정",
+    params=(
+        ParamSpec(name="column", label="보정할 열", type="str", role="column"),
+        ParamSpec(
+            name="x",
+            label="기준 열",
+            type="str",
+            role="column",
+            help="이 열이 늘 때 보정할 열이 늘어야 합니다(변형률). 최소 기울기의 기준입니다.",
+        ),
+        ParamSpec(
+            name="method",
+            label="내려가는 곳은",
+            type="choice",
+            default="envelope",
+            choices=MONOTONE_METHODS,
+            choice_labels={
+                "envelope": "직전 최댓값으로 덮기",
+                "isotonic": "이웃과 평균으로 펴기",
+            },
+            choice_help={
+                "envelope": "running max — 내려간 점을 앞의 최댓값으로 올립니다. 봉우리 "
+                "쪽으로 치우칩니다.",
+                "isotonic": "단조 비감소 최소제곱 회귀(PAVA) — 위아래로 고른 잡음에 원곡선과 "
+                "가깝습니다.",
+            },
+        ),
+        ParamSpec(
+            name="strict",
+            label="엄격히 증가",
+            type="bool",
+            default=True,
+            help="켜면 평탄부(기울기 0)도 아주 조금씩 오르게 합니다 — 접선계수 0 을 거부하는 "
+            "솔버용. 끄면 평탄부를 둡니다(단조 비감소).",
+        ),
+        ParamSpec(
+            name="step_ratio",
+            label="최소 오름(최댓값 비율)",
+            type="float",
+            default=MONOTONE_STEP_RATIO,
+            unit="1",
+            help="엄격히 증가일 때 점마다 최소 이만큼(열 최댓값의 비율) 앞 점보다 커야 "
+            "합니다. 1e-6 이면 400 MPa 곡선에서 400 Pa — 물성으로는 없는 값입니다.",
+        ),
+        ParamSpec(
+            name="min_slope",
+            label="최소 기울기",
+            type="float",
+            default=0.0,
+            help="기준 열 단위당 최소 오름(열의 단위 / 기준 열 단위). 0 이면 최소 오름만 "
+            "씁니다. 예: 응력에 1e7 이면 10 MPa/1.0 변형률.",
+        ),
+    ),
+    makes_values=(
+        Produced(
+            key="monotone_points",
+            label="단조 보정한 점 수",
+            si_unit="1",
+            help="이 단계가 값을 올린 점의 수. 0 이면 이미 단조 증가였습니다.",
+        ),
+        Produced(
+            key="monotone_max_lift",
+            label="최대 올린 폭",
+            help="한 점을 가장 많이 올린 폭(열의 단위). 크면 곡선이 실제로 내려갔던 것입니다.",
+        ),
+    ),
+    order=46,
+    version="1",
+)
+def monotone(frame: Frame, options: dict[str, Any]) -> StepResult:
+    """한 열을 기준 열에 대해 **단조 증가**로 만든다 — 평탄부까지.
+
+    `tensile.yield_drop` 은 「내려가는」 곡선을 고치고, 내려간 데가 없으면 손대지 않는다.
+    그런데 솔버가 거부하는 것은 하강만이 아니다 — **변형률이 늘어도 응력이 그대로인
+    평탄부**(접선계수 0)도 거부하거나 발산한다(2026-09-18 요청). 이 단계는 시험 종류와
+    무관하게 아무 열에나 걸 수 있고, 하강은 고른 방법으로, 평탄부는 아주 조금씩 올려
+    엄격히 증가로 만든다.
+
+    **무엇을 얼마나 올렸는지 남긴다** — 올린 점 수와 최대 폭. 최대 폭이 크면 곡선이
+    실제로 내려갔던 것이고, 그것은 이 단계가 아니라 `tensile.yield_drop` 으로 이유를
+    갈라 다뤄야 한다.
+    """
+    key = str(options.get("column") or "")
+    x_key = str(options.get("x") or "")
+    if not key or not x_key:
+        raise ProcessingError("보정할 열('column')과 기준 열('x')을 골라야 합니다.")
+    if key == x_key:
+        raise ProcessingError("보정할 열과 기준 열이 같습니다.")
+    x = frame.require(x_key, what="기준 열")
+    y = frame.require(key, what="보정할 열")
+    require_increasing(x, what=f"'{x_key}'")
+    method = option_text(options, "method", MONOTONE_METHODS)
+    strict = bool(options.get("strict", True))
+    step_ratio = option_float(options, "step_ratio", MONOTONE_STEP_RATIO)
+    min_slope = option_float(options, "min_slope", 0.0)
+    if step_ratio < 0 or min_slope < 0:
+        raise ProcessingError("최소 오름과 최소 기울기는 0 이상이어야 합니다.")
+
+    original = np.asarray(y, dtype=np.float64)
+    fixed = (
+        np.maximum.accumulate(original)
+        if method == "envelope"
+        else monotone_isotonic(original)
+    )
+    if strict:
+        fixed = strictly_increasing(x, fixed, step_ratio=step_ratio, min_slope=min_slope)
+
+    lifted = fixed - original
+    changed = int(np.count_nonzero(lifted != 0))
+    max_lift = float(np.max(np.abs(lifted))) if len(lifted) else 0.0
+    unit = frame.units.get(key, "1")
+    if changed == 0:
+        note = f"'{key}' 는 이미 '{x_key}' 에 대해 엄격히 증가합니다 — 손대지 않았습니다."
+    else:
+        how = "직전 최댓값으로 덮고" if method == "envelope" else "이웃과 평균으로 펴고"
+        note = (
+            f"'{key}' 를 '{x_key}' 에 대해 단조 증가로 만들었습니다 — 내려간 곳은 {how}"
+            + (", 평탄부는 아주 조금씩 올려 엄격히 증가" if strict else "")
+            + f". {changed}점을 바꿨고 가장 많이 올린 폭은 {max_lift:.4g} {unit} 입니다."
+            + (
+                " 폭이 크면 곡선이 실제로 내려갔던 것입니다 — 이유는 'tensile.yield_drop' 으로"
+                " 가르세요."
+                if len(original) and max_lift > 0.01 * float(np.max(np.abs(original)))
+                else ""
+            )
+        )
+    return StepResult(
+        frame.with_columns({key: fixed}, {}),
+        notes=(note,),
+        scalars=(
+            Scalar("monotone_points", "단조 보정한 점 수", float(changed), "1"),
+            Scalar("monotone_max_lift", "최대 올린 폭", max_lift, unit),
+        ),
     )

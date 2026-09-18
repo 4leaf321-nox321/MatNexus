@@ -1740,11 +1740,31 @@ def yield_drop(frame: Frame, options: dict[str, Any]) -> StepResult:
             f"(최대 {max_drop / 1e6:.3g} MPa) — 연화로 보지 않습니다."
         )
 
-    if method == "keep" or first is None:
-        if method != "keep" and first is None:
+    if method == "keep" or (first is None and min_slope <= 0):
+        if method != "keep":
             notes.append("곡선은 그대로 둡니다.")
         scalars.append(Scalar("yield_drop_points", "손댄 점 수", 0.0, "1"))
         return StepResult(frame, notes=tuple(notes), scalars=tuple(scalars))
+
+    if first is None:
+        # 하강은 없는데 최소 기울기를 달라고 했다 — 평탄부(접선계수 0)만 올린다.
+        # 아무 열에나 걸 수 있는 같은 일은 `curve.monotone` 이 한다.
+        fixed = stress.astype(np.float64).copy()
+        for index in range(1, len(fixed)):
+            floor = fixed[index - 1] + min_slope * float(strain[index] - strain[index - 1])
+            if fixed[index] < floor:
+                fixed[index] = floor
+        changed = int(np.count_nonzero(fixed != stress))
+        notes.append(
+            f"평탄부에 최소 기울기 {min_slope:.3g} Pa 를 줘 엄격히 단조 증가로 만들었습니다 — "
+            f"{changed}점을 올렸습니다."
+        )
+        scalars.append(Scalar("yield_drop_points", "손댄 점 수", float(changed), "1"))
+        return StepResult(
+            frame.with_columns({stress_key: fixed}, {}),
+            notes=tuple(notes),
+            scalars=tuple(scalars),
+        )
 
     if method == "cut":
         assert upper_index is not None
