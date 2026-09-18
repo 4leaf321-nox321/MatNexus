@@ -18,11 +18,15 @@ import { LeftPanelProvider } from '@/shared/layout/SidePanel'
 const info = vi.fn()
 const queue = vi.fn()
 const retry = vi.fn()
+const semantic = vi.fn()
+const reindex = vi.fn()
 vi.mock('@/modules/server/api', () => ({
   serverApi: {
     info: () => info(),
     queue: () => queue(),
     retry: (...args: unknown[]) => retry(...args),
+    semantic: () => semantic(),
+    reindex: () => reindex(),
   },
 }))
 
@@ -92,6 +96,22 @@ beforeEach(() => {
   info.mockResolvedValue(reply())
   queue.mockResolvedValue(QUEUE)
   retry.mockResolvedValue({})
+  semantic.mockResolvedValue({
+    ready: false,
+    engine: 'off',
+    model: 'bge-m3',
+    dim: 1024,
+    table_dim: null,
+    extension: false,
+    table: false,
+    chunks: 0,
+    kinds: {},
+    models: [],
+    indexed_at: null,
+    blocked: '임베딩 엔진이 꺼져 있습니다 — `EMBEDDING_BACKEND` 를 켜세요.',
+    running: false,
+  })
+  reindex.mockResolvedValue({ job_id: 'j-1', chunks: 0 })
 })
 
 describe('백업', () => {
@@ -232,5 +252,61 @@ describe('단위', () => {
     expect(duration(3700)).toBe('1시간 1분')
     expect(duration(120)).toBe('2분')
     expect(duration(null)).toBe('—')
+  })
+})
+
+describe('의미 검색', () => {
+  it('꺼져 있으면 왜 그런지와 할 일을 말한다', async () => {
+    // 「조각 0개」 만으로는 자료가 없는 것인지·엔진이 없는 것인지 구별할 수 없다.
+    mount()
+    expect(await screen.findByText(/EMBEDDING_BACKEND/)).toBeInTheDocument()
+    expect(screen.getByText('꺼짐')).toBeInTheDocument()
+    // 엔진이 없으면 색인해 봐야 빈 작업이 쌓인다 — 단추가 잠긴다.
+    expect(screen.getByRole('button', { name: /지금 색인/ })).toBeDisabled()
+  })
+
+  it('켜져 있으면 조각 수와 종류를 보이고, 색인을 예약한다', async () => {
+    semantic.mockResolvedValue({
+      ready: true,
+      engine: 'ollama',
+      model: 'bge-m3',
+      dim: 1024,
+      table_dim: 1024,
+      extension: true,
+      table: true,
+      chunks: 809,
+      kinds: { guide_section: 642, material: 135 },
+      models: ['bge-m3'],
+      indexed_at: '2026-09-18T10:00:00Z',
+      blocked: null,
+      running: false,
+    })
+    mount()
+    expect(await screen.findByText('켜짐')).toBeInTheDocument()
+    expect(screen.getByText(/조각 809개 · ollama · bge-m3 \(1024차원\)/)).toBeInTheDocument()
+    expect(screen.getByText('guide_section 642')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: /지금 색인/ }))
+    await waitFor(() => expect(reindex).toHaveBeenCalled())
+  })
+
+  it('표와 설정의 차원이 다르면 다시 만든다고 말한다', async () => {
+    // 모델을 바꾸면 차원이 바뀐다 — 옛 표에 새 벡터를 넣으면 통째로 실패한다.
+    semantic.mockResolvedValue({
+      ready: false,
+      engine: 'ollama',
+      model: 'nomic-embed-text',
+      dim: 768,
+      table_dim: 1024,
+      extension: true,
+      table: true,
+      chunks: 809,
+      kinds: {},
+      models: ['bge-m3'],
+      indexed_at: null,
+      blocked: null,
+      running: false,
+    })
+    mount()
+    expect(await screen.findByText(/표가 1024차원인데 설정은 768차원/)).toBeInTheDocument()
   })
 })

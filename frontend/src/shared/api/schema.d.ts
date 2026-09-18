@@ -4540,6 +4540,53 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/search/semantic": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Semantic Status
+         * @description 의미 검색이 켜져 있나 — **꺼졌으면 왜, 그리고 무엇을 하면 되나.**
+         *
+         *     「비슷」 이 글자만 보고 있는데 화면이 조용하면 사람은 「그런 자료가 없다」 로 읽는다
+         *     (계획서가 「가장 큰 구멍」 이라 적은 자리). 시스템 관리자만 — 모델·차원·경로는
+         *     운영 정보다.
+         */
+        get: operations["semantic_status_api_search_semantic_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/search/semantic/reindex": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Semantic Reindex
+         * @description 산문을 전부 다시 색인한다 — **워커가 뒤에서.**
+         *
+         *     요청 안에서 돌리면 조각 수천 개의 임베딩 왕복을 누른 사람이 기다린다(그리고 프록시가
+         *     먼저 끊는다). 모델·차원이 바뀌었으면 작업이 표를 다시 만들고 채운다.
+         */
+        post: operations["semantic_reindex_api_search_semantic_reindex_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/server/info": {
         parameters: {
             query?: never;
@@ -15404,6 +15451,56 @@ export interface components {
             /** Title */
             title?: string | null;
         };
+        /**
+         * SemanticReindexOut
+         * @description 색인을 예약했다. **요청 안에서 돌리지 않는다** — 조각 수천 개는 수 분이 걸린다.
+         */
+        SemanticReindexOut: {
+            /** Chunks */
+            chunks: number;
+            /**
+             * Job Id
+             * Format: uuid
+             */
+            job_id: string;
+        };
+        /**
+         * SemanticStatusOut
+         * @description 의미 검색 현황 — **왜 꺼졌는지까지.** 관리 화면이 이 하나로 그린다.
+         */
+        SemanticStatusOut: {
+            /** Blocked */
+            blocked: string | null;
+            /** Chunks */
+            chunks: number;
+            /** Dim */
+            dim: number;
+            /** Engine */
+            engine: string;
+            /** Extension */
+            extension: boolean;
+            /** Indexed At */
+            indexed_at: string | null;
+            /** Kinds */
+            kinds: {
+                [key: string]: number;
+            };
+            /** Model */
+            model: string;
+            /** Models */
+            models: string[];
+            /** Ready */
+            ready: boolean;
+            /**
+             * Running
+             * @default false
+             */
+            running: boolean;
+            /** Table */
+            table: boolean;
+            /** Table Dim */
+            table_dim: number | null;
+        };
         /** ServerInfoOut */
         ServerInfoOut: {
             /** App Version */
@@ -25410,6 +25507,46 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    semantic_status_api_search_semantic_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SemanticStatusOut"];
+                };
+            };
+        };
+    };
+    semantic_reindex_api_search_semantic_reindex_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SemanticReindexOut"];
                 };
             };
         };

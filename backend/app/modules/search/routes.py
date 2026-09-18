@@ -7,13 +7,22 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Query
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.jobs import kinds, queue
+from app.jobs.models import Job
 from app.modules.accounts.models import User
-from app.modules.search.schemas import SearchGroupOut, SearchHitOut, SearchOut
-from app.shared import entity_search, relations, semantic
-from app.shared.auth import current_user
+from app.modules.search.schemas import (
+    SearchGroupOut,
+    SearchHitOut,
+    SearchOut,
+    SemanticReindexOut,
+    SemanticStatusOut,
+)
+from app.shared import embeddings, entity_search, relations, semantic
+from app.shared.auth import current_user, require_system_admin
 from app.shared.errors import AppError
 
 router = APIRouter(prefix="/search", tags=["search"])
@@ -81,3 +90,55 @@ def search(
             for one in groups
         ],
     )
+
+
+# --- 의미 검색 현황 ---------------------------------------------------------------
+
+
+def _indexing(db: Session) -> bool:
+    """색인 작업이 큐에 있거나 도는 중인가 — 「지금 색인」 을 두 번 누르지 않게."""
+    found = db.scalar(
+        select(Job.id)
+        .where(Job.kind == kinds.SEARCH_REINDEX, Job.status.in_(("queued", "running")))
+        .limit(1)
+    )
+    return found is not None
+
+
+@router.get("/semantic", response_model=SemanticStatusOut)
+def semantic_status(
+    user: User = Depends(require_system_admin), db: Session = Depends(get_db)
+) -> SemanticStatusOut:
+    """의미 검색이 켜져 있나 — **꺼졌으면 왜, 그리고 무엇을 하면 되나.**
+
+    「비슷」 이 글자만 보고 있는데 화면이 조용하면 사람은 「그런 자료가 없다」 로 읽는다
+    (계획서가 「가장 큰 구멍」 이라 적은 자리). 시스템 관리자만 — 모델·차원·경로는
+    운영 정보다.
+    """
+    return SemanticStatusOut(**semantic.stats(db), running=_indexing(db))
+
+
+@router.post("/semantic/reindex", response_model=SemanticReindexOut, status_code=202)
+def semantic_reindex(
+    user: User = Depends(require_system_admin), db: Session = Depends(get_db)
+) -> SemanticReindexOut:
+    """산문을 전부 다시 색인한다 — **워커가 뒤에서.**
+
+    요청 안에서 돌리면 조각 수천 개의 임베딩 왕복을 누른 사람이 기다린다(그리고 프록시가
+    먼저 끊는다). 모델·차원이 바뀌었으면 작업이 표를 다시 만들고 채운다.
+    """
+    if not embeddings.enabled():
+        raise AppError(
+            "MNX-SEARCH-0003",
+            "임베딩 엔진이 꺼져 있습니다 — `EMBEDDING_BACKEND` 를 켜고 다시 띄우세요.",
+            status=409,
+        )
+    if _indexing(db):
+        raise AppError(
+            "MNX-SEARCH-0004",
+            "색인이 이미 돌고 있습니다 — 끝나면 현황이 바뀝니다.",
+            status=409,
+        )
+    job = queue.enqueue(db, kind=kinds.SEARCH_REINDEX)
+    db.commit()
+    return SemanticReindexOut(job_id=job.id, chunks=int(semantic.stats(db)["chunks"]))

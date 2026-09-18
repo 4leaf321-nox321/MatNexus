@@ -26,9 +26,11 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import text
 from sqlalchemy.orm import Session
+from test_voc import member_headers
 
 from app.config import get_settings
 from app.modules.guide.models import GuideDocument, GuideSection
+from app.modules.workspaces.models import Workspace
 from app.shared import semantic
 
 #: 색인에 넣을 산문. **제목에는 없는 낱말**로 본문을 채운다 — 그래야 트라이그램이
@@ -39,6 +41,23 @@ BODY = (
     "올린다. 그리고 신율은 표점 안에서만 재야 하며, 물림부 변형이 섞이면 값이 "
     "과대해진다. 이 절차는 얇은 강판과 알루미늄 판에 공통으로 적용한다."
 )
+
+
+@pytest.fixture
+def semantic_off() -> Iterator[None]:
+    """**꺼진 상태를 시험이 스스로 만든다.**
+
+    전에는 개발 `.env` 가 `off` 인 것에 기대고 있었다 — 그 파일에 `EMBEDDING_BACKEND=ollama`
+    를 넣자 「꺼져 있어도 검색은 돈다」 가 빨개졌다(2026-09-18). 시험은 사람 기계의 설정에
+    기대면 안 된다.
+    """
+    settings = get_settings()
+    before = settings.embedding_backend
+    settings.embedding_backend = "off"
+    try:
+        yield
+    finally:
+        settings.embedding_backend = before
 
 
 @pytest.fixture
@@ -90,6 +109,7 @@ class TestPlumbing:
         assert semantic.split("   ") == []
 
 
+@pytest.mark.usefixtures("semantic_off")
 class TestOff:
     def test_꺼져_있어도_검색은_돈다(
         self, client: TestClient, admin_headers: dict[str, str]
@@ -291,3 +311,80 @@ class TestMaterials:
             headers=admin_headers,
         ).json()
         assert material_id in [one["id"] for group in mine["groups"] for one in group["hits"]]
+
+
+class Test관리_화면:
+    """**꺼졌으면 왜, 그리고 무엇을 하면 되나** — 「조각 0개」 만으로는 셋을 못 가른다
+    (자료가 없다 · 엔진이 없다 · 아직 안 돌렸다). 2026-09-18."""
+
+    STATUS = "/api/search/semantic"
+    REINDEX = "/api/search/semantic/reindex"
+
+    @pytest.mark.usefixtures("semantic_off")
+    def test_꺼져_있으면_이유와_할_일을_말한다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        body = client.get(self.STATUS, headers=admin_headers).json()
+        assert body["ready"] is False and body["engine"] == "off"
+        assert "EMBEDDING_BACKEND" in (body["blocked"] or "")
+        # 꺼진 채로는 색인을 예약하지 않는다 — 빈 작업이 큐에 쌓이기만 한다.
+        denied = client.post(self.REINDEX, headers=admin_headers)
+        assert denied.status_code == 409
+        assert denied.json()["error"]["code"] == "MNX-SEARCH-0003"
+
+    @pytest.mark.usefixtures("semantic_ready")
+    def test_켜져_있고_색인이_있으면_켜짐이다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str]
+    ) -> None:
+        _handbook(db, title="시편 준비", body=BODY)
+        semantic.reindex(db)
+        body = client.get(self.STATUS, headers=admin_headers).json()
+        assert body["ready"] is True
+        assert body["chunks"] >= 1 and body["kinds"].get("guide_section", 0) >= 1
+        assert body["models"] == ["mock"] and body["blocked"] is None
+        assert body["table_dim"] == body["dim"]
+
+    @pytest.mark.usefixtures("semantic_ready")
+    def test_색인은_워커가_뒤에서_돌고_두_번_예약되지_않는다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        made = client.post(self.REINDEX, headers=admin_headers)
+        assert made.status_code == 202, made.text
+        assert made.json()["job_id"]
+        # 도는 중에는 현황이 그렇게 말하고, 또 누르면 막힌다.
+        assert client.get(self.STATUS, headers=admin_headers).json()["running"] is True
+        again = client.post(self.REINDEX, headers=admin_headers)
+        assert again.status_code == 409
+        assert again.json()["error"]["code"] == "MNX-SEARCH-0004"
+
+    def test_시스템_관리자만_본다(
+        self, client: TestClient, db: Session, workspace: Workspace
+    ) -> None:
+        headers = member_headers(client, db, workspace)
+        assert client.get(self.STATUS, headers=headers).status_code == 403
+        assert client.post(self.REINDEX, headers=headers).status_code == 403
+
+
+@pytest.mark.usefixtures("semantic_ready")
+class Test차원이_바뀌면:
+    def test_표를_다시_만들고_전부_새로_채운다(self, db: Session) -> None:
+        """**모델을 바꾸면 차원이 바뀐다**(bge-m3 1024 · nomic 768). 옛 표에 새 벡터를 넣으면
+        통째로 실패하는데, 그 실패는 워커 로그에만 남는다."""
+        _handbook(db, title="시편 준비", body=BODY)
+        semantic.reindex(db)
+        assert semantic.table_dim(db) == get_settings().embedding_dim
+
+        settings = get_settings()
+        before = settings.embedding_dim
+        settings.embedding_dim = before - 8
+        try:
+            assert semantic.ensure_schema(db) is True
+            db.commit()
+            assert semantic.table_dim(db) == before - 8
+            # 옛 조각은 버렸다 — 원문은 그대로라 다시 채우면 된다.
+            assert semantic.stats(db)["chunks"] == 0
+            assert semantic.reindex(db)["chunks"] >= 1
+        finally:
+            settings.embedding_dim = before
+            semantic.ensure_schema(db)
+            db.commit()

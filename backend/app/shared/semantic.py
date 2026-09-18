@@ -97,11 +97,34 @@ def available(db: Session) -> bool:
     return embeddings.enabled() and table_ready(db)
 
 
+def table_dim(db: Session) -> int | None:
+    """지금 표의 벡터 차원. 표가 없으면 None.
+
+    **모델이 바뀌면 차원이 바뀐다**(bge-m3 1024 · nomic 768). 그때 옛 표에 새 벡터를
+    넣으면 `expected N dimensions` 로 통째로 실패하는데, 그 실패는 워커 로그에만 남고
+    화면에는 「의미 검색이 왜 안 되지」 로만 보인다.
+    """
+    if not table_ready(db):
+        return None
+    found = db.execute(
+        text(f"""
+        SELECT a.atttypmod
+          FROM pg_attribute a
+          JOIN pg_class c ON c.oid = a.attrelid
+         WHERE c.relname = '{TABLE}' AND a.attname = 'embedding'
+        """)
+    ).scalar()
+    return int(found) if found and int(found) > 0 else None
+
+
 def ensure_schema(db: Session) -> bool:
     """표와 색인을 만든다. **확장이 없으면 아무것도 안 하고 False 를 준다.**
 
     멱등이다. 배포가 매번 불러도 되고, 나중에 pgvector 를 설치하면 그다음 배포에서
     생긴다.
+
+    **차원이 달라졌으면 표를 다시 만든다.** 조각은 전부 다시 임베딩해야 하므로 버려도
+    잃는 것이 없다 — 원문은 재료·핸드북에 그대로 있다.
     """
     if not extension_ready(db):
         available_here = db.execute(
@@ -115,6 +138,13 @@ def ensure_schema(db: Session) -> bool:
         logger.info("pgvector 를 켰습니다.")
 
     dim = get_settings().embedding_dim
+    current = table_dim(db)
+    if current is not None and current != dim:
+        logger.warning(
+            "임베딩 차원이 %s → %s 로 바뀌었습니다 — 색인 표를 다시 만듭니다.", current, dim
+        )
+        db.execute(text(f"DROP TABLE IF EXISTS {TABLE}"))
+        db.commit()
     db.execute(
         text(f"""
         CREATE TABLE IF NOT EXISTS {TABLE} (
@@ -374,12 +404,51 @@ def search(db: Session, query: str, *, limit: int = SEARCH_LIMIT) -> list[Match]
 
 
 def stats(db: Session) -> dict[str, Any]:
-    """무엇이 얼마나 색인돼 있나. 화면이 「의미 검색 꺼짐」 을 말할 근거."""
-    if not table_ready(db):
-        return {"ready": False, "chunks": 0, "kinds": {}}
-    rows = db.execute(text(f"SELECT kind, count(*) FROM {TABLE} GROUP BY kind")).all()
+    """무엇이 얼마나 색인돼 있나 — **꺼진 이유까지.**
+
+    「조각 0개」 만 보면 자료가 없는 것인지, 엔진이 없는 것인지, 색인을 아직 안 돌린
+    것인지 구별할 수 없다. 셋은 할 일이 전혀 다르다(설정 · 설치 · 단추 누르기).
+    """
+    settings = get_settings()
+    engine_on = embeddings.enabled()
+    extension = extension_ready(db)
+    table = table_ready(db)
+    rows = (
+        db.execute(text(f"SELECT kind, count(*) FROM {TABLE} GROUP BY kind")).all()
+        if table
+        else []
+    )
+    models = (
+        [str(one[0]) for one in db.execute(text(f"SELECT DISTINCT model FROM {TABLE}")).all()]
+        if table
+        else []
+    )
+    newest = (
+        db.execute(text(f"SELECT max(updated_at) FROM {TABLE}")).scalar() if table else None
+    )
+    chunks = sum(int(one[1]) for one in rows)
+    if not engine_on:
+        blocked = (
+            "임베딩 엔진이 꺼져 있습니다 — `backend\\.env` 의 `EMBEDDING_BACKEND` 를 "
+            "`ollama` 로 두고 서비스를 다시 띄우세요(`docs/의미 검색 설치.md`)."
+        )
+    elif not extension:
+        blocked = "pgvector 확장이 이 DB 에 없습니다 — `install_pgvector.ps1` 을 돌리세요."
+    elif chunks == 0:
+        blocked = "아직 색인을 안 돌렸습니다 — 「지금 색인」 을 누르세요(뒤에서 돕니다)."
+    else:
+        blocked = None
     return {
-        "ready": available(db),
-        "chunks": sum(int(one[1]) for one in rows),
+        "ready": engine_on and table and chunks > 0,
+        "engine": embeddings.backend(),
+        "model": settings.embedding_model,
+        "dim": settings.embedding_dim,
+        "table_dim": table_dim(db),
+        "extension": extension,
+        "table": table,
+        "chunks": chunks,
         "kinds": {one[0]: int(one[1]) for one in rows},
+        "models": models,
+        "indexed_at": newest,
+        "blocked": blocked,
     }

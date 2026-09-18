@@ -16,7 +16,7 @@
  * 0 을 그리면 「한가하다」 로 읽힌다.
  */
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   AlertTriangle,
   Archive,
@@ -26,6 +26,7 @@ import {
   ListChecks,
   MemoryStick,
   RotateCcw,
+  Search,
   Server,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
@@ -303,6 +304,10 @@ function Body() {
         </Card>
       </div>
 
+      {/* **의미 검색 — 켜져 있나, 아니면 왜 아닌가.** 「비슷」 이 글자만 보고 있는데
+          화면이 조용하면 사람은 「그런 자료가 없다」 로 읽는다. */}
+      <Semantic />
+
       {/* **큐 — 실패 목록과 다시 시도.** 재시도 3회·백오프·멈춘 작업 회수는 이미
           있다. 없던 것은 3회 다 실패해 `failed` 가 된 작업을 **보는 자리**다. */}
       <section className="rounded-md border" aria-label="작업 큐">
@@ -365,5 +370,110 @@ function Body() {
         <span>이 프로세스 {bytes(data.process.rss_bytes)}</span>
       </div>
     </div>
+  )
+}
+
+
+/**
+ * 의미 검색 — **켜져 있나, 아니면 왜 아닌가, 그리고 무엇을 하면 되나.**
+ *
+ * 「조각 0개」 만 보이면 자료가 없는 것인지 · 엔진이 없는 것인지 · 색인을 아직 안 돌린
+ * 것인지 구별할 수 없다 — 셋은 할 일이 전혀 다르다(설정 · 설치 · 단추 누르기). 서버가
+ * `blocked` 에 그 한 줄을 적어 주고, 여기서는 그대로 보이고 단추를 낸다.
+ *
+ * 색인은 **워커가 뒤에서** 돈다(202). 누르면 도는 중이 되고, 화면은 5초마다 다시 묻는다 —
+ * 조각 수가 늘다가 멈추면 끝난 것이다.
+ */
+function Semantic() {
+  const status = useResource(() => serverApi.semantic(), [])
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<Error | null>(null)
+  const running = status.data?.running ?? false
+
+  useEffect(() => {
+    if (!running) return undefined
+    const timer = setInterval(() => status.reload(), 5000)
+    return () => clearInterval(timer)
+  }, [running, status])
+
+  async function reindex() {
+    setBusy(true)
+    setError(null)
+    try {
+      await serverApi.reindex()
+      status.reload()
+    } catch (caught) {
+      setError(caught instanceof Error ? caught : new Error('색인을 예약하지 못했습니다.'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const data = status.data
+  return (
+    <section className="mt-4 rounded-md border" aria-label="의미 검색">
+      <div className="flex flex-wrap items-center gap-3 border-b px-3 py-2 text-sm">
+        <Search className="text-muted-foreground size-4" />
+        <span className="font-medium">의미 검색</span>
+        {data && (
+          <Badge variant="outline" className={data.ready ? 'text-emerald-600' : ''}>
+            {data.ready ? '켜짐' : '꺼짐'}
+          </Badge>
+        )}
+        {data && (
+          <span className="text-muted-foreground text-xs tabular-nums">
+            조각 {data.chunks.toLocaleString()}개 · {data.engine} · {data.model} ({data.dim}차원)
+            {data.indexed_at
+              ? ` · ${new Date(data.indexed_at).toLocaleString('ko-KR')} 색인`
+              : ''}
+          </span>
+        )}
+        <Button
+          size="sm"
+          variant="outline"
+          className="ml-auto"
+          disabled={busy || running || !data || data.engine === 'off'}
+          onClick={() => void reindex()}
+        >
+          <RotateCcw className={cn('size-4', running && 'animate-spin')} />
+          {running ? '색인 중…' : '지금 색인'}
+        </Button>
+      </div>
+      <div className="space-y-2 p-3">
+        <ErrorNotice error={status.error ?? error} />
+        {data?.blocked && (
+          <p className="text-muted-foreground text-xs">
+            <AlertTriangle className="mr-1 inline size-3.5 text-amber-600" />
+            {data.blocked}
+          </p>
+        )}
+        {data && data.table_dim != null && data.table_dim !== data.dim && (
+          <p className="text-xs text-amber-700 dark:text-amber-500">
+            표가 {data.table_dim}차원인데 설정은 {data.dim}차원입니다 — 색인을 돌리면 표를
+            다시 만들고 전부 새로 채웁니다.
+          </p>
+        )}
+        {data && data.models.length > 1 && (
+          <p className="text-xs text-amber-700 dark:text-amber-500">
+            조각이 모델 둘로 갈려 있습니다({data.models.join(' · ')}) — 색인을 한 번 돌리면
+            하나로 맞춰집니다.
+          </p>
+        )}
+        {data && Object.keys(data.kinds).length > 0 && (
+          <ul className="text-muted-foreground flex flex-wrap gap-x-3 gap-y-1 text-xs">
+            {Object.entries(data.kinds).map(([kind, count]) => (
+              <li key={kind} className="tabular-nums">
+                {kind} {count.toLocaleString()}
+              </li>
+            ))}
+          </ul>
+        )}
+        {data && !data.ready && !data.blocked && (
+          <p className="text-muted-foreground text-xs">
+            꺼져 있습니다 — 「비슷」 검색과 AI(MCP)는 글자만 봅니다.
+          </p>
+        )}
+      </div>
+    </section>
   )
 }
