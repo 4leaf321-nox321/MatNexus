@@ -1533,3 +1533,269 @@ def true_plastic(frame: Frame, options: dict[str, Any]) -> StepResult:
         ),
         notes=tuple(notes),
     )
+
+
+# ── 항복 강하 정리 ────────────────────────────────────────────────────────────
+
+#: 최대 응력에 견주어 이보다 작은 하강은 잡음이다 — 항복점·연화로 보지 않는다.
+YIELD_DROP_THRESHOLD = 0.005
+
+YIELD_DROP_METHODS = ("envelope", "isotonic", "lower_yield", "cut", "keep")
+
+
+def _isotonic(values: np.ndarray) -> np.ndarray:
+    """단조 비감소 최소제곱 회귀(PAVA). 내려가는 구간을 이웃과 **평균으로** 편다.
+
+    포락선(running max)은 내려간 점을 직전 최댓값으로 덮어 봉우리 쪽으로 치우친다.
+    잡음이 위아래로 고르게 섞인 곡선에는 이쪽이 원곡선에 가깝다.
+    """
+    level: list[float] = []
+    weight: list[int] = []
+    for value in values.tolist():
+        level.append(float(value))
+        weight.append(1)
+        while len(level) > 1 and level[-2] > level[-1]:
+            total = weight[-2] + weight[-1]
+            merged = (level[-2] * weight[-2] + level[-1] * weight[-1]) / total
+            level[-2:] = [merged]
+            weight[-2:] = [total]
+    out = np.empty(len(values), dtype=np.float64)
+    at = 0
+    for value, count in zip(level, weight, strict=True):
+        out[at : at + count] = value
+        at += count
+    return out
+
+
+def _first_drop(stress: np.ndarray, threshold: float) -> int | None:
+    """첫 「진짜」 하강 — 직전 최댓값에서 `threshold`(최댓값 비율)만큼 내려간 첫 점.
+
+    없으면 `None` — 잡음 이상의 연화가 없다는 뜻이다.
+    """
+    running = np.maximum.accumulate(stress)
+    drop = running - stress
+    hit = np.nonzero(drop > threshold * running)[0]
+    return int(hit[0]) if hit.size else None
+
+
+@register(
+    id="tensile.yield_drop",
+    kind="processing",
+    label="항복 강하 정리",
+    params=(
+        ParamSpec(
+            name="method",
+            label="방법",
+            type="choice",
+            default="envelope",
+            choices=YIELD_DROP_METHODS,
+            choice_labels={
+                "envelope": "단조 포락선",
+                "isotonic": "단조 회귀",
+                "lower_yield": "하항복점부터",
+                "cut": "연화 시작에서 자르기",
+                "keep": "그대로 두고 재기만",
+            },
+            choice_help={
+                "envelope": "내려가는 구간을 직전 최댓값으로 덮어 평탄하게 합니다"
+                "(running max). 잡음성 요철에. 봉우리 쪽으로 치우칩니다.",
+                "isotonic": "단조 비감소 최소제곱 회귀(PAVA) — 내려가는 구간을 이웃과 "
+                "평균으로 폅니다. 위아래로 고른 잡음에 원곡선과 가장 가깝습니다.",
+                "lower_yield": "연강의 항복점 현상용. 상항복 봉우리(ReH)를 하항복점(ReL)으로 "
+                "깎고 뤼더스 평탄부 끝까지 평탄하게 — 상항복은 시험기·정렬에 좌우되는 값이라 "
+                "버립니다. ReH·ReL·뤼더스 변형률을 값으로 냅니다.",
+                "cut": "첫 연화가 시작되는 봉우리에서 자릅니다. 수지의 항복 후 넥처럼 공칭 "
+                "하강이 재료가 아니라 단면 감소인 경우 — 그 뒤는 카드의 「늘릴 한계」"
+                "(경화식 외삽)가 맡습니다.",
+                "keep": "곡선은 안 건드리고 하강 폭·점 수와 (있으면) ReH·ReL 만 냅니다. "
+                "연화를 받는 재료 모델(SAMP-1 등)로 갈 때.",
+            },
+        ),
+        ParamSpec(
+            name="threshold",
+            label="하강 문턱",
+            type="float",
+            default=YIELD_DROP_THRESHOLD,
+            unit="1",
+            help="최대 응력에 견준 비율. 이보다 작은 하강은 잡음으로 보고 항복점·연화로 치지 "
+            "않습니다(기본 0.5 %).",
+        ),
+        ParamSpec(
+            name="min_slope",
+            label="최소 기울기",
+            type="float",
+            default=0.0,
+            unit="Pa",
+            help="0 이면 평탄부를 허용합니다(단조 비감소). 양수면 그 기울기(Pa/단위 "
+            "변형률)만큼은 늘 오르게 해 **엄격히 단조 증가**로 만듭니다 — 접선계수 0 을 "
+            "거부하는 솔버용. 예: 1e7 (10 MPa/1.0 변형률).",
+        ),
+        ParamSpec(name="strain", label="변형률 열", type="str", role="column", default=STRAIN),
+        ParamSpec(name="stress", label="응력 열", type="str", role="column", default=STRESS),
+    ),
+    applies_to=("tensile",),
+    # 키만으로 거르지 않는다 — 변위·하중을 재는 시험이면 공칭 곡선이 서고 이 정리가 뜻이 있다.
+    requires_channels=(("displacement",), ("force",)),
+    makes_values=(
+        Produced(
+            key="yield_drop_max",
+            label="최대 하강 폭",
+            si_unit="Pa",
+            help="직전 최댓값에서 가장 많이 내려간 폭. 0 이면 연화가 없었습니다.",
+        ),
+        Produced(
+            key="yield_drop_points",
+            label="손댄 점 수",
+            si_unit="1",
+            help="이 단계가 값을 바꾸거나 잘라 낸 점의 수.",
+        ),
+        Produced(
+            key="upper_yield_strength",
+            label="상항복강도 ReH",
+            si_unit="Pa",
+            help="첫 봉우리. 항복점 현상이 있을 때만 납니다.",
+        ),
+        Produced(
+            key="lower_yield_strength",
+            label="하항복강도 ReL",
+            si_unit="Pa",
+            help="첫 봉우리 뒤 최솟값. 소성 곡선의 시작으로 쓸 수 있습니다 "
+            "(`tensile.true_plastic` 의 항복강도에 `@lower_yield_strength`).",
+        ),
+        Produced(
+            key="luders_strain",
+            label="뤼더스 변형률",
+            si_unit="1",
+            help="평탄부의 길이 — ReL 아래로 떨어진 곳부터 다시 ReH 를 넘는 곳까지.",
+        ),
+    ),
+    order=35,
+    version="1",
+)
+def yield_drop(frame: Frame, options: dict[str, Any]) -> StepResult:
+    """항복 이후 **내려가는 구간**을 정리한다 — 단조 표를 받는 솔버를 위해.
+
+    MAT_024·Abaqus `*PLASTIC` 은 단조 비감소 표를 전제한다(Abaqus 는 음의 기울기를
+    거절하고, LS-DYNA 는 받되 국소화·발산한다). 그런데 실제 곡선은 세 가지 이유로
+    내려간다 — 연강의 항복점 현상(ReH → ReL → 뤼더스 평탄부), 수지의 항복 후 넥
+    (공칭 응력의 하강이지 재료 연화가 아니다), 그리고 잡음. 셋은 고칠 데가 달라서
+    방법을 고른다(`method`, 각각의 설명은 선택지에).
+
+    **무엇을 얼마나 바꿨는지 남긴다.** 걷어낸 것은 지어낸 것이 아니라 버린 것이다 —
+    수지의 연화는 실제 재료 거동이고, 그것을 버렸다는 사실이 근거에 있어야 나중에
+    SAMP-1 로 갈 때 되짚을 수 있다. 하강 폭·손댄 점 수는 값으로, 방법과 구간은 노트로.
+
+    문턱(`threshold`) 미만의 하강만 있으면 **아무것도 안 한다** — 잡음까지 정리하면
+    모든 곡선이 조금씩 손대진 채 저장되고, 그것은 「측정 그대로」 가 아니다.
+    """
+    strain, stress, strain_key, stress_key = _pair(frame, options)
+    require_increasing(strain, what=f"'{strain_key}'")
+    method = option_text(options, "method", YIELD_DROP_METHODS)
+    threshold = option_float(options, "threshold", YIELD_DROP_THRESHOLD)
+    if not 0 <= threshold < 1:
+        raise ProcessingError(f"하강 문턱은 0 이상 1 미만이어야 합니다: {threshold}")
+    min_slope = option_float(options, "min_slope", 0.0)
+    if min_slope < 0:
+        raise ProcessingError(f"최소 기울기는 0 이상이어야 합니다: {min_slope}")
+
+    running = np.maximum.accumulate(stress)
+    max_drop = float(np.max(running - stress)) if len(stress) else 0.0
+    first = _first_drop(stress, threshold)
+    notes: list[str] = []
+    scalars: list[Scalar] = [Scalar("yield_drop_max", "최대 하강 폭", max_drop, "Pa")]
+
+    # 항복점 현상이 있나 — 있으면 방법과 무관하게 ReH·ReL 을 잰다(규격 값이다).
+    upper_index: int | None = None
+    lower_index: int | None = None
+    recover_index: int | None = None
+    if first is not None:
+        upper_index = int(np.argmax(stress[:first]))
+        upper = float(stress[upper_index])
+        after = np.nonzero(stress[first:] >= upper)[0]
+        recover_index = int(first + after[0]) if after.size else None
+        window_end = recover_index if recover_index is not None else len(stress)
+        lower_index = int(first + np.argmin(stress[first:window_end]))
+        lower = float(stress[lower_index])
+        # 평탄부의 시작 — 봉우리 앞에서 ReL 을 처음 넘은 곳.
+        plateau_start = int(np.nonzero(stress[: upper_index + 1] >= lower)[0][0])
+        plateau_end = recover_index if recover_index is not None else len(stress) - 1
+        luders = float(strain[plateau_end] - strain[plateau_start])
+        scalars += [
+            Scalar("upper_yield_strength", "상항복강도 ReH", upper, "Pa"),
+            Scalar("lower_yield_strength", "하항복강도 ReL", lower, "Pa"),
+            Scalar("luders_strain", "뤼더스 변형률", luders, "1", "strain"),
+        ]
+        notes.append(
+            f"첫 봉우리 {upper / 1e6:.4g} MPa(변형률 {float(strain[upper_index]):.4g}) 뒤 "
+            f"{lower / 1e6:.4g} MPa 까지 내려갑니다"
+            + (
+                f" — 변형률 {float(strain[recover_index]):.4g} 에서 봉우리를 다시 넘습니다."
+                if recover_index is not None
+                else " — 끝까지 봉우리를 다시 넘지 않습니다(연화가 이어집니다)."
+            )
+        )
+    else:
+        notes.append(
+            f"직전 최댓값에서 {threshold * 100:.2g} % 를 넘는 하강이 없습니다"
+            f"(최대 {max_drop / 1e6:.3g} MPa) — 연화로 보지 않습니다."
+        )
+
+    if method == "keep" or first is None:
+        if method != "keep" and first is None:
+            notes.append("곡선은 그대로 둡니다.")
+        scalars.append(Scalar("yield_drop_points", "손댄 점 수", 0.0, "1"))
+        return StepResult(frame, notes=tuple(notes), scalars=tuple(scalars))
+
+    if method == "cut":
+        assert upper_index is not None
+        kept = upper_index + 1
+        removed = len(stress) - kept
+        notes.append(
+            f"연화가 시작되는 봉우리(index {upper_index}, 변형률 "
+            f"{float(strain[upper_index]):.4g})에서 잘랐습니다 — 뒤의 {removed}점은 "
+            f"버렸습니다. 그 뒤 구간은 카드의 「늘릴 한계」(경화식 외삽)가 맡습니다."
+        )
+        scalars.append(Scalar("yield_drop_points", "손댄 점 수", float(removed), "1"))
+        return StepResult(
+            frame.select(np.arange(kept)), notes=tuple(notes), scalars=tuple(scalars)
+        )
+
+    fixed = stress.astype(np.float64).copy()
+    if method == "envelope":
+        fixed = running.astype(np.float64)
+        how = "내려가는 구간을 직전 최댓값으로 덮었습니다(단조 포락선)"
+    elif method == "isotonic":
+        fixed = _isotonic(fixed)
+        how = "단조 비감소 최소제곱 회귀(PAVA)로 폈습니다"
+    else:  # lower_yield
+        assert lower_index is not None and upper_index is not None
+        lower = float(stress[lower_index])
+        plateau_start = int(np.nonzero(stress[: upper_index + 1] >= lower)[0][0])
+        plateau_end = recover_index if recover_index is not None else len(stress)
+        fixed[plateau_start:plateau_end] = np.minimum(fixed[plateau_start:plateau_end], lower)
+        # 평탄부 뒤에도 잔물결이 있을 수 있다 — 거기는 포락선으로.
+        fixed = np.maximum.accumulate(fixed)
+        how = (
+            f"상항복 봉우리를 하항복점 {lower / 1e6:.4g} MPa 로 깎고 평탄부"
+            f"(변형률 {float(strain[plateau_start]):.4g}~"
+            f"{float(strain[min(plateau_end, len(strain) - 1)]):.4g})를 평탄하게 했습니다"
+        )
+
+    if min_slope > 0:
+        # 엄격히 단조 증가 — 평탄부에 최소 기울기를 준다. 앞에서부터 한 번 훑는다.
+        for index in range(1, len(fixed)):
+            floor = fixed[index - 1] + min_slope * float(strain[index] - strain[index - 1])
+            if fixed[index] < floor:
+                fixed[index] = floor
+        how += f", 최소 기울기 {min_slope:.3g} Pa 로 엄격히 단조 증가"
+
+    changed = int(np.count_nonzero(~np.isclose(fixed, stress, rtol=0, atol=0)))
+    notes.append(
+        f"{how} — {changed}점을 바꿨습니다. 걷어낸 것은 지어낸 것이 아니라 버린 것입니다."
+    )
+    scalars.append(Scalar("yield_drop_points", "손댄 점 수", float(changed), "1"))
+    return StepResult(
+        frame.with_columns({stress_key: fixed}, {}),
+        notes=tuple(notes),
+        scalars=tuple(scalars),
+    )

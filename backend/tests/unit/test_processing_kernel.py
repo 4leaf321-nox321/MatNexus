@@ -1195,3 +1195,155 @@ def test_등록되지_않은_단계는_코드라고_말한다() -> None:
     # 프로파일(데이터)과 처리(코드)의 경계를 화면이 분명히 보여 줘야 한다.
     with pytest.raises(ProcessingError, match="정의만으로는 만들 수 없습니다"):
         processing.apply([Step("tensile.made_up", {})], synthetic())
+
+
+def mild_steel() -> Frame:
+    """항복점 현상 — E=200 GPa, ReH 320 · ReL 280 MPa, 뤼더스 평탄부 0.0016~0.02, 뒤는 경화."""
+    strain = np.linspace(0.0, 0.10, 1001)
+    stress = np.empty_like(strain)
+    for at, e in enumerate(strain):
+        if e <= 0.0016:
+            stress[at] = E_TRUE * e  # 0.0016 → 320 MPa
+        elif e <= 0.0026:
+            stress[at] = 320e6 - (e - 0.0016) / 0.001 * 40e6  # 뚝 떨어져 280
+        elif e <= 0.02:
+            stress[at] = 280e6 + 2e6 * np.sin((e - 0.0026) * 3000)  # 평탄부 잔물결 ±2 MPa
+        else:
+            stress[at] = 280e6 + 1.5e9 * (e - 0.02)  # 다시 경화, 0.0467 에서 320 을 넘는다
+    return Frame(
+        {"strain_engineering": strain, "stress_engineering": stress},
+        {"strain_engineering": "1", "stress_engineering": "Pa"},
+    )
+
+
+def polymer_neck() -> Frame:
+    """수지 — 항복 60 MPa(변형률 0.05) 뒤 넥으로 공칭 응력이 45 까지 내려가 평탄."""
+    strain = np.linspace(0.0, 0.5, 251)
+    stress = np.where(
+        strain <= 0.05,
+        60e6 * np.sin(strain / 0.05 * np.pi / 2),
+        45e6 + 15e6 * np.exp(-(strain - 0.05) / 0.03),
+    )
+    return Frame(
+        {"strain_engineering": strain, "stress_engineering": stress},
+        {"strain_engineering": "1", "stress_engineering": "Pa"},
+    )
+
+
+def noisy() -> Frame:
+    """경화 곡선에 ±1.5 MPa 잡음 — 국소적으로 내려가지만 연화는 아니다."""
+    base = synthetic()
+    rng = np.random.default_rng(7)
+    stress = base.columns["stress_engineering"] + rng.normal(0, 1.5e6, base.length())
+    return Frame({**base.columns, "stress_engineering": stress}, dict(base.units))
+
+
+def _run(frame: Frame, options: dict[str, object]) -> processing.PipelineResult:
+    return processing.apply([Step("tensile.yield_drop", dict(options))], frame)
+
+
+class Test항복_강하_정리:
+    """**단조 표를 받는 솔버를 위해 내려가는 구간을 정리하되, 무엇을 버렸는지 남긴다.**"""
+
+    def test_연강은_ReH_ReL_뤼더스를_재고_하항복점부터_평탄하게_한다(self) -> None:
+        result = _run(mild_steel(), {"method": "lower_yield"})
+        assert scalar(result, "upper_yield_strength") == pytest.approx(320e6, rel=1e-3)
+        assert scalar(result, "lower_yield_strength") == pytest.approx(278e6, rel=1e-2)
+        # 평탄부: ReL 아래로 떨어진 곳(≈0.0014)부터 봉우리를 다시 넘는 곳(≈0.0467)까지.
+        assert scalar(result, "luders_strain") == pytest.approx(0.045, abs=0.003)
+        fixed = result.frame.columns["stress_engineering"]
+        assert np.all(np.diff(fixed) >= 0), "단조 비감소여야 한다"
+        # 상항복 봉우리는 사라지고, 평탄부는 ReL 이다.
+        strain = result.frame.columns["strain_engineering"]
+        assert fixed[np.searchsorted(strain, 0.0016)] == pytest.approx(278e6, rel=1e-2)
+        assert fixed[np.searchsorted(strain, 0.01)] == pytest.approx(278e6, rel=1e-2)
+        # 경화 구간은 손대지 않았다.
+        assert fixed[-1] == pytest.approx(280e6 + 1.5e9 * 0.08, rel=1e-6)
+        assert scalar(result, "yield_drop_points") > 0
+        assert any("깎고" in note for note in result.notes)
+
+    def test_포락선은_내려가는_점을_직전_최댓값으로_덮는다(self) -> None:
+        result = _run(mild_steel(), {"method": "envelope"})
+        fixed = result.frame.columns["stress_engineering"]
+        assert np.all(np.diff(fixed) >= 0)
+        # 봉우리(320)를 그대로 끌고 간다 — 하항복점부터와 다른 점이다.
+        strain = result.frame.columns["strain_engineering"]
+        assert fixed[np.searchsorted(strain, 0.01)] == pytest.approx(320e6, rel=1e-3)
+
+    def test_단조_회귀는_잡음을_원곡선_가까이_편다(self) -> None:
+        frame = noisy()
+        result = _run(frame, {"method": "isotonic", "threshold": 0.0})
+        fixed = result.frame.columns["stress_engineering"]
+        assert np.all(np.diff(fixed) >= 0)
+        truth = synthetic().columns["stress_engineering"]
+        envelope = np.maximum.accumulate(frame.columns["stress_engineering"])
+        # 포락선보다 진짜 곡선에 가깝다 — 포락선은 봉우리 쪽으로 치우친다.
+        assert np.mean(np.abs(fixed - truth)) < np.mean(np.abs(envelope - truth))
+
+    def test_자르기는_봉우리_뒤를_버리고_그_수를_적는다(self) -> None:
+        frame = polymer_neck()
+        result = _run(frame, {"method": "cut"})
+        strain = result.frame.columns["strain_engineering"]
+        assert strain[-1] == pytest.approx(0.05, abs=0.003)
+        assert result.frame.length() < frame.length()
+        assert scalar(result, "yield_drop_points") == frame.length() - result.frame.length()
+        assert any("잘랐습니다" in note for note in result.notes)
+        # 봉우리를 다시 넘지 않는 곡선 — 그 사실을 말한다.
+        assert any("다시 넘지 않습니다" in note for note in result.notes)
+
+    def test_그대로_두기는_재기만_한다(self) -> None:
+        frame = polymer_neck()
+        result = _run(frame, {"method": "keep"})
+        assert np.array_equal(
+            result.frame.columns["stress_engineering"], frame.columns["stress_engineering"]
+        )
+        assert scalar(result, "yield_drop_max") == pytest.approx(15e6, rel=0.05)
+        assert scalar(result, "yield_drop_points") == 0
+        assert scalar(result, "upper_yield_strength") == pytest.approx(60e6, rel=1e-3)
+
+    def test_최소_기울기를_주면_엄격히_단조_증가다(self) -> None:
+        result = _run(mild_steel(), {"method": "lower_yield", "min_slope": 1e7})
+        fixed = result.frame.columns["stress_engineering"]
+        strain = result.frame.columns["strain_engineering"]
+        slopes = np.diff(fixed) / np.diff(strain)
+        assert np.all(slopes >= 1e7 * (1 - 1e-9))
+        assert any("엄격히 단조 증가" in note for note in result.notes)
+
+    def test_문턱_미만의_하강은_손대지_않는다(self) -> None:
+        # 잡음까지 정리하면 모든 곡선이 조금씩 손대진 채 저장된다 — 「측정 그대로」 가 아니다.
+        frame = noisy()
+        result = _run(frame, {"method": "envelope", "threshold": 0.05})
+        assert np.array_equal(
+            result.frame.columns["stress_engineering"], frame.columns["stress_engineering"]
+        )
+        assert scalar(result, "yield_drop_points") == 0
+        assert any("연화로 보지 않습니다" in note for note in result.notes)
+
+    def test_이상적_곡선에는_아무_일도_없다(self) -> None:
+        result = _run(synthetic(), {"method": "lower_yield"})
+        assert scalar(result, "yield_drop_max") == 0
+        assert scalar(result, "yield_drop_points") == 0
+        assert not any(item.key == "upper_yield_strength" for item in result.scalars)
+
+    def test_하항복점을_소성_시작으로_넘길_수_있다(self) -> None:
+        # 규격(ISO 6892-1)의 값이자, `tensile.true_plastic` 의 항복강도 자리에 `@` 로 들어간다.
+        result = processing.apply(
+            [
+                Step("tensile.yield_drop", {"method": "lower_yield"}),
+                Step(
+                    "tensile.elastic_modulus", {"method": "manual", "manual_modulus": E_TRUE}
+                ),
+                Step(
+                    "tensile.true_plastic",
+                    {
+                        "youngs_modulus": "@youngs_modulus",
+                        "proof_stress": "@lower_yield_strength",
+                    },
+                ),
+            ],
+            mild_steel(),
+        )
+        plastic = result.frame.columns["stress_true"][
+            result.frame.columns["strain_true_plastic"] > 0
+        ]
+        assert plastic[0] == pytest.approx(278e6, rel=0.02)
