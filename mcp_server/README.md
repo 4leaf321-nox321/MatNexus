@@ -68,10 +68,13 @@ claude mcp add --transport http matnexus http://127.0.0.1:8012/mcp `
 
 `<!--@ 이름 -->` 마커로 절을 나눈다. `get_guide("units")` 처럼 한 절만 받을 수 있다.
 
-## 5. 지금 있는 것 (도구 51개)
+## 5. 지금 있는 것 (도구 62개)
 
-**전부 한 번에 불러 보려면 `probe.py` 를 돌린다** — 진짜 MCP 클라이언트로 51번
-왕복한다(아래 「실측으로 잡은 것」 참조). 화면이나 curl 로는 안 보이는 층이 있다.
+**전부 한 번에 불러 보려면 `probe.py` 를 돌린다** — 진짜 MCP 클라이언트로 한 바퀴
+돈다(아래 「실측으로 잡은 것」 참조). 화면이나 curl 로는 안 보이는 층이 있다.
+프로브가 **부르지 못한 도구**를 끝에 적어 준다 — 새 도구를 더했으면 그 목록에서
+빠질 때까지 프로브에 자리를 만든다(도구를 더해 놓고 한 번도 안 불러 본 자리가
+실제로 생겼다: 2026-09-18 의 `create_commission`).
 
 **쓰는 도구는 전부 `dry_run=True` 가 기본이다.** 미리보기를 사람에게 보이고,
 사람이 「그대로」 라고 말한 뒤에 `dry_run=False` 로 다시 부른다. 아래 표에서
@@ -167,6 +170,16 @@ claude mcp add --transport http matnexus http://127.0.0.1:8012/mcp `
 
     get_statistics(material_id, ...)   반복 시편의 평균·SD·CV·이상치 (묶음=시험법+방향)
     compare_material_statistics(ids)   여러 재료를 한 표로
+
+### 측정 의뢰 — 「이 물성이 없다」 의 끝
+
+    list_commissions(scope?, status?)  누가 무엇을 왜 재 달라고 했고 어디까지 됐나
+    get_commission(commission_id)      항목·붙은 시험·진행률·이력
+    ★ create_commission(...)           **작성 중으로만** 짓는다 (미리보기 기본)
+
+`measurement_gaps` · `property_coverage` 가 「없다」 고 답했을 때 거기서 멈추지 않는
+길이다. **내는 것은 사람이 화면에서 한다** — 받는 부서의 일정을 잡아 두는 일이라
+AI 가 결정할 것이 아니다. 상태를 옮기는 도구도 없다.
 
 ### 이어짐 — 온톨로지
 

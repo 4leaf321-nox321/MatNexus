@@ -147,7 +147,14 @@ async def sweep(session: ClientSession) -> None:
     )
 
     if material_id:
-        await call(session, "get_material", {"material_id": material_id})
+        detail = await call(session, "get_material", {"material_id": material_id})
+        # **이름으로도 받는지** 본다(2026-09-18). uuid 만 받던 시절에는 AI 가 이름을
+        # 넣고 거절당해 검색으로 한 번 더 돌았다 — 기준선 3차가 두 번 걸렸다.
+        name = (detail or {}).get("name") if isinstance(detail, dict) else None
+        if name:
+            await call(session, "get_material", {"material_id": name})
+        await call(session, "property_coverage", {"material_id": material_id})
+        await call(session, "deck_readiness", {"material_id": material_id})
         await call(session, "get_parameter_sets", {"material_id": material_id})
         await call(session, "get_statistics", {"material_id": material_id})
         await call(session, "compare_material_statistics", {"material_ids": [material_id]})
@@ -289,6 +296,27 @@ async def sweep(session: ClientSession) -> None:
                     "to_id": run_id,
                 },
             )
+    # ── 측정 의뢰 — 짓는 것까지 **미리보기로** ───────────────────────────────
+    commissions = await call(session, "list_commissions", {"limit": 3})
+    listed = commissions.get("items") if isinstance(commissions, dict) else None
+    commission = listed[0] if isinstance(listed, list) and listed else None
+    if commission:
+        await call(session, "get_commission", {"commission_id": commission["id"]})
+        lab = (commission.get("lab_workspace") or {}).get("slug")
+        if lab:
+            await call(
+                session,
+                "create_commission",
+                {
+                    "title": "점검용 의뢰",
+                    "purpose": "MCP 점검 — 저장하지 않는다",
+                    "lab": lab,
+                    "material_hint": "점검용 새 재료(아직 등록 전)",
+                    "items": [{"property_hint": "고온 탄성계수", "count": 1}],
+                    "dry_run": True,
+                },
+            )
+
     sections = await call(
         session, "search_all", {"q": "단위", "kind": "guide_section", "limit": 2}
     )
