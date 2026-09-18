@@ -2997,6 +2997,118 @@ async def get_commission(ctx: Context, commission_id: str) -> dict[str, Any]:
     return await _get(ctx, f"/commissions/{commission_id}")
 
 
+async def _resolve_lab(ctx: Context, lab: str) -> dict[str, Any]:
+    """받는 부서 — **이름을 줘도 받아 준다.** 못 찾거나 여럿이면 후보를 준다."""
+    found = await _get(ctx, "/workspaces/options")
+    if isinstance(found, dict) and "error" in found:
+        return found
+    rows = found if isinstance(found, list) else []
+    needle = str(lab).strip().lower()
+    exact = [one for one in rows if str(one.get("slug", "")).lower() == needle]
+    if exact:
+        return {"slug": exact[0]["slug"], "name": exact[0]["name"], "path": exact[0]["path"]}
+    near = [
+        one
+        for one in rows
+        if needle in str(one.get("name", "")).lower()
+        or needle in str(one.get("path", "")).lower()
+    ]
+    if len(near) == 1:
+        return {"slug": near[0]["slug"], "name": near[0]["name"], "path": near[0]["path"]}
+    return {
+        "error": f"받는 부서를 못 정했습니다: {lab}",
+        "candidates": [
+            {"slug": one["slug"], "name": one["name"], "path": one["path"]}
+            for one in (near or rows)[:15]
+        ],
+        "hint": "slug 로 다시 부르세요 — 같은 이름의 팀이 본부마다 있을 수 있습니다.",
+    }
+
+
+@mcp.tool()
+async def create_commission(
+    ctx: Context,
+    title: str,
+    purpose: str,
+    lab: str,
+    items: list[dict[str, Any]],
+    sample_id: str | None = None,
+    material_hint: str | None = None,
+    sample_plan: str | None = None,
+    due_on: str | None = None,
+    priority: str = "normal",
+    dry_run: bool = True,
+) -> dict[str, Any]:
+    """측정 의뢰를 **작성 중으로** 만든다 — 「이 물성이 없으니 재 달라」 의 끝.
+
+    `measurement_gaps` · `property_coverage` 가 「없다」 고 답했을 때 거기서 멈추지
+    말고 여기까지 온다. 없는 값을 채우는 길은 문헌을 뒤지는 것 아니면 **재는 것**이다.
+
+    ## 내지는 않는다
+
+    **작성 중(draft)으로만 만든다.** 접수 대기로 내는 것은 사람이 화면에서 한다 —
+    의뢰는 두 부서 사이의 약속이고, 받는 쪽 일정을 잡아 두는 일이라 AI 가 대신
+    결정할 것이 아니다. 만든 뒤 사람에게 **링크(`/commissions/<id>`)를 주고 확인을
+    부탁해라.** 상태를 옮기는 도구는 없다(`get_commission` 참고).
+
+    **기본이 미리보기(dry_run=True)다.** 무엇이 적힐지 사람에게 보이고 나서 만든다.
+
+    ## 무엇을 재는가
+
+        sample_id       등록된 시료. `search_materials` → `get_material` 의 시료에서.
+        material_hint   아직 등록 안 된 새 재료면 이름·등급·업체·두께를 글로.
+
+    둘 중 하나는 있어야 한다.
+
+    ## 항목(`items`)
+
+    한 항목이 「이 시험 종류를 이 조건으로 n 개」 다. 칸:
+
+        test_type_key   tensile · dma … (`list_processing_steps` 의 applies_to 참고)
+        property_hint   무슨 시험으로 잴지 모르면 **물성 이름**을 글로. 받는 쪽이 정한다
+        conditions      온도·속도 같은 조건. 단위는 `condition_units` 에 따로
+        condition_units {"temperature": "degC"} — **SI 로 손수 바꾸지 마라**, 서버가 한다
+        orientations    ["MD", "TD"] · 비우면 방향 무관
+        count           시편 수(기본 1)
+        deliverable     받을 것 — 카드 블록 키(hardening …) 또는 "curves"
+        note            그 항목에만 붙는 말
+
+    둘(`test_type_key` · `property_hint`) 중 하나는 있어야 한다. **모르는 것을 지어
+    적지 마라** — 「무엇을 재는지」 를 글로 적는 길이 따로 있는 이유가 그것이다.
+    """
+    resolved = await _resolve_lab(ctx, lab)
+    if "error" in resolved:
+        return resolved
+    body: dict[str, Any] = {
+        "title": title,
+        "purpose": purpose,
+        "lab_workspace_slug": resolved["slug"],
+        "sample_id": sample_id,
+        "material_hint": material_hint,
+        "sample_plan": sample_plan,
+        "due_on": due_on,
+        "priority": priority,
+        "items": items,
+        # **AI 는 내지 않는다.** 위 「내지는 않는다」 를 코드로 못 박아 둔다.
+        "submit": False,
+    }
+    if dry_run:
+        return {
+            "dry_run": True,
+            "will_create": {**body, "lab": resolved},
+            "note": "이대로 만들려면 dry_run=False 로 다시 부르세요. 만든 뒤에도 "
+            "**작성 중**이라 받는 부서에는 안 보입니다 — 사람이 화면에서 냅니다.",
+        }
+    made = await _send(ctx, "POST", "/commissions", body)
+    if isinstance(made, dict) and "error" in made:
+        return made
+    return {
+        **made,
+        "note": f"작성 중으로 만들었습니다. 사람에게 /commissions/{made.get('id')} 를 "
+        f"보여 주고, 확인한 뒤 화면에서 「의뢰」 를 누르라고 전하세요.",
+    }
+
+
 @mcp.tool()
 async def list_recipes(ctx: Context, test_type: str | None = None) -> dict[str, Any]:
     """저장된 처리 레시피들 — **사람이 이미 합의해 둔 단계 묶음.**

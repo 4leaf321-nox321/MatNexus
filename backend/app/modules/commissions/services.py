@@ -7,7 +7,8 @@
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
+from collections import defaultdict
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import Select, and_, func, select
@@ -483,6 +484,118 @@ def notify_changed(
             "to_user_id": str(to_user),
         },
     )
+
+
+#: 기한을 며칠 앞두고 말하는가. 하루면 이미 늦고(시료를 받아 시험을 거는 데 하루로는
+#: 모자란다), 일주일이면 매일 오는 잔소리가 되어 사람이 알림 자체를 끈다.
+DUE_SOON_DAYS = 3
+
+#: 기한이 뜻을 잃은 상태. 아직 안 낸 것(`draft`)·끝난 것·반려된 것에 기한을 말하면
+#: **알림이 틀린 말을 하는 것**이고, 한 번 그러면 다음 알림도 안 읽힌다.
+DUE_QUIET_STATUSES = frozenset({"draft", "delivered", "closed", "rejected"})
+
+
+def due_soon(db: Session, *, today: date) -> dict[uuid.UUID, list[Commission]]:
+    """기한이 다가왔거나 지난 의뢰 → **말할 사람별로.**
+
+    받을 사람은 **받는 쪽**이다. 담당자가 정해졌으면 그 사람, 아직이면 받는 부서
+    관리자 전원 — 담당자가 없다는 것은 아무도 안 맡았다는 뜻이고, 그때야말로 기한이
+    조용히 지나간다.
+
+    낸 사람에게는 안 보낸다. 낸 사람이 할 수 있는 일이 없기 때문이다 — 재촉은
+    알림이 아니라 말로 하는 것이고, 그 화면에는 이미 기한이 보인다.
+    """
+    rows = list(
+        db.scalars(
+            select(Commission).where(
+                Commission.due_on.is_not(None),
+                Commission.due_on <= today + timedelta(days=DUE_SOON_DAYS),
+                Commission.status.not_in(tuple(DUE_QUIET_STATUSES)),
+            )
+        )
+    )
+    if not rows:
+        return {}
+
+    # 담당자 없는 건의 받는 부서 관리자 — **한 번에 읽는다**(건마다 물으면 N+1).
+    unassigned = {one.lab_workspace_id for one in rows if one.assignee_id is None}
+    managers: dict[uuid.UUID, list[uuid.UUID]] = defaultdict(list)
+    if unassigned:
+        found = db.execute(
+            select(WorkspaceMember.workspace_id, WorkspaceMember.user_id).where(
+                WorkspaceMember.workspace_id.in_(unassigned),
+                WorkspaceMember.role == "manager",
+            )
+        ).all()
+        for workspace_id, user_id in found:
+            managers[workspace_id].append(user_id)
+
+    made: dict[uuid.UUID, list[Commission]] = defaultdict(list)
+    for one in rows:
+        targets = (
+            [one.assignee_id]
+            if one.assignee_id is not None
+            else managers.get(one.lab_workspace_id, [])
+        )
+        for user_id in targets:
+            made[user_id].append(one)
+    return {user_id: sorted(items, key=_due_key) for user_id, items in made.items()}
+
+
+def _due_key(item: Commission) -> tuple[date, int]:
+    """급한 것부터 — 같은 날이면 번호 순."""
+    assert item.due_on is not None
+    return (item.due_on, item.seq)
+
+
+def due_phrase(item: Commission, *, today: date) -> str:
+    """「내일까지」·「3일 지났습니다」 — **날짜를 그대로 보이지 않는다.**
+
+    `2026-09-20` 을 읽고 오늘이 며칠인지 세는 것은 읽는 사람의 일이 아니다.
+    """
+    assert item.due_on is not None
+    days = (item.due_on - today).days
+    if days < 0:
+        return f"기한 {-days}일 지남"
+    return {0: "오늘까지", 1: "내일까지"}.get(days, f"{days}일 남음")
+
+
+def notify_due_soon(db: Session, *, today: date | None = None) -> int:
+    """하루 한 번. 사람마다 **한 통**으로 묶어 보낸다. 보낸 사람 수를 돌려준다.
+
+    건마다 보내면 기한이 몰린 날 알림이 다섯 통 오고, 그 다음부터 이 알림은 안
+    읽힌다. 키에 날짜가 들어가므로 같은 날 두 번 돌아도 한 통이다.
+
+    **커밋은 부르는 쪽이 한다** — 다른 알림과 같은 규칙이다.
+    """
+    day = today or datetime.now(UTC).date()
+    found = due_soon(db, today=day)
+    for user_id, items in found.items():
+        first = items[0]
+        if len(items) == 1:
+            title = f"측정 의뢰 #{first.seq} {due_phrase(first, today=day)}"
+            body = first.title
+            link = f"/commissions/{first.id}"
+        else:
+            title = f"기한이 다가온 측정 의뢰 {len(items)}건"
+            body = " · ".join(
+                f"#{one.seq} {one.title} ({due_phrase(one, today=day)})" for one in items[:5]
+            )
+            link = "/commissions?scope=received"
+        queue.enqueue(
+            db,
+            kind=kinds.NOTIFY_DELIVER,
+            payload={
+                "event_kind": "commission.due_soon",
+                # 하루 한 사람당 하나. 워커가 두 번 돌아도, 하루에 열 번 켜져도.
+                "key": f"commission:due:{user_id}:{day.isoformat()}",
+                "title": title,
+                "body": body,
+                "link": link,
+                "to_user_id": str(user_id),
+            },
+        )
+    return len(found)
 
 
 # --- 이름 -------------------------------------------------------------------------------

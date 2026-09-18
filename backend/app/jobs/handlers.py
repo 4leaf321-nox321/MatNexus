@@ -46,6 +46,7 @@ def load_all() -> None:
     워커와 테스트가 같은 함수를 부르게 해서, "테스트에서는 되는데 워커에서는
     핸들러가 없다"는 어긋남이 생기지 않게 한다.
     """
+    from app.modules.commissions import jobs as _commission_jobs  # noqa: F401
     from app.modules.notifications import jobs as _notification_jobs  # noqa: F401
     from app.modules.pipelines import jobs as _pipeline_jobs  # noqa: F401
     from app.modules.search import jobs as _search_jobs  # noqa: F401

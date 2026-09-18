@@ -50,3 +50,10 @@ PIPELINES_PARSE_INBOX = "pipelines.parse_inbox"
 #: 매번 치르게 된다. 주기로도 돈다 — 절이 바뀌었는데 색인이 옛 글이면 검색이
 #: 조용히 옛 답을 준다.
 SEARCH_REINDEX = "search.reindex"
+
+#: 기한이 다가온 측정 의뢰 — payload 없음(하루 한 번)
+#:
+#: 의뢰에 `due_on` 을 받아 두고 **아무도 안 봤다.** 기한은 지나고 나서야 문제가
+#: 되는 종류의 값이라, 화면에 적어 두는 것만으로는 아무 일도 안 일어난다 —
+#: 목록을 매일 여는 사람이 없기 때문이다. 하루 한 번 훑어 **맡은 사람에게** 말한다.
+COMMISSIONS_DUE_SOON = "commissions.due_soon"

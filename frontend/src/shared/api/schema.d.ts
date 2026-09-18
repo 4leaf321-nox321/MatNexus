@@ -8061,6 +8061,7 @@ export interface components {
         };
         /** CandidateOut */
         CandidateOut: {
+            commission?: components["schemas"]["CommissionHintOut"] | null;
             /** Material Name */
             material_name: string;
             /** Reason */
@@ -8909,6 +8910,30 @@ export interface components {
             note?: string | null;
             /** Status */
             status?: string | null;
+        };
+        /**
+         * CommissionHintOut
+         * @description 「이 시편은 아마 이 의뢰의 것」 — **읽을 때 센다**(저장하지 않는다).
+         *
+         *     수집함에 들어온 시각의 의뢰 상태를 박아 두면, 그 사이에 접수·완료된 건을
+         *     옛날 말로 보인다. 파일은 며칠씩 수집함에 서 있을 수 있다.
+         */
+        CommissionHintOut: {
+            /**
+             * Commission Id
+             * Format: uuid
+             */
+            commission_id: string;
+            /** Item Id */
+            item_id: string | null;
+            /** Item Position */
+            item_position: number | null;
+            /** Seq */
+            seq: number;
+            /** Status Label */
+            status_label: string;
+            /** Title */
+            title: string;
         };
         /**
          * CommissionItemIn

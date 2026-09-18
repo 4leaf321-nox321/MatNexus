@@ -11,7 +11,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Any
 
 import pytest
@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 
 from app.modules.accounts.models import User
 from app.modules.auth import security
+from app.modules.commissions import services as commission_services
 from app.modules.tests.definitions import ensure_builtin_test_types
 from app.modules.tests.models import TestRun
 from app.modules.workspaces.models import Workspace, WorkspaceMember
@@ -604,6 +605,116 @@ class Test알림:
         assert any("말을 보탰습니다" in one for one in self._inbox(client, lee))
         detail = client.get("/api/notifications", headers=lee).json()[0]
         assert detail["link"] == f"/commissions/{made['id']}"
+
+
+class Test기한:
+    """**기한은 지나고 나서야 문제가 되는 값이다.**
+
+    `due_on` 을 받아 두고 아무도 안 읽었다 — 화면에 적어 두는 것만으로는 아무 일도
+    안 일어난다(의뢰 목록을 매일 여는 사람이 없다). 하루 한 번 워커가 훑는다.
+
+    무는 것 넷:
+
+        받는 쪽에게 간다        담당자, 아직이면 받는 부서 관리자. 낸 사람은 못 할 일이다
+        한 통으로 묶는다        건마다 보내면 몰린 날 다섯 통이 오고 그 뒤로 안 읽힌다
+        하루 한 번이다          같은 날 두 번 돌아도 한 통
+        끝난 것은 안 센다       완료·반려된 건에 기한을 말하면 알림이 틀린 말을 한다
+    """
+
+    def _drain(self, db: Session) -> None:
+        from app.jobs import handlers, worker
+
+        handlers.load_all()
+        while worker.run_once(session=db):
+            pass
+
+    def _rules(self, db: Session) -> None:
+        from app.jobs import queue
+
+        for user in db.query(User).all():
+            queue.enqueue(
+                db, kind="notifications.ensure_rules", payload={"user_id": str(user.id)}
+            )
+        db.commit()
+        self._drain(db)
+
+    def _inbox(self, client: TestClient, headers: dict[str, str]) -> list[dict[str, Any]]:
+        """기한 알림만. 같은 수신함에 「새 측정 의뢰」 도 들어 있다."""
+        got: list[dict[str, Any]] = client.get("/api/notifications", headers=headers).json()
+        return [one for one in got if one["event_kind"] == "commission.due_soon"]
+
+    def _run(self, db: Session, day: date) -> int:
+        sent = commission_services.notify_due_soon(db, today=day)
+        db.commit()
+        self._drain(db)
+        return sent
+
+    def test_담당자가_없으면_받는_부서_관리자에게_간다(
+        self, client: TestClient, db: Session, world: dict[str, Any]
+    ) -> None:
+        self._rules(db)
+        kim, lee, park = world["kim"], world["lee"], world["park"]
+        _create(client, kim, world["sample"]["id"], title="기한 임박", due_on="2026-10-15")
+
+        assert self._run(db, date(2026, 10, 13)) == 1
+        titles = [one["title"] for one in self._inbox(client, lee)]
+        assert any("2일 남음" in one for one in titles), titles
+        # 낸 사람과 받는 부서 **멤버**에게는 안 간다 — 할 수 있는 일이 다르다.
+        assert not [one for one in self._inbox(client, kim) if "남음" in one["title"]]
+        assert self._inbox(client, park) == []
+
+    def test_아직_멀면_아무_말도_안_한다(
+        self, client: TestClient, db: Session, world: dict[str, Any]
+    ) -> None:
+        self._rules(db)
+        _create(
+            client, world["kim"], world["sample"]["id"], title="아직 멀다", due_on="2026-10-15"
+        )
+        assert self._run(db, date(2026, 10, 1)) == 0
+        assert self._inbox(client, world["lee"]) == []
+
+    def test_지난_기한도_말한다(
+        self, client: TestClient, db: Session, world: dict[str, Any]
+    ) -> None:
+        """**지난 것이야말로 말해야 한다.** 임박만 보면 하루 놓친 건이 영영 조용하다."""
+        self._rules(db)
+        _create(client, world["kim"], world["sample"]["id"], due_on="2026-10-15")
+        assert self._run(db, date(2026, 10, 20)) == 1
+        titles = [one["title"] for one in self._inbox(client, world["lee"])]
+        assert any("기한 5일 지남" in one for one in titles), titles
+
+    def test_여러_건은_한_통으로_묶는다(
+        self, client: TestClient, db: Session, world: dict[str, Any]
+    ) -> None:
+        self._rules(db)
+        _create(client, world["kim"], world["sample"]["id"], title="첫째", due_on="2026-10-15")
+        _create(client, world["kim"], world["sample"]["id"], title="둘째", due_on="2026-10-16")
+
+        assert self._run(db, date(2026, 10, 14)) == 1
+        mine = self._inbox(client, world["lee"])
+        assert len(mine) == 1, mine
+        assert "2건" in mine[0]["title"]
+        assert "첫째" in (mine[0]["body"] or "") and "둘째" in (mine[0]["body"] or "")
+        # 여럿이면 목록으로 보낸다 — 한 건만 열어 봐야 나머지를 못 본다.
+        assert mine[0]["link"] == "/commissions?scope=received"
+
+    def test_같은_날_두_번_돌아도_한_통이다(
+        self, client: TestClient, db: Session, world: dict[str, Any]
+    ) -> None:
+        """**워커는 자주 껐다 켜진다**(D9). 켤 때마다 알림이 오면 그것부터 끈다."""
+        self._rules(db)
+        _create(client, world["kim"], world["sample"]["id"], due_on="2026-10-15")
+        self._run(db, date(2026, 10, 14))
+        self._run(db, date(2026, 10, 14))
+        assert len(self._inbox(client, world["lee"])) == 1
+
+    def test_끝난_의뢰는_안_센다(
+        self, client: TestClient, db: Session, world: dict[str, Any]
+    ) -> None:
+        self._rules(db)
+        made = _create(client, world["kim"], world["sample"]["id"], due_on="2026-10-15")
+        _move(client, world["lee"], made["id"], "rejected", "시료 없음")
+        assert self._run(db, date(2026, 10, 14)) == 0
 
 
 class Test새재료와종류미정:

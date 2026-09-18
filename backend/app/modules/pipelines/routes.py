@@ -40,6 +40,7 @@ from app.modules.pipelines.schemas import (
     BulkApproveIn,
     BulkApproveOut,
     CandidateOut,
+    CommissionHintOut,
     ConnectorCreate,
     ConnectorOut,
     ConnectorUpdate,
@@ -55,7 +56,7 @@ from app.modules.pipelines.schemas import (
 )
 from app.modules.tests.models import TestType
 from app.modules.workspaces.models import Workspace, WorkspaceMember
-from app.shared import permissions
+from app.shared import commission_hints, permissions
 from app.shared.auth import current_user
 from app.shared.errors import AppError, Forbidden, NotFound
 from app.shared.pagination import Page, clamp_limit
@@ -402,13 +403,40 @@ def _get_item(db: Session, user: User, item_id: uuid.UUID) -> PipelineInboxItem:
     return item
 
 
+def _hint_out(hint: commission_hints.Hint | None) -> CommissionHintOut | None:
+    if hint is None:
+        return None
+    return CommissionHintOut(
+        commission_id=hint.commission_id,
+        seq=hint.seq,
+        title=hint.title,
+        status_label=hint.status_label,
+        item_id=hint.item_id,
+        item_position=hint.item_position,
+    )
+
+
 def _detail(db: Session, item: PipelineInboxItem) -> InboxItemDetail:
     fields = _item_fields(item, services.context(db, [item]))
+    # **누가 재 달라고 한 것인지**를 여기서 붙인다(2026-09-18). 안 붙이면 사람은
+    # 시편에 붙인 뒤 의뢰 화면으로 건너가 어느 건인지 스스로 떠올려야 하고, 그
+    # 왕복을 안 하면 의뢰는 「시험 중」 인 채로 서 있는다.
+    hints = commission_hints.for_specimens(
+        db,
+        [uuid.UUID(one["specimen_id"]) for one in item.candidates],
+        test_type_id=item.test_type_id,
+    )
     return InboxItemDetail(
         **fields,
         client_path=item.client_path,
         mtime=item.mtime,
-        candidates=[CandidateOut(**c) for c in item.candidates],
+        candidates=[
+            CandidateOut(
+                **one,
+                commission=_hint_out(hints.get(uuid.UUID(one["specimen_id"]))),
+            )
+            for one in item.candidates
+        ],
         summary=item.summary,
         discard_reason=item.discard_reason,
     )

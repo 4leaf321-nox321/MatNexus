@@ -195,6 +195,36 @@ describe('수집함', () => {
     await waitFor(() => expect(approve).toHaveBeenCalledWith('i1'))
   })
 
+  it('이 시편이 어느 의뢰의 것인지 말해 준다', async () => {
+    // 전에는 시편에 붙이고 나서 의뢰 화면으로 건너가 어느 건인지 스스로 떠올려야
+    // 했다. **잇지는 않는다** — 잘못 이으면 재지도 않은 것을 잰 것으로 적는다.
+    const suggested = { ...WAITING, status: 'suggested', candidate_count: 1 }
+    inbox.mockResolvedValue({ items: [suggested], total: 1, limit: 100, offset: 0 })
+    item.mockResolvedValue({
+      ...DETAIL,
+      status: 'suggested',
+      candidates: [
+        {
+          ...DETAIL.candidates[0],
+          commission: {
+            commission_id: 'c9',
+            seq: 12,
+            title: 'SECC 인장 물성',
+            status_label: '접수',
+            item_id: 'ci1',
+            item_position: 0,
+          },
+        },
+      ],
+    })
+    const user = userEvent.setup()
+    mount()
+    await user.click(await screen.findByText('Example.tra'))
+    const link = await screen.findByRole('link', { name: /의뢰 #12 SECC 인장 물성/ })
+    expect(link).toHaveAttribute('href', '/commissions/c9')
+    expect(screen.getByText(/1번 항목/)).toBeInTheDocument()
+  })
+
   it('여럿을 골라 한꺼번에 승인한다', async () => {
     const suggested = { ...WAITING, status: 'suggested', candidate_count: 1 }
     inbox.mockResolvedValue({ items: [suggested], total: 1, limit: 100, offset: 0 })

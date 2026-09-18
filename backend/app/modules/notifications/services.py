@@ -119,7 +119,14 @@ def wanted_kinds(db: Session, user: User) -> list[str]:
     """이 사람이 받을 수 있는 사건 — 역할이 정한다. 설정 화면도 이 목록만 보인다."""
     # VOC: 내가 낸 건이 움직이면 누구나 받고, 새 건은 관리자가 받는다 — 게시판을
     # 들여다보지 않으면 「해결됐다」 를 아무도 모른다(2026-09-12).
-    wanted = ["account.decided", "voc.changed", "commission.changed"]
+    # 기한 알림은 **맡은 사람**에게 간다. 담당자는 받는 부서 멤버 누구나 될 수 있어
+    # 관리자로 좁히지 않는다 — 좁히면 맡은 사람에게 규칙이 없어 조용히 안 간다.
+    wanted = [
+        "account.decided",
+        "voc.changed",
+        "commission.changed",
+        "commission.due_soon",
+    ]
     if user.is_system_admin:
         wanted.append("account.signup")
         wanted.append("voc.registered")

@@ -97,6 +97,21 @@ class Hints(BaseModel):
         return out
 
 
+class CommissionHintOut(BaseModel):
+    """「이 시편은 아마 이 의뢰의 것」 — **읽을 때 센다**(저장하지 않는다).
+
+    수집함에 들어온 시각의 의뢰 상태를 박아 두면, 그 사이에 접수·완료된 건을
+    옛날 말로 보인다. 파일은 며칠씩 수집함에 서 있을 수 있다.
+    """
+
+    commission_id: uuid.UUID
+    seq: int
+    title: str
+    status_label: str
+    item_id: uuid.UUID | None
+    item_position: int | None
+
+
 class CandidateOut(BaseModel):
     specimen_id: uuid.UUID
     specimen_name: str
@@ -104,6 +119,9 @@ class CandidateOut(BaseModel):
     sample_name: str
     reason: str
     """어느 힌트·identity 로 맞았나. 사람이 고를 때 근거가 된다."""
+    commission: CommissionHintOut | None = None
+    """이 시편으로 답할 수 있는 의뢰. **잇지는 않는다** — 화면이 말해 줄 뿐이고,
+    잇는 것은 의뢰 화면의 「시험 연결」 이다(거기가 이력을 남기는 자리다)."""
 
 
 class ResolveIn(BaseModel):

@@ -2735,6 +2735,16 @@
       },
       "CandidateOut": {
         "properties": {
+          "commission": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CommissionHintOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "material_name": {
             "title": "Material Name",
             "type": "string"
@@ -5191,6 +5201,61 @@
           }
         },
         "title": "CommissionEventRequest",
+        "type": "object"
+      },
+      "CommissionHintOut": {
+        "description": "「이 시편은 아마 이 의뢰의 것」 — **읽을 때 센다**(저장하지 않는다).\n\n수집함에 들어온 시각의 의뢰 상태를 박아 두면, 그 사이에 접수·완료된 건을\n옛날 말로 보인다. 파일은 며칠씩 수집함에 서 있을 수 있다.",
+        "properties": {
+          "commission_id": {
+            "format": "uuid",
+            "title": "Commission Id",
+            "type": "string"
+          },
+          "item_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Item Id"
+          },
+          "item_position": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Item Position"
+          },
+          "seq": {
+            "title": "Seq",
+            "type": "integer"
+          },
+          "status_label": {
+            "title": "Status Label",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "commission_id",
+          "seq",
+          "title",
+          "status_label",
+          "item_id",
+          "item_position"
+        ],
+        "title": "CommissionHintOut",
         "type": "object"
       },
       "CommissionItemIn": {

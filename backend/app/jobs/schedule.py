@@ -27,6 +27,9 @@ PERIODIC: tuple[tuple[str, int], ...] = (
     (kinds.VOCABULARY_CHECK_DRIFT, 6 * 3600),
     # 하루 한 번. 핸드북은 자주 안 바뀌고, 임베딩은 공짜가 아니다.
     (kinds.SEARCH_REINDEX, 24 * 3600),
+    # 하루 한 번. 기한은 날짜 단위라 더 자주 볼 것이 없고, 같은 날 두 번 돌아도
+    # 알림은 하루 한 사람당 하나다(`key` 에 날짜가 들어간다).
+    (kinds.COMMISSIONS_DUE_SOON, 24 * 3600),
 )
 
 

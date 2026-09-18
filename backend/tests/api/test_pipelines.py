@@ -25,6 +25,7 @@ from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.jobs import handlers, kinds
 from app.jobs.models import Job
+from app.modules.commissions.models import Commission
 from app.modules.pipelines import services
 from app.modules.pipelines.models import PipelineInboxItem
 from app.modules.tests.definitions import ensure_builtin_test_types
@@ -668,6 +669,115 @@ class Test사람이_정한다:
         assert detail["summary"]["row_count"] > 0
         assert detail["test_type_key"] == "tensile"
         assert detail["candidates"] == []
+
+
+class Test의뢰_귀띔:
+    """**「이 시험, 누가 재 달라고 한 건가」** 를 수집함이 말한다(2026-09-18).
+
+    전에는 파일을 시편에 붙이고 나서 의뢰 화면으로 건너가, 어느 건인지 스스로
+    떠올려 시험을 이어야 했다. 그 왕복을 안 하면 의뢰는 「시험 중」 인 채로 서 있고
+    진행률은 0 으로 남는다 — 낸 부서에는 아무 일도 안 일어난 것으로 보인다.
+
+    **잇지는 않는다.** 잘못 이으면 의뢰가 재지도 않은 것을 잰 것으로 적는다.
+    """
+
+    def _commission(
+        self,
+        client: TestClient,
+        db: Session,
+        headers: dict[str, str],
+        workspace: Any,
+        sample_id: str,
+        *,
+        status: str,
+    ) -> dict[str, Any]:
+        made = client.post(
+            "/api/commissions",
+            json={
+                "title": "SECC 인장",
+                "purpose": "성형 해석용",
+                "sample_id": sample_id,
+                "lab_workspace_slug": workspace.slug,
+                "items": [{"test_type_key": "tensile", "count": 3}],
+                "submit": True,
+            },
+            headers=headers,
+        )
+        assert made.status_code == 201, made.text
+        body: dict[str, Any] = made.json()
+        # 상태 전이는 여기서 볼 것이 아니다 — 귀띔이 어느 상태에서 뜨는지만 본다.
+        row = db.get(Commission, uuid.UUID(body["id"]))
+        assert row is not None
+        row.status = status
+        db.commit()
+        return body
+
+    def _detail(
+        self, client: TestClient, headers: dict[str, str], item_id: str
+    ) -> dict[str, Any]:
+        got: dict[str, Any] = client.get(
+            f"/api/pipelines/inbox/{item_id}", headers=headers
+        ).json()
+        return got
+
+    @pytest.fixture
+    def suggested(
+        self,
+        client: TestClient,
+        db: Session,
+        pat: dict[str, str],
+        connector: dict[str, Any],
+        specimen: dict[str, Any],
+        tensile: None,
+    ) -> dict[str, Any]:
+        received: dict[str, Any] = _send(client, pat, connector["id"]).json()
+        _run_worker(db, kinds.PIPELINES_PARSE_INBOX)
+        return received
+
+    def test_후보에_의뢰가_붙는다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        workspace: Any,
+        specimen: dict[str, Any],
+        suggested: dict[str, Any],
+    ) -> None:
+        made = self._commission(
+            client, db, admin_headers, workspace, specimen["sample_id"], status="accepted"
+        )
+        detail = self._detail(client, admin_headers, suggested["id"])
+        hint = detail["candidates"][0]["commission"]
+        assert hint is not None, detail["candidates"]
+        assert hint["commission_id"] == made["id"]
+        assert hint["seq"] == made["seq"]
+        # 시험 종류가 맞은 항목까지 짚는다 — 사람이 어느 줄에 이을지 안다.
+        assert hint["item_position"] == 0
+
+    def test_아직_접수_전이면_안_뜬다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        workspace: Any,
+        specimen: dict[str, Any],
+        suggested: dict[str, Any],
+    ) -> None:
+        """**접수 전에 붙이면 받지도 않은 일이 진행되는 셈이다**(`LINKABLE`).
+
+        귀띔이 붙을 수 없는 건을 가리키면, 눌러 본 사람이 거절당하고 이유를 모른다.
+        """
+        self._commission(
+            client, db, admin_headers, workspace, specimen["sample_id"], status="submitted"
+        )
+        detail = self._detail(client, admin_headers, suggested["id"])
+        assert detail["candidates"][0]["commission"] is None
+
+    def test_의뢰가_없으면_아무_말도_안_한다(
+        self, client: TestClient, admin_headers: dict[str, str], suggested: dict[str, Any]
+    ) -> None:
+        detail = self._detail(client, admin_headers, suggested["id"])
+        assert detail["candidates"] and detail["candidates"][0]["commission"] is None
 
 
 class Test승인_대기:

@@ -19,7 +19,7 @@
  */
 
 import { useEffect, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 
 import { Trash2 } from 'lucide-react'
 
@@ -486,6 +486,31 @@ function InboxTab({ status, onOpen }: { status: string; onOpen: (id: string) => 
   )
 }
 
+/**
+ * 「이 시편은 아마 이 의뢰의 것」.
+ *
+ * **잇지는 않는다.** 여기가 하는 일은 말해 주는 것까지고, 잇는 것은 의뢰 화면의
+ * 「시험 연결」 이다 — 거기가 이력을 남기는 자리다. 잘못 이으면 의뢰가 재지도
+ * 않은 것을 잰 것으로 적고, 그 숫자는 낸 부서의 보고서로 간다.
+ */
+function CommissionHint({ hint }: { hint: InboxItemDetail['candidates'][number]['commission'] }) {
+  if (!hint) return null
+  return (
+    <p className="mt-1 text-xs">
+      <Link to={`/commissions/${hint.commission_id}`} className="text-sky-700 underline">
+        의뢰 #{hint.seq} {hint.title}
+      </Link>{' '}
+      <span className="text-muted-foreground">
+        ({hint.status_label}
+        {hint.item_position === null
+          ? ' · 이 종류의 항목은 아직 없습니다'
+          : ` · ${hint.item_position + 1}번 항목`}
+        ) — 시험으로 등록한 뒤 의뢰 화면에서 이으세요.
+      </span>
+    </p>
+  )
+}
+
 function hintText(hints: Record<string, string | undefined>): string {
   return Object.entries(hints)
     .filter(([, value]) => value)
@@ -664,6 +689,7 @@ function ItemDialog({ id, onClose }: { id: string; onClose: () => void }) {
                   <span className="font-medium">{item.candidates[0].specimen_name}</span> 에 붙일
                   준비가 됐습니다 — {item.candidates[0].reason}
                 </div>
+                <CommissionHint hint={item.candidates[0].commission} />
                 <Button disabled={busy} onClick={() => act(() => pipelinesApi.approve(item.id))}>
                   승인 — 시험으로 등록
                 </Button>
@@ -684,6 +710,7 @@ function ItemDialog({ id, onClose }: { id: string; onClose: () => void }) {
                         <div className="text-muted-foreground text-xs">
                           {one.material_name} · {one.sample_name} · {one.reason}
                         </div>
+                        <CommissionHint hint={one.commission} />
                       </div>
                       <Button
                         size="sm"
