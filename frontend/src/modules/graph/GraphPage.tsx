@@ -21,6 +21,7 @@
  */
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { CSSProperties } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import {
   Boxes,
@@ -53,6 +54,7 @@ import { colorScale, withAlpha } from '@/modules/graph/colors'
 import { GraphCanvas } from '@/modules/graph/GraphCanvas'
 import type { CanvasLink, CanvasNode } from '@/modules/graph/GraphCanvas'
 import { COMMUNITY_MIN_NODES, useCommunities } from '@/modules/graph/useCommunities'
+import { useFillHeight } from '@/modules/graph/useElementSize'
 import { useFullscreen } from '@/modules/graph/useFullscreen'
 import { useShortcuts } from '@/modules/graph/useShortcuts'
 import { LazyPlot } from '@/modules/graph/LazyPlot'
@@ -74,6 +76,17 @@ import {
 } from '@/shared/components/ui/select'
 import { Tabs, TabsList, TabsTrigger } from '@/shared/components/ui/tabs'
 import { useResource } from '@/shared/hooks/useResource'
+
+/**
+ * **화면을 꼭 채우고, 스크롤은 기둥마다 하나.** 넓은 화면(lg)에서 그림판은 창 아래까지를
+ * 재서(`useFillHeight`) 그만큼만 차지하고, 왼쪽·오른쪽 기둥은 제 안에서 스크롤된다 — 안의
+ * 목록마다 스크롤 상자를 두면 상자 셋에 스크롤 셋이 생기고, 그 밖에 화면 스크롤이 또 생겨
+ * 어디를 굴려야 하는지 모른다. 좁은 화면에서는 기둥이 아래로 내려가므로 높이를 안 잰다.
+ */
+const FILL_GRID = 'grid gap-4 lg:h-(--fill) lg:grid-rows-[minmax(0,1fr)]'
+const FILL_ASIDE = 'min-h-0 text-sm lg:overflow-y-auto lg:pr-1'
+/** 캔버스 자기 높이(`useFillHeight`)를 덮고 기둥을 채운다 — 좁은 화면에서만 제 높이. */
+const FILL_CANVAS = 'min-h-[420px] lg:min-h-0 lg:h-auto! lg:flex-1'
 
 type Mode = 'schema' | 'explore'
 type ColorBy = 'type' | 'workspace' | 'status' | 'community'
@@ -423,6 +436,8 @@ function SchemaView({
 }: SchemaViewProps) {
   const [selected, setSelected] = useState<string | null>(null)
   const [shape, setShape] = useState<'web' | 'flow'>('web')
+  const gridRef = useRef<HTMLDivElement>(null)
+  const fill = useFillHeight(gridRef, { min: 480 })
 
   /** 사케이로 볼 정의 — 노드는 타입, 선은 **실제로 걸린** 관계의 수.
    *
@@ -554,12 +569,16 @@ function SchemaView({
   }
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[1fr_280px]">
+    <div
+      ref={gridRef}
+      style={{ '--fill': `${fill}px` } as CSSProperties}
+      className={`${FILL_GRID} lg:grid-cols-[1fr_280px]`}
+    >
       {/* **같은 정의를 두 모양으로 본다.** 그물은 「무엇이 무엇과 이어지나」 를, 흐름은
           「어디서 어디로 얼마나 가나」 를 보여 준다 — 관계가 단계로 이어지는 구조
           (접수 → 검토 → 승인)는 그물에서 잘 안 읽힌다. */}
       {shape === 'flow' ? (
-        <div className="relative rounded-md border p-2">
+        <div className="relative min-h-0 rounded-md border p-2 lg:overflow-y-auto">
           {/* **나갈 길은 어느 모양에서나 있어야 한다.** 전체화면에서 흐름으로 넘어온
               사람에게 축소 단추가 없으면, 브라우저가 전체화면을 거절한 경우 ESC 도
               안 먹어 갇힌다. */}
@@ -606,6 +625,7 @@ function SchemaView({
         </div>
       ) : (
         <GraphCanvas
+          className={FILL_CANVAS}
           nodes={nodes}
           links={links}
           wide={wide}
@@ -652,7 +672,7 @@ function SchemaView({
           }
         />
       )}
-      <aside className="space-y-3 text-sm">
+      <aside className={`${FILL_ASIDE} space-y-3`}>
         {picked ? (
           <div className="space-y-3 rounded-md border p-3">
             <div className="flex items-start justify-between gap-2">
@@ -751,6 +771,8 @@ function ExploreView({
   relationTypes,
   types,
 }: ExploreViewProps) {
+  const gridRef = useRef<HTMLDivElement>(null)
+  const fill = useFillHeight(gridRef, { min: 480 })
   const {
     depth,
     fanout,
@@ -1055,9 +1077,13 @@ function ExploreView({
   }
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[260px_1fr_280px]">
+    <div
+      ref={gridRef}
+      style={{ '--fill': `${fill}px` } as CSSProperties}
+      className={`${FILL_GRID} lg:grid-cols-[260px_1fr_280px]`}
+    >
       {/* 왼쪽 — 시작점과 상한 */}
-      <aside className="space-y-4 text-sm">
+      <aside className={`${FILL_ASIDE} space-y-4`}>
         <SeedPanel
           seed={seed}
           current={explored?.focus ? (explored.nodes.get(explored.focus) ?? null) : null}
@@ -1184,7 +1210,7 @@ function ExploreView({
       </aside>
 
       {/* 가운데 — 그림 */}
-      <div className="space-y-2">
+      <div className="flex min-h-0 flex-col gap-2">
         {error && <ErrorNotice error={error} />}
         {seed && (
           <div className="flex items-center gap-2">
@@ -1229,6 +1255,7 @@ function ExploreView({
           />
         ) : (
           <GraphCanvas
+            className={FILL_CANVAS}
             nodes={nodes}
             links={links}
             wide={wide}
@@ -1327,7 +1354,7 @@ function ExploreView({
       </div>
 
       {/* 오른쪽 — 고른 노드 */}
-      <aside className="text-sm">
+      <aside className={FILL_ASIDE}>
         {picked ? (
           <NodeDetail
             node={picked}
@@ -1684,7 +1711,7 @@ function SeedPanel({
         <p className="text-muted-foreground text-xs">맞는 것이 없습니다.</p>
       )}
       {hits.length > 0 && (
-        <ul className="max-h-56 space-y-0.5 overflow-y-auto rounded-md border p-1">
+        <ul className="space-y-0.5 rounded-md border p-1">
           {hits.map((hit) => (
             <li key={hit.id}>
               <button
@@ -1709,7 +1736,7 @@ function SeedPanel({
       <div className="space-y-1.5">
         <span className="text-muted-foreground text-xs">종류별 목록</span>
         {/* 드롭다운이 아니라 칩이다 — **무엇이 있는지가 열기 전에 보여야** 목록다. */}
-        <ul className="flex max-h-32 flex-wrap gap-1 overflow-y-auto">
+        <ul className="flex flex-wrap gap-1">
           {types
             .filter((one) => one.is_active)
             .map((one) => {
@@ -1787,7 +1814,7 @@ function SeedPanel({
                 {browsing ? '읽는 중…' : '보이는 객체가 없습니다.'}
               </p>
             ) : (
-              <ul className="max-h-64 space-y-0.5 overflow-y-auto rounded-md border p-1">
+              <ul className="space-y-0.5 rounded-md border p-1">
                 {rows.items.map((row) => (
                   <li key={row.id}>
                     <button
@@ -1872,7 +1899,7 @@ function FilterList({ title, options, picked, onToggle, onClear, swatch }: Filte
           </button>
         )}
       </div>
-      <ul className="max-h-44 space-y-0.5 overflow-y-auto">
+      <ul className="space-y-0.5">
         {options.map((one) => (
           <li key={one.slug}>
             <label className="hover:bg-muted flex cursor-pointer items-center gap-2 rounded px-1 py-0.5">
