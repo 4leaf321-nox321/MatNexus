@@ -74,6 +74,11 @@ def test_세_세계가_한_물성_아래_모인다(
     assert abs(catalog["conditions"]["temperature"] - 353.15) < 1e-6
     # 안 이어진 선언 항목은 사라지지 않고 이름이 남는다.
     assert body["unmapped"]["items"] == ["경도"]
+    # **셈이 함께 온다** — 「잰 값이 정말 있나」 를 다시 묻지 않게.
+    counts = body["counts"]
+    assert counts["samples"] >= 1 and counts["specimens"] >= 1
+    assert counts["test_runs"] == 3 and counts["adopted_results"] == 3
+    assert counts["measured"] == 1 and counts["catalog"] == 1
 
 
 def test_아무것도_없는_재료는_빈_지도를_준다(
@@ -84,3 +89,15 @@ def test_아무것도_없는_재료는_빈_지도를_준다(
     db.commit()
     body = _fetch(client, admin_headers, bare.id)
     assert body["properties"] == [] and body["unmapped"] == {}
+    # **「없다」 가 셈으로도 말해진다**(2026-09-18). 기준선 4차에서 AI 가 빈 지도를
+    # 받고도 `list_test_runs`·`get_statistics`·`get_material` 로 다섯 번을 더 불러
+    # 「정말 없나」 를 확인했다 — 지도만 봐서는 「없다」 와 「안 이어졌다」 가 안 갈렸다.
+    assert body["counts"] == {
+        "samples": 0,
+        "specimens": 0,
+        "test_runs": 0,
+        "adopted_results": 0,
+        "measured": 0,
+        "internal": 0,
+        "catalog": 0,
+    }

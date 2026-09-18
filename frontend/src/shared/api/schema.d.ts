@@ -9252,6 +9252,27 @@ export interface components {
             /** Run Count */
             run_count: number;
         };
+        /**
+         * CoverageCountsOut
+         * @description **「없다」 를 한 번에 답하는 셈**(2026-09-18). 시편이 0 이면 잰 값이 없는 것이
+         *     당연하고, 채택 결과가 0 이면 시험이 있어도 잰 값은 안 실린다.
+         */
+        CoverageCountsOut: {
+            /** Adopted Results */
+            adopted_results: number;
+            /** Catalog */
+            catalog: number;
+            /** Internal */
+            internal: number;
+            /** Measured */
+            measured: number;
+            /** Samples */
+            samples: number;
+            /** Specimens */
+            specimens: number;
+            /** Test Runs */
+            test_runs: number;
+        };
         /** CoverageEntryOut */
         CoverageEntryOut: {
             /** Conditions */
@@ -14029,6 +14050,7 @@ export interface components {
          *     항목은 `unmapped` 에 — 지도에서 사라지면 없는 줄 안다.
          */
         PropertyCoverageOut: {
+            counts: components["schemas"]["CoverageCountsOut"];
             /**
              * Material Id
              * Format: uuid

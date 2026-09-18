@@ -158,6 +158,19 @@ class CoveragePropertyOut(BaseModel):
     entries: list[CoverageEntryOut]
 
 
+class CoverageCountsOut(BaseModel):
+    """**「없다」 를 한 번에 답하는 셈**(2026-09-18). 시편이 0 이면 잰 값이 없는 것이
+    당연하고, 채택 결과가 0 이면 시험이 있어도 잰 값은 안 실린다."""
+
+    samples: int
+    specimens: int
+    test_runs: int
+    adopted_results: int
+    measured: int
+    internal: int
+    catalog: int
+
+
 class PropertyCoverageOut(BaseModel):
     """물성 지도 — 이 재료에 어떤 물성이 어떤 조건에 어떤 등급으로 있나(2026-09-16).
 
@@ -166,6 +179,7 @@ class PropertyCoverageOut(BaseModel):
 
     material_id: uuid.UUID
     properties: list[CoveragePropertyOut]
+    counts: CoverageCountsOut
     unmapped: dict[str, list[str]]
 
 

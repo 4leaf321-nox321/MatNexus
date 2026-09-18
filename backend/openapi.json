@@ -6196,6 +6196,50 @@
         "title": "CoverageCellOut",
         "type": "object"
       },
+      "CoverageCountsOut": {
+        "description": "**「없다」 를 한 번에 답하는 셈**(2026-09-18). 시편이 0 이면 잰 값이 없는 것이\n당연하고, 채택 결과가 0 이면 시험이 있어도 잰 값은 안 실린다.",
+        "properties": {
+          "adopted_results": {
+            "title": "Adopted Results",
+            "type": "integer"
+          },
+          "catalog": {
+            "title": "Catalog",
+            "type": "integer"
+          },
+          "internal": {
+            "title": "Internal",
+            "type": "integer"
+          },
+          "measured": {
+            "title": "Measured",
+            "type": "integer"
+          },
+          "samples": {
+            "title": "Samples",
+            "type": "integer"
+          },
+          "specimens": {
+            "title": "Specimens",
+            "type": "integer"
+          },
+          "test_runs": {
+            "title": "Test Runs",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "samples",
+          "specimens",
+          "test_runs",
+          "adopted_results",
+          "measured",
+          "internal",
+          "catalog"
+        ],
+        "title": "CoverageCountsOut",
+        "type": "object"
+      },
       "CoverageEntryOut": {
         "properties": {
           "conditions": {
@@ -18858,6 +18902,9 @@
       "PropertyCoverageOut": {
         "description": "물성 지도 — 이 재료에 어떤 물성이 어떤 조건에 어떤 등급으로 있나(2026-09-16).\n\n세 세계(시험·선언·문헌)를 같은 줄 모양으로. 공용어(문헌 물성 키)에 안 이어진 스칼라·\n항목은 `unmapped` 에 — 지도에서 사라지면 없는 줄 안다.",
         "properties": {
+          "counts": {
+            "$ref": "#/components/schemas/CoverageCountsOut"
+          },
           "material_id": {
             "format": "uuid",
             "title": "Material Id",
@@ -18884,6 +18931,7 @@
         "required": [
           "material_id",
           "properties",
+          "counts",
           "unmapped"
         ],
         "title": "PropertyCoverageOut",

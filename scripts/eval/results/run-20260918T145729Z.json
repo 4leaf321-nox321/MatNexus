@@ -1,0 +1,120 @@
+{
+  "at": "20260918T145729Z",
+  "git": "653acca",
+  "summary": {
+    "n": 2,
+    "passed": 2,
+    "calls": 6,
+    "calls_per_question": 3.0,
+    "empty_calls": 0,
+    "map_first": 1,
+    "errors": 0,
+    "seconds": 151.4,
+    "cost_usd": 1.1871,
+    "by_category": {
+      "값 찾기": {
+        "n": 1,
+        "passed": 1,
+        "calls": 4,
+        "empty": 0,
+        "map_first": 1
+      },
+      "커버리지": {
+        "n": 1,
+        "passed": 1,
+        "calls": 2,
+        "empty": 0,
+        "map_first": 0
+      }
+    }
+  },
+  "traces": [
+    {
+      "id": "search-06",
+      "category": "값 찾기",
+      "prompt": "SAC305 Solder Alloy 의 탄성계수 문헌값들을 온도별로 정리해 줘.",
+      "calls": [
+        {
+          "name": "mcp__matnexus__get_ontology",
+          "input": {},
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__search_catalog",
+          "input": {
+            "query": "SAC305",
+            "limit": 10
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__resolve_property",
+          "input": {
+            "name": "탄성계수"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__get_catalog_material",
+          "input": {
+            "catalog_material_id": "d68d0ecf-9122-4c47-a198-db3618c500cd",
+            "property_keys": [
+              "mechanical.youngs_modulus"
+            ],
+            "limit": 60
+          },
+          "empty": false,
+          "is_error": false
+        }
+      ],
+      "answer": "## SAC305 Solder Alloy — 영률(탄성계수) 문헌값 10건 (전부 등급 1, 출처: 문헌 카탈로그)\n\n**온도별 시리즈는 없다.** 등록된 값은 전부 상온(20~25 °C)이고, 실제로 갈리는 축은 **온도가 아니라 시효(aging)·변형률속도**다.\n\n### 상온 단일값\n| 값 | 조건 | 출처 |\n|---|---|---|\n| **27.83 GPa** (대표값) | 25 °C | ITherm 2016, *Mechanical Characterization of SAC305 Lead Free Solder at High Temperatures* (doi 10.1109/itherm.2016.7517622) |\n| 54.0 GPa | 20 °C(293.15 K), 변형률속도 0.04/s, as-cast 봉재 | JEM 2002, *Low-cycle fatigue behavior of Sn-Ag, Sn-Ag-Cu…* (doi 10.1007/s11664-002-0100-0) |\n| 6.9 GPa | **온도 기재 없음** | 데이터시트 Indalloy® 256 (SAC305 preform) |\n\n### 시효시간에 따른 유효탄성계수 — 25 °C(298.15 K), 0.001/s, reflowed, 100 °C 시효\n| 시효 | E |\n|---|---|\n| 0일(비시효) | 40.12 GPa |\n| 5일 | 36.40 |\n| 10일 | 34.39 |\n| 20일 | 32.35 |\n| 30일 | 30.45 |\n| 45일 | 28.83 |\n| 60일 | 28.00 |\n\n출처: ECTC 2010, *Reduction of lead free solder aging effects using doped SAC alloys* (doi 10.1109/ectc.2010.5490796), Fig. 25(a).\n\n### 읽을 때 주의\n- 시효 7점은 **그래프에서 디지타이즈한 값**(읽기 불확도 ±0.03 GPa)이다. 인쇄된 표값이 아니다.\n- 원문 정의가 \"유효 탄성계수 = 응력-변형 곡선의 초기 기울기\"이고, 솔더는 점소성이라 **변형률속도에 따라 달라진다** — 54.0 GPa(0.04/s)와 40.1 GPa(0.001/s)의 차이가 그것이다. 27.83 GPa 는 속도 미기재.\n- 6.9 GPa 는 다른 값들과 4~8배 차이 난다. 데이터시트 표기 방식이 다를 가능성이 커서 그대로 섞어 쓰지 않는 게 좋다.\n\n온도 의존 E(T) 곡선이 필요하면 지금 DB에는 없다 — 의뢰로 채우거나 해당 ITherm 2016 논문의 고온 구간을 추가 채굴해야 한다.",
+      "error": null,
+      "seconds": 50.3173942565918,
+      "cost_usd": 0.565669,
+      "map_first": true,
+      "empty_calls": 0,
+      "over_budget": false,
+      "tools_any_ok": true,
+      "forbidden_hit": [],
+      "missing_mentions": [],
+      "passed": true
+    },
+    {
+      "id": "coverage-02",
+      "category": "커버리지",
+      "prompt": "SAC305-Solder-Alloy_-_- 사내 재료에 시험으로 잰 값과 문헌값이 각각 뭐가 있어?",
+      "calls": [
+        {
+          "name": "mcp__matnexus__property_coverage",
+          "input": {
+            "material_id": "SAC305-Solder-Alloy_-_-"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__get_material",
+          "input": {
+            "material_id": "SAC305-Solder-Alloy_-_-"
+          },
+          "empty": false,
+          "is_error": false
+        }
+      ],
+      "answer": "**시험으로 잰 값: 없습니다.** (시료 0 · 시편 0 · 시험 0 · 채택 결과 0 — measured 0건)\n\n**문헌·선언값만 있습니다.**\n\n재료에 박아둔 선언값 7개 (전부 문헌 카탈로그에서 채택한 스냅샷):\n\n| 물성 | 값 | 출처 |\n|---|---|---|\n| 탄성계수 | 27.83 GPa (상온) | Mechanical Characterization of SAC305 … (tier 1) |\n| 인장강도 | 50.6 MPa | LCF of Sn-Ag/SAC/SAC-Bi, 2002 (tier 1) |\n| 항복강도 | 25.3 MPa | 위와 같은 논문 (tier 1) |\n| 연신율 | 49 % | Indalloy 256 (SAC305) 데이터시트 (tier 1) |\n| 선팽창계수 | 21 ×10⁻⁶ /K | 같은 데이터시트 (tier 1) |\n| 열전도율 | 58.7 W/(m·K) | SAC305 SAC Solder 데이터시트 (tier 1) |\n| 비열 | 230 J/(kg·K) | Almit, 2005 (tier 2) |\n\n기본 칸: 밀도 7.37e-9 tonne/mm³ (≈7370 kg/m³, 공칭값), 포아송비 0.35.\n\n그 밖에 이어진 문헌 카탈로그(SAC305 Solder Alloy)에 **785개 값**이 48개 물성에 걸쳐 있습니다 — 온도·변형률속도별 영률/항복/인장강도 시리즈, Anand·Johnson-Cook·Norton·Garofalo·Darveaux 상수, 피로계수(σf'·b·εf'·c), 크리프율, 융점·융해잠열, 체적저항률, 음속·음향임피던스, 비커스 경도 등. 등급이 섞여 있으니 쓰실 물성을 찍어주시면 조건·tier와 함께 뽑아 드리겠습니다.\n\n주의: 위 7개는 실측이 아니라 문헌 채택값이라 해석에 쓰실 때 실측처럼 다루면 안 됩니다.",
+      "error": null,
+      "seconds": 101.10742115974426,
+      "cost_usd": 0.621418,
+      "map_first": false,
+      "empty_calls": 0,
+      "over_budget": false,
+      "tools_any_ok": true,
+      "forbidden_hit": [],
+      "missing_mentions": [],
+      "passed": true
+    }
+  ]
+}

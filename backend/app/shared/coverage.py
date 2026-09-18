@@ -29,7 +29,7 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.modules.catalog.models import (
@@ -74,9 +74,38 @@ class PropertyRow:
 
 
 @dataclass(frozen=True)
+class Counts:
+    """**「없다」 를 한 번에 답하게 하는 셈**(2026-09-18).
+
+    기준선 4차에서 드러났다: 「시험으로 잰 값과 문헌값이 각각 뭐가 있나」 에 AI 가
+    `property_coverage` 로 바로 답을 받고도 `get_statistics`·`list_test_runs`·
+    `get_material` 을 더 불러 **「정말 없나」 를 확인했다**(6호출, 예산 5). 지도에
+    안 보이는 것이 「없는 것」 인지 「안 이어진 것」 인지 지도만 봐서는 알 수 없었기
+    때문이다 — `unmapped` 를 둔 이유와 같은 물음이고, 그 답이 이 셈이다.
+
+    시편이 0 이면 잰 값이 없는 것이 **당연하다.** 그 줄이 있으면 사람도 AI 도 「시험
+    목록을 뒤져 보자」 로 가지 않는다.
+    """
+
+    samples: int
+    specimens: int
+    test_runs: int
+    adopted_results: int
+    """채택된 결과. **여기가 0 이면 잰 값은 없다** — 시험이 있어도 채택이 없으면
+    통계에도 카드에도 안 실린다(그 판단은 사람만 한다)."""
+    measured: int
+    """`origin == "measured"` 인 줄 수."""
+    internal: int
+    """선언 물성에서 온 줄 수."""
+    catalog: int
+    """이어진 문헌 재료에서 온 줄 수."""
+
+
+@dataclass(frozen=True)
 class Coverage:
     material_id: str
     properties: tuple[PropertyRow, ...]
+    counts: Counts
     unmapped: dict[str, list[str]] = field(default_factory=dict)
     """공용어에 안 이어진 것 — `{"scalars": [...], "items": [...]}`. 물성 매핑에서 잇는다."""
 
@@ -327,4 +356,39 @@ def collect(db: Session, material_id: uuid.UUID) -> Coverage:
         )
         for key in keys
     )
-    return Coverage(material_id=str(material_id), properties=properties, unmapped=unmapped)
+    return Coverage(
+        material_id=str(material_id),
+        properties=properties,
+        counts=_counts(db, material_id, by_property),
+        unmapped=unmapped,
+    )
+
+
+def _counts(
+    db: Session, material_id: uuid.UUID, by_property: dict[str, list[Entry]]
+) -> Counts:
+    """한 질의로 센다 — 지도 한 장에 셈 네 번을 더 붙이면 그것대로 비용이다."""
+    row = db.execute(
+        select(
+            func.count(func.distinct(Sample.id)),
+            func.count(func.distinct(Specimen.id)),
+            func.count(func.distinct(TestRun.id)),
+            func.count(func.distinct(TestRun.adopted_result_id)),
+        )
+        .select_from(Sample)
+        .outerjoin(Specimen, (Specimen.sample_id == Sample.id) & Specimen.deleted_at.is_(None))
+        .outerjoin(
+            TestRun, (TestRun.specimen_id == Specimen.id) & TestRun.deleted_at.is_(None)
+        )
+        .where(Sample.material_id == material_id, Sample.deleted_at.is_(None))
+    ).one()
+    origins = [entry.origin for entries in by_property.values() for entry in entries]
+    return Counts(
+        samples=int(row[0] or 0),
+        specimens=int(row[1] or 0),
+        test_runs=int(row[2] or 0),
+        adopted_results=int(row[3] or 0),
+        measured=sum(1 for one in origins if one == "measured"),
+        internal=sum(1 for one in origins if one == "internal"),
+        catalog=sum(1 for one in origins if one == "catalog"),
+    )

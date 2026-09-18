@@ -1215,8 +1215,17 @@ async def property_coverage(ctx: Context, material_id: str) -> dict[str, Any]:
         properties[].key / name / si_unit
         properties[].entries[]   origin · tier(1 좋음~4) · value_si · count · spread_si
                                  · conditions{temperature: K …} · method · ref_kind/ref_id
+        counts                   samples · specimens · test_runs · adopted_results ·
+                                 measured · internal · catalog
         unmapped                 공용어에 안 이어진 시험 스칼라·선언 항목 — **없는 게 아니라
                                  안 이어진 것**이다. 사람에게 「물성 매핑에서 이으면 보인다」
+
+    ## 「없다」 는 `counts` 가 답한다 — **다시 뒤지지 마라**
+
+    `counts.adopted_results` 가 0 이면 **잰 값은 없다.** `specimens` 가 0 이면 시편부터
+    없는 것이다. 그 줄을 보고도 `list_test_runs`·`get_statistics`·`get_material` 로
+    한 번 더 확인하지 마라 — 같은 사실을 세 번 묻는 것이고, 답은 이미 여기 있다
+    (기준선 4차에서 실제로 그렇게 다섯 번을 더 불렀다).
 
     ## 읽는 법
 

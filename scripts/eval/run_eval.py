@@ -202,10 +202,18 @@ def ask(question: dict[str, Any], config: Path, model: str | None) -> Trace:
         except json.JSONDecodeError:
             continue
         kind = event.get("type")
-        message = event.get("message") or {}
-        content = message.get("content") or []
+        # **이벤트 모양을 믿지 않는다**(2026-09-18). `message` 가 문자열로 오는 줄이
+        # 있어서 `.get` 에서 터졌고, **16번째 문항에서 25분짜리 실행이 통째로
+        # 날아갔다.** 스트림 형식은 우리 것이 아니라 CLI 의 것이라 늘 바뀔 수 있다 —
+        # 모르는 줄은 세지 않고 넘어가는 편이 맞다.
+        message = event.get("message")
+        message = message if isinstance(message, dict) else {}
+        content = message.get("content")
+        content = content if isinstance(content, list) else []
         if kind == "assistant":
             for block in content:
+                if not isinstance(block, dict):
+                    continue
                 if block.get("type") == "tool_use":
                     call = {
                         "name": block.get("name"),
@@ -216,6 +224,8 @@ def ask(question: dict[str, Any], config: Path, model: str | None) -> Trace:
                     trace.calls.append(call)
         elif kind == "user":
             for block in content:
+                if not isinstance(block, dict):
+                    continue
                 if block.get("type") == "tool_result":
                     found = pending.get(block.get("tool_use_id", ""))
                     if found is None:
@@ -411,7 +421,18 @@ def main() -> int:
     try:
         for index, question in enumerate(questions, start=1):
             print(f"[{index}/{len(questions)}] {question['id']} …", end=" ", flush=True)
-            trace = ask(question, config, args.model)
+            # **한 문항이 터져도 실행을 안 버린다.** 30문항이 25분이라, 16번에서
+            # 죽으면 앞의 15개도 함께 날아간다(실측 2026-09-18). 못 읽은 문항은
+            # 오류로 적고 다음으로 간다 — 표에 그대로 남아 눈에 띈다.
+            try:
+                trace = ask(question, config, args.model)
+            except Exception as exc:  # 무엇이 터지든 다음 문항은 돈다
+                trace = Trace(
+                    id=question["id"],
+                    category=question["category"],
+                    prompt=str(question.get("prompt", "")),
+                )
+                trace.error = f"[{type(exc).__name__}] {exc}"[:400]
             score(trace, question)
             traces.append(trace)
             state = "오류" if trace.error else ("통과" if trace.passed else "미달")
