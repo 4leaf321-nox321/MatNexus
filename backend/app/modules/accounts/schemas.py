@@ -62,6 +62,8 @@ class AccountOut(BaseModel):
     created_at: datetime
     decided_at: datetime | None
     decision_note: str | None
+    deleted_at: datetime | None = None
+    """소프트 삭제 시각. 있으면 「정지」 가 아니라 「삭제됨」 이다 — 되살릴 수 없다."""
 
 
 class ApproveRequest(BaseModel):

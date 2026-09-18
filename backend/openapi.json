@@ -58,6 +58,18 @@
             ],
             "title": "Decision Note"
           },
+          "deleted_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deleted At"
+          },
           "display_name": {
             "title": "Display Name",
             "type": "string"
@@ -27911,7 +27923,7 @@
             "schema": {
               "anyOf": [
                 {
-                  "pattern": "^(pending|active|suspended)$",
+                  "pattern": "^(pending|active|suspended|deleted)$",
                   "type": "string"
                 },
                 {

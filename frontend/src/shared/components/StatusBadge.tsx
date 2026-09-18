@@ -15,6 +15,11 @@ const LABELS: Record<string, { text: string; className: string }> = {
     text: '정지',
     className: 'border-destructive/40 bg-destructive/10 text-destructive',
   },
+  // 삭제는 정지가 아니다 — 되살릴 수 없고, 아이디는 풀려 있다.
+  deleted: {
+    text: '삭제됨',
+    className: 'border-muted-foreground/40 bg-muted text-muted-foreground line-through',
+  },
 }
 
 export function StatusBadge({ status }: { status: string }) {

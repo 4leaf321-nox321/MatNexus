@@ -10,7 +10,8 @@ import { api } from '@/shared/api/client'
 import type { components } from '@/shared/api/schema'
 
 export type Account = components['schemas']['AccountOut']
-export type AccountStatus = 'pending' | 'active' | 'suspended'
+/** `deleted` 는 상태 칸이 아니라 `deleted_at` 이 있는 계정 — 목록에서만 따로 본다. */
+export type AccountStatus = 'pending' | 'active' | 'suspended' | 'deleted'
 export type Reference = components['schemas']['ReferenceOut']
 type DeleteResult = components['schemas']['DeleteAccountResponse']
 type TemporaryPassword = components['schemas']['TemporaryPasswordResponse']

@@ -55,10 +55,51 @@ def test_delete_keeps_the_row_and_cuts_access(
     assert user.status == "suspended"
     assert user.home_workspace_id is None
 
+    # 아이디는 풀린다 — 옛 아이디로는 계정 자체가 없다(401). 재입사자가 같은 아이디로
+    # 가입할 수 있어야 해서다(2026-09-18). 원래 아이디는 앞에 그대로 남는다.
+    assert user.email.startswith("hong#deleted-")
     login = client.post(
         "/api/auth/login", json={"email": "hong", "password": "member-password-1"}
     )
-    assert login.status_code == 403
+    assert login.status_code == 401
+
+
+def test_deleted_account_is_listed_apart_and_cannot_be_revived(
+    client: TestClient, db: Session, workspace: Workspace, admin_headers: dict[str, str]
+) -> None:
+    """삭제는 정지가 아니다 — 「정지」 목록에 섞여 나와 「활성화」 로 되살아났다(2026-09-18)."""
+    user = make_user(db, "hong", workspace)
+    client.request("DELETE", f"/api/accounts/{user.id}", json={}, headers=admin_headers)
+
+    everyone = client.get("/api/accounts", headers=admin_headers).json()
+    assert all(item["id"] != str(user.id) for item in everyone)
+    suspended = client.get("/api/accounts?status=suspended", headers=admin_headers).json()
+    assert all(item["id"] != str(user.id) for item in suspended)
+    deleted = client.get("/api/accounts?status=deleted", headers=admin_headers).json()
+    assert [item["id"] for item in deleted] == [str(user.id)]
+    assert deleted[0]["deleted_at"] is not None
+
+    revived = client.post(f"/api/accounts/{user.id}/activate", headers=admin_headers)
+    assert revived.status_code == 409
+    assert revived.json()["error"]["code"] == "MNX-ACCOUNTS-0009"
+
+
+def test_freed_id_can_sign_up_again(
+    client: TestClient, db: Session, workspace: Workspace, admin_headers: dict[str, str]
+) -> None:
+    user = make_user(db, "hong@samsung.com", workspace)
+    client.request("DELETE", f"/api/accounts/{user.id}", json={}, headers=admin_headers)
+    again = client.post(
+        "/api/accounts/signup",
+        json={
+            "email": "hong@samsung.com",
+            "password": "applicant-password-1",
+            "display_name": "홍길동",
+            "workspace_slug": workspace.slug,
+        },
+    )
+    assert again.status_code == 201, again.text
+    assert again.json()["id"] != str(user.id)
 
 
 def test_delete_removes_memberships(

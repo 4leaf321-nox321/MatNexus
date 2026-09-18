@@ -6801,6 +6801,8 @@ export interface components {
             decided_at: string | null;
             /** Decision Note */
             decision_note: string | null;
+            /** Deleted At */
+            deleted_at?: string | null;
             /** Display Name */
             display_name: string;
             /** Email */

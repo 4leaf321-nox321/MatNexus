@@ -27,7 +27,7 @@ import { DeleteAccountDialog } from '@/modules/accounts/DeleteAccountDialog'
 import { ExportIdsDialog } from '@/modules/accounts/ExportIdsDialog'
 import { HomeWorkspaceDialog } from '@/modules/accounts/HomeWorkspaceDialog'
 import { accountsApi } from '@/modules/accounts/api'
-import type { Account, AccountStatus } from '@/modules/accounts/api'
+import type { Account } from '@/modules/accounts/api'
 import { workspacesApi } from '@/modules/workspaces/api'
 import { useAuth } from '@/shared/auth/AuthContext'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
@@ -63,7 +63,7 @@ import {
 import { Tabs, TabsList, TabsTrigger } from '@/shared/components/ui/tabs'
 import { useResource } from '@/shared/hooks/useResource'
 
-type Tab = 'pending' | 'all'
+type Tab = 'pending' | 'all' | 'deleted'
 
 interface Secret {
   value: string
@@ -86,8 +86,13 @@ export default function AccountsAdminPage() {
 
   const { user: me } = useAuth()
 
+  // 삭제된 계정은 「삭제됨」 탭에서만 — 「전체」 에 섞이면 「정지」 로 보이고 그 줄의
+  // 「활성화」 가 지운 계정을 되살렸다(2026-09-18).
   const accounts = useResource(
-    () => accountsApi.list(tab === 'pending' ? ('pending' as AccountStatus) : undefined),
+    () =>
+      accountsApi.list(
+        tab === 'pending' ? 'pending' : tab === 'deleted' ? 'deleted' : undefined
+      ),
     [tab],
   )
   const workspaces = useResource(() => workspacesApi.options(), [])
@@ -159,6 +164,7 @@ export default function AccountsAdminPage() {
         <TabsList>
           <TabsTrigger value="pending">승인 대기</TabsTrigger>
           <TabsTrigger value="all">전체</TabsTrigger>
+          <TabsTrigger value="deleted">삭제됨</TabsTrigger>
         </TabsList>
       </Tabs>
 
@@ -216,14 +222,22 @@ export default function AccountsAdminPage() {
             {rows.map((account) => (
               <TableRow key={account.id}>
                 <TableCell className="font-medium">
-                  {account.email}
+                  {/* 지운 계정의 아이디는 `hong@samsung.com#deleted-…` 로 풀려 있다 — 원래
+                      아이디만 보이고, 언제 지웠는지는 상태 칸이 말한다. */}
+                  {account.deleted_at ? account.email.split('#deleted-')[0] : account.email}
                   {account.is_system_admin && (
                     <span className="text-muted-foreground ml-2 text-xs">시스템 관리자</span>
                   )}
                 </TableCell>
                 <TableCell>{account.display_name}</TableCell>
                 <TableCell>
-                  <StatusBadge status={account.status} />
+                  <StatusBadge status={account.deleted_at ? 'deleted' : account.status} />
+                  {account.deleted_at && (
+                    <p className="text-muted-foreground mt-1 text-xs">
+                      {new Date(account.deleted_at).toLocaleDateString('ko-KR')} 삭제 · 되살릴 수
+                      없습니다
+                    </p>
+                  )}
                   {account.decision_note && (
                     <p className="text-muted-foreground mt-1 text-xs">{account.decision_note}</p>
                   )}
@@ -236,107 +250,110 @@ export default function AccountsAdminPage() {
                   />
                 </TableCell>
                 <TableCell>
-                  <div className="flex justify-end gap-1">
-                    {account.status === 'pending' && (
-                      <>
-                        <Button
-                          size="sm"
-                          disabled={busyId === account.id}
-                          onClick={() =>
-                            run(account.id, () =>
-                              accountsApi.approve(account.id, null, 'member'),
-                            )
-                          }
-                        >
-                          <UserCheck className="size-4" />
-                          승인
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          disabled={busyId === account.id}
-                          onClick={() => setRejecting(account)}
-                        >
-                          <UserX className="size-4" />
-                          거절
-                        </Button>
-                      </>
-                    )}
+                  {/* 지운 계정에는 단추가 없다 — 「활성화」 가 되살리고 「삭제」 는 409 였다. */}
+                  {!account.deleted_at && (
+                    <div className="flex justify-end gap-1">
+                      {account.status === 'pending' && (
+                        <>
+                          <Button
+                            size="sm"
+                            disabled={busyId === account.id}
+                            onClick={() =>
+                              run(account.id, () =>
+                                accountsApi.approve(account.id, null, 'member'),
+                              )
+                            }
+                          >
+                            <UserCheck className="size-4" />
+                            승인
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={busyId === account.id}
+                            onClick={() => setRejecting(account)}
+                          >
+                            <UserX className="size-4" />
+                            거절
+                          </Button>
+                        </>
+                      )}
 
-                    {account.status === 'active' && (
-                      <>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          disabled={busyId === account.id}
-                          onClick={() =>
-                            run(account.id, async () => {
-                              const result = await accountsApi.resetPassword(account.id)
-                              setSecret({
-                                value: result.temporary_password,
-                                subject: `${account.display_name} (${account.email})`,
-                                title: '임시 비밀번호가 발급되었습니다',
-                                description: '본인에게 직접 전달하세요.',
+                      {account.status === 'active' && (
+                        <>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={busyId === account.id}
+                            onClick={() =>
+                              run(account.id, async () => {
+                                const result = await accountsApi.resetPassword(account.id)
+                                setSecret({
+                                  value: result.temporary_password,
+                                  subject: `${account.display_name} (${account.email})`,
+                                  title: '임시 비밀번호가 발급되었습니다',
+                                  description: '본인에게 직접 전달하세요.',
+                                })
                               })
-                            })
-                          }
-                        >
-                          <KeyRound className="size-4" />
-                          비밀번호 재설정
-                        </Button>
+                            }
+                          >
+                            <KeyRound className="size-4" />
+                            비밀번호 재설정
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={busyId === account.id}
+                            onClick={() => run(account.id, () => accountsApi.suspend(account.id))}
+                          >
+                            <ShieldOff className="size-4" />
+                            정지
+                          </Button>
+                        </>
+                      )}
+
+                      {account.status === 'suspended' && (
                         <Button
                           size="sm"
                           variant="outline"
                           disabled={busyId === account.id}
-                          onClick={() => run(account.id, () => accountsApi.suspend(account.id))}
+                          onClick={() => run(account.id, () => accountsApi.activate(account.id))}
                         >
-                          <ShieldOff className="size-4" />
-                          정지
-                        </Button>
-                      </>
-                    )}
-
-                    {account.status === 'suspended' && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={busyId === account.id}
-                        onClick={() => run(account.id, () => accountsApi.activate(account.id))}
-                      >
-                        <ShieldCheck className="size-4" />
-                        활성화
-                      </Button>
-                    )}
-
-                    {account.id !== me?.id &&
-                      (account.is_system_admin || account.status === 'active') && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          disabled={busyId === account.id}
-                          onClick={() => void toggleAdmin(account)}
-                        >
-                          {account.is_system_admin ? (
-                            <ShieldMinus className="size-4" />
-                          ) : (
-                            <ShieldPlus className="size-4" />
-                          )}
-                          {account.is_system_admin ? '관리자 해제' : '관리자 지정'}
+                          <ShieldCheck className="size-4" />
+                          활성화
                         </Button>
                       )}
 
-                    {account.status !== 'pending' && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={busyId === account.id}
-                        onClick={() => setDeleting(account)}
-                        aria-label="계정 삭제"
-                      >
-                        <Trash2 className="size-4" />
-                      </Button>
-                    )}
-                  </div>
+                      {account.id !== me?.id &&
+                        (account.is_system_admin || account.status === 'active') && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={busyId === account.id}
+                            onClick={() => void toggleAdmin(account)}
+                          >
+                            {account.is_system_admin ? (
+                              <ShieldMinus className="size-4" />
+                            ) : (
+                              <ShieldPlus className="size-4" />
+                            )}
+                            {account.is_system_admin ? '관리자 해제' : '관리자 지정'}
+                          </Button>
+                        )}
+
+                      {account.status !== 'pending' && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={busyId === account.id}
+                          onClick={() => setDeleting(account)}
+                          aria-label="계정 삭제"
+                        >
+                          <Trash2 className="size-4" />
+                        </Button>
+                      )}
+                    </div>
+                  )}
                 </TableCell>
               </TableRow>
             ))}

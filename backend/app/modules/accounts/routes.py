@@ -82,7 +82,7 @@ def account_ids(
 
 @router.get("", response_model=list[AccountOut])
 def list_accounts(
-    status: str | None = Query(default=None, pattern="^(pending|active|suspended)$"),
+    status: str | None = Query(default=None, pattern="^(pending|active|suspended|deleted)$"),
     limit: int = Query(default=50, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
     _: User = Depends(require_system_admin),

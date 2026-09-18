@@ -62,6 +62,7 @@ def account_out(db: Session, user: User) -> AccountOut:
         created_at=user.created_at,
         decided_at=user.decided_at,
         decision_note=user.decision_note,
+        deleted_at=user.deleted_at,
     )
 
 
@@ -320,6 +321,9 @@ def set_status(db: Session, *, user_id: uuid.UUID, status: str, actor: User) -> 
         raise NotFound("MNX-ACCOUNTS-0003", "계정을 찾을 수 없습니다.")
     if user.id == actor.id:
         raise Conflict("MNX-ACCOUNTS-0006", "자기 계정의 상태는 바꿀 수 없습니다.")
+    if user.deleted_at is not None:
+        # 삭제는 정지가 아니다 — 목록이 둘을 못 가르던 때 「활성화」 가 되살렸다(2026-09-18).
+        raise Conflict("MNX-ACCOUNTS-0009", "삭제된 계정입니다 — 되살릴 수 없습니다.")
     if status not in ("active", "suspended"):
         raise AppError("MNX-ACCOUNTS-0007", "허용되지 않는 상태입니다.", status=400)
 
@@ -545,17 +549,24 @@ def delete_account(
     user.deleted_at = _now()
     user.status = "suspended"
     user.home_workspace_id = None
+    # **아이디를 풀어 준다.** 행이 남으니 아이디(unique)도 남아, 퇴사 뒤 재입사한 사람이
+    # 같은 아이디로 가입하면 「이미 사용 중」 이었다(2026-09-18). 참조는 전부 id 로 걸려
+    # 있어 아이디를 바꿔도 「누가 만들었나」 는 그대로다. 원래 아이디는 `#deleted-` 앞에
+    # 그대로 있고 감사 기록에도 남는다.
+    original_email = user.email
+    user.email = f"{original_email}#deleted-{user.deleted_at:%Y%m%dT%H%M%SZ}"
     audit.record(
         db,
         action=audit.ACCOUNT_DELETED,
         actor=actor,
         target_table="users",
         target_id=user.id,
-        target_label=user.display_name or user.email,
+        target_label=user.display_name or original_email,
         # 무엇이 누구에게 넘어갔는지가 이 기록의 핵심이다. 자료는 남고 소유자만
         # 바뀌므로, 넘긴 내역이 없으면 나중에 그 자료의 출처를 되짚을 수 없다.
         changes={
             "deleted_at": {"after": user.deleted_at.isoformat()},
+            "email": {"before": original_email, "after": user.email},
             "transferred": {"after": [f"{ref.table} {ref.count}건" for ref in moved]},
         },
     )
@@ -584,14 +595,22 @@ def active_system_admin_count(db: Session) -> int:
 
 def account_ids(db: Session, *, include_inactive: bool) -> list[str]:
     """아이디 전부, 아이디순. 기본은 `active` 만."""
-    query = select(User.email).order_by(User.email)
+    query = select(User.email).where(User.deleted_at.is_(None)).order_by(User.email)
     if not include_inactive:
         query = query.where(User.status == "active")
     return [str(one) for one in db.scalars(query)]
 
 
 def list_accounts(db: Session, *, status: str | None, limit: int, offset: int) -> list[User]:
+    """계정 목록. **삭제된 계정은 `status="deleted"` 로만 본다** — 다른 목록에는 안 나온다.
+
+    삭제가 소프트라(`deleted_at` + `suspended`) 전에는 「정지」 로 섞여 나왔고, 그 줄의
+    「활성화」 가 지운 계정을 되살렸다(2026-09-18).
+    """
     query = select(User).order_by(User.created_at.desc()).limit(limit).offset(offset)
+    if status == "deleted":
+        return list(db.scalars(query.where(User.deleted_at.is_not(None))))
+    query = query.where(User.deleted_at.is_(None))
     if status:
         query = query.where(User.status == status)
     return list(db.scalars(query))
