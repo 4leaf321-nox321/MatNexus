@@ -26,6 +26,7 @@
 from __future__ import annotations
 
 import os
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -357,6 +358,80 @@ async def search_materials(
     }
 
 
+def _looks_like_uuid(value: str) -> bool:
+    try:
+        uuid.UUID(str(value).strip())
+    except (ValueError, AttributeError, TypeError):
+        return False
+    return True
+
+
+async def _resolve_material(ctx: Context, material_id: str) -> str | dict[str, Any]:
+    """재료 식별자 — **이름·번호를 줘도 받아 준다.**
+
+    기준선 3차(2026-09-18)에서 두 번 걸렸다: `deck_readiness("SCATTER_DP600_1.0")` ·
+    `get_card("SCATTER_DP600_1.0")`. 사람은 이름으로 말하므로 AI 도 이름을 넣어 보고,
+    그때마다 검색 한 번이 더 든다. 딱 하나 맞으면 그것으로 보고, 여럿이면 **고르라고
+    후보를 준다** — 조용히 첫 번째를 집으면 엉뚱한 재료의 덱이 나간다.
+    """
+    if _looks_like_uuid(material_id):
+        return material_id
+    found = await _get(ctx, "/materials", {"q": material_id, "limit": 5})
+    if isinstance(found, dict) and "error" in found:
+        return found
+    items = found.get("items", []) if isinstance(found, dict) else []
+    if len(items) == 1:
+        return str(items[0]["id"])
+    if not items:
+        return {
+            "error": f"그런 재료가 없습니다: {material_id}",
+            "hint": "`search_materials(query=...)` 로 먼저 찾으세요 — 이름이 조금 달라도 걸립니다.",
+        }
+    return {
+        "error": f"'{material_id}' 로 재료가 여럿입니다 — 하나를 골라 id 로 다시 부르세요.",
+        "candidates": [
+            {"id": one["id"], "name": one.get("record_name"), "code": one.get("code")}
+            for one in items
+        ],
+    }
+
+
+async def _resolve_card(ctx: Context, card_id: str) -> str | dict[str, Any]:
+    """카드 식별자 — 이름(라벨)이나 재료 이름을 줘도 받아 준다. 여럿이면 후보를 준다."""
+    if _looks_like_uuid(card_id):
+        return card_id
+    found = await _get(ctx, "/fitting/cards", {"limit": 200})
+    if isinstance(found, dict) and "error" in found:
+        return found
+    needle = str(card_id).strip().lower()
+    items = [
+        one
+        for one in (found.get("items", []) if isinstance(found, dict) else [])
+        if needle in str(one.get("label", "")).lower()
+        or needle in str(one.get("material_name", "")).lower()
+    ]
+    if len(items) == 1:
+        return str(items[0]["id"])
+    if not items:
+        return {
+            "error": f"그런 카드가 없습니다: {card_id}",
+            "hint": "`deck_readiness(material_id)` 가 ready 면 `formats[].card_id` 가 그 카드다."
+            " 없으면 `list_cards(material_id=...)`.",
+        }
+    return {
+        "error": f"'{card_id}' 로 카드가 여럿입니다 — 하나를 골라 id 로 다시 부르세요.",
+        "candidates": [
+            {
+                "id": one["id"],
+                "label": one.get("label"),
+                "material": one.get("material_name"),
+                "status": one.get("status"),
+            }
+            for one in items[:10]
+        ],
+    }
+
+
 @mcp.tool()
 async def get_material(ctx: Context, material_id: str) -> dict[str, Any]:
     """재료 하나 — 기본 칸·선언 물성·물성 카드·문헌 연결.
@@ -371,7 +446,13 @@ async def get_material(ctx: Context, material_id: str) -> dict[str, Any]:
     **선언 물성(`declared_properties`)의 값은 정본 SI** 다(응력 Pa · 온도 K).
     재료 기본 칸(`basics`)은 값과 **단위가 함께** 오니 그 단위로 읽어라 — 밀도는
     화면 표시 단위(tonne/mm3 등)일 수 있다.
+
+    **이름이나 재료 번호를 줘도 된다** — 딱 하나 맞으면 그것으로 본다(여럿이면 후보를 준다).
     """
+    resolved = await _resolve_material(ctx, material_id)
+    if isinstance(resolved, dict):
+        return resolved
+    material_id = resolved
     material = await _get(ctx, f"/materials/{material_id}")
     if "error" in material:
         return material
@@ -1012,7 +1093,10 @@ async def get_card(ctx: Context, card_id: str) -> dict[str, Any]:
     `caveat` 를 반드시 함께 전한다 — 초안 카드나 합성 소성 표를 확정된 실측처럼
     옮기면 그 값으로 해석이 돌아간다.
     """
-    card = await _get(ctx, f"/fitting/cards/{card_id}")
+    found = await _resolve_card(ctx, card_id)
+    if isinstance(found, dict):
+        return found
+    card = await _get(ctx, f"/fitting/cards/{found}")
     if "error" in card:
         return card
     blocks: dict[str, Any] = {}
@@ -1141,7 +1225,10 @@ async def property_coverage(ctx: Context, material_id: str) -> dict[str, Any]:
     없음」. 값은 SI 다 — 사람에게는 `si_unit` 을 보고 관행 단위로 바꿔 말한다(Pa → MPa).
     빈 `properties` 는 「이 재료에 값이 하나도 없다」 다.
     """
-    return await _get(ctx, f"/materials/{material_id}/property-coverage")
+    resolved = await _resolve_material(ctx, material_id)
+    if isinstance(resolved, dict):
+        return resolved
+    return await _get(ctx, f"/materials/{resolved}/property-coverage")
 
 
 @mcp.tool()
@@ -1167,7 +1254,10 @@ async def deck_readiness(ctx: Context, material_id: str) -> dict[str, Any]:
     처럼 **형식 · 빠진 것 · 채울 길**을 한 문장씩. 판정 규칙은 렌더와 같다 — 준비도가
     「나온다」 인데 덱이 안 나오면 그것은 버그다.
     """
-    return await _get(ctx, f"/fitting/materials/{material_id}/deck-readiness")
+    resolved = await _resolve_material(ctx, material_id)
+    if isinstance(resolved, dict):
+        return resolved
+    return await _get(ctx, f"/fitting/materials/{resolved}/deck-readiness")
 
 
 @mcp.tool()

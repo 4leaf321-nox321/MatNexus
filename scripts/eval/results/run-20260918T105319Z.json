@@ -1,0 +1,217 @@
+{
+  "at": "20260918T105319Z",
+  "git": "61ab65a",
+  "summary": {
+    "n": 3,
+    "passed": 3,
+    "calls": 16,
+    "calls_per_question": 5.33,
+    "empty_calls": 0,
+    "map_first": 3,
+    "errors": 0,
+    "seconds": 138.1,
+    "cost_usd": 1.5743,
+    "by_category": {
+      "카드": {
+        "n": 2,
+        "passed": 2,
+        "calls": 10,
+        "empty": 0,
+        "map_first": 2
+      },
+      "값 찾기": {
+        "n": 1,
+        "passed": 1,
+        "calls": 6,
+        "empty": 0,
+        "map_first": 1
+      }
+    }
+  },
+  "traces": [
+    {
+      "id": "deck-01",
+      "category": "카드",
+      "prompt": "SCATTER_DP600_1.0 재료로 LS-DYNA 곡선 덱(MAT_024)이 나오나? 안 나오면 뭐가 없는지, 어디서 채울 수 있는지 말해 줘.",
+      "calls": [
+        {
+          "name": "mcp__matnexus__get_guide",
+          "input": {
+            "topic": "workflow"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__get_material",
+          "input": {
+            "material_id": "SCATTER_DP600_1.0"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__deck_readiness",
+          "input": {
+            "material_id": "60959881-2063-474e-82d9-a2eec429561e"
+          },
+          "empty": false,
+          "is_error": false
+        }
+      ],
+      "answer": "**나옵니다** — LS-DYNA 곡선 덱(`dyna` = MAT_024 소성 표) 준비도 `ready: true`.\n\n- 재료: SCATTER_DP600_1.0 (M-000038, 기본 부서)\n- 쓰일 카드: **「DP600 MD (resample 0.11)」** — 블록 elastic · hardening · table 다 있음, 인장시험 시료 8개\n- ⚠️ **단, 이 재료의 카드 3장이 전부 `draft`(초안 — 아직 확정 안 됨)** 입니다. 덱은 나오지만 확정 카드가 아니니 해석에 그대로 쓰기 전 확정 절차를 거치세요.\n- 같이 나오는 것: `dyna_elastic`(MAT_001 계열), `dyna_johnson_cook`, 그 외 abaqus · openradioss · ansys · nastran · optistruct\n\n**안 나오는 이웃 형식**(필요하시면)\n\n| 형식 | 빠진 것 | 채울 길 |\n|---|---|---|\n| LS-DYNA (열물성) | 열물성 블록 | 문헌 채택 가능 값 **0건** → 사람이 직접 선언(`thermal.expansion_linear`·`specific_heat`·`conductivity`). 재료의 선언 물성에는 이미 열전도율 46.18 W/(m·K), 비열 483.58 J/(kg·K), CTE 1.233e-5 1/K 가 있으니(출처: KS D 3512 표 3 / 공급사 자료 2025-03, origin `declared:standard`·`declared:datasheet`) 카드 쪽으로 옮겨 붙이면 됩니다 |\n| LS-DYNA (점탄성) | Prony 표 | **DMA 스윕** 시험을 하면 생김. 문헌 채택 0건 |\n| Abaqus (속도 의존) | 속도별 소성 표 | 속도 달리한 **인장시험** 추가 |\n\n덱을 뽑을까요? 단위계 기본은 `mm_n_tonne`(SI 아님) 이라, 받는 해석 모델의 단위계를 알려 주시면 그대로 맞춰 내겠습니다.",
+      "error": null,
+      "seconds": 32.73895192146301,
+      "cost_usd": 0.316478,
+      "map_first": true,
+      "empty_calls": 0,
+      "over_budget": false,
+      "tools_any_ok": true,
+      "forbidden_hit": [],
+      "missing_mentions": [],
+      "passed": true
+    },
+    {
+      "id": "deck-05",
+      "category": "카드",
+      "prompt": "SCATTER_DP600_1.0 의 카드로 LS-DYNA 덱을 뽑고, 그 덱이 카드 값과 맞는지 되읽어 확인해 줘. 단위계는 mm-N-tonne.",
+      "calls": [
+        {
+          "name": "mcp__matnexus__get_guide",
+          "input": {
+            "topic": "cards"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__get_card",
+          "input": {
+            "card_id": "SCATTER_DP600_1.0"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__deck_readiness",
+          "input": {
+            "material_id": "SCATTER_DP600_1.0"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__list_unit_systems",
+          "input": {},
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__get_card",
+          "input": {
+            "card_id": "2b225245-7ae3-4cf3-9b0f-829570c028ba"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__render_card_deck",
+          "input": {
+            "card_id": "2b225245-7ae3-4cf3-9b0f-829570c028ba",
+            "format": "dyna",
+            "units": "mm_n_tonne"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__check_card_deck",
+          "input": {
+            "card_id": "2b225245-7ae3-4cf3-9b0f-829570c028ba",
+            "format": "dyna",
+            "units": "mm_n_tonne"
+          },
+          "empty": false,
+          "is_error": false
+        }
+      ],
+      "answer": "확인했습니다. 덱은 나왔고, 되읽기 검사 3항목 모두 통과입니다.\n\n**뽑은 카드 (주의 — 카드가 3장입니다)**\n`SCATTER_DP600_1.0` 에 초안 카드가 3장 있어 서버가 고른 것으로 뽑았습니다:\n- **`2b225245…` 「DP600 MD (resample 0.11)」** ← 이것으로 뽑음\n- `90ce03cd…` 「DP600 MD (resample 0.11)」 (같은 이름, 다른 카드)\n- `e4d37504…` 「DP600 MD (resample 0.24)」 (적합 구간이 0.24 까지)\n\n셋 다 **초안(draft)** 입니다 — 확정 카드가 아니고, 덱 머리에도 「초안 — 아직 확정되지 않았습니다」 가 박혀 나갑니다. 확정은 화면에서 하셔야 합니다.\n\n**덱**\n- 형식 `dyna` → `*MAT_PIECEWISE_LINEAR_PLASTICITY` + `*DEFINE_CURVE`, 141줄, 파일명 `SCATTER_DP600_1_0_MD_mm_n_tonne.k`\n- 단위계 **mm·N·tonne** (덱 머리 선언 `tonne, mm, s, MPa`). LS-DYNA 는 단위를 선언하지 않으니 **같은 파일의 다른 재료도 전부 이 계**여야 합니다.\n- **MID = 1167775** — 제가 `mid` 를 안 넘겨서 카드 id 에서 만든 수입니다. 전역으로 유일하지 않으니 다른 덱과 합치실 거면 겹치는지 보세요. 모델 번호를 주시면 그 번호로 다시 뽑습니다.\n\n**되읽기 대조 (`check_card_deck`)**\n| 검사 | 결과 |\n|---|---|\n| 읽기 | LS-DYNA 덱으로 읽힘 |\n| 값 | 카드 값 4개가 mm_n_tonne 숫자로 그대로 있음 — 밀도 7.85E-09 tonne/mm³, 푸아송비 0.3, 적합 구간 0~0.11 |\n| 표 | 120점의 **마지막 점까지** 실림 (잘리지 않음) |\n\n덱의 E = 1.999E+05 MPa (카드 199.9 GPa), SIGY = 3.332E+02 MPa (표 첫 점 333.2 MPa).\n\n**출처·등급**\n시편 8개 인장시험(MD)의 대표 곡선, 소성 표·경화식 관련 값은 **등급 1(실측, 표본 3 이상)**. 경화식은 참고로 Voce(상대 RMSE 0.04%, R² 0.99998), **적합 구간 소성변형률 0~0.11 — 그 밖은 검증되지 않았습니다.** 덱에 실린 것은 식이 아니라 표입니다.\n\n네킹 경고나 「첫 점이 항복점이 아닐 수 있음」 같은 각주는 이번 검사에서 **뜨지 않았습니다.**\n\n두 가지만 알려 주시면 마무리하겠습니다: ① 카드 3장 중 어느 것으로 확정할지(특히 0.11 vs 0.24 구간), ② 받는 쪽 모델의 MID. 그리고 아시는 실측값(예: E, 항복강도)을 SI 로 주시면 `expect` 로 한 번 더 대조하겠습니다 — 환산까지 같이 검사됩니다.",
+      "error": null,
+      "seconds": 51.80117917060852,
+      "cost_usd": 0.513253,
+      "map_first": true,
+      "empty_calls": 0,
+      "over_budget": false,
+      "tools_any_ok": true,
+      "forbidden_hit": [],
+      "missing_mentions": [],
+      "passed": true
+    },
+    {
+      "id": "search-06",
+      "category": "값 찾기",
+      "prompt": "SAC305 Solder Alloy 의 탄성계수 문헌값들을 온도별로 정리해 줘.",
+      "calls": [
+        {
+          "name": "mcp__matnexus__get_guide",
+          "input": {},
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__get_ontology",
+          "input": {},
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__resolve_property",
+          "input": {
+            "name": "탄성계수"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__search_catalog",
+          "input": {
+            "query": "SAC305"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__get_catalog_material",
+          "input": {
+            "catalog_material_id": "d68d0ecf-9122-4c47-a198-db3618c500cd",
+            "property_keys": [
+              "mechanical.youngs_modulus"
+            ],
+            "limit": 60
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__search_materials",
+          "input": {
+            "query": "SAC305"
+          },
+          "empty": false,
+          "is_error": false
+        }
+      ],
+      "answer": "SAC305 문헌 영률(탄성계수)은 카탈로그에 **10건**이 있는데, **온도로 갈린 값은 사실상 상온 하나뿐**입니다. 고온 값은 제가 볼 수 있는 범위에 없습니다.\n\n## 온도가 적힌 값\n\n| 온도 | E | 조건 | 등급·방법 | 출처 |\n|---|---|---|---|---|\n| 25 °C (298 K) | **27.83 GPa** | — | tier 1 · 실측 · **대표값** | ITherm 2016, 「Mechanical Characterization of SAC305 Lead Free Solder at High Temperatures」 (DOI 10.1109/itherm.2016.7517622) |\n| 20 °C (293 K) | **54.0 GPa** | 단축인장, 변형률속도 0.04 /s, 주조 그대로(as-cast) 환봉 φ7 mm | tier 1 · 실측 | J. Electron. Mater. 2002 (DOI 10.1007/s11664-002-0100-0) |\n| 온도 없음 | **6.9 GPa** | 조건 미기재 | tier 1 | Indalloy® 256 (SAC305) 제품 데이터시트 |\n\n같은 상온인데 6.9 ~ 54 GPa 로 8배 벌어집니다. 솔더는 점소성이라 E 가 변형률속도에 크게 의존하고(아래 논문이 원문에서 그렇게 밝힙니다), 주조 상태·시편 형상도 다릅니다 — **하나를 상온 대푯값으로 쓰려면 변형률속도부터 맞춰야 합니다.**\n\n## 온도가 아니라 **시효(aging) 시간**으로 갈린 계열\n\nECTC 2010 「Reduction of lead free solder aging effects using doped SAC alloys」 Fig. 25(a), 전부 **25 °C(298 K) 측정 · 0.001 /s · 125 °C(373 K) 시효** · tier 1 · 그래프 디지타이즈(읽기 오차 ±0.03 GPa):\n\n| 시효 0일 | 5일 | 10일 | 20일 | 30일 | 45일 | 60일 |\n|---|---|---|---|---|---|---|\n| 40.12 | 36.40 | 34.39 | 32.35 | 30.45 | 28.83 | 28.00 GPa |\n\n원문 정의는 「유효 탄성계수 = 응력-변형률 곡선의 초기 기울기」이고, 속도 의존이라고 명시돼 있습니다.\n\n참고로 사내 재료에 SAC305 별칭이 8건 등록돼 있지만 **시료가 0건**이라 실측 탄성계수는 없습니다. 고온 구간(예: 50/75/100 °C)이 필요하시면 해당 ITherm 논문 본문에 있을 값이니, 출처와 함께 카탈로그에 넣어 드릴 수 있습니다.",
+      "error": null,
+      "seconds": 53.522167921066284,
+      "cost_usd": 0.7445265000000001,
+      "map_first": true,
+      "empty_calls": 0,
+      "over_budget": false,
+      "tools_any_ok": true,
+      "forbidden_hit": [],
+      "missing_mentions": [],
+      "passed": true
+    }
+  ]
+}
