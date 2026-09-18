@@ -275,11 +275,16 @@ UNITS: dict[str, Unit] = {
 
 
 class UnknownUnit(ValueError):
-    """표에 없는 단위. 조용히 통과시키지 않기 위해 예외로 만든다."""
+    """표에 없는 단위. 조용히 통과시키지 않기 위해 예외로 만든다.
 
-    def __init__(self, symbol: str) -> None:
-        super().__init__(f"모르는 단위입니다: {symbol!r}")
+    `hint` 는 **왜 안 받는지**다. 모호해서 거절하는 자리(`MPa.s`)가 생기면서 필요해
+    졌다 — 「모르는 단위입니다」 만 보면 사람은 표에 없는 줄 알고 표를 뒤진다.
+    """
+
+    def __init__(self, symbol: str, hint: str | None = None) -> None:
+        super().__init__(f"모르는 단위입니다: {symbol!r}" + (f" — {hint}" if hint else ""))
         self.symbol = symbol
+        self.hint = hint
 
 
 #: 같은 단위의 다른 표기. **표를 늘리지 않고 여기서 흡수한다** — `°C` 와 `degC`
@@ -389,19 +394,55 @@ def canonical(symbol: str) -> str | None:
     alias = NOTATION_ALIASES.get(key)
     if alias:
         return alias
-    found = CASE_INDEX.get(key)
-    if found:
-        return found
     # 4. 곱·거듭제곱 표기만 다른가 (`W/(m*K)`·`kg/m^3`·`J/(kg·K)`)
     styled = _styled(text)
     if styled != text:
         return canonical(styled)
+    found = CASE_INDEX.get(key)
+    if found:
+        # **글자 그대로 읽어도 뜻이 되는데 그 뜻이 다르면, 둘 다 안 고른다**
+        # (2026-09-18). `MPa.s` 가 그 자리다 — 대소문자를 되돌리면 밀리파스칼초
+        # (물이 1 mPa·s), 글자 그대로 읽으면 메가파스칼초다. **10⁹ 배**다.
+        # 표 안의 충돌을 버리는 `_case_index` 와 같은 판단이고, 같은 이유다:
+        # 한 번 맞히면 다음번에 틀리는데 틀렸다는 것을 알아챌 방법이 없다.
+        return None if _case_rival(styled, found) else found
     # 5. 접두어만 다른 조합인가 (`W/(mm.K)`·`kPa.s`). **표에 없는 기호를 돌려준다** —
     #    `unit_of` 가 그때 지어 준다. 「아는 단위인가」 를 여기로 묻는 검증 경로
     #    (값으로 찾기·문헌 기여·식 정의)가 조합 단위를 거절하지 않게 하려는 것이다.
     if compose(styled) is not None:
         return styled
     return None
+
+
+def _case_rival(text: str, found: str) -> bool:
+    """대소문자를 되돌린 답과 **글자 그대로 조합한 답**이 다른가.
+
+    같은 답이면(대부분) 갈릴 것이 없다. 조합이 아예 안 되면(`mpa` — `pa` 는 밑기호가
+    아니다) 되돌리기만 남으므로 그대로 쓴다.
+    """
+    built = compose(text)
+    if built is None:
+        return False
+    known = UNITS[found]
+    return (built.dimension, built.factor) != (known.dimension, known.factor)
+
+
+def ambiguity(symbol: str) -> str | None:
+    """이 기호가 **대소문자 때문에** 갈리면 그 사정을 말로. 아니면 `None`.
+
+    오류 본문에 실어 사람이 다음에 무엇을 적을지 알게 한다.
+    """
+    styled = _styled(symbol.strip())
+    found = CASE_INDEX.get(_normalize(styled))
+    if found is None or not _case_rival(styled, found):
+        return None
+    built = compose(styled)
+    assert built is not None
+    return (
+        f"대소문자로 뜻이 갈립니다: 글자 그대로면 {built.dimension}"
+        f"(SI 로 {built.factor} 배), 대소문자를 되돌리면 {found!r}"
+        f"({UNITS[found].factor} 배). 어느 쪽인지 정확히 적으세요"
+    )
 
 
 #: 조합에 쓰는 SI 접두어. **단위 기호와 겹치는 글자는 안 넣는다** — `T` 는 테라이자
@@ -563,12 +604,12 @@ def unit_of(symbol: str) -> Unit:
         known = UNITS.get(found)
         if known is not None:
             return known
-    # **조합은 맨 마지막이다.** 표·별칭·대소문자가 이미 답한 기호의 뜻을 바꾸지
-    # 않는다 — 바꾸면 이미 저장된 값의 뜻이 배포 하나로 달라진다.
-    built = compose(symbol)
-    if built is None:
-        raise UnknownUnit(symbol)
-    return built
+        built = compose(found)
+        if built is not None:
+            return built
+    # **모호해서 거절한 것을 조합으로 되살리지 않는다.** `canonical` 이 `None` 을
+    # 준 까닭이 「표에 없다」 가 아니라 「갈린다」 일 수 있다.
+    raise UnknownUnit(symbol, ambiguity(symbol))
 
 
 def to_si(value: float | Decimal | str, symbol: str) -> float:

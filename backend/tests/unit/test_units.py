@@ -6,6 +6,8 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
+
 import pytest
 
 from matcore import units
@@ -326,14 +328,39 @@ class Test접두어_조합:
         assert units.unit_of("dB").dimension == "decibel"
 
     def test_이미_아는_기호의_뜻은_안_바꾼다(self) -> None:
-        """**조합은 맨 마지막이다.** 표·별칭·대소문자가 이미 답한 기호를 다시 지으면,
-        이미 저장된 값의 뜻이 배포 하나로 달라진다.
-
-        `mPa.s`(밀리파스칼초, 물이 1)와 `MPa.s` 가 그 자리다 — `MPa.s` 는 예전부터
-        대소문자 되돌리기로 `mPa.s` 를 뜻했고, 그대로 둔다. 헷갈리지 않으려면
-        mm·N·tonne 계의 점도는 `N.s/mm2` 로 적는다(표의 주석).
-        """
-        assert units.unit_of("MPa.s").symbol == "mPa.s"
-        assert units.unit_of("Mm").factor == units.unit_of("mm").factor
+        """**조합은 맨 마지막이다.** 표·별칭이 이미 답한 기호를 다시 짓지 않는다 —
+        지으면 이미 저장된 값의 뜻이 배포 하나로 달라진다."""
+        assert units.unit_of("mPa.s").factor == units.UNITS["mPa.s"].factor
         for symbol in units.UNITS:
             assert units.unit_of(symbol).symbol == symbol
+
+
+class Test대소문자가_갈리는_자리:
+    """**글자 그대로 읽어도 뜻이 되는데 그 뜻이 다르면, 둘 다 안 고른다**(2026-09-18).
+
+    `MPa.s` 가 그 자리다 — 되돌리면 밀리파스칼초(물이 1 mPa·s), 글자 그대로면
+    메가파스칼초. **10⁹ 배**다. 표 안의 충돌을 버리는 `_case_index` 와 같은 판단이다:
+    한 번 맞히면 다음번에 틀리는데, 틀렸다는 것을 알아챌 방법이 없다.
+
+    실사(2026-09-18): 개발 DB 의 점도 값 354건은 **전부 정본 `Pa*s`** 였고 `MPa.s`·
+    `mPa.s` 로 저장된 값은 하나도 없었다 — 거절로 바꾸는 대가가 0 이라 그때 닫았다.
+    """
+
+    @pytest.mark.parametrize("written", ["MPa.s", "Mm", "Ms", "MT"])
+    def test_갈리면_거절하고_까닭을_말한다(self, written: str) -> None:
+        assert units.canonical(written) is None
+        with pytest.raises(units.UnknownUnit) as raised:
+            units.unit_of(written)
+        assert "대소문자" in str(raised.value)
+
+    @pytest.mark.parametrize("written", ["mpa", "MPA", "Mpa", "Cm", "KG", "MM"])
+    def test_안_갈리면_그대로_되돌린다(self, written: str) -> None:
+        """**되돌리기를 없애는 것이 아니다.** 글자 그대로 읽어도 뜻이 안 되는 것
+        (`pa` 는 밑기호가 아니다)은 갈릴 것이 없으므로 예전처럼 받는다."""
+        assert units.canonical(written) is not None
+
+    def test_소문자_쪽은_그대로_산다(self) -> None:
+        """거절되는 것은 **대문자로 적은 쪽**뿐이다. 정본은 전혀 안 건드린다."""
+        assert units.unit_of("mPa.s").factor == Decimal("0.001")
+        assert units.unit_of("mm").factor == Decimal("0.001")
+        assert units.unit_of("mT").factor == Decimal("0.001")
