@@ -34,6 +34,7 @@ class VocOut(BaseModel):
     """고치거나 지울 수 있는가. 서버가 정한다(`_editable`) — 화면이 규칙을 두 벌로
     갖지 않게."""
     event_count: int
+    attachment_count: int = 0
     """등록을 뺀 이벤트 수. 목록에서 「말이 오간 건」 을 구별한다."""
 
 
@@ -52,9 +53,23 @@ class VocEventOut(BaseModel):
     note: str | None
 
 
+class VocAttachmentOut(BaseModel):
+    id: uuid.UUID
+    filename: str
+    content_type: str
+    size: int
+    created_at: datetime
+    created_by: str | None
+    url: str
+    """내려받는 주소. 토큰이 있어야 열린다 — 화면은 `downloadFile` 로 받는다."""
+
+
 class VocDetailOut(VocOut):
     body: str
     events: list[VocEventOut]
+    attachments: list[VocAttachmentOut] = []
+    can_attach: bool = False
+    """파일을 붙이거나 뗄 수 있나 — 낸 사람과 관리자."""
     """등록부터 지금까지, 시간순."""
     allowed: list[str]
     """**이 사람이 지금 옮길 수 있는 상태.** 관리자와 낸 사람이 다르고 지금 상태에
@@ -110,3 +125,9 @@ class VocEventRequest(BaseModel):
         if self.status is None and not (self.note or "").strip():
             raise ValueError("상태를 옮기거나 말을 적어야 합니다.")
         return self
+
+
+class VocExportRequest(BaseModel):
+    """게시판에서 고른 건들을 한 zip 으로 — 건마다 폴더, `item.json` + `attachments/`."""
+
+    ids: list[uuid.UUID] = Field(min_length=1, max_length=200)

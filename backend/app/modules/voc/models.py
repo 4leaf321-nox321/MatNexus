@@ -31,7 +31,16 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Identity, Integer, String, Text, func
+from sqlalchemy import (
+    BigInteger,
+    DateTime,
+    ForeignKey,
+    Identity,
+    Integer,
+    String,
+    Text,
+    func,
+)
 from sqlalchemy.dialects.postgresql import UUID as PgUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -135,3 +144,34 @@ class VocEvent(Base):
     from_status: Mapped[str | None] = mapped_column(String(20), nullable=True)
     to_status: Mapped[str] = mapped_column(String(20))
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class VocAttachment(Base):
+    """한 건에 붙은 파일 — 화면 캡처·로그·장비 파일.
+
+    「그 화면에서 안 돼요」 는 글보다 캡처 한 장이 빠르고, 「이 파일이 안 읽혀요」 는 그
+    파일이 있어야 재현된다(2026-09-18 요청). 파일은 filestore 의 `voc/<건 id>/<첨부 id>/`
+    에 두고 여기는 이름·크기·해시만 든다. 건이 지워지면 함께 간다(CASCADE) — 파일은
+    오펀 정리 잡이 행 없는 폴더를 걷는다.
+    """
+
+    __tablename__ = "voc_attachments"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    item_id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("voc_items.id", ondelete="CASCADE"), index=True
+    )
+    filename: Mapped[str] = mapped_column(String(255))
+    content_type: Mapped[str] = mapped_column(String(100))
+    size: Mapped[int] = mapped_column(BigInteger)
+    sha256: Mapped[str] = mapped_column(String(64))
+    path: Mapped[str] = mapped_column(String(500))
+    """filestore 상대경로. `voc/<item id>/<attachment id>/<파일명>`."""
+    created_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )

@@ -8,10 +8,16 @@
 
 from __future__ import annotations
 
+import io
+import json
+import re
 import uuid
+import zipfile
 from datetime import UTC, datetime
+from typing import Any
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, File, Query, UploadFile
+from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
@@ -24,19 +30,23 @@ from app.modules.voc.models import (
     NOTE_REQUIRED,
     VOC_STATUS_LABELS,
     VOC_STATUSES,
+    VocAttachment,
     VocEvent,
     VocItem,
 )
 from app.modules.voc.schemas import (
+    VocAttachmentOut,
     VocCreateRequest,
     VocDetailOut,
     VocEventOut,
     VocEventRequest,
     VocEventUpdateRequest,
+    VocExportRequest,
     VocOut,
     VocStatusOut,
     VocUpdateRequest,
 )
+from app.shared import filestore
 from app.shared.auth import current_user
 from app.shared.errors import AppError, Forbidden, NotFound
 from app.shared.pagination import Page, clamp_limit
@@ -107,6 +117,7 @@ def _out(
     names: dict[uuid.UUID, str],
     editable: bool,
     event_count: int,
+    attachment_count: int = 0,
 ) -> VocOut:
     return VocOut(
         id=item.id,
@@ -122,7 +133,24 @@ def _out(
         is_mine=item.created_by_id == viewer.id,
         can_edit=editable,
         event_count=event_count,
+        attachment_count=attachment_count,
     )
+
+
+def _attachments(db: Session, item: VocItem) -> list[VocAttachment]:
+    return list(
+        db.scalars(
+            select(VocAttachment)
+            .where(VocAttachment.item_id == item.id)
+            .order_by(VocAttachment.created_at, VocAttachment.id)
+        )
+    )
+
+
+def _can_attach(item: VocItem, user: User) -> bool:
+    """붙이고 떼는 것은 낸 사람과 관리자 — 남이 말을 남긴 뒤에도 된다(캡처를 나중에
+    보태는 것이 흔하다). 글 자체를 고치는 것(`_editable`)과는 다른 규칙이다."""
+    return bool(user.is_system_admin or item.created_by_id == user.id)
 
 
 def _detail(db: Session, item: VocItem, viewer: User) -> VocDetailOut:
@@ -133,7 +161,16 @@ def _detail(db: Session, item: VocItem, viewer: User) -> VocDetailOut:
             .order_by(VocEvent.at, VocEvent.id)
         )
     )
-    names = _names(db, {item.created_by_id, item.status_by_id, *(one.by_id for one in events)})
+    attachments = _attachments(db, item)
+    names = _names(
+        db,
+        {
+            item.created_by_id,
+            item.status_by_id,
+            *(one.by_id for one in events),
+            *(one.created_by_id for one in attachments),
+        },
+    )
     allowed = _moves(item, viewer)
     head = _out(
         item,
@@ -142,10 +179,24 @@ def _detail(db: Session, item: VocItem, viewer: User) -> VocDetailOut:
         editable=_editable(db, item, viewer),
         # 등록 이벤트는 빼고 센다 — 「말이 오간 건」 을 세는 수다.
         event_count=max(len(events) - 1, 0),
+        attachment_count=len(attachments),
     )
     return VocDetailOut(
         **head.model_dump(),
         body=item.body,
+        attachments=[
+            VocAttachmentOut(
+                id=one.id,
+                filename=one.filename,
+                content_type=one.content_type,
+                size=one.size,
+                created_at=one.created_at,
+                created_by=names.get(one.created_by_id) if one.created_by_id else None,
+                url=f"/api/voc/{item.id}/attachments/{one.id}",
+            )
+            for one in attachments
+        ],
+        can_attach=_can_attach(item, viewer),
         events=[
             VocEventOut(
                 id=one.id,
@@ -289,8 +340,15 @@ def list_items(
     )
     # 건마다 세지 않는다 — 한 번에 묶어 센다.
     counts: dict[uuid.UUID, int] = {}
+    files: dict[uuid.UUID, int] = {}
     spoken: set[uuid.UUID] = set()
     if ids:
+        for item_id, count in db.execute(
+            select(VocAttachment.item_id, func.count())
+            .where(VocAttachment.item_id.in_(ids))
+            .group_by(VocAttachment.item_id)
+        ).all():
+            files[item_id] = int(count)
         for item_id, count in db.execute(
             select(VocEvent.item_id, func.count())
             .where(VocEvent.item_id.in_(ids))
@@ -315,6 +373,7 @@ def list_items(
                 editable=user.is_system_admin
                 or (one.created_by_id == user.id and one.id not in spoken),
                 event_count=max(counts.get(one.id, 0) - 1, 0),
+                attachment_count=files.get(one.id, 0),
             )
             for one in items
         ],
@@ -533,3 +592,220 @@ def add_event(
     _notify_changed(db, item, event, user, previous_handler)
     db.commit()
     return _detail(db, item, user)
+
+
+# --- 첨부 -----------------------------------------------------------------------
+
+#: 첨부 한 개의 상한. 화면 캡처·로그·장비 파일이 대상이다 — 시험 원본은 시험 등록으로.
+MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024
+
+
+def _attachment(db: Session, item: VocItem, attachment_id: uuid.UUID) -> VocAttachment:
+    row = db.get(VocAttachment, attachment_id)
+    if row is None or row.item_id != item.id:
+        raise NotFound("MNX-VOC-0010", "첨부 파일을 찾을 수 없습니다.")
+    return row
+
+
+@router.post("/{item_id}/attachments", response_model=VocDetailOut, status_code=201)
+def upload_attachment(
+    item_id: uuid.UUID,
+    file: UploadFile = File(...),
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> VocDetailOut:
+    """파일 하나를 붙인다. 여럿이면 여러 번 부른다 — 하나가 커서 막혀도 나머지는 붙는다."""
+    item = _get(db, item_id)
+    if not _can_attach(item, user):
+        raise Forbidden("MNX-VOC-0011", "자기가 낸 건에만 파일을 붙일 수 있습니다.")
+    attachment_id = uuid.uuid4()
+    safe = filestore.sanitize_filename(file.filename or "") or "attachment"
+    try:
+        stored = filestore.save_stream(
+            file.file,
+            relative_dir=f"voc/{item.id}/{attachment_id}",
+            filename=safe,
+            max_bytes=MAX_ATTACHMENT_BYTES,
+        )
+    except filestore.FileTooLarge as exc:
+        raise AppError(
+            "MNX-VOC-0012",
+            f"첨부는 {MAX_ATTACHMENT_BYTES // (1024 * 1024)} MB 까지입니다.",
+            status=413,
+        ) from exc
+    db.add(
+        VocAttachment(
+            id=attachment_id,
+            item_id=item.id,
+            filename=safe,
+            content_type=(file.content_type or "application/octet-stream")
+            .split(";")[0]
+            .strip(),
+            size=stored.size,
+            sha256=stored.sha256,
+            path=stored.relative_path,
+            created_by_id=user.id,
+        )
+    )
+    db.commit()
+    return _detail(db, item, user)
+
+
+@router.get("/{item_id}/attachments/{attachment_id}")
+def download_attachment(
+    item_id: uuid.UUID,
+    attachment_id: uuid.UUID,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> Any:
+    """**첨부로만 내린다.** 올린 파일은 무엇이든 될 수 있다 — HTML 을 문서로 열면 그 안의
+    스크립트가 이 사이트의 권한으로 돈다."""
+    row = _attachment(db, _get(db, item_id), attachment_id)
+    path = filestore.resolve(row.path)
+    if not path.is_file():
+        raise AppError("MNX-VOC-0013", "첨부 파일이 저장소에 없습니다.", status=404)
+    return FileResponse(
+        path,
+        media_type="application/octet-stream",
+        filename=row.filename,
+        headers={"X-Content-Type-Options": "nosniff"},
+    )
+
+
+@router.delete("/{item_id}/attachments/{attachment_id}", response_model=VocDetailOut)
+def delete_attachment(
+    item_id: uuid.UUID,
+    attachment_id: uuid.UUID,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> VocDetailOut:
+    item = _get(db, item_id)
+    if not _can_attach(item, user):
+        raise Forbidden("MNX-VOC-0011", "자기가 낸 건의 파일만 뗄 수 있습니다.")
+    row = _attachment(db, item, attachment_id)
+    filestore.delete_dir(f"voc/{item.id}/{row.id}")
+    db.delete(row)
+    db.commit()
+    return _detail(db, item, user)
+
+
+# --- 내보내기 ---------------------------------------------------------------------
+
+
+def _folder_name(item: VocItem) -> str:
+    """`voc-0012-제목` — 번호가 앞이라 정렬되고, 제목은 파일 이름에 못 쓰는 글자를 뺀다."""
+    slug = re.sub(r"[\\/:*?\"<>|\x00-\x1f]+", " ", item.title).strip()
+    slug = re.sub(r"\s+", "-", slug)[:60].strip("-.")
+    return f"voc-{item.seq:04d}" + (f"-{slug}" if slug else "")
+
+
+@router.post("/export")
+def export_items(
+    payload: VocExportRequest,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> Any:
+    """고른 건들을 zip 하나로 — **건마다 폴더**, 그 안에 `item.json` 과 `attachments/`.
+
+    `item.json` 이 제목·본문·상태·이력과 첨부 목록을 들고, 첨부는 폴더 안 파일을
+    상대경로로 가리킨다(2026-09-18 요청). 맨 위 `index.json` 이 건 목록이다. 사람이
+    읽고 다른 곳(이슈 트래커·보고서)으로 옮기는 용도라 JSON 은 사람이 읽게 들여쓴다.
+    """
+    wanted = list(dict.fromkeys(payload.ids))
+    items = {one.id: one for one in db.scalars(select(VocItem).where(VocItem.id.in_(wanted)))}
+    missing = [str(one) for one in wanted if one not in items]
+    if missing:
+        raise NotFound("MNX-VOC-0001", "접수 내역을 찾을 수 없습니다: " + ", ".join(missing))
+    ordered = sorted(items.values(), key=lambda one: one.seq)
+
+    buffer = io.BytesIO()
+    index: list[dict[str, Any]] = []
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as bundle:
+        for item in ordered:
+            folder = _folder_name(item)
+            detail = _detail(db, item, user)
+            used: set[str] = set()
+            files: list[dict[str, Any]] = []
+            rows = _attachments(db, item)
+            uploaders = _names(db, {row.created_by_id for row in rows})
+            for row in rows:
+                # 같은 이름이 둘이면 뒤엣것에 첨부 id 앞자리를 붙인다 — 덮어쓰지 않는다.
+                name = row.filename
+                if name in used:
+                    stem, dot, ext = name.rpartition(".")
+                    name = f"{stem or ext}-{str(row.id)[:8]}{dot}{ext if stem else ''}"
+                used.add(name)
+                relative = f"attachments/{name}"
+                path = filestore.resolve(row.path)
+                if path.is_file():
+                    bundle.write(path, f"{folder}/{relative}")
+                    files.append(
+                        {
+                            "filename": row.filename,
+                            "path": relative,
+                            "content_type": row.content_type,
+                            "size": row.size,
+                            "sha256": row.sha256,
+                            "uploaded_by": uploaders.get(row.created_by_id)
+                            if row.created_by_id
+                            else None,
+                        }
+                    )
+                else:
+                    files.append({"filename": row.filename, "path": None, "missing": True})
+            body = {
+                "seq": item.seq,
+                "id": str(item.id),
+                "title": item.title,
+                "body": item.body,
+                "status": item.status,
+                "status_label": detail.status_label,
+                "page_path": item.page_path,
+                "created_at": item.created_at.isoformat(),
+                "created_by": detail.created_by,
+                "events": [
+                    {
+                        "at": one.at.isoformat(),
+                        "by": one.by,
+                        "from_status": one.from_status,
+                        "to_status": one.to_status,
+                        "to_status_label": one.to_status_label,
+                        "note": one.note,
+                    }
+                    for one in detail.events
+                ],
+                "attachments": files,
+            }
+            bundle.writestr(
+                f"{folder}/item.json", json.dumps(body, ensure_ascii=False, indent=2)
+            )
+            index.append(
+                {
+                    "seq": item.seq,
+                    "title": item.title,
+                    "status": item.status,
+                    "folder": folder,
+                    "item": f"{folder}/item.json",
+                    "attachments": len(files),
+                }
+            )
+        bundle.writestr(
+            "index.json",
+            json.dumps(
+                {
+                    "exported_at": datetime.now(UTC).isoformat(),
+                    "exported_by": user.display_name,
+                    "count": len(index),
+                    "items": index,
+                },
+                ensure_ascii=False,
+                indent=2,
+            ),
+        )
+    buffer.seek(0)
+    stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
+    return StreamingResponse(
+        buffer,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="voc-export-{stamp}.zip"'},
+    )

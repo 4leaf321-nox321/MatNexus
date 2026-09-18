@@ -276,6 +276,21 @@ def existing_guide_dirs() -> list[str]:
     return [f"guide/{asset.name}" for asset in sorted(top.iterdir()) if asset.is_dir()]
 
 
+def existing_voc_dirs() -> list[str]:
+    """VOC 첨부 폴더(`voc/{item id}/{attachment id}`). 행 없는 폴더가 오펀이다."""
+    base = root()
+    top = base / "voc"
+    if not top.is_dir():
+        return []
+    return [
+        f"voc/{item.name}/{one.name}"
+        for item in sorted(top.iterdir())
+        if item.is_dir()
+        for one in sorted(item.iterdir())
+        if one.is_dir()
+    ]
+
+
 def existing_run_dirs() -> list[str]:
     """저장소에 실제로 있는 시험 폴더. **오펀 정리 잡이 쓴다.**
 

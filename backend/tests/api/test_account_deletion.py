@@ -67,7 +67,7 @@ def test_delete_keeps_the_row_and_cuts_access(
 def test_deleted_account_is_listed_apart_and_cannot_be_revived(
     client: TestClient, db: Session, workspace: Workspace, admin_headers: dict[str, str]
 ) -> None:
-    """삭제는 정지가 아니다 — 「정지」 목록에 섞여 나와 「활성화」 로 되살아났다(2026-09-18)."""
+    """삭제는 정지가 아니다 — 「정지」 목록에 섞여 「활성화」 로 되살아났다(2026-09-18)."""
     user = make_user(db, "hong", workspace)
     client.request("DELETE", f"/api/accounts/{user.id}", json={}, headers=admin_headers)
 

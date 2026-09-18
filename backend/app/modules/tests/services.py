@@ -39,6 +39,7 @@ from app.modules.tests.models import (
 )
 from app.modules.tests.schemas import RECORD_FIELDS
 from app.modules.viscoelastic.models import MasterCurve
+from app.modules.voc.models import VocAttachment
 from app.modules.vocabulary import services as vocabulary_services
 from app.shared import (
     audit,
@@ -1191,6 +1192,15 @@ def storage_report(db: Session, *, retention_days: int | None = None) -> dict[st
         except ValueError:
             continue
         if db.get(GuideAsset, asset_id) is None:
+            orphans.append({"path": relative, "bytes": filestore.directory_size(relative)})
+
+    # VOC 첨부 — 행 없는 폴더만 오펀(건을 지우면 행은 CASCADE 로 가고 폴더가 남는다).
+    for relative in filestore.existing_voc_dirs():
+        try:
+            attachment_id = uuid.UUID(relative.rsplit("/", 1)[-1])
+        except ValueError:
+            continue
+        if db.get(VocAttachment, attachment_id) is None:
             orphans.append({"path": relative, "bytes": filestore.directory_size(relative)})
 
     return {

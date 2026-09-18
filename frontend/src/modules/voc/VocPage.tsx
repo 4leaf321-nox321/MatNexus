@@ -19,7 +19,7 @@
  */
 
 import { useState } from 'react'
-import { MessageSquare, MessageSquarePlus, Search } from 'lucide-react'
+import { Download, MessageSquare, MessageSquarePlus, Paperclip, Search, X } from 'lucide-react'
 import { Link, useNavigate } from 'react-router-dom'
 
 import { STATUS_TONES, vocApi } from '@/modules/voc/api'
@@ -71,6 +71,11 @@ export default function VocPage() {
   const [q, setQ] = useState('')
   const [offset, setOffset] = useState(0)
   const [writing, setWriting] = useState(false)
+  // **골라서 내려받는다**(2026-09-18). 이슈 트래커·보고서로 옮길 때 건마다 열어 복사하던
+  // 것을, 고른 만큼 zip 하나(건마다 폴더 · item.json · attachments/)로 받는다.
+  const [picked, setPicked] = useState<Set<string>>(new Set())
+  const [exporting, setExporting] = useState(false)
+  const [exportError, setExportError] = useState<Error | null>(null)
 
   const statuses = useResource(() => vocApi.statuses(), [])
   const page = useResource(
@@ -78,6 +83,38 @@ export default function VocPage() {
     [status, q, mine, offset]
   )
   const rows = page.data?.items ?? []
+  const pickedOnPage = rows.filter((item) => picked.has(item.id))
+  const allPicked = rows.length > 0 && pickedOnPage.length === rows.length
+
+  function togglePick(id: string) {
+    setPicked((current) => {
+      const next = new Set(current)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  function togglePage() {
+    setPicked((current) => {
+      const next = new Set(current)
+      if (allPicked) rows.forEach((item) => next.delete(item.id))
+      else rows.forEach((item) => next.add(item.id))
+      return next
+    })
+  }
+
+  async function exportPicked() {
+    setExporting(true)
+    setExportError(null)
+    try {
+      await vocApi.exportZip([...picked])
+    } catch (caught) {
+      setExportError(caught instanceof Error ? caught : new Error('내려받지 못했습니다.'))
+    } finally {
+      setExporting(false)
+    }
+  }
   const total = page.data?.total ?? 0
   const focus = useRowFocus(rows.map((one) => one.id))
 
@@ -105,14 +142,23 @@ export default function VocPage() {
         title="VOC"
         description="불편한 점이나 필요한 기능을 남겨 주세요. 등록 → 접수 → 처리 중 → 해결 → 종료 로 흐르고, 누가 언제 옮겼는지 남습니다."
         actions={
-          <Button onClick={() => setWriting(true)}>
-            <MessageSquarePlus className="size-4" />
-            의견 등록
-          </Button>
+          <div className="flex gap-2">
+            {/* 고른 것이 있을 때만 선다 — 늘 서 있으면 「뭘 내려받지」 가 된다. */}
+            {picked.size > 0 && (
+              <Button variant="outline" disabled={exporting} onClick={() => void exportPicked()}>
+                <Download className="size-4" />
+                {exporting ? '묶는 중…' : `${picked.size}건 다운로드`}
+              </Button>
+            )}
+            <Button onClick={() => setWriting(true)}>
+              <MessageSquarePlus className="size-4" />
+              의견 등록
+            </Button>
+          </div>
         }
       />
 
-      <ErrorNotice error={page.error ?? statuses.error} className="mb-4" />
+      <ErrorNotice error={page.error ?? statuses.error ?? exportError} className="mb-4" />
 
       {/* **상태로 거른다.** 「내가 낸 것 중 아직 안 된 것」 이 가장 흔한 물음이다. */}
       <div className="mb-4 flex flex-wrap items-center gap-2">
@@ -167,6 +213,14 @@ export default function VocPage() {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-8">
+                  <input
+                    type="checkbox"
+                    aria-label="이 쪽 전부 고르기"
+                    checked={allPicked}
+                    onChange={togglePage}
+                  />
+                </TableHead>
                 <TableHead className="w-16 text-right">번호</TableHead>
                 <TableHead>제목</TableHead>
                 <TableHead className="w-24">상태</TableHead>
@@ -185,6 +239,14 @@ export default function VocPage() {
                   // 줄 안의 첫 링크, `useRowFocus`).
                   onClick={() => navigate(`/voc/${item.id}`)}
                 >
+                  <TableCell onClick={(event) => event.stopPropagation()}>
+                    <input
+                      type="checkbox"
+                      aria-label={`${item.title} 고르기`}
+                      checked={picked.has(item.id)}
+                      onChange={() => togglePick(item.id)}
+                    />
+                  </TableCell>
                   <TableCell className="text-right tabular-nums">{item.seq}</TableCell>
                   <TableCell>
                     <Link
@@ -200,6 +262,15 @@ export default function VocPage() {
                       <span className="text-muted-foreground ml-2 inline-flex items-center gap-0.5">
                         <MessageSquare className="size-3" aria-hidden />
                         <span className="tabular-nums">{item.event_count}</span>
+                      </span>
+                    )}
+                    {(item.attachment_count ?? 0) > 0 && (
+                      <span
+                        className="text-muted-foreground ml-2 inline-flex items-center gap-0.5"
+                        title={`첨부 ${item.attachment_count}개`}
+                      >
+                        <Paperclip className="size-3" aria-hidden />
+                        <span className="tabular-nums">{item.attachment_count}</span>
                       </span>
                     )}
                     {item.is_mine && (
@@ -304,6 +375,7 @@ function WriteDialog({
 }) {
   const [title, setTitle] = useState('')
   const [body, setBody] = useState('')
+  const [files, setFiles] = useState<File[]>([])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<Error | null>(null)
 
@@ -317,8 +389,22 @@ function WriteDialog({
         // 직전 화면을 담는다. 사용자가 따로 적지 않아도 재현 실마리가 남는다.
         page_path: document.referrer ? new URL(document.referrer).pathname : null,
       })
+      // **글이 먼저, 파일은 하나씩.** 하나가 커서 막혀도 글과 나머지 파일은 남는다 —
+      // 막힌 것은 상세에서 다시 붙일 수 있다.
+      const failed: string[] = []
+      for (const file of files) {
+        try {
+          await vocApi.attach(made.id, file)
+        } catch {
+          failed.push(file.name)
+        }
+      }
       setTitle('')
       setBody('')
+      setFiles([])
+      if (failed.length > 0) {
+        window.alert(`글은 등록됐지만 붙이지 못한 파일이 있습니다: ${failed.join(', ')}`)
+      }
       onDone(made.id)
     } catch (caught) {
       setError(caught instanceof Error ? caught : new Error('접수에 실패했습니다.'))
@@ -351,6 +437,41 @@ function WriteDialog({
               rows={6}
               className="border-input bg-transparent focus-visible:ring-ring w-full rounded-md border px-3 py-2 text-sm focus-visible:ring-1 focus-visible:outline-none"
             />
+          </div>
+          {/* 캡처 한 장이 글보다 빠르다. 한 파일 25 MB 까지 — 시험 원본은 시험 등록으로. */}
+          <div className="space-y-1.5">
+            <Label htmlFor="voc-files">첨부</Label>
+            <Input
+              id="voc-files"
+              type="file"
+              multiple
+              onChange={(e) => {
+                const chosen = Array.from(e.target.files ?? [])
+                setFiles((current) => [...current, ...chosen])
+                e.target.value = ''
+              }}
+            />
+            {files.length > 0 && (
+              <ul className="space-y-0.5 text-xs">
+                {files.map((file, at) => (
+                  <li key={`${file.name}-${at}`} className="flex items-center gap-1">
+                    <Paperclip className="size-3" aria-hidden />
+                    <span className="truncate">{file.name}</span>
+                    <span className="text-muted-foreground tabular-nums">
+                      {(file.size / 1024).toFixed(0)} KB
+                    </span>
+                    <button
+                      type="button"
+                      className="text-muted-foreground hover:text-foreground ml-auto"
+                      aria-label={`${file.name} 빼기`}
+                      onClick={() => setFiles((current) => current.filter((_, i) => i !== at))}
+                    >
+                      <X className="size-3" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         </div>
 

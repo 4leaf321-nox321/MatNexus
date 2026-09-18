@@ -16,13 +16,18 @@ import VocPage from '@/modules/voc/VocPage'
 
 const list = vi.fn()
 const statuses = vi.fn()
+const create = vi.fn()
+const attach = vi.fn()
+const exportZip = vi.fn()
 
 vi.mock('@/modules/voc/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/modules/voc/api')>()),
   vocApi: {
     list: (...args: unknown[]) => list(...args),
     statuses: () => statuses(),
-    create: vi.fn(),
+    create: (...args: unknown[]) => create(...args),
+    attach: (...args: unknown[]) => attach(...args),
+    exportZip: (...args: unknown[]) => exportZip(...args),
   },
 }))
 
@@ -136,5 +141,63 @@ describe('VOC 게시판', () => {
     list.mockResolvedValue({ items: [], total: 0, limit: 50, offset: 0 })
     await user.click(screen.getByRole('button', { name: '반려' }))
     expect(await screen.findByText(/거른 조건에 맞는 것이 없습니다/)).toBeInTheDocument()
+  })
+})
+
+describe('고른 건 내려받기', () => {
+  beforeEach(() => {
+    list.mockReset()
+    statuses.mockReset()
+    statuses.mockResolvedValue(STATUSES)
+    exportZip.mockReset()
+    exportZip.mockResolvedValue(undefined)
+  })
+
+  it('고른 것이 있을 때만 단추가 서고, 고른 id 를 넘긴다', async () => {
+    await show([item(), item({ id: 'voc-2', seq: 13, title: '두 번째' })])
+    expect(screen.queryByRole('button', { name: /다운로드/ })).not.toBeInTheDocument()
+    await userEvent.click(await screen.findByLabelText('두 번째 고르기'))
+    await userEvent.click(screen.getByRole('button', { name: '1건 다운로드' }))
+    await waitFor(() => expect(exportZip).toHaveBeenCalledWith(['voc-2']))
+  })
+
+  it('머리 체크박스는 이 쪽 전부를 고른다', async () => {
+    await show([item(), item({ id: 'voc-2', seq: 13, title: '두 번째' })])
+    await screen.findByLabelText('두 번째 고르기')
+    await userEvent.click(screen.getByLabelText('이 쪽 전부 고르기'))
+    expect(screen.getByRole('button', { name: '2건 다운로드' })).toBeInTheDocument()
+  })
+
+  it('첨부가 있는 건은 클립과 수가 보인다', async () => {
+    await show([item({ attachment_count: 2 })])
+    expect(await screen.findByTitle('첨부 2개')).toHaveTextContent('2')
+  })
+})
+
+describe('등록할 때 파일을 붙인다', () => {
+  beforeEach(() => {
+    list.mockReset()
+    statuses.mockReset()
+    statuses.mockResolvedValue(STATUSES)
+    create.mockReset()
+    attach.mockReset()
+  })
+
+  it('글이 먼저 만들어지고 파일은 하나씩 붙는다', async () => {
+    create.mockResolvedValue({ id: 'voc-9' })
+    attach.mockResolvedValue({})
+    await show([])
+    await userEvent.click(screen.getByRole('button', { name: '의견 등록' }))
+    await userEvent.type(screen.getByLabelText('제목'), '캡처 있음')
+    await userEvent.type(screen.getByLabelText('내용'), '이렇게 나옵니다')
+    const one = new File(['a'], 'a.png', { type: 'image/png' })
+    const two = new File(['bb'], 'b.log', { type: 'text/plain' })
+    await userEvent.upload(screen.getByLabelText('첨부'), [one, two])
+    expect(screen.getByText('a.png')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: '등록' }))
+    await waitFor(() => expect(attach).toHaveBeenCalledTimes(2))
+    expect(create).toHaveBeenCalledTimes(1)
+    expect(attach.mock.calls[0][0]).toBe('voc-9')
+    expect((attach.mock.calls[0][1] as File).name).toBe('a.png')
   })
 })

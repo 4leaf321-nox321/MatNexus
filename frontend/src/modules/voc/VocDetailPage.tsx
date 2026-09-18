@@ -13,12 +13,12 @@
  */
 
 import { useState } from 'react'
-import { ArrowLeft, Pencil, Trash2 } from 'lucide-react'
+import { ArrowLeft, Download, Paperclip, Pencil, Trash2, X } from 'lucide-react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 
 import { StatusBadge } from '@/modules/voc/VocPage'
 import { STATUS_TONES, vocApi } from '@/modules/voc/api'
-import type { VocDetail, VocEvent } from '@/modules/voc/api'
+import type { VocAttachment, VocDetail, VocEvent } from '@/modules/voc/api'
 import { ConfirmDialog } from '@/shared/components/ConfirmDialog'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { Stamp } from '@/shared/components/Stamp'
@@ -108,6 +108,15 @@ export default function VocDetailPage() {
           <section className="mb-6 rounded-md border p-4">
             <p className="whitespace-pre-wrap">{detail.body}</p>
           </section>
+
+          <Attachments
+            detail={detail}
+            onChanged={() => {
+              setError(null)
+              item.reload()
+            }}
+            onError={setError}
+          />
 
           <section className="mb-6">
             <h2 className="mb-2 font-medium">이력</h2>
@@ -519,5 +528,110 @@ function EditDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  )
+}
+
+/**
+ * 첨부 — 내려받기는 누구나, 붙이고 떼는 것은 낸 사람과 관리자(`can_attach`).
+ *
+ * 내려받기는 `<a href>` 가 아니다 — 토큰은 메모리에만 있어 링크에 안 실리고, 그때의
+ * 401 은 새 탭에서 나서 화면에는 아무 표시도 안 뜬다(`downloadFile`).
+ */
+function Attachments({
+  detail,
+  onChanged,
+  onError,
+}: {
+  detail: VocDetail
+  onChanged: () => void
+  onError: (error: Error) => void
+}) {
+  const [busy, setBusy] = useState(false)
+  const attachments: VocAttachment[] = detail.attachments ?? []
+
+  async function run(action: () => Promise<unknown>) {
+    setBusy(true)
+    try {
+      await action()
+      onChanged()
+    } catch (caught) {
+      onError(caught instanceof Error ? caught : new Error('처리에 실패했습니다.'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (attachments.length === 0 && !detail.can_attach) return null
+
+  return (
+    <section className="mb-6">
+      <h2 className="mb-2 flex items-center gap-1 font-medium">
+        <Paperclip className="size-4" aria-hidden />
+        첨부
+        {attachments.length > 0 && (
+          <span className="text-muted-foreground text-sm tabular-nums">{attachments.length}</span>
+        )}
+      </h2>
+      {attachments.length > 0 && (
+        <ul className="divide-y rounded-md border">
+          {attachments.map((one) => (
+            <li key={one.id} className="flex items-center gap-2 px-3 py-2 text-sm">
+              <button
+                type="button"
+                className="inline-flex items-center gap-1 font-medium hover:underline"
+                disabled={busy}
+                onClick={() => void run(() => vocApi.download(one))}
+              >
+                <Download className="size-3.5" aria-hidden />
+                {one.filename}
+              </button>
+              <span className="text-muted-foreground tabular-nums">
+                {(one.size / 1024).toFixed(0)} KB
+              </span>
+              <span className="text-muted-foreground ml-auto text-xs">
+                {one.created_by ?? '알 수 없음'} · <Stamp at={one.created_at} />
+              </span>
+              {detail.can_attach && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-6 px-1"
+                  disabled={busy}
+                  aria-label={`${one.filename} 떼기`}
+                  onClick={() => {
+                    if (window.confirm(`'${one.filename}' 을 뗍니다. 파일은 지워집니다.`)) {
+                      void run(() => vocApi.detach(detail.id, one.id))
+                    }
+                  }}
+                >
+                  <X className="size-3.5" />
+                </Button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      {detail.can_attach && (
+        <label className="text-muted-foreground mt-2 inline-flex cursor-pointer items-center gap-1 text-xs hover:underline">
+          <Paperclip className="size-3" aria-hidden />
+          파일 붙이기 (한 파일 25 MB 까지)
+          <input
+            type="file"
+            multiple
+            className="sr-only"
+            aria-label="파일 붙이기"
+            disabled={busy}
+            onChange={(e) => {
+              const chosen = Array.from(e.target.files ?? [])
+              e.target.value = ''
+              if (chosen.length === 0) return
+              void run(async () => {
+                for (const file of chosen) await vocApi.attach(detail.id, file)
+              })
+            }}
+          />
+        </label>
+      )}
+    </section>
   )
 }

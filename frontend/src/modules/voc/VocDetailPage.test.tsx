@@ -15,6 +15,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import VocDetailPage from '@/modules/voc/VocDetailPage'
 
 const get = vi.fn()
+const download = vi.fn()
+const detach = vi.fn()
+const attach = vi.fn()
 const event = vi.fn()
 const remove = vi.fn()
 const removeEvent = vi.fn()
@@ -29,6 +32,9 @@ vi.mock('@/modules/voc/api', async (importOriginal) => ({
     removeEvent: (...args: unknown[]) => removeEvent(...args),
     updateEvent: (...args: unknown[]) => updateEvent(...args),
     update: vi.fn(),
+    download: (...args: unknown[]) => download(...args),
+    detach: (...args: unknown[]) => detach(...args),
+    attach: (...args: unknown[]) => attach(...args),
   },
 }))
 
@@ -236,5 +242,47 @@ describe('VOC 상세', () => {
     await user.click(within(dialog).getByRole('button', { name: '삭제' }))
     await waitFor(() => expect(remove).toHaveBeenCalledWith('voc-1'))
     expect(await screen.findByText('목록으로 왔다')).toBeInTheDocument()
+  })
+})
+
+describe('첨부', () => {
+  const file = {
+    id: 'a-1',
+    filename: '캡처.png',
+    content_type: 'image/png',
+    size: 2048,
+    created_at: '2026-08-27T10:00:00Z',
+    created_by: '홍길동',
+    url: '/api/voc/voc-1/attachments/a-1',
+  }
+
+  beforeEach(() => {
+    download.mockReset()
+    download.mockResolvedValue(undefined)
+    detach.mockReset()
+    attach.mockReset()
+  })
+
+  it('이름을 누르면 토큰을 붙여 받아 온다 — 링크가 아니다', async () => {
+    await show(detail({ attachments: [file], can_attach: false }))
+    await userEvent.click(screen.getByRole('button', { name: /캡처\.png/ }))
+    await waitFor(() => expect(download).toHaveBeenCalledWith(expect.objectContaining({ id: 'a-1' })))
+    // 붙일 수 없는 사람에게는 떼기·붙이기가 없다.
+    expect(screen.queryByLabelText('캡처.png 떼기')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('파일 붙이기')).not.toBeInTheDocument()
+  })
+
+  it('낸 사람은 붙이고 뗀다', async () => {
+    detach.mockResolvedValue(detail({ attachments: [], can_attach: true }))
+    attach.mockResolvedValue(detail({ attachments: [file], can_attach: true }))
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    await show(detail({ attachments: [file], can_attach: true }))
+    await userEvent.click(screen.getByLabelText('캡처.png 떼기'))
+    await waitFor(() => expect(detach).toHaveBeenCalledWith('voc-1', 'a-1'))
+    await userEvent.upload(
+      screen.getByLabelText('파일 붙이기'),
+      new File(['x'], 'log.txt', { type: 'text/plain' })
+    )
+    await waitFor(() => expect(attach).toHaveBeenCalledWith('voc-1', expect.any(File)))
   })
 })

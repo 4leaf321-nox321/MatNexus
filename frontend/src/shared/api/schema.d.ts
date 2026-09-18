@@ -5764,6 +5764,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/voc/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Export Items
+         * @description 고른 건들을 zip 하나로 — **건마다 폴더**, 그 안에 `item.json` 과 `attachments/`.
+         *
+         *     `item.json` 이 제목·본문·상태·이력과 첨부 목록을 들고, 첨부는 폴더 안 파일을
+         *     상대경로로 가리킨다(2026-09-18 요청). 맨 위 `index.json` 이 건 목록이다. 사람이
+         *     읽고 다른 곳(이슈 트래커·보고서)으로 옮기는 용도라 JSON 은 사람이 읽게 들여쓴다.
+         */
+        post: operations["export_items_api_voc_export_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/voc/statuses": {
         parameters: {
             query?: never;
@@ -5804,6 +5828,48 @@ export interface paths {
         head?: never;
         /** Update Item */
         patch: operations["update_item_api_voc__item_id__patch"];
+        trace?: never;
+    };
+    "/api/voc/{item_id}/attachments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Upload Attachment
+         * @description 파일 하나를 붙인다. 여럿이면 여러 번 부른다 — 하나가 커서 막혀도 나머지는 붙는다.
+         */
+        post: operations["upload_attachment_api_voc__item_id__attachments_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/voc/{item_id}/attachments/{attachment_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download Attachment
+         * @description **첨부로만 내린다.** 올린 파일은 무엇이든 될 수 있다 — HTML 을 문서로 열면 그 안의
+         *     스크립트가 이 사이트의 권한으로 돈다.
+         */
+        get: operations["download_attachment_api_voc__item_id__attachments__attachment_id__get"];
+        put?: never;
+        post?: never;
+        /** Delete Attachment */
+        delete: operations["delete_attachment_api_voc__item_id__attachments__attachment_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/voc/{item_id}/events": {
@@ -7323,6 +7389,11 @@ export interface components {
         };
         /** Body_upload_asset_api_guide_assets_post */
         Body_upload_asset_api_guide_assets_post: {
+            /** File */
+            file: string;
+        };
+        /** Body_upload_attachment_api_voc__item_id__attachments_post */
+        Body_upload_attachment_api_voc__item_id__attachments_post: {
             /** File */
             file: string;
         };
@@ -16963,6 +17034,29 @@ export interface components {
             /** Prony Fit Id */
             prony_fit_id?: string | null;
         };
+        /** VocAttachmentOut */
+        VocAttachmentOut: {
+            /** Content Type */
+            content_type: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Created By */
+            created_by: string | null;
+            /** Filename */
+            filename: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Size */
+            size: number;
+            /** Url */
+            url: string;
+        };
         /** VocCreateRequest */
         VocCreateRequest: {
             /** Body */
@@ -16980,8 +17074,23 @@ export interface components {
             allowed_labels: {
                 [key: string]: string;
             };
+            /**
+             * Attachment Count
+             * @default 0
+             */
+            attachment_count: number;
+            /**
+             * Attachments
+             * @default []
+             */
+            attachments: components["schemas"]["VocAttachmentOut"][];
             /** Body */
             body: string;
+            /**
+             * Can Attach
+             * @default false
+             */
+            can_attach: boolean;
             /**
              * Can Delete Events
              * @default false
@@ -17074,11 +17183,24 @@ export interface components {
             note?: string | null;
         };
         /**
+         * VocExportRequest
+         * @description 게시판에서 고른 건들을 한 zip 으로 — 건마다 폴더, `item.json` + `attachments/`.
+         */
+        VocExportRequest: {
+            /** Ids */
+            ids: string[];
+        };
+        /**
          * VocOut
          * @description 게시판 한 줄. **상세는 `VocDetailOut`** — 목록에 본문과 이력을 다 실으면
          *     100건짜리 화면이 느려지고, 그 느림은 목록에서만 보인다.
          */
         VocOut: {
+            /**
+             * Attachment Count
+             * @default 0
+             */
+            attachment_count: number;
             /** Can Edit */
             can_edit: boolean;
             /**
@@ -26799,6 +26921,39 @@ export interface operations {
             };
         };
     };
+    export_items_api_voc_export_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VocExportRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_statuses_api_voc_statuses_get: {
         parameters: {
             query?: never;
@@ -26893,6 +27048,105 @@ export interface operations {
                 "application/json": components["schemas"]["VocUpdateRequest"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VocDetailOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upload_attachment_api_voc__item_id__attachments_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_upload_attachment_api_voc__item_id__attachments_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VocDetailOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_attachment_api_voc__item_id__attachments__attachment_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+                attachment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_attachment_api_voc__item_id__attachments__attachment_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+                attachment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {

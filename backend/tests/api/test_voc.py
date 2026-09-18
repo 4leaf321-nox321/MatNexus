@@ -492,3 +492,158 @@ class Test알림:
         assert any("말을 보탰습니다" in one for one in self._inbox(client, hong))
         detail = client.get("/api/notifications", headers=hong).json()[0]
         assert detail["link"] == f"/voc/{item['id']}"
+
+
+class Test첨부:
+    """**캡처 한 장이 글보다 빠르다**(2026-09-18). 붙이고·내려받고·떼고 — 낸 사람·관리자."""
+
+    def _attach(
+        self, client: TestClient, headers: dict[str, str], item_id: str, name: str, data: bytes
+    ) -> Any:
+        return client.post(
+            f"/api/voc/{item_id}/attachments",
+            files={"file": (name, data, "image/png")},
+            headers=headers,
+        )
+
+    def test_붙이고_내려받고_뗀다(
+        self,
+        client: TestClient,
+        db: Session,
+        workspace: Workspace,
+        admin_headers: dict[str, str],
+    ) -> None:
+        mine = member_headers(client, db, workspace)
+        item = _voc(client, mine)
+        made = self._attach(client, mine, item["id"], "캡처.png", b"\x89PNG fake")
+        assert made.status_code == 201, made.text
+        body = made.json()
+        assert [one["filename"] for one in body["attachments"]] == ["캡처.png"]
+        assert body["attachments"][0]["size"] == len(b"\x89PNG fake")
+        assert body["attachment_count"] == 1
+        assert body["can_attach"] is True
+
+        # 목록도 첨부 수를 안다 — 건마다 세지 않고 한 번에.
+        listed = client.get("/api/voc", headers=admin_headers).json()["items"]
+        assert next(one for one in listed if one["id"] == item["id"])["attachment_count"] == 1
+
+        # **첨부로만 내린다** — 올린 파일이 HTML 이어도 문서로 열리지 않게.
+        got = client.get(body["attachments"][0]["url"], headers=mine)
+        assert got.status_code == 200
+        assert got.content == b"\x89PNG fake"
+        assert "attachment" in got.headers["content-disposition"]
+        assert got.headers["x-content-type-options"] == "nosniff"
+
+        gone = client.delete(
+            f"/api/voc/{item['id']}/attachments/{body['attachments'][0]['id']}", headers=mine
+        )
+        assert gone.status_code == 200
+        assert gone.json()["attachments"] == []
+
+    def test_남의_건에는_못_붙이고_관리자는_붙인다(
+        self,
+        client: TestClient,
+        db: Session,
+        workspace: Workspace,
+        admin_headers: dict[str, str],
+    ) -> None:
+        mine = member_headers(client, db, workspace)
+        other = login_as(client, db, workspace, email="park", name="박연구")
+        item = _voc(client, mine)
+        assert self._attach(client, other, item["id"], "a.txt", b"x").status_code == 403
+        assert (
+            self._attach(client, admin_headers, item["id"], "a.txt", b"x").status_code == 201
+        )
+        # 남이 말을 남긴 뒤에도 낸 사람은 붙인다 — 글 고치기와 다른 규칙이다.
+        _move(client, other, item["id"], None, "저도 그래요")
+        assert self._attach(client, mine, item["id"], "b.txt", b"y").status_code == 201
+        assert (
+            client.get(f"/api/voc/{item['id']}", headers=other).json()["can_attach"] is False
+        )
+
+    def test_너무_크면_받다가_멈춘다(
+        self, client: TestClient, db: Session, workspace: Workspace, monkeypatch: Any
+    ) -> None:
+        from app.modules.voc import routes
+
+        monkeypatch.setattr(routes, "MAX_ATTACHMENT_BYTES", 16)
+        mine = member_headers(client, db, workspace)
+        item = _voc(client, mine)
+        too_big = self._attach(client, mine, item["id"], "big.bin", b"0" * 17)
+        assert too_big.status_code == 413
+        assert client.get(f"/api/voc/{item['id']}", headers=mine).json()["attachments"] == []
+
+
+class Test내보내기:
+    """고른 건들을 zip 하나로 — 건마다 폴더, `item.json` + `attachments/`(2026-09-18)."""
+
+    def test_zip_안에_건마다_폴더와_json_그리고_첨부가_있다(
+        self,
+        client: TestClient,
+        db: Session,
+        workspace: Workspace,
+        admin_headers: dict[str, str],
+    ) -> None:
+        import io
+        import json
+        import zipfile
+
+        mine = member_headers(client, db, workspace)
+        first = _voc(client, mine, title="목록이 느려요: 재료/시험")
+        second = _voc(client, mine, title="두 번째")
+        client.post(
+            f"/api/voc/{first['id']}/attachments",
+            files={"file": ("캡처.png", b"\x89PNG", "image/png")},
+            headers=mine,
+        )
+        client.post(
+            f"/api/voc/{first['id']}/attachments",
+            files={"file": ("캡처.png", b"\x89PNG2", "image/png")},
+            headers=mine,
+        )
+        _move(client, admin_headers, first["id"], "accepted", "보겠습니다")
+
+        response = client.post(
+            "/api/voc/export", json={"ids": [second["id"], first["id"]]}, headers=admin_headers
+        )
+        assert response.status_code == 200, response.text
+        assert response.headers["content-type"].startswith("application/zip")
+        bundle = zipfile.ZipFile(io.BytesIO(response.content))
+        names = bundle.namelist()
+
+        folder = f"voc-{first['seq']:04d}-목록이-느려요-재료-시험"
+        assert f"{folder}/item.json" in names
+        # 같은 이름의 첨부 둘 — 덮어쓰지 않고 뒤엣것에 id 앞자리를 붙인다.
+        files = sorted(one for one in names if one.startswith(f"{folder}/attachments/"))
+        assert len(files) == 2 and f"{folder}/attachments/캡처.png" in files
+
+        item = json.loads(bundle.read(f"{folder}/item.json"))
+        assert item["title"] == first["title"]
+        assert item["body"] == "목록이 느립니다"
+        assert item["status"] == "accepted"
+        assert [one["to_status"] for one in item["events"]] == ["open", "accepted"]
+        # json 이 첨부를 상대경로로 가리키고, 그 경로가 zip 안에 실제로 있다.
+        for one in item["attachments"]:
+            assert f"{folder}/{one['path']}" in names
+            assert bundle.read(f"{folder}/{one['path']}").startswith(b"\x89PNG")
+
+        index = json.loads(bundle.read("index.json"))
+        assert index["count"] == 2
+        assert [one["seq"] for one in index["items"]] == [first["seq"], second["seq"]]
+        assert index["items"][0]["attachments"] == 2
+
+    def test_없는_건이_섞이면_막는다(
+        self,
+        client: TestClient,
+        db: Session,
+        workspace: Workspace,
+        admin_headers: dict[str, str],
+    ) -> None:
+        import uuid
+
+        mine = member_headers(client, db, workspace)
+        item = _voc(client, mine)
+        response = client.post(
+            "/api/voc/export", json={"ids": [item["id"], str(uuid.uuid4())]}, headers=mine
+        )
+        assert response.status_code == 404

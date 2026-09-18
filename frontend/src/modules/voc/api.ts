@@ -1,11 +1,12 @@
 /** VOC API — 게시판이고 절차다. */
 
-import { api } from '@/shared/api/client'
+import { api, downloadFile, downloadPostFile } from '@/shared/api/client'
 import type { components } from '@/shared/api/schema'
 
 export type VocItem = components['schemas']['VocOut']
 export type VocDetail = components['schemas']['VocDetailOut']
 export type VocEvent = components['schemas']['VocEventOut']
+export type VocAttachment = components['schemas']['VocAttachmentOut']
 export type VocPage = components['schemas']['Page_VocOut_']
 export type VocStatus = components['schemas']['VocStatusOut']
 type CreateRequest = components['schemas']['VocCreateRequest']
@@ -65,4 +66,20 @@ export const vocApi = {
     api.patch<VocDetail>(`/voc/${id}/events/${eventId}`, { note }),
   removeEvent: (id: string, eventId: string) =>
     api.delete<VocDetail>(`/voc/${id}/events/${eventId}`),
+  /** 파일 하나를 붙인다. 여럿이면 차례로 — 하나가 커서 막혀도 나머지는 붙는다. */
+  attach: (id: string, file: File) => {
+    const form = new FormData()
+    form.append('file', file, file.name)
+    return api.postForm<VocDetail>(`/voc/${id}/attachments`, form)
+  },
+  detach: (id: string, attachmentId: string) =>
+    api.delete<VocDetail>(`/voc/${id}/attachments/${attachmentId}`),
+  /** 토큰이 있어야 열리므로 `<a href>` 가 아니라 받아서 넘긴다. */
+  download: (attachment: VocAttachment) =>
+    downloadFile(attachment.url.replace(/^\/api/, ''), attachment.filename),
+  /** 고른 건들을 zip 하나로 — 건마다 폴더, `item.json` + `attachments/`. */
+  exportZip: (ids: string[]) => {
+    const stamp = new Date().toISOString().slice(0, 19).replace(/[-:]/g, '').replace('T', '-')
+    return downloadPostFile('/voc/export', { ids }, `voc-export-${stamp}.zip`)
+  },
 }

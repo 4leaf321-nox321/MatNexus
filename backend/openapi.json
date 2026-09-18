@@ -1390,6 +1390,20 @@
         "title": "Body_upload_asset_api_guide_assets_post",
         "type": "object"
       },
+      "Body_upload_attachment_api_voc__item_id__attachments_post": {
+        "properties": {
+          "file": {
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "type": "string"
+          }
+        },
+        "required": [
+          "file"
+        ],
+        "title": "Body_upload_attachment_api_voc__item_id__attachments_post",
+        "type": "object"
+      },
       "Body_upload_inbox_api_pipelines_inbox_post": {
         "properties": {
           "client_path": {
@@ -26963,6 +26977,58 @@
         "title": "ViscoelasticCardSaveRequest",
         "type": "object"
       },
+      "VocAttachmentOut": {
+        "properties": {
+          "content_type": {
+            "title": "Content Type",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By"
+          },
+          "filename": {
+            "title": "Filename",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "size": {
+            "title": "Size",
+            "type": "integer"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "filename",
+          "content_type",
+          "size",
+          "created_at",
+          "created_by",
+          "url"
+        ],
+        "title": "VocAttachmentOut",
+        "type": "object"
+      },
       "VocCreateRequest": {
         "properties": {
           "body": {
@@ -27012,9 +27078,27 @@
             "title": "Allowed Labels",
             "type": "object"
           },
+          "attachment_count": {
+            "default": 0,
+            "title": "Attachment Count",
+            "type": "integer"
+          },
+          "attachments": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/VocAttachmentOut"
+            },
+            "title": "Attachments",
+            "type": "array"
+          },
           "body": {
             "title": "Body",
             "type": "string"
+          },
+          "can_attach": {
+            "default": false,
+            "title": "Can Attach",
+            "type": "boolean"
           },
           "can_delete_events": {
             "default": false,
@@ -27250,9 +27334,34 @@
         "title": "VocEventUpdateRequest",
         "type": "object"
       },
+      "VocExportRequest": {
+        "description": "게시판에서 고른 건들을 한 zip 으로 — 건마다 폴더, `item.json` + `attachments/`.",
+        "properties": {
+          "ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 200,
+            "minItems": 1,
+            "title": "Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "ids"
+        ],
+        "title": "VocExportRequest",
+        "type": "object"
+      },
       "VocOut": {
         "description": "게시판 한 줄. **상세는 `VocDetailOut`** — 목록에 본문과 이력을 다 실으면\n100건짜리 화면이 느려지고, 그 느림은 목록에서만 보인다.",
         "properties": {
+          "attachment_count": {
+            "default": 0,
+            "title": "Attachment Count",
+            "type": "integer"
+          },
           "can_edit": {
             "title": "Can Edit",
             "type": "boolean"
@@ -42848,6 +42957,48 @@
         ]
       }
     },
+    "/api/voc/export": {
+      "post": {
+        "description": "고른 건들을 zip 하나로 — **건마다 폴더**, 그 안에 `item.json` 과 `attachments/`.\n\n`item.json` 이 제목·본문·상태·이력과 첨부 목록을 들고, 첨부는 폴더 안 파일을\n상대경로로 가리킨다(2026-09-18 요청). 맨 위 `index.json` 이 건 목록이다. 사람이\n읽고 다른 곳(이슈 트래커·보고서)으로 옮기는 용도라 JSON 은 사람이 읽게 들여쓴다.",
+        "operationId": "export_items_api_voc_export_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VocExportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Export Items Api Voc Export Post"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Export Items",
+        "tags": [
+          "voc"
+        ]
+      }
+    },
     "/api/voc/statuses": {
       "get": {
         "description": "상태의 차례와 이름. **화면이 표를 갖지 않는다** — 거르개 칩이 이것으로 선다.",
@@ -42998,6 +43149,165 @@
           }
         },
         "summary": "Update Item",
+        "tags": [
+          "voc"
+        ]
+      }
+    },
+    "/api/voc/{item_id}/attachments": {
+      "post": {
+        "description": "파일 하나를 붙인다. 여럿이면 여러 번 부른다 — 하나가 커서 막혀도 나머지는 붙는다.",
+        "operationId": "upload_attachment_api_voc__item_id__attachments_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Item Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_attachment_api_voc__item_id__attachments_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VocDetailOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Upload Attachment",
+        "tags": [
+          "voc"
+        ]
+      }
+    },
+    "/api/voc/{item_id}/attachments/{attachment_id}": {
+      "delete": {
+        "operationId": "delete_attachment_api_voc__item_id__attachments__attachment_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Item Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "attachment_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Attachment Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VocDetailOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Attachment",
+        "tags": [
+          "voc"
+        ]
+      },
+      "get": {
+        "description": "**첨부로만 내린다.** 올린 파일은 무엇이든 될 수 있다 — HTML 을 문서로 열면 그 안의\n스크립트가 이 사이트의 권한으로 돈다.",
+        "operationId": "download_attachment_api_voc__item_id__attachments__attachment_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Item Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "attachment_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Attachment Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Download Attachment Api Voc  Item Id  Attachments  Attachment Id  Get"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Download Attachment",
         "tags": [
           "voc"
         ]
