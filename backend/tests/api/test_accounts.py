@@ -70,10 +70,28 @@ class Test가입_도메인:
             "email_domains": ["samsung.com"]
         }
 
+    def test_아이디만_치면_도메인을_붙여_받는다(  # type: ignore[no-untyped-def]
+        self, client: TestClient, workspace, db: Session
+    ) -> None:
+        """**사람에게 도메인을 치게 하지 않는다**(2026-09-18). 녹스 ID 만 치고 막히던 사람이
+        있었다 — 허용 도메인이 하나뿐이니 시스템이 붙인다."""
+        response = signup(client, email="Hong")
+        assert response.status_code == 201, response.text
+        assert response.json()["email"] == "hong@samsung.com"
+        assert db.scalar(select(User).where(User.email == "hong@samsung.com")) is not None
+
+    def test_허용_도메인이_둘이면_아이디만으로는_못_붙인다(  # type: ignore[no-untyped-def]
+        self, client: TestClient, workspace
+    ) -> None:
+        get_settings().signup_email_domains = ["samsung.com", "partner.co.kr"]
+        response = signup(client, email="hong")
+        assert response.status_code == 422
+        assert response.json()["error"]["code"] == "MNX-ACCOUNTS-0017"
+
     @pytest.mark.parametrize(
-        "email", ["hong", "hong@gmail.com", "x@notsamsung.com", "x@samsung.com.evil"]
+        "email", ["hong@gmail.com", "x@notsamsung.com", "x@samsung.com.evil"]
     )
-    def test_다른_아이디는_422(self, client: TestClient, workspace, email: str) -> None:  # type: ignore[no-untyped-def]
+    def test_다른_도메인은_422(self, client: TestClient, workspace, email: str) -> None:  # type: ignore[no-untyped-def]
         response = signup(client, email=email)
         assert response.status_code == 422, response.text
         body = response.json()["error"]

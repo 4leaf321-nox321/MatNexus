@@ -15,6 +15,9 @@ import type { components } from '@/shared/api/schema'
 export type CurrentUser = components['schemas']['UserOut']
 type LoginResponse = components['schemas']['LoginResponse']
 
+/** 로그인 직후 한 번 보일 안내가 놓이는 자리. `LoginNotice` 가 읽고 지운다. */
+export const LOGIN_NOTICE_KEY = 'matnexus.login-notice'
+
 type Status = 'loading' | 'authenticated' | 'anonymous'
 
 interface AuthContextValue {
@@ -67,6 +70,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(async (email: string, password: string) => {
     const body = await api.post<LoginResponse>('/auth/login', { email, password })
+    // **로그인은 됐는데 알아야 할 것** — 친 아이디에 도메인이 붙어 계정 아이디가 다를 때.
+    // 껍데기(`LoginNotice`)가 한 번 보이고 지운다. 로그인 화면은 바로 떠나므로 여기서
+    // 못 보여 준다.
+    try {
+      if (body.notice) sessionStorage.setItem(LOGIN_NOTICE_KEY, body.notice)
+    } catch {
+      // 저장소가 막혀 있으면 안내만 못 보인다 — 로그인은 된다.
+    }
     session.setToken(body.access_token)
     setUser(body.user)
     setStatus('authenticated')

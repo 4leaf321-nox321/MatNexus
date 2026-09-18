@@ -51,7 +51,19 @@ describe('회사 메일로만', () => {
   it('치기 전에 규칙이 보인다', async () => {
     show()
     expect(await screen.findByText(/@samsung\.com.*로만 신청/)).toBeInTheDocument()
-    expect(screen.getByLabelText('아이디')).toHaveAttribute('placeholder', '이름@samsung.com')
+    expect(screen.getByLabelText('아이디')).toHaveAttribute(
+      'placeholder',
+      '아이디 (또는 아이디@samsung.com)'
+    )
+    expect(screen.getByText(/아이디만 적으면 @samsung\.com 이 붙습니다/)).toBeInTheDocument()
+  })
+
+  it('아이디만 쳐도 통과한다 — 서버가 도메인을 붙인다', async () => {
+    show()
+    await screen.findByText(/@samsung\.com.*로만 신청/)
+    await fill('hong')
+    expect(await screen.findByText('소속 부서를 선택하세요.')).toBeInTheDocument()
+    expect(signup).not.toHaveBeenCalled()
   })
 
   it('다른 도메인은 보내기 전에 막는다', async () => {

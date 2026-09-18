@@ -12,6 +12,7 @@ import { NoticePopup } from '@/modules/notices/NoticePopup'
 import { useAuth } from '@/shared/auth/AuthContext'
 import { Skeleton } from '@/shared/components/ui/skeleton'
 import { Header } from '@/shared/layout/Header'
+import { LoginNotice } from '@/shared/layout/LoginNotice'
 import {
   LeftPanelHost,
   LeftPanelProvider,
@@ -90,6 +91,8 @@ export function AppShell() {
           }}
           workspaceSlug={workspaceSlug}
         />
+        {/* 로그인 직후 한 번 — 「아이디에 @samsung.com 이 붙었습니다」. */}
+        <LoginNotice />
         <main className={cn('flex-1 p-6', tall ? 'min-h-0 overflow-hidden' : 'overflow-auto')}>
           {/* **본문은 폭을 다 쓴다. 상한이 없다**(2026-08-30 에 걷었다).
 

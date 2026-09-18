@@ -55,6 +55,8 @@ class LoginResponse(BaseModel):
     expires_in: int
     """초 단위. 프론트가 만료 전에 갱신을 걸 수 있게 한다."""
     user: UserOut
+    notice: str | None = None
+    """로그인은 됐는데 알아야 할 것 — 친 아이디에 도메인이 붙어 계정 아이디가 다를 때."""
 
 
 class ProfileUpdateRequest(BaseModel):

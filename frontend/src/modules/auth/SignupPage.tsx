@@ -31,14 +31,18 @@ import { useResource } from '@/shared/hooks/useResource'
 const MIN_PASSWORD = 10
 
 function domainHint(domains: string[]): string {
-  return `회사 메일 주소(${domains.map((d) => `@${d}`).join(' · ')})로만 신청할 수 있습니다.`
+  const shown = `회사 메일 주소(${domains.map((d) => `@${d}`).join(' · ')})로만 신청할 수 있습니다.`
+  // **도메인이 하나면 사람이 치지 않는다** — 아이디만 적으면 서버가 붙인다(2026-09-18).
+  return domains.length === 1 ? `${shown} 아이디만 적으면 @${domains[0]} 이 붙습니다.` : shown
 }
 
-/** 서버와 같은 규칙 — `@` 뒤를 통째로 견준다. 도메인 목록이 비면 제한 없음. */
+/** 서버와 같은 규칙 — `@` 뒤를 통째로 견준다. 도메인이 하나면 `@` 없는 아이디도 된다(붙여 준다). */
 function matchesDomain(email: string, domains: string[]): boolean {
   if (domains.length === 0) return true
-  const at = email.trim().toLowerCase().lastIndexOf('@')
-  return at >= 0 && domains.includes(email.trim().toLowerCase().slice(at + 1))
+  const typed = email.trim().toLowerCase()
+  const at = typed.lastIndexOf('@')
+  if (at < 0) return domains.length === 1 && typed.length > 0
+  return domains.includes(typed.slice(at + 1))
 }
 
 export default function SignupPage() {
@@ -135,7 +139,13 @@ export default function SignupPage() {
                 id="email"
                 type="text"
                 autoComplete="username"
-                placeholder={domains.length > 0 ? `이름@${domains[0]}` : '이메일 또는 아이디'}
+                placeholder={
+                  domains.length === 1
+                    ? `아이디 (또는 아이디@${domains[0]})`
+                    : domains.length > 1
+                      ? `이름@${domains[0]}`
+                      : '이메일 또는 아이디'
+                }
                 required
                 autoFocus
                 value={email}

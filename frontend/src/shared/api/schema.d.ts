@@ -11715,6 +11715,8 @@ export interface components {
             access_token: string;
             /** Expires In */
             expires_in: number;
+            /** Notice */
+            notice?: string | null;
             user: components["schemas"]["UserOut"];
         };
         /**

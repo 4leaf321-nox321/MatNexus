@@ -20,7 +20,7 @@ from app.modules.auth.models import PersonalAccessToken, RefreshToken
 from app.modules.auth.schemas import PatOut, UserOut, WorkspaceMembershipOut
 from app.modules.workspaces import services as workspaces
 from app.modules.workspaces.models import Workspace, WorkspaceMember
-from app.shared import audit
+from app.shared import audit, signup_domain
 from app.shared.errors import AppError, Forbidden, NotFound
 
 _INVALID_LOGIN = "이메일 또는 비밀번호가 올바르지 않습니다."
@@ -94,8 +94,35 @@ def _note_failure(db: Session, user: User) -> float:
     return delay
 
 
+def resolve_login(db: Session, typed: str) -> User | None:
+    """친 아이디로 계정을 찾는다 — **정확히 맞는 것 먼저, 없으면 도메인을 붙여서.**
+
+    옛 계정(`hong`)과 도메인이 붙은 계정(`hong@samsung.com`)이 함께 있는 동안 둘 다
+    아이디만 쳐서 들어와야 한다. 붙여서 찾았는지는 부르는 쪽이 `user.email` 과 친 것을
+    견줘 안다 — 그때 「아이디에 @samsung.com 이 붙었다」 고 알려 준다.
+    """
+    normalized = typed.strip().lower()
+    user = db.scalar(select(User).where(User.email == normalized))
+    if user is None:
+        completed = signup_domain.complete_email(normalized)
+        if completed != normalized:
+            user = db.scalar(select(User).where(User.email == completed))
+    return user
+
+
+def login_notice(typed: str, user: User) -> str | None:
+    """친 아이디와 계정 아이디가 다르면 그 사실을 한 줄로. 같으면 없음."""
+    normalized = typed.strip().lower()
+    if normalized == user.email:
+        return None
+    return (
+        f"아이디에 @{user.email.rpartition('@')[2]} 이 붙어 지금은 '{user.email}' 입니다. "
+        f"지금처럼 '{normalized}' 만 쳐도 로그인됩니다."
+    )
+
+
 def authenticate(db: Session, email: str, password: str) -> User:
-    user = db.scalar(select(User).where(User.email == email.lower()))
+    user = resolve_login(db, email)
 
     # 계정이 없을 때도 해시 비교를 한 번 수행해 응답 시간으로 계정 존재 여부가
     # 새지 않게 한다.

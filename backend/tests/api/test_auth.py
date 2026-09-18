@@ -7,10 +7,14 @@ RA는 refresh 를 stateless 로 두어 폐기 목록이 없고, 비교표는 그
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.config import get_settings
 from app.modules.accounts.models import User
 from app.modules.auth import security
 from app.modules.workspaces.models import Workspace, WorkspaceMember
@@ -60,6 +64,45 @@ def test_login_returns_access_token_and_sets_refresh_cookie(
     # refresh 는 본문에 실리지 않는다 — httpOnly 쿠키로만 오간다.
     assert "refresh" not in response.text
     assert client.cookies.get("mnx_refresh")
+
+
+class Test아이디만_쳐도_들어온다:
+    """옛 계정(`hong`)은 마이그레이션이 `hong@samsung.com` 으로 바꿨다. 그 사람은 여전히
+    `hong` 만 친다 — 들어오게 하고, 아이디가 바뀌었다고 알려 준다(2026-09-18)."""
+
+    @pytest.fixture(autouse=True)
+    def _domain(self) -> Iterator[None]:
+        settings = get_settings()
+        settings.signup_email_domains = ["samsung.com"]
+        yield
+        settings.signup_email_domains = []
+
+    def test_도메인을_붙여_찾고_그_사실을_알린다(
+        self, client: TestClient, db: Session
+    ) -> None:
+        make_user(db, email="hong@samsung.com")
+        response = login(client, email="Hong")
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["user"]["email"] == "hong@samsung.com"
+        assert "@samsung.com 이 붙어" in body["notice"]
+        assert "'hong' 만 쳐도" in body["notice"]
+
+    def test_정확히_치면_알릴_것이_없다(self, client: TestClient, db: Session) -> None:
+        make_user(db, email="hong@samsung.com")
+        assert login(client, email="hong@samsung.com").json()["notice"] is None
+
+    def test_정확히_맞는_계정이_먼저다(self, client: TestClient, db: Session) -> None:
+        # `admin` 처럼 도메인 없는 계정이 있으면 그것이 그 사람이다 — 붙여서 찾지 않는다.
+        make_user(db, email="admin")
+        body = login(client, email="admin").json()
+        assert body["user"]["email"] == "admin"
+        assert body["notice"] is None
+
+    def test_없는_아이디는_붙여_봐도_없다(self, client: TestClient, db: Session) -> None:
+        make_user(db, email="hong@samsung.com")
+        response = login(client, email="park")
+        assert response.status_code == 401
 
 
 def test_login_rejects_wrong_password_without_revealing_account(

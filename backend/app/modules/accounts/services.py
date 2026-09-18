@@ -13,7 +13,6 @@ from datetime import UTC, datetime
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.config import get_settings
 from app.jobs import kinds, queue
 from app.modules.accounts.models import User
 from app.modules.accounts.schemas import AccountOut
@@ -23,6 +22,7 @@ from app.modules.workspaces.models import Workspace, WorkspaceMember
 from app.shared import audit
 from app.shared.dependents import Reference, references_to, transfer_ownership
 from app.shared.errors import AppError, Conflict, NotFound
+from app.shared.signup_domain import allowed_signup_domains, complete_email
 
 
 def _now() -> datetime:
@@ -68,15 +68,6 @@ def account_out(db: Session, user: User) -> AccountOut:
 # --- 가입 ---------------------------------------------------------------------
 
 
-def allowed_signup_domains() -> list[str]:
-    """설정의 도메인을 **소문자·앞 `@` 없이** 정리한 것. `@Samsung.com` 으로 적어도 된다."""
-    return [
-        one.strip().lstrip("@").lower()
-        for one in get_settings().signup_email_domains
-        if one.strip().lstrip("@")
-    ]
-
-
 def require_signup_domain(email: str) -> None:
     """가입 신청 아이디가 허용 도메인으로 끝나는지. 아니면 422.
 
@@ -101,7 +92,7 @@ def require_signup_domain(email: str) -> None:
 def signup(
     db: Session, *, email: str, password: str, display_name: str, workspace_slug: str
 ) -> User:
-    normalized = email.strip().lower()
+    normalized = complete_email(email)
     require_signup_domain(normalized)
     workspace = _workspace_by_slug(db, workspace_slug)
 

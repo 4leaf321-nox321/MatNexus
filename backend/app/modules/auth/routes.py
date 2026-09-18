@@ -68,7 +68,10 @@ def login(
     )
     _set_refresh_cookie(response, refresh_raw)
     return LoginResponse(
-        access_token=access, expires_in=expires_in, user=services.user_out(db, user)
+        access_token=access,
+        expires_in=expires_in,
+        user=services.user_out(db, user),
+        notice=services.login_notice(str(payload.email), user),
     )
 
 

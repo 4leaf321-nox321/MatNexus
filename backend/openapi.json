@@ -13559,6 +13559,17 @@
             "title": "Expires In",
             "type": "integer"
           },
+          "notice": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notice"
+          },
           "user": {
             "$ref": "#/components/schemas/UserOut"
           }
