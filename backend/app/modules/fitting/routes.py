@@ -996,6 +996,34 @@ def _fit_out(
     )
 
 
+def _save_card(db: Session, user: User, item: PropertyCard) -> PropertyCardOut:
+    """카드를 저장한다 — **사람이 아닌 길로 들어왔으면 그 사실을 함께 남긴다.**
+
+    카드 만들기는 원래 감사 대상이 아니다(되돌릴 수 있다). 다만 「이 카드 사람이
+    만든 거 맞나」 는 그 덱이 해석에 들어간 **뒤에** 물어지고, 그때 `created_by`
+    만으로는 답이 안 된다 — AI 도 그 사람의 토큰으로 부르기 때문이다.
+
+    카드 만드는 길이 여섯이라 한 함수로 모은다. 새 카드 종류가 생겨도 여기로
+    오게 — 꼬리를 손으로 적게 두면 그중 하나만 안 남는다.
+    """
+    db.add(item)
+    # 감사는 **같은 트랜잭션** 안에 있어야 한다. id 는 flush 뒤에 생긴다.
+    db.flush()
+    audit.record_by_client(
+        db,
+        action=audit.CARD_CREATED_BY_CLIENT,
+        actor=user,
+        target_table="property_cards",
+        target_id=item.id,
+        target_label=item.label,
+        workspace_id=_card_workspace(db, item),
+        changes={"status": item.status, "point_count": item.point_count},
+    )
+    db.commit()
+    db.refresh(item)
+    return _card_out(db, item, workspace_id=user.home_workspace_id)
+
+
 @router.post("/preview", response_model=FitPreviewOut)
 def preview(
     payload: FitPreviewRequest,
@@ -1594,10 +1622,7 @@ def create_card(
         note=payload.note,
         created_by_id=user.id,
     )
-    db.add(item)
-    db.commit()
-    db.refresh(item)
-    return _card_out(db, item, workspace_id=user.home_workspace_id)
+    return _save_card(db, user, item)
 
 
 @router.get("/cards/inherited", response_model=list[InheritedValueOut])
@@ -1899,10 +1924,7 @@ def create_declared_card(
         note=payload.note,
         created_by_id=user.id,
     )
-    db.add(item)
-    db.commit()
-    db.refresh(item)
-    return _card_out(db, item, workspace_id=user.home_workspace_id)
+    return _save_card(db, user, item)
 
 
 @dataclass(frozen=True)
@@ -2177,10 +2199,7 @@ def create_viscoelastic_card(
         note=payload.note,
         created_by_id=user.id,
     )
-    db.add(item)
-    db.commit()
-    db.refresh(item)
-    return _card_out(db, item, workspace_id=user.home_workspace_id)
+    return _save_card(db, user, item)
 
 
 @dataclass(frozen=True)
@@ -2394,10 +2413,7 @@ def create_rate_card(
         note=payload.note,
         created_by_id=user.id,
     )
-    db.add(item)
-    db.commit()
-    db.refresh(item)
-    return _card_out(db, item, workspace_id=user.home_workspace_id)
+    return _save_card(db, user, item)
 
 
 @router.post("/cards/from-group", response_model=PropertyCardOut, status_code=201)
@@ -2503,10 +2519,7 @@ def create_card_from_group(
         note=payload.note,
         created_by_id=user.id,
     )
-    db.add(item)
-    db.commit()
-    db.refresh(item)
-    return _card_out(db, item, workspace_id=user.home_workspace_id)
+    return _save_card(db, user, item)
 
 
 @router.post("/cards/lve", response_model=PropertyCardOut, status_code=201)
@@ -2668,10 +2681,7 @@ def create_lve_card(
         note=payload.note,
         created_by_id=user.id,
     )
-    db.add(item)
-    db.commit()
-    db.refresh(item)
-    return _card_out(db, item, workspace_id=user.home_workspace_id)
+    return _save_card(db, user, item)
 
 
 #: 시험 없이 만든 카드를 가리키는 값(ADR 0016). **`null` 을 쿼리로 못 보낸다.**

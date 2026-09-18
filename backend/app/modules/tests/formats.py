@@ -49,7 +49,7 @@ from app.modules.tests.schemas import (
     TriedSummaryOut,
 )
 from app.modules.workspaces.models import Workspace
-from app.shared import dependents
+from app.shared import audit, dependents
 from app.shared.auth import current_user
 from app.shared.errors import AppError, Conflict, NotFound
 from app.shared.permissions import (
@@ -286,6 +286,25 @@ def list_profiles(
     return [_out(db, item) for item in db.scalars(query)]
 
 
+def _audit_profile(db: Session, user: User, item: FormatProfile, *, made: bool) -> None:
+    """형식 프로파일을 **사람이 아닌 것이** 저장했으면 남긴다.
+
+    프로파일은 장비 파일을 **어떻게 읽을지**다. 틀리면 값이 안 들어오는 게 아니라
+    **다른 값이 들어온다**(열이 밀리거나 단위가 어긋난 채로). 되돌릴 수는 있지만,
+    그 사이에 읽은 시험은 이미 그 해석으로 저장돼 있다.
+    """
+    audit.record_by_client(
+        db,
+        action=audit.FORMAT_SAVED_BY_CLIENT,
+        actor=user,
+        target_table="format_profiles",
+        target_id=item.id,
+        target_label=f"{item.label} ({item.key})",
+        workspace_id=item.owner_workspace_id,
+        changes={"created": made, "is_active": item.is_active},
+    )
+
+
 @router.post("", response_model=FormatProfileOut, status_code=201)
 def create_profile(
     payload: FormatProfileCreateRequest,
@@ -325,6 +344,8 @@ def create_profile(
         created_by_id=user.id,
     )
     db.add(item)
+    db.flush()
+    _audit_profile(db, user, item, made=True)
     db.commit()
     db.refresh(item)
     return _out(db, item)
@@ -356,6 +377,7 @@ def update_profile(
     item.definition = payload.definition
     item.priority = payload.priority
     item.is_active = payload.is_active
+    _audit_profile(db, user, item, made=False)
     db.commit()
     db.refresh(item)
     return _out(db, item)

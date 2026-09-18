@@ -56,9 +56,26 @@ function Changes({ entry }: { entry: AuditEntry }) {
   )
 }
 
+/**
+ * 들어온 길 — **사람이 화면에서 한 것과 AI 가 대신 한 것.**
+ *
+ * 권한은 언제나 그 사람의 것이라 `누가` 열만 봐서는 갈리지 않는다. 반년 뒤에
+ * 물어지는 것은 「이거 사람이 확인한 거 맞나」 이고, 그 질문에 답하려면 **AI 가
+ * 거친 것만 따로 볼 수** 있어야 한다.
+ */
+const CLIENTS: { value: string; label: string }[] = [
+  { value: '', label: '전부' },
+  { value: 'mcp', label: 'AI(MCP) 경유' },
+  { value: 'web', label: '화면에서' },
+]
+
 export default function AuditPage() {
   const [action, setAction] = useState('')
-  const entries = useResource(() => auditApi.list(action ? { action } : {}), [action])
+  const [client, setClient] = useState('')
+  const entries = useResource(
+    () => auditApi.list({ ...(action ? { action } : {}), ...(client ? { client } : {}) }),
+    [action, client],
+  )
   const rows = entries.data ?? []
 
   return (
@@ -85,13 +102,29 @@ export default function AuditPage() {
             </option>
           ))}
         </select>
+
+        <span className="text-sm font-medium">경로</span>
+        <select
+          aria-label="들어온 길로 필터"
+          className="border-input bg-background h-8 rounded-md border px-2 text-sm"
+          value={client}
+          onChange={(event) => setClient(event.target.value)}
+        >
+          {CLIENTS.map((one) => (
+            <option key={one.value} value={one.value}>
+              {one.label}
+            </option>
+          ))}
+        </select>
       </div>
 
       {!entries.loading && rows.length === 0 && (
         <div className="text-muted-foreground rounded-md border py-12 text-center text-sm">
-          {action
-            ? '그 행위로 남은 기록이 없습니다.'
-            : '아직 남은 기록이 없습니다. 물성 카드를 확정하거나 내리면 여기 남습니다.'}
+          {client === 'mcp'
+            ? 'AI(MCP) 를 거쳐 남은 기록이 없습니다 — 아직 AI 가 쓴 적이 없다는 뜻입니다.'
+            : action || client
+              ? '그 조건으로 남은 기록이 없습니다.'
+              : '아직 남은 기록이 없습니다. 물성 카드를 확정하거나 내리면 여기 남습니다.'}
         </div>
       )}
 

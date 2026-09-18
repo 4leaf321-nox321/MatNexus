@@ -63,6 +63,20 @@ EQUIPMENT_DELETED = "equipment.deleted"
 #: 붙지만(`source: literature`) **누가 담았는지는 어디에도 없었다.** 반년 뒤에
 #: 물어질 질문은 「이 값 어디서 났나」 가 아니라 「이거 사람이 확인한 거 맞나」 다.
 VALUES_CHANGED_BY_CLIENT = "values.changed_by_client"
+#: 아래 넷은 **그 예외의 나머지 절반이다.** 값 수정만 막아 두고 카드·처리 실행·
+#: 레시피·형식은 열어 뒀더니, 「AI 가 뭘 했나」 를 이 표로는 못 셌다 — 한 군데라도
+#: 새면 센 숫자가 틀린 것이지 모자란 것이 아니다.
+#:
+#: 실측(2026-09-18): MCP 도구 61개 중 쓰는 것이 열 몇 개인데 감사에 남는 길은
+#: 값 수정 하나뿐이었다. AI 가 만든 물성 카드는 사람이 만든 것과 화면에서
+#: 구별되지 않았고, 그 카드가 곧 해석에 들어가는 덱이 된다.
+#:
+#: **화면에서 한 것은 여기 안 남는다**(`record_by_client` 가 문지기다). 사람이
+#: 카드를 만드는 것은 원래 감사 대상이 아니고, 그 규칙은 그대로다.
+CARD_CREATED_BY_CLIENT = "card.created_by_client"
+PROCESSING_RUN_BY_CLIENT = "processing.run_by_client"
+RECIPE_SAVED_BY_CLIENT = "recipe.saved_by_client"
+FORMAT_SAVED_BY_CLIENT = "format.saved_by_client"
 LOGIN_THROTTLED = "auth.login_throttled"
 """같은 계정의 실패가 문턱을 넘어 응답을 늦추기 시작했다. 실패마다 남기면 넘치므로
 문턱을 넘는 순간 한 번만."""
@@ -123,3 +137,36 @@ def record(
     )
     db.add(entry)
     return entry
+
+
+def record_by_client(
+    db: Session,
+    *,
+    action: str,
+    actor: User | None,
+    target_table: str,
+    target_id: uuid.UUID | None,
+    target_label: str,
+    workspace_id: uuid.UUID | None = None,
+    changes: dict[str, Any] | None = None,
+    reason: str | None = None,
+) -> AuditEntry | None:
+    """**사람이 아닌 길로 들어온 쓰기만** 남긴다. 화면에서 한 것이면 아무것도 안 남는다.
+
+    묻는 자리를 하나로 둔다. 라우트마다 `if get_client():` 를 손으로 적으면, 새
+    쓰기가 생겼을 때 그 한 줄을 빠뜨린 자리만 조용히 안 남는다 — 감사에서 조용한
+    구멍은 없는 것보다 나쁘다. 「AI 는 아무것도 안 했다」 로 읽히기 때문이다.
+    """
+    if not get_client():
+        return None
+    return record(
+        db,
+        action=action,
+        actor=actor,
+        target_table=target_table,
+        target_id=target_id,
+        target_label=target_label,
+        workspace_id=workspace_id,
+        changes=changes,
+        reason=reason,
+    )

@@ -15,9 +15,31 @@ MCP 서버는 진작부터 `X-Client: mcp` 를 보내고 있었는데 백엔드�
 from __future__ import annotations
 
 import uuid
+from pathlib import Path
+from typing import Any
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
+
+from app.modules.materials.models import Material
+from app.modules.tests import services
+from app.modules.tests.definitions import ensure_builtin_test_types
+
+TRA = Path(__file__).resolve().parents[1] / "fixtures" / "Example.tra"
+
+#: 시편 치수를 숫자로 직접 준다 — 이 파일이 보는 것은 계산이 아니라 **남았는가** 다.
+STEPS: list[dict[str, Any]] = [
+    {"plugin": "tensile.engineering", "options": {"gauge_length": 0.05, "area": 12.12e-6}},
+    {"plugin": "tensile.strength", "options": {}},
+]
+
+
+def _actions(client: TestClient, headers: dict[str, str], action: str) -> list[dict[str, Any]]:
+    got: list[dict[str, Any]] = client.get(
+        "/api/audit", params={"action": action, "limit": 200}, headers=headers
+    ).json()
+    return got
 
 
 def _material(client: TestClient, headers: dict[str, str]) -> str:
@@ -148,3 +170,286 @@ class TestValueChange:
             "/api/audit", params={"target_id": material_id}, headers=admin_headers
         ).json()
         assert not [one for one in entries if one["action"] == "values.changed_by_client"]
+
+
+class Test쓰는_길마다_남는다:
+    """**값 수정 하나만 막아 둔 것이 구멍이었다**(2026-09-18).
+
+    `VALUES_CHANGED_BY_CLIENT` 를 넣을 때 답하려던 질문은 「이거 사람이 확인한 거
+    맞나」 였는데, 정작 AI 가 더 많이 하는 일 — 물성 카드 만들기·처리 실행·레시피와
+    형식 저장 — 은 그대로 빠져나갔다. 한 군데라도 새면 그 표로 센 숫자는 모자란
+    것이 아니라 **틀린 것**이 된다: 「AI 는 아무것도 안 했다」 로 읽힌다.
+
+    네 길 모두 같은 규칙이다 — **사람이 화면에서 한 것은 안 남는다.**
+    """
+
+    def test_AI_가_만든_물성_카드가_남는다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str]
+    ) -> None:
+        """카드는 되돌릴 수 있다. 그래도 남기는 이유는 **덱이 해석에 들어간 뒤**에
+        「이 카드 사람이 만든 거 맞나」 가 물어지기 때문이다."""
+        material = Material(
+            record_name=f"AUD_CARD_{uuid.uuid4().hex[:6]}",
+            family="Metal",
+            category="Steel",
+            grade="AUD",
+            poisson_ratio=0.3,
+            density_si=7850.0,
+            declared_properties=[
+                {
+                    "item": "탄성계수",
+                    "points": [{"temperature_k": None, "value_si": 200e9}],
+                    "input_unit": "GPa",
+                    "source": "literature",
+                    "reference": "핸드북",
+                }
+            ],
+        )
+        db.add(material)
+        db.commit()
+
+        made = client.post(
+            "/api/fitting/cards/declared",
+            json={"material_id": str(material.id), "label": "AI 가 만든 카드"},
+            headers={**admin_headers, "X-Client": "mcp"},
+        )
+        assert made.status_code == 201, made.text
+
+        mine = [
+            one
+            for one in _actions(client, admin_headers, "card.created_by_client")
+            if one["target_id"] == made.json()["id"]
+        ]
+        assert mine, "AI 가 카드를 만들었는데 감사에 안 남았다"
+        assert mine[0]["client"] == "mcp"
+        assert mine[0]["target_label"] == "AI 가 만든 카드"
+
+    def test_사람이_만든_카드는_안_남는다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str]
+    ) -> None:
+        material = Material(
+            record_name=f"AUD_HAND_{uuid.uuid4().hex[:6]}",
+            family="Metal",
+            category="Steel",
+            grade="AUD",
+            poisson_ratio=0.3,
+            density_si=7850.0,
+            declared_properties=[
+                {
+                    "item": "탄성계수",
+                    "points": [{"temperature_k": None, "value_si": 200e9}],
+                    "input_unit": "GPa",
+                    "source": "literature",
+                    "reference": "핸드북",
+                }
+            ],
+        )
+        db.add(material)
+        db.commit()
+
+        made = client.post(
+            "/api/fitting/cards/declared",
+            json={"material_id": str(material.id), "label": "사람이 만든 카드"},
+            headers=admin_headers,
+        )
+        assert made.status_code == 201, made.text
+        assert not [
+            one
+            for one in _actions(client, admin_headers, "card.created_by_client")
+            if one["target_id"] == made.json()["id"]
+        ]
+
+    def test_AI_가_저장한_레시피가_남는다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str]
+    ) -> None:
+        """레시피는 **앞으로 돌아갈 모든 처리**가 따르는 단계 구성이다. 과거의
+        결과는 스냅샷이 지켜 주지만 앞으로의 것은 아무도 안 지킨다."""
+        ensure_builtin_test_types(db)
+        db.commit()
+        key = f"aud_{uuid.uuid4().hex[:6]}"
+        made = client.post(
+            "/api/processing/recipes",
+            json={
+                "key": key,
+                "label": "AI 가 만든 레시피",
+                "test_type_key": "tensile",
+                "steps": STEPS,
+            },
+            headers={**admin_headers, "X-Client": "mcp"},
+        )
+        assert made.status_code == 201, made.text
+
+        mine = [
+            one
+            for one in _actions(client, admin_headers, "recipe.saved_by_client")
+            if one["target_id"] == made.json()["id"]
+        ]
+        assert mine and mine[0]["changes"]["created"] is True
+
+        fixed = client.put(
+            f"/api/processing/recipes/{key}",
+            json={
+                "label": "AI 가 고친 레시피",
+                "test_type_key": "tensile",
+                "steps": STEPS,
+                "expected_revision": made.json()["revision"],
+            },
+            headers={**admin_headers, "X-Client": "mcp"},
+        )
+        assert fixed.status_code == 200, fixed.text
+        again = [
+            one
+            for one in _actions(client, admin_headers, "recipe.saved_by_client")
+            if one["target_id"] == made.json()["id"]
+        ]
+        assert len(again) == 2, "고친 것도 남아야 한다 — 단계를 통째로 갈아 끼운다"
+        assert again[0]["changes"]["created"] is False
+
+    def test_AI_가_저장한_형식이_남는다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str]
+    ) -> None:
+        """형식이 틀리면 값이 **안 들어오는 게 아니라 다른 값이 들어온다.**"""
+        ensure_builtin_test_types(db)
+        db.commit()
+        key = f"aud_{uuid.uuid4().hex[:6]}"
+        made = client.post(
+            "/api/formats",
+            json={
+                "key": key,
+                "label": "AI 가 만든 형식",
+                "test_type_key": "tensile",
+                "definition": {
+                    "match": {"extensions": [".csv"]},
+                    "columns": {"Force": {"channel": "force"}},
+                },
+            },
+            headers={**admin_headers, "X-Client": "mcp"},
+        )
+        assert made.status_code == 201, made.text
+
+        mine = _actions(client, admin_headers, "format.saved_by_client")
+        assert mine, "AI 가 형식을 저장했는데 감사에 안 남았다"
+        assert mine[0]["target_label"].endswith(f"({key})")
+        assert mine[0]["client"] == "mcp"
+
+    def test_사람이_저장한_형식은_안_남는다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str]
+    ) -> None:
+        ensure_builtin_test_types(db)
+        db.commit()
+        made = client.post(
+            "/api/formats",
+            json={
+                "key": f"aud_{uuid.uuid4().hex[:6]}",
+                "label": "사람이 만든 형식",
+                "test_type_key": "tensile",
+                "definition": {
+                    "match": {"extensions": [".csv"]},
+                    "columns": {"Force": {"channel": "force"}},
+                },
+            },
+            headers=admin_headers,
+        )
+        assert made.status_code == 201, made.text
+        assert not _actions(client, admin_headers, "format.saved_by_client")
+
+
+@pytest.fixture
+def run_id(client: TestClient, admin_headers: dict[str, str], db: Session) -> str:
+    """파싱까지 끝난 인장 시험 하나."""
+    ensure_builtin_test_types(db)
+    db.commit()
+    material = client.post(
+        "/api/materials",
+        json={
+            "family": "Metal",
+            "category": "Steel",
+            "grade": "AUDP",
+            "details": "MDOI",
+            "spec_thickness": 1.0,
+        },
+        headers=admin_headers,
+    ).json()
+    sample = client.post(
+        f"/api/materials/{material['id']}/samples", json={}, headers=admin_headers
+    ).json()
+    specimen = client.post(
+        f"/api/samples/{sample['id']}/specimens",
+        json={"orientation": "MD"},
+        headers=admin_headers,
+    ).json()
+    created = client.post(
+        "/api/test-runs",
+        data={"specimen_id": specimen["id"], "test_type": "tensile", "conditions": "{}"},
+        files={"file": ("Example.tra", TRA.read_bytes())},
+        headers=admin_headers,
+    ).json()
+    assert services.parse_run(db, uuid.UUID(created["id"])) == "parsed"
+    return str(created["id"])
+
+
+class Test처리_실행:
+    """「이 결과 누가 돌렸지」 — `request_context` 가 이 말을 적어 둔 그 질문이다.
+
+    결과 자체는 단계·버전·실행 환경을 통째로 들고 있어 **무엇으로** 나왔는지는
+    안다. 빠진 것은 **길** 하나였다: 같은 토큰으로 AI 가 돌린 것과 사람이 돌린
+    것이 구별되지 않았다.
+    """
+
+    def test_AI_가_돌린_처리가_남는다(
+        self, client: TestClient, admin_headers: dict[str, str], run_id: str
+    ) -> None:
+        stored = client.post(
+            "/api/processing/results",
+            json={"test_run_id": run_id, "steps": STEPS},
+            headers={**admin_headers, "X-Client": "mcp"},
+        )
+        assert stored.status_code == 201, stored.text
+
+        mine = [
+            one
+            for one in _actions(client, admin_headers, "processing.run_by_client")
+            if one["target_id"] == stored.json()["id"]
+        ]
+        assert mine and mine[0]["client"] == "mcp"
+
+    def test_사람이_돌린_처리는_안_남는다(
+        self, client: TestClient, admin_headers: dict[str, str], run_id: str
+    ) -> None:
+        stored = client.post(
+            "/api/processing/results",
+            json={"test_run_id": run_id, "steps": STEPS},
+            headers=admin_headers,
+        )
+        assert stored.status_code == 201, stored.text
+        assert not _actions(client, admin_headers, "processing.run_by_client")
+
+    def test_배치는_한_줄로_남는다(
+        self, client: TestClient, admin_headers: dict[str, str], run_id: str
+    ) -> None:
+        """**건별로 남기면 한 번 돌린 것이 표 50줄이 된다.** 그러면 이 표에서
+        정작 찾을 것(계정·삭제)을 못 찾는다 — 그것이 이 표의 원래 규칙이다."""
+        done = client.post(
+            "/api/processing/batch",
+            json={"test_run_ids": [run_id], "steps": STEPS, "adopt": False},
+            headers={**admin_headers, "X-Client": "mcp"},
+        )
+        assert done.status_code == 200, done.text
+        assert done.json()["succeeded"] == 1
+
+        mine = _actions(client, admin_headers, "processing.run_by_client")
+        assert len(mine) == 1, "배치 한 번은 감사 한 줄이다"
+        assert mine[0]["changes"]["succeeded"] == 1
+        assert mine[0]["target_id"] is None
+
+    def test_돌려_보기만_한_배치는_안_남는다(
+        self, client: TestClient, admin_headers: dict[str, str], run_id: str
+    ) -> None:
+        """`dry_run` 은 아무것도 저장하지 않는다 — 남길 일이 없다."""
+        done = client.post(
+            "/api/processing/batch",
+            json={"test_run_ids": [run_id], "steps": STEPS, "dry_run": True},
+            headers={**admin_headers, "X-Client": "mcp"},
+        )
+        assert done.status_code == 200, done.text
+        assert not _actions(client, admin_headers, "processing.run_by_client")

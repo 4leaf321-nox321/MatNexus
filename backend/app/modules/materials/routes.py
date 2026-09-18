@@ -102,7 +102,6 @@ from app.shared import (
 from app.shared.auth import current_user
 from app.shared.errors import AppError, Conflict, NotFound
 from app.shared.pagination import Page, clamp_limit
-from app.shared.request_context import get_client
 from matcore import naming, units
 from matcore import specimen as specimen_kit
 
@@ -1361,9 +1360,7 @@ def _audit_if_not_human(
     실측(2026-09-10): AI 세션이 문헌값 9건을 재료에 담았는데 남은 흔적이
     `updated_at` 뿐이었다. 값에는 출처가 붙지만 **누가 담았는지가 없었다.**
     """
-    if not get_client():
-        return
-    audit.record(
+    audit.record_by_client(
         db,
         action=audit.VALUES_CHANGED_BY_CLIENT,
         actor=user,

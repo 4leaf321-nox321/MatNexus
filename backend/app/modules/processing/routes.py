@@ -504,6 +504,19 @@ def create_result(
         _recipe_or_none(db, user, payload.recipe_key),
         user,
     )
+    # **「이 결과 누가 돌렸지」.** 사람이 화면에서 돌린 것은 안 남는다 — 결과 자체가
+    # 단계·버전·실행 환경을 통째로 들고 있어 그걸로 충분하다. 빠진 것은 **길**
+    # 하나였다: 같은 토큰으로 AI 가 돌린 것과 사람이 돌린 것이 구별되지 않았다.
+    audit.record_by_client(
+        db,
+        action=audit.PROCESSING_RUN_BY_CLIENT,
+        actor=user,
+        target_table="processing_results",
+        target_id=item.id,
+        target_label=run.record_name,
+        workspace_id=run.workspace_id,
+        changes={"steps": len(payload.steps), "recipe": payload.recipe_key},
+    )
     db.commit()
     db.refresh(item)
     return _result_out(item)
@@ -595,6 +608,25 @@ def _visible_recipes(db: Session, user: User) -> Select[tuple[ProcessingRecipe]]
     return select(ProcessingRecipe).where(
         visible_owner_clause(db, user, ProcessingRecipe.owner_workspace_id),
         ProcessingRecipe.deleted_at.is_(None),
+    )
+
+
+def _audit_recipe(db: Session, user: User, item: ProcessingRecipe, *, made: bool) -> None:
+    """레시피를 **사람이 아닌 것이** 저장했으면 남긴다.
+
+    레시피는 「이 부서가 어느 규격을 따르는가」 다(ADR 0005·0006). 과거의 결과는
+    스냅샷이 지켜 주지만, **앞으로 돌아갈 모든 처리**가 이 단계 구성을 쓴다 —
+    그것을 AI 가 소리 없이 바꿔 두면 다음 사람은 자기가 무엇을 따르는지 모른다.
+    """
+    audit.record_by_client(
+        db,
+        action=audit.RECIPE_SAVED_BY_CLIENT,
+        actor=user,
+        target_table="processing_recipes",
+        target_id=item.id,
+        target_label=f"{item.label} ({item.key})",
+        workspace_id=item.owner_workspace_id,
+        changes={"created": made, "steps": len(item.steps or [])},
     )
 
 
@@ -700,6 +732,8 @@ def create_recipe(
         created_by_id=user.id,
     )
     db.add(item)
+    db.flush()
+    _audit_recipe(db, user, item, made=True)
     db.commit()
     db.refresh(item)
     return _recipe_out(db, item)
@@ -735,6 +769,7 @@ def update_recipe(
     item.steps = payload.steps
     item.is_active = payload.is_active
     revision.bump(item)
+    _audit_recipe(db, user, item, made=False)
     db.commit()
     db.refresh(item)
     return _recipe_out(db, item)
@@ -1151,6 +1186,8 @@ def run_batch(
     recipe = _recipe_or_none(db, user, payload.recipe_key)
 
     items: list[BatchItemOut] = []
+    #: 감사 한 줄에 적을 부서. 여러 부서면 비운다(아래).
+    workspaces: list[uuid.UUID | None] = []
     for run_id in payload.test_run_ids:
         # 못 보는 시험도 **건별 실패**로 남긴다. 여기서 404 를 던지면 앞의 성공까지
         # 없던 일이 되고, 사람은 무엇이 문제인지 모른 채 처음부터 다시 한다.
@@ -1188,6 +1225,7 @@ def run_batch(
                 )
                 continue
             stored = _store(db, run, payload.source_curve_key, payload.steps, recipe, user)
+            workspaces.append(run.workspace_id)
         except AppError as exc:
             db.rollback()
             items.append(
@@ -1223,6 +1261,29 @@ def run_batch(
         )
 
     succeeded = sum(1 for item in items if item.status == "ok")
+    # **배치는 한 줄로 남긴다.** 건별로 남기면 한 번 돌린 것이 감사 표 50줄이 되고,
+    # 그 표에서 정작 찾을 것(계정·삭제)을 못 찾는다 — 그것이 이 표의 원래 규칙이다.
+    if succeeded and not payload.dry_run:
+        spaces = {one for one in workspaces if one is not None}
+        audit.record_by_client(
+            db,
+            action=audit.PROCESSING_RUN_BY_CLIENT,
+            actor=user,
+            target_table="processing_results",
+            target_id=None,
+            target_label=f"일괄 처리 {succeeded}건",
+            # 여러 부서에 걸쳐 돌렸으면 **비운다** — 한쪽 부서 것으로 적으면 그
+            # 부서 관리자가 남의 부서 일을 자기 것으로 읽는다.
+            workspace_id=next(iter(spaces)) if len(spaces) == 1 else None,
+            changes={
+                "requested": len(items),
+                "succeeded": succeeded,
+                "steps": len(payload.steps),
+                "recipe": payload.recipe_key,
+                "adopt": payload.adopt,
+            },
+        )
+        db.commit()
     return BatchOut(
         requested=len(items),
         succeeded=succeeded,

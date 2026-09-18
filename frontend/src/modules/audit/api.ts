@@ -12,10 +12,19 @@ import type { components } from '@/shared/api/schema'
 export type AuditEntry = components['schemas']['AuditEntryOut']
 
 export const auditApi = {
-  /** 최근 것부터. 서버가 상한을 강제한다 — `limit` 을 크게 줘도 잘린다. */
-  list: (params: { action?: string; workspace_id?: string; limit?: number } = {}) => {
+  /**
+   * 최근 것부터. 서버가 상한을 강제한다 — `limit` 을 크게 줘도 잘린다.
+   *
+   * `client` 는 **들어온 길**이다: `mcp` 면 AI 를 거친 것만, `web` 이면 화면에서
+   * 한 것만. 서버가 빈 문자열을 `web` 이라는 말로 받는다(질의 인자로 빈 값은
+   * 넘기기 나쁘다).
+   */
+  list: (
+    params: { action?: string; client?: string; workspace_id?: string; limit?: number } = {},
+  ) => {
     const query = new URLSearchParams()
     if (params.action) query.set('action', params.action)
+    if (params.client) query.set('client', params.client)
     if (params.workspace_id) query.set('workspace_id', params.workspace_id)
     if (params.limit) query.set('limit', String(params.limit))
     const suffix = query.toString()
@@ -43,4 +52,11 @@ export const ACTION_LABELS: Record<string, string> = {
   'account.deleted': '계정 삭제',
   'vocabulary.renamed': '기준정보 이름 변경',
   'test_type.changed': '시험 종류 변경',
+  // 아래 다섯은 **사람이 아닌 길로 들어온 것만** 남는다(`shared/audit.py`).
+  // 화면에서 같은 일을 해도 안 남는다 — 남길 이유가 「누가 했나」 하나뿐이라.
+  'values.changed_by_client': 'AI 가 값 수정',
+  'card.created_by_client': 'AI 가 물성 카드 생성',
+  'processing.run_by_client': 'AI 가 처리 실행',
+  'recipe.saved_by_client': 'AI 가 레시피 저장',
+  'format.saved_by_client': 'AI 가 형식 저장',
 }
