@@ -64,6 +64,17 @@ describe('표준 단계', () => {
     expect(last('curve.sort_unique')).toBeLessThan(last('curve.resample'))
   })
 
+  it('단조 보정은 진소성 축이 선 뒤, 마지막 재샘플 앞이다', () => {
+    // 재는 단계·네킹 자르기 뒤여야 측정값을 안 바꾸고 네킹 이후를 「고치지」 않는다.
+    // 선형 보간은 단조를 보존하므로 재샘플 앞에서 측정점 단위로 「몇 점을 올렸나」 가 남는다.
+    expect(at('curve.monotone')).toBeGreaterThan(at('tensile.strength'))
+    expect(at('curve.monotone')).toBeGreaterThan(at('curve.crop'))
+    expect(at('curve.monotone')).toBeGreaterThan(last('curve.sort_unique'))
+    expect(at('curve.monotone')).toBeLessThan(last('curve.resample'))
+    const step = TENSILE_STANDARD[at('curve.monotone')]
+    expect(step.options).toEqual({ column: 'stress_true', x: 'strain_true_plastic' })
+  })
+
   it('두 축을 모두 재샘플한다', () => {
     // 여러 시편의 평균을 내려면 격자가 같아야 하고, 축이 둘이다.
     const axes = TENSILE_STANDARD.filter((one) => one.plugin === 'curve.resample').map(

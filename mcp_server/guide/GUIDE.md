@@ -260,7 +260,8 @@ GPa·mm)로 바꿔 보여 주지만 그것은 표시일 뿐이다.
     8  curve.crop                 네킹까지 자르기
     9  tensile.true_plastic       진응력·진소성변형률
     10 curve.sort_unique          진소성 축 정렬
-    11 curve.resample             균등 격자 (진소성 축)
+    11 curve.monotone             단조 증가 보정 (stress_true 를 strain_true_plastic 에 대해)
+    12 curve.resample             균등 격자 (진소성 축)
 
 **재는 단계(3~5)가 재샘플(7)보다 앞이다.** 금속은 항복이 변형률 0.002 언저리인데
 곡선은 0.4 까지 간다 — 400점을 전 구간에 고르게 뿌리면 **항복 전에 한두 점**만

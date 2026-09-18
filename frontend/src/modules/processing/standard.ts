@@ -104,6 +104,14 @@ export const TENSILE_STANDARD: RecipeStep[] = [
     plugin: 'curve.sort_unique',
     options: { x: 'strain_true_plastic', duplicate_policy: 'last' },
   },
+  // **솔버 표는 엄격히 단조 증가여야 한다**(2026-09-18). 진소성 축이 선 뒤, 마지막
+  // 재샘플 앞 — 재는 단계·네킹 자르기 뒤라 측정값을 안 바꾸고 네킹 이후를 「고치지」
+  // 않는다. 이미 단조인 곡선엔 아무것도 안 하고 그렇다고 적는다. 내려간 곳은 직전
+  // 최댓값으로, 평탄부는 최댓값의 1e-6 씩 — 물성으로는 없는 값이다.
+  {
+    plugin: 'curve.monotone',
+    options: { column: 'stress_true', x: 'strain_true_plastic' },
+  },
   {
     plugin: 'curve.resample',
     options: { x: 'strain_true_plastic', count: 300, start: 0 },

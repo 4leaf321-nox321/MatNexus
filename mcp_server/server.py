@@ -2783,6 +2783,7 @@ TENSILE_STANDARD: tuple[str, ...] = (
     "curve.crop",
     "tensile.true_plastic",
     "curve.sort_unique",
+    "curve.monotone",
     "curve.resample",
 )
 

@@ -466,7 +466,9 @@ def strictly_increasing(
             help="한 점을 가장 많이 올린 폭(열의 단위). 크면 곡선이 실제로 내려갔던 것입니다.",
         ),
     ),
-    order=46,
+    # 진소성 축이 선 뒤, 마지막 재샘플 앞 — 재는 단계와 네킹 자르기 뒤여야 측정값을 안 바꾸고
+    # 네킹 이후를 「고치지」 않는다. 선형 보간은 단조를 보존하므로 재샘플 앞이 맞다.
+    order=92,
     version="1",
 )
 def monotone(frame: Frame, options: dict[str, Any]) -> StepResult:
