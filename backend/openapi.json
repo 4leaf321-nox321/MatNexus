@@ -13485,6 +13485,572 @@
         "title": "ItemOut",
         "type": "object"
       },
+      "KGBrowseOut": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/KGSearchHitOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "KGBrowseOut",
+        "type": "object"
+      },
+      "KGEdgeOut": {
+        "properties": {
+          "directed": {
+            "title": "Directed",
+            "type": "boolean"
+          },
+          "dst": {
+            "title": "Dst",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "inverse_label": {
+            "title": "Inverse Label",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "relation": {
+            "title": "Relation",
+            "type": "string"
+          },
+          "src": {
+            "title": "Src",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "relation",
+          "label",
+          "inverse_label",
+          "directed",
+          "src",
+          "dst"
+        ],
+        "title": "KGEdgeOut",
+        "type": "object"
+      },
+      "KGFactOut": {
+        "properties": {
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "value"
+        ],
+        "title": "KGFactOut",
+        "type": "object"
+      },
+      "KGNeighborhoodOut": {
+        "properties": {
+          "depth": {
+            "title": "Depth",
+            "type": "integer"
+          },
+          "edges": {
+            "items": {
+              "$ref": "#/components/schemas/KGEdgeOut"
+            },
+            "title": "Edges",
+            "type": "array"
+          },
+          "fanout": {
+            "title": "Fanout",
+            "type": "integer"
+          },
+          "focus": {
+            "title": "Focus",
+            "type": "string"
+          },
+          "node_limit": {
+            "title": "Node Limit",
+            "type": "integer"
+          },
+          "nodes": {
+            "items": {
+              "$ref": "#/components/schemas/KGNodeOut"
+            },
+            "title": "Nodes",
+            "type": "array"
+          },
+          "truncated": {
+            "title": "Truncated",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "focus",
+          "nodes",
+          "edges",
+          "depth",
+          "fanout",
+          "node_limit",
+          "truncated"
+        ],
+        "title": "KGNeighborhoodOut",
+        "type": "object"
+      },
+      "KGNodeDetailOut": {
+        "properties": {
+          "detail_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail Path"
+          },
+          "facts": {
+            "items": {
+              "$ref": "#/components/schemas/KGFactOut"
+            },
+            "title": "Facts",
+            "type": "array"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Key"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "related": {
+            "items": {
+              "$ref": "#/components/schemas/KGRelatedOut"
+            },
+            "title": "Related",
+            "type": "array"
+          },
+          "related_total": {
+            "title": "Related Total",
+            "type": "integer"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "type_label": {
+            "title": "Type Label",
+            "type": "string"
+          },
+          "type_slug": {
+            "title": "Type Slug",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "key",
+          "type_slug",
+          "type_label",
+          "status",
+          "detail_path",
+          "facts",
+          "related",
+          "related_total"
+        ],
+        "title": "KGNodeDetailOut",
+        "type": "object"
+      },
+      "KGNodeOut": {
+        "properties": {
+          "degree": {
+            "title": "Degree",
+            "type": "integer"
+          },
+          "detail_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail Path"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Key"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "owner_workspace_slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner Workspace Slug"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "sublabel": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sublabel"
+          },
+          "truncated": {
+            "title": "Truncated",
+            "type": "boolean"
+          },
+          "type_label": {
+            "title": "Type Label",
+            "type": "string"
+          },
+          "type_slug": {
+            "title": "Type Slug",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "key",
+          "sublabel",
+          "type_slug",
+          "type_label",
+          "status",
+          "owner_workspace_slug",
+          "degree",
+          "truncated",
+          "detail_path"
+        ],
+        "title": "KGNodeOut",
+        "type": "object"
+      },
+      "KGOverviewOut": {
+        "properties": {
+          "edge_count": {
+            "title": "Edge Count",
+            "type": "integer"
+          },
+          "edges": {
+            "items": {
+              "$ref": "#/components/schemas/KGTypeEdgeOut"
+            },
+            "title": "Edges",
+            "type": "array"
+          },
+          "nodes": {
+            "items": {
+              "$ref": "#/components/schemas/KGTypeNodeOut"
+            },
+            "title": "Nodes",
+            "type": "array"
+          },
+          "object_count": {
+            "title": "Object Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "nodes",
+          "edges",
+          "object_count",
+          "edge_count"
+        ],
+        "title": "KGOverviewOut",
+        "type": "object"
+      },
+      "KGRelatedOut": {
+        "properties": {
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "node_id": {
+            "title": "Node Id",
+            "type": "string"
+          },
+          "node_label": {
+            "title": "Node Label",
+            "type": "string"
+          },
+          "node_type_label": {
+            "title": "Node Type Label",
+            "type": "string"
+          },
+          "outgoing": {
+            "title": "Outgoing",
+            "type": "boolean"
+          },
+          "relation": {
+            "title": "Relation",
+            "type": "string"
+          }
+        },
+        "required": [
+          "relation",
+          "label",
+          "outgoing",
+          "node_id",
+          "node_label",
+          "node_type_label"
+        ],
+        "title": "KGRelatedOut",
+        "type": "object"
+      },
+      "KGSearchHitOut": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Key"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "sublabel": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sublabel"
+          },
+          "type_label": {
+            "title": "Type Label",
+            "type": "string"
+          },
+          "type_slug": {
+            "title": "Type Slug",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "key",
+          "sublabel",
+          "type_slug",
+          "type_label"
+        ],
+        "title": "KGSearchHitOut",
+        "type": "object"
+      },
+      "KGSubgraphOut": {
+        "properties": {
+          "edges": {
+            "items": {
+              "$ref": "#/components/schemas/KGEdgeOut"
+            },
+            "title": "Edges",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "nodes": {
+            "items": {
+              "$ref": "#/components/schemas/KGNodeOut"
+            },
+            "title": "Nodes",
+            "type": "array"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          },
+          "truncated": {
+            "title": "Truncated",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "nodes",
+          "edges",
+          "total",
+          "limit",
+          "offset",
+          "truncated"
+        ],
+        "title": "KGSubgraphOut",
+        "type": "object"
+      },
+      "KGTypeEdgeOut": {
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "directed": {
+            "title": "Directed",
+            "type": "boolean"
+          },
+          "dst_type": {
+            "title": "Dst Type",
+            "type": "string"
+          },
+          "inverse_label": {
+            "title": "Inverse Label",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "relation": {
+            "title": "Relation",
+            "type": "string"
+          },
+          "src_type": {
+            "title": "Src Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "relation",
+          "label",
+          "inverse_label",
+          "directed",
+          "src_type",
+          "dst_type",
+          "count"
+        ],
+        "title": "KGTypeEdgeOut",
+        "type": "object"
+      },
+      "KGTypeNodeOut": {
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "detail_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail Path"
+          },
+          "icon": {
+            "title": "Icon",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "layer": {
+            "title": "Layer",
+            "type": "string"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          }
+        },
+        "required": [
+          "slug",
+          "label",
+          "icon",
+          "layer",
+          "count",
+          "detail_path"
+        ],
+        "title": "KGTypeNodeOut",
+        "type": "object"
+      },
       "LinkRunRequest": {
         "properties": {
           "run_id": {
@@ -34542,6 +35108,452 @@
         "summary": "Update Formula",
         "tags": [
           "formulas"
+        ]
+      }
+    },
+    "/api/graph/browse": {
+      "get": {
+        "description": "한 종류를 이름순으로 쪽 단위로 — 훑어서 시작점을 고르는 길.",
+        "operationId": "browse_api_graph_browse_get",
+        "parameters": [
+          {
+            "description": "종류 slug",
+            "in": "query",
+            "name": "type",
+            "required": true,
+            "schema": {
+              "description": "종류 slug",
+              "title": "Type",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KGBrowseOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Browse",
+        "tags": [
+          "graph"
+        ]
+      }
+    },
+    "/api/graph/neighborhood": {
+      "get": {
+        "description": "시작점에서 depth 단계까지의 이웃. **한 단계씩, 노드마다 fanout 개까지, 전체 limit\n개까지.** 잘리면 `truncated` 와 노드의 `degree` 로 잘렸다고 말한다.",
+        "operationId": "neighborhood_api_graph_neighborhood_get",
+        "parameters": [
+          {
+            "description": "시작 노드 id (<종류>:<식별자>)",
+            "in": "query",
+            "name": "focus",
+            "required": true,
+            "schema": {
+              "description": "시작 노드 id (<종류>:<식별자>)",
+              "title": "Focus",
+              "type": "string"
+            }
+          },
+          {
+            "description": "몇 단계까지. 최대 6",
+            "in": "query",
+            "name": "depth",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "몇 단계까지. 최대 6",
+              "title": "Depth"
+            }
+          },
+          {
+            "description": "노드 하나가 데려오는 이웃 수. 최대 500",
+            "in": "query",
+            "name": "fanout",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "노드 하나가 데려오는 이웃 수. 최대 500",
+              "title": "Fanout"
+            }
+          },
+          {
+            "description": "노드 상한. 최대 20000",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "노드 상한. 최대 20000",
+              "title": "Limit"
+            }
+          },
+          {
+            "description": "선 종류 slug, 쉼표로",
+            "in": "query",
+            "name": "relations",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "선 종류 slug, 쉼표로",
+              "title": "Relations"
+            }
+          },
+          {
+            "description": "이웃 종류 slug, 쉼표로",
+            "in": "query",
+            "name": "types",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "이웃 종류 slug, 쉼표로",
+              "title": "Types"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KGNeighborhoodOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Neighborhood",
+        "tags": [
+          "graph"
+        ]
+      }
+    },
+    "/api/graph/node": {
+      "get": {
+        "description": "고른 노드의 요약 — 그래프를 떠나지 않고 「이게 뭐지」 에 답한다. 관계는 종류별로 화면이\n묶는다.",
+        "operationId": "node_api_graph_node_get",
+        "parameters": [
+          {
+            "description": "노드 id (<종류>:<식별자>)",
+            "in": "query",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "노드 id (<종류>:<식별자>)",
+              "title": "Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KGNodeDetailOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Node",
+        "tags": [
+          "graph"
+        ]
+      }
+    },
+    "/api/graph/overview": {
+      "get": {
+        "description": "정의 그래프 — 종류가 노드, 관계 종류가 선. 선의 굵기는 실제로 걸린 수라 정의만 있고\n비어 있는 선은 점선으로 드러난다.",
+        "operationId": "overview_api_graph_overview_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KGOverviewOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Overview",
+        "tags": [
+          "graph"
+        ]
+      }
+    },
+    "/api/graph/search": {
+      "get": {
+        "description": "종류를 가리지 않고 시작점을 찾는다 — 무엇이 어느 종류인지 모르는 사람의 자리.",
+        "operationId": "search_api_graph_search_get",
+        "parameters": [
+          {
+            "description": "이름·번호·키·별칭의 일부",
+            "in": "query",
+            "name": "q",
+            "required": true,
+            "schema": {
+              "description": "이름·번호·키·별칭의 일부",
+              "minLength": 1,
+              "title": "Q",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/KGSearchHitOut"
+                  },
+                  "title": "Response Search Api Graph Search Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Search",
+        "tags": [
+          "graph"
+        ]
+      }
+    },
+    "/api/graph/subgraph": {
+      "get": {
+        "description": "한 종류(들)의 노드를 **쪽 단위로** 전부, 그 사이의 선과 함께. 「N개 중 M개」.",
+        "operationId": "subgraph_api_graph_subgraph_get",
+        "parameters": [
+          {
+            "description": "종류 slug, 쉼표로",
+            "in": "query",
+            "name": "types",
+            "required": true,
+            "schema": {
+              "description": "종류 slug, 쉼표로",
+              "title": "Types",
+              "type": "string"
+            }
+          },
+          {
+            "description": "선 종류 slug, 쉼표로",
+            "in": "query",
+            "name": "relations",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "선 종류 slug, 쉼표로",
+              "title": "Relations"
+            }
+          },
+          {
+            "description": "이름의 일부",
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "이름의 일부",
+              "title": "Q"
+            }
+          },
+          {
+            "description": "노드 상한. 최대 20000",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "노드 상한. 최대 20000",
+              "title": "Limit"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KGSubgraphOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Subgraph",
+        "tags": [
+          "graph"
         ]
       }
     },

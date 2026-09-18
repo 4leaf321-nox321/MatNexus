@@ -37,6 +37,7 @@ import {
   SlidersHorizontal,
   Split,
   Tags,
+  Waypoints,
   UserCog,
   Wrench,
   Users,
@@ -355,6 +356,11 @@ export const NAV_GROUPS: NavGroup[] = [
       // 기준정보가 아닌가」 를 묻게 된다. 화면 왼쪽 축 목록에서 「고칠 수 없는
       // 것」 으로 따로 세운다 — 축은 값을 더할 수 있고 단위는 못 고친다.
       { label: '기준정보', icon: Tags, to: '/vocabulary' },
+      // **기준정보가 「무엇이 있나」 라면 지식 그래프는 「무엇이 무엇과 이어지나」.** 구조(종류와
+      // 관계 종류)와 탐색(하나의 주변) — TestScope·StandardPlatform 의 것을 옮겨 왔다(2026-09-18).
+      // 「전부」 를 그리는 단추는 없다: 상한을 서버가 강제하고, 잘린 자리에 「+N」 이 붙는다.
+      // MCP 가 걷는 지도(`shared/relations`)와 같은 정의라, AI 가 본 길을 사람이 눈으로 확인한다.
+      { label: '지식 그래프', icon: Waypoints, to: '/graph' },
     ],
   },
   {

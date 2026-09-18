@@ -162,6 +162,9 @@ GPa·mm)로 바꿔 보여 주지만 그것은 표시일 뿐이다.
 
 너에게는 화면의 링크가 없다. 사람은 재료 상세에서 시료를 누르고 시험으로 가지만,
 너는 어느 것이 어느 것과 이어지는지 모른 채 시작한다. `get_ontology` 가 그 지도다.
+사람에게는 같은 지도가 그림으로 있다 — 화면의 「지식 그래프」(`/graph`, 2026-09-18).
+네가 `related`·`find_path` 로 걸은 길을 사람이 눈으로 확인하고 싶어 하면 그 화면을
+말해라: 「구조」 가 종류와 관계 종류, 「탐색」 이 한 마디의 주변이다.
 
     kinds       material · sample · specimen · test_run · property · instrument …
     relations   src 에서 dst 로 label 을 읽는다

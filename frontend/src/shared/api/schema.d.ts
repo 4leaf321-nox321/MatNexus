@@ -2597,6 +2597,129 @@ export interface paths {
         patch: operations["update_formula_api_formulas__formula_id__patch"];
         trace?: never;
     };
+    "/api/graph/browse": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Browse
+         * @description 한 종류를 이름순으로 쪽 단위로 — 훑어서 시작점을 고르는 길.
+         */
+        get: operations["browse_api_graph_browse_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/graph/neighborhood": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Neighborhood
+         * @description 시작점에서 depth 단계까지의 이웃. **한 단계씩, 노드마다 fanout 개까지, 전체 limit
+         *     개까지.** 잘리면 `truncated` 와 노드의 `degree` 로 잘렸다고 말한다.
+         */
+        get: operations["neighborhood_api_graph_neighborhood_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/graph/node": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Node
+         * @description 고른 노드의 요약 — 그래프를 떠나지 않고 「이게 뭐지」 에 답한다. 관계는 종류별로 화면이
+         *     묶는다.
+         */
+        get: operations["node_api_graph_node_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/graph/overview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Overview
+         * @description 정의 그래프 — 종류가 노드, 관계 종류가 선. 선의 굵기는 실제로 걸린 수라 정의만 있고
+         *     비어 있는 선은 점선으로 드러난다.
+         */
+        get: operations["overview_api_graph_overview_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/graph/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Search
+         * @description 종류를 가리지 않고 시작점을 찾는다 — 무엇이 어느 종류인지 모르는 사람의 자리.
+         */
+        get: operations["search_api_graph_search_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/graph/subgraph": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Subgraph
+         * @description 한 종류(들)의 노드를 **쪽 단위로** 전부, 그 사이의 선과 함께. 「N개 중 M개」.
+         */
+        get: operations["subgraph_api_graph_subgraph_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/groups": {
         parameters: {
             query?: never;
@@ -11748,6 +11871,194 @@ export interface components {
              * Format: uuid
              */
             target_id: string;
+        };
+        /** KGBrowseOut */
+        KGBrowseOut: {
+            /** Items */
+            items: components["schemas"]["KGSearchHitOut"][];
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+            /** Total */
+            total: number;
+        };
+        /** KGEdgeOut */
+        KGEdgeOut: {
+            /** Directed */
+            directed: boolean;
+            /** Dst */
+            dst: string;
+            /** Id */
+            id: string;
+            /** Inverse Label */
+            inverse_label: string;
+            /** Label */
+            label: string;
+            /** Relation */
+            relation: string;
+            /** Src */
+            src: string;
+        };
+        /** KGFactOut */
+        KGFactOut: {
+            /** Label */
+            label: string;
+            /** Value */
+            value: string;
+        };
+        /** KGNeighborhoodOut */
+        KGNeighborhoodOut: {
+            /** Depth */
+            depth: number;
+            /** Edges */
+            edges: components["schemas"]["KGEdgeOut"][];
+            /** Fanout */
+            fanout: number;
+            /** Focus */
+            focus: string;
+            /** Node Limit */
+            node_limit: number;
+            /** Nodes */
+            nodes: components["schemas"]["KGNodeOut"][];
+            /** Truncated */
+            truncated: boolean;
+        };
+        /** KGNodeDetailOut */
+        KGNodeDetailOut: {
+            /** Detail Path */
+            detail_path: string | null;
+            /** Facts */
+            facts: components["schemas"]["KGFactOut"][];
+            /** Id */
+            id: string;
+            /** Key */
+            key: string | null;
+            /** Label */
+            label: string;
+            /** Related */
+            related: components["schemas"]["KGRelatedOut"][];
+            /** Related Total */
+            related_total: number;
+            /** Status */
+            status: string;
+            /** Type Label */
+            type_label: string;
+            /** Type Slug */
+            type_slug: string;
+        };
+        /** KGNodeOut */
+        KGNodeOut: {
+            /** Degree */
+            degree: number;
+            /** Detail Path */
+            detail_path: string | null;
+            /** Id */
+            id: string;
+            /** Key */
+            key: string | null;
+            /** Label */
+            label: string;
+            /** Owner Workspace Slug */
+            owner_workspace_slug: string | null;
+            /** Status */
+            status: string;
+            /** Sublabel */
+            sublabel: string | null;
+            /** Truncated */
+            truncated: boolean;
+            /** Type Label */
+            type_label: string;
+            /** Type Slug */
+            type_slug: string;
+        };
+        /** KGOverviewOut */
+        KGOverviewOut: {
+            /** Edge Count */
+            edge_count: number;
+            /** Edges */
+            edges: components["schemas"]["KGTypeEdgeOut"][];
+            /** Nodes */
+            nodes: components["schemas"]["KGTypeNodeOut"][];
+            /** Object Count */
+            object_count: number;
+        };
+        /** KGRelatedOut */
+        KGRelatedOut: {
+            /** Label */
+            label: string;
+            /** Node Id */
+            node_id: string;
+            /** Node Label */
+            node_label: string;
+            /** Node Type Label */
+            node_type_label: string;
+            /** Outgoing */
+            outgoing: boolean;
+            /** Relation */
+            relation: string;
+        };
+        /** KGSearchHitOut */
+        KGSearchHitOut: {
+            /** Id */
+            id: string;
+            /** Key */
+            key: string | null;
+            /** Label */
+            label: string;
+            /** Sublabel */
+            sublabel: string | null;
+            /** Type Label */
+            type_label: string;
+            /** Type Slug */
+            type_slug: string;
+        };
+        /** KGSubgraphOut */
+        KGSubgraphOut: {
+            /** Edges */
+            edges: components["schemas"]["KGEdgeOut"][];
+            /** Limit */
+            limit: number;
+            /** Nodes */
+            nodes: components["schemas"]["KGNodeOut"][];
+            /** Offset */
+            offset: number;
+            /** Total */
+            total: number;
+            /** Truncated */
+            truncated: boolean;
+        };
+        /** KGTypeEdgeOut */
+        KGTypeEdgeOut: {
+            /** Count */
+            count: number;
+            /** Directed */
+            directed: boolean;
+            /** Dst Type */
+            dst_type: string;
+            /** Inverse Label */
+            inverse_label: string;
+            /** Label */
+            label: string;
+            /** Relation */
+            relation: string;
+            /** Src Type */
+            src_type: string;
+        };
+        /** KGTypeNodeOut */
+        KGTypeNodeOut: {
+            /** Count */
+            count: number;
+            /** Detail Path */
+            detail_path: string | null;
+            /** Icon */
+            icon: string;
+            /** Label */
+            label: string;
+            /** Layer */
+            layer: string;
+            /** Slug */
+            slug: string;
         };
         /** LinkRunRequest */
         LinkRunRequest: {
@@ -21708,6 +22019,206 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["FormulaOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    browse_api_graph_browse_get: {
+        parameters: {
+            query: {
+                /** @description 종류 slug */
+                type: string;
+                q?: string | null;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KGBrowseOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    neighborhood_api_graph_neighborhood_get: {
+        parameters: {
+            query: {
+                /** @description 시작 노드 id (<종류>:<식별자>) */
+                focus: string;
+                /** @description 몇 단계까지. 최대 6 */
+                depth?: number | null;
+                /** @description 노드 하나가 데려오는 이웃 수. 최대 500 */
+                fanout?: number | null;
+                /** @description 노드 상한. 최대 20000 */
+                limit?: number | null;
+                /** @description 선 종류 slug, 쉼표로 */
+                relations?: string | null;
+                /** @description 이웃 종류 slug, 쉼표로 */
+                types?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KGNeighborhoodOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    node_api_graph_node_get: {
+        parameters: {
+            query: {
+                /** @description 노드 id (<종류>:<식별자>) */
+                id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KGNodeDetailOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    overview_api_graph_overview_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KGOverviewOut"];
+                };
+            };
+        };
+    };
+    search_api_graph_search_get: {
+        parameters: {
+            query: {
+                /** @description 이름·번호·키·별칭의 일부 */
+                q: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KGSearchHitOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    subgraph_api_graph_subgraph_get: {
+        parameters: {
+            query: {
+                /** @description 종류 slug, 쉼표로 */
+                types: string;
+                /** @description 선 종류 slug, 쉼표로 */
+                relations?: string | null;
+                /** @description 이름의 일부 */
+                q?: string | null;
+                /** @description 노드 상한. 최대 20000 */
+                limit?: number | null;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KGSubgraphOut"];
                 };
             };
             /** @description Validation Error */

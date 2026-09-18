@@ -47,6 +47,7 @@ const WorkbenchPage = lazy(() => import('@/modules/workbench/WorkbenchPage'))
 const BomDeckPage = lazy(() => import('@/modules/fitting/BomDeckPage'))
 const AuditPage = lazy(() => import('@/modules/audit/AuditPage'))
 const SearchPage = lazy(() => import('@/modules/search/SearchPage'))
+const GraphPage = lazy(() => import('@/modules/graph/GraphPage'))
 const CatalogPage = lazy(() => import('@/modules/catalog/CatalogPage'))
 const CatalogMaterialPage = lazy(() => import('@/modules/catalog/CatalogMaterialPage'))
 const CatalogDeckPage = lazy(() => import('@/modules/catalog/CatalogDeckPage'))
@@ -136,6 +137,9 @@ export const router = createBrowserRouter([
           // **한 칸으로 무엇이든.** 상단 검색이 여기로 보낸다 — 주소가 곧 검색이라
           // 결과를 그대로 남에게 보낼 수 있다.
           { path: 'search', element: <SearchPage /> },
+          // **「무엇이 무엇과 이어지나」** — 구조(종류·관계 종류)와 탐색(하나의 주변). MCP 가
+          // 걷는 지도(`shared/relations`)를 사람이 보는 자리. 「전부」 를 그리는 단추는 없다.
+          { path: 'graph', element: <GraphPage /> },
           { path: 'materials', element: <MaterialsPage /> },
           // **재료를 거치지 않고 시편을 찾는다.** `/cards` 가 있는 이유와 같다.
           { path: 'specimens', element: <SpecimensPage /> },
