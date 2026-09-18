@@ -119,7 +119,9 @@ export function UnitsContent() {
 
       {units.data && (
         <p className="text-muted-foreground mb-2 text-xs">
-          {rows.length}개 차원 · {units.data.total_units}개 표기
+          {rows.length}개 차원 · {units.data.total_units}개 표기. 여기 없어도{' '}
+          <span className="font-medium">접두어만 다른 조합</span>(W/(mm·K) · mg/mm³ · kPa·s)은
+          서버가 지어서 받습니다 — 표기가 아니라 접두어만 다를 때입니다.
         </p>
       )}
 

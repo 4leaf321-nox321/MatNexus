@@ -16,6 +16,7 @@ Decimal 로 계산한다. `0.45 * 0.001` 같은 이진 부동소수 연산은 �
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from decimal import Decimal
 
@@ -395,7 +396,155 @@ def canonical(symbol: str) -> str | None:
     styled = _styled(text)
     if styled != text:
         return canonical(styled)
+    # 5. 접두어만 다른 조합인가 (`W/(mm.K)`·`kPa.s`). **표에 없는 기호를 돌려준다** —
+    #    `unit_of` 가 그때 지어 준다. 「아는 단위인가」 를 여기로 묻는 검증 경로
+    #    (값으로 찾기·문헌 기여·식 정의)가 조합 단위를 거절하지 않게 하려는 것이다.
+    if compose(styled) is not None:
+        return styled
     return None
+
+
+#: 조합에 쓰는 SI 접두어. **단위 기호와 겹치는 글자는 안 넣는다** — `T` 는 테라이자
+#: 테슬라이고(`mT` 가 표에 있다), `P` 는 페타이자 포아즈다(`cP`). 겹치는 글자를 넣으면
+#: 「조합했더니 10¹² 배 다른 단위」 가 조용히 나온다.
+#:
+#: `d`(데시)도 안 넣는다 — `deg`·`dB` 가 「데시-eg」·「데시-B」 로 읽힐 자리를 없앤다.
+PREFIXES: dict[str, Decimal] = {
+    "p": Decimal("1e-12"),
+    "n": Decimal("1e-9"),
+    "u": Decimal("1e-6"),
+    "m": Decimal("1e-3"),
+    "c": Decimal("1e-2"),
+    "k": Decimal("1e3"),
+    "M": Decimal("1e6"),
+    "G": Decimal("1e9"),
+}
+
+#: 조합의 바탕이 되는 기호. **표에 있는 기호를 그대로 쓰지 않는다** — `kgf`·`psi`·
+#: `tonne` 처럼 접두어로 읽히면 안 되는 것이 섞여 있고, 여기 없는 기호가 든 단위는
+#: 그냥 조합이 안 될 뿐이다(표에 그대로 있으면 표로 찾는다).
+BASE_SYMBOLS = frozenset(
+    {"m", "g", "s", "K", "N", "Pa", "W", "J", "V", "A", "C", "T", "S", "ohm", "Hz", "mol"}
+)
+
+#: 「글자 + 지수」. 지수는 `m2`·`m0.5`·`m-1` 처럼 붙는다.
+_TOKEN = re.compile(r"^([A-Za-z]+)(-?\d+(?:\.\d+)?)?$")
+
+#: 밑기호 → 지수. 지수 0 은 지운다(약분).
+Signature = tuple[tuple[str, Decimal], ...]
+
+
+def _token(text: str) -> tuple[str, Decimal, Decimal] | None:
+    """`mm2` → (밑기호 `m`, 접두어 1e-3, 지수 2). 모르면 `None`.
+
+    **밑기호가 먼저다.** `m` 은 미터이지 밀리-아무것도 아니고, `min` 은 「밀리-in」
+    이 아니다 — 먼저 통째로 맞춰 보고, 안 맞을 때만 접두어를 뗀다.
+    """
+    matched = _TOKEN.match(text)
+    if matched is None:
+        return None
+    letters, power = matched.groups()
+    exponent = Decimal(power) if power else Decimal(1)
+    if letters in BASE_SYMBOLS:
+        return letters, Decimal(1), exponent
+    prefix = PREFIXES.get(letters[:1])
+    if prefix is not None and letters[1:] in BASE_SYMBOLS:
+        return letters[1:], prefix, exponent
+    return None
+
+
+def _factors(symbol: str) -> tuple[Signature, Decimal] | None:
+    """기호 → (밑기호별 지수, 접두어 곱수). 못 읽으면 `None` — **짐작하지 않는다.**
+
+    `/` 오른쪽은 전부 분모다(`kg/(m2.s)` · `N.s/mm2`). `/` 가 둘이면 읽지 않는다 —
+    `a/b/c` 는 사람마다 다르게 읽는다.
+    """
+    if symbol.count("/") > 1:
+        return None
+    head, _, tail = symbol.partition("/")
+    powers: dict[str, Decimal] = {}
+    scale = Decimal(1)
+    for side, sign in ((head, Decimal(1)), (tail, Decimal(-1))):
+        text = side.strip()
+        if not text:
+            continue
+        if text.startswith("(") and text.endswith(")"):
+            text = text[1:-1]
+        if "(" in text or ")" in text:
+            return None
+        # **점은 곱셈이자 소수점이다.** `Pa.m0.5` 를 그냥 자르면 `m0` 과 `5` 가 된다 —
+        # 숫자가 뒤따르는 점은 지수의 일부다(파괴인성이 그 모양이다).
+        for piece in re.split(r"\.(?!\d)", text):
+            if piece == "1":
+                continue
+            read = _token(piece)
+            if read is None:
+                return None
+            base, prefix, exponent = read
+            powers[base] = powers.get(base, Decimal(0)) + exponent * sign
+            scale *= prefix ** (exponent * sign)
+    return tuple(sorted((k, v) for k, v in powers.items() if v != 0)), scale
+
+
+def _composition_index() -> dict[Signature, tuple[Unit, Decimal]]:
+    """같은 물리량을 가리키는 표의 대표 하나 — 서명 → (단위, 그 기호의 접두어 곱수).
+
+    **서명이 같은데 차원이 다르면 둘 다 버린다.** `m/s`(속도)와 `m3/(m2.s)`(부피
+    플럭스)가 실제로 그렇다 — 둘은 물리적으로 같은 차원이고 뜻만 다르다. 그런
+    서명으로 조합을 허용하면 `km/s` 가 어느 쪽인지 서버가 골라야 하는데, 그 선택은
+    `CASE_INDEX` 의 충돌과 같은 이유로 하지 않는다.
+
+    오프셋이 있는 단위(`degC`)는 넣지 않는다 — 곱수만으로 안 되는 단위다.
+    """
+    best: dict[Signature, tuple[Unit, Decimal]] = {}
+    dropped: set[Signature] = set()
+    for unit in UNITS.values():
+        if unit.offset:
+            continue
+        parsed = _factors(unit.symbol)
+        if parsed is None or parsed[0] in dropped:
+            continue
+        signature, scale = parsed
+        current = best.get(signature)
+        if current is None:
+            best[signature] = (unit, scale)
+        elif current[0].dimension != unit.dimension:
+            dropped.add(signature)
+            del best[signature]
+        elif scale == 1 and current[1] != 1:
+            # 접두어 없는 것을 대표로 — 나눗셈이 한 번 덜 돈다.
+            best[signature] = (unit, scale)
+    return best
+
+
+COMPOSITION_INDEX = _composition_index()
+
+
+def compose(symbol: str) -> Unit | None:
+    """표에 없는 기호를 **접두어와 밑기호로 지어** 본다. 못 지으면 `None`.
+
+    `W/(mm.K)` · `mg/mm3` · `kPa.s` 처럼, 표에 있는 단위와 **접두어만 다른** 것이다.
+    표를 그만큼 늘리는 것과 결과는 같지만, 늘리면 곱수를 손으로 적게 되고 그 자리에서
+    한 자리 틀리면 아무도 못 본다(실측: `MPa.m0.5` 는 손으로 적어 맞았지만, 같은
+    방식으로 스무 개를 더 적을 이유가 없다).
+
+    **추측은 안 한다.** 접두어 표에 `T`·`P`·`d` 가 없는 것이 그 규율이고, 서명이
+    겹치는 차원(속도 / 부피 플럭스)은 아예 조합하지 않는다.
+
+    분수 지수(`Pa.m0.5`)도 읽는다 — 파괴인성이 그 모양이다.
+    """
+    text = _styled(symbol.strip())
+    if not text:
+        return None
+    parsed = _factors(text)
+    if parsed is None:
+        return None
+    signature, scale = parsed
+    found = COMPOSITION_INDEX.get(signature)
+    if found is None:
+        return None
+    reference, reference_scale = found
+    return Unit(text, reference.dimension, reference.factor * scale / reference_scale)
 
 
 def unit_of(symbol: str) -> Unit:
@@ -410,9 +559,16 @@ def unit_of(symbol: str) -> Unit:
     if exact is not None:
         return exact
     found = canonical(symbol)
-    if found is None:
+    if found is not None:
+        known = UNITS.get(found)
+        if known is not None:
+            return known
+    # **조합은 맨 마지막이다.** 표·별칭·대소문자가 이미 답한 기호의 뜻을 바꾸지
+    # 않는다 — 바꾸면 이미 저장된 값의 뜻이 배포 하나로 달라진다.
+    built = compose(symbol)
+    if built is None:
         raise UnknownUnit(symbol)
-    return UNITS[found]
+    return built
 
 
 def to_si(value: float | Decimal | str, symbol: str) -> float:

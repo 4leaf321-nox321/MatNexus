@@ -249,3 +249,91 @@ class Test문헌_조합_단위:
         assert units.same_dimension(
             units.unit_of("MPa*m^0.5").dimension, units.unit_of("Pa*m^0.5").dimension
         )
+
+
+class Test접두어_조합:
+    """**표에 없는 접두어 조합을 지어 준다**(2026-09-18).
+
+    `W/(mm·K)` 는 mm·N·tonne 계 덱을 손으로 읽는 사람이 실제로 적는 단위인데 표에
+    없어서 「모르는 단위」 였다. 표를 그만큼 늘릴 수도 있지만, 늘리면 곱수를 손으로
+    적게 되고 한 자리 틀려도 아무도 못 본다 — 숫자는 그럴듯하게 남는다.
+
+    무는 것:
+
+        접두어만 다른 것을 짓는다     W/(mm.K) = 1e3 W/(m.K)
+        표와 어긋나지 않는다          표에 있는 조합 단위를 다시 지어도 같은 값
+        짐작은 안 한다               모르는 밑기호·겹치는 차원은 그대로 거절
+        이미 아는 뜻을 안 바꾼다      표·별칭·대소문자가 답한 기호는 그대로
+    """
+
+    @pytest.mark.parametrize(
+        ("written", "si_value"),
+        [
+            # 알려진 환산표로 못 박는다. 1 W/(mm·K) = 1000 W/(m·K).
+            ("W/(mm.K)", 1000.0),
+            ("W/(mm*K)", 1000.0),
+            ("mW/(m.K)", 0.001),
+            # 1 mg/mm³ = 1e-6 kg / 1e-9 m³ = 1000 kg/m³
+            ("mg/mm3", 1000.0),
+            ("g/mm3", 1_000_000.0),
+            ("kN/m", 1000.0),  # 선하중
+            ("kPa.s", 1000.0),  # 점도
+            ("GPa.m0.5", 1_000_000_000.0),  # 파괴인성
+            ("um/m", 0.000001),  # 무차원 — 약분되면 무차원이다
+            ("nm", 1e-9),
+            ("1/ms", 1000.0),
+            ("kmol/m3", 1000.0),
+            ("mV/m", 0.001),
+        ],
+    )
+    def test_접두어만_다른_조합을_짓는다(self, written: str, si_value: float) -> None:
+        assert units.to_si(1.0, written) == pytest.approx(si_value)
+
+    def test_표와_어긋나지_않는다(self) -> None:
+        """**이 시험이 조합의 근거다.** 표의 조합 단위를 다시 지어 보면 곱수가
+        같아야 한다 — 다르면 표의 손으로 적은 곱수나 여기 규칙 중 하나가 틀린 것이고,
+        어느 쪽이든 값이 조용히 틀린다."""
+        for symbol, unit in units.UNITS.items():
+            built = units.compose(symbol)
+            if built is None:
+                continue
+            assert built.factor == unit.factor, symbol
+            assert built.dimension == unit.dimension, symbol
+
+    @pytest.mark.parametrize(
+        "written", ["furlong/s", "kgf/cm2", "Mfurlong", "a/b/c", "W/(m.K"]
+    )
+    def test_모르는_것은_그대로_모른다(self, written: str) -> None:
+        """밑기호를 모르면 안 짓는다. `a/b/c` 는 사람마다 다르게 읽으므로 안 읽는다."""
+        assert units.compose(written) is None
+        with pytest.raises(units.UnknownUnit):
+            units.unit_of(written)
+
+    def test_겹치는_차원은_아예_안_짓는다(self) -> None:
+        """`m/s`(속도)와 `m3/(m2.s)`(부피 플럭스)는 물리 차원이 같고 뜻이 다르다.
+
+        `km/s` 를 지어 주려면 서버가 둘 중 하나를 골라야 하는데, 그 선택은
+        `CASE_INDEX` 의 충돌과 같은 이유로 하지 않는다 — 한 번 맞히면 다음에 틀린다.
+        """
+        assert units.compose("km/s") is None
+
+    def test_접두어로_읽히면_안_되는_글자는_안_넣었다(self) -> None:
+        """`T` 는 테라이자 테슬라, `P` 는 페타이자 포아즈, `d` 는 데시이자 `deg`·`dB`
+        의 첫 글자다. 넣었으면 `mT`(밀리테슬라)가 「밀리-테라」 가 됐다."""
+        assert not {"T", "P", "d"} & set(units.PREFIXES)
+        assert units.unit_of("mT").dimension == "magnetic_flux_density"
+        assert units.unit_of("cP").dimension == "viscosity"
+        assert units.unit_of("dB").dimension == "decibel"
+
+    def test_이미_아는_기호의_뜻은_안_바꾼다(self) -> None:
+        """**조합은 맨 마지막이다.** 표·별칭·대소문자가 이미 답한 기호를 다시 지으면,
+        이미 저장된 값의 뜻이 배포 하나로 달라진다.
+
+        `mPa.s`(밀리파스칼초, 물이 1)와 `MPa.s` 가 그 자리다 — `MPa.s` 는 예전부터
+        대소문자 되돌리기로 `mPa.s` 를 뜻했고, 그대로 둔다. 헷갈리지 않으려면
+        mm·N·tonne 계의 점도는 `N.s/mm2` 로 적는다(표의 주석).
+        """
+        assert units.unit_of("MPa.s").symbol == "mPa.s"
+        assert units.unit_of("Mm").factor == units.unit_of("mm").factor
+        for symbol in units.UNITS:
+            assert units.unit_of(symbol).symbol == symbol
