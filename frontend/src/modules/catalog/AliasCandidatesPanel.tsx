@@ -7,9 +7,13 @@
  *
  * 물성을 고르는 칸은 값 넣기 창과 같은 이름 해소(`resolveProperty`)를 쓴다 — 키를 손으로
  * 치게 하면 오타 하나로 별칭이 허공을 가리킨다(서버도 없는 키는 거절한다).
+ *
+ * **「이것 아닐까」 를 먼저 보인다**(2026-09-18). 못 푼 이름이야말로 뜻 검색이 제일 잘 하는
+ * 일인데, 전에는 이름만 쌓이고 관리자가 물성 271개에서 스스로 떠올려야 했다. 서버가 뜻으로
+ * 찾은 후보를 함께 주고(`suggestions`), 누르면 그대로 별칭이 된다 — **고르는 것은 사람이다.**
  */
 
-import { Check, X } from 'lucide-react'
+import { Check, Sparkles, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 import { catalogApi } from '@/modules/catalog/api'
@@ -90,6 +94,28 @@ function Row({
         <Badge variant="secondary">{SOURCE_LABEL[row.source] ?? row.source}</Badge>
       </TableCell>
       <TableCell>
+        {/* 서버가 짐작한 것 — 누르면 그대로 별칭. 뜻으로 걸린 것은 그렇다고 적는다. */}
+        {(row.suggestions ?? []).length > 0 && (
+          <div className="mb-1 flex flex-wrap items-center gap-1">
+            <span className="text-muted-foreground text-xs">이것 아닐까:</span>
+            {(row.suggestions ?? []).map((one) => (
+              <Button
+                key={one.key}
+                size="sm"
+                variant="outline"
+                className="h-6 gap-1 text-xs"
+                disabled={busy}
+                title={`${one.key} · 값 ${one.value_count}건${
+                  one.matched_by === 'meaning' ? ' · 뜻이 가까워 찾음' : ''
+                }`}
+                onClick={() => void act(() => catalogApi.acceptAliasCandidate(row.id, one.key))}
+              >
+                {one.matched_by === 'meaning' && <Sparkles className="size-3" />}
+                {one.name}
+              </Button>
+            ))}
+          </div>
+        )}
         <div className="relative w-64">
           <Input
             className="h-8"

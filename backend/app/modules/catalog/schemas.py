@@ -407,6 +407,21 @@ class PropertyAliasCreate(BaseModel):
     note: str | None = None
 
 
+class AliasSuggestionOut(BaseModel):
+    """「이것 아닐까」 — 못 푼 이름에 뜻이 가까운 물성(2026-09-18).
+
+    **고르는 것은 사람이다.** 자동으로 이으면 「UTS」 가 엉뚱한 물성의 별칭이 되고, 그
+    잘못은 그 뒤 모든 검색에 실린다 — 별칭은 사람이 못 박아 두는 것이라는 뜻이 사라진다.
+    """
+
+    key: str
+    name: str
+    si_unit: str
+    value_count: int
+    matched_by: str
+    """`meaning` 이면 뜻으로 찾은 것 — 이름이 안 비슷해도 걸린다."""
+
+
 class AliasCandidateOut(BaseModel):
     """못 푼 이름 하나 — 관리자가 별칭으로 받아들이거나 무시한다(2026-09-16)."""
 
@@ -419,6 +434,8 @@ class AliasCandidateOut(BaseModel):
     resolved_to: str | None
     first_seen_at: datetime
     last_seen_at: datetime
+    suggestions: list[AliasSuggestionOut] = []
+    """물성 이름 해소가 낸 후보 — 뜻이 가까운 것 포함. 비어 있으면 짐작할 것이 없다."""
 
     model_config = {"from_attributes": True}
 

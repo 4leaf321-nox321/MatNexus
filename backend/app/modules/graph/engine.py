@@ -371,8 +371,13 @@ def search(db: Session, user: User, q: str, limit: int) -> list[NodeInfo]:
     """종류를 가리지 않고 시작점을 찾는다 — 전체 검색과 **같은 함수**(`entity_search`)로.
 
     규칙이 둘이 되면 「검색에는 뜨는데 그래프에는 없다」 가 생긴다.
+
+    **`similar` 로 묻는다**(2026-09-18) — 오타와 **뜻이 가까운 것**까지 본다. 그래프의
+    시작점은 「이름을 정확히 아는 것」 이 아니라 「어디서부터 볼까」 라, 글자만 보면
+    「점탄성 자료」 같은 말로는 아무 데서도 시작할 수 없다. 엔진이 꺼져 있으면 글자만
+    보고 조용히 넘어간다(`entity_search` 가 그렇게 돈다).
     """
-    groups = entity_search.search(db, user, needle=q)
+    groups = entity_search.search(db, user, needle=q, mode="similar")
     wanted: dict[str, set[str]] = defaultdict(set)
     ranked: list[tuple[float, str]] = []
     for group in groups:

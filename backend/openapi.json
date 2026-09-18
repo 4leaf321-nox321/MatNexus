@@ -216,6 +216,14 @@
             "title": "Status",
             "type": "string"
           },
+          "suggestions": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/AliasSuggestionOut"
+            },
+            "title": "Suggestions",
+            "type": "array"
+          },
           "text": {
             "title": "Text",
             "type": "string"
@@ -252,6 +260,40 @@
           "means"
         ],
         "title": "AliasOut",
+        "type": "object"
+      },
+      "AliasSuggestionOut": {
+        "description": "「이것 아닐까」 — 못 푼 이름에 뜻이 가까운 물성(2026-09-18).\n\n**고르는 것은 사람이다.** 자동으로 이으면 「UTS」 가 엉뚱한 물성의 별칭이 되고, 그\n잘못은 그 뒤 모든 검색에 실린다 — 별칭은 사람이 못 박아 두는 것이라는 뜻이 사라진다.",
+        "properties": {
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "matched_by": {
+            "title": "Matched By",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "si_unit": {
+            "title": "Si Unit",
+            "type": "string"
+          },
+          "value_count": {
+            "title": "Value Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "key",
+          "name",
+          "si_unit",
+          "value_count",
+          "matched_by"
+        ],
+        "title": "AliasSuggestionOut",
         "type": "object"
       },
       "AnalysisCoverageOut": {

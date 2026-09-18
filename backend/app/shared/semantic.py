@@ -201,11 +201,49 @@ def split(body: str) -> list[str]:
     return [one for one in made if one]
 
 
+def _property_chunks(db: Session) -> list[Chunk]:
+    """물성 정의 — **이름 해소가 뜻을 쓸 수 있게**(2026-09-18).
+
+    「비캣 연화온도」·「무르는 온도」 처럼 사전에 없는 말은 글자로는 어디에도 안 걸린다.
+    정의의 이름·기호·키·설명을 한 조각으로 심으면 뜻이 가까운 후보를 낼 수 있고, 그것이
+    별칭 후보 큐의 「이것 아닐까」 가 된다.
+
+    **이름만 심지 않는다** — 그건 트라이그램이 이미 한다. 설명이 있는 정의는 설명까지
+    함께 실어야 「연화」 와 「무르다」 가 이어진다.
+    """
+    made: list[Chunk] = []
+    rows = db.execute(
+        text("""
+        SELECT d.key, d.name, coalesce(d.symbol, ''), coalesce(d.description, ''),
+               coalesce(string_agg(DISTINCT a.alias, ' · '), '')
+          FROM catalog_definitions d
+          LEFT JOIN property_aliases a ON a.property_key = d.key
+         WHERE d.deprecated_at IS NULL
+         GROUP BY d.key, d.name, d.symbol, d.description
+        """)
+    ).all()
+    for key, name, symbol, description, aliases in rows:
+        parts = [f"물성: {name}"]
+        if symbol:
+            parts.append(f"기호 {symbol}")
+        parts.append(f"키 {key}")
+        if aliases:
+            parts.append(f"달리 부르는 말: {aliases}")
+        if description:
+            parts.append(description)
+        body = ". ".join(parts)
+        for seq, piece in enumerate(split(body)):
+            made.append(Chunk(kind="property", entity_id=key, seq=seq, title=name, body=piece))
+    return made
+
+
 def collect(db: Session) -> list[Chunk]:
     """색인할 산문을 모은다. **이름 열은 여기 없다** — 그건 트라이그램의 일이다.
 
     사내 재료는 예외다: 이름이 아니라 분류·별칭·용도·메모를 **말로 엮어** 심는다
-    (`_material_chunks`). 「아연도금 강판」 으로 SECC 를 찾는 것은 이름으로는 안 된다."""
+    (`_material_chunks`). 「아연도금 강판」 으로 SECC 를 찾는 것은 이름으로는 안 된다.
+    물성 정의도 예외다(`_property_chunks`) — 이름 해소가 뜻을 쓸 수 있어야 사전에 없는
+    말이 별칭 후보로 이어진다."""
     made: list[Chunk] = []
 
     rows = db.execute(
@@ -251,6 +289,7 @@ def collect(db: Session) -> list[Chunk]:
             )
 
     made.extend(_material_chunks(db))
+    made.extend(_property_chunks(db))
     return made
 
 

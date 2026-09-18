@@ -24,11 +24,12 @@ from collections.abc import Iterator
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 from test_voc import member_headers
 
 from app.config import get_settings
+from app.modules.catalog.models import CatalogDefinition
 from app.modules.guide.models import GuideDocument, GuideSection
 from app.modules.workspaces.models import Workspace
 from app.shared import semantic
@@ -80,6 +81,26 @@ def semantic_ready(db: Session) -> Iterator[None]:
         settings.embedding_backend = before
         db.execute(text(f"DELETE FROM {semantic.TABLE}"))
         db.commit()
+
+
+def _definition(db: Session) -> None:
+    """물성 정의 하나 — 시험 DB 에는 사전이 없다(반입으로 들어오는 것이라서)."""
+    if db.scalar(
+        select(CatalogDefinition).where(CatalogDefinition.key == "mechanical.tensile_strength")
+    ):
+        return
+    db.add(
+        CatalogDefinition(
+            mt_id=880_777,
+            key="mechanical.tensile_strength",
+            name="인장강도",
+            domain="mechanical",
+            si_unit="Pa",
+            value_type="number",
+            description="잡아당겨 끊어질 때까지 견디는 가장 큰 응력.",
+        )
+    )
+    db.commit()
 
 
 def _handbook(db: Session, *, title: str, body: str) -> GuideSection:
@@ -388,3 +409,59 @@ class Test차원이_바뀌면:
             settings.embedding_dim = before
             semantic.ensure_schema(db)
             db.commit()
+
+
+@pytest.mark.usefixtures("semantic_ready")
+class Test뜻과_글자가_서로_돕는다:
+    """**역할을 갈라 두고, 서로 못 하는 것을 맡는다**(2026-09-18).
+
+    이름·번호·별칭은 트라이그램이, 산문과 「달리 부르는 말」 은 임베딩이. mock 백엔드는 뜻이
+    없으므로(해시 벡터) 여기서는 **길이 이어져 있는가**를 본다 — 뜻의 품질은 사람이 본다.
+    """
+
+    def test_물성_정의가_색인에_든다(self, db: Session) -> None:
+        # 이것이 없으면 이름 해소가 뜻을 쓸 수 없다 — 사전에 없는 말은 어디에도 안 걸린다.
+        _definition(db)
+        assert any(one.kind == "property" for one in semantic.collect(db))
+        semantic.reindex(db)
+        assert semantic.stats(db)["kinds"].get("property", 0) > 0
+
+    def test_글자로_찾은_것을_뜻이_밀어내지_않는다(self, db: Session) -> None:
+        """별칭은 사람이 못 박은 것이고 뜻은 짐작이다 — 둘이 같은 무게면 안 된다."""
+        from app.shared import property_names
+
+        _definition(db)
+        semantic.reindex(db)
+        found = property_names.resolve(db, "인장강도", limit=5)
+        assert found, "글자로 걸리는 것이 있어야 한다"
+        assert found[0].matched_by != "meaning"
+
+    def test_뜻_후보에는_바닥이_있다(self, db: Session) -> None:
+        """**아무 말이나 넣어도 무언가는 가장 가깝다** — 바닥이 없으면 헛것이 후보로 선다."""
+        from app.shared import property_names
+
+        _definition(db)
+        semantic.reindex(db)
+        assert property_names.MEANING_FLOOR > 0
+        junk = property_names.resolve(db, "아무말대잔치zzz", limit=3)
+        assert all(one.matched_by != "meaning" for one in junk)
+
+    def test_못_푼_이름에_이것_아닐까가_붙는다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str]
+    ) -> None:
+        """못 푼 이름이야말로 뜻 검색이 제일 잘 하는 일인데, 전에는 이름만 쌓였다."""
+        from app.shared import alias_candidates
+
+        _definition(db)
+        semantic.reindex(db)
+        alias_candidates.record(db, kind="property", text="인장", source="resolve")
+        db.commit()
+        rows = client.get(
+            "/api/catalog/properties/alias-candidates", headers=admin_headers
+        ).json()
+        row = next(one for one in rows if one["text"] == "인장")
+        # 「인장」 은 글자로도 걸린다 — 후보가 서고, 뜻으로 걸린 것은 그렇다고 적힌다.
+        assert row["suggestions"], "후보가 있어야 관리자가 고를 수 있다"
+        assert {"key", "name", "si_unit", "value_count", "matched_by"} <= set(
+            row["suggestions"][0]
+        )

@@ -80,3 +80,39 @@ describe('별칭 후보', () => {
     expect(await screen.findByText(/남은 것이 없습니다/)).toBeInTheDocument()
   })
 })
+
+describe('이것 아닐까', () => {
+  it('서버가 짐작한 후보를 누르면 그대로 별칭이 된다', async () => {
+    // 못 푼 이름이야말로 뜻 검색이 제일 잘 하는 일이다 — 전에는 이름만 쌓이고
+    // 관리자가 물성 271개에서 스스로 떠올려야 했다(2026-09-18).
+    aliasCandidates.mockResolvedValue([
+      {
+        id: 'c-9',
+        kind: 'property',
+        text: '비캣 연화온도',
+        source: 'resolve',
+        count: 3,
+        status: 'open',
+        resolved_to: null,
+        first_seen_at: '2026-09-18T00:00:00Z',
+        last_seen_at: '2026-09-18T00:00:00Z',
+        suggestions: [
+          {
+            key: 'thermal.vicat_softening',
+            name: '비카트 연화온도',
+            si_unit: 'K',
+            value_count: 34,
+            matched_by: 'meaning',
+          },
+        ],
+      },
+    ])
+    acceptAliasCandidate.mockResolvedValue({})
+    render(<AliasCandidatesPanel />)
+    const chip = await screen.findByRole('button', { name: /비카트 연화온도/ })
+    await userEvent.click(chip)
+    await waitFor(() =>
+      expect(acceptAliasCandidate).toHaveBeenCalledWith('c-9', 'thermal.vicat_softening')
+    )
+  })
+})

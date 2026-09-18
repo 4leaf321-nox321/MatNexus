@@ -40,6 +40,7 @@ from app.modules.catalog import parameters
 from app.modules.catalog.models import CatalogDefinition, CatalogValue
 from app.modules.catalog.ontology_models import PropertyAlias, PropertyLink
 from app.modules.vocabulary.models import Vocabulary, VocabularyTerm
+from app.shared import semantic
 from app.shared.text import compare_key
 from matcore import registry, units
 
@@ -253,8 +254,78 @@ def resolve(db: Session, text: str, *, limit: int = MAX_CANDIDATES) -> list[Cand
             )
         )
 
+    # **글자로 못 찾았으면 뜻으로 본다**(2026-09-18). 「비캣 연화온도」·「무르는 온도」 는
+    # 사전에 없어 트라이그램으로는 어디에도 안 걸린다 — 그때 빈손으로 두면 사람은 그 물성이
+    # **없다**고 읽는다. 뜻이 가까운 것을 **후보로만** 얹고, 왜 걸렸는지(`meaning`)를 적는다.
+    #
+    # **글자로 찾은 것을 밀어내지 않는다** — 점수를 낮게 줘 아래에 붙는다. 뜻은 짐작이고
+    # 별칭은 사람이 못 박은 것이라, 그 둘이 같은 무게면 안 된다.
+    if len(made) < limit:
+        made.extend(_meaning_candidates(db, text, exclude={one.key for one in made}))
+
     made.sort(key=lambda one: (-one.score, one.key))
     return made[:limit]
+
+
+#: 뜻 후보의 바닥 점수(코사인). **아무 말이나 넣어도 무언가는 가장 가깝다** — 바닥이 없으면
+#: 「아무말대잔치」 에도 물성 넷이 선다. 실측(bge-m3, 2026-09-18): 뜻 없는 말은 0.33 을 못
+#: 넘고, 맞는 것은 0.62(「비캣 연화온도」→비카트)·0.52(UTS→인장강도)다. 0.45 가 그 사이다.
+MEANING_FLOOR = 0.45
+
+
+def _meaning_candidates(db: Session, text: str, *, exclude: set[str]) -> list[Candidate]:
+    """뜻이 가까운 물성 — 의미 검색이 꺼져 있으면 **빈 목록**이다(오류를 던지지 않는다).
+
+    색인은 `semantic._property_chunks` 가 이름·기호·키·별칭·설명을 한 조각으로 심는다.
+    """
+    matches = [
+        one
+        for one in semantic.search(db, text)
+        if one.kind == "property" and one.score >= MEANING_FLOOR
+    ]
+    if not matches:
+        return []
+    keys = [one.entity_id for one in matches if one.entity_id not in exclude]
+    if not keys:
+        return []
+    found = {
+        one.key: one
+        for one in db.scalars(select(CatalogDefinition).where(CatalogDefinition.key.in_(keys)))
+    }
+    counts = _counts(db, list(found))
+    items = _items(db, list(found))
+    made: list[Candidate] = []
+    for rank, match in enumerate(matches):
+        one = found.get(match.entity_id)
+        if one is None:
+            continue
+        linked = tuple(dict.fromkeys(name for name, _scale in items.get(one.key, ())))
+        notes = [
+            "**뜻이 가까워 찾았습니다** — 이름·별칭으로 걸린 것이 아닙니다. 맞으면 기준정보 "
+            "화면에서 별칭으로 못 박아 두세요(다음부터 글자로 바로 걸립니다)."
+        ]
+        if not counts.get(one.key, 0):
+            notes.append("값이 없습니다 — 이 물성으로는 아무것도 못 찾습니다.")
+        made.append(
+            Candidate(
+                key=one.key,
+                name=one.name,
+                domain=one.domain,
+                si_unit=one.si_unit or "",
+                symbol=one.symbol,
+                value_count=counts.get(one.key, 0),
+                items=linked,
+                item_filters=tuple(sorted(items.get(one.key, ()))),
+                matched_by="meaning",
+                matched_text=one.name,
+                deprecated=one.deprecated_at is not None,
+                # **가장 낮은 자리다.** 부분 일치(30)보다도 아래 — 짐작이기 때문이다.
+                # 등수로 조금씩 낮춰 뜻이 더 가까운 것이 위에 선다.
+                score=20.0 - rank,
+                notes=tuple(notes),
+            )
+        )
+    return made
 
 
 def ambiguous(candidates: list[Candidate]) -> bool:

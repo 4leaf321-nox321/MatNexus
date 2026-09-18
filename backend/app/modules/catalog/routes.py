@@ -37,6 +37,7 @@ from app.modules.catalog.ontology_models import (
 from app.modules.catalog.schemas import (
     AliasCandidateAccept,
     AliasCandidateOut,
+    AliasSuggestionOut,
     AshbyAxisOut,
     AshbyOut,
     AshbyPointOut,
@@ -1066,7 +1067,26 @@ def list_alias_candidates(
     )
     if status != "all":
         query = query.where(AliasCandidate.status == status)
-    return [AliasCandidateOut.model_validate(one) for one in db.scalars(query.limit(limit))]
+    rows = list(db.scalars(query.limit(limit)))
+    made: list[AliasCandidateOut] = []
+    for one in rows:
+        out = AliasCandidateOut.model_validate(one)
+        # **「이것 아닐까」 를 함께 낸다**(2026-09-18). 못 푼 이름이야말로 뜻 검색이 제일 잘
+        # 하는 일인데, 전에는 이름만 쌓이고 관리자가 물성 271개에서 스스로 떠올려야 했다.
+        # 아직 안 정한 것(`open`)에만 — 닫힌 줄에 짐작을 붙이면 목록이 시끄러워진다.
+        if one.status == "open" and one.kind == "property":
+            out.suggestions = [
+                AliasSuggestionOut(
+                    key=hit.key,
+                    name=hit.name,
+                    si_unit=hit.si_unit,
+                    value_count=hit.value_count,
+                    matched_by=hit.matched_by,
+                )
+                for hit in property_names.resolve(db, one.text, limit=3)
+            ]
+        made.append(out)
+    return made
 
 
 @router.post(

@@ -7105,6 +7105,11 @@ export interface components {
             source: string;
             /** Status */
             status: string;
+            /**
+             * Suggestions
+             * @default []
+             */
+            suggestions: components["schemas"]["AliasSuggestionOut"][];
             /** Text */
             text: string;
         };
@@ -7120,6 +7125,25 @@ export interface components {
             means: string;
             /** Written */
             written: string;
+        };
+        /**
+         * AliasSuggestionOut
+         * @description 「이것 아닐까」 — 못 푼 이름에 뜻이 가까운 물성(2026-09-18).
+         *
+         *     **고르는 것은 사람이다.** 자동으로 이으면 「UTS」 가 엉뚱한 물성의 별칭이 되고, 그
+         *     잘못은 그 뒤 모든 검색에 실린다 — 별칭은 사람이 못 박아 두는 것이라는 뜻이 사라진다.
+         */
+        AliasSuggestionOut: {
+            /** Key */
+            key: string;
+            /** Matched By */
+            matched_by: string;
+            /** Name */
+            name: string;
+            /** Si Unit */
+            si_unit: string;
+            /** Value Count */
+            value_count: number;
         };
         /** AnalysisCoverageOut */
         AnalysisCoverageOut: {
