@@ -584,6 +584,27 @@
         "mcp__matnexus__convert_unit"
       ],
       "max_calls": 3
+    },
+    {
+      "id": "stats-01",
+      "category": "통계",
+      "prompt": "SCATTER_DP600_1.0 의 MD 인장 항복강도 분포를 봐 줘. 정규·로그정규·와이블 중 어느 게 맞고, 하위 1% 값은 얼마야?",
+      "must_mention": [
+        [
+          "와이블",
+          "Weibull",
+          "로그정규",
+          "정규"
+        ],
+        [
+          "MPa",
+          "Pa"
+        ]
+      ],
+      "tools_any": [
+        "mcp__matnexus__get_distribution"
+      ],
+      "max_calls": 5
     }
   ]
 }

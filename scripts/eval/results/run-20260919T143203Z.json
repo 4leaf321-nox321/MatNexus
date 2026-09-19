@@ -1,0 +1,66 @@
+{
+  "at": "20260919T143203Z",
+  "git": "a81aea3",
+  "summary": {
+    "n": 1,
+    "passed": 1,
+    "calls": 2,
+    "calls_per_question": 2.0,
+    "empty_calls": 0,
+    "map_first": 0,
+    "errors": 0,
+    "seconds": 43.6,
+    "cost_usd": 0.2732,
+    "by_category": {
+      "통계": {
+        "n": 1,
+        "passed": 1,
+        "calls": 2,
+        "empty": 0,
+        "map_first": 0
+      }
+    }
+  },
+  "traces": [
+    {
+      "id": "stats-01",
+      "category": "통계",
+      "prompt": "SCATTER_DP600_1.0 의 MD 인장 항복강도 분포를 봐 줘. 정규·로그정규·와이블 중 어느 게 맞고, 하위 1% 값은 얼마야?",
+      "calls": [
+        {
+          "name": "mcp__matnexus__get_distribution",
+          "input": {
+            "material_id": "SCATTER_DP600_1.0",
+            "test_type": "tensile",
+            "orientation": "MD"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__get_distribution",
+          "input": {
+            "material_id": "SCATTER_DP600_1.0",
+            "test_type": "tensile",
+            "orientation": "MD",
+            "scalar_key": "proof_stress",
+            "bootstrap": 999
+          },
+          "empty": false,
+          "is_error": false
+        }
+      ],
+      "answer": "## 분포 — 셋 중 하나를 고를 수 없다\n\nn = 8 이라 **가려낼 힘이 없다.** AICc 차이가 전부 2 안이다:\n\n| 분포 | Δ AICc | AD p값 |\n|---|---|---|\n| 와이블 (best) | 0 | 0.574 |\n| 정규 | 0.81 | 0.345 |\n| 로그정규 | 1.09 | 0.287 |\n\n셋 다 적합 자체는 통과(p > 0.05)했지만, **1등을 고르는 건 데이터가 아니라 사람이다.** 서버도 같은 경고를 붙였다 — 후보를 갈라내려면 20개는 필요하다.\n\n## 하위 1% — 답할 수 있는 범위를 넘는다\n\n도구가 주는 건 **p05 까지**다 (SI Pa → MPa):\n\n- 와이블 **306.9 MPa** · 정규 **310.7 MPa** · 로그정규 **310.9 MPa**\n\np01 은 서버가 내주지 않아 적합 모수로 외삽해 봤다 (내 계산):\n\n- 와이블 ≈ **288 MPa** · 정규 ≈ **299 MPa** · 로그정규 ≈ **301 MPa**\n\n**이 값을 쓰지 말라고 권한다.** 이유:\n\n- 관측 최소가 304.6 MPa 다. 세 값 모두 **실제로 본 적 없는 영역**이다.\n- 서버가 알려준 경험적 커버리지는 **0.312** — 95% 신뢰로 설계값을 말하려면 **59개**가 필요한데 8개뿐이다.\n- 분포가 안 갈리니 꼬리는 더 안 갈린다. 288 과 301 의 13 MPa 차이가 순전히 \"어느 걸 믿느냐\"에서 온다.\n\n## 지금 말할 수 있는 것\n\n중앙값 약 **340 MPa**, 표준편차 **16.5 MPa** (정규 기준), 관측 범위 304.6 ~ 362.3 MPa, 시편 8개 전부 `observed`.\n\n최소 보증값이 필요한 거면 p01 이 아니라 **표본을 더 받는 쪽**이 맞다. 또는 p05 를 쓰되 세 분포 중 가장 보수적인 306.9 MPa 를 택하고 \"n=8, 잠정\" 을 함께 적는다.",
+      "error": null,
+      "seconds": 43.57283687591553,
+      "cost_usd": 0.2731775,
+      "map_first": false,
+      "empty_calls": 0,
+      "over_budget": false,
+      "tools_any_ok": true,
+      "forbidden_hit": [],
+      "missing_mentions": [],
+      "passed": true
+    }
+  ]
+}

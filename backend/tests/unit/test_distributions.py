@@ -181,8 +181,14 @@ class Test견주기:
         """**설계가 묻는 것은 파라미터가 아니라 하위 5% 다.**"""
         report = distributions.fit_all(weibull(40), bootstrap=0)
         winner = next(item for item in report.candidates if item.key == report.best)
-        assert set(winner.quantiles) == {"p05", "p50", "p95"}
-        assert winner.quantiles["p05"] < winner.quantiles["p50"] < winner.quantiles["p95"]
+        assert set(winner.quantiles) == {"p01", "p05", "p50", "p95", "p99"}
+        assert (
+            winner.quantiles["p01"]
+            < winner.quantiles["p05"]
+            < winner.quantiles["p50"]
+            < winner.quantiles["p95"]
+            < winner.quantiles["p99"]
+        )
 
 
 class Test재현:

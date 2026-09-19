@@ -292,7 +292,7 @@ def get_guide(topic: str | None = None) -> str:
     단위(전부 SI) · 값의 무게(origin·quality_tier·caveat) · 선언 물성의 층 ·
     전형적인 흐름이 적혀 있다. `topic` 으로 한 절만 받을 수 있다:
     `overview` · `units` · `properties` · `trust` · `layers` · `ontology` ·
-    `processing` · `definitions` · `cards` · `workflow` · `limits`.
+    `processing` · `definitions` · `coverage` · `cards` · `statistics` · `workflow` · `limits`.
     """
     try:
         text = GUIDE_PATH.read_text(encoding="utf-8")
@@ -1001,6 +1001,181 @@ async def get_statistics(
             "채택된 결과만 들어간다. `skipped_unadopted` 가 크면 통계가 아니라 "
             "채택이 문제다 — 사람에게 그렇게 말해라."
         ),
+    }
+
+
+@mcp.tool()
+async def get_distribution(
+    ctx: Context,
+    material_id: str,
+    test_type: str,
+    orientation: str,
+    scalar_key: str | None = None,
+    bootstrap: int = 200,
+) -> dict[str, Any]:
+    """한 항목의 **분포** — 정규·로그정규·와이블을 나란히 맞춘 것(2026-09-19).
+
+    `get_statistics` 는 평균·표준편차까지다. 「최소 보증값을 어디에 두나」·「하위 1 %
+    가 얼마인가」 는 분포를 맞춰야 답이 나오고, 화면(통계 › 분포)이 늘 보는 것을 MCP 는
+    못 봤다.
+
+        scalar_key 를 비우면   물어볼 수 있는 항목 목록과 **값 개수**를 준다 — 먼저 이것
+        scalar_key 를 주면     candidates[] 세 분포 · best · empirical · observations[]
+
+    ## 읽는 법
+
+    **`best` 를 그대로 옮기지 마라.** 후보의 `delta_aicc` 가 2 안이면 데이터가 정한 것이
+    아니라 우리가 정한 것이다 — 그때는 「셋이 비슷하다」 고 말한다. `status` 가 `ok` 가
+    아닌 후보(표본 모자람·수렴 실패)는 이유(`reason`)와 함께 옮긴다. n 이 8 미만이면
+    적합이 안 돌고 `empirical`(사분위)만 온다 — 그것도 답이다, 빈손이 아니다.
+
+    `quantiles_si` 는 p01·p05·p50·p95·p99 이고 SI 다 — **네가 모수로 외삽하지 마라**, 서버가
+    준 것만 옮긴다. 설계 관행은 p05 다; p01 은 n 이 작을수록 못 믿고 `notes` 가 그 경고를
+    한다. 사람에게는 `si_unit` 을 보고 관행 단위로 바꿔 말한다(`convert_unit`).
+    `bootstrap` 이 낮으면 p 값이 거칠다 — 기본 200 은 훑어보기용이고, 문서에 적을 값이면
+    999 로 다시 부른다.
+    """
+    resolved = await _resolve_material(ctx, material_id)
+    if isinstance(resolved, dict):
+        return resolved
+    params: dict[str, Any] = {"test_type_key": test_type, "orientation": orientation}
+    if not scalar_key:
+        keys = await _get(ctx, f"/statistics/materials/{resolved}/distributable", params)
+        if isinstance(keys, dict) and "error" in keys:
+            return keys
+        return {
+            "material_id": resolved,
+            "test_type": test_type,
+            "orientation": orientation,
+            "distributable": keys if isinstance(keys, list) else [],
+            "note": "scalar_key 를 골라 다시 부르세요. count 가 8 미만이면 분포 적합은 "
+            "안 돌고 사분위만 옵니다.",
+        }
+    params.update({"scalar_key": scalar_key, "bootstrap": max(0, min(int(bootstrap), 2000))})
+    got = await _get(ctx, f"/statistics/materials/{resolved}/distributions", params)
+    if isinstance(got, dict) and "error" in got:
+        return got
+    return {
+        "material_id": got.get("material_id"),
+        "test_type": got.get("test_type_key"),
+        "orientation": got.get("orientation"),
+        "scalar": {
+            "key": got.get("scalar_key"),
+            "label": got.get("scalar_label"),
+            "si_unit": got.get("si_unit"),
+        },
+        "count": got.get("count"),
+        "best": got.get("best"),
+        "candidates": [
+            {
+                "key": one.get("key"),
+                "label": one.get("label"),
+                "status": one.get("status"),
+                "reason": one.get("reason"),
+                "parameters": dict(
+                    zip(one.get("parameter_names") or [], one.get("parameters") or [])
+                ),
+                "aicc": one.get("aicc"),
+                "delta_aicc": one.get("delta_aicc"),
+                "anderson_darling": one.get("anderson_darling"),
+                "p_value": one.get("p_value"),
+                "quantiles_si": one.get("quantiles"),
+            }
+            for one in got.get("candidates") or []
+        ],
+        "empirical": got.get("empirical"),
+        "observations": [
+            {
+                "specimen": one.get("specimen_label"),
+                "value_si": one.get("value"),
+                "status": one.get("status"),
+            }
+            for one in got.get("observations") or []
+        ],
+        "notes": got.get("notes") or [],
+    }
+
+
+@mcp.tool()
+async def spec_gap(
+    ctx: Context, material_id: str | None = None, limit: int = 20
+) -> dict[str, Any]:
+    """**선언한 값과 잰 값의 차이** — 차이가 큰 것이 위로(2026-09-19).
+
+    재료에 적어 둔 값(밀시트·규격·문헌)과 시험으로 잰 값이 얼마나 갈리는가. 큰 차이는
+    셋 중 하나다 — 선언이 낡았거나, 시험이 이상하거나, **단위·온도가 다른 것을 견준
+    것**. 어느 쪽인지는 사람이 본다 — 너는 차이와 후보 이유를 함께 말해라.
+
+        rows[]   material · item · declared_si(출처) · measured_mean(건수) · gap_ratio
+                 gap_ratio = (잰 값 − 선언) / 선언. +0.12 면 잰 값이 12 % 크다
+        unmatched_items   선언은 있는데 잰 값과 못 이은 항목 — 없는 게 아니라 안 이어진 것
+
+    선언값이 여러 온도면 **상온에 가장 가까운 점**을 견준다. 시험은 대개 상온이라,
+    400 °C 값과 견주면 차이가 재료가 아니라 온도의 것이 된다.
+    """
+    got = await _get(ctx, "/statistics/analysis/spec-gap")
+    if isinstance(got, dict) and "error" in got:
+        return got
+    rows = got.get("rows") or [] if isinstance(got, dict) else []
+    if material_id:
+        resolved = await _resolve_material(ctx, material_id)
+        if isinstance(resolved, dict):
+            return resolved
+        rows = [one for one in rows if str(one.get("material_id")) == resolved]
+    return {
+        "total": len(rows),
+        "shown": min(len(rows), max_limit(limit)),
+        "rows": [
+            {
+                "material_id": one.get("material_id"),
+                "material": one.get("material_name"),
+                "item": one.get("item"),
+                "declared_si": one.get("declared_si"),
+                "declared_source": one.get("declared_source"),
+                "declared_reference": one.get("declared_reference"),
+                "measured_mean_si": one.get("measured_mean"),
+                "measured_count": one.get("measured_count"),
+                "si_unit": one.get("si_unit"),
+                "gap_ratio": one.get("gap_ratio"),
+            }
+            for one in rows[: max_limit(limit)]
+        ],
+        "unmatched_items": got.get("unmatched_items") or [],
+        "note": "gap_ratio 가 크면 선언·시험·단위 셋 중 어느 쪽인지 사람이 본다. "
+        "unmatched 는 없는 게 아니라 안 이어진 것이다.",
+    }
+
+
+@mcp.tool()
+async def spread_by_group(
+    ctx: Context, scalars: list[str] | None = None, group_by: str = "family"
+) -> dict[str, Any]:
+    """재료군·분류별 **흩어짐** — 상자그림 한 줄씩(2026-09-19).
+
+    「강판 인장강도가 전체적으로 얼마나 흩어지나」·「어느 분류에 이상치가 많나」.
+    이상치가 곧 재시험 후보다. 사업부 축은 없다 — 흩어짐은 재료의 성질이지 누가
+    쟀는가의 성질이 아니다.
+
+        scalars    처리 스칼라 키(`yield_strength` …). 비우면 가장 많은 항목 하나.
+                   고를 수 있는 것은 응답의 `scalars[]` 에 온다
+        group_by   family(재료군) · category(분류)
+
+    셀이 `null` 이면 2건 미만이라 상자를 못 그린 것이다. 값은 SI 다.
+    """
+    # httpx 는 목록 값을 같은 키로 되풀이해 보낸다(`scalar=a&scalar=b`).
+    got = await _get(
+        ctx,
+        "/statistics/analysis/distribution",
+        {"group_by": group_by, "scalar": scalars or None},
+    )
+    if isinstance(got, dict) and "error" in got:
+        return got
+    return {
+        "group_by": got.get("group_by"),
+        "selected": got.get("selected"),
+        "groups": got.get("groups"),
+        "scalars": got.get("scalars"),
+        "skipped_unadopted": got.get("skipped_unadopted"),
     }
 
 

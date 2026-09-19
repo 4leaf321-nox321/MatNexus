@@ -158,6 +158,42 @@ async def sweep(session: ClientSession) -> None:
         await call(session, "get_parameter_sets", {"material_id": material_id})
         await call(session, "get_statistics", {"material_id": material_id})
         await call(session, "compare_material_statistics", {"material_ids": [material_id]})
+
+    # ── 분포·스펙 갭·흩어짐 — **채택된 통계가 있는 재료**에서만 뜻이 있다 ─────
+    await call(session, "spec_gap", {"limit": 5})
+    await call(session, "spread_by_group", {"group_by": "family"})
+    stats_material = None
+    picked = await call(session, "search_materials", {"query": "SCATTER", "limit": 3})
+    for candidate in (picked or {}).get("materials", []) if isinstance(picked, dict) else []:
+        stats = await call(session, "get_statistics", {"material_id": candidate["id"]})
+        groups = (stats or {}).get("groups") if isinstance(stats, dict) else None
+        if groups:
+            stats_material = (candidate["id"], groups[0])
+            break
+    if stats_material:
+        sid, group = stats_material
+        keys = await call(
+            session,
+            "get_distribution",
+            {
+                "material_id": sid,
+                "test_type": group["test_type"],
+                "orientation": group["orientation"],
+            },
+        )
+        rows = (keys or {}).get("distributable") if isinstance(keys, dict) else None
+        if rows:
+            await call(
+                session,
+                "get_distribution",
+                {
+                    "material_id": sid,
+                    "test_type": group["test_type"],
+                    "orientation": group["orientation"],
+                    "scalar_key": rows[0]["key"],
+                    "bootstrap": 50,
+                },
+            )
     # 환산은 서버가 — 오프셋(°C)·접두어 조합(W/(mm*K))·기본 SI 세 갈래를 다 본다.
     await call(session, "convert_unit", {"value": 300, "from_unit": "MPa", "to_unit": "kgf/mm2"})
     await call(session, "convert_unit", {"value": 25, "from_unit": "°C"})

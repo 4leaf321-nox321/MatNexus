@@ -539,9 +539,19 @@ def _one(
         p_value=_bootstrap_p(
             distribution, parameters, statistic, count, rounds=bootstrap, seed=seed
         ),
+        # p01·p99 도 낸다(2026-09-19). 실측: MCP 로 「하위 1 %」 를 물으니 서버가 p05
+        # 까지만 줘서 AI 가 모수로 **스스로 외삽**했다 — 답은 맞았지만 그 계산을 서버가
+        # 안 하면 다음번엔 틀린 값이 조용히 나간다. 설계 관행은 여전히 p05 다
+        # (`DESIGN_QUANTILE`) — p01 은 n 이 작을수록 더 못 믿고, 그 경고는 notes 가 한다.
         quantiles={
             name: float(distribution.ppf(parameters, probability))
-            for name, probability in (("p05", 0.05), ("p50", 0.50), ("p95", 0.95))
+            for name, probability in (
+                ("p01", 0.01),
+                ("p05", 0.05),
+                ("p50", 0.50),
+                ("p95", 0.95),
+                ("p99", 0.99),
+            )
         },
     )
 
