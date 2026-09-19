@@ -168,6 +168,16 @@ GPa·mm)로 바꿔 보여 주지만 그것은 표시일 뿐이다.
 그래서 "SUS304 의 항복강도"(제품 카탈로그의 공칭값)는 재료에 있고, "이번 입고분의
 항복강도"(밀시트)는 시료에 있다. 둘이 다른 것은 정상이다.
 
+<!--@ viscoelastic -->
+## 점탄성 — 곡선에서 벌까지
+
+    이 시험 마스터커브 있나      get_master_curves(test_run_id) — 스윕·기준 온도·이동 모델·대표
+    Prony 계수                  get_prony_fits(master_curve_id) — 후보 전부와 at_bound
+    재료에 채택된 벌            get_parameter_sets(material_id)
+
+`is_primary` 가 그 시험의 대표다. `at_bound` 가 비어 있지 않으면 **관측 밖을 외삽하고
+있다** — 그 완화시간은 데이터가 정한 것이 아니니 사람에게 말한다. 값은 SI 다.
+
 <!--@ ontology -->
 
 ## 길 찾기 — **지도를 먼저 읽어라**

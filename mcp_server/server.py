@@ -292,7 +292,8 @@ def get_guide(topic: str | None = None) -> str:
     단위(전부 SI) · 값의 무게(origin·quality_tier·caveat) · 선언 물성의 층 ·
     전형적인 흐름이 적혀 있다. `topic` 으로 한 절만 받을 수 있다:
     `overview` · `units` · `properties` · `trust` · `layers` · `ontology` ·
-    `processing` · `definitions` · `coverage` · `cards` · `statistics` · `workflow` · `limits`.
+    `processing` · `definitions` · `coverage` · `cards` · `statistics` · `viscoelastic` ·
+    `workflow` · `limits`.
     """
     try:
         text = GUIDE_PATH.read_text(encoding="utf-8")
@@ -391,6 +392,36 @@ async def _resolve_material(ctx: Context, material_id: str) -> str | dict[str, A
         "error": f"'{material_id}' 로 재료가 여럿입니다 — 하나를 골라 id 로 다시 부르세요.",
         "candidates": [
             {"id": one["id"], "name": one.get("record_name"), "code": one.get("code")}
+            for one in items
+        ],
+    }
+
+
+async def _resolve_run(ctx: Context, test_run_id: str) -> str | dict[str, Any]:
+    """시험 식별자 — **이름을 줘도 받아 준다.** 여럿이면 후보를 준다.
+
+    기준선(visco-01, 2026-09-19)에서 AI 가 시험 **이름**을 넣고 거절당해 목록으로 한 번
+    더 돌았다 — 재료·카드에서 이미 고친 자리와 같은 구멍이다.
+    """
+    if _looks_like_uuid(test_run_id):
+        return test_run_id
+    found = await _get(ctx, "/test-runs", {"q": test_run_id, "limit": 5})
+    if isinstance(found, dict) and "error" in found:
+        return found
+    items = found.get("items", []) if isinstance(found, dict) else []
+    needle = str(test_run_id).strip().lower()
+    exact = [one for one in items if str(one.get("record_name", "")).lower() == needle]
+    if len(exact) == 1 or len(items) == 1:
+        return str((exact or items)[0]["id"])
+    if not items:
+        return {
+            "error": f"그런 시험이 없습니다: {test_run_id}",
+            "hint": "`list_test_runs(query=...)` 로 먼저 찾으세요.",
+        }
+    return {
+        "error": f"'{test_run_id}' 로 시험이 여럿입니다 — 하나를 골라 id 로 다시 부르세요.",
+        "candidates": [
+            {"id": one["id"], "name": one.get("record_name"), "test_type": one.get("test_type_key")}
             for one in items
         ],
     }
@@ -1299,6 +1330,10 @@ async def get_test_run(ctx: Context, test_run_id: str) -> dict[str, Any]:
     처리 결과가 여럿이면 **채택된 것만** 값으로 옮긴다 — 나머지는 「시험해 본
     것」이지 「결론」이 아니다. 곡선 점은 안 낸다(수천 점이다).
     """
+    resolved = await _resolve_run(ctx, test_run_id)
+    if isinstance(resolved, dict):
+        return resolved
+    test_run_id = resolved
     run = await _get(ctx, f"/test-runs/{test_run_id}")
     if "error" in run:
         return run
@@ -3072,6 +3107,114 @@ async def check_card_deck(
         f"/fitting/cards/{card_id}/export/check",
         {"format": format, "units": units, "expect": expect or {}},
     )
+
+
+@mcp.tool()
+async def get_master_curves(ctx: Context, test_run_id: str) -> dict[str, Any]:
+    """DMA 시험의 **마스터커브** — 온도 스윕을 기준 온도로 겹친 것과, 겹칠 수 있는 스윕.
+
+    점탄성 카드·Prony 벌은 이 곡선에서 나온다. 전에는 MCP 로 「이 시험 마스터커브
+    있나」 를 물으면 빈손이었다(2026-09-19).
+
+        sweeps[]          겹칠 후보 — 온도(K)·점 수·주파수 범위. `warnings` 는 뺀 곡선과 이유
+        master_curves[]   기준 온도 · 방법(wlf·arrhenius·manual) · 계수 · shifts[] · is_primary
+
+    ## 읽는 법
+
+    `is_primary` 가 이 시험의 **대표**다 — 재료의 글로벌 피팅이 그 곡선을 읽는다. 둘 이상
+    있으면 대표를 말하고 나머지는 「다른 기준 온도로 겹친 것」 으로 적는다. `shifts[].residual`
+    이 벌어지면 그 이동 모델(WLF 등)이 이 재료에 안 맞는 것이다 — 값을 옮기기 전에 사람에게
+    그 사실을 말한다. 점 자체는 안 준다(화면이 그린다) — 계수와 범위로 말한다.
+    """
+    resolved = await _resolve_run(ctx, test_run_id)
+    if isinstance(resolved, dict):
+        return resolved
+    test_run_id = resolved
+    sweeps = await _get(ctx, f"/viscoelastic/runs/{test_run_id}/sweeps")
+    if isinstance(sweeps, dict) and "error" in sweeps:
+        return sweeps
+    curves = await _get(ctx, f"/viscoelastic/runs/{test_run_id}/master-curves")
+    if isinstance(curves, dict) and "error" in curves:
+        return curves
+    return {
+        "test_run_id": test_run_id,
+        "sweeps": sweeps.get("items") if isinstance(sweeps, dict) else [],
+        "warnings": sweeps.get("warnings") if isinstance(sweeps, dict) else [],
+        "master_curves": [
+            {
+                "id": one.get("id"),
+                "is_primary": one.get("is_primary"),
+                "reference_temperature_k": one.get("reference_temperature_k"),
+                "method": one.get("method"),
+                "parameters": one.get("parameters"),
+                "shifts": one.get("shifts"),
+                "point_count": one.get("point_count"),
+                "frequency_hz": [
+                    one.get("minimum_frequency_hz"),
+                    one.get("maximum_frequency_hz"),
+                ],
+                "source_curve_keys": one.get("source_curve_keys"),
+                "notes": one.get("notes"),
+            }
+            for one in (curves if isinstance(curves, list) else [])
+        ],
+        **(
+            {"caveat": "마스터커브가 없다 — 겹치는 것은 사람이 화면에서 기준 온도를 골라 한다."}
+            if not curves
+            else {}
+        ),
+    }
+
+
+@mcp.tool()
+async def get_prony_fits(ctx: Context, master_curve_id: str) -> dict[str, Any]:
+    """마스터커브에 맞춘 **Prony 벌**(일반화 Maxwell) — 계수와, 재 본 후보 전부.
+
+        fits[]  equilibrium_pa · instantaneous_pa · terms[{modulus_pa, relaxation_time_s}] ·
+                normalized_rmse · bic · at_bound · candidates[{term_count, bic, nrmse}]
+
+    ## 읽는 법
+
+    **`at_bound` 가 비어 있지 않으면 관측 밖을 외삽하고 있다** — 그 완화시간은 데이터가
+    정한 것이 아니다. 항 수는 BIC 가 골랐지만 `candidates` 를 함께 준 이유는 **사람이 다시
+    고를 수 있게**다: 항을 늘리면 잔차는 언제나 줄지만 계수도 는다. 값은 SI(Pa·s)다 —
+    덱에 넣을 때는 `render_card_deck(units=…)` 이 바꾼다, 여기서 옮기지 마라.
+    """
+    got = await _get(ctx, f"/viscoelastic/master-curves/{master_curve_id}/prony")
+    if isinstance(got, dict) and "error" in got:
+        return got
+    rows = got if isinstance(got, list) else []
+    return {
+        "master_curve_id": master_curve_id,
+        "count": len(rows),
+        "fits": [
+            {
+                "id": one.get("id"),
+                "equilibrium_pa": one.get("equilibrium_pa"),
+                "instantaneous_pa": one.get("instantaneous_pa"),
+                "terms": one.get("terms"),
+                "normalized_rmse": one.get("normalized_rmse"),
+                "bic": one.get("bic"),
+                "at_bound": one.get("at_bound"),
+                "candidates": [
+                    {
+                        "term_count": c.get("term_count"),
+                        "bic": c.get("bic"),
+                        "normalized_rmse": c.get("normalized_rmse"),
+                        "at_bound_count": len(c.get("at_bound") or []),
+                    }
+                    for c in one.get("candidates") or []
+                ],
+                "created_at": one.get("created_at"),
+            }
+            for one in rows
+        ],
+        **(
+            {"caveat": "Prony 적합이 없다 — 화면의 「Prony 맞추기」 는 사람이 한다."}
+            if not rows
+            else {}
+        ),
+    }
 
 
 @mcp.tool()

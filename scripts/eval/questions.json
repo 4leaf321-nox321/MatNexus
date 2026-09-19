@@ -620,6 +620,26 @@
         "mcp__matnexus__list_formulas"
       ],
       "max_calls": 2
+    },
+    {
+      "id": "visco-01",
+      "category": "점탄성",
+      "prompt": "DMA 시험 SECC-EXAD87-ALL_전체_0.8__01__NA_03__DMA_01 에 마스터커브가 있어? 있으면 기준 온도와 이동 모델, Prony 항 수를 말해 줘.",
+      "must_mention": [
+        [
+          "마스터커브",
+          "master"
+        ],
+        [
+          "Prony",
+          "프로니",
+          "항"
+        ]
+      ],
+      "tools_any": [
+        "mcp__matnexus__get_master_curves"
+      ],
+      "max_calls": 5
     }
   ]
 }

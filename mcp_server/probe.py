@@ -326,6 +326,13 @@ async def sweep(session: ClientSession) -> None:
         specimen = (detail or {}).get("specimen") if isinstance(detail, dict) else None
         if isinstance(specimen, dict) and specimen.get("id"):
             await call(session, "get_specimen", {"specimen_id": specimen["id"]})
+    # ── 점탄성 — 마스터커브가 있는 시험에서만 뜻이 있다 ────────────────────
+    dma = next((one["id"] for one in listed if (one.get("master_curve_count") or 0) > 0), None)
+    if dma:
+        curves = await call(session, "get_master_curves", {"test_run_id": dma})
+        found = (curves or {}).get("master_curves") if isinstance(curves, dict) else None
+        if found:
+            await call(session, "get_prony_fits", {"master_curve_id": found[0]["id"]})
     recipes = await call(session, "list_recipes")
     rows = recipes.get("recipes") if isinstance(recipes, dict) else recipes
     recipe_key = rows[0].get("key") if isinstance(rows, list) and rows else None

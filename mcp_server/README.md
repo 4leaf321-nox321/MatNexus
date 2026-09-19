@@ -68,7 +68,7 @@ claude mcp add --transport http matnexus http://127.0.0.1:8012/mcp `
 
 `<!--@ 이름 -->` 마커로 절을 나눈다. `get_guide("units")` 처럼 한 절만 받을 수 있다.
 
-## 5. 지금 있는 것 (도구 70개)
+## 5. 지금 있는 것 (도구 72개)
 
 **전부 한 번에 불러 보려면 `probe.py` 를 돌린다** — 진짜 MCP 클라이언트로 한 바퀴
 돈다(아래 「실측으로 잡은 것」 참조). 화면이나 curl 로는 안 보이는 층이 있다.
@@ -136,6 +136,9 @@ claude mcp add --transport http matnexus http://127.0.0.1:8012/mcp `
 「초안」 이 박혀 받는 사람이 안다. 확정은 사람이 화면에서 한다.
 
 ### 시험과 처리
+
+    get_master_curves(test_run_id)    DMA 마스터커브 — 기준 온도·이동 모델·대표
+    get_prony_fits(master_curve_id)   Prony 벌 — at_bound 가 있으면 외삽 중
 
     list_inbox(status?)                장비가 떨어뜨린, 아직 안 붙은 파일들
     list_test_runs(material_id?, ...)  시험 목록

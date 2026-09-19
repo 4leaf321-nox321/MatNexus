@@ -1,0 +1,84 @@
+{
+  "at": "20260919T144919Z",
+  "git": "4693e13",
+  "summary": {
+    "n": 1,
+    "passed": 1,
+    "calls": 5,
+    "calls_per_question": 5.0,
+    "empty_calls": 0,
+    "map_first": 1,
+    "errors": 0,
+    "seconds": 23.6,
+    "cost_usd": 0.334,
+    "by_category": {
+      "점탄성": {
+        "n": 1,
+        "passed": 1,
+        "calls": 5,
+        "empty": 0,
+        "map_first": 1
+      }
+    }
+  },
+  "traces": [
+    {
+      "id": "visco-01",
+      "category": "점탄성",
+      "prompt": "DMA 시험 SECC-EXAD87-ALL_전체_0.8__01__NA_03__DMA_01 에 마스터커브가 있어? 있으면 기준 온도와 이동 모델, Prony 항 수를 말해 줘.",
+      "calls": [
+        {
+          "name": "mcp__matnexus__get_master_curves",
+          "input": {
+            "test_run_id": "SECC-EXAD87-ALL_전체_0.8__01__NA_03__DMA_01"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__get_guide",
+          "input": {
+            "topic": "viscoelastic"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__list_test_runs",
+          "input": {
+            "query": "SECC-EXAD87-ALL_전체_0.8__01__NA_03__DMA_01"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__get_master_curves",
+          "input": {
+            "test_run_id": "9ef79714-51d5-41c3-8017-bf21691a0b44"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__get_prony_fits",
+          "input": {
+            "master_curve_id": "2744da09-d42d-4610-a20d-e2f4b2b08367"
+          },
+          "empty": false,
+          "is_error": false
+        }
+      ],
+      "answer": "있습니다. 대표 마스터커브(`is_primary`) 하나입니다.\n\n**마스터커브**\n- 기준 온도: **298.15 K (25 °C)**\n- 이동 모델: **WLF**, c1 = 151.7, c2 = 5000 K\n- 겹친 스윕: 0·25·50·75·100 °C 다섯 개 (각 9점, 0.1–20 Hz)\n- 겹친 뒤 주파수 범위: 0.000572–116 Hz — **잰 범위보다 2.3배 넓습니다**(외삽 구간 포함)\n- 이동 잔차 residual 최대 0.013 log10 — WLF 가 잘 맞습니다\n\n**Prony 벌 (일반화 Maxwell)**\n- 항 수: **6개** (BIC 가 고름, bic = −6257, NRMSE = 3.6e-4)\n- 평형 계수 202.9 GPa, 순간 계수 207.4 GPa (SI, Pa)\n- 완화시간: 0.0044 / 0.038 / 0.31 / 2.45 / 19.6 / 173.7 s\n- `at_bound` 비어 있음 — 완화시간이 경계에 붙지 않았습니다\n- 후보: 5항(bic −6223)과 7항(−6256)이 거의 같은 수준이라, 항을 줄이고 싶으면 5항도 실용적입니다\n\n주의 — 이 시험은 `adopted: false`(채택 결과 없음)입니다. 재료 물성으로 옮기려면 채택 절차를 먼저 거쳐야 합니다.",
+      "error": null,
+      "seconds": 23.621798276901245,
+      "cost_usd": 0.333974,
+      "map_first": true,
+      "empty_calls": 0,
+      "over_budget": false,
+      "tools_any_ok": true,
+      "forbidden_hit": [],
+      "missing_mentions": [],
+      "passed": true
+    }
+  ]
+}

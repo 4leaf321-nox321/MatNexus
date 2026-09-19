@@ -1,0 +1,68 @@
+{
+  "at": "20260919T145124Z",
+  "git": "4693e13",
+  "summary": {
+    "n": 1,
+    "passed": 1,
+    "calls": 3,
+    "calls_per_question": 3.0,
+    "empty_calls": 0,
+    "map_first": 1,
+    "errors": 0,
+    "seconds": 16.6,
+    "cost_usd": 0.2421,
+    "by_category": {
+      "점탄성": {
+        "n": 1,
+        "passed": 1,
+        "calls": 3,
+        "empty": 0,
+        "map_first": 1
+      }
+    }
+  },
+  "traces": [
+    {
+      "id": "visco-01",
+      "category": "점탄성",
+      "prompt": "DMA 시험 SECC-EXAD87-ALL_전체_0.8__01__NA_03__DMA_01 에 마스터커브가 있어? 있으면 기준 온도와 이동 모델, Prony 항 수를 말해 줘.",
+      "calls": [
+        {
+          "name": "mcp__matnexus__get_master_curves",
+          "input": {
+            "test_run_id": "SECC-EXAD87-ALL_전체_0.8__01__NA_03__DMA_01"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__get_guide",
+          "input": {
+            "topic": "viscoelastic"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__get_prony_fits",
+          "input": {
+            "master_curve_id": "2744da09-d42d-4610-a20d-e2f4b2b08367"
+          },
+          "empty": false,
+          "is_error": false
+        }
+      ],
+      "answer": "네, 있습니다. 대표 곡선 1개(`is_primary`).\n\n**마스터커브**\n- 기준 온도: **298.15 K** (25 °C)\n- 이동 모델: **WLF**, c1 = 151.7, c2 = 5000 K\n- 겹친 스윕: 0·25·50·75·100 °C 다섯 개 (각 9점, 0.1–20 Hz) → 합성 200점, 0.000572–116 Hz (잰 범위보다 2.3배 넓음)\n- 이동 인자 잔차 최대 0.013 log10 — WLF 가 잘 맞습니다\n\n**Prony (일반화 Maxwell)**\n- 항 수: **6** (BIC 로 선택, −6257.5 / NRMSE 3.6e-4)\n- `at_bound` 비어 있음 — 완화시간이 관측 범위 안에서 정해졌습니다\n- 완화시간 0.0044 s ~ 173.7 s, 각 항 모듈러스 7.1e8 ~ 8.8e8 Pa\n- 평형 202.9 GPa / 순간 207.4 GPa\n\n참고: 후보 5항(BIC −6222.9)·7항(−6256.1)이 6항과 거의 붙어 있어, 항 수를 줄이고 싶으면 5항도 실용적으로 무방합니다.\n\n출처: test_run `SECC-EXAD87-ALL_전체_0.8__01__NA_03__DMA_01` 의 마스터커브 `2744da09` 에 맞춘 Prony 피팅 (2026-09-05 생성). 값은 전부 SI.",
+      "error": null,
+      "seconds": 16.550684690475464,
+      "cost_usd": 0.24209749999999997,
+      "map_first": true,
+      "empty_calls": 0,
+      "over_budget": false,
+      "tools_any_ok": true,
+      "forbidden_hit": [],
+      "missing_mentions": [],
+      "passed": true
+    }
+  ]
+}
