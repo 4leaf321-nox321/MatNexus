@@ -565,6 +565,25 @@
       ],
       "max_calls": 5,
       "note": "지어내면 안 된다."
+    },
+    {
+      "id": "judge-05",
+      "category": "판단",
+      "prompt": "항복강도 300 MPa 를 국내 성적서 단위 kgf/mm² 로 바꾸면 얼마야? 그리고 25 °C 는 켈빈으로.",
+      "must_mention": [
+        [
+          "30.59",
+          "30.6"
+        ],
+        [
+          "298.15",
+          "298.1"
+        ]
+      ],
+      "tools_any": [
+        "mcp__matnexus__convert_unit"
+      ],
+      "max_calls": 3
     }
   ]
 }

@@ -11,14 +11,67 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 
 from app.modules.accounts.models import User
-from app.modules.units.schemas import AliasOut, DimensionOut, UnitOut, UnitsOut
+from app.modules.units.schemas import (
+    AliasOut,
+    DimensionOut,
+    UnitConversionOut,
+    UnitOut,
+    UnitsOut,
+)
 from app.shared.auth import current_user
+from app.shared.errors import AppError
 from matcore import units
 
 router = APIRouter(prefix="/units", tags=["units"])
+
+
+@router.get("/convert", response_model=UnitConversionOut)
+def convert(
+    value: float = Query(),
+    from_unit: str = Query(alias="from", min_length=1, max_length=40),
+    to_unit: str | None = Query(default=None, alias="to", min_length=1, max_length=40),
+    user: User = Depends(current_user),
+) -> UnitConversionOut:
+    """환산 — **표가 아는 만큼만, 서버가.**
+
+    `to` 를 비우면 그 차원의 저장 단위(SI)로. 차원이 다르면 거절한다 — 「항복강도를
+    °C 로」 는 숫자는 나와도 뜻이 없다. 모르는 단위는 표의 까닭(`UnknownUnit.hint`)
+    을 그대로 옮긴다: 「모르는 단위」 와 「대소문자로 갈리는 단위」 는 다음에 할 일이
+    다르다.
+    """
+    try:
+        source = units.unit_of(from_unit)
+    except units.UnknownUnit as exc:
+        raise AppError("MNX-UNITS-0001", str(exc), status=422) from None
+    si_value = units.to_si(value, from_unit)
+    # 표의 모든 차원에 저장 단위가 있다(`tests/unit/test_units.py` 가 지킨다).
+    si_unit = units.SI_UNITS[source.dimension]
+    if to_unit is None:
+        target = units.unit_of(si_unit)
+    else:
+        try:
+            target = units.unit_of(to_unit)
+        except units.UnknownUnit as exc:
+            raise AppError("MNX-UNITS-0001", str(exc), status=422) from None
+    if not units.same_dimension(source.dimension, target.dimension):
+        raise AppError(
+            "MNX-UNITS-0002",
+            f"차원이 다릅니다: {source.symbol}({source.dimension}) → "
+            f"{target.symbol}({target.dimension}). 같은 차원끼리만 환산합니다.",
+            status=422,
+        )
+    return UnitConversionOut(
+        value=value,
+        from_unit=source.symbol,
+        to_unit=target.symbol,
+        result=units.from_si(si_value, target.symbol),
+        dimension=source.dimension,
+        si_value=si_value,
+        si_unit=si_unit,
+    )
 
 
 @router.get("", response_model=UnitsOut)

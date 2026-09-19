@@ -513,6 +513,92 @@ async def get_material(ctx: Context, material_id: str) -> dict[str, Any]:
 
 
 @mcp.tool()
+async def convert_unit(
+    ctx: Context, value: float, from_unit: str, to_unit: str | None = None
+) -> dict[str, Any]:
+    """단위 환산 — **네가 곱하지 말고 서버에 시켜라**(2026-09-19).
+
+    안내가 「환산하지 마라」 고 말해 왔는데 시킬 손잡이가 없었다. 손잡이가 없으면 말은
+    지켜지지 않는다 — tonne/mm³ 를 kg/m³ 로 옮기며 10¹² 을 세는 것은 사람도 자주
+    틀리고, 틀린 숫자는 그럴듯하게 남는다.
+
+        value       숫자
+        from_unit   받은 표기 그대로 — `W/(m*K)`·`kgf/mm2`·`°C`·`tonne/mm3` 다 된다
+        to_unit     비우면 그 차원의 **저장 단위(SI)** 로
+
+    돌려주는 `from_unit`·`to_unit` 은 정본 표기다 — 사람에게 옮길 때 그것을 적어라.
+    차원이 다르면 거절한다(「항복강도를 °C 로」). 모르는 단위는 **왜** 모르는지가
+    실려 온다: 「표에 없다」 와 「대소문자로 뜻이 갈린다(`MPa.s`)」 는 다음 할 일이
+    다르다 — 뒤엣것은 사람에게 어느 쪽인지 물어라.
+
+    **덱의 단위계는 이 도구로 맞추지 않는다.** 덱은 `render_card_deck(units=...)` 가
+    통째로 바꾼다 — 값 하나씩 옮기면 한 줄을 빠뜨린다.
+    """
+    params: dict[str, Any] = {"value": value, "from": from_unit}
+    if to_unit:
+        params["to"] = to_unit
+    return await _get(ctx, "/units/convert", params)
+
+
+@mcp.tool()
+async def list_condition_fields(ctx: Context, test_type: str) -> dict[str, Any]:
+    """이 시험 종류의 **조건 칸** — 의뢰·시험 조건을 적기 **전에** 본다(2026-09-19).
+
+    `create_commission` 의 `items[].conditions` 와 시험 등록의 조건은 **이 키로만**
+    받는다. 키를 지어 적으면 서버가 거절하거나, 더 나쁘게는 조건 검색에 안 걸린다
+    (`canonical_key` 가 없는 칸은 「80 °C 값」 을 찾을 때 빠진다).
+
+        fields[]    key · label · si_unit · dimension · choices · is_required ·
+                    canonical_key(표준 조건 키 — 비면 조건 검색에 안 걸린다)
+        standard[]  표준 조건 어휘 — key · label · si_unit · aliases · help
+
+    값은 **입력 단위 그대로** 적고 단위는 `condition_units` 에 따로 준다(`{"temperature":
+    "degC"}`). SI 로 손수 바꾸지 마라 — 서버가 한다.
+    """
+    types = await _get(ctx, "/test-types")
+    if isinstance(types, dict) and "error" in types:
+        return types
+    needle = str(test_type).strip().lower()
+    found = next(
+        (
+            one
+            for one in (types if isinstance(types, list) else [])
+            if str(one.get("key", "")).lower() == needle
+            or str(one.get("label", "")).lower() == needle
+        ),
+        None,
+    )
+    if found is None:
+        return {
+            "error": f"그런 시험 종류가 없습니다: {test_type}",
+            "known": [
+                {"key": one.get("key"), "label": one.get("label")}
+                for one in (types if isinstance(types, list) else [])
+            ],
+        }
+    standard = await _get(ctx, "/test-types/standard-conditions")
+    return {
+        "test_type": {"key": found.get("key"), "label": found.get("label")},
+        "fields": [
+            {
+                "key": one.get("key"),
+                "label": one.get("label"),
+                "value_type": one.get("value_type"),
+                "si_unit": one.get("si_unit"),
+                "dimension": one.get("dimension"),
+                "choices": one.get("choices"),
+                "is_required": one.get("is_required"),
+                "canonical_key": one.get("canonical_key"),
+            }
+            for one in found.get("conditions") or []
+        ],
+        "standard": standard if isinstance(standard, list) else [],
+        "note": "conditions 는 위 fields[].key 로만 적는다. 값은 입력 단위 그대로, "
+        "단위는 condition_units 에 따로.",
+    }
+
+
+@mcp.tool()
 async def list_unit_systems(ctx: Context) -> dict[str, Any]:
     """덱을 낼 수 있는 **단위계 목록** — 덱을 뽑기 전에 먼저 고른다.
 
@@ -3084,6 +3170,9 @@ async def create_commission(
 
     둘(`test_type_key` · `property_hint`) 중 하나는 있어야 한다. **모르는 것을 지어
     적지 마라** — 「무엇을 재는지」 를 글로 적는 길이 따로 있는 이유가 그것이다.
+
+    **`conditions` 의 키는 `list_condition_fields(test_type)` 에서 본다.** 지어 적은
+    키는 거절되거나, 더 나쁘게는 조건 검색에 안 걸린다.
     """
     resolved = await _resolve_lab(ctx, lab)
     if "error" in resolved:

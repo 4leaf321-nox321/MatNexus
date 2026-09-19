@@ -1,0 +1,64 @@
+{
+  "at": "20260919T142108Z",
+  "git": "b4a67ea",
+  "summary": {
+    "n": 1,
+    "passed": 1,
+    "calls": 2,
+    "calls_per_question": 2.0,
+    "empty_calls": 0,
+    "map_first": 0,
+    "errors": 0,
+    "seconds": 11.6,
+    "cost_usd": 0.4545,
+    "by_category": {
+      "판단": {
+        "n": 1,
+        "passed": 1,
+        "calls": 2,
+        "empty": 0,
+        "map_first": 0
+      }
+    }
+  },
+  "traces": [
+    {
+      "id": "judge-05",
+      "category": "판단",
+      "prompt": "항복강도 300 MPa 를 국내 성적서 단위 kgf/mm² 로 바꾸면 얼마야? 그리고 25 °C 는 켈빈으로.",
+      "calls": [
+        {
+          "name": "mcp__matnexus__convert_unit",
+          "input": {
+            "value": 300,
+            "from_unit": "MPa",
+            "to_unit": "kgf/mm2"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__convert_unit",
+          "input": {
+            "value": 25,
+            "from_unit": "°C",
+            "to_unit": "K"
+          },
+          "empty": false,
+          "is_error": false
+        }
+      ],
+      "answer": "- 300 MPa = **30.59 kgf/mm²** (SI 저장값 3.0×10⁸ Pa, 차원 stress)\n- 25 °C = **298.15 K**\n\n출처: MatNexus `convert_unit` 서버 환산(정본 표기 `kgf/mm2`, `K`).",
+      "error": null,
+      "seconds": 11.638149976730347,
+      "cost_usd": 0.4544635,
+      "map_first": false,
+      "empty_calls": 0,
+      "over_budget": false,
+      "tools_any_ok": true,
+      "forbidden_hit": [],
+      "missing_mentions": [],
+      "passed": true
+    }
+  ]
+}

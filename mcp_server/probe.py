@@ -158,6 +158,11 @@ async def sweep(session: ClientSession) -> None:
         await call(session, "get_parameter_sets", {"material_id": material_id})
         await call(session, "get_statistics", {"material_id": material_id})
         await call(session, "compare_material_statistics", {"material_ids": [material_id]})
+    # 환산은 서버가 — 오프셋(°C)·접두어 조합(W/(mm*K))·기본 SI 세 갈래를 다 본다.
+    await call(session, "convert_unit", {"value": 300, "from_unit": "MPa", "to_unit": "kgf/mm2"})
+    await call(session, "convert_unit", {"value": 25, "from_unit": "°C"})
+    await call(session, "convert_unit", {"value": 1, "from_unit": "W/(mm*K)"})
+    await call(session, "list_condition_fields", {"test_type": "tensile"})
     systems = await call(session, "list_unit_systems")
     unit_key = None
     if isinstance(systems, dict):

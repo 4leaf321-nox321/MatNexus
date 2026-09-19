@@ -5748,6 +5748,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/units/convert": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Convert
+         * @description 환산 — **표가 아는 만큼만, 서버가.**
+         *
+         *     `to` 를 비우면 그 차원의 저장 단위(SI)로. 차원이 다르면 거절한다 — 「항복강도를
+         *     °C 로」 는 숫자는 나와도 뜻이 없다. 모르는 단위는 표의 까닭(`UnknownUnit.hint`)
+         *     을 그대로 옮긴다: 「모르는 단위」 와 「대소문자로 갈리는 단위」 는 다음에 할 일이
+         *     다르다.
+         */
+        get: operations["convert_api_units_convert_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/viscoelastic/master-curves/{master_curve_id}/points": {
         parameters: {
             query?: never;
@@ -17317,6 +17342,30 @@ export interface components {
             /** Value */
             value: number | null;
         };
+        /**
+         * UnitConversionOut
+         * @description 환산 한 번 — **서버가 곱한다.** AI 가 머릿속으로 곱하지 않게(2026-09-19).
+         *
+         *     MCP 안내가 「환산하지 마라」 고 말해 왔는데 시킬 손잡이가 없었다. 손잡이가 없으면
+         *     말은 지켜지지 않는다 — tonne/mm³ 를 kg/m³ 로 옮기며 10¹² 을 세는 것은 사람도
+         *     자주 틀리는 일이다.
+         */
+        UnitConversionOut: {
+            /** Dimension */
+            dimension: string;
+            /** From Unit */
+            from_unit: string;
+            /** Result */
+            result: number;
+            /** Si Unit */
+            si_unit: string;
+            /** Si Value */
+            si_value: number;
+            /** To Unit */
+            to_unit: string;
+            /** Value */
+            value: number;
+        };
         /** UnitOut */
         UnitOut: {
             /** Factor */
@@ -27275,6 +27324,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UnitsOut"];
+                };
+            };
+        };
+    };
+    convert_api_units_convert_get: {
+        parameters: {
+            query: {
+                value: number;
+                from: string;
+                to?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnitConversionOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

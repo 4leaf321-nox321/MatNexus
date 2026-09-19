@@ -43,3 +43,21 @@ class DimensionOut(BaseModel):
 class UnitsOut(BaseModel):
     dimensions: list[DimensionOut]
     total_units: int
+
+
+class UnitConversionOut(BaseModel):
+    """환산 한 번 — **서버가 곱한다.** AI 가 머릿속으로 곱하지 않게(2026-09-19).
+
+    MCP 안내가 「환산하지 마라」 고 말해 왔는데 시킬 손잡이가 없었다. 손잡이가 없으면
+    말은 지켜지지 않는다 — tonne/mm³ 를 kg/m³ 로 옮기며 10¹² 을 세는 것은 사람도
+    자주 틀리는 일이다.
+    """
+
+    value: float
+    from_unit: str
+    """받은 표기의 정본. `W/(m*K)` 를 주면 `W/(m.K)` 로 돌아온다."""
+    to_unit: str
+    result: float
+    dimension: str
+    si_value: float
+    si_unit: str

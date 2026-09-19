@@ -68,7 +68,7 @@ claude mcp add --transport http matnexus http://127.0.0.1:8012/mcp `
 
 `<!--@ 이름 -->` 마커로 절을 나눈다. `get_guide("units")` 처럼 한 절만 받을 수 있다.
 
-## 5. 지금 있는 것 (도구 62개)
+## 5. 지금 있는 것 (도구 64개)
 
 **전부 한 번에 불러 보려면 `probe.py` 를 돌린다** — 진짜 MCP 클라이언트로 한 바퀴
 돈다(아래 「실측으로 잡은 것」 참조). 화면이나 curl 로는 안 보이는 층이 있다.
@@ -85,6 +85,8 @@ claude mcp add --transport http matnexus http://127.0.0.1:8012/mcp `
     get_guide(topic?)                  규약 — 단위·값의 무게·층·흐름
     platform_summary()                 무엇이 얼마나 있나 — 규모부터 안다
     get_taxonomy()                     분류 체계와 지금 DB 의 분포
+    convert_unit(value, from, to?)     환산은 **서버가** — AI 가 곱하지 않게
+    list_condition_fields(test_type)   조건 칸의 키 — 의뢰·시험 조건을 적기 전에
     matnexus://guide                   같은 안내를 리소스로
 
 ### 찾기 — 이름을 모를 때의 손잡이
