@@ -68,7 +68,7 @@ claude mcp add --transport http matnexus http://127.0.0.1:8012/mcp `
 
 `<!--@ 이름 -->` 마커로 절을 나눈다. `get_guide("units")` 처럼 한 절만 받을 수 있다.
 
-## 5. 지금 있는 것 (도구 67개)
+## 5. 지금 있는 것 (도구 70개)
 
 **전부 한 번에 불러 보려면 `probe.py` 를 돌린다** — 진짜 MCP 클라이언트로 한 바퀴
 돈다(아래 「실측으로 잡은 것」 참조). 화면이나 curl 로는 안 보이는 층이 있다.
@@ -151,6 +151,10 @@ claude mcp add --transport http matnexus http://127.0.0.1:8012/mcp `
     ★ save_recipe(...)                 레시피 저장 — 부서가 함께 쓴다
 
 ### 정의 짓기 — AI 가 규약을 만드는 자리
+
+    list_formulas(kind?)              등록된 계산식 — 적합식·값 단계·열 단계 (ADR 0030)
+    formula_vocabulary()              식에 적을 수 있는 열·스칼라·함수 — 짓기 전에
+    preview_formula(spec, result_id)  식을 **저장 없이** 채택 결과 하나에 돌려 본다
 
     inspect_device_file(sample_text)   앞 몇십 줄로 구조를 읽는다
     check_format_profile(...)          지은 정의를 표본에 대고 검사 **저장 전에**

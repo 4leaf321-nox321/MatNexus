@@ -1311,11 +1311,13 @@ async def get_test_run(ctx: Context, test_run_id: str) -> dict[str, Any]:
     results = await _get(ctx, "/processing/results", {"test_run_id": test_run_id})
     scalars: list[dict[str, Any]] = []
     adopted_label = None
+    adopted_result_id = None
     if isinstance(results, list):
         for one in results:
             if not one.get("is_adopted"):
                 continue
             adopted_label = one.get("recipe_label") or one.get("recipe_key")
+            adopted_result_id = one.get("id")
             for value in one.get("scalars", []):
                 scalars.append(
                     {
@@ -1335,6 +1337,8 @@ async def get_test_run(ctx: Context, test_run_id: str) -> dict[str, Any]:
         "material_id": run.get("material_id"),
         **({"specimen": specimen} if specimen else {}),
         "adopted_recipe": adopted_label,
+        # `preview_formula(result_id=…)` 가 받는 손잡이 — 식을 실제 곡선에 돌려 볼 때.
+        "adopted_result_id": adopted_result_id,
         "measured_values_si": scalars,
         **(
             {"caveat": "채택된 처리 결과가 없다 — 이 시험의 물성은 아직 정해지지 않았다"}
@@ -3068,6 +3072,86 @@ async def check_card_deck(
         f"/fitting/cards/{card_id}/export/check",
         {"format": format, "units": units, "expect": expect or {}},
     )
+
+
+@mcp.tool()
+async def list_formulas(ctx: Context, kind: str | None = None) -> dict[str, Any]:
+    """등록된 **계산식** — 부서가 식 한 줄로 더한 적합식·값 단계·열 단계(ADR 0030).
+
+    「계산식은 데이터다」 로 만들어 두고 AI 는 그 데이터를 못 봤다(2026-09-19). 처리
+    단계 목록(`list_processing_steps`)에 `formula.<key>` 로 섞여 나오긴 했지만, 식이
+    무엇인지·변수가 어디서 오는지는 여기서만 보인다.
+
+        kind   family(적합식) · scalar_step(값 단계) · column_step(열 단계) · 비우면 전부
+
+    `registry_key` 가 처리 레시피·`preview_card_fit` 에 넣는 이름이다(`formula.<key>`).
+    `version` 이 오른 식은 옛 판으로 저장된 결과와 값이 다를 수 있다 — 결과는 옛 판을
+    든 채 그대로다. `enabled: false` 는 새로 쓰지 말라는 표시다.
+    """
+    got = await _get(ctx, "/formulas")
+    if isinstance(got, dict) and "error" in got:
+        return got
+    rows = got if isinstance(got, list) else []
+    if kind:
+        rows = [one for one in rows if one.get("kind") == kind]
+    return {
+        "count": len(rows),
+        "formulas": [
+            {
+                "key": one.get("key"),
+                "registry_key": one.get("registry_key"),
+                "kind": one.get("kind"),
+                "kind_label": one.get("kind_label"),
+                "label": one.get("label"),
+                "expression": one.get("expression"),
+                "describe": one.get("describe"),
+                "variables": one.get("variables"),
+                "parameters": one.get("parameters"),
+                "result": one.get("result"),
+                "x_column": one.get("x_column"),
+                "y_column": one.get("y_column"),
+                "block": one.get("block"),
+                "applies_to": one.get("applies_to"),
+                "version": one.get("version"),
+                "enabled": one.get("enabled"),
+            }
+            for one in rows
+        ],
+    }
+
+
+@mcp.tool()
+async def formula_vocabulary(ctx: Context) -> dict[str, Any]:
+    """식에 적을 수 있는 **이름** — 열·스칼라·블록·함수. 식을 짓기 **전에** 본다.
+
+    변수 이름을 지어 적으면 식은 문법을 통과하고 **돌 때** 「그런 열이 없다」 로 멎는다.
+    열·스칼라 항목의 `made_by` 가 그 이름을 **어느 처리 단계가 내는지**다 — 그 단계가
+    레시피에 없으면 그 변수도 없다. 함수 목록 밖의 함수는 안 된다(안전한 평가기다).
+    """
+    return await _get(ctx, "/formulas/vocabulary")
+
+
+@mcp.tool()
+async def preview_formula(
+    ctx: Context, spec: dict[str, Any], result_id: str
+) -> dict[str, Any]:
+    """식을 **저장하지 않고** 실제 채택 결과 하나에 돌려 본다 — 저장은 사람이 화면에서.
+
+    문법은 맞는데 뜻이 틀린 식(축을 바꿔 적음 · 단위가 천 배)은 돌려 봐야 드러난다.
+    `draft_test_type` 과 같은 태도다 — 식은 그 부서가 앞으로 따르는 계산이라 AI 가
+    등록할 것이 아니고, **초안과 검사까지**가 이 도구의 몫이다.
+
+        spec        `list_formulas` 의 한 항목과 같은 모양 — key · kind · label · expression ·
+                    variables[{name, unit}] · parameters[{name, unit, initial, lower, upper}]
+                    (적합식) · result{key, label, si_unit}(단계) · x_column/y_column · block
+        result_id   실제 처리 결과 — `get_test_run(...).adopted_result_id` 에 있다
+
+    돌려주는 것: `ok` · `message` · 적합식이면 계수와 `r_squared` · 값 단계면 `value` ·
+    열 단계면 앞 몇 점(`sample`). **`ok` 가 참이라도 뜻이 맞는지는 사람이 본다** — 결과
+    값을 관행 단위로 바꿔(`convert_unit`) 사람에게 보이고, 「이대로 등록하시겠습니까」
+    는 화면에서 한다.
+    """
+    return await _send(ctx, "POST", "/formulas/preview", {"spec": spec, "result_id": result_id})
 
 
 @mcp.tool()

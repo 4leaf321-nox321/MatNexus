@@ -1,0 +1,58 @@
+{
+  "at": "20260919T144407Z",
+  "git": "c7fdbbb",
+  "summary": {
+    "n": 1,
+    "passed": 1,
+    "calls": 2,
+    "calls_per_question": 2.0,
+    "empty_calls": 0,
+    "map_first": 0,
+    "errors": 0,
+    "seconds": 11.2,
+    "cost_usd": 0.1952,
+    "by_category": {
+      "계산식": {
+        "n": 1,
+        "passed": 1,
+        "calls": 2,
+        "empty": 0,
+        "map_first": 0
+      }
+    }
+  },
+  "traces": [
+    {
+      "id": "formula-01",
+      "category": "계산식",
+      "prompt": "지금 등록된 계산식 중 적합식(경화식 같은 것)은 뭐가 있어? 없으면 없다고 해 줘.",
+      "calls": [
+        {
+          "name": "mcp__matnexus__list_formulas",
+          "input": {
+            "kind": "family"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__list_formulas",
+          "input": {},
+          "empty": false,
+          "is_error": false
+        }
+      ],
+      "answer": "적합식(family)은 **없습니다.**\n\n- `list_formulas(kind=\"family\")` → 0건\n- 종류 제한 없이 조회해도 0건 — 값 단계(scalar_step)·열 단계(column_step)를 포함해 **등록된 계산식이 하나도 없습니다.**\n\n즉 경화식 같은 적합식은 아직 등록 전이고, 식이 없으니 버전·enabled 여부를 따질 대상도 없습니다. (출처: MatNexus MCP `list_formulas`)",
+      "error": null,
+      "seconds": 11.194475412368774,
+      "cost_usd": 0.1952295,
+      "map_first": false,
+      "empty_calls": 0,
+      "over_budget": false,
+      "tools_any_ok": true,
+      "forbidden_hit": [],
+      "missing_mentions": [],
+      "passed": true
+    }
+  ]
+}

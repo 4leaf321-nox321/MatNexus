@@ -605,6 +605,21 @@
         "mcp__matnexus__get_distribution"
       ],
       "max_calls": 5
+    },
+    {
+      "id": "formula-01",
+      "category": "계산식",
+      "prompt": "지금 등록된 계산식 중 적합식(경화식 같은 것)은 뭐가 있어? 없으면 없다고 해 줘.",
+      "must_mention": [
+        [
+          "식",
+          "없"
+        ]
+      ],
+      "tools_any": [
+        "mcp__matnexus__list_formulas"
+      ],
+      "max_calls": 2
     }
   ]
 }

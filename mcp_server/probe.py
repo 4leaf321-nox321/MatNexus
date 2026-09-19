@@ -285,11 +285,42 @@ async def sweep(session: ClientSession) -> None:
             },
         )
 
-    runs = await call(session, "list_test_runs", {"limit": 3})
-    run_id = _first(runs, "id", "test_run_id")
+    runs = await call(session, "list_test_runs", {"limit": 30})
+    # **채택 결과가 있는 시험**을 고른다 — 식 미리보기와 처리 입력이 그것을 받는다.
+    # 첫 줄을 집으면 채택 없는 시험이 걸려 뒤의 도구들이 조용히 건너뛴다(2026-09-19).
+    listed = (runs or {}).get("runs", []) if isinstance(runs, dict) else []
+    run_id = next((one["id"] for one in listed if one.get("adopted")), None) or _first(
+        runs, "id", "test_run_id"
+    )
     if run_id:
         detail = await call(session, "get_test_run", {"test_run_id": run_id})
         await call(session, "list_processing_inputs", {"test_run_id": run_id})
+        # ── 계산식 — 읽고, 어휘를 보고, 채택 결과 하나에 **저장 없이** 돌려 본다 ───
+        await call(session, "list_formulas")
+        await call(session, "formula_vocabulary")
+        adopted = (detail or {}).get("adopted_result_id") if isinstance(detail, dict) else None
+        measured = (detail or {}).get("measured_values_si") if isinstance(detail, dict) else None
+        if adopted and measured:
+            first = measured[0]["key"]
+            await call(
+                session,
+                "preview_formula",
+                {
+                    "spec": {
+                        "key": "probe_only",
+                        "kind": "scalar_step",
+                        "label": "점검용 — 값 그대로",
+                        "expression": f"{first} * 1",
+                        "variables": [{"name": first, "unit": measured[0].get("unit") or "1"}],
+                        "result": {
+                            "key": "probe_only",
+                            "label": "점검용",
+                            "si_unit": measured[0].get("unit") or "1",
+                        },
+                    },
+                    "result_id": adopted,
+                },
+            )
         # 시험이 든 시편으로 바로 들어간다 — 시편에는 제 목록이 따로 있지만,
         # **시험에서 시편으로 가는 길**이 실제로 쓰이는 길이다.
         specimen = (detail or {}).get("specimen") if isinstance(detail, dict) else None
