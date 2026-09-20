@@ -826,6 +826,58 @@ async def get_catalog_material(
 
 
 @mcp.tool()
+async def list_equipment(
+    ctx: Context,
+    query: str | None = None,
+    status: str | None = None,
+    calibration_due: bool = False,
+    limit: int = 30,
+) -> dict[str, Any]:
+    """우리 **장비** — 이름·모델·제조사·소속 랩·교정 만료(2026-09-20).
+
+    「이 시험 어디서 하나」·「교정 지난 장비 있나」 에 답한다. `how_to_measure` 가 물성
+    하나의 장비를 짚어 주는 것과 짝이다 — 이것은 장비에서 출발한다.
+
+        status           active · retired …  calibration_due   참이면 교정 만료·임박만
+        calibration_valid_until   지났으면 그 장비로 잰 값은 **교정 밖**이다 — 사람에게 말해라
+    """
+    got = await _get(
+        ctx,
+        "/equipment/units",
+        {
+            "q": query,
+            "status": status,
+            "calibration_due": calibration_due or None,
+            "limit": max_limit(limit),
+        },
+    )
+    if isinstance(got, dict) and "error" in got:
+        return got
+    items = got.get("items", []) if isinstance(got, dict) else []
+    return {
+        "total": got.get("total") if isinstance(got, dict) else len(items),
+        "shown": len(items),
+        "units": [
+            {
+                "id": one.get("id"),
+                "name": one.get("name"),
+                "asset_no": one.get("asset_no"),
+                "manufacturer": one.get("manufacturer"),
+                "model": one.get("model"),
+                "status": one.get("status"),
+                "ownership": one.get("ownership"),
+                "instrument_type": (one.get("instrument_type") or {}).get("label"),
+                "lab": (one.get("lab") or {}).get("label"),
+                "org": (one.get("org") or {}).get("label"),
+                "last_calibrated_on": one.get("last_calibrated_on"),
+                "calibration_valid_until": one.get("calibration_valid_until"),
+            }
+            for one in items
+        ],
+    }
+
+
+@mcp.tool()
 async def how_to_measure(ctx: Context, property_key: str) -> dict[str, Any]:
     """**이 물성은 무엇으로 어떻게 재는가** — 기법·시험 규격·장비.
 
@@ -1229,6 +1281,76 @@ async def compare_material_statistics(ctx: Context, material_ids: list[str]) -> 
     # **채택 안 한 것이 몇인지 함께 온다.** 그 수가 크면 표가 비어 보이는 이유가
     # 「값이 없다」 가 아니라 「아직 안 정했다」 다.
     return got if isinstance(got, dict) else {"error": "비교표를 읽지 못했습니다."}
+
+
+def _sample_brief(one: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": one.get("id"),
+        "name": one.get("record_name"),
+        "alias": one.get("alias"),
+        "lot_no": one.get("lot_no"),
+        "manufacturer": one.get("manufacturer"),
+        "production_date": one.get("production_date"),
+        # **밀도는 SI 가 아니다** — 재료 API 와 같이 표시 단위로 온다. 단위를 함께 싣는다.
+        "density": one.get("density"),
+        "density_unit": one.get("density_unit"),
+        "declared_count": len(one.get("declared_properties") or []),
+        "specimen_count": one.get("specimen_count"),
+        "test_run_count": one.get("test_run_count"),
+        "adopted_count": one.get("adopted_count"),
+        "note": one.get("note"),
+    }
+
+
+@mcp.tool()
+async def list_samples(ctx: Context, material_id: str) -> dict[str, Any]:
+    """재료의 **시료** — 로트·업체·생산일·시편 수·시험 수(2026-09-20).
+
+    재료 → 시료 → 시편 → 시험에서 가운데 층이 MCP 에 없었다. 「이 재료 로트가 몇 개고
+    어느 로트를 쟀나」 는 여기서만 답이 된다. 로트가 다르면 같은 재료라도 값이 다를 수
+    있다 — 통계가 로트를 섞고 있으면 그 사실을 말해라.
+
+    시료 하나를 열려면 `get_sample` — 시편 목록과 **밀시트 대조**가 거기 있다.
+    """
+    resolved = await _resolve_material(ctx, material_id)
+    if isinstance(resolved, dict):
+        return resolved
+    got = await _get(ctx, f"/materials/{resolved}/samples")
+    if isinstance(got, dict) and "error" in got:
+        return got
+    rows = got if isinstance(got, list) else []
+    return {"material_id": resolved, "count": len(rows), "samples": [_sample_brief(one) for one in rows]}
+
+
+@mcp.tool()
+async def get_sample(ctx: Context, sample_id: str) -> dict[str, Any]:
+    """시료 하나 — 시편 목록과 **밀시트 대조**(선언한 값 vs 우리가 잰 값).
+
+    밀시트가 말한 항복강도·인장강도와 채택 결과가 낸 값을 나란히 놓는다. 차이가 크면
+    밀시트가 다른 로트 것이거나 시험이 이상한 것이다 — 어느 쪽인지는 사람이 본다.
+    시편의 치수와 그 출처는 `get_specimen` 에서.
+    """
+    one = await _get(ctx, f"/samples/{sample_id}")
+    if isinstance(one, dict) and "error" in one:
+        return one
+    specimens = await _get(ctx, f"/samples/{sample_id}/specimens")
+    mill = await _get(ctx, f"/samples/{sample_id}/mill-check")
+    return {
+        **_sample_brief(one),
+        "material_id": one.get("material_id"),
+        "declared_properties": one.get("declared_properties"),
+        "specimens": [
+            {
+                "id": s_.get("id"),
+                "name": s_.get("record_name"),
+                "orientation": s_.get("orientation"),
+                "standard": s_.get("standard"),
+                "test_run_count": s_.get("test_run_count"),
+            }
+            for s_ in (specimens if isinstance(specimens, list) else [])
+        ],
+        "mill_check": mill.get("rows") if isinstance(mill, dict) and "rows" in mill else [],
+    }
 
 
 @mcp.tool()
@@ -1905,6 +2027,168 @@ async def preview_card_fit(
             " 갈린다 — 후보를 사람에게 보이고 어디까지 쓸 것인지 물어라."
         ),
     }
+
+
+@mcp.tool()
+async def list_groups(ctx: Context, material_id: str) -> dict[str, Any]:
+    """재료의 **묶음 결과** — 반복 시편·속도별·온도별·Prony 를 하나로 묶은 것(2026-09-20).
+
+    카드의 세 갈래(속도 의존·점탄성·확장 묶음)가 이것을 받는다. `plugin_id` 가 어느
+    갈래인지 말한다:
+
+        tensile.rate_family         속도별 → `create_card_from_group` (속도 의존 소성)
+        viscoelastic.prony_group    Prony 여럿 → `create_card_from_group` (점탄성)
+        그 밖(확장이 card= 로 선언) → `create_card_from_group` (공용 길)
+
+    `used` 가 **실제로 쓴 시험**이다 — 고른 것과 다를 수 있다(대표를 고르면 하나만 쓴다).
+    `warnings` 는 그대로 사람에게 옮긴다.
+    """
+    resolved = await _resolve_material(ctx, material_id)
+    if isinstance(resolved, dict):
+        return resolved
+    got = await _get(ctx, f"/groups/materials/{resolved}")
+    if isinstance(got, dict) and "error" in got:
+        return got
+    rows = got if isinstance(got, list) else []
+    return {
+        "material_id": resolved,
+        "count": len(rows),
+        "groups": [
+            {
+                "id": one.get("id"),
+                "plugin_id": one.get("plugin_id"),
+                "plugin_version": one.get("plugin_version"),
+                "member_count": len(one.get("members") or []),
+                "used_count": len(one.get("used") or []),
+                "values_si": one.get("values"),
+                "warnings": one.get("warnings"),
+                "note": one.get("note"),
+                "created_at": one.get("created_at"),
+            }
+            for one in rows
+        ],
+    }
+
+
+#: 묶음 플러그인 → 카드 경로. 속도·점탄성은 저마다 규칙이 있어 경로가 따로다.
+_GROUP_CARD_PATHS = {
+    "tensile.rate_family": "/fitting/cards/rate-dependent",
+    "viscoelastic.prony_group": "/fitting/cards/viscoelastic",
+}
+
+
+@mcp.tool()
+async def create_card_from_group(
+    ctx: Context,
+    group_result_id: str,
+    label: str,
+    plugin_id: str | None = None,
+    poisson_ratio: float | None = None,
+    density: float | None = None,
+    note: str | None = None,
+    dry_run: bool = True,
+) -> dict[str, Any]:
+    """묶음 결과에서 카드 초안 — 속도 의존·점탄성·확장 묶음을 **한 길로**(2026-09-20).
+
+    `list_groups` 의 `plugin_id` 를 **그대로 넘겨라** — 그것으로 서버 경로를 고른다
+    (속도·점탄성은 저마다 규칙이 있어 경로가 따로다). 비우면 공용 길로 가고, 그 묶음이
+    공용 길을 안 받으면 서버가 거절한다. **기본이 미리보기(dry_run=True)** 이고, 만들어도
+    **초안**이다 — 확정은 사람이.
+
+        poisson_ratio · density   시험이 주지 않는 값. 비우면 재료에서 물려받고, 없으면
+                                  서버가 거절한다 — **지어 넣지 마라**, 사람에게 물어라.
+                                  density 는 **SI(kg/m³)** 다. 재료 API 의 표시값(tonne/mm³)을
+                                  그대로 넣으면 범위 밖으로 거절된다.
+    """
+    body = {
+        "group_result_id": group_result_id,
+        "label": label,
+        "poisson_ratio": poisson_ratio,
+        "density": density,
+        "note": note,
+    }
+    path = _GROUP_CARD_PATHS.get(str(plugin_id), "/fitting/cards/from-group")
+    if dry_run:
+        return {
+            "dry_run": True,
+            "will_create": body,
+            "path": path,
+            "note": "이대로 만들려면 dry_run=False 로 다시 부르세요. 만들어도 초안입니다.",
+        }
+    return await _send(ctx, "POST", path, body)
+
+
+@mcp.tool()
+async def create_viscoelastic_card(
+    ctx: Context,
+    prony_fit_id: str,
+    label: str,
+    poisson_ratio: float | None = None,
+    density: float | None = None,
+    note: str | None = None,
+    dry_run: bool = True,
+) -> dict[str, Any]:
+    """Prony 적합 **하나**에서 점탄성 카드 초안 — 시편 하나의 마스터커브에서.
+
+    여러 시편을 묶은 것이면 `create_card_from_group` 이다. `prony_fit_id` 는
+    `get_prony_fits` 의 `fits[].id`. **DMA 는 푸아송비를 재지 않는다** — 재료에서 물려받고
+    없으면 사람에게 묻는다. 기본이 미리보기이고 만들어도 초안이다.
+    """
+    body = {
+        "prony_fit_id": prony_fit_id,
+        "label": label,
+        "poisson_ratio": poisson_ratio,
+        "density": density,
+        "note": note,
+    }
+    if dry_run:
+        return {
+            "dry_run": True,
+            "will_create": body,
+            "note": "이대로 만들려면 dry_run=False 로 다시 부르세요. 만들어도 초안입니다.",
+        }
+    return await _send(ctx, "POST", "/fitting/cards/viscoelastic", body)
+
+
+@mcp.tool()
+async def create_lve_card(
+    ctx: Context,
+    material_id: str,
+    test_type: str,
+    orientation: str,
+    label: str,
+    poisson_ratio: float | None = None,
+    density: float | None = None,
+    include_declared: bool = False,
+    note: str | None = None,
+    dry_run: bool = True,
+) -> dict[str, Any]:
+    """DMA 변형률 스윕의 **선형 구간 탄성률** 카드 초안 — 통계 묶음(재료·종류·방향)에서.
+
+    `get_statistics` 가 그 묶음에 선형 탄성률을 갖고 있어야 한다. `include_declared` 는
+    재료에 적어 둔 열물성을 `thermal` 블록으로 함께 싣는다. 기본이 미리보기이고 만들어도
+    초안이다.
+    """
+    resolved = await _resolve_material(ctx, material_id)
+    if isinstance(resolved, dict):
+        return resolved
+    body = {
+        "material_id": resolved,
+        "test_type_key": test_type,
+        "orientation": orientation,
+        "label": label,
+        "poisson_ratio": poisson_ratio,
+        "density": density,
+        "include_declared": include_declared,
+        "note": note,
+    }
+    if dry_run:
+        return {
+            "dry_run": True,
+            "will_create": body,
+            "note": "이대로 만들려면 dry_run=False 로 다시 부르세요. 만들어도 초안입니다.",
+        }
+    return await _send(ctx, "POST", "/fitting/cards/lve", body)
 
 
 @mcp.tool()

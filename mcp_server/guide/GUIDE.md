@@ -159,6 +159,10 @@ GPa·mm)로 바꿔 보여 주지만 그것은 표시일 뿐이다.
 <!--@ layers -->
 ## 선언 물성의 층 — 재료 / 시료
 
+시료는 `list_samples(material_id)` 로, 시료 하나의 시편과 **밀시트 대조**(밀시트가 말한
+값 vs 우리가 잰 값)는 `get_sample` 로 본다. 로트가 다르면 같은 재료라도 값이 다를 수
+있다 — 통계가 로트를 섞고 있으면 그 사실을 말해라.
+
 시험이 주지 않는 값은 사람이 적는다. 그 값이 어디에 붙는지는 **값의 성격**이
 정한다:
 
@@ -508,6 +512,19 @@ GPa·mm)로 바꿔 보여 주지만 그것은 표시일 뿐이다.
 위치에서 자름」 으로 두고 앞 단계가 낸 후보를 이어 붙인다. **다만 어느 결과를
 공식으로 삼을지(채택)는 사람만 한다** — 다시 돌려 저장까지는 해 줄 수 있어도,
 채택이 안 바뀌면 카드도 그대로다.
+
+### 카드의 갈래 — 어디서 나오나
+
+    인장 경화식(표+식)      create_card_from_tests(material, test_type, orientation)
+    선언 값만              create_declared_card(material)
+    속도 의존 소성          list_groups → create_card_from_group(plugin_id=tensile.rate_family)
+    점탄성(Prony 하나)      get_prony_fits → create_viscoelastic_card(prony_fit_id)
+    점탄성(Prony 여럿)      list_groups → create_card_from_group(plugin_id=viscoelastic.prony_group)
+    DMA 선형 탄성률         create_lve_card(material, test_type, orientation)
+    확장이 선언한 묶음      list_groups → create_card_from_group
+
+전부 미리보기가 기본이고, **푸아송비·밀도는 지어 넣지 마라** — 시험이 주지 않는 값이라
+재료에서 물려받고, 없으면 사람에게 묻는다.
 
 ### 카드는 언제나 초안으로 생긴다
 

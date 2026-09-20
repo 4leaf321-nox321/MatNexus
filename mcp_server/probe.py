@@ -136,6 +136,7 @@ async def sweep(session: ClientSession) -> None:
     await call(session, "platform_summary")
     await call(session, "get_taxonomy")
     await call(session, "measurement_gaps")
+    await call(session, "list_equipment", {"limit": 3})
 
     found = await call(session, "search_materials", {"query": "A", "limit": 3})
     material_id = _first(found, "id", "material_id")
@@ -153,6 +154,11 @@ async def sweep(session: ClientSession) -> None:
         name = (detail or {}).get("name") if isinstance(detail, dict) else None
         if name:
             await call(session, "get_material", {"material_id": name})
+        samples = await call(session, "list_samples", {"material_id": material_id})
+        rows = (samples or {}).get("samples") if isinstance(samples, dict) else None
+        if rows:
+            await call(session, "get_sample", {"sample_id": rows[0]["id"]})
+        await call(session, "list_groups", {"material_id": material_id})
         await call(session, "property_coverage", {"material_id": material_id})
         await call(session, "deck_readiness", {"material_id": material_id})
         await call(session, "get_parameter_sets", {"material_id": material_id})
@@ -332,7 +338,36 @@ async def sweep(session: ClientSession) -> None:
         curves = await call(session, "get_master_curves", {"test_run_id": dma})
         found = (curves or {}).get("master_curves") if isinstance(curves, dict) else None
         if found:
-            await call(session, "get_prony_fits", {"master_curve_id": found[0]["id"]})
+            fits = await call(session, "get_prony_fits", {"master_curve_id": found[0]["id"]})
+            listed_fits = (fits or {}).get("fits") if isinstance(fits, dict) else None
+            if listed_fits:
+                await call(
+                    session,
+                    "create_viscoelastic_card",
+                    {"prony_fit_id": listed_fits[0]["id"], "label": "점검용", "dry_run": True},
+                )
+    await call(
+        session,
+        "create_card_from_group",
+        {
+            "group_result_id": "00000000-0000-0000-0000-000000000000",
+            "label": "점검용",
+            "plugin_id": "tensile.rate_family",
+            "dry_run": True,
+        },
+    )
+    if material_id:
+        await call(
+            session,
+            "create_lve_card",
+            {
+                "material_id": material_id,
+                "test_type": "dma_sweep",
+                "orientation": "NA",
+                "label": "점검용",
+                "dry_run": True,
+            },
+        )
     recipes = await call(session, "list_recipes")
     rows = recipes.get("recipes") if isinstance(recipes, dict) else recipes
     recipe_key = rows[0].get("key") if isinstance(rows, list) and rows else None

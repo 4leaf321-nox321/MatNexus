@@ -68,7 +68,7 @@ claude mcp add --transport http matnexus http://127.0.0.1:8012/mcp `
 
 `<!--@ 이름 -->` 마커로 절을 나눈다. `get_guide("units")` 처럼 한 절만 받을 수 있다.
 
-## 5. 지금 있는 것 (도구 72개)
+## 5. 지금 있는 것 (도구 79개)
 
 **전부 한 번에 불러 보려면 `probe.py` 를 돌린다** — 진짜 MCP 클라이언트로 한 바퀴
 돈다(아래 「실측으로 잡은 것」 참조). 화면이나 curl 로는 안 보이는 층이 있다.
@@ -104,6 +104,9 @@ claude mcp add --transport http matnexus http://127.0.0.1:8012/mcp `
     list_cards(material_id?, status?)  물성 카드 목록
     list_card_blocks()                 카드가 담을 수 있는 갈래 — 「점탄성은 어디에」
     get_card(card_id)                  카드 하나 — 덱에 실릴 값 그대로
+    list_samples(material_id)          시료 — 로트·업체·시편 수·시험 수
+    get_sample(sample_id)              시료 하나 — 시편 목록과 **밀시트 대조**
+    list_groups(material_id)           묶음 결과 — 속도별·Prony·확장 묶음
 
 ### 문헌 카탈로그 → 사내로 받아 오기
 
@@ -113,6 +116,7 @@ claude mcp add --transport http matnexus http://127.0.0.1:8012/mcp `
     compare_catalog_materials(ids)     여럿을 한 표로 (최대 8종)
     match_bom(text)                    부품표를 붙여 후보를 찾는다
     how_to_measure(property_key)       이 물성은 무엇으로 어떻게 재나
+    list_equipment(query?, status?)    우리 장비 — 모델·소속 랩·교정 만료
     measurement_gaps()                 우리가 못 재는 물성 — 능력의 빈 칸
     ★ adopt_catalog_values(...)        문헌 값 → 선언 물성 (스냅샷)
     ★ adopt_parameter_set(...)         파라미터 한 벌을 통째로
@@ -131,6 +135,9 @@ claude mcp add --transport http matnexus http://127.0.0.1:8012/mcp `
 
     preview_card_fit(...)              경화식들을 견준다 — **RMSE 로 고르지 마라**
     ★ create_card_from_tests(...)      시험에서 나온 값으로 카드 초안
+    ★ create_card_from_group(...)      묶음에서 — 속도 의존·점탄성·확장 묶음을 한 길로
+    ★ create_viscoelastic_card(...)    Prony 적합 하나에서 점탄성 카드 초안
+    ★ create_lve_card(...)             DMA 변형률 스윕의 선형 탄성률 카드 초안
 
 확정(publish)하는 도구는 **없다.** 초안도 덱으로 뽑히니 흐름은 안 끊기고, 덱 머리에
 「초안」 이 박혀 받는 사람이 안다. 확정은 사람이 화면에서 한다.
