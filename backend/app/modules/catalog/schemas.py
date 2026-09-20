@@ -637,6 +637,11 @@ class PropertySearchOut(BaseModel):
     range_si: list[float] | None = None
     """실제로 건 범위(SI). **AI 가 자기가 무엇을 물었는지 되짚을 수 있어야 한다.**"""
     total: int = 0
+    """**보여 준 수**다 — 세계마다 `limit` 으로 자르고 합친 것이라 전체 수가 아니다.
+    전부인지는 `truncated` 가 말한다."""
+    truncated: bool = False
+    """어느 세계든 `limit` 에 걸려 잘렸으면 참. **거짓이면 이것이 전부다** — 창을 좁혀
+    다시 물을 이유가 없다(2026-09-20, 「없다」 규약)."""
     hits: list[PropertyHitOut] = Field(default_factory=list)
     notes: list[str] = Field(default_factory=list)
 

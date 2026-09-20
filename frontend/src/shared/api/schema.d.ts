@@ -14353,6 +14353,11 @@ export interface components {
              * @default 0
              */
             total: number;
+            /**
+             * Truncated
+             * @default false
+             */
+            truncated: boolean;
             /** Unit */
             unit?: string | null;
         };

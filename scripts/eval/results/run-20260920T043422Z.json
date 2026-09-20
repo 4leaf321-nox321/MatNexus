@@ -1,0 +1,221 @@
+{
+  "at": "20260920T043422Z",
+  "git": "28afc2e",
+  "summary": {
+    "n": 3,
+    "passed": 2,
+    "calls": 14,
+    "calls_per_question": 4.67,
+    "empty_calls": 0,
+    "map_first": 2,
+    "errors": 0,
+    "seconds": 106.0,
+    "cost_usd": 1.7176,
+    "by_category": {
+      "값 찾기": {
+        "n": 2,
+        "passed": 1,
+        "calls": 9,
+        "empty": 0,
+        "map_first": 1
+      },
+      "커버리지": {
+        "n": 1,
+        "passed": 1,
+        "calls": 5,
+        "empty": 0,
+        "map_first": 1
+      }
+    }
+  },
+  "traces": [
+    {
+      "id": "search-04",
+      "category": "값 찾기",
+      "prompt": "탄성계수 200 GPa 근처인 것 중 믿을 만한 것(등급 2 이상)만 보여 줘.",
+      "calls": [
+        {
+          "name": "mcp__matnexus__resolve_property",
+          "input": {
+            "name": "탄성계수"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__find_by_property",
+          "input": {
+            "property": "탄성계수",
+            "unit": "GPa",
+            "near": 200,
+            "min_tier": 2,
+            "limit": 20
+          },
+          "empty": false,
+          "is_error": false
+        }
+      ],
+      "answer": "**탄성계수(영률, E) 180~220 GPa · 등급 2 이상 — 총 45건** 중 가까운 순 20건:\n\n**시험으로 잰 값 (measured)**\n- SCATTER_DP600_1.0 — **200.5 GPa** (등급 1, 시편 11개, 표준편차 2.7 GPa, 선형점탄성 탄성률·변형률 스윕)\n\n**사내 값 (internal)**\n| 재료 | 값 | 등급 | 출처 |\n|---|---|---|---|\n| E2E27531286_-_1.0 | 200.2 GPa | 1 | 공급사 자료 2025-03 |\n| E2E70906858_-_1.0 | 199.7 GPa | 1 | 공급사 자료 2025-03 |\n| E2E23628374_-_1.0 | 200.9 GPa | 1 | 사내 물성표 v4 |\n| E2E32927383_-_1.0 | 199.9 GPa | 2 | 사내 물성표 v4 |\n| E2E00769112_-_1.0 | 199.8 GPa | 2 | 공급사 자료 2025-03 |\n| E2E27502862_-_1.0 | 199.5 GPa | 2 | 사내 물성표 v4 |\n| FILLBE9FFF_T_1.0 | 200.3 GPa | 2 | ASM Handbook Vol.1 |\n\n**문헌 값 (catalog)** — 전부 강(metal)\n- Uddeholm 공구·금형강 7종 (Vidar Superior, Elmax SuperClean, Corrax, Corrax for AM, Stavax ESR, Impax Supreme, Mirrax ESR) — 각 **200 GPa**, 등급 1\n- 교정용 와이어 Ormco 1400 (AISI 302/304) 200.4 GPa · Unitek Resilient 199.5 / 199.3 GPa — 등급 1 (Kusy 1988)\n- 17-4PH 주강 199.5 GPa, 등급 1 (Kim 2004)\n- SUS430_annealed Bilinear 200 GPa, 등급 2 (Table 3)\n\n참고 — 등급 1은 실측/데이터시트 선언, 등급 2는 규격·공인 DB 또는 시편 1~2개. 나머지 25건이 더 있으니 필요하면 더 뽑아 드립니다. 온도 조건은 걸지 않았습니다(조건 미기재 값 포함).",
+      "error": null,
+      "seconds": 21.123794317245483,
+      "cost_usd": 0.6000305,
+      "map_first": false,
+      "empty_calls": 0,
+      "over_budget": false,
+      "tools_any_ok": true,
+      "forbidden_hit": [],
+      "missing_mentions": [],
+      "passed": true
+    },
+    {
+      "id": "search-06",
+      "category": "값 찾기",
+      "prompt": "SAC305 Solder Alloy 의 탄성계수 문헌값들을 온도별로 정리해 줘.",
+      "calls": [
+        {
+          "name": "mcp__matnexus__get_ontology",
+          "input": {},
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__get_guide",
+          "input": {
+            "topic": "trust"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__search_catalog",
+          "input": {
+            "query": "SAC305",
+            "limit": 10
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__resolve_property",
+          "input": {
+            "name": "탄성계수"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__get_catalog_material",
+          "input": {
+            "catalog_material_id": "d68d0ecf-9122-4c47-a198-db3618c500cd",
+            "property_keys": [
+              "mechanical.youngs_modulus"
+            ],
+            "limit": 60
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__find_by_property",
+          "input": {
+            "property": "영률",
+            "unit": "GPa",
+            "min": 1,
+            "max": 100,
+            "condition": "temperature",
+            "condition_unit": "degC",
+            "condition_min": 50,
+            "condition_max": 250,
+            "limit": 20
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__find_by_property",
+          "input": {
+            "property": "영률",
+            "unit": "GPa",
+            "min": 1,
+            "max": 100,
+            "condition": "temperature",
+            "condition_unit": "degC",
+            "condition_near": 100,
+            "limit": 20
+          },
+          "empty": false,
+          "is_error": false
+        }
+      ],
+      "answer": "## SAC305 Solder Alloy — 영률(탄성계수) 문헌값 10건 (전부 등급 1, 출처: 문헌 카탈로그)\n\n**결론부터: 온도별로는 정리되지 않습니다.** 이 재료의 영률 값 10건은 전부 상온(20~25 °C)이고 고온 값이 하나도 없습니다. 대신 **시효시간(aging)** 축으로는 7점이 이어져 있습니다.\n\n### 상온 값\n\n| E | 온도 | 조건 | 출처 |\n|---|---|---|---|\n| **27.83 GPa** ← 대표값 | 25 °C | — | Mechanical Characterization of SAC305 … at High Temperatures (doi 10.1109/itherm.2016.7517622) |\n| 54.0 GPa | 20 °C | 단축인장, 변형률속도 0.04 /s, as-cast 환봉 ⌀7 mm | Low-cycle fatigue … lead-free solders, 2002 (doi 10.1007/s11664-002-0100-0) |\n| 6.9 GPa | 온도 미기재 | — | Indalloy® 256 (SAC305) 제품 데이터시트 |\n\n### 25 °C · 시효시간별 (0.001 /s, reflowed, 시효 100 °C)\n\n| 시효 | 0일 | 5일 | 10일 | 20일 | 30일 | 45일 | 60일 |\n|---|---|---|---|---|---|---|---|\n| E (GPa) | 40.12 | 36.40 | 34.39 | 32.35 | 30.45 | 28.83 | 28.00 |\n\n출처: Reduction of lead free solder aging effects using doped SAC alloys, 2010 (doi 10.1109/ectc.2010.5490796), Fig. 25(a). **그림에서 디지타이즈한 값(±0.03 GPa)**이며, 원문 정의는 응력-변형률 곡선 초기 기울기인 *effective elastic modulus* 로 변형률속도 의존값입니다.\n\n### 읽을 때 주의\n- 상온에서도 6.9 ~ 54 GPa로 8배 흩어집니다 — 시편 상태(as-cast/reflowed)·변형률속도·시효 이력이 다르기 때문이라 **한 값으로 뭉뚱그리면 안 됩니다.**\n- 첫 출처는 제목이 고온 특성인데 카탈로그에 담긴 건 상온 한 점뿐입니다. 고온 E(T)가 필요하면 그 논문을 다시 채굴해 값을 넣어야 합니다.\n- 참고: 온도 조건을 건 전역 검색(`find_by_property`)은 서버 오류(MNX-COMMON-0500)로 실패했습니다. 위 10건은 재료 단위 조회로 받은 전량(complete)입니다.",
+      "error": null,
+      "seconds": 51.9184832572937,
+      "cost_usd": 0.721701,
+      "map_first": true,
+      "empty_calls": 0,
+      "over_budget": true,
+      "tools_any_ok": true,
+      "forbidden_hit": [],
+      "missing_mentions": [],
+      "passed": false
+    },
+    {
+      "id": "coverage-02",
+      "category": "커버리지",
+      "prompt": "SAC305-Solder-Alloy_-_- 사내 재료에 시험으로 잰 값과 문헌값이 각각 뭐가 있어?",
+      "calls": [
+        {
+          "name": "mcp__matnexus__get_guide",
+          "input": {
+            "topic": "trust"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__search_materials",
+          "input": {
+            "query": "SAC305 Solder Alloy"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__property_coverage",
+          "input": {
+            "material_id": "0d9ff5b0-5033-43b1-acc4-1d1e06afe56d"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__list_test_runs",
+          "input": {
+            "material_id": "0d9ff5b0-5033-43b1-acc4-1d1e06afe56d"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__get_material",
+          "input": {
+            "material_id": "0d9ff5b0-5033-43b1-acc4-1d1e06afe56d"
+          },
+          "empty": false,
+          "is_error": false
+        }
+      ],
+      "answer": "**M-000140 `SAC305-Solder-Alloy_-_-`** (SnAgCu solder)\n\n**시험으로 잰 값(measured): 없습니다.** 시료 0건, 시험 0건 — 실측 물성이 하나도 없습니다.\n\n**문헌·데이터시트에서 채택한 선언값 7건** (모두 카탈로그 스냅샷):\n\n| 물성 | 값 | 출처·등급 |\n|---|---|---|\n| 탄성계수 | 27,830 MPa (상온) | Mechanical Characterization of SAC305 at High Temperatures · 문헌 tier 1 |\n| 인장강도 | 50.6 MPa | Low-cycle fatigue behavior of Sn-Ag, Sn-Ag-Cu… (2002) · 문헌 tier 1 |\n| 항복강도 | 25.3 MPa | 같은 문헌 · tier 1 |\n| 연신율 | 49 % | Indalloy® 256 (SAC305) 데이터시트 · tier 1 |\n| 선팽창계수 | 21 ×10⁻⁶ /K | 같은 데이터시트 · tier 1 |\n| 열전도율 | 58.7 W/(m·K) | SAC305 SAC Solder 데이터시트 · tier 1 |\n| 비열 | 230 J/(kg·K) | Almit Ltd. 기술자료(2005) · 문헌 tier 2 |\n\n재료 기본 칸: 밀도 7.37×10⁻⁹ tonne/mm³(=7,370 kg/m³), 푸아송비 0.35 — 둘 다 재료 공칭 선언값이며 시료 실측이 아닙니다.\n\n이어진 문헌 카탈로그 재료(SAC305 Solder Alloy)에는 값이 786건 더 있습니다(Anand 상수 등). 보시려면 영역(기계/열 등)을 좁혀 드리겠습니다.\n\n덧: `property_coverage` 전체 응답이 너무 커서(18만 자) 잘렸습니다. 위 내용은 `list_test_runs`(0건)와 `get_material`로 확인한 것이라 실측 유무와 선언값 목록은 확실하지만, 카탈로그 쪽 786건의 등급별 분포는 아직 안 봤습니다.",
+      "error": null,
+      "seconds": 32.97162103652954,
+      "cost_usd": 0.3959115,
+      "map_first": true,
+      "empty_calls": 0,
+      "over_budget": false,
+      "tools_any_ok": true,
+      "forbidden_hit": [],
+      "missing_mentions": [],
+      "passed": true
+    }
+  ]
+}

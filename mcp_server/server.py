@@ -162,6 +162,22 @@ def _named(item: dict[str, Any]) -> dict[str, Any]:
     return {"key": item.get("key"), "label": item.get("label"), "si_unit": item.get("si_unit")}
 
 
+def _complete(out: dict[str, Any], *, whole: bool) -> dict[str, Any]:
+    """「이게 전부인가」 를 **한 칸으로** — `complete`(2026-09-20).
+
+    기준선에서 두 번 연속 걸린 자리다: 도구가 전부를 줬는데(`omitted: 0` ·
+    `shown == total` · 빈 목록) AI 는 「정말 없나」 를 다른 도구로 서너 번 더 확인했다.
+    도구마다 「전부다」 를 말하는 낱말이 달라서(`omitted`·`truncated`·`total/shown`·
+    `count`) 그중 무엇을 믿어야 하는지 규칙이 없었기 때문이다.
+
+    이제 목록을 주는 도구는 전부 `complete` 를 단다 — 참이면 **이 조건에 맞는 것은
+    이것이 전부**다(빈 목록이면 없는 것이다). 거짓이면 `limit` 에 잘린 것이라 limit 을
+    올려 **같은 도구를** 한 번 더 부른다 — 창을 좁히거나 다른 도구로 가지 않는다.
+    """
+    out["complete"] = bool(whole)
+    return out
+
+
 def _listed(payload: object, key: str) -> dict[str, object]:
     """목록을 dict 로 **감싼다.**
 
@@ -181,7 +197,8 @@ def _listed(payload: object, key: str) -> dict[str, object]:
     if isinstance(payload, dict):
         return payload
     rows = list(payload) if isinstance(payload, list) else []
-    return {key: rows, "count": len(rows)}
+    # 서버가 상한 없이 통째로 준 목록이다 — 전부다.
+    return {key: rows, "count": len(rows), "complete": True}
 
 
 async def _get_text(ctx: Context, path: str, params: dict[str, Any] | None = None) -> Any:
@@ -293,7 +310,7 @@ def get_guide(topic: str | None = None) -> str:
     전형적인 흐름이 적혀 있다. `topic` 으로 한 절만 받을 수 있다:
     `overview` · `units` · `properties` · `trust` · `layers` · `ontology` ·
     `processing` · `definitions` · `coverage` · `cards` · `statistics` · `viscoelastic` ·
-    `workflow` · `limits`.
+    `workflow` · `absence` · `limits`.
     """
     try:
         text = GUIDE_PATH.read_text(encoding="utf-8")
@@ -336,7 +353,7 @@ async def search_materials(
     )
     if "error" in got:
         return got
-    return {
+    out = {
         "total": got.get("total", 0),
         "shown": len(got.get("items", [])),
         "materials": [
@@ -357,6 +374,7 @@ async def search_materials(
             for one in got.get("items", [])
         ],
     }
+    return _complete(out, whole=len(got.get("items", [])) >= int(got.get("total", 0) or 0))
 
 
 def _looks_like_uuid(value: str) -> bool:
@@ -728,7 +746,7 @@ async def search_catalog(
     )
     if "error" in got:
         return got
-    return {
+    out = {
         "total": got.get("total", 0),
         "materials": [
             {
@@ -744,6 +762,7 @@ async def search_catalog(
         ],
         "hint": "값이 많은 재료가 먼저 온다 — 쓸 것이 많다는 뜻이다.",
     }
+    return _complete(out, whole=len(got.get("items", [])) >= int(got.get("total", 0) or 0))
 
 
 @mcp.tool()
@@ -806,6 +825,8 @@ async def get_catalog_material(
         "total_values": total,
         "shown_values": len(values),
         "omitted": max(0, total - len(values)),
+        # 이 재료의 값은 **이것이 전부**인가 — `omitted` 가 0 이면 그렇다.
+        "complete": total <= len(values),
         "tier_counts": tiers,
         "values": values,
         **(
@@ -854,7 +875,7 @@ async def list_equipment(
     if isinstance(got, dict) and "error" in got:
         return got
     items = got.get("items", []) if isinstance(got, dict) else []
-    return {
+    out = {
         "total": got.get("total") if isinstance(got, dict) else len(items),
         "shown": len(items),
         "units": [
@@ -875,6 +896,7 @@ async def list_equipment(
             for one in items
         ],
     }
+    return _complete(out, whole=len(items) >= int(out["total"] or 0))
 
 
 @mcp.tool()
@@ -970,7 +992,7 @@ async def list_test_runs(
     )
     if "error" in got:
         return got
-    return {
+    out = {
         "total": got.get("total", 0),
         "runs": [
             {
@@ -990,6 +1012,7 @@ async def list_test_runs(
             for one in got.get("items", [])
         ],
     }
+    return _complete(out, whole=len(got.get("items", [])) >= int(got.get("total", 0) or 0))
 
 
 def _specimen_brief(one: Any) -> dict[str, Any] | None:
@@ -1205,7 +1228,7 @@ async def spec_gap(
         if isinstance(resolved, dict):
             return resolved
         rows = [one for one in rows if str(one.get("material_id")) == resolved]
-    return {
+    out = {
         "total": len(rows),
         "shown": min(len(rows), max_limit(limit)),
         "rows": [
@@ -1227,6 +1250,7 @@ async def spec_gap(
         "note": "gap_ratio 가 크면 선언·시험·단위 셋 중 어느 쪽인지 사람이 본다. "
         "unmatched 는 없는 게 아니라 안 이어진 것이다.",
     }
+    return _complete(out, whole=len(rows) <= max_limit(limit))
 
 
 @mcp.tool()
@@ -1319,7 +1343,12 @@ async def list_samples(ctx: Context, material_id: str) -> dict[str, Any]:
     if isinstance(got, dict) and "error" in got:
         return got
     rows = got if isinstance(got, list) else []
-    return {"material_id": resolved, "count": len(rows), "samples": [_sample_brief(one) for one in rows]}
+    return {
+        "material_id": resolved,
+        "count": len(rows),
+        "samples": [_sample_brief(one) for one in rows],
+        "complete": True,
+    }
 
 
 @mcp.tool()
@@ -1431,7 +1460,7 @@ async def list_specimens(
     if isinstance(got, dict) and "error" in got:
         return got
     rows = got.get("items", []) if isinstance(got, dict) else []
-    return {
+    out = {
         "total": got.get("total", len(rows)) if isinstance(got, dict) else len(rows),
         "specimens": [
             {
@@ -1443,6 +1472,7 @@ async def list_specimens(
             for one in rows
         ],
     }
+    return _complete(out, whole=len(rows) >= int(out["total"] or 0))
 
 
 @mcp.tool()
@@ -2050,7 +2080,7 @@ async def list_groups(ctx: Context, material_id: str) -> dict[str, Any]:
     if isinstance(got, dict) and "error" in got:
         return got
     rows = got if isinstance(got, list) else []
-    return {
+    out = {
         "material_id": resolved,
         "count": len(rows),
         "groups": [
@@ -2068,6 +2098,7 @@ async def list_groups(ctx: Context, material_id: str) -> dict[str, Any]:
             for one in rows
         ],
     }
+    return _complete(out, whole=True)
 
 
 #: 묶음 플러그인 → 카드 경로. 속도·점탄성은 저마다 규칙이 있어 경로가 따로다.
@@ -2431,11 +2462,12 @@ async def list_cards(
     )
     if "error" in got:
         return got
-    return {
+    out = {
         "total": got.get("total", 0),
         "cards": [_card_summary(one) | {"material": one.get("material_name")}
                   for one in got.get("items", [])],
     }
+    return _complete(out, whole=len(got.get("items", [])) >= int(got.get("total", 0) or 0))
 
 
 @mcp.tool()
@@ -3011,7 +3043,11 @@ async def find_by_property(
     ):
         if value is not None:
             params[key] = value
-    return await _get(ctx, "/catalog/properties/search", params)
+    got = await _get(ctx, "/catalog/properties/search", params)
+    if isinstance(got, dict) and "error" not in got:
+        # `total` 은 보여 준 수다. 전부인지는 서버의 `truncated` 가 말한다.
+        return _complete(got, whole=not got.get("truncated"))
+    return got
 
 
 @mcp.tool()
@@ -3114,9 +3150,10 @@ async def list_inbox(
 
     `status` 로 좁힌다: `pending`(아직 안 붙음) · `assigned` · `approved`.
     """
-    return await _get(
-        ctx, "/pipelines/inbox", {"status": status, "limit": max_limit(limit)}
-    )
+    got = await _get(ctx, "/pipelines/inbox", {"status": status, "limit": max_limit(limit)})
+    if isinstance(got, dict) and "error" not in got:
+        return _complete(got, whole=len(got.get("items", [])) >= int(got.get("total", 0) or 0))
+    return got
 
 
 @mcp.tool()
@@ -3420,7 +3457,7 @@ async def get_master_curves(ctx: Context, test_run_id: str) -> dict[str, Any]:
     curves = await _get(ctx, f"/viscoelastic/runs/{test_run_id}/master-curves")
     if isinstance(curves, dict) and "error" in curves:
         return curves
-    return {
+    out = {
         "test_run_id": test_run_id,
         "sweeps": sweeps.get("items") if isinstance(sweeps, dict) else [],
         "warnings": sweeps.get("warnings") if isinstance(sweeps, dict) else [],
@@ -3448,6 +3485,7 @@ async def get_master_curves(ctx: Context, test_run_id: str) -> dict[str, Any]:
             else {}
         ),
     }
+    return _complete(out, whole=True)
 
 
 @mcp.tool()
@@ -3468,7 +3506,7 @@ async def get_prony_fits(ctx: Context, master_curve_id: str) -> dict[str, Any]:
     if isinstance(got, dict) and "error" in got:
         return got
     rows = got if isinstance(got, list) else []
-    return {
+    out = {
         "master_curve_id": master_curve_id,
         "count": len(rows),
         "fits": [
@@ -3499,6 +3537,7 @@ async def get_prony_fits(ctx: Context, master_curve_id: str) -> dict[str, Any]:
             else {}
         ),
     }
+    return _complete(out, whole=True)
 
 
 @mcp.tool()
@@ -3521,7 +3560,7 @@ async def list_formulas(ctx: Context, kind: str | None = None) -> dict[str, Any]
     rows = got if isinstance(got, list) else []
     if kind:
         rows = [one for one in rows if one.get("kind") == kind]
-    return {
+    out = {
         "count": len(rows),
         "formulas": [
             {
@@ -3545,6 +3584,7 @@ async def list_formulas(ctx: Context, kind: str | None = None) -> dict[str, Any]
             for one in rows
         ],
     }
+    return _complete(out, whole=True)
 
 
 @mcp.tool()
@@ -3764,7 +3804,10 @@ async def list_commissions(
         params["status"] = status
     if q:
         params["q"] = q
-    return await _get(ctx, "/commissions", params)
+    got = await _get(ctx, "/commissions", params)
+    if isinstance(got, dict) and "error" not in got:
+        return _complete(got, whole=len(got.get("items", [])) >= int(got.get("total", 0) or 0))
+    return got
 
 
 @mcp.tool()

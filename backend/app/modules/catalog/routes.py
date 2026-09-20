@@ -1741,6 +1741,8 @@ def search_by_property(
             )
 
     hits: list[property_search.Hit] = []
+    #: 세계마다 자른 수 — 어느 하나라도 `limit` 에 닿았으면 더 있을 수 있다.
+    parts: list[int] = []
     notes: list[str] = []
     if cond is not None:
         std = cond.standard
@@ -1760,7 +1762,7 @@ def search_by_property(
             )
         )
     if scope in ("all", "catalog") and (wanted_worlds is None or "catalog" in wanted_worlds):
-        hits += property_search.catalog_hits(
+        part = property_search.catalog_hits(
             db,
             property_key=chosen.key,
             low=low,
@@ -1773,13 +1775,15 @@ def search_by_property(
             center=center,
             min_tier=min_tier,
         )
+        hits += part
+        parts.append(len(part))
     if scope in ("all", "internal") and grouped:
         # 파라미터 집합은 아직 사내로 받아 가는 길이 열리지 않았다(ADR 0029 2단계).
         notes.append("사내 재료는 안 봤습니다 — 모델 파라미터는 아직 채택 경로가 없습니다.")
     elif scope in ("all", "internal"):
         # **시험으로 잰 값이 먼저다.** 셋 중 제일 믿을 만한 값인데 전에는 이것만 빠졌다.
         if chosen.measured and (wanted_worlds is None or "measured" in wanted_worlds):
-            hits += property_search.measured_hits(
+            part = property_search.measured_hits(
                 db,
                 scalar_keys=chosen.measured,
                 low=low,
@@ -1792,9 +1796,11 @@ def search_by_property(
                 min_tier=min_tier,
                 center=center,
             )
+            hits += part
+            parts.append(len(part))
         if chosen.item_filters and (wanted_worlds is None or "internal" in wanted_worlds):
             for item, scale in chosen.item_filters:
-                hits += property_search.internal_hits(
+                part = property_search.internal_hits(
                     db,
                     item=item,
                     low=low,
@@ -1808,6 +1814,8 @@ def search_by_property(
                     min_tier=min_tier,
                     center=center,
                 )
+                hits += part
+                parts.append(len(part))
         else:
             # **못 찾은 게 아니라 이어져 있지 않은 것이다.** 그 차이를 말한다.
             notes.append(
@@ -1822,6 +1830,7 @@ def search_by_property(
         unit=unit,
         range_si=[low, high],
         total=len(hits),
+        truncated=any(one >= limit for one in parts),
         hits=[
             PropertyHitOut(
                 world=one.world,

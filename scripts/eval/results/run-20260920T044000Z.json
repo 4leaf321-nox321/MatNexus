@@ -1,0 +1,52 @@
+{
+  "at": "20260920T044000Z",
+  "git": "28afc2e",
+  "summary": {
+    "n": 1,
+    "passed": 1,
+    "calls": 1,
+    "calls_per_question": 1.0,
+    "empty_calls": 0,
+    "map_first": 0,
+    "errors": 0,
+    "seconds": 16.1,
+    "cost_usd": 0.2278,
+    "by_category": {
+      "이름 해소": {
+        "n": 1,
+        "passed": 1,
+        "calls": 1,
+        "empty": 0,
+        "map_first": 0
+      }
+    }
+  },
+  "traces": [
+    {
+      "id": "name-02",
+      "category": "이름 해소",
+      "prompt": "Tg 근처 값 찾으려는데 어떤 물성 이름으로 물어야 해? 후보를 보여 줘.",
+      "calls": [
+        {
+          "name": "mcp__matnexus__resolve_property",
+          "input": {
+            "name": "Tg"
+          },
+          "empty": false,
+          "is_error": false
+        }
+      ],
+      "answer": "**「유리전이온도」** 로 물으면 됩니다. (`Tg` 로 물어도 서버가 바로 이걸로 풀어 줍니다 — 갈림 없음)\n\n| 후보 | 값 건수 | 단위 | 비고 |\n|---|---|---|---|\n| **유리전이온도** (Tg) | 1,202건 | K (섭씨로 물어도 됨) | 정답 후보 |\n| 아웃가싱 TML | 67건 | 무차원 | 약어만 비슷, 다른 물성 |\n| 아웃가싱 CVCM | 65건 | 무차원 | 위와 같음 |\n\n찾을 때 유의할 점:\n- **단위를 꼭 붙여야** 합니다 — 「120」 만 주면 120 K 로 걸립니다. `degC` 인지 `K` 인지 명시.\n- Tg 는 **측정법마다 값이 다릅니다**(DSC vs DMA). 시험으로 잰 값(`glass_transition`)도 함께 잡히니, 답에 방법을 같이 봐야 합니다.\n\n찾으실 값이 몇 도 근처인지(그리고 °C 인지) 알려 주시면 바로 조회하겠습니다.",
+      "error": null,
+      "seconds": 16.117746353149414,
+      "cost_usd": 0.2277635,
+      "map_first": false,
+      "empty_calls": 0,
+      "over_budget": false,
+      "tools_any_ok": true,
+      "forbidden_hit": [],
+      "missing_mentions": [],
+      "passed": true
+    }
+  ]
+}
