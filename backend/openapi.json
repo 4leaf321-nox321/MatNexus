@@ -12720,6 +12720,50 @@
       "Hints": {
         "description": "에이전트가 파일 이름에서 뽑은 **힌트.** 확정이 아니다.",
         "properties": {
+          "commission": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Commission"
+          },
+          "details": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "division": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Division"
+          },
+          "humidity": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Humidity"
+          },
           "instrument": {
             "anyOf": [
               {
@@ -12730,6 +12774,17 @@
               }
             ],
             "title": "Instrument"
+          },
+          "legacy_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Legacy Id"
           },
           "lot": {
             "anyOf": [
@@ -12742,6 +12797,17 @@
             ],
             "title": "Lot"
           },
+          "manufacturer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manufacturer"
+          },
           "material_code": {
             "anyOf": [
               {
@@ -12752,6 +12818,17 @@
               }
             ],
             "title": "Material Code"
+          },
+          "material_no": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Material No"
           },
           "operator": {
             "anyOf": [
@@ -12775,6 +12852,61 @@
             ],
             "title": "Orientation"
           },
+          "production_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Production Date"
+          },
+          "record_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Record Name"
+          },
+          "repeat": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repeat"
+          },
+          "sample": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sample"
+          },
+          "sample_alias": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sample Alias"
+          },
           "specimen": {
             "anyOf": [
               {
@@ -12786,6 +12918,50 @@
             ],
             "title": "Specimen"
           },
+          "specimen_seq": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Specimen Seq"
+          },
+          "standard": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Standard"
+          },
+          "temperature": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Temperature"
+          },
+          "test_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Test Type"
+          },
           "tested_at": {
             "anyOf": [
               {
@@ -12796,6 +12972,17 @@
               }
             ],
             "title": "Tested At"
+          },
+          "thickness": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thickness"
           }
         },
         "title": "Hints",

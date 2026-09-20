@@ -12,11 +12,12 @@
 from __future__ import annotations
 
 import logging
+import re
 import uuid
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import false, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.jobs import kinds, queue
@@ -24,12 +25,13 @@ from app.modules.accounts.models import User
 from app.modules.materials.models import Material, Sample, Specimen
 from app.modules.pipelines.models import (
     FINAL_STATUSES,
+    HINT_KEYS,
     PipelineConnector,
     PipelineInboxItem,
 )
 from app.modules.tests.models import FormatProfile, TestRun, TestType
 from app.modules.workspaces.models import Workspace, WorkspaceMember
-from app.shared import audit, filestore, ingest, permissions
+from app.shared import audit, conditions, filestore, ingest, permissions
 from app.shared.errors import AppError, Conflict, NotFound
 from matcore.parsers import ParseError
 
@@ -250,7 +252,11 @@ def process(db: Session, item_id: uuid.UUID) -> str:
 
     data = filestore.read_bytes(item.source_path)  # 인프라 오류는 그대로 올린다
     detected = ingest.detect(
-        db, workspace_id=connector.workspace_id, filename=item.filename, data=data
+        db,
+        workspace_id=connector.workspace_id,
+        filename=item.filename,
+        data=data,
+        preferred_type_key=item.hints.get("test_type") or None,
     )
     if not detected.found or detected.test_type is None:
         return _fail(db, item, detected.reason)
@@ -306,6 +312,135 @@ def _fail(db: Session, item: PipelineInboxItem, reason: str) -> str:
     return "failed"
 
 
+#: 재료 이름의 두께 토막은 mm 다(`SECC_MDOI_1.0`). 저장은 m — 1 µm 안이면 같은 두께.
+_THICKNESS_TOLERANCE_M = 1e-6
+
+
+def _narrow_materials(
+    rows: list[Material], extra: dict[str, str]
+) -> tuple[list[Material], list[str]]:
+    """재료 후보를 힌트로 좁힌다 — **좁혀서 남으면** 그것으로, 안 남으면 안 좁힌다.
+
+    「없는 것」 보다 「여럿」 이 낫다. 힌트가 틀렸을 때 후보 전부를 없애면 사람은 왜
+    빈손인지 모른다 — 좁히기가 실패한 힌트는 그냥 안 쓴 것이 된다.
+    """
+    reasons: list[str] = []
+    if extra["thickness"]:
+        try:
+            wanted = float(re.sub(r"(?i)(mm|t)$", "", extra["thickness"].strip())) / 1000.0
+        except ValueError:
+            wanted = None
+        if wanted is not None:
+            by = [
+                m
+                for m in rows
+                if m.spec_thickness_m is not None
+                and abs(m.spec_thickness_m - wanted) <= _THICKNESS_TOLERANCE_M
+            ]
+            if by:
+                rows = by
+                reasons.append(f"두께 {extra['thickness']}")
+    if extra["details"]:
+        by = [m for m in rows if (m.details or "").lower() == extra["details"].lower()]
+        if by:
+            rows = by
+            reasons.append(f"상세 '{extra['details']}'")
+    return rows, reasons
+
+
+def _narrow_samples(
+    rows: list[Sample], extra: dict[str, str]
+) -> tuple[list[Sample], list[str]]:
+    """시료 후보를 힌트로 좁힌다. 규칙은 `_narrow_materials` 와 같다."""
+    reasons: list[str] = []
+    if extra["sample"]:
+        token = extra["sample"]
+        by = [
+            one
+            for one in rows
+            if one.record_name == token
+            or one.record_name.endswith(f"__{token}")
+            or (token.isdigit() and one.seq_no == int(token))
+        ]
+        if by:
+            rows = by
+            reasons.append(f"시료 '{token}'")
+    if extra["sample_alias"]:
+        by = [
+            one for one in rows if (one.alias or "").lower() == extra["sample_alias"].lower()
+        ]
+        if by:
+            rows = by
+            reasons.append(f"시료 별칭 '{extra['sample_alias']}'")
+    if extra["manufacturer"]:
+        by = [
+            one
+            for one in rows
+            if (one.manufacturer or "").lower() == extra["manufacturer"].lower()
+        ]
+        if by:
+            rows = by
+            reasons.append(f"업체 '{extra['manufacturer']}'")
+    if extra["production_date"]:
+        token = extra["production_date"].replace("/", "-")
+        by = [
+            one
+            for one in rows
+            if one.production_date is not None
+            and one.production_date.isoformat().startswith(token)
+        ]
+        if by:
+            rows = by
+            reasons.append(f"생산일 {token}")
+    if extra["legacy_id"]:
+        by = [one for one in rows if one.legacy_id == extra["legacy_id"]]
+        if by:
+            rows = by
+            reasons.append(f"옛 ID {extra['legacy_id']}")
+    return rows, reasons
+
+
+def _whole_name_candidate(
+    db: Session, workspace_id: uuid.UUID, record_name: str
+) -> list[dict[str, Any]] | None:
+    """`record_name` 힌트 — 시편 이름 통째(뒤에 시험 토막이 붙어 있어도)로 한 번에.
+
+    안 맞으면 `None` 을 돌려주고 보통 길로 간다 — 통째 이름이 틀렸다고 다른 힌트까지
+    버리지 않는다.
+    """
+    text = record_name.strip()
+    if not text:
+        return None
+    # `SECC_MDOI_1.0__01__MD_01__TEN_02` 처럼 시험 토막이 붙어 있으면 뗀다.
+    tries = [text]
+    if re.search(r"__[A-Z]{2,5}_\d+$", text):
+        tries.append(re.sub(r"__[A-Z]{2,5}_\d+$", "", text))
+    for name in tries:
+        specimen = db.scalar(
+            select(Specimen)
+            .join(Sample, Sample.id == Specimen.sample_id)
+            .where(
+                Specimen.record_name == name,
+                Specimen.deleted_at.is_(None),
+                Sample.workspace_id == workspace_id,
+            )
+        )
+        if specimen is None:
+            continue
+        sample = db.get(Sample, specimen.sample_id)
+        material = db.get(Material, sample.material_id) if sample else None
+        return [
+            {
+                "specimen_id": str(specimen.id),
+                "specimen_name": specimen.record_name,
+                "material_name": material.record_name if material else "?",
+                "sample_name": sample.record_name if sample else "?",
+                "reason": f"이름 통째 '{name}'",
+            }
+        ]
+    return None
+
+
 def find_candidates(
     db: Session,
     *,
@@ -320,14 +455,24 @@ def find_candidates(
         # 파일이 이긴다 — 장비가 적은 증거다. 이름은 사람이 붙인 이름표다.
         return (identity.get(file_key) or hints.get(hint_key) or "").strip()
 
+    # **통째 이름이 오면 그것부터.** 이름 규칙(ADR 0004)이 결정적이라 시편 이름 하나로
+    # 재료·시료·시편이 다 풀린다 — 파일명을 규칙대로 내는 장비는 이 키면 끝이다(2026-09-20).
+    whole = _whole_name_candidate(db, workspace_id, hints.get("record_name") or "")
+    if whole is not None:
+        return whole
+
     material_code = pick("material_grade", "material_code")
     lot = pick("sample_lot_no", "lot")
     specimen_name = pick("specimen_name", "specimen")
     orientation = pick("specimen_orientation", "orientation").upper()
     raw_seq = pick("specimen_seq_no", "specimen")
     seq = int(raw_seq) if raw_seq.isdigit() else None
+    # 파일이 안 준 것만 힌트로 — 아래 좁히기의 재료. 전부 문자열이다.
+    extra = {key: (hints.get(key) or "").strip() for key in HINT_KEYS}
+    if extra["specimen_seq"].isdigit():
+        seq = int(extra["specimen_seq"])
 
-    if not material_code:
+    if not material_code and not (extra["material_no"] or extra["legacy_id"]):
         return [
             {
                 "reason": (
@@ -349,12 +494,20 @@ def find_candidates(
                     Material.record_name == material_code,
                     Material.grade == material_code,
                     Material.alias == material_code,
+                    # 번호·옛 ID 는 이름보다 확실한 손잡이다 — 코드 없이도 이것으로 찾는다.
+                    Material.code == extra["material_no"] if extra["material_no"] else false(),
+                    Material.legacy_id == extra["legacy_id"]
+                    if extra["legacy_id"]
+                    else false(),
                 ),
             )
         )
     )
     if not materials:
-        return [{"reason": f"'{material_code}' 라는 재료가 없습니다. 재료를 먼저 만드세요."}]
+        asked = material_code or extra["material_no"] or extra["legacy_id"]
+        return [{"reason": f"'{asked}' 라는 재료가 없습니다. 재료를 먼저 만드세요."}]
+    materials, why = _narrow_materials(materials, extra)
+    reasons_material = why
 
     samples = list(
         db.scalars(
@@ -371,6 +524,7 @@ def find_candidates(
             samples = narrowed
         else:
             return [{"reason": f"'{material_code}' 에 로트 '{lot}' 인 시료가 없습니다."}]
+    samples, why_sample = _narrow_samples(samples, extra)
     if not samples:
         return [
             {"reason": f"'{material_code}' 에 시료가 없습니다. 시료와 시편을 먼저 만드세요."}
@@ -384,9 +538,18 @@ def find_candidates(
             )
         )
     )
-    reasons = [f"재료 '{material_code}'"]
+    reasons = [f"재료 '{material_code or extra['material_no'] or extra['legacy_id']}'"]
+    reasons += reasons_material
     if lot:
         reasons.append(f"로트 '{lot}'")
+    reasons += why_sample
+    if extra["standard"]:
+        by_standard = [
+            s for s in specimens if (s.standard or "").lower() == extra["standard"].lower()
+        ]
+        if by_standard:
+            specimens = by_standard
+            reasons.append(f"규격 '{extra['standard']}'")
     if specimen_name:
         # 전체 이름(`SECC_MDOI_1.0__01__MD_01`)이든 끝자리(`MD_01`)든 — 장비는 대개
         # 끝자리만 적는다.
@@ -596,13 +759,81 @@ def reference_tree(db: Session, *, workspace_id: uuid.UUID) -> dict[str, Any]:
 
 
 def _tested_at(item: PipelineInboxItem) -> datetime | None:
+    """시험일 — 파일 → 힌트 → **파일 수정 시각**. 마지막 보루는 봉투에 이미 있던 값이다.
+
+    `mtime` 을 받아 두고 안 쓰고 있었다(2026-09-20). 장비가 시험일을 안 적는 파일은 시험일이
+    비어 시간 추세 분석에서 빠졌는데, 파일이 쓰인 시각이 시험일에 가장 가깝다.
+    """
     raw = (item.summary.get("record") or {}).get("tested_at") or item.hints.get("tested_at")
+    if raw:
+        try:
+            return datetime.fromisoformat(str(raw))
+        except ValueError:
+            pass
+    return item.mtime
+
+
+#: 힌트 조건 → 표준 조건 키. 값의 단위는 값 끝에 붙어 온다(`80C`·`353K`·`85%`) — 없으면 관행.
+_HINT_CONDITIONS: tuple[tuple[str, str, str], ...] = (
+    ("temperature", "temperature", "degC"),
+    ("humidity", "humidity", "%"),
+)
+
+
+def _parse_condition_hint(raw: str, default_unit: str) -> tuple[float, str] | None:
+    """`80C` → (80, degC) · `353K` → (353, K) · `-40` → (-40, 기본 단위). 못 읽으면 `None`."""
+    text = raw.strip().replace("°", "")
+    match = re.match(r"^\s*([-+]?\d+(?:\.\d+)?)\s*([A-Za-z%]*)\s*$", text)
+    if not match:
+        return None
+    number, unit = float(match.group(1)), match.group(2)
+    unit_map = {
+        "": default_unit,
+        "c": "degC",
+        "degc": "degC",
+        "k": "K",
+        "%": "%",
+        "%rh": "%",
+        "rh": "%",
+    }
+    resolved = unit_map.get(unit.lower())
+    if resolved is None:
+        return None
+    return number, resolved
+
+
+def _hint_conditions(
+    db: Session, test_type: TestType, hints: dict[str, str]
+) -> tuple[dict[str, Any], dict[str, str]]:
+    """온도·습도 힌트를 이 시험 종류의 조건 칸에 맞춰 SI 로. **그 칸이 없으면 안 싣는다.**
+
+    온습도 챔버 시험은 온도가 폴더 이름이다(`\\80C\\`). 정의에 없는 조건을 억지로 넣으면
+    정체 모를 키가 쌓이므로, 종류의 조건 칸 중 표준 키(`canonical_key`)가 같은 것에만 넣는다.
+    """
+    fields = {
+        one.canonical_key: one
+        for one in conditions.condition_fields(db, test_type.id)
+        if one.canonical_key
+    }
+    raw: dict[str, Any] = {}
+    units: dict[str, str] = {}
+    for hint_key, standard_key, default_unit in _HINT_CONDITIONS:
+        value = (hints.get(hint_key) or "").strip()
+        field = fields.get(standard_key)
+        if not value or field is None:
+            continue
+        parsed = _parse_condition_hint(value, default_unit)
+        if parsed is None:
+            continue
+        raw[field.key] = parsed[0]
+        units[field.key] = parsed[1]
     if not raw:
-        return None
+        return {}, {}
     try:
-        return datetime.fromisoformat(str(raw))
-    except ValueError:
-        return None
+        return conditions.normalize_conditions(db, test_type, raw, units)
+    except AppError:
+        # 힌트가 틀린 것이지 파일이 틀린 것이 아니다 — 조건 없이 등록하고 사람이 채운다.
+        return {}, {}
 
 
 def register(
@@ -633,10 +864,16 @@ def register(
         tested_at=_tested_at(item),
         operator=record.get("operator") or item.hints.get("operator"),
         instrument=record.get("instrument") or item.hints.get("instrument"),
-        note=f"장비 커넥터로 들어옴: {item.client_path}",
+        division=record.get("division") or item.hints.get("division"),
+        note=_register_note(item),
         profile_id=item.profile_id,
         conflict_code="MNX-PIPE-0009",
     )
+    # 힌트의 조건(온도·습도)은 **이 종류에 그 칸이 있을 때만** 싣는다.
+    hinted, hinted_units = _hint_conditions(db, test_type, item.hints)
+    if hinted:
+        run.conditions = {**(run.conditions or {}), **hinted}
+        run.input_units = {**(run.input_units or {}), **hinted_units}
     item.test_run_id = run.id
     item.source_path = None
     item.status = "registered"
@@ -654,6 +891,18 @@ def register(
         changes={"inbox_item_id": str(item.id), "auto": actor is None},
     )
     return run
+
+
+def _register_note(item: PipelineInboxItem) -> str:
+    """등록 메모 — 경로와, 힌트 중 **칸이 없어 메모로만 남는 것**(재시험·의뢰 번호)."""
+    parts = [f"장비 커넥터로 들어옴: {item.client_path}"]
+    if item.hints.get("repeat"):
+        parts.append(f"재시험 표시: {item.hints['repeat']}")
+    if item.hints.get("commission"):
+        parts.append(
+            f"의뢰 #{item.hints['commission']} (커넥터 힌트 — 의뢰 화면에서 이으세요)"
+        )
+    return " · ".join(parts)
 
 
 def discard(db: Session, item: PipelineInboxItem, *, actor: User, reason: str) -> None:

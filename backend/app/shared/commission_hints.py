@@ -60,6 +60,7 @@ def for_specimens(
     specimen_ids: list[uuid.UUID],
     *,
     test_type_id: uuid.UUID | None = None,
+    preferred_seq: int | None = None,
 ) -> dict[uuid.UUID, Hint]:
     """시편 → 그 시편으로 답할 수 있는 의뢰 하나. **한 번에 읽는다**(N+1 을 안 만든다).
 
@@ -93,8 +94,13 @@ def for_specimens(
         )
         # 같은 의뢰 안에서는 **종류가 맞은 항목이 먼저**다 — 아직 종류를 안 정한
         # 항목이 앞에 서면, 바로 이을 수 있는 줄을 두고 못 잇는 줄을 가리킨다.
+        # 커넥터가 의뢰 번호를 힌트로 줬으면(`\\의뢰-12\\`) 그 번호가 맨 앞이다 — 잇지는
+        # 않는다, 먼저 보일 뿐이다.
         .order_by(
-            Commission.seq, CommissionItem.test_type_id.is_(None), CommissionItem.position
+            (Commission.seq != preferred_seq) if preferred_seq is not None else Commission.seq,
+            Commission.seq,
+            CommissionItem.test_type_id.is_(None),
+            CommissionItem.position,
         )
     ).all()
     if not found:

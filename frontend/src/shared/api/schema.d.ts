@@ -11686,20 +11686,54 @@ export interface components {
          * @description 에이전트가 파일 이름에서 뽑은 **힌트.** 확정이 아니다.
          */
         Hints: {
+            /** Commission */
+            commission?: string | null;
+            /** Details */
+            details?: string | null;
+            /** Division */
+            division?: string | null;
+            /** Humidity */
+            humidity?: string | null;
             /** Instrument */
             instrument?: string | null;
+            /** Legacy Id */
+            legacy_id?: string | null;
             /** Lot */
             lot?: string | null;
+            /** Manufacturer */
+            manufacturer?: string | null;
             /** Material Code */
             material_code?: string | null;
+            /** Material No */
+            material_no?: string | null;
             /** Operator */
             operator?: string | null;
             /** Orientation */
             orientation?: string | null;
+            /** Production Date */
+            production_date?: string | null;
+            /** Record Name */
+            record_name?: string | null;
+            /** Repeat */
+            repeat?: string | null;
+            /** Sample */
+            sample?: string | null;
+            /** Sample Alias */
+            sample_alias?: string | null;
             /** Specimen */
             specimen?: string | null;
+            /** Specimen Seq */
+            specimen_seq?: string | null;
+            /** Standard */
+            standard?: string | null;
+            /** Temperature */
+            temperature?: string | null;
+            /** Test Type */
+            test_type?: string | null;
             /** Tested At */
             tested_at?: string | null;
+            /** Thickness */
+            thickness?: string | null;
         };
         /**
          * HomeWorkspaceRequest

@@ -421,10 +421,12 @@ def _detail(db: Session, item: PipelineInboxItem) -> InboxItemDetail:
     # **누가 재 달라고 한 것인지**를 여기서 붙인다(2026-09-18). 안 붙이면 사람은
     # 시편에 붙인 뒤 의뢰 화면으로 건너가 어느 건인지 스스로 떠올려야 하고, 그
     # 왕복을 안 하면 의뢰는 「시험 중」 인 채로 서 있는다.
+    asked = str(item.hints.get("commission") or "").strip().lstrip("#")
     hints = commission_hints.for_specimens(
         db,
         [uuid.UUID(one["specimen_id"]) for one in item.candidates],
         test_type_id=item.test_type_id,
+        preferred_seq=int(asked) if asked.isdigit() else None,
     )
     return InboxItemDetail(
         **fields,

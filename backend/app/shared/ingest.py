@@ -65,10 +65,22 @@ def _extensions(parser_key: str | None) -> list[str]:
     return [str(one).lower() for one in plugin.meta.get("extensions", ())]
 
 
-def detect(db: Session, *, workspace_id: uuid.UUID, filename: str, data: bytes) -> Detected:
+def detect(
+    db: Session,
+    *,
+    workspace_id: uuid.UUID,
+    filename: str,
+    data: bytes,
+    preferred_type_key: str | None = None,
+) -> Detected:
     """어느 시험 종류인가. **프로파일의 지문이 먼저, 확장자는 그다음.**
 
     `.csv` 는 어느 장비나 쓰지만 헤더의 열 이름은 그 장비의 것이다.
+
+    `preferred_type_key`(커넥터의 `test_type` 힌트, 2026-09-20)는 **순서만** 바꾼다 — 그
+    종류의 프로파일을 먼저 대 본다. 같은 파일 형식으로 인장·압축을 다 내는 장비는 지문이
+    둘 다 맞는데, 그때 폴더 이름(`\\tensile\\`)이 더 확실하다. 지문이 안 맞는 프로파일을
+    힌트로 밀어 넣지는 않는다 — 파싱은 프로파일의 것이라 틀리면 읽기가 조용히 어긋난다.
     """
     suffix = filename[filename.rfind(".") :].lower() if "." in filename else ""
 
@@ -94,6 +106,11 @@ def detect(db: Session, *, workspace_id: uuid.UUID, filename: str, data: bytes) 
         structure = readers.sniff(data)
     except readers.ReadError:
         structure = None
+
+    if preferred_type_key:
+        preferred = db.scalar(select(TestType).where(TestType.key == preferred_type_key))
+        if preferred is not None:
+            candidates.sort(key=lambda one: one.test_type_id != preferred.id)
 
     if structure is not None:
         for candidate in candidates:
@@ -162,6 +179,7 @@ def create_run(
     tested_at: datetime | None = None,
     operator: str | None = None,
     instrument: str | None = None,
+    division: str | None = None,
     note: str | None = None,
     profile_id: uuid.UUID | None = None,
     conflict_code: str,
@@ -197,7 +215,7 @@ def create_run(
             db,
             made,
             vocabulary_services.TEST_RUN_BINDINGS,
-            {"instrument": instrument},
+            {"instrument": instrument, "division": division},
             created_by_id=registered_by_id,
         )
         db.add(made)

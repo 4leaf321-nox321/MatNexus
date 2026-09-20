@@ -80,12 +80,29 @@ class Hints(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     material_code: str | None = None
+    material_no: str | None = None
+    thickness: str | None = None
+    details: str | None = None
+    legacy_id: str | None = None
     lot: str | None = None
+    sample: str | None = None
+    sample_alias: str | None = None
+    manufacturer: str | None = None
+    production_date: str | None = None
     specimen: str | None = None
+    specimen_seq: str | None = None
     orientation: str | None = None
+    standard: str | None = None
+    test_type: str | None = None
+    temperature: str | None = None
+    humidity: str | None = None
+    commission: str | None = None
+    repeat: str | None = None
+    division: str | None = None
     tested_at: str | None = None
     operator: str | None = None
     instrument: str | None = None
+    record_name: str | None = None
 
     def compact(self) -> dict[str, str]:
         """빈 것을 뺀다. 저장할 때 `null` 이 일곱 개 늘어서는 것은 정보가 아니다."""

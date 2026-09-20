@@ -63,16 +63,44 @@ INBOX_STATUSES = (
 #: 사람이 손댈 수 없는 끝 상태. 붙이기·버리기·다시 파싱이 여기서는 409 다.
 FINAL_STATUSES = ("registered", "discarded")
 
-#: 에이전트가 보내는 힌트의 키. **이 일곱 개만 받는다** — 나머지는 버린다.
-#: 힌트는 확정이 아니라 후보를 좁히는 재료다.
+#: 에이전트가 보내는 힌트의 키. **여기 있는 것만 받는다** — 나머지는 버린다.
+#: 힌트는 확정이 아니라 후보를 좁히는 재료다. 계약의 정본은 MatPylon 의
+#: `matpylon-openapi.yaml` 이고 `src/shared/hint-keys.ts` 가 같은 목록을 든다 —
+#: 한쪽만 늘리면 에이전트가 뽑아 보낸 것을 서버가 조용히 버린다.
+#:
+#: 일곱에서 스물넷으로 늘린 까닭(2026-09-20): 파일 **밖**(폴더·파일명)에 있는 정보가
+#: 재료·시료·시편 모델의 칸과 하나씩 맞는데, 받을 자리가 없어 `needs_specimen` 으로
+#: 떨어졌다 — 같은 등급 다른 두께가 흔한데 `material_code` 만으로는 후보가 여럿이다.
 HINT_KEYS = (
+    # 재료
     "material_code",
+    "material_no",  # M-000123 — 이름은 개명을 따라 바뀌지만 번호는 안 바뀐다
+    "thickness",  # 재료 이름의 두께 토막(mm). 같은 등급 다른 두께를 가른다
+    "details",  # 재료 이름의 가운데 토막(MDOI …)
+    "legacy_id",  # 옛 시스템 ID — 재료 또는 시료
+    # 시료
     "lot",
-    "specimen",
+    "sample",  # 시료 번호(01) 또는 이름
+    "sample_alias",
+    "manufacturer",
+    "production_date",
+    # 시편
+    "specimen",  # 이름 전체든 끝자리(MD_01)든
+    "specimen_seq",
     "orientation",
+    "standard",
+    # 시험
+    "test_type",  # 프로파일 감지가 갈릴 때 그 종류의 프로파일을 먼저 본다
+    "temperature",  # 80C · -40 · 353K — 단위 없으면 °C
+    "humidity",  # 85 · 85%RH
+    "commission",  # 의뢰 번호 — 잇지는 않고 그 건을 먼저 귀띔한다
+    "repeat",  # 재시험 표시(r2 …) — 메모에 남는다
+    "division",
     "tested_at",
     "operator",
     "instrument",
+    # 통째
+    "record_name",  # SECC_MDOI_1.0__01__MD_01(__TEN_02) — 이름 규칙(ADR 0004)으로 한 번에
 )
 
 

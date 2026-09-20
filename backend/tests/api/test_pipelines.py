@@ -13,6 +13,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import uuid
 from pathlib import Path
 from typing import Any
@@ -778,6 +779,146 @@ class Test의뢰_귀띔:
     ) -> None:
         detail = self._detail(client, admin_headers, suggested["id"])
         assert detail["candidates"] and detail["candidates"][0]["commission"] is None
+
+
+class Test파일_밖의_힌트:
+    """**파일 밖(폴더·파일명)에 있는 정보를 받는다**(2026-09-20).
+
+    일곱 키만 받던 때, 같은 등급 다른 두께가 흔한데 `material_code` 만으로는 후보가 여럿이라
+    `needs_specimen` 으로 떨어졌다. 재료·시료·시편 모델의 칸과 하나씩 맞는 키를 열어 두고,
+    있으면 그대로 저장하고 좁히는 데 쓴다.
+
+    무는 것:
+
+        두께가 재료를 가른다          SECC 1.0 과 0.8 — thickness=0.8 이면 하나
+        통째 이름이 한 번에 푼다      record_name 하나로 시편까지
+        조건이 시험에 실린다          temperature=80C → 시험 조건 353.15 K
+        시험일의 마지막 보루          파일이 안 적었으면 mtime
+        의뢰 번호는 먼저 보일 뿐      commission=12 — 잇지는 않는다
+    """
+
+    @pytest.fixture
+    def two_thicknesses(
+        self, client: TestClient, admin_headers: dict[str, str], specimen: dict[str, Any]
+    ) -> dict[str, Any]:
+        """SECC 1.0(기본 fixture) 옆에 SECC 0.8 을 하나 더 — 시료·시편까지."""
+        thin = client.post(
+            "/api/materials", json={**SECC, "spec_thickness": 0.8}, headers=admin_headers
+        ).json()
+        sample = client.post(
+            f"/api/materials/{thin['id']}/samples", json={}, headers=admin_headers
+        ).json()
+        made: dict[str, Any] = client.post(
+            f"/api/samples/{sample['id']}/specimens",
+            json={"orientation": "MD"},
+            headers=admin_headers,
+        ).json()
+        return made
+
+    def test_두께가_재료를_가른다(
+        self,
+        client: TestClient,
+        db: Session,
+        pat: dict[str, str],
+        connector: dict[str, Any],
+        specimen: dict[str, Any],
+        two_thicknesses: dict[str, Any],
+        tensile: None,
+    ) -> None:
+        # 두께 없이 — 같은 등급이 둘이라 후보가 여럿이다.
+        vague = _send(
+            client,
+            pat,
+            connector["id"],
+            hints='{"material_code": "SECC", "orientation": "MD"}',
+        ).json()
+        _run_worker(db, kinds.PIPELINES_PARSE_INBOX)
+        item = db.get(PipelineInboxItem, uuid.UUID(vague["id"]))
+        assert item is not None and item.status == "needs_specimen"
+        assert len(item.candidates) == 2
+
+        # 두께를 주면 하나로 좁혀 승인 대기까지 간다. `0.8t` 처럼 폴더식 표기도 읽는다.
+        sharp = _send(
+            client,
+            pat,
+            connector["id"],
+            content=TRA.read_bytes() + b"\n",  # 내용 해시가 달라야 두 번째 파일로 받는다
+            hints='{"material_code": "SECC", "orientation": "MD", "thickness": "0.8t"}',
+        ).json()
+        _run_worker(db, kinds.PIPELINES_PARSE_INBOX)
+        item = db.get(PipelineInboxItem, uuid.UUID(sharp["id"]))
+        assert item is not None
+        assert item.status == "suggested", item.error
+        assert item.candidates[0]["specimen_id"] == two_thicknesses["id"]
+        assert "두께 0.8t" in item.candidates[0]["reason"]
+        # 받은 힌트는 **그대로** 저장된다 — 나중에 사람이 왜 이렇게 붙었는지 본다.
+        assert item.hints["thickness"] == "0.8t"
+
+    def test_통째_이름이_한_번에_푼다(
+        self,
+        client: TestClient,
+        db: Session,
+        pat: dict[str, str],
+        connector: dict[str, Any],
+        specimen: dict[str, Any],
+        two_thicknesses: dict[str, Any],
+        tensile: None,
+    ) -> None:
+        """시험 토막(`__TEN_02`)이 붙어 있어도 뗀다 — 장비가 시험 이름을 파일명으로 낸다."""
+        name = str(two_thicknesses["record_name"]) + "__TEN_02"
+        received = _send(
+            client, pat, connector["id"], hints=json.dumps({"record_name": name})
+        ).json()
+        _run_worker(db, kinds.PIPELINES_PARSE_INBOX)
+        item = db.get(PipelineInboxItem, uuid.UUID(received["id"]))
+        assert item is not None
+        assert item.status == "suggested", item.error
+        assert item.candidates[0]["specimen_id"] == two_thicknesses["id"]
+        assert "이름 통째" in item.candidates[0]["reason"]
+
+    def test_조건과_부서가_시험에_실리고_시험일은_mtime_이_보루다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        pat: dict[str, str],
+        connector: dict[str, Any],
+        specimen: dict[str, Any],
+        tensile: None,
+    ) -> None:
+        received = _send(
+            client,
+            pat,
+            connector["id"],
+            hints=json.dumps(
+                {
+                    "material_code": "SECC",
+                    "orientation": "MD",
+                    "specimen": "1",
+                    "temperature": "80C",
+                    "division": "MX",
+                    "repeat": "r2",
+                    "commission": "12",
+                }
+            ),
+        ).json()
+        _run_worker(db, kinds.PIPELINES_PARSE_INBOX)
+        done = client.post(
+            f"/api/pipelines/inbox/{received['id']}/approve", headers=admin_headers
+        )
+        assert done.status_code == 200, done.text
+        run = db.scalar(select(TestRun).order_by(TestRun.created_at.desc()))
+        assert run is not None
+        # 80 °C → 353.15 K, 입력 단위는 남는다.
+        assert run.conditions.get("temperature") == pytest.approx(353.15)
+        assert run.input_units.get("temperature") == "degC"
+        assert run.division == "MX"
+        # 칸이 없는 힌트(재시험·의뢰 번호)는 메모로 남는다 — 잇지는 않는다.
+        assert "재시험 표시: r2" in (run.note or "")
+        assert "의뢰 #12" in (run.note or "")
+        assert run.commission_item_id is None
+        # 파일도 힌트도 시험일을 안 줬다 — 봉투의 mtime 이 시험일이다.
+        assert run.tested_at is not None and run.tested_at.year == 2026
 
 
 class Test승인_대기:
