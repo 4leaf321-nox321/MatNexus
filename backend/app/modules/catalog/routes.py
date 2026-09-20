@@ -1708,6 +1708,8 @@ def search_by_property(
         near=near,
         convert=not grouped and not raw_scale,
     )
+    # 「근처」 로 물었으면 **가까운 순**이다 — 창의 아래쪽부터 주면 근처를 못 본다(`rank`).
+    center = (low + high) / 2 if near is not None else None
 
     cond: property_search.ConditionFilter | None = None
     if condition is not None:
@@ -1768,6 +1770,7 @@ def search_by_property(
             term=term,
             convert=not grouped and not raw_scale,
             condition=cond,
+            center=center,
             min_tier=min_tier,
         )
     if scope in ("all", "internal") and grouped:
@@ -1787,6 +1790,7 @@ def search_by_property(
                 convert=not raw_scale,
                 condition=cond,
                 min_tier=min_tier,
+                center=center,
             )
         if chosen.item_filters and (wanted_worlds is None or "internal" in wanted_worlds):
             for item, scale in chosen.item_filters:
@@ -1802,6 +1806,7 @@ def search_by_property(
                     convert=not raw_scale,
                     condition=cond,
                     min_tier=min_tier,
+                    center=center,
                 )
         else:
             # **못 찾은 게 아니라 이어져 있지 않은 것이다.** 그 차이를 말한다.
@@ -1810,7 +1815,7 @@ def search_by_property(
                 "이어져 있지 않습니다(물성 매핑에서 이을 수 있습니다)."
             )
 
-    hits.sort(key=lambda one: one.value_si)
+    hits.sort(key=property_search.rank(center))
     return PropertySearchOut(
         query=q,
         resolved=PropertyCandidateOut(**property_names.describe([chosen])["candidates"][0]),

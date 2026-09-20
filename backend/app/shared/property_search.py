@@ -223,6 +223,19 @@ def same_symbol(asked: str, si_unit: str | None) -> bool:
     return units.loose_key(asked) == units.loose_key(si_unit)
 
 
+def rank(center: float | None) -> Any:
+    """결과를 **무엇에 가까운 순**으로 세울지 — `near` 를 줬으면 그 값에서 가까운 순.
+
+    실측(기준선 5차, 2026-09-20): 「탄성계수 200 GPa 근처」 를 `near=200, limit=20` 으로
+    물으면 180~220 창의 **아래쪽 20개**(180.x 부터)가 왔다. 값 오름차순이라서다. AI 는
+    200 근처를 못 보고 창을 195~205, 199~201 로 좁혀 세 번 더 불렀다 — 네 문항이
+    그렇게 예산을 넘겼다. 「근처」 라고 물었으면 가까운 것부터가 답이다.
+    """
+    if center is None:
+        return lambda one: one.value_si
+    return lambda one: abs(one.value_si - center)
+
+
 def catalog_hits(
     db: Session,
     *,
@@ -235,6 +248,7 @@ def catalog_hits(
     convert: bool = True,
     condition: ConditionFilter | None = None,
     min_tier: int | None = None,
+    center: float | None = None,
 ) -> list[Hit]:
     """문헌 값에서 찾는다.
 
@@ -253,7 +267,11 @@ def catalog_hits(
             CatalogValue.value_num >= low,
             CatalogValue.value_num <= high,
         )
-        .order_by(CatalogValue.value_num)
+        .order_by(
+            func.abs(CatalogValue.value_num - center)
+            if center is not None
+            else CatalogValue.value_num
+        )
         .limit(limit)
     )
     if term:
@@ -319,6 +337,7 @@ def measured_hits(
     convert: bool = True,
     condition: ConditionFilter | None = None,
     min_tier: int | None = None,
+    center: float | None = None,
 ) -> list[Hit]:
     """**시험으로 잰 값**에서 찾는다 — 채택된 처리 결과의 스칼라.
 
@@ -354,7 +373,7 @@ def measured_hits(
             scalar_value >= low,
             scalar_value <= high,
         )
-        .order_by(scalar_value)
+        .order_by(func.abs(scalar_value - center) if center is not None else scalar_value)
         .limit(MAX_ROWS)
     )
     if visible is not None:
@@ -412,7 +431,7 @@ def measured_hits(
                 method=method,
             )
         )
-    made.sort(key=lambda one: one.value_si)
+    made.sort(key=rank(center))
     return made[:limit]
 
 
@@ -475,6 +494,7 @@ def internal_hits(
     convert: bool = True,
     condition: ConditionFilter | None = None,
     min_tier: int | None = None,
+    center: float | None = None,
 ) -> list[Hit]:
     """사내 재료의 선언 물성에서 찾는다.
 
@@ -556,7 +576,7 @@ def internal_hits(
                         )
                     )
                     break
-    made.sort(key=lambda one: one.value_si)
+    made.sort(key=rank(center))
     return made[:limit]
 
 

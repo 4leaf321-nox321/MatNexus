@@ -269,6 +269,47 @@ class Test등급:
         assert bad.status_code == 422
 
 
+class Test근처:
+    """**「근처」 로 물었으면 가까운 순이다.**
+
+    실측(기준선 5차, 2026-09-20): 「탄성계수 200 GPa 근처」 를 `near=200, limit=20` 으로
+    물으니 180~220 창의 **아래쪽 20개**가 왔다 — 값 오름차순이라서다. AI 는 200 근처를 못
+    보고 창을 195~205, 199~201 로 좁혀 세 번 더 불렀다. 네 문항이 그렇게 예산을 넘겼다.
+    """
+
+    def test_near_는_가까운_것부터_주고_limit_이_먼_것을_자른다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        yield_def: CatalogDefinition,
+    ) -> None:
+        # 창(±10 %) 안에 셋: 아래쪽 끝·한가운데·위쪽. limit=2 면 **가운데와 가까운 하나**.
+        _catalog(db, name="LOW", value=182e6, conditions={}, tier=2)
+        _catalog(db, name="MID", value=201e6, conditions={}, tier=2)
+        _catalog(db, name="HIGH", value=215e6, conditions={}, tier=2)
+        got = client.get(
+            "/api/catalog/properties/search",
+            params={"q": KEY, "unit": "MPa", "near": 200, "limit": 2},
+            headers=admin_headers,
+        )
+        assert got.status_code == 200, got.text
+        names = [one["material_name"] for one in got.json()["hits"]]
+        assert names == ["MID", "HIGH"], names  # 값 오름차순이었으면 LOW, MID 가 왔다
+
+    def test_범위로_물으면_전처럼_값_순이다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        yield_def: CatalogDefinition,
+    ) -> None:
+        _catalog(db, name="B", value=300e6, conditions={}, tier=2)
+        _catalog(db, name="A", value=200e6, conditions={}, tier=2)
+        names = [one["material_name"] for one in _search(client, admin_headers)["hits"]]
+        assert names == ["A", "B"]
+
+
 def test_선언_물성의_등급은_출처가_정한다() -> None:
     from app.shared import tiers
 

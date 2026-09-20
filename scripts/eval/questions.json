@@ -495,7 +495,9 @@
       "must_mention": [
         [
           "단위계",
-          "단위"
+          "단위",
+          "mm_n_tonne",
+          "tonne"
         ],
         [
           "mm",

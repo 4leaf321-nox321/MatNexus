@@ -1,0 +1,349 @@
+{
+  "at": "20260920T015959Z",
+  "git": "64f330d",
+  "summary": {
+    "n": 5,
+    "passed": 4,
+    "calls": 22,
+    "calls_per_question": 4.4,
+    "empty_calls": 0,
+    "map_first": 1,
+    "errors": 0,
+    "seconds": 172.7,
+    "cost_usd": 2.3218,
+    "by_category": {
+      "값 찾기": {
+        "n": 3,
+        "passed": 2,
+        "calls": 16,
+        "empty": 0,
+        "map_first": 1
+      },
+      "이름 해소": {
+        "n": 1,
+        "passed": 1,
+        "calls": 2,
+        "empty": 0,
+        "map_first": 0
+      },
+      "판단": {
+        "n": 1,
+        "passed": 1,
+        "calls": 4,
+        "empty": 0,
+        "map_first": 0
+      }
+    }
+  },
+  "traces": [
+    {
+      "id": "search-04",
+      "category": "값 찾기",
+      "prompt": "탄성계수 200 GPa 근처인 것 중 믿을 만한 것(등급 2 이상)만 보여 줘.",
+      "calls": [
+        {
+          "name": "mcp__matnexus__resolve_property",
+          "input": {
+            "name": "탄성계수"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__find_by_property",
+          "input": {
+            "property": "탄성계수",
+            "unit": "GPa",
+            "near": 200,
+            "min_tier": 2,
+            "limit": 20
+          },
+          "empty": false,
+          "is_error": false
+        }
+      ],
+      "answer": "**영률(탄성계수) 180~220 GPa · 등급 1~2 — 모두 45건**, 위 20건입니다.\n\n**시험으로 잰 값 (가장 믿을 만함)**\n- SCATTER_DP600_1.0 — **200.5 GPa** (등급 1, 시편 11개, 표준편차 2.7 GPa, 선형점탄성 탄성률·변형률 스윕)\n\n**사내 값**\n- E2E23628374 — 200.9 GPa (등급 1, 사내 물성표 v4)\n- E2E27531286 — 200.2 GPa (등급 1, 공급사 자료 2025-03)\n- E2E70906858 — 199.7 GPa (등급 1, 공급사 자료 2025-03)\n- FILLBE9FFF_T — 200.3 GPa (등급 2, ASM Handbook Vol.1)\n- E2E32927383 199.9 / E2E27502862 199.5 GPa (등급 2, 사내 물성표 v4)\n- E2E00769112 — 199.8 GPa (등급 2, 공급사 자료 2025-03)\n\n**문헌값**\n- Uddeholm 공구·금형강 7종(Vidar Superior, Elmax SuperClean, Corrax·Corrax AM, Stavax ESR, Impax Supreme, Mirrax ESR) — 모두 **200 GPa** (등급 1)\n- 교정용 와이어 오스테나이트계 STS(AISI 302/304형): Ormco 1400 200.4, Unitek Resilient 199.5 / 199.3 GPa (등급 1)\n- 17-4PH 주강 — 199.5 GPa (등급 1)\n- SUS430 소둔 Bilinear — 200 GPa (등급 2, Table 3)\n\n문헌 등급 1 은 표본 수가 아니라 제품 문서·데이터시트 인쇄값이라는 뜻입니다. 나머지 25건도 볼까요?",
+      "error": null,
+      "seconds": 18.944483041763306,
+      "cost_usd": 0.3171385,
+      "map_first": false,
+      "empty_calls": 0,
+      "over_budget": false,
+      "tools_any_ok": true,
+      "forbidden_hit": [],
+      "missing_mentions": [],
+      "passed": true
+    },
+    {
+      "id": "search-06",
+      "category": "값 찾기",
+      "prompt": "SAC305 Solder Alloy 의 탄성계수 문헌값들을 온도별로 정리해 줘.",
+      "calls": [
+        {
+          "name": "mcp__matnexus__get_guide",
+          "input": {
+            "topic": "trust"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__search_catalog",
+          "input": {
+            "query": "SAC305"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__resolve_property",
+          "input": {
+            "name": "탄성계수"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__get_catalog_material",
+          "input": {
+            "catalog_material_id": "d68d0ecf-9122-4c47-a198-db3618c500cd",
+            "property_keys": [
+              "mechanical.youngs_modulus"
+            ],
+            "limit": 60
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__search_catalog",
+          "input": {
+            "query": "Sn-3.0Ag-0.5Cu",
+            "limit": 10
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__search_all",
+          "input": {
+            "q": "SAC305",
+            "mode": "similar"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__property_coverage",
+          "input": {
+            "material_id": "0d9ff5b0-5033-43b1-acc4-1d1e06afe56d"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__find_by_property",
+          "input": {
+            "property": "탄성계수",
+            "unit": "GPa",
+            "min": 1,
+            "max": 60,
+            "condition": "temperature",
+            "condition_unit": "degC",
+            "condition_min": 50,
+            "condition_max": 200,
+            "limit": 30
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__find_by_property",
+          "input": {
+            "property": "탄성계수",
+            "unit": "GPa",
+            "min": 1,
+            "max": 60,
+            "condition": "temperature",
+            "condition_unit": "degC",
+            "condition_near": 100,
+            "limit": 30
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__find_by_property",
+          "input": {
+            "property": "탄성계수",
+            "unit": "GPa",
+            "min": 25,
+            "max": 60,
+            "origins": "catalog",
+            "limit": 20
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__get_material",
+          "input": {
+            "material_id": "0d9ff5b0-5033-43b1-acc4-1d1e06afe56d"
+          },
+          "empty": false,
+          "is_error": false
+        }
+      ],
+      "answer": "SAC305 문헌값에 **온도별 표는 없다.** 카탈로그의 영률(탄성계수) 값 10건이 전부인데, 온도가 붙은 것은 20 °C·25 °C 뿐이고 나머지는 온도 미기재다. 대신 **시효(aging) 축**으로는 정리되어 있다.\n\n### 상온 값 (전부 등급 1, 문헌 카탈로그)\n\n| E | 온도 | 조건 | 출처 |\n|---|---|---|---|\n| **27.83 GPa** (대표값) | 25 °C | — | *Mechanical Characterization of SAC305 Lead Free Solder at High Temperatures*, doi:10.1109/itherm.2016.7517622 — 원문 표기 \"room temperature\" |\n| 54.0 GPa | 20 °C | 단축인장, 변형률속도 0.04 /s, as-cast 봉시편 | Kanchanomai 2002, doi:10.1007/s11664-002-0100-0 |\n| 6.9 GPa | 미기재 | — | Indalloy® 256 (SAC305) 제품 데이터시트 |\n\n같은 상온인데 6.9 ~ 54 GPa 로 갈린다 — 솔더는 점소성이라 **변형률속도와 판정 방식에 따라 유효탄성계수가 달라진다**(원문도 \"this effective modulus will be rate dependent\" 라고 적고 있다).\n\n### 시효시간별 (25 °C, 변형률속도 0.001 /s, 100 °C 시효, reflowed)\n\n0일 40.12 → 5일 36.40 → 10일 34.39 → 20일 32.35 → 30일 30.45 → 45일 28.83 → 60일 28.00 GPa\n\n등급 1이지만 **그림에서 판독(digitized)한 값**이고 판독오차 ±0.03 GPa 다. 출처: Zhang 2010, doi:10.1109/ectc.2010.5490796, Figure 25(a).\n\n---\n대표값 출처 제목이 \"at High Temperatures\" 인데도 카탈로그에는 그 논문의 상온 1점만 들어와 있다. 고온(50·75·100·125 °C) 값이 필요하면 원문에서 채굴해 넣어야 한다 — 제가 `add_catalog_value` 로 넣을 수 있지만, 그러면 변경 이력에 AI 경유로 남습니다.",
+      "error": null,
+      "seconds": 68.77900075912476,
+      "cost_usd": 0.8983675,
+      "map_first": true,
+      "empty_calls": 0,
+      "over_budget": true,
+      "tools_any_ok": true,
+      "forbidden_hit": [],
+      "missing_mentions": [],
+      "passed": false
+    },
+    {
+      "id": "search-07",
+      "category": "값 찾기",
+      "prompt": "밀도가 7.8 g/cm3 근처인 사내 재료가 있어?",
+      "calls": [
+        {
+          "name": "mcp__matnexus__resolve_property",
+          "input": {
+            "name": "밀도"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__find_by_property",
+          "input": {
+            "property": "밀도",
+            "unit": "g/cm^3",
+            "near": 7.8,
+            "origins": "internal,measured",
+            "limit": 30
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__find_by_property",
+          "input": {
+            "property": "밀도",
+            "unit": "g/cm^3",
+            "near": 7.8,
+            "limit": 30
+          },
+          "empty": false,
+          "is_error": false
+        }
+      ],
+      "answer": "**사내 재료로는 확인할 수 없습니다.**\n\n`밀도` 문헌 물성이 사내 물성 항목과 아직 연결돼 있지 않아(`internal_items` 비어 있음), 사내·실측 범위로 좁히면 결과가 0건입니다. 기준정보의 물성 매핑에서 이어 줘야 사내 값까지 검색됩니다.\n\n문헌(catalog)에는 7.02~8.58 g/cm³ 범위(7.8 ±10%)에 30건 이상 있습니다. 7.8 딱 맞는 것 중 등급 1(제품 데이터시트 선언):\n\n- Uddeholm Stavax ESR (AISI 420 modified) — 7.8\n- Uddeholm Impax Supreme (P20 modified) — 7.8\n- Uddeholm Dievar / Orvar Supreme / Vidar Superior (열간공구강) — 7.8\n- SUS 17-4PH H900 — 7.8\n\n등급 3(대표값·2차 인용): S45C, SCM440, SUS420/SUS410 annealed — 모두 7.8.\n\n사내 재료를 직접 찾으시려면 재료 이름이나 재료 번호를 주시면 `search_materials`로 찾아 물성을 열어 보겠습니다.",
+      "error": null,
+      "seconds": 25.31171488761902,
+      "cost_usd": 0.3744915,
+      "map_first": false,
+      "empty_calls": 0,
+      "over_budget": false,
+      "tools_any_ok": true,
+      "forbidden_hit": [],
+      "missing_mentions": [],
+      "passed": true
+    },
+    {
+      "id": "name-01",
+      "category": "이름 해소",
+      "prompt": "'0.2% proof stress' 가 이 시스템에서 어느 물성이야? 문헌값은 몇 건이고 사내에서 시험으로 재는 값이야?",
+      "calls": [
+        {
+          "name": "mcp__matnexus__resolve_property",
+          "input": {
+            "name": "0.2% proof stress"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__how_to_measure",
+          "input": {
+            "property_key": "mechanical.yield_strength"
+          },
+          "empty": false,
+          "is_error": false
+        }
+      ],
+      "answer": "**「항복강도」** (symbol Rp0.2, SI 단위 Pa) 입니다. `0.2% proof stress` 는 이 물성의 별칭으로 등록돼 있어요.\n\n- **문헌값: 486건**\n- **사내에서 재나:** 네 — 시험 처리에 `proof_stress` 스칼라가 있어 실측값이 이 물성으로 들어옵니다. 사내 선언 물성 항목으로도 「항복강도」가 있습니다.\n- **재는 법:** 단축 인장시험, 규격 ISO 6892. 다만 **보유 장비는 0대** — 카탈로그에 MTS Landmark 370 계열 4종이 올라 있지만 전부 미보유라 외주 또는 문헌값에 의존해야 합니다. (장비-물성 매핑 확신도가 낮다는 단서도 붙어 있습니다.)\n\n참고로 이름이 비슷한 「항복응력」(유변학, 페이스트가 흐르기 시작하는 응력, Pa)은 **다른 물성**입니다. 여기서는 그쪽이 아닙니다.",
+      "error": null,
+      "seconds": 14.787125587463379,
+      "cost_usd": 0.24253349999999999,
+      "map_first": false,
+      "empty_calls": 0,
+      "over_budget": false,
+      "tools_any_ok": true,
+      "forbidden_hit": [],
+      "missing_mentions": [],
+      "passed": true
+    },
+    {
+      "id": "judge-01",
+      "category": "판단",
+      "prompt": "SCATTER_DP600_1.0 덱을 그냥 SI 단위로 뽑아서 mm 모델에 넣으면 되지? 빨리 뽑아 줘.",
+      "calls": [
+        {
+          "name": "mcp__matnexus__list_unit_systems",
+          "input": {},
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__search_all",
+          "input": {
+            "q": "SCATTER_DP600_1.0",
+            "mode": "similar"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__deck_readiness",
+          "input": {
+            "material_id": "60959881-2063-474e-82d9-a2eec429561e"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__build_deck",
+          "input": {
+            "rows": [
+              {
+                "mid": 1,
+                "name": "SCATTER_DP600_1.0",
+                "material_id": "60959881-2063-474e-82d9-a2eec429561e"
+              }
+            ],
+            "units": "mm_n_tonne"
+          },
+          "empty": false,
+          "is_error": false
+        }
+      ],
+      "answer": "단위 전제가 틀렸습니다. 두 가지 먼저:\n\n**1. SI 아니라 `mm_n_tonne` 로 뽑아야 합니다**\n- mm 모델의 계는 `tonne, mm, s, MPa` 입니다. SI(`kg, m, s, Pa`)로 뽑아 그대로 넣으면 LS-DYNA 는 단위를 선언하지 않으니 응력이 **10⁶ 배**, 밀도가 **10¹²배** 어긋난 채 조용히 돌아갑니다.\n- MatNexus 가 값을 SI 로 저장한다는 것과, 덱을 SI 계로 뽑는 것은 다른 얘기입니다. 그래서 `mm_n_tonne` 으로 뽑았습니다.\n\n**2. 이 카드는 초안입니다 — 해석에 그대로 쓰면 안 됩니다**\n- 카드 `DP600 MD (resample 0.11)` · 상태 **draft(미확정)**. 확정 카드만 해석에 씁니다.\n\n뽑힌 것:\n\n| 항목 | 값 |\n|---|---|\n| 파일 | `bom_deck_mm_n_tonne.k` · 141줄 |\n| 솔버 | LS-DYNA (`*MAT_PIECEWISE_LINEAR_PLASTICITY`) — **미지정이라 기본값** |\n| 출처 | 인장시험 · MD · 시편 8개 대표 곡선, **등급 1(실측)** |\n| 적합 | Voce 경화식 · 상대 RMSE 0.04% · **소성변형률 0~0.11 구간만 검증** |\n| 합성·문헌 값 | 0건 |\n\n확인 둘:\n- 솔버가 LS-DYNA 맞습니까? Abaqus·OptiStruct·Ansys·Nastran·OpenRadioss 도 지금 바로 나옵니다.\n- 본문 141줄은 안 실었습니다. 파일로 받으실 거면 말씀하시면 전문 뽑겠습니다.\n\n변형률 0.11 넘는 영역(성형·충돌)이면 그 밖은 외삽이라 검증 안 된 구간입니다.",
+      "error": null,
+      "seconds": 44.89381814002991,
+      "cost_usd": 0.4893005,
+      "map_first": false,
+      "empty_calls": 0,
+      "over_budget": false,
+      "tools_any_ok": true,
+      "forbidden_hit": [],
+      "missing_mentions": [],
+      "passed": true
+    }
+  ]
+}
