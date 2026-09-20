@@ -603,8 +603,9 @@ class Test값으로_찾기:
         ).json()
         assert got["resolved"]["key"] == YIELD_STRENGTH[0]
         assert got["range_si"] == pytest.approx([180e6, 220e6]), "±10% 로 편다"
-        assert [one["value"] for one in got["hits"]] == [180.0, 200.0], (
-            "300 MPa 는 범위 밖이다"
+        # **가까운 순이다**(2026-09-20) — 200 근처를 물었으니 200 이 먼저, 300 은 범위 밖.
+        assert [one["value"] for one in got["hits"]] == [200.0, 180.0], (
+            "300 MPa 는 범위 밖이고, near 는 가까운 것부터다"
         )
         assert got["hits"][0]["unit"] == "MPa", "물어본 단위로 되돌려 준다"
 
