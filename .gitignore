@@ -44,3 +44,8 @@ materialtwin-*.tar.gz
 # 빌드 산출물 — pgvector DLL 등. 기계마다 판이 달라 저장소에 안 넣는다
 # (`scripts/deploy/build_pgvector.ps1` 이 만든다).
 build/
+
+# 기준선 야간 작업의 토큰 — 화면에서 발급한 mnx_pat_… 한 줄
+scripts/eval/.pat
+scripts/eval/results/nightly*.log
+scripts/eval/results/nightly-last.err

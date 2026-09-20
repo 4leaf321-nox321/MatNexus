@@ -322,7 +322,11 @@ def previous_summary() -> dict[str, Any] | None:
 
 
 def write_report(
-    traces: list[Trace], summary: dict[str, Any], before: dict[str, Any] | None
+    traces: list[Trace],
+    summary: dict[str, Any],
+    before: dict[str, Any] | None,
+    *,
+    full: bool = True,
 ) -> Path:
     stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     head = subprocess.run(
@@ -383,7 +387,40 @@ def write_report(
         )
     (RESULTS / f"run-{stamp}.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
     (RESULTS / "latest.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    # **전부 돌린 것만 추세에 넣는다.** `--ids` 로 낱개를 돌린 줄이 섞이면 「통과 1/1」 이
+    # 「29/34」 뒤에 서고, 야간 작업의 「꺾임」 판정이 그것을 보고 틀리게 운다.
+    if full:
+        _append_trend(stamp, head, summary)
     return out
+
+
+def _append_trend(stamp: str, head: str, summary: dict[str, Any]) -> None:
+    """한 실행을 `trend.csv` 한 줄로 — **추세는 표본이 쌓여야 보인다**(2026-09-20).
+
+    세션마다 값이 들어서 한 번의 통과 수로는 「나아졌다」 를 말할 수 없다. 다섯 번을
+    돌리는 동안 매번 json 을 열어 손으로 견줬다. 야간 작업(`nightly.ps1`)이 이 표에
+    쌓고, 사람은 이 파일 하나만 본다.
+    """
+    path = RESULTS / "trend.csv"
+    fresh = not path.exists()
+    with path.open("a", encoding="utf-8", newline="") as handle:
+        if fresh:
+            handle.write(
+                "stamp,commit,n,passed,calls,calls_per_question,empty_calls,map_first,errors,seconds,cost_usd\n"
+            )
+        keys = (
+            "n",
+            "passed",
+            "calls",
+            "calls_per_question",
+            "empty_calls",
+            "map_first",
+            "errors",
+            "seconds",
+            "cost_usd",
+        )
+        cells = [stamp, head, *(str(summary.get(key, "")) for key in keys)]
+        handle.write(",".join(cells) + "\n")
 
 
 def main() -> int:
@@ -445,7 +482,7 @@ def main() -> int:
             server.kill()
 
     summary = summarize(traces)
-    out = write_report(traces, summary, before)
+    out = write_report(traces, summary, before, full=not (args.ids or args.only))
     print()
     print(
         f"=== 물음 {summary['n']} · 통과 {summary['passed']} · 호출 {summary['calls']}"
