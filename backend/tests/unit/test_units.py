@@ -286,6 +286,11 @@ class Test접두어_조합:
             ("1/ms", 1000.0),
             ("kmol/m3", 1000.0),
             ("mV/m", 0.001),
+            # 뉴턴 계열 — `N/m2` 정본 한 줄이 열어 준 것(2026-09-20). 규격서가 탄성계수를
+            # kN/mm² 로 적는다: 1 kN/mm² = 1 GPa.
+            ("kN/mm2", 1.0e9),
+            ("N/cm2", 1.0e4),
+            ("MN/m2", 1.0e6),
         ],
     )
     def test_접두어만_다른_조합을_짓는다(self, written: str, si_value: float) -> None:

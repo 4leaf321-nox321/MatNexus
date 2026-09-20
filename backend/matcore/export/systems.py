@@ -249,6 +249,13 @@ def _symbol_for(si_unit: str, factor: float, bases: tuple[str, str, str]) -> str
     ]
     if not candidates:
         return _compose(*bases, si_unit)
+    # **SI 계에서는 정본 기호다.** `N/m2` 가 표에 들어오면서(2026-09-20) 인수 1 후보가 둘이
+    # 됐고, 아래 「기본 단위 이름이 든 기호」 규칙이 `m` 을 보고 `N/m2` 를 집었다 — SI 덱의
+    # 응력이 `Pa` 에서 `N/m2` 로 바뀌는 것은 규약 변경이지 개선이 아니다. 정본이 인수까지
+    # 맞으면 그것이다. mm 계에서는 정본의 인수가 안 맞으니(mW/(mm.K) 만 1) 아래로 간다.
+    canonical = units.SI_UNITS.get(dimension)
+    if canonical in candidates and bases == ("kg", "m", "s"):
+        return canonical
     # **기본 단위 이름이 든 기호가 먼저.** 같은 값이라도 mm 계에서는 mW/(mm.K) 가 W/(m.K)
     # 보다 「이 덱이 어느 계인지」 를 말한다. 표의 정본 표기(ASCII, 점 곱)를 고른다.
     ascii_only = [one for one in candidates if one.isascii()] or candidates
