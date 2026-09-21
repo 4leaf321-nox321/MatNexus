@@ -115,7 +115,23 @@ $prevPath = $AppPath + '_prev'
 $stagingPath = $AppPath + '_staging'
 $isFirstRun = -not (Test-Path $AppPath)
 
-if ($isFirstRun) { Write-Log "$AppPath 에 기존 설치가 없습니다 — 첫 배포로 처리합니다." }
+# **「첫 배포」 가 진짜 첫 배포가 아닐 수 있다**(실측 2026-09-21). 교체는 Move 가
+# 두 번인데(운영→_prev, _staging→운영) 둘째가 액세스 거부로 막히면 운영 폴더가 **없는**
+# 상태로 끝난다. 그 뒤에 다시 돌리면 여기서 「기존 설치가 없다」 로 보고 첫 배포 경로로
+# 가는데, 그 경로는 `.env` 를 이어받지 않는다 — DATABASE_URL 이 없어 마이그레이션이
+# 실패하고, 사람은 마이그레이션을 원인으로 읽는다. 아래에서 `_prev` 를 보고 그 사정을
+# 말해 주고, `.env` 도 거기서 이어받는다.
+$interrupted = $isFirstRun -and (Test-Path $prevPath)
+if ($isFirstRun -and -not $interrupted) {
+    Write-Log "$AppPath 에 기존 설치가 없습니다 — 첫 배포로 처리합니다."
+}
+if ($interrupted) {
+    Write-Warning (
+        "$AppPath 가 없는데 $prevPath 가 있습니다 — 지난 배포가 교체 도중에 끊긴 흔적입니다.`n" +
+        "  · 첫 배포처럼 진행하되 `.env` 는 $prevPath 에서 이어받습니다.`n" +
+        "  · $prevPath 는 **다음 배포 때 지워집니다** — 그 전에 이 배포가 제대로 끝났는지 보세요."
+    )
+}
 
 # --- 서비스(service.ps1, 2026-09-15) — 무엇이 돌고 있는지만 먼저 본다 ---------------
 #
@@ -388,22 +404,64 @@ if (-not $isFirstRun) {
             "`n  · 그 폴더나 하위 폴더에 들어가 있는 탐색기·터미널 창을 닫고 다시 시도하세요."
         )
     }
+    # **staging 도 먼저 잰다**(2026-09-21). 아래 Move 가 둘인데 첫째만 재고 있었다 —
+    # 둘째(staging→운영)가 막히면 운영 폴더가 사라진 채로 끝난다. 막 압축을 푼 폴더는
+    # 백신이 훑는 중이거나 탐색기가 들어가 있기 쉽다. 여기서 막으면 **아무것도 안 바뀐다.**
+    if (-not (Test-FolderMovable $stagingPath)) {
+        $holders = Get-FolderHolders $stagingPath
+        Start-KnownServices $runningServices
+        Abort-Staging (
+            "$stagingPath 를 옮길 수 없습니다 — 무언가 새 버전 폴더를 잡고 있습니다.`n" +
+            "운영 폴더는 그대로이고 서비스도 다시 띄웠습니다.`n" +
+            (($holders | ForEach-Object { "  · $_" }) -join "`n") +
+            "`n  · 백신 검사가 방금 푼 파일을 훑는 중일 수 있습니다 — 잠시 뒤 다시 시도하세요." +
+            "`n  · 그 폴더에 들어가 있는 탐색기·터미널 창을 닫으세요."
+        )
+    }
     if (Test-Path $prevPath) { Write-Log '이전 백업 삭제'; Remove-Item -Recurse -Force $prevPath }
     Write-Log "현재 설치를 $prevPath 로 이동"
     [System.IO.Directory]::Move($AppPath, $prevPath)
 }
 Write-Log "새 버전 배치: $AppPath"
-[System.IO.Directory]::Move($stagingPath, $AppPath)
+try {
+    [System.IO.Directory]::Move($stagingPath, $AppPath)
+} catch {
+    # **여기서 멈추면 운영 폴더가 없다.** 되돌릴 수 있으면 되돌리고, 못 되돌리면
+    # 사람이 손으로 할 한 줄을 준다 — 「액세스 거부」 만 남기고 끝내지 않는다.
+    $failure = $_
+    if (-not $isFirstRun -and -not (Test-Path $AppPath) -and (Test-Path $prevPath)) {
+        try {
+            [System.IO.Directory]::Move($prevPath, $AppPath)
+            Start-KnownServices $runningServices
+            throw (
+                "새 버전을 배치하지 못했습니다: $failure`n" +
+                "**되돌렸습니다** — 운영 폴더는 이전 버전 그대로이고 서비스도 다시 띄웠습니다.`n" +
+                "  · $stagingPath 를 무언가 잡고 있습니다(백신 검사·탐색기 창).`n" +
+                "  · 잠시 뒤 다시 배포하세요."
+            )
+        } catch [System.IO.IOException] {
+            throw (
+                "새 버전을 배치하지 못했고 되돌리지도 못했습니다: $failure`n" +
+                "**지금 $AppPath 가 없습니다.** 손으로 되돌리세요:`n" +
+                "  Move-Item '$prevPath' '$AppPath'`n" +
+                "  .\service.ps1 -AppPath '$AppPath' -Action Start"
+            )
+        }
+    }
+    throw $failure
+}
 
 # --- 패키지에 없는 것 이어받기 -------------------------------------------------
 # .env 는 접속 정보라 git 에도 패키지에도 없다. filestore·logs 는 <AppPath>_data
 # 에 있어 애초에 교체 대상이 아니다 — 52는 배포마다 uploads 를 복사하지만
 # 시험 데이터가 GB 단위가 되면 그 방식은 성립하지 않는다.
-if (-not $isFirstRun) {
+# `$interrupted` 도 함께 본다 — 끊긴 배포 뒤의 「첫 배포」 에서 이것을 안 하면
+# DATABASE_URL 이 없어 바로 아래 마이그레이션이 실패한다(2026-09-21 실측).
+if (-not $isFirstRun -or $interrupted) {
     $envFrom = Join-Path $prevPath 'backend\.env'
     $envTo = Join-Path $AppPath 'backend\.env'
     if (Test-Path $envFrom) {
-        Write-Log '.env 이어받기'
+        Write-Log ('.env 이어받기' + $(if ($interrupted) { " (끊긴 배포의 $prevPath 에서)" } else { '' }))
         Copy-Item -Force $envFrom $envTo
     } else {
         Write-Warning ".env 를 $envFrom 에서 찾지 못했습니다."
@@ -421,7 +479,7 @@ if (-not (Test-Path (Join-Path $AppPath 'backend\.env'))) {
 # 열린다 — 새로고침하면 새 index 를 받아 되고(실측 2026-09-16, 매일 릴리스하니 자주 났다).
 # 해시 이름은 내용이 같으면 같고 다르면 다르므로 옛 파일을 **새 폴더에 그대로 두어도**
 # 충돌이 없다. 한 세대만 이어받는다 — 그 다음 배포 때는 그 사람도 새로고침한 뒤다.
-if (-not $isFirstRun) {
+if (-not $isFirstRun -or $interrupted) {
     $assetsFrom = Join-Path $prevPath 'frontend\dist\assets'
     $assetsTo = Join-Path $AppPath 'frontend\dist\assets'
     if ((Test-Path $assetsFrom) -and (Test-Path $assetsTo)) {
