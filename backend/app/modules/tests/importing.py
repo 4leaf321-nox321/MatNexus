@@ -88,6 +88,11 @@ class Row:
     status: str
     """`new` · `existing` · `rejected` · `skipped`."""
     specimen_label: str = ""
+    orientation: str = ""
+    """표의 방향 열. **만들 때 쓴다** — 없으면 시편 이름의 앞 글자에서 짐작한다.
+
+    전에는 계획만 이 값을 보고 만들 때는 버렸다. 번호만 적은 줄에 방향을 적으면
+    시편이 `NA` 로 생겼고, 같은 표를 다시 올리면 같은 시편이 또 생겼다."""
     specimen: Specimen | None = None
     creates_specimen: bool = False
     conditions: dict[str, float] = field(default_factory=dict)
@@ -303,6 +308,7 @@ def plan(
                 raw,
                 "new",
                 specimen_label=label,
+                orientation=orientation,
                 specimen=specimen,
                 creates_specimen=specimen is None,
                 conditions=conditions,
@@ -342,7 +348,7 @@ def apply(
             continue
         specimen = row.specimen
         if specimen is None:
-            orientation = _orientation_of(row.specimen_label, "")
+            orientation = _orientation_of(row.specimen_label, row.orientation)
             seq_no = _seq(row.specimen_label) or _next_specimen_seq(db, sample, orientation)
             specimen = Specimen(
                 workspace_id=sample.workspace_id,

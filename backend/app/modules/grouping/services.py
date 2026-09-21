@@ -80,7 +80,11 @@ def collector(
 #:         "columns": ["strain_true_plastic", "stress_true"],   # 채택된 결과의 곡선 열
 #:         "conditions": ["temperature"],                       # 시험 조건 → values (SI)
 #:         "values": ["youngs_modulus"],                        # 채택된 결과의 스칼라 → values
+#:         "specimen": ["orientation"],                         # 시편의 칸 → meta
 #:     }}
+#:
+#: `"specimen"` 은 **조건도 결과도 아닌 것**을 위한 자리다 — 이방성 묶음은 어느 시편이
+#: MD 였는지 모르면 아무 말도 못 하는데, 방향은 시편의 성질이라 그 둘 어디에도 없다.
 #:
 #: `"from": "summary"` 면 곡선이 없는 시험이다 — 피로처럼 시편마다 점 하나. `conditions`
 #: 는 같고 `values` 는 요약값(`TestSummary`, 표로 넣은 것)에서 꺼낸다. 글자 요약값은
@@ -110,13 +114,72 @@ def member_needs(plugin_id: str) -> Needs:
     rule = _declared_rule(plugin_id)
     if rule is not None and rule.get("from") == "adopted_result":
         return "adopted_result"
-    if rule is not None and rule.get("from") == "summary":
+    # **둘 중 하나면 되는 묶음은 안 거른다.** 채택된 결과가 없어도 사람이 표로
+    # 적었을 수 있다 — 화면에서 미리 빼 버리면 그 시험을 고를 길이 없어진다.
+    # 정말 아무 데도 값이 없으면 묶을 때 서버가 이름을 대고 막는다.
+    if rule is not None and rule.get("from") in ("summary", MEASURED_OR_STATED):
         return "summary"
     return "master_curve"
 
 
 _YES = {"yes", "y", "true", "1", "o", "예", "런아웃", "runout", "run-out"}
 _NO = {"no", "n", "false", "0", "x", "아니오", "파단", "failure", "failed"}
+
+
+#: 채택된 결과에 없으면 **사람이 표로 적은 요약값**에서 읽는 구성원 규칙.
+#:
+#: 같은 물성을 장비가 내기도 하고 사람이 적기도 하는 자리가 실제로 있다 —
+#: r값이 그렇다(폭 신율계가 수동 시험기에만 달려 있다, 2026-09-22). 둘을 가리지
+#: 않고 받되 **어느 쪽인지 기억한다**: 구성원의 `meta["source"]` 가 `measured`
+#: 또는 `stated` 이고, 카드가 그것을 값의 출처로 옮겨 등급이 따라 내려간다.
+MEASURED_OR_STATED = "measured_or_stated"
+
+#: 값의 출처를 적는 자리 — 구성원 `meta` 의 키.
+SOURCE_META = "source"
+
+
+def _stated_values(
+    db: Session, runs: list[TestRun], wanted: list[str]
+) -> dict[uuid.UUID, dict[str, float]]:
+    """시험마다 **사람이 표로 적은** 요약값. 글자는 예/아니오로 읽어 1/0 이 된다."""
+    out: dict[uuid.UUID, dict[str, float]] = {}
+    if not wanted:
+        return out
+    for row in db.scalars(
+        select(TestSummary).where(TestSummary.test_run_id.in_([run.id for run in runs]))
+    ):
+        if row.key not in wanted:
+            continue
+        value: float | None = None
+        if row.value_num is not None:
+            value = float(row.value_num)
+        elif row.value_text is not None:
+            text = row.value_text.strip().casefold()
+            value = 1.0 if text in _YES else 0.0 if text in _NO else None
+        if value is not None:
+            out.setdefault(row.test_run_id, {})[row.key] = value
+    return out
+
+
+def _specimen_meta(
+    db: Session, runs: list[TestRun], wanted: list[str]
+) -> dict[uuid.UUID, dict[str, Any]]:
+    """시편에서 읽어 구성원에 실을 칸 — 방향이 대표다.
+
+    **조건이 아니라 시편의 성질이다.** 이방성 묶음은 어느 시편이 MD 였는지 모르면
+    아무 말도 못 하는데, 그 값은 시험 조건에도 결과 스칼라에도 없다.
+    """
+    if not wanted:
+        return {}
+    ids = {run.specimen_id for run in runs if run.specimen_id}
+    found = {one.id: one for one in db.scalars(select(Specimen).where(Specimen.id.in_(ids)))}
+    out: dict[uuid.UUID, dict[str, Any]] = {}
+    for run in runs:
+        specimen = found.get(run.specimen_id) if run.specimen_id else None
+        if specimen is None:
+            continue
+        out[run.id] = {key: getattr(specimen, key) for key in wanted if hasattr(specimen, key)}
+    return out
 
 
 def _summary_members(
@@ -132,20 +195,8 @@ def _summary_members(
             f"{plugin_id}: 요약값 구성원에는 곡선 열이 없습니다 — `columns` 를 비우세요.",
             status=422,
         )
-    by_run: dict[uuid.UUID, dict[str, float]] = {}
-    for row in db.scalars(
-        select(TestSummary).where(TestSummary.test_run_id.in_([run.id for run in runs]))
-    ):
-        if row.key not in wanted_values:
-            continue
-        value: float | None = None
-        if row.value_num is not None:
-            value = float(row.value_num)
-        elif row.value_text is not None:
-            text = row.value_text.strip().casefold()
-            value = 1.0 if text in _YES else 0.0 if text in _NO else None
-        if value is not None:
-            by_run.setdefault(row.test_run_id, {})[row.key] = value
+    by_run = _stated_values(db, runs, wanted_values)
+    extra = _specimen_meta(db, runs, [str(one) for one in rule.get("specimen") or []])
     members: list[groups.Member] = []
     for run in runs:
         values: dict[str, float] = {}
@@ -155,7 +206,91 @@ def _summary_members(
             if isinstance(found, int | float):
                 values[key] = float(found)
         values.update(by_run.get(run.id, {}))
-        members.append(groups.Member(label=run.record_name, columns={}, values=values))
+        members.append(
+            groups.Member(
+                label=run.record_name,
+                columns={},
+                values=values,
+                meta={**extra.get(run.id, {}), SOURCE_META: "stated"},
+            )
+        )
+    return members
+
+
+def _mixed_members(
+    db: Session, runs: list[TestRun], rule: dict[str, Any], plugin_id: str
+) -> list[groups.Member]:
+    """**잰 값이 있으면 그것, 없으면 적은 값.** 어느 쪽인지 구성원에 남긴다.
+
+    장비가 갈리는 물성이 있다 — 폭 신율계가 달린 시험기는 r값을 곡선에서 내고,
+    없는 시험기의 시험은 사람이 표로 적는다. 여기서 둘을 가르면 같은 재료의 세
+    방향을 한 묶음에 못 넣는다.
+    """
+    if rule.get("columns"):
+        raise AppError(
+            "MNX-GROUPING-0001",
+            f"{plugin_id}: '{MEASURED_OR_STATED}' 구성원에는 곡선 열이 없습니다 — "
+            "`columns` 를 비우세요.",
+            status=422,
+        )
+    wanted_conditions = [str(one) for one in rule.get("conditions") or []]
+    wanted_values = [str(one) for one in rule.get("values") or []]
+    stated = _stated_values(db, runs, wanted_values)
+    extra = _specimen_meta(db, runs, [str(one) for one in rule.get("specimen") or []])
+    results = {
+        one.id: one
+        for one in db.scalars(
+            select(ProcessingResult).where(
+                ProcessingResult.id.in_(
+                    {run.adopted_result_id for run in runs if run.adopted_result_id}
+                )
+            )
+        )
+    }
+
+    members: list[groups.Member] = []
+    for run in runs:
+        values: dict[str, float] = {}
+        conditions = run.conditions or {}
+        for key in wanted_conditions:
+            found = conditions.get(key)
+            if isinstance(found, int | float):
+                values[key] = float(found)
+        result = results.get(run.adopted_result_id) if run.adopted_result_id else None
+        scalars = {
+            str(one.get("key")): one.get("value")
+            for one in ((result.scalars if result else None) or [])
+            if isinstance(one, dict)
+        }
+        source = "measured"
+        for key in wanted_values:
+            found = scalars.get(key)
+            if isinstance(found, int | float):
+                values[key] = float(found)
+        missing = [key for key in wanted_values if key not in values]
+        if missing:
+            # 채택된 결과가 없거나 그 값을 안 냈다 — 사람이 적은 것을 본다.
+            written = stated.get(run.id, {})
+            for key in missing:
+                if key in written:
+                    values[key] = written[key]
+            source = "stated" if any(key in written for key in missing) else source
+        still = [key for key in wanted_values if key not in values]
+        if still:
+            raise AppError(
+                "MNX-GROUPING-0009",
+                f"{run.record_name} 에 {', '.join(still)} 이(가) 없습니다 — "
+                f"그 값을 내는 처리를 채택하거나, 「표로 시험 입력」 에서 적으세요.",
+                status=422,
+            )
+        members.append(
+            groups.Member(
+                label=run.record_name,
+                columns={},
+                values=values,
+                meta={**extra.get(run.id, {}), SOURCE_META: source},
+            )
+        )
     return members
 
 
@@ -166,15 +301,19 @@ def _declared_members(
     없는지** 말한다 — 속도 가족 수집기와 같은 문장이다."""
     if rule.get("from") == "summary":
         return _summary_members(db, runs, rule, plugin_id)
+    if rule.get("from") == MEASURED_OR_STATED:
+        return _mixed_members(db, runs, rule, plugin_id)
     if rule.get("from") != "adopted_result":
         raise AppError(
             "MNX-GROUPING-0001",
-            f"{plugin_id}: 구성원 규칙의 `from` 은 'adopted_result'·'summary' 만 됩니다.",
+            f"{plugin_id}: 구성원 규칙의 `from` 은 'adopted_result'·'summary'·"
+            f"'{MEASURED_OR_STATED}' 만 됩니다.",
             status=422,
         )
     wanted_columns = [str(one) for one in rule.get("columns") or []]
     wanted_conditions = [str(one) for one in rule.get("conditions") or []]
     wanted_values = [str(one) for one in rule.get("values") or []]
+    extra = _specimen_meta(db, runs, [str(one) for one in rule.get("specimen") or []])
     results = {
         one.id: one
         for one in db.scalars(
@@ -225,6 +364,7 @@ def _declared_members(
                 label=run.record_name,
                 columns={one: columns[one] for one in wanted_columns},
                 values=values,
+                meta={**extra.get(run.id, {}), SOURCE_META: "measured"},
             )
         )
     return members

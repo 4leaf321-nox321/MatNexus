@@ -21,11 +21,11 @@ from matcore import cards
 from matcore.registry import Produced
 
 
-def _spec(key: str, label: str = "이방성") -> cards.BlockSpec:
+def _spec(key: str, label: str = "시험용 항목란") -> cards.BlockSpec:
     return cards.BlockSpec(
         key=key,
         label=label,
-        help="세 방향 인장에서 나오는 r값들.",
+        help="시험이 얹어 보는 항목란.",
         produces=(Produced(key="r_bar", label="평균 이방성", si_unit="1"),),
         order=200,
     )
@@ -49,10 +49,10 @@ def test_내장_키는_못_얹는다() -> None:
 
 
 def test_자기_것은_새_판으로_바꾼다() -> None:
-    cards.install(_spec("anisotropy"))
-    cards.install(_spec("anisotropy", label="이방성(판재)"))
-    assert cards.block("anisotropy").label == "이방성(판재)"
-    assert cards.installed() == ["anisotropy"]
+    cards.install(_spec("block_under_test"))
+    cards.install(_spec("block_under_test", label="다른 이름"))
+    assert cards.block("block_under_test").label == "다른 이름"
+    assert cards.installed() == ["block_under_test"]
 
 
 def test_내장은_못_뺀다() -> None:
@@ -65,8 +65,8 @@ def test_내장은_못_뺀다() -> None:
 def test_이름_없는_슬롯은_안_얹는다() -> None:
     """비면 화면에 키가 그대로 뜨고, 그것이 무엇인지는 만든 사람만 안다."""
     empty = cards.BlockSpec(
-        key="anisotropy",
-        label="이방성",
+        key="block_under_test",
+        label="시험용 항목란",
         help="",
         produces=(Produced(key="r_bar", label="  ", si_unit="1"),),
     )
@@ -76,8 +76,8 @@ def test_이름_없는_슬롯은_안_얹는다() -> None:
 
 
 def test_목록에_섞여_나오되_순서는_order_가_정한다() -> None:
-    cards.install(_spec("anisotropy"))
+    cards.install(_spec("block_under_test"))
     keys = [spec.key for spec in cards.list_blocks()]
-    assert "anisotropy" in keys and "elastic" in keys
+    assert "block_under_test" in keys and "elastic" in keys
     # 기본 200 — **내장들 뒤다.**
-    assert keys.index("anisotropy") > keys.index("elastic")
+    assert keys.index("block_under_test") > keys.index("elastic")

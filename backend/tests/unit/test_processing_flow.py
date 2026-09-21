@@ -23,7 +23,11 @@ from matcore import processing, registry
 from matcore.processing import Frame, Step
 
 #: 장비가 실제로 주는 것. Zwick 은 응력-변형률을 주지 않는다.
-SOURCE = ("displacement", "force", "width")
+#:
+#: **이름은 시험 종류가 선언한 채널과 같다**(`definitions.py` 의 tensile). 여기만
+#: `width` 로 적어 두었더니 폭을 쓰는 첫 단계(이방성)가 선언된 이름(`specimen_width`)을
+#: 기본값으로 들고도 「없는 열」 로 걸렸다(2026-09-22).
+SOURCE = ("displacement", "force", "specimen_width")
 
 
 @pytest.fixture(autouse=True)
@@ -43,9 +47,10 @@ def source_frame() -> Frame:
         {
             "displacement": displacement,
             "force": force,
-            "width": np.full(200, 0.0125),
+            # 폭은 인장 중에 줄어든다 — 이방성 단계가 그 기울기를 본다.
+            "specimen_width": np.full(200, 0.0125) - displacement * 0.5,
         },
-        {"displacement": "m", "force": "N", "width": "m"},
+        {"displacement": "m", "force": "N", "specimen_width": "m"},
     )
 
 

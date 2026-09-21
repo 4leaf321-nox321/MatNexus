@@ -128,6 +128,40 @@ class TestCreateMissing:
         listed = client.get(f"/api/samples/{sample_id}/specimens", headers=admin_headers)
         assert {one["record_name"] for one in listed.json()} >= {item["specimen"]}
 
+    def test_번호만_적어도_방향_열대로_만든다(
+        self, client: TestClient, admin_headers: dict[str, str], sample_id: str
+    ) -> None:
+        """**방향 열이 시편을 만들 때도 쓰인다.**
+
+        전에는 찾을 때만 쓰고 만들 때는 버렸다. 번호만 적은 줄(`7`)에 방향을 TD 로
+        적어도 시편은 `NA` 로 생겼고, 같은 표를 다시 올리면 계획은 `..._TD_07` 을
+        찾다가 못 찾아 **같은 시편을 또 만들었다.** 이방성(방향이 곧 물성인 첫 물성)을
+        붙이다 드러났다(2026-09-22).
+        """
+        made = send(
+            client,
+            admin_headers,
+            sample_id,
+            [HEADER, "7	TD	g.tra	300	11"],
+            create_missing=True,
+        )
+        assert made.status_code == 200, made.text
+        (item,) = made.json()["items"]
+        assert "_TD_" in item["specimen"], item
+
+        # 두 번째로 같은 표를 올리면 **그 시편을 찾아낸다** — 또 만들지 않는다.
+        again = send(
+            client,
+            admin_headers,
+            sample_id,
+            [HEADER, "7	TD	g.tra	300	11"],
+            preview=True,
+            create_missing=True,
+        )
+        (seen,) = again.json()["items"]
+        assert seen["creates_specimen"] is False
+        assert seen["status"] == "existing"
+
     def test_미리보기가_시편을_만드는지_말한다(
         self, client: TestClient, admin_headers: dict[str, str], sample_id: str
     ) -> None:

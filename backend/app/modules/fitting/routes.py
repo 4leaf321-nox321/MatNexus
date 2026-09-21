@@ -2220,12 +2220,20 @@ class _Lineage:
     specimens: list[Specimen]
     samples: list[Sample]
     test_type_id: uuid.UUID
-    orientation: str
+    orientation: str | None
+    """방향을 가로지르는 묶음이면 **없다** — 이방성의 r̄ 가 그렇다."""
 
 
-def _lineage_of_group(db: Session, user: User, row: GroupResult) -> _Lineage:
+def _lineage_of_group(
+    db: Session, user: User, row: GroupResult, *, mixed_orientation: bool = False
+) -> _Lineage:
     """묶음의 구성원을 시험 → 시편 → 시료로 따라간다. 방향·종류가 섞이면 막는다 —
-    한 카드는 방향 하나·종류 하나의 물성이다."""
+    한 카드는 방향 하나·종류 하나의 물성이다.
+
+    **예외가 하나 있다**(`mixed_orientation`). 세 방향을 함께 써야 나오는 값(이방성의
+    r̄·Δr)은 애초에 방향이 없다. 그때는 섞인 것을 받고 방향을 **비운다** — 셋 중 하나를
+    골라 적으면 그 카드가 그 방향의 물성인 것처럼 보인다. 그 예외를 켜는 것은 부르는
+    쪽의 판단이 아니라 **블록의 선언**이다(`meta["cross_orientation"]`)."""
     material = db.scalar(
         permissions.visible_materials(db, user).where(Material.id == row.material_id)
     )
@@ -2244,7 +2252,7 @@ def _lineage_of_group(db: Session, user: User, row: GroupResult) -> _Lineage:
         raise NotFound("MNX-FITTING-0011", "묶음의 시편을 따라갈 수 없습니다.")
     found = [one for one in specimens if one is not None]
     orientations = {one.orientation for one in found}
-    if len(orientations) != 1:
+    if len(orientations) != 1 and not mixed_orientation:
         raise AppError(
             "MNX-FITTING-0013",
             f"방향이 {len(orientations)}가지 섞여 있습니다"
@@ -2263,7 +2271,9 @@ def _lineage_of_group(db: Session, user: User, row: GroupResult) -> _Lineage:
         specimens=found,
         samples=samples,
         test_type_id=types.pop(),
-        orientation=orientations.pop(),
+        # 섞여 있으면 **비운다.** 자리표시를 넣지 않는 이유는 카드 모델의 주석과
+        # 같다 — 목록이 그것을 방향 이름으로 줄 세우고, 거르는 코드가 생긴다.
+        orientation=orientations.pop() if len(orientations) == 1 else None,
     )
 
 
@@ -2473,7 +2483,10 @@ def create_card_from_group(
             status=422,
         )
 
-    lineage = _lineage_of_group(db, user, row)
+    # **방향을 가로지르는 블록이 하나라도 있으면** 방향 검사를 면제한다. 위에서
+    # 이미 「등록된 블록인가」 를 확인했으므로 여기서는 그 선언만 읽는다.
+    crosses = any(bool(cards.block(key).meta.get("cross_orientation")) for key in blocks)
+    lineage = _lineage_of_group(db, user, row, mixed_orientation=crosses)
     material = lineage.material
     modulus, modulus_count = _mean_scalar_of_runs(db, lineage.runs, "youngs_modulus")
     modulus_source = "statistics"

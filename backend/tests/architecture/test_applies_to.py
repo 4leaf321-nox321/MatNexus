@@ -124,7 +124,12 @@ def test_시험종류를_가리키면_채널도_함께_적는다() -> None:
         and not plugin.requires_channels
         # **요약값 묶음은 채널이 없다** — 피로는 시편마다 점 하나라 곡선 채널이 없는 것이
         # 그 종류의 데이터 모양이다. 적을 채널이 없으니 키로만 거른다.
-        and (plugin.meta.get("members") or {}).get("from") != "summary"
+        #
+        # 「잰 값 또는 적은 값」 도 같다(ADR 0034): 폭 채널이 있는 장비의 시험은 곡선에서
+        # 재고 없는 장비의 시험은 사람이 표로 적는다. 채널을 요구하면 **뒤쪽 시험이
+        # 후보에서 빠져** 세 방향을 한 묶음에 못 넣는다.
+        and (plugin.meta.get("members") or {}).get("from")
+        not in ("summary", "measured_or_stated")
     ]
     assert not naked, (
         "시험종류 키만 보고 거릅니다 — `requires_channels` 를 함께 적으세요: "

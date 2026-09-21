@@ -30,12 +30,14 @@ PASSWORD = "Passw0rd!block"
 
 def _body(**over: Any) -> dict[str, Any]:
     return {
-        "key": "anisotropy",
-        "label": "이방성",
-        "help": "세 방향 인장에서 나오는 r값들.",
+        # **실재하는 항목란 이름을 안 쓴다.** 확장이 등록한 키(`anisotropy`)를 쓰면
+        # 내장 보호에 걸려 이 시험이 무엇을 재는지와 무관한 이유로 빨개진다.
+        "key": "block_under_test",
+        "label": "시험용 항목란",
+        "help": "시험이 만들어 보는 항목란.",
         "produces": [
-            {"key": "r_bar", "label": "평균 이방성", "si_unit": "1"},
-            {"key": "delta_r", "label": "면내 이방성", "si_unit": "1"},
+            {"key": "first_value", "label": "첫 값", "si_unit": "1"},
+            {"key": "second_value", "label": "둘째 값", "si_unit": "1"},
         ],
         "measured": True,
         **over,
@@ -88,8 +90,11 @@ class Test만들기:
         listed = client.get("/api/fitting/blocks", headers=admin_headers)
         assert listed.status_code == 200
         shown = {one["key"]: one for one in listed.json()}
-        assert "anisotropy" in shown
-        assert [one["key"] for one in shown["anisotropy"]["produces"]] == ["r_bar", "delta_r"]
+        assert "block_under_test" in shown
+        assert [one["key"] for one in shown["block_under_test"]["produces"]] == [
+            "first_value",
+            "second_value",
+        ]
         # 내장은 그대로 있다 — 표는 **추가만** 한다.
         assert "elastic" in shown
 
@@ -121,7 +126,7 @@ class Test만들기:
     ) -> None:
         got = client.post(
             "/api/fitting/block-definitions",
-            json=_body(produces=[{"key": "r_bar", "label": "평균", "si_unit": "개"}]),
+            json=_body(produces=[{"key": "first_value", "label": "첫 값", "si_unit": "개"}]),
             headers=admin_headers,
         )
         assert got.status_code == 422, got.text
@@ -179,7 +184,7 @@ class Test고치기와_지우기:
 
         renamed = client.patch(
             f"/api/fitting/block-definitions/{made['id']}",
-            json={"label": "이방성(판재)"},
+            json={"label": "다른 이름"},
             headers=admin_headers,
         )
         # 이름은 판이 아니다 — 라벨 하나 바꿨다고 리비전이 찍히면 안 된다.
@@ -188,7 +193,7 @@ class Test고치기와_지우기:
 
         changed = client.patch(
             f"/api/fitting/block-definitions/{made['id']}",
-            json={"produces": [{"key": "r_bar", "label": "평균 이방성", "si_unit": "1"}]},
+            json={"produces": [{"key": "first_value", "label": "첫 값", "si_unit": "1"}]},
             headers=admin_headers,
         )
         assert changed.status_code == 200, changed.text
@@ -212,7 +217,7 @@ class Test고치기와_지우기:
             one["key"]
             for one in client.get("/api/fitting/blocks", headers=admin_headers).json()
         }
-        assert "anisotropy" not in shown
+        assert "block_under_test" not in shown
 
     def test_카드가_담고_있으면_못_지운다(
         self, client: TestClient, db: Session, admin_headers: dict[str, str]
@@ -235,16 +240,16 @@ class Test고치기와_지우기:
             family="Metal",
             category="Steel",
             grade="SECC",
-            record_name="SECC-이방성",
+            record_name="SECC-항목란",
         )
         db.add(material)
         db.flush()
         db.add(
             PropertyCard(
                 material_id=material.id,
-                label="이방성 카드",
+                label="시험용 카드",
                 status="draft",
-                blocks={"anisotropy": {"values": {"r_bar": 1.675}}},
+                blocks={"block_under_test": {"values": {"first_value": 1.675}}},
             )
         )
         db.commit()
