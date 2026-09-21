@@ -94,7 +94,11 @@ export const TENSILE_STANDARD: RecipeStep[] = [
   // 「곡선이 E 직선을 넘는 곳」 이 되고, 토우가 있으면 탄성 구간이 그대로 남는다.
   {
     plugin: 'tensile.true_plastic',
-    options: { youngs_modulus: '@youngs_modulus', proof_stress: '@proof_stress' },
+    options: {
+      youngs_modulus: '@youngs_modulus',
+      proof_stress: '@proof_stress',
+      proof_strain: '@proof_strain',
+    },
   },
   // **여기만 '마지막 점만 남김' 이다.** `clip_zero` 가 탄성 구간을 전부 x=0 에
   // 쌓아 두는데(실측 120점 중 34점), 그것을 평균 내면 x=0 의 응력이 탄성 구간

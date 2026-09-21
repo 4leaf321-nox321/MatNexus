@@ -1260,6 +1260,17 @@ def necking_candidate(frame: Frame, options: dict[str, Any]) -> StepResult:
     )
 
 
+def _prepare_true_plastic_options(options: dict[str, Any]) -> dict[str, Any]:
+    """Pair old saved proof-stress references with the matching proof strain."""
+    if (
+        options.get("yield_policy", "proof_stress") == "proof_stress"
+        and options.get("proof_stress") == "@proof_stress"
+        and "proof_strain" not in options
+    ):
+        return {**options, "proof_strain": "@proof_strain"}
+    return dict(options)
+
+
 @register(
     id="tensile.true_plastic",
     kind="processing",
@@ -1305,7 +1316,23 @@ def necking_candidate(frame: Frame, options: dict[str, Any]) -> StepResult:
             default="@proof_stress",
             required=True,
             when={"yield_policy": ("proof_stress",)},
-            help="항복강도 단계가 잰 값(공칭응력). 이보다 낮은 점은 소성 곡선에 안 듭니다.",
+            help=(
+                "항복강도 단계가 잰 값(공칭응력). 대응하는 교점 변형률과 함께 "
+                "시작점을 정합니다."
+            ),
+        ),
+        ParamSpec(
+            name="proof_strain",
+            label="항복 변형률",
+            type="float",
+            dimension="strain",
+            unit="1",
+            default=None,
+            when={"yield_policy": ("proof_stress",)},
+            help=(
+                "내력 값과 함께 그 교점의 변형률을 연결합니다. 수동 응력 기준만 "
+                "사용할 때는 비워 둡니다."
+            ),
         ),
         ParamSpec(
             name="necking_policy",
@@ -1376,7 +1403,8 @@ def necking_candidate(frame: Frame, options: dict[str, Any]) -> StepResult:
         ),
     ),
     order=90,
-    version="2",
+    version="3",
+    prepare_options=_prepare_true_plastic_options,
 )
 def true_plastic(frame: Frame, options: dict[str, Any]) -> StepResult:
     """공칭 → 진응력·진변형률·진소성변형률.
@@ -1399,13 +1427,11 @@ def true_plastic(frame: Frame, options: dict[str, Any]) -> StepResult:
     304 → 225 MPa 로 내려앉았다. 항복강도 단계의 오프셋은 **아무도 읽지 않아서**
     아무리 바꿔도 이 열은 비트 하나 안 바뀌었다.
 
-    그래서 기본은 **항복강도(Rp)보다 낮은 점을 버리고, 곡선이 Rp 를 지나는 교점을
-    보간해 (소성변형률 0, Rp) 로 첫 줄에 앉히는 것**이다. 뒤의 점은 식 그대로다 —
-    오프셋 정의상 항복점에는 이미 오프셋만큼의 영구 변형이 있으므로 둘째 점의
-    소성변형률은 오프셋 근처에서 시작한다. 잰 점을 옮기지 않는다: 첫 0.2% 만 평평한
-    구간으로 남고 나머지는 전부 제자리다. 값을 전부 오프셋만큼 왼쪽으로 미는 것보다
-    솔버가 받는 표가 실제에 가깝고, 네킹 후보처럼 다른 축에서 같은 식으로 옮긴 값과도
-    어긋나지 않는다. 옛 방식은 `line_crossing` 으로 남겨 둔다.
+    그래서 기본은 앞 단계가 낸 항복강도와 그 교점 변형률을 함께 받아, 그 좌표를
+    (소성변형률 0, 공칭응력 Rp) 의 첫 점으로 둔다. 곡선을 다시 검색하지 않으므로 중간에
+    재샘플해도 원래 교점이 보존된다. 뒤의 관측점은 식 그대로다 — 오프셋 정의상 항복점에는
+    이미 오프셋만큼의 영구 변형이 있으므로 둘째 점의 소성변형률은 오프셋 근처에서
+    시작한다. 잰 점을 옮기지 않는다. 옛 방식은 `line_crossing` 으로 남겨 둔다.
 
     탄성 되돌림 때문에 초기 구간의 소성변형률이 **음수**로 나온다. 0 으로 자르는
     것이 기본이지만 버리거나 남길 수도 있게 둔다 — 적합 코드마다 요구가 다르다.
@@ -1458,51 +1484,120 @@ def true_plastic(frame: Frame, options: dict[str, Any]) -> StepResult:
         proof = option_float(options, "proof_stress")
         if proof <= 0:
             raise ProcessingError(f"항복강도가 양수가 아닙니다: {proof} Pa")
-        reached = np.flatnonzero(eng_stress >= proof)
-        if not len(reached):
-            raise ProcessingError(
-                f"항복강도 {proof / 1e6:.4g} MPa 에 이르는 점이 없습니다 — 항복강도를 "
-                f"다른 곡선·다른 E 로 쟀거나, 네킹 경계가 항복 앞에서 잘렸습니다."
+
+        raw_proof_strain = options.get("proof_strain")
+        if raw_proof_strain is not None:
+            yield_strain = option_float(options, "proof_strain")
+            if yield_strain < float(eng_strain[0]) or yield_strain > float(eng_strain[-1]):
+                raise ProcessingError(
+                    f"항복 변형률 좌표 {yield_strain:.6g}가 관측 변형률 범위 "
+                    f"[{eng_strain[0]:.6g}, {eng_strain[-1]:.6g}]를 벗어납니다."
+                )
+
+            right = int(np.searchsorted(eng_strain, yield_strain, side="left"))
+            exact = right < len(eng_strain) and eng_strain[right] == yield_strain
+            first_after = right + 1 if exact else right
+            if len(eng_strain) - first_after < 2:
+                raise ProcessingError(
+                    f"항복 변형률 좌표 {yield_strain:.6g} 뒤에 관측점이 2점 미만입니다. "
+                    "교점 뒤에 관측점 두 개 이상이 남도록 네킹 경계나 입력 곡선을 확인하세요."
+                )
+
+            if exact:
+                # 교점이 이미 관측 행이면 중복 x 를 만들지 않고 그 행부터 잇는다.
+                cut_columns = {
+                    key: values[right:].copy() for key, values in cut.columns.items()
+                }
+                cut_columns[strain_key] = cut_columns[strain_key].astype(
+                    np.float64, copy=False
+                )
+                cut_columns[stress_key] = cut_columns[stress_key].astype(
+                    np.float64, copy=False
+                )
+                cut_columns[strain_key][0] = yield_strain
+                cut_columns[stress_key][0] = proof
+                cut = Frame(cut_columns, dict(cut.units))
+                yield_true = proof * (1.0 + yield_strain)
+                true_strain = np.concatenate(
+                    [[np.log1p(yield_strain)], true_strain[right + 1 :]]
+                )
+                true_stress = np.concatenate([[yield_true], true_stress[right + 1 :]])
+                plastic = np.concatenate([[0.0], plastic[right + 1 :]])
+            else:
+                left = right - 1
+                fraction = float(
+                    (yield_strain - eng_strain[left]) / (eng_strain[right] - eng_strain[left])
+                )
+                # 모든 채널은 같은 strain bracket 으로 보간한다. proof scalar 는
+                # 원래 교점 계산의 값을 보존하므로 x 와 y 에 정확히 덮어쓴다.
+                yield_row = {
+                    key: np.asarray([values[left] + fraction * (values[right] - values[left])])
+                    for key, values in cut.columns.items()
+                }
+                yield_row[strain_key] = np.asarray([yield_strain])
+                yield_row[stress_key] = np.asarray([proof])
+                cut = Frame(
+                    {
+                        key: np.concatenate([yield_row[key], values[right:]])
+                        for key, values in cut.columns.items()
+                    },
+                    dict(cut.units),
+                )
+                yield_true = proof * (1.0 + yield_strain)
+                true_strain = np.concatenate([[np.log1p(yield_strain)], true_strain[right:]])
+                true_stress = np.concatenate([[yield_true], true_stress[right:]])
+                plastic = np.concatenate([[0.0], plastic[right:]])
+
+            notes.append(
+                f"항복강도 {proof / 1e6:.4g} MPa(공칭)와 짝지은 변형률 "
+                f"{yield_strain:.6g}의 교점을 첫 점으로 앉혔습니다 — 솔버는 첫 점을 "
+                "항복점으로 읽습니다. 둘째 점부터는 식 그대로라 오프셋 근처에서 시작합니다."
             )
-        at = int(reached[0])
-        if at == 0:
-            raise ProcessingError(
-                f"첫 점부터 항복강도 {proof / 1e6:.4g} MPa 이상입니다 — 탄성 구간이 "
-                f"앞에서 잘려 나갔거나 항복강도가 너무 낮습니다."
-            )
-        if len(eng_stress) - at < 2:
-            raise ProcessingError(
-                f"항복강도 {proof / 1e6:.4g} MPa 뒤에 남는 점이 2점 미만입니다."
-            )
-        # **항복점은 보간한 교점이다 — 지어낸 값이 아니다.** 곡선이 Rp 를 지나는
-        # 두 점 사이를 모든 열에서 같은 비율로 자른다(항복강도 단계가 교점을 찾는
-        # 것과 같은 태도). 그 줄의 소성변형률만 0 으로 둔다 — 솔버는 첫 점을
-        # 항복점으로 읽고, 오프셋 정의상 거기까지의 영구 변형은 첫 구간의 평평한
-        # 자리로 남는다. 뒤의 점은 식 그대로라 잰 자리에서 안 움직인다.
-        below, above = float(eng_stress[at - 1]), float(eng_stress[at])
-        fraction = 0.0 if above == below else (proof - below) / (above - below)
-        yield_row = {
-            key: np.asarray([value[at - 1] + fraction * (value[at] - value[at - 1])])
-            for key, value in cut.columns.items()
-        }
-        yield_strain = float(yield_row[strain_key][0])
-        yield_true = proof * (1.0 + yield_strain)
-        cut = Frame(
-            {
-                key: np.concatenate([yield_row[key], value[at:]])
+        else:
+            reached = np.flatnonzero(eng_stress >= proof)
+            if not len(reached):
+                raise ProcessingError(
+                    f"항복강도 {proof / 1e6:.4g} MPa 에 이르는 점이 없습니다 — 항복강도를 "
+                    f"다른 곡선·다른 E 로 쟀거나, 네킹 경계가 항복 앞에서 잘렸습니다."
+                )
+            at = int(reached[0])
+            if at == 0:
+                raise ProcessingError(
+                    f"첫 점부터 항복강도 {proof / 1e6:.4g} MPa 이상입니다 — 탄성 구간이 "
+                    f"앞에서 잘려 나갔거나 항복강도가 너무 낮습니다."
+                )
+            if len(eng_stress) - at < 2:
+                raise ProcessingError(
+                    f"항복강도 {proof / 1e6:.4g} MPa 뒤에 남는 점이 2점 미만입니다."
+                )
+            # 숫자 Rp 의 옛 레시피는 좌표를 알 수 없으므로 첫 응력 교차를 쓴다.
+            below, above = float(eng_stress[at - 1]), float(eng_stress[at])
+            fraction = 0.0 if above == below else (proof - below) / (above - below)
+            yield_row = {
+                key: np.asarray([value[at - 1] + fraction * (value[at] - value[at - 1])])
                 for key, value in cut.columns.items()
-            },
-            dict(cut.units),
-        )
-        true_strain = np.concatenate([[np.log1p(yield_strain)], true_strain[at:]])
-        true_stress = np.concatenate([[yield_true], true_stress[at:]])
-        plastic = np.concatenate([[0.0], plastic[at:]])
-        notes.append(
-            f"항복강도 {proof / 1e6:.4g} MPa(공칭) 앞의 {at}점을 버리고, 곡선이 그 값을 "
-            f"지나는 교점(변형률 {yield_strain:.4g}, 진응력 {yield_true / 1e6:.4g} MPa)을 "
-            f"소성변형률 0 의 첫 점으로 앉혔습니다 — 솔버는 첫 점을 항복점으로 읽습니다. "
-            f"둘째 점부터는 식 그대로라 오프셋 근처에서 시작합니다."
-        )
+            }
+            yield_strain = float(yield_row[strain_key][0])
+            yield_true = proof * (1.0 + yield_strain)
+            cut = Frame(
+                {
+                    key: np.concatenate([yield_row[key], value[at:]])
+                    for key, value in cut.columns.items()
+                },
+                dict(cut.units),
+            )
+            true_strain = np.concatenate([[np.log1p(yield_strain)], true_strain[at:]])
+            true_stress = np.concatenate([[yield_true], true_stress[at:]])
+            plastic = np.concatenate([[0.0], plastic[at:]])
+            notes.append(
+                f"항복강도 {proof / 1e6:.4g} MPa(공칭) 앞의 {at}점을 버리고, 곡선이 그 값을 "
+                f"지나는 교점(변형률 {yield_strain:.4g}, 진응력 {yield_true / 1e6:.4g} MPa)을 "
+                f"소성변형률 0 의 첫 점으로 앉혔습니다 — 솔버는 첫 점을 항복점으로 읽습니다. "
+                f"둘째 점부터는 식 그대로라 오프셋 근처에서 시작합니다."
+            )
+            notes.append(
+                "항복 변형률 좌표 없이 항복강도와 곡선의 첫 응력 교차로 시작점을 잡았습니다."
+            )
     else:
         notes.append(
             "소성 곡선을 항복강도가 아니라 「ε - σ/E 가 양수가 되는 곳」 부터 잡았습니다 "

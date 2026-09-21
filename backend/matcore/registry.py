@@ -208,6 +208,12 @@ class Plugin:
     version: str = "1"
     """계산이 바뀌면 올린다. 결과 아티팩트에 기록해 재현 가능성을 남긴다."""
     meta: dict[str, Any] = field(default_factory=dict)
+    prepare_options: Callable[[dict[str, Any]], dict[str, Any]] | None = None
+    """Prepare a plugin's options before resolving recipe references.
+
+    Use this only when a plugin needs a small, pure compatibility normalizer.
+    This is execution behavior, not API metadata.
+    """
 
 
 _REGISTRY: dict[str, Plugin] = {}
@@ -226,6 +232,7 @@ def register(
     makes_values: tuple[Produced, ...] = (),
     order: int = 100,
     version: str = "1",
+    prepare_options: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
     **meta: Any,
 ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """계산 함수를 레지스트리에 등록한다.
@@ -251,6 +258,7 @@ def register(
             order=order,
             version=version,
             meta=meta,
+            prepare_options=prepare_options,
         )
         return fn
 

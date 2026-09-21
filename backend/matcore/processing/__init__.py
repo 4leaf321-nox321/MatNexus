@@ -202,7 +202,10 @@ def apply(steps: list[Step], frame: Frame, *, given: Sequence[Scalar] = ()) -> P
     for index, step in enumerate(steps):
         plugin = _plugin(step.plugin)
         try:
-            options = _resolve_references(step.options, carried, index, stages)
+            raw_options = dict(step.options)
+            if plugin.prepare_options is not None:
+                raw_options = plugin.prepare_options(raw_options)
+            options = _resolve_references(raw_options, carried, index, stages)
         except ProcessingError as exc:
             raise ProcessingError(str(exc), done=PipelineResult(tuple(stages))) from exc
         try:

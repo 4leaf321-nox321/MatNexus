@@ -61,6 +61,42 @@ def synthetic() -> Frame:
     )
 
 
+S355_PROOF_EXCERPT = (
+    Path(__file__).resolve().parents[1] / "fixtures" / "s355_proof_point_excerpt.csv"
+)
+
+
+def s355_toe_corrected_excerpt() -> Frame:
+    """Actual BAM-S355-Zy4 rows 438-468 and 521-527, after toe correction.
+
+    Values are derived from displacement/gauge length (50 mm), the measured
+    120.582838 mm² area, and the recorded zero-stress shift. Source row and
+    physical-line columns retain provenance for the interpolated proof point.
+    """
+    with S355_PROOF_EXCERPT.open(encoding="utf-8", newline="") as handle:
+        rows = list(csv.DictReader(handle))
+    return Frame(
+        {
+            "strain_engineering": np.asarray(
+                [float(row["strain_engineering"]) for row in rows]
+            ),
+            "stress_engineering": np.asarray(
+                [float(row["stress_engineering_pa"]) for row in rows]
+            ),
+            "source_data_row": np.asarray([float(row["source_data_row"]) for row in rows]),
+            "source_physical_line": np.asarray(
+                [float(row["source_physical_line"]) for row in rows]
+            ),
+        },
+        {
+            "strain_engineering": "1",
+            "stress_engineering": "Pa",
+            "source_data_row": "1",
+            "source_physical_line": "1",
+        },
+    )
+
+
 def scalar(result: processing.PipelineResult, key: str) -> float:
     for item in result.scalars:
         if item.key == key:
@@ -880,6 +916,8 @@ class Test진응력:
         # 조용히 넘어가면 그 곡선으로 적합한 경화식이 네킹 후 구간까지 맞추려 든다.
         result = processing.apply([Step("tensile.true_plastic", WHOLE)], synthetic())
         assert any("네킹 뒤 구간이 섞여" in note for note in result.notes)
+        assert "proof_strain" not in result.stages[0].options
+        assert any("옛 방식" in note for note in result.notes)
 
     def test_음의_소성변형률을_어떻게_다뤘는지_남는다(self) -> None:
         result = processing.apply(
@@ -970,6 +1008,215 @@ class Test소성은_항복부터:
             processing.apply(
                 [Step("tensile.true_plastic", {"youngs_modulus": E_TRUE})], synthetic()
             )
+
+
+class Test항복교점전달:
+    E_S355 = 210867263618.31775
+
+    @staticmethod
+    def _prefix() -> list[Step]:
+        return [
+            Step(
+                "tensile.elastic_modulus",
+                {"method": "manual", "manual_modulus": Test항복교점전달.E_S355},
+            ),
+            Step(
+                "tensile.proof_stress",
+                {"youngs_modulus": "@youngs_modulus", "offset_strain": 0.002},
+            ),
+        ]
+
+    def test_s355_toe보정_후에도_기존레시피가_원교점을_전달한다(self) -> None:
+        """원자료의 q=0.00221310 첫 응력 교차 대신 p=0.00390515515를 보존한다."""
+        raw_options = {
+            "youngs_modulus": "@youngs_modulus",
+            "proof_stress": "@proof_stress",
+        }
+        steps = [
+            *self._prefix(),
+            Step("tensile.true_plastic", raw_options),
+        ]
+        source = s355_toe_corrected_excerpt()
+        result = processing.apply(steps, source)
+        proof = scalar(result, "proof_stress")
+        proof_strain = scalar(result, "proof_strain")
+        assert proof == pytest.approx(401734853.3933848, abs=1e-6)
+        assert proof_strain == pytest.approx(0.0039051551506854507, abs=1e-15)
+
+        first = result.frame
+        assert first.columns["strain_engineering"][0] == proof_strain
+        assert first.columns["stress_engineering"][0] == proof
+        assert "proof_strain" not in raw_options
+        assert result.stages[-1].options["proof_strain"] == proof_strain
+
+        stress = source.columns["stress_engineering"]
+        crossing_at = int(np.flatnonzero(stress >= proof)[0])
+        fraction = (proof - stress[crossing_at - 1]) / (
+            stress[crossing_at] - stress[crossing_at - 1]
+        )
+        old_strain = source.columns["strain_engineering"][crossing_at - 1] + fraction * (
+            source.columns["strain_engineering"][crossing_at]
+            - source.columns["strain_engineering"][crossing_at - 1]
+        )
+        assert old_strain == pytest.approx(0.002213103794829775, abs=1e-15)
+        assert first.columns["strain_engineering"][0] != pytest.approx(old_strain)
+
+        right = int(np.searchsorted(source.columns["strain_engineering"], proof_strain))
+        left = right - 1
+        bracket_fraction = (proof_strain - source.columns["strain_engineering"][left]) / (
+            source.columns["strain_engineering"][right]
+            - source.columns["strain_engineering"][left]
+        )
+        expected_source_row = source.columns["source_data_row"][left] + bracket_fraction * (
+            source.columns["source_data_row"][right] - source.columns["source_data_row"][left]
+        )
+        assert first.columns["source_data_row"][0] == pytest.approx(expected_source_row)
+
+    def test_중간에_400점_재샘플해도_명시한_원교점을_쓴다(self) -> None:
+        result = processing.apply(
+            [
+                *self._prefix(),
+                Step("curve.resample", {"x": "strain_engineering", "count": 400}),
+                Step(
+                    "tensile.true_plastic",
+                    {
+                        "youngs_modulus": "@youngs_modulus",
+                        "proof_stress": "@proof_stress",
+                        "proof_strain": "@proof_strain",
+                    },
+                ),
+            ],
+            s355_toe_corrected_excerpt(),
+        )
+        proof = scalar(result, "proof_stress")
+        proof_strain = scalar(result, "proof_strain")
+        resampled = result.stages[-2].frame
+        assert resampled.length() == 400
+        assert result.stages[-1].options["proof_strain"] == proof_strain
+        assert result.frame.columns["strain_engineering"][0] == proof_strain
+        assert result.frame.columns["stress_engineering"][0] == proof
+
+    def test_교점이_기존_행이면_중복하지_않고_뒤_행만_잇는다(self) -> None:
+        frame = Frame(
+            {
+                "strain_engineering": np.asarray([0.0, 0.01, 0.02, 0.03, 0.04]),
+                "stress_engineering": np.asarray(
+                    [0, 100_000_000, 200_000_000, 300_000_000, 400_000_000]
+                ),
+                "marker": np.asarray([10.0, 20.0, 30.0, 40.0, 50.0]),
+            },
+            {
+                "strain_engineering": "1",
+                "stress_engineering": "Pa",
+                "marker": "1",
+            },
+        )
+        result = processing.apply(
+            [
+                Step(
+                    "tensile.true_plastic",
+                    {
+                        "youngs_modulus": E_TRUE,
+                        "proof_stress": 250_000_000.5,
+                        "proof_strain": 0.02,
+                    },
+                )
+            ],
+            frame,
+        )
+        assert result.frame.columns["strain_engineering"] == pytest.approx([0.02, 0.03, 0.04])
+        assert result.frame.columns["stress_engineering"][0] == 250_000_000.5
+        assert result.frame.columns["marker"] == pytest.approx([30.0, 40.0, 50.0])
+
+    @pytest.mark.parametrize("proof_strain", [-0.001, 0.04])
+    def test_관측범위_밖의_교점은_명료하게_실패한다(self, proof_strain: float) -> None:
+        frame = Frame(
+            {
+                "strain_engineering": np.asarray([0.0, 0.01, 0.02, 0.03]),
+                "stress_engineering": np.asarray([0.0, 100e6, 200e6, 300e6]),
+            },
+            {"strain_engineering": "1", "stress_engineering": "Pa"},
+        )
+        with pytest.raises(ProcessingError, match="관측 변형률 범위"):
+            processing.apply(
+                [
+                    Step(
+                        "tensile.true_plastic",
+                        {
+                            "youngs_modulus": E_TRUE,
+                            "proof_stress": 100e6,
+                            "proof_strain": proof_strain,
+                        },
+                    )
+                ],
+                frame,
+            )
+
+    def test_교점_뒤_관측점이_두개_미만이면_실패한다(self) -> None:
+        frame = Frame(
+            {
+                "strain_engineering": np.asarray([0.0, 0.01, 0.02, 0.03]),
+                "stress_engineering": np.asarray([0.0, 100e6, 200e6, 300e6]),
+            },
+            {"strain_engineering": "1", "stress_engineering": "Pa"},
+        )
+        with pytest.raises(ProcessingError, match="뒤에 관측점이 2점 미만"):
+            processing.apply(
+                [
+                    Step(
+                        "tensile.true_plastic",
+                        {
+                            "youngs_modulus": E_TRUE,
+                            "proof_stress": 100e6,
+                            "proof_strain": 0.02,
+                        },
+                    )
+                ],
+                frame,
+            )
+
+    def test_숫자_Rp만_받으면_기존_첫응력교차를_쓰고_근거를_남긴다(self) -> None:
+        frame = synthetic()
+        proof = 350e6
+        stress = frame.columns["stress_engineering"]
+        strain = frame.columns["strain_engineering"]
+        at = int(np.flatnonzero(stress >= proof)[0])
+        fraction = (proof - stress[at - 1]) / (stress[at] - stress[at - 1])
+        expected = strain[at - 1] + fraction * (strain[at] - strain[at - 1])
+        result = processing.apply(
+            [
+                Step(
+                    "tensile.true_plastic",
+                    {"youngs_modulus": E_TRUE, "proof_stress": proof},
+                )
+            ],
+            frame,
+        )
+        assert result.frame.columns["strain_engineering"][0] == pytest.approx(expected)
+        assert "proof_strain" not in result.stages[0].options
+        assert any("좌표 없이" in note for note in result.notes)
+
+    def test_준비훅은_옛참조만_보충하고_명시값과_입력을_보존한다(self) -> None:
+        plugin = registry.get("tensile.true_plastic")
+        assert plugin.prepare_options is not None
+        assert "prepare_options" not in plugin.meta
+        strain_param = next(one for one in plugin.params if one.name == "proof_strain")
+        assert strain_param.default is None
+        assert strain_param.dimension == "strain"
+        assert strain_param.unit == "1"
+        legacy = {"proof_stress": "@proof_stress"}
+        assert plugin.prepare_options(dict(legacy)) == {
+            "proof_stress": "@proof_stress",
+            "proof_strain": "@proof_strain",
+        }
+        assert legacy == {"proof_stress": "@proof_stress"}
+        for options in (
+            {"proof_stress": "@proof_stress", "proof_strain": None},
+            {"proof_stress": 350e6},
+            {"proof_stress": "@lower_yield_strength"},
+            {"proof_stress": "@proof_stress", "yield_policy": "line_crossing"},
+        ):
+            assert plugin.prepare_options(dict(options)) == options
 
 
 class Test네킹:
@@ -1629,6 +1876,31 @@ class Test항복_강하_정리:
                 ],
                 mild_steel(),
             )
+
+    def test_하항복점을_소성_시작으로_넘길_수_있다(self) -> None:
+        # 규격(ISO 6892-1)의 값이자, `tensile.true_plastic` 의 항복강도 자리에 `@` 로 들어간다.
+        result = processing.apply(
+            [
+                Step("tensile.yield_drop", {"method": "lower_yield"}),
+                Step(
+                    "tensile.elastic_modulus", {"method": "manual", "manual_modulus": E_TRUE}
+                ),
+                Step(
+                    "tensile.true_plastic",
+                    {
+                        "youngs_modulus": "@youngs_modulus",
+                        "proof_stress": "@lower_yield_strength",
+                    },
+                ),
+            ],
+            mild_steel(),
+        )
+        plastic = result.frame.columns["stress_true"][
+            result.frame.columns["strain_true_plastic"] > 0
+        ]
+        assert plastic[0] == pytest.approx(278e6, rel=0.02)
+        assert "proof_strain" not in result.stages[-1].options
+        assert any("좌표 없이" in note for note in result.notes)
 
 
 def plateau() -> Frame:
