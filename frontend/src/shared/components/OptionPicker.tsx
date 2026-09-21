@@ -75,6 +75,14 @@ interface Props {
    * 고르면 **기준정보를 거친 의미가 사라진다.**
    */
   onCreate?: (term: string) => Promise<Option>
+  /**
+   * **왜 새로 못 만드는지.** 주면 「새로 추가」 자리에 이 글이 대신 뜬다.
+   *
+   * `onCreate` 를 그냥 빼면 목록에 없는 값을 친 사람은 **아무것도 못 본다** —
+   * 화면이 고장 났는지, 원래 못 하는 일인지 구별이 안 된다. 관리자만 세울 수
+   * 있는 축(ADR 0032)이 그 자리다.
+   */
+  createHint?: string
   /** 아무것도 안 고른 상태의 이름. 기본은 '전체'. */
   anyLabel?: string
   /**
@@ -96,6 +104,7 @@ export function OptionPicker({
   options,
   search,
   onCreate,
+  createHint,
   anyLabel = '전체',
   showLabel = true,
   triggerClassName = '',
@@ -105,6 +114,14 @@ export function OptionPicker({
   const [term, setTerm] = useState('')
   const [remote, setRemote] = useState<Option[] | null>(null)
   const [busy, setBusy] = useState(false)
+  /**
+   * 만들다 서버에 막혔을 때 그 말.
+   *
+   * **화면의 판정이 서버와 어긋날 수 있다** — 권한이 방금 바뀌었거나, 별칭
+   * 게이트에 걸리거나(ADR 0010), 축 정책을 못 받아 온 채로 단추를 보여 줬거나.
+   * 그때 조용히 아무 일도 안 일어나면 사람은 단추가 고장 났다고 읽는다.
+   */
+  const [failed, setFailed] = useState<string | null>(null)
   /** 몇 번째 요청인가. 늦게 온 응답을 버리는 데 쓴다. */
   const issued = useRef(0)
 
@@ -145,18 +162,26 @@ export function OptionPicker({
     onChange(next)
     setOpen(false)
     setTerm('')
+    setFailed(null)
   }
 
   const typed = term.trim()
   // 이미 있는 값이면 '새로 추가' 를 안 보여 준다 — 눌러 봐야 같은 것이 나온다.
   const exists = matched.some((item) => item.value.toLowerCase() === typed.toLowerCase())
-  const canCreate = Boolean(onCreate) && typed !== '' && !exists && !busy
+  /** 목록에 없는 값을 쳤다 — 만들 수 있으면 단추, 없으면 이유를 놓을 자리다. */
+  const isNew = typed !== '' && !exists && !busy
+  const canCreate = Boolean(onCreate) && isNew
 
   async function create() {
     if (!onCreate) return
-    const added = await onCreate(typed)
-    // **서버가 준 값을 고른다.** 친 글자가 아니다.
-    pick(added.value)
+    setFailed(null)
+    try {
+      const added = await onCreate(typed)
+      // **서버가 준 값을 고른다.** 친 글자가 아니다.
+      pick(added.value)
+    } catch (caught) {
+      setFailed(caught instanceof Error ? caught.message : '값을 만들지 못했습니다.')
+    }
   }
 
   return (
@@ -199,7 +224,11 @@ export function OptionPicker({
             <Input
               autoFocus
               value={term}
-              onChange={(event) => setTerm(event.target.value)}
+              onChange={(event) => {
+                setTerm(event.target.value)
+                // 글자를 고쳤으면 지난 거절문은 지운다 — 방금 친 값 이야기가 아니다.
+                setFailed(null)
+              }}
               placeholder={`${label} 찾기`}
               className="h-9 border-0 pl-8 text-xs focus-visible:ring-0"
             />
@@ -244,6 +273,16 @@ export function OptionPicker({
                   '<b>{typed}</b>' 새로 추가
                 </span>
               </button>
+            )}
+
+            {/* 만들 수는 없지만 **왜인지는 말한다.** 빈자리로 두면 화면이 고장
+                난 것과 구별이 안 된다. */}
+            {!canCreate && isNew && createHint && (
+              <p className="text-muted-foreground px-2 py-1.5 text-xs">{createHint}</p>
+            )}
+
+            {failed && (
+              <p className="text-destructive px-2 py-1.5 text-xs">{failed}</p>
             )}
           </div>
 

@@ -6,6 +6,9 @@
  */
 
 import { vocabularyApi } from '@/modules/vocabulary/api'
+import { coinHint, mayCoin, useEntryPolicy } from '@/modules/vocabulary/entryPolicy'
+import { useMaybeAuth } from '@/shared/auth/AuthContext'
+import { isAnyManager } from '@/shared/auth/roles'
 import { OptionPicker } from '@/shared/components/OptionPicker'
 import { Label } from '@/shared/components/ui/label'
 
@@ -49,6 +52,13 @@ export function VocabularyField({
   compact = false,
   onChange,
 }: Props) {
+  // **축이 관리되는 축인지, 내가 관리자인지**를 여기서 한 번만 엮는다(ADR 0032).
+  // 폼마다 따로 물으면 어떤 폼은 단추를 보이고 어떤 폼은 안 보이게 된다.
+  const policy = useEntryPolicy(slug)
+  // 로그인 정보가 없는 자리에 얹힐 수 있다 — 그때는 **모른다**(`null`).
+  const auth = useMaybeAuth()
+  const canCoin = mayCoin(policy, auth ? isAnyManager(auth.user) : null)
+
   return (
     <div className={compact ? 'space-y-1' : 'space-y-1.5'}>
       <Label className={compact ? 'text-muted-foreground text-xs' : undefined}>{label}</Label>
@@ -62,8 +72,11 @@ export function VocabularyField({
           const found = await vocabularyApi.search(slug, term, { parentValue })
           return found.items.map((item) => ({ value: item.value, count: item.usage_count }))
         }}
+        // 못 만드는 까닭은 둘이다 — 화면이 끈 것(`allowCreate`)과 축의 정책.
+        // 앞엣것은 「부모를 고르는 자리」 라 말할 것이 없고, 뒤엣것은 말해야 한다.
+        createHint={allowCreate && !canCoin ? coinHint(policy, label) : undefined}
         onCreate={
-          allowCreate
+          allowCreate && canCoin
             ? async (term) => {
                 // **서버가 준 값을 고른다.** 별칭에 걸리면 친 글자와 다르다.
                 const added = await vocabularyApi.create(slug, term, parentValue)

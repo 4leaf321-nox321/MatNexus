@@ -36,8 +36,11 @@ const FACETS = {
 
 // **이 화면은 이제 로그인한 사람을 안다** — 정렬을 그 계정 자리에 적어 두기
 // 때문이다. 프로바이더 없이 `useAuth` 를 부르면 던지는데, 그 가드는 옳다.
+// 일괄 수정의 기준정보 칸은 **내가 관리자인지**를 본다(새 값은 부서 관리자만,
+// ADR 0032) — 그쪽은 제공자 밖에서도 뜨는 칸이라 `useMaybeAuth` 를 쓴다.
 vi.mock('@/shared/auth/AuthContext', () => ({
   useAuth: () => ({ user: { id: 'user-1' } }),
+  useMaybeAuth: () => ({ user: { id: 'user-1', memberships: [] } }),
 }))
 
 vi.mock('@/modules/materials/api', async () => {
