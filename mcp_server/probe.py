@@ -158,6 +158,36 @@ async def sweep(session: ClientSession) -> None:
         rows = (samples or {}).get("samples") if isinstance(samples, dict) else None
         if rows:
             await call(session, "get_sample", {"sample_id": rows[0]["id"]})
+            # 등록 — **미리보기로만.** 기존 재료의 분류를 그대로 되돌려 넣어
+            # 기준정보 문(ADR 0032)에 안 걸리게 한다. 지어낸 등급을 넣으면
+            # 프로브가 매번 「막혔다」 만 확인하게 된다.
+            await call(
+                session,
+                "create_sample",
+                {
+                    "material_id": material_id,
+                    "lot_no": "PROBE-LOT",
+                    "dry_run": True,
+                },
+            )
+            await call(
+                session,
+                "create_specimen",
+                {"sample_id": rows[0]["id"], "orientation": "MD", "dry_run": True},
+            )
+        classified = (detail or {}).get("classification") if isinstance(detail, dict) else None
+        if isinstance(classified, dict) and classified.get("grade"):
+            await call(
+                session,
+                "create_material",
+                {
+                    "family": classified.get("family"),
+                    "category": classified.get("category"),
+                    "grade": classified.get("grade"),
+                    "details": "PROBE",
+                    "dry_run": True,
+                },
+            )
         await call(session, "list_groups", {"material_id": material_id})
         await call(session, "property_coverage", {"material_id": material_id})
         await call(session, "deck_readiness", {"material_id": material_id})

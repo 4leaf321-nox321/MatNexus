@@ -68,7 +68,7 @@ claude mcp add --transport http matnexus http://127.0.0.1:8012/mcp `
 
 `<!--@ 이름 -->` 마커로 절을 나눈다. `get_guide("units")` 처럼 한 절만 받을 수 있다.
 
-## 5. 지금 있는 것 (도구 79개)
+## 5. 지금 있는 것 (도구 82개)
 
 **전부 한 번에 불러 보려면 `probe.py` 를 돌린다** — 진짜 MCP 클라이언트로 한 바퀴
 돈다(아래 「실측으로 잡은 것」 참조). 화면이나 curl 로는 안 보이는 층이 있다.
@@ -107,6 +107,22 @@ claude mcp add --transport http matnexus http://127.0.0.1:8012/mcp `
     list_samples(material_id)          시료 — 로트·업체·시편 수·시험 수
     get_sample(sample_id)              시료 하나 — 시편 목록과 **밀시트 대조**
     list_groups(material_id)           묶음 결과 — 속도별·Prony·확장 묶음
+
+### 등록 — 재료 · 시료 · 시편 (**새 낱말은 안 만든다**)
+
+    ★ create_material(family, category, 재료 하나. 미리보기가 **지어질 이름**과
+                      grade, ...)        **비슷한 이름**을 준다
+    ★ create_sample(material_id, ...)   로트 하나. 미리보기가 **같은 로트**를 짚는다
+    ★ create_specimen(sample_id, ...)   자른 조각 하나. 번호는 서버가 방향별로 매긴다
+
+Family·Category·Grade·제조사·유통사·시편 규격은 **기준정보**라, 목록에 없는 값이면
+도구가 아무것도 안 만들고 비슷한 값을 후보로 준다(ADR 0032). 정말 새 등급이면 사람이
+화면에서 세운다 — 관리자 토큰이어도 같다. 권한의 문제가 아니라 **AI 가 쓸 낱말을
+새로 지어내지 않는다**는 규약이고, 그럴듯한 등급 이름을 짓는 일은 AI 가 가장 잘하는
+일이라 틀린 날에도 아무도 못 본다. 판정은 `term_gate.py` 에 따로 떼어 뒀다
+(`tests/unit/test_mcp_term_gate.py`).
+
+시험 파일은 못 올린다 — 시편까지 만들어 두고 사람에게 넘긴다.
 
 ### 문헌 카탈로그 → 사내로 받아 오기
 

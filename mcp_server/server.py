@@ -32,8 +32,9 @@ from typing import Any
 
 import httpx
 
-# 같은 폴더 — 재시도 판단만 떼어 둔 순수 함수(시험이 부를 수 있게).
+# 같은 폴더 — 판단만 떼어 둔 순수 함수들(시험이 부를 수 있게).
 import retry_plan
+import term_gate
 from mcp.server.mcpserver import Context, MCPServer
 from mcp.server.transport_security import TransportSecuritySettings
 
@@ -233,7 +234,13 @@ async def _send(
     if got.status_code == 401:
         return {"error": "인증에 실패했습니다 — 개인 토큰(mnx_pat_…)을 확인하세요."}
     if got.status_code == 403:
-        return {"error": "권한이 없습니다 — 이 자료는 당신 계정으로 고칠 수 없습니다."}
+        # **서버가 할 말이 있으면 그것을 옮긴다.** 새 기준정보 값을 막을 때는
+        # 비슷한 값 후보가 `details` 에 실려 온다(ADR 0032) — 여기서 한 줄로
+        # 뭉개면 AI 는 「권한 없음」 만 보고, 오타를 고칠 기회가 사라진다.
+        out = _failed(got)
+        if str(out.get("error", "")).startswith("요청이 실패했습니다"):
+            return {"error": "권한이 없습니다 — 이 자료는 당신 계정으로 고칠 수 없습니다."}
+        return out
     if got.status_code >= 400:
         return _failed(got)
     return got.json() if got.content else {"ok": True}
@@ -1473,6 +1480,311 @@ async def list_specimens(
         ],
     }
     return _complete(out, whole=len(rows) >= int(out["total"] or 0))
+
+
+# ── 만들기 — 재료 · 시료 · 시편 ───────────────────────────────────────────────
+
+
+async def _new_terms(ctx: Context, values: dict[str, str | None]) -> dict[str, Any] | None:
+    """보내려는 값 중 **기준정보에 아직 없는 것**. 전부 있으면 `None`.
+
+    판단은 `term_gate` 에 있다(시험이 부를 수 있게) — 여기는 축 목록과 값 검색을
+    가져다 그 판단에 먹인다. **정책을 못 읽어 오면 막지 않는다**: 판정은 서버가
+    하고, 읽기 한 번 실패한 것이 쓰기 전체를 세우면 안 된다.
+    """
+    axes = await _get(ctx, "/vocabularies")
+    if not isinstance(axes, list):
+        return None
+    policy = {str(one.get("slug")): str(one.get("entry_policy")) for one in axes}
+
+    blocked: list[dict[str, Any]] = []
+    for field, axis, text in term_gate.to_check(values, policy):
+        found = await _get(ctx, f"/vocabularies/{axis}/terms", {"q": text, "limit": 5})
+        items = found.get("items", []) if isinstance(found, dict) else []
+        if not term_gate.is_new(text, items):
+            continue
+        blocked.append(
+            {
+                "field": field,
+                "axis": axis,
+                "value": text,
+                # 별칭에 걸린 경우도 여기로 온다 — 「포스코(주)」 를 치면 후보에
+                # 「포스코」 가 뜨고, 그 정본 표기로 다시 부르면 된다.
+                "candidates": term_gate.candidates(items),
+            }
+        )
+    return term_gate.refusal(blocked) if blocked else None
+
+
+@mcp.tool()
+async def create_material(
+    ctx: Context,
+    family: str,
+    category: str,
+    grade: str,
+    details: str | None = None,
+    spec_thickness_mm: float | None = None,
+    alias: str | None = None,
+    note: str | None = None,
+    workspace_slug: str | None = None,
+    dry_run: bool = True,
+) -> dict[str, Any]:
+    """재료를 등록한다. **기존 분류·등급으로만** — 기본은 미리보기다.
+
+    ## 먼저 찾아본다
+
+    **`search_materials` 로 없는 것을 확인하고 온다.** 같은 실물이 두 줄 되는 것이
+    이 화면에서 가장 흔한 사고다(`SGARC440` / `SGARC 440`). 미리보기가 비슷한
+    이름(`similar`)을 함께 주니 **그것을 사람에게 그대로 보여 주고 물어라** —
+    하나라도 있으면 새로 만들기 전에 사람이 판단할 일이다.
+
+    ## 새 등급은 못 만든다
+
+    `family`·`category`·`grade` 는 기준정보에 **이미 있는 값**이어야 한다. 없으면
+    비슷한 값을 후보로 돌려주고 아무것도 안 만든다(ADR 0032). 정말 새 등급이면
+    사람이 화면에서 세운다 — 지어낸 등급 하나가 그 뒤의 검색·통계를 가른다.
+
+    ## 이름은 서버가 짓는다
+
+    `record_name` 은 등급·상세·두께로 서버가 조립한다(ADR 0004). 손으로 적는 칸이
+    아니다. 미리보기가 **무슨 이름이 될지**와 **이미 쓰이는 이름인지**(`name_taken`)를
+    말해 준다.
+
+        spec_thickness_mm   **mm 다.** 1.0T 면 1.0 (SI 가 아니다 — 이름에 단위가 있다)
+        details             같은 등급을 가르는 말(도금·조질). 없으면 비운다
+        workspace_slug      생략하면 내 소속 부서
+
+    시료·시편은 따로 만든다(`create_sample` → `create_specimen`).
+    """
+    blocked = await _new_terms(
+        ctx, {"family": family, "category": category, "grade": grade}
+    )
+    if blocked:
+        return blocked
+
+    body: dict[str, Any] = {
+        "family": family,
+        "category": category,
+        "grade": grade,
+        "details": details,
+        "spec_thickness": spec_thickness_mm,
+        "spec_thickness_unit": "mm",
+        "alias": alias,
+        "note": note,
+        "workspace_slug": workspace_slug,
+    }
+
+    if dry_run:
+        # **이름과 닮은 이름을 서버에 묻는다.** 화면의 등록 폼이 입력 중에 부르는
+        # 것과 같은 자리라, 여기서 다시 계산하면 두 이름이 갈라진다.
+        path = "/materials/preview-name"
+        if workspace_slug:
+            path = f"{path}?workspace_slug={workspace_slug}"
+        preview = await _send(
+            ctx,
+            "POST",
+            path,
+            {
+                "grade": grade,
+                "details": details,
+                "spec_thickness": spec_thickness_mm,
+                "spec_thickness_unit": "mm",
+            },
+        )
+        if isinstance(preview, dict) and "error" in preview:
+            return preview
+        similar = preview.get("similar") or []
+        return {
+            "dry_run": True,
+            "will_create": body,
+            "record_name": preview.get("record_name"),
+            "name_taken": preview.get("taken"),
+            "similar": similar,
+            "note": (
+                "**이미 있는 이름입니다** — 그 재료를 쓰세요. 그래도 만들어야 하는 "
+                "이유가 있으면 사람에게 확인하세요."
+                if preview.get("taken")
+                else (
+                    "비슷한 이름이 있습니다 — 사람에게 보여 주고 같은 것인지 물어본 "
+                    "뒤에 만드세요."
+                    if similar
+                    else "이대로 만들려면 dry_run=False 로 다시 부르세요."
+                )
+            ),
+        }
+
+    made = await _send(ctx, "POST", "/materials", body)
+    if isinstance(made, dict) and "error" in made:
+        return made
+    return {
+        **made,
+        "note": f"만들었습니다. 사람에게 /materials/{made.get('id')} 를 보여 주세요. "
+        f"시료(로트)는 create_sample 로 이어서 만듭니다.",
+    }
+
+
+@mcp.tool()
+async def create_sample(
+    ctx: Context,
+    material_id: str,
+    lot_no: str | None = None,
+    manufacturer: str | None = None,
+    distributor: str | None = None,
+    primary_vendor: str | None = None,
+    sales_type: str | None = None,
+    production_date: str | None = None,
+    density_kg_m3: float | None = None,
+    alias: str | None = None,
+    note: str | None = None,
+    dry_run: bool = True,
+) -> dict[str, Any]:
+    """시료(로트)를 재료 밑에 만든다. **기본은 미리보기다.**
+
+    시료는 「그 재료를 실제로 받은 한 덩어리」 다 — 로트가 다르면 같은 재료라도
+    값이 다르다. 그래서 시험은 시료에 매달린다.
+
+    **로트번호는 용어가 아니라 매번 새것이다** — 아무 글자나 적어도 된다. 반면
+    제조사·유통사·주 벤더·판매 유형은 **기준정보**라, 목록에 없는 값이면 만들지
+    않고 후보를 준다(ADR 0032).
+
+        material_id      이름이나 재료 번호를 줘도 된다 — 딱 하나 맞으면 그것으로 본다
+        production_date  YYYY-MM-DD
+        density_kg_m3    **kg/m³ 다.** 강이면 7850 (화면은 tonne/mm³ 로 보여 준다)
+
+    이미 있는 로트인지 먼저 본다: `list_samples(material_id)`.
+    """
+    resolved = await _resolve_material(ctx, material_id)
+    if isinstance(resolved, dict):
+        return resolved
+
+    blocked = await _new_terms(
+        ctx,
+        {
+            "manufacturer": manufacturer,
+            "distributor": distributor,
+            "primary_vendor": primary_vendor,
+            "sales_type": sales_type,
+        },
+    )
+    if blocked:
+        return blocked
+
+    body: dict[str, Any] = {
+        "lot_no": lot_no,
+        "alias": alias,
+        "manufacturer": manufacturer,
+        "distributor": distributor,
+        "primary_vendor": primary_vendor,
+        "sales_type": sales_type,
+        "production_date": production_date,
+        "density": density_kg_m3,
+        "density_unit": "kg/m3",
+        "note": note,
+    }
+
+    if dry_run:
+        seen = await _get(ctx, f"/materials/{resolved}/samples")
+        rows = seen if isinstance(seen, list) else []
+        same = [
+            _sample_brief(one)
+            for one in rows
+            if lot_no and str(one.get("lot_no") or "").strip().lower() == lot_no.strip().lower()
+        ]
+        return {
+            "dry_run": True,
+            "material_id": resolved,
+            "will_create": body,
+            "existing_samples": len(rows),
+            "same_lot": same,
+            "note": (
+                "**같은 로트번호의 시료가 이미 있습니다** — 그것을 쓰세요."
+                if same
+                else "이대로 만들려면 dry_run=False 로 다시 부르세요."
+            ),
+        }
+
+    made = await _send(ctx, "POST", f"/materials/{resolved}/samples", body)
+    if isinstance(made, dict) and "error" in made:
+        return made
+    return {
+        **_sample_brief(made),
+        "material_id": resolved,
+        "note": "만들었습니다. 시편은 create_specimen 으로 이어서 만듭니다.",
+    }
+
+
+@mcp.tool()
+async def create_specimen(
+    ctx: Context,
+    sample_id: str,
+    orientation: str = "NA",
+    standard: str | None = None,
+    thickness_mm: float | None = None,
+    width_mm: float | None = None,
+    gauge_length_mm: float | None = None,
+    note: str | None = None,
+    dry_run: bool = True,
+) -> dict[str, Any]:
+    """시편을 시료 밑에 만든다 — **자른 조각 하나.** 기본은 미리보기다.
+
+    시험 하나가 시편 하나에 매달린다. 응력은 단면적으로 나눈 값이라 **치수가
+    곧 값의 근거**다 — 두께·폭을 지어 적지 마라. 모르면 비우고, 시험을 올릴 때
+    파일이나 사람이 채우게 둔다.
+
+        orientation       MD · TD · DD · NA 중 하나(압연 방향 기준). 모르면 NA
+        standard          시편 규격(ASTM E8/E8M …). **기준정보다** — 없는 값이면 후보를 준다
+        thickness_mm ·
+        width_mm ·
+        gauge_length_mm   **mm 다.** 규격이 정하는 값이면 규격에서 온다 —
+                          `list_specimens(standard=…)` 로 같은 규격의 시편을 먼저 보라
+
+    번호(`MD_03` 의 03)는 **방향별로 서버가 이어서 매긴다.** 손으로 적는 칸이 아니다.
+    시료 id 는 `list_samples(material_id)` · `get_sample` 에서 온다.
+    """
+    blocked = await _new_terms(ctx, {"standard": standard})
+    if blocked:
+        return blocked
+
+    body: dict[str, Any] = {
+        "orientation": orientation,
+        "standard": standard,
+        "thickness": thickness_mm,
+        "width": width_mm,
+        "gauge_length": gauge_length_mm,
+        "length_unit": "mm",
+        "note": note,
+    }
+
+    if dry_run:
+        seen = await _get(ctx, f"/samples/{sample_id}/specimens")
+        if isinstance(seen, dict) and "error" in seen:
+            return seen
+        rows = seen if isinstance(seen, list) else []
+        return {
+            "dry_run": True,
+            "sample_id": sample_id,
+            "will_create": body,
+            "existing_specimens": [
+                {
+                    "id": one.get("id"),
+                    "name": one.get("record_name"),
+                    "orientation": one.get("orientation"),
+                    "standard": one.get("standard"),
+                }
+                for one in rows
+            ],
+            "note": "이대로 만들려면 dry_run=False 로 다시 부르세요. 번호는 서버가 "
+            "이 방향의 다음 번호로 매깁니다.",
+        }
+
+    made = await _send(ctx, "POST", f"/samples/{sample_id}/specimens", body)
+    if isinstance(made, dict) and "error" in made:
+        return made
+    return {
+        **(_specimen_brief(made) or {}),
+        "sample_id": sample_id,
+        "note": "만들었습니다. 시험 파일은 화면에서 올립니다 — MCP 로는 못 올립니다.",
+    }
 
 
 @mcp.tool()
@@ -4376,6 +4688,14 @@ _RECIPES: list[dict[str, str]] = [
         "question": "이 시험 값이 어느 재료에서 나왔나",
         "steps": 'find_path(from_kind="test_run", from_id=…, to_kind="material", to_id=…)',
         "note": "tested → part_of → derived_from 사슬로 돌아온다.",
+    },
+    {
+        "question": "새 재료(또는 로트·시편)를 등록해 달라",
+        "steps": "search_materials(q=…) 로 없는 것을 확인 → create_material(dry_run) → "
+        "create_sample(dry_run) → create_specimen(dry_run) → 사람이 보고 나서 dry_run=False",
+        "note": "미리보기의 `similar`·`same_lot` 을 사람에게 그대로 보여라 — 같은 실물이 두 줄 "
+        "되는 것이 이 층의 사고다. 기준정보에 없는 Grade·업체·규격은 도구가 막고 후보를 준다: "
+        "**새 낱말은 사람이 세운다**(ADR 0032).",
     },
 ]
 
