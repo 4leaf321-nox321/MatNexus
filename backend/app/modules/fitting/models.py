@@ -225,3 +225,76 @@ class ExportProfile(Base):
         DateTime(timezone=True), nullable=True, index=True
     )
     """지운 때. **행은 남는다** — 휴지통에서 되살린다(ADR 0023 5단계)."""
+
+
+class CardBlock(Base):
+    """화면에서 만든 **카드 항목란**. 코드가 아니라 행이다(ADR 0033).
+
+    행 하나가 `matcore.cards.BlockSpec` 하나이고, 기동할 때와 저장할 때 레지스트리에
+    얹는다 — 계산식(`Formula`, ADR 0030)이 쓰는 방식 그대로다.
+
+    ## 왜 생겼나
+
+    새 물성 갈래를 카드에 싣고 덱까지 보내려면 조각이 셋인데(항목란 · 채우는 계산 ·
+    덱에 쓰는 규칙), **가운데만 빼고 둘은 이미 화면에서 된다.** 계산식 편집기는 「어느
+    블록에 넣을지」 를 드롭다운으로 고르게까지 하고 있었다. 그래서 r값 하나 싣자는
+    요구에도 배포가 돌았다.
+
+    ## 내장은 못 덮는다
+
+    내장 12개는 코드에 그대로 두고 **표는 추가만** 한다. 덮게 두면 그 물성을 내는
+    계산이 조용히 다른 칸을 보게 되고, 덱을 열어 보기 전까지 안 드러난다. 같은
+    판단이 `ExportProfile` 에도 있다(코드 렌더러를 못 덮는다).
+    """
+
+    __tablename__ = "card_blocks"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    key: Mapped[str] = mapped_column(String(40), unique=True, index=True)
+    """카드 `blocks` 의 키이자 덱 정의가 가리키는 이름. **점을 못 쓴다** — 덱 정의가
+    값을 `블록.슬롯` 으로 가리키고 그 해석이 첫 점 기준이다. 한 번 나가면 안 바꾼다."""
+    label: Mapped[str] = mapped_column(String(120))
+    help: Mapped[str] = mapped_column(Text, default="", server_default="")
+    """이 항목란이 무엇인지 한 줄. **화면에 그대로 뜬다.**"""
+
+    produces: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSONB, default=list, server_default="[]"
+    )
+    """담는 값들의 선언.
+
+    `[{"key": "r_bar", "label": "평균 이방성", "si_unit": "1", "property_key": ...}]`."""
+    rows: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSONB, default=list, server_default="[]"
+    )
+    """표의 열 선언. 비어 있으면 이 항목란에는 표가 없다."""
+
+    sort_order: Mapped[int] = mapped_column(Integer, default=200, server_default="200")
+    """화면 순서. 기본 200 — **내장 블록들 뒤다.**"""
+    kind_priority: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    """이 항목란이 들어 있으면 카드의 **종류**가 되는가. 비우면 종류가 아니다."""
+    curve_x: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    curve_y: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    """표가 **점 곡선**이면 (x 열, y 열). 덱 정의가 중복을 묶고 단조성을 보는 근거다."""
+    from_tests: Mapped[list[str]] = mapped_column(JSONB, default=list, server_default="[]")
+    """이 항목란을 내는 시험 종류 키. 준비도가 「없다 → 이 시험을 하면 생긴다」 를
+    답하는 근거다."""
+    measured: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    """값이 **시험에서 나오는가.** 등급 판정이 표본 수로 등급을 매길지 정하는 데 쓴다 —
+    코드의 목록(`card_tiers`)에 이름을 더하러 가지 않게 여기서 선언한다."""
+
+    version: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
+    """계산이 달라지는 칸을 고치면 오른다. 이름·설명은 안 올린다."""
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    """끄면 레지스트리에서 빠진다. **옛 카드의 값은 그대로 남는다.**"""
+
+    created_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )

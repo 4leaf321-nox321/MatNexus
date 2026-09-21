@@ -29,6 +29,7 @@ import {
   Megaphone,
   Package,
   Plug,
+  Rows3,
   Ruler,
   ScrollText,
   Server,
@@ -497,6 +498,15 @@ export const NAV_GROUPS: NavGroup[] = [
         label: '계산식',
         icon: Sigma,
         to: '/admin/formulas',
+        audience: 'system_admin',
+      },
+      {
+        // **카드가 담는 칸을 화면에서 만든다**(ADR 0033). 계산식 바로 밑에 둔다 —
+        // 식이 「넣을 블록」 을 고르는데 그 블록을 만드는 자리가 여기다. 떨어뜨려
+        // 두면 식을 짓다가 갈 곳이 없다는 것을 알고도 어디로 갈지 모른다.
+        label: '카드 항목란',
+        icon: Rows3,
+        to: '/admin/card-blocks',
         audience: 'system_admin',
       },
       {

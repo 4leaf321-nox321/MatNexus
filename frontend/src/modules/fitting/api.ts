@@ -27,6 +27,12 @@ export type DeckReadiness = components['schemas']['DeckReadinessOut']
 export type ReadinessMissing = components['schemas']['ReadinessMissingOut']
 export type ResampleMethod = components['schemas']['ResampleMethodOut']
 export type BlockSpec = components['schemas']['BlockSpecOut']
+/** 표에서 만든 항목란 한 줄 — 고칠 수 있는 것(ADR 0033). */
+export type CardBlockDef = components['schemas']['CardBlockOut']
+export type CardBlockCreate = components['schemas']['CardBlockCreate']
+export type CardBlockUpdate = components['schemas']['CardBlockUpdate']
+/** 담는 값 하나, 또는 표의 열 하나. */
+export type CardSlot = components['schemas']['CardSlotIn']
 export type Produced = components['schemas']['CardValueOut']
 export type ViscoelasticCardSaveRequest =
   components['schemas']['ViscoelasticCardSaveRequest']
@@ -127,6 +133,19 @@ export const fittingApi = {
    * 더하는 값을 마이그레이션 0·화면 0 으로 만드는 자리다(D7).
    */
   blocks: () => api.get<BlockSpec[]>('/fitting/blocks'),
+
+  /**
+   * **화면에서 만든** 항목란만(ADR 0033). 위 `blocks` 는 내장까지 합친 목록이고,
+   * 이것은 고칠 수 있는 것만 — 관리 화면이 그 둘을 섞어 보이면 못 고치는 줄에
+   * 편집 단추가 뜬다.
+   */
+  blockDefinitions: () => api.get<CardBlockDef[]>('/fitting/block-definitions'),
+  createBlockDefinition: (payload: CardBlockCreate) =>
+    api.post<CardBlockDef>('/fitting/block-definitions', payload),
+  updateBlockDefinition: (id: string, payload: CardBlockUpdate) =>
+    api.patch<CardBlockDef>(`/fitting/block-definitions/${id}`, payload),
+  removeBlockDefinition: (id: string) =>
+    api.delete<void>(`/fitting/block-definitions/${id}`),
 
   /** 저장하지 않고 견줘 본다. `families` 를 비우면 등록된 식 전부. */
   preview: (body: FitPreviewRequest) => api.post<FitPreview>('/fitting/preview', body),

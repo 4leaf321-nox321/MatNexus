@@ -2777,6 +2777,384 @@
         "title": "CandidateOut",
         "type": "object"
       },
+      "CardBlockCreate": {
+        "properties": {
+          "curve_x": {
+            "anyOf": [
+              {
+                "maxLength": 60,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Curve X"
+          },
+          "curve_y": {
+            "anyOf": [
+              {
+                "maxLength": 60,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Curve Y"
+          },
+          "from_tests": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "From Tests",
+            "type": "array"
+          },
+          "help": {
+            "default": "",
+            "maxLength": 1000,
+            "title": "Help",
+            "type": "string"
+          },
+          "key": {
+            "maxLength": 40,
+            "minLength": 2,
+            "title": "Key",
+            "type": "string"
+          },
+          "kind_priority": {
+            "anyOf": [
+              {
+                "maximum": 999.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kind Priority"
+          },
+          "label": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          },
+          "measured": {
+            "default": false,
+            "title": "Measured",
+            "type": "boolean"
+          },
+          "produces": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/CardSlotIn"
+            },
+            "title": "Produces",
+            "type": "array"
+          },
+          "rows": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/CardSlotIn"
+            },
+            "title": "Rows",
+            "type": "array"
+          },
+          "sort_order": {
+            "default": 200,
+            "maximum": 999.0,
+            "minimum": 0.0,
+            "title": "Sort Order",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "key",
+          "label"
+        ],
+        "title": "CardBlockCreate",
+        "type": "object"
+      },
+      "CardBlockOut": {
+        "properties": {
+          "card_count": {
+            "title": "Card Count",
+            "type": "integer"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "curve_x": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Curve X"
+          },
+          "curve_y": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Curve Y"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "from_tests": {
+            "items": {
+              "type": "string"
+            },
+            "title": "From Tests",
+            "type": "array"
+          },
+          "help": {
+            "title": "Help",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "installed": {
+            "title": "Installed",
+            "type": "boolean"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "kind_priority": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kind Priority"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "measured": {
+            "title": "Measured",
+            "type": "boolean"
+          },
+          "produces": {
+            "items": {
+              "$ref": "#/components/schemas/CardSlotIn"
+            },
+            "title": "Produces",
+            "type": "array"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/CardSlotIn"
+            },
+            "title": "Rows",
+            "type": "array"
+          },
+          "sort_order": {
+            "title": "Sort Order",
+            "type": "integer"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "key",
+          "label",
+          "help",
+          "produces",
+          "rows",
+          "sort_order",
+          "kind_priority",
+          "curve_x",
+          "curve_y",
+          "from_tests",
+          "measured",
+          "version",
+          "enabled",
+          "installed",
+          "card_count",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "CardBlockOut",
+        "type": "object"
+      },
+      "CardBlockUpdate": {
+        "description": "**키는 없다** — 카드가 그 키로 값을 들고 있어 못 바꾼다.",
+        "properties": {
+          "curve_x": {
+            "anyOf": [
+              {
+                "maxLength": 60,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Curve X"
+          },
+          "curve_y": {
+            "anyOf": [
+              {
+                "maxLength": 60,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Curve Y"
+          },
+          "enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enabled"
+          },
+          "from_tests": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "From Tests"
+          },
+          "help": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Help"
+          },
+          "kind_priority": {
+            "anyOf": [
+              {
+                "maximum": 999.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kind Priority"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "measured": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Measured"
+          },
+          "produces": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/CardSlotIn"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Produces"
+          },
+          "rows": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/CardSlotIn"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rows"
+          },
+          "sort_order": {
+            "anyOf": [
+              {
+                "maximum": 999.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sort Order"
+          }
+        },
+        "title": "CardBlockUpdate",
+        "type": "object"
+      },
       "CardBundleRequest": {
         "description": "카드 여럿을 한 묶음으로 내보낸다.\n\n**해석 하나에 재료가 여럿 들어간다.** 한 장씩 내려받아 사람이 폴더에 모으면 그\n묶음이 무엇이었는지가 아무 데도 안 남는다 — 해석자가 「내가 받은 이 덱이 그때\n그 카드가 맞나」 를 물을 때 답할 것이 없다.",
         "properties": {
@@ -2862,6 +3240,59 @@
           "owners"
         ],
         "title": "CardFacetsOut",
+        "type": "object"
+      },
+      "CardSlotIn": {
+        "description": "항목란이 담는 값 하나, 또는 표의 열 하나.",
+        "properties": {
+          "help": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Help"
+          },
+          "key": {
+            "maxLength": 40,
+            "minLength": 2,
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          },
+          "property_key": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Property Key"
+          },
+          "si_unit": {
+            "default": "1",
+            "maxLength": 40,
+            "title": "Si Unit",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "label"
+        ],
+        "title": "CardSlotIn",
         "type": "object"
       },
       "CardValueOut": {
@@ -33404,6 +33835,161 @@
         "summary": "Create Part",
         "tags": [
           "equipment"
+        ]
+      }
+    },
+    "/api/fitting/block-definitions": {
+      "get": {
+        "description": "**표에서 만든** 항목란만. 내장 12개는 여기 없다 — `/fitting/blocks` 가 둘을\n합쳐 보여 준다(화면이 카드를 그리는 쪽은 그것을 본다).\n\n보는 것은 누구나. 만들고 고치는 것은 시스템 관리자다(ADR 0033 D3).",
+        "operationId": "list_block_definitions_api_fitting_block_definitions_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CardBlockOut"
+                  },
+                  "title": "Response List Block Definitions Api Fitting Block Definitions Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Block Definitions",
+        "tags": [
+          "fitting"
+        ]
+      },
+      "post": {
+        "description": "새 항목란. **시스템 관리자만** — 덱 구조까지 흘러가고 전 부서가 공유한다.\n\n만든 즉시 레지스트리에 얹혀, 계산식 편집기의 「넣을 블록」 목록과 카드 화면에\n바로 나온다. 배포를 안 기다린다.",
+        "operationId": "create_block_definition_api_fitting_block_definitions_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CardBlockCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CardBlockOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Block Definition",
+        "tags": [
+          "fitting"
+        ]
+      }
+    },
+    "/api/fitting/block-definitions/{block_id}": {
+      "delete": {
+        "description": "지운다. **카드가 담고 있으면 못 지운다** — 대신 끈다.\n\n지우면 그 카드의 값이 「모르는 블록」이 되어 덱에서 조용히 빠진다. 끄면 선언만\n빠지고 값은 남는다.",
+        "operationId": "delete_block_definition_api_fitting_block_definitions__block_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "block_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Block Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Block Definition",
+        "tags": [
+          "fitting"
+        ]
+      },
+      "patch": {
+        "description": "고친다. **담기는 모양이 달라지면 판이 오른다** — 이름·설명은 안 올린다.\n\n**옛 카드의 값은 안 바뀐다.** 슬롯을 지워도 이미 저장된 카드는 그 값을 그대로\n들고 있고, 선언이 사라진 값은 화면에 안 뜰 뿐이다.",
+        "operationId": "update_block_definition_api_fitting_block_definitions__block_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "block_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Block Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CardBlockUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CardBlockOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Block Definition",
+        "tags": [
+          "fitting"
         ]
       }
     },

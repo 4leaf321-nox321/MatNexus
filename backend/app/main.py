@@ -26,6 +26,7 @@ from app.modules.auth import routes as auth_routes
 from app.modules.catalog import routes as catalog_routes
 from app.modules.commissions import routes as commissions_routes
 from app.modules.equipment import routes as equipment_routes
+from app.modules.fitting import blocks as fitting_blocks
 from app.modules.fitting import routes as fitting_routes
 from app.modules.formulas import routes as formulas_routes
 from app.modules.formulas import services as formulas_services
@@ -194,6 +195,17 @@ def _sync_formulas() -> None:
         logger.info("계산식 %d개를 올렸습니다: %s", len(keys), ", ".join(keys))
 
 
+def _sync_card_blocks() -> None:
+    try:
+        with SessionLocal() as db:
+            keys = fitting_blocks.sync(db)
+    except Exception as exc:  # 기동을 막지 않는다
+        logger.warning("카드 항목란을 레지스트리에 올리지 못했습니다 — %s", exc)
+        return
+    if keys:
+        logger.info("카드 항목란 %d개를 올렸습니다: %s", len(keys), ", ".join(keys))
+
+
 def create_app() -> FastAPI:
     settings = get_settings()
     setup_logging(settings)
@@ -249,6 +261,11 @@ def create_app() -> FastAPI:
     # 500 으로 먼저 만나는데, 거기엔 원인이 안 적힌다. 운영은 배포가 알아서
     # `alembic upgrade head` 를 돌리므로 이건 개발 서버를 위한 안내다.
     warn_if_behind(engine)
+
+    # **표에 적힌 카드 항목란을 얹는다** (ADR 0033). 계산식보다 먼저다 — 식이
+    # 「어느 블록에 넣을지」 를 들고 있으므로 블록 목록이 먼저 차 있는 편이 읽기
+    # 쉽다. 내장은 못 덮으므로(`cards.install`) 확장 뒤 어디에 두어도 안전하다.
+    _sync_card_blocks()
 
     # **표에 적힌 계산식을 레지스트리에 올린다** (ADR 0030). 확장 다음이다 — 확장이
     # 같은 키를 내장으로 등록했다면 식이 그것을 덮지 못하게 `formula.` 접두어가

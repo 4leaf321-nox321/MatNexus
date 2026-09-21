@@ -885,3 +885,75 @@ class BomDeckOut(BaseModel):
     literature_count: int
     synthetic_count: int = 0
     """합성 곡선으로 실린 부품 수 — 문헌 스칼라 수와도 갈라 보인다."""
+
+
+# ── 카드 항목란을 화면에서 정의한다 (ADR 0033) ────────────────────────────────
+
+
+class CardSlotIn(BaseModel):
+    """항목란이 담는 값 하나, 또는 표의 열 하나."""
+
+    key: str = Field(min_length=2, max_length=40)
+    label: str = Field(min_length=1, max_length=120)
+    si_unit: str = Field(default="1", max_length=40)
+    """**SI 정본으로 적는다**(Pa · 1 · K). 단위표에 없으면 저장이 거절된다."""
+    help: str | None = Field(default=None, max_length=500)
+    property_key: str | None = Field(default=None, max_length=120)
+    """물성 사전의 낱말. 이어 두면 문헌값·선언값과 **같은 물성으로** 묶인다."""
+
+
+class CardBlockCreate(BaseModel):
+    key: str = Field(min_length=2, max_length=40)
+    """카드 안의 이름이자 덱 정의가 가리키는 이름. **한 번 만들면 못 바꾼다.**"""
+    label: str = Field(min_length=1, max_length=120)
+    help: str = Field(default="", max_length=1000)
+    produces: list[CardSlotIn] = []
+    rows: list[CardSlotIn] = []
+    sort_order: int = Field(default=200, ge=0, le=999)
+    kind_priority: int | None = Field(default=None, ge=1, le=999)
+    """이 항목란이 들어 있으면 카드의 **종류**가 되는가 — 작을수록 먼저, 비우면 아님."""
+    curve_x: str | None = Field(default=None, max_length=60)
+    curve_y: str | None = Field(default=None, max_length=60)
+    from_tests: list[str] = []
+    measured: bool = False
+    """값이 시험에서 나오는가. 등급 판정이 표본 수로 등급을 매길지 정한다."""
+
+
+class CardBlockUpdate(BaseModel):
+    """**키는 없다** — 카드가 그 키로 값을 들고 있어 못 바꾼다."""
+
+    label: str | None = Field(default=None, min_length=1, max_length=120)
+    help: str | None = Field(default=None, max_length=1000)
+    produces: list[CardSlotIn] | None = None
+    rows: list[CardSlotIn] | None = None
+    sort_order: int | None = Field(default=None, ge=0, le=999)
+    kind_priority: int | None = Field(default=None, ge=1, le=999)
+    curve_x: str | None = Field(default=None, max_length=60)
+    curve_y: str | None = Field(default=None, max_length=60)
+    from_tests: list[str] | None = None
+    measured: bool | None = None
+    enabled: bool | None = None
+
+
+class CardBlockOut(BaseModel):
+    id: uuid.UUID
+    key: str
+    label: str
+    help: str
+    produces: list[CardSlotIn]
+    rows: list[CardSlotIn]
+    sort_order: int
+    kind_priority: int | None
+    curve_x: str | None
+    curve_y: str | None
+    from_tests: list[str]
+    measured: bool
+    version: int
+    enabled: bool
+    installed: bool
+    """지금 레지스트리에 얹혀 있는가. 켜 뒀는데 거짓이면 **선언에 탈이 난 것**이다 —
+    기동 로그에 이유가 남는다."""
+    card_count: int
+    """이 항목란을 담고 있는 카드 수. 0 이 아니면 못 지우고 끄기만 한다."""
+    created_at: datetime
+    updated_at: datetime

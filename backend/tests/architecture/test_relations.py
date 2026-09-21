@@ -183,6 +183,9 @@ EXCLUDED_TABLES: dict[str, str] = {
     "vocabulary_dismissals": 기준정보,
     "vocabulary_drift_checks": 기준정보,
     "vocabulary_merges": 기준정보,
+    "card_blocks": 설정
+    + " — 화면에서 만든 카드 항목란(ADR 0033). 코드의 `BlockSpec` 과 같은 자리라,"
+    " 마디로 두면 내장 12개는 그래프에 없고 만든 것만 있는 반쪽 목록이 된다",
     "export_profiles": 설정,
     "format_profiles": 설정,
     "specimen_fields": 설정,

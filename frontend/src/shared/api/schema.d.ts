@@ -1487,6 +1487,66 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/fitting/block-definitions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Block Definitions
+         * @description **표에서 만든** 항목란만. 내장 12개는 여기 없다 — `/fitting/blocks` 가 둘을
+         *     합쳐 보여 준다(화면이 카드를 그리는 쪽은 그것을 본다).
+         *
+         *     보는 것은 누구나. 만들고 고치는 것은 시스템 관리자다(ADR 0033 D3).
+         */
+        get: operations["list_block_definitions_api_fitting_block_definitions_get"];
+        put?: never;
+        /**
+         * Create Block Definition
+         * @description 새 항목란. **시스템 관리자만** — 덱 구조까지 흘러가고 전 부서가 공유한다.
+         *
+         *     만든 즉시 레지스트리에 얹혀, 계산식 편집기의 「넣을 블록」 목록과 카드 화면에
+         *     바로 나온다. 배포를 안 기다린다.
+         */
+        post: operations["create_block_definition_api_fitting_block_definitions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/fitting/block-definitions/{block_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Block Definition
+         * @description 지운다. **카드가 담고 있으면 못 지운다** — 대신 끈다.
+         *
+         *     지우면 그 카드의 값이 「모르는 블록」이 되어 덱에서 조용히 빠진다. 끄면 선언만
+         *     빠지고 값은 남는다.
+         */
+        delete: operations["delete_block_definition_api_fitting_block_definitions__block_id__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Update Block Definition
+         * @description 고친다. **담기는 모양이 달라지면 판이 오른다** — 이름·설명은 안 올린다.
+         *
+         *     **옛 카드의 값은 안 바뀐다.** 슬롯을 지워도 이미 저장된 카드는 그 값을 그대로
+         *     들고 있고, 선언이 사라진 값은 화면에 안 뜰 뿐이다.
+         */
+        patch: operations["update_block_definition_api_fitting_block_definitions__block_id__patch"];
+        trace?: never;
+    };
     "/api/fitting/blocks": {
         parameters: {
             query?: never;
@@ -8101,6 +8161,125 @@ export interface components {
             /** Specimen Name */
             specimen_name: string;
         };
+        /** CardBlockCreate */
+        CardBlockCreate: {
+            /** Curve X */
+            curve_x?: string | null;
+            /** Curve Y */
+            curve_y?: string | null;
+            /**
+             * From Tests
+             * @default []
+             */
+            from_tests: string[];
+            /**
+             * Help
+             * @default
+             */
+            help: string;
+            /** Key */
+            key: string;
+            /** Kind Priority */
+            kind_priority?: number | null;
+            /** Label */
+            label: string;
+            /**
+             * Measured
+             * @default false
+             */
+            measured: boolean;
+            /**
+             * Produces
+             * @default []
+             */
+            produces: components["schemas"]["CardSlotIn"][];
+            /**
+             * Rows
+             * @default []
+             */
+            rows: components["schemas"]["CardSlotIn"][];
+            /**
+             * Sort Order
+             * @default 200
+             */
+            sort_order: number;
+        };
+        /** CardBlockOut */
+        CardBlockOut: {
+            /** Card Count */
+            card_count: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Curve X */
+            curve_x: string | null;
+            /** Curve Y */
+            curve_y: string | null;
+            /** Enabled */
+            enabled: boolean;
+            /** From Tests */
+            from_tests: string[];
+            /** Help */
+            help: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Installed */
+            installed: boolean;
+            /** Key */
+            key: string;
+            /** Kind Priority */
+            kind_priority: number | null;
+            /** Label */
+            label: string;
+            /** Measured */
+            measured: boolean;
+            /** Produces */
+            produces: components["schemas"]["CardSlotIn"][];
+            /** Rows */
+            rows: components["schemas"]["CardSlotIn"][];
+            /** Sort Order */
+            sort_order: number;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Version */
+            version: number;
+        };
+        /**
+         * CardBlockUpdate
+         * @description **키는 없다** — 카드가 그 키로 값을 들고 있어 못 바꾼다.
+         */
+        CardBlockUpdate: {
+            /** Curve X */
+            curve_x?: string | null;
+            /** Curve Y */
+            curve_y?: string | null;
+            /** Enabled */
+            enabled?: boolean | null;
+            /** From Tests */
+            from_tests?: string[] | null;
+            /** Help */
+            help?: string | null;
+            /** Kind Priority */
+            kind_priority?: number | null;
+            /** Label */
+            label?: string | null;
+            /** Measured */
+            measured?: boolean | null;
+            /** Produces */
+            produces?: components["schemas"]["CardSlotIn"][] | null;
+            /** Rows */
+            rows?: components["schemas"]["CardSlotIn"][] | null;
+            /** Sort Order */
+            sort_order?: number | null;
+        };
         /**
          * CardBundleRequest
          * @description 카드 여럿을 한 묶음으로 내보낸다.
@@ -8154,6 +8333,25 @@ export interface components {
             statuses: components["schemas"]["CardFacetOut"][];
             /** Test Types */
             test_types: components["schemas"]["CardFacetOut"][];
+        };
+        /**
+         * CardSlotIn
+         * @description 항목란이 담는 값 하나, 또는 표의 열 하나.
+         */
+        CardSlotIn: {
+            /** Help */
+            help?: string | null;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Property Key */
+            property_key?: string | null;
+            /**
+             * Si Unit
+             * @default 1
+             */
+            si_unit: string;
         };
         /**
          * CardValueOut
@@ -20719,6 +20917,123 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["EquipmentPartOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_block_definitions_api_fitting_block_definitions_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardBlockOut"][];
+                };
+            };
+        };
+    };
+    create_block_definition_api_fitting_block_definitions_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CardBlockCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardBlockOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_block_definition_api_fitting_block_definitions__block_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                block_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_block_definition_api_fitting_block_definitions__block_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                block_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CardBlockUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardBlockOut"];
                 };
             };
             /** @description Validation Error */

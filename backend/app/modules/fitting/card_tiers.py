@@ -31,8 +31,25 @@ _SOURCE_TIERS: dict[str, int] = {
 }
 _MEASURED_SOURCES = ("measured", "sample", "prony")
 
-#: 시험에서 나오는 블록 — 표본 수로 등급을 매긴다.
+#: 시험에서 나오는 **내장** 블록 — 표본 수로 등급을 매긴다.
 _MEASURED_BLOCKS = ("table", "hardening", "hyperelastic", "viscoelastic", "lve", "rate_table")
+
+
+def _measured_block(key: str) -> bool:
+    """이 항목란의 값이 시험에서 나오나.
+
+    내장은 위 목록이 정하고, **화면에서 만든 항목란은 스스로 선언한다**
+    (`meta["measured"]`, ADR 0033) — 그것 하나 때문에 코드의 목록에 이름을 더하러
+    오게 하면 「배포 없이」 가 반만 참이 된다.
+    """
+    if key in _MEASURED_BLOCKS:
+        return True
+    try:
+        return bool(cards.block(key).meta.get("measured"))
+    except KeyError:
+        # 레지스트리가 모르는 블록 — 끈 항목란이거나 사라진 확장이다. 옛 카드의
+        # 값은 그대로 보이되 등급은 못 매긴다(`cards.unknown` 이 따로 말한다).
+        return False
 
 
 def _sample_count(card: PropertyCard) -> int:
@@ -64,9 +81,9 @@ def value_tiers(card: PropertyCard) -> dict[str, int]:
                 out[f"{block_key}.{key}"] = tiers.measured_tier(count)
             elif source in _SOURCE_TIERS:
                 out[f"{block_key}.{key}"] = _SOURCE_TIERS[source]
-            elif block_key in _MEASURED_BLOCKS and count > 0:
+            elif _measured_block(block_key) and count > 0:
                 out[f"{block_key}.{key}"] = tiers.measured_tier(count)
-        if block_key in _MEASURED_BLOCKS and (payload or {}).get("rows"):
+        if _measured_block(block_key) and (payload or {}).get("rows"):
             if synthetic or values.get("source") == "합성":
                 out[block_key] = tiers.computed_tier()
             elif values.get("source") == "외삽":

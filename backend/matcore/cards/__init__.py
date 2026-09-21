@@ -137,6 +137,51 @@ def list_blocks() -> list[BlockSpec]:
 def clear() -> None:
     """테스트 전용."""
     _BLOCKS.clear()
+    _INSTALLED.clear()
+
+
+# ── 표에서 온 블록 (ADR 0033) ─────────────────────────────────────────────────
+#
+# 화면에서 만든 항목란은 코드가 아니라 행이다. 기동할 때와 저장할 때 여기로 얹는다 —
+# 계산식(ADR 0030)이 쓰는 방식 그대로다.
+
+#: 표에서 얹은 키들. **내장과 가른다** — 내장은 못 덮고 못 뺀다.
+_INSTALLED: set[str] = set()
+
+
+def install(spec: BlockSpec) -> str:
+    """표에서 온 블록을 얹는다. 같은 키가 있으면 **새 판으로 바꾼다.**
+
+    **내장 블록은 못 덮는다.** 덮게 두면 그 물성을 내는 계산이 조용히 다른 칸을
+    보게 되고, 그 사실은 덱을 열어 보기 전까지 안 드러난다(ADR 0033 D2).
+    """
+    if spec.key in _BLOCKS and spec.key not in _INSTALLED:
+        raise CardError(f"내장 물성 블록과 같은 키는 쓸 수 없습니다: {spec.key}")
+    for item in (*spec.produces, *spec.rows):
+        if not item.label.strip():
+            raise CardError(f"{spec.key}.{item.key} 에 이름이 없습니다.")
+    _BLOCKS[spec.key] = spec
+    _INSTALLED.add(spec.key)
+    return spec.key
+
+
+def uninstall(key: str) -> None:
+    """표에서 얹은 블록을 뺀다. 내장은 못 뺀다."""
+    if key not in _INSTALLED:
+        raise CardError(f"표에서 얹은 블록이 아닙니다: {key}")
+    _BLOCKS.pop(key, None)
+    _INSTALLED.discard(key)
+
+
+def installed() -> list[str]:
+    """지금 얹혀 있는, 표에서 온 블록 키들."""
+    return sorted(_INSTALLED)
+
+
+def is_builtin(key: str) -> bool:
+    """코드가 등록한 블록인가. 표가 만든 것과 가르는 데 쓴다."""
+    load_builtin()
+    return key in _BLOCKS and key not in _INSTALLED
 
 
 def values_of(payload: Any) -> dict[str, Any]:
@@ -190,11 +235,15 @@ __all__ = [
     "CardError",
     "block",
     "clear",
+    "install",
+    "installed",
+    "is_builtin",
     "is_empty",
     "list_blocks",
     "load_builtin",
     "register_block",
     "rows_of",
+    "uninstall",
     "unknown",
     "values_of",
 ]

@@ -28,16 +28,25 @@ from app import version
 from app.database import get_db
 from app.modules.accounts.models import User
 from app.modules.catalog.models import CatalogMaterial
-from app.modules.fitting import bundle, card_tiers, readiness, renderers
-from app.modules.fitting.models import ExportProfile, PropertyCard, UnitSystemDef
+from app.modules.fitting import blocks, bundle, card_tiers, readiness, renderers
+from app.modules.fitting.models import (
+    CardBlock,
+    ExportProfile,
+    PropertyCard,
+    UnitSystemDef,
+)
 from app.modules.fitting.schemas import (
     BlockSpecOut,
     BomDeckIn,
     BomDeckOut,
     BomDeckSkippedOut,
+    CardBlockCreate,
+    CardBlockOut,
+    CardBlockUpdate,
     CardBundleRequest,
     CardFacetOut,
     CardFacetsOut,
+    CardSlotIn,
     CardValueOut,
     DeckCheckItemOut,
     DeckCheckOut,
@@ -4215,3 +4224,100 @@ def build_bom_deck(
         literature_count=literature_count,
         synthetic_count=synthetic_count,
     )
+
+
+# ── 카드 항목란을 화면에서 정의한다 (ADR 0033) ────────────────────────────────
+
+
+def _block_out(db: Session, row: CardBlock) -> CardBlockOut:
+    return CardBlockOut(
+        id=row.id,
+        key=row.key,
+        label=row.label,
+        help=row.help or "",
+        produces=[CardSlotIn(**one) for one in row.produces or []],
+        rows=[CardSlotIn(**one) for one in row.rows or []],
+        sort_order=row.sort_order,
+        kind_priority=row.kind_priority,
+        curve_x=row.curve_x,
+        curve_y=row.curve_y,
+        from_tests=list(row.from_tests or []),
+        measured=row.measured,
+        version=row.version,
+        enabled=row.enabled,
+        installed=row.key in cards.installed(),
+        card_count=blocks.cards_using(db, row),
+        created_at=row.created_at,
+        updated_at=row.updated_at,
+    )
+
+
+@router.get("/block-definitions", response_model=list[CardBlockOut])
+def list_block_definitions(
+    user: User = Depends(current_user), db: Session = Depends(get_db)
+) -> list[CardBlockOut]:
+    """**표에서 만든** 항목란만. 내장 12개는 여기 없다 — `/fitting/blocks` 가 둘을
+    합쳐 보여 준다(화면이 카드를 그리는 쪽은 그것을 본다).
+
+    보는 것은 누구나. 만들고 고치는 것은 시스템 관리자다(ADR 0033 D3).
+    """
+    rows = db.scalars(select(CardBlock).order_by(CardBlock.sort_order, CardBlock.key)).all()
+    return [_block_out(db, row) for row in rows]
+
+
+@router.post("/block-definitions", response_model=CardBlockOut, status_code=201)
+def create_block_definition(
+    payload: CardBlockCreate,
+    user: User = Depends(require_system_admin),
+    db: Session = Depends(get_db),
+) -> CardBlockOut:
+    """새 항목란. **시스템 관리자만** — 덱 구조까지 흘러가고 전 부서가 공유한다.
+
+    만든 즉시 레지스트리에 얹혀, 계산식 편집기의 「넣을 블록」 목록과 카드 화면에
+    바로 나온다. 배포를 안 기다린다.
+    """
+    row = blocks.create(db, payload.model_dump(), user)
+    db.commit()
+    db.refresh(row)
+    # **저장과 얹기를 같은 요청에서 한다.** 기동 때만 얹으면 만든 사람이 재시작을
+    # 기다려야 하고, 그러면 「배포 없이」 라고 말할 수 없다(계산식과 같은 자리).
+    blocks.sync(db)
+    return _block_out(db, row)
+
+
+@router.patch("/block-definitions/{block_id}", response_model=CardBlockOut)
+def update_block_definition(
+    block_id: uuid.UUID,
+    payload: CardBlockUpdate,
+    user: User = Depends(require_system_admin),
+    db: Session = Depends(get_db),
+) -> CardBlockOut:
+    """고친다. **담기는 모양이 달라지면 판이 오른다** — 이름·설명은 안 올린다.
+
+    **옛 카드의 값은 안 바뀐다.** 슬롯을 지워도 이미 저장된 카드는 그 값을 그대로
+    들고 있고, 선언이 사라진 값은 화면에 안 뜰 뿐이다.
+    """
+    row = blocks.get(db, block_id)
+    blocks.update(db, row, payload.model_dump(exclude_unset=True))
+    db.commit()
+    db.refresh(row)
+    blocks.sync(db)
+    return _block_out(db, row)
+
+
+@router.delete("/block-definitions/{block_id}", status_code=204)
+def delete_block_definition(
+    block_id: uuid.UUID,
+    user: User = Depends(require_system_admin),
+    db: Session = Depends(get_db),
+) -> Response:
+    """지운다. **카드가 담고 있으면 못 지운다** — 대신 끈다.
+
+    지우면 그 카드의 값이 「모르는 블록」이 되어 덱에서 조용히 빠진다. 끄면 선언만
+    빠지고 값은 남는다.
+    """
+    row = blocks.get(db, block_id)
+    blocks.delete(db, row)
+    db.commit()
+    blocks.sync(db)
+    return Response(status_code=204)
