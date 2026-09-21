@@ -1537,7 +1537,7 @@ def true_plastic(frame: Frame, options: dict[str, Any]) -> StepResult:
 
 # ── 항복 강하 정리 ────────────────────────────────────────────────────────────
 
-#: 최대 응력에 견주어 이보다 작은 하강은 잡음이다 — 항복점·연화로 보지 않는다.
+#: 양수인 선행 최대 응력에 견주어 이보다 작은 하강은 잡음이다.
 YIELD_DROP_THRESHOLD = 0.005
 
 YIELD_DROP_METHODS = ("envelope", "isotonic", "lower_yield", "cut", "keep")
@@ -1568,13 +1568,13 @@ def _isotonic(values: np.ndarray) -> np.ndarray:
 
 
 def _first_drop(stress: np.ndarray, threshold: float) -> int | None:
-    """첫 「진짜」 하강 — 직전 최댓값에서 `threshold`(최댓값 비율)만큼 내려간 첫 점.
+    """첫 상대 하강 — 양수인 선행 최댓값에서 `threshold` 만큼 내려간 첫 점.
 
-    없으면 `None` — 잡음 이상의 연화가 없다는 뜻이다.
+    음수·0 의 선행 최댓값에는 상대 비율을 적용하지 않는다. 없으면 `None` 이다.
     """
     running = np.maximum.accumulate(stress)
     drop = running - stress
-    hit = np.nonzero(drop > threshold * running)[0]
+    hit = np.nonzero((running > 0) & (drop > threshold * running))[0]
     return int(hit[0]) if hit.size else None
 
 
@@ -1617,8 +1617,8 @@ def _first_drop(stress: np.ndarray, threshold: float) -> int | None:
             type="float",
             default=YIELD_DROP_THRESHOLD,
             unit="1",
-            help="최대 응력에 견준 비율. 이보다 작은 하강은 잡음으로 보고 항복점·연화로 치지 "
-            "않습니다(기본 0.5 %).",
+            help="양수인 선행 최댓값에 견준 비율입니다. 이보다 작은 하강은 잡음으로 보고 "
+            "항복점·연화로 치지 않습니다(기본 0.5 %).",
         ),
         ParamSpec(
             name="min_slope",
@@ -1670,7 +1670,7 @@ def _first_drop(stress: np.ndarray, threshold: float) -> int | None:
         ),
     ),
     order=35,
-    version="1",
+    version="2",
 )
 def yield_drop(frame: Frame, options: dict[str, Any]) -> StepResult:
     """항복 이후 **내려가는 구간**을 정리한다 — 단조 표를 받는 솔버를 위해.
@@ -1697,6 +1697,8 @@ def yield_drop(frame: Frame, options: dict[str, Any]) -> StepResult:
     min_slope = option_float(options, "min_slope", 0.0)
     if min_slope < 0:
         raise ProcessingError(f"최소 기울기는 0 이상이어야 합니다: {min_slope}")
+    if not np.any(stress > 0):
+        raise ProcessingError("양의 인장응력이 없어 상대 하강을 평가할 수 없음")
 
     running = np.maximum.accumulate(stress)
     max_drop = float(np.max(running - stress)) if len(stress) else 0.0
@@ -1736,7 +1738,7 @@ def yield_drop(frame: Frame, options: dict[str, Any]) -> StepResult:
         )
     else:
         notes.append(
-            f"직전 최댓값에서 {threshold * 100:.2g} % 를 넘는 하강이 없습니다"
+            f"양수인 선행 최댓값에서 {threshold * 100:.2g} % 를 넘는 하강이 없습니다"
             f"(최대 {max_drop / 1e6:.3g} MPa) — 연화로 보지 않습니다."
         )
 

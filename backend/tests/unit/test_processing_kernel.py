@@ -13,6 +13,7 @@
 
 from __future__ import annotations
 
+import csv
 from pathlib import Path
 from typing import ClassVar
 
@@ -22,8 +23,12 @@ import pytest
 from matcore import parsers, processing
 from matcore.parsers import zwick_tra
 from matcore.processing import Frame, ProcessingError, Step
+from matcore.processing.tensile import _first_drop
 
 TRA = Path(__file__).resolve().parents[1] / "fixtures" / "Example.tra"
+OXFORD_PC_TEST2 = (
+    Path(__file__).resolve().parents[1] / "fixtures" / "oxford_pc_fig5_50mm_min_test2.csv"
+)
 
 #: 합성 곡선의 정답.
 E_TRUE = 200e9
@@ -1243,6 +1248,38 @@ def _run(frame: Frame, options: dict[str, object]) -> processing.PipelineResult:
     return processing.apply([Step("tensile.yield_drop", dict(options))], frame)
 
 
+def oxford_pc_test2() -> Frame:
+    """Oxford PC50Test2, in original row order, with engineering channels derived."""
+    with OXFORD_PC_TEST2.open(encoding="utf-8", newline="") as handle:
+        data = list(csv.reader(handle))
+    columns = {name: index for index, name in enumerate(data[0])}
+    rows = data[1:]
+
+    def values(name: str) -> np.ndarray:
+        return np.asarray([float(row[columns[name]]) for row in rows], dtype=np.float64)
+
+    displacement = values("displacement_mm") / 1000.0
+    force = values("force_N")
+    return Frame(
+        {
+            "displacement": displacement,
+            "force": force,
+            "time": values("time_s"),
+            "source_excel_row": values("source_excel_row"),
+            "strain_engineering": displacement / 0.08,
+            "stress_engineering": force / 40e-6,
+        },
+        {
+            "displacement": "m",
+            "force": "N",
+            "time": "s",
+            "source_excel_row": "1",
+            "strain_engineering": "1",
+            "stress_engineering": "Pa",
+        },
+    )
+
+
 class Test항복_강하_정리:
     """**단조 표를 받는 솔버를 위해 내려가는 구간을 정리하되, 무엇을 버렸는지 남긴다.**"""
 
@@ -1325,6 +1362,52 @@ class Test항복_강하_정리:
         assert scalar(result, "yield_drop_max") == 0
         assert scalar(result, "yield_drop_points") == 0
         assert not any(item.key == "upper_yield_strength" for item in result.scalars)
+
+    @pytest.mark.parametrize("method", ("envelope", "isotonic", "lower_yield", "cut", "keep"))
+    def test_Oxford_PC50Test2_음수_첫하중을_보존하며_다섯방법이_실행된다(
+        self, method: str
+    ) -> None:
+        frame = oxford_pc_test2()
+        stress = frame.columns["stress_engineering"]
+        assert stress[0] == pytest.approx(-5_000.0)
+
+        first = _first_drop(stress, 0.005)
+        assert first is not None
+        assert first > 0
+
+        result = _run(frame, {"method": method})
+        output = result.frame
+        assert output.length() > 1
+        assert np.all(np.isfinite(output.columns["stress_engineering"]))
+        assert np.all(np.diff(output.columns["strain_engineering"]) > 0)
+        assert np.all(np.diff(output.columns["source_excel_row"]) > 0)
+
+        if method == "keep":
+            assert output.length() == frame.length()
+            for key, values in frame.columns.items():
+                np.testing.assert_array_equal(output.columns[key], values)
+            assert scalar(result, "yield_drop_points") == 0
+
+    def test_상대하강은_양수인_선행최댓값만_기준으로_삼는다(self) -> None:
+        assert _first_drop(np.asarray([-5000.0, -1.0, 0.0]), 0.005) is None
+        assert _first_drop(np.asarray([0.0, 0.0, 0.0]), 0.005) is None
+        assert _first_drop(np.asarray([-5000.0, 0.0, 1.0, 0.99]), 0.005) == 3
+
+    @pytest.mark.parametrize("stress", ((-5000.0, -1.0, 0.0), (0.0, 0.0, 0.0)))
+    def test_양의_인장응력이_없으면_상대하강을_보류한다(
+        self, stress: tuple[float, ...]
+    ) -> None:
+        frame = Frame(
+            {
+                "strain_engineering": np.asarray([0.0, 0.01, 0.02]),
+                "stress_engineering": np.asarray(stress),
+            },
+            {"strain_engineering": "1", "stress_engineering": "Pa"},
+        )
+        with pytest.raises(
+            ProcessingError, match="양의 인장응력이 없어 상대 하강을 평가할 수 없음"
+        ):
+            _run(frame, {"method": "keep"})
 
     def test_하항복점을_소성_시작으로_넘길_수_있다(self) -> None:
         # 규격(ISO 6892-1)의 값이자, `tensile.true_plastic` 의 항복강도 자리에 `@` 로 들어간다.
