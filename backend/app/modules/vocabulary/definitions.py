@@ -25,18 +25,28 @@ DIMENSIONS = tuple(sorted(SI_UNITS))
 
 #: (slug, label, entry_policy, sort_order)
 #:
-#: `open` 은 사용자가 피커에서 즉석 추가할 수 있다. `closed` 는 관리자가 등록한
-#: 값만 고른다 — 미리 정해야 하는 분류다.
+#: 정책은 셋이다:
+#:
+#:     open      누구나 피커에서 즉석 추가
+#:     managed   **새 값만** 부서 관리자. 이미 있는 값은 누구나 고른다
+#:     closed    관리자가 등록한 값만 — 미리 정해야 하는 분류
+#:
+#: `managed` 를 둔 까닭(2026-09-21, ADR 0032): 「재료는 관리자만」 으로 층을 자르면
+#: 새 로트 하나 받을 때마다 관리자를 불러야 한다. 위험한 것은 층이 아니라 **기준정보가
+#: 새로 생기는 것**이다 — `SECC` 를 `secc`·`SECC강판`으로 적으면 재료가 셋으로 갈리고
+#: 그 뒤의 검색·통계·카드가 따라 갈린다. 그래서 **기존 등급으로 재료를 만드는 것은
+#: 누구나, 새 등급을 세우는 것만 부서 관리자**로 문을 단다.
 #: (slug, label, entry_policy, sort_order, parent_slug, attribute_source)
 #:
 #: **분류는 사슬이다.** Metal → Steel → SECC. 평평하게 두면 Polymer + PP + SECC
 #: 같은 조합을 아무도 안 막고, Grade 가 수만 개일 때 피커가 전체를 보여 준다.
 BUILTIN_VOCABULARIES: list[tuple[str, str, str, int, str | None, str | None]] = [
-    ("manufacturer", "제조사", "open", 10, None, None),
+    # 새 업체가 생기는 것은 사건이다 — 12곳뿐이고 로트마다 늘지 않는다(managed).
+    ("manufacturer", "제조사", "managed", 10, None, None),
     # **유통사와 주 벤더가 한 축을 공유한다.** 같은 회사가 어떤 로트에서는
     # 유통사고 다른 로트에서는 주 벤더다. 축을 나누면 같은 회사가 두 목록에
     # 따로 쌓이고, 그 둘을 합칠 방법도 없다.
-    ("vendor", "거래처", "open", 20, None, None),
+    ("vendor", "거래처", "managed", 20, None, None),
     ("sales_type", "판매 유형", "open", 30, None, None),
     # **시편 분류가 기본 칸을 갖는다.** "인장 시편이면 늘 게이지 길이가
     # 필요하다" 처럼, 그 분류의 규격 전부가 갖는 치수다(`specimen_fields`).
@@ -80,9 +90,9 @@ BUILTIN_VOCABULARIES: list[tuple[str, str, str, int, str | None, str | None]] = 
     # 축은 재료군을 안 가린다 — 개발 DB 에 Polymer/PP 의 Grade `S6F58` 이 있고,
     # 그것을 강종이라 부르면 틀린 말이다. 재료 화면은 처음부터 "Grade" 로
     # 부르고 있었으므로(`NewMaterialDialog`), 기준정보만 다른 이름을 쓰고 있었다.
-    ("family", "Family", "open", 1, None, None),
-    ("category", "Category", "open", 2, "family", None),
-    ("grade", "Grade", "open", 5, "category", None),
+    ("family", "Family", "managed", 1, None, None),
+    ("category", "Category", "managed", 2, "family", None),
+    ("grade", "Grade", "managed", 5, "category", None),
     # **용도는 재료의 성질이다**(전에는 시료에 있었다). "도어 이너용 재료가 뭐가
     # 있나" 가 집계 질문이 되려면 자유 문자열이면 안 된다 — `도어`/`Door`/`도어 `
     # 가 갈리면 그 질문에 답이 셋 나온다.
@@ -568,10 +578,17 @@ def ensure_builtin_vocabularies(db: Session) -> list[str]:
     **이미 있는 축은 손대지 않는다.** 운영 중에 관리자가 라벨이나 정책을 바꿨을
     수 있고, 그것을 배포가 되돌리면 안 된다(시험 종류와 같은 판단).
     """
-    existing = set(db.scalars(select(Vocabulary.slug)))
+    rows = {one.slug: one for one in db.scalars(select(Vocabulary))}
+    existing = set(rows)
     created: list[str] = []
     for slug, label, policy, order, parent, attribute_source in BUILTIN_VOCABULARIES:
         if slug in existing:
+            # **정책은 코드가 정본이다.** 화면에 고치는 길이 없고, 여기서 안 맞추면
+            # 이미 깔린 서버는 옛 정책 그대로다 — `grade` 를 managed 로 바꿔도
+            # 운영에서는 계속 open 이었다(2026-09-21).
+            row = rows[slug]
+            if row.entry_policy != policy:
+                row.entry_policy = policy
             continue
         db.add(
             Vocabulary(

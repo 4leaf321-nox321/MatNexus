@@ -18,6 +18,7 @@ from typing import Any, cast
 from sqlalchemy import Select, func, or_, select, text, update
 from sqlalchemy.orm import Session
 
+from app.modules.accounts.models import User
 from app.modules.vocabulary.models import (
     SpecimenField,
     Vocabulary,
@@ -27,7 +28,7 @@ from app.modules.vocabulary.models import (
     VocabularyMerge,
     VocabularyTerm,
 )
-from app.shared import vocabulary_hooks
+from app.shared import permissions, vocabulary_hooks
 from app.shared.errors import AppError, NotFound
 from app.shared.text import clean, compare_key
 from matcore import units as unit_kit
@@ -117,6 +118,8 @@ def resolve_or_create(
             f"'{cleaned}' 는 목록에 없습니다.",
             status=422,
         )
+    if vocabulary.entry_policy == "managed" and not _may_coin(db, created_by_id):
+        raise _cannot_coin(db, vocabulary, cleaned)
 
     # **새 값이 부모를 물려받는다.** Metal/Steel 을 고른 상태에서 `DP980` 을
     # 추가하면 부모가 `Steel` 로 붙는다 — 계층이 쓰면서 저절로 만들어진다.
@@ -131,6 +134,51 @@ def resolve_or_create(
     db.add(term)
     db.flush()  # 같은 요청 안에서 뒤이어 참조할 수 있게
     return term
+
+
+def _may_coin(db: Session, created_by_id: uuid.UUID | None) -> bool:
+    """`managed` 축에 **새 값을 세울** 수 있는가 — 부서 관리자·시스템 관리자만.
+
+    **사람이 아닌 경로는 막지 않는다**(`created_by_id` 가 없을 때). 씨앗·이관
+    스크립트·커넥터 자동 등록이 그 길로 들어오는데, 거기서 막으면 배포가 멈추거나
+    장비 파일이 조용히 쌓인다 — 그것은 이 문이 막으려던 것이 아니다.
+    """
+    if created_by_id is None:
+        return True
+    user = db.get(User, created_by_id)
+    if user is None:
+        return True
+    return permissions.is_any_manager(db, user)
+
+
+def _cannot_coin(db: Session, vocabulary: Vocabulary, value: str) -> AppError:
+    """거절하되 **다음에 할 일**을 준다 — 비슷한 값과, 없으면 누구에게 부탁할지.
+
+    그냥 「권한이 없습니다」 로 끝내면 사람은 오타인지 진짜 새 값인지 모른다. 갈림은
+    대개 오타에서 난다(`SECC` / `secc` / `SECC강판`) — 비슷한 것을 보여 주면 그 자리에서
+    끝난다.
+    """
+    near = [
+        one.value
+        for one in db.scalars(
+            select(VocabularyTerm)
+            .where(
+                VocabularyTerm.vocabulary_id == vocabulary.id,
+                VocabularyTerm.value.ilike(f"%{value[:4]}%"),
+            )
+            .order_by(VocabularyTerm.usage_count.desc())
+            .limit(5)
+        )
+    ]
+    hint = f" 비슷한 값: {', '.join(near)}." if near else ""
+    return AppError(
+        "MNX-VOCABULARY-0011",
+        f"'{vocabulary.label}' 에 **새 값**을 세우는 것은 부서 관리자만 할 수 있습니다 — "
+        f"'{value}' 는 아직 목록에 없습니다.{hint} "
+        f"이미 있는 값이면 그대로 고르시고, 정말 새 값이면 부서 관리자에게 등록을 요청하세요.",
+        status=403,
+        details={"axis": vocabulary.slug, "value": value, "similar": near},
+    )
 
 
 def _filtered(
