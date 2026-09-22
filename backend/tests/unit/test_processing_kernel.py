@@ -1380,7 +1380,7 @@ class Test항복_강하_정리:
     def test_평탄화_메타데이터는_모델_근사와_실제_선택점을_선언한다(self) -> None:
         plugin = registry.get("tensile.yield_drop")
         assert plugin.label == "공칭 하강 처리"
-        assert plugin.version == "3"
+        assert plugin.version == "4"
         params = {item.name: item for item in plugin.params}
         for name in ("plateau_start", "plateau_end", "plateau_stress"):
             assert params[name].required

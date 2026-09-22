@@ -33,6 +33,7 @@ from matcore.processing import (
     option_text,
     require_increasing,
 )
+from matcore.processing._drop_recovery import DropEvent, detect_events
 
 #: 탄성계수를 낼 수 있는 최소 점 수. **이보다 적으면 값을 안 낸다.**
 #:
@@ -1540,42 +1541,772 @@ def true_plastic(frame: Frame, options: dict[str, Any]) -> StepResult:
 #: 양수인 선행 최대 응력에 견주어 이보다 작은 하강은 잡음이다.
 YIELD_DROP_THRESHOLD = 0.005
 
-YIELD_DROP_METHODS = ("envelope", "isotonic", "lower_yield", "cut", "keep")
+YIELD_DROP_SCOPES = ("full", "range", "events")
+YIELD_DROP_METHODS = (
+    "envelope",
+    "isotonic",
+    "lower_yield",
+    "cut",
+    "keep",
+    "lower_envelope",
+    "median_plateau",
+    "linear",
+    "least_squares",
+    "robust_linear",
+)
+_FULL_METHODS = ("envelope", "isotonic", "lower_yield", "cut", "keep")
+_SCOPED_METHODS = (
+    "envelope",
+    "isotonic",
+    "cut",
+    "keep",
+    "lower_envelope",
+    "median_plateau",
+    "linear",
+    "least_squares",
+    "robust_linear",
+)
+_MONOTONE_SCOPED_METHODS = ("envelope", "isotonic", "lower_envelope")
+_REGRESSION_METHODS = ("linear", "least_squares", "robust_linear")
 
 
-def _isotonic(values: np.ndarray) -> np.ndarray:
-    """단조 비감소 최소제곱 회귀(PAVA). 내려가는 구간을 이웃과 **평균으로** 편다.
+def _isotonic(values: np.ndarray, weights: np.ndarray | None = None) -> np.ndarray:
+    """가중치가 있는 단조 비감소 최소제곱 회귀(PAVA).
 
-    포락선(running max)은 내려간 점을 직전 최댓값으로 덮어 봉우리 쪽으로 치우친다.
-    잡음이 위아래로 고르게 섞인 곡선에는 이쪽이 원곡선에 가깝다.
+    weights 를 생략하면 기존 yield_drop 의 점당 동일 가중치 계약과 같다.
+    블록의 점 수가 아니라 실제 가중치로 평균을 내므로, 같은 계산을 독립
+    검산하는 쪽에서 SciPy PAVA 결과와 대조할 수 있다.
     """
-    level: list[float] = []
-    weight: list[int] = []
-    for value in values.tolist():
-        level.append(float(value))
-        weight.append(1)
-        while len(level) > 1 and level[-2] > level[-1]:
-            total = weight[-2] + weight[-1]
-            merged = (level[-2] * weight[-2] + level[-1] * weight[-1]) / total
-            level[-2:] = [merged]
-            weight[-2:] = [total]
-    out = np.empty(len(values), dtype=np.float64)
-    at = 0
-    for value, count in zip(level, weight, strict=True):
-        out[at : at + count] = value
-        at += count
+    source = np.asarray(values, dtype=np.float64)
+    if source.ndim != 1:
+        raise ValueError("isotonic 입력은 1차원이어야 합니다")
+    if not np.all(np.isfinite(source)):
+        raise ValueError("isotonic 입력에 유한하지 않은 값이 있습니다")
+    if weights is None:
+        weight_values = np.ones(source.size, dtype=np.float64)
+    else:
+        weight_values = np.asarray(weights, dtype=np.float64)
+        if weight_values.shape != source.shape:
+            raise ValueError("isotonic 가중치의 길이가 값과 다릅니다")
+        if not np.all(np.isfinite(weight_values)) or np.any(weight_values <= 0):
+            raise ValueError("isotonic 가중치는 양의 유한값이어야 합니다")
+    blocks: list[list[float | int]] = []
+    for index, (value, weight) in enumerate(zip(source, weight_values, strict=True)):
+        blocks.append([float(value), float(weight), index, index + 1])
+        while len(blocks) > 1 and float(blocks[-2][0]) > float(blocks[-1][0]):
+            left, right = blocks[-2], blocks[-1]
+            total = float(left[1]) + float(right[1])
+            merged = (
+                float(left[0]) * float(left[1]) + float(right[0]) * float(right[1])
+            ) / total
+            blocks[-2:] = [[merged, total, int(left[2]), int(right[3])]]
+    out = np.empty(source.size, dtype=np.float64)
+    for level, _weight, start, end in blocks:
+        out[int(start) : int(end)] = float(level)
     return out
 
 
 def _first_drop(stress: np.ndarray, threshold: float) -> int | None:
-    """첫 상대 하강 — 양수인 선행 최댓값에서 `threshold` 만큼 내려간 첫 점.
-
-    음수·0 의 선행 최댓값에는 상대 비율을 적용하지 않는다. 없으면 `None` 이다.
-    """
+    """첫 상대 하강 — 양수인 선행 최댓값에서 threshold 만큼 내려간 첫 점."""
     running = np.maximum.accumulate(stress)
     drop = running - stress
     hit = np.nonzero((running > 0) & (drop > threshold * running))[0]
     return int(hit[0]) if hit.size else None
+
+
+def _finite_pair(
+    strain: np.ndarray, stress: np.ndarray, strain_key: str, stress_key: str
+) -> tuple[np.ndarray, np.ndarray]:
+    x = np.asarray(strain, dtype=np.float64)
+    y = np.asarray(stress, dtype=np.float64)
+    if x.ndim != 1 or y.ndim != 1:
+        raise ProcessingError(f"'{strain_key}' 와 '{stress_key}' 는 1차원 열이어야 합니다.")
+    if x.size != y.size:
+        raise ProcessingError(
+            f"'{strain_key}' 와 '{stress_key}' 의 점 수가 다릅니다: {x.size}, {y.size}"
+        )
+    if not np.all(np.isfinite(x)):
+        raise ProcessingError(f"'{strain_key}' 에 유한하지 않은 값이 있습니다.")
+    if not np.all(np.isfinite(y)):
+        raise ProcessingError(f"'{stress_key}' 에 유한하지 않은 값이 있습니다.")
+    if x.size < 2:
+        raise ProcessingError("하강 처리는 관측점이 2점 이상이어야 합니다.")
+    return x, y
+
+
+def _domain_indices(
+    strain: np.ndarray, scope: str, options: dict[str, Any]
+) -> tuple[np.ndarray, float | None, float | None]:
+    has_start = options.get("range_start") is not None
+    has_end = options.get("range_end") is not None
+    start: float | None
+    end: float | None
+    if scope == "full":
+        if has_start or has_end:
+            raise ProcessingError(
+                "scope='full' 에서는 range_start/range_end 를 지정할 수 없습니다."
+            )
+        return np.arange(strain.size, dtype=int), None, None
+    if scope == "range" and not (has_start and has_end):
+        raise ProcessingError(
+            "scope='range' 에서는 range_start 와 range_end 를 함께 지정해야 합니다."
+        )
+    if has_start != has_end:
+        raise ProcessingError(
+            "range_start 와 range_end 는 둘 다 지정하거나 둘 다 비워야 합니다."
+        )
+    if has_start:
+        start = option_float(options, "range_start")
+        end = option_float(options, "range_end")
+        if not start < end:
+            raise ProcessingError(f"선택 범위 시작({start})이 끝({end})보다 작아야 합니다.")
+        observed_min = float(np.min(strain))
+        observed_max = float(np.max(strain))
+        if start < observed_min or end > observed_max:
+            raise ProcessingError(
+                f"선택 범위({start}~{end})가 관측 변형률 범위"
+                f"({observed_min}~{observed_max}) 안에 있어야 합니다."
+            )
+        selected = np.flatnonzero((strain >= start) & (strain <= end))
+        if selected.size < 2:
+            raise ProcessingError(f"선택 범위 {start}~{end} 에 관측점이 2점 미만입니다.")
+    else:
+        start = end = None
+        selected = np.arange(strain.size, dtype=int)
+    if selected.size < 2:
+        raise ProcessingError("선택 계산 범위에 관측점이 2점 미만입니다.")
+    if selected.size > 1 and np.any(np.diff(selected) != 1):
+        raise ProcessingError(
+            "선택 계산 범위가 원행에서 이어지지 않습니다(disconnected-domain). "
+            "행을 이어 붙이거나 원행 순서를 바꾸지 않고 범위를 다시 지정하세요."
+        )
+    return selected, start, end
+
+
+def _actual_domain_note(
+    indices: np.ndarray,
+    strain: np.ndarray,
+    scope: str,
+    requested_start: float | None,
+    requested_end: float | None,
+) -> str:
+    actual_start = float(strain[int(indices[0])])
+    actual_end = float(strain[int(indices[-1])])
+    requested = (
+        f", 요청 변형률 {requested_start:.6g}~{requested_end:.6g}"
+        if requested_start is not None and requested_end is not None
+        else ""
+    )
+    return (
+        f"계산 scope={scope}, 실제 원행 index {int(indices[0])}~{int(indices[-1])}, "
+        f"변형률 {actual_start:.6g}~{actual_end:.6g}{requested}"
+    )
+
+
+def _event_scalars(events: list[DropEvent]) -> list[Scalar]:
+    full = sum(event.kind == "full_recovery" for event in events)
+    partial = sum(event.kind == "partial_recovery" for event in events)
+    terminal = sum(event.kind == "terminal_unrecovered" for event in events)
+    return [
+        Scalar("event_count", "검출 사건 수", float(len(events)), "1"),
+        Scalar("recovered_count", "완전 회복 사건 수", float(full), "1"),
+        Scalar("partial_count", "부분 회복 사건 수", float(partial), "1"),
+        Scalar("unrecovered_count", "미회복 사건 수", float(terminal), "1"),
+    ]
+
+
+def _event_notes(
+    events: list[DropEvent],
+    domain: np.ndarray,
+    strain: np.ndarray,
+    stress: np.ndarray,
+    threshold: float,
+    min_reference_fraction: float,
+) -> list[str]:
+    domain_stress = stress[domain]
+    positive = domain_stress[domain_stress > 0]
+    reference_max = float(np.max(positive)) if positive.size else 0.0
+    floor = reference_max * min_reference_fraction
+    low_rows = int(np.count_nonzero((domain_stress > 0) & (domain_stress < floor)))
+    notes = [
+        f"양의 관측응력 최댓값 {reference_max:.6g} Pa의 "
+        f"{min_reference_fraction:.6g} 배({floor:.6g} Pa) 미만인 {low_rows}점은 "
+        "상대 하강 기준에서 제외했습니다.",
+        f"하강 문턱 {threshold:.6g}에 따라 원행 순서로 사건을 검출했습니다. "
+        "검출만으로 시편 파손·잡음 등의 원인을 확정하지 않습니다.",
+    ]
+    if any(event.kind == "full_recovery" for event in events):
+        notes.append(
+            "full_recovery는 첫 원봉우리 복귀까지의 내부 하강을 한 outer 사건으로 묶었습니다. "
+            "recovery index는 trough 뒤 의미 있는 반등 시작입니다."
+        )
+    for number, event in enumerate(events, start=1):
+        peak = int(event.peak_index)
+        trough = int(event.trough_index)
+        end = int(event.end_index)
+        recovery = (
+            str(int(event.recovery_index)) if event.recovery_index is not None else "없음"
+        )
+        notes.append(
+            f"사건 {number}: peak index {peak}, drop_start index {int(event.drop_start)}, "
+            f"trough index {trough}, recovery index {recovery}, end index {end}, "
+            f"분류 {event.kind}, 관측끝={event.end_at_observation_boundary}, "
+            f"peak 변형률 {float(strain[peak]):.6g}, "
+            f"trough 응력 {float(stress[trough]):.6g} Pa."
+        )
+    return notes
+
+
+def _absolute_events(local_events: list[DropEvent], domain: np.ndarray) -> list[DropEvent]:
+    def convert(event: DropEvent) -> DropEvent:
+        def row(value: int) -> int:
+            return int(domain[value])
+
+        return DropEvent(
+            row(event.peak_index),
+            row(event.drop_start),
+            row(event.trough_index),
+            row(event.recovery_index) if event.recovery_index is not None else None,
+            row(event.end_index),
+            event.kind,
+            event.end_at_observation_boundary,
+        )
+
+    return [convert(event) for event in local_events]
+
+
+def _fit_linear(
+    x: np.ndarray,
+    y: np.ndarray,
+    *,
+    slope_constraint: str,
+    min_slope: float = 0.0,
+) -> tuple[np.ndarray, float, float]:
+    if x.size < 2:
+        raise ProcessingError("직선·회귀 방법은 관측점 2점 이상이 필요합니다.")
+    center = float(np.mean(x))
+    scale = float(np.max(np.abs(x - center)))
+    if not np.isfinite(scale) or scale <= 0:
+        raise ProcessingError("선택 구간의 변형률이 퇴화해 직선을 계산할 수 없습니다.")
+    z = (x - center) / scale
+
+    def weighted_fit(weights: np.ndarray) -> tuple[float, float]:
+        total = float(np.sum(weights))
+        if not np.isfinite(total) or total <= 0:
+            raise ProcessingError("회귀 가중치 합이 유효하지 않습니다.")
+        z_bar = float(np.sum(weights * z) / total)
+        y_bar = float(np.sum(weights * y) / total)
+        denominator = float(np.sum(weights * (z - z_bar) ** 2))
+        if not np.isfinite(denominator) or denominator <= np.finfo(float).eps:
+            raise ProcessingError("선택 구간의 변형률이 퇴화해 회귀할 수 없습니다.")
+        slope = float(np.sum(weights * (z - z_bar) * (y - y_bar)) / denominator)
+        if slope_constraint == "nondecreasing":
+            slope = max(min_slope * scale, slope)
+        elif slope_constraint != "none":
+            raise ProcessingError("slope_constraint 는 none 또는 nondecreasing 이어야 합니다.")
+        intercept = y_bar - slope * z_bar
+        return slope, intercept
+
+    if slope_constraint not in ("none", "nondecreasing"):
+        raise ProcessingError("slope_constraint 는 none 또는 nondecreasing 이어야 합니다.")
+    slope, intercept = weighted_fit(np.ones(x.size, dtype=np.float64))
+    fitted = intercept + slope * z
+    return fitted, slope / scale, intercept - slope * center / scale
+
+
+def _fit_endpoint_line(
+    x: np.ndarray,
+    y: np.ndarray,
+    *,
+    slope_constraint: str,
+    min_slope: float = 0.0,
+) -> tuple[np.ndarray, float, float]:
+    if x.size < 2:
+        raise ProcessingError("양끝 직선은 관측점 2점 이상이 필요합니다.")
+    delta_x = float(x[-1] - x[0])
+    if not np.isfinite(delta_x) or delta_x <= 0:
+        raise ProcessingError("양끝 직선을 계산하려면 변형률이 엄격히 증가해야 합니다.")
+    slope = float((y[-1] - y[0]) / delta_x)
+    if slope_constraint == "nondecreasing" and slope < min_slope:
+        raise ProcessingError(
+            "slope_constraint='nondecreasing' 에서 양끝 직선의 기울기가 "
+            f"min_slope({min_slope})보다 작아 양끝 직선을 만들 수 없습니다."
+        )
+    if slope_constraint not in ("none", "nondecreasing"):
+        raise ProcessingError("slope_constraint 는 none 또는 nondecreasing 이어야 합니다.")
+    fitted = y[0] + slope * (x - x[0])
+    return fitted, slope, float(y[0] - slope * x[0])
+
+
+def _fit_robust_linear(
+    x: np.ndarray,
+    y: np.ndarray,
+    *,
+    slope_constraint: str,
+    min_slope: float = 0.0,
+) -> tuple[np.ndarray, float, float]:
+    if x.size < 2:
+        raise ProcessingError("Huber 회귀는 관측점 2점 이상이 필요합니다.")
+    center = float(np.mean(x))
+    scale_x = float(np.max(np.abs(x - center)))
+    if not np.isfinite(scale_x) or scale_x <= 0:
+        raise ProcessingError("선택 구간의 변형률이 퇴화해 Huber 회귀를 계산할 수 없습니다.")
+    z = (x - center) / scale_x
+    if slope_constraint not in ("none", "nondecreasing"):
+        raise ProcessingError("slope_constraint 는 none 또는 nondecreasing 이어야 합니다.")
+
+    def weighted_fit(weights: np.ndarray, *, constrained: bool) -> tuple[float, float]:
+        total = float(np.sum(weights))
+        if not np.isfinite(total) or total <= 0:
+            raise ProcessingError("Huber 회귀 가중치 합이 유효하지 않습니다.")
+        z_bar = float(np.sum(weights * z) / total)
+        y_bar = float(np.sum(weights * y) / total)
+        denominator = float(np.sum(weights * (z - z_bar) ** 2))
+        if not np.isfinite(denominator) or denominator <= np.finfo(float).eps:
+            raise ProcessingError(
+                "선택 구간의 변형률이 퇴화해 Huber 회귀를 계산할 수 없습니다."
+            )
+        slope = float(np.sum(weights * (z - z_bar) * (y - y_bar)) / denominator)
+        if constrained and slope_constraint == "nondecreasing":
+            slope = max(min_slope * scale_x, slope)
+        return slope, y_bar - slope * z_bar
+
+    ones = np.ones(x.size, dtype=np.float64)
+    # Huber scale is fixed from unconstrained OLS residuals, even when the final
+    # IRLS solve carries a nondecreasing lower bound.
+    slope, intercept = weighted_fit(ones, constrained=False)
+    initial = intercept + slope * z
+    residual = y - initial
+    mad = float(np.median(np.abs(residual - np.median(residual))))
+    max_abs = float(np.max(np.abs(y))) if y.size else 0.0
+    huber_scale = max(1.4826 * mad, 1e-6 * max_abs, 1.0)
+    delta = 1.345 * huber_scale
+    previous = initial
+    converged = False
+    for _iteration in range(100):
+        residual = y - previous
+        absolute = np.abs(residual)
+        weights = np.ones_like(absolute)
+        outside = absolute > delta
+        weights[outside] = delta / absolute[outside]
+        slope, intercept = weighted_fit(weights, constrained=True)
+        fitted = intercept + slope * z
+        if not np.all(np.isfinite(fitted)):
+            raise ProcessingError("Huber 회귀 결과가 유한하지 않습니다.")
+        change = float(np.max(np.abs(fitted - previous)))
+        fit_scale = max(1.0, float(np.max(np.abs(fitted))), float(np.max(np.abs(y))))
+        previous = fitted
+        if change <= 1e-10 * fit_scale:
+            converged = True
+            break
+    if not converged:
+        raise ProcessingError("Huber 회귀가 100회 반복 안에 수렴하지 않았습니다.")
+    return previous, slope / scale_x, intercept - slope * center / scale_x
+
+
+def _fit_segment(
+    method: str,
+    x: np.ndarray,
+    y: np.ndarray,
+    *,
+    min_slope: float,
+    slope_constraint: str,
+) -> tuple[np.ndarray, float, float]:
+    if x.size < 2:
+        raise ProcessingError("선택 계산 구간은 관측점 2점 이상이어야 합니다.")
+    if not np.all(np.isfinite(x)) or not np.all(np.isfinite(y)):
+        raise ProcessingError("선택 계산 구간에 유한하지 않은 값이 있습니다.")
+    if method in _MONOTONE_SCOPED_METHODS:
+        transformed = y - min_slope * x
+        if method == "envelope":
+            fitted_transformed = np.maximum.accumulate(transformed)
+        elif method == "isotonic":
+            fitted_transformed = _isotonic(transformed)
+        else:
+            fitted_transformed = np.minimum.accumulate(transformed[::-1])[::-1]
+        fitted = fitted_transformed + min_slope * x
+    elif method == "median_plateau":
+        transformed = y - min_slope * x
+        fitted = np.full_like(y, float(np.median(transformed)), dtype=np.float64)
+        fitted += min_slope * x
+    elif method == "linear":
+        if min_slope > 0 and slope_constraint == "none":
+            raise ProcessingError(
+                "linear에서 min_slope>0 을 쓰려면 slope_constraint='nondecreasing'을 "
+                "지정해야 합니다."
+            )
+        fitted, _slope, _intercept = _fit_endpoint_line(
+            x, y, slope_constraint=slope_constraint, min_slope=min_slope
+        )
+    elif method == "least_squares":
+        if min_slope > 0 and slope_constraint == "none":
+            raise ProcessingError(
+                "least_squares에서 min_slope>0 을 쓰려면 "
+                "slope_constraint='nondecreasing'을 지정해야 합니다."
+            )
+        fitted, _slope, _intercept = _fit_linear(
+            x, y, slope_constraint=slope_constraint, min_slope=min_slope
+        )
+    elif method == "robust_linear":
+        if min_slope > 0 and slope_constraint == "none":
+            raise ProcessingError(
+                "robust_linear에서 min_slope>0 을 쓰려면 "
+                "slope_constraint='nondecreasing'을 지정해야 합니다."
+            )
+        fitted, _slope, _intercept = _fit_robust_linear(
+            x, y, slope_constraint=slope_constraint, min_slope=min_slope
+        )
+    else:
+        raise ProcessingError(f"범위 처리에서 지원하지 않는 방법입니다: {method}")
+    if not np.all(np.isfinite(fitted)):
+        raise ProcessingError(f"{method} 계산 결과가 유한하지 않습니다.")
+    residual = y - fitted
+    total = float(np.sum((y - float(np.mean(y))) ** 2))
+    error = float(np.sum(residual**2))
+    score = 1.0 if total == 0 and error == 0 else 0.0 if total == 0 else 1.0 - error / total
+    rmse = float(np.sqrt(np.mean(residual**2)))
+    if not np.isfinite(score) or not np.isfinite(rmse):
+        raise ProcessingError(f"{method} 계산 점수가 유한하지 않습니다.")
+    return fitted, score, rmse
+
+
+def _merge_intervals(intervals: list[tuple[int, int]]) -> list[tuple[int, int]]:
+    if not intervals:
+        return []
+    merged: list[tuple[int, int]] = []
+    for start, end in sorted(intervals):
+        if merged and start <= merged[-1][1] + 1:
+            merged[-1] = (merged[-1][0], max(merged[-1][1], end))
+        else:
+            merged.append((start, end))
+    return merged
+
+
+def _expand_event_intervals(
+    intervals: list[tuple[int, int]],
+    *,
+    domain_start: int,
+    domain_end: int,
+    strain: np.ndarray,
+    original: np.ndarray,
+    method: str,
+    min_slope: float,
+    slope_constraint: str,
+    protected_intervals: list[tuple[int, int]] | None = None,
+) -> tuple[list[tuple[int, int]], list[str]]:
+    current = _merge_intervals(intervals)
+    notes: list[str] = []
+    protected = _merge_intervals(protected_intervals or [])
+
+    def protected_row(row: int) -> bool:
+        return any(start <= row <= end for start, end in protected)
+
+    while True:
+        candidate = current[:]
+        probe = original.copy()
+        for start, end in current:
+            probe[start : end + 1], _score, _rmse = _fit_segment(
+                method,
+                strain[start : end + 1],
+                original[start : end + 1],
+                min_slope=min_slope,
+                slope_constraint=slope_constraint,
+            )
+        changed = False
+        for start, end in current:
+            if start > domain_start:
+                required = probe[start - 1] + min_slope * float(
+                    strain[start] - strain[start - 1]
+                )
+                if probe[start] < required:
+                    if protected_row(start - 1):
+                        raise ProcessingError(
+                            "terminal_action='keep' 보호 행 때문에 events 단조 방법의 "
+                            "왼쪽 경계를 연결할 수 없습니다."
+                        )
+                    else:
+                        candidate.append((start - 1, end))
+                        changed = True
+            elif start > 0:
+                required = probe[start - 1] + min_slope * float(
+                    strain[start] - strain[start - 1]
+                )
+                if probe[start] < required:
+                    raise ProcessingError(
+                        "events 단조 방법의 왼쪽 경계 연결에 행을 더 넣어야 하지만 "
+                        "선택 domain 밖입니다."
+                    )
+            if end < domain_end:
+                required = probe[end] + min_slope * float(strain[end + 1] - strain[end])
+                if probe[end + 1] < required:
+                    if protected_row(end + 1):
+                        raise ProcessingError(
+                            "terminal_action='keep' 보호 행 때문에 events 단조 방법의 "
+                            "오른쪽 경계를 연결할 수 없습니다."
+                        )
+                    else:
+                        candidate.append((start, end + 1))
+                        changed = True
+            elif end + 1 < len(strain):
+                required = probe[end] + min_slope * float(strain[end + 1] - strain[end])
+                if probe[end + 1] < required:
+                    raise ProcessingError(
+                        "events 단조 방법의 오른쪽 경계 연결에 행을 더 넣어야 하지만 "
+                        "선택 domain 밖입니다."
+                    )
+        merged = _merge_intervals(candidate)
+        if not changed and merged == current:
+            break
+        current = merged
+    if current != _merge_intervals(intervals):
+        notes.append(
+            "events 단조 방법의 경계 급락을 없애려고 선택 domain 안에서 영향 구간을 "
+            f"최소 확장했습니다: {current}."
+        )
+    return current, notes
+
+
+def _boundary_metrics(
+    original: np.ndarray, fixed: np.ndarray, intervals: list[tuple[int, int]]
+) -> tuple[int, float]:
+    count = 0
+    maximum = 0.0
+    for start, end in intervals:
+        if start > 0 and fixed[start] != original[start]:
+            jump = abs(
+                (fixed[start] - fixed[start - 1]) - (original[start] - original[start - 1])
+            )
+            if jump > 0:
+                count += 1
+                maximum = max(maximum, float(jump))
+        if end + 1 < len(original) and fixed[end] != original[end]:
+            jump = abs((fixed[end + 1] - fixed[end]) - (original[end + 1] - original[end]))
+            if jump > 0:
+                count += 1
+                maximum = max(maximum, float(jump))
+    return count, maximum
+
+
+def _fit_interval_statistics(
+    original: np.ndarray, fixed: np.ndarray, intervals: list[tuple[int, int]]
+) -> tuple[float, float]:
+    observed: list[np.ndarray] = []
+    predicted: list[np.ndarray] = []
+    for start, end in intervals:
+        observed.append(original[start : end + 1])
+        predicted.append(fixed[start : end + 1])
+    if not observed:
+        return 1.0, 0.0
+    y = np.concatenate(observed)
+    fit = np.concatenate(predicted)
+    residual = y - fit
+    total = float(np.sum((y - float(np.mean(y))) ** 2))
+    error = float(np.sum(residual**2))
+    score = 1.0 if total == 0 and error == 0 else 0.0 if total == 0 else 1.0 - error / total
+    rmse = float(np.sqrt(np.mean(residual**2)))
+    if not np.isfinite(score) or not np.isfinite(rmse):
+        raise ProcessingError("범위 처리 점수가 유한하지 않습니다.")
+    return score, rmse
+
+
+def _scoped_result(
+    frame: Frame,
+    strain: np.ndarray,
+    stress: np.ndarray,
+    strain_key: str,
+    stress_key: str,
+    *,
+    scope: str,
+    method: str,
+    domain: np.ndarray,
+    events: list[DropEvent],
+    options: dict[str, Any],
+    threshold: float,
+    min_reference_fraction: float,
+    min_slope: float,
+    requested_start: float | None,
+    requested_end: float | None,
+) -> StepResult:
+    slope_constraint = str(options.get("slope_constraint") or "none")
+    terminal_action = str(options.get("terminal_action") or "hold")
+    if terminal_action not in ("hold", "keep"):
+        raise ProcessingError("terminal_action 은 hold 또는 keep 이어야 합니다.")
+    if method in _REGRESSION_METHODS and slope_constraint not in ("none", "nondecreasing"):
+        raise ProcessingError("slope_constraint 는 none 또는 nondecreasing 이어야 합니다.")
+    if method not in _REGRESSION_METHODS:
+        slope_constraint = "none"
+
+    notes = [_actual_domain_note(domain, strain, scope, requested_start, requested_end)]
+    notes.extend(
+        _event_notes(events, domain, strain, stress, threshold, min_reference_fraction)
+    )
+    scalars = _event_scalars(events)
+
+    if method == "keep":
+        notes.append("keep: 원본 모든 채널을 그대로 두고 선택 domain의 사건만 진단했습니다.")
+        scalars.extend(
+            [
+                Scalar("yield_drop_points", "손댄 점 수", 0.0, "1"),
+                Scalar("boundary_jump_count", "경계 jump 수", 0.0, "1"),
+                Scalar("boundary_jump_max", "최대 경계 jump", 0.0, "Pa"),
+                Scalar(
+                    "remaining_drop_count",
+                    "남은 하강 수",
+                    float(np.count_nonzero(np.diff(stress[domain]) < 0)),
+                    "1",
+                ),
+            ]
+        )
+        return StepResult(frame, notes=tuple(notes), scalars=tuple(scalars))
+
+    terminal = [event for event in events if event.kind == "terminal_unrecovered"]
+    if scope == "events" and terminal and terminal_action == "hold" and method != "cut":
+        detail = ", ".join(str(event.peak_index) for event in terminal)
+        raise ProcessingError(
+            "events 범위에 terminal_unrecovered 사건이 있어 hold 합니다"
+            f"(peak 원행 index: {detail}). terminal_action='keep' 를 선택하면 "
+            "미회복 구간을 원본으로 보존할 수 있습니다."
+        )
+
+    if method == "cut":
+        if not events:
+            notes.append("선택 domain 안에 검출 사건이 없어 cut 하지 않았습니다.")
+            scalars.extend(
+                [
+                    Scalar("yield_drop_points", "손댄 점 수", 0.0, "1"),
+                    Scalar("boundary_jump_count", "경계 jump 수", 0.0, "1"),
+                    Scalar("boundary_jump_max", "최대 경계 jump", 0.0, "Pa"),
+                    Scalar(
+                        "remaining_drop_count",
+                        "남은 하강 수",
+                        float(np.count_nonzero(np.diff(stress[domain]) < 0)),
+                        "1",
+                    ),
+                ]
+            )
+            return StepResult(frame, notes=tuple(notes), scalars=tuple(scalars))
+        first_peak = int(events[0].peak_index)
+        kept = first_peak + 1
+        removed = len(stress) - kept
+        notes.append(
+            f"선택 domain의 첫 검출 peak 원행 index {first_peak}까지 모든 채널을 보존하고 "
+            f"뒤의 {removed}점을 잘랐습니다."
+        )
+        scalars.append(Scalar("yield_drop_points", "손댄 점 수", float(removed), "1"))
+        return StepResult(
+            frame.select(np.arange(kept)), notes=tuple(notes), scalars=tuple(scalars)
+        )
+
+    intervals: list[tuple[int, int]]
+    if scope == "events":
+        intervals = []
+        for event in events:
+            if event.kind == "terminal_unrecovered" and terminal_action == "keep":
+                continue
+            intervals.append((event.peak_index, event.end_index))
+        intervals = _merge_intervals(intervals)
+        if not intervals:
+            notes.append("편집할 회복 사건이 없어 원본을 그대로 둡니다.")
+            scalars.append(Scalar("yield_drop_points", "손댄 점 수", 0.0, "1"))
+            return StepResult(frame, notes=tuple(notes), scalars=tuple(scalars))
+    else:
+        intervals = [(int(domain[0]), int(domain[-1]))]
+
+    if method in _MONOTONE_SCOPED_METHODS and scope == "events":
+        protected_intervals = [
+            (event.peak_index, event.end_index)
+            for event in terminal
+            if terminal_action == "keep"
+        ]
+        intervals, expansion_notes = _expand_event_intervals(
+            intervals,
+            domain_start=int(domain[0]),
+            domain_end=int(domain[-1]),
+            strain=strain,
+            original=stress,
+            method=method,
+            min_slope=min_slope,
+            slope_constraint=slope_constraint,
+            protected_intervals=protected_intervals,
+        )
+        notes.extend(expansion_notes)
+
+    fixed = stress.astype(np.float64).copy()
+    for start, end in intervals:
+        fixed[start : end + 1], _score, _rmse = _fit_segment(
+            method,
+            strain[start : end + 1],
+            stress[start : end + 1],
+            min_slope=min_slope,
+            slope_constraint=slope_constraint,
+        )
+
+    if scope == "events" and terminal_action == "keep":
+        for event in terminal:
+            protected_start, protected_end = event.peak_index, event.end_index
+            if np.any(
+                fixed[protected_start : protected_end + 1]
+                != stress[protected_start : protected_end + 1]
+            ):
+                raise ProcessingError(
+                    "terminal_action='keep' 보호 영역과 회복 영향 구간이 겹쳐 "
+                    "미회복 원행을 보존할 수 없습니다. 범위를 다시 지정하세요."
+                )
+
+    changed = int(np.count_nonzero(fixed != stress))
+    boundary_count, boundary_max = _boundary_metrics(stress, fixed, intervals)
+    score, rmse = _fit_interval_statistics(stress, fixed, intervals)
+    remaining = int(np.count_nonzero(np.diff(fixed[domain]) < 0))
+    method_note = {
+        "envelope": "선택 구간 prefix envelope",
+        "isotonic": "선택 구간 PAVA 단조 회귀",
+        "lower_envelope": "선택 구간 suffix lower envelope",
+        "median_plateau": "선택 구간 median plateau",
+        "linear": "선택 구간 양끝 직선",
+        "least_squares": "선택 구간 OLS 직선",
+        "robust_linear": "선택 구간 고정 scale Huber IRLS 직선",
+    }.get(method, method)
+    notes.append(
+        f"{method_note}을 적용했습니다. 영향 index {intervals}, {changed}점을 바꿨습니다."
+    )
+    if method == "median_plateau" and min_slope > 0:
+        notes.append(
+            "median_plateau는 y-min_slope*x의 중앙값을 복원했으므로 양수 min_slope에서는 "
+            "완전한 수평 평탄부가 아닙니다."
+        )
+    if method == "robust_linear" and any(end - start + 1 == 2 for start, end in intervals):
+        notes.append(
+            "2점 robust_linear 구간은 제약이 없을 때 끝점 직선과 동일하지만, "
+            "기울기 제약 시 달라질 수 있으며 이상점을 분별할 수 없습니다."
+        )
+    if method in ("median_plateau", "linear", "least_squares", "robust_linear"):
+        notes.append(
+            f"{method}은 양끝 연속을 수치적으로 보장하지 않습니다: 추가 경계 jump "
+            f"{boundary_count}개, 최대 {boundary_max:.6g} Pa, 남은 하강 {remaining}개."
+        )
+    elif method in _MONOTONE_SCOPED_METHODS:
+        notes.append(f"단조 계산 뒤 남은 선택 domain 내부 하강은 {remaining}개입니다.")
+    if method in _REGRESSION_METHODS:
+        notes.append(
+            "slope_constraint='none' 이면 하강 기울기를 허용하며, "
+            f"현재 선택값은 {slope_constraint} 입니다."
+        )
+
+    scalars.extend(
+        [
+            Scalar("yield_drop_points", "손댄 점 수", float(changed), "1"),
+            Scalar("boundary_jump_count", "경계 jump 수", float(boundary_count), "1"),
+            Scalar("boundary_jump_max", "최대 경계 jump", boundary_max, "Pa"),
+            Scalar("remaining_drop_count", "남은 하강 수", float(remaining), "1"),
+            Scalar("fit_r_squared", "처리 구간 R²", score, "1"),
+            Scalar("fit_rmse", "처리 구간 RMSE", rmse, "Pa"),
+        ]
+    )
+    return StepResult(
+        frame.with_columns({stress_key: fixed}, {}),
+        notes=tuple(notes),
+        scalars=tuple(scalars),
+    )
 
 
 @register(
@@ -1583,6 +2314,19 @@ def _first_drop(stress: np.ndarray, threshold: float) -> int | None:
     kind="processing",
     label="공칭 하강 처리",
     params=(
+        ParamSpec(
+            name="scope",
+            label="계산 범위",
+            type="choice",
+            default="full",
+            choices=YIELD_DROP_SCOPES,
+            choice_labels={"full": "전체 관측", "range": "명시 구간", "events": "검출 사건"},
+            choice_help={
+                "full": "기존 전체 관측 계약으로 계산합니다.",
+                "range": "range_start~range_end 안의 원행 구간만 계산하고 밖은 그대로 둡니다.",
+                "events": "원행 순서에서 급락과 회복 사건을 검출한 영향 구간만 계산합니다.",
+            },
+        ),
         ParamSpec(
             name="method",
             label="방법",
@@ -1593,20 +2337,28 @@ def _first_drop(stress: np.ndarray, threshold: float) -> int | None:
                 "envelope": "단조 포락선",
                 "isotonic": "단조 회귀",
                 "lower_yield": "선택 구간 평탄화 (모델 근사)",
-                "cut": "첫 하강 봉우리에서 자르기",
+                "cut": "첫 검출 봉우리에서 자르기",
                 "keep": "그대로 두고 재기만",
+                "lower_envelope": "뒤쪽 최솟값 포락선",
+                "median_plateau": "중앙값 평탄부",
+                "linear": "양끝 직선",
+                "least_squares": "최소제곱 직선",
+                "robust_linear": "Huber 강건 직선",
             },
             choice_help={
-                "envelope": "내려가는 구간을 직전 최댓값으로 덮어 평탄하게 합니다"
-                "(running max). 잡음성 요철을 정리할 때 쓸 수 있지만 "
-                "봉우리 쪽으로 치우칩니다.",
-                "isotonic": "단조 비감소 최소제곱 회귀(PAVA) — 내려가는 구간을 이웃과 "
-                "평균으로 폅니다. 위아래로 고른 잡음에 원곡선과 가장 가깝습니다.",
-                "lower_yield": "명시한 공칭변형률 구간의 응력만 입력 목표응력으로 바꿉니다. "
-                "규격 하항복강도나 뤼더스 변형률을 자동으로 측정하지 않는 모델 근사입니다.",
-                "cut": "첫 상대 하강이 감지된 봉우리에서 자릅니다. 이후 공칭 곡선을 "
-                "별도 모델 범위로 다룰 때 사용합니다.",
-                "keep": "곡선은 안 건드리고 하강 폭과 변경점 수만 기록합니다.",
+                "envelope": "prefix running maximum으로 선택 구간의 하강을 올립니다.",
+                "isotonic": "PAVA 단조 비감소 최소제곱 회귀를 적용합니다.",
+                "lower_yield": "명시한 공칭변형률 구간과 목표 응력으로 모델 근사합니다.",
+                "cut": "선택 범위에서 첫 검출 peak까지 모든 채널을 보존하고 뒤를 자릅니다. "
+                "range는 검출 범위이며 삭제 보호 범위가 아닙니다.",
+                "keep": "곡선은 안 건드리고 선택 범위의 사건과 지표만 기록합니다.",
+                "lower_envelope": (
+                    "suffix running minimum으로 선택 구간의 하강 아래 경계를 계산합니다."
+                ),
+                "median_plateau": "선택 구간 응력의 중앙값으로 평탄부를 만듭니다.",
+                "linear": "선택 구간 양끝을 잇는 직선을 계산합니다.",
+                "least_squares": "선택 구간의 OLS 직선을 계산합니다.",
+                "robust_linear": "고정된 Huber scale의 IRLS로 직선을 계산합니다.",
             },
         ),
         ParamSpec(
@@ -1615,8 +2367,60 @@ def _first_drop(stress: np.ndarray, threshold: float) -> int | None:
             type="float",
             default=YIELD_DROP_THRESHOLD,
             unit="1",
-            help="양수인 선행 최댓값에 견준 비율입니다. 이보다 작은 하강은 잡음으로 보고 "
-            "응력 하강으로 치지 않습니다(기본 0.5 %).",
+            help="양수인 선행 최댓값에 견준 비율입니다. 이보다 작은 하강은 기존 계약에서 "
+            "응력 하강으로 치지 않습니다(기본 0.5%).",
+        ),
+        ParamSpec(
+            name="recovery_threshold",
+            label="회복 문턱",
+            type="float",
+            default=None,
+            unit="1",
+            when={"scope": ("range", "events")},
+            help=(
+                "급락 최저점에서 의미 있는 상승으로 볼 비율입니다. 비우면 threshold를 씁니다."
+            ),
+        ),
+        ParamSpec(
+            name="min_reference_fraction",
+            label="최소 기준 봉우리 비율",
+            type="float",
+            default=0.05,
+            unit="1",
+            when={"scope": ("range", "events")},
+            help="선택 domain의 양의 관측응력 최댓값에 대한 최소 기준 비율입니다.",
+        ),
+        ParamSpec(
+            name="terminal_action",
+            label="말단 미회복",
+            type="choice",
+            default="hold",
+            choices=("hold", "keep"),
+            choice_labels={"hold": "보류", "keep": "원본 보존"},
+            choice_help={
+                "hold": (
+                    "편집 방법에서 events의 terminal_unrecovered가 있으면 "
+                    "전체 처리를 보류합니다."
+                ),
+                "keep": (
+                    "회복 사건만 처리하고 미회복 영역은 원본으로 보존합니다. "
+                    "cut은 선택한 prefix를 자릅니다."
+                ),
+            },
+            when={"scope": ("events",)},
+        ),
+        ParamSpec(
+            name="slope_constraint",
+            label="직선 기울기",
+            type="choice",
+            default="none",
+            choices=("none", "nondecreasing"),
+            choice_labels={"none": "제약 없음", "nondecreasing": "비감소"},
+            choice_help={
+                "none": "하강 기울기도 허용합니다. 결과가 내려갈 수 있음을 notes에 남깁니다.",
+                "nondecreasing": "OLS/Huber 기울기를 0 이상으로 직접 제약합니다.",
+            },
+            when={"method": ("linear", "least_squares", "robust_linear")},
         ),
         ParamSpec(
             name="min_slope",
@@ -1624,9 +2428,27 @@ def _first_drop(stress: np.ndarray, threshold: float) -> int | None:
             type="float",
             default=0.0,
             unit="Pa",
-            help="0 이면 평탄부를 허용합니다(단조 비감소). 양수면 그 기울기(Pa/단위 "
-            "변형률)만큼은 늘 오르게 해 **엄격히 단조 증가**로 만듭니다 — 접선계수 0 을 "
-            "거부하는 솔버용. 예: 1e7 (10 MPa/1.0 변형률).",
+            help="단조 방법에서 y-min_slope*x를 먼저 계산해 이 기울기 이상을 보장합니다.",
+        ),
+        ParamSpec(
+            name="range_start",
+            label="범위 시작 변형률",
+            type="float",
+            unit="1",
+            dimension="strain",
+            required=False,
+            when={"scope": ("range", "events")},
+            help="명시 범위의 시작. 실제 선택 원행 범위는 notes에 남습니다.",
+        ),
+        ParamSpec(
+            name="range_end",
+            label="범위 끝 변형률",
+            type="float",
+            unit="1",
+            dimension="strain",
+            required=False,
+            when={"scope": ("range", "events")},
+            help="명시 범위의 끝. 실제 선택 원행 범위는 notes에 남습니다.",
         ),
         ParamSpec(
             name="plateau_start",
@@ -1661,20 +2483,38 @@ def _first_drop(stress: np.ndarray, threshold: float) -> int | None:
         ParamSpec(name="stress", label="응력 열", type="str", role="column", default=STRESS),
     ),
     applies_to=("tensile",),
-    # 키만으로 거르지 않는다 — 변위·하중을 재는 시험이면 공칭 곡선이 서고 이 정리가 뜻이 있다.
     requires_channels=(("displacement",), ("force",)),
     makes_values=(
         Produced(
             key="yield_drop_max",
             label="최대 하강 폭",
             si_unit="Pa",
-            help="직전 최댓값에서 가장 많이 내려간 관측 응력 폭. 0 이면 응력 하강이 없습니다.",
+            help="직전 최댓값에서 가장 많이 내려간 관측 응력 폭.",
+        ),
+        Produced(key="yield_drop_points", label="손댄 점 수", si_unit="1"),
+        Produced(
+            key="event_count",
+            label="검출 사건 수",
+            si_unit="1",
+            help="원행 순서에서 threshold를 넘은 급락 사건 수.",
+        ),
+        Produced(key="recovered_count", label="완전 회복 사건 수", si_unit="1"),
+        Produced(key="partial_count", label="부분 회복 사건 수", si_unit="1"),
+        Produced(key="unrecovered_count", label="미회복 사건 수", si_unit="1"),
+        Produced(key="boundary_jump_count", label="경계 jump 수", si_unit="1"),
+        Produced(key="boundary_jump_max", label="최대 경계 jump", si_unit="Pa"),
+        Produced(key="remaining_drop_count", label="남은 하강 수", si_unit="1"),
+        Produced(
+            key="fit_r_squared",
+            label="처리 구간 R²",
+            si_unit="1",
+            help="선택 방법의 수치 적합 점수이며 방법 순위나 물리 승인 지표가 아닙니다.",
         ),
         Produced(
-            key="yield_drop_points",
-            label="손댄 점 수",
-            si_unit="1",
-            help="이 단계가 값을 바꾸거나 잘라 낸 점의 수.",
+            key="fit_rmse",
+            label="처리 구간 RMSE",
+            si_unit="Pa",
+            help="선택 방법의 수치 잔차이며 방법 순위나 물리 승인 지표가 아닙니다.",
         ),
         Produced(
             key="model_plateau_stress",
@@ -1696,35 +2536,137 @@ def _first_drop(stress: np.ndarray, threshold: float) -> int | None:
         ),
     ),
     order=35,
-    version="3",
+    version="4",
 )
 def yield_drop(frame: Frame, options: dict[str, Any]) -> StepResult:
-    """공칭 응력-변형률의 하강을 선택한 방법으로 처리한다.
+    """공칭 응력의 하강과 회복을 선택한 방법으로 진단·처리한다.
 
-    공칭 하강은 측정·시험편·재료 거동의 여러 원인으로 생길 수 있으므로 이 단계가
-    원인을 판정하지 않는다. `envelope`·`isotonic`·`cut`·`keep`은 하강을 감지해
-    기존 방식대로 진단하거나 곡선을 정리한다. `lower_yield`는 자동 항복 판정 대신
-    사용자가 지정한 구간과 목표 응력으로 모델 근사를 명시한다.
-
-    **무엇을 얼마나 바꿨는지 남긴다.** 하강 폭과 변경점 수는 값으로, 방법과 구간은
-    노트로 기록한다. 선택 구간 평탄화는 규격 하항복강도나 뤼더스 변형률을 측정하는
-    기능이 아니다.
+    전체 scope와 기존 방법의 기본값은 유지한다. range/events는 사용자가 선택한
+    원행 영역을 계산 대상으로 삼으며, 사건 검출은 변형률 정렬이나 중복 제거 없이
+    관측 행 순서에서 수행한다. 검출만으로 하강 원인을 판정하지 않는다.
     """
-    strain, stress, strain_key, stress_key = _pair(frame, options)
-    require_increasing(strain, what=f"'{strain_key}'")
+    strain_raw, stress_raw, strain_key, stress_key = _pair(frame, options)
+    strain, stress = _finite_pair(strain_raw, stress_raw, strain_key, stress_key)
+    scope = option_text(options, "scope", YIELD_DROP_SCOPES)
     method = option_text(options, "method", YIELD_DROP_METHODS)
     threshold = option_float(options, "threshold", YIELD_DROP_THRESHOLD)
     if not 0 <= threshold < 1:
         raise ProcessingError(f"하강 문턱은 0 이상 1 미만이어야 합니다: {threshold}")
+    recovery_threshold = (
+        option_float(options, "recovery_threshold")
+        if options.get("recovery_threshold") is not None
+        else threshold
+    )
+    if not 0 <= recovery_threshold < 1:
+        raise ProcessingError(f"회복 문턱은 0 이상 1 미만이어야 합니다: {recovery_threshold}")
+    min_reference_fraction = (
+        0.0
+        if scope == "full" and options.get("min_reference_fraction") is None
+        else option_float(options, "min_reference_fraction", 0.05)
+    )
+    if not 0 <= min_reference_fraction <= 1:
+        raise ProcessingError(
+            f"최소 기준 봉우리 비율은 0 이상 1 이하이어야 합니다: {min_reference_fraction}"
+        )
     min_slope = option_float(options, "min_slope", 0.0)
     if min_slope < 0:
         raise ProcessingError(f"최소 기울기는 0 이상이어야 합니다: {min_slope}")
-    running = np.maximum.accumulate(stress)
-    max_drop = float(np.max(running - stress)) if len(stress) else 0.0
+    domain, requested_start, requested_end = _domain_indices(strain, scope, options)
     if not np.any(stress > 0):
         raise ProcessingError("양의 인장응력이 없어 상대 하강을 평가할 수 없음")
 
+    local_stress = stress[domain]
+    try:
+        local_events = detect_events(
+            local_stress,
+            threshold,
+            recovery_threshold,
+            min_reference_fraction,
+        )
+    except ValueError as exc:
+        raise ProcessingError(f"사건 검출 입력이 유효하지 않습니다: {exc}") from exc
+    events = _absolute_events(local_events, domain)
+    domain_running = np.maximum.accumulate(stress[domain])
+    max_drop = float(np.max(domain_running - stress[domain])) if domain.size else 0.0
+
+    if method == "keep":
+        if scope == "full":
+            require_increasing(strain, what=f"'{strain_key}'")
+            keep_notes = [
+                f"계산 scope=full, 실제 원행 index 0~{len(stress) - 1}, "
+                f"변형률 {float(strain[0]):.6g}~{float(strain[-1]):.6g}",
+            ]
+            keep_notes.extend(
+                _event_notes(events, domain, strain, stress, threshold, min_reference_fraction)
+            )
+            keep_notes.append("곡선은 그대로 둡니다.")
+            keep_scalars = [
+                Scalar("yield_drop_max", "최대 하강 폭", max_drop, "Pa"),
+                *_event_scalars(events),
+                Scalar("yield_drop_points", "손댄 점 수", 0.0, "1"),
+                Scalar("boundary_jump_count", "경계 jump 수", 0.0, "1"),
+                Scalar("boundary_jump_max", "최대 경계 jump", 0.0, "Pa"),
+                Scalar(
+                    "remaining_drop_count",
+                    "남은 하강 수",
+                    float(np.count_nonzero(np.diff(stress) < 0)),
+                    "1",
+                ),
+            ]
+            return StepResult(frame, notes=tuple(keep_notes), scalars=tuple(keep_scalars))
+        result = _scoped_result(
+            frame,
+            strain,
+            stress,
+            strain_key,
+            stress_key,
+            scope=scope,
+            method=method,
+            domain=domain,
+            events=events,
+            options=options,
+            threshold=threshold,
+            min_reference_fraction=min_reference_fraction,
+            min_slope=min_slope,
+            requested_start=requested_start,
+            requested_end=requested_end,
+        )
+        scalars = list(result.scalars)
+        scalars.insert(0, Scalar("yield_drop_max", "최대 하강 폭", max_drop, "Pa"))
+        non_increasing = np.diff(strain[domain]) <= 0
+        if np.any(non_increasing):
+            reversal_count = int(np.count_nonzero(np.diff(strain[domain]) < 0))
+            duplicate_count = int(np.count_nonzero(np.diff(strain[domain]) == 0))
+            result = StepResult(
+                result.frame,
+                notes=(
+                    *result.notes,
+                    f"진단 domain에 역전 {reversal_count}개와 중복 {duplicate_count}개가 "
+                    "있어 편집 가능한 단조 곡선으로 보지 않습니다.",
+                ),
+                scalars=result.scalars,
+            )
+        return StepResult(result.frame, notes=result.notes, scalars=tuple(scalars))
+
+    if scope != "full" and method not in _SCOPED_METHODS:
+        raise ProcessingError(
+            f"method='{method}' 은 scope='{scope}' 에서 사용할 수 없습니다. "
+            "lower_yield는 scope='full'의 명시 plateau 계약만 지원합니다."
+        )
+    if scope == "full" and method not in _FULL_METHODS:
+        raise ProcessingError(
+            f"method='{method}' 은 scope='full'에서 사용할 수 없습니다. "
+            "새 범위 방법에는 scope='range' 또는 scope='events'를 지정하세요."
+        )
+    require_increasing(
+        strain if scope == "full" else strain[domain],
+        what=(f"'{strain_key}'" if scope == "full" else f"'{strain_key}' 선택 편집 domain"),
+    )
     if method == "lower_yield":
+        if scope != "full":
+            raise ProcessingError(
+                "lower_yield는 scope='full'에서만 명시 plateau 계약으로 처리합니다."
+            )
         if min_slope != 0:
             raise ProcessingError(
                 "선택 구간 평탄화와 최소 기울기 단조화는 한 단계에서 함께 하지 않습니다. "
@@ -1764,23 +2706,22 @@ def yield_drop(frame: Frame, options: dict[str, Any]) -> StepResult:
             )
         if plateau_stress <= 0:
             raise ProcessingError(f"평탄화 목표 응력은 0보다 커야 합니다: {plateau_stress} Pa")
-
-        fixed = stress.astype(np.float64).copy()
+        fixed = stress.copy()
         fixed[selected] = plateau_stress
         changed = int(np.count_nonzero(fixed != stress))
         selected_strain = strain[selected]
         actual_start = float(selected_strain[0])
         actual_end = float(selected_strain[-1])
-        plateau_notes = (
+        plateau_note = (
             f"선택 구간 평탄화(모델 근사): 요청 변형률 {plateau_start:.6g}~"
             f"{plateau_end:.6g}, 실제 관측 구간 {actual_start:.6g}~{actual_end:.6g}, "
             f"원관측점 {selected_count}점, 입력 목표응력 {plateau_stress:.6g} Pa, "
             f"변경점 {changed}개. 규격 하항복강도(ReL)나 뤼더스 변형률을 측정한 결과가 "
-            "아닙니다.",
+            "아닙니다."
         )
         return StepResult(
             frame.with_columns({stress_key: fixed}, {}),
-            notes=plateau_notes,
+            notes=(plateau_note,),
             scalars=(
                 Scalar("yield_drop_max", "최대 하강 폭", max_drop, "Pa"),
                 Scalar("yield_drop_points", "손댄 점 수", float(changed), "1"),
@@ -1792,99 +2733,173 @@ def yield_drop(frame: Frame, options: dict[str, Any]) -> StepResult:
             ),
         )
 
-    first = _first_drop(stress, threshold)
-    notes: list[str] = []
-    scalars: list[Scalar] = [Scalar("yield_drop_max", "최대 하강 폭", max_drop, "Pa")]
-
-    # 첫 상대 하강을 기록해 generic 방법의 기존 행 선택과 진단에 사용한다.
-    upper_index: int | None = None
-    recover_index: int | None = None
-    if first is not None:
-        upper_index = int(np.argmax(stress[:first]))
-        upper = float(stress[upper_index])
-        after = np.nonzero(stress[first:] >= upper)[0]
-        recover_index = int(first + after[0]) if after.size else None
-        notes.append(
-            f"첫 상대 하강은 봉우리 index {upper_index} "
-            f"({upper / 1e6:.4g} MPa, 변형률 {float(strain[upper_index]):.4g}) 뒤에서 "
-            + (
-                f"변형률 {float(strain[recover_index]):.4g} 에서 봉우리를 다시 넘습니다."
-                if recover_index is not None
-                else "끝까지 봉우리를 다시 넘지 않습니다."
+    if scope == "full":
+        first = _first_drop(stress, threshold)
+        full_notes: list[str] = [
+            f"계산 scope=full, 실제 원행 index 0~{len(stress) - 1}, "
+            f"변형률 {float(strain[0]):.6g}~{float(strain[-1]):.6g}",
+        ]
+        full_notes.extend(
+            _event_notes(events, domain, strain, stress, threshold, min_reference_fraction)
+        )
+        upper_index: int | None = None
+        recover_index: int | None = None
+        if first is not None:
+            upper_index = int(np.argmax(stress[:first]))
+            upper = float(stress[upper_index])
+            after = np.nonzero(stress[first:] >= upper)[0]
+            recover_index = int(first + after[0]) if after.size else None
+            full_notes.append(
+                f"기존 full 진단의 첫 상대 하강은 peak index {upper_index} "
+                f"({upper / 1e6:.4g} MPa, 변형률 {float(strain[upper_index]):.4g}) 뒤에서 "
+                + (
+                    f"변형률 {float(strain[recover_index]):.4g} 에서 봉우리를 다시 넘습니다."
+                    if recover_index is not None
+                    else "끝까지 봉우리를 다시 넘지 않습니다."
+                )
             )
-        )
-    else:
-        notes.append(
-            f"양수인 선행 최댓값에서 {threshold * 100:.2g} % 를 넘는 하강이 없습니다"
-            f"(최대 {max_drop / 1e6:.3g} MPa) — 응력 하강으로 보지 않습니다."
-        )
-
-    if method == "keep" or (first is None and min_slope <= 0):
-        if method != "keep":
-            notes.append("곡선은 그대로 둡니다.")
-        scalars.append(Scalar("yield_drop_points", "손댄 점 수", 0.0, "1"))
-        return StepResult(frame, notes=tuple(notes), scalars=tuple(scalars))
-
-    if first is None:
-        # 하강은 없는데 최소 기울기를 달라고 했다 — 평탄부(접선계수 0)만 올린다.
-        # 아무 열에나 걸 수 있는 같은 일은 `curve.monotone` 이 한다.
-        fixed = stress.astype(np.float64).copy()
-        for index in range(1, len(fixed)):
-            floor = fixed[index - 1] + min_slope * float(strain[index] - strain[index - 1])
-            if fixed[index] < floor:
-                fixed[index] = floor
+        else:
+            full_notes.append(
+                f"양수인 선행 최댓값에서 {threshold * 100:.2g}%를 넘는 하강이 없습니다"
+                f"(최대 {max_drop / 1e6:.3g} MPa) — 응력 하강으로 보지 않습니다."
+            )
+        full_scalars: list[Scalar] = [
+            Scalar("yield_drop_max", "최대 하강 폭", max_drop, "Pa"),
+            *_event_scalars(events),
+        ]
+        if method == "keep" or (first is None and min_slope <= 0):
+            if method != "keep":
+                full_notes.append("곡선은 그대로 둡니다.")
+            full_scalars.extend(
+                [
+                    Scalar("yield_drop_points", "손댄 점 수", 0.0, "1"),
+                    Scalar("boundary_jump_count", "경계 jump 수", 0.0, "1"),
+                    Scalar("boundary_jump_max", "최대 경계 jump", 0.0, "Pa"),
+                    Scalar(
+                        "remaining_drop_count",
+                        "남은 하강 수",
+                        float(np.count_nonzero(np.diff(stress) < 0)),
+                        "1",
+                    ),
+                ]
+            )
+            return StepResult(frame, notes=tuple(full_notes), scalars=tuple(full_scalars))
+        if first is None:
+            fixed = stress.copy()
+            for index in range(1, len(fixed)):
+                floor = fixed[index - 1] + min_slope * float(strain[index] - strain[index - 1])
+                if fixed[index] < floor:
+                    fixed[index] = floor
+            changed = int(np.count_nonzero(fixed != stress))
+            full_notes.append(
+                f"평탄부에 최소 기울기 {min_slope:.3g} Pa 를 줘 엄격히 단조 증가로 "
+                "만들었습니다 — "
+                f"{changed}점을 올렸습니다."
+            )
+            full_scalars.extend(
+                [
+                    Scalar("yield_drop_points", "손댄 점 수", float(changed), "1"),
+                    Scalar("boundary_jump_count", "경계 jump 수", 0.0, "1"),
+                    Scalar("boundary_jump_max", "최대 경계 jump", 0.0, "Pa"),
+                    Scalar(
+                        "remaining_drop_count",
+                        "남은 하강 수",
+                        float(np.count_nonzero(np.diff(fixed) < 0)),
+                        "1",
+                    ),
+                ]
+            )
+            return StepResult(
+                frame.with_columns({stress_key: fixed}, {}),
+                notes=tuple(full_notes),
+                scalars=tuple(full_scalars),
+            )
+        if method == "cut":
+            assert upper_index is not None
+            kept = upper_index + 1
+            removed = len(stress) - kept
+            full_notes.append(
+                f"기존 full 첫 상대 하강 peak(index {upper_index}, 변형률 "
+                f"{float(strain[upper_index]):.4g})에서 잘랐습니다 — "
+                f"뒤의 {removed}점은 버렸습니다."
+            )
+            full_scalars.extend(
+                [
+                    Scalar("yield_drop_points", "손댄 점 수", float(removed), "1"),
+                    Scalar("boundary_jump_count", "경계 jump 수", 0.0, "1"),
+                    Scalar("boundary_jump_max", "최대 경계 jump", 0.0, "Pa"),
+                    Scalar(
+                        "remaining_drop_count",
+                        "남은 하강 수",
+                        float(np.count_nonzero(np.diff(stress[:kept]) < 0)),
+                        "1",
+                    ),
+                ]
+            )
+            return StepResult(
+                frame.select(np.arange(kept)),
+                notes=tuple(full_notes),
+                scalars=tuple(full_scalars),
+            )
+        # Keep the parent full-domain numeric contract: PAVA/running-max is
+        # applied to y first, and the historic forward slope floor follows it.
+        if method == "envelope":
+            fixed = np.maximum.accumulate(stress).astype(np.float64)
+        else:
+            fixed = _isotonic(stress)
+        if min_slope > 0:
+            for index in range(1, len(fixed)):
+                floor = fixed[index - 1] + min_slope * float(strain[index] - strain[index - 1])
+                if fixed[index] < floor:
+                    fixed[index] = floor
         changed = int(np.count_nonzero(fixed != stress))
-        notes.append(
-            f"평탄부에 최소 기울기 {min_slope:.3g} Pa 를 줘 엄격히 단조 증가로 만들었습니다 — "
-            f"{changed}점을 올렸습니다."
+        full_notes.append(
+            (
+                "내려가는 구간을 직전 최댓값으로 덮었습니다(단조 포락선)"
+                if method == "envelope"
+                else "단조 비감소 최소제곱 회귀(PAVA)로 폈습니다"
+            )
+            + f" — {changed}점을 바꿨습니다."
         )
-        scalars.append(Scalar("yield_drop_points", "손댄 점 수", float(changed), "1"))
+        full_score, full_rmse = _fit_interval_statistics(stress, fixed, [(0, len(stress) - 1)])
+        full_scalars.extend(
+            [
+                Scalar("yield_drop_points", "손댄 점 수", float(changed), "1"),
+                Scalar("boundary_jump_count", "경계 jump 수", 0.0, "1"),
+                Scalar("boundary_jump_max", "최대 경계 jump", 0.0, "Pa"),
+                Scalar(
+                    "remaining_drop_count",
+                    "남은 하강 수",
+                    float(np.count_nonzero(np.diff(fixed) < 0)),
+                    "1",
+                ),
+                Scalar("fit_r_squared", "처리 구간 R²", full_score, "1"),
+                Scalar("fit_rmse", "처리 구간 RMSE", full_rmse, "Pa"),
+            ]
+        )
         return StepResult(
             frame.with_columns({stress_key: fixed}, {}),
-            notes=tuple(notes),
-            scalars=tuple(scalars),
+            notes=tuple(full_notes),
+            scalars=tuple(full_scalars),
         )
 
-    if method == "cut":
-        assert upper_index is not None
-        kept = upper_index + 1
-        removed = len(stress) - kept
-        notes.append(
-            f"첫 상대 하강이 감지된 봉우리(index {upper_index}, 변형률 "
-            f"{float(strain[upper_index]):.4g})에서 잘랐습니다 — 뒤의 {removed}점은 "
-            f"버렸습니다. 그 뒤 구간은 카드의 「늘릴 한계」(경화식 외삽)가 맡습니다."
-        )
-        scalars.append(Scalar("yield_drop_points", "손댄 점 수", float(removed), "1"))
-        return StepResult(
-            frame.select(np.arange(kept)), notes=tuple(notes), scalars=tuple(scalars)
-        )
-
-    fixed = stress.astype(np.float64).copy()
-    if method == "envelope":
-        fixed = running.astype(np.float64)
-        how = "내려가는 구간을 직전 최댓값으로 덮었습니다(단조 포락선)"
-    elif method == "isotonic":
-        fixed = _isotonic(fixed)
-        how = "단조 비감소 최소제곱 회귀(PAVA)로 폈습니다"
-    else:
-        # `lower_yield` returns after applying its explicit bounded request above.
-        raise AssertionError(f"unhandled yield-drop method: {method}")
-
-    if min_slope > 0:
-        # 엄격히 단조 증가 — 평탄부에 최소 기울기를 준다. 앞에서부터 한 번 훑는다.
-        for index in range(1, len(fixed)):
-            floor = fixed[index - 1] + min_slope * float(strain[index] - strain[index - 1])
-            if fixed[index] < floor:
-                fixed[index] = floor
-        how += f", 최소 기울기 {min_slope:.3g} Pa 로 엄격히 단조 증가"
-
-    changed = int(np.count_nonzero(~np.isclose(fixed, stress, rtol=0, atol=0)))
-    notes.append(
-        f"{how} — {changed}점을 바꿨습니다. 걷어낸 것은 지어낸 것이 아니라 버린 것입니다."
+    result = _scoped_result(
+        frame,
+        strain,
+        stress,
+        strain_key,
+        stress_key,
+        scope=scope,
+        method=method,
+        domain=domain,
+        events=events,
+        options=options,
+        threshold=threshold,
+        min_reference_fraction=min_reference_fraction,
+        min_slope=min_slope,
+        requested_start=requested_start,
+        requested_end=requested_end,
     )
-    scalars.append(Scalar("yield_drop_points", "손댄 점 수", float(changed), "1"))
-    return StepResult(
-        frame.with_columns({stress_key: fixed}, {}),
-        notes=tuple(notes),
-        scalars=tuple(scalars),
-    )
+    scalars = list(result.scalars)
+    scalars.insert(0, Scalar("yield_drop_max", "최대 하강 폭", max_drop, "Pa"))
+    return StepResult(result.frame, notes=result.notes, scalars=tuple(scalars))
