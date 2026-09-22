@@ -11000,6 +11000,89 @@
         "title": "ExportFormatOut",
         "type": "object"
       },
+      "ExportOut": {
+        "description": "만들어 둔 내보내기 하나.",
+        "properties": {
+          "catalog": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Catalog"
+          },
+          "curves": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Curves"
+          },
+          "done": {
+            "title": "Done",
+            "type": "boolean"
+          },
+          "generated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Generated At"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "row_total": {
+            "title": "Row Total",
+            "type": "integer"
+          },
+          "size_bytes": {
+            "title": "Size Bytes",
+            "type": "integer"
+          },
+          "workspace": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workspace"
+          }
+        },
+        "required": [
+          "name",
+          "path",
+          "size_bytes",
+          "generated_at",
+          "workspace",
+          "curves",
+          "catalog",
+          "row_total",
+          "done"
+        ],
+        "title": "ExportOut",
+        "type": "object"
+      },
       "ExportProfileCreateRequest": {
         "properties": {
           "definition": {
@@ -11177,6 +11260,74 @@
           "definition"
         ],
         "title": "ExportProfileSaveRequest",
+        "type": "object"
+      },
+      "ExportQueuedOut": {
+        "properties": {
+          "folder": {
+            "title": "Folder",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "folder",
+          "path",
+          "message"
+        ],
+        "title": "ExportQueuedOut",
+        "type": "object"
+      },
+      "ExportRequest": {
+        "description": "물성 데이터 내보내기 요청.\n\n**기본이 전부다** — 곡선도 문헌도 포함. 받는 쪽이 「구조 없이 데이터만」 을\n원할 때 빠진 것이 있으면 다시 뽑아야 하고, 그 왕복이 며칠이 된다.",
+        "properties": {
+          "catalog": {
+            "default": true,
+            "title": "Catalog",
+            "type": "boolean"
+          },
+          "curves": {
+            "default": true,
+            "title": "Curves",
+            "type": "boolean"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "maxLength": 60,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "workspace": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workspace"
+          }
+        },
+        "title": "ExportRequest",
         "type": "object"
       },
       "FacetOut": {
@@ -41626,6 +41777,72 @@
         "summary": "Semantic Reindex",
         "tags": [
           "search"
+        ]
+      }
+    },
+    "/api/server/exports": {
+      "get": {
+        "description": "만들어 둔 내보내기들. 최근 것부터.\n\n**무엇이 들었는지 함께 준다**(부서·곡선·문헌·줄 수). 폴더 이름만 보이면\n「이게 곡선 포함이었나」 를 열어 봐야 알고, 그때는 이미 건넨 뒤다.",
+        "operationId": "list_exports_api_server_exports_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ExportOut"
+                  },
+                  "title": "Response List Exports Api Server Exports Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Exports",
+        "tags": [
+          "server"
+        ]
+      },
+      "post": {
+        "description": "물성 데이터를 CSV 묶음으로 뽑는다. **큐에 넣고 바로 돌려준다.**\n\n곡선까지 뽑으면 수 분에 수백 MB 다 — 요청을 붙잡으면 브라우저가 먼저 끊고,\n그러면 사람은 실패한 줄 아는데 서버는 계속 만든다.\n\n## 되돌릴 수 없는 일이라 감사에 남긴다\n\n나간 파일은 회수가 안 되고, 그 파일 안에서는 **부서 가시성도 뜻이 없다.**\n누가 언제 무엇을 뽑았는지는 반년 뒤에 실제로 물어질 수 있다.",
+        "operationId": "create_export_api_server_exports_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExportQueuedOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Export",
+        "tags": [
+          "server"
         ]
       }
     },

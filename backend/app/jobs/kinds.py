@@ -31,6 +31,13 @@ TESTS_PARSE_UPLOAD = "tests.parse_upload"
 #: 영원히 안 잡힌다. 실측(2026-08-15): 지운 시험 2건의 파일이 그대로 남아 있었다.
 TESTS_CLEANUP_STORAGE = "tests.cleanup_storage"
 
+#: 물성 데이터 내보내기 — payload: workspace(str|None) · curves(bool) · catalog(bool)
+#:     · requested_by(str, 사람 이름) · folder(str, 만들 폴더 이름)
+#:
+#: 요청 안에서 만들지 않는 이유는 업로드 파싱과 같다 — 곡선까지 뽑으면 수 분에 수백
+#: MB 라 브라우저가 먼저 끊고, 그러면 사람은 실패한 줄 아는데 서버는 계속 만든다.
+DATA_EXPORT_DATASET = "data.export_dataset"
+
 #: 어긋남 점검 — payload 없음
 #:
 #: 문자열 컬럼과 기준정보가 같은 말을 하는지 본다(ADR 0010 Contract). **주기 작업이다**

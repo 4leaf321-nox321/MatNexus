@@ -22,6 +22,7 @@
 from __future__ import annotations
 
 import ctypes
+import json
 import os
 import platform
 import re
@@ -293,6 +294,7 @@ KIND_LABELS: dict[str, str] = {
     kinds.TESTS_CLEANUP_STORAGE: "저장소 정리",
     kinds.VOCABULARY_CHECK_DRIFT: "기준정보 어긋남 점검",
     kinds.PIPELINES_PARSE_INBOX: "수집함 파일 읽기",
+    kinds.DATA_EXPORT_DATASET: "데이터 내보내기",
 }
 
 
@@ -389,3 +391,76 @@ def info(db: Session) -> dict[str, Any]:
         "database": _database(db),
         "app_version": version.current(),
     }
+
+
+# ── 데이터 내보내기 ───────────────────────────────────────────────────────────
+
+
+#: 폴더 이름에 쓸 수 있는 글자. 사람이 적은 메모가 경로가 되므로 좁게 잡는다.
+_FOLDER = re.compile(r"[^0-9A-Za-z가-힣._-]+")
+
+
+def export_root() -> Path:
+    """내보낸 것이 쌓이는 폴더. 없으면 만든다.
+
+    **파일스토어 안에 두지 않는다** — 오펀 정리가 훑는 자리라 「DB 에 행이 없는
+    폴더」로 보고 지울 수 있다.
+    """
+    settings = get_settings()
+    root = settings.export_dir or settings.filestore_dir.parent / "exports"
+    root.mkdir(parents=True, exist_ok=True)
+    return root
+
+
+def export_folder_name(*, workspace: str | None, note: str | None = None) -> str:
+    """이번 내보내기의 폴더 이름. **요청할 때 정한다** — 큐에서 기다린 시간만큼
+    이름이 밀리면 사람이 화면에서 본 것과 폴더가 달라진다."""
+    stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
+    parts = [stamp, workspace or "all"]
+    if note:
+        trimmed = _FOLDER.sub("_", note).strip("_")[:40]
+        if trimmed:
+            parts.append(trimmed)
+    return "-".join(parts)
+
+
+def _folder_size(path: Path) -> int:
+    return sum(one.stat().st_size for one in path.rglob("*") if one.is_file())
+
+
+def exports(limit: int = 20) -> list[dict[str, Any]]:
+    """만들어 둔 내보내기들. 최근 것부터.
+
+    **manifest 를 읽어 무엇이 들었는지 함께 준다** — 폴더 이름만 보이면 「이게 곡선
+    포함이었나」 를 열어 봐야 알고, 그때는 이미 건넨 뒤다.
+    """
+    root = export_root()
+    out: list[dict[str, Any]] = []
+    for folder in sorted(root.iterdir(), reverse=True):
+        if not folder.is_dir():
+            continue
+        manifest: dict[str, Any] = {}
+        found = folder / "manifest.json"
+        if found.is_file():
+            try:
+                manifest = json.loads(found.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                # 만드는 중이거나 깨졌다 — 폴더는 보이되 내용은 비운다.
+                manifest = {}
+        scope = manifest.get("scope") or {}
+        out.append(
+            {
+                "name": folder.name,
+                "path": str(folder),
+                "size_bytes": _folder_size(folder),
+                "generated_at": manifest.get("generated_at"),
+                "workspace": scope.get("workspace"),
+                "curves": scope.get("curves"),
+                "catalog": scope.get("catalog"),
+                "row_total": sum(int(one) for one in (manifest.get("counts") or {}).values()),
+                "done": bool(manifest),
+            }
+        )
+        if len(out) >= limit:
+            break
+    return out

@@ -4647,6 +4647,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/server/exports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Exports
+         * @description 만들어 둔 내보내기들. 최근 것부터.
+         *
+         *     **무엇이 들었는지 함께 준다**(부서·곡선·문헌·줄 수). 폴더 이름만 보이면
+         *     「이게 곡선 포함이었나」 를 열어 봐야 알고, 그때는 이미 건넨 뒤다.
+         */
+        get: operations["list_exports_api_server_exports_get"];
+        put?: never;
+        /**
+         * Create Export
+         * @description 물성 데이터를 CSV 묶음으로 뽑는다. **큐에 넣고 바로 돌려준다.**
+         *
+         *     곡선까지 뽑으면 수 분에 수백 MB 다 — 요청을 붙잡으면 브라우저가 먼저 끊고,
+         *     그러면 사람은 실패한 줄 아는데 서버는 계속 만든다.
+         *
+         *     ## 되돌릴 수 없는 일이라 감사에 남긴다
+         *
+         *     나간 파일은 회수가 안 되고, 그 파일 안에서는 **부서 가시성도 뜻이 없다.**
+         *     누가 언제 무엇을 뽑았는지는 반년 뒤에 실제로 물어질 수 있다.
+         */
+        post: operations["create_export_api_server_exports_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/server/info": {
         parameters: {
             query?: never;
@@ -11040,6 +11075,30 @@ export interface components {
             /** Requires */
             requires: string[];
         };
+        /**
+         * ExportOut
+         * @description 만들어 둔 내보내기 하나.
+         */
+        ExportOut: {
+            /** Catalog */
+            catalog: boolean | null;
+            /** Curves */
+            curves: boolean | null;
+            /** Done */
+            done: boolean;
+            /** Generated At */
+            generated_at: string | null;
+            /** Name */
+            name: string;
+            /** Path */
+            path: string;
+            /** Row Total */
+            row_total: number;
+            /** Size Bytes */
+            size_bytes: number;
+            /** Workspace */
+            workspace: string | null;
+        };
         /** ExportProfileCreateRequest */
         ExportProfileCreateRequest: {
             /** Definition */
@@ -11118,6 +11177,40 @@ export interface components {
             is_active: boolean;
             /** Label */
             label: string;
+        };
+        /** ExportQueuedOut */
+        ExportQueuedOut: {
+            /** Folder */
+            folder: string;
+            /** Message */
+            message: string;
+            /** Path */
+            path: string;
+            /** Status */
+            status: string;
+        };
+        /**
+         * ExportRequest
+         * @description 물성 데이터 내보내기 요청.
+         *
+         *     **기본이 전부다** — 곡선도 문헌도 포함. 받는 쪽이 「구조 없이 데이터만」 을
+         *     원할 때 빠진 것이 있으면 다시 뽑아야 하고, 그 왕복이 며칠이 된다.
+         */
+        ExportRequest: {
+            /**
+             * Catalog
+             * @default true
+             */
+            catalog: boolean;
+            /**
+             * Curves
+             * @default true
+             */
+            curves: boolean;
+            /** Note */
+            note?: string | null;
+            /** Workspace */
+            workspace?: string | null;
         };
         /**
          * FacetOut
@@ -26021,6 +26114,59 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SemanticReindexOut"];
+                };
+            };
+        };
+    };
+    list_exports_api_server_exports_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExportOut"][];
+                };
+            };
+        };
+    };
+    create_export_api_server_exports_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExportRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExportQueuedOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

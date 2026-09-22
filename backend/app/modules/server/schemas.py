@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class HostOut(BaseModel):
@@ -104,3 +104,47 @@ class QueueOut(BaseModel):
     failed: int
     done_last_24h: int
     failures: list[FailedJobOut]
+
+
+class ExportRequest(BaseModel):
+    """물성 데이터 내보내기 요청.
+
+    **기본이 전부다** — 곡선도 문헌도 포함. 받는 쪽이 「구조 없이 데이터만」 을
+    원할 때 빠진 것이 있으면 다시 뽑아야 하고, 그 왕복이 며칠이 된다.
+    """
+
+    workspace: str | None = None
+    """부서 slug 하나. 비우면 **전 부서**. 전역 재료는 어느 쪽이든 함께 나간다."""
+    curves: bool = True
+    """곡선 점까지 낼까. 끄면 표만 — 용량이 크게 준다."""
+    catalog: bool = True
+    """문헌 카탈로그까지 낼까. **재배포 판단이 붙는다** — 줄마다 출처와 라이선스가
+    함께 나가고, 산출물의 README 가 그 사실을 적는다."""
+    note: str | None = Field(default=None, max_length=60)
+    """폴더 이름 끝에 붙는 메모. 「누구에게 주려고 뽑았나」 를 적어 두면 반년 뒤에
+    그 폴더가 무엇인지 안다."""
+
+
+class ExportQueuedOut(BaseModel):
+    status: str
+    folder: str
+    """만들어질 폴더 이름. **요청할 때 정해진다** — 큐에서 기다린 만큼 이름이 밀리면
+    화면에서 본 것과 폴더가 달라진다."""
+    path: str
+    message: str
+
+
+class ExportOut(BaseModel):
+    """만들어 둔 내보내기 하나."""
+
+    name: str
+    path: str
+    size_bytes: int
+    generated_at: datetime | None
+    workspace: str | None
+    curves: bool | None
+    catalog: bool | None
+    row_total: int
+    done: bool
+    """manifest 가 있나. **없으면 만드는 중이거나 실패한 것**이다 — 폴더만 있고
+    속이 빈 것을 완성으로 보이면 그것을 건넨다."""

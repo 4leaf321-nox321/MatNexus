@@ -20,6 +20,8 @@ const queue = vi.fn()
 const retry = vi.fn()
 const semantic = vi.fn()
 const reindex = vi.fn()
+const exports = vi.fn()
+const createExport = vi.fn()
 vi.mock('@/modules/server/api', () => ({
   serverApi: {
     info: () => info(),
@@ -27,6 +29,8 @@ vi.mock('@/modules/server/api', () => ({
     retry: (...args: unknown[]) => retry(...args),
     semantic: () => semantic(),
     reindex: () => reindex(),
+    exports: () => exports(),
+    createExport: (...args: unknown[]) => createExport(...args),
   },
 }))
 
@@ -96,6 +100,13 @@ beforeEach(() => {
   info.mockResolvedValue(reply())
   queue.mockResolvedValue(QUEUE)
   retry.mockResolvedValue({})
+  exports.mockResolvedValue([])
+  createExport.mockResolvedValue({
+    status: 'queued',
+    folder: '20260923-090000-all',
+    path: 'D:/exports/20260923-090000-all',
+    message: '큐에 넣었습니다.',
+  })
   semantic.mockResolvedValue({
     ready: false,
     engine: 'off',
@@ -308,5 +319,51 @@ describe('의미 검색', () => {
     })
     mount()
     expect(await screen.findByText(/표가 1024차원인데 설정은 768차원/)).toBeInTheDocument()
+  })
+})
+
+describe('데이터 내보내기', () => {
+  it('뽑기 전에 무엇이 나가는지 말한다', async () => {
+    mount()
+    // **전 부서라는 사실은 뽑은 뒤에 알면 늦다.** 이 파일 안에서는 부서 가시성이 없다.
+    expect(await screen.findByText(/전 부서/)).toBeInTheDocument()
+    expect(screen.getByText(/감사 기록에 남습니다/)).toBeInTheDocument()
+    // 문헌을 켜 둔 상태의 기본 — 재배포 판단이 붙는다는 것을 먼저 본다.
+    expect(screen.getByText(/재배포 전에 확인하라/)).toBeInTheDocument()
+  })
+
+  it('고른 대로 큐에 넣고 폴더 이름을 알려 준다', async () => {
+    const user = userEvent.setup()
+    mount()
+    await user.click(await screen.findByLabelText('곡선 포함'))
+    await user.type(screen.getByLabelText('메모'), 'MatPylon')
+    await user.click(screen.getByRole('button', { name: /지금 뽑기/ }))
+
+    await waitFor(() => expect(createExport).toHaveBeenCalled())
+    expect(createExport.mock.calls[0][0]).toEqual({
+      curves: false,
+      catalog: true,
+      note: 'MatPylon',
+    })
+    expect(await screen.findByText(/20260923-090000-all/)).toBeInTheDocument()
+  })
+
+  it('만드는 중인 것은 완성으로 안 보인다', async () => {
+    // manifest 가 없는 폴더다 — 완성으로 보이면 속이 빈 것을 건넨다.
+    exports.mockResolvedValue([
+      {
+        name: '20260923-080000-all',
+        path: 'D:/exports/20260923-080000-all',
+        size_bytes: 1024,
+        generated_at: null,
+        workspace: null,
+        curves: null,
+        catalog: null,
+        row_total: 0,
+        done: false,
+      },
+    ])
+    mount()
+    expect(await screen.findByText('만드는 중')).toBeInTheDocument()
   })
 })

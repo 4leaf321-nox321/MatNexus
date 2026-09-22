@@ -25,6 +25,7 @@ import {
   HardDrive,
   ListChecks,
   MemoryStick,
+  Download,
   RotateCcw,
   Search,
   Server,
@@ -307,6 +308,7 @@ function Body() {
       {/* **의미 검색 — 켜져 있나, 아니면 왜 아닌가.** 「비슷」 이 글자만 보고 있는데
           화면이 조용하면 사람은 「그런 자료가 없다」 로 읽는다. */}
       <Semantic />
+      <DataExports />
 
       {/* **큐 — 실패 목록과 다시 시도.** 재시도 3회·백오프·멈춘 작업 회수는 이미
           있다. 없던 것은 3회 다 실패해 `failed` 가 된 작업을 **보는 자리**다. */}
@@ -472,6 +474,146 @@ function Semantic() {
           <p className="text-muted-foreground text-xs">
             꺼져 있습니다 — 「비슷」 검색과 AI(MCP)는 글자만 봅니다.
           </p>
+        )}
+      </div>
+    </section>
+  )
+}
+
+
+/**
+ * 데이터 내보내기 — **다른 플랫폼에 넘길 CSV 묶음을 여기서 뽑는다.**
+ *
+ * 요청 안에서 안 만든다. 곡선까지 뽑으면 수 분에 수백 MB 라 브라우저가 먼저 끊고,
+ * 그러면 사람은 실패한 줄 아는데 서버는 계속 만든다 — 업로드 파싱을 워커로 옮긴 것과
+ * 같은 이유다. 큐에 넣고, 다 되면 이 목록에 줄 수와 크기가 뜬다.
+ *
+ * **파일은 화면으로 안 내려받는다.** 백업과 같이 서버 폴더에서 사람이 가져간다 —
+ * 수백 MB 를 앱으로 흘리면 그 요청이 앱을 붙잡는다.
+ */
+function DataExports() {
+  const made = useResource(() => serverApi.exports(), [])
+  const [curves, setCurves] = useState(true)
+  const [catalog, setCatalog] = useState(true)
+  const [note, setNote] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<Error | null>(null)
+  const [queued, setQueued] = useState<string | null>(null)
+
+  // 만드는 중인 것이 있으면 다시 물어 본다 — 다 되면 manifest 가 생기며 `done` 이 참이 된다.
+  const pending = (made.data ?? []).some((one) => !one.done)
+  useEffect(() => {
+    if (!pending) return
+    const timer = setInterval(() => made.reload(), 5000)
+    return () => clearInterval(timer)
+  }, [pending, made])
+
+  async function start() {
+    setBusy(true)
+    setError(null)
+    try {
+      const got = await serverApi.createExport({ curves, catalog, note: note.trim() || null })
+      setQueued(got.folder)
+      setNote('')
+      made.reload()
+    } catch (caught) {
+      setError(caught instanceof Error ? caught : new Error('내보내기를 넣지 못했습니다.'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <section className="mt-4 rounded-md border" aria-label="데이터 내보내기">
+      <div className="flex flex-wrap items-center gap-3 border-b px-3 py-2 text-sm">
+        <Download className="text-muted-foreground size-4" />
+        <span className="font-medium">데이터 내보내기</span>
+        <span className="text-muted-foreground text-xs">
+          다른 플랫폼에 넘길 CSV 묶음. 숫자는 전부 SI 입니다
+        </span>
+      </div>
+
+      <div className="space-y-3 p-3">
+        <ErrorNotice error={made.error ?? error} />
+
+        {/* **무엇이 나가는지 누르기 전에 말한다.** 전 부서라는 사실과 문헌의 재배포
+            판단은 뽑은 뒤에 알면 늦다. */}
+        <p className="text-xs text-amber-700 dark:text-amber-500">
+          <AlertTriangle className="mr-1 inline size-3.5" />
+          <b>전 부서</b> 데이터가 나갑니다 — 이 파일 안에서는 부서 가시성이 없습니다.
+          누가 언제 무엇을 뽑았는지는 감사 기록에 남습니다.
+        </p>
+
+        <div className="flex flex-wrap items-center gap-4 text-sm">
+          <label className="flex items-center gap-1.5">
+            <input
+              type="checkbox"
+              checked={curves}
+              onChange={(event) => setCurves(event.target.checked)}
+            />
+            곡선 포함
+          </label>
+          <label className="flex items-center gap-1.5">
+            <input
+              type="checkbox"
+              checked={catalog}
+              onChange={(event) => setCatalog(event.target.checked)}
+            />
+            문헌 카탈로그 포함
+          </label>
+          <input
+            value={note}
+            maxLength={60}
+            placeholder="메모 (누구에게 주려고 뽑나)"
+            aria-label="메모"
+            className="h-8 min-w-48 flex-1 rounded-md border px-2 text-sm"
+            onChange={(event) => setNote(event.target.value)}
+          />
+          <Button size="sm" variant="outline" disabled={busy} onClick={() => void start()}>
+            <Download className="size-4" />
+            지금 뽑기
+          </Button>
+        </div>
+
+        {catalog && (
+          <p className="text-muted-foreground text-xs">
+            문헌 값은 대부분 논문·핸드북에서 온 것입니다. 줄마다 출처와 라이선스가 함께
+            나가고, <b>재배포 전에 확인하라</b>는 안내가 산출물의 README 에 적힙니다.
+          </p>
+        )}
+
+        {queued && (
+          <p className="text-muted-foreground text-xs">
+            <b>{queued}</b> 를 큐에 넣었습니다. 다 되면 아래 목록에 줄 수와 크기가 뜹니다 —
+            파일은 서버 폴더에서 가져갑니다.
+          </p>
+        )}
+
+        {made.data && made.data.length === 0 && (
+          <p className="text-muted-foreground text-xs">뽑아 둔 것이 없습니다.</p>
+        )}
+        {made.data && made.data.length > 0 && (
+          <ul className="space-y-2">
+            {made.data.map((one) => (
+              <li key={one.name} className="flex flex-wrap items-center gap-2 text-sm">
+                <span className="font-mono text-xs">{one.name}</span>
+                {one.done ? (
+                  <span className="text-muted-foreground text-xs tabular-nums">
+                    {one.row_total.toLocaleString()}줄 · {bytes(one.size_bytes)} ·{' '}
+                    {one.workspace ?? '전 부서'}
+                    {one.curves ? ' · 곡선' : ''}
+                    {one.catalog ? ' · 문헌' : ''}
+                  </span>
+                ) : (
+                  // 폴더만 있고 manifest 가 없다 = 만드는 중이거나 실패한 것.
+                  <Badge variant="outline">만드는 중</Badge>
+                )}
+                <span className="text-muted-foreground ml-auto font-mono text-xs break-all">
+                  {one.path}
+                </span>
+              </li>
+            ))}
+          </ul>
         )}
       </div>
     </section>
