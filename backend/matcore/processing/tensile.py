@@ -1581,7 +1581,7 @@ def _first_drop(stress: np.ndarray, threshold: float) -> int | None:
 @register(
     id="tensile.yield_drop",
     kind="processing",
-    label="항복 강하 정리",
+    label="공칭 하강 처리",
     params=(
         ParamSpec(
             name="method",
@@ -1592,23 +1592,21 @@ def _first_drop(stress: np.ndarray, threshold: float) -> int | None:
             choice_labels={
                 "envelope": "단조 포락선",
                 "isotonic": "단조 회귀",
-                "lower_yield": "하항복점부터",
-                "cut": "연화 시작에서 자르기",
+                "lower_yield": "선택 구간 평탄화 (모델 근사)",
+                "cut": "첫 하강 봉우리에서 자르기",
                 "keep": "그대로 두고 재기만",
             },
             choice_help={
                 "envelope": "내려가는 구간을 직전 최댓값으로 덮어 평탄하게 합니다"
-                "(running max). 잡음성 요철에. 봉우리 쪽으로 치우칩니다.",
+                "(running max). 잡음성 요철을 정리할 때 쓸 수 있지만 "
+                "봉우리 쪽으로 치우칩니다.",
                 "isotonic": "단조 비감소 최소제곱 회귀(PAVA) — 내려가는 구간을 이웃과 "
                 "평균으로 폅니다. 위아래로 고른 잡음에 원곡선과 가장 가깝습니다.",
-                "lower_yield": "연강의 항복점 현상용. 상항복 봉우리(ReH)를 하항복점(ReL)으로 "
-                "깎고 뤼더스 평탄부 끝까지 평탄하게 — 상항복은 시험기·정렬에 좌우되는 값이라 "
-                "버립니다. ReH·ReL·뤼더스 변형률을 값으로 냅니다.",
-                "cut": "첫 연화가 시작되는 봉우리에서 자릅니다. 수지의 항복 후 넥처럼 공칭 "
-                "하강이 재료가 아니라 단면 감소인 경우 — 그 뒤는 카드의 「늘릴 한계」"
-                "(경화식 외삽)가 맡습니다.",
-                "keep": "곡선은 안 건드리고 하강 폭·점 수와 (있으면) ReH·ReL 만 냅니다. "
-                "연화를 받는 재료 모델(SAMP-1 등)로 갈 때.",
+                "lower_yield": "명시한 공칭변형률 구간의 응력만 입력 목표응력으로 바꿉니다. "
+                "규격 하항복강도나 뤼더스 변형률을 자동으로 측정하지 않는 모델 근사입니다.",
+                "cut": "첫 상대 하강이 감지된 봉우리에서 자릅니다. 이후 공칭 곡선을 "
+                "별도 모델 범위로 다룰 때 사용합니다.",
+                "keep": "곡선은 안 건드리고 하강 폭과 변경점 수만 기록합니다.",
             },
         ),
         ParamSpec(
@@ -1618,7 +1616,7 @@ def _first_drop(stress: np.ndarray, threshold: float) -> int | None:
             default=YIELD_DROP_THRESHOLD,
             unit="1",
             help="양수인 선행 최댓값에 견준 비율입니다. 이보다 작은 하강은 잡음으로 보고 "
-            "항복점·연화로 치지 않습니다(기본 0.5 %).",
+            "응력 하강으로 치지 않습니다(기본 0.5 %).",
         ),
         ParamSpec(
             name="min_slope",
@@ -1629,6 +1627,35 @@ def _first_drop(stress: np.ndarray, threshold: float) -> int | None:
             help="0 이면 평탄부를 허용합니다(단조 비감소). 양수면 그 기울기(Pa/단위 "
             "변형률)만큼은 늘 오르게 해 **엄격히 단조 증가**로 만듭니다 — 접선계수 0 을 "
             "거부하는 솔버용. 예: 1e7 (10 MPa/1.0 변형률).",
+        ),
+        ParamSpec(
+            name="plateau_start",
+            label="평탄화 시작 변형률",
+            type="float",
+            unit="1",
+            dimension="strain",
+            required=True,
+            when={"method": ("lower_yield",)},
+            help="선택 구간 평탄화의 시작. 관측 공칭변형률 범위 안에서 직접 지정합니다.",
+        ),
+        ParamSpec(
+            name="plateau_end",
+            label="평탄화 끝 변형률",
+            type="float",
+            unit="1",
+            dimension="strain",
+            required=True,
+            when={"method": ("lower_yield",)},
+            help="선택 구간 평탄화의 끝. 시작보다 크고 관측 범위 안이어야 합니다.",
+        ),
+        ParamSpec(
+            name="plateau_stress",
+            label="평탄화 목표 응력",
+            type="float",
+            unit="Pa",
+            required=True,
+            when={"method": ("lower_yield",)},
+            help="선택 구간의 원관측 응력을 바꿀 목표 응력입니다. 양수로 직접 지정합니다.",
         ),
         ParamSpec(name="strain", label="변형률 열", type="str", role="column", default=STRAIN),
         ParamSpec(name="stress", label="응력 열", type="str", role="column", default=STRESS),
@@ -1641,7 +1668,7 @@ def _first_drop(stress: np.ndarray, threshold: float) -> int | None:
             key="yield_drop_max",
             label="최대 하강 폭",
             si_unit="Pa",
-            help="직전 최댓값에서 가장 많이 내려간 폭. 0 이면 연화가 없었습니다.",
+            help="직전 최댓값에서 가장 많이 내려간 관측 응력 폭. 0 이면 응력 하강이 없습니다.",
         ),
         Produced(
             key="yield_drop_points",
@@ -1650,43 +1677,38 @@ def _first_drop(stress: np.ndarray, threshold: float) -> int | None:
             help="이 단계가 값을 바꾸거나 잘라 낸 점의 수.",
         ),
         Produced(
-            key="upper_yield_strength",
-            label="상항복강도 ReH",
+            key="model_plateau_stress",
+            label="모델 평탄 응력",
             si_unit="Pa",
-            help="첫 봉우리. 항복점 현상이 있을 때만 납니다.",
+            help="선택 구간 평탄화에 입력한 목표 응력. 규격 하항복강도 측정값이 아닙니다.",
         ),
         Produced(
-            key="lower_yield_strength",
-            label="하항복강도 ReL",
-            si_unit="Pa",
-            help="첫 봉우리 뒤 최솟값. 소성 곡선의 시작으로 쓸 수 있습니다 "
-            "(`tensile.true_plastic` 의 항복강도에 `@lower_yield_strength`).",
-        ),
-        Produced(
-            key="luders_strain",
-            label="뤼더스 변형률",
+            key="model_plateau_start",
+            label="모델 평탄 시작 변형률",
             si_unit="1",
-            help="평탄부의 길이 — ReL 아래로 떨어진 곳부터 다시 ReH 를 넘는 곳까지.",
+            help="선택 구간에서 실제로 선택된 첫 관측 변형률입니다.",
+        ),
+        Produced(
+            key="model_plateau_end",
+            label="모델 평탄 끝 변형률",
+            si_unit="1",
+            help="선택 구간에서 실제로 선택된 마지막 관측 변형률입니다.",
         ),
     ),
     order=35,
-    version="2",
+    version="3",
 )
 def yield_drop(frame: Frame, options: dict[str, Any]) -> StepResult:
-    """항복 이후 **내려가는 구간**을 정리한다 — 단조 표를 받는 솔버를 위해.
+    """공칭 응력-변형률의 하강을 선택한 방법으로 처리한다.
 
-    MAT_024·Abaqus `*PLASTIC` 은 단조 비감소 표를 전제한다(Abaqus 는 음의 기울기를
-    거절하고, LS-DYNA 는 받되 국소화·발산한다). 그런데 실제 곡선은 세 가지 이유로
-    내려간다 — 연강의 항복점 현상(ReH → ReL → 뤼더스 평탄부), 수지의 항복 후 넥
-    (공칭 응력의 하강이지 재료 연화가 아니다), 그리고 잡음. 셋은 고칠 데가 달라서
-    방법을 고른다(`method`, 각각의 설명은 선택지에).
+    공칭 하강은 측정·시험편·재료 거동의 여러 원인으로 생길 수 있으므로 이 단계가
+    원인을 판정하지 않는다. `envelope`·`isotonic`·`cut`·`keep`은 하강을 감지해
+    기존 방식대로 진단하거나 곡선을 정리한다. `lower_yield`는 자동 항복 판정 대신
+    사용자가 지정한 구간과 목표 응력으로 모델 근사를 명시한다.
 
-    **무엇을 얼마나 바꿨는지 남긴다.** 걷어낸 것은 지어낸 것이 아니라 버린 것이다 —
-    수지의 연화는 실제 재료 거동이고, 그것을 버렸다는 사실이 근거에 있어야 나중에
-    SAMP-1 로 갈 때 되짚을 수 있다. 하강 폭·손댄 점 수는 값으로, 방법과 구간은 노트로.
-
-    문턱(`threshold`) 미만의 하강만 있으면 **아무것도 안 한다** — 잡음까지 정리하면
-    모든 곡선이 조금씩 손대진 채 저장되고, 그것은 「측정 그대로」 가 아니다.
+    **무엇을 얼마나 바꿨는지 남긴다.** 하강 폭과 변경점 수는 값으로, 방법과 구간은
+    노트로 기록한다. 선택 구간 평탄화는 규격 하항복강도나 뤼더스 변형률을 측정하는
+    기능이 아니다.
     """
     strain, stress, strain_key, stress_key = _pair(frame, options)
     require_increasing(strain, what=f"'{strain_key}'")
@@ -1697,49 +1719,104 @@ def yield_drop(frame: Frame, options: dict[str, Any]) -> StepResult:
     min_slope = option_float(options, "min_slope", 0.0)
     if min_slope < 0:
         raise ProcessingError(f"최소 기울기는 0 이상이어야 합니다: {min_slope}")
+    running = np.maximum.accumulate(stress)
+    max_drop = float(np.max(running - stress)) if len(stress) else 0.0
     if not np.any(stress > 0):
         raise ProcessingError("양의 인장응력이 없어 상대 하강을 평가할 수 없음")
 
-    running = np.maximum.accumulate(stress)
-    max_drop = float(np.max(running - stress)) if len(stress) else 0.0
+    if method == "lower_yield":
+        if min_slope != 0:
+            raise ProcessingError(
+                "선택 구간 평탄화와 최소 기울기 단조화는 한 단계에서 함께 하지 않습니다. "
+                "min_slope=0 으로 두고 별도의 단조화 단계를 사용하세요."
+            )
+        missing = tuple(
+            name
+            for name in ("plateau_start", "plateau_end", "plateau_stress")
+            if options.get(name) is None
+        )
+        if missing:
+            names = ", ".join(missing)
+            raise ProcessingError(
+                "옛 하항복 자동 평탄화는 지원하지 않습니다. lower_yield 모델 근사를 "
+                f"사용하려면 {names} 를 지정하세요."
+            )
+        plateau_start = option_float(options, "plateau_start")
+        plateau_end = option_float(options, "plateau_end")
+        plateau_stress = option_float(options, "plateau_stress")
+        if plateau_start >= plateau_end:
+            raise ProcessingError(
+                f"평탄화 구간 시작({plateau_start})이 끝({plateau_end})보다 작아야 합니다."
+            )
+        observed_start = float(strain[0])
+        observed_end = float(strain[-1])
+        if plateau_start < observed_start or plateau_end > observed_end:
+            raise ProcessingError(
+                f"평탄화 구간({plateau_start}~{plateau_end})이 관측 변형률 범위 "
+                f"({observed_start}~{observed_end}) 안에 있어야 합니다."
+            )
+        selected = (strain >= plateau_start) & (strain <= plateau_end)
+        selected_count = int(np.count_nonzero(selected))
+        if selected_count < 2:
+            raise ProcessingError(
+                "평탄화 구간에 포함되는 원관측점이 2점 미만입니다. "
+                "두 점 이상을 포함하도록 구간을 다시 지정하세요."
+            )
+        if plateau_stress <= 0:
+            raise ProcessingError(f"평탄화 목표 응력은 0보다 커야 합니다: {plateau_stress} Pa")
+
+        fixed = stress.astype(np.float64).copy()
+        fixed[selected] = plateau_stress
+        changed = int(np.count_nonzero(fixed != stress))
+        selected_strain = strain[selected]
+        actual_start = float(selected_strain[0])
+        actual_end = float(selected_strain[-1])
+        plateau_notes = (
+            f"선택 구간 평탄화(모델 근사): 요청 변형률 {plateau_start:.6g}~"
+            f"{plateau_end:.6g}, 실제 관측 구간 {actual_start:.6g}~{actual_end:.6g}, "
+            f"원관측점 {selected_count}점, 입력 목표응력 {plateau_stress:.6g} Pa, "
+            f"변경점 {changed}개. 규격 하항복강도(ReL)나 뤼더스 변형률을 측정한 결과가 "
+            "아닙니다.",
+        )
+        return StepResult(
+            frame.with_columns({stress_key: fixed}, {}),
+            notes=plateau_notes,
+            scalars=(
+                Scalar("yield_drop_max", "최대 하강 폭", max_drop, "Pa"),
+                Scalar("yield_drop_points", "손댄 점 수", float(changed), "1"),
+                Scalar("model_plateau_stress", "모델 평탄 응력", plateau_stress, "Pa"),
+                Scalar(
+                    "model_plateau_start", "모델 평탄 시작 변형률", actual_start, "1", "strain"
+                ),
+                Scalar("model_plateau_end", "모델 평탄 끝 변형률", actual_end, "1", "strain"),
+            ),
+        )
+
     first = _first_drop(stress, threshold)
     notes: list[str] = []
     scalars: list[Scalar] = [Scalar("yield_drop_max", "최대 하강 폭", max_drop, "Pa")]
 
-    # 항복점 현상이 있나 — 있으면 방법과 무관하게 ReH·ReL 을 잰다(규격 값이다).
+    # 첫 상대 하강을 기록해 generic 방법의 기존 행 선택과 진단에 사용한다.
     upper_index: int | None = None
-    lower_index: int | None = None
     recover_index: int | None = None
     if first is not None:
         upper_index = int(np.argmax(stress[:first]))
         upper = float(stress[upper_index])
         after = np.nonzero(stress[first:] >= upper)[0]
         recover_index = int(first + after[0]) if after.size else None
-        window_end = recover_index if recover_index is not None else len(stress)
-        lower_index = int(first + np.argmin(stress[first:window_end]))
-        lower = float(stress[lower_index])
-        # 평탄부의 시작 — 봉우리 앞에서 ReL 을 처음 넘은 곳.
-        plateau_start = int(np.nonzero(stress[: upper_index + 1] >= lower)[0][0])
-        plateau_end = recover_index if recover_index is not None else len(stress) - 1
-        luders = float(strain[plateau_end] - strain[plateau_start])
-        scalars += [
-            Scalar("upper_yield_strength", "상항복강도 ReH", upper, "Pa"),
-            Scalar("lower_yield_strength", "하항복강도 ReL", lower, "Pa"),
-            Scalar("luders_strain", "뤼더스 변형률", luders, "1", "strain"),
-        ]
         notes.append(
-            f"첫 봉우리 {upper / 1e6:.4g} MPa(변형률 {float(strain[upper_index]):.4g}) 뒤 "
-            f"{lower / 1e6:.4g} MPa 까지 내려갑니다"
+            f"첫 상대 하강은 봉우리 index {upper_index} "
+            f"({upper / 1e6:.4g} MPa, 변형률 {float(strain[upper_index]):.4g}) 뒤에서 "
             + (
-                f" — 변형률 {float(strain[recover_index]):.4g} 에서 봉우리를 다시 넘습니다."
+                f"변형률 {float(strain[recover_index]):.4g} 에서 봉우리를 다시 넘습니다."
                 if recover_index is not None
-                else " — 끝까지 봉우리를 다시 넘지 않습니다(연화가 이어집니다)."
+                else "끝까지 봉우리를 다시 넘지 않습니다."
             )
         )
     else:
         notes.append(
             f"양수인 선행 최댓값에서 {threshold * 100:.2g} % 를 넘는 하강이 없습니다"
-            f"(최대 {max_drop / 1e6:.3g} MPa) — 연화로 보지 않습니다."
+            f"(최대 {max_drop / 1e6:.3g} MPa) — 응력 하강으로 보지 않습니다."
         )
 
     if method == "keep" or (first is None and min_slope <= 0):
@@ -1773,7 +1850,7 @@ def yield_drop(frame: Frame, options: dict[str, Any]) -> StepResult:
         kept = upper_index + 1
         removed = len(stress) - kept
         notes.append(
-            f"연화가 시작되는 봉우리(index {upper_index}, 변형률 "
+            f"첫 상대 하강이 감지된 봉우리(index {upper_index}, 변형률 "
             f"{float(strain[upper_index]):.4g})에서 잘랐습니다 — 뒤의 {removed}점은 "
             f"버렸습니다. 그 뒤 구간은 카드의 「늘릴 한계」(경화식 외삽)가 맡습니다."
         )
@@ -1789,19 +1866,9 @@ def yield_drop(frame: Frame, options: dict[str, Any]) -> StepResult:
     elif method == "isotonic":
         fixed = _isotonic(fixed)
         how = "단조 비감소 최소제곱 회귀(PAVA)로 폈습니다"
-    else:  # lower_yield
-        assert lower_index is not None and upper_index is not None
-        lower = float(stress[lower_index])
-        plateau_start = int(np.nonzero(stress[: upper_index + 1] >= lower)[0][0])
-        plateau_end = recover_index if recover_index is not None else len(stress)
-        fixed[plateau_start:plateau_end] = np.minimum(fixed[plateau_start:plateau_end], lower)
-        # 평탄부 뒤에도 잔물결이 있을 수 있다 — 거기는 포락선으로.
-        fixed = np.maximum.accumulate(fixed)
-        how = (
-            f"상항복 봉우리를 하항복점 {lower / 1e6:.4g} MPa 로 깎고 평탄부"
-            f"(변형률 {float(strain[plateau_start]):.4g}~"
-            f"{float(strain[min(plateau_end, len(strain) - 1)]):.4g})를 평탄하게 했습니다"
-        )
+    else:
+        # `lower_yield` returns after applying its explicit bounded request above.
+        raise AssertionError(f"unhandled yield-drop method: {method}")
 
     if min_slope > 0:
         # 엄격히 단조 증가 — 평탄부에 최소 기울기를 준다. 앞에서부터 한 번 훑는다.

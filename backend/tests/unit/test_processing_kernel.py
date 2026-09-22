@@ -20,7 +20,7 @@ from typing import ClassVar
 import numpy as np
 import pytest
 
-from matcore import parsers, processing
+from matcore import parsers, processing, registry
 from matcore.parsers import zwick_tra
 from matcore.processing import Frame, ProcessingError, Step
 from matcore.processing.tensile import _first_drop
@@ -1283,22 +1283,120 @@ def oxford_pc_test2() -> Frame:
 class Test항복_강하_정리:
     """**단조 표를 받는 솔버를 위해 내려가는 구간을 정리하되, 무엇을 버렸는지 남긴다.**"""
 
-    def test_연강은_ReH_ReL_뤼더스를_재고_하항복점부터_평탄하게_한다(self) -> None:
-        result = _run(mild_steel(), {"method": "lower_yield"})
-        assert scalar(result, "upper_yield_strength") == pytest.approx(320e6, rel=1e-3)
-        assert scalar(result, "lower_yield_strength") == pytest.approx(278e6, rel=1e-2)
-        # 평탄부: ReL 아래로 떨어진 곳(≈0.0014)부터 봉우리를 다시 넘는 곳(≈0.0467)까지.
-        assert scalar(result, "luders_strain") == pytest.approx(0.045, abs=0.003)
+    def test_연강은_명시한_구간만_모델_응력으로_평탄화한다(self) -> None:
+        frame = mild_steel()
+        result = _run(
+            frame,
+            {
+                "method": "lower_yield",
+                "plateau_start": 0.0016,
+                "plateau_end": 0.02,
+                "plateau_stress": 278e6,
+            },
+        )
+        original = frame.columns["stress_engineering"]
+        strain = frame.columns["strain_engineering"]
+        selected = (strain >= 0.0016) & (strain <= 0.02)
         fixed = result.frame.columns["stress_engineering"]
-        assert np.all(np.diff(fixed) >= 0), "단조 비감소여야 한다"
-        # 상항복 봉우리는 사라지고, 평탄부는 ReL 이다.
-        strain = result.frame.columns["strain_engineering"]
-        assert fixed[np.searchsorted(strain, 0.0016)] == pytest.approx(278e6, rel=1e-2)
-        assert fixed[np.searchsorted(strain, 0.01)] == pytest.approx(278e6, rel=1e-2)
-        # 경화 구간은 손대지 않았다.
-        assert fixed[-1] == pytest.approx(280e6 + 1.5e9 * 0.08, rel=1e-6)
-        assert scalar(result, "yield_drop_points") > 0
-        assert any("깎고" in note for note in result.notes)
+
+        np.testing.assert_array_equal(result.frame.columns["strain_engineering"], strain)
+        np.testing.assert_array_equal(fixed[~selected], original[~selected])
+        assert np.all(fixed[selected] == 278e6)
+        assert scalar(result, "yield_drop_points") == np.count_nonzero(
+            original[selected] != 278e6
+        )
+        assert scalar(result, "yield_drop_max") == pytest.approx(42e6, rel=1e-2)
+        assert scalar(result, "model_plateau_stress") == 278e6
+        assert scalar(result, "model_plateau_start") == pytest.approx(0.0016)
+        assert scalar(result, "model_plateau_end") == pytest.approx(0.02)
+        assert not {item.key for item in result.scalars} & {
+            "upper_yield_strength",
+            "lower_yield_strength",
+            "luders_strain",
+        }
+        assert any("실제 관측 구간" in note for note in result.notes)
+        assert any("규격 하항복강도" in note for note in result.notes)
+
+    def test_옛_하항복_방법만_지정하면_필요한_설정을_말하고_보류한다(self) -> None:
+        with pytest.raises(ProcessingError, match=r"옛 하항복 자동 평탄화.*plateau_start"):
+            _run(mild_steel(), {"method": "lower_yield"})
+
+    @pytest.mark.parametrize(
+        ("options", "message"),
+        (
+            (
+                {
+                    "method": "lower_yield",
+                    "plateau_start": 0.02,
+                    "plateau_end": 0.01,
+                    "plateau_stress": 280e6,
+                },
+                "작아야",
+            ),
+            (
+                {
+                    "method": "lower_yield",
+                    "plateau_start": -0.01,
+                    "plateau_end": 0.01,
+                    "plateau_stress": 280e6,
+                },
+                "관측 변형률 범위",
+            ),
+            (
+                {
+                    "method": "lower_yield",
+                    "plateau_start": 0.0016,
+                    "plateau_end": 0.00160001,
+                    "plateau_stress": 280e6,
+                },
+                "2점 미만",
+            ),
+            (
+                {
+                    "method": "lower_yield",
+                    "plateau_start": 0.0016,
+                    "plateau_end": 0.002,
+                    "plateau_stress": 0.0,
+                },
+                "0보다 커야",
+            ),
+            (
+                {
+                    "method": "lower_yield",
+                    "plateau_start": 0.0016,
+                    "plateau_end": 0.002,
+                    "plateau_stress": float("nan"),
+                },
+                "유한하지 않습니다",
+            ),
+        ),
+    )
+    def test_명시_평탄화_입력의_범위와_유한성을_검증한다(
+        self, options: dict[str, object], message: str
+    ) -> None:
+        with pytest.raises(ProcessingError, match=message):
+            _run(mild_steel(), options)
+
+    def test_평탄화_메타데이터는_모델_근사와_실제_선택점을_선언한다(self) -> None:
+        plugin = registry.get("tensile.yield_drop")
+        assert plugin.label == "공칭 하강 처리"
+        assert plugin.version == "3"
+        params = {item.name: item for item in plugin.params}
+        for name in ("plateau_start", "plateau_end", "plateau_stress"):
+            assert params[name].required
+            assert params[name].when == {"method": ("lower_yield",)}
+        assert {item.key for item in plugin.makes_values} >= {
+            "yield_drop_max",
+            "yield_drop_points",
+            "model_plateau_stress",
+            "model_plateau_start",
+            "model_plateau_end",
+        }
+        assert not {item.key for item in plugin.makes_values} & {
+            "upper_yield_strength",
+            "lower_yield_strength",
+            "luders_strain",
+        }
 
     def test_포락선은_내려가는_점을_직전_최댓값으로_덮는다(self) -> None:
         result = _run(mild_steel(), {"method": "envelope"})
@@ -1337,15 +1435,23 @@ class Test항복_강하_정리:
         )
         assert scalar(result, "yield_drop_max") == pytest.approx(15e6, rel=0.05)
         assert scalar(result, "yield_drop_points") == 0
-        assert scalar(result, "upper_yield_strength") == pytest.approx(60e6, rel=1e-3)
+        assert not any(
+            item.key in {"upper_yield_strength", "lower_yield_strength", "luders_strain"}
+            for item in result.scalars
+        )
 
-    def test_최소_기울기를_주면_엄격히_단조_증가다(self) -> None:
-        result = _run(mild_steel(), {"method": "lower_yield", "min_slope": 1e7})
-        fixed = result.frame.columns["stress_engineering"]
-        strain = result.frame.columns["strain_engineering"]
-        slopes = np.diff(fixed) / np.diff(strain)
-        assert np.all(slopes >= 1e7 * (1 - 1e-9))
-        assert any("엄격히 단조 증가" in note for note in result.notes)
+    def test_평탄화와_최소_기울기는_한_단계에서_섞지_않는다(self) -> None:
+        with pytest.raises(ProcessingError, match="별도의 단조화 단계"):
+            _run(
+                mild_steel(),
+                {
+                    "method": "lower_yield",
+                    "min_slope": 1e7,
+                    "plateau_start": 0.0016,
+                    "plateau_end": 0.02,
+                    "plateau_stress": 278e6,
+                },
+            )
 
     def test_문턱_미만의_하강은_손대지_않는다(self) -> None:
         # 잡음까지 정리하면 모든 곡선이 조금씩 손대진 채 저장된다 — 「측정 그대로」 가 아니다.
@@ -1355,13 +1461,22 @@ class Test항복_강하_정리:
             result.frame.columns["stress_engineering"], frame.columns["stress_engineering"]
         )
         assert scalar(result, "yield_drop_points") == 0
-        assert any("연화로 보지 않습니다" in note for note in result.notes)
+        assert any("응력 하강으로 보지 않습니다" in note for note in result.notes)
 
-    def test_이상적_곡선에는_아무_일도_없다(self) -> None:
-        result = _run(synthetic(), {"method": "lower_yield"})
+    def test_하강이_없어도_명시한_모델_근사는_처리한다(self) -> None:
+        result = _run(
+            synthetic(),
+            {
+                "method": "lower_yield",
+                "plateau_start": 0.03,
+                "plateau_end": 0.04,
+                "plateau_stress": 450e6,
+            },
+        )
         assert scalar(result, "yield_drop_max") == 0
-        assert scalar(result, "yield_drop_points") == 0
-        assert not any(item.key == "upper_yield_strength" for item in result.scalars)
+        assert scalar(result, "yield_drop_points") > 0
+        assert scalar(result, "model_plateau_stress") == 450e6
+        assert any("선택 구간 평탄화" in note for note in result.notes)
 
     @pytest.mark.parametrize("method", ("envelope", "isotonic", "lower_yield", "cut", "keep"))
     def test_Oxford_PC50Test2_음수_첫하중을_보존하며_다섯방법이_실행된다(
@@ -1375,7 +1490,12 @@ class Test항복_강하_정리:
         assert first is not None
         assert first > 0
 
-        result = _run(frame, {"method": method})
+        options: dict[str, object] = {"method": method}
+        if method == "lower_yield":
+            options.update(
+                {"plateau_start": 0.05, "plateau_end": 0.10, "plateau_stress": 55e6}
+            )
+        result = _run(frame, options)
         output = result.frame
         assert output.length() > 1
         assert np.all(np.isfinite(output.columns["stress_engineering"]))
@@ -1387,6 +1507,40 @@ class Test항복_강하_정리:
             for key, values in frame.columns.items():
                 np.testing.assert_array_equal(output.columns[key], values)
             assert scalar(result, "yield_drop_points") == 0
+
+    def test_Oxford_PC50Test2_명시_구간은_말단_급락과_원행을_보존한다(self) -> None:
+        frame = oxford_pc_test2()
+        options = {
+            "method": "lower_yield",
+            "plateau_start": 0.05,
+            "plateau_end": 0.10,
+            "plateau_stress": 55e6,
+        }
+        for excluded_tail in (0, 1, 2):
+            candidate = frame.select(np.arange(frame.length() - excluded_tail))
+            result = _run(candidate, options)
+            output = result.frame
+            selected = (candidate.columns["strain_engineering"] >= 0.05) & (
+                candidate.columns["strain_engineering"] <= 0.10
+            )
+            np.testing.assert_array_equal(
+                output.columns["source_excel_row"], candidate.columns["source_excel_row"]
+            )
+            np.testing.assert_array_equal(
+                output.columns["stress_engineering"][~selected],
+                candidate.columns["stress_engineering"][~selected],
+            )
+            assert np.all(output.columns["stress_engineering"][selected] == 55e6)
+            assert (
+                output.columns["stress_engineering"][-1]
+                == candidate.columns["stress_engineering"][-1]
+            )
+            assert scalar(result, "model_plateau_start") == pytest.approx(
+                candidate.columns["strain_engineering"][selected][0]
+            )
+            assert scalar(result, "model_plateau_end") == pytest.approx(
+                candidate.columns["strain_engineering"][selected][-1]
+            )
 
     def test_상대하강은_양수인_선행최댓값만_기준으로_삼는다(self) -> None:
         assert _first_drop(np.asarray([-5000.0, -1.0, 0.0]), 0.005) is None
@@ -1409,28 +1563,33 @@ class Test항복_강하_정리:
         ):
             _run(frame, {"method": "keep"})
 
-    def test_하항복점을_소성_시작으로_넘길_수_있다(self) -> None:
-        # 규격(ISO 6892-1)의 값이자, `tensile.true_plastic` 의 항복강도 자리에 `@` 로 들어간다.
-        result = processing.apply(
-            [
-                Step("tensile.yield_drop", {"method": "lower_yield"}),
-                Step(
-                    "tensile.elastic_modulus", {"method": "manual", "manual_modulus": E_TRUE}
-                ),
-                Step(
-                    "tensile.true_plastic",
-                    {
-                        "youngs_modulus": "@youngs_modulus",
-                        "proof_stress": "@lower_yield_strength",
-                    },
-                ),
-            ],
-            mild_steel(),
-        )
-        plastic = result.frame.columns["stress_true"][
-            result.frame.columns["strain_true_plastic"] > 0
-        ]
-        assert plastic[0] == pytest.approx(278e6, rel=0.02)
+    def test_옛_하항복_참조는_값이_없다고_명확히_보류한다(self) -> None:
+        with pytest.raises(ProcessingError, match=r"@lower_yield_strength.*내지 않았습니다"):
+            processing.apply(
+                [
+                    Step(
+                        "tensile.yield_drop",
+                        {
+                            "method": "lower_yield",
+                            "plateau_start": 0.0016,
+                            "plateau_end": 0.02,
+                            "plateau_stress": 278e6,
+                        },
+                    ),
+                    Step(
+                        "tensile.elastic_modulus",
+                        {"method": "manual", "manual_modulus": E_TRUE},
+                    ),
+                    Step(
+                        "tensile.true_plastic",
+                        {
+                            "youngs_modulus": "@youngs_modulus",
+                            "proof_stress": "@lower_yield_strength",
+                        },
+                    ),
+                ],
+                mild_steel(),
+            )
 
 
 def plateau() -> Frame:
