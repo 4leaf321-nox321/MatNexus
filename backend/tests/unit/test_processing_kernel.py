@@ -1380,8 +1380,22 @@ class Test항복_강하_정리:
     def test_평탄화_메타데이터는_모델_근사와_실제_선택점을_선언한다(self) -> None:
         plugin = registry.get("tensile.yield_drop")
         assert plugin.label == "공칭 하강 처리"
-        assert plugin.version == "4"
+        assert plugin.version == "5"
         params = {item.name: item for item in plugin.params}
+        assert params["scope"].default == "full"
+        assert params["method"].default == "envelope"
+        auto_method = "lower_envelope_auto_v1"
+        assert params["method"].choice_labels[auto_method] == "하측 포락선 — 자동"
+        for name in ("scope", "threshold", "min_slope"):
+            assert auto_method not in params[name].when["method"]
+        for name in ("recovery_threshold", "min_reference_fraction", "terminal_action"):
+            assert auto_method not in params[name].when["method"]
+        for name in ("range_start", "range_end"):
+            assert params[name].when == {
+                "scope": ("range", "events"),
+                "method": params[name].when["method"],
+            }
+            assert auto_method not in params[name].when["method"]
         for name in ("plateau_start", "plateau_end", "plateau_stress"):
             assert params[name].required
             assert params[name].when == {"method": ("lower_yield",)}
@@ -1391,6 +1405,10 @@ class Test항복_강하_정리:
             "model_plateau_stress",
             "model_plateau_start",
             "model_plateau_end",
+            "auto_edit_applied",
+            "auto_review_required",
+            "auto_terminal_only",
+            "open_partial_count",
         }
         assert not {item.key for item in plugin.makes_values} & {
             "upper_yield_strength",

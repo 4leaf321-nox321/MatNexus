@@ -130,6 +130,7 @@ class StepResult:
     frame: Frame
     notes: tuple[str, ...] = ()
     scalars: tuple[Scalar, ...] = ()
+    effective_options: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -217,7 +218,11 @@ def apply(steps: list[Step], frame: Frame, *, given: Sequence[Scalar] = ()) -> P
                 plugin=plugin.id,
                 label=plugin.label,
                 version=plugin.version,
-                options=options,
+                options=(
+                    dict(result.effective_options)
+                    if result.effective_options is not None
+                    else options
+                ),
                 frame=result.frame,
                 notes=result.notes,
                 scalars=result.scalars,

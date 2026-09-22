@@ -1542,6 +1542,11 @@ def true_plastic(frame: Frame, options: dict[str, Any]) -> StepResult:
 YIELD_DROP_THRESHOLD = 0.005
 
 YIELD_DROP_SCOPES = ("full", "range", "events")
+AUTO_LOWER_ENVELOPE_METHOD = "lower_envelope_auto_v1"
+_AUTO_LOWER_ENVELOPE_THRESHOLD = 0.005
+_AUTO_LOWER_ENVELOPE_RECOVERY_THRESHOLD = 0.005
+_AUTO_LOWER_ENVELOPE_MIN_REFERENCE_FRACTION = 0.05
+_AUTO_LOWER_ENVELOPE_MIN_SLOPE = 0.0
 YIELD_DROP_METHODS = (
     "envelope",
     "isotonic",
@@ -1549,10 +1554,14 @@ YIELD_DROP_METHODS = (
     "cut",
     "keep",
     "lower_envelope",
+    AUTO_LOWER_ENVELOPE_METHOD,
     "median_plateau",
     "linear",
     "least_squares",
     "robust_linear",
+)
+_YIELD_DROP_MANUAL_METHODS = tuple(
+    method for method in YIELD_DROP_METHODS if method != AUTO_LOWER_ENVELOPE_METHOD
 )
 _FULL_METHODS = ("envelope", "isotonic", "lower_yield", "cut", "keep")
 _SCOPED_METHODS = (
@@ -1568,6 +1577,14 @@ _SCOPED_METHODS = (
 )
 _MONOTONE_SCOPED_METHODS = ("envelope", "isotonic", "lower_envelope")
 _REGRESSION_METHODS = ("linear", "least_squares", "robust_linear")
+
+
+def _option_value_matches(actual: Any, expected: Any) -> bool:
+    """Compare possibly malformed stale options without validating or coercing them."""
+    try:
+        return bool(actual == expected)
+    except (TypeError, ValueError):
+        return False
 
 
 def _isotonic(values: np.ndarray, weights: np.ndarray | None = None) -> np.ndarray:
@@ -1707,10 +1724,17 @@ def _event_scalars(events: list[DropEvent]) -> list[Scalar]:
     full = sum(event.kind == "full_recovery" for event in events)
     partial = sum(event.kind == "partial_recovery" for event in events)
     terminal = sum(event.kind == "terminal_unrecovered" for event in events)
+    open_partial = sum(
+        event.kind == "partial_recovery" and event.end_at_observation_boundary
+        for event in events
+    )
     return [
         Scalar("event_count", "검출 사건 수", float(len(events)), "1"),
         Scalar("recovered_count", "완전 회복 사건 수", float(full), "1"),
         Scalar("partial_count", "부분 회복 사건 수", float(partial), "1"),
+        Scalar(
+            "open_partial_count", "관측 종료 열린 부분 회복 사건 수", float(open_partial), "1"
+        ),
         Scalar("unrecovered_count", "미회복 사건 수", float(terminal), "1"),
     ]
 
@@ -2040,10 +2064,20 @@ def _expand_event_intervals(
                 required = probe[end] + min_slope * float(strain[end + 1] - strain[end])
                 if probe[end + 1] < required:
                     if protected_row(end + 1):
-                        raise ProcessingError(
-                            "terminal_action='keep' 보호 행 때문에 events 단조 방법의 "
-                            "오른쪽 경계를 연결할 수 없습니다."
-                        )
+                        if probe[end] == original[end] and probe[end + 1] == original[end + 1]:
+                            note = (
+                                "terminal_action='keep' 보호 말단에 닿는 기존 하강을 그대로 "
+                                f"보존했습니다: index {end}~{end + 1}, "
+                                f"{float(original[end]):.6g}→"
+                                f"{float(original[end + 1]):.6g} Pa."
+                            )
+                            if note not in notes:
+                                notes.append(note)
+                        else:
+                            raise ProcessingError(
+                                "terminal_action='keep' 보호 행 때문에 events 단조 방법의 "
+                                "오른쪽 경계를 연결할 수 없습니다."
+                            )
                     else:
                         candidate.append((start, end + 1))
                         changed = True
@@ -2326,6 +2360,7 @@ def _scoped_result(
                 "range": "range_start~range_end 안의 원행 구간만 계산하고 밖은 그대로 둡니다.",
                 "events": "원행 순서에서 급락과 회복 사건을 검출한 영향 구간만 계산합니다.",
             },
+            when={"method": _YIELD_DROP_MANUAL_METHODS},
         ),
         ParamSpec(
             name="method",
@@ -2340,6 +2375,7 @@ def _scoped_result(
                 "cut": "첫 검출 봉우리에서 자르기",
                 "keep": "그대로 두고 재기만",
                 "lower_envelope": "뒤쪽 최솟값 포락선",
+                AUTO_LOWER_ENVELOPE_METHOD: "하측 포락선 — 자동",
                 "median_plateau": "중앙값 평탄부",
                 "linear": "양끝 직선",
                 "least_squares": "최소제곱 직선",
@@ -2355,6 +2391,10 @@ def _scoped_result(
                 "lower_envelope": (
                     "suffix running minimum으로 선택 구간의 하강 아래 경계를 계산합니다."
                 ),
+                AUTO_LOWER_ENVELOPE_METHOD: (
+                    "사건을 자동 검출해 하측 포락선을 적용합니다. 하강·회복 문턱 0.5%, "
+                    "최소 기준 봉우리 5%, 말단 원본 보존 규칙을 고정해 사용합니다."
+                ),
                 "median_plateau": "선택 구간 응력의 중앙값으로 평탄부를 만듭니다.",
                 "linear": "선택 구간 양끝을 잇는 직선을 계산합니다.",
                 "least_squares": "선택 구간의 OLS 직선을 계산합니다.",
@@ -2369,6 +2409,7 @@ def _scoped_result(
             unit="1",
             help="양수인 선행 최댓값에 견준 비율입니다. 이보다 작은 하강은 기존 계약에서 "
             "응력 하강으로 치지 않습니다(기본 0.5%).",
+            when={"method": _YIELD_DROP_MANUAL_METHODS},
         ),
         ParamSpec(
             name="recovery_threshold",
@@ -2376,7 +2417,7 @@ def _scoped_result(
             type="float",
             default=None,
             unit="1",
-            when={"scope": ("range", "events")},
+            when={"scope": ("range", "events"), "method": _YIELD_DROP_MANUAL_METHODS},
             help=(
                 "급락 최저점에서 의미 있는 상승으로 볼 비율입니다. 비우면 threshold를 씁니다."
             ),
@@ -2387,7 +2428,7 @@ def _scoped_result(
             type="float",
             default=0.05,
             unit="1",
-            when={"scope": ("range", "events")},
+            when={"scope": ("range", "events"), "method": _YIELD_DROP_MANUAL_METHODS},
             help="선택 domain의 양의 관측응력 최댓값에 대한 최소 기준 비율입니다.",
         ),
         ParamSpec(
@@ -2407,7 +2448,7 @@ def _scoped_result(
                     "cut은 선택한 prefix를 자릅니다."
                 ),
             },
-            when={"scope": ("events",)},
+            when={"scope": ("events",), "method": _YIELD_DROP_MANUAL_METHODS},
         ),
         ParamSpec(
             name="slope_constraint",
@@ -2429,6 +2470,7 @@ def _scoped_result(
             default=0.0,
             unit="Pa",
             help="단조 방법에서 y-min_slope*x를 먼저 계산해 이 기울기 이상을 보장합니다.",
+            when={"method": _YIELD_DROP_MANUAL_METHODS},
         ),
         ParamSpec(
             name="range_start",
@@ -2437,7 +2479,7 @@ def _scoped_result(
             unit="1",
             dimension="strain",
             required=False,
-            when={"scope": ("range", "events")},
+            when={"scope": ("range", "events"), "method": _YIELD_DROP_MANUAL_METHODS},
             help="명시 범위의 시작. 실제 선택 원행 범위는 notes에 남습니다.",
         ),
         ParamSpec(
@@ -2447,7 +2489,7 @@ def _scoped_result(
             unit="1",
             dimension="strain",
             required=False,
-            when={"scope": ("range", "events")},
+            when={"scope": ("range", "events"), "method": _YIELD_DROP_MANUAL_METHODS},
             help="명시 범위의 끝. 실제 선택 원행 범위는 notes에 남습니다.",
         ),
         ParamSpec(
@@ -2500,10 +2542,37 @@ def _scoped_result(
         ),
         Produced(key="recovered_count", label="완전 회복 사건 수", si_unit="1"),
         Produced(key="partial_count", label="부분 회복 사건 수", si_unit="1"),
+        Produced(
+            key="open_partial_count",
+            label="관측 종료 열린 부분 회복 사건 수",
+            si_unit="1",
+            help="관측 종료까지 원봉우리로 복귀하지 않은 부분 회복 사건 수입니다.",
+        ),
         Produced(key="unrecovered_count", label="미회복 사건 수", si_unit="1"),
         Produced(key="boundary_jump_count", label="경계 jump 수", si_unit="1"),
         Produced(key="boundary_jump_max", label="최대 경계 jump", si_unit="Pa"),
         Produced(key="remaining_drop_count", label="남은 하강 수", si_unit="1"),
+        Produced(
+            key="auto_edit_applied",
+            label="자동 하측 편집 적용",
+            si_unit="1",
+            help="자동 프로필에서 원응력 값이 실제로 바뀌었으면 1입니다.",
+        ),
+        Produced(
+            key="auto_review_required",
+            label="자동 하측 검토 필요",
+            si_unit="1",
+            help=(
+                "미회복 말단 또는 관측 종료까지 열린 부분 회복 사건이 있어 "
+                "사람이 검토해야 하면 1입니다."
+            ),
+        ),
+        Produced(
+            key="auto_terminal_only",
+            label="자동 하측 말단 사건만",
+            si_unit="1",
+            help="회복 사건 없이 미회복 말단 사건만 검출되면 1입니다.",
+        ),
         Produced(
             key="fit_r_squared",
             label="처리 구간 R²",
@@ -2536,7 +2605,7 @@ def _scoped_result(
         ),
     ),
     order=35,
-    version="4",
+    version="5",
 )
 def yield_drop(frame: Frame, options: dict[str, Any]) -> StepResult:
     """공칭 응력의 하강과 회복을 선택한 방법으로 진단·처리한다.
@@ -2545,6 +2614,115 @@ def yield_drop(frame: Frame, options: dict[str, Any]) -> StepResult:
     원행 영역을 계산 대상으로 삼으며, 사건 검출은 변형률 정렬이나 중복 제거 없이
     관측 행 순서에서 수행한다. 검출만으로 하강 원인을 판정하지 않는다.
     """
+    if options.get("method") == AUTO_LOWER_ENVELOPE_METHOD:
+        strain_key = str(options.get("strain") or STRAIN)
+        stress_key = str(options.get("stress") or STRESS)
+        fixed_options: dict[str, Any] = {
+            "scope": "events",
+            "method": "lower_envelope",
+            "threshold": _AUTO_LOWER_ENVELOPE_THRESHOLD,
+            "recovery_threshold": _AUTO_LOWER_ENVELOPE_RECOVERY_THRESHOLD,
+            "min_reference_fraction": _AUTO_LOWER_ENVELOPE_MIN_REFERENCE_FRACTION,
+            "min_slope": _AUTO_LOWER_ENVELOPE_MIN_SLOPE,
+            "terminal_action": "keep",
+            "strain": strain_key,
+            "stress": stress_key,
+        }
+        strain_raw, stress_raw, strain_key, stress_key = _pair(frame, fixed_options)
+        strain, _stress = _finite_pair(strain_raw, stress_raw, strain_key, stress_key)
+        if np.any(np.diff(strain) <= 0):
+            raise ProcessingError(
+                f"자동 하측 포락선은 '{strain_key}'의 원행 변형률이 엄격히 증가해야 "
+                "합니다. 원래 측정 순서를 확인하세요. 자동 전역 정렬은 하지 않습니다."
+            )
+
+        result = yield_drop(frame, fixed_options)
+        result_values = {item.key: item.value for item in result.scalars}
+        event_count = result_values.get("event_count", 0.0)
+        full_count = result_values.get("recovered_count", 0.0)
+        partial_count = result_values.get("partial_count", 0.0)
+        open_partial_count = result_values.get("open_partial_count", 0.0)
+        terminal_count = result_values.get("unrecovered_count", 0.0)
+        changed_points = result_values.get("yield_drop_points", 0.0)
+        terminal_only = bool(
+            event_count > 0 and terminal_count > 0 and full_count + partial_count == 0
+        )
+        has_terminal = terminal_count > 0
+        review_required = has_terminal or open_partial_count > 0
+        edit_applied = changed_points > 0
+        ignored_defaults: dict[str, Any] = {
+            "scope": "events",
+            "method": AUTO_LOWER_ENVELOPE_METHOD,
+            "threshold": _AUTO_LOWER_ENVELOPE_THRESHOLD,
+            "recovery_threshold": _AUTO_LOWER_ENVELOPE_RECOVERY_THRESHOLD,
+            "min_reference_fraction": _AUTO_LOWER_ENVELOPE_MIN_REFERENCE_FRACTION,
+            "min_slope": _AUTO_LOWER_ENVELOPE_MIN_SLOPE,
+            "terminal_action": "keep",
+            "slope_constraint": "none",
+            "range_start": None,
+            "range_end": None,
+            "plateau_start": None,
+            "plateau_end": None,
+            "plateau_stress": None,
+        }
+        ignored = [
+            key
+            for key, expected in ignored_defaults.items()
+            if key in options and not _option_value_matches(options[key], expected)
+        ]
+        notes = list(result.notes)
+        if ignored:
+            notes.append(
+                "lower_envelope_auto_v1 고정 규칙이 적용되어 전달된 입력 "
+                f"{', '.join(ignored)}은 무시했습니다."
+            )
+        if event_count == 0:
+            notes.append(
+                "자동 검사에서 v1 기준의 편집 대상 사건이 없어 원본 곡선을 보존했습니다."
+            )
+        elif terminal_only:
+            notes.append(
+                "미회복 말단 사건만 있어 곡선을 편집하지 않았습니다. 말단은 원본 그대로이며 "
+                "사람의 검토가 필요합니다; 이 결과는 하항복 곡선을 승인하지 않습니다."
+            )
+        elif has_terminal:
+            notes.append(
+                "회복 사건의 영향 구간만 편집하고 미회복 말단 구간은 "
+                "원행 그대로 보존했습니다. "
+                "말단이 남아 있어 사람의 검토가 필요합니다."
+            )
+        elif edit_applied:
+            notes.append(
+                f"자동 하측 포락선이 원응력 {changed_points:.0f}점을 실제로 바꿨습니다."
+            )
+        else:
+            notes.append("회복 사건은 검출했지만 포락선이 원응력과 같아 실제 변경은 없습니다.")
+        if open_partial_count > 0:
+            notes.append(
+                "부분 회복 사건이 관측 종료까지 열려 있고 이전 봉우리로 복귀하지 못했습니다. "
+                "끝 이후 자료가 없어 사람의 검토가 필요합니다."
+            )
+        notes.append(
+            "자동 프로필은 선택 사건 구간을 처리합니다. 전체 곡선이나 카드의 단조성을 "
+            "보장하지 않으며, 규격 하항복 물성을 산출하거나 승인하지 않습니다."
+        )
+        effective_options = {**fixed_options, "method": AUTO_LOWER_ENVELOPE_METHOD}
+        return StepResult(
+            result.frame,
+            notes=tuple(notes),
+            scalars=(
+                *result.scalars,
+                Scalar("auto_edit_applied", "자동 하측 편집 적용", float(edit_applied), "1"),
+                Scalar(
+                    "auto_review_required", "자동 하측 검토 필요", float(review_required), "1"
+                ),
+                Scalar(
+                    "auto_terminal_only", "자동 하측 말단 사건만", float(terminal_only), "1"
+                ),
+            ),
+            effective_options=effective_options,
+        )
+
     strain_raw, stress_raw, strain_key, stress_key = _pair(frame, options)
     strain, stress = _finite_pair(strain_raw, stress_raw, strain_key, stress_key)
     scope = option_text(options, "scope", YIELD_DROP_SCOPES)

@@ -2,13 +2,19 @@
 
 from __future__ import annotations
 
+import json
+
 import numpy as np
 import pytest
 
 from matcore import processing
 from matcore.processing import Frame, ProcessingError, Step
 from matcore.processing._drop_recovery import DropEvent, detect_events
-from matcore.processing.tensile import _expand_event_intervals, _fit_linear
+from matcore.processing.tensile import (
+    AUTO_LOWER_ENVELOPE_METHOD,
+    _expand_event_intervals,
+    _fit_linear,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -137,6 +143,195 @@ def test_monotone_event_expansion_merges_overlapping_intervals() -> None:
 
     assert intervals == [(1, 5)]
     assert any("최소 확장" in note for note in notes)
+
+
+def test_protected_terminal_fall_is_allowed_only_when_both_boundary_values_are_unchanged() -> (
+    None
+):
+    strain = np.arange(6, dtype=float)
+    original = np.asarray([0, 100, 50, 75, 90, 60], dtype=float)
+    intervals, notes = _expand_event_intervals(
+        [(1, 4)],
+        domain_start=0,
+        domain_end=5,
+        strain=strain,
+        original=original,
+        method="lower_envelope",
+        min_slope=0,
+        slope_constraint="none",
+        protected_intervals=[(4, 5)],
+    )
+
+    assert intervals == [(1, 4)]
+    assert any("기존 하강" in note and "index 4~5" in note for note in notes)
+
+    with pytest.raises(ProcessingError, match="보호 행"):
+        _expand_event_intervals(
+            [(1, 4)],
+            domain_start=0,
+            domain_end=5,
+            strain=strain,
+            original=original,
+            method="envelope",
+            min_slope=0,
+            slope_constraint="none",
+            protected_intervals=[(4, 5)],
+        )
+
+
+def test_auto_lower_envelope_uses_fixed_rules_and_records_effective_options() -> None:
+    base = _frame([0, 100, 50, 75, 90, 60])
+    frame = Frame(
+        {
+            "eps": base.columns["strain_engineering"].copy(),
+            "sig": base.columns["stress_engineering"].copy(),
+            "time": base.columns["time"].copy(),
+            "source_row": base.columns["source_row"].copy(),
+        },
+        {"eps": "1", "sig": "Pa", "time": "s", "source_row": "1"},
+    )
+    original_columns = {key: values.copy() for key, values in frame.columns.items()}
+    requested = {
+        "method": AUTO_LOWER_ENVELOPE_METHOD,
+        "scope": "full",
+        "threshold": -1.0,
+        "recovery_threshold": 2.0,
+        "min_reference_fraction": -2.0,
+        "min_slope": -3.0,
+        "terminal_action": "hold",
+        "range_start": -2.0,
+        "range_end": -1.0,
+        "plateau_start": 0.03,
+        "plateau_end": 0.01,
+        "plateau_stress": 0.0,
+        "slope_constraint": "nondecreasing",
+        "strain": "eps",
+        "stress": "sig",
+    }
+    saved_recipe = json.dumps(
+        {"plugin": "tensile.yield_drop", "options": requested}, sort_keys=True
+    )
+    first_request = json.loads(saved_recipe)["options"]
+    automatic = _run(frame, **first_request)
+    repeated = _run(frame, **json.loads(saved_recipe)["options"])
+    explicit = _run(
+        frame,
+        scope="events",
+        method="lower_envelope",
+        threshold=0.005,
+        recovery_threshold=0.005,
+        min_reference_fraction=0.05,
+        min_slope=0.0,
+        terminal_action="keep",
+        strain="eps",
+        stress="sig",
+    )
+
+    effective = {
+        "scope": "events",
+        "method": AUTO_LOWER_ENVELOPE_METHOD,
+        "threshold": 0.005,
+        "recovery_threshold": 0.005,
+        "min_reference_fraction": 0.05,
+        "min_slope": 0.0,
+        "terminal_action": "keep",
+        "strain": "eps",
+        "stress": "sig",
+    }
+    assert automatic.stages[0].options == effective
+    assert repeated.stages[0].options == effective
+    assert automatic.stages[0].notes == repeated.stages[0].notes
+    assert automatic.stages[0].scalars == repeated.stages[0].scalars
+    np.testing.assert_array_equal(
+        automatic.frame.columns["sig"], repeated.frame.columns["sig"]
+    )
+    np.testing.assert_array_equal(
+        automatic.frame.columns["sig"], explicit.frame.columns["sig"]
+    )
+    for key in ("eps", "time", "source_row"):
+        np.testing.assert_array_equal(automatic.frame.columns[key], original_columns[key])
+        np.testing.assert_array_equal(frame.columns[key], original_columns[key])
+    np.testing.assert_array_equal(frame.columns["sig"], original_columns["sig"])
+    for key in (
+        "event_count",
+        "recovered_count",
+        "partial_count",
+        "open_partial_count",
+        "unrecovered_count",
+        "yield_drop_points",
+        "remaining_drop_count",
+        "fit_r_squared",
+        "fit_rmse",
+    ):
+        assert _scalar(automatic, key) == pytest.approx(_scalar(explicit, key))
+    assert _scalar(automatic, "auto_edit_applied") == 1
+    assert _scalar(automatic, "auto_review_required") == 1
+    assert _scalar(automatic, "auto_terminal_only") == 0
+    assert any(
+        "scope, threshold" in note and "range_start" in note for note in automatic.notes
+    )
+    assert any("미회복 말단 구간" in note for note in automatic.notes)
+    assert not {
+        "range_start",
+        "range_end",
+        "plateau_start",
+        "plateau_end",
+        "plateau_stress",
+    } & set(automatic.stages[0].options)
+
+
+def test_auto_lower_envelope_distinguishes_no_event_from_terminal_only() -> None:
+    no_event_frame = _frame([10, 11, 12, 13])
+    no_event = _run(no_event_frame, method=AUTO_LOWER_ENVELOPE_METHOD)
+    np.testing.assert_array_equal(
+        no_event.frame.columns["stress_engineering"],
+        no_event_frame.columns["stress_engineering"],
+    )
+    assert _scalar(no_event, "auto_edit_applied") == 0
+    assert _scalar(no_event, "auto_review_required") == 0
+    assert _scalar(no_event, "auto_terminal_only") == 0
+    assert any("v1 기준의 편집 대상 사건이 없어" in note for note in no_event.notes)
+
+    terminal_frame = _frame([0, 100, 90, 80])
+    terminal_only = _run(terminal_frame, method=AUTO_LOWER_ENVELOPE_METHOD)
+    np.testing.assert_array_equal(
+        terminal_only.frame.columns["stress_engineering"],
+        terminal_frame.columns["stress_engineering"],
+    )
+    assert _scalar(terminal_only, "auto_edit_applied") == 0
+    assert _scalar(terminal_only, "auto_review_required") == 1
+    assert _scalar(terminal_only, "auto_terminal_only") == 1
+    assert any("사람의 검토" in note and "하항복 곡선" in note for note in terminal_only.notes)
+
+
+def test_auto_lower_envelope_flags_open_partial_at_observation_end_for_review() -> None:
+    frame = _frame([0, 100, 50, 60, 70])
+    original_channels = {key: values.copy() for key, values in frame.columns.items()}
+    result = _run(frame, method=AUTO_LOWER_ENVELOPE_METHOD)
+
+    assert _scalar(result, "auto_edit_applied") == 1
+    assert _scalar(result, "auto_review_required") == 1
+    assert _scalar(result, "auto_terminal_only") == 0
+    assert _scalar(result, "open_partial_count") == 1
+    assert any("관측 종료까지 열려" in note and "사람의 검토" in note for note in result.notes)
+    for key in ("strain_engineering", "time", "source_row"):
+        np.testing.assert_array_equal(result.frame.columns[key], original_channels[key])
+        np.testing.assert_array_equal(frame.columns[key], original_channels[key])
+    np.testing.assert_array_equal(
+        frame.columns["stress_engineering"], original_channels["stress_engineering"]
+    )
+
+
+def test_auto_lower_envelope_rejects_non_increasing_strain_without_sorting() -> None:
+    frame = _frame([0, 100, 50, 80], [0, 1, 1, 2])
+    original_x = frame.columns["strain_engineering"].copy()
+    original_y = frame.columns["stress_engineering"].copy()
+
+    with pytest.raises(ProcessingError, match="원래 측정 순서를 확인"):
+        _run(frame, method=AUTO_LOWER_ENVELOPE_METHOD)
+
+    np.testing.assert_array_equal(frame.columns["strain_engineering"], original_x)
+    np.testing.assert_array_equal(frame.columns["stress_engineering"], original_y)
 
 
 def test_scoped_edit_holds_when_selected_strain_is_not_strict() -> None:
