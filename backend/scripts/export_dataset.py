@@ -37,14 +37,24 @@
     cards.csv                물성 카드
     card_values.csv          카드 값 — `블록.값 = 숫자`(긴 형식)
     declared_properties.csv  사람이 적어 둔 값 — 출처·근거와 함께
+    parameter_sets.csv       사내 재료가 인용하는 모델 파라미터 벌 (ADR 0029)
+    catalog_*.csv            문헌 카탈로그 — 물성 사전·재료·값·출처·연결
     curves/<시험>__<키>.csv   곡선 점
     curves/index.csv         곡선 파일 ↔ 시험
     README.md                열 뜻·단위·빠진 것
     manifest.json            언제·무엇을·몇 줄·무엇이 빠졌나
 
+## 문헌은 **어디서 왔는지 적어서** 낸다
+
+카탈로그는 대부분 MaterialTwin 에서 이관해 온 것이고 원본은 논문·핸드북이다. 다른
+조직으로 넘기는 것은 3자 데이터의 재배포가 될 수 있다 — 막지는 않되 **줄마다
+`origin`(materialtwin · local)과 출처의 `license` 를 함께 낸다.** 판단할 근거를 빼고
+데이터만 주면 받는 쪽도 판단할 수가 없다.
+
 사용:
     python scripts/export_dataset.py --out D:\\export
     python scripts/export_dataset.py --out D:\\export --no-curves
+    python scripts/export_dataset.py --out D:\\export --no-catalog
     python scripts/export_dataset.py --out D:\\export --workspace metal
 """
 
@@ -72,8 +82,21 @@ import app.all_models  # noqa: E402,F401
 from _console import survive_cp949  # noqa: E402
 from app import version  # noqa: E402
 from app.database import SessionLocal  # noqa: E402
+from app.modules.catalog.models import (  # noqa: E402
+    CatalogDefinition,
+    CatalogLink,
+    CatalogMaterial,
+    CatalogSource,
+    CatalogValue,
+)
+from app.modules.catalog.ontology_models import PropertyLink  # noqa: E402
 from app.modules.fitting.models import PropertyCard  # noqa: E402
-from app.modules.materials.models import Material, Sample, Specimen  # noqa: E402
+from app.modules.materials.models import (  # noqa: E402
+    Material,
+    MaterialParameterSet,
+    Sample,
+    Specimen,
+)
 from app.modules.processing.models import ProcessingResult  # noqa: E402
 from app.modules.tests.models import Curve, TestRun, TestSummary, TestType  # noqa: E402
 from app.modules.workspaces.models import Workspace  # noqa: E402
@@ -133,12 +156,18 @@ def _workspaces(db: Session, slug: str | None) -> dict[Any, str]:
     return {one.id: one.slug for one in rows}
 
 
-def export(out: Path, *, workspace: str | None, with_curves: bool) -> dict[str, Any]:
+def export(
+    out: Path, *, workspace: str | None, with_curves: bool, with_catalog: bool = True
+) -> dict[str, Any]:
     out.mkdir(parents=True, exist_ok=True)
     report: dict[str, Any] = {
         "generated_at": datetime.now(UTC).isoformat(),
         "app_version": version.current(),
-        "scope": {"workspace": workspace or "전 부서", "curves": with_curves},
+        "scope": {
+            "workspace": workspace or "전 부서",
+            "curves": with_curves,
+            "catalog": with_catalog,
+        },
         "counts": {},
         "missing_curve_files": [],
     }
@@ -180,6 +209,8 @@ def export(out: Path, *, workspace: str | None, with_curves: bool) -> dict[str, 
 
         sheets = _write_core(out, spaces, materials, samples, specimens, runs, types)
         sheets += _write_values(out, db, runs, run_ids, material_ids, sample_ids)
+        if with_catalog:
+            sheets += _write_catalog(out, db, material_ids, report)
         if with_curves:
             sheets.append(_write_curves(out, db, runs, run_ids, report))
 
@@ -530,6 +561,42 @@ def _write_values(
                     ]
                 )
 
+    parameter_sheet = Sheet(
+        out,
+        "parameter_sets.csv",
+        [
+            "material_id",
+            "model",
+            "property_key",
+            "label",
+            "origin",
+            "quality_tier",
+            "source_ref",
+            "source_detail",
+            "terms_json_si",
+            "notes",
+            "created_at",
+        ],
+    )
+    for one in db.scalars(select(MaterialParameterSet)):
+        if one.material_id not in material_ids:
+            continue
+        parameter_sheet.write(
+            [
+                one.material_id,
+                one.model,
+                one.property_key,
+                one.label,
+                one.origin,
+                one.quality_tier,
+                one.source_ref,
+                _dump(one.source_detail),
+                _dump(one.terms),
+                one.notes,
+                _iso(one.created_at),
+            ]
+        )
+
     return [
         summary_sheet,
         result_sheet,
@@ -537,6 +604,203 @@ def _write_values(
         card_sheet,
         card_value_sheet,
         declared_sheet,
+        parameter_sheet,
+    ]
+
+
+def _origin(mt_id: Any) -> str:
+    """이 줄이 어디서 왔나. **이관해 온 것과 여기서 만든 것을 가른다** — 재배포
+    판단이 그 구별 위에 선다(이관은 원본이 정본이고, `local.` 은 우리 것이다)."""
+    return "materialtwin" if mt_id else "local"
+
+
+def _write_catalog(
+    out: Path, db: Session, material_ids: set[Any], report: dict[str, Any]
+) -> list[Sheet]:
+    """문헌 카탈로그. **전부 낸다** — 사내 재료에 이어진 것만 내면 「이 값이 왜
+    이 등급인가」 를 되짚을 출처가 함께 안 간다."""
+    property_sheet = Sheet(
+        out,
+        "catalog_properties.csv",
+        [
+            "property_key",
+            "name",
+            "symbol",
+            "si_unit",
+            "domain",
+            "value_type",
+            "test_standard",
+            "condition_axes_json",
+            "deprecated_at",
+            "superseded_by",
+            "origin",
+        ],
+    )
+    for one in db.scalars(select(CatalogDefinition)):
+        property_sheet.write(
+            [
+                one.key,
+                one.name,
+                one.symbol,
+                one.si_unit,
+                one.domain,
+                one.value_type,
+                one.test_standard,
+                _dump(one.condition_axes),
+                _iso(one.deprecated_at),
+                one.superseded_by,
+                _origin(one.mt_id),
+            ]
+        )
+
+    material_sheet = Sheet(
+        out,
+        "catalog_materials.csv",
+        [
+            "catalog_material_id",
+            "name",
+            "material_code",
+            "material_class",
+            "category",
+            "grade",
+            "manufacturer",
+            "role",
+            "subsystem",
+            "description",
+            "attributes_json",
+            "origin",
+        ],
+    )
+    for one in db.scalars(select(CatalogMaterial)):
+        material_sheet.write(
+            [
+                one.id,
+                one.name,
+                one.material_code,
+                one.material_class,
+                one.category,
+                one.grade,
+                one.manufacturer,
+                one.role,
+                one.subsystem,
+                one.description,
+                _dump(one.attributes),
+                _origin(one.mt_id),
+            ]
+        )
+
+    value_sheet = Sheet(
+        out,
+        "catalog_values.csv",
+        [
+            "value_id",
+            "catalog_material_id",
+            "property_key",
+            "value_num",
+            "value_text",
+            "unit",
+            "uncertainty",
+            "conditions_json",
+            "method",
+            "quality_tier",
+            "source_id",
+            "source_detail",
+            "notes",
+            "origin",
+        ],
+    )
+    for one in db.scalars(select(CatalogValue)):
+        value_sheet.write(
+            [
+                one.id,
+                one.material_id,
+                one.property_key,
+                one.value_num,
+                one.value_text,
+                # **사내 표와 달리 여기 단위는 줄마다 온다.** 물성 정의의 단위와
+                # 같지만(적재 관문이 검사한다) 값 옆에 둔다 — 떨어져 있으면
+                # 언젠가 어긋난다.
+                one.unit,
+                one.uncertainty,
+                _dump(one.conditions),
+                one.method,
+                one.quality_tier,
+                one.source_id,
+                one.source_detail,
+                one.notes,
+                _origin(one.mt_id),
+            ]
+        )
+
+    #: 라이선스가 적힌 출처가 몇이나 되나. **승인하는 사람이 볼 수다** — 거의
+    #: 전부 빈칸이면 「확인하고 넘기라」 는 말이 실제 무게를 갖는다.
+    licenses: dict[str, int] = {}
+    source_sheet = Sheet(
+        out,
+        "catalog_sources.csv",
+        [
+            "source_id",
+            "kind",
+            "title",
+            "authors",
+            "year",
+            "publisher",
+            "doi",
+            "isbn",
+            "url",
+            "license",
+            "origin",
+        ],
+    )
+    for one in db.scalars(select(CatalogSource)):
+        licenses[one.license or "(적혀 있지 않음)"] = (
+            licenses.get(one.license or "(적혀 있지 않음)", 0) + 1
+        )
+        source_sheet.write(
+            [
+                one.id,
+                one.kind,
+                one.title,
+                one.authors,
+                one.year,
+                one.publisher,
+                one.doi,
+                one.isbn,
+                one.url,
+                # **재배포 판단의 근거다.** 비어 있으면 「모른다」 이지 「자유」 가 아니다.
+                one.license,
+                _origin(one.mt_id),
+            ]
+        )
+
+    link_sheet = Sheet(
+        out,
+        "catalog_links.csv",
+        ["material_id", "catalog_material_id", "created_at"],
+    )
+    for one in db.scalars(select(CatalogLink)):
+        if one.material_id not in material_ids:
+            continue
+        link_sheet.write([one.material_id, one.catalog_material_id, _iso(one.created_at)])
+
+    property_link_sheet = Sheet(
+        out,
+        "catalog_property_links.csv",
+        ["property_key", "term_id", "kind", "scale", "note"],
+    )
+    for one in db.scalars(select(PropertyLink)):
+        property_link_sheet.write(
+            [one.property_key, one.term_id, one.kind, one.scale, one.note]
+        )
+
+    report["catalog_licenses"] = dict(sorted(licenses.items(), key=lambda pair: -pair[1]))
+    return [
+        property_sheet,
+        material_sheet,
+        value_sheet,
+        source_sheet,
+        link_sheet,
+        property_link_sheet,
     ]
 
 
@@ -633,13 +897,31 @@ README = """# MatNexus 물성 데이터 내보내기
 원본 저장은 Parquet 이고 여기서 CSV 로 편 것이라, **실수 표현이 조금 달라질 수
 있습니다**(마지막 자리). 정밀 대조가 필요하면 Parquet 원본을 따로 요청하세요.
 
+## 문헌 카탈로그 — **재배포 전에 확인하세요**
+
+`catalog_*.csv` 는 논문·핸드북에서 온 값입니다. 줄마다 `origin` 이 붙어 있습니다.
+
+    materialtwin   MaterialTwin 에서 이관해 온 것. **원본이 정본입니다**
+    local          MatNexus 에서 직접 넣은 것 (키가 `local.` 로 시작합니다)
+
+출처의 라이선스는 `catalog_sources.license` 에 있습니다. **비어 있으면 「모른다」이지
+「자유롭게 써도 된다」가 아닙니다.** 이 데이터를 다시 배포하기 전에 원본 소유자와
+확인하세요 — 우리가 넘길 수 있는 것은 우리가 잰 값이고, 문헌 값은 그 출처의 것입니다.
+
+이번 내보내기의 출처 라이선스:
+
+{licenses}
+
+값의 등급(`quality_tier`)은 1(제품 문서 실측) ~ 4(계산·추정)이고, 사내 값과 같은
+척도입니다. `method` 가 `digitized` 면 그래프에서 읽은 값이라 자릿수를 믿지 마세요.
+
 ## 빠진 것 — 일부러
 
 - **계정·토큰·감사 기록·접근 로그.** 물성 데이터를 넘기는 데 필요하지 않습니다.
 - **등록한 사람.** 부서(`materials.workspace`)만 남겼습니다.
 - **지운 것.** 소프트 삭제된 재료·시료·시편·시험·카드는 안 나옵니다.
-- **문헌 카탈로그·기준정보 사전·시험 종류 정의.** 이 내보내기는 «잰 값»이 대상입니다.
-  그쪽이 필요하면 따로 말씀하세요 — 다른 표입니다.
+- **기준정보 사전·시험 종류 정의·처리 레시피.** 값이 아니라 «우리가 일하는 방식»
+  입니다. 그쪽이 필요하면 따로 말씀하세요 — 다른 표입니다.
 
 ## 못 읽은 곡선
 
@@ -649,10 +931,16 @@ README = """# MatNexus 물성 데이터 내보내기
 
 def _write_readme(out: Path, report: dict[str, Any]) -> None:
     missing = report["missing_curve_files"]
+    licenses = report.get("catalog_licenses") or {}
     text = README.format(
         generated_at=report["generated_at"],
         app_version=report["app_version"],
         scope=report["scope"]["workspace"],
+        licenses=(
+            "    (문헌을 안 냈습니다)"
+            if not licenses
+            else "\n".join(f"    {name:24s} {count:>6,}건" for name, count in licenses.items())
+        ),
         missing=(
             "없습니다."
             if not missing
@@ -667,9 +955,17 @@ def main() -> None:
     parser.add_argument("--out", required=True, help="내보낼 폴더")
     parser.add_argument("--workspace", default=None, help="부서 slug 하나만. 없으면 전 부서")
     parser.add_argument("--no-curves", action="store_true", help="곡선 파일을 빼고 표만 낸다")
+    parser.add_argument(
+        "--no-catalog", action="store_true", help="문헌 카탈로그를 뺀다(사내 값만)"
+    )
     args = parser.parse_args()
 
-    report = export(Path(args.out), workspace=args.workspace, with_curves=not args.no_curves)
+    report = export(
+        Path(args.out),
+        workspace=args.workspace,
+        with_curves=not args.no_curves,
+        with_catalog=not args.no_catalog,
+    )
     print(f"내보냄: {args.out}")
     for name, rows in report["counts"].items():
         print(f"  {name:28s} {rows:>8,}줄")
