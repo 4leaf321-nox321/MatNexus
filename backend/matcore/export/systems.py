@@ -241,11 +241,16 @@ def _symbol_for(si_unit: str, factor: float, bases: tuple[str, str, str]) -> str
         # 무차원·온도는 어느 계나 같다. 표에서 찾으면 mm 계가 `mm/mm` 를 집는다.
         return si_unit
     dimension = units.unit_of(si_unit).dimension
+    # **여기서는 차원 이름이 같은 것만 본다**(2026-09-24). `units_for` 는 별칭까지
+    # 편다 — 변형률 속도와 주파수는 같은 `1/s` 라 검증에서는 하나로 봐야 하지만,
+    # 덱에 적히는 기호는 그렇지 않다. 열어 두면 mm 계의 주파수가 `Hz` 대신 `1/s` 로
+    # 적힌다(아래 「기본 단위 이름이 든 기호」 규칙이 `s` 를 보고 집는다).
     candidates = [
         symbol
-        for symbol in units.units_for(dimension)
-        if units.unit_of(symbol).offset == 0
-        and abs(float(units.unit_of(symbol).factor) - factor) <= 1e-9 * max(factor, 1e-30)
+        for symbol, unit in units.UNITS.items()
+        if unit.dimension == dimension
+        and unit.offset == 0
+        and abs(float(unit.factor) - factor) <= 1e-9 * max(factor, 1e-30)
     ]
     if not candidates:
         return _compose(*bases, si_unit)

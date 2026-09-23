@@ -205,6 +205,15 @@ UNITS: dict[str, Unit] = {
         # 기존 앱이 쓰던 단위. 흡수 경로에서 그대로 들어온다.
         _u("tonne/mm3", "density", "1000000000000"),
         _u("1/K", "inverse_temperature", "1"),
+        # **역수 온도에는 영점이 없다.** `1/°C` 는 `1/K` 와 크기가 같다 — 선팽창계수는
+        # 「온도 1도 올릴 때」 의 변화율이고, 1도의 크기는 두 눈금이 같기 때문이다.
+        # (절대온도 `degC` 는 영점이 있어 조합에서 빠지지만, 그 역수는 안 그렇다.)
+        #
+        # 데이터시트는 이 값을 `23 ppm/°C` 로 적는다. 사람이 `2.3e-5 1/K` 로 고쳐
+        # 치게 두면 10⁻⁶ 을 손으로 곱하는 자리가 생기고, 그 자리는 한 번 틀리면
+        # 아무도 못 본다 — 이 저장소가 밀도에서 이미 겪었다(10¹² 배).
+        _u("1/degC", "inverse_temperature", "1"),
+        _u("ppm/degC", "inverse_temperature", "0.000001"),
         _u("1/Pa", "compliance", "1"),
         _u("1/MPa", "compliance", "0.000001"),
         _u("rad", "angle", "1"),
@@ -348,7 +357,17 @@ def _styled(symbol: str) -> str:
     다릅니다」 로 막혔고, 선언 물성 147건이 화면에 단위 없이 떴다 — 전부 같은
     단위였다. 곱 기호 셋과 캐럿을 지우는 것뿐이라 다른 단위로 바뀔 길이 없다.
     """
-    return symbol.replace("*", ".").replace("·", ".").replace("⋅", ".").replace("^", "")
+    # **섭씨 기호도 여기서 되돌린다**(2026-09-24). `°C` 하나짜리는 표에 있지만
+    # 조합 안에 들어가면(`ppm/°C` — 데이터시트의 선팽창계수) 아무도 못 읽었다.
+    # 뜻이 바뀔 길이 없는 표기 교체라 위 곱 기호들과 같은 자리다.
+    return (
+        symbol.replace("*", ".")
+        .replace("·", ".")
+        .replace("⋅", ".")
+        .replace("^", "")
+        .replace("℃", "degC")
+        .replace("°C", "degC")
+    )
 
 
 def _case_index() -> dict[str, str]:
@@ -473,6 +492,20 @@ BASE_SYMBOLS = frozenset(
     {"m", "g", "s", "K", "N", "Pa", "W", "J", "V", "A", "C", "T", "S", "ohm", "Hz", "mol"}
 )
 
+#: 차원이 없는 **곱수 낱말**. 단위가 아니라 크기라서 서명에 안 들어간다.
+#:
+#: `ppm/K`(선팽창계수) · `ppm`(수분 함량)처럼 데이터시트가 그대로 쓰는 표기를 받기
+#: 위한 것이다. 접두어 표(`PREFIXES`)에 못 넣는 까닭은 접두어가 **밑기호에 붙는**
+#: 글자이기 때문이다 — `ppm` 은 그 자체로 한 낱말이다.
+#:
+#: **`%` 는 여기 없다.** 변형률을 퍼센트로 받는 것을 이미 한 번 접었다(§10) —
+#: 0.2 와 20 이 같은 칸에 섞이면 어느 쪽인지 숫자만 봐서는 못 가른다. `ppm` 은
+#: 그런 혼동이 없다(1 ppm 을 1 로 적는 사람은 없다).
+SCALE_TOKENS: dict[str, Decimal] = {
+    "ppm": Decimal("0.000001"),
+    "ppb": Decimal("0.000000001"),
+}
+
 #: 「글자 + 지수」. 지수는 `m2`·`m0.5`·`m-1` 처럼 붙는다.
 _TOKEN = re.compile(r"^([A-Za-z]+)(-?\d+(?:\.\d+)?)?$")
 
@@ -491,6 +524,9 @@ def _token(text: str) -> tuple[str, Decimal, Decimal] | None:
         return None
     letters, power = matched.groups()
     exponent = Decimal(power) if power else Decimal(1)
+    # 곱수 낱말은 **밑기호가 없다** — 서명에 안 들어가고 크기만 낸다(`ppm/K`).
+    if letters in SCALE_TOKENS:
+        return "", SCALE_TOKENS[letters], exponent
     if letters in BASE_SYMBOLS:
         return letters, Decimal(1), exponent
     prefix = PREFIXES.get(letters[:1])
@@ -527,7 +563,8 @@ def _factors(symbol: str) -> tuple[Signature, Decimal] | None:
             if read is None:
                 return None
             base, prefix, exponent = read
-            powers[base] = powers.get(base, Decimal(0)) + exponent * sign
+            if base:
+                powers[base] = powers.get(base, Decimal(0)) + exponent * sign
             scale *= prefix ** (exponent * sign)
     return tuple(sorted((k, v) for k, v in powers.items() if v != 0)), scale
 
@@ -631,7 +668,12 @@ def from_si(value: float | Decimal | str, symbol: str) -> float:
 
 #: 이름은 다르지만 같은 차원. 변형률·무차원은 물리적으로 하나다 —
 #: 구분해 부르는 것은 사람이 뜻을 알아보기 위해서지 단위가 다르기 때문이 아니다.
-DIMENSION_ALIASES = {"strain": "dimensionless"}
+#: **변형률 속도와 주파수도 하나다**(2026-09-24). 둘 다 `1/s` 인데 표는 그 기호를
+#: 변형률 속도로만 읽는다. 그래서 같은 `1/s` 값이 주파수 자리에 가면 「차원이
+#: 다릅니다」 로 막혔다 — 문헌의 1차 반응 속도상수(광분해·가수분해)가 그 자리다.
+#: 숫자는 바뀌지 않으므로 막을 이유가 없다. 이름은 각자 그대로 쓴다 — 사람이
+#: 「주파수」 라고 읽어야 맞는 자리가 있고, 「변형률 속도」 가 맞는 자리가 있다.
+DIMENSION_ALIASES = {"strain": "dimensionless", "strain_rate": "frequency"}
 
 
 def normalize_dimension(dimension: str) -> str:

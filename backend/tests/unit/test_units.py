@@ -369,3 +369,69 @@ class Test대소문자가_갈리는_자리:
         assert units.unit_of("mPa.s").factor == Decimal("0.001")
         assert units.unit_of("mm").factor == Decimal("0.001")
         assert units.unit_of("mT").factor == Decimal("0.001")
+
+
+class Test데이터시트가_적는_선팽창계수:
+    """**`23 ppm/°C` 를 그대로 받는다.**
+
+    데이터시트는 선팽창계수를 이렇게 적는다. 전에는 `1/K` 만 받았으므로 사람이
+    `2.3e-5` 로 고쳐 쳐야 했다 — 10⁻⁶ 을 손으로 곱하는 자리이고, 한 자리 틀리면
+    아무도 못 본다(밀도에서 10¹² 배로 겪었다).
+    """
+
+    @pytest.mark.parametrize(
+        "written, expected",
+        [
+            ("1/K", Decimal("1")),
+            ("1/degC", Decimal("1")),
+            ("1/°C", Decimal("1")),
+            ("ppm/K", Decimal("0.000001")),
+            ("ppm/degC", Decimal("0.000001")),
+            ("ppm/°C", Decimal("0.000001")),
+            ("ppm/℃", Decimal("0.000001")),
+            ("um/(m.K)", Decimal("0.000001")),
+        ],
+    )
+    def test_같은_크기로_읽는다(self, written: str, expected: Decimal) -> None:
+        assert units.unit_of(written).factor == expected
+        assert units.same_dimension(units.unit_of(written).dimension, "inverse_temperature")
+
+    def test_역수_온도에는_영점이_없다(self) -> None:
+        """`1/°C` 는 `1/K` 와 크기가 같다 — 1도의 크기가 두 눈금에서 같기 때문이다.
+        **절대온도는 그대로 영점을 갖는다**(그쪽까지 건드리면 25 °C 가 25 K 가 된다)."""
+        assert units.unit_of("1/degC").offset == Decimal(0)
+        assert units.to_si(1, "1/degC") == units.to_si(1, "1/K")
+        assert units.unit_of("degC").offset == Decimal("273.15")
+        assert units.to_si(25, "degC") == 298.15
+
+    def test_ppm_은_곱수일_뿐이다(self) -> None:
+        """차원이 없다 — `ppm` 하나는 무차원이고, `ppm/K` 는 역수 온도다."""
+        assert units.unit_of("ppm").dimension == "dimensionless"
+        assert units.to_si(23, "ppm") == pytest.approx(2.3e-05)
+
+    def test_퍼센트를_변형률로_만들지_않았다(self) -> None:
+        """`%` 는 예전 그대로 무차원이다 — 변형률을 퍼센트로 받는 것은 접은 결정이다."""
+        assert units.unit_of("%").dimension == "dimensionless"
+        assert units.unit_of("%").factor == Decimal("0.01")
+
+
+class Test같은_기호를_쓰는_차원:
+    """**`1/s` 하나가 둘로 읽힌다** — 변형률 속도와 주파수.
+
+    표는 그 기호를 변형률 속도로만 읽으므로, 같은 값이 주파수 자리에 가면 「차원이
+    다릅니다」 로 막혔다. 문헌의 1차 반응 속도상수(광분해·가수분해)가 그 자리다.
+    숫자가 안 바뀌므로 막을 이유가 없다.
+    """
+
+    def test_변형률_속도와_주파수는_같다(self) -> None:
+        assert units.same_dimension("strain_rate", "frequency")
+        assert units.same_dimension("frequency", "strain_rate")
+
+    def test_단위_고르기에_둘_다_나온다(self) -> None:
+        assert set(units.units_for("frequency")) == set(units.units_for("strain_rate"))
+        assert {"1/s", "Hz"} <= set(units.units_for("frequency"))
+
+    def test_다른_차원까지_열지는_않는다(self) -> None:
+        """**이분자 반응속도상수는 다른 것이다**(m³/(mol·s)). 기호가 같은 것만 묶는다."""
+        assert not units.same_dimension("strain_rate", "rate_constant")
+        assert not units.same_dimension("frequency", "time")
