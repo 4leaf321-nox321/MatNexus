@@ -10064,6 +10064,21 @@ export interface components {
             row_count: number;
         };
         /**
+         * DeclaredBlockOptionOut
+         * @description 적어 둔 값으로 채울 수 있는 항목란 하나.
+         *
+         *     **값이 있다고 다 싣지 않는다.** 고르는 것은 사람이다 — 이방성 카드에 열물성이
+         *     따라 붙으면 그 카드가 무엇의 카드인지 흐려진다.
+         */
+        DeclaredBlockOptionOut: {
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Slots */
+            slots: components["schemas"]["DeclaredSlotOut"][];
+        };
+        /**
          * DeclaredCardPreviewOut
          * @description 적어 둔 값만으로 카드를 만들면 **무엇이 실리는가.**
          *
@@ -10077,6 +10092,11 @@ export interface components {
         DeclaredCardPreviewOut: {
             /** Blocks */
             blocks: string[];
+            /**
+             * Fillable
+             * @default []
+             */
+            fillable: components["schemas"]["DeclaredBlockOptionOut"][];
             /** Material Name */
             material_name: string;
             synthetic?: components["schemas"]["SyntheticPlasticOut"] | null;
@@ -10100,6 +10120,12 @@ export interface components {
          *     「합성 — 실측이 아니다」 가 반드시 남는다.
          */
         DeclaredCardSaveRequest: {
+            /**
+             * Block Keys
+             * @description 함께 실을 **항목란 키**. 미리보기의 `fillable` 에서 고른다 — 적어 둔 값이 닿는 칸이 하나도 없는 항목란을 고르면 거절한다(빈 칸만 든 블록이 카드에 앉으면 그 카드가 무엇의 카드인지 흐려진다).
+             * @default []
+             */
+            block_keys: string[];
             /** Density */
             density?: number | null;
             /** Label */
@@ -10190,6 +10216,22 @@ export interface components {
             si_unit?: string | null;
             /** Source */
             source: string;
+        };
+        /**
+         * DeclaredSlotOut
+         * @description 적어 둔 값이 앉을 칸 하나 — **누르기 전에 보여 준다.**
+         */
+        DeclaredSlotOut: {
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Si Unit */
+            si_unit: string;
+            /** Source */
+            source: string;
+            /** Value */
+            value: number;
         };
         /** DeleteAccountRequest */
         DeleteAccountRequest: {

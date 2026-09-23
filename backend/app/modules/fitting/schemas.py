@@ -637,6 +637,30 @@ class CardFacetsOut(BaseModel):
     """소유 부서. 전역은 `global`."""
 
 
+class DeclaredSlotOut(BaseModel):
+    """적어 둔 값이 앉을 칸 하나 — **누르기 전에 보여 준다.**"""
+
+    key: str
+    label: str
+    si_unit: str
+    value: float
+    """**SI 다.** 화면이 표시 단위로 바꿔 보인다(`InheritedValueOut` 과 같은 규약)."""
+    source: str
+    """`millsheet` · `standard` · `literature` · `estimate` — 등급이 여기서 갈린다."""
+
+
+class DeclaredBlockOptionOut(BaseModel):
+    """적어 둔 값으로 채울 수 있는 항목란 하나.
+
+    **값이 있다고 다 싣지 않는다.** 고르는 것은 사람이다 — 이방성 카드에 열물성이
+    따라 붙으면 그 카드가 무엇의 카드인지 흐려진다.
+    """
+
+    key: str
+    label: str
+    slots: list[DeclaredSlotOut]
+
+
 class DeclaredCardPreviewOut(BaseModel):
     """적어 둔 값만으로 카드를 만들면 **무엇이 실리는가.**
 
@@ -653,6 +677,9 @@ class DeclaredCardPreviewOut(BaseModel):
     """실릴 값들. 선언 물성과 물려받은 푸아송비·밀도가 함께 온다."""
     blocks: list[str]
     """생길 블록 이름. 비면 카드를 만들 수 없다."""
+    fillable: list[DeclaredBlockOptionOut] = []
+    """**고르면 더 실을 수 있는** 항목란들. 탄성·열물성 말고 적어 둔 값이 닿는 칸이
+    있는 항목란이 여기 온다 — 화면에서 만든 항목란도 포함이다."""
     synthetic: SyntheticPlasticOut | None = None
     """소성 표를 합성하면 무엇이 지어지는가 — 화면이 스위치 옆에 보여 준다."""
 
@@ -691,6 +718,14 @@ class DeclaredCardSaveRequest(BaseModel):
         description=(
             "함께 실을 **모델 파라미터 벌**(ADR 0029). 재료가 든 것 중에서 고른다 — "
             "카드는 인용할 뿐 소유하지 않는다."
+        ),
+    )
+    block_keys: list[str] = Field(
+        default=[],
+        description=(
+            "함께 실을 **항목란 키**. 미리보기의 `fillable` 에서 고른다 — 적어 둔 값이 "
+            "닿는 칸이 하나도 없는 항목란을 고르면 거절한다(빈 칸만 든 블록이 카드에 "
+            "앉으면 그 카드가 무엇의 카드인지 흐려진다)."
         ),
     )
     label: str = Field(min_length=1, max_length=120)

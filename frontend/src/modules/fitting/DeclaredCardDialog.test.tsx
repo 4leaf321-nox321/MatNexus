@@ -133,6 +133,52 @@ describe('재료 기본 정보로 카드 생성', () => {
     expect(screen.getByRole('button', { name: '생성' })).toBeDisabled()
   })
 
+  it('적어 둔 값이 닿는 항목란을 고르면 함께 보낸다', async () => {
+    // **곡선이 없는 물성은 이 문 말고 카드로 갈 길이 없다** — 적합식은 맞출
+    // 곡선이 있어야 하고, 묶음은 확장이 있어야 한다.
+    declaredPreview.mockResolvedValue({
+      ...PREVIEW,
+      fillable: [
+        {
+          key: 'laminate',
+          label: '적층 강성',
+          slots: [{ key: 'a11', label: 'A11', si_unit: 'Pa', value: 2.1e11, source: 'standard' }],
+        },
+      ],
+    })
+    const user = userEvent.setup()
+    dialog()
+
+    await user.click(await screen.findByLabelText(/적층 강성/))
+    await user.click(screen.getByRole('button', { name: '생성' }))
+
+    await waitFor(() => expect(createDeclaredCard).toHaveBeenCalled())
+    expect(createDeclaredCard.mock.calls[0][0]).toMatchObject({ block_keys: ['laminate'] })
+  })
+
+  it('고른 항목란만 있어도 만들 수 있다', async () => {
+    // 탄성·열물성이 하나도 없는 재료 — 고른 것이 카드의 전부다.
+    declaredPreview.mockResolvedValue({
+      material_name: 'X',
+      blocks: [],
+      values: [],
+      fillable: [
+        {
+          key: 'laminate',
+          label: '적층 강성',
+          slots: [{ key: 'a11', label: 'A11', si_unit: 'Pa', value: 2.1e11, source: 'standard' }],
+        },
+      ],
+    })
+    const user = userEvent.setup()
+    dialog()
+
+    // 고르기 전에는 잠겨 있다 — 빈 카드는 「이 재료는 물성이 있다」 는 거짓말이다.
+    await waitFor(() => expect(screen.getByRole('button', { name: '생성' })).toBeDisabled())
+    await user.click(await screen.findByLabelText(/적층 강성/))
+    expect(screen.getByRole('button', { name: '생성' })).toBeEnabled()
+  })
+
   it('비운 칸은 안 보낸다', async () => {
     // **재료·시료에 있으면 비워 둔다** — 두 곳에 적으면 어느 쪽이 맞는지
     // 판정할 근거가 없다.

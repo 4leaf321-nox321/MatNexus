@@ -114,6 +114,40 @@ def _state(
     assert got.status_code == 200, got.text
 
 
+def _state_modulus(
+    client: TestClient, db: Session, headers: dict[str, str], material_id: str
+) -> None:
+    """탄성계수도 적어 둔다 — 이 경로가 **저절로** 만드는 블록이 서게."""
+    axis = db.scalar(select(Vocabulary).where(Vocabulary.slug == "property_item"))
+    assert axis is not None
+    term = vocabulary_services.resolve_or_create(db, axis, "탄성계수", created_by_id=None)
+    assert term is not None
+    term.attributes = {"dimension": "stress"}
+    db.commit()
+    got = client.patch(
+        f"/api/materials/{material_id}",
+        json={
+            "declared_properties": [
+                {
+                    "item": ITEM,
+                    "points": [{"value": 6.0}],
+                    "source": "standard",
+                    "reference": "KS D 3512",
+                },
+                {
+                    "item": "탄성계수",
+                    "points": [{"value": 206.0}],
+                    "input_unit": "GPa",
+                    "source": "standard",
+                    "reference": "KS D 3512",
+                },
+            ]
+        },
+        headers=headers,
+    )
+    assert got.status_code == 200, got.text
+
+
 def _card(db: Session, material_id: str, values: dict[str, Any]) -> PropertyCard:
     """블록 하나를 든 카드. 저장 경로를 그대로 지나가게 한다."""
     from app.modules.fitting import routes
@@ -192,6 +226,104 @@ def test_안_이어_둔_항목은_안_실린다(
     _state(client, admin_headers, material["id"], 6.0)
     item = _card(db, material["id"], {})
     assert "exponent" not in item.blocks["block_under_test"]["values"]
+
+
+class Test시험_없이_만드는_카드:
+    """**고르면 항목란이 카드에 앉는다** — 곡선이 없어도.
+
+    선언 물성은 지금까지 「남의 블록에 얹혀」 만 갈 수 있었다. 블록을 카드에 올리는
+    것은 값을 내는 쪽(적합식·묶음)의 일이라, 맞출 곡선이 없는 물성(적층 강성처럼
+    사람이 적기만 하는 값)은 항목란을 만들어 두고 값을 적어도 앉을 자리가 없었다.
+    """
+
+    def _preview(
+        self, client: TestClient, headers: dict[str, str], material_id: str
+    ) -> dict[str, Any]:
+        got = client.get(
+            "/api/fitting/cards/declared/preview",
+            params={"material_id": material_id},
+            headers=headers,
+        )
+        assert got.status_code == 200, got.text
+        return dict(got.json())
+
+    def _make(
+        self,
+        client: TestClient,
+        headers: dict[str, str],
+        material_id: str,
+        keys: list[str],
+    ) -> Any:
+        return client.post(
+            "/api/fitting/cards/declared",
+            json={"material_id": material_id, "label": "적어 둔 값 카드", "block_keys": keys},
+            headers=headers,
+        )
+
+    def test_미리보기가_후보를_말한다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str], linked: str
+    ) -> None:
+        """**누르기 전에 안다.** 만들고 나서 「비었네」 를 보는 것은 늦다."""
+        material = _material(client, admin_headers)
+        _state(client, admin_headers, material["id"], 6.0)
+
+        found = self._preview(client, admin_headers, material["id"])
+        option = next(one for one in found["fillable"] if one["key"] == "block_under_test")
+        slot = next(one for one in option["slots"] if one["key"] == "exponent")
+        assert slot["value"] == pytest.approx(6.0)
+        # 등급이 여기서 갈린다 — 화면이 「규격이라 2등급」 을 미리 말할 수 있다.
+        assert slot["source"] == "standard"
+
+    def test_고르면_카드에_앉는다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str], linked: str
+    ) -> None:
+        material = _material(client, admin_headers)
+        _state(client, admin_headers, material["id"], 6.0)
+
+        made = self._make(client, admin_headers, material["id"], ["block_under_test"])
+        assert made.status_code == 201, made.text
+        values = made.json()["blocks"]["block_under_test"]["values"]
+        assert values["exponent"] == pytest.approx(6.0)
+        assert values["exponent_source"] == "declared:standard"
+        # 시험이 하나도 없는 카드다 — 그 사실이 근거에 남아야 한다.
+        assert made.json()["source"]["declared_only"] is True
+
+    def test_안_고르면_안_앉는다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str], linked: str
+    ) -> None:
+        """**값이 있다고 다 싣지 않는다.** 고르는 것은 사람이다."""
+        material = _material(client, admin_headers, spec_thickness=1.0)
+        _state(client, admin_headers, material["id"], 6.0)
+        _state_modulus(client, db, admin_headers, material["id"])
+
+        made = self._make(client, admin_headers, material["id"], [])
+        assert made.status_code == 201, made.text
+        assert "block_under_test" not in made.json()["blocks"]
+        assert "elastic" in made.json()["blocks"]
+
+    def test_채울_값이_없는_항목란은_이름을_대고_거절한다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str], linked: str
+    ) -> None:
+        """조용히 빼지 않는다 — 고른 사람은 그것이 실린 줄 안다. 빈 칸만 든 블록이
+        앉으면 목록은 「이 물성이 있다」 고 말하는데 값이 없다."""
+        material = _material(client, admin_headers)
+        _state(client, admin_headers, material["id"], 6.0)
+
+        got = self._make(client, admin_headers, material["id"], ["hardening"])
+        assert got.status_code == 422, got.text
+        assert "hardening" in got.json()["error"]["message"]
+
+    def test_저절로_실리는_것은_후보가_아니다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str], linked: str
+    ) -> None:
+        """탄성·열물성은 이 경로가 이미 만든다. 고르게 두면 「켰는데 이미 있다」 와
+        「껐는데 실렸다」 가 생긴다."""
+        material = _material(client, admin_headers)
+        _state(client, admin_headers, material["id"], 6.0)
+        _state_modulus(client, db, admin_headers, material["id"])
+
+        found = self._preview(client, admin_headers, material["id"])
+        assert {one["key"] for one in found["fillable"]} == {"block_under_test"}
 
 
 def test_없던_블록은_안_만든다(

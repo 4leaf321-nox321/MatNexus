@@ -59,8 +59,10 @@ from app.modules.fitting.schemas import (
     DeckScanIn,
     DeckScanOut,
     DeckTableOut,
+    DeclaredBlockOptionOut,
     DeclaredCardPreviewOut,
     DeclaredCardSaveRequest,
+    DeclaredSlotOut,
     ExportFormatOut,
     ExportProfileCreateRequest,
     ExportProfileOut,
@@ -1793,8 +1795,62 @@ def preview_declared_card(
             *(["thermal"] if thermal else []),
             *(["table"] if synthesize_plastic and synthetic.ok else []),
         ],
+        fillable=_fillable_options(db, material),
         synthetic=synthetic,
     )
+
+
+#: 저절로 실리는 항목란 — 고르는 목록에서 뺀다.
+#:
+#: 탄성·열물성은 이 경로가 **이미 만든다**(`_declared_blocks`). 고를 수 있게 두면
+#: 「켰는데 이미 있다」 와 「껐는데 실렸다」 가 생기고, 그때 화면이 거짓말이 된다.
+_ALWAYS_DECLARED = ("elastic", "thermal")
+
+
+def _fillable_options(db: Session, material: Material) -> list[DeclaredBlockOptionOut]:
+    """적어 둔 값으로 **더** 실을 수 있는 항목란들.
+
+    화면에서 만든 항목란(ADR 0033)도 여기 온다 — 그것이 이 기능의 요점이다.
+    곡선이 없는 물성은 적합식으로 카드에 올릴 길이 없어서, 항목란을 만들어 두고
+    값을 적어도 앉을 자리가 안 생겼다.
+    """
+    return [
+        DeclaredBlockOptionOut(
+            key=one.key,
+            label=one.label,
+            slots=[
+                DeclaredSlotOut(
+                    key=slot, label=label, si_unit=unit, value=value, source=source
+                )
+                for slot, label, unit, value, source in one.slots
+            ],
+        )
+        for one in declared_slots.fillable(db, material)
+        if one.key not in _ALWAYS_DECLARED
+    ]
+
+
+def _chosen_blocks(db: Session, material: Material, wanted: list[str]) -> list[str]:
+    """고른 항목란 중 **실제로 채워질 것**만. 나머지는 이름을 대고 거절한다.
+
+    빈 칸만 든 블록이 카드에 앉으면 목록은 「이 물성이 있다」 고 말하는데 값은
+    없다 — 이 엔드포인트가 빈 카드를 막는 것과 같은 자리다. 조용히 빼지 않는
+    이유는 **고른 사람이 켰다고 믿기 때문**이다.
+    """
+    if not wanted:
+        return []
+    can = {one.key for one in declared_slots.fillable(db, material)}
+    empty = [key for key in wanted if key not in can]
+    if empty:
+        raise AppError(
+            "MNX-FITTING-0016",
+            f"적어 둔 값이 닿는 칸이 없는 항목란입니다: {', '.join(sorted(empty))}. "
+            "항목란의 칸에 물성 키가 있는지, 그 키가 기준정보 항목과 이어져 있는지 "
+            "보세요(문헌 물성의 「사내 항목 연결」).",
+            status=422,
+        )
+    # 이미 저절로 실리는 것은 빼고 준다 — 같은 키를 두 번 얹으면 뒤엣것이 이긴다.
+    return [key for key in wanted if key not in _ALWAYS_DECLARED]
 
 
 def _parameter_blocks(
@@ -1903,7 +1959,9 @@ def create_declared_card(
         db, material.id, payload.parameter_set_ids
     )
 
-    if not elastic and not thermal and not parameter_blocks:
+    chosen = _chosen_blocks(db, material, payload.block_keys)
+
+    if not elastic and not thermal and not parameter_blocks and not chosen:
         raise AppError(
             "MNX-FITTING-0016",
             "이 재료에는 적어 둔 물성이 없습니다. 재료의 '물성' 탭에서 선언 물성을 "
@@ -1949,6 +2007,9 @@ def create_declared_card(
             **_temperature_aware("thermal", thermal, thermal_rows),
             **({"table": {"rows": synthetic_rows}} if synthetic_rows else {}),
             **parameter_blocks,
+            # **빈 채로 올려 두면 `_save_card` 가 채운다.** 여기서 값을 적으면
+            # 채우는 규칙이 두 벌이 되고, 둘이 어긋나는 날 카드가 조용히 달라진다.
+            **{key: {"values": {}} for key in chosen},
         },
         point_count=len(synthetic_rows),
         note=payload.note,

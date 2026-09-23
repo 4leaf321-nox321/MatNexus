@@ -41,6 +41,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -77,6 +78,51 @@ def _declared_by_key(db: Session, material: Material) -> dict[str, dict[str, Any
             "source": str(row.get("source") or "unknown"),
             "reference": row.get("reference"),
         }
+    return out
+
+
+@dataclass(frozen=True)
+class Fillable:
+    """적어 둔 값으로 **채울 수 있는** 항목란 하나와 그 칸들."""
+
+    key: str
+    label: str
+    slots: tuple[tuple[str, str, str, float, str], ...]
+    """`(칸 키, 칸 이름, SI 단위, 값, 출처)`. 값은 **SI** 다."""
+
+
+def fillable(db: Session, material: Material | None) -> list[Fillable]:
+    """이 재료의 적어 둔 값으로 채울 수 있는 항목란들. **만들지는 않는다.**
+
+    `fill` 이 「있는 블록의 빈 칸」 을 채운다면 이쪽은 「어느 블록이면 채울 값이
+    있나」 를 답한다 — 시험 없이 카드를 만드는 화면이 **누르기 전에** 무엇이 실릴지
+    보여 주는 데 쓴다.
+
+    **고르는 것은 사람이다.** 값이 있다고 다 실으면 이방성 카드에 열물성이 따라
+    붙는 것과 같은 일이 생긴다(`fill` 의 규칙 ②와 같은 판단).
+    """
+    if material is None:
+        return []
+    stated = _declared_by_key(db, material)
+    if not stated:
+        return []
+
+    cards.load_builtin()
+    out: list[Fillable] = []
+    for spec in sorted(cards.list_blocks(), key=lambda one: one.order):
+        slots = tuple(
+            (
+                slot.key,
+                slot.label,
+                slot.si_unit,
+                stated[slot.property_key]["value"],
+                stated[slot.property_key]["source"],
+            )
+            for slot in spec.produces
+            if slot.property_key and slot.property_key in stated
+        )
+        if slots:
+            out.append(Fillable(key=spec.key, label=spec.label, slots=slots))
     return out
 
 

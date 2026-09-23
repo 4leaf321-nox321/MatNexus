@@ -60,6 +60,9 @@ export function DeclaredCardDialog({
   )
   const rows = found.data?.values ?? []
   const blocks = found.data?.blocks ?? []
+  // **고르면 더 실린다.** 탄성·열물성 말고도 적어 둔 값이 닿는 칸이 있는 항목란 —
+  // 화면에서 만든 항목란(적층처럼 맞출 곡선이 없는 물성)이 여기로 온다.
+  const fillable = found.data?.fillable ?? []
 
   // **단위를 화면에 박지 않는다.** 블록 선언이 값마다 저장 단위를 들고 있다 —
   // 새 물성이 붙어도 여기는 안 고친다(`CardBlocks` 와 같은 규칙).
@@ -81,6 +84,7 @@ export function DeclaredCardDialog({
   // **카드는 파라미터 벌을 인용한다**(ADR 0029). 재료가 담아 둔 것 중에서 고른다 —
   // 카드가 소유하지 않으므로 여기서 새로 만들 수는 없다.
   const [picked, setPicked] = useState<Set<string>>(new Set())
+  const [pickedBlocks, setPickedBlocks] = useState<Set<string>>(new Set())
   const parameterSets = useResource(
     () => (open ? materialsApi.parameterSets(materialId) : Promise.resolve([])),
     [materialId, open]
@@ -95,6 +99,7 @@ export function DeclaredCardDialog({
       setDensity('')
       setNote('')
       setPicked(new Set())
+      setPickedBlocks(new Set())
       setError(null)
     }
   }, [open])
@@ -108,6 +113,7 @@ export function DeclaredCardDialog({
         label,
         synthesize_plastic: synthesize,
         parameter_set_ids: [...picked],
+        block_keys: [...pickedBlocks],
         poisson_ratio: poisson === '' ? null : Number(poisson),
         density: densityToSi(density),
         note: note || null,
@@ -138,7 +144,7 @@ export function DeclaredCardDialog({
             것은 늦다. */}
         <div className="rounded-md border p-3 text-sm">
           <div className="text-muted-foreground mb-1 text-xs">실릴 값</div>
-          {blocks.length === 0 && !found.loading ? (
+          {blocks.length === 0 && fillable.length === 0 && !found.loading ? (
             <p className="text-muted-foreground text-xs">
               적어 둔 물성이 없습니다. 재료의 <b>물성</b> 탭에서 먼저 채우세요 — 값이 없는
               카드는 목록에서 「이 재료는 물성이 있다」고 말하게 됩니다.
@@ -156,6 +162,44 @@ export function DeclaredCardDialog({
             </ul>
           )}
         </div>
+
+        {/* **적어 둔 값이 닿는 항목란.** 탄성·열물성은 저절로 실리므로 여기 없다.
+            곡선이 없는 물성(적층 강성처럼 사람이 적기만 하는 값)은 적합식으로
+            카드에 올릴 길이 없어서, 이 목록이 그 유일한 문이다. */}
+        {fillable.length > 0 && (
+          <div className="space-y-1">
+            <Label>함께 실을 항목란</Label>
+            <ul className="divide-y rounded-md border text-sm">
+              {fillable.map((one) => (
+                <li key={one.key} className="flex items-start gap-2 px-3 py-2">
+                  <input
+                    type="checkbox"
+                    className="mt-1"
+                    id={`fillable-${one.key}`}
+                    checked={pickedBlocks.has(one.key)}
+                    onChange={(event) => {
+                      const next = new Set(pickedBlocks)
+                      if (event.target.checked) next.add(one.key)
+                      else next.delete(one.key)
+                      setPickedBlocks(next)
+                    }}
+                  />
+                  <label htmlFor={`fillable-${one.key}`} className="min-w-0">
+                    <span className="font-medium">{one.label}</span>
+                    <span className="text-muted-foreground block text-xs tabular-nums">
+                      {one.slots
+                        .map(
+                          (slot) =>
+                            `${slot.label} ${formatScalar(slot.value, slot.si_unit)}`
+                        )
+                        .join(' · ')}
+                    </span>
+                  </label>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         {/* 합성 소성 표 — **지어낸 곡선은 지어냈다고 말한다.** 켜기 전에 무엇이
             지어지는지(모델·점 수) 서버가 말해 주고, 카드 근거와 덱 각주에
@@ -258,7 +302,11 @@ export function DeclaredCardDialog({
           <Button variant="ghost" onClick={onClose}>
             취소
           </Button>
-          <Button onClick={save} disabled={saving || !label || blocks.length === 0}>
+          {/* 고른 항목란만으로도 카드가 된다 — 탄성·열물성이 없는 재료가 그 경우다. */}
+          <Button
+            onClick={save}
+            disabled={saving || !label || (blocks.length === 0 && pickedBlocks.size === 0)}
+          >
             {saving ? '만드는 중…' : '생성'}
           </Button>
         </DialogFooter>
