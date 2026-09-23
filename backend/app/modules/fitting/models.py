@@ -283,6 +283,16 @@ class CardBlock(Base):
     measured: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     """값이 **시험에서 나오는가.** 등급 판정이 표본 수로 등급을 매길지 정하는 데 쓴다 —
     코드의 목록(`card_tiers`)에 이름을 더하러 가지 않게 여기서 선언한다."""
+    cross_orientation: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false"
+    )
+    """이 항목란의 값이 **여러 방향을 함께 써서** 나오는가(ADR 0034).
+
+    카드 한 장은 방향 하나다. 그 예외를 켜는 것은 카드를 만드는 쪽의 판단이 아니라
+    항목란의 선언인데, 그 선언을 **코드로 만든 블록만** 할 수 있었다. 그래서 화면에서
+    「세 방향을 합친 값」 항목란을 만들면 만들기는 되고 **그걸 든 카드를 저장할 때
+    422 로 막혔다**(「방향이 3가지 섞여 있습니다」) — 왜 막히는지는 화면 어디에도
+    없었다. 라미네이트·적층처럼 방향을 가로지르는 물성이 화면으로 올 자리다."""
 
     version: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
     """계산이 달라지는 칸을 고치면 오른다. 이름·설명은 안 올린다."""

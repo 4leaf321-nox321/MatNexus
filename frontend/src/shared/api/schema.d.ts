@@ -8198,6 +8198,11 @@ export interface components {
         };
         /** CardBlockCreate */
         CardBlockCreate: {
+            /**
+             * Cross Orientation
+             * @default false
+             */
+            cross_orientation: boolean;
             /** Curve X */
             curve_x?: string | null;
             /** Curve Y */
@@ -8248,6 +8253,8 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /** Cross Orientation */
+            cross_orientation: boolean;
             /** Curve X */
             curve_x: string | null;
             /** Curve Y */
@@ -8292,6 +8299,8 @@ export interface components {
          * @description **키는 없다** — 카드가 그 키로 값을 들고 있어 못 바꾼다.
          */
         CardBlockUpdate: {
+            /** Cross Orientation */
+            cross_orientation?: boolean | null;
             /** Curve X */
             curve_x?: string | null;
             /** Curve Y */

@@ -917,6 +917,9 @@ class CardBlockCreate(BaseModel):
     from_tests: list[str] = []
     measured: bool = False
     """값이 시험에서 나오는가. 등급 판정이 표본 수로 등급을 매길지 정한다."""
+    cross_orientation: bool = False
+    """값이 **여러 방향을 함께 써서** 나오는가(ADR 0034). 켜면 그 카드는 방향 검사를
+    면제받고 방향이 비워진다 — 안 켜면 세 방향을 묶은 카드가 422 로 막힌다."""
 
 
 class CardBlockUpdate(BaseModel):
@@ -932,6 +935,7 @@ class CardBlockUpdate(BaseModel):
     curve_y: str | None = Field(default=None, max_length=60)
     from_tests: list[str] | None = None
     measured: bool | None = None
+    cross_orientation: bool | None = None
     enabled: bool | None = None
 
 
@@ -948,6 +952,7 @@ class CardBlockOut(BaseModel):
     curve_y: str | None
     from_tests: list[str]
     measured: bool
+    cross_orientation: bool
     version: int
     enabled: bool
     installed: bool

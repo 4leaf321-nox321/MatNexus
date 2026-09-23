@@ -271,6 +271,7 @@ function BlockDialog({
   const [rows, setRows] = useState<CardSlot[]>([])
   const [fromTests, setFromTests] = useState<string[]>([])
   const [measured, setMeasured] = useState(false)
+  const [crossOrientation, setCrossOrientation] = useState(false)
   const [error, setError] = useState<Error | null>(null)
   const [busy, setBusy] = useState(false)
   const [loaded, setLoaded] = useState<string | null>(null)
@@ -286,6 +287,7 @@ function BlockDialog({
     setRows(item ? item.rows.map((one) => ({ ...one })) : [])
     setFromTests(item?.from_tests ?? [])
     setMeasured(item?.measured ?? false)
+    setCrossOrientation(item?.cross_orientation ?? false)
     setError(null)
   }
   if (!open && loaded !== null) setLoaded(null)
@@ -302,6 +304,7 @@ function BlockDialog({
         rows: clean(rows),
         from_tests: fromTests,
         measured,
+        cross_orientation: crossOrientation,
       }
       if (item) await fittingApi.updateBlockDefinition(item.id, body)
       // 순서는 화면에서 안 고른다 — 만든 것은 내장들 뒤에 선다(서버 기본과 같은 값).
@@ -409,6 +412,23 @@ function BlockDialog({
             값이 <b>시험에서 나옵니다</b>
             <span className="text-muted-foreground block text-xs">
               켜면 값 등급을 시편 수로 매깁니다. 사람이 적거나 문헌에서 받는 값이면 끕니다.
+            </span>
+          </span>
+        </label>
+
+        <label className="flex items-start gap-2 text-sm">
+          <input
+            type="checkbox"
+            className="mt-1"
+            checked={crossOrientation}
+            onChange={(event) => setCrossOrientation(event.target.checked)}
+          />
+          <span>
+            값이 <b>여러 방향을 함께 써서</b> 나옵니다
+            <span className="text-muted-foreground block text-xs">
+              카드 한 장은 방향 하나입니다. 세 방향(MD·DD·TD)을 합쳐야 나오는 값이면 켜세요 —
+              안 켜면 그 묶음으로 카드를 만들 때 「방향이 섞여 있습니다」 로 막힙니다. 켠
+              항목란이 든 카드는 방향이 비어 있습니다.
             </span>
           </span>
         </label>

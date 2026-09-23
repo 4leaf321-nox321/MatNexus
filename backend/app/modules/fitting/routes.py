@@ -4277,6 +4277,7 @@ def _block_out(db: Session, row: CardBlock) -> CardBlockOut:
         curve_y=row.curve_y,
         from_tests=list(row.from_tests or []),
         measured=row.measured,
+        cross_orientation=row.cross_orientation,
         version=row.version,
         enabled=row.enabled,
         installed=row.key in cards.installed(),

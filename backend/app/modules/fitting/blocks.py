@@ -118,6 +118,9 @@ def spec_of(row: CardBlock) -> cards.BlockSpec:
         # **등급 판정이 읽는다.** 코드의 목록에 이름을 더하러 가지 않게 한다.
         meta={
             "measured": bool(row.measured),
+            # **카드 만드는 쪽이 읽는다**(ADR 0034). 코드 블록과 같은 이름이라야
+            # 한다 — 화면에서 만든 것만 다른 열쇠를 보면 그쪽은 조용히 안 걸린다.
+            "cross_orientation": bool(row.cross_orientation),
             "origin": "db",
             "version": int(row.version or 1),
         },
@@ -209,6 +212,7 @@ def create(db: Session, payload: dict[str, Any], user: User) -> CardBlock:
         curve_y=_text(payload.get("curve_y")) or None,
         from_tests=list(payload.get("from_tests") or []),
         measured=bool(payload.get("measured")),
+        cross_orientation=bool(payload.get("cross_orientation")),
         created_by_id=user.id,
     )
     validate(db, row)
@@ -225,6 +229,9 @@ EDITABLE = (
     "curve_y",
     "from_tests",
     "measured",
+    # 값의 모양은 안 바뀌지만 **그 카드가 무엇의 카드인지**가 바뀐다 — 켜면 방향이
+    # 비워지고, 끄면 같은 묶음이 422 로 막힌다. 판이 올라야 그 경계가 보인다.
+    "cross_orientation",
 )
 #: 바꿔도 판이 안 오르는 것 — 이름 하나 고쳤다고 리비전이 찍히면 안 된다.
 COSMETIC = ("label", "help", "sort_order", "kind_priority")

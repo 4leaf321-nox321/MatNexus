@@ -117,6 +117,25 @@ describe('카드 항목란', () => {
     expect(sent.produces).toEqual([{ key: 'fld_0', label: 'FLD0', si_unit: '1' }])
   })
 
+  it('방향을 가로지른다고 켜면 그대로 보낸다', async () => {
+    // 이 칸이 안 가면 「세 방향을 합친 값」 항목란을 만들어 두고도 그걸 든 카드가
+    // 저장될 때 422 로 막힌다 — 그리고 왜 막히는지는 화면 어디에도 안 뜬다.
+    const user = userEvent.setup()
+    render(<CardBlocksPage />)
+    await user.click(await screen.findByRole('button', { name: /항목란 만들기/ }))
+
+    await user.type(await screen.findByLabelText('키'), 'laminate')
+    await user.type(screen.getByLabelText('이름'), '적층')
+    await user.type(screen.getByLabelText('담는 값 1 키'), 'a11')
+    await user.type(screen.getByLabelText('담는 값 1 이름'), 'A11')
+    await user.click(screen.getByRole('checkbox', { name: /여러 방향을 함께 써서/ }))
+    await user.click(screen.getByRole('button', { name: '저장' }))
+
+    await waitFor(() => expect(createBlockDefinition).toHaveBeenCalled())
+    const sent = createBlockDefinition.mock.calls[0][0] as Record<string, unknown>
+    expect(sent.cross_orientation).toBe(true)
+  })
+
   it('시스템 관리자가 아니면 고치는 길이 없다', async () => {
     isAdmin = false
     render(<CardBlocksPage />)

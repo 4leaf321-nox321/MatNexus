@@ -2779,6 +2779,11 @@
       },
       "CardBlockCreate": {
         "properties": {
+          "cross_orientation": {
+            "default": false,
+            "title": "Cross Orientation",
+            "type": "boolean"
+          },
           "curve_x": {
             "anyOf": [
               {
@@ -2888,6 +2893,10 @@
             "format": "date-time",
             "title": "Created At",
             "type": "string"
+          },
+          "cross_orientation": {
+            "title": "Cross Orientation",
+            "type": "boolean"
           },
           "curve_x": {
             "anyOf": [
@@ -2999,6 +3008,7 @@
           "curve_y",
           "from_tests",
           "measured",
+          "cross_orientation",
           "version",
           "enabled",
           "installed",
@@ -3012,6 +3022,17 @@
       "CardBlockUpdate": {
         "description": "**키는 없다** — 카드가 그 키로 값을 들고 있어 못 바꾼다.",
         "properties": {
+          "cross_orientation": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cross Orientation"
+          },
           "curve_x": {
             "anyOf": [
               {
