@@ -43,6 +43,18 @@ def _links(db: Session) -> list[PropertyLink]:
     return list(db.scalars(select(PropertyLink)))
 
 
+def test_연결_표의_항목이_전부_씨앗에_있다() -> None:
+    """**이름을 못 찾으면 그 줄은 조용히 안 심긴다.** 표를 늘릴 때 오타 한 자가
+    그렇게 사라지므로, 두 표가 맞는지 여기서 본다."""
+    from app.modules.catalog.links import BUILTIN_LINKS
+    from app.shared import property_names
+
+    unknown = [
+        one for one, _key, _scale in BUILTIN_LINKS if property_names.builtin_item(one) is None
+    ]
+    assert unknown == []
+
+
 def test_항목과_정의가_있으면_잇는다(db: Session) -> None:
     ensure_builtin_property_items(db)
     _definition(db, KEY, "J/(kg.K)", "Specific heat")

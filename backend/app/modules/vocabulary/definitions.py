@@ -367,6 +367,63 @@ BUILTIN_PROPERTY_ITEMS: list[tuple[str, str, str, str, str | None, str | None, s
         "HV, HB, HRC, HRB, HS",
         "mechanical.hardness_vickers",
     ),
+    # ── 데이터시트·핸드북에서 받아 적는 것들 (2026-09-24) ──────────────────────
+    #
+    # **고르는 기준은 「우리 시험이 안 주는데 해석·설계가 묻는 값」 이다.** 문헌
+    # 물성 271종 중에서 값이 수백~수천 건 쌓여 있고 데이터시트에 늘 적히는 것만
+    # 골랐다. 값이 있어야 「적어 둔 값과 문헌값이 얼마나 다른가」 를 물을 수 있다.
+    #
+    # **밀도·푸아송비는 일부러 뺐다.** 재료·시료가 컬럼으로 들고 있어서, 선언
+    # 항목으로도 받으면 같은 값이 두 곳에 생기고 어느 쪽이 이기는지가 흐려진다.
+    #
+    # 층은 전부 「재료」 다 — 로트마다 달라지는 값이 아니라 Grade 의 성질이다.
+    (
+        "유리전이온도",
+        "temperature",
+        "Tg",
+        "재료",
+        "glass_transition",
+        None,
+        "thermal.glass_transition",
+    ),
+    ("융점", "temperature", "Tm", "재료", None, None, "thermal.melting_point"),
+    ("최대 사용온도", "temperature", "Tmax", "재료", None, None, "thermal.max_service_temp"),
+    ("열분해온도", "temperature", "Td", "재료", None, None, "thermal.decomposition_temp"),
+    ("굽힘강도", "stress", "sigma_f", "재료", None, None, "mechanical.flexural_strength"),
+    ("굽힘탄성률", "stress", "Ef", "재료", None, None, "mechanical.flexural_modulus"),
+    ("압축강도", "stress", "sigma_c", "재료", None, None, "mechanical.compressive_strength"),
+    (
+        "파괴인성",
+        "fracture_toughness",
+        "KIC",
+        "재료",
+        None,
+        None,
+        "mechanical.fracture_toughness",
+    ),
+    (
+        "비유전율",
+        "dimensionless",
+        "eps_r",
+        "재료",
+        None,
+        None,
+        "electrical.dielectric_constant",
+    ),
+    (
+        "체적저항률",
+        "resistivity",
+        "rho_v",
+        "재료",
+        None,
+        None,
+        "electrical.resistivity_volume",
+    ),
+    ("굴절률", "dimensionless", "n", "재료", None, None, "optical.refractive_index"),
+    # **접착·적층의 값이다.** 구성체(ADR 0026)가 생기면 그쪽으로 옮길 후보인데,
+    # 지금은 적층 소재를 재료로 등록하므로 재료에 적는다.
+    ("박리강도", "line_force", "P", "재료", None, None, "interface.peel_strength"),
+    ("점도", "viscosity", "eta", "재료", None, None, "rheological.viscosity"),
 ]
 
 #: 물성 키 → 기본 항목 이름. **위 표에서 만든다** — 두 벌로 두면 한쪽만 고쳐진다.

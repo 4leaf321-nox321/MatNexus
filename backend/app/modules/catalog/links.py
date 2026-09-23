@@ -61,6 +61,20 @@ BUILTIN_LINKS: list[tuple[str, str, str | None]] = [
     ("mechanical.hardness_vickers", "mechanical.hardness_brinell", "HB"),
     ("mechanical.hardness_vickers", "mechanical.hardness_rockwell", "HRC"),
     ("mechanical.hardness_vickers", "mechanical.hardness_rockwell", "HRB"),
+    # 데이터시트에서 받아 적는 것들 (2026-09-24) — 항목과 키가 1:1 이다.
+    ("thermal.glass_transition", "thermal.glass_transition", None),
+    ("thermal.melting_point", "thermal.melting_point", None),
+    ("thermal.max_service_temp", "thermal.max_service_temp", None),
+    ("thermal.decomposition_temp", "thermal.decomposition_temp", None),
+    ("mechanical.flexural_strength", "mechanical.flexural_strength", None),
+    ("mechanical.flexural_modulus", "mechanical.flexural_modulus", None),
+    ("mechanical.compressive_strength", "mechanical.compressive_strength", None),
+    ("mechanical.fracture_toughness", "mechanical.fracture_toughness", None),
+    ("electrical.dielectric_constant", "electrical.dielectric_constant", None),
+    ("electrical.resistivity_volume", "electrical.resistivity_volume", None),
+    ("optical.refractive_index", "optical.refractive_index", None),
+    ("interface.peel_strength", "interface.peel_strength", None),
+    ("rheological.viscosity", "rheological.viscosity", None),
 ]
 
 
