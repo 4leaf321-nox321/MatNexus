@@ -230,10 +230,15 @@ def rank(center: float | None) -> Any:
     물으면 180~220 창의 **아래쪽 20개**(180.x 부터)가 왔다. 값 오름차순이라서다. AI 는
     200 근처를 못 보고 창을 195~205, 199~201 로 좁혀 세 번 더 불렀다 — 네 문항이
     그렇게 예산을 넘겼다. 「근처」 라고 물었으면 가까운 것부터가 답이다.
+
+    **동점에는 작은 값이 앞이다.** 기준 200 에 190 과 210 은 똑같이 10 만큼 머니,
+    거리만 열쇠로 쓰면 둘의 앞뒤를 SQL 이 준 순서가 정한다 — 그쪽도 거리만 보므로
+    결국 DB 마음이고, 같은 요청이 매번 다른 답을 준다(시험이 이따금 빨갰다,
+    실측 2026-09-23).
     """
     if center is None:
         return lambda one: one.value_si
-    return lambda one: abs(one.value_si - center)
+    return lambda one: (abs(one.value_si - center), one.value_si)
 
 
 def catalog_hits(
@@ -268,9 +273,14 @@ def catalog_hits(
             CatalogValue.value_num <= high,
         )
         .order_by(
-            func.abs(CatalogValue.value_num - center)
-            if center is not None
-            else CatalogValue.value_num
+            # **동점에 앞뒤를 준다.** 기준 200 에 190 과 210 은 똑같이 10 만큼 멀다 —
+            # 거리만으로 줄 세우면 둘의 순서가 DB 마음이라 같은 요청이 매번 다른 답을
+            # 준다(시험이 이따금 빨갰다, 실측 2026-09-23).
+            *(
+                (func.abs(CatalogValue.value_num - center), CatalogValue.value_num)
+                if center is not None
+                else (CatalogValue.value_num,)
+            )
         )
         .limit(limit)
     )
@@ -373,7 +383,14 @@ def measured_hits(
             scalar_value >= low,
             scalar_value <= high,
         )
-        .order_by(func.abs(scalar_value - center) if center is not None else scalar_value)
+        .order_by(
+            # 위와 같은 이유로 동점에 앞뒤를 준다.
+            *(
+                (func.abs(scalar_value - center), scalar_value)
+                if center is not None
+                else (scalar_value,)
+            )
+        )
         .limit(MAX_ROWS)
     )
     if visible is not None:
