@@ -610,6 +610,15 @@ if ($SkipMigrations) {
     try {
         Invoke-Native '카탈로그 적재 실패' { & $backendPython scripts\import_materialtwin.py --apply }
         Write-Log '문헌 카탈로그 씨앗 완료'
+        # **씨앗을 한 번 더 맞춘다.** 기본 물성 항목 ↔ 문헌 물성 키 연결은 문헌
+        # 정의를 가리키는데, 위 씨앗 맞추기는 이 적재보다 **앞에** 돈다 — 갓 설치한
+        # 서버에서는 그때 정의가 없어 아무것도 못 잇는다. 멱등이라 두 번째는
+        # 「할 일이 없습니다」 로 끝난다.
+        try {
+            Invoke-Native '씨앗 다시 맞추기 실패' { & $backendPython scripts\refresh_builtins.py }
+        } catch {
+            Write-Log "씨앗 다시 맞추기 실패 (배포는 계속합니다): $_"
+        }
     } catch {
         Write-Log "문헌 카탈로그 씨앗 실패 (배포는 계속합니다): $_"
         Write-Host ''

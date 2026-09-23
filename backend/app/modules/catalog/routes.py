@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session
 from app import version
 from app.database import get_db
 from app.modules.accounts.models import User
-from app.modules.catalog import contribute, mapping, parameters
+from app.modules.catalog import contribute, links, mapping, parameters
 from app.modules.catalog.models import (
     CatalogDefinition,
     CatalogLink,
@@ -1537,33 +1537,15 @@ def _check_same_dimension(
 ) -> None:
     """**차원이 다르면 「같은 것」 으로 못 잇는다.**
 
-    이 매핑은 채우기의 정본이고, 채우기는 SI 값을 환산 없이 옮긴다. 열전도율을 「비열」
-    에 이어 두면 W/(m·K) 숫자가 J/(kg·K) 자리에 조용히 들어간다 — 숫자는 그럴듯하다.
-    표가 모르는 눈금(HV)은 무차원·눈금 항목(경도)에만 간다.
+    규칙 자체는 `catalog/links.py` 에 있다 — 씨앗(기본 연결)이 같은 것을 써야 하고,
+    두 벌이면 씨앗이 심은 것을 화면이 거절하는 상태가 생긴다. 여기서는 그 판정을
+    사람에게 보여 줄 오류로 바꾼다.
     """
     if kind != "same_as":
         return
-    dimension = str((term.attributes or {}).get("dimension") or "dimensionless")
-    has_scales = bool(str((term.attributes or {}).get("scales") or "").strip())
-    symbol = definition.si_unit or ""
-    found = units.canonical(symbol) if symbol else None
-    if found is None:
-        if has_scales:
-            return
-        raise AppError(
-            "MNX-CATALOG-0029",
-            f"'{definition.name}' 의 단위 '{symbol or '(없음)'}' 는 표가 모르는 단위라 "
-            f"눈금 있는 항목에만 이을 수 있습니다 — '{term.value}' 은 눈금이 없습니다.",
-            status=422,
-        )
-    if not units.same_dimension(units.unit_of(found).dimension, dimension):
-        raise AppError(
-            "MNX-CATALOG-0029",
-            f"'{definition.name}' 은 {units.unit_of(found).dimension} 인데 '{term.value}' 은 "
-            f"{dimension} 입니다 — 차원이 달라 같은 것으로 이을 수 없습니다. 담으면 숫자가 "
-            "다른 단위 자리에 그대로 들어갑니다.",
-            status=422,
-        )
+    why = links.dimension_conflict(definition, term)
+    if why is not None:
+        raise AppError("MNX-CATALOG-0029", why, status=422)
 
 
 @router.delete("/properties/links/{link_id}", status_code=204)

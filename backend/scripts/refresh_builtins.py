@@ -29,6 +29,7 @@ sys.path.insert(0, str(BACKEND_DIR))
 import app.all_models  # noqa: E402,F401
 from _console import survive_cp949  # noqa: E402
 from app.database import SessionLocal  # noqa: E402
+from app.modules.catalog.links import ensure_builtin_property_links  # noqa: E402
 from app.modules.tests.definitions import (  # noqa: E402
     ensure_builtin_test_types,
     refresh_builtin_test_types,
@@ -62,6 +63,10 @@ def run(db) -> dict[str, list[str]]:  # type: ignore[no-untyped-def]
         "시험 종류 맞춤": refresh_builtin_test_types(db),
         "형식 프로파일 만듦": ensure_builtin_format_profiles(db),
         "형식 프로파일 맞춤": refresh_builtin_format_profiles(db),
+        # **맨 뒤다.** 항목이 있어야 이을 수 있고, 문헌 정의도 있어야 한다 —
+        # 정의는 배포에서 이 뒤에 적재되므로 갓 설치한 서버에서는 여기서 아무것도
+        # 안 만들어진다. 배포가 카탈로그를 심은 뒤 이 스크립트를 한 번 더 부른다.
+        "물성 항목 연결 만듦": ensure_builtin_property_links(db),
     }
 
 
