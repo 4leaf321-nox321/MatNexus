@@ -105,6 +105,7 @@ from app.shared import (
     litdeck,
     pagination,
     permissions,
+    property_names,
 )
 from app.shared.auth import current_user, require_system_admin
 from app.shared.errors import AppError, Conflict, Forbidden, NotFound
@@ -360,17 +361,37 @@ def _declared_row(material: Material, item: str) -> dict[str, Any] | None:
     return None
 
 
-#: 열물성 블록의 키 ↔ 기준정보 물성 항목 이름.
-#:
-#: **이름을 코드에 박는다.** 항목 목록 자체는 기준정보가 정하지만(D7), 덱의
-#: `*EXPANSION` 이 무엇을 받는지는 솔버가 정한 것이라 데이터가 아니다. 항목을
-#: 지우거나 이름을 바꾸면 그냥 이 블록이 비는 것이고, 그것이 맞는 결과다 —
-#: **틀린 값이 실리는 것보다 안 실리는 것이 낫다.**
-THERMAL_ITEMS = {
-    "thermal_expansion": "선팽창계수(CTE)",
-    "specific_heat": "비열",
-    "thermal_conductivity": "열전도율",
-}
+#: 선언 물성이 아니라 **재료·시료가 드는 값** — 표의 열이 아니라 상수로 실린다.
+#: 푸아송비는 재료 컬럼에서, 밀도는 시료 실측에서 온다.
+FROM_RECORD = ("poisson_ratio", "density")
+
+
+def _declared_items(block: str) -> dict[str, str]:
+    """이 항목란의 **칸 → 기준정보 항목 이름.** 항목란 선언에서 만든다.
+
+    전에는 이 표를 라우터가 한글 이름으로 들고 있었다(`THERMAL_ITEMS`,
+    `_declared(material, "탄성계수")`). 그 자리가 둘이 되면서 선언 물성이 카드로
+    가는 길이 **여섯 물성에 묶였고**, 새 물성은 이름을 코드에 더해야 했다.
+    지금은 칸이 자기 물성 키를 들고(`Produced.property_key`), 키 ↔ 이름의 정본은
+    기준정보 씨앗 하나다(`shared/property_names.builtin_item`).
+
+    기본 항목이 아닌 키(확장이 선언한 것)는 여기서 빠진다 — 그쪽은 「사내 항목
+    연결」 을 거쳐 `shared/declared_slots` 가 채운다.
+    """
+    cards.load_builtin()
+    try:
+        spec = cards.block(block)
+    except KeyError:
+        return {}
+    found: dict[str, str] = {}
+    for slot in spec.produces:
+        if slot.key in FROM_RECORD:
+            continue
+        item = property_names.builtin_item(slot.property_key)
+        if item:
+            found[slot.key] = item
+    return found
+
 
 #: 물려받는 값의 저장 단위. **응답에 값과 함께 실린다** — SI 값만 주면 받는 쪽이
 #: 단위를 짐작하고, 밀도에서 그것이 10¹² 배로 틀렸다(2026-09-06·09-11).
@@ -395,7 +416,7 @@ def _thermal_block(material: Material) -> dict[str, Any]:
     """
     values: dict[str, Any] = {}
     temperatures: set[float | None] = set()
-    for key, item in THERMAL_ITEMS.items():
+    for key, item in _declared_items("thermal").items():
         found = _declared(material, item)
         if found.value is None:
             continue
@@ -424,17 +445,13 @@ def _thermal_block(material: Material) -> dict[str, Any]:
     return values
 
 
-#: 온도에 따라 변하는 물성의 격자. `{블록 열 이름: 물성 항목 이름}`.
-#:
-#: **`*ELASTIC` 은 한 줄에 `(E, ν, T)` 를 받는다** — 둘이 한 표에 올라야 한다.
-#: **푸아송비는 여기 없다.** 선언 물성 항목이 아니라 재료 컬럼에서 오므로
-#: `constants` 로 들어간다 — 온도를 타게 하려면 그 항목을 축에 먼저 넣어야 한다.
-ELASTIC_COLUMNS = {"youngs_modulus": "탄성계수"}
+def _item_of(block: str, slot: str) -> str:
+    """칸 하나가 받는 기준정보 항목 이름. 없으면 빈 글자 — 그러면 값이 안 실린다.
 
-#: 열물성은 **키워드가 셋으로 갈리므로** 각자 자기 표를 갖는다. 그래도 한 격자에
-#: 모아 두는 이유는 카드가 표 하나로 읽히는 편이 낫기 때문이고, 렌더러가 값이
-#: 있는 온도만 그 키워드에 싣는다.
-THERMAL_COLUMNS = {key: label for key, label in THERMAL_ITEMS.items()}
+    **틀린 값이 실리는 것보다 안 실리는 것이 낫다**(항목을 지우거나 이름을 바꾼
+    경우가 그렇다).
+    """
+    return _declared_items(block).get(slot, "")
 
 
 def _constants(values: dict[str, Any]) -> dict[str, float]:
@@ -493,8 +510,9 @@ def _declared_blocks(
     값일 수 있고, 이 경로가 그것을 무시하면 같은 재료가 어느 버튼을 눌렀느냐에
     따라 다른 밀도를 갖는다.
     """
-    stated = _declared(material, "탄성계수")
-    stated_row = _declared_row(material, "탄성계수")
+    modulus_item = _item_of("elastic", "youngs_modulus")
+    stated = _declared(material, modulus_item)
+    stated_row = _declared_row(material, modulus_item)
     poisson = _inherit_poisson(material, poisson_override)
     # **지운 시료는 안 본다.** 밀도를 잘못 적어 지운 시료의 값이 카드에
     # 「실측」으로 박히면, 지운 그 값으로 해석을 돌리게 된다.
@@ -544,12 +562,12 @@ def _declared_blocks(
             detail=one.detail,
         )
         for key, label, one in (
-            ("youngs_modulus", "탄성계수", stated),
+            ("youngs_modulus", modulus_item, stated),
             ("poisson_ratio", "푸아송비", poisson),
             ("density", "밀도", density),
             *(
                 (key, label, _declared(material, label))
-                for key, label in THERMAL_ITEMS.items()
+                for key, label in _declared_items("thermal").items()
                 if key in thermal
             ),
         )
@@ -558,8 +576,21 @@ def _declared_blocks(
     return elastic, thermal, found
 
 
-#: 합성 소성 표의 재료가 되는 선언 항목들 — 기준정보 이름(2026-09-06 개명 후).
-SYNTH_ITEMS = ("항복강도", "인장강도", "연신율")
+#: 합성 소성 표의 재료가 되는 선언 물성 — **물성 키로 든다.**
+#:
+#: 이 셋은 카드 항목란의 칸이 아니라 곡선을 짓는 입력이라 항목란에서 끌어올 자리가
+#: 없다. 그래서 키를 여기 적되 **이름은 안 적는다** — 이름의 정본은 기준정보
+#: 씨앗이고, 키는 사람이 고치지 않는 식별자다.
+SYNTH_KEYS = (
+    "mechanical.yield_strength",
+    "mechanical.tensile_strength",
+    "mechanical.elongation_at_break",
+)
+
+
+def _synth_items() -> list[str]:
+    """합성에 쓰는 항목 이름 셋 — 순서는 `SYNTH_KEYS` 그대로(항복·인장·연신)."""
+    return [property_names.builtin_item(key) or "" for key in SYNTH_KEYS]
 
 
 def _synthetic_plastic(
@@ -573,12 +604,14 @@ def _synthetic_plastic(
     E = elastic.get("youngs_modulus")
     if not isinstance(E, (int, float)):
         return "탄성계수가 없습니다 — 선언 물성에 먼저 적으세요."
-    scalars = {item: _declared(material, item) for item in SYNTH_ITEMS}
+    items = _synth_items()
+    scalars = {item: _declared(material, item) for item in items}
+    yield_item, tensile_item, elongation_item = items
     curve = synth.synthesize(
         float(E),
-        scalars["항복강도"].value,
-        scalars["인장강도"].value,
-        scalars["연신율"].value,
+        scalars[yield_item].value,
+        scalars[tensile_item].value,
+        scalars[elongation_item].value,
     )
     if curve is None:
         return "항복강도(또는 인장강도)가 없습니다 — 지어낼 근거가 없습니다."
@@ -590,7 +623,7 @@ def _synthetic_plastic(
         f"합성 소성 표 — 실측이 아니다. 모델: {curve.model}",
         f"합성 주의 — {curve.note}",
     ]
-    for item in SYNTH_ITEMS:
+    for item in items:
         one = scalars[item]
         if one.value is None:
             continue
@@ -788,7 +821,7 @@ def _thermal_notes(material: Material, thermal: dict[str, Any]) -> list[str]:
     """
     return [
         f"{label}: {found.detail}"
-        for key, label in THERMAL_ITEMS.items()
+        for key, label in _declared_items("thermal").items()
         if key in thermal
         for found in [_declared(material, label)]
         if found.detail
@@ -1474,13 +1507,14 @@ def create_card(
         None,
     )
     samples = _samples_of(db, group)
-    stated = _declared(group.material, "탄성계수")
-    stated_row = _declared_row(group.material, "탄성계수")
+    modulus_item = _item_of("elastic", "youngs_modulus")
+    stated = _declared(group.material, modulus_item)
+    stated_row = _declared_row(group.material, modulus_item)
     poisson = _inherit_poisson(group.material, payload.poisson_ratio)
     density = _inherit_density(group.material, samples, payload.density)
     thermal = _thermal_block(group.material)
     uncut = _uncut_necking(group, strain)
-    thermal_rows = _declared_table(group.material, THERMAL_COLUMNS)
+    thermal_rows = _declared_table(group.material, _declared_items("thermal"))
     inherited_notes = [
         # 잰 값이면 처리 결과가 근거를 들고 있다. 적은 값일 때만 적는다 —
         # **어느 문서에서 왔는지가 카드에 없으면 되짚을 수 없다.**
@@ -1617,7 +1651,7 @@ def create_card(
     # 온도를 타면 표가 붙는다. **격자가 어긋나면 여기서 멈춘다** — 조용히 한쪽을
     # 버리면 덱은 나가고 재료만 딴판이 된다.
     elastic_rows = _declared_table(
-        group.material, ELASTIC_COLUMNS, constants=_constants(elastic)
+        group.material, _declared_items("elastic"), constants=_constants(elastic)
     )
 
     item = PropertyCard(
@@ -1940,8 +1974,10 @@ def create_declared_card(
     elastic, thermal, found = _declared_blocks(
         db, material, payload.poisson_ratio, payload.density
     )
-    elastic_rows = _declared_table(material, ELASTIC_COLUMNS, constants=_constants(elastic))
-    thermal_rows = _declared_table(material, THERMAL_COLUMNS)
+    elastic_rows = _declared_table(
+        material, _declared_items("elastic"), constants=_constants(elastic)
+    )
+    thermal_rows = _declared_table(material, _declared_items("thermal"))
 
     synthetic_rows: list[dict[str, Any]] = []
     synthetic_notes: list[str] = []
@@ -2413,7 +2449,7 @@ def create_rate_card(
     modulus, modulus_count = _mean_scalar_of_runs(db, lineage.runs, "youngs_modulus")
     modulus_source = "statistics"
     if modulus is None:
-        stated = _declared(material, "탄성계수")
+        stated = _declared(material, _item_of("elastic", "youngs_modulus"))
         modulus, modulus_source = stated.value, stated.source
     poisson = _inherit_poisson(material, payload.poisson_ratio)
     density = _inherit_density(material, lineage.samples, payload.density)
@@ -2573,7 +2609,7 @@ def create_card_from_group(
     modulus, modulus_count = _mean_scalar_of_runs(db, lineage.runs, "youngs_modulus")
     modulus_source = "statistics"
     if modulus is None:
-        stated = _declared(material, "탄성계수")
+        stated = _declared(material, _item_of("elastic", "youngs_modulus"))
         modulus, modulus_source = stated.value, stated.source
     poisson = _inherit_poisson(material, payload.poisson_ratio)
     density = _inherit_density(material, lineage.samples, payload.density)
@@ -2726,7 +2762,7 @@ def create_lve_card(
     thermal_rows: list[dict[str, Any]] = []
     if payload.include_declared:
         thermal_values = _thermal_block(material)
-        thermal_rows = _declared_table(material, THERMAL_COLUMNS)
+        thermal_rows = _declared_table(material, _declared_items("thermal"))
         notes.append(
             "재료 기본 정보(열물성)를 함께 실었습니다."
             if thermal_values

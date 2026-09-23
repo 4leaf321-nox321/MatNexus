@@ -313,22 +313,44 @@ BUILTIN_SPECIMEN_CATEGORIES: list[tuple[str, list[dict[str, Any]]]] = [
 #: 다르다). 지금 기계는 값 하나에 단위 하나라 셋을 한 칸에 받게 되고, 그러면
 #: **숫자는 그럴듯한데 뜻이 다른** 값이 저장된다 — 이 저장소가 가장 경계하는
 #: 종류다. 시험 척도를 값의 속성으로 드는 것이 먼저다.
-#: `(값, 차원, 기호, 붙는 곳, 우리가 재는 값, 시험 척도)`.
-BUILTIN_PROPERTY_ITEMS: list[tuple[str, str, str, str, str | None, str | None]] = [
-    ("탄성계수", "stress", "E", "재료", None, None),
-    ("전단탄성계수", "stress", "G", "재료", None, None),
-    ("선팽창계수(CTE)", "inverse_temperature", "alpha", "재료", None, None),
-    ("비열", "specific_heat", "Cp", "재료", None, None),
-    ("열전도율", "thermal_conductivity", "k", "재료", None, None),
+#: `(값, 차원, 기호, 붙는 곳, 우리가 재는 값, 시험 척도, 물성 키)`.
+#:
+#: **물성 키가 여기 있는 이유.** 카드 항목란의 칸은 자기가 어느 물성인지를 물성
+#: 키로 든다(`Produced.property_key`). 그 칸에 어떤 선언 물성이 들어갈지 고르려면
+#: 키 ↔ 항목 이름의 대응이 있어야 하는데, 그것을 코드 여러 곳에 한글 이름으로
+#: 적어 두면(전에는 카드 라우터가 「탄성계수」·「비열」 을 직접 들고 있었다) 항목
+#: 이름을 바꾸는 순간 그 자리들이 조용히 빈다. 이름의 정본은 여기 한 곳이다.
+BUILTIN_PROPERTY_ITEMS: list[tuple[str, str, str, str, str | None, str | None, str]] = [
+    ("탄성계수", "stress", "E", "재료", None, None, "mechanical.youngs_modulus"),
+    ("전단탄성계수", "stress", "G", "재료", None, None, "mechanical.shear_modulus"),
+    (
+        "선팽창계수(CTE)",
+        "inverse_temperature",
+        "alpha",
+        "재료",
+        None,
+        None,
+        "thermal.expansion_linear",
+    ),
+    ("비열", "specific_heat", "Cp", "재료", None, None, "thermal.specific_heat"),
+    ("열전도율", "thermal_conductivity", "k", "재료", None, None, "thermal.conductivity"),
     # 밀시트가 주는 것들. 앞의 둘은 **우리가 잰 값에 대응이 있다** — 그래서
     # 「밀시트가 말한 값과 우리가 잰 값이 맞나」를 물을 수 있다.
-    ("항복강도", "stress", "Rp", "시료", "proof_stress", None),
-    ("인장강도", "stress", "Rm", "시료", "tensile_strength", None),
+    ("항복강도", "stress", "Rp", "시료", "proof_stress", None, "mechanical.yield_strength"),
+    (
+        "인장강도",
+        "stress",
+        "Rm",
+        "시료",
+        "tensile_strength",
+        None,
+        "mechanical.tensile_strength",
+    ),
     # **연신율은 비워 둔다.** 밀시트의 A 는 파단 후 연신율인데 우리가 내는
     # `elongation_observed` 는 시험 창 안의 관측 최대 변형률이다 — 가깝지만
     # 같지 않다. 이어 붙이면 화면이 「맞다/틀리다」를 말하게 되고, 그 판정은
     # 두 값이 같은 것일 때만 뜻이 있다.
-    ("연신율", "strain", "A", "시료", None, None),
+    ("연신율", "strain", "A", "시료", None, None, "mechanical.elongation_at_break"),
     # **경도는 척도로 든다.** `HV 200`·`HB 200`·`HRC 200` 은 서로 다른 값이고
     # 환산식이 없다 — 규격(ASTM E140)이 참고표를 주지만 재료마다 다르고 그것도
     # 「대략」이라고 명시한다. 한 칸에 받으면 **숫자는 그럴듯한데 뜻이 다른**
@@ -336,8 +358,19 @@ BUILTIN_PROPERTY_ITEMS: list[tuple[str, str, str, str, str | None, str | None]] 
     #
     # 차원 자리는 안 쓴다(척도가 있으면 단위 검사를 건너뛴다). 자리를 비울 수
     # 없어 `dimensionless` 를 적어 둔다.
-    ("경도", "dimensionless", "H", "시료", None, "HV, HB, HRC, HRB, HS"),
+    (
+        "경도",
+        "dimensionless",
+        "H",
+        "시료",
+        None,
+        "HV, HB, HRC, HRB, HS",
+        "mechanical.hardness_vickers",
+    ),
 ]
+
+#: 물성 키 → 기본 항목 이름. **위 표에서 만든다** — 두 벌로 두면 한쪽만 고쳐진다.
+BUILTIN_ITEM_OF_KEY: dict[str, str] = {row[6]: row[0] for row in BUILTIN_PROPERTY_ITEMS}
 
 
 def refresh_builtin_property_items(db: Session) -> list[str]:
@@ -356,7 +389,7 @@ def refresh_builtin_property_items(db: Session) -> list[str]:
     if axis is None:
         return []
     changed: list[str] = []
-    for value, dimension, symbol, level, measured, scales in BUILTIN_PROPERTY_ITEMS:
+    for value, dimension, symbol, level, measured, scales, _key in BUILTIN_PROPERTY_ITEMS:
         term = db.scalar(
             select(VocabularyTerm).where(
                 VocabularyTerm.vocabulary_id == axis.id,
@@ -395,7 +428,7 @@ def ensure_builtin_property_items(db: Session) -> list[str]:
         return []
 
     created: list[str] = []
-    for value, dimension, symbol, level, measured, scales in BUILTIN_PROPERTY_ITEMS:
+    for value, dimension, symbol, level, measured, scales, _key in BUILTIN_PROPERTY_ITEMS:
         cleaned = clean(value)
         if cleaned is None:
             continue

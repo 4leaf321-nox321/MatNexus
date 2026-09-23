@@ -39,6 +39,7 @@ from sqlalchemy.orm import Session
 from app.modules.catalog import parameters
 from app.modules.catalog.models import CatalogDefinition, CatalogValue
 from app.modules.catalog.ontology_models import PropertyAlias, PropertyLink
+from app.modules.vocabulary.definitions import BUILTIN_ITEM_OF_KEY
 from app.modules.vocabulary.models import Vocabulary, VocabularyTerm
 from app.shared import semantic
 from app.shared.text import compare_key
@@ -379,6 +380,27 @@ def describe(candidates: list[Candidate]) -> dict[str, Any]:
             for one in candidates
         ],
     }
+
+
+def builtin_item(property_key: str | None) -> str | None:
+    """물성 키 → **기본 물성 항목 이름.** 기본 항목이 아니면 `None`.
+
+    카드 항목란의 칸은 자기가 어느 물성인지를 물성 키로 든다. 그 칸에 들어갈 선언
+    물성을 찾으려면 키를 항목 이름으로 바꿔야 하는데, 전에는 **카드 라우터가 한글
+    이름을 직접 들고 있었다**(「탄성계수」·「비열」·「선팽창계수(CTE)」…). 그러면
+    기준정보에서 항목 이름을 고치는 순간 그 자리가 조용히 빈다 — 오류 없이 값만
+    사라지는 종류다.
+
+    이름의 정본은 기준정보 씨앗 한 곳이다(`BUILTIN_PROPERTY_ITEMS`). 여기서는 그
+    표를 읽기만 한다.
+
+    **부서가 만든 항목은 여기 없다.** 그쪽은 `property_links`(사내 항목 연결)가
+    잇고, 그 다리는 `shared/coverage.item_property_map` 이 읽는다 — 두 길이 같은
+    물음("이 키가 우리 항목으로 무엇인가")에 답하지만, 이쪽은 **DB 없이** 답한다.
+    """
+    if not property_key:
+        return None
+    return BUILTIN_ITEM_OF_KEY.get(property_key)
 
 
 def item_terms(db: Session) -> list[VocabularyTerm]:
