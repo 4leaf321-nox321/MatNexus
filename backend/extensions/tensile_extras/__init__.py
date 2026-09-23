@@ -22,6 +22,7 @@ from . import (  # noqa: F401  (card 는 import 만으로 블록·렌더러를 �
     card,
     model_anchor,
     model_curve,
+    plastic_domain,
     ratio,
     temperature,
     terminal_domain,
@@ -332,6 +333,99 @@ register(
     version="1",
     prepare_options=model_anchor.prepare_options,
 )(model_anchor.model_anchor)
+
+register(
+    id="tensile.plastic_domain",
+    kind="processing",
+    label="모델 소성 구간",
+    applies_to=("tensile",),
+    requires_channels=(("displacement",), ("force",)),
+    params=(
+        ParamSpec(
+            name="proof_strain",
+            dimension="strain",
+            label="모델 소성 시작 변형률",
+            type="float",
+            unit="1",
+            default="@model_proof_strain",
+            help="모델 소성 시작점의 변형률 좌표입니다.",
+        ),
+        ParamSpec(
+            name="proof_stress",
+            label="모델 소성 시작 응력",
+            type="float",
+            unit="Pa",
+            default="@model_proof_stress",
+            help="같은 모델 소성 시작점의 응력이며 현재 곡선 보간값과 대조합니다.",
+        ),
+        ParamSpec(
+            name="end_strain",
+            dimension="strain",
+            label="소성 구간 끝 변형률",
+            type="float",
+            unit="1",
+            default="@necking_candidate_strain",
+            help="기본값은 네킹 후보 변형률입니다. 이 값 이하는 허용됩니다.",
+        ),
+        ParamSpec(
+            name="necking_limit",
+            dimension="strain",
+            label="네킹 상한 변형률",
+            type="float",
+            unit="1",
+            default="@necking_candidate_strain",
+            help=("네킹 후보 변형률을 상한으로 씁니다. end_strain 은 이를 넘을 수 없습니다."),
+        ),
+        ParamSpec(
+            name="strain",
+            label="변형률 열",
+            type="str",
+            role="column",
+            default=plastic_domain.DEFAULT_STRAIN,
+            unit="1",
+            dimension="strain",
+        ),
+        ParamSpec(
+            name="stress",
+            label="응력 열",
+            type="str",
+            role="column",
+            default=plastic_domain.DEFAULT_STRESS,
+            unit="Pa",
+        ),
+    ),
+    makes_values=(
+        Produced(key="plastic_domain_input_points", label="입력 관측점 수", si_unit="1"),
+        Produced(
+            key="plastic_domain_support_points", label="입력 모델 관측점 수", si_unit="1"
+        ),
+        Produced(key="plastic_domain_output_points", label="출력 구간 점 수", si_unit="1"),
+        Produced(key="plastic_domain_inserted_points", label="삽입 경계점 수", si_unit="1"),
+        Produced(
+            key="plastic_domain_proof_inserted", label="proof 경계 삽입 여부", si_unit="1"
+        ),
+        Produced(key="plastic_domain_end_inserted", label="끝 경계 삽입 여부", si_unit="1"),
+        Produced(
+            key="plastic_domain_proof_strain",
+            label="모델 proof 변형률",
+            si_unit="1",
+        ),
+        Produced(key="plastic_domain_proof_stress", label="모델 proof 응력", si_unit="Pa"),
+        Produced(
+            key="plastic_domain_end_strain",
+            label="소성 구간 끝 변형률",
+            si_unit="1",
+        ),
+        Produced(
+            key="plastic_domain_necking_limit",
+            label="네킹 상한 변형률",
+            si_unit="1",
+        ),
+    ),
+    order=87,
+    version="1",
+    prepare_options=plastic_domain.prepare_options,
+)(plastic_domain.plastic_domain)
 
 register(
     id="tensile.temperature_family",

@@ -27,9 +27,13 @@ order:
    this selected domain, not from a model curve or the separately retained
    full-acquisition measurement.
 4. Choose one of the seven existing model operations, then run
-   `tensile.model_anchor` with the retained-source `@youngs_modulus`. Pass
-   **both** model proof stress and strain to `tensile.true_plastic`.
-5. Keep later resampling and cropping within the model start point and the
+   `tensile.model_anchor` with the retained-source `@youngs_modulus`.
+5. For the paired plastic-domain flow, run `tensile.plastic_domain` after the
+   anchor and before `tensile.true_plastic`. It validates the paired model
+   point and selects model rows through the chosen end, bounded by the
+   retained-source necking candidate. Pass **both** validated proof values to
+   `tensile.true_plastic`.
+6. Keep later resampling and cropping within the selected model start and the
    unnecked range used for plastic conversion.
 
 Store each of the seven method recipes explicitly; catalog order only controls
@@ -48,8 +52,8 @@ fracture elongation. Keep the full acquired extent as separate source
 provenance.
 
 After the retained-source E and Rp steps and the chosen model operation, the
-model anchor can inherit the retained-source E. The final two stages use the
-paired model stress and strain explicitly:
+model anchor can inherit the retained-source E. The plastic-domain stage then
+checks and forwards its paired stress and strain explicitly:
 
 ```json
 [
@@ -58,11 +62,15 @@ paired model stress and strain explicitly:
     "options": {"offset_strain": 0.002}
   },
   {
+    "plugin": "tensile.plastic_domain",
+    "options": {}
+  },
+  {
     "plugin": "tensile.true_plastic",
     "options": {
       "youngs_modulus": "@youngs_modulus",
-      "proof_stress": "@model_proof_stress",
-      "proof_strain": "@model_proof_strain"
+      "proof_stress": "@plastic_domain_proof_stress",
+      "proof_strain": "@plastic_domain_proof_strain"
     }
   }
 ]
@@ -121,19 +129,21 @@ selection, retained-source strength/E/Rp/necking, and then the model curve and
 `tensile.model_anchor`. When the recipe includes
 `tensile.necking_candidate`, calculate it on the retained, unmodified source
 prefix after `tensile.terminal_domain` and before the model operation. The
-paired model stress and strain still go to `tensile.true_plastic`:
+paired model stress and strain pass through `tensile.plastic_domain` before
+`tensile.true_plastic`:
 
 ```json
 [
   {"plugin": "tensile.terminal_domain", "options": {}},
   {"plugin": "tensile.model_curve", "options": {}},
   {"plugin": "tensile.model_anchor", "options": {"offset_strain": 0.002}},
+  {"plugin": "tensile.plastic_domain", "options": {}},
   {
     "plugin": "tensile.true_plastic",
     "options": {
       "youngs_modulus": "@youngs_modulus",
-      "proof_stress": "@model_proof_stress",
-      "proof_strain": "@model_proof_strain"
+      "proof_stress": "@plastic_domain_proof_stress",
+      "proof_strain": "@plastic_domain_proof_strain"
     }
   }
 ]
@@ -192,6 +202,57 @@ before the model operation. Their E and Rp use the existing automatic-E method
 and 0.2% proof-line convention; a missing fit or observed crossing means that
 method could not measure it on the selected prefix, not that the material
 physically lacks a yield point.
+
+The newer [`recipes/adaptive_plastic_domain_v1_examples.json`](recipes/adaptive_plastic_domain_v1_examples.json)
+contains seven separate examples using `tensile.plastic_domain` after
+`tensile.model_anchor`. These replace the R14 engineering resample/crop pair
+with the bounded observed-row domain step, then keep the existing true-plastic,
+sort, monotone and final resample stages. The examples set source
+`tensile.proof_stress.search_start` to `@elastic_window_end`; this limits the
+search to after the selected E window but does not validate that window as a
+physically elastic interval. No fitted-origin correction is adopted by
+default, and source-origin sensitivity remains unresolved in issue #30. The
+new examples are comparison references, not automatic defaults or a claim of
+universal material-card approval. They do not rewrite the historical R14
+examples or saved recipes.
+
+Each R15 example sets `curve.sort_unique.duplicate_policy` to `first`. The
+plastic domain begins at the paired proof point, but `tensile.true_plastic` can
+clip the next row to the same zero plastic strain. Keeping the first duplicate
+preserves the validated proof stress as the initial table value; choosing the
+last duplicate can replace it with the following row's stress. The actual PC
+Test1 upper-envelope run exposed this case. The later clipped row is the one
+discarded by duplicate removal; this recipe choice does not change the source
+origin or establish that it is physically correct. Historical R14 recipe
+examples keep their original option.
+
+## Paired plastic-domain stage
+
+`tensile.plastic_domain` retains the paired proof/end boundaries and every
+current model row strictly between them. It adds only a missing proof or end
+endpoint by linear interpolation across numeric columns. It requires at least
+two current input rows after the proof point through the end before inserting
+endpoints.
+That count describes the frame it receives: upstream resampling does not make
+those rows additional original observations. The supplied examples avoid
+resampling before this stage. The inserted rows are derived coordinates and
+must not be described as measured acquisition rows.
+
+By default, the step takes the proof pair from `tensile.model_anchor`, the end
+from `tensile.necking_candidate`, and the upper bound from that same necking
+candidate. A reviewed manual `necking_limit` is an explicit boundary choice;
+it is not an automatically measured necking value. A shorter `end_strain` is
+allowed, but it cannot exceed the selected limit. The step checks the paired
+proof stress against the model curve, refuses extrapolation, and rejects
+negative modeled stress or strain at or below -1 inside the selected domain.
+The source engineering E and Rp stages run earlier on the retained, unmodified
+source prefix and remain unchanged.
+
+Use `@plastic_domain_proof_stress` and `@plastic_domain_proof_strain` together
+in `tensile.true_plastic`. That forwards the validated pair when a recipe uses
+a manual model start point; the seven examples use the automatic anchor pair.
+This step does not infer a physical origin, create additional observed points,
+or establish that the model domain is suitable for a solver or material card.
 
 ## Scoped follow-ups
 

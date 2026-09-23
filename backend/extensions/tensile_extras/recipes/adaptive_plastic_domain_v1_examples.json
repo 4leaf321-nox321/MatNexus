@@ -1,0 +1,657 @@
+{
+  "schema": "matnexus.tensile.adaptive_plastic_domain_examples/1",
+  "description": "R15 versioned reference recipes. Uses retained-source E, proof search from the automatic E window end, and a bounded endpoint-preserving plastic domain. Not auto-installed or universal card defaults; the downstream dense grid is interpolated, not additional measured data.",
+  "recipes": [
+    {
+      "key": "r15_adaptive_plastic_domain_lower_envelope_auto_v1",
+      "label": "적응형 소성영역 참고 레시피 — 하측 포락선",
+      "description": "R15 reference example for lower_envelope_auto_v1; experimental interpolation preserves paired model proof endpoints but does not establish a physical material-card default.",
+      "test_type_key": "tensile",
+      "steps": [
+        {
+          "plugin": "tensile.engineering",
+          "options": {
+            "gauge_length": "@specimen_gauge_length",
+            "area": "@specimen_area"
+          }
+        },
+        {
+          "plugin": "tensile.terminal_domain",
+          "options": {
+            "policy": "terminal_loss_auto_v1",
+            "strain": "strain_engineering",
+            "stress": "stress_engineering",
+            "time": "time"
+          }
+        },
+        {
+          "plugin": "tensile.strength",
+          "options": {}
+        },
+        {
+          "plugin": "tensile.elastic_modulus",
+          "options": {
+            "method": "auto"
+          }
+        },
+        {
+          "plugin": "tensile.proof_stress",
+          "options": {
+            "offset_strain": 0.002,
+            "youngs_modulus": "@youngs_modulus",
+            "search_start": "@elastic_window_end"
+          }
+        },
+        {
+          "plugin": "tensile.necking_candidate",
+          "options": {}
+        },
+        {
+          "plugin": "tensile.yield_drop",
+          "options": {
+            "method": "lower_envelope_auto_v1"
+          }
+        },
+        {
+          "plugin": "tensile.model_anchor",
+          "options": {
+            "offset_strain": 0.002,
+            "youngs_modulus": "@youngs_modulus"
+          }
+        },
+        {
+          "plugin": "tensile.plastic_domain",
+          "options": {}
+        },
+        {
+          "plugin": "tensile.true_plastic",
+          "options": {
+            "youngs_modulus": "@youngs_modulus",
+            "proof_stress": "@plastic_domain_proof_stress",
+            "proof_strain": "@plastic_domain_proof_strain"
+          }
+        },
+        {
+          "plugin": "curve.sort_unique",
+          "options": {
+            "x": "strain_true_plastic",
+            "duplicate_policy": "first"
+          }
+        },
+        {
+          "plugin": "curve.monotone",
+          "options": {
+            "column": "stress_true",
+            "x": "strain_true_plastic"
+          }
+        },
+        {
+          "plugin": "curve.resample",
+          "options": {
+            "x": "strain_true_plastic",
+            "count": 300,
+            "start": 0
+          }
+        }
+      ]
+    },
+    {
+      "key": "r15_adaptive_plastic_domain_isotonic_auto_v1",
+      "label": "적응형 소성영역 참고 레시피 — 단조 포락선",
+      "description": "R15 reference example for isotonic_auto_v1; experimental interpolation preserves paired model proof endpoints but does not establish a physical material-card default.",
+      "test_type_key": "tensile",
+      "steps": [
+        {
+          "plugin": "tensile.engineering",
+          "options": {
+            "gauge_length": "@specimen_gauge_length",
+            "area": "@specimen_area"
+          }
+        },
+        {
+          "plugin": "tensile.terminal_domain",
+          "options": {
+            "policy": "terminal_loss_auto_v1",
+            "strain": "strain_engineering",
+            "stress": "stress_engineering",
+            "time": "time"
+          }
+        },
+        {
+          "plugin": "tensile.strength",
+          "options": {}
+        },
+        {
+          "plugin": "tensile.elastic_modulus",
+          "options": {
+            "method": "auto"
+          }
+        },
+        {
+          "plugin": "tensile.proof_stress",
+          "options": {
+            "offset_strain": 0.002,
+            "youngs_modulus": "@youngs_modulus",
+            "search_start": "@elastic_window_end"
+          }
+        },
+        {
+          "plugin": "tensile.necking_candidate",
+          "options": {}
+        },
+        {
+          "plugin": "tensile.yield_drop",
+          "options": {
+            "method": "isotonic_auto_v1"
+          }
+        },
+        {
+          "plugin": "tensile.model_anchor",
+          "options": {
+            "offset_strain": 0.002,
+            "youngs_modulus": "@youngs_modulus"
+          }
+        },
+        {
+          "plugin": "tensile.plastic_domain",
+          "options": {}
+        },
+        {
+          "plugin": "tensile.true_plastic",
+          "options": {
+            "youngs_modulus": "@youngs_modulus",
+            "proof_stress": "@plastic_domain_proof_stress",
+            "proof_strain": "@plastic_domain_proof_strain"
+          }
+        },
+        {
+          "plugin": "curve.sort_unique",
+          "options": {
+            "x": "strain_true_plastic",
+            "duplicate_policy": "first"
+          }
+        },
+        {
+          "plugin": "curve.monotone",
+          "options": {
+            "column": "stress_true",
+            "x": "strain_true_plastic"
+          }
+        },
+        {
+          "plugin": "curve.resample",
+          "options": {
+            "x": "strain_true_plastic",
+            "count": 300,
+            "start": 0
+          }
+        }
+      ]
+    },
+    {
+      "key": "r15_adaptive_plastic_domain_median_plateau_auto_v1",
+      "label": "적응형 소성영역 참고 레시피 — 중앙값 평탄부",
+      "description": "R15 reference example for median_plateau_auto_v1; experimental interpolation preserves paired model proof endpoints but does not establish a physical material-card default.",
+      "test_type_key": "tensile",
+      "steps": [
+        {
+          "plugin": "tensile.engineering",
+          "options": {
+            "gauge_length": "@specimen_gauge_length",
+            "area": "@specimen_area"
+          }
+        },
+        {
+          "plugin": "tensile.terminal_domain",
+          "options": {
+            "policy": "terminal_loss_auto_v1",
+            "strain": "strain_engineering",
+            "stress": "stress_engineering",
+            "time": "time"
+          }
+        },
+        {
+          "plugin": "tensile.strength",
+          "options": {}
+        },
+        {
+          "plugin": "tensile.elastic_modulus",
+          "options": {
+            "method": "auto"
+          }
+        },
+        {
+          "plugin": "tensile.proof_stress",
+          "options": {
+            "offset_strain": 0.002,
+            "youngs_modulus": "@youngs_modulus",
+            "search_start": "@elastic_window_end"
+          }
+        },
+        {
+          "plugin": "tensile.necking_candidate",
+          "options": {}
+        },
+        {
+          "plugin": "tensile.yield_drop",
+          "options": {
+            "method": "median_plateau_auto_v1"
+          }
+        },
+        {
+          "plugin": "tensile.model_anchor",
+          "options": {
+            "offset_strain": 0.002,
+            "youngs_modulus": "@youngs_modulus"
+          }
+        },
+        {
+          "plugin": "tensile.plastic_domain",
+          "options": {}
+        },
+        {
+          "plugin": "tensile.true_plastic",
+          "options": {
+            "youngs_modulus": "@youngs_modulus",
+            "proof_stress": "@plastic_domain_proof_stress",
+            "proof_strain": "@plastic_domain_proof_strain"
+          }
+        },
+        {
+          "plugin": "curve.sort_unique",
+          "options": {
+            "x": "strain_true_plastic",
+            "duplicate_policy": "first"
+          }
+        },
+        {
+          "plugin": "curve.monotone",
+          "options": {
+            "column": "stress_true",
+            "x": "strain_true_plastic"
+          }
+        },
+        {
+          "plugin": "curve.resample",
+          "options": {
+            "x": "strain_true_plastic",
+            "count": 300,
+            "start": 0
+          }
+        }
+      ]
+    },
+    {
+      "key": "r15_adaptive_plastic_domain_linear_auto_v1",
+      "label": "적응형 소성영역 참고 레시피 — 선형 항복강하",
+      "description": "R15 reference example for linear_auto_v1; experimental interpolation preserves paired model proof endpoints but does not establish a physical material-card default.",
+      "test_type_key": "tensile",
+      "steps": [
+        {
+          "plugin": "tensile.engineering",
+          "options": {
+            "gauge_length": "@specimen_gauge_length",
+            "area": "@specimen_area"
+          }
+        },
+        {
+          "plugin": "tensile.terminal_domain",
+          "options": {
+            "policy": "terminal_loss_auto_v1",
+            "strain": "strain_engineering",
+            "stress": "stress_engineering",
+            "time": "time"
+          }
+        },
+        {
+          "plugin": "tensile.strength",
+          "options": {}
+        },
+        {
+          "plugin": "tensile.elastic_modulus",
+          "options": {
+            "method": "auto"
+          }
+        },
+        {
+          "plugin": "tensile.proof_stress",
+          "options": {
+            "offset_strain": 0.002,
+            "youngs_modulus": "@youngs_modulus",
+            "search_start": "@elastic_window_end"
+          }
+        },
+        {
+          "plugin": "tensile.necking_candidate",
+          "options": {}
+        },
+        {
+          "plugin": "tensile.yield_drop",
+          "options": {
+            "method": "linear_auto_v1"
+          }
+        },
+        {
+          "plugin": "tensile.model_anchor",
+          "options": {
+            "offset_strain": 0.002,
+            "youngs_modulus": "@youngs_modulus"
+          }
+        },
+        {
+          "plugin": "tensile.plastic_domain",
+          "options": {}
+        },
+        {
+          "plugin": "tensile.true_plastic",
+          "options": {
+            "youngs_modulus": "@youngs_modulus",
+            "proof_stress": "@plastic_domain_proof_stress",
+            "proof_strain": "@plastic_domain_proof_strain"
+          }
+        },
+        {
+          "plugin": "curve.sort_unique",
+          "options": {
+            "x": "strain_true_plastic",
+            "duplicate_policy": "first"
+          }
+        },
+        {
+          "plugin": "curve.monotone",
+          "options": {
+            "column": "stress_true",
+            "x": "strain_true_plastic"
+          }
+        },
+        {
+          "plugin": "curve.resample",
+          "options": {
+            "x": "strain_true_plastic",
+            "count": 300,
+            "start": 0
+          }
+        }
+      ]
+    },
+    {
+      "key": "r15_adaptive_plastic_domain_least_squares_auto_v1",
+      "label": "적응형 소성영역 참고 레시피 — 최소제곱 직선",
+      "description": "R15 reference example for least_squares_auto_v1; experimental interpolation preserves paired model proof endpoints but does not establish a physical material-card default.",
+      "test_type_key": "tensile",
+      "steps": [
+        {
+          "plugin": "tensile.engineering",
+          "options": {
+            "gauge_length": "@specimen_gauge_length",
+            "area": "@specimen_area"
+          }
+        },
+        {
+          "plugin": "tensile.terminal_domain",
+          "options": {
+            "policy": "terminal_loss_auto_v1",
+            "strain": "strain_engineering",
+            "stress": "stress_engineering",
+            "time": "time"
+          }
+        },
+        {
+          "plugin": "tensile.strength",
+          "options": {}
+        },
+        {
+          "plugin": "tensile.elastic_modulus",
+          "options": {
+            "method": "auto"
+          }
+        },
+        {
+          "plugin": "tensile.proof_stress",
+          "options": {
+            "offset_strain": 0.002,
+            "youngs_modulus": "@youngs_modulus",
+            "search_start": "@elastic_window_end"
+          }
+        },
+        {
+          "plugin": "tensile.necking_candidate",
+          "options": {}
+        },
+        {
+          "plugin": "tensile.yield_drop",
+          "options": {
+            "method": "least_squares_auto_v1"
+          }
+        },
+        {
+          "plugin": "tensile.model_anchor",
+          "options": {
+            "offset_strain": 0.002,
+            "youngs_modulus": "@youngs_modulus"
+          }
+        },
+        {
+          "plugin": "tensile.plastic_domain",
+          "options": {}
+        },
+        {
+          "plugin": "tensile.true_plastic",
+          "options": {
+            "youngs_modulus": "@youngs_modulus",
+            "proof_stress": "@plastic_domain_proof_stress",
+            "proof_strain": "@plastic_domain_proof_strain"
+          }
+        },
+        {
+          "plugin": "curve.sort_unique",
+          "options": {
+            "x": "strain_true_plastic",
+            "duplicate_policy": "first"
+          }
+        },
+        {
+          "plugin": "curve.monotone",
+          "options": {
+            "column": "stress_true",
+            "x": "strain_true_plastic"
+          }
+        },
+        {
+          "plugin": "curve.resample",
+          "options": {
+            "x": "strain_true_plastic",
+            "count": 300,
+            "start": 0
+          }
+        }
+      ]
+    },
+    {
+      "key": "r15_adaptive_plastic_domain_robust_linear_auto_v1",
+      "label": "적응형 소성영역 참고 레시피 — 강건 선형 모델",
+      "description": "R15 reference example for robust_linear_auto_v1; experimental interpolation preserves paired model proof endpoints but does not establish a physical material-card default.",
+      "test_type_key": "tensile",
+      "steps": [
+        {
+          "plugin": "tensile.engineering",
+          "options": {
+            "gauge_length": "@specimen_gauge_length",
+            "area": "@specimen_area"
+          }
+        },
+        {
+          "plugin": "tensile.terminal_domain",
+          "options": {
+            "policy": "terminal_loss_auto_v1",
+            "strain": "strain_engineering",
+            "stress": "stress_engineering",
+            "time": "time"
+          }
+        },
+        {
+          "plugin": "tensile.strength",
+          "options": {}
+        },
+        {
+          "plugin": "tensile.elastic_modulus",
+          "options": {
+            "method": "auto"
+          }
+        },
+        {
+          "plugin": "tensile.proof_stress",
+          "options": {
+            "offset_strain": 0.002,
+            "youngs_modulus": "@youngs_modulus",
+            "search_start": "@elastic_window_end"
+          }
+        },
+        {
+          "plugin": "tensile.necking_candidate",
+          "options": {}
+        },
+        {
+          "plugin": "tensile.yield_drop",
+          "options": {
+            "method": "robust_linear_auto_v1"
+          }
+        },
+        {
+          "plugin": "tensile.model_anchor",
+          "options": {
+            "offset_strain": 0.002,
+            "youngs_modulus": "@youngs_modulus"
+          }
+        },
+        {
+          "plugin": "tensile.plastic_domain",
+          "options": {}
+        },
+        {
+          "plugin": "tensile.true_plastic",
+          "options": {
+            "youngs_modulus": "@youngs_modulus",
+            "proof_stress": "@plastic_domain_proof_stress",
+            "proof_strain": "@plastic_domain_proof_strain"
+          }
+        },
+        {
+          "plugin": "curve.sort_unique",
+          "options": {
+            "x": "strain_true_plastic",
+            "duplicate_policy": "first"
+          }
+        },
+        {
+          "plugin": "curve.monotone",
+          "options": {
+            "column": "stress_true",
+            "x": "strain_true_plastic"
+          }
+        },
+        {
+          "plugin": "curve.resample",
+          "options": {
+            "x": "strain_true_plastic",
+            "count": 300,
+            "start": 0
+          }
+        }
+      ]
+    },
+    {
+      "key": "r15_adaptive_plastic_domain_upper_envelope_auto_v1",
+      "label": "적응형 소성영역 참고 레시피 — 상측 포락선",
+      "description": "R15 reference example for upper_envelope_auto_v1; experimental interpolation preserves paired model proof endpoints but does not establish a physical material-card default.",
+      "test_type_key": "tensile",
+      "steps": [
+        {
+          "plugin": "tensile.engineering",
+          "options": {
+            "gauge_length": "@specimen_gauge_length",
+            "area": "@specimen_area"
+          }
+        },
+        {
+          "plugin": "tensile.terminal_domain",
+          "options": {
+            "policy": "terminal_loss_auto_v1",
+            "strain": "strain_engineering",
+            "stress": "stress_engineering",
+            "time": "time"
+          }
+        },
+        {
+          "plugin": "tensile.strength",
+          "options": {}
+        },
+        {
+          "plugin": "tensile.elastic_modulus",
+          "options": {
+            "method": "auto"
+          }
+        },
+        {
+          "plugin": "tensile.proof_stress",
+          "options": {
+            "offset_strain": 0.002,
+            "youngs_modulus": "@youngs_modulus",
+            "search_start": "@elastic_window_end"
+          }
+        },
+        {
+          "plugin": "tensile.necking_candidate",
+          "options": {}
+        },
+        {
+          "plugin": "tensile.model_curve",
+          "options": {
+            "method": "upper_envelope_auto_v1"
+          }
+        },
+        {
+          "plugin": "tensile.model_anchor",
+          "options": {
+            "offset_strain": 0.002,
+            "youngs_modulus": "@youngs_modulus"
+          }
+        },
+        {
+          "plugin": "tensile.plastic_domain",
+          "options": {}
+        },
+        {
+          "plugin": "tensile.true_plastic",
+          "options": {
+            "youngs_modulus": "@youngs_modulus",
+            "proof_stress": "@plastic_domain_proof_stress",
+            "proof_strain": "@plastic_domain_proof_strain"
+          }
+        },
+        {
+          "plugin": "curve.sort_unique",
+          "options": {
+            "x": "strain_true_plastic",
+            "duplicate_policy": "first"
+          }
+        },
+        {
+          "plugin": "curve.monotone",
+          "options": {
+            "column": "stress_true",
+            "x": "strain_true_plastic"
+          }
+        },
+        {
+          "plugin": "curve.resample",
+          "options": {
+            "x": "strain_true_plastic",
+            "count": 300,
+            "start": 0
+          }
+        }
+      ]
+    }
+  ]
+}
