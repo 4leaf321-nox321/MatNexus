@@ -71,7 +71,7 @@ register(
 register(
     id="tensile.terminal_domain",
     kind="processing",
-    label="인장 모델 말단 구간",
+    label="인장 시험 종료 구간",
     applies_to=("tensile",),
     requires_channels=(("displacement",), ("force",)),
     params=(
@@ -87,20 +87,27 @@ register(
             },
             choice_help={
                 terminal_domain.AUTO_POLICY: (
-                    "진행축의 마지막 10% 안에서 급격하고 회복되지 않는 하중 소실만 제외합니다."
+                    "진행축 마지막 10%에서 급격하고 회복되지 않는 하중 소실만 제외합니다. "
+                    "응력값은 바꾸지 않으므로 뒤에 둔 강도·E·Rp 단계는 보존한 원응력에서 "
+                    "계산됩니다."
                 ),
                 terminal_domain.MANUAL_POLICY: (
-                    "현재 입력 프레임의 0부터 세는 마지막 포함 행을 직접 지정합니다."
+                    "현재 입력 프레임의 0부터 세는 마지막 포함 행을 직접 지정합니다. "
+                    "전체 공학 변환 직후라면 원래 취득행 인덱스와 같습니다."
                 ),
             },
         ),
         ParamSpec(
             name="end_index",
-            label="마지막 포함 행 위치 (0부터)",
+            label="마지막 포함 행 위치 (현재 프레임, 0부터)",
             type="int",
             required=True,
             when={"policy": (terminal_domain.MANUAL_POLICY,)},
-            help="검토한 현재 입력 프레임 행 위치. 해당 행까지 포함하고 뒤 행은 모두 뺍니다.",
+            help=(
+                "현재 입력 프레임의 0-based 행 위치입니다. 전체 공학 변환 직후라면 원래 "
+                "취득행 위치와 같고, upstream crop 뒤라면 그 입력 프레임 기준입니다. "
+                "해당 행까지 포함하고 뒤 행은 제외합니다."
+            ),
         ),
         ParamSpec(
             name="strain",
@@ -121,7 +128,7 @@ register(
         ),
         ParamSpec(
             name="time",
-            label="시간 열",
+            label="시간 열 (선택)",
             type="str",
             role="column",
             unit="s",
@@ -136,7 +143,7 @@ register(
             key="terminal_domain_end_index",
             label="모델 구간 끝 행 위치 (0부터)",
             si_unit="1",
-            help="유지한 현재 입력 프레임의 마지막 행 위치(포함).",
+            help="유지한 현재 입력 프레임에서 0부터 세는 마지막 행 위치(포함).",
         ),
         Produced(
             key="terminal_domain_end_strain",
@@ -177,7 +184,7 @@ register(
             ),
         ),
     ),
-    order=81,
+    order=20,
     version="1",
 )(terminal_domain.terminal_domain)
 

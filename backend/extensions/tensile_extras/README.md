@@ -1,34 +1,55 @@
-# Tensile extras: source-first plastic-model recipe
+# Tensile extras: retained-source plastic-model recipe
 
-Use `tensile.model_anchor` when the plastic model needs a chosen offset-line start
-point while the Rp calculated from the original curve remains available as its
-own result.
+Use `tensile.model_anchor` when the plastic model needs a chosen offset-line
+start point while Rp from the selected unmodified source prefix remains a
+separate result when an observed crossing exists.
 The plugin reuses the observed-intersection calculation from
 `tensile.proof_stress`; it names the outputs `model_proof_stress`,
 `model_proof_strain`, and `model_proof_offset`. These values describe a model
-curve start. They are not the Rp calculated from the original curve and do not
-replace the original `proof_stress` result or its property mapping.
+curve start. They are distinct from source Rp, which is measured on the
+retained, unmodified engineering-stress prefix when the data contain an
+observed crossing. They do not replace that `proof_stress` result or its
+property mapping, and they do not restate measurements from the full acquired
+curve.
 
-Keep the recipe source-first:
+For each new model-method recipe, save a new explicit recipe version with this
+order:
 
-1. Calculate source-curve E and raw proof strength before changing the model
-   domain or applying a model operation. If a later crop uses a
-   `tensile.necking_candidate`, record it on the acquired curve first.
-2. For a new model recipe, add `tensile.terminal_domain` after those source
-   measurements. Then select one intended model operation: an existing
-   `tensile.yield_drop` method or `tensile.model_curve`.
-3. Run `tensile.model_anchor` on that model curve, using the original measured
-   E, and pass **both** model references to `tensile.true_plastic`.
-4. Resample or crop only when needed, retaining the model start strain and
-   staying within the unnecked range used for plastic conversion.
+1. Run `tensile.engineering` on the acquired curve without changing its row
+   order. Keep the full acquired record available as the original source.
+2. Run `tensile.terminal_domain` immediately after engineering conversion. It
+   selects one common prefix across every channel and leaves the original
+   engineering stress values unchanged.
+3. Run `tensile.strength`, `tensile.elastic_modulus`,
+   `tensile.proof_stress`, and `tensile.necking_candidate` on that retained
+   unmodified source prefix. E and Rp are measured before any model operation;
+   the retained-source E comes from unmodified engineering stress values in
+   this selected domain, not from a model curve or the separately retained
+   full-acquisition measurement.
+4. Choose one of the seven existing model operations, then run
+   `tensile.model_anchor` with the retained-source `@youngs_modulus`. Pass
+   **both** model proof stress and strain to `tensile.true_plastic`.
+5. Keep later resampling and cropping within the model start point and the
+   unnecked range used for plastic conversion.
 
-The terminal step is explicit in new recipes; catalog order does not insert it
-into a pipeline. Saved recipes keep their existing behavior. A `lower_yield`
-plateau remains a model approximation and does not measure ReL or Lüders strain.
+Store each of the seven method recipes explicitly; catalog order only controls
+display and never inserts a processing stage into a pipeline. This is a new
+recipe version, not an edit to historical saved recipes. Retain their full-
+acquisition results separately. A `lower_yield` plateau remains a model
+approximation and does not measure ReL or Lüders strain.
 
-After the source E and raw Rp steps and the chosen model operation, the model
-anchor can inherit the original E. The final two stages use the paired model
-stress and strain explicitly:
+The terminal stage selects rows; it does not recalibrate, shift, or otherwise
+modify stress. If a proof crossing existed only across the excluded terminal
+collapse, the retained-source `tensile.proof_stress` result must remain
+unavailable. Do not interpolate across removed rows, extrapolate, adjust E, or
+reuse the historical full-acquisition Rp. After a terminal crop,
+`elongation_observed` describes the retained source endpoint; it does not infer
+fracture elongation. Keep the full acquired extent as separate source
+provenance.
+
+After the retained-source E and Rp steps and the chosen model operation, the
+model anchor can inherit the retained-source E. The final two stages use the
+paired model stress and strain explicitly:
 
 ```json
 [
@@ -47,19 +68,24 @@ stress and strain explicitly:
 ]
 ```
 
-The raw proof step records the 0.2% Rp calculated from the original curve. The
-model anchor may use another offset and operates on the selected model curve.
+The raw proof step records the 0.2% Rp calculated from the retained, unmodified
+source prefix, if that prefix contains an observed crossing. The model anchor
+may use another offset and operates on the selected model curve.
 Pass its stress and strain together: passing stress alone can select a different
 stress crossing and lose the chosen offset coordinate.
 
 ## Common model-domain step
 
-Put `tensile.terminal_domain` after source E, raw Rp, and any
-`tensile.necking_candidate` measurement, then before the chosen model operation.
-Use it in each new recipe for the seven supported model operations. It selects
-one inclusive prefix for every channel in the current frame; the original
-engineering curve and its E/Rp results remain unchanged. The next model method
-still applies its own strain-order and conversion checks.
+Put `tensile.terminal_domain` immediately after `tensile.engineering` and before
+`tensile.strength`, `tensile.elastic_modulus`, `tensile.proof_stress`, or
+`tensile.necking_candidate`. Use this order in a new version of each of the
+seven model-method recipes. The stage selects one inclusive prefix for every
+channel in the current frame without changing any stress values. Thus the
+following strength, E, Rp, and necking measurements use the retained, unmodified
+source stress before any model approximation. The full acquired curve and
+historical full-domain measurements remain separately available; the old saved
+recipes are not rewritten. Later model methods still apply their own
+strain-order and conversion checks.
 
 The default `terminal_loss_auto_v1` only removes a supported, abrupt load loss
 near the recorded end when the load does not recover. An available `time`
@@ -74,8 +100,10 @@ do not identify necking or fracture.
 
 Use `manual_end_v1` with a reviewed zero-based `end_index` when the automatic
 decision is ambiguous or a different boundary is intended. The selected row is
-included; every later row is excluded from all channels. Its index is relative
-to the current frame, so an upstream crop changes the index domain.
+included; every later row is excluded from all channels. The index refers to
+the current input frame: immediately after a full `tensile.engineering` step it
+matches the original acquisition row position, while an upstream crop changes
+the index domain.
 
 ## Upper-envelope model curve
 
@@ -88,12 +116,12 @@ receives, raises every drop including small ones, keeps every row in that
 selected prefix, and holds the last running maximum through its recorded end.
 It does not rejoin a later measured tail.
 
-The upper-envelope recipe follows source E, raw Rp, and terminal-domain
-selection with the model curve and then `tensile.model_anchor`. If a later crop
-will use a
-`tensile.necking_candidate`, calculate the candidate on the acquired curve
-before applying `tensile.terminal_domain`. The paired model stress and strain
-still go to `tensile.true_plastic`:
+The upper-envelope recipe follows engineering conversion, terminal-domain
+selection, retained-source strength/E/Rp/necking, and then the model curve and
+`tensile.model_anchor`. When the recipe includes
+`tensile.necking_candidate`, calculate it on the retained, unmodified source
+prefix after `tensile.terminal_domain` and before the model operation. The
+paired model stress and strain still go to `tensile.true_plastic`:
 
 ```json
 [
@@ -129,11 +157,11 @@ that row is not inferred to be fracture. Keep plastic conversion within the
 unnecked range.
 
 When `youngs_modulus` is omitted from the anchor options, its local preparation
-hook references the earlier `@youngs_modulus`. An explicitly entered number is
-used as supplied, and another reference remains intact. The anchor does not
-recompute E from the edited curve. Keep the original measured E step before the
-selected model operation; use an intentional numeric E only when the recipe
-calls for a user-specified modulus.
+hook references the earlier retained-source `@youngs_modulus`. An explicitly
+entered number is used as supplied, and another reference remains intact. The
+anchor does not recompute E from the edited curve. Keep the retained-source E
+step before the selected model operation; use an intentional numeric E only
+when the recipe calls for a user-specified modulus.
 
 The paired values remain valid through resampling and cropping only while the
 model start point remains inside the retained curve. A crop that removes that
@@ -145,6 +173,25 @@ This extension does not rewrite saved recipes or reorder their steps globally.
 It also does not create a complete material-card pipeline automatically. Add
 the steps to a reviewed recipe and connect the values the intended downstream
 stages consume.
+
+## Versioned retained-source recipe examples
+
+[`recipes/valid_source_properties_v1_examples.json`](recipes/valid_source_properties_v1_examples.json)
+contains seven self-contained `RecipeCreateRequest`-shaped examples, one for
+each existing model method. They are explicit comparison/reference recipes for
+the R14 retained-source ordering; they are not auto-installed, a new registry
+kind, or universal card defaults. Before posting an object to the existing
+recipes API, set `owner_workspace_slug` to the actual intended workspace slug;
+omit it only for deliberate global creation by a system administrator. Then
+review the created recipe's stages and options in that workspace. The frozen
+comparison options include downstream resampling from zero; some real records
+hold at that stage, so completion or material-card approval is not implied.
+Keep the full-acquisition record and historic saved recipes unchanged. The
+examples compute source strength/E/Rp/necking on the retained unmodified prefix
+before the model operation. Their E and Rp use the existing automatic-E method
+and 0.2% proof-line convention; a missing fit or observed crossing means that
+method could not measure it on the selected prefix, not that the material
+physically lacks a yield point.
 
 ## Scoped follow-ups
 

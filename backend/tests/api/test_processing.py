@@ -790,7 +790,10 @@ class Test자동하강프로필저장:
             model_curve = steps_by_id["tensile.model_curve"]
             terminal_domain = steps_by_id["tensile.terminal_domain"]
             assert model_curve["label"] == "소성 모델 공칭곡선"
-            assert terminal_domain["order"] == 81
+            assert terminal_domain["label"] == "인장 시험 종료 구간"
+            assert terminal_domain["order"] == 20
+            assert steps_by_id["tensile.engineering"]["order"] < terminal_domain["order"]
+            assert terminal_domain["order"] < steps_by_id["tensile.elastic_modulus"]["order"]
             assert model_curve["order"] == 82
             assert terminal_domain["order"] < model_curve["order"]
             curve_params = {one["name"]: one for one in model_curve["params"]}
