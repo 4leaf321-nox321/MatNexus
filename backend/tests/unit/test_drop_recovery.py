@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 
 import numpy as np
 import pytest
@@ -12,6 +13,7 @@ from matcore.processing import Frame, ProcessingError, Step
 from matcore.processing._drop_recovery import DropEvent, detect_events
 from matcore.processing.tensile import (
     AUTO_LOWER_ENVELOPE_METHOD,
+    AUTO_YIELD_PROFILES,
     _expand_event_intervals,
     _fit_linear,
 )
@@ -332,6 +334,230 @@ def test_auto_lower_envelope_rejects_non_increasing_strain_without_sorting() -> 
 
     np.testing.assert_array_equal(frame.columns["strain_engineering"], original_x)
     np.testing.assert_array_equal(frame.columns["stress_engineering"], original_y)
+
+
+@pytest.mark.parametrize(
+    ("profile_id", "base_method", "slope_constraint", "anchor_policy"),
+    [
+        pytest.param(
+            profile.id,
+            profile.method,
+            profile.slope_constraint,
+            profile.anchor_policy,
+            id=profile.id,
+        )
+        for profile in AUTO_YIELD_PROFILES
+    ],
+)
+def test_auto_profiles_ignore_stale_controls_and_match_their_fixed_advanced_path(
+    profile_id: str,
+    base_method: str,
+    slope_constraint: str | None,
+    anchor_policy: str | None,
+) -> None:
+    base = _frame([0, 10, 20, 30, 40, 50, 60, 70, 80, 100, 100, 50, 90, 100, 110])
+    frame = Frame(
+        {
+            "eps": base.columns["strain_engineering"].copy(),
+            "sig": base.columns["stress_engineering"].copy(),
+            "time": base.columns["time"].copy(),
+            "source_row": base.columns["source_row"].copy(),
+        },
+        {"eps": "1", "sig": "Pa", "time": "s", "source_row": "1"},
+    )
+    original = {key: values.copy() for key, values in frame.columns.items()}
+    requested = {
+        "method": profile_id,
+        "scope": "full",
+        "threshold": -1.0,
+        "recovery_threshold": 2.0,
+        "min_reference_fraction": -2.0,
+        "min_slope": -3.0,
+        "terminal_action": "hold",
+        "range_start": -2.0,
+        "range_end": -1.0,
+        "plateau_start": 0.03,
+        "plateau_end": 0.01,
+        "plateau_stress": 0.0,
+        "slope_constraint": "bogus",
+        "strain": "eps",
+        "stress": "sig",
+    }
+    saved_recipe = json.dumps(
+        {"plugin": "tensile.yield_drop", "options": requested}, sort_keys=True
+    )
+    automatic = _run(frame, **json.loads(saved_recipe)["options"])
+    repeated = _run(frame, **json.loads(saved_recipe)["options"])
+
+    explicit_options: dict[str, object] = {
+        "scope": "events",
+        "method": base_method,
+        "threshold": 0.005,
+        "recovery_threshold": 0.005,
+        "min_reference_fraction": 0.05,
+        "min_slope": 0.0,
+        "terminal_action": "keep",
+        "strain": "eps",
+        "stress": "sig",
+    }
+    if slope_constraint is not None:
+        explicit_options["slope_constraint"] = slope_constraint
+    if anchor_policy is not None:
+        explicit_options["anchor_policy"] = anchor_policy
+    explicit = _run(frame, **explicit_options)
+
+    expected_options = dict(explicit_options)
+    expected_options["method"] = profile_id
+    assert automatic.stages[0].options == expected_options
+    assert repeated.stages[0].options == expected_options
+    assert automatic.stages[0].notes == repeated.stages[0].notes
+    assert automatic.stages[0].scalars == repeated.stages[0].scalars
+    assert any("고정 규칙" in note and "scope, threshold" in note for note in automatic.notes)
+    np.testing.assert_array_equal(
+        automatic.frame.columns["sig"], repeated.frame.columns["sig"]
+    )
+    for key, values in original.items():
+        np.testing.assert_array_equal(frame.columns[key], values)
+        if key != "sig":
+            np.testing.assert_array_equal(automatic.frame.columns[key], values)
+    assert _scalar(automatic, "auto_edit_applied") == 1
+    event_keys = (
+        "event_count",
+        "recovered_count",
+        "partial_count",
+        "open_partial_count",
+        "unrecovered_count",
+    )
+    for key in event_keys:
+        assert _scalar(automatic, key) == pytest.approx(_scalar(explicit, key))
+    if anchor_policy is None:
+        np.testing.assert_array_equal(
+            automatic.frame.columns["sig"], explicit.frame.columns["sig"]
+        )
+        for key in (
+            "yield_drop_points",
+            "remaining_drop_count",
+            "fit_r_squared",
+            "fit_rmse",
+        ):
+            assert _scalar(automatic, key) == pytest.approx(_scalar(explicit, key))
+
+
+@pytest.mark.parametrize(
+    ("profile_id", "slope_constraint", "anchor_policy"),
+    [
+        pytest.param(
+            profile.id, profile.slope_constraint, profile.anchor_policy, id=profile.id
+        )
+        for profile in AUTO_YIELD_PROFILES
+    ],
+)
+def test_auto_profiles_need_only_method_and_preserve_no_event_inputs(
+    profile_id: str, slope_constraint: str | None, anchor_policy: str | None
+) -> None:
+    frame = _frame([10, 11, 12, 13])
+    original = {key: values.copy() for key, values in frame.columns.items()}
+
+    result = _run(frame, method=profile_id)
+
+    expected_options: dict[str, object] = {
+        "scope": "events",
+        "method": profile_id,
+        "threshold": 0.005,
+        "recovery_threshold": 0.005,
+        "min_reference_fraction": 0.05,
+        "min_slope": 0.0,
+        "terminal_action": "keep",
+        "strain": "strain_engineering",
+        "stress": "stress_engineering",
+    }
+    if slope_constraint is not None:
+        expected_options["slope_constraint"] = slope_constraint
+    if anchor_policy is not None:
+        expected_options["anchor_policy"] = anchor_policy
+    assert result.stages[0].options == expected_options
+    assert _scalar(result, "event_count") == 0
+    assert _scalar(result, "auto_edit_applied") == 0
+    assert _scalar(result, "auto_review_required") == 0
+    assert _scalar(result, "auto_terminal_only") == 0
+    assert any("v1 기준의 편집 대상 사건이 없어" in note for note in result.notes)
+    for key, values in original.items():
+        np.testing.assert_array_equal(frame.columns[key], values)
+        np.testing.assert_array_equal(result.frame.columns[key], values)
+
+
+@pytest.mark.parametrize(
+    "profile_id",
+    [
+        pytest.param(profile.id, id=profile.id)
+        for profile in AUTO_YIELD_PROFILES
+        if profile.anchor_policy is not None
+    ],
+)
+def test_auto_anchor_profiles_fit_a_deep_recovered_drop(profile_id: str) -> None:
+    frame = _frame([0, 10, 20, 30, 40, 50, 60, 70, 80, 100, 100, 1, 90, 100, 110])
+    original = frame.columns["stress_engineering"].copy()
+
+    result = _run(frame, method=profile_id)
+
+    fixed = result.frame.columns["stress_engineering"]
+    assert _scalar(result, "auto_edit_applied") == 1
+    assert _scalar(result, "auto_review_required") == 0
+    np.testing.assert_array_equal(frame.columns["stress_engineering"], original)
+    anchor_note = next(note for note in result.notes if "core index 10~12" in note)
+    anchors = re.search(r"실제 앵커 index (\d+)~(\d+)", anchor_note)
+    assert anchors is not None
+    left, right = (int(value) for value in anchors.groups())
+    assert right == 13
+    assert fixed[left] == original[left]
+    assert fixed[right] == original[right]
+    np.testing.assert_array_equal(fixed[:left], original[:left])
+    np.testing.assert_array_equal(fixed[right:], original[right:])
+    assert np.all(np.diff(fixed[left : right + 1]) >= 0)
+
+
+@pytest.mark.parametrize(
+    "profile_id",
+    [
+        pytest.param(profile.id, id=profile.id)
+        for profile in AUTO_YIELD_PROFILES
+        if profile.anchor_policy is not None
+    ],
+)
+def test_auto_anchor_profiles_leave_terminal_tail_exact_and_flag_review(
+    profile_id: str,
+) -> None:
+    frame = _frame([0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 50, 75, 100, 80, 70])
+    original = frame.columns["stress_engineering"].copy()
+
+    result = _run(frame, method=profile_id)
+
+    fixed = result.frame.columns["stress_engineering"]
+    assert _scalar(result, "auto_edit_applied") == 1
+    assert _scalar(result, "auto_review_required") == 1
+    assert _scalar(result, "auto_terminal_only") == 0
+    np.testing.assert_array_equal(fixed[13:], original[13:])
+    assert any("보호 말단 구간" in note and "13~15" in note for note in result.notes)
+
+
+@pytest.mark.parametrize(
+    "profile_id",
+    [
+        pytest.param(profile.id, id=profile.id)
+        for profile in AUTO_YIELD_PROFILES
+        if profile.anchor_policy is not None
+    ],
+)
+def test_auto_anchor_terminal_only_preserves_raw_and_requires_review(profile_id: str) -> None:
+    frame = _frame([0, 100, 90, 80])
+    original = frame.columns["stress_engineering"].copy()
+
+    result = _run(frame, method=profile_id)
+
+    np.testing.assert_array_equal(result.frame.columns["stress_engineering"], original)
+    assert _scalar(result, "auto_edit_applied") == 0
+    assert _scalar(result, "auto_review_required") == 1
+    assert _scalar(result, "auto_terminal_only") == 1
 
 
 def test_scoped_edit_holds_when_selected_strain_is_not_strict() -> None:

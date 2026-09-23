@@ -18,6 +18,7 @@
 from __future__ import annotations
 
 import math
+from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
@@ -32,6 +33,11 @@ from matcore.processing import (
     option_int,
     option_text,
     require_increasing,
+)
+from matcore.processing._auto_yield_fit import (
+    AutoYieldFitError,
+    AutoYieldFitResult,
+    fit_event_cores,
 )
 from matcore.processing._drop_recovery import DropEvent, detect_events
 
@@ -1543,10 +1549,81 @@ YIELD_DROP_THRESHOLD = 0.005
 
 YIELD_DROP_SCOPES = ("full", "range", "events")
 AUTO_LOWER_ENVELOPE_METHOD = "lower_envelope_auto_v1"
-_AUTO_LOWER_ENVELOPE_THRESHOLD = 0.005
-_AUTO_LOWER_ENVELOPE_RECOVERY_THRESHOLD = 0.005
-_AUTO_LOWER_ENVELOPE_MIN_REFERENCE_FRACTION = 0.05
-_AUTO_LOWER_ENVELOPE_MIN_SLOPE = 0.0
+AUTO_EVENT_ANCHOR_POLICY = "observed_event_anchors_v1"
+_AUTO_PROFILE_THRESHOLD = 0.005
+_AUTO_PROFILE_RECOVERY_THRESHOLD = 0.005
+_AUTO_PROFILE_MIN_REFERENCE_FRACTION = 0.05
+_AUTO_PROFILE_MIN_SLOPE = 0.0
+
+
+@dataclass(frozen=True)
+class _AutoYieldProfile:
+    id: str
+    method: str
+    label: str
+    slope_constraint: str | None = None
+    anchor_policy: str | None = None
+
+
+AUTO_YIELD_PROFILES = (
+    _AutoYieldProfile("envelope_auto_v1", "envelope", "상측 포락선 — 자동"),
+    _AutoYieldProfile("isotonic_auto_v1", "isotonic", "단조 회귀 — 자동"),
+    _AutoYieldProfile("lower_envelope_auto_v1", "lower_envelope", "하측 포락선 — 자동"),
+    _AutoYieldProfile(
+        "median_plateau_auto_v1",
+        "median_plateau",
+        "중앙값 평탄부 — 자동",
+        anchor_policy=AUTO_EVENT_ANCHOR_POLICY,
+    ),
+    _AutoYieldProfile(
+        "linear_auto_v1",
+        "linear",
+        "양끝 직선 — 자동",
+        "nondecreasing",
+        AUTO_EVENT_ANCHOR_POLICY,
+    ),
+    _AutoYieldProfile(
+        "least_squares_auto_v1",
+        "least_squares",
+        "최소제곱 직선 — 자동",
+        "nondecreasing",
+        AUTO_EVENT_ANCHOR_POLICY,
+    ),
+    _AutoYieldProfile(
+        "robust_linear_auto_v1",
+        "robust_linear",
+        "Huber 강건 직선 — 자동",
+        "nondecreasing",
+        AUTO_EVENT_ANCHOR_POLICY,
+    ),
+)
+_AUTO_YIELD_PROFILE_BY_ID = {profile.id: profile for profile in AUTO_YIELD_PROFILES}
+AUTO_YIELD_PROFILE_IDS = tuple(profile.id for profile in AUTO_YIELD_PROFILES)
+_AUTO_METHOD_HELP = {
+    profile.id: (
+        (
+            f"같은 사건 검출을 사용해 {profile.label.removesuffix(' — 자동')}의 "
+            "접합 구간을 자동으로 선택합니다. "
+            if profile.anchor_policy is not None
+            else (
+                f"같은 자동 검출 구간에 {profile.label.removesuffix(' — 자동')}을 적용합니다. "
+            )
+        )
+        + "하강·회복 문턱 0.5%, 기준 봉우리 비율 5%, 최소 기울기 0, "
+        "말단 원본 보존 규칙은 고정되어 있습니다."
+        + (
+            " 직선 기울기는 비감소로 고정합니다."
+            if profile.slope_constraint == "nondecreasing"
+            else ""
+        )
+    )
+    for profile in AUTO_YIELD_PROFILES
+}
+# Keep the original private names stable for any in-repository diagnostics.
+_AUTO_LOWER_ENVELOPE_THRESHOLD = _AUTO_PROFILE_THRESHOLD
+_AUTO_LOWER_ENVELOPE_RECOVERY_THRESHOLD = _AUTO_PROFILE_RECOVERY_THRESHOLD
+_AUTO_LOWER_ENVELOPE_MIN_REFERENCE_FRACTION = _AUTO_PROFILE_MIN_REFERENCE_FRACTION
+_AUTO_LOWER_ENVELOPE_MIN_SLOPE = _AUTO_PROFILE_MIN_SLOPE
 YIELD_DROP_METHODS = (
     "envelope",
     "isotonic",
@@ -1554,14 +1631,14 @@ YIELD_DROP_METHODS = (
     "cut",
     "keep",
     "lower_envelope",
-    AUTO_LOWER_ENVELOPE_METHOD,
     "median_plateau",
     "linear",
     "least_squares",
     "robust_linear",
+    *AUTO_YIELD_PROFILE_IDS,
 )
 _YIELD_DROP_MANUAL_METHODS = tuple(
-    method for method in YIELD_DROP_METHODS if method != AUTO_LOWER_ENVELOPE_METHOD
+    method for method in YIELD_DROP_METHODS if method not in _AUTO_YIELD_PROFILE_BY_ID
 )
 _FULL_METHODS = ("envelope", "isotonic", "lower_yield", "cut", "keep")
 _SCOPED_METHODS = (
@@ -2160,6 +2237,7 @@ def _scoped_result(
     min_slope: float,
     requested_start: float | None,
     requested_end: float | None,
+    auto_profile: _AutoYieldProfile | None = None,
 ) -> StepResult:
     slope_constraint = str(options.get("slope_constraint") or "none")
     terminal_action = str(options.get("terminal_action") or "hold")
@@ -2246,7 +2324,92 @@ def _scoped_result(
     else:
         intervals = [(int(domain[0]), int(domain[-1]))]
 
-    if method in _MONOTONE_SCOPED_METHODS and scope == "events":
+    auto_fit: AutoYieldFitResult | None = None
+    if auto_profile is not None and auto_profile.anchor_policy is not None:
+        terminal_peaks = [event.peak_index for event in terminal]
+        search_end = min(terminal_peaks) if terminal_peaks else len(stress) - 1
+        candidate_window, _candidate_count, _rising_count = _auto_window(
+            strain[: search_end + 1], stress[: search_end + 1]
+        )
+        if candidate_window is not None:
+            preserve_boundary = int(
+                np.searchsorted(strain[: search_end + 1], candidate_window[1], side="right")
+                - 1
+            )
+            preserve_boundary_reason = "_auto_window candidate end row"
+        else:
+            prefix = stress[: search_end + 1]
+            peak = int(np.argmax(prefix))
+            initial_max = float(prefix[peak])
+            hits = np.flatnonzero(prefix[: peak + 1] >= initial_max * 0.4)
+            preserve_boundary = int(hits[0]) if hits.size else peak
+            preserve_boundary_reason = (
+                "candidate unavailable; conservative first 40% of pre-peak rise"
+            )
+        auto_cores = [
+            (event.peak_index, event.end_index)
+            for event in events
+            if event.kind in ("full_recovery", "partial_recovery")
+        ]
+        protected = [
+            (event.peak_index, event.end_index)
+            for event in terminal
+            if terminal_action == "keep"
+        ]
+        try:
+            auto_fit = fit_event_cores(
+                strain,
+                stress,
+                auto_cores,
+                protected,
+                preserve_boundary,
+                method,
+                preserve_boundary_reason=preserve_boundary_reason,
+            )
+        except AutoYieldFitError as exc:
+            raise ProcessingError(f"자동 앵커 처리 보류: {exc}") from exc
+        fixed = auto_fit.values.copy()
+        intervals = [(region.left_anchor, region.right_anchor) for region in auto_fit.regions]
+        protected_note = (
+            ", ".join(f"{start}~{end}" for start, end in auto_fit.protected_intervals)
+            or "없음"
+        )
+        notes.append(
+            f"자동 앵커 정책 {auto_profile.anchor_policy}; 보존 경계 index "
+            f"{auto_fit.preserve_boundary} ({auto_fit.preserve_boundary_reason}); "
+            f"보호 말단 구간 {protected_note}."
+        )
+        for region in auto_fit.regions:
+            start = region.core_start
+            end = region.core_end
+            left = region.left_anchor
+            right = region.right_anchor
+            unconstrained = (
+                "없음"
+                if region.unconstrained_endpoints is None
+                else f"{region.unconstrained_endpoints[0]:.6g}~"
+                f"{region.unconstrained_endpoints[1]:.6g} Pa"
+            )
+            huber_delta = (
+                "없음" if region.huber_delta is None else f"{region.huber_delta:.6g} Pa"
+            )
+            notes.append(
+                f"자동 적합 core index {start}~{end}, 실제 앵커 index {left}~{right} "
+                f"(변형률 {float(strain[left]):.6g}~{float(strain[right]):.6g}); "
+                f"앵커 응력 {float(stress[left]):.6g}~{float(stress[right]):.6g} Pa, "
+                f"c0={region.c0 if region.c0 is not None else '없음'}, "
+                f"왼쪽 앵커 탐색 기준 {region.target_stress:.6g} Pa, "
+                f"비제약 끝값 {unconstrained}, 제약 끝값 "
+                f"{region.constrained_endpoints[0]:.6g}~"
+                f"{region.constrained_endpoints[1]:.6g} Pa, "
+                f"Huber delta={huber_delta}, 제약 적용={region.constraint_applied}; "
+                f"접합 구간 {left}~{start} 및 {end}~{right}, "
+                f"영향 행 폭 {right - left + 1}, core 대비 확장 폭 "
+                f"{right - left + 1 - (end - start + 1)}, "
+                f"코어 R²={region.fit_r_squared:.6g}, RMSE={region.fit_rmse:.6g} Pa, "
+                f"최대 변경량={region.max_abs_distortion:.6g} Pa."
+            )
+    elif method in _MONOTONE_SCOPED_METHODS and scope == "events":
         protected_intervals = [
             (event.peak_index, event.end_index)
             for event in terminal
@@ -2265,15 +2428,16 @@ def _scoped_result(
         )
         notes.extend(expansion_notes)
 
-    fixed = stress.astype(np.float64).copy()
-    for start, end in intervals:
-        fixed[start : end + 1], _score, _rmse = _fit_segment(
-            method,
-            strain[start : end + 1],
-            stress[start : end + 1],
-            min_slope=min_slope,
-            slope_constraint=slope_constraint,
-        )
+    if auto_fit is None:
+        fixed = stress.astype(np.float64).copy()
+        for start, end in intervals:
+            fixed[start : end + 1], _score, _rmse = _fit_segment(
+                method,
+                strain[start : end + 1],
+                stress[start : end + 1],
+                min_slope=min_slope,
+                slope_constraint=slope_constraint,
+            )
 
     if scope == "events" and terminal_action == "keep":
         for event in terminal:
@@ -2289,7 +2453,11 @@ def _scoped_result(
 
     changed = int(np.count_nonzero(fixed != stress))
     boundary_count, boundary_max = _boundary_metrics(stress, fixed, intervals)
-    score, rmse = _fit_interval_statistics(stress, fixed, intervals)
+    score, rmse = (
+        (auto_fit.fit_r_squared, auto_fit.fit_rmse)
+        if auto_fit is not None
+        else _fit_interval_statistics(stress, fixed, intervals)
+    )
     remaining = int(np.count_nonzero(np.diff(fixed[domain]) < 0))
     method_note = {
         "envelope": "선택 구간 prefix envelope",
@@ -2313,7 +2481,12 @@ def _scoped_result(
             "2점 robust_linear 구간은 제약이 없을 때 끝점 직선과 동일하지만, "
             "기울기 제약 시 달라질 수 있으며 이상점을 분별할 수 없습니다."
         )
-    if method in ("median_plateau", "linear", "least_squares", "robust_linear"):
+    if auto_fit is not None:
+        notes.append(
+            "관측 앵커와 보호 말단은 원본 값 그대로 두고, 자동 접합 구간에서만 "
+            "비감소 모델 근사를 적용했습니다."
+        )
+    elif method in ("median_plateau", "linear", "least_squares", "robust_linear"):
         notes.append(
             f"{method}은 양끝 연속을 수치적으로 보장하지 않습니다: 추가 경계 jump "
             f"{boundary_count}개, 최대 {boundary_max:.6g} Pa, 남은 하강 {remaining}개."
@@ -2375,7 +2548,7 @@ def _scoped_result(
                 "cut": "첫 검출 봉우리에서 자르기",
                 "keep": "그대로 두고 재기만",
                 "lower_envelope": "뒤쪽 최솟값 포락선",
-                AUTO_LOWER_ENVELOPE_METHOD: "하측 포락선 — 자동",
+                **{profile.id: profile.label for profile in AUTO_YIELD_PROFILES},
                 "median_plateau": "중앙값 평탄부",
                 "linear": "양끝 직선",
                 "least_squares": "최소제곱 직선",
@@ -2391,10 +2564,7 @@ def _scoped_result(
                 "lower_envelope": (
                     "suffix running minimum으로 선택 구간의 하강 아래 경계를 계산합니다."
                 ),
-                AUTO_LOWER_ENVELOPE_METHOD: (
-                    "사건을 자동 검출해 하측 포락선을 적용합니다. 하강·회복 문턱 0.5%, "
-                    "최소 기준 봉우리 5%, 말단 원본 보존 규칙을 고정해 사용합니다."
-                ),
+                **_AUTO_METHOD_HELP,
                 "median_plateau": "선택 구간 응력의 중앙값으로 평탄부를 만듭니다.",
                 "linear": "선택 구간 양끝을 잇는 직선을 계산합니다.",
                 "least_squares": "선택 구간의 OLS 직선을 계산합니다.",
@@ -2554,13 +2724,13 @@ def _scoped_result(
         Produced(key="remaining_drop_count", label="남은 하강 수", si_unit="1"),
         Produced(
             key="auto_edit_applied",
-            label="자동 하측 편집 적용",
+            label="자동 근사 편집 적용",
             si_unit="1",
             help="자동 프로필에서 원응력 값이 실제로 바뀌었으면 1입니다.",
         ),
         Produced(
             key="auto_review_required",
-            label="자동 하측 검토 필요",
+            label="자동 근사 검토 필요",
             si_unit="1",
             help=(
                 "미회복 말단 또는 관측 종료까지 열린 부분 회복 사건이 있어 "
@@ -2569,7 +2739,7 @@ def _scoped_result(
         ),
         Produced(
             key="auto_terminal_only",
-            label="자동 하측 말단 사건만",
+            label="자동 근사 말단 사건만",
             si_unit="1",
             help="회복 사건 없이 미회복 말단 사건만 검출되면 1입니다.",
         ),
@@ -2605,7 +2775,7 @@ def _scoped_result(
         ),
     ),
     order=35,
-    version="5",
+    version="6",
 )
 def yield_drop(frame: Frame, options: dict[str, Any]) -> StepResult:
     """공칭 응력의 하강과 회복을 선택한 방법으로 진단·처리한다.
@@ -2614,29 +2784,43 @@ def yield_drop(frame: Frame, options: dict[str, Any]) -> StepResult:
     원행 영역을 계산 대상으로 삼으며, 사건 검출은 변형률 정렬이나 중복 제거 없이
     관측 행 순서에서 수행한다. 검출만으로 하강 원인을 판정하지 않는다.
     """
-    if options.get("method") == AUTO_LOWER_ENVELOPE_METHOD:
+    requested_method = options.get("method")
+    profile = (
+        _AUTO_YIELD_PROFILE_BY_ID.get(requested_method)
+        if isinstance(requested_method, str)
+        else None
+    )
+    if profile is not None:
         strain_key = str(options.get("strain") or STRAIN)
         stress_key = str(options.get("stress") or STRESS)
         fixed_options: dict[str, Any] = {
             "scope": "events",
-            "method": "lower_envelope",
-            "threshold": _AUTO_LOWER_ENVELOPE_THRESHOLD,
-            "recovery_threshold": _AUTO_LOWER_ENVELOPE_RECOVERY_THRESHOLD,
-            "min_reference_fraction": _AUTO_LOWER_ENVELOPE_MIN_REFERENCE_FRACTION,
-            "min_slope": _AUTO_LOWER_ENVELOPE_MIN_SLOPE,
+            "method": profile.method,
+            "threshold": _AUTO_PROFILE_THRESHOLD,
+            "recovery_threshold": _AUTO_PROFILE_RECOVERY_THRESHOLD,
+            "min_reference_fraction": _AUTO_PROFILE_MIN_REFERENCE_FRACTION,
+            "min_slope": _AUTO_PROFILE_MIN_SLOPE,
             "terminal_action": "keep",
             "strain": strain_key,
             "stress": stress_key,
         }
+        if profile.slope_constraint is not None:
+            fixed_options["slope_constraint"] = profile.slope_constraint
+        if profile.anchor_policy is not None:
+            fixed_options["anchor_policy"] = profile.anchor_policy
         strain_raw, stress_raw, strain_key, stress_key = _pair(frame, fixed_options)
         strain, _stress = _finite_pair(strain_raw, stress_raw, strain_key, stress_key)
         if np.any(np.diff(strain) <= 0):
             raise ProcessingError(
-                f"자동 하측 포락선은 '{strain_key}'의 원행 변형률이 엄격히 증가해야 "
+                f"자동 처리 프로필 '{profile.label}'은 '{strain_key}'의 원행 변형률이 "
+                "엄격히 증가해야 "
                 "합니다. 원래 측정 순서를 확인하세요. 자동 전역 정렬은 하지 않습니다."
             )
 
-        result = yield_drop(frame, fixed_options)
+        internal_options = dict(fixed_options)
+        if profile.anchor_policy is not None:
+            internal_options["_auto_profile"] = profile
+        result = yield_drop(frame, internal_options)
         result_values = {item.key: item.value for item in result.scalars}
         event_count = result_values.get("event_count", 0.0)
         full_count = result_values.get("recovered_count", 0.0)
@@ -2652,13 +2836,14 @@ def yield_drop(frame: Frame, options: dict[str, Any]) -> StepResult:
         edit_applied = changed_points > 0
         ignored_defaults: dict[str, Any] = {
             "scope": "events",
-            "method": AUTO_LOWER_ENVELOPE_METHOD,
-            "threshold": _AUTO_LOWER_ENVELOPE_THRESHOLD,
-            "recovery_threshold": _AUTO_LOWER_ENVELOPE_RECOVERY_THRESHOLD,
-            "min_reference_fraction": _AUTO_LOWER_ENVELOPE_MIN_REFERENCE_FRACTION,
-            "min_slope": _AUTO_LOWER_ENVELOPE_MIN_SLOPE,
+            "method": profile.id,
+            "threshold": _AUTO_PROFILE_THRESHOLD,
+            "recovery_threshold": _AUTO_PROFILE_RECOVERY_THRESHOLD,
+            "min_reference_fraction": _AUTO_PROFILE_MIN_REFERENCE_FRACTION,
+            "min_slope": _AUTO_PROFILE_MIN_SLOPE,
             "terminal_action": "keep",
-            "slope_constraint": "none",
+            "slope_constraint": profile.slope_constraint or "none",
+            "anchor_policy": profile.anchor_policy,
             "range_start": None,
             "range_end": None,
             "plateau_start": None,
@@ -2673,7 +2858,7 @@ def yield_drop(frame: Frame, options: dict[str, Any]) -> StepResult:
         notes = list(result.notes)
         if ignored:
             notes.append(
-                "lower_envelope_auto_v1 고정 규칙이 적용되어 전달된 입력 "
+                f"{profile.id} 고정 규칙이 적용되어 전달된 입력 "
                 f"{', '.join(ignored)}은 무시했습니다."
             )
         if event_count == 0:
@@ -2693,7 +2878,7 @@ def yield_drop(frame: Frame, options: dict[str, Any]) -> StepResult:
             )
         elif edit_applied:
             notes.append(
-                f"자동 하측 포락선이 원응력 {changed_points:.0f}점을 실제로 바꿨습니다."
+                f"선택한 자동 방법이 원응력 {changed_points:.0f}점을 실제로 바꿨습니다."
             )
         else:
             notes.append("회복 사건은 검출했지만 포락선이 원응력과 같아 실제 변경은 없습니다.")
@@ -2706,18 +2891,18 @@ def yield_drop(frame: Frame, options: dict[str, Any]) -> StepResult:
             "자동 프로필은 선택 사건 구간을 처리합니다. 전체 곡선이나 카드의 단조성을 "
             "보장하지 않으며, 규격 하항복 물성을 산출하거나 승인하지 않습니다."
         )
-        effective_options = {**fixed_options, "method": AUTO_LOWER_ENVELOPE_METHOD}
+        effective_options = {**fixed_options, "method": profile.id}
         return StepResult(
             result.frame,
             notes=tuple(notes),
             scalars=(
                 *result.scalars,
-                Scalar("auto_edit_applied", "자동 하측 편집 적용", float(edit_applied), "1"),
+                Scalar("auto_edit_applied", "자동 근사 편집 적용", float(edit_applied), "1"),
                 Scalar(
-                    "auto_review_required", "자동 하측 검토 필요", float(review_required), "1"
+                    "auto_review_required", "자동 근사 검토 필요", float(review_required), "1"
                 ),
                 Scalar(
-                    "auto_terminal_only", "자동 하측 말단 사건만", float(terminal_only), "1"
+                    "auto_terminal_only", "자동 근사 말단 사건만", float(terminal_only), "1"
                 ),
             ),
             effective_options=effective_options,
@@ -3077,6 +3262,11 @@ def yield_drop(frame: Frame, options: dict[str, Any]) -> StepResult:
         min_slope=min_slope,
         requested_start=requested_start,
         requested_end=requested_end,
+        auto_profile=(
+            options.get("_auto_profile")
+            if isinstance(options.get("_auto_profile"), _AutoYieldProfile)
+            else None
+        ),
     )
     scalars = list(result.scalars)
     scalars.insert(0, Scalar("yield_drop_max", "최대 하강 폭", max_drop, "Pa"))

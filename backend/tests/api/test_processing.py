@@ -751,6 +751,154 @@ class Test결과는불변:
         assert len(listed) == 2
 
 
+class Test자동하강프로필저장:
+    def test_자동프로필의_고정옵션과_상태가_레시피_왕복에서_같다(
+        self, client: TestClient, admin_headers: dict[str, str], run_id: str
+    ) -> None:
+        """자동 레시피는 요청값을 보존하면서 실행에는 프로필 고정 규칙을 쓴다."""
+        method = "linear_auto_v1"
+        steps = [
+            *STEPS,
+            {
+                "plugin": "tensile.yield_drop",
+                "options": {
+                    "method": method,
+                    # 자동 프로필이 무시하고 고정 규칙으로 대체해야 하는 오래된 입력.
+                    "scope": "full",
+                    "threshold": 0.9,
+                    "recovery_threshold": 0.8,
+                    "min_reference_fraction": 0.9,
+                    "min_slope": 1e9,
+                    "terminal_action": "hold",
+                    "range_start": 0.01,
+                    "range_end": 0.02,
+                    "anchor_policy": "caller_anchor_v0",
+                },
+            },
+        ]
+        preview = client.post(
+            "/api/processing/preview?x=strain_engineering&y=stress_engineering",
+            json={"test_run_id": run_id, "steps": steps},
+            headers=admin_headers,
+        )
+        assert preview.status_code == 200, preview.text
+        preview_body = preview.json()
+        assert preview_body["problem"] is None
+        assert preview_body["points"]
+
+        key = f"auto_contract_{uuid.uuid4().hex[:10]}"
+        made = client.post(
+            "/api/processing/recipes",
+            json={
+                "key": key,
+                "label": "자동 프로필 계약 확인",
+                "description": None,
+                "test_type_key": "tensile",
+                "steps": steps,
+                "is_active": True,
+            },
+            headers=admin_headers,
+        )
+        assert made.status_code == 201, made.text
+        assert made.json()["steps"] == steps
+
+        saved = client.post(
+            "/api/processing/results",
+            json={"test_run_id": run_id, "steps": steps, "recipe_key": key},
+            headers=admin_headers,
+        )
+        assert saved.status_code == 201, saved.text
+
+        results = client.get(
+            f"/api/processing/results?test_run_id={run_id}", headers=admin_headers
+        )
+        assert results.status_code == 200, results.text
+        first = next(one for one in results.json() if one["id"] == saved.json()["id"])
+        assert first["steps"] == steps, "요청한 stale 옵션은 실행 스냅샷에 남아야 합니다"
+
+        first_curve = client.get(
+            f"/api/processing/results/{first['id']}/curve",
+            params={"x": "strain_engineering", "y": "stress_engineering"},
+            headers=admin_headers,
+        )
+        assert first_curve.status_code == 200, first_curve.text
+        assert first_curve.json()["points"] == preview_body["points"]
+
+        recipes = client.get("/api/processing/recipes", headers=admin_headers)
+        assert recipes.status_code == 200, recipes.text
+        recipe = next(one for one in recipes.json() if one["key"] == key)
+        assert recipe["steps"] == steps
+
+        rerun_preview = client.post(
+            "/api/processing/preview?x=strain_engineering&y=stress_engineering",
+            json={"test_run_id": run_id, "steps": recipe["steps"]},
+            headers=admin_headers,
+        )
+        assert rerun_preview.status_code == 200, rerun_preview.text
+        rerun_body = rerun_preview.json()
+        rerun_saved = client.post(
+            "/api/processing/results",
+            json={"test_run_id": run_id, "steps": recipe["steps"], "recipe_key": key},
+            headers=admin_headers,
+        )
+        assert rerun_saved.status_code == 201, rerun_saved.text
+
+        refreshed = client.get(
+            f"/api/processing/results?test_run_id={run_id}", headers=admin_headers
+        )
+        assert refreshed.status_code == 200, refreshed.text
+        second = next(one for one in refreshed.json() if one["id"] == rerun_saved.json()["id"])
+        assert second["steps"] == recipe["steps"]
+
+        effective = {
+            "scope": "events",
+            "method": method,
+            "threshold": 0.005,
+            "recovery_threshold": 0.005,
+            "min_reference_fraction": 0.05,
+            "min_slope": 0.0,
+            "terminal_action": "keep",
+            "slope_constraint": "nondecreasing",
+            "anchor_policy": "observed_event_anchors_v1",
+            "strain": "strain_engineering",
+            "stress": "stress_engineering",
+        }
+        assert preview_body["stages"][-1]["options"] == effective
+        assert first["stages"][-1]["options"] == effective
+        assert rerun_body["stages"][-1]["options"] == effective
+        assert second["stages"][-1]["options"] == effective
+
+        auto_status_keys = {
+            "event_count",
+            "recovered_count",
+            "partial_count",
+            "open_partial_count",
+            "unrecovered_count",
+            "auto_edit_applied",
+            "auto_review_required",
+            "auto_terminal_only",
+        }
+
+        def auto_status(body: dict[str, Any]) -> dict[str, float]:
+            return {
+                item["key"]: item["value"]
+                for item in body["scalars"]
+                if item["key"] in auto_status_keys
+            }
+
+        assert auto_status(preview_body) == auto_status(first)
+        assert auto_status(rerun_body) == auto_status(second)
+        assert auto_status(first) == auto_status(second)
+
+        second_curve = client.get(
+            f"/api/processing/results/{second['id']}/curve",
+            params={"x": "strain_engineering", "y": "stress_engineering"},
+            headers=admin_headers,
+        )
+        assert second_curve.status_code == 200, second_curve.text
+        assert second_curve.json()["points"] == first_curve.json()["points"]
+
+
 class Test레시피:
     def test_등록되지_않은_단계는_저장_시점에_거절한다(
         self, client: TestClient, admin_headers: dict[str, str], run_id: str

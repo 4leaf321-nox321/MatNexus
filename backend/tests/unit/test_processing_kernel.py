@@ -23,7 +23,7 @@ import pytest
 from matcore import parsers, processing, registry
 from matcore.parsers import zwick_tra
 from matcore.processing import Frame, ProcessingError, Step
-from matcore.processing.tensile import _first_drop
+from matcore.processing.tensile import AUTO_YIELD_PROFILES, _first_drop
 
 TRA = Path(__file__).resolve().parents[1] / "fixtures" / "Example.tra"
 OXFORD_PC_TEST2 = (
@@ -1380,25 +1380,46 @@ class Test항복_강하_정리:
     def test_평탄화_메타데이터는_모델_근사와_실제_선택점을_선언한다(self) -> None:
         plugin = registry.get("tensile.yield_drop")
         assert plugin.label == "공칭 하강 처리"
-        assert plugin.version == "5"
+        assert plugin.version == "6"
         params = {item.name: item for item in plugin.params}
         assert params["scope"].default == "full"
         assert params["method"].default == "envelope"
         auto_method = "lower_envelope_auto_v1"
         assert params["method"].choice_labels[auto_method] == "하측 포락선 — 자동"
+        assert len(AUTO_YIELD_PROFILES) == 7
+        assert len({profile.id for profile in AUTO_YIELD_PROFILES}) == 7
+        for profile in AUTO_YIELD_PROFILES:
+            assert profile.id in params["method"].choices
+            assert params["method"].choice_labels[profile.id] == profile.label
+            assert profile.id in params["method"].choice_help
         for name in ("scope", "threshold", "min_slope"):
-            assert auto_method not in params[name].when["method"]
+            assert all(
+                profile.id not in params[name].when["method"]
+                for profile in AUTO_YIELD_PROFILES
+            )
         for name in ("recovery_threshold", "min_reference_fraction", "terminal_action"):
-            assert auto_method not in params[name].when["method"]
+            assert all(
+                profile.id not in params[name].when["method"]
+                for profile in AUTO_YIELD_PROFILES
+            )
+        for profile in AUTO_YIELD_PROFILES:
+            assert profile.id not in params["slope_constraint"].when["method"]
         for name in ("range_start", "range_end"):
             assert params[name].when == {
                 "scope": ("range", "events"),
                 "method": params[name].when["method"],
             }
-            assert auto_method not in params[name].when["method"]
+            assert all(
+                profile.id not in params[name].when["method"]
+                for profile in AUTO_YIELD_PROFILES
+            )
         for name in ("plateau_start", "plateau_end", "plateau_stress"):
             assert params[name].required
             assert params[name].when == {"method": ("lower_yield",)}
+            assert all(
+                profile.id not in params[name].when["method"]
+                for profile in AUTO_YIELD_PROFILES
+            )
         assert {item.key for item in plugin.makes_values} >= {
             "yield_drop_max",
             "yield_drop_points",
