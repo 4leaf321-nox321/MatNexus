@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import csv
+import json
 from io import BytesIO
 from pathlib import Path
 
@@ -17,6 +18,29 @@ EXTENSIONS = Path(__file__).resolve().parents[2] / "extensions"
 FIXTURE = (
     Path(__file__).resolve().parents[1] / "fixtures" / "oxford_pc_fig5_50mm_min_test2.csv"
 )
+R16_FIXTURE = (
+    Path(__file__).resolve().parents[1] / "fixtures" / "tensile_terminal_v2_cases.npz"
+)
+R15_RECIPES = (
+    Path(__file__).resolve().parents[2]
+    / "extensions"
+    / "tensile_extras"
+    / "recipes"
+    / "adaptive_plastic_domain_v1_examples.json"
+)
+R16_RECIPES = (
+    Path(__file__).resolve().parents[2]
+    / "extensions"
+    / "tensile_extras"
+    / "recipes"
+    / "progressive_terminal_domain_v2_examples.json"
+)
+V2_OPTIONS: dict[str, object] = {
+    "policy": "terminal_loss_auto_v2",
+    "strain": "strain_engineering",
+    "stress": "stress_engineering",
+    "time": "time",
+}
 extensions.load(EXTENSIONS)
 processing.load_builtin()
 
@@ -90,6 +114,36 @@ def _oxford_pc2() -> Frame:
     )
 
 
+def _r16_source_frame(case_index: int) -> Frame:
+    prefix = f"c{case_index:03d}_"
+    with np.load(R16_FIXTURE, allow_pickle=False) as archive:
+        columns = {
+            "strain_engineering": archive[f"{prefix}x"].copy(),
+            "stress_engineering": archive[f"{prefix}y"].copy(),
+            "time": archive[f"{prefix}time"].copy(),
+            "source_row": archive[f"{prefix}row"].copy(),
+            "displacement": archive[f"{prefix}displacement_m"].copy(),
+            "force": archive[f"{prefix}force_N"].copy(),
+            "prepared_row": archive[f"{prefix}prepared_row"].copy(),
+        }
+        source_excel_row = f"{prefix}source_excel_row"
+        if source_excel_row in archive:
+            columns["source_excel_row"] = archive[source_excel_row].copy()
+    return Frame(
+        columns,
+        {
+            "strain_engineering": "1",
+            "stress_engineering": "Pa",
+            "time": "s",
+            "source_row": "1",
+            "displacement": "m",
+            "force": "N",
+            "prepared_row": "1",
+            **({"source_excel_row": "1"} if "source_excel_row" in columns else {}),
+        },
+    )
+
+
 class Test등록:
     def test_확장_로더를_거치며_말단과_모델_단계_사이에_정렬된다(self) -> None:
         plugin = registry.get("tensile.terminal_domain")
@@ -97,7 +151,7 @@ class Test등록:
         assert plugin.kind == "processing"
         assert plugin.label == "인장 시험 종료 구간"
         assert plugin.order == 20
-        assert plugin.version == "1"
+        assert plugin.version == "2"
         assert plugin.applies_to == ("tensile",)
         assert plugin.requires_channels == (("displacement",), ("force",))
         assert registry.get("tensile.engineering").order < plugin.order
@@ -112,6 +166,7 @@ class Test등록:
         }.issubset({one.key for one in plugin.makes_values})
         params = {one.name: one for one in plugin.params}
         assert params["policy"].default == "terminal_loss_auto_v1"
+        assert "terminal_loss_auto_v2" in params["policy"].choices
         assert params["end_index"].type == "int"
         assert params["end_index"].when == {"policy": ("manual_end_v1",)}
         assert params["time"].role == "column"
@@ -120,6 +175,10 @@ class Test등록:
         assert "마지막 10%" in params["policy"].choice_help["terminal_loss_auto_v1"]
         assert "현재 입력 프레임" in params["policy"].choice_help["manual_end_v1"]
         assert "현재 입력 프레임" in (params["end_index"].help or "")
+        assert "근사" in (params["policy"].choice_help["terminal_loss_auto_v2"] or "")
+        assert "terminal_domain_v2_near_optimal_knot_span" in {
+            one.key for one in plugin.makes_values
+        }
 
 
 class Test자동_말단_선택:
@@ -383,6 +442,191 @@ class Test옥스퍼드_PC2:
         assert _notes(result).find("첫 제외 행 1036") >= 0
         assert all(key.startswith("terminal_domain_") for key in _scalars(result))
         assert all(np.isfinite(value) for value in _scalars(result).values())
+
+
+class Test점진적_말단_가속_시작_v2:
+    def test_일곱_R16_레시피는_R15의_말단정책만_바꾼다(self) -> None:
+        r15 = json.loads(R15_RECIPES.read_text(encoding="utf-8"))
+        r16 = json.loads(R16_RECIPES.read_text(encoding="utf-8"))
+
+        assert len(r15["recipes"]) == len(r16["recipes"]) == 7
+        for old_recipe, new_recipe in zip(r15["recipes"], r16["recipes"], strict=True):
+            assert len(old_recipe["steps"]) == len(new_recipe["steps"])
+            for old_step, new_step in zip(
+                old_recipe["steps"], new_recipe["steps"], strict=True
+            ):
+                if old_step["plugin"] == "tensile.terminal_domain":
+                    assert new_step["plugin"] == old_step["plugin"]
+                    assert old_step["options"]["policy"] == "terminal_loss_auto_v1"
+                    assert new_step["options"]["policy"] == "terminal_loss_auto_v2"
+                    assert {
+                        key: value
+                        for key, value in old_step["options"].items()
+                        if key != "policy"
+                    } == {
+                        key: value
+                        for key, value in new_step["options"].items()
+                        if key != "policy"
+                    }
+                else:
+                    assert new_step == old_step
+            assert any(
+                step["plugin"] == "tensile.plastic_domain" for step in new_recipe["steps"]
+            )
+            assert any(
+                step.get("options", {}).get("duplicate_policy") == "first"
+                for step in new_recipe["steps"]
+            )
+
+    def test_구성한_상승_선행부와_말단_가속을_자르고_JSON_옵션으로_재생한다(self) -> None:
+        progress = np.linspace(0.0, 1.0, 501)
+        stress = np.where(
+            progress <= 0.84,
+            100.0 + 2.0 * progress,
+            100.0 + 2.0 * 0.84 - 100.0 * (progress - 0.84),
+        )
+        frame = _frame(stress, time=progress)
+        before = {key: values.copy() for key, values in frame.columns.items()}
+
+        legacy_default = _run(frame)
+        legacy_explicit = _run(frame, {"policy": "terminal_loss_auto_v1"})
+        assert legacy_default.frame is frame
+        assert legacy_explicit.frame is frame
+        assert legacy_default.stages[-1].notes == legacy_explicit.stages[-1].notes
+        assert legacy_default.stages[-1].options == legacy_explicit.stages[-1].options
+
+        result = _run(frame, V2_OPTIONS)
+        values = _scalars(result)
+        assert values["terminal_domain_decision_code"] == 3.0
+        assert values["terminal_domain_v2_onset_status_code"] == 1.0
+        assert (
+            values["terminal_domain_end_index"] == values["terminal_domain_v2_candidate_index"]
+        )
+        assert values["terminal_domain_end_index"] < len(stress) - 1
+        assert values["terminal_domain_v2_pre_slope_per_progress"] > 0.0
+        assert "progressive_terminal_loss_onset" in _notes(result)
+        assert "파단 판정은 아닙니다" in _notes(result)
+        assert all(np.isfinite(value) for value in values.values())
+
+        effective = result.stages[-1].options
+        replay_options = json.loads(json.dumps(effective))
+        replay = _run(frame, replay_options)
+        assert replay.stages[-1].options == effective
+        assert replay.stages[-1].notes == result.stages[-1].notes
+        assert _scalars(replay) == values
+        assert effective["sensitivity_start_progress"] == [0.70, 0.75, 0.80]
+        effective["sensitivity_start_progress"].append(0.85)
+        fresh = _run(frame, V2_OPTIONS)
+        assert fresh.stages[-1].options["sensitivity_start_progress"] == [
+            0.70,
+            0.75,
+            0.80,
+        ]
+        for key, original in before.items():
+            np.testing.assert_array_equal(frame.columns[key], original)
+            np.testing.assert_array_equal(
+                result.frame.columns[key],
+                original[: int(values["terminal_domain_end_index"]) + 1],
+            )
+
+    def test_고정된_v2_상수는_바꿀_수_없고_v1은_v2_옵션을_받지_않는다(self) -> None:
+        frame = _frame([100.0] * 20, time=np.linspace(0.0, 1.0, 20))
+        changed = {**V2_OPTIONS, "score_grid_points": 252}
+        with pytest.raises(ProcessingError, match="고정되어 있습니다"):
+            _run(frame, changed)
+        with pytest.raises(ProcessingError, match="지원하지 않는 말단 구간 옵션"):
+            _run(
+                frame,
+                {"policy": "terminal_loss_auto_v1", "minimum_late_progress": 0.80},
+            )
+
+    def test_점수_시작을_가로지르는_큰_간격은_v2_앞당김을_보류한다(self) -> None:
+        # Constructed lower-window-boundary regression; it is not a real-data case.
+        before_gap = np.linspace(0.0, 0.70, 901)
+        after_gap = np.linspace(0.78, 1.0, 151)[1:]
+        progress = np.concatenate((before_gap, after_gap))
+        stress = np.where(
+            progress <= 0.84,
+            100.0,
+            100.0 - 100.0 * (progress - 0.84),
+        )
+        result = _run(_frame(stress, time=progress), V2_OPTIONS)
+
+        assert result.frame.length() == len(progress)
+        assert "significant_intersecting_progress_gap" in _notes(result)
+        values = _scalars(result)
+        assert values["terminal_domain_v2_intersecting_gap_count"] >= 1.0
+        assert values["terminal_domain_v2_candidate_index"] < len(progress)
+
+    def test_점수_격자만_충분하고_원래행이_성기면_잘라내지_않는다(self) -> None:
+        # Constructed sparse-support regression; it does not add a source-corpus count.
+        progress = np.concatenate(
+            (np.linspace(0.0, 0.72, 100), [0.76, 0.78, 0.80], np.linspace(0.82, 1.0, 25))
+        )
+        stress = np.where(
+            progress <= 0.82,
+            100.0,
+            100.0 - 100.0 * (progress - 0.82),
+        )
+        result = _run(_frame(stress, time=progress), V2_OPTIONS)
+
+        assert result.frame.length() == len(progress)
+        assert "insufficient_original_row_support" in _notes(result)
+        assert _scalars(result)["terminal_domain_v2_onset_status_code"] == 0.0
+
+    @pytest.mark.parametrize(
+        ("case_index", "old_end", "expected_end"),
+        [
+            (85, 588, 555),  # DP980 gradual decline
+            (96, 527, 503),  # DP1180 gradual decline
+            (107, 4982, 4782),  # jagged 304L persistent tail loss
+            (130, 655, 600),  # original 304 pre-abrupt shoulder
+            (151, 330, 308),  # rising-pre 2024 shoulder
+            (118, 2586, 2586),  # BT3 internal dip and recovery control
+            (60, 209, 209),  # smooth 1018 decline without a distinct onset
+        ],
+    )
+    def test_R16_실제_대표자료의_검토된_끝행과_모든_열을_보존한다(
+        self, case_index: int, old_end: int, expected_end: int
+    ) -> None:
+        frame = _r16_source_frame(case_index)
+        before = {key: values.copy() for key, values in frame.columns.items()}
+
+        result = _run(frame, V2_OPTIONS)
+
+        values = _scalars(result)
+        assert values["terminal_domain_v2_old_end_index"] == float(old_end)
+        assert values["terminal_domain_end_index"] == float(expected_end)
+        assert result.frame.length() == expected_end + 1
+        expected_decision_code = (
+            3.0 if expected_end < old_end else 0.0 if old_end == frame.length() - 1 else 1.0
+        )
+        assert values["terminal_domain_decision_code"] == expected_decision_code
+        assert np.all(np.diff(result.frame.columns["time"]) > 0.0)
+        for key, original in before.items():
+            np.testing.assert_array_equal(frame.columns[key], original)
+            np.testing.assert_array_equal(
+                result.frame.columns[key], original[: expected_end + 1]
+            )
+        if case_index == 151:
+            assert values["terminal_domain_v2_pre_slope_per_progress"] > 0.0
+            assert values["terminal_domain_decision_code"] == 3.0
+        if case_index == 118:
+            assert "post_half_loss_recovery" in _notes(result)
+        if case_index == 60:
+            assert "substantial_preterminal_loss_no_distinct_onset" in _notes(result)
+
+    def test_PC2_긴_저하중_평탄부는_v1_끝행에_남긴다(self) -> None:
+        frame = _oxford_pc2()
+        before = {key: values.copy() for key, values in frame.columns.items()}
+
+        result = _run(frame, V2_OPTIONS)
+
+        assert _scalars(result)["terminal_domain_v2_old_end_index"] == 1035.0
+        assert _scalars(result)["terminal_domain_end_index"] == 1035.0
+        assert "stable_loaded_final_suffix" in _notes(result)
+        for key, original in before.items():
+            np.testing.assert_array_equal(result.frame.columns[key], original[:1036])
 
 
 # Genuine R14 corpus rows embedded to keep provenance regressions hermetic.

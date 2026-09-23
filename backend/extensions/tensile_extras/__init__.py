@@ -84,6 +84,7 @@ register(
             default=terminal_domain.AUTO_POLICY,
             choice_labels={
                 terminal_domain.AUTO_POLICY: "말단 하중 소실 자동 검토",
+                terminal_domain.PROGRESSIVE_POLICY: "연속 말단 하중 가속 시작 검토",
                 terminal_domain.MANUAL_POLICY: "검토한 끝 행 직접 지정",
             },
             choice_help={
@@ -91,6 +92,13 @@ register(
                     "진행축 마지막 10%에서 급격하고 회복되지 않는 하중 소실만 제외합니다. "
                     "응력값은 바꾸지 않으므로 뒤에 둔 강도·E·Rp 단계는 보존한 원응력에서 "
                     "계산됩니다."
+                ),
+                terminal_domain.PROGRESSIVE_POLICY: (
+                    "먼저 v1 급락 끝을 찾은 뒤, 시간 또는 엄격 증가 변형률 진행축에서 "
+                    "연속 힌지로 구별되는 말단 응력 가속 시작을 근사해 앞당깁니다. "
+                    "양의 응력 최댓값의 3% 손실은 이 보수적 자동 프로필의 고정 선별값이며 "
+                    "보편적인 물성 임계값이나 파단 판정이 아닙니다. 모호한 간격·회복·안정 "
+                    "하중 꼬리에서는 v1 끝을 유지합니다."
                 ),
                 terminal_domain.MANUAL_POLICY: (
                     "현재 입력 프레임의 0부터 세는 마지막 포함 행을 직접 지정합니다. "
@@ -168,7 +176,10 @@ register(
             key="terminal_domain_decision_code",
             label="말단 결정 코드",
             si_unit="1",
-            help="0은 자동 무절단, 1은 자동 제외, 2는 수동 끝 행 적용입니다.",
+            help=(
+                "0은 자동 무절단, 1은 v1 자동 제외, 2는 수동 끝 행 적용, "
+                "3은 v2 연속 말단 가속 시작 제외입니다."
+            ),
         ),
         Produced(
             key="terminal_domain_strain_strict",
@@ -184,9 +195,156 @@ register(
                 "단계 설명에 있습니다."
             ),
         ),
+        Produced(
+            key="terminal_domain_v2_old_end_index",
+            label="v2 기준 끝 행 위치",
+            si_unit="1",
+            help="v2가 비교에 사용한 변경 전 v1 말단 끝 행입니다.",
+        ),
+        Produced(
+            key="terminal_domain_v2_onset_status_code",
+            label="v2 가속 시작 적용 코드",
+            si_unit="1",
+            help=(
+                "0은 v1 끝 유지, 1은 근사 가속 시작 적용입니다. "
+                "자세한 보류 사유는 단계 설명에 있습니다."
+            ),
+        ),
+        Produced(
+            key="terminal_domain_v2_candidate_index",
+            label="v2 가속 시작 후보 행 위치",
+            si_unit="1",
+        ),
+        Produced(
+            key="terminal_domain_v2_knot_progress",
+            label="v2 힌지 무릎 진행도",
+            si_unit="1",
+        ),
+        Produced(
+            key="terminal_domain_v2_raw_fit_pre_progress_span",
+            label="v2 적합창 무릎 전 진행폭",
+            si_unit="1",
+        ),
+        Produced(
+            key="terminal_domain_v2_raw_fit_post_progress_span",
+            label="v2 적합창 무릎 후 진행폭",
+            si_unit="1",
+        ),
+        Produced(
+            key="terminal_domain_v2_pre_slope_per_progress",
+            label="v2 무릎 전 기울기",
+            si_unit="1",
+        ),
+        Produced(
+            key="terminal_domain_v2_post_slope_per_progress",
+            label="v2 무릎 후 기울기",
+            si_unit="1",
+        ),
+        Produced(
+            key="terminal_domain_v2_slope_magnitude_ratio",
+            label="v2 기울기 크기비",
+            si_unit="1",
+        ),
+        Produced(
+            key="terminal_domain_v2_hinge_sse_gain",
+            label="v2 힌지 SSE 개선",
+            si_unit="1",
+        ),
+        Produced(
+            key="terminal_domain_v2_remaining_loss_over_peak",
+            label="v2 후보~끝 응력 손실/양의 최댓값",
+            si_unit="1",
+        ),
+        Produced(
+            key="terminal_domain_v2_local_pre_knee_stress",
+            label="v2 국소 무릎 전 기준응력",
+            si_unit="Pa",
+        ),
+        Produced(
+            key="terminal_domain_v2_candidate_stress",
+            label="v2 가속 시작 후보 응력",
+            si_unit="Pa",
+        ),
+        Produced(
+            key="terminal_domain_v2_loss_over_local_pre_knee",
+            label="v2 응력 손실/국소 기준응력",
+            si_unit="1",
+        ),
+        Produced(
+            key="terminal_domain_v2_late_residual_mad_over_peak",
+            label="v2 후반 힌지 잔차 MAD/양의 최댓값",
+            si_unit="1",
+            help="힌지 적합 잔차의 산포 진단이며 센서 잡음 추정값이 아닙니다.",
+        ),
+        Produced(
+            key="terminal_domain_v2_loss_to_residual_mad",
+            label="v2 손실/후반 힌지 잔차 MAD",
+            si_unit="1",
+        ),
+        Produced(
+            key="terminal_domain_v2_source_rows_before_knot",
+            label="v2 무릎 전 원래 행 수",
+            si_unit="1",
+        ),
+        Produced(
+            key="terminal_domain_v2_source_rows_after_candidate",
+            label="v2 후보 뒤 원래 행 수",
+            si_unit="1",
+        ),
+        Produced(
+            key="terminal_domain_v2_source_pre_progress_span",
+            label="v2 무릎 전 원래 진행폭",
+            si_unit="1",
+        ),
+        Produced(
+            key="terminal_domain_v2_source_post_progress_span",
+            label="v2 후보 뒤 원래 진행폭",
+            si_unit="1",
+        ),
+        Produced(
+            key="terminal_domain_v2_near_optimal_knot_low",
+            label="v2 근최적 무릎 하한",
+            si_unit="1",
+        ),
+        Produced(
+            key="terminal_domain_v2_near_optimal_knot_high",
+            label="v2 근최적 무릎 상한",
+            si_unit="1",
+        ),
+        Produced(
+            key="terminal_domain_v2_near_optimal_knot_span",
+            label="v2 근최적 무릎 폭",
+            si_unit="1",
+            help="SSE가 최솟값의 1.05배 이내인 탐색 격자 무릎 폭이며 신뢰구간이 아닙니다.",
+        ),
+        Produced(
+            key="terminal_domain_v2_sensitivity_knot_spread",
+            label="v2 점수 시작 민감도 무릎 폭",
+            si_unit="1",
+        ),
+        Produced(
+            key="terminal_domain_v2_intersecting_gap_count",
+            label="v2 점수 구간 교차 큰 간격 수",
+            si_unit="1",
+        ),
+        Produced(
+            key="terminal_domain_v2_max_scored_gap",
+            label="v2 점수 구간 최대 원래 간격",
+            si_unit="1",
+        ),
+        Produced(
+            key="terminal_domain_v2_post_half_loss_recovery",
+            label="v2 절반 응력 손실 뒤 회복 여부",
+            si_unit="1",
+        ),
+        Produced(
+            key="terminal_domain_v2_stable_loaded_suffix",
+            label="v2 안정 응력 끝 구간 여부",
+            si_unit="1",
+        ),
     ),
     order=20,
-    version="1",
+    version="2",
 )(terminal_domain.terminal_domain)
 
 register(

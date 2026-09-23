@@ -113,6 +113,43 @@ the current input frame: immediately after a full `tensile.engineering` step it
 matches the original acquisition row position, while an upstream crop changes
 the index domain.
 
+For a new recipe that needs to screen a gradual terminal decline, select
+`terminal_loss_auto_v2` explicitly. It first runs the unchanged v1 abrupt-loss
+decision, then fits a continuous one-knot line to uniformly spaced values of
+the selected engineering-stress channel over the late progress window. A
+supported negative post-knot slope can move the inclusive end earlier to the
+greatest original row at or before the fitted knot. Interpolated fit values are
+scoring points only; the stage returns only original rows and leaves every
+channel unchanged. A positive pre-knot slope is allowed.
+
+The v2 fit requires a usable, strictly increasing time or strain progress axis;
+when only acquisition row order is available it keeps the v1 end and reports
+that gradual onset is unavailable. It also keeps the v1 end when original-row
+support or progress spans are sparse, the knot depends too much on fit-window
+start, the near-optimal knot range is broad, a significant sampling gap
+intersects a scored window, load recovers after half the candidate-to-end loss,
+or a stable loaded suffix remains. These are hold reasons, not data repair.
+The 3% positive-peak stress-loss gate is a frozen conservative profile value
+from the reviewed finite corpus, not a universal material threshold. The
+effective options record all v2 constants so saved runs can be replayed.
+
+Decision code `3` means the approximate accelerated-terminal-loss onset was
+selected. V2 diagnostics include the v1 end, candidate row, fit slopes and SSE
+gain, peak- and local-stress loss, original support, gap/recovery/suffix checks,
+and a near-optimal knot range. The detrended late MAD describes fit-residual
+spread; it is not a sensor-noise estimate. A smooth decline without a distinct
+accelerating onset remains at the v1 end. When substantial preterminal loss
+exists but no onset is accepted, the neutral
+`substantial_preterminal_loss_no_distinct_onset` diagnostic does not distinguish
+a continuous decline from a long loaded plateau. The selected boundary
+describes a model-record domain; it does not identify the first infinitesimal
+decrease, physical fracture, necking, or the validity of the remaining tail for
+a material model.
+
+The seven R15 model-method reference examples are preserved. New explicit v2
+copies, with their other processing stages and options unchanged, are in
+[`recipes/progressive_terminal_domain_v2_examples.json`](recipes/progressive_terminal_domain_v2_examples.json).
+
 ## Upper-envelope model curve
 
 Choose `tensile.model_curve` when the intended model is the running maximum of
