@@ -19,6 +19,7 @@ from __future__ import annotations
 from matcore.registry import ParamSpec, Produced, register
 
 from . import (  # noqa: F401  (card 는 import 만으로 블록·렌더러를 등록한다)
+    band_model,
     card,
     model_anchor,
     model_curve,
@@ -346,6 +347,224 @@ register(
     order=20,
     version="2",
 )(terminal_domain.terminal_domain)
+
+register(
+    id="tensile.band_model",
+    kind="processing",
+    label="안정 밴드 소성 모델",
+    applies_to=("tensile",),
+    requires_channels=(("displacement",), ("force",)),
+    params=(
+        ParamSpec(
+            name="policy",
+            label="원행 영역 정책",
+            type="choice",
+            choices=band_model.POLICIES,
+            default=band_model.AUTO_POLICY,
+            choice_labels={
+                band_model.AUTO_POLICY_V1: "안정 밴드 및 사건 자동 선택 (v1)",
+                band_model.AUTO_POLICY_V2: "안정 밴드 및 연결 사건 자동 선택 (v2)",
+                band_model.MANUAL_POLICY: "검토한 밴드 행 직접 지정",
+            },
+            choice_help={
+                band_model.AUTO_POLICY_V1: (
+                    "현재 입력 원행에서 가장 긴 지지 가능한 post-peak 안정 밴드를 찾습니다. "
+                    "밴드가 없으면 같은 방법의 legacy 자동 프로필에 "
+                    "원입력을 그대로 위임합니다. "
+                    "지원하지 않는 후보나 선택 밴드 적합 실패는 명시적으로 보류합니다."
+                ),
+                band_model.AUTO_POLICY_V2: (
+                    "v1의 원행 밴드 선택에 더해 밴드 안에서 시작해 밴드 끝 뒤에 "
+                    "완료되는 full-recovery 사건의 관측 끝행까지 적합합니다. "
+                    "lower_envelope에서 닫힌 회복 사건이 앵커만 실패하면 원행 사건으로 "
+                    "연결된 직전 모델 성분을 원응력 하측 포락선으로 함께 재계산합니다. "
+                    "열린·말단 사건은 연결에 쓰지 않으며 밴드 통계는 원래 선택 행에서 "
+                    "계산합니다."
+                ),
+                band_model.MANUAL_POLICY: (
+                    "현재 입력 프레임의 0-based 포함 행으로 밴드 끝 앵커를 지정합니다. "
+                    "왼쪽 관측 앵커와 봉우리도 선택적으로 지정할 수 있습니다."
+                ),
+            },
+        ),
+        ParamSpec(
+            name="method",
+            label="밴드 모델 방법",
+            type="choice",
+            choices=band_model.METHODS,
+            required=True,
+            choice_labels={
+                "lower_envelope": "하측 원행 포락선",
+                "isotonic": "전체 영향 구간 단조 회귀",
+                "median_plateau": "밴드 중앙값 평탄부",
+                "linear": "관측 앵커 끝점 직선",
+                "least_squares": "밴드 원행 최소제곱 직선",
+                "robust_linear": "밴드 원행 Huber 직선",
+            },
+            choice_help={
+                "lower_envelope": (
+                    "각 원행에서 오른쪽 앵커까지의 원응력 최솟값을 적용합니다. "
+                    "하측 근사라 내부 trough를 낮게 남길 수 있습니다."
+                ),
+                "isotonic": (
+                    "왼쪽 관측 앵커부터 오른쪽 관측 앵커까지 PAVA 최소제곱 단조 적합을 합니다."
+                ),
+                "median_plateau": (
+                    "오른쪽 앵커를 제외한 밴드 core의 중앙값으로 평탄부를 만들고 "
+                    "왼쪽 관측 앵커에서 원행 변형률로 연결합니다."
+                ),
+                "linear": "선택 밴드의 끝과 왼쪽 관측 앵커 두 점만 잇는 직선입니다.",
+                "least_squares": (
+                    "밴드 core 원행을 같은 가중치로 맞추고 두 관측 앵커 응력 사이에서 "
+                    "비감소 직선을 제약합니다."
+                ),
+                "robust_linear": (
+                    "기존 고정-scale Huber IRLS로 밴드 core를 맞추고 관측 앵커 사이에서 "
+                    "비감소 직선을 제약합니다."
+                ),
+            },
+        ),
+        ParamSpec(
+            name="band_start",
+            label="밴드 시작 행 위치 (현재 프레임, 0부터)",
+            type="int",
+            required=True,
+            when={"policy": (band_model.MANUAL_POLICY,)},
+        ),
+        ParamSpec(
+            name="band_end",
+            label="밴드 끝 앵커 행 위치 (현재 프레임, 0부터)",
+            type="int",
+            required=True,
+            when={"policy": (band_model.MANUAL_POLICY,)},
+        ),
+        ParamSpec(
+            name="peak_row",
+            label="선행 봉우리 행 위치 (선택, 0부터)",
+            type="int",
+            when={"policy": (band_model.MANUAL_POLICY,)},
+            help="비우면 band_start 앞 원응력 최댓값의 첫 원행을 사용합니다.",
+        ),
+        ParamSpec(
+            name="left_anchor",
+            label="왼쪽 관측 앵커 행 위치 (선택, 0부터)",
+            type="int",
+            when={"policy": (band_model.MANUAL_POLICY,)},
+            help=("비우면 보호 하중구간 뒤, 봉우리 전 마지막 유효 상향 교차를 씁니다."),
+        ),
+        ParamSpec(
+            name="minimum_band_rows",
+            label="자동 밴드 최소 원행 수",
+            type="int",
+            default=band_model.DEFAULT_MINIMUM_BAND_ROWS,
+            when={"policy": band_model.AUTO_POLICIES},
+        ),
+        ParamSpec(
+            name="minimum_progress_span",
+            label="자동 밴드 최소 정규화 진행폭",
+            type="float",
+            default=band_model.DEFAULT_MINIMUM_PROGRESS_SPAN,
+            unit="1",
+            when={"policy": band_model.AUTO_POLICIES},
+        ),
+        ParamSpec(
+            name="maximum_stress_over_peak",
+            label="자동 밴드 최대 응력/봉우리 비율",
+            type="float",
+            default=band_model.DEFAULT_MAXIMUM_STRESS_OVER_PEAK,
+            unit="1",
+            when={"policy": band_model.AUTO_POLICIES},
+        ),
+        ParamSpec(
+            name="maximum_range_over_peak",
+            label="자동 밴드 응력 범위/봉우리 상한",
+            type="float",
+            default=band_model.DEFAULT_MAXIMUM_RANGE_OVER_PEAK,
+            unit="1",
+            when={"policy": band_model.AUTO_POLICIES},
+        ),
+        ParamSpec(
+            name="maximum_gap_over_band_span",
+            label="밴드 최대 원행 간격 비율",
+            type="float",
+            default=band_model.DEFAULT_MAXIMUM_GAP_OVER_BAND_SPAN,
+            unit="1",
+        ),
+        ParamSpec(
+            name="loading_floor_fraction",
+            label="봉우리 대비 보호 하중 비율",
+            type="float",
+            default=band_model.DEFAULT_LOADING_FLOOR_FRACTION,
+            unit="1",
+        ),
+        ParamSpec(
+            name="strain",
+            label="공학 변형률 열",
+            type="str",
+            role="column",
+            default=band_model.DEFAULT_STRAIN,
+            unit="1",
+            dimension="strain",
+        ),
+        ParamSpec(
+            name="stress",
+            label="공학 응력 열",
+            type="str",
+            role="column",
+            default=band_model.DEFAULT_STRESS,
+            unit="Pa",
+        ),
+        ParamSpec(
+            name="time",
+            label="시간 진행 열 (선택)",
+            type="str",
+            role="column",
+            unit="s",
+            help=(
+                "초 단위로 엄격 증가할 때만 진행축으로 씁니다. 그 밖에는 변형률로 대체합니다."
+            ),
+        ),
+    ),
+    makes_values=(
+        Produced("band_model_peak_index", "원응력 최댓값 행 위치", "1"),
+        Produced("band_model_band_start_index", "모델 밴드 시작 행 위치", "1"),
+        Produced("band_model_band_end_index", "선택 밴드 오른쪽 끝 원행", "1"),
+        Produced(
+            "band_model_model_end_index",
+            "밴드 연결 모델 영향 오른쪽 관측 앵커 행 위치",
+            "1",
+        ),
+        Produced("band_model_released_internal_anchor_count", "해제한 내부 모델 앵커 수", "1"),
+        Produced("band_model_lower_composition_count", "하측 연결 조합 수", "1"),
+        Produced(
+            "band_model_lower_composition_changed_points",
+            "하측 연결 조합 신규 구간의 최종 변경 점 수",
+            "1",
+        ),
+        Produced(
+            "band_model_lower_composition_max_additional_change",
+            "하측 연결 조합 신규 구간 최종 최대 응력 변화",
+            "Pa",
+        ),
+        Produced("band_model_left_anchor_index", "모델 영향 왼쪽 관측 앵커 행 위치", "1"),
+        Produced("band_model_support_rows", "밴드 원행 지지 수", "1"),
+        Produced("band_model_progress_span", "밴드 정규화 진행폭", "1"),
+        Produced("band_model_max_gap_ratio", "밴드 최대 원행 간격 비율", "1"),
+        Produced("band_model_changed_points", "모델 단계 변경 점 수", "1"),
+        Produced(
+            "band_model_peak_depression",
+            "원봉우리 행 모델 응력 감소",
+            "Pa",
+            help=(
+                "선택한 모델이 원봉우리 행의 응력을 얼마나 낮췄는지; "
+                "물리적 하항복 값이 아닙니다."
+            ),
+        ),
+        Produced("band_model_max_stress_change", "최대 원응력 변경 폭", "Pa"),
+    ),
+    order=36,
+    version="2",
+)(band_model.band_model)
 
 register(
     id="tensile.model_curve",

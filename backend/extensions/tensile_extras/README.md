@@ -291,11 +291,105 @@ a manual model start point; the seven examples use the automatic anchor pair.
 This step does not infer a physical origin, create additional observed points,
 or establish that the model domain is suitable for a solver or material card.
 
+## Stable-band model stage
+
+`tensile.band_model` is the versioned R17 model-region choice for sources whose
+original retained engineering curve contains a supported post-peak band. It
+must follow source strength/E/Rp measurement and precede `tensile.model_anchor`.
+It reads strictly increasing `strain_engineering` and `stress_engineering` in
+`1` and `Pa`; a usable time column in seconds may provide the selector's
+progress axis. It never sorts or edits the source frame in place.
+
+The automatic policy `band_and_events_auto_v1` uses the frozen row-count,
+normalized-span, stress-level, range and gap limits recorded in the effective
+options. These are conservative selection settings, not material constants.
+When it finds no band, it delegates the unmodified input to the same method's
+legacy `*_auto_v1` profile, preserving that method's curve result. Explicit v1
+recipes retain that numerical behavior. An unsupported candidate or infeasible
+selected fit stops with a reason; it does not switch to a different method.
+`manual_band_v1` takes inclusive current-frame
+`band_start`/`band_end` row positions. The end row is the observed right anchor,
+so at least two fit-core rows must precede it. Optional `peak_row` and
+`left_anchor` overrides still have to satisfy the loading guard and observed
+crossing rules.
+
+The registered automatic default is `band_and_events_auto_v2`. It keeps the
+same selector, methods and source statistics as v1. If a full-recovery event
+starts in the selected band and recovers by its observed right anchor, v2 fits
+through that event's recorded end row; it does not extend the boundary for an
+open/terminal event or a recovery outside the band. For `lower_envelope` only,
+an anchor-only failure on a closed recovered event can retry as one original-
+source suffix-minimum fit over the connected prior modeled component and closed
+source events. Whole components and source bounds are retained; open or terminal
+events cannot connect the composition. A missing feasible source anchor remains
+an explicit failure. The `model_end_index` scalar reports the actual right
+observed anchor of the band-connected model component after either v2
+composition; separately fitted event endpoints remain in their own event
+records and do not extend this band scalar.
+
+Choose one method explicitly: `lower_envelope` uses source suffix minima;
+`isotonic` uses equal-row PAVA across the full influence; `median_plateau` uses
+the original band-core median; `linear` joins the observed anchors without
+fitting the band interior; `least_squares` uses a bounded equal-row affine fit;
+and `robust_linear` uses the bounded fixed-scale Huber fit. The left observed
+anchor can differ between methods. Selected-band support statistics remain
+based on original band-core rows. Median, OLS and Huber fit objectives use
+their actual recorded fit core; eligible v2 full-recovery completion may
+extend that core through `R_model − 1`. The observed-row bridge from the left
+anchor is reported as part of model influence. These choices may lower the
+recorded peak in the model curve; that is a modeling choice, not a measured
+lower-yield strength.
+
+The stage detects source drop/recovery events once on the unchanged stress
+array. Events fully inside a band are handled by its selected method. A
+disjoint recovered event can be fitted only inside its original-row cell; other
+recovered events crossing the band influence are an explicit hold. One closed
+partial-recovery topology is composed with the band when its rows satisfy
+`L ≤ peak ≤ trough < rebound < band_start ≤ R < end`. The band then covers only
+through that anchor. In v1, its continuation remains original input for later
+disjoint event fits, whose declared influence may edit its loading bridge; it is
+not relabeled as full recovery. In v2, a later closed eligible event that cannot
+find a lower-envelope anchor may join the connected band/event component for a
+single original-source refit. An unrecovered terminal event outside the
+influence remains observed.
+A successful fit preserves both observed anchors and every stress row outside
+its open influence interval. Later raw decreases outside edited regions may
+remain, so the full model curve is not necessarily globally monotone.
+
+The fixed `band_model_*` scalars report the peak, selected band, method-specific
+left anchor, source support, normalized span/gap, changed-row count, peak-row
+depression and maximum stress change. V2 also reports released internal anchors,
+composition count, additional changed rows and maximum additional stress change.
+For lower compositions, the added-row diagnostics compare the final composed
+output on each newly included open span with that pool's pre-pool baseline. A
+later connected pool may change an earlier added span, so these values describe
+the final curve rather than an isolated step-by-step delta.
+Notes distinguish source core rows from the edited influence and name event
+decisions. They do not classify fracture, approve a physical yield point, or
+establish solver suitability.
+
+Two decimated PC4 lower-profile holds remain under review because component
+connectivity is sensitive to a sampled one-row gap and exact ties. This is a
+sampling/tie sensitivity of the current connection rule, not a finding of
+arithmetic infeasibility or proof that the experiment is noisy. No smoothing
+or permissive connector has been added.
+
+[`recipes/stable_band_model_v1_examples.json`](recipes/stable_band_model_v1_examples.json)
+contains seven explicit v1 comparison recipes. The matching
+[`recipes/stable_band_model_v2_examples.json`](recipes/stable_band_model_v2_examples.json)
+contains v2 recipes. In each set, six methods replace only the R16 `yield_drop`
+stage; the upper-envelope control keeps its unchanged `tensile.model_curve`
+stage. Both preserve the R16 source-proof and downstream stage ordering and do
+not replace historical examples or saved recipes.
+
 ## Scoped follow-ups
 
 - `tensile.model_curve` supplies a full-range upper envelope with a held recorded
   tail. Existing `tensile.yield_drop` automatic profiles remain unchanged for
   saved-recipe compatibility.
+- `tensile.band_model` is a versioned stable-region approximation, not a general
+  material softening or terminal-onset classifier. Use explicit v1 when
+  reproducing the earlier numerical policy.
 - `terminal_loss_auto_v1` handles supported abrupt end losses only. Gradual or
   ambiguous endings still need review; it is not a general tail classifier or
   physical fracture detector.

@@ -1,0 +1,1634 @@
+"""Versioned, original-row tensile band/event modeling choices.
+
+The stable band is a modeling region, not a measured yield or fracture point.
+The selector and all proposals read the unchanged input arrays. The bounded
+legacy fit helper is intentionally reused for median, endpoint, OLS and Huber
+geometry; lower-envelope and isotonic methods retain their distinct objectives.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, replace
+from typing import Any, Literal
+
+import numpy as np
+from numpy.typing import ArrayLike, NDArray
+
+from matcore.processing import Frame, ProcessingError, Scalar, StepResult
+from matcore.processing._auto_yield_fit import (
+    AutoYieldFitError,
+    _Candidate,
+    _fit_candidate,
+    _unconstrained_core_fit,
+)
+from matcore.processing._drop_recovery import DropEvent, detect_events
+
+from .lower_composition import (
+    LowerComponentClosure,
+    connected_lower_closure,
+    lower_suffix_minorant,
+)
+from .model_regions import (
+    DEFAULT_MAXIMUM_GAP_OVER_BAND_SPAN,
+    DEFAULT_MAXIMUM_RANGE_OVER_PEAK,
+    DEFAULT_MAXIMUM_STRESS_OVER_PEAK,
+    DEFAULT_MINIMUM_BAND_ROWS,
+    DEFAULT_MINIMUM_PROGRESS_SPAN,
+    ProgressBasis,
+    StableBandSelection,
+    _normalized_axis,
+    select_stable_band,
+)
+
+AUTO_POLICY_V1 = "band_and_events_auto_v1"
+AUTO_POLICY_V2 = "band_and_events_auto_v2"
+AUTO_POLICIES = (AUTO_POLICY_V1, AUTO_POLICY_V2)
+AUTO_POLICY = AUTO_POLICY_V2
+MANUAL_POLICY = "manual_band_v1"
+POLICIES = (*AUTO_POLICIES, MANUAL_POLICY)
+METHODS = (
+    "lower_envelope",
+    "isotonic",
+    "median_plateau",
+    "linear",
+    "least_squares",
+    "robust_linear",
+)
+DEFAULT_STRAIN = "strain_engineering"
+DEFAULT_STRESS = "stress_engineering"
+DEFAULT_TIME = "time"
+DEFAULT_LOADING_FLOOR_FRACTION = 0.40
+
+_LEGACY_METHODS = {
+    "lower_envelope": "lower_envelope_auto_v1",
+    "isotonic": "isotonic_auto_v1",
+    "median_plateau": "median_plateau_auto_v1",
+    "linear": "linear_auto_v1",
+    "least_squares": "least_squares_auto_v1",
+    "robust_linear": "robust_linear_auto_v1",
+}
+_COMMON_OPTIONS = {
+    "policy",
+    "method",
+    "strain",
+    "stress",
+    "time",
+    "minimum_band_rows",
+    "minimum_progress_span",
+    "maximum_stress_over_peak",
+    "maximum_range_over_peak",
+    "maximum_gap_over_band_span",
+    "loading_floor_fraction",
+}
+_MANUAL_OPTIONS = {"band_start", "band_end", "peak_row", "left_anchor"}
+_NUMERIC_METHODS = ("median_plateau", "linear", "least_squares", "robust_linear")
+_Decision = Literal[
+    "band_fit",
+    "band_subsumes_event",
+    "band_supersedes_open_terminal",
+    "band_supersedes_partial_continuation",
+    "lower_component_pool_member",
+    "kept_terminal_event",
+    "kept_open_event_without_recovery",
+    "kept_event_outside_band",
+    "event_fit",
+    "event_fit_infeasible_kept",
+    "held_event_crosses_band",
+    "held_unresolved_overlap",
+]
+
+
+@dataclass(frozen=True, slots=True)
+class BandFitRecord:
+    """Original-source evidence and one proposal decision for a fit region.
+
+    ``core_start/core_end`` identify the common selected source evidence; the
+    ``fit_rows_*`` fields distinguish the rows used by the chosen objective.
+    ``source_cell_*`` record the bounds imposed before selecting its left anchor.
+    A proposal is a read-only full-length copy and is composed only over its open
+    anchor interval.
+    """
+
+    method: str
+    region_kind: Literal["band", "event"]
+    source_event: DropEvent | None
+    peak_row: int
+    core_start: int
+    core_end: int
+    fit_rows_start: int
+    fit_rows_end: int
+    left_anchor: int | None
+    right_anchor: int
+    source_cell_start: int
+    source_cell_end: int
+    decision: _Decision
+    anchor_rule: str = "strict_target_upcrossing"
+    reason: str | None = None
+    target_stress: float | None = None
+    unconstrained_level: float | None = None
+    unconstrained_endpoints: tuple[float, float] | None = None
+    constrained_endpoints: tuple[float, float] | None = None
+    huber_delta: float | None = None
+    fit_r_squared: float | None = None
+    fit_rmse: float | None = None
+    max_abs_distortion: float | None = None
+    constraint_applied: bool = False
+    proposal: NDArray[np.float64] | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class BandModelComputation:
+    """Pure source-row computation, exposed internally for independent checks."""
+
+    values: NDArray[np.float64]
+    selection: StableBandSelection
+    events: tuple[DropEvent, ...]
+    records: tuple[BandFitRecord, ...]
+    model_end_row: int | None
+    compositions: tuple[ModelComposition, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class ModelComposition:
+    """Source-row provenance for one v2 right-boundary or lower-pooling change."""
+
+    kind: Literal["full_recovery_completion", "lower_connected_component"]
+    event_intervals: tuple[tuple[int, int, str], ...]
+    component_intervals: tuple[tuple[int, int], ...]
+    outer_left: int
+    outer_right: int
+    released_internal_anchors: tuple[int, ...]
+    newly_included_rows: tuple[int, int] | None
+    newly_changed_points: int = 0
+    max_additional_stress_change: float = 0.0
+    includes_band: bool = False
+
+
+@dataclass(slots=True)
+class _ModelComponent:
+    """One active proposal and the eligible original event rows connected to it."""
+
+    proposal: BandFitRecord
+    event_indices: set[int]
+    is_band: bool
+
+
+class _NoFeasibleAnchorError(AutoYieldFitError):
+    """An anchor-only failure that may enter the versioned lower-pooling path."""
+
+
+def _real_vector(values: ArrayLike, *, what: str) -> NDArray[np.float64]:
+    raw = np.asarray(values)
+    if raw.ndim != 1 or not np.issubdtype(raw.dtype, np.number) or np.iscomplexobj(raw):
+        raise ProcessingError(f"{what}은(는) 1차원 실수 배열이어야 합니다.")
+    try:
+        result = np.asarray(raw, dtype=np.float64)
+    except (TypeError, ValueError, OverflowError):
+        raise ProcessingError(f"{what}을(를) 실수 배열로 읽을 수 없습니다.") from None
+    if not np.all(np.isfinite(result)):
+        raise ProcessingError(f"{what}에 유한하지 않은 값이 있습니다.")
+    return result
+
+
+def _json_number(value: Any, *, name: str, low: float, high: float) -> float:
+    if type(value) not in (int, float):
+        raise ProcessingError(f"{name}은(는) 유한한 JSON 숫자여야 합니다.")
+    numeric = float(value)
+    if not np.isfinite(numeric) or not low <= numeric <= high:
+        raise ProcessingError(f"{name}은(는) {low} 이상 {high} 이하여야 합니다.")
+    return numeric
+
+
+def _resolve_options(options: dict[str, Any]) -> dict[str, Any]:
+    policy = options.get("policy", AUTO_POLICY)
+    if policy not in POLICIES:
+        raise ProcessingError(f"지원하지 않는 tensile.band_model 정책입니다: {policy!r}")
+    allowed = _COMMON_OPTIONS | (_MANUAL_OPTIONS if policy == MANUAL_POLICY else set())
+    unknown = sorted(set(options) - allowed)
+    if unknown:
+        raise ProcessingError(
+            f"정책 '{policy}'에서 허용되지 않는 옵션입니다: {', '.join(unknown)}"
+        )
+
+    method = options.get("method")
+    if method not in METHODS:
+        raise ProcessingError(
+            f"tensile.band_model 방법을 여섯 선택지에서 지정해야 합니다: {method!r}"
+        )
+    strain = options.get("strain", DEFAULT_STRAIN)
+    stress = options.get("stress", DEFAULT_STRESS)
+    time = options.get("time", DEFAULT_TIME)
+    if not isinstance(strain, str) or not strain:
+        raise ProcessingError("strain은 비어 있지 않은 변형률 열 이름이어야 합니다.")
+    if not isinstance(stress, str) or not stress:
+        raise ProcessingError("stress는 비어 있지 않은 응력 열 이름이어야 합니다.")
+    if time is not None and (not isinstance(time, str) or not time):
+        raise ProcessingError("time은 초 단위 시간 열 이름 또는 null이어야 합니다.")
+    if type(options.get("minimum_band_rows", DEFAULT_MINIMUM_BAND_ROWS)) is not int:
+        raise ProcessingError("minimum_band_rows는 정수여야 합니다.")
+    minimum_band_rows = int(options.get("minimum_band_rows", DEFAULT_MINIMUM_BAND_ROWS))
+    if minimum_band_rows < 2:
+        raise ProcessingError("minimum_band_rows는 2 이상이어야 합니다.")
+
+    resolved: dict[str, Any] = {
+        "policy": policy,
+        "method": method,
+        "strain": strain,
+        "stress": stress,
+        "time": time,
+        "minimum_band_rows": minimum_band_rows,
+        "minimum_progress_span": _json_number(
+            options.get("minimum_progress_span", DEFAULT_MINIMUM_PROGRESS_SPAN),
+            name="minimum_progress_span",
+            low=0.0,
+            high=1.0,
+        ),
+        "maximum_stress_over_peak": _json_number(
+            options.get("maximum_stress_over_peak", DEFAULT_MAXIMUM_STRESS_OVER_PEAK),
+            name="maximum_stress_over_peak",
+            low=0.0,
+            high=1.0,
+        ),
+        "maximum_range_over_peak": _json_number(
+            options.get("maximum_range_over_peak", DEFAULT_MAXIMUM_RANGE_OVER_PEAK),
+            name="maximum_range_over_peak",
+            low=0.0,
+            high=1.0,
+        ),
+        "maximum_gap_over_band_span": _json_number(
+            options.get("maximum_gap_over_band_span", DEFAULT_MAXIMUM_GAP_OVER_BAND_SPAN),
+            name="maximum_gap_over_band_span",
+            low=0.0,
+            high=1.0,
+        ),
+        "loading_floor_fraction": _json_number(
+            options.get("loading_floor_fraction", DEFAULT_LOADING_FLOOR_FRACTION),
+            name="loading_floor_fraction",
+            low=0.0,
+            high=1.0,
+        ),
+    }
+    if policy == MANUAL_POLICY:
+        for key in ("band_start", "band_end"):
+            value = options.get(key)
+            if type(value) is not int:
+                raise ProcessingError(f"manual_band_v1에는 {key} 정수 행 위치가 필요합니다.")
+            resolved[key] = value
+        for key in ("peak_row", "left_anchor"):
+            value = options.get(key)
+            if value is not None and type(value) is not int:
+                raise ProcessingError(f"{key}는 정수 행 위치 또는 null이어야 합니다.")
+            resolved[key] = value
+    return resolved
+
+
+def _load_source(
+    frame: Frame, options: dict[str, Any]
+) -> tuple[NDArray[np.float64], NDArray[np.float64], NDArray[np.float64] | None, str]:
+    strain_key = options["strain"]
+    stress_key = options["stress"]
+    strain_raw = frame.require(strain_key, what="공학 변형률")
+    stress_raw = frame.require(stress_key, what="공학 응력")
+    if frame.units.get(strain_key) != "1":
+        raise ProcessingError(
+            f"'{strain_key}' 단위가 '1'이 아닙니다: {frame.units.get(strain_key)!r}"
+        )
+    if frame.units.get(stress_key) != "Pa":
+        raise ProcessingError(
+            f"'{stress_key}' 단위가 'Pa'가 아닙니다: {frame.units.get(stress_key)!r}"
+        )
+    strain = _real_vector(strain_raw, what=f"'{strain_key}'")
+    stress = _real_vector(stress_raw, what=f"'{stress_key}'")
+    if strain.size != stress.size or strain.size < 2:
+        raise ProcessingError("변형률과 응력은 길이가 같고 관측 행이 2개 이상이어야 합니다.")
+    for key, values in frame.columns.items():
+        if len(values) != strain.size:
+            raise ProcessingError(f"'{key}' 열 길이가 입력 원행 수와 다릅니다.")
+    if np.any(np.diff(strain) <= 0.0):
+        raise ProcessingError(f"'{strain_key}'은(는) 원행 순서에서 엄격히 증가해야 합니다.")
+
+    time_key = options["time"]
+    progress: NDArray[np.float64] | None = None
+    progress_note = ""
+    if time_key is not None and time_key in frame.columns:
+        if frame.units.get(time_key) == "s":
+            try:
+                progress = _real_vector(frame.columns[time_key], what=f"초 단위 '{time_key}'")
+                if progress.size != strain.size or np.any(np.diff(progress) <= 0.0):
+                    progress = None
+                    progress_note = "시간 진행축을 쓸 수 없어 공학 변형률로 대체했습니다."
+            except ProcessingError:
+                progress_note = (
+                    "시간 진행축에 유한한 초 단위 값이 없어 공학 변형률로 대체했습니다."
+                )
+        else:
+            progress_note = (
+                f"'{time_key}' 단위가 초(s)가 아니어서 공학 변형률 진행축을 사용했습니다."
+            )
+    elif time_key is not None:
+        progress_note = f"'{time_key}' 열이 없어 공학 변형률 진행축을 사용했습니다."
+    return strain, stress, progress, progress_note
+
+
+def _manual_selection(
+    strain: NDArray[np.float64],
+    stress: NDArray[np.float64],
+    progress: NDArray[np.float64] | None,
+    *,
+    start: int,
+    end: int,
+    peak_row: int | None,
+    maximum_gap_over_band_span: float,
+) -> StableBandSelection:
+    n = int(strain.size)
+    if start < 0 or end >= n or end - start < 2:
+        raise ProcessingError(
+            "manual_band_v1의 band_start~band_end는 입력 범위 안에서 끝 행을 제외하고 "
+            "적어도 2개의 적합 관측행을 포함해야 합니다."
+        )
+    if peak_row is None:
+        peak_row = int(np.argmax(stress[:start])) if start > 0 else -1
+    if peak_row < 0 or peak_row >= start or stress[peak_row] <= 0.0:
+        raise ProcessingError(
+            "manual_band_v1의 peak_row는 양의 응력인 band_start 앞 행이어야 합니다."
+        )
+    axis: NDArray[np.float64] = strain if progress is None else progress
+    basis: ProgressBasis = "engineering_strain" if progress is None else "progress_channel"
+    try:
+        normalized = _normalized_axis(axis)
+    except ValueError as exc:
+        raise ProcessingError(f"수동 밴드 진행축을 정규화할 수 없습니다: {exc}") from None
+    span = float(normalized[end] - normalized[start])
+    if span <= 0.0:
+        raise ProcessingError("수동 밴드 진행폭이 양수여야 합니다.")
+    max_gap_ratio = float(np.max(np.diff(normalized[start : end + 1])) / span)
+    if max_gap_ratio > maximum_gap_over_band_span:
+        raise ProcessingError(
+            "수동 밴드에 큰 원행 간격이 있습니다: "
+            f"max_gap_ratio={max_gap_ratio:.6g} > {maximum_gap_over_band_span:.6g}."
+        )
+    band = stress[start : end + 1]
+    return StableBandSelection(
+        peak_row=peak_row,
+        peak_stress=float(stress[peak_row]),
+        band_start_row=start,
+        band_end_row=end,
+        progress_basis=basis,
+        progress_span=span,
+        max_gap_ratio=max_gap_ratio,
+        source_row_count=n,
+        band_min_stress=float(np.min(band)),
+        band_max_stress=float(np.max(band)),
+        band_median_stress=float(np.median(band)),
+        reason="selected",
+    )
+
+
+def _loading_guard(
+    stress: NDArray[np.float64], peak_row: int, loading_floor_fraction: float
+) -> tuple[int, float]:
+    peak = float(stress[peak_row])
+    if peak <= 0.0:
+        raise AutoYieldFitError("선택 봉우리 응력이 양수여야 합니다.")
+    floor = loading_floor_fraction * peak
+    qualifying = np.flatnonzero(stress[: peak_row + 1] >= floor)
+    if qualifying.size == 0:
+        raise AutoYieldFitError("봉우리 앞에서 보호할 하중 시작 행을 찾지 못했습니다.")
+    return int(qualifying[0]), floor
+
+
+def _method_evidence(
+    method: str,
+    strain: NDArray[np.float64],
+    stress: NDArray[np.float64],
+    core_start: int,
+    right: int,
+    peak_row: int,
+) -> tuple[float, float | None, tuple[float, float] | None, float | None]:
+    right_value = float(stress[right])
+    if method in ("lower_envelope", "isotonic", "linear"):
+        if method == "lower_envelope":
+            target = float(np.min(stress[peak_row + 1 : right + 1]))
+        else:
+            target = right_value
+        return target, None, None, None
+    core_x = strain[core_start:right]
+    core_y = stress[core_start:right]
+    if core_y.size < 2:
+        raise AutoYieldFitError("선택 밴드의 원행 적합 점이 2개 미만입니다.")
+    try:
+        _fit, endpoints, c0, huber_delta = _unconstrained_core_fit(method, core_x, core_y)
+    except AutoYieldFitError:
+        raise
+    if c0 is None:
+        raise AutoYieldFitError("선택 방법의 원행 적합 시작값을 계산하지 못했습니다.")
+    target = min(float(c0), right_value)
+    return target, float(c0), endpoints, huber_delta
+
+
+def _anchor_is_feasible(
+    stress: NDArray[np.float64],
+    *,
+    method: str,
+    left: int,
+    right: int,
+    target: float,
+    rising_step_to_peak: bool = False,
+) -> bool:
+    if not (0 <= left < right < stress.size):
+        return False
+    if rising_step_to_peak:
+        if not (
+            float(stress[left + 1]) > float(stress[left])
+            and float(stress[left]) <= min(target, float(stress[right]))
+        ):
+            return False
+    elif not (float(stress[left]) <= target < float(stress[left + 1])):
+        return False
+    if float(stress[left]) > float(stress[right]):
+        return False
+    if method == "lower_envelope":
+        return float(stress[left]) <= float(np.min(stress[left + 1 : right + 1]))
+    return True
+
+
+def _choose_anchor(
+    stress: NDArray[np.float64],
+    *,
+    method: str,
+    peak_row: int,
+    right: int,
+    target: float,
+    guard_start: int,
+    minimum_left: int,
+    manual_left: int | None = None,
+    rising_step_to_peak: bool = False,
+) -> int:
+    candidates = (
+        [manual_left] if manual_left is not None else range(peak_row - 1, guard_start - 1, -1)
+    )
+    for candidate in candidates:
+        if (
+            candidate is None
+            or candidate < max(guard_start, minimum_left)
+            or candidate >= peak_row
+        ):
+            continue
+        if _anchor_is_feasible(
+            stress,
+            method=method,
+            left=candidate,
+            right=right,
+            target=target,
+            rising_step_to_peak=rising_step_to_peak,
+        ):
+            return candidate
+    raise _NoFeasibleAnchorError(
+        "보호된 하중 시작 뒤, 봉우리 전에서 해당 방법의 상향 교차와 오른쪽 앵커를 "
+        "함께 만족하는 관측 왼쪽 앵커를 찾지 못했습니다."
+    )
+
+
+def _readonly(values: NDArray[np.float64]) -> NDArray[np.float64]:
+    result = np.asarray(values, dtype=np.float64).copy()
+    result.setflags(write=False)
+    return result
+
+
+def _fit_region(
+    strain: NDArray[np.float64],
+    stress: NDArray[np.float64],
+    *,
+    method: str,
+    region_kind: Literal["band", "event"],
+    event: DropEvent | None,
+    peak_row: int,
+    core_start: int,
+    right: int,
+    source_cell_start: int,
+    source_cell_end: int,
+    loading_floor_fraction: float,
+    manual_left: int | None = None,
+) -> BandFitRecord:
+    if region_kind == "band" and not (0 <= peak_row < core_start < right < stress.size):
+        raise AutoYieldFitError(
+            "밴드 적합 코어는 선행 봉우리 뒤, 오른쪽 앵커 앞이어야 합니다."
+        )
+    if region_kind == "event" and not (0 <= peak_row == core_start < right < stress.size):
+        raise AutoYieldFitError("사건 적합 코어는 원행 사건 봉우리에서 시작해야 합니다.")
+    if right - core_start < 2:
+        raise AutoYieldFitError(
+            "오른쪽 관측 앵커를 뺀 적합 코어에는 원행이 2개 이상 필요합니다."
+        )
+    if (
+        source_cell_start < 0
+        or source_cell_end >= stress.size
+        or source_cell_start > source_cell_end
+    ):
+        raise AutoYieldFitError("원행 적합 셀 경계가 입력 범위에 맞지 않습니다.")
+    guard_start, _floor = _loading_guard(stress, peak_row, loading_floor_fraction)
+    target, c0, unconstrained_endpoints, huber_delta = _method_evidence(
+        method, strain, stress, core_start, right, peak_row
+    )
+    use_event_peak_rising_step = region_kind == "event" and target >= float(stress[peak_row])
+    left = _choose_anchor(
+        stress,
+        method=method,
+        peak_row=peak_row,
+        right=right,
+        target=target,
+        guard_start=guard_start,
+        minimum_left=source_cell_start,
+        manual_left=manual_left,
+        rising_step_to_peak=use_event_peak_rising_step,
+    )
+
+    try:
+        if method in _NUMERIC_METHODS:
+            candidate = _Candidate(
+                start=core_start,
+                right=right,
+                left=left,
+                c0=c0,
+                target=target,
+                unconstrained_endpoints=unconstrained_endpoints,
+                huber_delta=huber_delta,
+            )
+            proposed, region = _fit_candidate(strain, stress, candidate, method)
+            return BandFitRecord(
+                method=method,
+                region_kind=region_kind,
+                source_event=event,
+                peak_row=peak_row,
+                core_start=core_start,
+                core_end=right - 1,
+                fit_rows_start=core_start,
+                fit_rows_end=right - 1,
+                left_anchor=left,
+                right_anchor=right,
+                source_cell_start=source_cell_start,
+                source_cell_end=source_cell_end,
+                decision="band_fit" if region_kind == "band" else "event_fit",
+                anchor_rule=(
+                    "rising_step_before_event_peak_target_at_or_above_peak"
+                    if use_event_peak_rising_step
+                    else "strict_target_upcrossing"
+                ),
+                target_stress=target,
+                unconstrained_level=c0,
+                unconstrained_endpoints=region.unconstrained_endpoints,
+                constrained_endpoints=region.constrained_endpoints,
+                huber_delta=region.huber_delta,
+                fit_r_squared=region.fit_r_squared,
+                fit_rmse=region.fit_rmse,
+                max_abs_distortion=region.max_abs_distortion,
+                constraint_applied=region.constraint_applied,
+                proposal=_readonly(proposed),
+            )
+
+        proposed = stress.copy()
+        left_value = float(stress[left])
+        right_value = float(stress[right])
+        if method == "lower_envelope":
+            source = stress[left + 1 : right + 1]
+            suffix = np.minimum.accumulate(source[::-1])[::-1]
+            proposed[left + 1 : right] = suffix[:-1]
+            fit_start, fit_end = left + 1, right - 1
+            endpoints = None
+            applied = False
+        elif method == "isotonic":
+            from matcore.processing.tensile import _isotonic
+
+            interior = stress[left + 1 : right]
+            levels = np.asarray(_isotonic(interior), dtype=np.float64)
+            proposed[left + 1 : right] = np.clip(levels, left_value, right_value)
+            fit_start, fit_end = left + 1, right - 1
+            endpoints = (float(proposed[left + 1]), float(proposed[right - 1]))
+            applied = bool(np.any((levels < left_value) | (levels > right_value)))
+        else:
+            raise AutoYieldFitError(f"지원하지 않는 모델 방법입니다: {method}")
+        local = proposed[left : right + 1]
+        if not np.all(np.isfinite(local)) or np.any(np.diff(local) < 0.0):
+            raise AutoYieldFitError("계산한 영향 구간이 유한한 비감소 곡선이 아닙니다.")
+        if proposed[left] != stress[left] or proposed[right] != stress[right]:
+            raise AutoYieldFitError("계산한 모델이 관측 앵커를 바꾸었습니다.")
+        fit_y = stress[fit_start : fit_end + 1]
+        fit_z = proposed[fit_start : fit_end + 1]
+        residual = fit_y - fit_z
+        total = float(np.sum((fit_y - float(np.mean(fit_y))) ** 2))
+        error = float(np.sum(residual**2))
+        r_squared = (
+            1.0
+            if total == 0.0 and error == 0.0
+            else 0.0
+            if total == 0.0
+            else 1.0 - error / total
+        )
+        rmse = float(np.sqrt(np.mean(residual**2)))
+        return BandFitRecord(
+            method=method,
+            region_kind=region_kind,
+            source_event=event,
+            peak_row=peak_row,
+            core_start=core_start,
+            core_end=right - 1,
+            fit_rows_start=fit_start,
+            fit_rows_end=fit_end,
+            left_anchor=left,
+            right_anchor=right,
+            source_cell_start=source_cell_start,
+            source_cell_end=source_cell_end,
+            decision="band_fit" if region_kind == "band" else "event_fit",
+            anchor_rule=(
+                "rising_step_before_event_peak_target_at_or_above_peak"
+                if use_event_peak_rising_step
+                else "strict_target_upcrossing"
+            ),
+            target_stress=target,
+            constrained_endpoints=endpoints,
+            fit_r_squared=r_squared,
+            fit_rmse=rmse,
+            max_abs_distortion=float(np.max(np.abs(local - stress[left : right + 1]))),
+            constraint_applied=applied,
+            proposal=_readonly(proposed),
+        )
+    except (np.linalg.LinAlgError, FloatingPointError) as exc:
+        raise AutoYieldFitError(f"원행 적합 계산이 실패했습니다: {exc}") from None
+
+
+def _event_record(
+    method: str,
+    event: DropEvent,
+    *,
+    decision: _Decision,
+    reason: str | None,
+    cell_start: int,
+    cell_end: int,
+    band_start: int,
+    band_end: int,
+) -> BandFitRecord:
+    return BandFitRecord(
+        method=method,
+        region_kind="event",
+        source_event=event,
+        peak_row=event.peak_index,
+        core_start=event.peak_index,
+        core_end=max(event.peak_index, event.end_index - 1),
+        fit_rows_start=event.peak_index,
+        fit_rows_end=max(event.peak_index, event.end_index - 1),
+        left_anchor=None,
+        right_anchor=event.end_index,
+        source_cell_start=cell_start,
+        source_cell_end=cell_end,
+        decision=decision,
+        reason=reason,
+    )
+
+
+def _can_supersede_closed_partial_continuation(
+    event: DropEvent,
+    *,
+    influence_start: int,
+    band_start: int,
+    band_end: int,
+) -> bool:
+    """Whether the band contains a closed partial event's observed rebound onset."""
+    recovery = event.recovery_index
+    return (
+        event.kind == "partial_recovery"
+        and not event.end_at_observation_boundary
+        and recovery is not None
+        and influence_start <= event.peak_index <= event.trough_index < recovery
+        and recovery < band_start <= band_end < event.end_index
+    )
+
+
+def _compose_records(
+    stress: NDArray[np.float64], records: list[BandFitRecord]
+) -> NDArray[np.float64]:
+    result = stress.copy()
+    occupied = np.zeros(stress.size, dtype=bool)
+    for record in records:
+        if record.proposal is None or record.left_anchor is None:
+            continue
+        left, right = record.left_anchor, record.right_anchor
+        proposal = record.proposal
+        if proposal.shape != stress.shape:
+            raise ProcessingError("원행 적합 제안 길이가 원응력과 다릅니다.")
+        if proposal[left] != stress[left] or proposal[right] != stress[right]:
+            raise ProcessingError("원행 적합 제안이 관측 앵커와 일치하지 않습니다.")
+        interior = np.arange(left + 1, right, dtype=int)
+        if interior.size and np.any(occupied[interior]):
+            raise ProcessingError("독립 원행 적합 영향 구간이 겹쳐 조합할 수 없습니다.")
+        if interior.size:
+            occupied[interior] = True
+            result[interior] = proposal[interior]
+    if not np.all(np.isfinite(result)):
+        raise ProcessingError("조합한 응력에 유한하지 않은 값이 있습니다.")
+    return result
+
+
+def _full_recovery_completions(
+    events: tuple[DropEvent, ...], *, band_start: int, band_end: int
+) -> tuple[DropEvent, ...]:
+    """Find original full events whose rebound is in B and observed end follows it."""
+    return tuple(
+        event
+        for event in events
+        if event.kind == "full_recovery"
+        and not event.end_at_observation_boundary
+        and event.recovery_index is not None
+        and band_start <= event.peak_index <= event.trough_index
+        and event.trough_index < event.recovery_index <= band_end < event.end_index
+    )
+
+
+def _eligible_pool_event(event: DropEvent) -> bool:
+    return event.kind == "full_recovery" or (
+        event.kind == "partial_recovery"
+        and event.recovery_index is not None
+        and not event.end_at_observation_boundary
+    )
+
+
+def _lower_pool_proposal(
+    strain: NDArray[np.float64],
+    stress: NDArray[np.float64],
+    events: tuple[DropEvent, ...],
+    components: list[_ModelComponent],
+    *,
+    root_component: int,
+    failed_event_index: int,
+    loading_floor_fraction: float,
+) -> tuple[
+    BandFitRecord,
+    ModelComposition,
+    NDArray[np.float64],
+    int,
+    LowerComponentClosure,
+]:
+    """Build one lower proposal from a bounded original-event component closure."""
+    failed = events[failed_event_index]
+    intervals_list: list[tuple[int, int]] = []
+    for component in components:
+        left = component.proposal.left_anchor
+        if left is None:
+            raise _NoFeasibleAnchorError("연결 모델 성분에 관측 왼쪽 앵커가 없습니다.")
+        intervals_list.append((left, component.proposal.right_anchor))
+    intervals = tuple(intervals_list)
+    memberships = tuple(tuple(sorted(component.event_indices)) for component in components)
+    closure = connected_lower_closure(
+        events,
+        intervals,
+        memberships,
+        root_component=root_component,
+        failed_event=failed_event_index,
+    )
+    if closure is None:
+        raise _NoFeasibleAnchorError("실패 사건까지 닿는 닫힌 원행 사건 연결 성분이 없습니다.")
+
+    included = [components[index] for index in closure.component_indices]
+    earliest = min(included, key=lambda component: component.proposal.peak_row)
+    template = earliest.proposal
+    assert template.left_anchor is not None
+    old_left = min(
+        int(component.proposal.left_anchor)
+        for component in included
+        if component.proposal.left_anchor is not None
+    )
+    source_cell_start = template.source_cell_start
+    peak = template.peak_row
+    right = failed.end_index
+    guard_start, _floor = _loading_guard(stress, peak, loading_floor_fraction)
+
+    def suffix_feasible(candidate: int) -> bool:
+        return max(guard_start, source_cell_start) <= candidate < peak < right and float(
+            stress[candidate]
+        ) <= float(np.min(stress[candidate + 1 : right + 1]))
+
+    left = old_left
+    target = float(np.min(stress[peak + 1 : right + 1]))
+    if not suffix_feasible(left):
+        left = -1
+        for candidate in range(old_left - 1, max(guard_start, source_cell_start) - 1, -1):
+            if _anchor_is_feasible(
+                stress,
+                method="lower_envelope",
+                left=candidate,
+                right=right,
+                target=target,
+            ):
+                left = candidate
+                break
+        if left < 0:
+            raise _NoFeasibleAnchorError(
+                "원자료 suffix 최소값이 기존 바깥 앵커를 넘고, 보호구간 안에서 "
+                "더 이른 하측 앵커를 찾지 못했습니다."
+            )
+
+    try:
+        proposed = lower_suffix_minorant(stress, left=left, right=right)
+    except ValueError as exc:
+        raise _NoFeasibleAnchorError(str(exc)) from None
+    local = proposed[left : right + 1]
+    if (
+        not np.all(np.isfinite(local))
+        or np.any(local <= 0.0)
+        or np.any(np.diff(local) < 0.0)
+        or np.any(local > stress[left : right + 1])
+        or proposed[left] != stress[left]
+        or proposed[right] != stress[right]
+    ):
+        raise _NoFeasibleAnchorError(
+            "원자료 연결 suffix 모델이 관측 경계와 하측 비감소 조건을 만족하지 않습니다."
+        )
+
+    includes_band = any(component.is_band for component in included)
+    region_kind: Literal["band", "event"] = "band" if includes_band else "event"
+    decision: _Decision = "band_fit" if includes_band else "event_fit"
+    new_record = BandFitRecord(
+        method="lower_envelope",
+        region_kind=region_kind,
+        source_event=None if includes_band else failed,
+        peak_row=peak,
+        core_start=template.core_start,
+        core_end=right - 1,
+        fit_rows_start=left + 1,
+        fit_rows_end=right - 1,
+        left_anchor=left,
+        right_anchor=right,
+        source_cell_start=source_cell_start,
+        source_cell_end=right,
+        decision=decision,
+        anchor_rule="connected_component_source_suffix_minorant",
+        reason="연결된 eligible 원행 사건을 원응력 suffix 최소값으로 한 번 다시 적합했습니다.",
+        target_stress=target,
+        max_abs_distortion=float(np.max(np.abs(local - stress[left : right + 1]))),
+        proposal=_readonly(proposed),
+    )
+    old_right = max(component.proposal.right_anchor for component in included)
+    composition = ModelComposition(
+        kind="lower_connected_component",
+        event_intervals=tuple(
+            (events[index].peak_index, events[index].end_index, events[index].kind)
+            for index in closure.event_indices
+        ),
+        component_intervals=tuple(
+            (component.proposal.left_anchor, component.proposal.right_anchor)
+            for component in included
+            if component.proposal.left_anchor is not None
+        ),
+        outer_left=left,
+        outer_right=right,
+        released_internal_anchors=tuple(
+            sorted(
+                {
+                    component.proposal.right_anchor
+                    for component in included
+                    if component.proposal.right_anchor < right
+                }
+            )
+        ),
+        newly_included_rows=(old_right + 1, right) if old_right < right else None,
+        includes_band=includes_band,
+    )
+    return new_record, composition, proposed, old_right, closure
+
+
+def compute_band_model(
+    engineering_strain: ArrayLike,
+    engineering_stress: ArrayLike,
+    progress: ArrayLike | None = None,
+    *,
+    method: str,
+    policy: str = AUTO_POLICY,
+    minimum_band_rows: int = DEFAULT_MINIMUM_BAND_ROWS,
+    minimum_progress_span: float = DEFAULT_MINIMUM_PROGRESS_SPAN,
+    maximum_stress_over_peak: float = DEFAULT_MAXIMUM_STRESS_OVER_PEAK,
+    maximum_range_over_peak: float = DEFAULT_MAXIMUM_RANGE_OVER_PEAK,
+    maximum_gap_over_band_span: float = DEFAULT_MAXIMUM_GAP_OVER_BAND_SPAN,
+    loading_floor_fraction: float = DEFAULT_LOADING_FLOOR_FRACTION,
+    band_start: int | None = None,
+    band_end: int | None = None,
+    peak_row: int | None = None,
+    left_anchor: int | None = None,
+) -> BandModelComputation:
+    """Compute one method's edits and source-bound records without mutating inputs.
+
+    The function is an internal verification seam. In automatic mode, a missing
+    band is represented as an unchanged result; the registered wrapper delegates
+    that case to the exact same-method legacy profile.
+    """
+    if method not in METHODS or policy not in POLICIES:
+        raise ProcessingError("모델 방법과 정책을 지원 목록에서 지정해야 합니다.")
+    strain = _real_vector(engineering_strain, what="공학 변형률")
+    stress = _real_vector(engineering_stress, what="공학 응력")
+    if strain.size != stress.size or strain.size < 2:
+        raise ProcessingError("변형률과 응력은 길이가 같고 관측 행이 2개 이상이어야 합니다.")
+    if np.any(np.diff(strain) <= 0.0):
+        raise ProcessingError("공학 변형률은 원행 순서에서 엄격히 증가해야 합니다.")
+    try:
+        floor_fraction = _json_number(
+            loading_floor_fraction,
+            name="loading_floor_fraction",
+            low=0.0,
+            high=1.0,
+        )
+        minimum_gap = _json_number(
+            maximum_gap_over_band_span,
+            name="maximum_gap_over_band_span",
+            low=0.0,
+            high=1.0,
+        )
+        if type(minimum_band_rows) is not int or minimum_band_rows < 2:
+            raise ProcessingError("minimum_band_rows는 2 이상의 정수여야 합니다.")
+        if policy == MANUAL_POLICY:
+            if band_start is None or band_end is None:
+                raise ProcessingError("manual_band_v1에는 band_start와 band_end가 필요합니다.")
+            if type(band_start) is not int or type(band_end) is not int:
+                raise ProcessingError("manual_band_v1 band 경계는 정수 행 위치여야 합니다.")
+            # The selector validates the source vectors and positive global maximum.
+            selection = _manual_selection(
+                strain,
+                stress,
+                None if progress is None else _real_vector(progress, what="진행축"),
+                start=band_start,
+                end=band_end,
+                peak_row=peak_row,
+                maximum_gap_over_band_span=minimum_gap,
+            )
+        else:
+            selection = select_stable_band(
+                strain,
+                stress,
+                progress,
+                minimum_band_rows=minimum_band_rows,
+                minimum_progress_span=minimum_progress_span,
+                maximum_stress_over_peak=maximum_stress_over_peak,
+                maximum_range_over_peak=maximum_range_over_peak,
+                maximum_gap_over_band_span=minimum_gap,
+            )
+    except (ValueError, TypeError) as exc:
+        raise ProcessingError(f"안정 밴드 입력을 검증할 수 없습니다: {exc}") from None
+
+    if selection.reason == "not_found":
+        unchanged = _readonly(stress)
+        return BandModelComputation(unchanged, selection, (), (), None, ())
+    if selection.reason != "selected":
+        raise ProcessingError(
+            "안정 밴드 후보가 원행 지지 간격을 만족하지 않습니다: "
+            f"reason={selection.reason}, max_gap_ratio={selection.max_gap_ratio}."
+        )
+    assert selection.band_start_row is not None and selection.band_end_row is not None
+    band_start_row = selection.band_start_row
+    band_end_row = selection.band_end_row
+    peak = selection.peak_row
+    if not peak < band_start_row < band_end_row:
+        raise ProcessingError("안정 밴드와 선행 봉우리의 원행 순서가 맞지 않습니다.")
+    if band_end_row - band_start_row < 2:
+        raise ProcessingError("오른쪽 관측 앵커를 뺀 밴드 적합 코어에 원행이 2개 미만입니다.")
+
+    events = tuple(detect_events(stress, 0.005, 0.005, 0.05))
+    completed_events = (
+        _full_recovery_completions(events, band_start=band_start_row, band_end=band_end_row)
+        if policy == AUTO_POLICY_V2
+        else ()
+    )
+    model_end_row = max((event.end_index for event in completed_events), default=band_end_row)
+    records: list[BandFitRecord] = []
+    compositions: list[ModelComposition] = []
+    try:
+        band_record = _fit_region(
+            strain,
+            stress,
+            method=method,
+            region_kind="band",
+            event=None,
+            peak_row=peak,
+            core_start=band_start_row,
+            right=model_end_row,
+            source_cell_start=0,
+            source_cell_end=model_end_row,
+            loading_floor_fraction=floor_fraction,
+            manual_left=left_anchor if policy == MANUAL_POLICY else None,
+        )
+    except AutoYieldFitError as exc:
+        raise ProcessingError(f"선택 밴드 {method} 원행 적합을 보류합니다: {exc}") from None
+    records.append(band_record)
+    assert band_record.left_anchor is not None
+    influence_start = band_record.left_anchor
+    if model_end_row > band_end_row:
+        compositions.append(
+            ModelComposition(
+                kind="full_recovery_completion",
+                event_intervals=tuple(
+                    (event.peak_index, event.end_index, event.kind)
+                    for event in completed_events
+                ),
+                component_intervals=((influence_start, band_end_row),),
+                outer_left=influence_start,
+                outer_right=model_end_row,
+                released_internal_anchors=(band_end_row,),
+                newly_included_rows=(band_end_row + 1, model_end_row),
+                includes_band=True,
+            )
+        )
+
+    pre_boundary = 0
+    post_boundary = model_end_row
+    event_records: list[BandFitRecord] = []
+    band_component = _ModelComponent(band_record, set(), True)
+    components = [band_component]
+    pending_pool_measurements: list[tuple[int, int, int, NDArray[np.float64]]] = []
+    if model_end_row > band_end_row:
+        unrelated = [
+            event
+            for event in events
+            if event not in completed_events
+            and event.end_index > band_end_row
+            and event.peak_index <= model_end_row
+        ]
+        if unrelated:
+            event = unrelated[0]
+            raise ProcessingError(
+                "full_recovery_completion_interrupted_by_other_event: "
+                f"peak={event.peak_index}, end={event.end_index}, "
+                f"model_influence={influence_start}~{model_end_row}."
+            )
+    for event_index, event in enumerate(events):
+        overlaps = event.peak_index <= model_end_row and event.end_index > influence_start
+        contained = event.peak_index >= influence_start and event.end_index <= model_end_row
+        open_terminal = event.kind == "terminal_unrecovered" or (
+            event.kind == "partial_recovery" and event.end_at_observation_boundary
+        )
+        if contained:
+            band_component.event_indices.add(event_index)
+            event_records.append(
+                _event_record(
+                    method,
+                    event,
+                    decision="band_subsumes_event",
+                    reason="원행 사건 전체가 실제 모델 영향 구간 안에 있습니다.",
+                    cell_start=0,
+                    cell_end=model_end_row,
+                    band_start=influence_start,
+                    band_end=model_end_row,
+                )
+            )
+            continue
+        if overlaps:
+            if model_end_row == band_end_row and _can_supersede_closed_partial_continuation(
+                event,
+                influence_start=influence_start,
+                band_start=band_start_row,
+                band_end=band_end_row,
+            ):
+                band_component.event_indices.add(event_index)
+                event_records.append(
+                    _event_record(
+                        method,
+                        event,
+                        decision="band_supersedes_partial_continuation",
+                        reason=(
+                            "닫힌 부분회복의 봉우리·골·반등 시작은 밴드 영향 안에 있어 "
+                            "밴드가 원행 R까지만 다룹니다. 원행 continuation "
+                            f"{band_end_row + 1}~{event.end_index}은 뒤이은 사건의 "
+                            "원자료 기준 적합 입력으로 남습니다. 그 후속 사건의 "
+                            "별도 영향 구간은 적합 결과에 따라 변경될 수 있습니다."
+                        ),
+                        cell_start=0,
+                        cell_end=model_end_row,
+                        band_start=influence_start,
+                        band_end=model_end_row,
+                    )
+                )
+                continue
+            if (
+                open_terminal
+                and influence_start <= event.peak_index < model_end_row
+                and event.end_index >= model_end_row
+            ):
+                event_records.append(
+                    _event_record(
+                        method,
+                        event,
+                        decision="band_supersedes_open_terminal",
+                        reason=(
+                            "선택 밴드의 선행 봉우리와 말단 미회복/열린 부분회복 "
+                            "영향이 겹칩니다."
+                        ),
+                        cell_start=0,
+                        cell_end=model_end_row,
+                        band_start=influence_start,
+                        band_end=model_end_row,
+                    )
+                )
+                continue
+            if event.recovery_index is not None:
+                event_records.append(
+                    _event_record(
+                        method,
+                        event,
+                        decision="held_event_crosses_band",
+                        reason=(
+                            "회복 사건이 모델 영향 경계를 가로질러 원행 셀에 "
+                            "분리할 수 없습니다."
+                        ),
+                        cell_start=0,
+                        cell_end=model_end_row,
+                        band_start=influence_start,
+                        band_end=model_end_row,
+                    )
+                )
+                raise ProcessingError(
+                    f"recovered_event_crosses_band_influence: peak={event.peak_index}, "
+                    f"recovery={event.recovery_index}, end={event.end_index}, "
+                    f"band_influence={influence_start}~{model_end_row}."
+                )
+            event_records.append(
+                _event_record(
+                    method,
+                    event,
+                    decision="held_unresolved_overlap",
+                    reason="미회복 사건이 선택 영향 경계를 가로질러 별도 적합하지 않았습니다.",
+                    cell_start=0,
+                    cell_end=model_end_row,
+                    band_start=influence_start,
+                    band_end=model_end_row,
+                )
+            )
+            continue
+
+        if event.recovery_index is None:
+            decision: _Decision = (
+                "kept_terminal_event"
+                if event.kind == "terminal_unrecovered"
+                else "kept_open_event_without_recovery"
+            )
+            event_records.append(
+                _event_record(
+                    method,
+                    event,
+                    decision=decision,
+                    reason="선택 밴드 밖의 미회복 사건은 원응력 그대로 보존했습니다.",
+                    cell_start=0 if event.end_index <= influence_start else model_end_row,
+                    cell_end=event.end_index,
+                    band_start=influence_start,
+                    band_end=model_end_row,
+                )
+            )
+            if event.end_index <= influence_start:
+                pre_boundary = max(pre_boundary, event.end_index)
+            continue
+
+        before_band = event.end_index <= influence_start
+        cell_start = pre_boundary if before_band else post_boundary
+        cell_end = event.end_index
+        try:
+            event_record = _fit_region(
+                strain,
+                stress,
+                method=method,
+                region_kind="event",
+                event=event,
+                peak_row=event.peak_index,
+                core_start=event.peak_index,
+                right=event.end_index,
+                source_cell_start=cell_start,
+                source_cell_end=cell_end,
+                loading_floor_fraction=floor_fraction,
+            )
+        except _NoFeasibleAnchorError as exc:
+            can_pool = (
+                policy == AUTO_POLICY_V2
+                and method == "lower_envelope"
+                and _eligible_pool_event(event)
+            )
+            if not can_pool:
+                raise ProcessingError(
+                    "disjoint_recovered_event_fit_infeasible: "
+                    f"method={method}, peak={event.peak_index}, end={event.end_index}, "
+                    f"cell={cell_start}~{cell_end}, reason={exc}"
+                ) from None
+
+            roots = [
+                index
+                for index, component in enumerate(components)
+                if component.proposal.right_anchor == cell_start
+            ]
+            if not roots:
+                raise ProcessingError(
+                    "lower_connected_component_unavailable: no immediately preceding "
+                    f"modeled component at source boundary {cell_start}; "
+                    f"peak={event.peak_index}, end={event.end_index}, reason={exc}"
+                ) from None
+            root_component = max(roots, key=lambda index: components[index].proposal.peak_row)
+            baseline_values = _compose_records(stress, [*records, *event_records])
+            try:
+                pooled, composition, _proposal, _old_right, closure = _lower_pool_proposal(
+                    strain,
+                    stress,
+                    events,
+                    components,
+                    root_component=root_component,
+                    failed_event_index=event_index,
+                    loading_floor_fraction=floor_fraction,
+                )
+            except _NoFeasibleAnchorError as pool_exc:
+                raise ProcessingError(
+                    "lower_connected_component_infeasible: "
+                    f"method={method}, peak={event.peak_index}, end={event.end_index}, "
+                    f"cell={cell_start}~{cell_end}, anchor_failure={exc}, "
+                    f"pool_failure={pool_exc}"
+                ) from None
+
+            consumed = set(closure.component_indices)
+            consumed_proposals = {id(components[index].proposal) for index in consumed}
+            member_reason = (
+                "이 원행 제안은 source-event 연결 성분의 단일 하측 적합에 포함되었습니다."
+            )
+            closure_event_ids = {id(events[index]) for index in closure.event_indices}
+            for bucket in (records, event_records):
+                for record_index, record in enumerate(bucket):
+                    if id(record) in consumed_proposals:
+                        bucket[record_index] = replace(
+                            record,
+                            decision="lower_component_pool_member",
+                            reason=member_reason,
+                            proposal=None,
+                        )
+            for record_index, record in enumerate(event_records):
+                if (
+                    record.source_event is not None
+                    and id(record.source_event) in closure_event_ids
+                    and record.decision == "band_supersedes_partial_continuation"
+                ):
+                    event_records[record_index] = replace(
+                        record,
+                        decision="lower_component_pool_member",
+                        reason=(
+                            "닫힌 부분회복의 원행 continuation이 뒤의 닫힌 적격 사건과 "
+                            "연결되어 하나의 원응력 하측 조합으로 재계산되었습니다."
+                        ),
+                    )
+
+            event_records.append(
+                _event_record(
+                    method,
+                    event,
+                    decision="lower_component_pool_member",
+                    reason="앵커-only 보류 뒤 닫힌 원행 사건 연결 성분으로 다시 적합했습니다.",
+                    cell_start=cell_start,
+                    cell_end=cell_end,
+                    band_start=influence_start,
+                    band_end=model_end_row,
+                )
+            )
+            if pooled.region_kind == "band":
+                records.append(pooled)
+            else:
+                event_records.append(pooled)
+            composition_index = len(compositions)
+            compositions.append(composition)
+            assert pooled.left_anchor is not None
+            pending_pool_measurements.append(
+                (
+                    composition_index,
+                    (
+                        composition.newly_included_rows[0]
+                        if composition.newly_included_rows is not None
+                        else pooled.right_anchor
+                    ),
+                    pooled.right_anchor,
+                    baseline_values,
+                )
+            )
+            remaining = [
+                component
+                for index, component in enumerate(components)
+                if index not in consumed
+            ]
+            remaining.append(
+                _ModelComponent(
+                    proposal=pooled,
+                    event_indices=set(closure.event_indices),
+                    is_band=pooled.region_kind == "band",
+                )
+            )
+            components = remaining
+        except AutoYieldFitError as exc:
+            raise ProcessingError(
+                "disjoint_recovered_event_fit_infeasible: "
+                f"method={method}, peak={event.peak_index}, end={event.end_index}, "
+                f"cell={cell_start}~{cell_end}, reason={exc}"
+            ) from None
+        else:
+            event_records.append(event_record)
+            components.append(_ModelComponent(event_record, {event_index}, False))
+        if before_band:
+            pre_boundary = max(pre_boundary, event.end_index)
+        else:
+            post_boundary = max(post_boundary, event.end_index)
+
+    records.extend(event_records)
+    values = _compose_records(stress, records)
+    for composition_index, left, right, baseline in pending_pool_measurements:
+        additional = values[left:right] - baseline[left:right]
+        compositions[composition_index] = replace(
+            compositions[composition_index],
+            newly_changed_points=int(np.count_nonzero(additional)),
+            max_additional_stress_change=(
+                0.0 if additional.size == 0 else float(np.max(np.abs(additional)))
+            ),
+        )
+    reported_model_end = model_end_row
+    for composition in compositions:
+        if composition.kind == "lower_connected_component" and composition.includes_band:
+            reported_model_end = max(reported_model_end, composition.outer_right)
+    result_values = _readonly(values)
+    return BandModelComputation(
+        result_values,
+        selection,
+        events,
+        tuple(records),
+        reported_model_end,
+        tuple(compositions),
+    )
+
+
+def _diagnostic_scalars(
+    source: NDArray[np.float64],
+    values: NDArray[np.float64],
+    selection: StableBandSelection,
+    left_anchor: int | None,
+    model_end_row: int | None,
+    compositions: tuple[ModelComposition, ...] = (),
+) -> tuple[Scalar, ...]:
+    peak = selection.peak_row
+    band_start = -1 if selection.band_start_row is None else selection.band_start_row
+    band_end = -1 if selection.band_end_row is None else selection.band_end_row
+    support = 0 if selection.band_start_row is None else band_end - band_start + 1
+    span = 0.0 if selection.progress_span is None else float(selection.progress_span)
+    gap_ratio = 0.0 if selection.max_gap_ratio is None else float(selection.max_gap_ratio)
+    lower_compositions = tuple(
+        composition
+        for composition in compositions
+        if composition.kind == "lower_connected_component"
+    )
+    released_anchors = {
+        anchor
+        for composition in compositions
+        for anchor in composition.released_internal_anchors
+    }
+    return (
+        Scalar("band_model_peak_index", "원응력 최댓값 행 위치", float(peak), "1"),
+        Scalar(
+            "band_model_band_start_index", "모델 밴드 시작 행 위치", float(band_start), "1"
+        ),
+        Scalar("band_model_band_end_index", "선택 밴드 오른쪽 끝 원행", float(band_end), "1"),
+        Scalar(
+            "band_model_model_end_index",
+            "밴드 연결 모델 영향 오른쪽 관측 앵커 행 위치",
+            float(-1 if model_end_row is None else model_end_row),
+            "1",
+        ),
+        Scalar(
+            "band_model_left_anchor_index",
+            "모델 영향 왼쪽 관측 앵커 행 위치",
+            float(-1 if left_anchor is None else left_anchor),
+            "1",
+        ),
+        Scalar("band_model_support_rows", "밴드 원행 지지 수", float(support), "1"),
+        Scalar("band_model_progress_span", "밴드 정규화 진행폭", span, "1"),
+        Scalar("band_model_max_gap_ratio", "밴드 최대 원행 간격 비율", gap_ratio, "1"),
+        Scalar(
+            "band_model_released_internal_anchor_count",
+            "해제한 내부 모델 앵커 수",
+            float(len(released_anchors)),
+            "1",
+        ),
+        Scalar(
+            "band_model_lower_composition_count",
+            "하측 연결 조합 수",
+            float(len(lower_compositions)),
+            "1",
+        ),
+        Scalar(
+            "band_model_lower_composition_changed_points",
+            "하측 연결 조합 신규 구간의 최종 변경 점 수",
+            float(sum(composition.newly_changed_points for composition in lower_compositions)),
+            "1",
+        ),
+        Scalar(
+            "band_model_lower_composition_max_additional_change",
+            "하측 연결 조합 신규 구간 최종 최대 응력 변화",
+            max(
+                (
+                    composition.max_additional_stress_change
+                    for composition in lower_compositions
+                ),
+                default=0.0,
+            ),
+            "Pa",
+        ),
+        Scalar(
+            "band_model_changed_points",
+            "모델 단계 변경 점 수",
+            float(np.count_nonzero(values != source)),
+            "1",
+        ),
+        Scalar(
+            "band_model_peak_depression",
+            "원봉우리 행 모델 응력 감소",
+            float(source[peak] - values[peak]),
+            "Pa",
+        ),
+        Scalar(
+            "band_model_max_stress_change",
+            "최대 원응력 변경 폭",
+            float(np.max(np.abs(values - source))),
+            "Pa",
+        ),
+    )
+
+
+def band_model(frame: Frame, options: dict[str, Any]) -> StepResult:
+    """Select one stable original-row band and compose method-specific proposals."""
+    resolved = _resolve_options(options)
+    strain, stress, progress, progress_note = _load_source(frame, resolved)
+    policy = resolved["policy"]
+    if policy == MANUAL_POLICY:
+        selection = _manual_selection(
+            strain,
+            stress,
+            progress,
+            start=resolved["band_start"],
+            end=resolved["band_end"],
+            peak_row=resolved["peak_row"],
+            maximum_gap_over_band_span=resolved["maximum_gap_over_band_span"],
+        )
+    else:
+        try:
+            selection = select_stable_band(
+                strain,
+                stress,
+                progress,
+                minimum_band_rows=resolved["minimum_band_rows"],
+                minimum_progress_span=resolved["minimum_progress_span"],
+                maximum_stress_over_peak=resolved["maximum_stress_over_peak"],
+                maximum_range_over_peak=resolved["maximum_range_over_peak"],
+                maximum_gap_over_band_span=resolved["maximum_gap_over_band_span"],
+            )
+        except (ValueError, TypeError) as exc:
+            raise ProcessingError(f"안정 밴드 원행 입력을 검증할 수 없습니다: {exc}") from None
+
+    if selection.reason == "not_found":
+        # Preserve the exact numerical compatibility path: do not even run the
+        # new source-event detector when the automatic selector found no band.
+        from matcore.processing.tensile import yield_drop
+
+        legacy = yield_drop(
+            frame,
+            {
+                "method": _LEGACY_METHODS[resolved["method"]],
+                "strain": resolved["strain"],
+                "stress": resolved["stress"],
+            },
+        )
+        legacy_stress = _real_vector(
+            legacy.frame.require(resolved["stress"], what="원응력"), what="기존 자동 결과"
+        )
+        notes = list(legacy.notes)
+        notes.append(
+            "안정 밴드가 선택되지 않아 같은 방법의 legacy *_auto_v1 단계에 "
+            "원입력을 그대로 위임했습니다."
+        )
+        if progress_note:
+            notes.append(progress_note)
+        return StepResult(
+            legacy.frame,
+            notes=tuple(notes),
+            scalars=legacy.scalars
+            + _diagnostic_scalars(stress, legacy_stress, selection, None, None),
+            effective_options=resolved,
+        )
+    if selection.reason != "selected":
+        raise ProcessingError(
+            "선택 밴드 후보가 최대 원행 간격 지지 조건을 만족하지 않습니다: "
+            f"reason={selection.reason}, max_gap_ratio={selection.max_gap_ratio}."
+        )
+
+    result = compute_band_model(
+        strain,
+        stress,
+        progress,
+        method=resolved["method"],
+        policy=policy,
+        minimum_band_rows=resolved["minimum_band_rows"],
+        minimum_progress_span=resolved["minimum_progress_span"],
+        maximum_stress_over_peak=resolved["maximum_stress_over_peak"],
+        maximum_range_over_peak=resolved["maximum_range_over_peak"],
+        maximum_gap_over_band_span=resolved["maximum_gap_over_band_span"],
+        loading_floor_fraction=resolved["loading_floor_fraction"],
+        band_start=resolved.get("band_start"),
+        band_end=resolved.get("band_end"),
+        peak_row=resolved.get("peak_row"),
+        left_anchor=resolved.get("left_anchor"),
+    )
+    left_anchor = next(
+        (
+            record.left_anchor
+            for record in result.records
+            if record.region_kind == "band" and record.decision == "band_fit"
+        ),
+        None,
+    )
+    columns = {key: value for key, value in frame.columns.items()}
+    columns[resolved["stress"]] = np.asarray(result.values, dtype=np.float64).copy()
+    output_frame = Frame(columns, dict(frame.units))
+    result_band_start = result.selection.band_start_row
+    result_band_end = result.selection.band_end_row
+    assert result_band_start is not None and result_band_end is not None
+    notes = [
+        f"방법={resolved['method']}, 정책={policy}, "
+        f"원행 봉우리 p={result.selection.peak_row}, "
+        f"선택 B={result_band_start}~{result_band_end}; 실제 적합 코어와 영향 구간은 "
+        f"방법별 기록을 따릅니다. 밴드 연결 모델의 오른쪽 관측 앵커 "
+        f"R_model={result.model_end_row}, "
+        f"왼쪽 관측 앵커 L={left_anchor}.",
+        "원응력 최댓값·밴드 통계는 측정 provenance이고, 선택한 곡선은 별도 모델 근사입니다. "
+        "이 단계는 물리적 하항복점이나 파단을 판정하지 않습니다.",
+    ]
+    for record in result.records:
+        event = record.source_event
+        if record.region_kind == "band" and record.proposal is not None:
+            notes.append(
+                f"{record.method}: 원행 core {record.core_start}~{record.core_end}, "
+                f"영향 {record.left_anchor}~{record.right_anchor}, 관측 앵커 "
+                f"({record.left_anchor},{stress[record.left_anchor]:.6g} Pa)·"
+                f"({record.right_anchor},{stress[record.right_anchor]:.6g} Pa); "
+                f"원행 밴드 적합 {record.fit_rows_start}~{record.fit_rows_end}."
+            )
+        elif event is not None:
+            notes.append(
+                f"원행 사건 peak={event.peak_index}, kind={event.kind}, "
+                f"행={event.peak_index}~{event.end_index}: {record.decision}"
+                + (f" ({record.reason})" if record.reason else "")
+                + (
+                    f"; core={record.core_start}~{record.core_end}, "
+                    f"influence={record.left_anchor}~{record.right_anchor}"
+                    if record.proposal is not None
+                    else ""
+                )
+                + "."
+            )
+    for composition in result.compositions:
+        if composition.kind == "full_recovery_completion":
+            notes.append(
+                f"원행 full_recovery 사건 {composition.event_intervals}의 완료 관측행에 맞춰 "
+                f"모델 오른쪽 앵커를 선택 밴드 끝 {result_band_end}에서 "
+                f"{composition.outer_right}로 확장했습니다. 선택 밴드와 통계는 그대로입니다."
+            )
+        elif composition.kind == "lower_connected_component":
+            notes.append(
+                "하측 연결 조합: 원행 사건 "
+                f"{composition.event_intervals}, 모델 성분 {composition.component_intervals}; "
+                f"바깥 관측 앵커 L={composition.outer_left}, R={composition.outer_right}; "
+                f"해제한 내부 앵커={composition.released_internal_anchors}; "
+                f"새 영향 행={composition.newly_included_rows}; "
+                f"직전 pool 기준 대비 신규 open span의 최종 곡선 변경="
+                f"{composition.newly_changed_points}행, "
+                f"최대 응력 변화={composition.max_additional_stress_change:.6g} Pa. "
+                "뒤이은 연결 pool은 이 span을 다시 바꿀 수 있어 값은 최종 곡선을 "
+                "기준으로 계산합니다. 모든 제안은 원응력에서 한 번 다시 계산했습니다."
+            )
+    edited_intervals = [
+        (record.left_anchor, record.right_anchor)
+        for record in result.records
+        if record.proposal is not None and record.left_anchor is not None
+    ]
+    outside_decreases = 0
+    for row in np.flatnonzero(np.diff(result.values) < 0.0):
+        if not any(
+            start <= int(row) and int(row) + 1 <= end for start, end in edited_intervals
+        ):
+            outside_decreases += 1
+    notes.append(
+        f"전체 입력이 아니라 각 선언 영향 구간만 확인했습니다. 편집 영역 밖에 원행 하강 "
+        f"{outside_decreases}개가 남아 있습니다."
+    )
+    if progress_note:
+        notes.append(progress_note)
+    return StepResult(
+        output_frame,
+        notes=tuple(notes),
+        scalars=_diagnostic_scalars(
+            stress,
+            result.values,
+            result.selection,
+            left_anchor,
+            result.model_end_row,
+            result.compositions,
+        ),
+        effective_options=resolved,
+    )
