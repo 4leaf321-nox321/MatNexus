@@ -95,7 +95,15 @@ from app.modules.statistics import services as statistics_services
 from app.modules.tests.models import TestRun, TestType
 from app.modules.viscoelastic.models import MasterCurve, PronyFit
 from app.modules.workspaces.models import Workspace
-from app.shared import audit, display, filestore, litdeck, pagination, permissions
+from app.shared import (
+    audit,
+    declared_slots,
+    display,
+    filestore,
+    litdeck,
+    pagination,
+    permissions,
+)
 from app.shared.auth import current_user, require_system_admin
 from app.shared.errors import AppError, Conflict, Forbidden, NotFound
 from app.shared.pagination import Page
@@ -1014,7 +1022,20 @@ def _save_card(db: Session, user: User, item: PropertyCard) -> PropertyCardOut:
 
     카드 만드는 길이 여섯이라 한 함수로 모은다. 새 카드 종류가 생겨도 여기로
     오게 — 꼬리를 손으로 적게 두면 그중 하나만 안 남는다.
+
+    **적어 둔 값이 빈 칸을 채우는 것도 여기서 한다**(`declared_slots`). 여섯 길에
+    각자 적으면 그중 하나만 빠지고, 그때 사람은 「어떤 카드는 되고 어떤 카드는
+    안 된다」 를 겪는다 — 감사 꼬리와 같은 이유로 같은 자리에 둔다.
     """
+    stated = declared_slots.fill(db, db.get(Material, item.material_id), item.blocks or {})
+    if stated:
+        # **채웠으면 말한다.** 덱을 받은 사람이 「이 값은 잰 것인가」 를 물을 때,
+        # 카드 안의 `_source` 와 각주가 같은 말을 해야 한다.
+        source = dict(item.source or {})
+        notes = list(source.get("notes") or [])
+        notes.append(f"적어 둔 값으로 채운 칸: {' · '.join(stated)}.")
+        source["notes"] = notes
+        item.source = source
     db.add(item)
     # 감사는 **같은 트랜잭션** 안에 있어야 한다. id 는 flush 뒤에 생긴다.
     db.flush()

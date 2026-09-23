@@ -133,8 +133,13 @@ def _scalar_property_map() -> dict[str, str]:
     return found
 
 
-def _item_property_map(db: Session) -> dict[str, str]:
-    """사내 물성 항목 이름 → 문헌 물성 키(`property_links`)."""
+def item_property_map(db: Session) -> dict[str, str]:
+    """사내 물성 항목 이름 → 문헌 물성 키(`property_links`).
+
+    **이 다리를 두 곳에 두지 않는다.** 커버리지가 「잰 값과 문헌값이 같은 물성인가」
+    를 묻는 데 쓰고, 카드 채우기(`declared_slots`)가 「적어 둔 값이 어느 칸에 가나」
+    를 묻는 데 쓴다 — 둘이 갈라지면 화면이 이었다고 한 것이 카드에는 안 실린다.
+    """
     rows = db.execute(
         select(VocabularyTerm.value, PropertyLink.property_key).join(
             VocabularyTerm, VocabularyTerm.id == PropertyLink.term_id
@@ -254,7 +259,7 @@ def collect(db: Session, material_id: uuid.UUID) -> Coverage:
         unmapped["scalars"] = unmapped_scalars
 
     # ── 선언 물성 (재료 층 + 시료 층)
-    item_map = _item_property_map(db)
+    item_map = item_property_map(db)
     unmapped_items: set[str] = set()
     material = db.get(Material, material_id)
     holders: list[tuple[str, str, str, list[dict[str, Any]]]] = []
