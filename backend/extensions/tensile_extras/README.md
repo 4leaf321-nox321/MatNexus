@@ -11,20 +11,24 @@ replace the original `proof_stress` result or its property mapping.
 
 Keep the recipe source-first:
 
-1. Calculate the source-curve elastic modulus and raw proof strength before any
-   yield-drop editing. If a later crop will use a `tensile.necking_candidate`,
-   record that candidate on the acquired curve before editing too. This records
-   the measured values against the acquired engineering curve.
-2. Apply the selected `tensile.yield_drop` operation. An explicit `lower_yield`
-   plateau is a model approximation and does not measure ReL or Lüders strain.
-3. Run `tensile.model_anchor` on the resulting model curve.
-4. Resample or crop if needed, while retaining the model start strain in the
-   curve and staying within the unnecked range used for plastic conversion.
-5. Pass **both** model references to `tensile.true_plastic`.
+1. Calculate source-curve E and raw proof strength before changing the model
+   domain or applying a model operation. If a later crop uses a
+   `tensile.necking_candidate`, record it on the acquired curve first.
+2. For a new model recipe, add `tensile.terminal_domain` after those source
+   measurements. Then select one intended model operation: an existing
+   `tensile.yield_drop` method or `tensile.model_curve`.
+3. Run `tensile.model_anchor` on that model curve, using the original measured
+   E, and pass **both** model references to `tensile.true_plastic`.
+4. Resample or crop only when needed, retaining the model start strain and
+   staying within the unnecked range used for plastic conversion.
 
-After the source E and raw Rp steps, followed by the chosen yield-drop operation,
-the model anchor can inherit the original E. The final two stages use the paired
-model stress and strain explicitly:
+The terminal step is explicit in new recipes; catalog order does not insert it
+into a pipeline. Saved recipes keep their existing behavior. A `lower_yield`
+plateau remains a model approximation and does not measure ReL or Lüders strain.
+
+After the source E and raw Rp steps and the chosen model operation, the model
+anchor can inherit the original E. The final two stages use the paired model
+stress and strain explicitly:
 
 ```json
 [
@@ -44,28 +48,56 @@ model stress and strain explicitly:
 ```
 
 The raw proof step records the 0.2% Rp calculated from the original curve. The
-model anchor may use another offset and operates on the post-edit model curve.
+model anchor may use another offset and operates on the selected model curve.
 Pass its stress and strain together: passing stress alone can select a different
 stress crossing and lose the chosen offset coordinate.
+
+## Common model-domain step
+
+Put `tensile.terminal_domain` after source E, raw Rp, and any
+`tensile.necking_candidate` measurement, then before the chosen model operation.
+Use it in each new recipe for the seven supported model operations. It selects
+one inclusive prefix for every channel in the current frame; the original
+engineering curve and its E/Rp results remain unchanged. The next model method
+still applies its own strain-order and conversion checks.
+
+The default `terminal_loss_auto_v1` only removes a supported, abrupt load loss
+near the recorded end when the load does not recover. An available `time`
+column is used only when its unit is seconds and its values are finite and
+strictly increasing; otherwise the step falls back to strictly increasing
+engineering strain, then acquisition row order. Notes identify the axis and
+any fallback. Row-order progress cannot establish physical spacing. A large
+sampling gap across a possible loss or a stable loaded band after it makes the
+automatic end ambiguous and stops the step for review. A gradual end decline
+remains in the frame and is reported as unresolved by this policy. These rules
+do not identify necking or fracture.
+
+Use `manual_end_v1` with a reviewed zero-based `end_index` when the automatic
+decision is ambiguous or a different boundary is intended. The selected row is
+included; every later row is excluded from all channels. Its index is relative
+to the current frame, so an upstream crop changes the index domain.
 
 ## Upper-envelope model curve
 
 Choose `tensile.model_curve` when the intended model is the running maximum of
 engineering stress. It is an alternative model operation to `tensile.yield_drop`;
-the recipe should state which operation defines the curve. For a selected input
-domain, run the existing `curve.crop` before `tensile.model_curve`. The step
-applies `np.maximum.accumulate` to every row it receives, raises every drop
-including small ones, keeps every row, and holds the last running maximum through
-the recorded end. It does not rejoin a later measured tail.
+the recipe should state which operation defines the curve. If a separate
+upstream crop chooses the input domain, apply it before `tensile.terminal_domain`.
+The upper-envelope step then applies `np.maximum.accumulate` to every row it
+receives, raises every drop including small ones, keeps every row in that
+selected prefix, and holds the last running maximum through its recorded end.
+It does not rejoin a later measured tail.
 
-The upper-envelope recipe follows the source E and raw Rp steps with the model
-curve and then `tensile.model_anchor`. If a later crop will use a
+The upper-envelope recipe follows source E, raw Rp, and terminal-domain
+selection with the model curve and then `tensile.model_anchor`. If a later crop
+will use a
 `tensile.necking_candidate`, calculate the candidate on the acquired curve
-before applying `tensile.model_curve`. The paired model stress and strain still
-go to `tensile.true_plastic`:
+before applying `tensile.terminal_domain`. The paired model stress and strain
+still go to `tensile.true_plastic`:
 
 ```json
 [
+  {"plugin": "tensile.terminal_domain", "options": {}},
   {"plugin": "tensile.model_curve", "options": {}},
   {"plugin": "tensile.model_anchor", "options": {"offset_strain": 0.002}},
   {
@@ -100,8 +132,8 @@ When `youngs_modulus` is omitted from the anchor options, its local preparation
 hook references the earlier `@youngs_modulus`. An explicitly entered number is
 used as supplied, and another reference remains intact. The anchor does not
 recompute E from the edited curve. Keep the original measured E step before the
-yield-drop operation; use an intentional numeric E only when the recipe calls
-for a user-specified modulus.
+selected model operation; use an intentional numeric E only when the recipe
+calls for a user-specified modulus.
 
 The paired values remain valid through resampling and cropping only while the
 model start point remains inside the retained curve. A crop that removes that
@@ -119,5 +151,6 @@ stages consume.
 - `tensile.model_curve` supplies a full-range upper envelope with a held recorded
   tail. Existing `tensile.yield_drop` automatic profiles remain unchanged for
   saved-recipe compatibility.
-- The event detector identifies drop and recovery events. It is not a classifier
-  for plateau duration or slope; that needs a separately specified rule.
+- `terminal_loss_auto_v1` handles supported abrupt end losses only. Gradual or
+  ambiguous endings still need review; it is not a general tail classifier or
+  physical fracture detector.

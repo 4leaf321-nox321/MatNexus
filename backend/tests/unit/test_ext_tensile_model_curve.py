@@ -80,9 +80,10 @@ class Test모델_공칭곡선_등록:
         plugin = registry.get("tensile.model_curve")
         assert plugin.kind == "processing"
         assert plugin.label == "소성 모델 공칭곡선"
-        assert plugin.order == 81
+        assert plugin.order == 82
         assert plugin.version == "1"
         assert registry.get("tensile.necking_candidate").order < plugin.order
+        assert registry.get("tensile.terminal_domain").order < plugin.order
         assert plugin.order < registry.get("tensile.model_anchor").order
         assert plugin.applies_to == ("tensile",)
         assert plugin.requires_channels == (("displacement",), ("force",))

@@ -788,8 +788,11 @@ class Test자동하강프로필저장:
         assert "tensile.model_anchor" in steps_by_id
         if profile_step["plugin"] == "tensile.model_curve":
             model_curve = steps_by_id["tensile.model_curve"]
+            terminal_domain = steps_by_id["tensile.terminal_domain"]
             assert model_curve["label"] == "소성 모델 공칭곡선"
-            assert model_curve["order"] == 81
+            assert terminal_domain["order"] == 81
+            assert model_curve["order"] == 82
+            assert terminal_domain["order"] < model_curve["order"]
             curve_params = {one["name"]: one for one in model_curve["params"]}
             assert curve_params["method"]["default"] == "upper_envelope_auto_v1"
             model_curve_values = model_curve["makes_values"]
@@ -1097,6 +1100,184 @@ class Test자동하강프로필저장:
         )
         assert second_curve.status_code == 200, second_curve.text
         assert second_curve.json()["points"] == first_curve.json()["points"]
+
+
+class Test자동종료도메인처리:
+    def test_수동저장범위가_원곡선과_분리되어_레시피와_결과에_남는다(
+        self, client: TestClient, admin_headers: dict[str, str], run_id: str
+    ) -> None:
+        """자동 검출을 검증하지 않고도 명시한 종료 행의 저장 계약을 본다."""
+        curve_params = {"x": "displacement", "y": "force", "max_points": 5000}
+        source_before = client.get(
+            f"/api/test-runs/{run_id}/curve", params=curve_params, headers=admin_headers
+        )
+        assert source_before.status_code == 200, source_before.text
+
+        source_steps = [
+            *STEPS,
+            {
+                "plugin": "tensile.elastic_modulus",
+                "options": {"method": "manual", "manual_modulus": 200e9},
+            },
+            {
+                "plugin": "tensile.proof_stress",
+                "options": {"offset_strain": 0.002, "youngs_modulus": "@youngs_modulus"},
+            },
+        ]
+        prefix = client.post(
+            "/api/processing/preview?x=strain_engineering&y=stress_engineering",
+            json={"test_run_id": run_id, "steps": source_steps},
+            headers=admin_headers,
+        )
+        assert prefix.status_code == 200, prefix.text
+        prefix_body = prefix.json()
+        source_rows = prefix_body["row_count"]
+        assert source_rows > 4
+        prefix_values = {one["key"]: one["value"] for one in prefix_body["scalars"]}
+        original_measurements = {
+            key: prefix_values[key] for key in ("youngs_modulus", "proof_stress")
+        }
+        # Two final rows are cut, leaving the measured offset crossing available.
+        end_index = source_rows - 3
+        steps = [
+            *source_steps,
+            {
+                "plugin": "tensile.terminal_domain",
+                "options": {"policy": "manual_end_v1", "end_index": end_index},
+            },
+            {
+                "plugin": "tensile.model_curve",
+                "options": {"method": "upper_envelope_auto_v1"},
+            },
+            {
+                "plugin": "tensile.model_anchor",
+                "options": {"offset_strain": 0.003, "youngs_modulus": "@youngs_modulus"},
+            },
+            {
+                "plugin": "tensile.true_plastic",
+                "options": {
+                    "youngs_modulus": "@youngs_modulus",
+                    "proof_stress": "@model_proof_stress",
+                    "proof_strain": "@model_proof_strain",
+                },
+            },
+        ]
+        key = f"terminal_domain_contract_{uuid.uuid4().hex[:10]}"
+        made = client.post(
+            "/api/processing/recipes",
+            json={
+                "key": key,
+                "label": "수동 종료 범위 저장 계약",
+                "description": None,
+                "test_type_key": "tensile",
+                "steps": steps,
+                "is_active": True,
+            },
+            headers=admin_headers,
+        )
+        assert made.status_code == 201, made.text
+
+        recipes = client.get(
+            "/api/processing/recipes?test_type=tensile", headers=admin_headers
+        )
+        assert recipes.status_code == 200, recipes.text
+        recipe = next(one for one in recipes.json() if one["key"] == key)
+        assert recipe["steps"] == steps
+
+        preview = client.post(
+            "/api/processing/preview?x=strain_engineering&y=stress_engineering",
+            json={"test_run_id": run_id, "steps": recipe["steps"]},
+            headers=admin_headers,
+        )
+        assert preview.status_code == 200, preview.text
+        preview_body = preview.json()
+        assert preview_body["problem"] is None
+        retained_rows = end_index + 1
+        domain_stage = next(
+            one for one in preview_body["stages"] if one["plugin"] == "tensile.terminal_domain"
+        )
+        assert domain_stage["row_count"] == retained_rows
+        assert domain_stage["options"]["policy"] == "manual_end_v1"
+        assert domain_stage["options"]["end_index"] == end_index
+        assert domain_stage["options"]["strain"] == "strain_engineering"
+        assert domain_stage["options"]["stress"] == "stress_engineering"
+        preview_values = {one["key"]: one["value"] for one in preview_body["scalars"]}
+        assert preview_values["terminal_domain_end_index"] == pytest.approx(end_index)
+        assert preview_values["terminal_domain_removed_points"] == pytest.approx(2)
+        for scalar_key, value in original_measurements.items():
+            assert preview_values[scalar_key] == pytest.approx(value)
+        expected_end_strain = preview_values["terminal_domain_end_strain"]
+        assert 2 <= preview_body["row_count"] <= retained_rows
+        assert preview_body["points"]
+        assert preview_body["points"][-1][0] == pytest.approx(expected_end_strain)
+
+        saved = client.post(
+            "/api/processing/results",
+            json={"test_run_id": run_id, "steps": recipe["steps"], "recipe_key": key},
+            headers=admin_headers,
+        )
+        assert saved.status_code == 201, saved.text
+        first = saved.json()
+        assert first["row_count"] == preview_body["row_count"]
+        assert first["row_count"] <= retained_rows
+        first_values = {one["key"]: one["value"] for one in first["scalars"]}
+        for scalar_key, value in original_measurements.items():
+            assert first_values[scalar_key] == pytest.approx(value)
+        assert first_values["terminal_domain_removed_points"] == pytest.approx(2)
+
+        listed = client.get(
+            f"/api/processing/results?test_run_id={run_id}", headers=admin_headers
+        )
+        assert listed.status_code == 200, listed.text
+        persisted = next(one for one in listed.json() if one["id"] == first["id"])
+        assert persisted["steps"] == recipe["steps"]
+        saved_stage = next(
+            one for one in persisted["stages"] if one["plugin"] == "tensile.terminal_domain"
+        )
+        assert saved_stage["options"] == domain_stage["options"]
+
+        first_curve = client.get(
+            f"/api/processing/results/{first['id']}/curve",
+            params={"x": "strain_engineering", "y": "stress_engineering"},
+            headers=admin_headers,
+        )
+        assert first_curve.status_code == 200, first_curve.text
+        first_curve_body = first_curve.json()
+        assert first_curve_body["row_count"] == preview_body["row_count"]
+        assert first_curve_body["row_count"] <= retained_rows
+        assert first_curve_body["points"] == preview_body["points"]
+        assert first_curve_body["points"][-1][0] == pytest.approx(expected_end_strain)
+
+        replay = client.post(
+            "/api/processing/results",
+            json={"test_run_id": run_id, "steps": recipe["steps"], "recipe_key": key},
+            headers=admin_headers,
+        )
+        assert replay.status_code == 201, replay.text
+        replay_values = {one["key"]: one["value"] for one in replay.json()["scalars"]}
+        for scalar_key in (
+            "youngs_modulus",
+            "proof_stress",
+            "terminal_domain_end_index",
+            "terminal_domain_end_strain",
+        ):
+            assert replay_values[scalar_key] == pytest.approx(first_values[scalar_key])
+        replay_curve = client.get(
+            f"/api/processing/results/{replay.json()['id']}/curve",
+            params={"x": "strain_engineering", "y": "stress_engineering"},
+            headers=admin_headers,
+        )
+        assert replay_curve.status_code == 200, replay_curve.text
+        assert replay_curve.json()["row_count"] == preview_body["row_count"]
+        assert replay_curve.json()["row_count"] <= retained_rows
+        assert replay_curve.json()["points"] == first_curve_body["points"]
+
+        source_after = client.get(
+            f"/api/test-runs/{run_id}/curve", params=curve_params, headers=admin_headers
+        )
+        assert source_after.status_code == 200, source_after.text
+        assert source_after.json()["row_count"] == source_before.json()["row_count"]
+        assert source_after.json()["points"] == source_before.json()["points"]
 
 
 class Test레시피:

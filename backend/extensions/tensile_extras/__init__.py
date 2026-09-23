@@ -24,6 +24,7 @@ from . import (  # noqa: F401  (card 는 import 만으로 블록·렌더러를 �
     model_curve,
     ratio,
     temperature,
+    terminal_domain,
 )
 
 register(
@@ -66,6 +67,119 @@ register(
     order=85,
     version="1",
 )(ratio.yield_ratio)
+
+register(
+    id="tensile.terminal_domain",
+    kind="processing",
+    label="인장 모델 말단 구간",
+    applies_to=("tensile",),
+    requires_channels=(("displacement",), ("force",)),
+    params=(
+        ParamSpec(
+            name="policy",
+            label="말단 구간 정책",
+            type="choice",
+            choices=terminal_domain.POLICIES,
+            default=terminal_domain.AUTO_POLICY,
+            choice_labels={
+                terminal_domain.AUTO_POLICY: "말단 하중 소실 자동 검토",
+                terminal_domain.MANUAL_POLICY: "검토한 끝 행 직접 지정",
+            },
+            choice_help={
+                terminal_domain.AUTO_POLICY: (
+                    "진행축의 마지막 10% 안에서 급격하고 회복되지 않는 하중 소실만 제외합니다."
+                ),
+                terminal_domain.MANUAL_POLICY: (
+                    "현재 입력 프레임의 0부터 세는 마지막 포함 행을 직접 지정합니다."
+                ),
+            },
+        ),
+        ParamSpec(
+            name="end_index",
+            label="마지막 포함 행 위치 (0부터)",
+            type="int",
+            required=True,
+            when={"policy": (terminal_domain.MANUAL_POLICY,)},
+            help="검토한 현재 입력 프레임 행 위치. 해당 행까지 포함하고 뒤 행은 모두 뺍니다.",
+        ),
+        ParamSpec(
+            name="strain",
+            label="변형률 열",
+            type="str",
+            role="column",
+            default=terminal_domain.DEFAULT_STRAIN,
+            unit="1",
+            dimension="strain",
+        ),
+        ParamSpec(
+            name="stress",
+            label="응력 열",
+            type="str",
+            role="column",
+            default=terminal_domain.DEFAULT_STRESS,
+            unit="Pa",
+        ),
+        ParamSpec(
+            name="time",
+            label="시간 열",
+            type="str",
+            role="column",
+            unit="s",
+            help=(
+                "비우면 'time' 열이 있을 때 초 단위로 확인해 씁니다. 선택한 열이 없거나 "
+                "유효하지 않으면 변형률 또는 행 순서로 대체합니다."
+            ),
+        ),
+    ),
+    makes_values=(
+        Produced(
+            key="terminal_domain_end_index",
+            label="모델 구간 끝 행 위치 (0부터)",
+            si_unit="1",
+            help="유지한 현재 입력 프레임의 마지막 행 위치(포함).",
+        ),
+        Produced(
+            key="terminal_domain_end_strain",
+            label="모델 구간 끝 변형률",
+            si_unit="1",
+            help="모델 구간에 포함한 마지막 행의 공칭 변형률.",
+        ),
+        Produced(
+            key="terminal_domain_removed_points",
+            label="제외한 말단 점 수",
+            si_unit="1",
+            help="현재 입력 프레임에서 모델 구간 밖으로 제외한 행 수.",
+        ),
+        Produced(key="terminal_domain_input_points", label="입력 점 수", si_unit="1"),
+        Produced(
+            key="terminal_domain_input_end_load",
+            label="입력 끝 응력",
+            si_unit="Pa",
+        ),
+        Produced(
+            key="terminal_domain_decision_code",
+            label="말단 결정 코드",
+            si_unit="1",
+            help="0은 자동 무절단, 1은 자동 제외, 2는 수동 끝 행 적용입니다.",
+        ),
+        Produced(
+            key="terminal_domain_strain_strict",
+            label="입력 변형률 엄격 증가 여부",
+            si_unit="1",
+        ),
+        Produced(
+            key="terminal_domain_progress_basis_code",
+            label="진행축 코드",
+            si_unit="1",
+            help=(
+                "0은 행 순서, 1은 변형률, 2는 시간입니다. 자세한 대체 사유는 "
+                "단계 설명에 있습니다."
+            ),
+        ),
+    ),
+    order=81,
+    version="1",
+)(terminal_domain.terminal_domain)
 
 register(
     id="tensile.model_curve",
@@ -124,7 +238,7 @@ register(
         Produced(key="model_curve_max_raise", label="최대 응력 올림 폭", si_unit="Pa"),
         Produced(key="model_curve_end_raise", label="기록 끝 응력 올림 폭", si_unit="Pa"),
     ),
-    order=81,
+    order=82,
     version="1",
 )(model_curve.model_curve)
 
