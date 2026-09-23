@@ -21,6 +21,7 @@ from matcore.registry import ParamSpec, Produced, register
 from . import (  # noqa: F401  (card 는 import 만으로 블록·렌더러를 등록한다)
     card,
     model_anchor,
+    model_curve,
     ratio,
     temperature,
 )
@@ -65,6 +66,67 @@ register(
     order=85,
     version="1",
 )(ratio.yield_ratio)
+
+register(
+    id="tensile.model_curve",
+    kind="processing",
+    label="소성 모델 공칭곡선",
+    applies_to=("tensile",),
+    requires_channels=(("displacement",), ("force",)),
+    params=(
+        ParamSpec(
+            name="method",
+            label="방법",
+            type="choice",
+            choices=(model_curve.METHOD,),
+            default=model_curve.METHOD,
+            choice_labels={model_curve.METHOD: "상측 포락선(자동)"},
+            help="모든 입력 행에 원응력의 누적 최댓값을 적용합니다.",
+        ),
+        ParamSpec(
+            name="strain",
+            label="변형률 열",
+            type="str",
+            role="column",
+            default=model_curve.DEFAULT_STRAIN,
+            unit="1",
+            dimension="strain",
+        ),
+        ParamSpec(
+            name="stress",
+            label="응력 열",
+            type="str",
+            role="column",
+            default=model_curve.DEFAULT_STRESS,
+            unit="Pa",
+        ),
+    ),
+    makes_values=(
+        Produced(key="model_curve_changed_points", label="변경 점 수", si_unit="1"),
+        Produced(
+            key="model_curve_peak_stress",
+            label="입력 응력 최댓값",
+            si_unit="Pa",
+            help="현재 입력 프레임의 선택 응력 열에서 가장 높은 원래 관측값.",
+        ),
+        Produced(
+            key="model_curve_peak_strain",
+            label="입력 응력 최댓값 변형률",
+            si_unit="1",
+            help="현재 입력 프레임에서 응력 최댓값이 처음 나타난 변형률.",
+        ),
+        Produced(
+            key="model_curve_peak_index",
+            label="입력 행 위치 (0부터)",
+            si_unit="1",
+            help="현재 입력 프레임에서 0부터 세는 행 위치이며 Excel 행 번호가 아닙니다.",
+        ),
+        Produced(key="model_curve_max_raise", label="최대 응력 올림 폭", si_unit="Pa"),
+        Produced(key="model_curve_end_raise", label="기록 끝 응력 올림 폭", si_unit="Pa"),
+    ),
+    order=81,
+    version="1",
+)(model_curve.model_curve)
 
 register(
     id="tensile.model_anchor",

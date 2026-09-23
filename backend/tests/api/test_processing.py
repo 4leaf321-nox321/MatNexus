@@ -16,6 +16,7 @@
 from __future__ import annotations
 
 import uuid
+from itertools import pairwise
 from pathlib import Path
 from typing import Any
 
@@ -752,8 +753,31 @@ class Test결과는불변:
 
 
 class Test자동하강프로필저장:
+    @pytest.mark.parametrize(
+        "profile_step",
+        [
+            pytest.param(
+                {
+                    "plugin": "tensile.yield_drop",
+                    "options": {"method": "linear_auto_v1"},
+                },
+                id="linear_auto_v1",
+            ),
+            pytest.param(
+                {
+                    "plugin": "tensile.model_curve",
+                    "options": {"method": "upper_envelope_auto_v1"},
+                },
+                id="upper_envelope_auto_v1",
+            ),
+        ],
+    )
     def test_모델_소성_시작점은_원래_Rp와_분리되어_저장_채택_재생된다(
-        self, client: TestClient, admin_headers: dict[str, str], run_id: str
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        run_id: str,
+        profile_step: dict[str, Any],
     ) -> None:
         """모델 곡선의 시작점은 새 값으로 남고, 원곡선의 Rp는 그대로 채택된다."""
         catalog = client.get(
@@ -762,6 +786,16 @@ class Test자동하강프로필저장:
         assert catalog.status_code == 200, catalog.text
         steps_by_id = {one["id"]: one for one in catalog.json()}
         assert "tensile.model_anchor" in steps_by_id
+        if profile_step["plugin"] == "tensile.model_curve":
+            model_curve = steps_by_id["tensile.model_curve"]
+            assert model_curve["label"] == "소성 모델 공칭곡선"
+            assert model_curve["order"] == 81
+            curve_params = {one["name"]: one for one in model_curve["params"]}
+            assert curve_params["method"]["default"] == "upper_envelope_auto_v1"
+            model_curve_values = model_curve["makes_values"]
+            assert model_curve_values
+            assert all(one["key"].startswith("model_") for one in model_curve_values)
+            assert all(one["property_key"] is None for one in model_curve_values)
         original_rp = next(
             one
             for one in steps_by_id["tensile.proof_stress"]["makes_values"]
@@ -791,10 +825,7 @@ class Test자동하강프로필저장:
                 "plugin": "tensile.proof_stress",
                 "options": {"offset_strain": 0.002, "youngs_modulus": "@youngs_modulus"},
             },
-            {
-                "plugin": "tensile.yield_drop",
-                "options": {"method": "linear_auto_v1"},
-            },
+            profile_step,
             {
                 "plugin": "tensile.model_anchor",
                 # A distinct supported offset proves this is an independent model Rp.
@@ -839,6 +870,18 @@ class Test자동하강프로필저장:
         assert listed_response.status_code == 200, listed_response.text
         persisted = next(one for one in listed_response.json() if one["id"] == saved["id"])
         assert persisted["steps"] == recipe["steps"]
+        if profile_step["plugin"] == "tensile.model_curve":
+            curve_stage = next(
+                one for one in persisted["stages"] if one["plugin"] == "tensile.model_curve"
+            )
+            assert curve_stage["options"] == {
+                "method": "upper_envelope_auto_v1",
+                "strain": "strain_engineering",
+                "stress": "stress_engineering",
+                "domain": "all_input_rows",
+                "tail_policy": "hold_running_max",
+                "profile_version": "1",
+            }
         first_scalars = {one["key"]: one["value"] for one in persisted["scalars"]}
         original_value = first_scalars["proof_stress"]
         model_value = first_scalars["model_proof_stress"]
@@ -876,6 +919,16 @@ class Test자동하강프로필저장:
                 model_value * (1.0 + first_scalars["model_proof_strain"]),
             )
         )
+        if profile_step["plugin"] == "tensile.model_curve":
+            model_curve = client.get(
+                f"/api/processing/results/{saved['id']}/curve",
+                params={"x": "strain_engineering", "y": "stress_engineering"},
+                headers=admin_headers,
+            )
+            assert model_curve.status_code == 200, model_curve.text
+            points = model_curve.json()["points"]
+            assert points
+            assert all(left[1] <= right[1] for left, right in pairwise(points))
 
         replay = client.post(
             "/api/processing/results",
