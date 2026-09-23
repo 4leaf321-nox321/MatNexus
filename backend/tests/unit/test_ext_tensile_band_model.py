@@ -233,11 +233,11 @@ class TestRegistration:
 
         assert plugin.kind == "processing"
         assert plugin.version == "2"
-        assert plugin.order == 36
+        assert plugin.order == 82
         assert plugin.applies_to == ("tensile",)
         assert plugin.requires_channels == (("displacement",), ("force",))
         assert registry.get("tensile.yield_drop").order < plugin.order
-        assert plugin.order < registry.get("tensile.model_curve").order
+        assert registry.get("tensile.model_curve").order == plugin.order
         params = {param.name: param for param in plugin.params}
         assert params["method"].required is True
         assert params["method"].default is None
@@ -246,6 +246,7 @@ class TestRegistration:
         assert params["policy"].choices == (
             "band_and_events_auto_v1",
             "band_and_events_auto_v2",
+            "band_and_source_events_auto_v1",
             "manual_band_v1",
         )
         assert params["band_start"].when == {"policy": ("manual_band_v1",)}

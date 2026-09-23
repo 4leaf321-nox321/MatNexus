@@ -12,6 +12,65 @@ observed crossing. They do not replace that `proof_stress` result or its
 property mapping, and they do not restate measurements from the full acquired
 curve.
 
+## Original-row elastic measurement foundation
+
+`tensile.source_elastic_modulus` measures E on the current input frame before
+any model operation and returns that whole frame unchanged. Its default
+`auto_rows_v1` finds the first maximum engineering stress, takes the pre-peak
+rows in the 10–40% stress band, and fits the inclusive original-row envelope
+from the first to last band member. It never sorts, drops, smooths, or shifts
+rows. When the complete strain input is strictly increasing, it delegates to
+the existing `tensile.elastic_modulus` auto calculation and preserves its
+scalars and notes. Otherwise it performs centered OLS on every row in the
+source envelope in acquisition order, including local strain reversals, with
+the existing minimum-row, numerical, positive-slope, and R² guards.
+
+Select `manual_rows` to provide inclusive `start_index` and `end_index` values
+for the current input frame. Manual windows use the same fit guards; their row
+indices are not claimed to be original CSV line numbers. `source_elastic_*`
+outputs record the selected current-input row bounds and the number of
+nonincreasing strain steps inside the fitted interval. `elastic_window_start`
+and `elastic_window_end` describe the minimum and maximum strain actually
+included in the fit.
+
+The E channel options default only when omitted. An explicitly empty, false,
+non-string, or whitespace-only channel name is an error; it never falls back to
+the engineering channel silently.
+
+## Original-row proof stress
+
+`tensile.source_proof_stress` measures Rp from the unchanged current input
+frame. Its default `first_positive_forward_v1` policy evaluates
+`d[i] = stress[i] - E * (strain[i] - offset)` without adding the E-fit
+intercept or shifting the origin. A crossing must be between adjacent original
+rows, both inside the inclusive row and strain bounds, with the right strain
+strictly greater than the left. It selects the first interpolated positive
+stress; a falling stress segment remains eligible. It never sorts, smooths,
+filters rows, bridges a gap, or extrapolates.
+
+When omitted, E, the starting row, and the starting strain refer to
+`@youngs_modulus`, `@source_elastic_end_index`, and `@elastic_window_end`.
+The ending row defaults to the last current-input row; the ending strain
+defaults to the observed maximum over the selected row interval. Direct E and
+explicit manual search bounds are supported. Effective options store the
+resolved numeric inputs for JSON replay. Output row indices always refer to
+the current input frame, not file line numbers.
+
+If no eligible positive crossing exists, the step raises a processing error
+with the search bounds and separately defined forward-pair, reverse/equal-
+strain crossing, positive/nonpositive candidate, and coincident-residual
+counts. The failed stage does not emit Rp, so dependent model stages stop too.
+When two adjacent residuals are exactly zero, the segment uses its left
+observed point (`t=0`); coincident segments are reported as a subset of the
+positive or nonpositive forward candidates. This remains an observed
+intersection rule, not an approval of measurement validity or material
+properties.
+
+The source-elastic stage remains an E foundation only. Neither source E nor
+source Rp approves measurement validity or material properties, changes
+historical recipes, or relaxes the downstream model and plastic-domain checks.
+Manual E workflows and their saved settings remain available.
+
 For each new model-method recipe, save a new explicit recipe version with this
 order:
 
@@ -253,6 +312,15 @@ new examples are comparison references, not automatic defaults or a claim of
 universal material-card approval. They do not rewrite the historical R14
 examples or saved recipes.
 
+R18's separate [`recipes/source_measurement_model_v1_examples.json`](recipes/source_measurement_model_v1_examples.json)
+keeps source strength, source-row E and observed source Rp ahead of model
+selection. It adds `tensile.model_support` after the source necking candidate
+and before either stable-band or upper-envelope modeling. The R17 examples and
+saved recipes remain unchanged. The follow-up
+[`recipes/source_measurement_model_v2_examples.json`](recipes/source_measurement_model_v2_examples.json)
+changes only the six stable-band steps to the explicit source-event policy;
+its upper-envelope control and downstream steps remain the same.
+
 Each R15 example sets `curve.sort_unique.duplicate_policy` to `first`. The
 plastic domain begins at the paired proof point, but `tensile.true_plastic` can
 clip the next row to the same zero plastic strain. Keeping the first duplicate
@@ -291,6 +359,32 @@ a manual model start point; the seven examples use the automatic anchor pair.
 This step does not infer a physical origin, create additional observed points,
 or establish that the model domain is suitable for a solver or material card.
 
+## Original-row model support
+
+`tensile.model_support` creates a separate model-input frame from the current
+engineering curve. It keeps the first row in the chosen inclusive current-row
+range, then keeps a later row only when its strain exceeds the last retained
+strain. It applies the same original indices to every channel and adds
+`model_input_index`; that column identifies rows only at this stage. Later
+interpolation or resampling can make its values fractional, so it is not a
+source-row identity downstream.
+
+Before that projection, `record_high_guarded_v1` examines every original gap.
+For a gap it compares backward strain `dx` with the unloading-equivalent strain
+`u = max(0, (stress_anchor − stress_gap) / E)` and residual `r = dx − u`. It
+withholds the model path when `r` exceeds the larger of one E-window strain
+span and six scaled residual MADs divided by E, while `u` is below one tenth of
+`dx`. These fixed heuristic limits are a model-boundary review; they do not
+diagnose a sensor fault, prove noise, or certify a material model. A flagged
+automatic input stops without silently cropping it.
+
+Optional `start_index` and `end_index` values select an explicit model scope;
+they do not recompute source E or Rp. Gaps inside that scope still receive the
+same guard. Notes record when a manual scope cuts a flagged full-input boundary
+or omits source E rows, the observed proof pair, or the full-input peak. The
+first maximum-stress row inside the chosen scope must remain selected. The
+source frame itself is unchanged.
+
 ## Stable-band model stage
 
 `tensile.band_model` is the versioned R17 model-region choice for sources whose
@@ -326,6 +420,49 @@ an explicit failure. The `model_end_index` scalar reports the actual right
 observed anchor of the band-connected model component after either v2
 composition; separately fitted event endpoints remain in their own event
 records and do not extend this band scalar.
+
+The separate `band_and_source_events_auto_v1` policy keeps the same selected-
+band calculation as v2. Its source-event fitting applies when no band is found
+and the method is `median_plateau`, `linear`, `least_squares`, or
+`robust_linear`. It maps the source-E end row through the required
+`model_input_index` channel, then excludes closed recovered events whose
+complete observed interval lies in that measured prefix. It fits eligible
+later events from their full original cores with the existing observed-anchor
+helper. If that helper cannot fit an eligible closed-recovery component, the
+policy can retry the same method with fixed observed anchors and only the
+interior rows that the fit can change. For an E-crossing component, the mapped
+E-prefix end P and the component's observed right endpoint R bound the edit;
+the original event bounds remain in diagnostics. A one-row interior uses only
+the method's bounded scalar objective (or anchor interpolation for `linear`),
+so no slope or fit-quality statistic is reported. Other bounded fits retain the
+method-specific objective and must satisfy the same observed-anchor constraints;
+an infeasible fit remains an explicit hold. A non-crossing event with no
+eligible strict-target left anchor may use the nearest original observed anchor
+after the preservation boundary whose stress does not exceed the event's right
+anchor, provided the affected rows do not overlap a protected terminal interval.
+A closed crossing with no editable row (`R=P+1`) is kept as an unchanged, diagnosed
+`crossing_no_editable_rows` event when its observed boundary stresses are
+ordered; that completion row is protected from later event fits. Terminal and
+observation-open events remain unchanged. If no retained row falls inside the E
+prefix, the first current model row is retained as the scope anchor; if the
+whole scope is inside the prefix, the stage returns unchanged input with a
+no-eligible-event diagnostic. The original v1/v2 policies retain their
+existing `lower_envelope` and `isotonic` no-band paths. Under this source-event
+policy, isotonic first preserves a successful legacy no-band result exactly.
+Only after that legacy step raises does a separate raw-topology gate allow a
+bounded isotonic terminal join: one closed recovered source-event component
+must end at the observed start `T` of a protected terminal drop, and unbounded
+equal-row PAVA on the original rows through `T` must raise the raw stress at
+`T` into the following decline. The rescue recomputes every eligible closed
+component from original stress, closes overlapping modeled influences, and
+uses the latest admissible observed left anchor `L` at or after the mapped E
+boundary with `y[L] ≤ y[R]`. Equal-row PAVA applies only to open rows
+`L+1..R-1` and is clipped to the raw anchor stresses. The E prefix, protected
+terminal rows, outer anchors, and all rows outside declared open intervals
+remain unchanged. Missing topology or infeasible anchors remain an explicit
+hold with the legacy reason recorded; no error text selects the rescue. This
+policy does not smooth measurements, validate an elastic window, or imply that
+a stress drop inside the E prefix is noise.
 
 Choose one method explicitly: `lower_envelope` uses source suffix minima;
 `isotonic` uses equal-row PAVA across the full influence; `median_plateau` uses

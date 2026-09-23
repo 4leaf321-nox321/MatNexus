@@ -23,11 +23,410 @@ from . import (  # noqa: F401  (card 는 import 만으로 블록·렌더러를 �
     card,
     model_anchor,
     model_curve,
+    model_support,
     plastic_domain,
     ratio,
+    source_elastic,
+    source_proof,
     temperature,
     terminal_domain,
 )
+
+register(
+    id="tensile.source_elastic_modulus",
+    kind="processing",
+    label="원행 탄성계수",
+    params=(
+        ParamSpec(
+            name="policy",
+            label="원행 탄성 구간",
+            type="choice",
+            choices=source_elastic.POLICIES,
+            default=source_elastic.AUTO_POLICY,
+            choice_labels={
+                source_elastic.AUTO_POLICY: "최대응력 띠의 원행 구간",
+                source_elastic.MANUAL_POLICY: "현재 입력 원행 직접 지정",
+            },
+            help=(
+                "자동은 첫 최대응력의 10~40% 띠를 포함하는 원행 구간을 씁니다. "
+                "현재 입력 전체를 정렬·평활·이동하지 않습니다."
+            ),
+        ),
+        ParamSpec(
+            name="start_index",
+            label="시작 원행 인덱스 (현재 입력, 0부터)",
+            type="int",
+            required=True,
+            when={"policy": (source_elastic.MANUAL_POLICY,)},
+            help="포함할 현재 입력 프레임의 시작 행입니다.",
+        ),
+        ParamSpec(
+            name="end_index",
+            label="끝 원행 인덱스 (현재 입력, 0부터)",
+            type="int",
+            required=True,
+            when={"policy": (source_elastic.MANUAL_POLICY,)},
+            help="포함할 현재 입력 프레임의 끝 행입니다.",
+        ),
+        ParamSpec(
+            name="strain",
+            label="변형률 열",
+            type="str",
+            role="column",
+            default="strain_engineering",
+            unit="1",
+            dimension="strain",
+        ),
+        ParamSpec(
+            name="stress",
+            label="응력 열",
+            type="str",
+            role="column",
+            default="stress_engineering",
+            unit="Pa",
+        ),
+    ),
+    applies_to=("tensile",),
+    requires_channels=(("displacement",), ("force",)),
+    makes_values=(
+        Produced(
+            key="youngs_modulus",
+            label="탄성계수",
+            si_unit="Pa",
+            help="수치·품질 검사를 통과한 원행 변형률-응력 구간의 기울기.",
+            property_key="mechanical.youngs_modulus",
+        ),
+        Produced(key="elastic_intercept", label="탄성 절편", si_unit="Pa"),
+        Produced(key="elastic_r_squared", label="탄성 구간 R²", si_unit="1"),
+        Produced(key="elastic_point_count", label="탄성 구간 점 수", si_unit="1"),
+        Produced(key="elastic_window_start", label="실제 적합 변형률 시작", si_unit="1"),
+        Produced(key="elastic_window_end", label="실제 적합 변형률 끝", si_unit="1"),
+        Produced(
+            key="elastic_slope_reference",
+            label="참고 기울기(믿을 수 없음)",
+            si_unit="Pa",
+        ),
+        Produced(
+            key="source_elastic_start_index",
+            label="원행 E 시작 인덱스 (현재 입력, 0부터)",
+            si_unit="1",
+            help="실제 적합 구간의 첫 입력 행. 원본 CSV 행 번호와는 다릅니다.",
+        ),
+        Produced(
+            key="source_elastic_end_index",
+            label="원행 E 끝 인덱스 (현재 입력, 0부터)",
+            si_unit="1",
+            help="실제 적합 구간의 마지막 입력 행. 원본 CSV 행 번호와는 다릅니다.",
+        ),
+        Produced(
+            key="source_elastic_nonincreasing_step_count",
+            label="원행 E 구간 비증가 단계 수",
+            si_unit="1",
+            help="실제 적합 구간의 인접 원행에서 변형률이 감소하거나 같은 횟수.",
+        ),
+    ),
+    order=71,
+    version="1",
+)(source_elastic.source_elastic_modulus)
+
+register(
+    id="tensile.source_proof_stress",
+    kind="processing",
+    label="원행 내력 교점",
+    applies_to=("tensile",),
+    requires_channels=(("displacement",), ("force",)),
+    params=(
+        ParamSpec(
+            name="policy",
+            label="원행 내력 정책",
+            type="choice",
+            choices=(source_proof.POLICY,),
+            default=source_proof.POLICY,
+            help="인접한 원행에서 변형률이 증가하는 첫 양수 오프셋 교점을 선택합니다.",
+        ),
+        ParamSpec(
+            name="youngs_modulus",
+            label="탄성계수",
+            type="float",
+            unit="Pa",
+            default="@youngs_modulus",
+            required=True,
+            help="비우면 앞 단계 원행 E 값을 씁니다. 직접 입력값도 사용할 수 있습니다.",
+        ),
+        ParamSpec(
+            name="offset_strain",
+            dimension="strain",
+            label="오프셋 변형률",
+            type="float",
+            unit="1",
+            default=source_proof.DEFAULT_OFFSET,
+            help="0 이상이어야 합니다. E 절편이나 별도 영점 이동은 더하지 않습니다.",
+        ),
+        ParamSpec(
+            name="start_index",
+            label="검색 시작 원행 (현재 입력, 0부터)",
+            type="int",
+            default="@source_elastic_end_index",
+            required=True,
+            links_to="source_elastic_end_index",
+            help="비우면 원행 E 구간의 끝 행부터 검색합니다.",
+        ),
+        ParamSpec(
+            name="end_index",
+            label="검색 끝 원행 (현재 입력, 0부터)",
+            type="int",
+            help="비우면 현재 입력 프레임의 마지막 행까지 검색합니다.",
+        ),
+        ParamSpec(
+            name="search_start",
+            dimension="strain",
+            label="검색 시작 변형률",
+            type="float",
+            unit="1",
+            default="@elastic_window_end",
+            required=True,
+            links_to="elastic_window_end",
+            help="비우면 원행 E 적합 창의 끝 변형률부터 검색합니다.",
+        ),
+        ParamSpec(
+            name="search_end",
+            dimension="strain",
+            label="검색 끝 변형률",
+            type="float",
+            unit="1",
+            help="비우면 선택한 입력 구간의 관측 최대 변형률까지 검색합니다.",
+        ),
+        ParamSpec(
+            name="strain",
+            label="변형률 열",
+            type="str",
+            role="column",
+            default=source_proof.DEFAULT_STRAIN,
+            unit="1",
+            dimension="strain",
+        ),
+        ParamSpec(
+            name="stress",
+            label="응력 열",
+            type="str",
+            role="column",
+            default=source_proof.DEFAULT_STRESS,
+            unit="Pa",
+        ),
+    ),
+    makes_values=(
+        Produced(
+            key="proof_stress",
+            label="원행 내력",
+            si_unit="Pa",
+            property_key="mechanical.yield_strength",
+            help=(
+                "관측된 인접 전진 원행 교점의 응력. 적격 양수 교점이 없으면 값을 "
+                "내지 않습니다."
+            ),
+        ),
+        Produced(key="proof_strain", label="원행 내력 변형률", si_unit="1"),
+        Produced(key="proof_offset", label="원행 내력 오프셋", si_unit="1"),
+        Produced(
+            key="source_proof_left_index",
+            label="원행 내력 교점 왼쪽 행 (현재 입력, 0부터)",
+            si_unit="1",
+            help="보간에 사용한 첫 원행이며 원본 파일 행 번호가 아닙니다.",
+        ),
+        Produced(
+            key="source_proof_right_index",
+            label="원행 내력 교점 오른쪽 행 (현재 입력, 0부터)",
+            si_unit="1",
+            help="보간에 사용한 바로 다음 원행이며 원본 파일 행 번호가 아닙니다.",
+        ),
+        Produced(
+            key="source_proof_search_start_index", label="내력 검색 시작 원행", si_unit="1"
+        ),
+        Produced(key="source_proof_search_end_index", label="내력 검색 끝 원행", si_unit="1"),
+        Produced(
+            key="source_proof_search_start_strain", label="내력 검색 시작 변형률", si_unit="1"
+        ),
+        Produced(
+            key="source_proof_search_end_strain", label="내력 검색 끝 변형률", si_unit="1"
+        ),
+        Produced(
+            key="source_proof_forward_eligible_pair_count",
+            label="전진 적격 인접 원행 쌍 수",
+            si_unit="1",
+        ),
+        Produced(
+            key="source_proof_backward_crossing_candidate_count",
+            label="역행 잔차 교점 후보 수",
+            si_unit="1",
+        ),
+        Produced(
+            key="source_proof_equal_strain_crossing_candidate_count",
+            label="같은 변형률 잔차 교점 후보 수",
+            si_unit="1",
+        ),
+        Produced(
+            key="source_proof_positive_crossing_candidate_count",
+            label="양수 전진 교점 후보 수",
+            si_unit="1",
+        ),
+        Produced(
+            key="source_proof_nonpositive_crossing_candidate_count",
+            label="비양수 전진 교점 후보 수",
+            si_unit="1",
+        ),
+        Produced(
+            key="source_proof_coincident_forward_residual_segment_count",
+            label="전진 일치 잔차 선분 수",
+            si_unit="1",
+        ),
+    ),
+    order=72,
+    version="1",
+    prepare_options=source_proof.prepare_options,
+)(source_proof.source_proof_stress)
+
+register(
+    id="tensile.model_support",
+    kind="processing",
+    label="원행 기반 모델 입력",
+    applies_to=("tensile",),
+    requires_channels=(("displacement",), ("force",)),
+    params=(
+        ParamSpec(
+            name="policy",
+            label="모델 입력 정책",
+            type="choice",
+            choices=(model_support.POLICY,),
+            default=model_support.POLICY,
+            help=(
+                "원래 입력 행에서 변형률 기록 최고점을 보수적으로 골라 모델 입력을 "
+                "만듭니다. 계측 이상이나 물리적 유효성을 판정하지 않습니다."
+            ),
+        ),
+        ParamSpec(
+            name="start_index",
+            label="모델 범위 시작 현재행 (0부터, 선택)",
+            type="int",
+            default=0,
+            help="비우면 현재 입력의 첫 행부터 모델 범위를 봅니다.",
+        ),
+        ParamSpec(
+            name="end_index",
+            label="모델 범위 끝 현재행 (0부터, 선택)",
+            type="int",
+            help="비우면 현재 입력의 마지막 행까지 모델 범위를 봅니다.",
+        ),
+        ParamSpec(
+            name="youngs_modulus",
+            label="원행 탄성계수",
+            type="float",
+            unit="Pa",
+            default="@youngs_modulus",
+            required=True,
+            help="앞 단계에서 원자료로 계산한 E. 이 단계가 다시 계산하지 않습니다.",
+        ),
+        ParamSpec(
+            name="elastic_intercept",
+            label="원행 E 적합 절편",
+            type="float",
+            unit="Pa",
+            default="@elastic_intercept",
+            required=True,
+            help="원행 E 적합의 절편이며 paired-row guard 잔차 폭에만 사용합니다.",
+        ),
+        ParamSpec(
+            name="source_elastic_start_index",
+            label="원행 E 적합 시작 현재행",
+            type="int",
+            default="@source_elastic_start_index",
+            required=True,
+            links_to="source_elastic_start_index",
+        ),
+        ParamSpec(
+            name="source_elastic_end_index",
+            label="원행 E 적합 끝 현재행",
+            type="int",
+            default="@source_elastic_end_index",
+            required=True,
+            links_to="source_elastic_end_index",
+        ),
+        ParamSpec(
+            name="source_proof_left_index",
+            label="원행 내력 교점 왼쪽 현재행",
+            type="int",
+            default="@source_proof_left_index",
+            required=True,
+            links_to="source_proof_left_index",
+        ),
+        ParamSpec(
+            name="source_proof_right_index",
+            label="원행 내력 교점 오른쪽 현재행",
+            type="int",
+            default="@source_proof_right_index",
+            required=True,
+            links_to="source_proof_right_index",
+        ),
+        ParamSpec(
+            name="strain",
+            label="공학 변형률 열",
+            type="str",
+            role="column",
+            default=model_support.DEFAULT_STRAIN,
+            unit="1",
+            dimension="strain",
+        ),
+        ParamSpec(
+            name="stress",
+            label="공학 응력 열",
+            type="str",
+            role="column",
+            default=model_support.DEFAULT_STRESS,
+            unit="Pa",
+        ),
+    ),
+    makes_columns=(Produced("model_input_index", "모델 입력 원행 대응 열", "1"),),
+    makes_values=(
+        Produced("model_support_start_index", "모델 범위 시작 현재행", "1"),
+        Produced("model_support_end_index", "모델 범위 끝 현재행", "1"),
+        Produced("model_support_selected_row_count", "모델 입력 유지 행 수", "1"),
+        Produced("model_support_omitted_row_count", "모델 입력 제외 행 수", "1"),
+        Produced("model_support_record_high_gap_row_count", "기록 최고 gap 행 수", "1"),
+        Produced("model_support_backward_gap_row_count", "변형률 후퇴 gap 행 수", "1"),
+        Produced("model_support_guard_flagged_row_count", "선택 범위 guard 표시 행 수", "1"),
+        Produced(
+            "model_support_full_guard_flagged_row_count", "전체 입력 guard 표시 행 수", "1"
+        ),
+        Produced(
+            "model_support_excluded_flagged_boundary_count",
+            "수동 범위가 끊은 표시 경계 수",
+            "1",
+        ),
+        Produced("model_support_guard_allowance", "paired-row guard 허용 후퇴 상한", "1"),
+        Produced("model_support_max_backward_step", "최대 변형률 후퇴 폭", "1"),
+        Produced(
+            "model_support_elastic_rows_inside_count", "모델 범위 안 원행 E 적합 수", "1"
+        ),
+        Produced(
+            "model_support_elastic_rows_outside_count", "모델 범위 밖 원행 E 적합 수", "1"
+        ),
+        Produced(
+            "model_support_elastic_rows_retained_count", "모델 입력에 남은 원행 E 적합 수", "1"
+        ),
+        Produced("model_support_proof_pair_inside", "원행 내력 쌍 범위 포함", "1"),
+        Produced("model_support_proof_pair_retained", "원행 내력 쌍 두 행 선택 유지", "1"),
+        Produced(
+            "model_support_proof_rows_retained_count", "모델 입력에 남은 원행 내력 점 수", "1"
+        ),
+        Produced("model_support_full_peak_inside", "전체 입력 첫 최대응력 범위 포함", "1"),
+        Produced(
+            "model_support_full_peak_retained", "전체 입력 첫 최대응력 행 선택 유지", "1"
+        ),
+        Produced("model_support_range_peak_index", "모델 범위 첫 최대응력 현재행", "1"),
+    ),
+    order=81,
+    version="1",
+    prepare_options=model_support.prepare_options,
+)(model_support.model_support)
 
 register(
     id="tensile.yield_ratio",
@@ -364,6 +763,7 @@ register(
             choice_labels={
                 band_model.AUTO_POLICY_V1: "안정 밴드 및 사건 자동 선택 (v1)",
                 band_model.AUTO_POLICY_V2: "안정 밴드 및 연결 사건 자동 선택 (v2)",
+                band_model.SOURCE_EVENT_POLICY: "원행 E 경계 뒤 사건 보정 (v1)",
                 band_model.MANUAL_POLICY: "검토한 밴드 행 직접 지정",
             },
             choice_help={
@@ -380,6 +780,14 @@ register(
                     "연결된 직전 모델 성분을 원응력 하측 포락선으로 함께 재계산합니다. "
                     "열린·말단 사건은 연결에 쓰지 않으며 밴드 통계는 원래 선택 행에서 "
                     "계산합니다."
+                ),
+                band_model.SOURCE_EVENT_POLICY: (
+                    "선택 밴드가 있으면 v2와 같은 계산을 합니다. "
+                    "밴드가 없을 때 네 앵커 방법은 "
+                    "model_input_index로 원행 E 끝을 대응시켜 E prefix 안의 닫힌 회복 사건을 "
+                    "대상에서 제외하고, 뒤의 닫힌 사건만 원행 core 전체로 적합합니다. "
+                    "경계 사건을 prefix 안쪽으로 자르지 않으며 terminal 행은 보존합니다. "
+                    "lower_envelope와 isotonic의 no-band 경로는 기존 동작을 유지합니다."
                 ),
                 band_model.MANUAL_POLICY: (
                     "현재 입력 프레임의 0-based 포함 행으로 밴드 끝 앵커를 지정합니다. "
@@ -451,6 +859,26 @@ register(
             type="int",
             when={"policy": (band_model.MANUAL_POLICY,)},
             help=("비우면 보호 하중구간 뒤, 봉우리 전 마지막 유효 상향 교차를 씁니다."),
+        ),
+        ParamSpec(
+            name="source_elastic_end_index",
+            label="원자료 E 끝 원행 위치",
+            type="int",
+            default="@source_elastic_end_index",
+            required=True,
+            when={"policy": (band_model.SOURCE_EVENT_POLICY,)},
+            links_to="source_elastic_end_index",
+            help="source_index_column의 원행 번호와 비교할 원자료의 E 끝 원행 위치입니다.",
+        ),
+        ParamSpec(
+            name="source_index_column",
+            label="현재 모델 행의 원행 대응 열",
+            type="str",
+            role="column",
+            default=band_model.DEFAULT_SOURCE_INDEX_COLUMN,
+            when={"policy": (band_model.SOURCE_EVENT_POLICY,)},
+            unit="1",
+            help="model_support가 만든 엄격 증가 정수 원행 대응 열입니다.",
         ),
         ParamSpec(
             name="minimum_band_rows",
@@ -561,9 +989,90 @@ register(
             ),
         ),
         Produced("band_model_max_stress_change", "최대 원응력 변경 폭", "Pa"),
+        Produced(
+            "band_model_source_elastic_end_index",
+            "원자료 E 끝 원행 위치",
+            "1",
+        ),
+        Produced(
+            "band_model_source_elastic_prefix_end_index",
+            "현재 모델 입력에서 E prefix 끝 행 위치",
+            "1",
+        ),
+        Produced(
+            "band_model_source_event_recovered_count",
+            "검출된 닫힌 회복 사건 수",
+            "1",
+        ),
+        Produced(
+            "band_model_source_event_excluded_in_elastic_count",
+            "E prefix 안에서 제외한 닫힌 사건 수",
+            "1",
+        ),
+        Produced(
+            "band_model_source_event_target_count",
+            "E prefix 뒤 적합 대상 닫힌 사건 수",
+            "1",
+        ),
+        Produced(
+            "band_model_source_event_fit_region_count",
+            "자동 사건 적합 영향 구간 수",
+            "1",
+        ),
+        Produced(
+            "band_model_source_event_crossing_noop_count",
+            "경계에 편집 행이 없어 그대로 둔 사건 수",
+            "1",
+        ),
+        Produced(
+            "band_model_source_event_one_free_row_region_count",
+            "관측 자유행이 하나뿐인 퇴화 적합 구간 수",
+            "1",
+        ),
+        Produced(
+            "band_model_source_event_bounded_anchor_count",
+            "bounded observed anchor 규칙을 쓴 적합 구간 수",
+            "1",
+        ),
+        Produced(
+            "band_model_source_event_isotonic_trigger_count",
+            "고정 관측 말단 접합 게이트 통과 수",
+            "1",
+        ),
+        Produced(
+            "band_model_source_event_isotonic_fit_region_count",
+            "등위회귀 적합 연결 성분 수",
+            "1",
+        ),
+        Produced(
+            "band_model_source_event_isotonic_released_anchor_count",
+            "연결 성분에서 해제한 내부 앵커 수",
+            "1",
+        ),
+        Produced(
+            "band_model_source_event_isotonic_changed_points",
+            "등위회귀 열린 구간 변경 원행 수",
+            "1",
+        ),
+        Produced(
+            "band_model_source_event_isotonic_max_abs_distortion",
+            "등위회귀 최대 절대 왜곡",
+            "Pa",
+        ),
+        Produced(
+            "band_model_source_event_isotonic_rmse",
+            "등위회귀 열린 구간 RMSE",
+            "Pa",
+        ),
+        Produced(
+            "band_model_source_event_isotonic_remaining_unedited_declines",
+            "적합하지 않은 인접 원행에 남은 하강 수",
+            "1",
+        ),
     ),
-    order=36,
+    order=82,
     version="2",
+    prepare_options=band_model.prepare_options,
 )(band_model.band_model)
 
 register(

@@ -17,9 +17,11 @@ from numpy.typing import ArrayLike, NDArray
 from matcore.processing import Frame, ProcessingError, Scalar, StepResult
 from matcore.processing._auto_yield_fit import (
     AutoYieldFitError,
+    AutoYieldFitResult,
     _Candidate,
     _fit_candidate,
     _unconstrained_core_fit,
+    fit_event_cores,
 )
 from matcore.processing._drop_recovery import DropEvent, detect_events
 
@@ -29,20 +31,37 @@ from .lower_composition import (
     lower_suffix_minorant,
 )
 from .model_regions import (
-    DEFAULT_MAXIMUM_GAP_OVER_BAND_SPAN,
-    DEFAULT_MAXIMUM_RANGE_OVER_PEAK,
-    DEFAULT_MAXIMUM_STRESS_OVER_PEAK,
-    DEFAULT_MINIMUM_BAND_ROWS,
-    DEFAULT_MINIMUM_PROGRESS_SPAN,
+    DEFAULT_MAXIMUM_GAP_OVER_BAND_SPAN as _MODEL_DEFAULT_MAXIMUM_GAP_OVER_BAND_SPAN,
+)
+from .model_regions import (
+    DEFAULT_MAXIMUM_RANGE_OVER_PEAK as _MODEL_DEFAULT_MAXIMUM_RANGE_OVER_PEAK,
+)
+from .model_regions import (
+    DEFAULT_MAXIMUM_STRESS_OVER_PEAK as _MODEL_DEFAULT_MAXIMUM_STRESS_OVER_PEAK,
+)
+from .model_regions import (
+    DEFAULT_MINIMUM_BAND_ROWS as _MODEL_DEFAULT_MINIMUM_BAND_ROWS,
+)
+from .model_regions import (
+    DEFAULT_MINIMUM_PROGRESS_SPAN as _MODEL_DEFAULT_MINIMUM_PROGRESS_SPAN,
+)
+from .model_regions import (
     ProgressBasis,
     StableBandSelection,
     _normalized_axis,
     select_stable_band,
 )
 
+DEFAULT_MAXIMUM_GAP_OVER_BAND_SPAN = _MODEL_DEFAULT_MAXIMUM_GAP_OVER_BAND_SPAN
+DEFAULT_MAXIMUM_RANGE_OVER_PEAK = _MODEL_DEFAULT_MAXIMUM_RANGE_OVER_PEAK
+DEFAULT_MAXIMUM_STRESS_OVER_PEAK = _MODEL_DEFAULT_MAXIMUM_STRESS_OVER_PEAK
+DEFAULT_MINIMUM_BAND_ROWS = _MODEL_DEFAULT_MINIMUM_BAND_ROWS
+DEFAULT_MINIMUM_PROGRESS_SPAN = _MODEL_DEFAULT_MINIMUM_PROGRESS_SPAN
+
 AUTO_POLICY_V1 = "band_and_events_auto_v1"
 AUTO_POLICY_V2 = "band_and_events_auto_v2"
-AUTO_POLICIES = (AUTO_POLICY_V1, AUTO_POLICY_V2)
+SOURCE_EVENT_POLICY = "band_and_source_events_auto_v1"
+AUTO_POLICIES = (AUTO_POLICY_V1, AUTO_POLICY_V2, SOURCE_EVENT_POLICY)
 AUTO_POLICY = AUTO_POLICY_V2
 MANUAL_POLICY = "manual_band_v1"
 POLICIES = (*AUTO_POLICIES, MANUAL_POLICY)
@@ -57,7 +76,9 @@ METHODS = (
 DEFAULT_STRAIN = "strain_engineering"
 DEFAULT_STRESS = "stress_engineering"
 DEFAULT_TIME = "time"
+DEFAULT_SOURCE_INDEX_COLUMN = "model_input_index"
 DEFAULT_LOADING_FLOOR_FRACTION = 0.40
+_COMPOSITION_V2_POLICIES = (AUTO_POLICY_V2, SOURCE_EVENT_POLICY)
 
 _LEGACY_METHODS = {
     "lower_envelope": "lower_envelope_auto_v1",
@@ -81,6 +102,7 @@ _COMMON_OPTIONS = {
     "loading_floor_fraction",
 }
 _MANUAL_OPTIONS = {"band_start", "band_end", "peak_row", "left_anchor"}
+_SOURCE_EVENT_OPTIONS = {"source_elastic_end_index", "source_index_column"}
 _NUMERIC_METHODS = ("median_plateau", "linear", "least_squares", "robust_linear")
 _Decision = Literal[
     "band_fit",
@@ -177,6 +199,66 @@ class _NoFeasibleAnchorError(AutoYieldFitError):
     """An anchor-only failure that may enter the versioned lower-pooling path."""
 
 
+@dataclass(frozen=True, slots=True)
+class _SourceEventCore:
+    start: int
+    right: int
+    events: tuple[DropEvent, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class _SourceEventFitRegion:
+    core_start: int
+    core_end: int
+    fit_start: int
+    fit_end: int
+    left_anchor: int
+    right_anchor: int
+    source_events: tuple[DropEvent, ...]
+    support_count: int
+    anchor_rule: str
+    reason: str | None
+    target_stress: float | None
+    unconstrained_level: float | None
+    unconstrained_endpoints: tuple[float, float] | None
+    constrained_endpoints: tuple[float, float] | None
+    huber_delta: float | None
+    fit_r_squared: float | None
+    fit_rmse: float | None
+    max_abs_distortion: float
+    one_free_row: bool
+
+
+@dataclass(frozen=True, slots=True)
+class _SourceEventFitResult:
+    values: NDArray[np.float64]
+    regions: tuple[_SourceEventFitRegion, ...]
+    protected_intervals: tuple[tuple[int, int], ...]
+
+
+@dataclass(frozen=True, slots=True)
+class _SourceEventPlan:
+    component: _SourceEventCore
+    fit_start: int
+    left_anchor: int
+    target_stress: float | None
+    unconstrained_level: float | None
+    unconstrained_endpoints: tuple[float, float] | None
+    huber_delta: float | None
+    anchor_rule: str
+    reason: str | None
+    crossing_prefix: bool
+    one_free_row: bool
+
+
+@dataclass(frozen=True, slots=True)
+class _SourceEventIsotonicRegion:
+    component: _SourceEventCore
+    left_anchor: int
+    fit_values: NDArray[np.float64]
+    anchor_rule: str
+
+
 def _real_vector(values: ArrayLike, *, what: str) -> NDArray[np.float64]:
     raw = np.asarray(values)
     if raw.ndim != 1 or not np.issubdtype(raw.dtype, np.number) or np.iscomplexobj(raw):
@@ -199,11 +281,66 @@ def _json_number(value: Any, *, name: str, low: float, high: float) -> float:
     return numeric
 
 
+def prepare_options(options: dict[str, Any]) -> dict[str, Any]:
+    """Resolve visible source references only for the explicit source-event policy."""
+    prepared = dict(options)
+    if prepared.get("policy") == SOURCE_EVENT_POLICY:
+        prepared.setdefault("source_elastic_end_index", "@source_elastic_end_index")
+        prepared.setdefault("source_index_column", DEFAULT_SOURCE_INDEX_COLUMN)
+    return prepared
+
+
+def _row_scalar(value: Any, *, name: str) -> int:
+    if type(value) not in (int, float) or not np.isfinite(float(value)):
+        raise ProcessingError(f"{name}은(는) 유한한 정수 행 위치여야 합니다.")
+    numeric = float(value)
+    if numeric < 0 or not numeric.is_integer() or numeric >= float(1 << 63):
+        raise ProcessingError(f"{name}은(는) 0 이상의 정수 행 위치여야 합니다.")
+    return int(numeric)
+
+
+def _source_row_mapping(
+    frame: Frame, options: dict[str, Any]
+) -> tuple[int, NDArray[np.int64]]:
+    elastic_end = _row_scalar(
+        options.get("source_elastic_end_index"), name="source_elastic_end_index"
+    )
+    column = options["source_index_column"]
+    if not isinstance(column, str) or not column.strip():
+        raise ProcessingError("source_index_column은 비어 있지 않은 열 이름이어야 합니다.")
+    if column not in frame.columns:
+        raise ProcessingError(f"원행 대응 열 '{column}'이 현재 모델 입력에 없습니다.")
+    if frame.units.get(column) != "1":
+        raise ProcessingError(
+            f"원행 대응 열 '{column}' 단위가 '1'이 아닙니다: {frame.units.get(column)!r}"
+        )
+    raw = np.asarray(frame.columns[column])
+    if raw.ndim != 1 or not np.issubdtype(raw.dtype, np.number) or np.iscomplexobj(raw):
+        raise ProcessingError("원행 대응 열은 유한한 1차원 정수 행 위치여야 합니다.")
+    try:
+        numeric = np.asarray(raw, dtype=np.float64)
+    except (TypeError, ValueError, OverflowError):
+        raise ProcessingError("원행 대응 열을 정수 행 위치로 읽을 수 없습니다.") from None
+    if (
+        not np.all(np.isfinite(numeric))
+        or np.any(numeric < 0.0)
+        or np.any(numeric >= float(1 << 63))
+        or np.any(numeric != np.floor(numeric))
+        or np.any(np.diff(numeric) <= 0.0)
+    ):
+        raise ProcessingError(
+            "원행 대응 열은 음수가 없고 엄격히 증가하는 유한 정수여야 합니다."
+        )
+    return elastic_end, numeric.astype(np.int64)
+
+
 def _resolve_options(options: dict[str, Any]) -> dict[str, Any]:
     policy = options.get("policy", AUTO_POLICY)
     if policy not in POLICIES:
         raise ProcessingError(f"지원하지 않는 tensile.band_model 정책입니다: {policy!r}")
     allowed = _COMMON_OPTIONS | (_MANUAL_OPTIONS if policy == MANUAL_POLICY else set())
+    if policy == SOURCE_EVENT_POLICY:
+        allowed |= _SOURCE_EVENT_OPTIONS
     unknown = sorted(set(options) - allowed)
     if unknown:
         raise ProcessingError(
@@ -279,6 +416,14 @@ def _resolve_options(options: dict[str, Any]) -> dict[str, Any]:
             if value is not None and type(value) is not int:
                 raise ProcessingError(f"{key}는 정수 행 위치 또는 null이어야 합니다.")
             resolved[key] = value
+    if policy == SOURCE_EVENT_POLICY:
+        resolved["source_elastic_end_index"] = _row_scalar(
+            options.get("source_elastic_end_index"), name="source_elastic_end_index"
+        )
+        source_index_column = options.get("source_index_column", DEFAULT_SOURCE_INDEX_COLUMN)
+        if not isinstance(source_index_column, str) or not source_index_column.strip():
+            raise ProcessingError("source_index_column은 비어 있지 않은 열 이름이어야 합니다.")
+        resolved["source_index_column"] = source_index_column
     return resolved
 
 
@@ -991,7 +1136,7 @@ def compute_band_model(
     events = tuple(detect_events(stress, 0.005, 0.005, 0.05))
     completed_events = (
         _full_recovery_completions(events, band_start=band_start_row, band_end=band_end_row)
-        if policy == AUTO_POLICY_V2
+        if policy in _COMPOSITION_V2_POLICIES
         else ()
     )
     model_end_row = max((event.end_index for event in completed_events), default=band_end_row)
@@ -1200,7 +1345,7 @@ def compute_band_model(
             )
         except _NoFeasibleAnchorError as exc:
             can_pool = (
-                policy == AUTO_POLICY_V2
+                policy in _COMPOSITION_V2_POLICIES
                 and method == "lower_envelope"
                 and _eligible_pool_event(event)
             )
@@ -1452,11 +1597,1007 @@ def _diagnostic_scalars(
     )
 
 
+def _source_event_cores(events: tuple[DropEvent, ...]) -> list[_SourceEventCore]:
+    components: list[_SourceEventCore] = []
+    for event in sorted(events, key=lambda item: (item.peak_index, item.end_index)):
+        if components and event.peak_index <= components[-1].right:
+            previous = components[-1]
+            components[-1] = _SourceEventCore(
+                previous.start,
+                max(previous.right, event.end_index),
+                (*previous.events, event),
+            )
+        else:
+            components.append(_SourceEventCore(event.peak_index, event.end_index, (event,)))
+    return components
+
+
+def _protected_anchor_overlap(
+    left: int,
+    right: int,
+    protected: tuple[tuple[int, int], ...],
+) -> tuple[int, int] | None:
+    for start, end in protected:
+        if start <= left <= end:
+            return start, end
+        if start <= right <= end and right != start:
+            return start, end
+        if max(left + 1, start) <= min(right - 1, end):
+            return start, end
+    return None
+
+
+def _source_event_plan(
+    strain: NDArray[np.float64],
+    stress: NDArray[np.float64],
+    component: _SourceEventCore,
+    *,
+    method: str,
+    preserve_boundary: int,
+    protected: tuple[tuple[int, int], ...],
+) -> _SourceEventPlan:
+    start, right = component.start, component.right
+    crossing_prefix = start <= preserve_boundary < right
+    if crossing_prefix:
+        fit_start = preserve_boundary + 1
+        if fit_start >= right:
+            raise AutoYieldFitError(
+                "경계 사건에 편집 관측행이 없어 one-row 또는 다중행 적합을 할 수 없습니다."
+            )
+        if float(stress[preserve_boundary]) > float(stress[right]):
+            raise AutoYieldFitError(
+                "경계 사건의 고정 관측 앵커 응력이 감소해 비감소 접합을 만들 수 없습니다."
+            )
+        conflict = _protected_anchor_overlap(preserve_boundary, right, protected)
+        if conflict is not None:
+            raise AutoYieldFitError(
+                f"경계 사건 영향 구간이 보호 말단 구간 {conflict[0]}~{conflict[1]}과 겹칩니다."
+            )
+        support_count = right - fit_start
+        if support_count == 1:
+            return _SourceEventPlan(
+                component,
+                fit_start,
+                preserve_boundary,
+                None,
+                None,
+                None,
+                None,
+                "one_observed_free_row",
+                "one_observed_free_row",
+                True,
+                True,
+            )
+        target, c0, endpoints, huber_delta = _method_evidence(
+            method, strain, stress, fit_start, right, start
+        )
+        return _SourceEventPlan(
+            component,
+            fit_start,
+            preserve_boundary,
+            target,
+            c0,
+            endpoints,
+            huber_delta,
+            "editable_domain_fixed_prefix_anchor",
+            "crossing event fit uses only mutable post-prefix rows",
+            True,
+            False,
+        )
+
+    if right - start < 2:
+        raise AutoYieldFitError(
+            f"core index {start}~{right} 에 자동 적합 점이 2개 미만입니다."
+        )
+    target, c0, endpoints, huber_delta = _method_evidence(
+        method, strain, stress, start, right, start
+    )
+    left: int | None = None
+    for candidate in range(start - 1, preserve_boundary - 1, -1):
+        if float(stress[candidate]) <= target:
+            left = candidate
+            break
+    anchor_rule = "strict_target"
+    reason: str | None = None
+    if left is not None:
+        conflict = _protected_anchor_overlap(left, right, protected)
+        if conflict is not None:
+            raise AutoYieldFitError(
+                f"영향 구간이 보호 말단 구간 {conflict[0]}~{conflict[1]}과 겹칩니다."
+            )
+    else:
+        right_value = float(stress[right])
+        for candidate in range(start - 1, preserve_boundary - 1, -1):
+            if float(stress[candidate]) > right_value:
+                continue
+            if _protected_anchor_overlap(candidate, right, protected) is not None:
+                continue
+            left = candidate
+            break
+        if left is None:
+            raise AutoYieldFitError(
+                f"core index {start}~{right} 에서 보존 경계 뒤의 bounded observed anchor를 "
+                "찾지 못했습니다."
+            )
+        anchor_rule = "bounded_observed_anchor"
+        reason = "strict unconstrained target had no eligible raw left anchor"
+    return _SourceEventPlan(
+        component,
+        start,
+        left,
+        target,
+        c0,
+        endpoints,
+        huber_delta,
+        anchor_rule,
+        reason,
+        False,
+        False,
+    )
+
+
+def _source_event_plan_proposal(
+    strain: NDArray[np.float64],
+    stress: NDArray[np.float64],
+    plan: _SourceEventPlan,
+    *,
+    method: str,
+) -> tuple[NDArray[np.float64], _SourceEventFitRegion]:
+    right = plan.component.right
+    support_count = right - plan.fit_start
+    if plan.one_free_row:
+        if support_count != 1:
+            raise AutoYieldFitError("one_observed_free_row 진단과 적합 행 수가 다릅니다.")
+        row = plan.fit_start
+        left_value = float(stress[plan.left_anchor])
+        right_value = float(stress[right])
+        if method == "linear":
+            fraction = float(
+                (strain[row] - strain[plan.left_anchor])
+                / (strain[right] - strain[plan.left_anchor])
+            )
+            ordinate = left_value + (right_value - left_value) * fraction
+        else:
+            ordinate = float(np.clip(stress[row], left_value, right_value))
+        proposed = stress.copy()
+        proposed[row] = ordinate
+        local = proposed[plan.left_anchor : right + 1]
+        if (
+            not np.all(np.isfinite(local))
+            or np.any(np.diff(local) < 0.0)
+            or proposed[plan.left_anchor] != stress[plan.left_anchor]
+            or proposed[right] != stress[right]
+        ):
+            raise AutoYieldFitError(
+                "one_observed_free_row가 고정 관측 앵커 사이에서 "
+                "비감소 접합을 만들지 못했습니다."
+            )
+        region = _SourceEventFitRegion(
+            core_start=plan.component.start,
+            core_end=right - 1,
+            fit_start=row,
+            fit_end=row,
+            left_anchor=plan.left_anchor,
+            right_anchor=right,
+            source_events=plan.component.events,
+            support_count=1,
+            anchor_rule=plan.anchor_rule,
+            reason=plan.reason,
+            target_stress=None,
+            unconstrained_level=None,
+            unconstrained_endpoints=None,
+            constrained_endpoints=None,
+            huber_delta=None,
+            fit_r_squared=None,
+            fit_rmse=None,
+            max_abs_distortion=abs(ordinate - float(stress[row])),
+            one_free_row=True,
+        )
+        return proposed, region
+
+    assert plan.target_stress is not None
+    candidate = _Candidate(
+        start=plan.fit_start,
+        right=right,
+        left=plan.left_anchor,
+        c0=plan.unconstrained_level,
+        target=plan.target_stress,
+        unconstrained_endpoints=plan.unconstrained_endpoints,
+        huber_delta=plan.huber_delta,
+    )
+    proposed, fit = _fit_candidate(strain, stress, candidate, method)
+    region = _SourceEventFitRegion(
+        core_start=plan.component.start,
+        core_end=right - 1,
+        fit_start=plan.fit_start,
+        fit_end=right - 1,
+        left_anchor=plan.left_anchor,
+        right_anchor=right,
+        source_events=plan.component.events,
+        support_count=support_count,
+        anchor_rule=plan.anchor_rule,
+        reason=plan.reason,
+        target_stress=fit.target_stress,
+        unconstrained_level=fit.c0,
+        unconstrained_endpoints=fit.unconstrained_endpoints,
+        constrained_endpoints=fit.constrained_endpoints,
+        huber_delta=fit.huber_delta,
+        fit_r_squared=fit.fit_r_squared,
+        fit_rmse=fit.fit_rmse,
+        max_abs_distortion=fit.max_abs_distortion,
+        one_free_row=False,
+    )
+    return proposed, region
+
+
+def _source_event_a2_fit(
+    strain: NDArray[np.float64],
+    stress: NDArray[np.float64],
+    targets: tuple[DropEvent, ...],
+    protected: list[tuple[int, int]],
+    preserve_boundary: int,
+    method: str,
+) -> tuple[_SourceEventFitResult | None, str | None]:
+    """Apply A2 only when a crossing suffix or target-blocked bounded anchor exists."""
+    if method not in _NUMERIC_METHODS:
+        return None, None
+    protected_tuple = tuple(protected)
+    components = _source_event_cores(targets)
+    if not components:
+        return None, None
+
+    trigger_seen = any(
+        component.start <= preserve_boundary < component.right
+        and component.right > preserve_boundary + 1
+        for component in components
+    )
+    plans: list[_SourceEventPlan] = []
+    try:
+        for _ in range(len(components)):
+            plans = []
+            for component in components:
+                plan = _source_event_plan(
+                    strain,
+                    stress,
+                    component,
+                    method=method,
+                    preserve_boundary=preserve_boundary,
+                    protected=protected_tuple,
+                )
+                plans.append(plan)
+                trigger_seen = (
+                    trigger_seen
+                    or plan.crossing_prefix
+                    or (plan.anchor_rule == "bounded_observed_anchor")
+                )
+            merge_at = next(
+                (
+                    index
+                    for index in range(len(plans) - 1)
+                    if plans[index + 1].left_anchor <= plans[index].component.right
+                ),
+                None,
+            )
+            if merge_at is None:
+                break
+            first, second = components[merge_at : merge_at + 2]
+            components[merge_at : merge_at + 2] = [
+                _SourceEventCore(
+                    first.start,
+                    max(first.right, second.right),
+                    (*first.events, *second.events),
+                )
+            ]
+        else:
+            return None, "source-event influence closure did not converge"
+
+        if not trigger_seen:
+            return None, None
+        proposals = [
+            _source_event_plan_proposal(strain, stress, plan, method=method) for plan in plans
+        ]
+    except AutoYieldFitError as exc:
+        return None, str(exc) if trigger_seen else None
+
+    values = stress.copy()
+    regions: list[_SourceEventFitRegion] = []
+    previous_right = -1
+    for plan, (proposed, region) in zip(plans, proposals, strict=True):
+        if plan.left_anchor < previous_right:
+            return None, "source-event fitted influence intervals still overlap after closure"
+        values[plan.left_anchor + 1 : plan.component.right] = proposed[
+            plan.left_anchor + 1 : plan.component.right
+        ]
+        previous_right = plan.component.right
+        regions.append(region)
+    values.setflags(write=False)
+    return _SourceEventFitResult(values, tuple(regions), protected_tuple), None
+
+
+def _legacy_source_event_fit(
+    fitted: AutoYieldFitResult,
+    targets: tuple[DropEvent, ...],
+) -> _SourceEventFitResult:
+    regions = tuple(
+        _SourceEventFitRegion(
+            core_start=region.core_start,
+            core_end=region.core_end,
+            fit_start=region.core_start,
+            fit_end=region.core_end,
+            left_anchor=region.left_anchor,
+            right_anchor=region.right_anchor,
+            source_events=tuple(
+                event
+                for event in targets
+                if event.peak_index <= region.core_end and event.end_index >= region.core_start
+            ),
+            support_count=region.core_end - region.core_start + 1,
+            anchor_rule="fit_event_cores",
+            reason=None,
+            target_stress=region.target_stress,
+            unconstrained_level=region.c0,
+            unconstrained_endpoints=region.unconstrained_endpoints,
+            constrained_endpoints=region.constrained_endpoints,
+            huber_delta=region.huber_delta,
+            fit_r_squared=region.fit_r_squared,
+            fit_rmse=region.fit_rmse,
+            max_abs_distortion=region.max_abs_distortion,
+            one_free_row=False,
+        )
+        for region in fitted.regions
+    )
+    return _SourceEventFitResult(
+        np.asarray(fitted.values, dtype=np.float64), regions, fitted.protected_intervals
+    )
+
+
+def _source_event_no_band_result(
+    frame: Frame,
+    options: dict[str, Any],
+    strain: NDArray[np.float64],
+    stress: NDArray[np.float64],
+    selection: StableBandSelection,
+    progress_note: str,
+    *,
+    elastic_end: int,
+    source_rows: NDArray[np.int64],
+) -> StepResult:
+    """Fit closed events after the mapped source-E prefix when no band exists."""
+    detected = tuple(detect_events(stress, 0.005, 0.005, 0.05))
+    recovered = tuple(
+        event
+        for event in detected
+        if event.kind == "full_recovery"
+        or (
+            event.kind == "partial_recovery"
+            and event.recovery_index is not None
+            and not event.end_at_observation_boundary
+        )
+    )
+    prefix_rows = np.flatnonzero(source_rows <= elastic_end)
+    prefix_end = int(prefix_rows[-1]) if prefix_rows.size else -1
+    preserve_boundary = prefix_end if prefix_end >= 0 else 0
+    preserve_reason = (
+        f"mapped source E end row {elastic_end}; model prefix ends at current row {prefix_end}"
+        if prefix_end >= 0
+        else "source E window precedes this model scope; preserve first current row as anchor"
+    )
+    excluded = tuple(event for event in recovered if event.end_index <= prefix_end)
+    crossing_noops = tuple(
+        event
+        for event in recovered
+        if prefix_end >= 0
+        and event.peak_index <= prefix_end < event.end_index
+        and event.end_index == prefix_end + 1
+        and float(stress[prefix_end]) <= float(stress[event.end_index])
+    )
+    crossing_noop_ids = {id(event) for event in crossing_noops}
+    targets = tuple(
+        event
+        for event in recovered
+        if event.end_index > prefix_end and id(event) not in crossing_noop_ids
+    )
+    fit_preserve_boundary = max(
+        preserve_boundary,
+        max((event.end_index for event in crossing_noops), default=preserve_boundary),
+    )
+    fit_preserve_reason = preserve_reason
+    if crossing_noops:
+        completion_rows = tuple(event.end_index for event in crossing_noops)
+        fit_preserve_reason += (
+            f"; preserve no-editable-row recovery completions {completion_rows} as anchors"
+        )
+    protected = [
+        (event.peak_index, event.end_index)
+        for event in detected
+        if event.kind == "terminal_unrecovered" or event.end_at_observation_boundary
+    ]
+    try:
+        legacy_fit: AutoYieldFitResult = fit_event_cores(
+            strain,
+            stress,
+            [(event.peak_index, event.end_index) for event in targets],
+            protected,
+            fit_preserve_boundary,
+            options["method"],
+            preserve_boundary_reason=fit_preserve_reason,
+        )
+        fitted = _legacy_source_event_fit(legacy_fit, targets)
+    except AutoYieldFitError as exc:
+        a2_fitted, a2_failure = _source_event_a2_fit(
+            strain,
+            stress,
+            targets,
+            protected,
+            fit_preserve_boundary,
+            options["method"],
+        )
+        if a2_fitted is not None:
+            fitted = a2_fitted
+        else:
+            reason = str(exc)
+            if a2_failure is not None:
+                reason += f"; A2 attempt={a2_failure}"
+            no_op_bounds = tuple(
+                (
+                    event.peak_index,
+                    event.end_index,
+                    int(source_rows[event.peak_index]),
+                    int(source_rows[event.end_index]),
+                )
+                for event in crossing_noops
+            )
+            raise ProcessingError(
+                "band_and_source_events_auto_v1 recovered-event fit held: "
+                f"source E end={elastic_end}, mapped model prefix end={prefix_end}, "
+                f"eligible targets={len(targets)}, excluded-in-prefix={len(excluded)}, "
+                f"crossing_no_editable_rows={len(crossing_noops)} {no_op_bounds}, "
+                f"reason={reason}"
+            ) from None
+
+    values = np.asarray(fitted.values, dtype=np.float64)
+    if prefix_end >= 0 and not np.array_equal(
+        values[: prefix_end + 1], stress[: prefix_end + 1]
+    ):
+        raise ProcessingError(
+            "원행 E 모델 prefix를 원응력 그대로 보존하지 못해 사건 적합을 보류합니다."
+        )
+    for start, end in fitted.protected_intervals:
+        if not np.array_equal(values[start : end + 1], stress[start : end + 1]):
+            raise ProcessingError(
+                f"말단 보호 원행을 보존하지 못해 사건 적합을 보류합니다: {start}~{end}."
+            )
+    for event in crossing_noops:
+        if values[event.end_index] != stress[event.end_index]:
+            raise ProcessingError(
+                "crossing_no_editable_rows completion anchor를 보존하지 못해 "
+                "사건 적합을 보류합니다: "
+                f"{event.end_index}."
+            )
+
+    output_columns = dict(frame.columns)
+    output_columns[options["stress"]] = values.copy()
+    output_frame = Frame(output_columns, dict(frame.units))
+    notes = [
+        "선택 가능한 안정 밴드가 없어 source-event 정책의 no-band 경로를 사용했습니다. "
+        f"source E 끝 원행={elastic_end}, 현재 모델 입력에서 E prefix 끝 행={prefix_end}; "
+        f"보존 경계={preserve_boundary} ({preserve_reason}).",
+        f"검출 사건 {len(detected)}개 중 닫힌 회복 사건 {len(recovered)}개를 확인했습니다. "
+        f"E prefix 안의 닫힌 회복 사건 {len(excluded)}개는 적합 대상에서 제외했습니다. "
+        f"경계 양 끝만 맞닿아 편집 가능한 원행이 없는 crossing_no_editable_rows "
+        f"사건은 {len(crossing_noops)}개로 그대로 두었습니다. "
+        f"남은 적합 대상 {len(targets)}개는 "
+        "원사건 경계를 유지합니다. 경계 사건의 목적함수에는 실제로 변경 가능한 관측행만 "
+        "넣고, E prefix 끝 P와 별도로 no-op 완료 행 R도 적합 "
+        f"보존 경계={fit_preserve_boundary}로 유지합니다.",
+        f"원자료 적합 결과 {len(fitted.regions)}개 영향 구간; 보호 말단 구간="
+        f"{fitted.protected_intervals or '없음'}. E prefix와 보호 구간은 원응력 그대로입니다.",
+    ]
+    for event in detected:
+        source_interval = (
+            int(source_rows[event.peak_index]),
+            int(source_rows[event.end_index]),
+        )
+        if event in excluded:
+            decision = "E prefix 안의 닫힌 회복 사건 — 적합 대상 제외"
+        elif id(event) in crossing_noop_ids:
+            decision = (
+                "crossing_no_editable_rows — 경계 양 끝만 있고 y[P]≤y[R]여서 "
+                "양 끝과 전체 사건을 원응력 그대로 보존"
+            )
+        elif event in targets:
+            region = next(
+                (item for item in fitted.regions if event in item.source_events), None
+            )
+            if region is None:
+                decision = "E 경계 뒤 닫힌 원사건 — 적합 영향 구간에서 처리"
+            else:
+                decision = (
+                    f"전체 원사건을 유지하고 편집 적합행 {region.fit_start}~"
+                    f"{region.fit_end} ({region.support_count}개)를 사용"
+                )
+        elif event.kind == "terminal_unrecovered" or event.end_at_observation_boundary:
+            decision = "열린/말단 사건 — 관측 원행 보존"
+        else:
+            decision = "닫힌 회복 사건이 아니므로 적합 대상 아님"
+        notes.append(
+            f"원행 사건 kind={event.kind}, 현재 모델 입력 행="
+            f"{event.peak_index}~{event.end_index}, source 원행={source_interval[0]}~"
+            f"{source_interval[1]}: {decision}."
+        )
+    one_free_row_count = 0
+    bounded_anchor_count = 0
+    for region in fitted.regions:
+        original_events = (
+            ",".join(f"{event.peak_index}~{event.end_index}" for event in region.source_events)
+            or "none"
+        )
+        source_events = (
+            ",".join(
+                f"{int(source_rows[event.peak_index])}~{int(source_rows[event.end_index])}"
+                for event in region.source_events
+            )
+            or "none"
+        )
+        bounded_anchor_count += region.anchor_rule == "bounded_observed_anchor"
+        details = (
+            f"source_event_fit method={options['method']} original_events={original_events} "
+            f"source_events={source_events} "
+            f"core={region.core_start}~{region.core_end} "
+            f"editable_rows={region.fit_start}~{region.fit_end} "
+            f"source_editable_rows={int(source_rows[region.fit_start])}~"
+            f"{int(source_rows[region.fit_end])} "
+            f"support_count={region.support_count} "
+            f"anchors={region.left_anchor}~{region.right_anchor} "
+            f"source_anchors={int(source_rows[region.left_anchor])}~"
+            f"{int(source_rows[region.right_anchor])} "
+            f"anchor_mode={region.anchor_rule}"
+        )
+        if region.one_free_row:
+            one_free_row_count += 1
+            objective = (
+                "endpoint_interpolation"
+                if options["method"] == "linear"
+                else "clipped_scalar_objective"
+            )
+            notes.append(
+                f"{details} reason=one_observed_free_row objective={objective} "
+                "quality=not_reported."
+            )
+            continue
+        reason = f" reason={region.reason};" if region.reason else ""
+        quality = ""
+        if region.fit_r_squared is not None and region.fit_rmse is not None:
+            quality = f" R²={region.fit_r_squared:.6g}, RMSE={region.fit_rmse:.6g} Pa;"
+        notes.append(
+            f"{details};{reason}{quality} maximum_change={region.max_abs_distortion:.6g} Pa."
+        )
+    if not targets:
+        notes.append(
+            "E prefix 뒤에 적합할 닫힌 회복 사건이 없어 원응력을 그대로 반환했습니다."
+        )
+    if progress_note:
+        notes.append(progress_note)
+
+    scalars = (
+        *_diagnostic_scalars(stress, values, selection, None, None),
+        Scalar(
+            "band_model_source_elastic_end_index",
+            "원자료 E 끝 원행 위치",
+            float(elastic_end),
+            "1",
+        ),
+        Scalar(
+            "band_model_source_elastic_prefix_end_index",
+            "현재 모델 입력에서 E prefix 끝 행 위치",
+            float(prefix_end),
+            "1",
+        ),
+        Scalar(
+            "band_model_source_event_recovered_count",
+            "검출된 닫힌 회복 사건 수",
+            float(len(recovered)),
+            "1",
+        ),
+        Scalar(
+            "band_model_source_event_excluded_in_elastic_count",
+            "E prefix 안에서 제외한 닫힌 사건 수",
+            float(len(excluded)),
+            "1",
+        ),
+        Scalar(
+            "band_model_source_event_target_count",
+            "E prefix 뒤 적합 대상 닫힌 사건 수",
+            float(len(targets)),
+            "1",
+        ),
+        Scalar(
+            "band_model_source_event_crossing_noop_count",
+            "경계에 편집 행이 없어 그대로 둔 사건 수",
+            float(len(crossing_noops)),
+            "1",
+        ),
+        Scalar(
+            "band_model_source_event_fit_region_count",
+            "자동 사건 적합 영향 구간 수",
+            float(len(fitted.regions)),
+            "1",
+        ),
+        Scalar(
+            "band_model_source_event_one_free_row_region_count",
+            "관측 자유행이 하나뿐인 퇴화 적합 구간 수",
+            float(one_free_row_count),
+            "1",
+        ),
+        Scalar(
+            "band_model_source_event_bounded_anchor_count",
+            "bounded observed anchor 규칙을 쓴 적합 구간 수",
+            float(bounded_anchor_count),
+            "1",
+        ),
+    )
+    return StepResult(
+        output_frame,
+        notes=tuple(notes),
+        scalars=scalars,
+        effective_options=options,
+    )
+
+
+def _source_event_isotonic_no_band_result(
+    frame: Frame,
+    options: dict[str, Any],
+    strain: NDArray[np.float64],
+    stress: NDArray[np.float64],
+    selection: StableBandSelection,
+    progress_note: str,
+    *,
+    elastic_end: int,
+    source_rows: NDArray[np.int64],
+    legacy_error: ProcessingError,
+) -> StepResult:
+    """Rescue only the raw-PAVA conflict with an observed protected terminal."""
+    from matcore.processing.tensile import _isotonic
+
+    def held(reason: str) -> None:
+        raise ProcessingError(
+            "legacy isotonic_auto_v1 hold preserved; fixed-terminal source-event "
+            f"rescue unavailable: {reason}; legacy reason: {legacy_error}"
+        ) from None
+
+    if (
+        strain.size != stress.size
+        or source_rows.size != stress.size
+        or strain.size < 2
+        or not np.all(np.isfinite(strain))
+        or not np.all(np.isfinite(stress))
+        or np.any(np.diff(strain) <= 0.0)
+        or np.any(np.diff(source_rows) <= 0)
+    ):
+        held("원행 변형률 또는 source-row 대응이 유효하지 않습니다")
+
+    prefix_positions = np.flatnonzero(source_rows <= elastic_end)
+    prefix_end = int(prefix_positions[-1]) if prefix_positions.size else -1
+    if prefix_end < 0:
+        held("현재 입력에 매핑된 source-E prefix가 없습니다")
+    preserve_boundary = prefix_end
+
+    detected = tuple(detect_events(stress, 0.005, 0.005, 0.05))
+    recovered = tuple(event for event in detected if _eligible_pool_event(event))
+    excluded = tuple(event for event in recovered if event.end_index <= prefix_end)
+    crossing = tuple(
+        event for event in recovered if event.peak_index <= prefix_end < event.end_index
+    )
+    if crossing:
+        crossings = tuple((event.peak_index, event.end_index) for event in crossing)
+        held(f"source-E 경계를 지나는 닫힌 회복 사건을 보호합니다: {crossings}")
+
+    targets = tuple(event for event in recovered if event.end_index > prefix_end)
+    components = _source_event_cores(targets)
+    protected_events = tuple(
+        event
+        for event in detected
+        if event.kind == "terminal_unrecovered" or event.end_at_observation_boundary
+    )
+    protected = tuple((event.peak_index, event.end_index) for event in protected_events)
+    if not components or not protected_events:
+        held("닫힌 회복 성분 또는 관측 말단 보호 구간이 없습니다")
+
+    trigger_matches: list[tuple[_SourceEventCore, DropEvent, float]] = []
+    for terminal in protected_events:
+        terminal_row = terminal.peak_index
+        if terminal_row + 1 > terminal.end_index or terminal_row + 1 >= stress.size:
+            continue
+        if float(stress[terminal_row + 1]) >= float(stress[terminal_row]):
+            continue
+        ending = [component for component in components if component.right == terminal_row]
+        if len(ending) != 1:
+            continue
+        component = ending[0]
+        if component.start <= prefix_end:
+            continue
+        raw = stress[component.start : terminal_row + 1]
+        unbounded = np.asarray(_isotonic(raw), dtype=np.float64)
+        if unbounded.size != raw.size or not np.all(np.isfinite(unbounded)):
+            held("말단 원성분의 동일행 PAVA 결과가 유효하지 않습니다")
+        lift = float(unbounded[-1] - stress[terminal_row])
+        if lift > 0.0:
+            trigger_matches.append((component, terminal, lift))
+    if len(trigger_matches) != 1:
+        held(
+            "source 원행의 닫힌 성분 하나가 보호 말단 시작에서 끝나고, "
+            "동일행 PAVA가 그 말단 값을 올리는 유일한 접합을 찾지 못했습니다"
+        )
+
+    trigger_component, terminal_event, trigger_lift = trigger_matches[0]
+    trigger_events = {id(event) for event in trigger_component.events}
+
+    def choose_left(component: _SourceEventCore) -> int:
+        right_value = float(stress[component.right])
+        for candidate in range(component.start - 1, preserve_boundary - 1, -1):
+            if float(stress[candidate]) > right_value:
+                continue
+            if _protected_anchor_overlap(candidate, component.right, protected) is not None:
+                continue
+            return candidate
+        raise ProcessingError(
+            f"원행 성분 {component.start}~{component.right}에서 source-E 뒤의 "
+            "보호구간 밖 비감소 왼쪽 관측 앵커를 찾지 못했습니다."
+        )
+
+    # Recompute every merged interval from the unchanged source observations.
+    merge_count = 0
+    plans: list[tuple[_SourceEventCore, int]] = []
+    while True:
+        plans = [(component, choose_left(component)) for component in components]
+        conflict: tuple[int, int] | None = None
+        for right_index in range(1, len(plans)):
+            left_anchor = plans[right_index][1]
+            overlapping = [
+                index for index in range(right_index) if left_anchor <= plans[index][0].right
+            ]
+            if overlapping:
+                conflict = (min(overlapping), right_index)
+                break
+        if conflict is None:
+            break
+        first, last = conflict
+        merged_events = tuple(
+            event for component, _left in plans[first : last + 1] for event in component.events
+        )
+        merged = _SourceEventCore(
+            plans[first][0].start,
+            plans[last][0].right,
+            merged_events,
+        )
+        components = [*components[:first], merged, *components[last + 1 :]]
+        merge_count += 1
+        if merge_count > len(recovered):
+            held("원행 성분 접합이 유한 단계 안에 닫히지 않았습니다")
+
+    values = stress.copy()
+    editable = np.zeros(stress.size, dtype=bool)
+    regions: list[_SourceEventIsotonicRegion] = []
+    released_internal_anchors = 0
+    for component, left in plans:
+        right = component.right
+        if not (preserve_boundary <= left < component.start <= right < stress.size):
+            held(
+                f"최종 원행 성분/앵커 순서가 유효하지 않습니다: "
+                f"{component.start}~{right}, L={left}, P={prefix_end}"
+            )
+        if float(stress[left]) > float(stress[right]):
+            held(f"고정 관측 앵커 응력이 감소합니다: L={left}, R={right}")
+        fit_start, fit_end = left + 1, right - 1
+        raw_interior = stress[fit_start:right]
+        levels = np.asarray(_isotonic(raw_interior), dtype=np.float64)
+        fitted = np.clip(levels, float(stress[left]), float(stress[right]))
+        local = np.concatenate(
+            (np.asarray([stress[left]], dtype=np.float64), fitted, np.asarray([stress[right]]))
+        )
+        if not np.all(np.isfinite(local)) or np.any(np.diff(local) < 0.0):
+            held(f"고정 관측 성분 {left}~{right}의 비감소 적합에 실패했습니다")
+        if np.any(editable[fit_start:right]):
+            held(f"최종 편집 성분이 행을 공유합니다: {left}~{right}")
+        values[fit_start:right] = fitted
+        editable[fit_start:right] = True
+        rule = (
+            "bounded_terminal_join"
+            if any(id(event) in trigger_events for event in component.events)
+            else "bounded_observed_anchor"
+        )
+        regions.append(_SourceEventIsotonicRegion(component, left, fitted.copy(), rule))
+        released_internal_anchors += max(len(component.events) - 1, 0)
+
+    if prefix_end >= 0 and not np.array_equal(
+        values[: prefix_end + 1], stress[: prefix_end + 1]
+    ):
+        held("source-E model prefix 원응력이 바뀌었습니다")
+    for start, end in protected:
+        if not np.array_equal(values[start : end + 1], stress[start : end + 1]):
+            held(f"보호 말단 원행이 바뀌었습니다: {start}~{end}")
+    if not np.array_equal(values[~editable], stress[~editable]):
+        held("선언한 열린 fit 구간 밖 원응력이 바뀌었습니다")
+
+    changed = int(np.count_nonzero(values[editable] != stress[editable]))
+    residual = values[editable] - stress[editable]
+    maximum_distortion = float(np.max(np.abs(residual))) if residual.size else 0.0
+    rmse = float(np.sqrt(np.mean(residual**2))) if residual.size else 0.0
+    unedited_edges = ~(editable[:-1] | editable[1:])
+    unedited_declines = int(np.count_nonzero((np.diff(values) < 0.0) & unedited_edges))
+
+    output_columns = dict(frame.columns)
+    output_columns[options["stress"]] = values.copy()
+    output_frame = Frame(output_columns, dict(frame.units))
+    terminal_row = terminal_event.peak_index
+    trigger_note = (
+        f"source_isotonic_trigger model_prefix_end={prefix_end} "
+        f"source_prefix_end={int(source_rows[prefix_end])} "
+        f"minimal_component={trigger_component.start}~{trigger_component.right} "
+        f"source_component={int(source_rows[trigger_component.start])}~"
+        f"{int(source_rows[trigger_component.right])} "
+        f"protected_terminal={terminal_row} "
+        f"source_terminal={int(source_rows[terminal_row])} "
+        f"raw_terminal_pa={float(stress[terminal_row]):.12g} "
+        f"unbounded_pava_terminal_pa="
+        f"{float(stress[terminal_row] + trigger_lift):.12g} "
+        f"unbounded_lift_pa={trigger_lift:.12g}."
+    )
+    notes = [
+        "legacy isotonic_auto_v1 no-band 계산이 보류되어 source-event 고정 말단 "
+        f"접합 경로를 적용했습니다. 기존 보류 사유: {legacy_error}",
+        trigger_note,
+        f"source-E prefix 0~{prefix_end} (source row {int(source_rows[0])}~"
+        f"{int(source_rows[prefix_end])})와 보호 말단 {protected}를 원응력 그대로 "
+        "보존했습니다. 선언한 열린 편집구간 밖 응력도 원행과 같습니다.",
+    ]
+    for region in regions:
+        component = region.component
+        right = component.right
+        fit_start, fit_end = region.left_anchor + 1, right - 1
+        original_events = ",".join(
+            f"{event.peak_index}~{event.end_index}" for event in component.events
+        )
+        source_events = ",".join(
+            f"{int(source_rows[event.peak_index])}~{int(source_rows[event.end_index])}"
+            for event in component.events
+        )
+        if fit_start <= fit_end:
+            source_fit = f"{int(source_rows[fit_start])}~{int(source_rows[fit_end])}"
+            region_residual = values[fit_start : fit_end + 1] - stress[fit_start : fit_end + 1]
+            region_changed = int(
+                np.count_nonzero(
+                    values[fit_start : fit_end + 1] != stress[fit_start : fit_end + 1]
+                )
+            )
+            region_max = float(np.max(np.abs(region_residual)))
+            region_rmse = float(np.sqrt(np.mean(region_residual**2)))
+            fit_rows = f"{fit_start}~{fit_end}"
+            support_count = fit_end - fit_start + 1
+        else:
+            source_fit = "none"
+            region_changed = 0
+            region_max = 0.0
+            region_rmse = 0.0
+            fit_rows = "none"
+            support_count = 0
+        notes.append(
+            f"source_event_fit method=isotonic original_events={original_events} "
+            f"source_events={source_events} core={component.start}~{right - 1} "
+            f"editable_rows={fit_rows} source_editable_rows={source_fit} "
+            f"support_count={support_count} anchors={region.left_anchor}~{right} "
+            f"source_anchors={int(source_rows[region.left_anchor])}~"
+            f"{int(source_rows[right])} anchor_mode={region.anchor_rule} "
+            f"objective=equal_row_bounded_l2 changed_points={region_changed} "
+            f"max_abs_distortion_pa={region_max:.12g} rmse_pa={region_rmse:.12g}."
+        )
+    notes.append(
+        f"적합된 열린 원행 구간의 전체 변경점={changed}, 최대 절대 왜곡="
+        f"{maximum_distortion:.12g} Pa, RMSE={rmse:.12g} Pa; 적합하지 않은 "
+        f"인접 원행에 남은 하강={unedited_declines}개입니다. 보호된 prefix/tail을 포함한 "
+        "전체 곡선의 단조성을 주장하지 않습니다."
+    )
+    if progress_note:
+        notes.append(progress_note)
+
+    scalars = (
+        *_diagnostic_scalars(stress, values, selection, None, None),
+        Scalar(
+            "band_model_source_elastic_end_index",
+            "원자료 E 끝 원행 위치",
+            float(elastic_end),
+            "1",
+        ),
+        Scalar(
+            "band_model_source_elastic_prefix_end_index",
+            "현재 모델 입력에서 E prefix 끝 행 위치",
+            float(prefix_end),
+            "1",
+        ),
+        Scalar(
+            "band_model_source_event_recovered_count",
+            "검출된 닫힌 회복 사건 수",
+            float(len(recovered)),
+            "1",
+        ),
+        Scalar(
+            "band_model_source_event_excluded_in_elastic_count",
+            "E prefix 안에서 제외한 닫힌 사건 수",
+            float(len(excluded)),
+            "1",
+        ),
+        Scalar(
+            "band_model_source_event_target_count",
+            "E prefix 뒤 적합 대상 닫힌 사건 수",
+            float(len(targets)),
+            "1",
+        ),
+        Scalar(
+            "band_model_source_event_fit_region_count",
+            "자동 사건 적합 영향 구간 수",
+            float(len(regions)),
+            "1",
+        ),
+        Scalar(
+            "band_model_source_event_isotonic_trigger_count",
+            "고정 관측 말단 접합 게이트 통과 수",
+            1.0,
+            "1",
+        ),
+        Scalar(
+            "band_model_source_event_isotonic_fit_region_count",
+            "등위회귀 적합 연결 성분 수",
+            float(len(regions)),
+            "1",
+        ),
+        Scalar(
+            "band_model_source_event_isotonic_released_anchor_count",
+            "연결 성분에서 해제한 내부 앵커 수",
+            float(released_internal_anchors),
+            "1",
+        ),
+        Scalar(
+            "band_model_source_event_isotonic_changed_points",
+            "등위회귀 열린 구간 변경 원행 수",
+            float(changed),
+            "1",
+        ),
+        Scalar(
+            "band_model_source_event_isotonic_max_abs_distortion",
+            "등위회귀 최대 절대 왜곡",
+            maximum_distortion,
+            "Pa",
+        ),
+        Scalar(
+            "band_model_source_event_isotonic_rmse",
+            "등위회귀 열린 구간 RMSE",
+            rmse,
+            "Pa",
+        ),
+        Scalar(
+            "band_model_source_event_isotonic_remaining_unedited_declines",
+            "적합하지 않은 인접 원행에 남은 하강 수",
+            float(unedited_declines),
+            "1",
+        ),
+    )
+    return StepResult(
+        output_frame,
+        notes=tuple(notes),
+        scalars=scalars,
+        effective_options=options,
+    )
+
+
 def band_model(frame: Frame, options: dict[str, Any]) -> StepResult:
     """Select one stable original-row band and compose method-specific proposals."""
     resolved = _resolve_options(options)
     strain, stress, progress, progress_note = _load_source(frame, resolved)
     policy = resolved["policy"]
+    source_elastic_end: int | None = None
+    source_rows: NDArray[np.int64] | None = None
+    if policy == SOURCE_EVENT_POLICY:
+        source_elastic_end, source_rows = _source_row_mapping(frame, resolved)
     if policy == MANUAL_POLICY:
         selection = _manual_selection(
             strain,
@@ -1483,18 +2624,46 @@ def band_model(frame: Frame, options: dict[str, Any]) -> StepResult:
             raise ProcessingError(f"안정 밴드 원행 입력을 검증할 수 없습니다: {exc}") from None
 
     if selection.reason == "not_found":
+        if policy == SOURCE_EVENT_POLICY and resolved["method"] in _NUMERIC_METHODS:
+            assert source_elastic_end is not None and source_rows is not None
+            return _source_event_no_band_result(
+                frame,
+                resolved,
+                strain,
+                stress,
+                selection,
+                progress_note,
+                elastic_end=source_elastic_end,
+                source_rows=source_rows,
+            )
         # Preserve the exact numerical compatibility path: do not even run the
         # new source-event detector when the automatic selector found no band.
         from matcore.processing.tensile import yield_drop
 
-        legacy = yield_drop(
-            frame,
-            {
-                "method": _LEGACY_METHODS[resolved["method"]],
-                "strain": resolved["strain"],
-                "stress": resolved["stress"],
-            },
-        )
+        try:
+            legacy = yield_drop(
+                frame,
+                {
+                    "method": _LEGACY_METHODS[resolved["method"]],
+                    "strain": resolved["strain"],
+                    "stress": resolved["stress"],
+                },
+            )
+        except ProcessingError as exc:
+            if policy == SOURCE_EVENT_POLICY and resolved["method"] == "isotonic":
+                assert source_elastic_end is not None and source_rows is not None
+                return _source_event_isotonic_no_band_result(
+                    frame,
+                    resolved,
+                    strain,
+                    stress,
+                    selection,
+                    progress_note,
+                    elastic_end=source_elastic_end,
+                    source_rows=source_rows,
+                    legacy_error=exc,
+                )
+            raise
         legacy_stress = _real_vector(
             legacy.frame.require(resolved["stress"], what="원응력"), what="기존 자동 결과"
         )
