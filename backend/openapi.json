@@ -3633,6 +3633,11 @@
             "title": "Domain",
             "type": "string"
           },
+          "is_span": {
+            "default": false,
+            "title": "Is Span",
+            "type": "boolean"
+          },
           "key": {
             "title": "Key",
             "type": "string"
@@ -20286,6 +20291,11 @@
           "domain": {
             "title": "Domain",
             "type": "string"
+          },
+          "is_span": {
+            "default": false,
+            "title": "Is Span",
+            "type": "boolean"
           },
           "key": {
             "title": "Key",

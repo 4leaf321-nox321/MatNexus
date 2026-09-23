@@ -65,6 +65,7 @@ const MAPPING: PropertyMapping = {
     {
       origin: 'catalog',
       deprecated: false,
+      is_span: false,
       key: 'mechanical.yield_strength',
       name: '항복강도',
       domain: 'mechanical',
@@ -90,6 +91,7 @@ const MAPPING: PropertyMapping = {
     {
       origin: 'catalog',
       deprecated: false,
+      is_span: false,
       key: 'mechanical.hardness_vickers',
       name: '비커스 경도',
       domain: 'mechanical',
@@ -113,6 +115,7 @@ const MAPPING: PropertyMapping = {
     {
       origin: 'catalog',
       deprecated: false,
+      is_span: false,
       key: 'mechanical.flexural_strength',
       name: '굽힘강도',
       domain: 'mechanical',

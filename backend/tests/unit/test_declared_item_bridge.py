@@ -58,3 +58,19 @@ def test_모르는_키는_이름이_없다() -> None:
     """확장이 선언한 키는 여기서 안 풀린다 — 그쪽은 「사내 항목 연결」 이 잇는다."""
     assert property_names.builtin_item("local.mechanical.barlat_exponent") is None
     assert property_names.builtin_item(None) is None
+
+
+def test_폭인_물성은_표시가_붙는다() -> None:
+    """**단위는 같은데 뜻이 다른 자리다.** WLF C₂ 는 K 로 적히지만 온도가 아니라
+    온도 폭이다 — 섭씨로 바꿀 때 영점을 빼면 안 된다.
+
+    지금은 환산하는 곳이 없어 아무 일도 안 나지만, 그 표시를 잃어버리면 「℃ 로
+    보기」 를 붙이는 날 51.6 K 가 -221.55 °C 로 뜬다.
+    """
+    from app.modules.catalog import spans
+
+    assert spans.is_span("mechanical.wlf_c2")
+    # 나머지 온도 물성은 절대온도다 — 개발 DB 의 K 단위 정의 12종 중 폭은 하나뿐이다.
+    assert not spans.is_span("thermal.glass_transition")
+    assert not spans.is_span("thermal.melting_point")
+    assert not spans.is_span(None)

@@ -415,6 +415,14 @@ export function PropertyMappingPanel({
                         폐기{row.superseded_by ? ` → ${row.superseded_by}` : ''}
                       </Badge>
                     )}
+                    {/* **단위는 같은데 뜻이 다르다.** WLF C₂ 는 K 로 적히지만 온도가
+                        아니라 온도 폭이다 — 섭씨로 바꾸면 영점을 빼면 안 된다. 숫자만
+                        봐서는 구별이 안 되므로 여기서 말한다. */}
+                    {row.is_span && (
+                      <Badge variant="outline" title="값이 절대값이 아니라 폭입니다 — 섭씨로 바꿔도 크기가 그대로입니다">
+                        온도 폭
+                      </Badge>
+                    )}
                     {canEdit && !row.deprecated && (
                       <button
                         type="button"

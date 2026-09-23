@@ -8523,6 +8523,11 @@ export interface components {
             description: string | null;
             /** Domain */
             domain: string;
+            /**
+             * Is Span
+             * @default false
+             */
+            is_span: boolean;
             /** Key */
             key: string;
             /** Name */
@@ -14655,6 +14660,11 @@ export interface components {
             deprecation_note?: string | null;
             /** Domain */
             domain: string;
+            /**
+             * Is Span
+             * @default false
+             */
+            is_span: boolean;
             /** Key */
             key: string;
             /** Links */

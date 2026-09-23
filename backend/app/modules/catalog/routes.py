@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session
 from app import version
 from app.database import get_db
 from app.modules.accounts.models import User
-from app.modules.catalog import contribute, links, mapping, parameters
+from app.modules.catalog import contribute, links, mapping, parameters, spans
 from app.modules.catalog.models import (
     CatalogDefinition,
     CatalogLink,
@@ -862,6 +862,7 @@ def _definition_out(db: Session, one: CatalogDefinition) -> CatalogDefinitionOut
         deprecated=one.deprecated,
         superseded_by=one.superseded_by,
         deprecation_note=one.deprecation_note,
+        is_span=spans.is_span(one.key),
     )
 
 
@@ -1388,6 +1389,7 @@ def property_mapping(
             si_unit=one.si_unit,
             symbol=one.symbol,
             test_standard=one.test_standard,
+            is_span=spans.is_span(one.key),
             value_count=counts.get(one.key, 0),
             links=links_by_key.get(one.key, []),
             measured=[

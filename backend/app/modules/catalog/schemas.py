@@ -270,6 +270,9 @@ class CatalogDefinitionOut(BaseModel):
     deprecated: bool = False
     superseded_by: str | None = None
     deprecation_note: str | None = None
+    is_span: bool = False
+    """값이 **절대값이 아니라 폭**인가(WLF C₂ 처럼). 단위는 같은데 환산이 다르다 —
+    폭은 섭씨로 바꿔도 크기가 그대로다. 화면이 이것으로 배지를 세운다."""
 
 
 class CatalogPropertyMigrateIn(BaseModel):
@@ -547,6 +550,8 @@ class PropertyMappingRowOut(BaseModel):
     si_unit: str | None
     symbol: str | None
     test_standard: str | None
+    is_span: bool = False
+    """값이 **절대값이 아니라 폭**인가(WLF C₂ 처럼). 단위는 같은데 환산이 다르다."""
     value_count: int
     """문헌값 수. 0 이면 문헌에도 값이 없는 정의다."""
     links: list[PropertyLinkOut]
