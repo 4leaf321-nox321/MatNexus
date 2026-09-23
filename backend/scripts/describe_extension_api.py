@@ -146,6 +146,7 @@ def build() -> str:
         "- `Member(label, columns, values)`: 시험 하나에서 꺼낸 곡선과 스칼라. 둘 이상이어야 묶인다.",
         "- `GroupOutcome(values, columns, detail, warnings, used)`: 처리 결과와 같은 모양(곡선 하나 + 스칼라). `used` 는 실제로 쓴 구성원.",
         '- **구성원을 모으는 법은 선언한다** — `register(..., members={"from": "adopted_result", "columns": [...], "conditions": [...], "values": [...]})`. 채택된 처리 결과의 곡선 열·시험 조건·스칼라를 그 이름으로 꺼내 준다. 계산이 필요한 것(변형률 속도)은 중심 코드의 `@collector` 다.',
+        '- `"optional": [...]` 은 **있으면 싣고 없으면 비우는 값**이다. `values` 에 적은 것은 없으면 그 시험이 막히지만 이쪽은 안 막는다 — 이방성 묶음이 방향별 항복응력을 이렇게 받는다(없어도 r̄ 는 나온다). 어느 값이 사람이 적은 것인지는 구성원 `meta["stated_keys"]` 에 이름으로 온다.',
         "",
     ]
     rows = []

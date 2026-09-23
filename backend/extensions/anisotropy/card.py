@@ -34,6 +34,24 @@ ANISOTROPY = register_block(
             Produced(key="hill_g", label="Hill48 G", si_unit="1"),
             Produced(key="hill_h", label="Hill48 H", si_unit="1"),
             Produced(key="hill_n", label="Hill48 N", si_unit="1"),
+            Produced(
+                key="sigma_0",
+                label="σ₀ (MD 항복)",
+                si_unit="Pa",
+                help=(
+                    "방향별 항복응력. **셋이 다 있을 때만 실린다** — 두 방향만으로는 "
+                    "항복면을 못 맞추는데, 카드에 앉아 있으면 셋인 줄 알고 가져간다."
+                ),
+            ),
+            Produced(key="sigma_45", label="σ₄₅ (DD 항복)", si_unit="Pa"),
+            Produced(key="sigma_90", label="σ₉₀ (TD 항복)", si_unit="Pa"),
+            Produced(
+                key="sigma_ratio_45",
+                label="σ₄₅/σ₀",
+                si_unit="1",
+                help="솔버가 이방성 계수로 받는 모양(0° 를 1 로 두고 견준다).",
+            ),
+            Produced(key="sigma_ratio_90", label="σ₉₀/σ₀", si_unit="1"),
         ),
         order=55,
         kind_priority=4,

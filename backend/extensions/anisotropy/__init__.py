@@ -186,6 +186,25 @@ register(
         Produced(key="hill_g", label="Hill48 G", si_unit="1"),
         Produced(key="hill_h", label="Hill48 H", si_unit="1"),
         Produced(key="hill_n", label="Hill48 N", si_unit="1"),
+        Produced(
+            key="sigma_0",
+            label="σ₀ (MD 항복)",
+            si_unit="Pa",
+            help=(
+                "**있으면 싣는다** — 없어도 r̄·Δr 은 나옵니다. 물성 키는 일부러 안 답니다: "
+                "방향 없는 「항복강도」 를 적어 둔 값이 MD 칸에 앉으면 그것이 어느 방향의 "
+                "값인지 아무도 모르게 됩니다."
+            ),
+        ),
+        Produced(key="sigma_45", label="σ₄₅ (DD 항복)", si_unit="Pa"),
+        Produced(key="sigma_90", label="σ₉₀ (TD 항복)", si_unit="Pa"),
+        Produced(
+            key="sigma_ratio_45",
+            label="σ₄₅/σ₀",
+            si_unit="1",
+            help="솔버가 이방성 계수로 받는 모양. 1 에서 멀수록 방향에 따라 더 다릅니다.",
+        ),
+        Produced(key="sigma_ratio_90", label="σ₉₀/σ₀", si_unit="1"),
         Produced(key="specimen_count", label="쓴 시편 수", si_unit="1"),
         Produced(key="stated_count", label="그중 사람이 적은 값", si_unit="1"),
     ),
@@ -195,6 +214,10 @@ register(
     members={
         "from": "measured_or_stated",
         "values": [rvalue.R_VALUE],
+        #: **있으면 싣고 없으면 그만이다.** 여기 것을 `values` 로 올리면 항복강도를
+        #: 안 적은 옛 시험이 통째로 안 묶인다 — r̄ 만 보려던 사람이 막힌다.
+        #: 이름이 셋인 이유는 `rvalue.YIELD_KEYS` 에 적어 두었다.
+        "optional": list(rvalue.YIELD_KEYS),
         "specimen": ["orientation"],
     },
     card=rvalue.card_blocks,

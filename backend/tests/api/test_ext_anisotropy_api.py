@@ -29,20 +29,30 @@ from app.modules.tests.models import TestRun
 #: 표의 첫 줄. 요약값 열은 **키를 그대로** 적는다 — 묶음이 `r_value` 로 찾는다.
 HEADER = "시편\t방향\tr_value"
 
+#: 항복강도까지 적은 표. **열 이름이 한글이면 키도 한글이다**(`importing._slug`) —
+#: 묶음은 그 이름도 항복응력으로 알아본다(`rvalue.YIELD_KEYS`).
+HEADER_WITH_YIELD = f"{HEADER}\t항복강도 (MPa)"
+
 #: 방향마다 답을 아는 r값. r̄ = (1.8 + 2·1.4 + 2.1)/4 = 1.675, Δr = 0.55.
 R_OF = {"MD": 1.8, "DD": 1.4, "TD": 2.1}
 
+#: 방향별 항복강도(MPa). σ₉₀/σ₀ = 1.1 이 되게 골랐다.
+YIELD_OF = {"MD": 210.0, "DD": 220.0, "TD": 231.0}
 
-def _rows() -> list[str]:
-    return [HEADER] + [
+
+def _rows(*, with_yield: bool = False) -> list[str]:
+    header = HEADER_WITH_YIELD if with_yield else HEADER
+    return [header] + [
         f"{index}\t{orientation}\t{value}"
+        + (f"\t{YIELD_OF[orientation]}" if with_yield else "")
         for index, (orientation, value) in enumerate(R_OF.items(), start=1)
     ]
 
 
-@pytest.fixture
-def imported(client: TestClient, db: Session, admin_headers: dict[str, str]) -> dict[str, Any]:
-    """폭 채널이 없는 장비의 시험 셋 — **사람이 표로 적은 r값**으로 들어온다."""
+def _import(
+    client: TestClient, db: Session, headers: dict[str, str], rows: list[str]
+) -> dict[str, Any]:
+    """재료·시료 하나에 표를 올려 시험 셋을 만든다."""
     ensure_builtin_test_types(db)
     db.commit()
     material = client.post(
@@ -55,27 +65,33 @@ def imported(client: TestClient, db: Session, admin_headers: dict[str, str]) -> 
             "poisson_ratio": 0.3,
             "density": 7850,
         },
-        headers=admin_headers,
+        headers=headers,
     ).json()
     sample = client.post(
-        f"/api/materials/{material['id']}/samples", json={}, headers=admin_headers
+        f"/api/materials/{material['id']}/samples", json={}, headers=headers
     ).json()
     made = client.post(
         "/api/test-runs/import",
         json={
             "sample_id": sample["id"],
             "test_type": "tensile",
-            "values": _rows(),
+            "values": rows,
             "create_missing": True,
         },
-        headers=admin_headers,
+        headers=headers,
     )
     assert made.status_code == 200, made.text
     runs = client.get(
-        "/api/test-runs", params={"material_id": material["id"]}, headers=admin_headers
+        "/api/test-runs", params={"material_id": material["id"]}, headers=headers
     ).json()["items"]
     assert len(runs) == 3
     return {"material_id": material["id"], "run_ids": [run["id"] for run in runs]}
+
+
+@pytest.fixture
+def imported(client: TestClient, db: Session, admin_headers: dict[str, str]) -> dict[str, Any]:
+    """폭 채널이 없는 장비의 시험 셋 — **사람이 표로 적은 r값**으로 들어온다."""
+    return _import(client, db, admin_headers, _rows())
 
 
 def _adopt_measured(db: Session, run_id: str, value: float) -> None:
@@ -194,6 +210,41 @@ def test_잰_값이_있으면_그쪽을_쓴다(
     assert values["r_bar_source"] == "measured"
     # 표본 셋이면 1등급이다(ADR 0008 과 같은 문턱).
     assert _tiers(db, card.json()["id"])["anisotropy.r_bar"] == 1
+
+
+def test_방향별_항복응력도_카드까지_간다(
+    client: TestClient, db: Session, admin_headers: dict[str, str]
+) -> None:
+    """r 만으로는 Hill48 까지다. Yld2000 같은 항복면은 σ₀·σ₄₅·σ₉₀ 를 r 셋과 **함께**
+    요구하는데, 그 값은 이미 같은 시험에 적혀 있었다 — 묶음이 안 걷었을 뿐이다.
+
+    표의 열 이름이 한글(`항복강도`)이라 키도 한글이고, 단위 칸이 MPa 라 저장은 Pa 다.
+    """
+    made = _import(client, db, admin_headers, _rows(with_yield=True))
+    body = _group(client, admin_headers, made["run_ids"])
+    assert body["values"]["sigma_0"] == pytest.approx(210e6)
+    assert body["values"]["sigma_ratio_90"] == pytest.approx(1.1)
+
+    card = client.post(
+        "/api/fitting/cards/from-group",
+        json={"group_result_id": body["id"], "label": "이방성(항복응력까지)"},
+        headers=admin_headers,
+    )
+    assert card.status_code == 201, card.text
+    values = card.json()["blocks"]["anisotropy"]["values"]
+    assert values["sigma_45"] == pytest.approx(220e6)
+    # 표로 적은 값이라 등급이 내려간다 — r 과 **따로** 센다.
+    assert values["sigma_0_source"] == "manual"
+
+
+def test_항복응력이_없어도_r_묶음은_선다(
+    client: TestClient, admin_headers: dict[str, str], imported: dict[str, Any]
+) -> None:
+    """**있으면 싣는 값이다.** 필수로 두면 항복강도를 안 적은 옛 시험이 통째로 안
+    묶이고, r̄ 만 보려던 사람이 막힌다."""
+    body = _group(client, admin_headers, imported["run_ids"])
+    assert body["values"]["r_bar"] == pytest.approx(1.675)
+    assert "sigma_0" not in body["values"]
 
 
 def test_한_방향이_빠지면_묶지_않는다(

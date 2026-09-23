@@ -54,13 +54,22 @@ def _run(frame: Frame, **options: Any) -> Any:
     return processing.apply([processing.Step(STEP, options)], frame).stages[-1]
 
 
-def _member(label: str, orientation: str, r: float, source: str = "measured") -> Member:
-    return Member(
-        label=label,
-        columns={},
-        values={"r_value": r},
-        meta={"orientation": orientation, "source": source},
-    )
+def _member(
+    label: str,
+    orientation: str,
+    r: float,
+    source: str = "measured",
+    sigma: float | None = None,
+    sigma_key: str = "proof_stress",
+    stated_keys: list[str] | None = None,
+) -> Member:
+    values: dict[str, float] = {"r_value": r}
+    if sigma is not None:
+        values[sigma_key] = sigma
+    meta: dict[str, Any] = {"orientation": orientation, "source": source}
+    if stated_keys is not None:
+        meta["stated_keys"] = stated_keys
+    return Member(label=label, columns={}, values=values, meta=meta)
 
 
 class Test곡선에서_재기:
@@ -172,6 +181,78 @@ class Test세_방향_묶음:
         assert blocks["anisotropy"]["values"]["r_bar_source"] == "measured"
 
 
+class Test방향별_항복응력:
+    """r 만으로는 Hill48 까지다. 그 위(Yld2000)는 σ₀·σ₄₅·σ₉₀ 를 함께 요구하는데,
+    그 값은 이미 같은 시험에 있었다 — 묶음이 안 걷었을 뿐이다."""
+
+    def _group(self, members: list[Member], **options: Any) -> Any:
+        return groups.run_group(GROUP, members, options)
+
+    def test_셋이_다_있으면_싣는다(self) -> None:
+        got = self._group(
+            [
+                _member("MD_01", "MD", 1.8, sigma=210e6),
+                _member("DD_01", "DD", 1.4, sigma=220e6),
+                _member("TD_01", "TD", 2.1, sigma=231e6),
+            ]
+        )
+        assert got.values["sigma_0"] == pytest.approx(210e6)
+        # 솔버가 받는 모양 — 0° 를 1 로 두고 견준다.
+        assert got.values["sigma_ratio_90"] == pytest.approx(1.1)
+
+    def test_없어도_r_묶음은_선다(self) -> None:
+        """**σ 를 필수로 두면** 항복강도를 안 적은 옛 시험이 통째로 안 묶인다."""
+        got = self._group(
+            [
+                _member("MD_01", "MD", 1.8),
+                _member("DD_01", "DD", 1.4),
+                _member("TD_01", "TD", 2.1),
+            ]
+        )
+        assert got.values["r_bar"] > 0
+        assert "sigma_0" not in got.values
+        assert not [line for line in got.warnings if "항복응력" in line]
+
+    def test_두_방향만_있으면_안_싣고_말한다(self) -> None:
+        """반쪽으로 실으면 셋인 줄 알고 가져간다 — 두 방향으로는 항복면을 못 맞춘다."""
+        got = self._group(
+            [
+                _member("MD_01", "MD", 1.8, sigma=210e6),
+                _member("DD_01", "DD", 1.4),
+                _member("TD_01", "TD", 2.1, sigma=231e6),
+            ]
+        )
+        assert "sigma_0" not in got.values
+        assert any("45°" in line and "항복응력" in line for line in got.warnings)
+
+    def test_이름이_달라도_같은_물성이다(self) -> None:
+        """표로 적으면 열 이름이 그대로 키가 된다 — 한글 열도 읽는다."""
+        got = self._group(
+            [
+                _member("MD_01", "MD", 1.8, sigma=210e6, sigma_key="항복강도"),
+                _member("DD_01", "DD", 1.4, sigma=220e6, sigma_key="yield_strength"),
+                _member("TD_01", "TD", 2.1, sigma=231e6),
+            ]
+        )
+        assert got.values["sigma_45"] == pytest.approx(220e6)
+
+    def test_적은_항복응력이_잰_r_의_등급을_안_내린다(self) -> None:
+        """한 시험에서 r 은 곡선에서 나오고 항복응력만 표로 적을 수 있다. 그때 구성원
+        하나를 통째로 「적은 값」 으로 세면 **잰 r 까지 4등급이 된다.**"""
+        got = self._group(
+            [
+                _member("MD_01", "MD", 1.8, sigma=210e6, stated_keys=["proof_stress"]),
+                _member("DD_01", "DD", 1.4, sigma=220e6, stated_keys=[]),
+                _member("TD_01", "TD", 2.1, sigma=231e6, stated_keys=[]),
+            ]
+        )
+        assert got.values["stated_count"] == 0
+        blocks = registry.get(GROUP).meta["card"](got.values, got.detail, got.warnings)
+        values = blocks["anisotropy"]["values"]
+        assert values["r_bar_source"] == "measured"
+        assert values["sigma_0_source"] == "manual"
+
+
 class Test로더로_읽힌다:
     def test_처리_단계와_묶음이_나란히_선다(self) -> None:
         ids = {plugin.id for plugin in registry.list_plugins()}
@@ -189,3 +270,6 @@ class Test로더로_읽힌다:
         rule = registry.get(GROUP).meta["members"]
         assert rule["from"] == "measured_or_stated"
         assert rule["specimen"] == ["orientation"]
+        # 항복응력은 **있으면 싣는 값**이다 — `values` 에 있으면 안 적은 시험이 막힌다.
+        assert rule["values"] == ["r_value"]
+        assert "proof_stress" in rule["optional"]

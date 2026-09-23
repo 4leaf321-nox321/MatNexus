@@ -137,6 +137,33 @@ MEASURED_OR_STATED = "measured_or_stated"
 #: 값의 출처를 적는 자리 — 구성원 `meta` 의 키.
 SOURCE_META = "source"
 
+#: **있으면 싣고 없으면 비우는 값.** `values` 는 없으면 막지만 이쪽은 안 막는다.
+#:
+#: 한 묶음이 여러 물성을 함께 보는 자리가 있다 — 이방성이 그렇다. r값은 세 방향이
+#: 다 있어야 r̄ 가 나오므로 필수지만, 방향별 항복응력은 있으면 카드에 더 싣고 없으면
+#: 그만이다(Yld2000 을 맞추려면 필요하고, r̄·Δr 만 볼 때는 필요 없다). 이것을
+#: `values` 에 넣으면 **항복응력을 안 적은 옛 시험이 통째로 안 묶인다.**
+OPTIONAL_VALUES = "optional"
+
+#: 그 구성원에서 **사람이 표로 적은** 값들의 이름 — 구성원 `meta` 의 키.
+#:
+#: `SOURCE_META` 하나로는 모자란 자리가 생겼다. 한 시험이 r값은 곡선에서 나오고
+#: 항복응력은 사람이 적은 것일 수 있는데, 그때 「이 구성원은 stated」 라고만 적으면
+#: **잰 r값까지 적은 값으로 내려간다.** 어느 값이 적힌 것인지 이름으로 남긴다.
+STATED_KEYS_META = "stated_keys"
+
+
+def _wanted_values(rule: dict[str, Any]) -> tuple[list[str], list[str]]:
+    """규칙이 바라는 값 이름 — `(있어야 하는 것, 있으면 좋은 것)`.
+
+    둘을 한 번에 찾되 **막는 것은 앞쪽뿐이다**(`OPTIONAL_VALUES`).
+    """
+    required = [str(one) for one in rule.get("values") or []]
+    optional = [
+        str(one) for one in rule.get(OPTIONAL_VALUES) or [] if str(one) not in required
+    ]
+    return required, optional
+
 
 def _stated_values(
     db: Session, runs: list[TestRun], wanted: list[str]
@@ -188,14 +215,14 @@ def _summary_members(
     """곡선 없는 시험 — 조건과 요약값만 든 구성원. 없는 값은 **어느 시험이 무엇이 없는지**
     말한다."""
     wanted_conditions = [str(one) for one in rule.get("conditions") or []]
-    wanted_values = [str(one) for one in rule.get("values") or []]
+    wanted_values, optional_values = _wanted_values(rule)
     if rule.get("columns"):
         raise AppError(
             "MNX-GROUPING-0001",
             f"{plugin_id}: 요약값 구성원에는 곡선 열이 없습니다 — `columns` 를 비우세요.",
             status=422,
         )
-    by_run = _stated_values(db, runs, wanted_values)
+    by_run = _stated_values(db, runs, wanted_values + optional_values)
     extra = _specimen_meta(db, runs, [str(one) for one in rule.get("specimen") or []])
     members: list[groups.Member] = []
     for run in runs:
@@ -205,13 +232,18 @@ def _summary_members(
             found = conditions.get(key)
             if isinstance(found, int | float):
                 values[key] = float(found)
-        values.update(by_run.get(run.id, {}))
+        written = by_run.get(run.id, {})
+        values.update(written)
         members.append(
             groups.Member(
                 label=run.record_name,
                 columns={},
                 values=values,
-                meta={**extra.get(run.id, {}), SOURCE_META: "stated"},
+                meta={
+                    **extra.get(run.id, {}),
+                    SOURCE_META: "stated",
+                    STATED_KEYS_META: sorted(written),
+                },
             )
         )
     return members
@@ -234,8 +266,8 @@ def _mixed_members(
             status=422,
         )
     wanted_conditions = [str(one) for one in rule.get("conditions") or []]
-    wanted_values = [str(one) for one in rule.get("values") or []]
-    stated = _stated_values(db, runs, wanted_values)
+    wanted_values, optional_values = _wanted_values(rule)
+    stated = _stated_values(db, runs, wanted_values + optional_values)
     extra = _specimen_meta(db, runs, [str(one) for one in rule.get("specimen") or []])
     results = {
         one.id: one
@@ -262,19 +294,22 @@ def _mixed_members(
             for one in ((result.scalars if result else None) or [])
             if isinstance(one, dict)
         }
-        source = "measured"
-        for key in wanted_values:
+        for key in wanted_values + optional_values:
             found = scalars.get(key)
             if isinstance(found, int | float):
                 values[key] = float(found)
-        missing = [key for key in wanted_values if key not in values]
-        if missing:
-            # 채택된 결과가 없거나 그 값을 안 냈다 — 사람이 적은 것을 본다.
-            written = stated.get(run.id, {})
-            for key in missing:
-                if key in written:
-                    values[key] = written[key]
-            source = "stated" if any(key in written for key in missing) else source
+        # 채택된 결과가 없거나 그 값을 안 냈다 — 사람이 적은 것을 본다.
+        written = stated.get(run.id, {})
+        written_keys = [
+            key
+            for key in wanted_values + optional_values
+            if key not in values and key in written
+        ]
+        for key in written_keys:
+            values[key] = written[key]
+        # **하나라도 적은 값이면 구성원은 stated 다.** 어느 값이 그랬는지는
+        # `STATED_KEYS_META` 가 이름으로 말하므로, 묶음은 값마다 따로 볼 수 있다.
+        source = "stated" if written_keys else "measured"
         still = [key for key in wanted_values if key not in values]
         if still:
             raise AppError(
@@ -288,7 +323,11 @@ def _mixed_members(
                 label=run.record_name,
                 columns={},
                 values=values,
-                meta={**extra.get(run.id, {}), SOURCE_META: source},
+                meta={
+                    **extra.get(run.id, {}),
+                    SOURCE_META: source,
+                    STATED_KEYS_META: written_keys,
+                },
             )
         )
     return members
@@ -312,7 +351,8 @@ def _declared_members(
         )
     wanted_columns = [str(one) for one in rule.get("columns") or []]
     wanted_conditions = [str(one) for one in rule.get("conditions") or []]
-    wanted_values = [str(one) for one in rule.get("values") or []]
+    required, optional = _wanted_values(rule)
+    wanted_values = required + optional
     extra = _specimen_meta(db, runs, [str(one) for one in rule.get("specimen") or []])
     results = {
         one.id: one
@@ -364,7 +404,11 @@ def _declared_members(
                 label=run.record_name,
                 columns={one: columns[one] for one in wanted_columns},
                 values=values,
-                meta={**extra.get(run.id, {}), SOURCE_META: "measured"},
+                meta={
+                    **extra.get(run.id, {}),
+                    SOURCE_META: "measured",
+                    STATED_KEYS_META: [],
+                },
             )
         )
     return members

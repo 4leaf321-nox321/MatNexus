@@ -31,6 +31,20 @@ Hill48 의 계수도 셋에서 나온다(평면 응력, 등방 경화):
 
 **셋이 다 있어야 낸다.** 하나가 없으면 r̄ 도 Hill48 도 못 낸다 — 빠진 방향을
 0 으로 두거나 옆 방향으로 대신하면 그 사실이 숫자 안에 숨는다.
+
+## 방향별 항복응력도 함께 걷는다
+
+r 만으로 맞출 수 있는 항복면은 Hill48 까지다. 그 위(Yld2000-2d 등)는 방향별 항복응력
+σ₀·σ₄₅·σ₉₀ 를 r 셋과 **함께** 요구하는데, 그 값은 이미 같은 시험 안에 있었다 —
+묶음이 안 걷어서 카드 한 장에 같이 앉지 못했을 뿐이다(2026-09-23).
+
+**있으면 싣고 없으면 그만이다.** r 은 셋이 다 있어야 하지만 σ 는 없어도 r̄·Δr 은
+나온다 — σ 를 필수로 두면 항복응력을 안 적은 옛 시험이 통째로 안 묶인다.
+
+**응력으로 Hill48 을 다시 맞추지는 않는다.** F·G·H 를 응력에서 얻으려면 이축 항복응력
+σ_b 가 있어야 한다(F+G = 1/σ_b²) — 단축 인장 셋만으로는 안 나온다. 여기서는 모아서
+적어 둘 뿐이고, 맞추는 것은 σ_b 를 재는 시험이 생긴 뒤다. 함께 내는 σ₄₅/σ₀ · σ₉₀/σ₀
+는 솔버들이 이방성 계수로 받는 그 모양이다.
 """
 
 from __future__ import annotations
@@ -157,27 +171,74 @@ def fit(length: np.ndarray, width: np.ndarray, *, start: float, end: float) -> F
 #: 구성원이 드는 값 이름. 곡선에서 계산됐든 사람이 적었든 **같은 이름**이다 —
 #: 어느 쪽인지는 `meta` 가 말한다(아래 `SOURCE_META`).
 R_VALUE = "r_value"
+#: 방향별 항복응력이 들어올 수 있는 이름. **셋 다 본다.**
+#:
+#: 곡선을 처리했으면 오프셋 항복이 `proof_stress` 로 나오고, 표로 적었으면 **열 이름이
+#: 그대로 키가 된다**(`tests/importing.py` 의 `_slug` — 한글 이름은 한글 그대로다).
+#: 그래서 같은 물성이 세 이름으로 들어온다. 하나만 보면 「분명히 적었는데 카드에 없다」
+#: 가 되고, 그때 사람은 자기가 적은 열 이름을 의심하지 않는다.
+YIELD_KEYS = ("proof_stress", "yield_strength", "항복강도")
+
 #: 구성원의 방향. 수집기가 시편에서 읽어 넣는다.
 ORIENTATION_META = "orientation"
 #: 그 값이 어디서 왔나 — `measured`(채택된 결과) · `stated`(사람이 표로 적음).
 SOURCE_META = "source"
+#: 그중 **사람이 적은 값의 이름들.** 한 시험에서 r 은 곡선에서 나오고 항복응력만
+#: 적은 것일 수 있다 — 구성원 하나를 통째로 `stated` 로 세면 잰 r 까지 내려간다.
+STATED_KEYS_META = "stated_keys"
+
+
+@dataclass(frozen=True)
+class _Row:
+    """한 시편에서 꺼낸 것. 방향은 밖(`by_angle`)이 쥔다."""
+
+    label: str
+    r: float
+    r_stated: bool
+    sigma: float | None
+    """방향별 항복응력(Pa). 없을 수 있다 — 그래도 r 묶음은 선다."""
+    sigma_stated: bool
+
+
+def _stated(member: Member, key: str) -> bool:
+    """이 **값 하나**가 사람이 적은 것인가.
+
+    이름 목록이 있으면 그것을 보고, 없으면(옛 수집기) 구성원 전체의 출처를 본다 —
+    r 은 곡선에서 나오고 항복응력만 적은 시험이 실제로 있다.
+    """
+    names = member.meta.get(STATED_KEYS_META)
+    if isinstance(names, list | tuple | set):
+        return key in names
+    return str(member.meta.get(SOURCE_META) or "measured") == "stated"
+
+
+def _yield_of(member: Member) -> tuple[float, bool] | None:
+    """이 구성원의 항복응력과 그 출처. 없으면 `None` — **막지 않는다.**
+
+    이름이 셋이라 먼저 나오는 것을 쓴다(`YIELD_KEYS`). 0 이하는 값이 아니다 —
+    비운 칸이 0 으로 들어온 것이고, 그걸 나누면 비가 무한이 된다.
+    """
+    for key in YIELD_KEYS:
+        value = member.values.get(key)
+        if isinstance(value, int | float) and math.isfinite(float(value)) and float(value) > 0:
+            return float(value), _stated(member, key)
+    return None
 
 
 def r_family(members: list[Member], *, hill48: bool = True) -> GroupOutcome:
-    """세 방향의 r값을 모아 r̄·Δr(·Hill48)을 낸다.
+    """세 방향의 r값을 모아 r̄·Δr(·Hill48)을 낸다. **항복응력이 있으면 함께 싣는다.**
 
     **같은 방향에 시편이 여럿이면 평균한다** — 반복 시편의 흩어짐은 통계가 볼 일이고,
     여기서 필요한 것은 방향마다 대표 하나다. 몇 개를 평균했는지는 값으로 남긴다.
     """
     warnings: list[str] = []
     used: list[str] = []
-    by_angle: dict[int, list[tuple[str, float, str]]] = {0: [], 45: [], 90: []}
+    by_angle: dict[int, list[_Row]] = {0: [], 45: [], 90: []}
 
     for member in members:
         orientation = str(member.meta.get(ORIENTATION_META) or "").upper()
         angle = ANGLE_OF.get(orientation)
         value = member.values.get(R_VALUE)
-        source = str(member.meta.get(SOURCE_META) or "measured")
         if angle is None:
             warnings.append(
                 f"{member.label} 은(는) 방향이 '{orientation or '없음'}' 이라 뺐습니다 — "
@@ -187,7 +248,16 @@ def r_family(members: list[Member], *, hill48: bool = True) -> GroupOutcome:
         if value is None or not math.isfinite(float(value)):
             warnings.append(f"{member.label} 에 r값이 없어 뺐습니다.")
             continue
-        by_angle[angle].append((member.label, float(value), source))
+        found = _yield_of(member)
+        by_angle[angle].append(
+            _Row(
+                label=member.label,
+                r=float(value),
+                r_stated=_stated(member, R_VALUE),
+                sigma=found[0] if found else None,
+                sigma_stated=bool(found and found[1]),
+            )
+        )
         used.append(member.label)
 
     missing = [angle for angle, rows in by_angle.items() if not rows]
@@ -200,10 +270,10 @@ def r_family(members: list[Member], *, hill48: bool = True) -> GroupOutcome:
         )
 
     means = {
-        angle: float(np.mean([one[1] for one in rows])) for angle, rows in by_angle.items()
+        angle: float(np.mean([one.r for one in rows])) for angle, rows in by_angle.items()
     }
     r_0, r_45, r_90 = means[0], means[45], means[90]
-    stated = [one[0] for rows in by_angle.values() for one in rows if one[2] == "stated"]
+    stated = [one.label for rows in by_angle.values() for one in rows if one.r_stated]
     if stated:
         # **섞이면 낮은 쪽을 따른다.** 사람이 적은 값은 우리 곡선으로 되짚을 수 없다.
         warnings.append(
@@ -220,6 +290,44 @@ def r_family(members: list[Member], *, hill48: bool = True) -> GroupOutcome:
         "specimen_count": float(len(used)),
         "stated_count": float(len(stated)),
     }
+
+    sigma_rows = {
+        angle: [one for one in rows if one.sigma is not None]
+        for angle, rows in by_angle.items()
+    }
+    sigma_means = {
+        angle: float(np.mean([one.sigma for one in rows]))
+        for angle, rows in sigma_rows.items()
+        if rows
+    }
+    sigma_stated = [
+        one.label for rows in sigma_rows.values() for one in rows if one.sigma_stated
+    ]
+    if len(sigma_means) == 3:
+        s_0, s_45, s_90 = sigma_means[0], sigma_means[45], sigma_means[90]
+        values.update(
+            {
+                "sigma_0": s_0,
+                "sigma_45": s_45,
+                "sigma_90": s_90,
+                # 솔버가 이방성 계수로 받는 모양 — 0° 를 1 로 두고 견준다.
+                "sigma_ratio_45": s_45 / s_0,
+                "sigma_ratio_90": s_90 / s_0,
+            }
+        )
+        if sigma_stated:
+            warnings.append(
+                f"사람이 적어 넣은 항복응력이 {len(sigma_stated)}건 섞였습니다"
+                f"({' · '.join(sigma_stated)}) — σ 값은 **적은 값**으로 셉니다."
+            )
+    elif sigma_means:
+        # **반쪽으로 내지 않는다.** 두 방향만 있는 σ 로는 항복면을 못 맞추는데,
+        # 카드에 두 개가 앉아 있으면 셋인 줄 알고 가져간다.
+        empty = " · ".join(f"{angle}°" for angle in sorted(set(by_angle) - set(sigma_means)))
+        warnings.append(
+            f"항복응력이 {empty} 에 없어 σ 는 안 실었습니다 — 이방성 항복면은 세 방향이 "
+            f"다 있어야 맞춥니다. 「표로 시험 입력」 에서 항복강도 열을 함께 적으세요."
+        )
 
     if hill48:
         if r_90 <= 0 or r_0 <= -1:
@@ -247,14 +355,19 @@ def r_family(members: list[Member], *, hill48: bool = True) -> GroupOutcome:
         "by_angle": {
             str(angle): {
                 "r": means[angle],
+                "sigma": sigma_means.get(angle),
                 "count": len(rows),
-                "members": [one[0] for one in rows],
-                "sources": sorted({one[2] for one in rows}),
+                "sigma_count": len(sigma_rows[angle]),
+                "members": [one.label for one in rows],
+                "sources": sorted({"stated" if one.r_stated else "measured" for one in rows}),
             }
             for angle, rows in by_angle.items()
         },
         # 카드가 값에 붙일 출처 — 하나라도 사람이 적었으면 그쪽을 따른다.
+        # **r 과 σ 를 따로 센다.** 한쪽이 적은 값이라고 다른 쪽 등급까지 내리면,
+        # 잰 r 로 만든 카드가 항복강도 한 줄 때문에 4등급이 된다.
         "source": "stated" if stated else "measured",
+        "sigma_source": "stated" if sigma_stated else "measured",
     }
     return GroupOutcome(values=values, detail=detail, warnings=warnings, used=used)
 
@@ -272,15 +385,19 @@ def card_blocks(
     """묶음 결과 → `anisotropy` 블록.
 
     **값마다 출처를 함께 적는다.** 사람이 적은 r값이 하나라도 섞였으면 이 카드의
-    이방성 값은 전부 「적은 값」 이다 — r̄ 는 셋을 다 쓰므로 가장 약한 것을 따른다.
+    r 계열 값은 전부 「적은 값」 이다 — r̄ 는 셋을 다 쓰므로 가장 약한 것을 따른다.
+
+    **σ 는 따로 센다.** r 은 곡선에서 나오고 항복응력만 표로 적은 시험이 있는데, 그때
+    한쪽 때문에 다른 쪽 등급까지 내리면 잰 값이 적은 값으로 보인다.
     """
     if "r_bar" not in values:
         raise ValueError("이 묶음에 r̄ 가 없습니다.")
     source = _CARD_SOURCE.get(str(detail.get("source") or "measured"), "manual")
+    sigma_source = _CARD_SOURCE.get(str(detail.get("sigma_source") or "measured"), "manual")
     out: dict[str, Any] = {}
     for key, value in values.items():
         if key in ("specimen_count", "stated_count"):
             continue
         out[key] = float(value)
-        out[f"{key}_source"] = source
+        out[f"{key}_source"] = sigma_source if key.startswith("sigma") else source
     return {"anisotropy": {"values": out, "notes": list(warnings)}}
