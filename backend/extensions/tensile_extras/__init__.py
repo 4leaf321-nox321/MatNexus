@@ -20,6 +20,7 @@ from matcore.registry import ParamSpec, Produced, register
 
 from . import (  # noqa: F401  (card 는 import 만으로 블록·렌더러를 등록한다)
     card,
+    model_anchor,
     ratio,
     temperature,
 )
@@ -64,6 +65,90 @@ register(
     order=85,
     version="1",
 )(ratio.yield_ratio)
+
+register(
+    id="tensile.model_anchor",
+    kind="processing",
+    label="모델 소성 시작점(오프셋)",
+    applies_to=("tensile",),
+    requires_channels=(("displacement",), ("force",)),
+    params=(
+        ParamSpec(
+            name="offset_strain",
+            dimension="strain",
+            label="오프셋",
+            type="float",
+            default=0.002,
+            unit="1",
+            help="모델 소성 곡선의 시작점을 정할 오프셋. 금속은 보통 0.2%입니다.",
+        ),
+        ParamSpec(
+            name="youngs_modulus",
+            label="탄성계수",
+            type="float",
+            unit="Pa",
+            default="@youngs_modulus",
+            required=True,
+            help=(
+                "비우면 앞 단계가 잰 @youngs_modulus 를 씁니다. "
+                "숫자나 다른 참조도 지정할 수 있습니다."
+            ),
+        ),
+        ParamSpec(
+            name="search_start",
+            dimension="strain",
+            label="탐색 시작",
+            type="float",
+            unit="1",
+            help="오프셋 직선과 모델 곡선의 교점을 찾을 공칭 변형률 구간 시작.",
+        ),
+        ParamSpec(
+            name="search_end",
+            dimension="strain",
+            label="탐색 끝",
+            type="float",
+            unit="1",
+            help="비우면 관측 끝까지 탐색합니다.",
+        ),
+        ParamSpec(
+            name="strain",
+            label="변형률 열",
+            type="str",
+            role="column",
+            default="strain_engineering",
+        ),
+        ParamSpec(
+            name="stress",
+            label="응력 열",
+            type="str",
+            role="column",
+            default="stress_engineering",
+        ),
+    ),
+    makes_values=(
+        Produced(
+            key="model_proof_stress",
+            label="모델 소성 시작 응력",
+            si_unit="Pa",
+            help="오프셋 교점의 공칭응력. 재료의 Rp 가 아니라 소성 모델 곡선의 시작점입니다.",
+        ),
+        Produced(
+            key="model_proof_strain",
+            label="모델 소성 시작 변형률",
+            si_unit="1",
+            help="모델 소성 시작 응력과 짝지은 오프셋 교점 변형률.",
+        ),
+        Produced(
+            key="model_proof_offset",
+            label="모델 소성 시작 오프셋",
+            si_unit="1",
+            help="모델 소성 시작점을 계산할 때 사용한 오프셋.",
+        ),
+    ),
+    order=85,
+    version="1",
+    prepare_options=model_anchor.prepare_options,
+)(model_anchor.model_anchor)
 
 register(
     id="tensile.temperature_family",
