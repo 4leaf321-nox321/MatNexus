@@ -34,6 +34,9 @@ def export_dataset(db: Session, payload: dict[str, Any]) -> None:
     workspace = payload.get("workspace")
     report = dataset_export.export(
         folder,
+        # **워커가 든 세션을 그대로 넘긴다.** 여기서 새로 열면 그 작업이 어느 DB 를
+        # 보는지가 설정에만 달리고, 시험은 제 DB 가 아닌 것을 뽑는다.
+        db=db,
         workspace=str(workspace) if workspace else None,
         with_curves=bool(payload.get("curves", True)),
         with_catalog=bool(payload.get("catalog", True)),

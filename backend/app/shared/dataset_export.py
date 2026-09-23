@@ -74,7 +74,6 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app import version
-from app.database import SessionLocal
 from app.modules.catalog.models import (
     CatalogDefinition,
     CatalogLink,
@@ -145,8 +144,19 @@ def _workspaces(db: Session, slug: str | None) -> dict[Any, str]:
 
 
 def export(
-    out: Path, *, workspace: str | None, with_curves: bool, with_catalog: bool = True
+    out: Path,
+    *,
+    db: Session,
+    workspace: str | None,
+    with_curves: bool,
+    with_catalog: bool = True,
 ) -> dict[str, Any]:
+    """CSV 묶음을 만든다. **세션은 부르는 쪽이 준다.**
+
+    전에는 여기서 `SessionLocal()` 로 자기 세션을 열었다. 워커가 건넨 세션을 무시하고
+    기본 DB 로 갔다는 뜻이다 — 운영에서는 같은 DB 라 표가 안 났지만, 시험은 제 DB 가
+    아니라 개발 DB 를 뽑고 있었고 CI(그 DB 가 없는 기계)에서야 드러났다(2026-09-23).
+    """
     out.mkdir(parents=True, exist_ok=True)
     report: dict[str, Any] = {
         "generated_at": datetime.now(UTC).isoformat(),
@@ -160,47 +170,46 @@ def export(
         "missing_curve_files": [],
     }
 
-    with SessionLocal() as db:
-        spaces = _workspaces(db, workspace)
-        keep = set(spaces)
+    spaces = _workspaces(db, workspace)
+    keep = set(spaces)
 
-        # **전역 재료는 부서가 없다**(`owner_workspace_id` 가 NULL). 부서로 거를 때도
-        # 함께 낸다 — 그 재료를 쓰는 시험이 나가는데 재료만 빠지면 줄이 끊긴다.
-        materials = [
-            one
-            for one in db.scalars(select(Material).where(Material.deleted_at.is_(None)))
-            if one.owner_workspace_id is None or one.owner_workspace_id in keep
-        ]
-        material_ids = {one.id for one in materials}
+    # **전역 재료는 부서가 없다**(`owner_workspace_id` 가 NULL). 부서로 거를 때도
+    # 함께 낸다 — 그 재료를 쓰는 시험이 나가는데 재료만 빠지면 줄이 끊긴다.
+    materials = [
+        one
+        for one in db.scalars(select(Material).where(Material.deleted_at.is_(None)))
+        if one.owner_workspace_id is None or one.owner_workspace_id in keep
+    ]
+    material_ids = {one.id for one in materials}
 
-        samples = [
-            one
-            for one in db.scalars(select(Sample).where(Sample.deleted_at.is_(None)))
-            if one.material_id in material_ids
-        ]
-        sample_ids = {one.id for one in samples}
+    samples = [
+        one
+        for one in db.scalars(select(Sample).where(Sample.deleted_at.is_(None)))
+        if one.material_id in material_ids
+    ]
+    sample_ids = {one.id for one in samples}
 
-        specimens = [
-            one
-            for one in db.scalars(select(Specimen).where(Specimen.deleted_at.is_(None)))
-            if one.sample_id in sample_ids
-        ]
-        specimen_ids = {one.id for one in specimens}
+    specimens = [
+        one
+        for one in db.scalars(select(Specimen).where(Specimen.deleted_at.is_(None)))
+        if one.sample_id in sample_ids
+    ]
+    specimen_ids = {one.id for one in specimens}
 
-        runs = [
-            one
-            for one in db.scalars(select(TestRun).where(TestRun.deleted_at.is_(None)))
-            if one.specimen_id in specimen_ids
-        ]
-        run_ids = {one.id for one in runs}
-        types = {one.id: one.key for one in db.scalars(select(TestType))}
+    runs = [
+        one
+        for one in db.scalars(select(TestRun).where(TestRun.deleted_at.is_(None)))
+        if one.specimen_id in specimen_ids
+    ]
+    run_ids = {one.id for one in runs}
+    types = {one.id: one.key for one in db.scalars(select(TestType))}
 
-        sheets = _write_core(out, spaces, materials, samples, specimens, runs, types)
-        sheets += _write_values(out, db, runs, run_ids, material_ids, sample_ids)
-        if with_catalog:
-            sheets += _write_catalog(out, db, material_ids, report)
-        if with_curves:
-            sheets.append(_write_curves(out, db, runs, run_ids, report))
+    sheets = _write_core(out, spaces, materials, samples, specimens, runs, types)
+    sheets += _write_values(out, db, runs, run_ids, material_ids, sample_ids)
+    if with_catalog:
+        sheets += _write_catalog(out, db, material_ids, report)
+    if with_curves:
+        sheets.append(_write_curves(out, db, runs, run_ids, report))
 
     for sheet in sheets:
         sheet.close()

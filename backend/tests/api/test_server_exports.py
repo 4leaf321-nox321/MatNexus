@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import json
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -153,14 +154,27 @@ def test_목록이_무엇이_들었는지_말한다(
     assert rows["20260922-130000-all"]["done"] is False
 
 
-def test_워커가_그_폴더에_만든다(
+def test_워커가_그_폴더에_이_DB_의_것을_만든다(
     client: TestClient, db: Session, admin_headers: dict[str, str]
 ) -> None:
     """**핸들러까지 돌려 본다.** 큐에 들어가는 것만 보면 「넣었는데 안 만들어진다」 를
-    못 잡는다 — 거기가 실제로 자주 어긋나는 자리다."""
+    못 잡는다 — 거기가 실제로 자주 어긋나는 자리다.
+
+    그리고 **건넨 세션의 DB 를 뽑는지**까지 본다. 전에는 내보내기가 제 세션을 열어서
+    (`SessionLocal`) 워커가 준 것을 무시했다 — 운영에서는 같은 DB 라 표가 안 나고,
+    시험만 조용히 개발 DB 를 뽑고 있었다. 그 DB 가 없는 CI 에서야 빨개졌다(2026-09-23).
+    """
     from app.jobs import handlers
 
     handlers.load_all()
+    grade = f"EXPORT-{uuid.uuid4().hex[:6]}"
+    material = client.post(
+        "/api/materials",
+        json={"family": "Metal", "category": "Steel", "grade": grade},
+        headers=admin_headers,
+    )
+    assert material.status_code == 201, material.text
+
     made = client.post(
         "/api/server/exports",
         json={"curves": False, "catalog": False},
@@ -173,8 +187,9 @@ def test_워커가_그_폴더에_만든다(
     )
 
     out = services.export_root() / folder
-    assert (out / "materials.csv").is_file()
     assert (out / "README.md").is_file()
+    # **이 DB 의 재료가 들어 있다.** 다른 DB 를 뽑았으면 이 등급이 없다.
+    assert grade in (out / "materials.csv").read_text(encoding="utf-8-sig")
     manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
     assert manifest["scope"]["curves"] is False
     # 문헌을 뺐으면 그 표는 아예 없다 — 빈 파일을 두면 「문헌이 없는 시스템」 으로 읽힌다.

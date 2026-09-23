@@ -25,6 +25,7 @@ sys.path.insert(0, str(BACKEND_DIR))
 # 메타데이터에 없어 매핑이 안 풀린다 — 앱에서는 안 드러나고 스크립트에서만 터진다.
 import app.all_models  # noqa: E402,F401
 from _console import survive_cp949  # noqa: E402
+from app.database import SessionLocal  # noqa: E402
 from app.shared import dataset_export  # noqa: E402
 
 survive_cp949()
@@ -41,12 +42,14 @@ def main() -> None:
     args = parser.parse_args()
 
     try:
-        report = dataset_export.export(
-            Path(args.out),
-            workspace=args.workspace,
-            with_curves=not args.no_curves,
-            with_catalog=not args.no_catalog,
-        )
+        with SessionLocal() as db:
+            report = dataset_export.export(
+                Path(args.out),
+                db=db,
+                workspace=args.workspace,
+                with_curves=not args.no_curves,
+                with_catalog=not args.no_catalog,
+            )
     except ValueError as failed:  # 부서 이름 오타 같은 것 — 스택보다 한 줄이 낫다
         raise SystemExit(str(failed)) from failed
     print(f"내보냄: {args.out}")
