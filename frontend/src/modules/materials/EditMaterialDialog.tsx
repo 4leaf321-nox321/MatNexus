@@ -13,7 +13,7 @@
  * 그때마다 하위가 흔들리면 안 되기 때문이다.
  */
 
-import { display } from '@/shared/units'
+import { display, editableText } from '@/shared/units'
 import { useEffect, useState } from 'react'
 import { ArrowRight } from 'lucide-react'
 
@@ -50,8 +50,10 @@ function initial(material: Material) {
     details: material.details ?? '',
     // **문자열로 들고 있는다.** 숫자 입력을 제어 컴포넌트로 두면 `Number('0.')`
     // 이 0 이 되어 소수점을 찍는 순간 지워진다 — 처리 옵션에서 겪은 것과 같다.
-    spec_thickness: material.spec_thickness == null ? '' : String(material.spec_thickness),
-    density: material.density == null ? '' : String(material.density),
+    // **API 는 SI 다**(2026-09-24) — 상자는 라벨의 표시 단위(mm · tonne/mm³)로 받고, 보낼 때
+    // 그 단위를 함께 적는다. 표시로 바꾸는 것은 화면의 일이다.
+    spec_thickness: editableText(material.spec_thickness, material.spec_thickness_unit),
+    density: editableText(material.density, material.density_unit),
     poisson_ratio: material.poisson_ratio == null ? '' : String(material.poisson_ratio),
     alias: material.alias ?? '',
     note: material.note ?? '',

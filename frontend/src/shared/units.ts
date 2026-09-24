@@ -193,6 +193,23 @@ export function fromDisplay(
 }
 
 /**
+ * SI 값을 **편집 상자에 넣을 표시 문자열로.** 비었으면 빈 문자열.
+ *
+ * `7850 × 1e-12` 는 `7.8500000000000005e-9` 처럼 부동소수 꼬리를 단다. 그대로 상자에 넣으면
+ * 사람은 없는 자릿수를 보고, 고치지 않고 저장해도 값이 미세하게 바뀐다 — 10자리로 자른다
+ * (`EditSpecimenDialog` 와 같은 규칙). 읽는 자리의 `significant`(4자리)보다 넉넉한 까닭은
+ * 사람이 적은 자릿수를 상자가 지우면 안 되어서다.
+ */
+export function editableText(
+  value: number | null | undefined,
+  siUnit: string | null | undefined,
+  dimension?: string | null
+): string {
+  if (value == null) return ''
+  return String(Number(toDisplay(value, siUnit, dimension).toPrecision(10)))
+}
+
+/**
  * **차이(Δ)는 오프셋을 빼지 않는다.**
  *
  * 온도 차 10 K 는 10 °C 이지 -263 °C 가 아니다. 65도 같은 것을 갖고 있었다

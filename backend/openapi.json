@@ -2170,7 +2170,7 @@
             "title": "Density"
           },
           "density_unit": {
-            "default": "tonne/mm3",
+            "default": "kg/m3",
             "title": "Density Unit",
             "type": "string"
           },
@@ -2259,7 +2259,7 @@
             "title": "Spec Thickness"
           },
           "spec_thickness_unit": {
-            "default": "mm",
+            "default": "m",
             "title": "Spec Thickness Unit",
             "type": "string"
           },
@@ -2368,7 +2368,7 @@
             "title": "Density"
           },
           "density_unit": {
-            "default": "tonne/mm3",
+            "default": "kg/m3",
             "title": "Density Unit",
             "type": "string"
           },
@@ -16134,7 +16134,7 @@
             "title": "Density"
           },
           "density_unit": {
-            "default": "tonne/mm3",
+            "default": "kg/m3",
             "title": "Density Unit",
             "type": "string"
           },
@@ -16211,7 +16211,7 @@
             "title": "Spec Thickness"
           },
           "spec_thickness_unit": {
-            "default": "mm",
+            "default": "m",
             "title": "Spec Thickness Unit",
             "type": "string"
           },
@@ -16369,19 +16369,8 @@
             ],
             "title": "Density"
           },
-          "density_si": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Density Si"
-          },
           "density_unit": {
-            "default": "tonne/mm3",
+            "default": "kg/m3",
             "title": "Density Unit",
             "type": "string"
           },
@@ -16485,7 +16474,7 @@
             "title": "Spec Thickness"
           },
           "spec_thickness_unit": {
-            "default": "mm",
+            "default": "m",
             "title": "Spec Thickness Unit",
             "type": "string"
           },
@@ -17531,7 +17520,7 @@
             "title": "Spec Thickness"
           },
           "spec_thickness_unit": {
-            "default": "mm",
+            "default": "m",
             "title": "Spec Thickness Unit",
             "type": "string"
           }
@@ -23348,7 +23337,7 @@
             "title": "Density"
           },
           "density_unit": {
-            "default": "tonne/mm3",
+            "default": "kg/m3",
             "title": "Density Unit",
             "type": "string"
           },
@@ -23502,19 +23491,8 @@
             ],
             "title": "Density"
           },
-          "density_si": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Density Si"
-          },
           "density_unit": {
-            "default": "tonne/mm3",
+            "default": "kg/m3",
             "title": "Density Unit",
             "type": "string"
           },

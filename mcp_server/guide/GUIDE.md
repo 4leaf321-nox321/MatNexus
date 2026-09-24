@@ -666,9 +666,9 @@ JSON `…/cards/{id}/export` · 문헌 내보내기 `GET /api/catalog/export` ·
 읽게 하라.** 값은 그 계로 오고, 재료·문헌 내보내기는 저장된 SI 를 곁에 둔다(`value_si` ·
 `density_si`). 그 계에 기호가 없는 단위(저항률·경도 …)는 받은 그대로 두고 `kept_units` 에 적힌다.
 
-화면용 **재료 API**(`GET /api/materials`)는 이 규칙 밖이다 — 그 응답의 `density` 는 화면
-표시값(tonne/mm3)이고 SI 는 곁의 `density_si`(kg/m3)다. 연동은 재료 API 말고 재료 내보내기를
-쓰게 하라(2026-09-24, 해석 연동이 재료 API 식 응답을 「전부 SI」 로 읽을 뻔했다).
+화면용 **재료 API**(`GET /api/materials`)는 계를 고르지 않는다 — **SI 다**(밀도 kg/m³ ·
+두께 m, 2026-09-24 저녁부터. 그 전에는 밀도가 화면 표시값 tonne/mm3 였다). 단위 없이 보낸
+입력도 SI 로 읽는다. 계를 고르려면 재료 내보내기를 쓰게 하라.
 
 MCP 도구가 주는 값은 여전히 SI 다. 덱은 `render_card_deck(units=...)` 로 통째로 받는다 —
 값을 하나씩 환산하면 한 줄을 빠뜨린다.

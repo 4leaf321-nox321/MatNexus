@@ -40,7 +40,7 @@ import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/shared/components/ui/tabs'
 import { useResource } from '@/shared/hooks/useResource'
-import { formatScalar, fromDisplay } from '@/shared/units'
+import { formatScalar } from '@/shared/units'
 import { RecordName } from '@/shared/components/RecordName'
 
 export default function MaterialDetailPage() {
@@ -209,18 +209,16 @@ export default function MaterialDetailPage() {
             value={
               item.spec_thickness == null
                 ? '—'
-                : `${item.spec_thickness} ${item.spec_thickness_unit}`
+                : formatScalar(item.spec_thickness, item.spec_thickness_unit)
             }
           />
-          {/* **표시 단위로, 표의 기호로.** 서버가 밀도를 늘 표시 단위(tonne/mm3)로 주므로
-              값을 SI 로 되돌려 다른 화면과 같은 함수로 적는다 — 넣은 단위를 그대로 붙였더니
-              「7850 kg/m3」 과 「7.85e-9 tonne/mm3」 이 한 목록에 섞였다(2026-09-05). */}
+          {/* **표시는 화면의 일이다.** API 는 밀도·두께를 SI 로 준다(2026-09-24) — 다른 칸과 같은
+              함수로 표시 단위(mm · tonne/mm³)로 적는다. 서버가 표시 단위로 주던 때는 여기서
+              SI 로 되돌렸다가 다시 표시 단위로 바꾸는 왕복이 있었다. */}
           <Field
             label="밀도"
             value={
-              item.density == null
-                ? '—'
-                : formatScalar(fromDisplay(item.density, 'kg/m3'), 'kg/m3', 'density')
+              item.density == null ? '—' : formatScalar(item.density, item.density_unit, 'density')
             }
           />
           <Field label="푸아송비" value={item.poisson_ratio == null ? '—' : String(item.poisson_ratio)} />

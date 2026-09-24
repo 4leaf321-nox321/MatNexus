@@ -47,6 +47,7 @@ def specimen(client: TestClient, admin_headers: dict[str, str]) -> dict[str, Any
             "grade": "SECC",
             "details": "MDOI",
             "spec_thickness": 1.0,
+            "spec_thickness_unit": "mm",
         },
         headers=admin_headers,
     ).json()

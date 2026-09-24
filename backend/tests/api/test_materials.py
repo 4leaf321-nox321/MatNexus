@@ -39,6 +39,8 @@ SECC = {
     "grade": "SECC",
     "details": "MDOI",
     "spec_thickness": 1.0,
+    # 화면처럼 **단위를 적어 보낸다** — API 는 단위 없는 값을 SI(m)로 읽는다(2026-09-24).
+    "spec_thickness_unit": "mm",
 }
 
 
@@ -68,7 +70,12 @@ class TestNaming:
         """
         preview = client.post(
             "/api/materials/preview-name",
-            json={"grade": "SECC", "details": "MDOI", "spec_thickness": 1.0},
+            json={
+                "grade": "SECC",
+                "details": "MDOI",
+                "spec_thickness": 1.0,
+                "spec_thickness_unit": "mm",
+            },
             headers=admin_headers,
         )
         assert preview.status_code == 200, preview.text
@@ -79,7 +86,12 @@ class TestNaming:
 
         again = client.post(
             "/api/materials/preview-name",
-            json={"grade": "SECC", "details": "MDOI", "spec_thickness": 1.0},
+            json={
+                "grade": "SECC",
+                "details": "MDOI",
+                "spec_thickness": 1.0,
+                "spec_thickness_unit": "mm",
+            },
             headers=admin_headers,
         )
         assert again.json()["taken"] is True  # 등록 버튼을 누르기 전에 알려 준다
@@ -103,46 +115,53 @@ class TestNaming:
 
 
 class TestUnits:
-    def test_mm_로_넣고_mm_로_받는다(
+    def test_mm_로_넣으면_SI_로_받는다(
         self, client: TestClient, db: Session, admin_headers: dict[str, str]
     ) -> None:
+        """**REST 는 SI 다**(2026-09-24). 화면은 mm 로 받아 mm 를 적어 보내고, 받은 SI 를 mm
+        로 바꿔 보인다 — 표시는 화면의 일이다."""
         material = _create_material(client, admin_headers, spec_thickness=0.45)
-        assert material["spec_thickness"] == 0.45
-        assert material["spec_thickness_unit"] == "mm"
+        assert material["spec_thickness"] == pytest.approx(0.00045)
+        assert material["spec_thickness_unit"] == "m"
 
         stored = db.scalar(select(Material).where(Material.id == material["id"]))
         assert stored is not None
         assert stored.spec_thickness_m == 0.00045  # 저장은 SI
-        # 밀도도 입력 단위를 함께 적는다 — 값만 저장하면 나중에 kg/m³ 인지
-        # tonne/mm³ 인지 알 수 없다(기존 앱이 후자로 저장해 겪은 일이다).
-        assert stored.input_units == {"spec_thickness": "mm", "density": "tonne/mm3"}
+        # 넣은 단위를 함께 적는다 — 값만 저장하면 나중에 어느 단위로 적었는지 알 수 없다
+        # (기존 앱이 밀도를 tonne/mm³ 로 저장해 겪은 일이다). 밀도는 안 적었으니 기본(SI)이다.
+        assert stored.input_units == {"spec_thickness": "mm", "density": "kg/m3"}
 
-    def test_밀도는_CAE_단위로_주고받고_SI_로_저장한다(
+    def test_밀도는_화면_단위로_넣어도_SI_로_주고_SI_로_저장한다(
         self, client: TestClient, db: Session, admin_headers: dict[str, str]
     ) -> None:
-        """화면이 `7.85e-9` 을 받고 DB 는 `7850` 을 갖는다(v1.88.0).
+        """화면이 `7.85e-9`(tonne/mm³)를 적어 보내고, API 는 `7850`(kg/m³)을 준다.
 
-        **바뀐 것은 사람이 보는 단위뿐이다.** 저장까지 솔버 단위로 옮기면 다른
-        솔버를 붙일 때 어디서 변환이 일어났는지 추적할 수 없다 — `matcore/units`
-        첫 문단이 기존 앱에서 겪은 일로 적어 둔 것이다.
+        **바뀐 것은 사람이 보는 단위뿐이다**(v1.88.0) — 저장까지 솔버 단위로 옮기면 다른
+        솔버를 붙일 때 어디서 변환이 일어났는지 추적할 수 없다(`matcore/units` 첫 문단).
+        응답도 SI 다(2026-09-24) — 표시 단위로 내던 때는 한 응답 안에서 밀도만 tonne/mm3
+        였다(ADR 0036).
         """
-        material = _create_material(client, admin_headers, density=7.85e-9)
-        assert material["density_unit"] == "tonne/mm3"
-        assert material["density"] == pytest.approx(7.85e-9)
+        material = _create_material(
+            client, admin_headers, density=7.85e-9, density_unit="tonne/mm3"
+        )
+        assert material["density_unit"] == "kg/m3"
+        assert material["density"] == pytest.approx(7850.0)
 
         stored = db.scalar(select(Material).where(Material.id == material["id"]))
         assert stored is not None
         assert stored.density_si == pytest.approx(7850.0)
 
-    def test_어느_단위로_넣었든_늘_표시_단위로_준다(
+    def test_어느_단위로_넣었든_늘_SI_로_준다(
         self, client: TestClient, admin_headers: dict[str, str]
     ) -> None:
-        """API 로 kg/m3 로 넣은 재료가 「7850 kg/m3」 로, 화면에서 넣은 재료가
-        「7.85e-9 tonne/mm3」 로 한 목록에 섞여 보였다(2026-09-05). 넣은 단위는
-        `input_units` 에 남고, 응답은 늘 표시 단위다."""
-        material = _create_material(client, admin_headers, density=7850, density_unit="kg/m3")
-        assert material["density_unit"] == "tonne/mm3"
-        assert material["density"] == pytest.approx(7.85e-9)
+        """넣은 단위를 되돌려 주던 때는 한 목록에 「7850 kg/m3」 과 「7.85e-9 tonne/mm3」 이
+        섞였다(2026-09-05). 넣은 단위는 `input_units` 에 남고, 응답은 늘 SI 다 — 재료도
+        시료도."""
+        material = _create_material(
+            client, admin_headers, density=7.85e-9, density_unit="tonne/mm3"
+        )
+        assert material["density_unit"] == "kg/m3"
+        assert material["density"] == pytest.approx(7850.0)
 
         sample = client.post(
             f"/api/materials/{material['id']}/samples",
@@ -150,21 +169,19 @@ class TestUnits:
             headers=admin_headers,
         )
         assert sample.status_code == 201, sample.text
-        assert sample.json()["density_unit"] == "tonne/mm3"
-        assert sample.json()["density"] == pytest.approx(7.9e-9)
+        assert sample.json()["density_unit"] == "kg/m3"
+        assert sample.json()["density"] == pytest.approx(7900.0)
 
-    def test_다른_시스템이_읽을_SI_밀도를_곁에_둔다(
-        self, client: TestClient, admin_headers: dict[str, str]
-    ) -> None:
-        """한 응답에서 밀도만 표시 단위(tonne/mm3)이고 선언 물성은 SI 라, 받는 쪽이 「전부
-        SI」 로 읽으면 밀도만 10¹² 배 틀렸다(2026-09-24, 해석 연동이 받은 데이터에서 짚었다).
-        `density` 는 화면 수정 창이 되보내는 값이라 그대로 두고 **SI 칸을 곁에 둔다.**"""
-        material = _create_material(client, admin_headers, density=2.68e-9)
-        assert material["density"] == pytest.approx(2.68e-9)
-        assert material["density_si"] == pytest.approx(2680.0)
+    def test_밀도_칸은_하나다(self, client: TestClient, admin_headers: dict[str, str]) -> None:
+        """`density` 가 표시값이던 때는 SI 칸(`density_si`)을 곁에 뒀다(같은 날 오전). 응답이
+        SI 가 되며 **같은 값이 두 칸**이 되어 걷었다 — 칸이 둘이면 받는 쪽이 어느 것을 읽을지
+        다시 고른다. 내보내기 파일에는 남는다(거기서 `density` 는 고른 계다)."""
+        material = _create_material(client, admin_headers, density=2680)
+        assert material["density"] == pytest.approx(2680.0)
+        assert "density_si" not in material
         listed = client.get("/api/materials", headers=admin_headers).json()
         row = next(one for one in listed["items"] if one["id"] == material["id"])
-        assert row["density_si"] == pytest.approx(2680.0)
+        assert row["density"] == pytest.approx(2680.0) and "density_si" not in row
 
         sample = client.post(
             f"/api/materials/{material['id']}/samples",
@@ -172,26 +189,68 @@ class TestUnits:
             headers=admin_headers,
         )
         assert sample.status_code == 201, sample.text
-        assert sample.json()["density"] == pytest.approx(2.7e-9)
-        assert sample.json()["density_si"] == pytest.approx(2700.0)
+        assert sample.json()["density"] == pytest.approx(2700.0)
+        assert "density_si" not in sample.json()
 
-        # 밀도를 안 적었으면 둘 다 비어 있다 — 0 이 아니다.
+        # 밀도를 안 적었으면 비어 있다 — 0 이 아니다.
         bare = _create_material(client, admin_headers, grade="SPCC")
-        assert bare["density"] is None and bare["density_si"] is None
+        assert bare["density"] is None
 
-    def test_단위_없이_고친_값은_표시_단위로_읽는다(
+    def test_읽은_값을_단위_없이_되보내면_제_숫자가_돌아온다(
         self, client: TestClient, db: Session, admin_headers: dict[str, str]
     ) -> None:
-        """응답이 표시 단위이므로, 그 값을 보고 단위 없이 되보낸 것도 표시 단위다 —
-        넣었던 단위(kg/m3)로 읽으면 화면에서 본 7.85e-9 가 kg/m3 로 저장된다."""
-        material = _create_material(client, admin_headers, density=7850, density_unit="kg/m3")
-        changed = client.patch(
-            f"/api/materials/{material['id']}", json={"density": 7.8e-9}, headers=admin_headers
+        """**단위 없는 값은 응답과 같은 SI 로 읽는다.** 응답이 표시 단위이던 때는 표시 단위로
+        읽었다 — 같은 규칙이다. 읽은 값을 고치지 않고 되보냈는데 값이 바뀌면, 그 쪽은 틀린 것을
+        알 길이 없다."""
+        material = _create_material(
+            client, admin_headers, density=7.85e-9, density_unit="tonne/mm3"
         )
-        assert changed.status_code == 200, changed.text
+        back = client.patch(
+            f"/api/materials/{material['id']}",
+            json={
+                "density": material["density"],
+                "spec_thickness": material["spec_thickness"],
+            },
+            headers=admin_headers,
+        )
+        assert back.status_code == 200, back.text
+        assert back.json()["density"] == pytest.approx(material["density"])
+        assert back.json()["spec_thickness"] == pytest.approx(material["spec_thickness"])
         stored = db.scalar(select(Material).where(Material.id == material["id"]))
         assert stored is not None
-        assert stored.density_si == pytest.approx(7800.0)
+        assert stored.density_si == pytest.approx(7850.0)
+        assert stored.spec_thickness_m == pytest.approx(0.001)
+
+    def test_말이_안_되는_밀도는_단위를_짚어_거절한다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        """화면 값(7.85e-9)을 단위 없이 보내면 7.85e-9 kg/m³ 가 되고, 7850 을 tonne/mm3 로 적어
+        보내면 7.85e15 가 된다 — 둘 다 오류 없이 저장되던 자리다. 카드와 같은 울타리
+        (0.5~50,000 kg/m³)가 막고, 무엇을 적으면 되는지 말한다. 시료도 같다."""
+        naked = client.post(
+            "/api/materials", json={**SECC, "density": 7.85e-9}, headers=admin_headers
+        )
+        assert naked.status_code == 422
+        error = naked.json()["error"]
+        assert error["code"] == "MNX-MATERIALS-0037"
+        assert "tonne/mm3" in error["message"]
+
+        swapped = client.post(
+            "/api/materials",
+            json={**SECC, "density": 7850, "density_unit": "tonne/mm3"},
+            headers=admin_headers,
+        )
+        assert swapped.status_code == 422
+        assert swapped.json()["error"]["code"] == "MNX-MATERIALS-0037"
+
+        material = _create_material(client, admin_headers)
+        sample = client.post(
+            f"/api/materials/{material['id']}/samples",
+            json={"lot_no": "L9", "density": 7.85e-9},
+            headers=admin_headers,
+        )
+        assert sample.status_code == 422
+        assert sample.json()["error"]["code"] == "MNX-MATERIALS-0037"
 
     def test_모르는_단위는_거절한다(
         self, client: TestClient, admin_headers: dict[str, str]

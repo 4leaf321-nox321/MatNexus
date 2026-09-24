@@ -19,6 +19,14 @@ from app.shared.access import EditAccessOut
 from app.shared.display import DENSITY_UNIT as DENSITY_UNIT
 from app.shared.display import LENGTH_UNIT as LENGTH_UNIT
 from app.shared.facets import FacetOut
+from matcore import units
+
+#: REST 가 주고받는 밀도·두께의 단위 — **SI 다**(2026-09-24). 응답도, 단위를 안 적은 입력도
+#: 이 단위다. 화면은 제 표시 단위(`DENSITY_UNIT`·`LENGTH_UNIT`)로 바꿔 보이고, 보낼 때는 그
+#: 단위를 적어 보낸다. 전에는 응답이 표시 단위라 한 응답 안에서 밀도만 tonne/mm3 였고, 다른
+#: 시스템이 「전부 SI」 로 읽을 뻔했다(ADR 0036).
+SI_DENSITY = units.SI_UNITS["density"]
+SI_LENGTH = units.SI_UNITS["length"]
 
 MAX_USES = 20
 """한 재료에 붙일 수 있는 용도 수. 스무 개가 넘으면 그건 분류가 아니라 메모다."""
@@ -203,8 +211,8 @@ class MaterialOut(BaseModel):
     grade: str
     details: str | None
     spec_thickness: float | None
-    spec_thickness_unit: str = LENGTH_UNIT
-    """**규격 두께다.** 계산에 쓰는 것은 시편의 실측 두께다."""
+    spec_thickness_unit: str = SI_LENGTH
+    """**규격 두께다**(SI, m — 화면은 mm 로 보인다). 계산에 쓰는 것은 시편의 실측 두께다."""
 
     applied_products: list[str] = Field(default_factory=list)
     applied_parts: list[str] = Field(default_factory=list)
@@ -213,16 +221,9 @@ class MaterialOut(BaseModel):
     """이 재료를 어디에 쓰는가. **재료의 용도이지 로트의 행선지가 아니다.**"""
 
     density: float | None
-    """공칭 밀도 — **화면 표시값**이다(단위는 `density_unit`, 지금 tonne/mm3). 로트 실측은
-    시료에 있고, 카드는 실측을 먼저 본다. **다른 시스템은 `density_si` 를 읽는다.**"""
-    density_unit: str = DENSITY_UNIT
-    density_si: float | None = None
-    """같은 공칭 밀도의 **SI(kg/m³)** 값 — 선언 물성의 `value_si` 와 같은 계다.
-
-    한 응답에서 밀도만 표시 단위(tonne/mm3)이고 나머지는 SI 라, 받는 쪽이 「전부 SI」
-    로 읽으면 밀도만 10¹² 배 틀린다(2026-09-24, 해석 연동 쪽이 받은 데이터에서 짚었다).
-    `density` 는 화면 수정 창이 그대로 되돌려 보내는 값이라 SI 로 못 바꾸고, SI 칸을
-    곁에 둔다."""
+    """공칭 밀도 — **SI(kg/m³)**, 선언 물성과 같은 계다(화면은 tonne/mm³ 로 보인다). 로트
+    실측은 시료에 있고, 카드는 실측을 먼저 본다."""
+    density_unit: str = SI_DENSITY
     poisson_ratio: float | None
     """인장시험이 주지 않는 값이다 — 대개 문헌값이고 재료 등급에 붙는다."""
 
@@ -264,11 +265,13 @@ class MaterialCreateRequest(BaseModel):
     grade: str = Field(min_length=1, max_length=100)
     details: str | None = Field(default=None, max_length=100)
     spec_thickness: float | None = Field(default=None, gt=0)
-    spec_thickness_unit: str = LENGTH_UNIT
+    spec_thickness_unit: str = SI_LENGTH
+    """**안 적으면 응답과 같은 SI(m) 로 읽는다.** 화면은 mm 를 적어 보낸다."""
     applied_products: list[str] = Field(default_factory=list, max_length=MAX_USES)
     applied_parts: list[str] = Field(default_factory=list, max_length=MAX_USES)
     density: float | None = Field(default=None, gt=0)
-    density_unit: str = DENSITY_UNIT
+    density_unit: str = SI_DENSITY
+    """**안 적으면 응답과 같은 SI(kg/m³) 로 읽는다.** 화면은 tonne/mm3 를 적어 보낸다."""
     poisson_ratio: float | None = Field(default=None, ge=0, lt=0.5)
     alias: str | None = Field(default=None, max_length=200)
     note: str | None = None
@@ -403,7 +406,7 @@ class NamePreviewRequest(BaseModel):
     grade: str | None = None
     details: str | None = None
     spec_thickness: float | None = None
-    spec_thickness_unit: str = LENGTH_UNIT
+    spec_thickness_unit: str = SI_LENGTH
 
 
 class SimilarNameOut(BaseModel):
@@ -443,11 +446,9 @@ class SampleOut(BaseModel):
     production_date: date | None
 
     density: float | None
-    """**이 로트에서 잰 값이다** — 화면 표시값(단위는 `density_unit`). 공칭은 재료에 있다.
-    **다른 시스템은 `density_si` 를 읽는다.**"""
-    density_unit: str = DENSITY_UNIT
-    density_si: float | None = None
-    """같은 실측 밀도의 **SI(kg/m³)** 값 — 재료의 `density_si` 와 같은 까닭으로 둔다."""
+    """**이 로트에서 잰 값이다** — SI(kg/m³), 재료의 `density` 와 같은 계다. 공칭은
+    재료에 있다."""
+    density_unit: str = SI_DENSITY
 
     declared_properties: list[DeclaredPropertyOut] = []
     """밀시트가 준 값들(ADR 0016). **재료의 같은 칸과 층이 다르다** — 여기 것은
@@ -516,7 +517,8 @@ class SampleCreateRequest(BaseModel):
     sales_type: str | None = Field(default=None, max_length=50)
     production_date: date | None = None
     density: float | None = Field(default=None, gt=0)
-    density_unit: str = DENSITY_UNIT
+    density_unit: str = SI_DENSITY
+    """**안 적으면 응답과 같은 SI(kg/m³) 로 읽는다.** 화면은 tonne/mm3 를 적어 보낸다."""
     note: str | None = None
     workspace_slug: str | None = None
 

@@ -38,6 +38,7 @@ def _material(client: TestClient, headers: dict[str, str], **over: Any) -> dict[
         "grade": "EXP",
         "details": "MDOI",
         "spec_thickness": 1.0,
+        "spec_thickness_unit": "mm",
         **over,
     }
     made = client.post("/api/materials", json=body, headers=headers)
@@ -148,7 +149,12 @@ class Test재료:
         SI」 로 읽을 뻔했다(2026-09-24). 기본은 해석이 쓰는 mm·N·tonne, SI 는 골라야 나온다.
         """
         made = _material(
-            client, admin_headers, grade="EXPUNIT", spec_thickness=1.2, density=2.68e-9
+            client,
+            admin_headers,
+            grade="EXPUNIT",
+            spec_thickness=1.2,
+            density=2.68e-9,
+            density_unit="tonne/mm3",
         )
         saved = client.patch(
             f"/api/materials/{made['id']}",

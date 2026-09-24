@@ -35,6 +35,8 @@ from app.modules.materials.models import (
 from app.modules.materials.schemas import (
     DENSITY_UNIT,
     LENGTH_UNIT,
+    SI_DENSITY,
+    SI_LENGTH,
     BulkBlockedOut,
     BulkDeletePlanOut,
     BulkMadeOut,
@@ -131,12 +133,10 @@ def _material_out(
     access: EditAccessOut | None = None,
 ) -> MaterialOut:
     """`uses` 는 **밖에서 미리 읽어 넘긴다** — 목록이 재료마다 물으면 N+1 이다."""
-    unit = material.input_units.get("spec_thickness", LENGTH_UNIT)
-    # **밀도는 늘 표시 단위로 낸다**(2026-09-05). 넣은 단위를 되돌려 줬더니 API 로
-    # kg/m3 로 넣은 재료는 「7850 kg/m3」, 화면에서 넣은 재료는 「7.85e-9 tonne/mm3」
-    # 로 한 목록에 섞여 보였다 — 그리고 수정 창은 라벨이 tonne/mm³ 라 그 7850 을
-    # 그대로 tonne/mm3 로 되보냈다. 넣은 단위는 `input_units` 에 남는다.
-    density_unit = DENSITY_UNIT
+    # **밀도·두께는 SI 로 낸다**(2026-09-24) — 선언 물성과 같은 계이고, 표시는 화면의 일이다.
+    # 넣은 단위를 되돌려 주던 때는 한 목록에 7850 kg/m3 와 7.85e-9 tonne/mm3 가 섞였고
+    # (2026-09-05), 그래서 표시 단위로 내게 했더니 한 응답 안에서 밀도만 tonne/mm3 가 되어
+    # 다른 시스템이 「전부 SI」 로 읽을 뻔했다(ADR 0036). 넣은 단위는 `input_units` 에 남는다.
     return MaterialOut(
         id=material.id,
         code=material.code,
@@ -148,15 +148,12 @@ def _material_out(
         category=material.category,
         grade=material.grade,
         details=material.details,
-        spec_thickness=services.from_si(material.spec_thickness_m, unit),
-        spec_thickness_unit=unit,
+        spec_thickness=material.spec_thickness_m,
+        spec_thickness_unit=SI_LENGTH,
         applied_products=(uses or {}).get("product", []),
         applied_parts=(uses or {}).get("part", []),
-        density=services.from_si(material.density_si, density_unit),
-        density_unit=density_unit,
-        # **SI 칸을 곁에 둔다** — 위 `density` 는 화면 표시값이라, 다른 시스템이 선언 물성의
-        # SI 와 함께 읽으면 밀도만 10¹² 배 틀린다(2026-09-24).
-        density_si=material.density_si,
+        density=material.density_si,
+        density_unit=SI_DENSITY,
         poisson_ratio=material.poisson_ratio,
         declared_properties=[
             _declared_out(row) for row in (material.declared_properties or [])
@@ -286,8 +283,7 @@ def _sample_out(
     registered_by: str | None = None,
     access: EditAccessOut | None = None,
 ) -> SampleOut:
-    # 재료와 같은 이유로 늘 표시 단위(`material_out` 참고).
-    unit = DENSITY_UNIT
+    # 재료와 같은 까닭으로 SI 로 낸다(`_material_out` 참고).
     return SampleOut(
         test_run_count=runs[0],
         adopted_count=runs[1],
@@ -306,9 +302,8 @@ def _sample_out(
         primary_vendor=sample.primary_vendor,
         sales_type=sample.sales_type,
         production_date=sample.production_date,
-        density=services.from_si(sample.density_si, unit),
-        density_unit=unit,
-        density_si=sample.density_si,
+        density=sample.density_si,
+        density_unit=SI_DENSITY,
         declared_properties=[_declared_out(row) for row in (sample.declared_properties or [])],
         note=sample.note,
         specimen_count=specimen_count,
@@ -689,9 +684,9 @@ def _in_units(
 ) -> dict[str, Any]:
     """화면 모양의 재료 한 줄을 **고른 계 하나로** — 밀도·두께·선언 물성.
 
-    화면 응답은 밀도를 표시 단위(tonne/mm3), 두께를 넣은 단위, 선언 물성의 `value` 를 사람이
-    적은 단위로 준다. 그대로 담으면 한 파일에 계가 셋이다. 여기서 SI(저장값)에서 다시 옮긴다
-    — 표시값을 되옮기면 반올림이 한 번 더 붙는다.
+    화면 응답의 밀도·두께는 SI 이고 선언 물성의 `value` 는 사람이 적은 단위다. 그대로 담으면
+    한 파일에 계가 둘이다. 여기서 SI(저장값)에서 고른 계로 옮기고, 밀도는 SI 를 곁에 둔다
+    (`density_si` — 선언 물성의 `value_si` 와 같은 자리다. 화면 응답에는 없다).
     """
     density = (
         unit_systems.convert(system, material.density_si, "kg/m3")
@@ -700,6 +695,7 @@ def _in_units(
     )
     body["density"] = density.value if density else None
     body["density_unit"] = unit_systems.convert(system, 1.0, "kg/m3").unit
+    body["density_si"] = material.density_si
     thickness = (
         unit_systems.convert(system, material.spec_thickness_m, "m")
         if material.spec_thickness_m is not None
@@ -906,9 +902,7 @@ def _make_material(
             field="두께",
             dimension="length",
         ),
-        density_si=services.to_si(
-            payload.density, payload.density_unit, field="밀도", dimension="density"
-        ),
+        density_si=services.density_to_si(payload.density, payload.density_unit),
         poisson_ratio=payload.poisson_ratio,
         input_units={
             "spec_thickness": payload.spec_thickness_unit,
@@ -1509,21 +1503,20 @@ def update_material(
         material.declared_properties = declared.check(db, data["declared_properties"] or [])
 
     if "density" in data or "density_unit" in data:
-        # 응답이 늘 표시 단위이므로, 단위 없이 값만 보낸 것도 표시 단위로 읽는다 —
-        # 넣었던 단위(kg/m3)로 읽으면 화면에서 본 7.85e-9 가 kg/m3 로 저장된다.
-        unit = data.get("density_unit") or DENSITY_UNIT
+        # **단위 없이 보낸 값은 응답과 같은 SI 로 읽는다** — 읽은 값을 그대로 되보내는 쪽이
+        # 제 숫자를 돌려받게 하는 규칙이다(응답이 표시 단위이던 때는 표시 단위로 읽었다).
+        unit = data.get("density_unit") or SI_DENSITY
         value = (
             data["density"]
             if "density" in data
             else services.from_si(material.density_si, unit)
         )
-        material.density_si = services.to_si(value, unit, field="밀도", dimension="density")
+        material.density_si = services.density_to_si(value, unit)
         material.input_units = {**material.input_units, "density": unit}
 
     if "spec_thickness" in data or "spec_thickness_unit" in data:
-        unit = data.get("spec_thickness_unit") or material.input_units.get(
-            "spec_thickness", LENGTH_UNIT
-        )
+        # 밀도와 같은 규칙 — 단위를 안 적으면 응답과 같은 SI(m) 로 읽는다.
+        unit = data.get("spec_thickness_unit") or SI_LENGTH
         value = (
             data["spec_thickness"]
             if "spec_thickness" in data
@@ -1745,9 +1738,7 @@ def _make_sample(
         lot_no=payload.lot_no,
         # 기준정보를 거치는 값들은 아래 `apply_bindings` 가 넣는다.
         production_date=payload.production_date,
-        density_si=services.to_si(
-            payload.density, payload.density_unit, field="밀도", dimension="density"
-        ),
+        density_si=services.density_to_si(payload.density, payload.density_unit),
         input_units={"density": payload.density_unit},
         note=payload.note,
         registered_by_id=user.id,
@@ -1941,12 +1932,12 @@ def update_sample(
         )
 
     if "density" in data or "density_unit" in data:
-        # 응답이 늘 표시 단위이므로 단위 없는 값도 표시 단위로 읽는다(재료와 같다).
-        unit = data.get("density_unit") or DENSITY_UNIT
+        # 재료와 같다 — 단위 없이 보낸 값은 응답과 같은 SI 로 읽는다.
+        unit = data.get("density_unit") or SI_DENSITY
         value = (
             data["density"] if "density" in data else services.from_si(sample.density_si, unit)
         )
-        sample.density_si = services.to_si(value, unit, field="밀도", dimension="density")
+        sample.density_si = services.density_to_si(value, unit)
         sample.input_units = {**sample.input_units, "density": unit}
 
     db.commit()

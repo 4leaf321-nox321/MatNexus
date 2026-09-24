@@ -40,6 +40,7 @@ def _material(client: TestClient, headers: dict[str, str], **extra: Any) -> dict
             "category": "Steel",
             "grade": f"PLAN-{uuid.uuid4().hex[:6]}",
             "spec_thickness": 1.0,
+            "spec_thickness_unit": "mm",
             **extra,
         },
         headers=headers,
@@ -279,7 +280,12 @@ class Test7_비슷한_이름:
         made = _material(client, admin_headers, grade=f"SGARC440{tag}", details="MDOI")
         seen = client.post(
             "/api/materials/preview-name",
-            json={"grade": f"SGARC 440{tag}", "details": "MDOI", "spec_thickness": 1.0},
+            json={
+                "grade": f"SGARC 440{tag}",
+                "details": "MDOI",
+                "spec_thickness": 1.0,
+                "spec_thickness_unit": "mm",
+            },
             headers=admin_headers,
         )
         assert seen.status_code == 200, seen.text
@@ -292,7 +298,12 @@ class Test7_비슷한_이름:
         made = _material(client, admin_headers, details="MDOI")
         seen = client.post(
             "/api/materials/preview-name",
-            json={"grade": made["grade"], "details": "MDOI", "spec_thickness": 1.0},
+            json={
+                "grade": made["grade"],
+                "details": "MDOI",
+                "spec_thickness": 1.0,
+                "spec_thickness_unit": "mm",
+            },
             headers=admin_headers,
         ).json()
         assert seen["taken"] is True

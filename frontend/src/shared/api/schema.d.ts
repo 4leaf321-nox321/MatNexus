@@ -8199,7 +8199,7 @@ export interface components {
             density?: number | null;
             /**
              * Density Unit
-             * @default tonne/mm3
+             * @default kg/m3
              */
             density_unit: string;
             /** Details */
@@ -8225,7 +8225,7 @@ export interface components {
             spec_thickness?: number | null;
             /**
              * Spec Thickness Unit
-             * @default mm
+             * @default m
              */
             spec_thickness_unit: string;
             /** Workspace Slug */
@@ -8264,7 +8264,7 @@ export interface components {
             density?: number | null;
             /**
              * Density Unit
-             * @default tonne/mm3
+             * @default kg/m3
              */
             density_unit: string;
             /** Distributor */
@@ -13230,7 +13230,7 @@ export interface components {
             density?: number | null;
             /**
              * Density Unit
-             * @default tonne/mm3
+             * @default kg/m3
              */
             density_unit: string;
             /** Details */
@@ -13249,7 +13249,7 @@ export interface components {
             spec_thickness?: number | null;
             /**
              * Spec Thickness Unit
-             * @default mm
+             * @default m
              */
             spec_thickness_unit: string;
             /** Workspace Slug */
@@ -13317,11 +13317,9 @@ export interface components {
             declared_properties: components["schemas"]["DeclaredPropertyOut"][];
             /** Density */
             density: number | null;
-            /** Density Si */
-            density_si?: number | null;
             /**
              * Density Unit
-             * @default tonne/mm3
+             * @default kg/m3
              */
             density_unit: string;
             /** Details */
@@ -13353,7 +13351,7 @@ export interface components {
             spec_thickness: number | null;
             /**
              * Spec Thickness Unit
-             * @default mm
+             * @default m
              */
             spec_thickness_unit: string;
             /**
@@ -13682,7 +13680,7 @@ export interface components {
             spec_thickness?: number | null;
             /**
              * Spec Thickness Unit
-             * @default mm
+             * @default m
              */
             spec_thickness_unit: string;
         };
@@ -16074,7 +16072,7 @@ export interface components {
             density?: number | null;
             /**
              * Density Unit
-             * @default tonne/mm3
+             * @default kg/m3
              */
             density_unit: string;
             /** Distributor */
@@ -16116,11 +16114,9 @@ export interface components {
             declared_properties: components["schemas"]["DeclaredPropertyOut"][];
             /** Density */
             density: number | null;
-            /** Density Si */
-            density_si?: number | null;
             /**
              * Density Unit
-             * @default tonne/mm3
+             * @default kg/m3
              */
             density_unit: string;
             /** Distributor */

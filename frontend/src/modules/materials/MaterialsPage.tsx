@@ -55,6 +55,7 @@ import { ROW_FOCUS_STYLE, useRowFocus } from '@/shared/hooks/useRowFocus'
 import { useRowSelection } from '@/shared/hooks/useRowSelection'
 import { useSort } from '@/shared/hooks/useSort'
 import { RecordName } from '@/shared/components/RecordName'
+import { formatScalar } from '@/shared/units'
 
 /**
  * 한 쪽에 몇 건. `'all'` 은 200건씩 이어 받아 모은다(`shared/api/paging.ts`).
@@ -592,9 +593,10 @@ export default function MaterialsPage() {
                     {material.category}
                   </TableCell>
                   <TableCell className="text-right tabular-nums">
+                    {/* API 는 SI(m)다 — 표시 단위(mm)로 바꾸는 것은 화면의 일이다. */}
                     {material.spec_thickness == null
                       ? '—'
-                      : `${material.spec_thickness} ${material.spec_thickness_unit}`}
+                      : formatScalar(material.spec_thickness, material.spec_thickness_unit)}
                   </TableCell>
                   <TableCell className="text-right tabular-nums">{material.sample_count}</TableCell>
                   <TableCell>

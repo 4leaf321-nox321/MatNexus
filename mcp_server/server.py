@@ -257,11 +257,12 @@ async def _send(
 def _density_si(row: dict[str, Any]) -> tuple[Any, Any]:
     """밀도를 **SI(kg/m³)** 로 — (값, 단위).
 
-    재료·시료 API 의 `density` 는 화면 표시값(tonne/mm3)이라, 선언 물성의 SI 와 한
-    응답에 섞였다 — 해석 연동 쪽이 「전부 SI」 로 읽을 뻔했다(2026-09-24). 서버가
-    `density_si` 를 곁에 두게 되어 여기서는 그것을 낸다 — **환산을 여기서 하지 않는다**
-    (규칙이 두 벌이 되면 갈라진다). 옛 서버라 `density_si` 가 없으면 표시값과 그 단위를
-    그대로 낸다 — 단위를 떼지 않는 한 틀리게 읽히지는 않는다.
+    재료·시료 API 의 `density` 는 한동안 화면 표시값(tonne/mm3)이라 선언 물성의 SI 와 한
+    응답에 섞였다 — 해석 연동 쪽이 「전부 SI」 로 읽을 뻔했다(2026-09-24). 서버가 곁에
+    `density_si` 를 뒀다가(v1.257) 같은 날 `density` 자체를 SI 로 바꾸고 걷었다. 여기서는
+    **둘 다 읽는다** — `density_si` 가 있으면 그것, 없으면 `density` 와 그 단위(이제 kg/m3).
+    **환산을 여기서 하지 않는다**(규칙이 두 벌이 되면 갈라진다) — 단위를 떼지 않는 한
+    틀리게 읽히지는 않는다.
     """
     if "density_si" in row:
         return row.get("density_si"), "kg/m3"
@@ -2471,8 +2472,8 @@ async def create_card_from_group(
         poisson_ratio · density   시험이 주지 않는 값. 비우면 재료에서 물려받고, 없으면
                                   서버가 거절한다 — **지어 넣지 마라**, 사람에게 물어라.
                                   density 는 **SI(kg/m³)** 다 — `get_material` 이 주는 값
-                                  그대로다. 화면·REST 재료 API 의 `density`(tonne/mm³
-                                  표시값)를 넣으면 범위 밖으로 거절된다.
+                                  그대로다. 화면에 보이는 숫자(tonne/mm³, 강판 7.85e-9)를
+                                  넣으면 범위 밖으로 거절된다.
     """
     body = {
         "group_result_id": group_result_id,

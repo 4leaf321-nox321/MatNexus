@@ -9,11 +9,8 @@ from typing import Any
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.shared.access import EditAccessOut
+from app.shared.display import DENSITY_SI_RANGE as DENSITY_SI_RANGE
 from app.shared.unit_systems import DEFAULT as DEFAULT_UNITS
-
-#: 밀도가 SI(kg/m³)로 왔는지 가르는 울타리. 에어로젤 1 kg/m³ 부터 오스뮴 22,600 까지가
-#: 안이고, 표시 단위(tonne/mm³)로 잘못 넘긴 7.85e-9 는 밖이다.
-DENSITY_SI_RANGE = (0.5, 50_000.0)
 
 
 def _density_in_si(value: float | None) -> float | None:

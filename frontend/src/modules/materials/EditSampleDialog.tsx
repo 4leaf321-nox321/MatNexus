@@ -19,6 +19,7 @@ import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 
 import { DENSITY_UNIT, materialsApi } from '@/modules/materials/api'
+import { editableText } from '@/shared/units'
 import type { Sample } from '@/modules/materials/api'
 import { SampleFields, samplePayload } from '@/modules/materials/SampleFields'
 import type { SampleForm } from '@/modules/materials/SampleFields'
@@ -50,7 +51,8 @@ function initial(sample: Sample): SampleForm {
     primary_vendor: sample.primary_vendor ?? '',
     sales_type: sample.sales_type ?? '',
     production_date: sample.production_date ?? '',
-    density: sample.density == null ? '' : String(sample.density),
+    // API 는 SI 다 — 상자는 표시 단위(tonne/mm³)로 받는다(재료 수정 창과 같다).
+    density: editableText(sample.density, sample.density_unit),
     note: sample.note ?? '',
   }
 }

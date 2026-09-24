@@ -101,7 +101,13 @@ def make_specimen(
 ) -> dict[str, Any]:
     material = client.post(
         "/api/materials",
-        json={"family": "Metal", "category": "Steel", "grade": "SECC", "spec_thickness": 1.0},
+        json={
+            "family": "Metal",
+            "category": "Steel",
+            "grade": "SECC",
+            "spec_thickness": 1.0,
+            "spec_thickness_unit": "mm",
+        },
         headers=headers,
     )
     assert material.status_code == 201, material.text

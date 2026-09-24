@@ -49,8 +49,9 @@ const MATERIAL = {
   family: 'Metal',
   category: 'Steel',
   grade: 'SECC',
-  spec_thickness: 1.0,
-  spec_thickness_unit: 'mm',
+  // API 는 SI 다(2026-09-24) — 화면이 mm 로 바꿔 보인다.
+  spec_thickness: 0.001,
+  spec_thickness_unit: 'm',
   density: null,
   density_unit: 'kg/m3',
   poisson_ratio: null,
@@ -65,8 +66,8 @@ const MATERIAL = {
   updated_at: '2026-08-01T00:00:00Z',
 }
 
-function show(over: Record<string, number>) {
-  get.mockResolvedValue(MATERIAL)
+function show(over: Record<string, number>, material: Record<string, unknown> = MATERIAL) {
+  get.mockResolvedValue(material)
   samples.mockResolvedValue([])
   summary.mockResolvedValue({
     sample_count: 5,
@@ -105,5 +106,16 @@ describe('계층 요약', () => {
     show({ specimens_without_run: 0 })
     await screen.findByText('시료 5')
     expect(screen.queryByText(/시험 없는 시편/)).not.toBeInTheDocument()
+  })
+
+  it('SI 로 온 두께·밀도를 표시 단위로 적는다', async () => {
+    // API 는 밀도·두께를 SI 로 준다(2026-09-24) — mm · tonne/mm³ 로 바꾸는 것은 화면의 일이다.
+    // 0.001 m 나 7850 kg/m3 가 그대로 보이면 사람이 그 숫자를 다시 적어 넣는다.
+    show(
+      { sample_count: 0, specimen_count: 0, run_count: 0, specimens_without_run: 0 },
+      { ...MATERIAL, density: 7850, density_unit: 'kg/m3' }
+    )
+    expect(await screen.findByText('1 mm')).toBeInTheDocument()
+    expect(await screen.findByText('7.850e-9 tonne/mm³')).toBeInTheDocument()
   })
 })

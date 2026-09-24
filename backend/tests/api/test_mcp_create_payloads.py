@@ -17,6 +17,7 @@ from __future__ import annotations
 
 from typing import Any
 
+import pytest
 from fastapi.testclient import TestClient
 
 #: `create_material` 이 만드는 본문(ADR 0032 문을 이미 지난 값들).
@@ -69,11 +70,11 @@ def test_재료_시료_시편을_그_본문으로_만든다(
         f"/api/materials/{material_id}/samples", json=SAMPLE, headers=admin_headers
     )
     assert sample.status_code == 201, sample.text
-    # **응답은 화면 단위(tonne/mm³)다.** 7850 kg/m³ 은 7.85e-9 tonne/mm³ 이므로,
-    # 여기 7850 이 그대로 돌아오면 서버가 `kg/m3` 을 무시하고 화면 단위로 읽은
-    # 것이다 — 1e12 배 틀린 채로 조용히 저장된다(밀도는 응력을 나누는 데 쓰이지
-    # 않아 한참 뒤에야 드러난다).
-    assert abs(sample.json()["density"] - 7.85e-9) < 1e-15
+    # **응답은 SI(kg/m³)다**(2026-09-24). 도구가 `kg/m3` 을 적어 보낸 7850 이 그대로 돌아와야
+    # 한다 — 7.85e-9 가 오면 서버가 단위를 무시하고 화면 단위로 읽은 것이다(1e12 배, 밀도는
+    # 응력을 나누는 데 쓰이지 않아 한참 뒤에야 드러난다).
+    assert sample.json()["density"] == pytest.approx(7850.0)
+    assert sample.json()["density_unit"] == "kg/m3"
 
     specimen = client.post(
         f"/api/samples/{sample.json()['id']}/specimens",

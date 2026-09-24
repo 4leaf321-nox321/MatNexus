@@ -79,8 +79,9 @@ function material(id: string, name: string) {
     category: 'Steel',
     grade: name,
     details: null,
-    spec_thickness: 1,
-    spec_thickness_unit: 'mm',
+    // API 는 SI 다(2026-09-24) — 화면이 mm 로 바꿔 보인다.
+    spec_thickness: 0.001,
+    spec_thickness_unit: 'm',
     owner_workspace_id: null,
     owner_workspace_name: null,
     created_at: '2026-01-01T00:00:00Z',

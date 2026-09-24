@@ -49,10 +49,14 @@ MATERIAL = {
     "category": "Steel",
     "grade": "DEMO-DP590",
     "details": "예시",
+    # **단위를 적는다.** API 는 단위 없는 값을 SI(m · kg/m3)로 읽는다(2026-09-24) — 전에는
+    # 기본이 mm · tonne/mm3 라 적지 않아도 됐는데, 그대로 두면 두께 1 m 가 된다.
     "spec_thickness": 1.0,
+    "spec_thickness_unit": "mm",
     "alias": "예시 데이터 (합성 곡선)",
     "poisson_ratio": 0.3,
     "density": 7.85e-9,
+    "density_unit": "tonne/mm3",
     "note": (
         "MatNexus 예시 데이터입니다. 측정값이 아니라 공개된 DP590(DP590T/340Y) "
         "물성 범위(항복 330~430 MPa · 인장 590~700 MPa)를 목표로 만든 합성 "

@@ -24,12 +24,36 @@ from app.modules.tests.models import TestRun, TestType
 from app.modules.vocabulary import services as vocabulary_services
 from app.modules.workspaces.models import Workspace
 from app.shared import audit, permissions, vocabulary_hooks
+from app.shared.display import DENSITY_SI_RANGE
 from app.shared.errors import AppError, Conflict, Forbidden, NotFound
 from matcore import naming, units
 
 logger = logging.getLogger(__name__)
 
 # --- 단위 -------------------------------------------------------------------
+
+
+def density_to_si(value: float | None, unit: str) -> float | None:
+    """밀도를 SI 로 — **울타리(`DENSITY_SI_RANGE`) 밖이면 거절한다.**
+
+    밀도는 단위가 틀려도 숫자만으로는 안 드러난다. 화면 값 7.85e-9 를 단위 없이 보내면(이제
+    기본은 SI 다) 7.85e-9 kg/m³ 가 되고, 읽은 7850 을 tonne/mm3 로 적어 보내면 7.85e15 가
+    된다 — 둘 다 오류 없이 저장되던 자리다. 카드가 이미 같은 울타리로 막는다.
+    """
+    si = to_si(value, unit, field="밀도", dimension="density")
+    if si is None:
+        return None
+    low, high = DENSITY_SI_RANGE
+    if not low <= si <= high:
+        raise AppError(
+            "MNX-MATERIALS-0037",
+            f"밀도가 {si:g} kg/m³ 가 됩니다 — 말이 되는 범위({low:g}~{high:g})가 아닙니다. "
+            f"보낸 단위는 {unit!r} 입니다: 단위를 안 적으면 SI(kg/m³, 강판 7850)로 읽고, "
+            "화면 값(tonne/mm³, 강판 7.85e-9)이면 `density_unit` 을 'tonne/mm3' 로 "
+            "함께 보내세요.",
+            status=422,
+        )
+    return si
 
 
 def to_si(value: float | None, unit: str, *, field: str, dimension: str) -> float | None:
