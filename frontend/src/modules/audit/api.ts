@@ -59,4 +59,28 @@ export const ACTION_LABELS: Record<string, string> = {
   'processing.run_by_client': 'AI 가 처리 실행',
   'recipe.saved_by_client': 'AI 가 레시피 저장',
   'format.saved_by_client': 'AI 가 형식 저장',
+  // **이름이 없으면 코드 그대로 뜨고 「행위로 필터」 에서 고를 수도 없다.** 아래는 이름표가
+  // 없던 것들이다(2026-09-24, 36가지 중 18가지) — 배포 뒤 「열람 제한이 켜져 있던 부서」 를
+  // 찾으려는데 필터에 없었다. 새 행위를 남기면 여기도 적는다(`tests/architecture/
+  // test_audit_labels.py` 가 백엔드와 대조한다).
+  'card.restored': '물성 카드 되살림(초안으로)',
+  'test_run.updated': '시험 정보 변경',
+  'processing_result.deleted': '처리 결과 삭제',
+  'group_result.deleted': '글로벌 피팅 결과 삭제',
+  'equipment.deleted': '장비 삭제',
+  'trash.restored': '휴지통 복원',
+  'trash.purged': '휴지통 영구 삭제',
+  'data.exported': '데이터 내보내기',
+  'guide.revision.approve': '핸드북 수정안 승인',
+  'pipelines.connector.create': '장비 커넥터 생성',
+  'pipelines.inbox.register': '수신함 파일 등록',
+  'pipelines.inbox.discard': '수신함 파일 버림',
+  'workspace.merged': '부서 병합',
+  'auth.login_throttled': '로그인 지연(연속 실패)',
+  // ADR 0035 — 보기는 모두에게, 고치기는 사람에게.
+  'account.data_manager_changed': '자료 관리자 권한 변경',
+  'ownership.changed': '등록자·편집 부서 변경',
+  // 아래 둘은 배포(마이그레이션)가 한 번 남긴다 — 배포 뒤 확인할 목록이다.
+  'workspace.restriction_removed': '부서 열람 제한 해제',
+  'definition.key_renamed': '정의 키 변경(겹침 정리)',
 }

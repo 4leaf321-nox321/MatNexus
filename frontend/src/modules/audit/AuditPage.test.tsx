@@ -98,6 +98,18 @@ describe('변경 이력', () => {
     }
   })
 
+  it('배포가 남긴 기록도 행위로 골라 본다', async () => {
+    // 배포(ADR 0035)가 남긴 「열람 제한이 켜져 있던 부서」 를 찾는 것이 배포 뒤 할 일이다.
+    // 이름표가 없던 때는 필터에 그 행위가 없어 수백 줄을 눈으로 훑어야 했다.
+    const user = userEvent.setup()
+    render(<AuditPage />)
+    await table()
+    await user.selectOptions(screen.getByLabelText('행위로 필터'), '부서 열람 제한 해제')
+    await waitFor(() =>
+      expect(list).toHaveBeenLastCalledWith({ action: 'workspace.restriction_removed' })
+    )
+  })
+
   it('비어 있으면 어디서 생기는지 말한다', async () => {
     list.mockResolvedValue([])
     render(<AuditPage />)
