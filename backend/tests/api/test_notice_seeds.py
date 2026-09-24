@@ -58,7 +58,8 @@ def test_씨앗이_초안으로_한_번만_들어오고_관리자만_본다(
     assert rows[0].is_published is False and rows[0].is_popup is False
 
     # 관리자는 초안을 보고, 일반 사용자는 못 본다.
-    titles = [one["title"] for one in client.get("/api/notices", headers=admin_headers).json()]
+    listed = client.get("/api/notices", headers=admin_headers).json()["items"]
+    titles = [one["title"] for one in listed]
     assert "새로 생긴 것" in titles
     member = User(
         email="hong",
@@ -74,7 +75,7 @@ def test_씨앗이_초안으로_한_번만_들어오고_관리자만_본다(
     )
     headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
     assert "새로 생긴 것" not in [
-        one["title"] for one in client.get("/api/notices", headers=headers).json()
+        one["title"] for one in client.get("/api/notices", headers=headers).json()["items"]
     ]
 
     # 운영에서 고친 글은 안 덮인다 — 같은 키의 파일 내용이 바뀌어도.

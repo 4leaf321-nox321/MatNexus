@@ -11,6 +11,7 @@
 import { useEffect, useState } from 'react'
 import { Megaphone } from 'lucide-react'
 
+import { NoticeBody } from '@/modules/notices/NoticeBody'
 import { noticesApi } from '@/modules/notices/api'
 import type { Notice } from '@/modules/notices/api'
 import { Button } from '@/shared/components/ui/button'
@@ -72,7 +73,8 @@ export function NoticePopup() {
           </DialogDescription>
         </DialogHeader>
 
-        <p className="text-sm whitespace-pre-wrap">{current.body}</p>
+        {/* 상세와 같은 본문 — `**굵게**` 와 `` `코드` `` 가 글자로 보이지 않게. */}
+        <NoticeBody text={current.body} className="text-sm" />
 
         <DialogFooter>
           <Button onClick={dismiss} disabled={busy}>

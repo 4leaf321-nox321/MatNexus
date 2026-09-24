@@ -3720,7 +3720,13 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List Notices */
+        /**
+         * List Notices
+         * @description 게시판. **최근에 알린 것이 위다** — 발행 시각, 초안은 만든 시각.
+         *
+         *     만든 시각으로만 세우면 배포가 초안으로 넣어 둔 안내(`seeds/notices`)를 며칠 뒤에
+         *     발행했을 때 아래로 묻힌다 — 사람에게는 방금 알린 글이다.
+         */
         get: operations["list_notices_api_notices_get"];
         put?: never;
         /** Create Notice */
@@ -3758,7 +3764,12 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * Get Notice
+         * @description 한 건. **읽음 표시는 따로다**(`POST …/read`) — 여는 것만으로 표시하면 목록을 미리
+         *     불러 두는 화면이나 스크립트가 남의 읽음을 대신 찍는다.
+         */
+        get: operations["get_notice_api_notices__notice_id__get"];
         put?: never;
         post?: never;
         /**
@@ -13723,6 +13734,13 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /** Created By */
+            created_by?: string | null;
+            /**
+             * From Release
+             * @default false
+             */
+            from_release: boolean;
             /**
              * Id
              * Format: uuid
@@ -14071,6 +14089,17 @@ export interface components {
         Page_MaterialOut_: {
             /** Items */
             items: components["schemas"]["MaterialOut"][];
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+            /** Total */
+            total: number;
+        };
+        /** Page[NoticeOut] */
+        Page_NoticeOut_: {
+            /** Items */
+            items: components["schemas"]["NoticeOut"][];
             /** Limit */
             limit: number;
             /** Offset */
@@ -25106,7 +25135,12 @@ export interface operations {
     };
     list_notices_api_notices_get: {
         parameters: {
-            query?: never;
+            query?: {
+                q?: string | null;
+                unread?: boolean;
+                limit?: number | null;
+                offset?: number;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -25119,7 +25153,16 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["NoticeOut"][];
+                    "application/json": components["schemas"]["Page_NoticeOut_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -25173,6 +25216,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["NoticeOut"][];
+                };
+            };
+        };
+    };
+    get_notice_api_notices__notice_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                notice_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NoticeOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

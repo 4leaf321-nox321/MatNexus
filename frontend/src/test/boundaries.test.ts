@@ -328,7 +328,8 @@ describe('모듈 경계', () => {
  * 경로와 같은 종류다 — **규율이 아니라 검사가 막는다.**
  */
 const NARROW_BY_DESIGN = new Set([
-  path.join('notices', 'NoticesPage.tsx'),
+  // 공지도 게시판이다(2026-09-24) — 목록은 표라 좁히지 않고, 한 건을 읽는 상세만 좁힌다.
+  path.join('notices', 'NoticeDetailPage.tsx'),
   path.join('notifications', 'NotificationsPage.tsx'),
   // 게시판(`VocPage`)은 표라 좁히지 않는다. 한 건을 읽는 상세만 좁힌다.
   path.join('voc', 'VocDetailPage.tsx'),

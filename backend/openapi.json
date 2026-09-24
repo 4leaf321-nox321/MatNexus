@@ -17590,6 +17590,22 @@
             "title": "Created At",
             "type": "string"
           },
+          "created_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By"
+          },
+          "from_release": {
+            "default": false,
+            "title": "From Release",
+            "type": "boolean"
+          },
           "id": {
             "format": "uuid",
             "title": "Id",
@@ -18460,6 +18476,37 @@
           "offset"
         ],
         "title": "Page[MaterialOut]",
+        "type": "object"
+      },
+      "Page_NoticeOut_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/NoticeOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "Page[NoticeOut]",
         "type": "object"
       },
       "Page_PropertyCardOut_": {
@@ -40378,21 +40425,85 @@
     },
     "/api/notices": {
       "get": {
+        "description": "게시판. **최근에 알린 것이 위다** — 발행 시각, 초안은 만든 시각.\n\n만든 시각으로만 세우면 배포가 초안으로 넣어 둔 안내(`seeds/notices`)를 며칠 뒤에\n발행했을 때 아래로 묻힌다 — 사람에게는 방금 알린 글이다.",
         "operationId": "list_notices_api_notices_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "unread",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Unread",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 1000,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Limit"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/NoticeOut"
-                  },
-                  "title": "Response List Notices Api Notices Get",
-                  "type": "array"
+                  "$ref": "#/components/schemas/Page_NoticeOut_"
                 }
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "List Notices",
@@ -40498,6 +40609,48 @@
           }
         },
         "summary": "Delete Notice",
+        "tags": [
+          "notices"
+        ]
+      },
+      "get": {
+        "description": "한 건. **읽음 표시는 따로다**(`POST …/read`) — 여는 것만으로 표시하면 목록을 미리\n불러 두는 화면이나 스크립트가 남의 읽음을 대신 찍는다.",
+        "operationId": "get_notice_api_notices__notice_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "notice_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Notice Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NoticeOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Notice",
         "tags": [
           "notices"
         ]

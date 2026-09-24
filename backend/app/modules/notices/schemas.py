@@ -17,6 +17,11 @@ class NoticeOut(BaseModel):
     created_at: datetime
     published_at: datetime | None
     is_read: bool
+    created_by: str | None = None
+    """쓴 사람(표시 이름). 계정이 지워졌거나 배포가 넣은 글이면 비어 있다."""
+    from_release: bool = False
+    """**배포에 실려 온 안내**인가(`seeds/notices`). 쓴 사람이 없는 글이라, 화면이 「알 수
+    없음」 대신 무엇이라 적을지 여기서 안다."""
 
 
 class NoticeCreateRequest(BaseModel):

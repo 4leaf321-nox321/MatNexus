@@ -66,6 +66,7 @@ const ExportProfileEditorPage = lazy(
 )
 const MembersPage = lazy(() => import('@/modules/workspaces/MembersPage'))
 const NoticesPage = lazy(() => import('@/modules/notices/NoticesPage'))
+const NoticeDetailPage = lazy(() => import('@/modules/notices/NoticeDetailPage'))
 const RecipesPage = lazy(() => import('@/modules/processing/RecipesPage'))
 const SignupPage = lazy(() => import('@/modules/auth/SignupPage'))
 const ServerPage = lazy(() => import('@/modules/server/ServerPage'))
@@ -218,6 +219,7 @@ export const router = createBrowserRouter([
           // **주소는 둘로 남긴다** — 탭을 화면 안에 감추면 공지 하나를 링크로
           // 가리킬 수 없다(`SubTabs`).
           { path: 'notices', element: <NoticesPage /> },
+          { path: 'notices/:id', element: <NoticeDetailPage /> },
           { path: 'voc', element: <VocPage /> },
           { path: 'voc/:id', element: <VocDetailPage /> },
           // 물성 핸드북 — 배포 없이 갱신된다. 누구나 초안, 검토자가 승인(ADR 0022).
