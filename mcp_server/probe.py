@@ -30,6 +30,12 @@ CI 에는 안 넣는다 — 살아 있는 DB 와 그 안의 자료에 기대기 
 
 `dry_run=True` 로만 부른다. 이 스크립트는 아무것도 바꾸지 않는다 — 개발 DB 라도
 점검이 자료를 남기면 다음 점검이 그것을 보고 판단하게 된다.
+
+**미리보기가 없는 쓰기는 일부러 거절당하게 부른다**(2026-09-25) — 없는 id, 카탈로그에
+없는 분류값. 서버는 쓰기 전에 거절한다. 그래도 도구가 서버까지 가서 그 거절을 그대로
+돌려주는지가 이 파일이 보는 층이다. 전에는 문헌 카탈로그 쓰기 여섯이 **한 번도 안
+불렸다**(「부르지 못한 도구」). 이런 호출은 `expect_error` 로 부르고, 거절돼야 성공으로
+센다 — 뜻밖에 통과하면 무언가 쓰였다는 뜻이라 문제로 센다.
 """
 
 from __future__ import annotations
@@ -74,8 +80,17 @@ DEFINITION: dict[str, Any] = {
 results: list[dict[str, Any]] = []
 
 
-async def call(session: ClientSession, name: str, args: dict[str, Any] | None = None) -> Any:
-    """한 번 부르고 결과를 적는다. **오류도 200 으로 온다** — 본문을 봐야 안다."""
+async def call(
+    session: ClientSession,
+    name: str,
+    args: dict[str, Any] | None = None,
+    *,
+    expect_error: bool = False,
+) -> Any:
+    """한 번 부르고 결과를 적는다. **오류도 200 으로 온다** — 본문을 봐야 안다.
+
+    `expect_error` 는 **거절당해야 맞는** 호출이다(미리보기가 없는 쓰기를 무해하게 부를
+    때). 그때는 거절이 성공이고, 통과가 문제다."""
     started = time.perf_counter()
     try:
         out = await session.call_tool(name, args or {})
@@ -89,9 +104,11 @@ async def call(session: ClientSession, name: str, args: dict[str, Any] | None = 
     else:
         body = " ".join(getattr(one, "text", str(one)) for one in out.content or [])
     took = round((time.perf_counter() - started) * 1000)
-    bad = bool(out.is_error) or '"error"' in body[:400]
+    refused = bool(out.is_error) or '"error"' in body[:400]
+    bad = not refused if expect_error else refused
     results.append({"tool": name, "ok": not bad, "ms": took, "excerpt": body[:220]})
-    print(("!! " if bad else "OK ") + f"{name}  {took}ms  " + " ".join(body[:130].split()))
+    mark = "!! " if bad else ("OK(거절) " if expect_error else "OK ")
+    print(mark + f"{name}  {took}ms  " + " ".join(body[:130].split()))
     try:
         return json.loads(body)
     except Exception:
@@ -280,6 +297,7 @@ async def sweep(session: ClientSession) -> None:
     #: 대표값이면서 수치인 물성 하나 — 채택 미리보기에 쓴다. 없는 물성으로 부르면
     #: 「담을 값이 없습니다」 만 보고 정작 담는 일이 되는지는 못 본다.
     adoptable: str | None = None
+    adoptable_unit: str | None = None
     if catalog_id:
         detail = await call(
             session, "get_catalog_material", {"catalog_material_id": catalog_id}
@@ -291,13 +309,14 @@ async def sweep(session: ClientSession) -> None:
                 and one.get("representative")
             ):
                 adoptable = one["property_key"]
+                adoptable_unit = one.get("unit")
                 break
     if len(catalog_ids) >= 2:
         await call(session, "compare_catalog_materials", {"catalog_material_ids": catalog_ids})
     await call(session, "match_bom", {"text": "브래킷\tSPCC\n볼트\tSCM435"})
 
     # **도메인이 빠진 키는 일부러 넣는다** — 안내가 나오는지 보는 자리다.
-    await call(session, "how_to_measure", {"property_key": "yield_strength"})
+    await call(session, "how_to_measure", {"property_key": "yield_strength"}, expect_error=True)
     await call(session, "how_to_measure", {"property_key": "mechanical.yield_strength"})
 
     # **시험 기반 카드 길**: 적합을 견주고, 초안을 미리보기까지 해 본다.
@@ -549,6 +568,68 @@ async def sweep(session: ClientSession) -> None:
                 "test_type": "tensile",
                 "dry_run": True,
             },
+        )
+    # ── 문헌 카탈로그에 넣기 — **아무것도 안 바꾸게**(2026-09-25) ───────────────
+    # 값은 미리보기가 기본이다. 정의·재료는 미리보기가 없어 카탈로그에 없는 분류값으로
+    # 부른다 — 서버가 쓰기 전에 422 로 거절한다(관리자 아닌 토큰이면 403, 어느 쪽이든
+    # 아무것도 안 생긴다). 지우기·폐기·이관은 없는 id·키로.
+    if catalog_id and adoptable and adoptable_unit:
+        await call(
+            session,
+            "add_catalog_value",
+            {
+                "catalog_material_id": catalog_id,
+                "property_key": adoptable,
+                "value": 1.0,
+                "unit": adoptable_unit,
+                "quality_tier": 2,
+                "source_kind": "handbook",
+                "source_title": "점검용 — 저장하지 않는다",
+                "dry_run": True,
+            },
+        )
+    await call(
+        session,
+        "add_catalog_material",
+        {"name": "점검용 문헌 재료", "category": "__probe__"},
+        expect_error=True,
+    )
+    await call(
+        session,
+        "add_catalog_property",
+        {"name": "점검용 물성", "domain": "__probe__", "slug": "probe_only", "si_unit": "Pa"},
+        expect_error=True,
+    )
+    await call(
+        session,
+        "delete_catalog_value",
+        {"value_id": "00000000-0000-0000-0000-000000000000"},
+        expect_error=True,
+    )
+    await call(
+        session,
+        "deprecate_catalog_property",
+        {"property_key": "local.probe.nothing"},
+        expect_error=True,
+    )
+    await call(
+        session,
+        "migrate_catalog_property",
+        {"property_key": "local.probe.nothing"},
+        expect_error=True,
+    )
+    if not item_id:
+        # 수신함이 비었으면 **없는 항목으로** 부른다 — 도구가 서버까지 가는지는 본다.
+        await call(
+            session,
+            "assign_inbox_item",
+            {
+                "item_id": "00000000-0000-0000-0000-000000000000",
+                "specimen_id": "00000000-0000-0000-0000-000000000000",
+                "test_type": "tensile",
+                "dry_run": True,
+            },
+            expect_error=True,
         )
     if catalog_id:
         await call(
