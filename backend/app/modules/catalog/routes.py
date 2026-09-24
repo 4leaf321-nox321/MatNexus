@@ -90,6 +90,7 @@ from app.modules.materials.models import Material
 from app.modules.vocabulary.models import VocabularyTerm
 from app.shared import (
     alias_candidates,
+    audit,
     exports,
     property_names,
     property_search,
@@ -924,14 +925,26 @@ def _definition_out(db: Session, one: CatalogDefinition) -> CatalogDefinitionOut
 def deprecate_property(
     property_key: str,
     payload: CatalogPropertyDeprecate,
-    _user: User = Depends(require_system_admin),
+    user: User = Depends(require_system_admin),
     db: Session = Depends(get_db),
 ) -> CatalogDefinitionOut:
     """키를 **폐기한다 — 지우지 않는다.** 값·매핑이 걸렸거나 사전이 이미 나간 키를
     물리는 길이다. 새 값을 못 달고, 채우기에서 빠지고, 이름 풀기에서 뒤로 밀리며
-    후속 키를 함께 알려 준다. 사전에 `deprecated`·`superseded_by` 로 실린다."""
+    후속 키를 함께 알려 준다. 사전에 `deprecated`·`superseded_by` 로 실린다.
+
+    되돌릴 수 있어(아래 `undeprecate`) AI 가 한 것만 남긴다."""
     definition = contribute.deprecate_property(
         db, property_key, superseded_by=payload.superseded_by, note=payload.note
+    )
+    audit.record_by_client(
+        db,
+        action=audit.CATALOG_PROPERTY_DEPRECATED_BY_CLIENT,
+        actor=user,
+        target_table="catalog_definitions",
+        target_id=definition.id,
+        target_label=definition.key,
+        changes={"superseded_by": payload.superseded_by},
+        reason=payload.note,
     )
     db.commit()
     return _definition_out(db, definition)
@@ -941,7 +954,7 @@ def deprecate_property(
 def migrate_property(
     property_key: str,
     payload: CatalogPropertyMigrateIn,
-    _user: User = Depends(require_system_admin),
+    user: User = Depends(require_system_admin),
     db: Session = Depends(get_db),
 ) -> CatalogPropertyMigrateOut:
     """폐기된 키에 걸린 값·매핑·별칭을 후속 키로 옮긴다 — **미리보기가 기본이다.**
@@ -953,6 +966,25 @@ def migrate_property(
         db, property_key, to=payload.to, dry_run=payload.dry_run
     )
     if not payload.dry_run:
+        # **옮긴 일은 사람이 해도 남긴다** — 되돌릴 수 없고, 값이 원래 어느 키에 있었는지가
+        # 이 기록에만 남는다.
+        audit.record(
+            db,
+            action=audit.CATALOG_PROPERTY_MIGRATED,
+            actor=user,
+            target_table="catalog_definitions",
+            target_id=db.scalar(
+                select(CatalogDefinition.id).where(CatalogDefinition.key == plan.from_key)
+            ),
+            target_label=f"{plan.from_key} → {plan.to_key}",
+            changes={
+                "to": plan.to_key,
+                "values": plan.values,
+                "links": plan.links,
+                "aliases": plan.aliases,
+                "converted": plan.converted,
+            },
+        )
         db.commit()
     return CatalogPropertyMigrateOut(
         from_key=plan.from_key,
@@ -990,6 +1022,15 @@ def create_property(
     못 바꾼다. 이름·별칭이 같은 물성이 이미 있으면 그 키를 알려 주고 거절한다(409).
     """
     definition = contribute.create_property(db, payload, user)
+    db.flush()
+    audit.record_by_client(
+        db,
+        action=audit.CATALOG_PROPERTY_CREATED_BY_CLIENT,
+        actor=user,
+        target_table="catalog_definitions",
+        target_id=definition.id,
+        target_label=definition.key,
+    )
     db.commit()
     return _definition_out(db, definition)
 
@@ -1017,6 +1058,15 @@ def create_catalog_material(
     같은 이름이 이미 있으면 그 id 를 알려 주고 거절한다(409) — 값은 그 재료에 더한다.
     """
     material = contribute.create_material(db, payload, user)
+    db.flush()
+    audit.record_by_client(
+        db,
+        action=audit.CATALOG_MATERIAL_CREATED_BY_CLIENT,
+        actor=user,
+        target_table="catalog_materials",
+        target_id=material.id,
+        target_label=material.name,
+    )
     db.commit()
     db.refresh(material)  # commit 이 속성을 비운다 — __dict__ 로 읽으려면 다시 채워야 한다
     return CatalogMaterialOut.model_validate(
@@ -1051,6 +1101,18 @@ def create_catalog_value(
     computed·estimated 는 tier 4 여야 하고, tier 4 는 가정값 표지가 붙는다.
     """
     row, converted = contribute.create_value(db, material_id, payload, user)
+    db.flush()
+    # **AI 가 넣은 문헌 값은 남긴다.** 출처가 붙어도 「그 출처에 정말 그 값이 있나」 는 사람이
+    # 확인할 일이고, 그 확인이 필요한 값을 여기서 고른다(등록자 칸은 토큰 주인이다).
+    audit.record_by_client(
+        db,
+        action=audit.CATALOG_VALUE_ADDED_BY_CLIENT,
+        actor=user,
+        target_table="catalog_values",
+        target_id=row.id,
+        target_label=_value_label(db, row),
+        changes={"tier": row.quality_tier, "method": row.method},
+    )
     db.commit()
     got = db.execute(
         select(CatalogValue, CatalogDefinition, CatalogSource)
@@ -1068,10 +1130,39 @@ def delete_catalog_value(
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> Response:
-    """직접 넣은 값만(넣은 사람·관리자). 이관해 온 값은 원본이 정본이다."""
+    """직접 넣은 값만(넣은 사람·관리자). 이관해 온 값은 원본이 정본이다.
+
+    **지운 일은 사람이 해도 남긴다** — 되살릴 수 없고, 그 값이 이미 덱에 실렸을 수 있다.
+    이름은 지우기 전에 읽어 둔다(지우고 나면 무엇이었는지 알 길이 없다)."""
+    row = db.get(CatalogValue, value_id)
+    label = _value_label(db, row) if row is not None else str(value_id)
+    before: dict[str, Any] = {}
+    if row is not None:
+        before = {
+            "value": row.value_num if row.value_num is not None else row.value_text,
+            "unit": row.unit,
+        }
     contribute.delete_value(db, value_id, user)
+    audit.record(
+        db,
+        action=audit.CATALOG_VALUE_DELETED,
+        actor=user,
+        target_table="catalog_values",
+        target_id=value_id,
+        target_label=label,
+        changes=before,
+    )
     db.commit()
     return Response(status_code=204)
+
+
+def _value_label(db: Session, row: CatalogValue) -> str:
+    """감사에 적을 이름 — `SUS304 · mechanical.yield_strength = 205 MPa`."""
+    material = db.get(CatalogMaterial, row.material_id)
+    name = material.name if material else str(row.material_id)
+    shown = row.value_num if row.value_num is not None else (row.value_text or "")
+    unit = f" {row.unit}" if row.unit else ""
+    return f"{name} · {row.property_key} = {shown}{unit}"
 
 
 # --- 물성 이름 사전 -----------------------------------------------------------

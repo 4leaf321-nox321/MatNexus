@@ -936,6 +936,17 @@ def _make_material(
     # 용도는 재료의 칸이 아니라 매달린 줄이라, 재료가 id 를 받은 뒤에 붙는다.
     services.set_uses(db, material, "product", payload.applied_products, created_by_id=user.id)
     services.set_uses(db, material, "part", payload.applied_parts, created_by_id=user.id)
+    # **AI 가 만들었으면 남긴다**(화면에서 만든 것은 안 남는다 — `record_by_client`). 등록자
+    # 칸은 토큰 주인이라, 사람이 만든 재료와 구별할 길이 이것뿐이다(카드와 같은 까닭).
+    audit.record_by_client(
+        db,
+        action=audit.MATERIAL_CREATED_BY_CLIENT,
+        actor=user,
+        target_table="materials",
+        target_id=material.id,
+        target_label=material.record_name,
+        workspace_id=material.owner_workspace_id,
+    )
     return material
 
 
@@ -1749,6 +1760,16 @@ def _make_sample(
     )
     db.add(sample)
     db.flush()
+    # 재료와 같다 — AI 가 만든 로트만 남긴다(`_make_material`).
+    audit.record_by_client(
+        db,
+        action=audit.SAMPLE_CREATED_BY_CLIENT,
+        actor=user,
+        target_table="samples",
+        target_id=sample.id,
+        target_label=sample.record_name,
+        workspace_id=sample.workspace_id,
+    )
     return sample
 
 
@@ -2054,6 +2075,26 @@ def _make_specimen(
             "MNX-MATERIALS-0013",
             f"{orientation} 방향 {seq_no}번 시편이 이미 있습니다.",
         ) from exc
+    # 재료와 같다(`_make_material`). **시편은 치수가 응력의 분모라** 누가 적었는지가 값만큼
+    # 중요하다 — AI 에게는 모르면 비우라고 일러 두었지만, 적었다면 그 사실이 남아야 한다.
+    audit.record_by_client(
+        db,
+        action=audit.SPECIMEN_CREATED_BY_CLIENT,
+        actor=user,
+        target_table="specimens",
+        target_id=specimen.id,
+        target_label=specimen.record_name,
+        workspace_id=specimen.workspace_id,
+        changes={
+            key: value
+            for key, value in (
+                ("thickness_m", specimen.thickness_m),
+                ("width_m", specimen.width_m),
+                ("gauge_length_m", specimen.gauge_length_m),
+            )
+            if value is not None
+        },
+    )
     return specimen
 
 

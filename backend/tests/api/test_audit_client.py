@@ -25,6 +25,7 @@ from sqlalchemy.orm import Session
 from app.modules.materials.models import Material
 from app.modules.tests import services
 from app.modules.tests.definitions import ensure_builtin_test_types
+from app.modules.workspaces.models import Workspace
 
 TRA = Path(__file__).resolve().parents[1] / "fixtures" / "Example.tra"
 
@@ -453,3 +454,240 @@ class Test처리_실행:
         )
         assert done.status_code == 200, done.text
         assert not _actions(client, admin_headers, "processing.run_by_client")
+
+
+#: 문헌 카탈로그에 직접 넣는 정의·출처 — `test_catalog_contribute.py` 와 같은 모양.
+PROPERTY: dict[str, Any] = {
+    "name": "습윤 굴곡탄성률",
+    "domain": "mechanical",
+    "slug": "flexural_modulus_wet",
+    "si_unit": "Pa",
+}
+SOURCE = {"kind": "datasheet", "title": "PA66-GF30 기술자료", "year": 2024}
+
+
+def _mine(
+    client: TestClient, headers: dict[str, str], action: str, target: str
+) -> list[dict[str, Any]]:
+    return [one for one in _actions(client, headers, action) if one["target_id"] == target]
+
+
+def _catalog_value(
+    client: TestClient, headers: dict[str, str], material_id: str, key: str, gpa: float
+) -> Any:
+    return client.post(
+        f"/api/catalog/materials/{material_id}/values",
+        json={
+            "property_key": key,
+            "value_num": gpa,
+            "unit": "GPa",
+            "method": "handbook",
+            "quality_tier": 2,
+            "source": SOURCE,
+        },
+        headers=headers,
+    )
+
+
+class Test등록_문헌_의뢰도_남는다:
+    """**그러고도 샜던 자리**(2026-09-25).
+
+    MCP 쓰기 도구를 경로마다 감사와 맞대 보니 재료·시료·시편 등록, 문헌 카탈로그 쓰기, 측정
+    의뢰 작성이 아무 흔적도 안 남겼다 — AI 가 문헌 값을 지어 넣어도 사람이 넣은 값과 구별할
+    길이 없었다(등록자 칸은 토큰 주인이다). 다시 새지 않게 구조 시험
+    (`test_mcp_writes_audited.py`)이 도구마다 본다. 여기는 **실제로 남는가**를 본다.
+    """
+
+    def test_AI_가_등록한_재료_시료_시편이_남는다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        mcp = {**admin_headers, "X-Client": "mcp"}
+        material_id = _material(client, mcp)
+        sample = client.post(f"/api/materials/{material_id}/samples", json={}, headers=mcp)
+        assert sample.status_code == 201, sample.text
+        specimen = client.post(
+            f"/api/samples/{sample.json()['id']}/specimens",
+            json={"orientation": "MD", "thickness": 1.2, "length_unit": "mm"},
+            headers=mcp,
+        )
+        assert specimen.status_code == 201, specimen.text
+
+        for action, target in (
+            ("material.created_by_client", material_id),
+            ("sample.created_by_client", sample.json()["id"]),
+            ("specimen.created_by_client", specimen.json()["id"]),
+        ):
+            mine = _mine(client, admin_headers, action, target)
+            assert len(mine) == 1, f"AI 가 만들었는데 {action} 이 안 남았다"
+            assert mine[0]["client"] == "mcp"
+        # 시편은 **적은 치수**까지 남긴다 — 응력의 분모라, AI 가 지어 적었는지 볼 자리다.
+        made = _mine(
+            client, admin_headers, "specimen.created_by_client", specimen.json()["id"]
+        )
+        assert made[0]["changes"]["thickness_m"] == pytest.approx(0.0012)
+
+    def test_사람이_등록한_것은_안_남는다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        """**규칙을 안 뒤집는다** — 만들기는 원래 감사 대상이 아니다."""
+        material_id = _material(client, admin_headers)
+        sample = client.post(
+            f"/api/materials/{material_id}/samples", json={}, headers=admin_headers
+        ).json()
+        specimen = client.post(
+            f"/api/samples/{sample['id']}/specimens",
+            json={"orientation": "MD"},
+            headers=admin_headers,
+        ).json()
+        assert not _mine(client, admin_headers, "material.created_by_client", material_id)
+        assert not _mine(client, admin_headers, "sample.created_by_client", sample["id"])
+        assert not _mine(client, admin_headers, "specimen.created_by_client", specimen["id"])
+
+    def test_AI_가_넣은_문헌_정의_재료_값이_남는다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        """출처가 붙어도 「그 출처에 정말 그 값이 있나」 는 사람이 확인할 일이다 — 확인이
+        필요한 값을 여기서 고른다."""
+        mcp = {**admin_headers, "X-Client": "mcp"}
+        prop = client.post("/api/catalog/properties", json=PROPERTY, headers=mcp)
+        assert prop.status_code == 201, prop.text
+        key = prop.json()["key"]
+        material = client.post(
+            "/api/catalog/materials",
+            json={"name": "PA66-GF30W", "category": "polymer"},
+            headers=mcp,
+        )
+        assert material.status_code == 201, material.text
+        material_id = material.json()["id"]
+        value = _catalog_value(client, mcp, material_id, key, 5.1)
+        assert value.status_code == 201, value.text
+
+        defined = [
+            one
+            for one in _actions(client, admin_headers, "catalog_property.created_by_client")
+            if one["target_label"] == key
+        ]
+        assert defined and defined[0]["client"] == "mcp"
+        made = _mine(client, admin_headers, "catalog_material.created_by_client", material_id)
+        assert made and made[0]["target_label"] == "PA66-GF30W"
+        value_id = value.json()["value"]["id"]
+        added = _mine(client, admin_headers, "catalog_value.added_by_client", value_id)
+        assert added and added[0]["client"] == "mcp"
+        # 무엇을 넣었는지 이름만으로 읽힌다 — 재료 · 키 = 값(정의 단위로 환산된 것).
+        assert added[0]["target_label"].startswith(f"PA66-GF30W · {key} = ")
+        assert added[0]["changes"] == {"tier": 2, "method": "handbook"}
+
+        # 사람이 화면에서 넣은 값은 안 남는다.
+        human = _catalog_value(client, admin_headers, material_id, key, 5.3)
+        assert human.status_code == 201, human.text
+        human_id = human.json()["value"]["id"]
+        assert not _mine(client, admin_headers, "catalog_value.added_by_client", human_id)
+
+    def test_문헌_값을_지운_것은_사람이_해도_남는다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        """되살릴 수 없고 이미 덱에 실렸을 수 있다 — 삭제는 누가 했든 남긴다(재료·카드 삭제와
+        같은 규칙). **지우기 전의 값**이 기록에 있어야 무엇이 사라졌는지 안다."""
+        prop = client.post("/api/catalog/properties", json=PROPERTY, headers=admin_headers)
+        key = prop.json()["key"]
+        material_id = client.post(
+            "/api/catalog/materials",
+            json={"name": "PA66-DEL", "category": "polymer"},
+            headers=admin_headers,
+        ).json()["id"]
+        made = _catalog_value(client, admin_headers, material_id, key, 5.1)
+        value_id = made.json()["value"]["id"]
+
+        gone = client.delete(f"/api/catalog/values/{value_id}", headers=admin_headers)
+        assert gone.status_code == 204, gone.text
+        entry = _mine(client, admin_headers, "catalog_value.deleted", value_id)
+        assert len(entry) == 1
+        assert not entry[0]["client"], "화면에서 지운 것 — 길은 빈 값이다"
+        assert entry[0]["target_label"].startswith(f"PA66-DEL · {key} = ")
+        assert entry[0]["changes"]["value"] == pytest.approx(5.1e9)
+        assert entry[0]["changes"]["unit"] == "Pa"
+
+        # 없는 값을 지우려 하면 404 이고 아무것도 안 남는다 — 기록은 변경과 한 트랜잭션이다.
+        missing = str(uuid.uuid4())
+        lost = client.delete(f"/api/catalog/values/{missing}", headers=admin_headers)
+        assert lost.status_code == 404
+        assert not _mine(client, admin_headers, "catalog_value.deleted", missing)
+
+    def test_키를_폐기하고_옮긴_일이_남고_미리보기는_안_남는다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        mcp = {**admin_headers, "X-Client": "mcp"}
+        old = client.post(
+            "/api/catalog/properties",
+            json={**PROPERTY, "name": "옛 굴곡탄성률", "slug": "flexural_old"},
+            headers=admin_headers,
+        ).json()["key"]
+        new = client.post("/api/catalog/properties", json=PROPERTY, headers=admin_headers)
+        new_key = new.json()["key"]
+        material_id = client.post(
+            "/api/catalog/materials",
+            json={"name": "PA66-MIG", "category": "polymer"},
+            headers=admin_headers,
+        ).json()["id"]
+        _catalog_value(client, admin_headers, material_id, old, 5.1)
+
+        deprecated = client.post(
+            f"/api/catalog/properties/{old}/deprecate",
+            json={"superseded_by": new_key, "note": "이름이 겹쳐 합친다"},
+            headers=mcp,
+        )
+        assert deprecated.status_code == 200, deprecated.text
+        marked = [
+            one
+            for one in _actions(client, admin_headers, "catalog_property.deprecated_by_client")
+            if one["target_label"] == old
+        ]
+        assert marked and marked[0]["client"] == "mcp"
+        assert marked[0]["changes"] == {"superseded_by": new_key}
+        assert marked[0]["reason"] == "이름이 겹쳐 합친다"
+
+        # 미리보기는 아무것도 안 바꾸니 남길 일이 없다.
+        plan = client.post(
+            f"/api/catalog/properties/{old}/migrate", json={}, headers=admin_headers
+        )
+        assert plan.status_code == 200, plan.text
+        assert not _actions(client, admin_headers, "catalog_property.migrated")
+
+        done = client.post(
+            f"/api/catalog/properties/{old}/migrate",
+            json={"dry_run": False},
+            headers=admin_headers,
+        )
+        assert done.status_code == 200, done.text
+        moved = _actions(client, admin_headers, "catalog_property.migrated")
+        assert len(moved) == 1, "옮긴 일은 사람이 해도 남는다"
+        assert moved[0]["target_label"] == f"{old} → {new_key}"
+        assert moved[0]["changes"]["values"] == 1
+
+    def test_AI_가_지은_측정_의뢰가_남는다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str]
+    ) -> None:
+        """MCP 는 작성 중으로만 짓는다. 의뢰 이력은 누가·언제를 적지만 어느 길로 들어왔는지는
+        모른다 — 그것을 여기 남긴다."""
+        ensure_builtin_test_types(db)
+        db.add(Workspace(slug="reliability", name="신뢰성그룹"))
+        db.commit()
+        body = {
+            "title": "SECC 인장 물성",
+            "purpose": "성형 해석용",
+            "material_hint": "SECC 1.0t",
+            "lab_workspace_slug": "reliability",
+            "items": [{"test_type_key": "tensile", "deliverable": "curves"}],
+            "submit": False,
+        }
+        mcp = {**admin_headers, "X-Client": "mcp"}
+        by_ai = client.post("/api/commissions", json=body, headers=mcp)
+        assert by_ai.status_code == 201, by_ai.text
+        by_hand = client.post("/api/commissions", json=body, headers=admin_headers)
+        assert by_hand.status_code == 201, by_hand.text
+
+        mine = _mine(client, admin_headers, "commission.created_by_client", by_ai.json()["id"])
+        assert mine and mine[0]["client"] == "mcp"
+        assert mine[0]["changes"]["status"] == "draft"
+        hand_id = by_hand.json()["id"]
+        assert not _mine(client, admin_headers, "commission.created_by_client", hand_id)

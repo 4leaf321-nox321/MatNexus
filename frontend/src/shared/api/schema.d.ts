@@ -1094,6 +1094,8 @@ export interface paths {
          * @description 키를 **폐기한다 — 지우지 않는다.** 값·매핑이 걸렸거나 사전이 이미 나간 키를
          *     물리는 길이다. 새 값을 못 달고, 채우기에서 빠지고, 이름 풀기에서 뒤로 밀리며
          *     후속 키를 함께 알려 준다. 사전에 `deprecated`·`superseded_by` 로 실린다.
+         *
+         *     되돌릴 수 있어(아래 `undeprecate`) AI 가 한 것만 남긴다.
          */
         post: operations["deprecate_property_api_catalog_properties__property_key__deprecate_post"];
         /**
@@ -1162,6 +1164,9 @@ export interface paths {
         /**
          * Delete Catalog Value
          * @description 직접 넣은 값만(넣은 사람·관리자). 이관해 온 값은 원본이 정본이다.
+         *
+         *     **지운 일은 사람이 해도 남긴다** — 되살릴 수 없고, 그 값이 이미 덱에 실렸을 수 있다.
+         *     이름은 지우기 전에 읽어 둔다(지우고 나면 무엇이었는지 알 길이 없다).
          */
         delete: operations["delete_catalog_value_api_catalog_values__value_id__delete"];
         options?: never;

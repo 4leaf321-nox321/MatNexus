@@ -45,7 +45,7 @@ from app.modules.commissions.schemas import (
 )
 from app.modules.materials.models import Specimen
 from app.modules.tests.models import TestRun, TestType
-from app.shared import conditions
+from app.shared import audit, conditions
 from app.shared.auth import current_user
 from app.shared.errors import AppError, Forbidden, NotFound
 from app.shared.pagination import Page, clamp_limit
@@ -331,6 +331,18 @@ def create_commission(
     db.flush()
     if status == "submitted":
         services.notify_submitted(db, item, user)
+    # **AI 가 지었으면 남긴다.** 의뢰 이력(`CommissionEvent`)은 누가·언제를 적지만 어느 길로
+    # 들어왔는지는 모른다 — MCP 는 작성 중으로만 짓고, 내는 것은 사람이 한다.
+    audit.record_by_client(
+        db,
+        action=audit.COMMISSION_CREATED_BY_CLIENT,
+        actor=user,
+        target_table="commissions",
+        target_id=item.id,
+        target_label=item.title,
+        workspace_id=requester.id,
+        changes={"status": status, "lab_workspace_id": str(lab.id)},
+    )
     db.commit()
     return _detail(db, item, user)
 

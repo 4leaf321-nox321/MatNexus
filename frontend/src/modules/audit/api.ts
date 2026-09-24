@@ -59,6 +59,19 @@ export const ACTION_LABELS: Record<string, string> = {
   'processing.run_by_client': 'AI 가 처리 실행',
   'recipe.saved_by_client': 'AI 가 레시피 저장',
   'format.saved_by_client': 'AI 가 형식 저장',
+  // 그러고도 샜던 자리(2026-09-25) — 등록·문헌 카탈로그·의뢰. MCP 쓰기 도구마다 감사 흔적이
+  // 있는지 `tests/architecture/test_mcp_writes_audited.py` 가 본다.
+  'material.created_by_client': 'AI 가 재료 등록',
+  'sample.created_by_client': 'AI 가 시료 등록',
+  'specimen.created_by_client': 'AI 가 시편 등록',
+  'catalog_property.created_by_client': 'AI 가 문헌 물성 정의 추가',
+  'catalog_property.deprecated_by_client': 'AI 가 문헌 물성 정의 폐기',
+  'catalog_material.created_by_client': 'AI 가 문헌 재료 추가',
+  'catalog_value.added_by_client': 'AI 가 문헌 값 추가',
+  'commission.created_by_client': 'AI 가 측정 의뢰 작성',
+  // 이 둘은 **사람이 해도 남는다** — 되돌릴 수 없다.
+  'catalog_value.deleted': '문헌 값 삭제',
+  'catalog_property.migrated': '문헌 물성 키 이관',
   // **이름이 없으면 코드 그대로 뜨고 「행위로 필터」 에서 고를 수도 없다.** 아래는 이름표가
   // 없던 것들이다(2026-09-24, 36가지 중 18가지) — 배포 뒤 「열람 제한이 켜져 있던 부서」 를
   // 찾으려는데 필터에 없었다. 새 행위를 남기면 여기도 적는다(`tests/architecture/

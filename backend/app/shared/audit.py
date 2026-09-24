@@ -82,6 +82,23 @@ CARD_CREATED_BY_CLIENT = "card.created_by_client"
 PROCESSING_RUN_BY_CLIENT = "processing.run_by_client"
 RECIPE_SAVED_BY_CLIENT = "recipe.saved_by_client"
 FORMAT_SAVED_BY_CLIENT = "format.saved_by_client"
+#: **그러고도 샜던 자리**(2026-09-25). MCP 쓰기 도구를 경로마다 감사와 맞대 보니 재료·
+#: 시료·시편 등록, 문헌 카탈로그 쓰기, 측정 의뢰 작성이 아무 흔적도 안 남겼다 — AI 가
+#: 문헌 값을 지어 넣어도 사람이 넣은 값과 구별할 길이 없었다(등록자 칸은 토큰 주인이다).
+#: 새 쓰기 도구가 다시 새지 않게 `tests/architecture/test_mcp_writes_audited.py` 가 본다.
+MATERIAL_CREATED_BY_CLIENT = "material.created_by_client"
+SAMPLE_CREATED_BY_CLIENT = "sample.created_by_client"
+SPECIMEN_CREATED_BY_CLIENT = "specimen.created_by_client"
+CATALOG_PROPERTY_CREATED_BY_CLIENT = "catalog_property.created_by_client"
+CATALOG_PROPERTY_DEPRECATED_BY_CLIENT = "catalog_property.deprecated_by_client"
+CATALOG_MATERIAL_CREATED_BY_CLIENT = "catalog_material.created_by_client"
+CATALOG_VALUE_ADDED_BY_CLIENT = "catalog_value.added_by_client"
+COMMISSION_CREATED_BY_CLIENT = "commission.created_by_client"
+#: 문헌 값을 **실제로 지운** 일과 폐기된 키의 값을 **옮긴** 일. 둘 다 되돌릴 수 없어
+#: 위의 규칙대로 사람이 해도 남긴다(누가 했든 `client` 가 길을 말한다) — 지운 값은 이미
+#: 덱에 실렸을 수 있고, 옮긴 값은 원래 어느 키에 있었는지가 이 기록에만 남는다.
+CATALOG_VALUE_DELETED = "catalog_value.deleted"
+CATALOG_PROPERTY_MIGRATED = "catalog_property.migrated"
 LOGIN_THROTTLED = "auth.login_throttled"
 """같은 계정의 실패가 문턱을 넘어 응답을 늦추기 시작했다. 실패마다 남기면 넘치므로
 문턱을 넘는 순간 한 번만."""
