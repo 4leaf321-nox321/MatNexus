@@ -184,7 +184,8 @@ describe('선언 물성 편집', () => {
     propertyItems.mockResolvedValue([])
     panel()
     await waitFor(() =>
-      expect(screen.getByText(/기준정보의/)).toHaveTextContent('사내 물성 항목')
+      // 가는 길을 메뉴 이름으로 말한다(「온톨로지 편집」 — 2026-09-25, 전에는 「기준정보」).
+      expect(screen.getByText(/온톨로지 편집의/)).toHaveTextContent('사내 물성 항목')
     )
   })
 

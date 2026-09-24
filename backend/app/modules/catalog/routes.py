@@ -1634,7 +1634,8 @@ def add_property_link(
     if term is None:
         raise NotFound(
             "MNX-CATALOG-0025",
-            f"'{payload.item}' 이(가) 사내 물성 항목에 없습니다. 기준정보에서 먼저 만드세요.",
+            f"'{payload.item}' 이(가) 사내 물성 항목에 없습니다. 「온톨로지 편집」 에서 먼저 "
+            "만드세요.",
         )
     definition = db.scalar(
         select(CatalogDefinition).where(CatalogDefinition.key == payload.property_key)

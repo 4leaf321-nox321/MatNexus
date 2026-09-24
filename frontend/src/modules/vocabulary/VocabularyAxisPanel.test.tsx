@@ -53,7 +53,7 @@ function indent(name: string): number {
   return Number.parseFloat(button.style.paddingLeft)
 }
 
-describe('기준정보 축 목록', () => {
+describe('온톨로지 축 목록', () => {
   it('계층을 들여쓰기로 그린다', () => {
     // **나란히 놓으면 종속 관계가 사라진다.** Grade 가 Category 아래라는 것이
     // 화면에 남아야 한다.

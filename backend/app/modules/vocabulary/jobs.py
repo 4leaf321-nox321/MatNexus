@@ -30,7 +30,7 @@ def check_drift(db: Session, payload: dict[str, Any]) -> None:
         logger.info("어긋남 점검: 0건")
         return
     logger.warning(
-        "어긋남 점검: %s건이 벌어졌습니다 — %s. 기준정보 화면에서 고치세요.",
+        "어긋남 점검: %s건이 벌어졌습니다 — %s. 「온톨로지 편집」 화면에서 고치세요.",
         row.total,
         ", ".join(f"{item['table']}.{item['field']} {item['count']}건" for item in row.detail),
     )

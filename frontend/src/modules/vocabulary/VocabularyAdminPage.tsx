@@ -113,7 +113,7 @@ export default function VocabularyAdminPage() {
   return (
     <div>
       <PageHeader
-        title="기준정보"
+        title="온톨로지 편집"
         description="제조사·Grade 같은 값의 목록. 오타를 고치고, 안 쓰는 값을 감춥니다."
       />
 

@@ -160,7 +160,7 @@ export function PropertyCoverageTable({ materialId }: { materialId: string }) {
       )}
       {unmapped.length > 0 && (
         <p className="text-muted-foreground text-xs" data-testid="coverage-unmapped">
-          공용어에 안 이어져 지도에 못 선 것: {unmapped.join(', ')} — 기준정보 &gt; 물성 매핑에서
+          공용어에 안 이어져 지도에 못 선 것: {unmapped.join(', ')} — 온톨로지 편집 &gt; 물성 매핑에서
           이으면 보입니다.
         </p>
       )}

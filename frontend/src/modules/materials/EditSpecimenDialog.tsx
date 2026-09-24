@@ -200,7 +200,7 @@ export function EditSpecimenDialog({ specimen, open, onClose, onSaved }: Props) 
           {fields.length === 0 ? (
             <p className="text-muted-foreground rounded-md border p-3 text-xs">
               이 시편에는 치수 칸이 없습니다. <b>규격이 칸을 정합니다</b> — 규격을 고르거나,
-              기준정보 &gt; 시편 규격에서 그 규격의 치수 칸을 먼저 만드세요.
+              온톨로지 편집 &gt; 시편 규격에서 그 규격의 치수 칸을 먼저 만드세요.
             </p>
           ) : (
             <div className="space-y-2">

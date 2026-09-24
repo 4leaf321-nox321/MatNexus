@@ -70,7 +70,7 @@ export default function VocabularyPage() {
   return (
     <div>
       <PageHeader
-        title="기준정보"
+        title="온톨로지 조회"
         description="재료·시편·시험을 등록할 때 고르는 값의 목록입니다. 찾는 값이 없으면 시스템 관리자에게 요청하세요."
         actions={
           // **고칠 수 있는 사람에게는 가는 길을 준다.** 없으면 관리자도 이 화면을

@@ -112,15 +112,15 @@ describe('자리', () => {
     }
   })
 
-  it('고르는 사람이 기준정보를 본다 — 다만 고치는 자리는 아니다', () => {
+  it('고르는 사람이 온톨로지를 본다 — 다만 고치는 자리는 아니다', () => {
     // **막고 있던 것은 화면뿐이었다.** 서버의 읽기 엔드포인트는 이미 `current_user`
     // 다. 값을 매일 드롭다운에서 고르는 것은 멤버인데 목록을 못 보면, 찾는 값이
     // 없을 때 「아직 없다」 인지 「이름이 다르다」 인지 구별할 수 없다.
     const seen = labels(MEMBER)
-    expect(seen).toContain('기준정보')
+    expect(seen).toContain('온톨로지 조회')
     // 고치는 화면은 여전히 관리자만이다 — 이름이 달라야 어느 쪽인지 안다.
-    expect(seen).not.toContain('기준정보 편집')
-    expect(labels(ADMIN)).toContain('기준정보 편집')
+    expect(seen).not.toContain('온톨로지 편집')
+    expect(labels(ADMIN)).toContain('온톨로지 편집')
   })
 
   it('단위는 메뉴에 따로 안 선다 — 기준정보 안의 한 칸이다', () => {

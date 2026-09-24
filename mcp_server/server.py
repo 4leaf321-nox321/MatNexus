@@ -2236,7 +2236,7 @@ async def adopt_catalog_values(
             planned.append(
                 {
                     "property_key": row["property_key"],
-                    "skipped": "담을 자리가 없는 물성 — 기준정보의 물성 매핑에서 사내 항목에 이으면 담긴다",
+                    "skipped": "담을 자리가 없는 물성 — 「온톨로지 편집」 의 물성 매핑에서 사내 항목에 이으면 담긴다",
                 }
             )
             continue
@@ -2861,7 +2861,7 @@ async def add_catalog_property(
         **got,
         "note": (
             f"만들었습니다: {got.get('key')}. 이제 add_catalog_value 로 값을 달거나, "
-            "기준정보의 물성 매핑에서 사내 항목에 이을 수 있습니다."
+            "「온톨로지 편집」 의 물성 매핑에서 사내 항목에 이을 수 있습니다."
         ),
     }
 
@@ -3275,7 +3275,7 @@ async def resolve_property(ctx: Context, name: str) -> dict[str, Any]:
             "hint": (
                 f"'{name}' 로 물성을 찾지 못했습니다. `get_taxonomy` 로 어떤 물성 "
                 "도메인이 있는지 보거나, 다른 이름으로 다시 물어보세요. **이 이름은 서버가 "
-                "별칭 후보로 남겨 두었습니다** — 관리자가 기준정보 화면에서 어느 물성인지 "
+                "별칭 후보로 남겨 두었습니다** — 관리자가 「온톨로지 편집」 화면에서 어느 물성인지 "
                 "이어 주면 다음부터 이 말로 찾힙니다. 사람에게 그렇게 말해라."
             ),
         }

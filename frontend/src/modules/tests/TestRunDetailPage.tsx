@@ -531,7 +531,7 @@ export default function TestRunDetailPage() {
             <p className="mt-2 text-xs opacity-80">
               원본을 내려받아 형식을 확인하세요. <b>「다시 읽기」 를 열면 형식을 골라
               읽을 수 있습니다</b> — 자동으로 고른 것이 틀렸을 때 쓰는 길입니다. 맞는
-              형식이 없으면 <b>기준정보 · 파일 형식</b>에서 새로 만들고 다시 읽습니다.
+              형식이 없으면 <b>장비 파일 정의</b>에서 새로 만들고 다시 읽습니다.
             </p>
           </div>
         )}

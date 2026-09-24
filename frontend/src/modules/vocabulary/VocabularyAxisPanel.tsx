@@ -51,7 +51,7 @@ export function VocabularyAxisPanel({
   extrasLabel?: string
 }) {
   return (
-    <LeftPanel label="기준정보 축">
+    <LeftPanel label="온톨로지 축">
       <aside className="bg-background flex h-full w-60 flex-col border-r">
         <div className="min-h-0 flex-1 overflow-auto py-1">
           {axes.map((axis) => {

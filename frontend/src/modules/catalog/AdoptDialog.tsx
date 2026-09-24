@@ -140,7 +140,7 @@ export function AdoptDialog({
     const slot = slots[value.property_key]
     if (!slot || slot.place !== 'declared' || !slot.item || levels === null) return null
     const level = levels.get(slot.item)
-    if (level === undefined) return "기준정보 '사내 물성 항목' 축에 없어 못 담습니다"
+    if (level === undefined) return "온톨로지 '사내 물성 항목' 축에 없어 못 담습니다"
     // 시료 층 항목도 문헌 공칭값은 재료에 담긴다 — 로트를 증명하는 밀시트만
     // 서버가 시료로 보낸다(카탈로그에는 그 출처가 없어 사실상 전부 담긴다).
     if (level !== '재료' && adoptionSource(value) === 'millsheet') {
@@ -368,7 +368,7 @@ export function AdoptDialog({
               </p>
               {candidates.length === 0 && (
                 <p className="text-muted-foreground text-sm">
-                  이 재료에는 담을 수 있는 물성이 없습니다 — 기준정보의 물성 매핑에서 이은
+                  이 재료에는 담을 수 있는 물성이 없습니다 — 온톨로지 편집의 물성 매핑에서 이은
                   것만 담깁니다.
                 </p>
               )}
