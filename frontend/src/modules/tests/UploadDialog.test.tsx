@@ -4,7 +4,7 @@
  * 다른 시료의 시편은 고를 수 없다 — 의뢰가 재지도 않은 것을 잰 것으로 적으면 안 된다.
  */
 
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -82,6 +82,8 @@ describe('의뢰 항목에서 열 때', () => {
       />
     )
     const select = await screen.findByLabelText('시편 (이 의뢰의 시료)')
+    // 고르개는 시편 목록보다 먼저 선다 — 목록이 오기 전에 고르면 「없는 값」 이다.
+    await within(select).findByRole('option', { name: /SECC_S1_MD_01/ })
     await user.selectOptions(select, 'sp1')
     expect(specimens).toHaveBeenCalledWith('s1')
     // 조건이 채워진 채 뜬다 — 의뢰 항목의 80 °C.

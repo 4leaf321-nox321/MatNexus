@@ -102,6 +102,9 @@ function show() {
  * 요약은 **항목마다 카드**이고 여러 열에 흐른다 — 항목마다 값 개수가 달라
  * 격자로 두면 짧은 카드 밑에 빈칸이 크게 남기 때문이다.
  */
+//: **요약 표는 통계보다 먼저 선다**(첫 값을 넣을 자리라 늘 그린다). 그래서 이것만 기다리면
+//: 통계가 오기 전이다 — 통계에서 오는 줄은 `linesOf` 로, 칩·단추는 `findBy` 로 기다린다.
+//: 「없다」 를 보는 시험도 먼저 줄을 기다린다(응답을 30ms 늦추면 드러났다, 2026-09-24).
 const summary = async () => within(await screen.findByLabelText('물성 요약'))
 
 /**
@@ -184,7 +187,7 @@ describe('요약', () => {
     show()
     const area = await summary()
     // **한 표에 둘 다 있다.** 시험종류마다 표를 만들면 종류 수만큼 세로로 선다.
-    expect(area.getAllByLabelText('유리전이온도').length).toBeGreaterThan(0)
+    expect((await area.findAllByLabelText('유리전이온도')).length).toBeGreaterThan(0)
     expect(area.getAllByLabelText('항복강도').length).toBeGreaterThan(0)
   })
 
@@ -306,15 +309,14 @@ describe('시험종류 칩', () => {
     // **없는 선택지를 보이면 그것도 소음이다.**
     forMaterial.mockResolvedValue({ groups: [group('MD', 285)] })
     show()
-    await summary()
+    await linesOf('항복강도')
     expect(screen.queryByRole('button', { name: '모든 시험종류 보기' })).not.toBeInTheDocument()
   })
 
   it('종류가 여럿이면 고를 수 있다', async () => {
     mixed()
     show()
-    await summary()
-    expect(screen.getByRole('button', { name: '모든 시험종류 보기' })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: '모든 시험종류 보기' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'DMA 스윕 만 보기' })).toBeInTheDocument()
   })
 
@@ -504,7 +506,9 @@ describe('선언과 계산', () => {
     //
     // 이름으로 거르는 role 질의(`findAllByRole`)로는 못 바꾼다 — 트리 전체의
     // 접근성 이름을 매번 계산해 5초 안에 안 끝났다.
-    await linesOf('탄성계수')
+    // **두 줄(적어 둔 값 + 통계)을 기다린다.** 적어 둔 줄은 첫 렌더에 이미 있어서 한 줄만
+    // 기다리면 통계가 붙으며 다시 그리기 전의 단추를 누를 수 있다(응답을 늦추면 매번 졌다).
+    await linesOf('탄성계수', 2)
     const button = await screen.findByLabelText('탄성계수 적어 둔 값 편집')
     await user.click(button)
     await waitFor(() => expect(onEdit).toHaveBeenCalledWith('탄성계수'))
@@ -669,7 +673,7 @@ describe('글로벌 피팅 자리', () => {
   it('안 주면 아무것도 안 그린다', async () => {
     // 쓸 방법이 없는 재료에서 「묶기」 가 뜨면 그것이 무엇인지 매번 묻게 된다.
     show()
-    await summary()
+    await linesOf('항복강도')
     expect(screen.queryByRole('button', { name: '글로벌 피팅' })).not.toBeInTheDocument()
   })
 })

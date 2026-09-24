@@ -60,7 +60,10 @@ describe('시료 추가', () => {
   it('가장 최근 시료의 제조사·유통 경로를 채우고, 로트·생산일·밀도는 비워 둔다', async () => {
     render(<NewSampleDialog materialId="m1" open onClose={vi.fn()} onCreated={vi.fn()} />)
 
-    expect(await screen.findByLabelText('제조사')).toHaveValue('포스코')
+    // **칸은 최근 시료보다 먼저 선다**(빈 채로). 칸을 기다리면 빈 칸을 한 번 보고 끝난다 —
+    // 채웠다는 안내를 기다린 뒤 본다(응답을 늦추면 드러났다, 2026-09-24).
+    await screen.findByText(/채워 두었습니다/)
+    expect(screen.getByLabelText('제조사')).toHaveValue('포스코')
     expect(screen.getByLabelText('유통사')).toHaveValue('삼성물산')
     expect(screen.getByLabelText('판매 유형')).toHaveValue('직거래')
     expect(screen.getByText(/SPCC_-_1\.0__03/)).toBeInTheDocument()

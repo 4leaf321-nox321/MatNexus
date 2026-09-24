@@ -7,7 +7,7 @@
  *   고치기·삭제는 `can_edit` 가 정한다    이름으로 짐작하지 않는다
  */
 
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -186,6 +186,9 @@ describe('VOC 상세', () => {
     await show(detail({ events: [registered, moved], can_delete_events: false }))
     expect(screen.queryByRole('button', { name: '이력 삭제' })).toBeNull()
 
+    // **앞 화면을 치운다.** 남겨 두면 `show` 가 기다리는 제목을 앞 화면에서 곧바로 찾아
+    // 뒤 화면이 그려지기 전에 검사한다 — 응답을 늦추면 매번 졌다(2026-09-24).
+    cleanup()
     removeEvent.mockResolvedValue(detail({ events: [registered] }))
     await show(detail({ events: [registered, moved], can_delete_events: true }))
     const buttons = screen.getAllByRole('button', { name: '이력 삭제' })
@@ -279,6 +282,9 @@ describe('첨부', () => {
     await show(detail({ attachments: [file], can_attach: true }))
     await userEvent.click(screen.getByLabelText('캡처.png 떼기'))
     await waitFor(() => expect(detach).toHaveBeenCalledWith('voc-1', 'a-1'))
+    // **떼기가 끝나 입력이 다시 열릴 때까지.** 떼는 동안 파일 입력은 막혀 있어서(`busy`),
+    // 불린 것만 기다리고 곧바로 붙이면 막힌 입력에 대고 붙인다 — 아무 일도 안 일어난다.
+    await waitFor(() => expect(screen.getByLabelText('파일 붙이기')).toBeEnabled())
     await userEvent.upload(
       screen.getByLabelText('파일 붙이기'),
       new File(['x'], 'log.txt', { type: 'text/plain' })

@@ -95,7 +95,8 @@ describe('분포 화면', () => {
     await userEvent.click(screen.getByRole('button', { name: '산포 분포 적합' }))
     await userEvent.click(await screen.findByRole('button', { name: /항복강도/ }))
     await waitFor(() => expect(distributions).toHaveBeenCalled())
-    expect(screen.getByText('와이블')).toBeInTheDocument()
+    // 불린 것과 그려진 것은 다른 순간이다 — 그려진 것을 기다린다.
+    expect(await screen.findByText('와이블')).toBeInTheDocument()
     expect(screen.getByText('1등')).toBeInTheDocument()
     // **설계가 묻는 것은 파라미터가 아니라 하위 5% 다.**
     expect(screen.getByRole('columnheader', { name: '하위 5%' })).toBeInTheDocument()

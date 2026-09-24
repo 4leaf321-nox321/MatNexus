@@ -66,7 +66,10 @@ async function show(rows: unknown[]) {
       <CommissionsPage />
     </MemoryRouter>
   )
-  await waitFor(() => expect(list).toHaveBeenCalled())
+  // **그려진 것을 기다린다.** 불린 것(`list` 호출)과 다시 그린 것은 다른 순간이라, 불린
+  // 것만 기다리면 느린 CI 에서 아직 안 그려진 표에 대고 검사한다 — 감사 화면 시험이 CI 에서
+  // 그렇게 졌고, 응답을 30ms 늦춰 돌리니 여기서도 졌다(2026-09-24).
+  await screen.findAllByText((rows[0] as { title: string }).title)
 }
 
 describe('측정 의뢰 게시판', () => {

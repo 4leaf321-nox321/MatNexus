@@ -62,8 +62,8 @@ describe('별칭 후보', () => {
       expect(acceptAliasCandidate).toHaveBeenCalledWith('c1', 'mechanical.tensile_strength'),
     )
     expect(screen.queryByText('옛 인장강도')).toBeNull()
-    // 판정 뒤 목록을 다시 읽는다.
-    expect(aliasCandidates).toHaveBeenCalledTimes(2)
+    // 판정 뒤 목록을 다시 읽는다 — 다시 읽기는 판정이 끝나고 다시 그린 뒤라 기다린다.
+    await waitFor(() => expect(aliasCandidates).toHaveBeenCalledTimes(2))
   })
 
   it('무시는 그 줄만', async () => {

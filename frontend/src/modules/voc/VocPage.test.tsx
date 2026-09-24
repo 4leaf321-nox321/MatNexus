@@ -65,6 +65,11 @@ async function show(rows: unknown[]) {
     </MemoryRouter>
   )
   await waitFor(() => expect(list).toHaveBeenCalled())
+  // **그려진 것을 기다린다.** 불린 것(`list` 호출)과 다시 그린 것은 다른 순간이라, 불린
+  // 것만 기다리면 느린 CI 에서 아직 안 그려진 표에 대고 검사한다 — 감사 화면 시험이 CI 에서
+  // 그렇게 졌고, 응답을 30ms 늦춰 돌리니 여기서도 졌다(2026-09-24).
+  const first = rows[0] as { title?: string } | undefined
+  if (first?.title) await screen.findAllByText(first.title)
 }
 
 /** 마지막으로 서버에 보낸 질의. */
@@ -117,7 +122,10 @@ describe('VOC 게시판', () => {
     const user = userEvent.setup()
     await show([item()])
     const chips = await screen.findByRole('group', { name: '상태로 필터' })
-    expect(within(chips).getAllByRole('button')).toHaveLength(STATUSES.length + 1)
+    // 칩은 따로 오는 상태 목록으로 선다 — 묶음 틀(「전부」)은 그보다 먼저 선다.
+    await waitFor(() =>
+      expect(within(chips).getAllByRole('button')).toHaveLength(STATUSES.length + 1)
+    )
 
     await user.click(within(chips).getByRole('button', { name: '처리 중' }))
     await waitFor(() => expect(asked().status).toBe('in_progress'))
@@ -139,7 +147,7 @@ describe('VOC 게시판', () => {
     const user = userEvent.setup()
     await show([item()])
     list.mockResolvedValue({ items: [], total: 0, limit: 50, offset: 0 })
-    await user.click(screen.getByRole('button', { name: '반려' }))
+    await user.click(await screen.findByRole('button', { name: '반려' }))
     expect(await screen.findByText(/거른 조건에 맞는 것이 없습니다/)).toBeInTheDocument()
   })
 })

@@ -76,9 +76,13 @@ describe('어디에 담기는지', () => {
 
   it('누르면 그 작업에 담는다', async () => {
     show(['c1', 'c2'])
-    await userEvent.click(await screen.findByRole('button', { name: /추가/ }))
+    // **작업 이름이 붙은 단추를 누른다.** 「추가」 만 보면 작업 목록이 오기 전의 단추가
+    // 먼저 잡힌다 — 응답을 늦추면 매번 엉뚱한 데로 담으려 했다(2026-09-24).
+    await userEvent.click(
+      await screen.findByRole('button', { name: /「EPDM 도어씰 2026-09」에 추가/ })
+    )
     await waitFor(() => expect(add).toHaveBeenCalledWith('r1', 'card', ['c1', 'c2']))
-    expect(screen.getByText(/2건 담았습니다/)).toBeInTheDocument()
+    expect(await screen.findByText(/2건 담았습니다/)).toBeInTheDocument()
   })
 
   it('여럿이면 고를 수 있다', async () => {
@@ -200,7 +204,9 @@ describe('기억해 둔 작업', () => {
     // 조용히 실패하거나, 더 나쁘게 엉뚱한 데로 간다.
     window.localStorage.setItem('matnexus.basket.active', '없어진작업')
     show()
-    await userEvent.click(await screen.findByRole('button', { name: /추가/ }))
+    await userEvent.click(
+      await screen.findByRole('button', { name: /「EPDM 도어씰 2026-09」에 추가/ })
+    )
     await waitFor(() => expect(add).toHaveBeenCalledWith('r1', 'card', ['c1']))
   })
 
@@ -209,7 +215,9 @@ describe('기억해 둔 작업', () => {
     // 보내면 방금 담은 작업을 다시 골라야 한다 — 진행 중인 것이 여럿이면 어느
     // 것이었는지 헷갈린다.
     show()
-    await userEvent.click(await screen.findByRole('button', { name: /추가/ }))
+    await userEvent.click(
+      await screen.findByRole('button', { name: /「EPDM 도어씰 2026-09」에 추가/ })
+    )
     const back = await screen.findByRole('link', { name: '워크벤치로' })
     // 워크벤치는 한 주소다 — 부서 주소를 걷었다(ADR 0035 3단계).
     expect(back).toHaveAttribute('href', '/workbench?run=r1')
@@ -218,7 +226,9 @@ describe('기억해 둔 작업', () => {
   it('담고 나면 그 작업을 기억한다', async () => {
     // 다음 화면에서도 같은 작업에 담긴다 — 목록을 오가며 모으는 것이 이 단추의 쓰임이다.
     show()
-    await userEvent.click(await screen.findByRole('button', { name: /추가/ }))
+    await userEvent.click(
+      await screen.findByRole('button', { name: /「EPDM 도어씰 2026-09」에 추가/ })
+    )
     await waitFor(() => expect(window.localStorage.getItem('matnexus.basket.active')).toBe('r1'))
   })
 })
