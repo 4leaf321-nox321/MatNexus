@@ -4,6 +4,7 @@
   - 초안은 발행 전까지 남에게 보이지 않는다 — 목록에도, 한 건 주소로도
   - 팝업은 읽으면 다시 뜨지 않는다
   - 게시판이다 — 쪽으로 나가고, 제목·내용으로 찾고, 안 읽은 것만 고른다(2026-09-24)
+  - 안 읽은 수는 발행된 것만 세고, 「모두 읽음」 이 그 수를 0 으로 만든다
 """
 
 from __future__ import annotations
@@ -201,3 +202,66 @@ def test_쓴_사람과_배포에_실려_온_안내를_가른다(
     db.commit()
     one = client.get(f"/api/notices/{seeded.id}", headers=admin_headers).json()
     assert one["created_by"] is None and one["from_release"] is True
+
+
+def test_안_읽은_수는_발행된_것만_센다(
+    client: TestClient, db: Session, workspace: Workspace, admin_headers: dict[str, str]
+) -> None:
+    """사이드바의 수. **초안은 안 센다** — 관리자에게도 초안은 아직 아무에게도 안 알린 글이라
+    「새 글」 이 아니다(목록의 「새 글」 표와 같다)."""
+    ids = [
+        client.post(
+            "/api/notices", json={"title": title, "body": "본문"}, headers=admin_headers
+        ).json()["id"]
+        for title in ("가", "나", "다")
+    ]
+    client.post(
+        "/api/notices",
+        json={"title": "초안", "body": "본문", "is_published": False},
+        headers=admin_headers,
+    )
+    headers = member_headers(client, db, workspace)
+    count = client.get("/api/notices/unread-count", headers=headers)
+    assert count.status_code == 200, count.text
+    assert count.json() == {"unread": 3}
+
+    client.post(f"/api/notices/{ids[0]}/read", headers=headers)
+    assert client.get("/api/notices/unread-count", headers=headers).json() == {"unread": 2}
+    # 관리자도 초안은 안 센다.
+    assert client.get("/api/notices/unread-count", headers=admin_headers).json() == {
+        "unread": 3
+    }
+
+
+def test_모두_읽음은_수를_0_으로_만들고_이미_읽은_것은_건너뛴다(
+    client: TestClient, db: Session, workspace: Workspace, admin_headers: dict[str, str]
+) -> None:
+    """처음 들어온 사람에게는 쌓인 공지가 전부 새 글이다. 하나를 이미 읽었어도(다른 탭에서)
+    겹친 짝 때문에 전부가 되돌려지면 안 된다."""
+    from sqlalchemy import func, select
+
+    from app.modules.notices.models import NoticeRead
+
+    ids = [
+        client.post(
+            "/api/notices", json={"title": title, "body": "본문"}, headers=admin_headers
+        ).json()["id"]
+        for title in ("가", "나")
+    ]
+    headers = member_headers(client, db, workspace)
+    client.post(f"/api/notices/{ids[0]}/read", headers=headers)
+
+    done = client.post("/api/notices/read-all", headers=headers)
+    assert done.status_code == 200, done.text
+    assert done.json() == {"unread": 0}
+    assert client.get("/api/notices/unread-count", headers=headers).json() == {"unread": 0}
+    listed = client.get("/api/notices", headers=headers).json()["items"]
+    assert all(one["is_read"] for one in listed)
+    # 짝마다 한 줄 — 이미 읽은 것을 두 번 적지 않았다.
+    rows = db.scalar(select(func.count()).select_from(NoticeRead))
+    assert rows == 2
+
+    # 남의 읽음은 건드리지 않는다.
+    assert client.get("/api/notices/unread-count", headers=admin_headers).json() == {
+        "unread": 2
+    }

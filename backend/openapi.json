@@ -17653,6 +17653,20 @@
         "title": "NoticeOut",
         "type": "object"
       },
+      "NoticeUnreadOut": {
+        "description": "안 읽은 공지 수 — **발행된 것만** 센다(초안은 아직 아무에게도 안 알렸다).",
+        "properties": {
+          "unread": {
+            "title": "Unread",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "unread"
+        ],
+        "title": "NoticeUnreadOut",
+        "type": "object"
+      },
       "NoticeUpdateRequest": {
         "properties": {
           "body": {
@@ -40572,6 +40586,50 @@
           }
         },
         "summary": "Popup Notices",
+        "tags": [
+          "notices"
+        ]
+      }
+    },
+    "/api/notices/read-all": {
+      "post": {
+        "description": "안 읽은 공지를 **모두 읽음**으로. 처음 들어온 사람에게는 그동안 쌓인 공지가 전부\n새 글이라 — 하나씩 열어 끄라고 하면 수를 안 보게 된다.\n\n같은 공지를 다른 탭에서 방금 읽었을 수 있다. 짝(공지·사람)이 겹치면 **건너뛴다** — 한\n건이 겹쳤다고 전부를 되돌리면 눌렀는데 아무 일도 안 일어난다.",
+        "operationId": "read_all_api_notices_read_all_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NoticeUnreadOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Read All",
+        "tags": [
+          "notices"
+        ]
+      }
+    },
+    "/api/notices/unread-count": {
+      "get": {
+        "description": "사이드바의 「공지 · VOC」 옆 수. **숫자 하나만** 준다 — 화면이 주기적으로 묻는 자리라\n목록을 통째로 받게 하면 사람이 늘수록 서버가 그만큼 일한다(알림 종과 같은 판단).\n\n팝업은 중요한 공지에만 켜므로, 나머지 공지는 이 수가 아니면 게시판에 들어가 봐야 안다.",
+        "operationId": "unread_count_api_notices_unread_count_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NoticeUnreadOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Unread Count",
         "tags": [
           "notices"
         ]

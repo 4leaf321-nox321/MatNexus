@@ -6,17 +6,24 @@
  * 그때 화면이 거짓말을 한다. 답이 틀린 것은 못 답하는 것보다 나쁘다.
  */
 
-import { render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { NOTICES_READ } from '@/modules/notices/api'
 import { Sidebar } from '@/shared/layout/Sidebar'
 
 const health = vi.fn()
+const unreadCount = vi.fn()
 
 vi.mock('@/shared/api/system', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/shared/api/system')>()),
   systemApi: { health: () => health() },
+}))
+
+vi.mock('@/modules/notices/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/modules/notices/api')>()),
+  noticesApi: { unreadCount: () => unreadCount() },
 }))
 
 vi.mock('@/shared/auth/AuthContext', () => ({
@@ -34,6 +41,7 @@ function sidebar() {
 beforeEach(() => {
   vi.clearAllMocks()
   health.mockResolvedValue({ status: 'ok', version: 'v1.73.0' })
+  unreadCount.mockResolvedValue({ unread: 0 })
 })
 
 describe('사이드바 머리글', () => {
@@ -79,5 +87,47 @@ describe('사이드바 머리글', () => {
     health.mockRejectedValue(new Error('끊김'))
     sidebar()
     expect(await screen.findByText('MatNexus')).toBeInTheDocument()
+  })
+})
+
+/**
+ * 안 읽은 공지 수 — 「공지 · VOC」 옆에 선다(2026-09-24).
+ *
+ * 팝업은 중요한 공지에만 켜므로, 나머지는 이 수가 아니면 게시판에 들어가 봐야 안다.
+ */
+describe('안 읽은 공지 수', () => {
+  function noticeLink() {
+    return screen.getByText('공지 · VOC').closest('a') as HTMLElement
+  }
+
+  it('안 읽은 공지가 있으면 그 수를 메뉴 옆에 단다', async () => {
+    unreadCount.mockResolvedValue({ unread: 3 })
+    sidebar()
+    expect(await within(noticeLink()).findByText('3')).toBeInTheDocument()
+    expect(within(noticeLink()).getByTitle('안 읽은 공지 3건')).toBeInTheDocument()
+  })
+
+  it('없으면 아무것도 안 단다', async () => {
+    sidebar()
+    await waitFor(() => expect(unreadCount).toHaveBeenCalled())
+    expect(within(noticeLink()).queryByTitle(/안 읽은 공지/)).toBeNull()
+  })
+
+  it('많으면 99+ 로 줄인다', async () => {
+    unreadCount.mockResolvedValue({ unread: 140 })
+    sidebar()
+    expect(await within(noticeLink()).findByText('99+')).toBeInTheDocument()
+  })
+
+  it('읽었다는 신호를 받으면 곧바로 다시 센다 — 1분을 기다리지 않는다', async () => {
+    unreadCount.mockResolvedValue({ unread: 2 })
+    sidebar()
+    expect(await within(noticeLink()).findByText('2')).toBeInTheDocument()
+
+    unreadCount.mockResolvedValue({ unread: 1 })
+    act(() => {
+      window.dispatchEvent(new Event(NOTICES_READ))
+    })
+    expect(await within(noticeLink()).findByText('1')).toBeInTheDocument()
   })
 })

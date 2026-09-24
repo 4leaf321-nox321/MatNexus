@@ -11,11 +11,14 @@
  * 모양이다 — 목록은 여는 자리이고, 본문·편집·삭제는 상세(`/notices/:id`)에서 한다.
  *
  * **안 읽은 글이 보인다.** 굵게 적고 「새 글」 을 붙인다 — 팝업은 중요한 것에만 켜므로,
- * 나머지는 여기서 알아채야 한다.
+ * 나머지는 여기서 알아채야 한다. 사이드바에도 그 수가 선다(`useUnreadNotices`).
+ *
+ * **「모두 읽음」 이 있다.** 처음 들어온 사람에게는 그동안 쌓인 공지가 전부 새 글이다 —
+ * 하나씩 열어 끄라고 하면 사이드바의 수를 안 보게 된다.
  */
 
 import { useState } from 'react'
-import { Megaphone, Plus, Search } from 'lucide-react'
+import { CheckCheck, Megaphone, Plus, Search } from 'lucide-react'
 import { Link, useNavigate } from 'react-router-dom'
 
 import { NoticeDialog } from '@/modules/notices/NoticeDialog'
@@ -58,6 +61,25 @@ export default function NoticesPage() {
   const rows = page.data?.items ?? []
   const total = page.data?.total ?? 0
   const focus = useRowFocus(rows.map((one) => one.id))
+  // 이 쪽에 안 보이는 안 읽은 글도 센다 — 목록은 쪽으로 잘려 있다.
+  const unreadCount = useResource(() => noticesApi.unreadCount(), [])
+  const unreadTotal = unreadCount.data?.unread ?? 0
+  const [marking, setMarking] = useState(false)
+  const [markError, setMarkError] = useState<Error | null>(null)
+
+  const readAll = async () => {
+    setMarking(true)
+    setMarkError(null)
+    try {
+      await noticesApi.readAll()
+      page.reload()
+      unreadCount.reload()
+    } catch (caught) {
+      setMarkError(caught instanceof Error ? caught : new Error('읽음으로 바꾸지 못했습니다.'))
+    } finally {
+      setMarking(false)
+    }
+  }
 
   return (
     // 표라 폭을 스스로 좁히지 않는다(`boundaries.test`). 읽는 화면인 상세만 좁힌다.
@@ -84,7 +106,7 @@ export default function NoticesPage() {
         }
       />
 
-      <ErrorNotice error={page.error} className="mb-4" />
+      <ErrorNotice error={page.error ?? markError} className="mb-4" />
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <label className="flex items-center gap-1.5 text-sm">
@@ -98,6 +120,12 @@ export default function NoticesPage() {
           />
           안 읽은 것만
         </label>
+        {unreadTotal > 0 && (
+          <Button size="sm" variant="outline" disabled={marking} onClick={readAll}>
+            <CheckCheck className="size-4" />
+            모두 읽음 ({unreadTotal})
+          </Button>
+        )}
         <form
           className="relative ml-auto w-full sm:w-64"
           onSubmit={(event) => {

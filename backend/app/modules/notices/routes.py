@@ -19,13 +19,19 @@ from collections.abc import Iterable
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import exists, func, or_, select
+from sqlalchemy import Select, exists, func, or_, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.modules.accounts.models import User
 from app.modules.notices.models import Notice, NoticeRead
-from app.modules.notices.schemas import NoticeCreateRequest, NoticeOut, NoticeUpdateRequest
+from app.modules.notices.schemas import (
+    NoticeCreateRequest,
+    NoticeOut,
+    NoticeUnreadOut,
+    NoticeUpdateRequest,
+)
 from app.shared.auth import current_user, require_system_admin
 from app.shared.errors import NotFound
 from app.shared.pagination import Page, clamp_limit
@@ -64,6 +70,18 @@ def _names(db: Session, ids: Iterable[uuid.UUID | None]) -> dict[uuid.UUID, str]
 def _read_ids(db: Session, user: User) -> set[uuid.UUID]:
     return set(
         db.scalars(select(NoticeRead.notice_id).where(NoticeRead.user_id == user.id)).all()
+    )
+
+
+def _unread_of(user: User) -> Select[tuple[uuid.UUID]]:
+    """**발행된 것** 중 이 사람이 안 읽은 공지. 사이드바의 수와 「모두 읽음」 이 같은 줄을
+    센다 — 둘이 따로 세면 「모두 읽음」 을 눌렀는데 수가 남는다.
+
+    목록의 `unread` 거르개와는 초안에서 갈린다 — 관리자는 목록에서 초안도 보지만, 초안은
+    아직 아무에게도 안 알린 글이라 「새 글」 로 세지 않는다(목록의 「새 글」 표와 같다)."""
+    return select(Notice.id).where(
+        Notice.is_published.is_(True),
+        ~exists().where(NoticeRead.notice_id == Notice.id, NoticeRead.user_id == user.id),
     )
 
 
@@ -138,6 +156,40 @@ def popup_notices(
     rows = [n for n in db.scalars(query) if n.id not in read]
     names = _names(db, (one.created_by_id for one in rows))
     return [_out(n, read=False, names=names) for n in rows]
+
+
+@router.get("/unread-count", response_model=NoticeUnreadOut)
+def unread_count(
+    user: User = Depends(current_user), db: Session = Depends(get_db)
+) -> NoticeUnreadOut:
+    """사이드바의 「공지 · VOC」 옆 수. **숫자 하나만** 준다 — 화면이 주기적으로 묻는 자리라
+    목록을 통째로 받게 하면 사람이 늘수록 서버가 그만큼 일한다(알림 종과 같은 판단).
+
+    팝업은 중요한 공지에만 켜므로, 나머지 공지는 이 수가 아니면 게시판에 들어가 봐야 안다."""
+    count = db.scalar(select(func.count()).select_from(_unread_of(user).subquery()))
+    return NoticeUnreadOut(unread=int(count or 0))
+
+
+@router.post("/read-all", response_model=NoticeUnreadOut)
+def read_all(
+    user: User = Depends(current_user), db: Session = Depends(get_db)
+) -> NoticeUnreadOut:
+    """안 읽은 공지를 **모두 읽음**으로. 처음 들어온 사람에게는 그동안 쌓인 공지가 전부
+    새 글이라 — 하나씩 열어 끄라고 하면 수를 안 보게 된다.
+
+    같은 공지를 다른 탭에서 방금 읽었을 수 있다. 짝(공지·사람)이 겹치면 **건너뛴다** — 한
+    건이 겹쳤다고 전부를 되돌리면 눌렀는데 아무 일도 안 일어난다."""
+    ids = list(db.scalars(_unread_of(user)))
+    if ids:
+        db.execute(
+            pg_insert(NoticeRead)
+            .values(
+                [{"id": uuid.uuid4(), "notice_id": one, "user_id": user.id} for one in ids]
+            )
+            .on_conflict_do_nothing(constraint="uq_notice_reads_pair")
+        )
+        db.commit()
+    return NoticeUnreadOut(unread=0)
 
 
 @router.get("/{notice_id}", response_model=NoticeOut)

@@ -109,7 +109,12 @@ export interface NavItem {
   phase?: string
   /** 한 줄 설명. 개요 화면과 stub 화면이 같은 말을 하도록 여기 한 번만 적는다. */
   summary?: string
+  /** 사이드바가 이 항목 옆에 다는 수. 지금은 안 읽은 공지 하나뿐이다 — 팝업은 중요한
+   *  공지에만 켜므로, 나머지는 이 수가 아니면 게시판에 들어가 봐야 안다. */
+  counter?: NavCounter
 }
+
+export type NavCounter = 'unreadNotices'
 
 export interface NavGroup {
   /** 없으면 제목 없이 항목만 선다. **한 항목짜리 그룹에는 제목을 안 단다** —
@@ -342,7 +347,7 @@ export const NAV_GROUPS: NavGroup[] = [
       // **한 진입점이다.** 둘로 서 있으면 「어느 쪽에 쓰지」 를 매번 묻는다 —
       // 위에서 내려오는 글과 아래에서 올라가는 글일 뿐, 사람에게는 같은
       // 게시판이다. 화면 안에서 탭으로 갈리고 주소는 그대로다(`SubTabs`).
-      { label: '공지 · VOC', icon: Megaphone, to: '/notices' },
+      { label: '공지 · VOC', icon: Megaphone, to: '/notices', counter: 'unreadNotices' },
       { label: '가이드', icon: BookOpen, to: '/guide' },
       // **고르는 사람이 목록을 볼 수 있어야 한다.** 기준정보는 시스템 관리자에게만
       // 보였는데, 그 값을 매일 드롭다운에서 고르는 것은 멤버다. 못 보면 찾는 값이

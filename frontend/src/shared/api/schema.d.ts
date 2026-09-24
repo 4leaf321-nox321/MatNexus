@@ -3757,6 +3757,53 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/notices/read-all": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Read All
+         * @description 안 읽은 공지를 **모두 읽음**으로. 처음 들어온 사람에게는 그동안 쌓인 공지가 전부
+         *     새 글이라 — 하나씩 열어 끄라고 하면 수를 안 보게 된다.
+         *
+         *     같은 공지를 다른 탭에서 방금 읽었을 수 있다. 짝(공지·사람)이 겹치면 **건너뛴다** — 한
+         *     건이 겹쳤다고 전부를 되돌리면 눌렀는데 아무 일도 안 일어난다.
+         */
+        post: operations["read_all_api_notices_read_all_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/notices/unread-count": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Unread Count
+         * @description 사이드바의 「공지 · VOC」 옆 수. **숫자 하나만** 준다 — 화면이 주기적으로 묻는 자리라
+         *     목록을 통째로 받게 하면 사람이 늘수록 서버가 그만큼 일한다(알림 종과 같은 판단).
+         *
+         *     팝업은 중요한 공지에만 켜므로, 나머지 공지는 이 수가 아니면 게시판에 들어가 봐야 안다.
+         */
+        get: operations["unread_count_api_notices_unread_count_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/notices/{notice_id}": {
         parameters: {
             query?: never;
@@ -13756,6 +13803,14 @@ export interface components {
             published_at: string | null;
             /** Title */
             title: string;
+        };
+        /**
+         * NoticeUnreadOut
+         * @description 안 읽은 공지 수 — **발행된 것만** 센다(초안은 아직 아무에게도 안 알렸다).
+         */
+        NoticeUnreadOut: {
+            /** Unread */
+            unread: number;
         };
         /** NoticeUpdateRequest */
         NoticeUpdateRequest: {
@@ -25216,6 +25271,46 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["NoticeOut"][];
+                };
+            };
+        };
+    };
+    read_all_api_notices_read_all_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NoticeUnreadOut"];
+                };
+            };
+        };
+    };
+    unread_count_api_notices_unread_count_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NoticeUnreadOut"];
                 };
             };
         };

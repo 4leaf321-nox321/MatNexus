@@ -24,6 +24,12 @@ class NoticeOut(BaseModel):
     없음」 대신 무엇이라 적을지 여기서 안다."""
 
 
+class NoticeUnreadOut(BaseModel):
+    """안 읽은 공지 수 — **발행된 것만** 센다(초안은 아직 아무에게도 안 알렸다)."""
+
+    unread: int
+
+
 class NoticeCreateRequest(BaseModel):
     title: str = Field(min_length=1, max_length=200)
     body: str = Field(min_length=1)

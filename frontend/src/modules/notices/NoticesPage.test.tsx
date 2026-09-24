@@ -6,6 +6,7 @@
  *   배포에 실려 온 안내           「알 수 없음」 이 아니라 「배포 안내」
  *   제목·내용으로 찾고, 안 읽은 것만 고른다
  *   쓰는 것은 시스템 관리자만
+ *   「모두 읽음」 — 안 읽은 글이 있을 때만, 누르면 목록과 수를 다시 읽는다
  */
 
 import { render, screen, waitFor, within } from '@testing-library/react'
@@ -16,11 +17,18 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import NoticesPage from '@/modules/notices/NoticesPage'
 
 const list = vi.fn()
+const unreadCount = vi.fn()
+const readAll = vi.fn()
 let admin = false
 
 vi.mock('@/modules/notices/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/modules/notices/api')>()),
-  noticesApi: { list: (...args: unknown[]) => list(...args), create: vi.fn() },
+  noticesApi: {
+    list: (...args: unknown[]) => list(...args),
+    unreadCount: () => unreadCount(),
+    readAll: () => readAll(),
+    create: vi.fn(),
+  },
 }))
 
 vi.mock('@/shared/auth/AuthContext', () => ({
@@ -59,6 +67,8 @@ function show() {
 beforeEach(() => {
   vi.clearAllMocks()
   admin = false
+  unreadCount.mockResolvedValue({ unread: 0 })
+  readAll.mockResolvedValue({ unread: 0 })
 })
 
 describe('공지 게시판', () => {
@@ -113,5 +123,32 @@ describe('공지 게시판', () => {
     show()
     await screen.findByRole('table')
     expect(screen.getByRole('button', { name: /공지 작성/ })).toBeInTheDocument()
+  })
+
+  it('안 읽은 글이 있으면 「모두 읽음」 이 서고, 누르면 목록과 수를 다시 읽는다', async () => {
+    const user = userEvent.setup()
+    list.mockResolvedValue(page([notice({ id: 'n2', title: '새 기능', is_read: false })]))
+    unreadCount.mockResolvedValueOnce({ unread: 7 })
+    show()
+    // 이 쪽에 한 건만 보여도 수는 전체다 — 목록은 쪽으로 잘려 있다.
+    const button = await screen.findByRole('button', { name: /모두 읽음 \(7\)/ })
+
+    list.mockResolvedValue(page([notice({ id: 'n2', title: '새 기능', is_read: true })]))
+    await user.click(button)
+    await waitFor(() => expect(readAll).toHaveBeenCalledTimes(1))
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: /모두 읽음/ })).not.toBeInTheDocument()
+    )
+    const row = within(await screen.findByRole('table')).getAllByRole('row')[1]
+    await waitFor(() => expect(within(row).queryByText('새 글')).toBeNull())
+    expect(list.mock.calls.length).toBeGreaterThanOrEqual(2)
+  })
+
+  it('다 읽었으면 「모두 읽음」 이 없다', async () => {
+    list.mockResolvedValue(page([notice()]))
+    show()
+    await screen.findByRole('table')
+    await waitFor(() => expect(unreadCount).toHaveBeenCalled())
+    expect(screen.queryByRole('button', { name: /모두 읽음/ })).toBeNull()
   })
 })

@@ -18,7 +18,9 @@ import {
   SheetTitle,
 } from '@/shared/components/ui/sheet'
 import { REALMS, REALM_ORDER, itemHref, visibleGroups } from '@/shared/layout/navigation'
+import type { NavCounter } from '@/shared/layout/navigation'
 import { rememberRealm, useRealm } from '@/shared/layout/realm'
+import { useUnreadNotices } from '@/shared/layout/useUnreadNotices'
 import { useResource } from '@/shared/hooks/useResource'
 
 interface SidebarProps {
@@ -48,6 +50,11 @@ function SidebarBody({ onNavigate }: Omit<SidebarProps, 'collapsed'>) {
   // 있는지 헷갈린다(navigation.ts 의 `NavRealm`).
   const realm = useRealm()
   const navigate = useNavigate()
+  // 항목 옆의 수(`NavItem.counter`). 지금은 안 읽은 공지 하나뿐이다.
+  const unreadNotices = useUnreadNotices()
+  const counts: Record<NavCounter, { value: number; title: string }> = {
+    unreadNotices: { value: unreadNotices, title: `안 읽은 공지 ${unreadNotices}건` },
+  }
   const groups = visibleGroups(
     {
       isSystemAdmin: isSystemAdmin(user),
@@ -156,6 +163,14 @@ function SidebarBody({ onNavigate }: Omit<SidebarProps, 'collapsed'>) {
                   >
                     <item.icon className="size-4 shrink-0" />
                     <span className="truncate">{item.label}</span>
+                    {item.counter && counts[item.counter].value > 0 && (
+                      <span
+                        className="bg-primary text-primary-foreground ml-auto shrink-0 rounded-full px-1.5 text-[10px] leading-4 font-medium tabular-nums"
+                        title={counts[item.counter].title}
+                      >
+                        {counts[item.counter].value > 99 ? '99+' : counts[item.counter].value}
+                      </span>
+                    )}
                     {item.pending && (
                       <span className="text-muted-foreground/70 ml-auto shrink-0 rounded border px-1 text-[10px] leading-4">
                         미구현
