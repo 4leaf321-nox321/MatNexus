@@ -1955,7 +1955,8 @@ def bulk_update_runs(
             # **이름을 모르면 id 라도 준다.** 조용히 세지 않는 것이 요점이다.
             blocked.append(str(run_id))
             continue
-        if not editor.allows(run):
+        # 판정하고, 남의 시험이면 그 사실을 남긴다(`admits`).
+        if not permissions.admits(db, user, editor, run):
             # 막힌 까닭과 **누구에게 물으면 되는지**를 이름과 함께 준다.
             locked = permissions.locked(db, run, code="MNX-TESTS-0042")
             blocked.append(f"{run.record_name} — {locked.message}")
@@ -2037,7 +2038,7 @@ def delete_runs(
             # **이름을 모르면 id 라도 준다.** 조용히 세지 않는 것이 요점이다.
             blocked.append(str(run_id))
             continue
-        if not editor.allows(run):
+        if not permissions.admits(db, user, editor, run):
             locked = permissions.locked(db, run, code="MNX-TESTS-0042")
             blocked.append(f"{run.record_name} — {locked.message}")
             continue

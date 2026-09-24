@@ -115,6 +115,19 @@ class AuditEntry(Base):
     )
     """어느 부서의 일인가. 가시성 판정에 쓴다 — 여기도 FK 를 안 건다."""
 
+    subject_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), nullable=True, index=True
+    )
+    """**누구의 자료에 일어난 일인가** — 그때 대상의 등록자(2026-09-25, ADR 0035 남은 것).
+
+    보기가 모두에게 열리고 고치기가 자료 관리자·편집을 받은 부서로 넓어진 뒤, 등록자가
+    「내 자료에 무슨 일이 있었나」 를 물을 자리가 없었다 — 감사 화면은 관리자 것이다. 이
+    칸으로 등록자에게 **제 자료의 기록만** 연다(`GET /audit/mine`). 넘겨준 자료는 넘기기
+    **전의** 등록자다 — 넘겨받은 사람은 이제 제 자료로 본다.
+
+    사람이 지워져도 기록은 남아야 해서 FK 를 안 건다(`actor_id` 와 다른 까닭 — 그쪽은
+    이름을 박아 두었다)."""
+
     changes: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, server_default="{}")
     """`{키: {"before": ..., "after": ...}}`. **바뀐 것만** 담는다.
 

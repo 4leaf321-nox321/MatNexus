@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import uuid
 from contextvars import ContextVar
+from typing import Any
 
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
@@ -33,6 +34,11 @@ _request_id: ContextVar[str] = ContextVar("request_id", default="-")
 #: **인증이 아니다.** 클라이언트가 아무 값이나 보낼 수 있다 — 권한은 토큰이
 #: 정하고, 이 값은 「어느 길로 들어왔나」 를 적어 두는 표식일 뿐이다.
 _client: ContextVar[str] = ContextVar("client", default="")
+
+#: **한 요청 안에서만 기억할 것.** 감사가 한 요청의 같은 일을 한 줄로 묶는 데 쓴다 — 일괄
+#: 수정 300건이 감사 300줄이 되면 그 표에서 정작 찾을 것을 못 찾는다
+#: (`audit.record_edit_by_other`). 요청 밖(스크립트·워커)에서는 `None` 이다.
+_scratch: ContextVar[dict[str, Any] | None] = ContextVar("scratch", default=None)
 
 HEADER = "X-Request-ID"
 _HEADER_BYTES = HEADER.lower().encode()
@@ -54,6 +60,11 @@ def get_client() -> str:
     return _client.get()
 
 
+def get_scratch() -> dict[str, Any] | None:
+    """이 요청의 메모장. 요청 밖이면 `None` — 그때는 묶지 않고 건마다 남긴다."""
+    return _scratch.get()
+
+
 class RequestIdMiddleware:
     def __init__(self, app: ASGIApp) -> None:
         self.app = app
@@ -71,6 +82,7 @@ class RequestIdMiddleware:
         raw = dict(scope.get("headers") or {}).get(_CLIENT_BYTES)
         said = raw.decode(errors="replace").strip().lower()[:20] if raw else ""
         client_token = _client.set(said if said in KNOWN_CLIENTS else "")
+        scratch_token = _scratch.set({})
 
         async def send_wrapper(message: Message) -> None:
             if message["type"] == "http.response.start":
@@ -83,3 +95,4 @@ class RequestIdMiddleware:
         finally:
             _request_id.reset(token)
             _client.reset(client_token)
+            _scratch.reset(scratch_token)

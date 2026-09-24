@@ -1224,7 +1224,8 @@ def run_batch(
         # **채택까지 걸면 그 시험을 고칠 수 있어야 한다**(ADR 0035). 결과만 쌓는 것은
         # 누구나 하지만, 「이 시험의 물성」 을 바꾸는 것은 고치는 일이다. 미리보기에서도
         # 같은 자리에서 막아야 걸어 보고 나서 놀라지 않는다.
-        if payload.adopt and not editor.allows(run):
+        # 채택은 그 시험을 고치는 일이라, 남의 시험이면 그 사실이 남는다(`admits`).
+        if payload.adopt and not permissions.admits(db, user, editor, run):
             locked = permissions.locked(db, run, code="MNX-PROCESSING-0017")
             items.append(
                 BatchItemOut(

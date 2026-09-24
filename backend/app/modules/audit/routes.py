@@ -8,6 +8,10 @@
 
 시스템 관리자는 전부, 부서 관리자는 자기 부서 것을. **일반 사용자는 못 본다** —
 "누가 무엇을 했나" 는 그 자체로 사람에 대한 정보다.
+
+**다만 제 자료에 일어난 일은 누구나 본다**(`/audit/mine`, 2026-09-25). 고칠 권한이 등록자
+밖으로 넓어진 뒤(ADR 0035) 「내 자료에 무슨 일이 있었나」 는 등록자의 물음이다 — 제 자료의
+기록만 열고, 남의 것은 여전히 못 본다.
 """
 
 from __future__ import annotations
@@ -15,7 +19,7 @@ from __future__ import annotations
 import uuid
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -25,7 +29,7 @@ from app.modules.audit.schemas import AuditEntryOut
 from app.modules.workspaces.models import WorkspaceMember
 from app.shared.auth import current_user
 from app.shared.errors import Forbidden
-from app.shared.pagination import clamp_limit
+from app.shared.pagination import Page, clamp_limit
 
 router = APIRouter(prefix="/audit", tags=["audit"])
 
@@ -38,6 +42,40 @@ def _managed(db: Session, user: User) -> list[uuid.UUID]:
         )
     )
     return list(rows)
+
+
+@router.get("/mine", response_model=Page[AuditEntryOut])
+def my_data_entries(
+    limit: int | None = Query(default=None, le=1000),
+    offset: int = Query(default=0, ge=0),
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> Page[AuditEntryOut]:
+    """**내 자료에 일어난 일** — 등록자가 묻는 자리(ADR 0035 남은 것). 최근 것부터.
+
+    기록마다 「누구의 자료였나」(`subject_id`)가 적혀 있고, 그것이 나인 것만 준다. 남이 고친 것
+    (「남의 자료 고침」 — 근거와 함께) · 지운 것 · 확정하거나 내린 것 · 넘긴 것이 여기 선다.
+
+    **내가 손으로 한 일은 뺀다** — 내가 한 일은 내가 안다. 다만 **내 토큰으로 AI 가 한 일은
+    남긴다**(`client`) — 그것은 내가 손으로 한 일이 아니다.
+    """
+    query = select(AuditEntry).where(
+        AuditEntry.subject_id == user.id,
+        or_(
+            AuditEntry.actor_id.is_(None),
+            AuditEntry.actor_id != user.id,
+            AuditEntry.client != "",
+        ),
+    )
+    total = db.scalar(select(func.count()).select_from(query.subquery())) or 0
+    size = clamp_limit(limit)
+    rows = db.scalars(query.order_by(AuditEntry.created_at.desc()).limit(size).offset(offset))
+    return Page(
+        items=[AuditEntryOut.model_validate(row, from_attributes=True) for row in rows],
+        total=int(total),
+        limit=size,
+        offset=offset,
+    )
 
 
 @router.get("", response_model=list[AuditEntryOut])

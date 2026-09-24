@@ -18368,6 +18368,37 @@
         "title": "OwnershipSkippedOut",
         "type": "object"
       },
+      "Page_AuditEntryOut_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AuditEntryOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "Page[AuditEntryOut]",
+        "type": "object"
+      },
       "Page_CommissionOut_": {
         "properties": {
           "items": {
@@ -31609,6 +31640,68 @@
           }
         },
         "summary": "List Entries",
+        "tags": [
+          "audit"
+        ]
+      }
+    },
+    "/api/audit/mine": {
+      "get": {
+        "description": "**내 자료에 일어난 일** — 등록자가 묻는 자리(ADR 0035 남은 것). 최근 것부터.\n\n기록마다 「누구의 자료였나」(`subject_id`)가 적혀 있고, 그것이 나인 것만 준다. 남이 고친 것\n(「남의 자료 고침」 — 근거와 함께) · 지운 것 · 확정하거나 내린 것 · 넘긴 것이 여기 선다.\n\n**내가 손으로 한 일은 뺀다** — 내가 한 일은 내가 안다. 다만 **내 토큰으로 AI 가 한 일은\n남긴다**(`client`) — 그것은 내가 손으로 한 일이 아니다.",
+        "operationId": "my_data_entries_api_audit_mine_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 1000,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Limit"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_AuditEntryOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "My Data Entries",
         "tags": [
           "audit"
         ]

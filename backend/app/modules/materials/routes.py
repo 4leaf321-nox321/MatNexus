@@ -2408,7 +2408,8 @@ def bulk_update_specimens(
             # **이름을 모르면 id 라도 준다.** 조용히 세지 않는 것이 요점이다.
             blocked.append(str(specimen_id))
             continue
-        if not editor.allows(specimen):
+        # 판정하고, 남의 시편이면 그 사실을 남긴다(`admits` — 일괄로 고친 것도 등록자가 본다).
+        if not permissions.admits(db, user, editor, specimen):
             # 막힌 까닭과 **누구에게 물으면 되는지**를 이름과 함께 준다.
             locked = permissions.locked(db, specimen, code="MNX-MATERIALS-0034")
             blocked.append(f"{specimen.record_name} — {locked.message}")

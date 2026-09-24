@@ -342,6 +342,13 @@ def change(
             target_label=name_of(one),
             workspace_id=after_workspace or before_workspace,
             changes=changes,
+            # **누구의 일인가** — 넘기기 전의 등록자다(지금 표에는 새 사람이 적혀 있다). 제
+            # 것을 제가 넘겼거나 등록자가 없던 것이면 받은 사람의 일이다.
+            subject_id=(
+                before_registrant
+                if before_registrant is not None and before_registrant != user.id
+                else (registrant.id if registrant is not None else None)
+            ),
         )
         changed += 1
     return changed, skipped

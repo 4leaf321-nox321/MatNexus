@@ -26,7 +26,7 @@ from sqlalchemy.orm import Session
 
 from app.modules.accounts.models import User
 from app.modules.audit.models import AuditEntry
-from app.shared.request_context import get_client, get_request_id
+from app.shared.request_context import get_client, get_request_id, get_scratch
 
 #: 남기는 일. **과거형으로 적는다** — 일어난 일의 기록이지 명령이 아니다.
 #:
@@ -113,6 +113,12 @@ TEST_TYPE_CHANGED = "test_type.changed"
 #: 바뀐다), 뒤의 것은 부서 열람 제한이 켜져 있던 부서(지우면 어느 부서였는지 사라진다).
 DEFINITION_KEY_RENAMED = "definition.key_renamed"
 WORKSPACE_RESTRICTION_REMOVED = "workspace.restriction_removed"
+#: **남의 자료를 고친 일**(2026-09-25, ADR 0035 남은 것). 고칠 권한이 등록자 밖으로 —
+#: 자료 관리자·편집을 받은 부서로 — 넓어졌는데, 등록자는 제 자료에 누가 손댔는지 볼 길이
+#: 없었다. 값 수정은 원래 감사 대상이 아니지만, **남의 것을 고친 것은 권한이 실린 일**이라
+#: 위의 규칙(「권한이 실린 것」) 안에 든다. 판정 자리(`permissions.require_edit`)가 남긴다 —
+#: 고치는 길이 전부 거기를 지나서, 새 쓰기 길이 생겨도 빠지지 않는다.
+EDITED_BY_OTHER = "data.edited_by_other"
 #: 등록자·편집 부서를 넘긴 일(ADR 0035). **권한이 실린 변경이다** — 넘긴 뒤에는
 #: 「등록자」 칸이 새 사람을 가리키므로, 처음 올린 사람은 이 기록에만 남는다.
 OWNERSHIP_CHANGED = "ownership.changed"
@@ -142,12 +148,19 @@ def record(
     workspace_id: uuid.UUID | None = None,
     changes: dict[str, Any] | None = None,
     reason: str | None = None,
+    subject_id: uuid.UUID | None = None,
 ) -> AuditEntry:
     """감사 기록 하나. **부르는 쪽이 커밋한다.**
 
     `actor` 가 없을 수 있다(시스템이 한 일). 그때도 남긴다 — 안 남기면 "아무도
     안 했는데 바뀌었다" 가 되고, 그것이 가장 설명하기 어려운 상태다.
+
+    `subject_id`(누구의 자료인가)는 안 주면 **대상의 지금 등록자**로 채운다 — 부르는 자리
+    마다 적게 두면 그중 하나가 빠지고, 그 자리의 일은 등록자에게 안 보인다. 그래서 삭제는
+    지우기 **전에** 남긴다(지금도 그렇다). 넘기기처럼 지금 등록자가 주인이 아닌 일만 준다.
     """
+    if subject_id is None and target_id is not None:
+        subject_id = _subject_of(db, target_table, target_id)
     entry = AuditEntry(
         action=action,
         actor_id=actor.id if actor else None,
@@ -164,9 +177,93 @@ def record(
         request_id=get_request_id(),
         # **어느 길로 들어왔나.** 화면이면 빈 값, AI 면 `mcp`.
         client=get_client(),
+        subject_id=subject_id,
     )
     db.add(entry)
     return entry
+
+
+def _subject_of(db: Session, table: str, target_id: uuid.UUID) -> uuid.UUID | None:
+    """대상의 등록자. 등록자 칸의 표는 `permissions` 가 갖고 있다 — 두 벌로 두지 않는다.
+
+    **부를 때 읽는다.** `permissions` 가 이 모듈을 부르므로(판정 자리가 남긴다), 맨 위에서
+    읽으면 서로를 부르다 멈춘다."""
+    from app.shared import permissions
+
+    return permissions.registrant_of(db, table, target_id)
+
+
+def _label_of(row: Any) -> str:
+    """사람이 읽는 대상 이름 — 표마다 칸 이름이 다르다(`record_name` · `label` · `name`)."""
+    for column in ("record_name", "label", "name", "title", "key"):
+        value = getattr(row, column, None)
+        if isinstance(value, str) and value:
+            return value
+    return str(getattr(row, "id", "?"))
+
+
+def record_edit_by_other(
+    db: Session, actor: User, row: Any, *, registrant_id: uuid.UUID, basis: str
+) -> None:
+    """**남의 자료를 고쳤다** — 판정 자리(`permissions.require_edit`)가 부른다.
+
+    **한 요청의 같은 일은 한 줄이다.** 자료 관리자가 시편 300장을 일괄로 고치면 줄마다 남기지
+    않고 `(등록자, 표, 근거)` 마다 한 줄에 몇 건인지와 이름 스무 개까지를 싣는다 — 300줄이면
+    이 표에서 정작 찾을 것(삭제·계정)을 못 찾는다(처리 배치를 한 줄로 남기는 것과 같은
+    판단). 같은 행을 두 번 판정해도 한 번만 센다. 요청이 중간에 커밋하면 그 뒤는 새 줄이다 —
+    커밋된 기록을 고치지 않는다.
+
+    **커밋된 쓰기에만 남는다.** 기록이 그 변경과 같은 트랜잭션에 있어서, 미리보기처럼 커밋하지
+    않는 길(삭제 계획 · `dry_run`)에서 판정을 불러도 아무것도 안 남는다."""
+    table = type(row).__tablename__
+    label = _label_of(row)
+    workspace_id = getattr(row, "owner_workspace_id", None) or getattr(
+        row, "workspace_id", None
+    )
+    scratch = get_scratch()
+    if scratch is None:
+        # 요청 밖(스크립트·워커) — 묶을 자리가 없으니 건마다 남긴다.
+        record(
+            db,
+            action=EDITED_BY_OTHER,
+            actor=actor,
+            target_table=table,
+            target_id=row.id,
+            target_label=label,
+            workspace_id=workspace_id,
+            changes={"basis": basis, "count": 1},
+            subject_id=registrant_id,
+        )
+        return
+
+    key = (registrant_id, table, basis, id(db.get_transaction()))
+    groups: dict[Any, dict[str, Any]] = scratch.setdefault("edited_by_other", {})
+    group = groups.get(key)
+    if group is None:
+        entry = record(
+            db,
+            action=EDITED_BY_OTHER,
+            actor=actor,
+            target_table=table,
+            target_id=row.id,
+            target_label=label,
+            workspace_id=workspace_id,
+            changes={"basis": basis, "count": 1},
+            subject_id=registrant_id,
+        )
+        groups[key] = {"entry": entry, "ids": {row.id}, "labels": [label]}
+        return
+    if row.id in group["ids"]:
+        return
+    group["ids"].add(row.id)
+    labels: list[str] = group["labels"]
+    if len(labels) < 20:
+        labels.append(label)
+    count = len(group["ids"])
+    entry = group["entry"]
+    # 새 dict 로 바꿔 끼운다 — JSON 칸은 안에서 고치면 바뀐 줄 모른다.
+    entry.changes = {"basis": basis, "count": count, "targets": list(labels)}
+    entry.target_label = f"{labels[0]} 외 {count - 1}건"[:300]
 
 
 def record_by_client(

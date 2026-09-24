@@ -55,16 +55,27 @@ def _emitted() -> tuple[dict[str, set[str]], list[str]]:
     found: dict[str, set[str]] = {}
     unread: list[str] = []
     for path in sorted((BACKEND / "app").rglob("*.py")):
-        if path == audit_py:
-            continue  # `record_by_client` 가 받은 것을 `record` 로 넘기는 자리뿐이다
         tree = _parse(path)
         local = _module_constants(tree)
         for node in ast.walk(tree):
-            if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)):
+            if not isinstance(node, ast.Call):
                 continue
-            if node.func.attr not in ("record", "record_by_client"):
-                continue
-            if ast.unparse(node.func.value) != "audit":
+            if path == audit_py:
+                # **감사 모듈 안은 `record(...)` 를 바로 부른다**(남의 자료 고침 — 2026-09-25).
+                # 전에는 이 파일을 통째로 건너뛰었는데, 그러면 여기서 남기는 행위가 이름표
+                # 검사를 빠져나간다. 받은 것을 넘기는 자리(`action=action`)만 건너뛴다.
+                if not (isinstance(node.func, ast.Name) and node.func.id == "record"):
+                    continue
+                if any(
+                    k.arg == "action" and ast.unparse(k.value) == "action"
+                    for k in node.keywords
+                ):
+                    continue
+            elif not (
+                isinstance(node.func, ast.Attribute)
+                and node.func.attr in ("record", "record_by_client")
+                and ast.unparse(node.func.value) == "audit"
+            ):
                 continue
             where = f"{path.relative_to(BACKEND).as_posix()}:{node.lineno}"
             for keyword in node.keywords:

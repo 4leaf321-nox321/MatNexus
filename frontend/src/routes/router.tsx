@@ -45,6 +45,7 @@ const AccountsAdminPage = lazy(() => import('@/modules/accounts/AccountsAdminPag
 const WorkbenchPage = lazy(() => import('@/modules/workbench/WorkbenchPage'))
 const BomDeckPage = lazy(() => import('@/modules/fitting/BomDeckPage'))
 const AuditPage = lazy(() => import('@/modules/audit/AuditPage'))
+const MyDataHistoryPage = lazy(() => import('@/modules/audit/MyDataHistoryPage'))
 const SearchPage = lazy(() => import('@/modules/search/SearchPage'))
 const GraphPage = lazy(() => import('@/modules/graph/GraphPage'))
 const CatalogPage = lazy(() => import('@/modules/catalog/CatalogPage'))
@@ -213,6 +214,8 @@ export const router = createBrowserRouter([
           { path: 'personal', element: <Navigate to="/" replace /> },
           { path: 'notifications', element: <NotificationsPage /> },
           { path: 'me', element: <ProfilePage /> },
+          // 내 자료에 남이 한 일 — 등록자에게 제 자료의 기록만 연다(ADR 0035 남은 것).
+          { path: 'audit/mine', element: <MyDataHistoryPage /> },
 
           // 공통
           // 공지와 VOC 는 사이드바에서 한 항목이고, 화면 안에서 탭으로 갈린다.

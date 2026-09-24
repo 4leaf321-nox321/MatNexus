@@ -49,10 +49,11 @@ from app.modules.fitting.models import ExportProfile, PropertyCard
 from app.modules.grouping.models import GroupResult
 from app.modules.materials.models import Material, Sample, Specimen
 from app.modules.pipelines.models import PipelineConnector
-from app.modules.processing.models import ProcessingRecipe
+from app.modules.processing.models import ProcessingRecipe, ProcessingResult
 from app.modules.tests.models import FormatProfile, TestRun, TestType
 from app.modules.workbench.models import WorkbenchRun
 from app.modules.workspaces.models import Workspace, WorkspaceMember
+from app.shared import audit
 from app.shared.errors import AppError, Forbidden, NotFound
 
 
@@ -360,6 +361,22 @@ def owner_of(row: Owned) -> tuple[uuid.UUID | None, uuid.UUID | None]:
     return registrant, workspace
 
 
+def registrant_of(db: Session, table: str, target_id: uuid.UUID) -> uuid.UUID | None:
+    """표 이름과 id 로 **그 행의 등록자** — 감사가 「누구의 자료인가」 를 채울 때 묻는다.
+
+    처리 결과는 제 등록자가 없다 — 그 결과를 낸 **시험의 등록자**다. 표가 여기 없거나 행이
+    없으면 `None`(계정·부서처럼 누구의 자료도 아닌 일)."""
+    if table == ProcessingResult.__tablename__:
+        result = db.get(ProcessingResult, target_id)
+        run = db.get(TestRun, result.test_run_id) if result is not None else None
+        return run.registered_by_id if run is not None else None
+    for model, column in _REGISTRANT.items():
+        if getattr(model, "__tablename__", None) == table:
+            row = db.get(model, target_id)
+            return getattr(row, column) if row is not None else None
+    return None
+
+
 def set_registrant(row: Owned, user_id: uuid.UUID) -> None:
     """등록자를 바꾼다 — 칸 이름이 갈린 것을 `owner_of` 와 같은 자리에서 흡수한다."""
     setattr(row, _REGISTRANT[type(row)], user_id)
@@ -462,8 +479,46 @@ def require_edit(db: Session, user: User, row: Owned, *, code: str) -> None:
     자료 관리자. 화면은 같은 말을 단추 옆에 미리 보인다(`shared/access`).
     """
     if editor(db, user).allows(row):
+        _note_edit(db, user, row)
         return
     raise locked(db, row, code=code)
+
+
+def admits(db: Session, user: User, judge: Editor, row: Owned) -> bool:
+    """`Editor.allows` 에 **쓰기의 흔적**을 더한 것 — 일괄 쓰기가 줄마다 부른다.
+
+    일괄 수정은 막힌 줄을 모아 알려 주느라 `require_edit`(막히면 멈춘다) 대신 판정을 직접
+    묻는다. 그 길로 고친 남의 자료도 `require_edit` 로 고친 것과 같이 남아야 한다 — 안 그러면
+    자료 관리자가 일괄로 고친 것만 등록자에게 안 보인다."""
+    if not judge.allows(row):
+        return False
+    _note_edit(db, user, row)
+    return True
+
+
+def _note_edit(db: Session, user: User, row: Owned) -> None:
+    """**남의 자료를 고치면 남긴다**(2026-09-25, ADR 0035 남은 것).
+
+    고칠 권한이 등록자 밖으로 넓어진 대가다 — 자료 관리자와 편집을 받은 부서가 고칠 수
+    있게 되자, 등록자는 제 자료에 누가 손댔는지 볼 길이 없었다. 판정이 한 곳이라 여기서
+    남기면 새 쓰기 길이 생겨도 빠지지 않는다. **근거를 함께 적는다** — 등록자가 「왜 저
+    사람이 고칠 수 있었나」 를 다시 묻지 않게.
+
+    남기지 않는 것: 제 자료 · 등록자가 없는 자료(물을 사람이 없다) · 워크벤치 작업(부서 안에서
+    함께 미는 것이 그 표의 뜻이다, ADR 0025)."""
+    if isinstance(row, WorkbenchRun):
+        return
+    registrant, workspace_id = owner_of(row)
+    if registrant is None or registrant == user.id:
+        return
+    if user.is_system_admin:
+        basis = "시스템 관리자"
+    elif user.is_data_manager:
+        basis = "자료 관리자"
+    else:
+        workspace = db.get(Workspace, workspace_id) if workspace_id else None
+        basis = f"편집을 받은 부서({workspace.name if workspace else '?'})"
+    audit.record_edit_by_other(db, user, row, registrant_id=registrant, basis=basis)
 
 
 def locked(db: Session, row: Owned, *, code: str) -> Forbidden:

@@ -21,8 +21,8 @@
 
 import { useState } from 'react'
 
+import { Changes } from '@/modules/audit/Changes'
 import { ACTION_LABELS, auditApi } from '@/modules/audit/api'
-import type { AuditEntry } from '@/modules/audit/api'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { PageHeader } from '@/shared/components/PageHeader'
 import { Badge } from '@/shared/components/ui/badge'
@@ -36,25 +36,6 @@ import {
 } from '@/shared/components/ui/table'
 import { useResource } from '@/shared/hooks/useResource'
 import { stamp } from '@/shared/lib/datetime'
-
-function Changes({ entry }: { entry: AuditEntry }) {
-  const keys = Object.keys(entry.changes ?? {})
-  if (keys.length === 0) return <span className="text-muted-foreground">—</span>
-  return (
-    <div className="space-y-0.5">
-      {keys.map((key) => {
-        const change = (entry.changes as Record<string, { before?: unknown; after?: unknown }>)[key]
-        return (
-          <div key={key} className="text-xs">
-            <span className="text-muted-foreground">{key}</span>{' '}
-            <span className="line-through opacity-60">{String(change?.before ?? '없음')}</span>{' '}
-            → <span className="font-medium">{String(change?.after ?? '없음')}</span>
-          </div>
-        )
-      })}
-    </div>
-  )
-}
 
 /**
  * 들어온 길 — **사람이 화면에서 한 것과 AI 가 대신 한 것.**

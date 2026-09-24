@@ -317,6 +317,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/audit/mine": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * My Data Entries
+         * @description **내 자료에 일어난 일** — 등록자가 묻는 자리(ADR 0035 남은 것). 최근 것부터.
+         *
+         *     기록마다 「누구의 자료였나」(`subject_id`)가 적혀 있고, 그것이 나인 것만 준다. 남이 고친 것
+         *     (「남의 자료 고침」 — 근거와 함께) · 지운 것 · 확정하거나 내린 것 · 넘긴 것이 여기 선다.
+         *
+         *     **내가 손으로 한 일은 뺀다** — 내가 한 일은 내가 안다. 다만 **내 토큰으로 AI 가 한 일은
+         *     남긴다**(`client`) — 그것은 내가 손으로 한 일이 아니다.
+         */
+        get: operations["my_data_entries_api_audit_mine_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/auth/change-password": {
         parameters: {
             query?: never;
@@ -14112,6 +14138,17 @@ export interface components {
             /** Reason */
             reason: string;
         };
+        /** Page[AuditEntryOut] */
+        Page_AuditEntryOut_: {
+            /** Items */
+            items: components["schemas"]["AuditEntryOut"][];
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+            /** Total */
+            total: number;
+        };
         /** Page[CommissionOut] */
         Page_CommissionOut_: {
             /** Items */
@@ -19551,6 +19588,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AuditEntryOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    my_data_entries_api_audit_mine_get: {
+        parameters: {
+            query?: {
+                limit?: number | null;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_AuditEntryOut_"];
                 };
             };
             /** @description Validation Error */

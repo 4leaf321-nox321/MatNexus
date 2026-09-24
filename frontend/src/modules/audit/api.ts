@@ -10,6 +10,7 @@ import { api } from '@/shared/api/client'
 import type { components } from '@/shared/api/schema'
 
 export type AuditEntry = components['schemas']['AuditEntryOut']
+export type AuditPage = components['schemas']['Page_AuditEntryOut_']
 
 export const auditApi = {
   /**
@@ -29,6 +30,17 @@ export const auditApi = {
     if (params.limit) query.set('limit', String(params.limit))
     const suffix = query.toString()
     return api.get<AuditEntry[]>(`/audit${suffix ? `?${suffix}` : ''}`)
+  },
+  /**
+   * **내 자료에 일어난 일** — 등록자가 묻는 자리(ADR 0035 남은 것). 누구나 부르되 제 자료의
+   * 기록만 온다. 내가 손으로 한 일은 빠지고, 내 이름으로 AI 가 한 일은 선다.
+   */
+  mine: (params: { limit?: number; offset?: number } = {}) => {
+    const query = new URLSearchParams()
+    if (params.limit) query.set('limit', String(params.limit))
+    if (params.offset) query.set('offset', String(params.offset))
+    const suffix = query.toString()
+    return api.get<AuditPage>(`/audit/mine${suffix ? `?${suffix}` : ''}`)
   },
 }
 
@@ -93,6 +105,9 @@ export const ACTION_LABELS: Record<string, string> = {
   // ADR 0035 — 보기는 모두에게, 고치기는 사람에게.
   'account.data_manager_changed': '자료 관리자 권한 변경',
   'ownership.changed': '등록자·편집 부서 변경',
+  // 등록자가 아닌 사람이 고친 일 — 판정 자리가 남긴다(2026-09-25). 등록자는 「내 자료
+  // 변경 이력」 에서 본다.
+  'data.edited_by_other': '남의 자료 고침',
   // 아래 둘은 배포(마이그레이션)가 한 번 남긴다 — 배포 뒤 확인할 목록이다.
   'workspace.restriction_removed': '부서 열람 제한 해제',
   'definition.key_renamed': '정의 키 변경(겹침 정리)',

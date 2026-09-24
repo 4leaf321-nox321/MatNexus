@@ -23,6 +23,7 @@ import {
   FlaskConical,
   Gauge,
   GitCompare,
+  History,
   Home,
   Layers,
   ListTree,
@@ -337,6 +338,10 @@ export const NAV_GROUPS: NavGroup[] = [
       // 잘못 누른 사람이 되돌릴 길이 없어서 부탁이 관리자에게 갔다. 내가 되살릴 수
       // 있는 것만 보인다.
       { label: '휴지통', icon: Trash2, to: '/trash' },
+      // **내 자료에 남이 한 일**(2026-09-25, ADR 0035 남은 것). 고칠 권한이 등록자 밖으로
+      // 넓어진 대가다 — 누가 손댔는지 등록자가 물을 자리가 없었다. 변경 이력(관리자)과 달리
+      // 제 자료의 기록만 보인다.
+      { label: '내 자료 변경 이력', icon: History, to: '/audit/mine' },
       // 팝업이었다가 화면이 됐다 — 액세스 토큰까지 붙자 팝업이 좁았다.
       { label: '내 정보', icon: UserCog, to: '/me' },
     ],
