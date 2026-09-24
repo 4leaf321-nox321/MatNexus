@@ -81,7 +81,7 @@ class Test모델_공칭곡선_등록:
         assert plugin.kind == "processing"
         assert plugin.label == "소성 모델 공칭곡선"
         assert plugin.order == 82
-        assert plugin.version == "1"
+        assert plugin.version == "2"
         assert registry.get("tensile.necking_candidate").order < plugin.order
         assert registry.get("tensile.terminal_domain").order < plugin.order
         assert plugin.order < registry.get("tensile.model_anchor").order
@@ -95,6 +95,12 @@ class Test모델_공칭곡선_등록:
             "model_curve_peak_index",
             "model_curve_max_raise",
             "model_curve_end_raise",
+            "model_card_input_points",
+            "model_card_changed_points",
+            "model_card_last_changed_index",
+            "model_card_effect_end_index",
+            "model_card_effect_end_strain",
+            "model_card_support_kind",
         }
         params = {one.name: one for one in plugin.params}
         assert params["method"].type == "choice"
@@ -153,7 +159,14 @@ class Test상측_포락선:
         assert (
             result.frame.columns["stress_engineering"] is frame.columns["stress_engineering"]
         )
-        assert _scalar_map(result)["model_curve_changed_points"] == 0.0
+        values = _scalar_map(result)
+        assert values["model_curve_changed_points"] == 0.0
+        assert values["model_card_input_points"] == 4.0
+        assert values["model_card_changed_points"] == 0.0
+        assert values["model_card_last_changed_index"] == -1.0
+        assert values["model_card_effect_end_index"] == -1.0
+        assert values["model_card_effect_end_strain"] == 0.0
+        assert values["model_card_support_kind"] == 0.0
 
     def test_진단값은_원응력_최댓값과_올림_폭을_기록한다(self) -> None:
         result = _run(_frame([1.0, 2.0, 50.0, 4.0, 5.0]))
@@ -165,11 +178,22 @@ class Test상측_포락선:
         assert values["model_curve_peak_index"] == 2.0
         assert values["model_curve_max_raise"] == 46.0
         assert values["model_curve_end_raise"] == 45.0
+        assert values["model_card_changed_points"] == 2.0
+        assert values["model_card_last_changed_index"] == 4.0
+        assert values["model_card_effect_end_index"] == 4.0
+        assert values["model_card_effect_end_strain"] == 4.0
+        assert values["model_card_support_kind"] == 1.0
         assert all(np.isfinite(value) for value in values.values())
         peak_strain = next(
             one for one in result.stages[-1].scalars if one.key == "model_curve_peak_strain"
         )
         assert peak_strain.dimension == "strain"
+        effect_end_strain = next(
+            one
+            for one in result.stages[-1].scalars
+            if one.key == "model_card_effect_end_strain"
+        )
+        assert effect_end_strain.dimension == "strain"
         assert {one.key for one in result.stages[-1].scalars}.isdisjoint(
             {"youngs_modulus", "proof_stress", "proof_strain", "proof_offset"}
         )
@@ -320,7 +344,22 @@ class Test옥스퍼드_PC2_꼬리:
         assert diagnostics["model_curve_peak_stress"] == 72_297_500.0
         assert diagnostics["model_curve_peak_strain"] == pytest.approx(0.07437125)
         assert diagnostics["model_curve_peak_index"] == 72.0
-        assert all(key.startswith("model_curve_") for key in diagnostics)
+        assert {key for key in diagnostics if key.startswith("model_curve_")} == {
+            "model_curve_changed_points",
+            "model_curve_peak_stress",
+            "model_curve_peak_strain",
+            "model_curve_peak_index",
+            "model_curve_max_raise",
+            "model_curve_end_raise",
+        }
+        assert {key for key in diagnostics if key.startswith("model_card_")} == {
+            "model_card_input_points",
+            "model_card_changed_points",
+            "model_card_last_changed_index",
+            "model_card_effect_end_index",
+            "model_card_effect_end_strain",
+            "model_card_support_kind",
+        }
         assert all(np.isfinite(value) for value in diagnostics.values())
         assert "0~1.07866" in result.stages[-1].notes[0]
         assert "파단점으로 추정하지 않으며" in result.stages[-1].notes[1]

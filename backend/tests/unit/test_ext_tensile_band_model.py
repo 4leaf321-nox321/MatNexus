@@ -232,7 +232,7 @@ class TestRegistration:
         plugin = registry.get("tensile.band_model")
 
         assert plugin.kind == "processing"
-        assert plugin.version == "2"
+        assert plugin.version == "3"
         assert plugin.order == 82
         assert plugin.applies_to == ("tensile",)
         assert plugin.requires_channels == (("displacement",), ("force",))
@@ -255,6 +255,14 @@ class TestRegistration:
         assert params["time"].unit == "s"
         assert params["time"].required is False
         assert params["time"].default is None
+        assert {
+            "model_card_input_points",
+            "model_card_changed_points",
+            "model_card_last_changed_index",
+            "model_card_effect_end_index",
+            "model_card_effect_end_strain",
+            "model_card_support_kind",
+        } <= {one.key for one in plugin.makes_values}
 
     def test_missing_optional_time_uses_strain_progress_without_source_mutation(self) -> None:
         source = _source_frame(0)

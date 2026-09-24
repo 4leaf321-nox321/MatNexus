@@ -8,6 +8,8 @@ import numpy as np
 
 from matcore.processing import Frame, ProcessingError, Scalar, StepResult, option_text
 
+from .model_effect import effect_scalars
+
 METHOD = "upper_envelope_auto_v1"
 METHODS = (METHOD,)
 DEFAULT_STRAIN = "strain_engineering"
@@ -163,6 +165,6 @@ def model_curve(frame: Frame, options: dict[str, Any]) -> StepResult:
     return StepResult(
         frame=result_frame,
         notes=notes,
-        scalars=scalars,
+        scalars=scalars + effect_scalars(strain, stress, envelope),
         effective_options=effective,
     )

@@ -30,6 +30,7 @@ from .lower_composition import (
     connected_lower_closure,
     lower_suffix_minorant,
 )
+from .model_effect import effect_scalars
 from .model_regions import (
     DEFAULT_MAXIMUM_GAP_OVER_BAND_SPAN as _MODEL_DEFAULT_MAXIMUM_GAP_OVER_BAND_SPAN,
 )
@@ -1502,12 +1503,14 @@ def compute_band_model(
 
 
 def _diagnostic_scalars(
+    strain: NDArray[np.float64],
     source: NDArray[np.float64],
     values: NDArray[np.float64],
     selection: StableBandSelection,
     left_anchor: int | None,
     model_end_row: int | None,
     compositions: tuple[ModelComposition, ...] = (),
+    supports: tuple[tuple[int, int], ...] = (),
 ) -> tuple[Scalar, ...]:
     peak = selection.peak_row
     band_start = -1 if selection.band_start_row is None else selection.band_start_row
@@ -1593,6 +1596,15 @@ def _diagnostic_scalars(
             "최대 원응력 변경 폭",
             float(np.max(np.abs(values - source))),
             "Pa",
+        ),
+        *effect_scalars(
+            strain,
+            source,
+            values,
+            supports=supports,
+            selected_end=model_end_row
+            if model_end_row is not None
+            else selection.band_end_row,
         ),
     )
 
@@ -2180,7 +2192,17 @@ def _source_event_no_band_result(
         notes.append(progress_note)
 
     scalars = (
-        *_diagnostic_scalars(stress, values, selection, None, None),
+        *_diagnostic_scalars(
+            strain,
+            stress,
+            values,
+            selection,
+            None,
+            None,
+            supports=tuple(
+                (region.left_anchor, region.right_anchor) for region in fitted.regions
+            ),
+        ),
         Scalar(
             "band_model_source_elastic_end_index",
             "원자료 E 끝 원행 위치",
@@ -2501,7 +2523,15 @@ def _source_event_isotonic_no_band_result(
         notes.append(progress_note)
 
     scalars = (
-        *_diagnostic_scalars(stress, values, selection, None, None),
+        *_diagnostic_scalars(
+            strain,
+            stress,
+            values,
+            selection,
+            None,
+            None,
+            supports=tuple((region.left_anchor, region.component.right) for region in regions),
+        ),
         Scalar(
             "band_model_source_elastic_end_index",
             "원자료 E 끝 원행 위치",
@@ -2678,7 +2708,7 @@ def band_model(frame: Frame, options: dict[str, Any]) -> StepResult:
             legacy.frame,
             notes=tuple(notes),
             scalars=legacy.scalars
-            + _diagnostic_scalars(stress, legacy_stress, selection, None, None),
+            + _diagnostic_scalars(strain, stress, legacy_stress, selection, None, None),
             effective_options=resolved,
         )
     if selection.reason != "selected":
@@ -2792,12 +2822,14 @@ def band_model(frame: Frame, options: dict[str, Any]) -> StepResult:
         output_frame,
         notes=tuple(notes),
         scalars=_diagnostic_scalars(
+            strain,
             stress,
             result.values,
             result.selection,
             left_anchor,
             result.model_end_row,
             result.compositions,
+            tuple(edited_intervals),
         ),
         effective_options=resolved,
     )

@@ -519,6 +519,58 @@ stage; the upper-envelope control keeps its unchanged `tensile.model_curve`
 stage. Both preserve the R16 source-proof and downstream stage ordering and do
 not replace historical examples or saved recipes.
 
+## Effective model card-domain stage
+
+Use `tensile.effective_card_domain` after `tensile.model_anchor` and before
+`tensile.true_plastic` when a new recipe should extend its plastic-card domain
+through the model's right-side effect support. Its default policy,
+`uniform_measured_v1`, ends at the same source necking candidate as the existing
+`tensile.plastic_domain`; it does not require method-effect diagnostics. Choose
+`effective_engineering_model_auto_v1` to end at the later of that source
+candidate and `@model_card_effect_end_index`, or choose
+`manual_observed_end_v1` to include a reviewed current-frame `end_index`.
+Automatic mode validates the effect index, its exact observed strain, and the
+model-input row count, then includes the selected or edited right support in the
+chosen end. This is right-end coverage only; the stage does not prove complete
+proof-to-band coverage. Independently verify that each selected band starts at
+or after proof and that its start/end and every changed post-proof row lie
+inside the card's proof-to-end interval. Report a coverage failure if a band
+starts before proof. Manual mode reports when the observed end precedes a known
+model-effect end.
+
+The model methods expose six common `model_card_*` values. Band fits include the
+right support of each changed declared interval and the selected band end, even
+when the selected values equal the source. Methods without typed legacy
+intervals use the row after the last changed curve value as a changed-curve
+closure, capped at the final retained row; this is not described as an internal
+fit anchor. A genuine no-op without a selected band reports effect index `-1`
+and strain `0`.
+
+The registered coordinate assumption is fixed to
+`effective_engineering_to_true_uniform_v1`. Extending the card beyond the source
+necking candidate is an explicitly saved simulation approximation that maps
+effective engineering strain into the uniform-deformation true coordinate. It
+does not mean measured local stress or constant true stress after necking. The
+stage keeps the source necking candidate as a separate scalar and sets the
+delegated `plastic_domain` computational limit to the selected card end. The
+wrapper labels `plastic_domain_necking_limit` as the card computation cap;
+`card_domain_source_necking_strain` retains the source candidate separately. It
+retains `plastic_domain_*` diagnostics and all of that step's checks for paired
+proof values, observed support, interpolation, units, input values and selected
+nonnegative engineering stress. An interpolated end is reported with index `-1`
+and is not assigned an acquisition-row identity.
+
+The seven R19 examples in
+[`recipes/effective_card_domain_v1_examples.json`](recipes/effective_card_domain_v1_examples.json)
+copy the R18 source-measurement v2 structures and change only the domain step,
+recipe identifiers, labels and descriptions. The existing downstream
+`tensile.true_plastic`, `curve.sort_unique`, `curve.monotone`, and 300-point
+`curve.resample` operations remain explicit and unchanged. Their clipping,
+sorting, duplicate selection, monotone lift, and final plastic-axis range still
+affect what reaches the exported table. This is a numerical transfer under a
+saved coordinate assumption, not evidence that every final card row is a
+constitutive measurement.
+
 ## Scoped follow-ups
 
 - `tensile.model_curve` supplies a full-range upper envelope with a held recorded

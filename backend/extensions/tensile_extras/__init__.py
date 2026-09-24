@@ -21,6 +21,7 @@ from matcore.registry import ParamSpec, Produced, register
 from . import (  # noqa: F401  (card 는 import 만으로 블록·렌더러를 등록한다)
     band_model,
     card,
+    effective_card_domain,
     model_anchor,
     model_curve,
     model_support,
@@ -30,6 +31,30 @@ from . import (  # noqa: F401  (card 는 import 만으로 블록·렌더러를 �
     source_proof,
     temperature,
     terminal_domain,
+)
+
+_MODEL_CARD_EFFECT_VALUES = (
+    Produced("model_card_input_points", "모델 단계 입력 관측점 수", "1"),
+    Produced("model_card_changed_points", "모델 단계 변경 관측점 수", "1"),
+    Produced("model_card_last_changed_index", "마지막 변경 모델 행", "1"),
+    Produced(
+        "model_card_effect_end_index",
+        "카드용 모델 영향 끝 관측행",
+        "1",
+        help="선언 지지가 없으면 마지막 변경행 뒤 첫 미변경 관측행을 씁니다.",
+    ),
+    Produced(
+        "model_card_effect_end_strain",
+        "카드용 모델 영향 끝 공칭 변형률",
+        "1",
+        help="영향이 없으면 0이며, 끝 행은 현재 모델 입력 프레임 기준입니다.",
+    ),
+    Produced(
+        "model_card_support_kind",
+        "모델 영향 지지 종류",
+        "1",
+        help="0 없음, 1 변경 곡선 접합, 2 선언 지지를 포함한 끝입니다.",
+    ),
 )
 
 register(
@@ -1069,9 +1094,10 @@ register(
             "적합하지 않은 인접 원행에 남은 하강 수",
             "1",
         ),
+        *_MODEL_CARD_EFFECT_VALUES,
     ),
     order=82,
-    version="2",
+    version="3",
     prepare_options=band_model.prepare_options,
 )(band_model.band_model)
 
@@ -1131,9 +1157,10 @@ register(
         ),
         Produced(key="model_curve_max_raise", label="최대 응력 올림 폭", si_unit="Pa"),
         Produced(key="model_curve_end_raise", label="기록 끝 응력 올림 폭", si_unit="Pa"),
+        *_MODEL_CARD_EFFECT_VALUES,
     ),
     order=82,
-    version="1",
+    version="2",
 )(model_curve.model_curve)
 
 register(
@@ -1312,6 +1339,201 @@ register(
     version="1",
     prepare_options=plastic_domain.prepare_options,
 )(plastic_domain.plastic_domain)
+
+register(
+    id="tensile.effective_card_domain",
+    kind="processing",
+    label="모델 영향 기반 카드 구간",
+    applies_to=("tensile",),
+    requires_channels=(("displacement",), ("force",)),
+    params=(
+        ParamSpec(
+            name="policy",
+            label="카드 끝 정책",
+            type="choice",
+            choices=effective_card_domain.POLICIES,
+            default=effective_card_domain.DEFAULT_POLICY,
+            choice_labels={
+                effective_card_domain.UNIFORM_MEASURED_POLICY: "원자료 네킹 후보 끝",
+                effective_card_domain.EFFECTIVE_MODEL_POLICY: "원행 모델 영향까지 포함",
+                effective_card_domain.MANUAL_POLICY: "관측 끝 행 직접 지정",
+            },
+            choice_help={
+                effective_card_domain.UNIFORM_MEASURED_POLICY: (
+                    "기존 plastic_domain 과 같은 원자료 네킹 후보 경계입니다. "
+                    "모델 영향 메타데이터가 없어도 사용할 수 있습니다."
+                ),
+                effective_card_domain.EFFECTIVE_MODEL_POLICY: (
+                    "원자료 네킹 후보와 모델 영향의 오른쪽 지지 중 뒤의 경계를 씁니다. "
+                    "proof-to-band 전체 구간은 별도 감사 대상이며 이 단계가 보증하지 않습니다."
+                ),
+                effective_card_domain.MANUAL_POLICY: (
+                    "현재 모델 입력 프레임의 관측 끝 행을 포함합니다. 모델 영향 끝보다 "
+                    "앞을 고르면 잘린 영향이 진단됩니다."
+                ),
+            },
+            help="카드에 넘길 공학곡선의 끝을 고릅니다.",
+        ),
+        ParamSpec(
+            name="coordinate_assumption",
+            label="네킹 뒤 좌표 가정",
+            type="choice",
+            choices=(effective_card_domain.COORDINATE_ASSUMPTION,),
+            default=effective_card_domain.COORDINATE_ASSUMPTION,
+            choice_labels={
+                effective_card_domain.COORDINATE_ASSUMPTION: (
+                    "유효 공학 변형률에서 균일변형 true 좌표로 계산"
+                )
+            },
+            help=(
+                "원자료 네킹 후보 뒤까지 포함할 때 저장하는 시뮬레이션 근사 가정입니다. "
+                "측정된 국부 응력이나 일정한 완전소성 진응력을 뜻하지 않습니다."
+            ),
+        ),
+        ParamSpec(
+            name="proof_strain",
+            dimension="strain",
+            label="모델 proof 변형률",
+            type="float",
+            unit="1",
+            default="@model_proof_strain",
+            required=True,
+        ),
+        ParamSpec(
+            name="proof_stress",
+            label="모델 proof 응력",
+            type="float",
+            unit="Pa",
+            default="@model_proof_stress",
+            required=True,
+        ),
+        ParamSpec(
+            name="source_necking_strain",
+            dimension="strain",
+            label="원자료 네킹 후보 변형률",
+            type="float",
+            unit="1",
+            default="@necking_candidate_strain",
+            required=True,
+            links_to="necking_candidate_strain",
+            help="원자료에서 계산한 네킹 후보이며, 계산용 카드 상한과 별도 보존합니다.",
+        ),
+        ParamSpec(
+            name="effect_end_index",
+            label="모델 영향 끝 행",
+            type="int",
+            default="@model_card_effect_end_index",
+            required=True,
+            when={
+                "policy": (
+                    effective_card_domain.EFFECTIVE_MODEL_POLICY,
+                    effective_card_domain.MANUAL_POLICY,
+                )
+            },
+            links_to="model_card_effect_end_index",
+        ),
+        ParamSpec(
+            name="effect_end_strain",
+            dimension="strain",
+            label="모델 영향 끝 변형률",
+            type="float",
+            unit="1",
+            default="@model_card_effect_end_strain",
+            required=True,
+            when={
+                "policy": (
+                    effective_card_domain.EFFECTIVE_MODEL_POLICY,
+                    effective_card_domain.MANUAL_POLICY,
+                )
+            },
+            links_to="model_card_effect_end_strain",
+        ),
+        ParamSpec(
+            name="model_input_points",
+            label="모델 단계 입력 행 수",
+            type="int",
+            unit="1",
+            default="@model_card_input_points",
+            required=True,
+            when={
+                "policy": (
+                    effective_card_domain.EFFECTIVE_MODEL_POLICY,
+                    effective_card_domain.MANUAL_POLICY,
+                )
+            },
+            links_to="model_card_input_points",
+        ),
+        ParamSpec(
+            name="end_index",
+            label="카드 끝 관측행 (현재 모델 프레임, 0부터)",
+            type="int",
+            required=True,
+            when={"policy": (effective_card_domain.MANUAL_POLICY,)},
+            help="선택한 관측행을 포함합니다. 원본 취득행 식별자로 보지 않습니다.",
+        ),
+        ParamSpec(
+            name="strain",
+            label="공학 변형률 열",
+            type="str",
+            role="column",
+            default=effective_card_domain.DEFAULT_STRAIN,
+            unit="1",
+            dimension="strain",
+        ),
+        ParamSpec(
+            name="stress",
+            label="공학 응력 열",
+            type="str",
+            role="column",
+            default=effective_card_domain.DEFAULT_STRESS,
+            unit="Pa",
+        ),
+    ),
+    makes_values=(
+        Produced(
+            "plastic_domain_input_points",
+            "입력 관측점 수",
+            "1",
+            help="기존 plastic_domain 진단을 그대로 보존합니다.",
+        ),
+        Produced("plastic_domain_support_points", "입력 모델 관측점 수", "1"),
+        Produced("plastic_domain_output_points", "출력 구간 점 수", "1"),
+        Produced("plastic_domain_inserted_points", "삽입 경계점 수", "1"),
+        Produced("plastic_domain_proof_inserted", "proof 경계 삽입 여부", "1"),
+        Produced("plastic_domain_end_inserted", "끝 경계 삽입 여부", "1"),
+        Produced("plastic_domain_proof_strain", "모델 proof 변형률", "1"),
+        Produced("plastic_domain_proof_stress", "모델 proof 응력", "Pa"),
+        Produced("plastic_domain_end_strain", "소성 구간 끝 변형률", "1"),
+        Produced(
+            "plastic_domain_necking_limit",
+            "카드 계산 상한 변형률",
+            "1",
+            help=(
+                "카드 구간을 자르는 계산용 상한입니다. 원자료 네킹 후보는 "
+                "card_domain_source_necking_strain 에 별도로 기록됩니다."
+            ),
+        ),
+        Produced("card_domain_source_necking_strain", "원자료 네킹 후보 변형률", "1"),
+        Produced("card_domain_end_index", "카드 끝 관측 모델 행", "1"),
+        Produced("card_domain_end_strain", "카드 끝 공학 변형률", "1"),
+        Produced("card_domain_end_stress", "카드 끝 공학 응력", "Pa"),
+        Produced("card_domain_effect_end_index", "모델 영향 끝 관측 모델 행", "1"),
+        Produced("card_domain_effect_end_strain", "모델 영향 끝 공학 변형률", "1"),
+        Produced("card_domain_effect_info_known", "모델 영향 메타데이터 제공 여부", "1"),
+        Produced("card_domain_beyond_source_neck", "원자료 네킹 후보 뒤 카드 끝 여부", "1"),
+        Produced("card_domain_effect_truncated", "모델 영향 지지 끝 전 카드 종료 여부", "1"),
+        Produced(
+            "card_domain_effect_truncation_deliberate",
+            "수동 끝 지정으로 모델 영향이 실제 잘렸는지 여부",
+            "1",
+        ),
+        Produced("card_domain_model_input_points", "모델 단계 입력 관측점 수", "1"),
+        Produced("card_domain_last_input_strain", "마지막 모델 입력 변형률", "1"),
+    ),
+    order=87,
+    version="1",
+    prepare_options=effective_card_domain.prepare_options,
+)(effective_card_domain.effective_card_domain)
 
 register(
     id="tensile.temperature_family",
