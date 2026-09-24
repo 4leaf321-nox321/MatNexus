@@ -208,6 +208,8 @@ def main() -> None:
                 # **게이지 길이는 장비 파일에 없다.** `.tra` 는 두께 a0 와 폭 b0
                 # 만 적는다 — 사람이 안 넣으면 처리 1단계가 그 자리에서 멈춘다.
                 "gauge_length": GAUGE_MM,
+                # 단위를 적는다 — 안 적으면 SI(m) 로 읽혀 50 m 가 된다(2026-09-24).
+                "length_unit": "mm",
                 "note": RUN_NOTE,
             },
             headers=headers,

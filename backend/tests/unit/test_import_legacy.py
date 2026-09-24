@@ -309,9 +309,10 @@ class Test재료와_시료_속성:
         assert row.sample["manufacturer"] == "포스코"
 
     def test_단위_없는_숫자를_막는다(self, tmp_path: Path) -> None:
-        """**안 막으면 API 기본값(mm · tonne/mm3)으로 조용히 읽힌다.**
+        """**안 막으면 API 기본값(SI — m · kg/m3)으로 조용히 읽힌다.**
 
-        m 로 적어 온 파일에서 그것은 1000배이고, 숫자는 그럴듯하다.
+        mm 로 적어 온 파일에서 그것은 1000배이고, 숫자는 그럴듯하다. 기본값은 바뀐다 —
+        2026-09-24 전에는 mm · tonne/mm3 였다.
         """
         profile = self.profile()
         del profile["material"]["thickness_spec_mm"]["unit"]

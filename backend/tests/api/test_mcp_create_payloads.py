@@ -84,10 +84,11 @@ def test_재료_시료_시편을_그_본문으로_만든다(
     assert specimen.status_code == 201, specimen.text
     made = specimen.json()
     assert made["orientation"] == "MD"
-    # 길이의 화면 단위도 mm 라 보낸 값이 그대로 돌아온다 — 여기서 어긋나면
-    # `length_unit` 이 안 읽힌 것이다.
-    assert abs(made["thickness"] - 1.2) < 1e-9
-    assert abs(made["gauge_length"] - 50.0) < 1e-9
+    # **응답은 SI(m)다**(2026-09-24). 도구가 mm 로 적어 보낸 1.2 · 50 이 0.0012 · 0.05 로
+    # 돌아와야 한다 — `length_unit` 이 안 읽히면 1.2 m · 50 m 가 되어 울타리(1 m)가 거절한다.
+    assert made["length_unit"] == "m"
+    assert made["thickness"] == pytest.approx(0.0012)
+    assert made["gauge_length"] == pytest.approx(0.05)
 
 
 def test_미리보기는_이름과_닮은_이름을_준다(

@@ -184,7 +184,9 @@ def _run(
     """시편 하나 → 시험 하나 → 처리 → 채택. **한 건이라도 실패하면 왜인지 적는다.**"""
     body: dict[str, Any] = {"orientation": orientation, "note": NOTE}
     if gauge is not None:
+        # mm 다 — 단위를 안 적으면 SI(m) 로 읽혀 50 m 가 된다(2026-09-24).
         body["gauge_length"] = gauge
+        body["length_unit"] = "mm"
     specimen = client.post(f"/api/samples/{sample_id}/specimens", json=body)
     if specimen.status_code != 201:
         print(f"  시편 실패: {specimen.text[:200]}")

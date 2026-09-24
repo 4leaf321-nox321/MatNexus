@@ -155,7 +155,7 @@ def _numeric_problem(where: str, values: dict[str, str], units: dict[str, str]) 
         return None
     return (
         f"{where}의 {', '.join(naked)} 에 단위가 없습니다. "
-        f"프로파일에서 그 칸의 단위를 적으세요 — 안 적으면 mm · tonne/mm3 로 "
+        f"프로파일에서 그 칸의 단위를 적으세요 — 안 적으면 SI(m · kg/m3)로 "
         f"읽힙니다."
     )
 
@@ -508,8 +508,9 @@ def _body(
     를 기본값 없이 둔 것과 같은 판단이다 — 값이 있으면 "사람이 일부러 정했다" 는
     뜻이고, 그때만 파일보다 먼저다.
 
-    **단위는 값과 함께 간다.** 값만 보내고 단위를 안 보내면 API 가 기본값(mm ·
-    tonne/mm3)으로 읽는다 — 그래서 `_numeric_problem` 이 먼저 막는다.
+    **단위는 값과 함께 간다.** 값만 보내고 단위를 안 보내면 API 가 기본값(SI — m ·
+    kg/m3, 2026-09-24 전에는 mm · tonne/mm3)으로 읽는다 — 그래서 `_numeric_problem` 이
+    먼저 막는다.
     """
     body: dict[str, Any] = {"note": note}
     for key, raw in values.items():

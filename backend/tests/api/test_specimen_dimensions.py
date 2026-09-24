@@ -297,8 +297,10 @@ class TestValues:
 
         read = client.get(f"/api/specimens/{specimen['id']}", headers=admin_headers)
         assert read.status_code == 200, read.text
-        assert read.json()["thickness"] == pytest.approx(0.98)  # mm 로 나온다
-        assert read.json()["width"] == pytest.approx(12.5)
+        # 응답은 SI 다(2026-09-24) — 치수 칸에 적은 그대로 m 로 나온다.
+        assert read.json()["thickness"] == pytest.approx(0.00098)
+        assert read.json()["width"] == pytest.approx(0.0125)
+        assert read.json()["length_unit"] == "m"
 
     def test_규격에서_사라진_칸도_보인다(
         self, client: TestClient, admin_headers: dict[str, str], seeded: None

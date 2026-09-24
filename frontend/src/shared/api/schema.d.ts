@@ -8308,7 +8308,7 @@ export interface components {
             gauge_length?: number | null;
             /**
              * Length Unit
-             * @default mm
+             * @default m
              */
             length_unit: string;
             /** Note */
@@ -16761,7 +16761,7 @@ export interface components {
             gauge_length?: number | null;
             /**
              * Length Unit
-             * @default mm
+             * @default m
              */
             length_unit: string;
             /** Note */
@@ -16914,7 +16914,7 @@ export interface components {
             id: string;
             /**
              * Length Unit
-             * @default mm
+             * @default m
              */
             length_unit: string;
             /** Note */
@@ -16990,7 +16990,7 @@ export interface components {
             id: string;
             /**
              * Length Unit
-             * @default mm
+             * @default m
              */
             length_unit: string;
             /** Lot No */
@@ -18471,8 +18471,6 @@ export interface components {
          *     실측 두께가 나란히 있는데 계산에 들어가는 것은 하나뿐이다.
          */
         ValueSourceOut: {
-            /** Display Unit */
-            display_unit: string;
             /** Edit Hint */
             edit_hint?: string | null;
             /** Key */
@@ -18483,6 +18481,8 @@ export interface components {
             level: string;
             /** Origin */
             origin: string | null;
+            /** Si Unit */
+            si_unit: string;
             /** Status */
             status: string;
             /** Used For */

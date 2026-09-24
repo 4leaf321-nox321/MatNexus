@@ -211,7 +211,7 @@ class Test재료와_시료:
             "family": "Metal",
         }
         # **단위가 값과 함께 가야 한다.** JSON 에는 단위 줄이 아예 없어서, 안
-        # 보내면 읽는 쪽이 기본값(mm · tonne/mm3)으로 본다.
+        # 보내면 읽는 쪽이 기본값(SI — m · kg/m3)으로 본다.
         assert parsed.material_units == {
             "spec_thickness": "mm",
             "density": "tonne/mm3",

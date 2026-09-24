@@ -56,6 +56,28 @@ def density_to_si(value: float | None, unit: str) -> float | None:
     return si
 
 
+#: 시편 치수의 울타리 — **1 m 를 넘는 시편은 없다.** 단위를 안 적은 치수가 SI(m) 로 읽히게
+#: 되며(2026-09-24) mm 로 적은 값을 단위 없이 보내면 1000배가 된다 — 폭 12.5 가 12.5 m,
+#: 게이지 50 이 50 m. 한 시편의 세 칸 중 하나만 걸려도 요청 전체가 멈추므로 실수는 거의 다
+#: 잡힌다(두께 0.8 은 0.8 m 로 빠져나가도 폭·게이지가 걸린다). 아래쪽은 안 막는다 — 필름
+#: 두께는 µm 라 작은 값이 정상이다.
+SPECIMEN_LENGTH_MAX_M = 1.0
+
+
+def specimen_length_to_si(value: float | None, unit: str, *, field: str) -> float | None:
+    """시편 치수를 SI 로 — **1 m 를 넘으면 거절한다**(`SPECIMEN_LENGTH_MAX_M`)."""
+    si = to_si(value, unit, field=field, dimension="length")
+    if si is not None and si > SPECIMEN_LENGTH_MAX_M:
+        raise AppError(
+            "MNX-MATERIALS-0038",
+            f"{field} 값이 {si:g} m 가 됩니다 — {SPECIMEN_LENGTH_MAX_M:g} m 를 넘는 시편은 "
+            f"없습니다. 보낸 단위는 {unit!r} 입니다: 단위를 안 적으면 SI(m)로 읽고, mm 로 "
+            "적은 값이면 `length_unit` 을 'mm' 로 함께 보내세요.",
+            status=422,
+        )
+    return si
+
+
 def to_si(value: float | None, unit: str, *, field: str, dimension: str) -> float | None:
     """사람 단위 → 저장 단위. 모르는 단위도, **차원이 다른 단위도** 거부한다.
 

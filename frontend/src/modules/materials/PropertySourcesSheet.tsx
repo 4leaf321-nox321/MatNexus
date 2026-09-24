@@ -29,6 +29,7 @@ import {
   SheetTitle,
 } from '@/shared/components/ui/sheet'
 import { useResource } from '@/shared/hooks/useResource'
+import { formatScalar } from '@/shared/units'
 
 /** 어디에 적는 값인가. **층을 말로 보여 준다** — 코드는 사람이 못 읽는다. */
 const LEVEL_LABEL: Record<string, string> = {
@@ -95,10 +96,10 @@ function SourceRow({ row }: { row: ValueSource }) {
         <Badge variant="secondary" className="text-xs">
           {LEVEL_LABEL[row.level] ?? row.level}
         </Badge>
+        {/* **값은 SI 로 온다**(2026-09-24) — 표시 단위로 바꾸는 것은 여기서, 다른 화면과 같은
+            표(`shared/units`)로 한다. 전에는 서버가 표시 단위로 바꿔 `display_unit` 과 함께 줬다. */}
         <span className="ml-auto font-mono text-sm tabular-nums">
-          {row.value === null
-            ? '—'
-            : `${Number(row.value.toPrecision(6))}${row.display_unit ? ` ${row.display_unit}` : ''}`}
+          {row.value === null ? '—' : formatScalar(row.value, row.si_unit)}
         </span>
       </div>
 

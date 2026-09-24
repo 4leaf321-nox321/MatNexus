@@ -33,7 +33,6 @@ from app.modules.materials.models import (
     Specimen,
 )
 from app.modules.materials.schemas import (
-    DENSITY_UNIT,
     LENGTH_UNIT,
     SI_DENSITY,
     SI_LENGTH,
@@ -339,7 +338,8 @@ def _specimen_out(
     registered_by: str | None = None,
     access: EditAccessOut | None = None,
 ) -> SpecimenOut:
-    unit = specimen.input_units.get("length", LENGTH_UNIT)
+    # **치수는 SI(m) 로 낸다**(2026-09-24) — 재료의 두께·밀도와 같다(`_material_out`). 넣은
+    # 단위를 되돌려 주던 때는 같은 목록에 mm 로 넣은 시편과 m 로 넣은 시편이 섞여 나왔다.
     return SpecimenOut(
         test_run_count=runs[0],
         adopted_count=runs[1],
@@ -352,10 +352,10 @@ def _specimen_out(
         record_name=specimen.record_name,
         registered_by=registered_by,
         standard=specimen.standard,
-        thickness=services.from_si(specimen.thickness_m, unit),
-        width=services.from_si(specimen.width_m, unit),
-        gauge_length=services.from_si(specimen.gauge_length_m, unit),
-        length_unit=unit,
+        thickness=specimen.thickness_m,
+        width=specimen.width_m,
+        gauge_length=specimen.gauge_length_m,
+        length_unit=SI_LENGTH,
         sizes=_brief_sizes(sizes),
         note=specimen.note,
         created_at=specimen.created_at,
@@ -1308,13 +1308,13 @@ def property_sources(
         )
     )
 
-    length_unit = material.input_units.get("spec_thickness", LENGTH_UNIT)
+    # **값은 SI 로 낸다**(2026-09-24) — 재료·시편 응답과 같은 계다. 표시는 화면의 일이다.
     rows: list[ValueSourceOut] = [
         ValueSourceOut(
             key="spec_thickness",
             label="규격 두께",
-            value=services.from_si(material.spec_thickness_m, length_unit),
-            display_unit=length_unit,
+            value=material.spec_thickness_m,
+            si_unit=SI_LENGTH,
             level="material",
             origin="재료 이름의 한 칸입니다 — 고치면 이름이 바뀝니다.",
             status="ok" if material.spec_thickness_m is not None else "missing",
@@ -1331,7 +1331,7 @@ def property_sources(
             key="specimen_standard",
             label="시편 규격",
             value=None,
-            display_unit="",
+            si_unit="",
             level="specimen",
             origin=(
                 ", ".join(sorted(standards)) + f" (시편 {len(specimens)}개 중 "
@@ -1357,12 +1357,8 @@ def property_sources(
         ValueSourceOut(
             key="specimen_thickness",
             label="실측 두께",
-            value=(
-                services.from_si(sum(measured) / len(measured), LENGTH_UNIT)
-                if measured
-                else None
-            ),
-            display_unit=LENGTH_UNIT,
+            value=sum(measured) / len(measured) if measured else None,
+            si_unit=SI_LENGTH,
             level="specimen",
             origin=_thickness_origin(measured, len(specimens)),
             status=(
@@ -1381,7 +1377,6 @@ def property_sources(
         )
     )
 
-    density_unit = DENSITY_UNIT
     lot = {s.density_si for s in samples if s.density_si is not None}
     if len(lot) == 1:
         value, level, origin, status = (
@@ -1411,8 +1406,8 @@ def property_sources(
         ValueSourceOut(
             key="density",
             label="밀도",
-            value=services.from_si(value, density_unit),
-            display_unit=density_unit,
+            value=value,
+            si_unit=SI_DENSITY,
             level=level,
             origin=origin,
             status=status,
@@ -1426,7 +1421,7 @@ def property_sources(
             key="poisson_ratio",
             label="푸아송비",
             value=material.poisson_ratio,
-            display_unit="",
+            si_unit="",
             level="material",
             origin=(
                 "재료에 적힌 값입니다."
@@ -1444,7 +1439,7 @@ def property_sources(
             key="youngs_modulus",
             label="탄성계수",
             value=None,
-            display_unit="GPa",
+            si_unit="Pa",
             level="result",
             origin="처리에서 잽니다 — 적어 넣는 값이 아닙니다.",
             status="ok",
@@ -2033,17 +2028,12 @@ def _make_specimen(
         record_name=naming.specimen_name(
             sample=sample.record_name, orientation=orientation, seq_no=seq_no
         ),
-        thickness_m=services.to_si(
-            payload.thickness, payload.length_unit, field="두께", dimension="length"
+        thickness_m=services.specimen_length_to_si(
+            payload.thickness, payload.length_unit, field="두께"
         ),
-        width_m=services.to_si(
-            payload.width, payload.length_unit, field="폭", dimension="length"
-        ),
-        gauge_length_m=services.to_si(
-            payload.gauge_length,
-            payload.length_unit,
-            field="게이지 길이",
-            dimension="length",
+        width_m=services.specimen_length_to_si(payload.width, payload.length_unit, field="폭"),
+        gauge_length_m=services.specimen_length_to_si(
+            payload.gauge_length, payload.length_unit, field="게이지 길이"
         ),
         input_units={"length": payload.length_unit},
         note=payload.note,
@@ -2466,19 +2456,26 @@ def update_specimen(
     specimen = _get_specimen(db, user, specimen_id)
     permissions.require_edit(db, user, specimen, code="MNX-MATERIALS-0034")
     data = payload.model_dump(exclude_unset=True)
-    unit = data.get("length_unit") or specimen.input_units.get("length", LENGTH_UNIT)
+    # **단위 없이 보낸 치수는 응답과 같은 SI(m) 로 읽는다** — 재료의 두께와 같은 규칙이다.
+    # 전에는 넣었던 단위(대개 mm)로 읽었는데, 그때는 응답도 그 단위였다.
+    unit = data.get("length_unit") or SI_LENGTH
+    lengths = [key for key in ("thickness", "width", "gauge_length") if key in data]
 
-    for field, column in (
-        ("thickness", "thickness_m"),
-        ("width", "width_m"),
-        ("gauge_length", "gauge_length_m"),
+    for field, column, label in (
+        ("thickness", "thickness_m", "두께"),
+        ("width", "width_m", "폭"),
+        ("gauge_length", "gauge_length_m", "게이지 길이"),
     ):
         if field in data:
             setattr(
                 specimen,
                 column,
-                services.to_si(data[field], unit, field=field, dimension="length"),
+                services.specimen_length_to_si(data[field], unit, field=label),
             )
+    if lengths or "length_unit" in data:
+        # 넣은 단위는 **치수를 넣었을 때만** 남긴다 — 메모만 고쳤는데 「m 로 넣었다」 가
+        # 적히면 역추적할 기록이 거짓이 된다.
+        specimen.input_units = {**specimen.input_units, "length": unit}
     if "note" in data:
         specimen.note = data["note"]
 
@@ -2497,7 +2494,6 @@ def update_specimen(
     vocabulary_services.apply_bindings(
         db, specimen, vocabulary_services.SPECIMEN_BINDINGS, data, created_by_id=user.id
     )
-    specimen.input_units = {**specimen.input_units, "length": unit}
 
     db.commit()
     return SpecimenUpdateOut(

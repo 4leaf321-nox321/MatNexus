@@ -129,6 +129,8 @@ def main() -> None:
                         "thickness": 1.2,
                         "width": 12.5,
                         "gauge_length": 50.0,
+                        # 안 적으면 SI(m) 로 읽힌다(2026-09-24).
+                        "length_unit": "mm",
                     },
                 )
                 if specimen.status_code != 201:

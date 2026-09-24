@@ -329,6 +329,156 @@ class TestUnits:
         assert response.status_code == 422
         assert response.json()["error"]["code"] == "MNX-MATERIALS-0028"
 
+    def _specimen(
+        self, client: TestClient, headers: dict[str, str], **body: object
+    ) -> dict[str, Any]:
+        # 부를 때마다 재료를 새로 만든다 — 이름이 겹치지 않게 등급을 달리한다.
+        material = _create_material(client, headers, grade=f"S{uuid.uuid4().hex[:6]}")
+        sample = client.post(
+            f"/api/materials/{material['id']}/samples", json={}, headers=headers
+        ).json()
+        made = client.post(
+            f"/api/samples/{sample['id']}/specimens",
+            json={"orientation": "MD", **body},
+            headers=headers,
+        )
+        assert made.status_code == 201, made.text
+        created: dict[str, Any] = made.json()
+        return created
+
+    def test_시편_치수도_SI_로_준다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str]
+    ) -> None:
+        """재료의 두께와 같다(2026-09-24). 넣은 단위를 되돌려 주던 때는 한 목록에 mm 로 넣은
+        시편과 m 로 넣은 시편이 섞여 나왔다 — 넣은 단위는 `input_units` 에만 남는다."""
+        specimen = self._specimen(
+            client,
+            admin_headers,
+            thickness=1.2,
+            width=12.5,
+            gauge_length=50,
+            length_unit="mm",
+        )
+        assert specimen["length_unit"] == "m"
+        assert specimen["thickness"] == pytest.approx(0.0012)
+        assert specimen["width"] == pytest.approx(0.0125)
+        assert specimen["gauge_length"] == pytest.approx(0.05)
+
+        # 평면 목록도 같은 계다 — 한 모양(`_specimen_out`)을 거친다.
+        listed = client.get(
+            "/api/specimens", params={"q": specimen["record_name"]}, headers=admin_headers
+        ).json()
+        row = next(one for one in listed["items"] if one["id"] == specimen["id"])
+        assert row["thickness"] == pytest.approx(0.0012) and row["length_unit"] == "m"
+
+        stored = db.get(Specimen, uuid.UUID(specimen["id"]))
+        assert stored is not None
+        assert stored.thickness_m == pytest.approx(0.0012)
+        assert stored.input_units == {"length": "mm"}
+
+    def test_시편도_읽은_값을_단위_없이_되보내면_제_숫자가_돌아온다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str]
+    ) -> None:
+        """재료와 같은 규칙 — 단위 없는 치수는 응답과 같은 SI(m) 로 읽는다. 전에는 넣었던
+        단위로 읽었고, 그때는 응답도 그 단위였다."""
+        specimen = self._specimen(
+            client, admin_headers, thickness=1.2, width=12.5, length_unit="mm"
+        )
+        back = client.patch(
+            f"/api/specimens/{specimen['id']}",
+            json={"thickness": specimen["thickness"], "width": specimen["width"]},
+            headers=admin_headers,
+        )
+        assert back.status_code == 200, back.text
+        assert back.json()["specimen"]["thickness"] == pytest.approx(specimen["thickness"])
+        assert back.json()["specimen"]["width"] == pytest.approx(specimen["width"])
+        stored = db.get(Specimen, uuid.UUID(specimen["id"]))
+        assert stored is not None
+        db.refresh(stored)
+        assert stored.thickness_m == pytest.approx(0.0012)
+        assert stored.width_m == pytest.approx(0.0125)
+
+    def test_치수를_안_건드리면_넣은_단위_기록도_그대로다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str]
+    ) -> None:
+        """메모만 고쳤는데 「m 로 넣었다」 가 적히면 역추적할 기록이 거짓이 된다."""
+        specimen = self._specimen(client, admin_headers, thickness=1.2, length_unit="mm")
+        noted = client.patch(
+            f"/api/specimens/{specimen['id']}",
+            json={"note": "모서리 버 제거"},
+            headers=admin_headers,
+        )
+        assert noted.status_code == 200, noted.text
+        stored = db.get(Specimen, uuid.UUID(specimen["id"]))
+        assert stored is not None
+        db.refresh(stored)
+        assert stored.input_units == {"length": "mm"}
+
+    def test_1_m_를_넘는_시편_치수는_단위를_짚어_거절한다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        """mm 로 적은 값을 단위 없이 보내면 1000배다 — 폭 12.5 가 12.5 m. 오류 없이 저장되던
+        자리라 거절하면서 무엇을 적으면 되는지 말한다. 고칠 때도, 여럿을 한꺼번에 만들 때도
+        같은 함수를 거친다."""
+        material = _create_material(client, admin_headers)
+        sample = client.post(
+            f"/api/materials/{material['id']}/samples", json={}, headers=admin_headers
+        ).json()
+        naked = client.post(
+            f"/api/samples/{sample['id']}/specimens",
+            json={"orientation": "MD", "thickness": 0.8, "width": 12.5, "gauge_length": 50},
+            headers=admin_headers,
+        )
+        assert naked.status_code == 422
+        error = naked.json()["error"]
+        assert error["code"] == "MNX-MATERIALS-0038"
+        assert "length_unit" in error["message"] and "'mm'" in error["message"]
+
+        specimen = self._specimen(client, admin_headers, width=12.5, length_unit="mm")
+        patched = client.patch(
+            f"/api/specimens/{specimen['id']}", json={"width": 12.5}, headers=admin_headers
+        )
+        assert patched.status_code == 422
+        assert patched.json()["error"]["code"] == "MNX-MATERIALS-0038"
+
+        # 필름 두께(µm)는 작은 값이 정상이다 — 아래쪽은 막지 않는다.
+        film = self._specimen(client, admin_headers, thickness=25, length_unit="um")
+        assert film["thickness"] == pytest.approx(25e-6)
+
+    def test_값_출처도_SI_로_준다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        """「값 출처」 패널(`property-sources`)도 재료·시편 응답과 같은 계다. 전에는 서버가
+        표시 단위(mm · tonne/mm3)로 바꿔 `display_unit` 과 함께 줬다 — 한 화면에 SI 응답과
+        표시 단위 응답이 섞여 있었다."""
+        material = _create_material(
+            client, admin_headers, density=7.85e-9, density_unit="tonne/mm3"
+        )
+        sample = client.post(
+            f"/api/materials/{material['id']}/samples", json={}, headers=admin_headers
+        ).json()
+        for thickness in (1.0, 1.2):
+            made = client.post(
+                f"/api/samples/{sample['id']}/specimens",
+                json={"orientation": "MD", "thickness": thickness, "length_unit": "mm"},
+                headers=admin_headers,
+            )
+            assert made.status_code == 201, made.text
+
+        found = client.get(
+            f"/api/materials/{material['id']}/property-sources", headers=admin_headers
+        )
+        assert found.status_code == 200, found.text
+        rows = {row["key"]: row for row in found.json()["rows"]}
+        assert rows["spec_thickness"]["value"] == pytest.approx(0.001)
+        assert rows["spec_thickness"]["si_unit"] == "m"
+        assert rows["specimen_thickness"]["value"] == pytest.approx(0.0011)
+        assert rows["specimen_thickness"]["si_unit"] == "m"
+        assert rows["density"]["value"] == pytest.approx(7850.0)
+        assert rows["density"]["si_unit"] == "kg/m3"
+        assert rows["poisson_ratio"]["si_unit"] == ""
+        assert "display_unit" not in rows["density"]
+
 
 class TestHierarchy:
     def test_계층_이름이_이어진다(
@@ -352,12 +502,13 @@ class TestHierarchy:
 
         specimen = client.post(
             f"/api/samples/{first.json()['id']}/specimens",
-            json={"orientation": "MD", "thickness": 1.02, "width": 20.0},
+            json={"orientation": "MD", "thickness": 1.02, "width": 20.0, "length_unit": "mm"},
             headers=admin_headers,
         )
         assert specimen.status_code == 201, specimen.text
         assert specimen.json()["record_name"] == "SECC_MDOI_1.0__01__MD_01"
-        assert specimen.json()["thickness"] == 1.02
+        # 응답은 SI 다 — mm 로 넣어도 m 로 돌아온다.
+        assert specimen.json()["thickness"] == pytest.approx(1.02e-3)
 
     def test_방향별로_따로_채번한다(
         self, client: TestClient, admin_headers: dict[str, str]

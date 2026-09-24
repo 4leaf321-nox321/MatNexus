@@ -1534,7 +1534,7 @@ class Test들어오는값:
 
         saved = client.patch(
             f"/api/specimens/{specimen_id}",
-            json={"thickness": 1.0, "width": 12.5, "gauge_length": 50.0},
+            json={"thickness": 1.0, "width": 12.5, "gauge_length": 50.0, "length_unit": "mm"},
             headers=admin_headers,
         )
         assert saved.status_code == 200, saved.text

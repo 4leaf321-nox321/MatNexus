@@ -561,7 +561,9 @@ class SpecimenOut(BaseModel):
     thickness: float | None
     width: float | None
     gauge_length: float | None
-    length_unit: str = LENGTH_UNIT
+    length_unit: str = SI_LENGTH
+    """위 세 치수의 단위 — **SI(m) 다**(2026-09-24, 화면은 mm 로 보인다). 재료의 두께·밀도와
+    같은 계다. 전에는 넣은 단위를 되돌려 줘서 한 목록에 mm 와 m 가 섞일 수 있었다."""
 
     sizes: list[SpecimenBriefSizeOut] = []
     """이 시편의 실효 치수. **잰 값이 이기고 빈 칸은 규격에서 온다.**
@@ -752,7 +754,8 @@ class SpecimenCreateRequest(BaseModel):
     thickness: float | None = Field(default=None, gt=0)
     width: float | None = Field(default=None, gt=0)
     gauge_length: float | None = Field(default=None, gt=0)
-    length_unit: str = LENGTH_UNIT
+    length_unit: str = SI_LENGTH
+    """**안 적으면 응답과 같은 SI(m) 로 읽는다.** 화면은 mm 를 적어 보낸다."""
     note: str | None = None
 
 
@@ -771,6 +774,7 @@ class SpecimenUpdateRequest(BaseModel):
     width: float | None = Field(default=None, gt=0)
     gauge_length: float | None = Field(default=None, gt=0)
     length_unit: str | None = None
+    """**안 적으면 응답과 같은 SI(m) 로 읽는다** — 읽은 값을 되보내면 제 숫자가 돌아온다."""
     note: str | None = None
 
 
@@ -796,8 +800,11 @@ class ValueSourceOut(BaseModel):
     key: str
     label: str
     value: float | None
-    display_unit: str
-    """표시 단위. 값은 이 단위로 이미 환산돼 있다."""
+    """**SI 다**(2026-09-24) — 두께는 m, 밀도는 kg/m³. 화면이 표시 단위로 바꿔 보인다."""
+    si_unit: str
+    """`value` 의 단위. 무차원(푸아송비)이거나 값이 아닌 줄(시편 규격)은 빈 문자열이다.
+
+    전에는 `display_unit` 이었다 — 값을 서버가 표시 단위(mm · tonne/mm3)로 바꿔 보냈다."""
     level: str
     """`material` | `sample` | `specimen` | `result`. **어디에 적는 값인가.**"""
     origin: str | None
