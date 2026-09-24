@@ -28,7 +28,9 @@ from matcore.processing._drop_recovery import DropEvent, detect_events
 from .lower_composition import (
     LowerComponentClosure,
     connected_lower_closure,
+    lower_closure_failure_diagnostic,
     lower_suffix_minorant,
+    validated_source_rows,
 )
 from .model_effect import effect_scalars
 from .model_regions import (
@@ -200,6 +202,14 @@ class _NoFeasibleAnchorError(AutoYieldFitError):
     """An anchor-only failure that may enter the versioned lower-pooling path."""
 
 
+class _LowerPoolFailure(_NoFeasibleAnchorError):
+    """A lower-pool hold with a bounded stage label for diagnostics."""
+
+    def __init__(self, message: str, *, stage: Literal["closure", "suffix", "component"]):
+        super().__init__(message)
+        self.stage = stage
+
+
 @dataclass(frozen=True, slots=True)
 class _SourceEventCore:
     start: int
@@ -333,6 +343,18 @@ def _source_row_mapping(
             "원행 대응 열은 음수가 없고 엄격히 증가하는 유한 정수여야 합니다."
         )
     return elastic_end, numeric.astype(np.int64)
+
+
+def _optional_diagnostic_source_rows(
+    frame: Frame, *, preferred: NDArray[np.int64] | None = None
+) -> NDArray[np.int64] | None:
+    """Read an existing source-row lineage column for failure diagnostics only."""
+    if preferred is not None:
+        return validated_source_rows(preferred)
+    column = "source_row"
+    if column not in frame.columns or frame.units.get(column) != "1":
+        return None
+    return validated_source_rows(frame.columns[column])
 
 
 def _resolve_options(options: dict[str, Any]) -> dict[str, Any]:
@@ -919,7 +941,9 @@ def _lower_pool_proposal(
     for component in components:
         left = component.proposal.left_anchor
         if left is None:
-            raise _NoFeasibleAnchorError("연결 모델 성분에 관측 왼쪽 앵커가 없습니다.")
+            raise _LowerPoolFailure(
+                "연결 모델 성분에 관측 왼쪽 앵커가 없습니다.", stage="component"
+            )
         intervals_list.append((left, component.proposal.right_anchor))
     intervals = tuple(intervals_list)
     memberships = tuple(tuple(sorted(component.event_indices)) for component in components)
@@ -931,7 +955,10 @@ def _lower_pool_proposal(
         failed_event=failed_event_index,
     )
     if closure is None:
-        raise _NoFeasibleAnchorError("실패 사건까지 닿는 닫힌 원행 사건 연결 성분이 없습니다.")
+        raise _LowerPoolFailure(
+            "실패 사건까지 닿는 닫힌 원행 사건 연결 성분이 없습니다.",
+            stage="closure",
+        )
 
     included = [components[index] for index in closure.component_indices]
     earliest = min(included, key=lambda component: component.proposal.peak_row)
@@ -967,15 +994,16 @@ def _lower_pool_proposal(
                 left = candidate
                 break
         if left < 0:
-            raise _NoFeasibleAnchorError(
+            raise _LowerPoolFailure(
                 "원자료 suffix 최소값이 기존 바깥 앵커를 넘고, 보호구간 안에서 "
-                "더 이른 하측 앵커를 찾지 못했습니다."
+                "더 이른 하측 앵커를 찾지 못했습니다.",
+                stage="suffix",
             )
 
     try:
         proposed = lower_suffix_minorant(stress, left=left, right=right)
     except ValueError as exc:
-        raise _NoFeasibleAnchorError(str(exc)) from None
+        raise _LowerPoolFailure(str(exc), stage="suffix") from None
     local = proposed[left : right + 1]
     if (
         not np.all(np.isfinite(local))
@@ -985,8 +1013,9 @@ def _lower_pool_proposal(
         or proposed[left] != stress[left]
         or proposed[right] != stress[right]
     ):
-        raise _NoFeasibleAnchorError(
-            "원자료 연결 suffix 모델이 관측 경계와 하측 비감소 조건을 만족하지 않습니다."
+        raise _LowerPoolFailure(
+            "원자료 연결 suffix 모델이 관측 경계와 하측 비감소 조건을 만족하지 않습니다.",
+            stage="suffix",
         )
 
     includes_band = any(component.is_band for component in included)
@@ -1046,6 +1075,7 @@ def compute_band_model(
     engineering_stress: ArrayLike,
     progress: ArrayLike | None = None,
     *,
+    source_rows: ArrayLike | None = None,
     method: str,
     policy: str = AUTO_POLICY,
     minimum_band_rows: int = DEFAULT_MINIMUM_BAND_ROWS,
@@ -1369,6 +1399,22 @@ def compute_band_model(
                     f"peak={event.peak_index}, end={event.end_index}, reason={exc}"
                 ) from None
             root_component = max(roots, key=lambda index: components[index].proposal.peak_row)
+            diagnostic_intervals = (
+                tuple(
+                    (
+                        int(component.proposal.left_anchor),
+                        int(component.proposal.right_anchor),
+                    )
+                    for component in components
+                )
+                if all(component.proposal.left_anchor is not None for component in components)
+                else None
+            )
+            diagnostic_memberships = (
+                tuple(tuple(sorted(component.event_indices)) for component in components)
+                if diagnostic_intervals is not None
+                else None
+            )
             baseline_values = _compose_records(stress, [*records, *event_records])
             try:
                 pooled, composition, _proposal, _old_right, closure = _lower_pool_proposal(
@@ -1381,11 +1427,28 @@ def compute_band_model(
                     loading_floor_fraction=floor_fraction,
                 )
             except _NoFeasibleAnchorError as pool_exc:
+                pool_stage = (
+                    pool_exc.stage if isinstance(pool_exc, _LowerPoolFailure) else "unknown"
+                )
+                closure_diagnostic = (
+                    lower_closure_failure_diagnostic(
+                        events,
+                        diagnostic_intervals,
+                        diagnostic_memberships,
+                        root_component=root_component,
+                        failed_event=event_index,
+                        stress=stress,
+                        source_rows=source_rows,
+                    )
+                    if diagnostic_intervals is not None and diagnostic_memberships is not None
+                    else "closure_diagnostic_scope=unavailable_missing_component_anchor"
+                )
                 raise ProcessingError(
                     "lower_connected_component_infeasible: "
                     f"method={method}, peak={event.peak_index}, end={event.end_index}, "
                     f"cell={cell_start}~{cell_end}, anchor_failure={exc}, "
-                    f"pool_failure={pool_exc}"
+                    f"pool_failure_stage={pool_stage}, pool_failure={pool_exc}; "
+                    f"{closure_diagnostic}"
                 ) from None
 
             consumed = set(closure.component_indices)
@@ -2717,10 +2780,15 @@ def band_model(frame: Frame, options: dict[str, Any]) -> StepResult:
             f"reason={selection.reason}, max_gap_ratio={selection.max_gap_ratio}."
         )
 
+    diagnostic_source_rows = _optional_diagnostic_source_rows(
+        frame,
+        preferred=source_rows,
+    )
     result = compute_band_model(
         strain,
         stress,
         progress,
+        source_rows=diagnostic_source_rows,
         method=resolved["method"],
         policy=policy,
         minimum_band_rows=resolved["minimum_band_rows"],

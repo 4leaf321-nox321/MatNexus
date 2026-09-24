@@ -117,3 +117,52 @@ def test_lower_suffix_minorant_rejects_an_infeasible_left_anchor() -> None:
         composition_module.lower_suffix_minorant(
             np.asarray([1.0, 5.0, 3.0, 4.0]), left=1, right=3
         )
+
+
+def test_failure_diagnostic_reports_observed_boundary_and_source_row_gap() -> None:
+    events = (_partial(68, 583), _full(585, 867))
+    stress = np.zeros(868, dtype=np.float64)
+    stress[583:586] = 51.5825
+    source_rows = np.arange(1000, 1000 + 2 * stress.size, 2, dtype=np.int64)
+
+    diagnostic = composition_module.lower_closure_failure_diagnostic(
+        events,
+        ((30, 517),),
+        ((0,),),
+        root_component=0,
+        failed_event=1,
+        stress=stress,
+        source_rows=source_rows,
+    )
+
+    assert "closure_diagnostic_scope=observed_root_prior_event_boundary" in diagnostic
+    assert "prior_event=0" in diagnostic
+    assert "prior_event_interval=68~583" in diagnostic
+    assert "failed_event_peak=585" in diagnostic
+    assert "boundary_relation=gap" in diagnostic
+    assert "observed_index_gap=1" in diagnostic
+    assert "observed_boundary_tie=true" in diagnostic
+    assert "observed_between_all_equal=true" in diagnostic
+    assert "source_row_interval=2166~2170" in diagnostic
+    assert "source_row_gap=3" in diagnostic
+    assert "source_row_gap_exceeds_observed=true" in diagnostic
+
+
+def test_failure_diagnostic_does_not_invent_a_tie_for_component_membership() -> None:
+    events = (_full(100, 180), _full(220, 260), _full(150, 170))
+    stress = np.ones(261, dtype=np.float64)
+
+    diagnostic = composition_module.lower_closure_failure_diagnostic(
+        events,
+        ((80, 200),),
+        ((0, 1),),
+        root_component=0,
+        failed_event=2,
+        stress=stress,
+    )
+
+    assert "prior_event=unavailable" in diagnostic
+    assert "boundary_relation=unavailable" in diagnostic
+    assert "observed_boundary_tie=not_evaluated" in diagnostic
+    assert "observed_between_all_equal=not_evaluated" in diagnostic
+    assert "source_row_evidence=unavailable" in diagnostic

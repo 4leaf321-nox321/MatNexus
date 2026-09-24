@@ -480,6 +480,156 @@ class Test실제원행:
         ):
             _run(frame, "lower_envelope")
 
+    def test_pc4_decimated_lower_hold_reports_observed_boundary_evidence(self) -> None:
+        frame = _source_frame(4)
+        decimated = Frame(
+            {key: value[::2].copy() for key, value in frame.columns.items()},
+            dict(frame.units),
+        )
+
+        with pytest.raises(ProcessingError) as caught:
+            processing.apply(
+                [
+                    Step(
+                        "tensile.band_model",
+                        {
+                            "policy": "band_and_events_auto_v2",
+                            "method": "lower_envelope",
+                        },
+                    )
+                ],
+                decimated,
+            )
+
+        message = str(caught.value)
+        assert "lower_connected_component_infeasible:" in message
+        assert "closure_diagnostic_scope=observed_root_prior_event_boundary" in message
+        assert "prior_event=0" in message
+        assert "prior_event_interval=68~583" in message
+        assert "failed_event_peak=585" in message
+        assert "boundary_relation=gap" in message
+        assert "observed_index_gap=1" in message
+        assert "observed_boundary_tie=true" in message
+        assert "observed_between_all_equal=true" in message
+        assert "source_row_interval=1169~1173" in message
+        assert "source_row_gap=3" in message
+        assert "source_row_gap_exceeds_observed=true" in message
+
+    def test_pc4_decimated_lower_hold_reports_index_only_without_source_row(self) -> None:
+        frame = _source_frame(4)
+        columns = {
+            key: value[::2].copy()
+            for key, value in frame.columns.items()
+            if key != "source_row"
+        }
+        units = {key: unit for key, unit in frame.units.items() if key != "source_row"}
+        decimated = Frame(columns, units)
+
+        with pytest.raises(ProcessingError) as caught:
+            processing.apply(
+                [
+                    Step(
+                        "tensile.band_model",
+                        {
+                            "policy": "band_and_events_auto_v2",
+                            "method": "lower_envelope",
+                        },
+                    )
+                ],
+                decimated,
+            )
+
+        message = str(caught.value)
+        assert "observed_index_gap=1" in message
+        assert "observed_boundary_tie=true" in message
+        assert "source_row_evidence=unavailable" in message
+        assert "source_row_interval=" not in message
+
+    @pytest.mark.parametrize("malformed_kind", ("string", "nan", "negative", "overflow"))
+    def test_pc4_malformed_source_rows_do_not_mask_the_original_processing_error(
+        self, malformed_kind: str
+    ) -> None:
+        frame = _source_frame(4)
+        decimated = {key: value[::2].copy() for key, value in frame.columns.items()}
+        source_count = decimated["stress_engineering"].size
+        if malformed_kind == "string":
+            malformed = np.full(source_count, "row", dtype=object)
+        elif malformed_kind == "nan":
+            malformed = np.full(source_count, np.nan, dtype=np.float64)
+        elif malformed_kind == "negative":
+            malformed = np.arange(source_count, dtype=np.float64)
+            malformed[0] = -1.0
+        else:
+            malformed = np.arange(source_count, dtype=np.uint64)
+            malformed[-1] = np.uint64(1 << 63)
+
+        with pytest.raises(ProcessingError) as caught:
+            compute_band_model(
+                decimated["strain_engineering"],
+                decimated["stress_engineering"],
+                decimated["time"],
+                source_rows=malformed,
+                method="lower_envelope",
+                policy="band_and_events_auto_v2",
+            )
+
+        message = str(caught.value)
+        assert "lower_connected_component_infeasible:" in message
+        assert "source_row_evidence=unavailable" in message
+
+    @pytest.mark.parametrize("length_delta", (-1, 1))
+    def test_pc4_source_row_length_mismatch_is_not_lineage_evidence(
+        self, length_delta: int
+    ) -> None:
+        frame = _source_frame(4)
+        decimated = {key: value[::2].copy() for key, value in frame.columns.items()}
+        source_rows = decimated["source_row"]
+        if length_delta < 0:
+            mismatched = source_rows[:-1]
+        else:
+            mismatched = np.append(source_rows, source_rows[-1] + 2.0)
+
+        with pytest.raises(ProcessingError) as caught:
+            compute_band_model(
+                decimated["strain_engineering"],
+                decimated["stress_engineering"],
+                decimated["time"],
+                source_rows=mismatched,
+                method="lower_envelope",
+                policy="band_and_events_auto_v2",
+            )
+
+        message = str(caught.value)
+        assert "lower_connected_component_infeasible:" in message
+        assert "source_row_evidence=unavailable" in message
+        assert "source_row_interval=" not in message
+
+    def test_pc4_connected_suffix_hold_reports_suffix_stage_without_causal_tie_claim(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        frame = _source_frame(4)
+
+        def fail_suffix(*args: Any, **kwargs: Any) -> NDArray[np.float64]:
+            raise ValueError("synthetic suffix hold")
+
+        monkeypatch.setattr(band_module, "lower_suffix_minorant", fail_suffix)
+        with pytest.raises(ProcessingError) as caught:
+            compute_band_model(
+                frame.columns["strain_engineering"],
+                frame.columns["stress_engineering"],
+                frame.columns["time"],
+                source_rows=frame.columns["source_row"],
+                method="lower_envelope",
+                policy="band_and_events_auto_v2",
+            )
+
+        message = str(caught.value)
+        assert "lower_connected_component_infeasible:" in message
+        assert "pool_failure_stage=suffix" in message
+        assert "pool_failure=synthetic suffix hold" in message
+        assert "closure_diagnostic_scope=observed_root_prior_event_boundary" in message
+        assert "pool_failure_stage=closure" not in message
+
     def test_pc4_v2_lower_pool_matches_original_suffix_minima_and_keeps_later_event_separate(
         self,
     ) -> None:

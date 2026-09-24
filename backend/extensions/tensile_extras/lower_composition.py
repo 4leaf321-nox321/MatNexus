@@ -18,6 +18,26 @@ class LowerComponentClosure:
     event_indices: tuple[int, ...]
 
 
+def validated_source_rows(source_rows: ArrayLike) -> NDArray[np.int64] | None:
+    """Return safe source-row evidence, or ``None`` for unusable metadata."""
+    try:
+        raw = np.asarray(source_rows)
+        if raw.ndim != 1 or not np.issubdtype(raw.dtype, np.number) or np.iscomplexobj(raw):
+            return None
+        numeric = np.asarray(raw, dtype=np.float64)
+        if (
+            not np.all(np.isfinite(numeric))
+            or np.any(numeric < 0.0)
+            or np.any(numeric >= float(1 << 63))
+            or np.any(numeric != np.floor(numeric))
+            or np.any(np.diff(numeric) <= 0.0)
+        ):
+            return None
+        return numeric.astype(np.int64)
+    except (TypeError, ValueError, OverflowError):
+        return None
+
+
 def _eligible_connector(event: DropEvent) -> bool:
     return event.kind == "full_recovery" or (
         event.kind == "partial_recovery"
@@ -129,6 +149,127 @@ def connected_lower_closure(
         component_indices=tuple(sorted(component_set)),
         event_indices=tuple(sorted(event_set)),
     )
+
+
+def lower_closure_failure_diagnostic(
+    events: tuple[DropEvent, ...],
+    component_intervals: tuple[tuple[int, int], ...],
+    component_event_indices: tuple[tuple[int, ...], ...],
+    *,
+    root_component: int,
+    failed_event: int,
+    stress: ArrayLike | None = None,
+    source_rows: ArrayLike | None = None,
+) -> str:
+    """Describe a failed closure using only bounded observed evidence."""
+
+    def token(value: object) -> str:
+        if isinstance(value, (bool, np.bool_)):
+            return "true" if value else "false"
+        return "unavailable" if value is None else str(value)
+
+    failed = events[failed_event]
+    root_left, root_right = component_intervals[root_component]
+    prior_candidates = [
+        index
+        for index in component_event_indices[root_component]
+        if index != failed_event
+        and _eligible_connector(events[index])
+        and events[index].end_index <= failed.peak_index
+    ]
+    prior_index = (
+        max(prior_candidates, key=lambda index: (events[index].end_index, index))
+        if prior_candidates
+        else None
+    )
+    fields = [
+        "closure_diagnostic_scope=observed_root_prior_event_boundary",
+        f"root_component={root_component}",
+        f"root_component_interval={root_left}~{root_right}",
+        f"failed_event={failed_event}",
+        f"failed_event_kind={failed.kind}",
+        f"failed_event_peak={failed.peak_index}",
+        f"failed_event_end={failed.end_index}",
+        f"failed_event_closed={token(_eligible_connector(failed))}",
+    ]
+    if prior_index is None:
+        fields.extend(
+            (
+                "prior_event=unavailable",
+                "boundary_relation=unavailable",
+                "observed_index_gap=unavailable",
+                "observed_boundary_tie=not_evaluated",
+                "observed_between_all_equal=not_evaluated",
+                "source_row_evidence=unavailable",
+            )
+        )
+        return " ".join(fields)
+
+    prior = events[prior_index]
+    index_delta = failed.peak_index - prior.end_index
+    relation = (
+        "overlap"
+        if index_delta < 0
+        else "shared_row"
+        if index_delta == 0
+        else "adjacent"
+        if index_delta == 1
+        else "gap"
+    )
+    fields.extend(
+        (
+            f"prior_event={prior_index}",
+            f"prior_event_kind={prior.kind}",
+            f"prior_event_interval={prior.peak_index}~{prior.end_index}",
+            f"boundary_relation={relation}",
+            f"observed_index_gap={max(index_delta - 1, 0)}",
+        )
+    )
+    stress_values = None if stress is None else np.asarray(stress, dtype=np.float64)
+    if (
+        stress_values is None
+        or stress_values.ndim != 1
+        or not np.all(np.isfinite(stress_values))
+        or max(prior.end_index, failed.peak_index) >= stress_values.size
+    ):
+        fields.append("observed_boundary_tie=not_evaluated")
+    else:
+        tie = stress_values[prior.end_index] == stress_values[failed.peak_index]
+        observed_boundary = stress_values[prior.end_index : failed.peak_index + 1]
+        fields.append(f"observed_boundary_tie={token(tie)}")
+        fields.append(
+            "observed_between_all_equal="
+            + token(
+                bool(
+                    observed_boundary.size
+                    and np.all(observed_boundary == observed_boundary[0])
+                )
+            )
+        )
+
+    source_values = None if source_rows is None else validated_source_rows(source_rows)
+    if source_values is not None and (
+        stress_values is None or source_values.size != stress_values.size
+    ):
+        source_values = None
+    if (
+        source_values is None
+        or source_values.ndim != 1
+        or max(prior.end_index, failed.peak_index) >= source_values.size
+    ):
+        fields.append("source_row_evidence=unavailable")
+    else:
+        left = int(source_values[prior.end_index])
+        right = int(source_values[failed.peak_index])
+        fields.extend(
+            (
+                "source_row_evidence=available",
+                f"source_row_interval={left}~{right}",
+                f"source_row_gap={max(right - left - 1, 0)}",
+                f"source_row_gap_exceeds_observed={token(right - left > index_delta)}",
+            )
+        )
+    return " ".join(fields)
 
 
 def lower_suffix_minorant(source: ArrayLike, *, left: int, right: int) -> NDArray[np.float64]:
