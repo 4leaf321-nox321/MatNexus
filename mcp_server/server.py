@@ -89,9 +89,14 @@ GUIDE_PATH = Path(__file__).parent / "guide" / "GUIDE.md"
 
 mcp = MCPServer(
     name="matnexus",
+    # **답할 때의 단위는 여기 적는다**(2026-09-24). 안내(GUIDE)의 「units」 절에만 두었더니,
+    # 그 절을 안 부른 AI 점검 세션이 단위를 안 말한 물음에 SI 로만 답했다 — 늘 실리는
+    # 자리는 이 문장뿐이다.
     instructions=(
         "MatNexus 재료 물성 플랫폼. 값에는 언제나 출처(origin·source·quality_tier)가"
-        " 함께 오고, 숫자는 전부 SI 다. 먼저 get_guide() 를 읽어라 —"
+        " 함께 오고, 도구가 주고받는 숫자는 전부 SI 다. 사람에게 답할 때 단위를 따로"
+        " 말하지 않았으면 mm·N·tonne(해석의 관행)으로 답하고 SI 값을 괄호에 함께 적는다 —"
+        " 환산은 convert_unit 에 시킨다. 먼저 get_guide() 를 읽어라 —"
         " 특히 tier 4(추정)와 synthetic(합성) 값을 실측처럼 옮기지 않는 규약이 있다."
     ),
 )
