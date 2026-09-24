@@ -173,8 +173,8 @@ def export(
     spaces = _workspaces(db, workspace)
     keep = set(spaces)
 
-    # **전역 재료는 부서가 없다**(`owner_workspace_id` 가 NULL). 부서로 거를 때도
-    # 함께 낸다 — 그 재료를 쓰는 시험이 나가는데 재료만 빠지면 줄이 끊긴다.
+    # **부서 없이 올린 재료**(`owner_workspace_id` 가 NULL)는 부서로 거를 때도 함께
+    # 낸다 — 그 재료를 쓰는 시험이 나가는데 재료만 빠지면 줄이 끊긴다.
     materials = [
         one
         for one in db.scalars(select(Material).where(Material.deleted_at.is_(None)))
@@ -247,7 +247,6 @@ def _write_core(
             "density_kg_m3",
             "poisson_ratio",
             "alias",
-            "is_global",
             "legacy_id",
             "note",
             "created_at",
@@ -268,8 +267,8 @@ def _write_core(
                 material.density_si,
                 material.poisson_ratio,
                 material.alias,
-                # 전역 재료는 소유 부서가 없다 — 그것이 곧 「전역」 이다.
-                material.owner_workspace_id is None,
+                # `is_global` 칸은 걷었다(ADR 0035) — 받는 쪽이 「공식인가」 로 읽었다.
+                # 부서가 비었는지는 `workspace` 칸이 그대로 말한다.
                 material.legacy_id,
                 material.note,
                 _iso(material.created_at),

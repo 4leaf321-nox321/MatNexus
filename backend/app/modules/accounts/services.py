@@ -55,6 +55,7 @@ def account_out(db: Session, user: User) -> AccountOut:
         display_name=user.display_name,
         status=user.status,
         is_system_admin=user.is_system_admin,
+        is_data_manager=user.is_data_manager,
         must_change_password=user.must_change_password,
         home_workspace_slug=home.slug if home else None,
         requested_workspace_slug=requested.slug if requested else None,
@@ -401,6 +402,39 @@ def set_system_admin(db: Session, *, user_id: uuid.UUID, grant: bool, actor: Use
         target_id=user.id,
         target_label=user.display_name or user.email,
         changes={"is_system_admin": {"before": before, "after": grant}},
+    )
+    db.commit()
+    return user
+
+
+def set_data_manager(db: Session, *, user_id: uuid.UUID, grant: bool, actor: User) -> User:
+    """자료 관리자를 주거나 뺀다(ADR 0035). **시스템 관리자만 부른다**(라우트가 막는다).
+
+    시스템 관리자 권한과 달리 **자기 것도 바꿀 수 있다** — 이것을 빼도 시스템 관리자는
+    그대로 남아 되돌릴 수 있다. 활성 계정에만 준다(시스템 관리자와 같은 이유: 화면에는
+    관리자로 보이는데 로그인은 안 되는 계정이 생긴다).
+    """
+    user = db.get(User, user_id)
+    if user is None:
+        raise NotFound("MNX-ACCOUNTS-0003", "계정을 찾을 수 없습니다.")
+    if grant and user.status != "active":
+        raise Conflict(
+            "MNX-ACCOUNTS-0018",
+            "활성 계정에만 자료 관리자를 맡길 수 있습니다.",
+        )
+    before = user.is_data_manager
+    if before == grant:
+        return user
+    user.is_data_manager = grant
+    # **누가 전사 자료를 고칠 수 있게 됐는가** — 권한이 실린 변경이라 남긴다.
+    audit.record(
+        db,
+        action=audit.ACCOUNT_DATA_MANAGER_CHANGED,
+        actor=actor,
+        target_table="users",
+        target_id=user.id,
+        target_label=user.display_name or user.email,
+        changes={"is_data_manager": {"before": before, "after": grant}},
     )
     db.commit()
     return user

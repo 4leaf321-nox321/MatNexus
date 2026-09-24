@@ -16,7 +16,7 @@
 
 import { useEffect, useState } from 'react'
 import { AlertTriangle, ChevronLeft, ChevronRight, FileUp, FlaskConical, Layers, PencilLine, Plus, RefreshCw, Search, Star, Trash2, X } from 'lucide-react'
-import { Link, useLocation, useParams, useSearchParams } from 'react-router-dom'
+import { Link, useLocation, useSearchParams } from 'react-router-dom'
 
 import { BatchDialog } from '@/modules/processing/BatchDialog'
 import { RUN_STATUS_LABEL, isPending, testsApi } from '@/modules/tests/api'
@@ -70,11 +70,9 @@ const PAGE_SIZES = [50, 100, 200, 'all'] as const
 type PageSize = (typeof PAGE_SIZES)[number]
 
 export default function TestRunsPage() {
-  const { slug } = useParams<{ slug?: string }>()
   // 지금 이 목록의 주소. 상세로 넘겨 「뒤로」 가 여기로 돌아오게 한다.
-  const { pathname } = useLocation()
+  const { pathname, search: here } = useLocation()
   const [uploading, setUploading] = useState(false)
-  // 사이드바가 '부서' 라고 말하는 화면이므로 그 부서 것만 보여 준다.
   const [size, setSize] = useState<PageSize>(PAGE_SIZES[0])
   const [offset, setOffset] = useState(0)
   const all = size === 'all'
@@ -84,6 +82,10 @@ export default function TestRunsPage() {
   // 보내는데 그것을 안 읽으면 거르개 없는 전체 목록이 뜬다 — 누른 사람은 그 숫자가
   // 가리킨 것을 다시 찾아야 하고, 단추가 안 먹은 것처럼 보인다.
   const [askedIn] = useSearchParams()
+  // **그 부서가 올린 시험만** — `?workspace=<부서>`. 전에는 주소가 `/w/<부서>/tests` 였고
+  // 부서는 상단 선택기가 정했다(ADR 0035 3단계에서 걷었다). 거르기는 그대로 남는다 —
+  // 옛 주소도 이리로 온다.
+  const slug = askedIn.get('workspace') ?? undefined
   // **워크벤치에서 담으러 왔나.** 그 사람은 고르는 순간 담기 창이 떠야 한다 —
   // 평소에는 단추만 선다(체크만 해도 창이 뜨면 지우기·일괄 수정을 방해한다).
   const collecting = askedIn.get('collect') === 'test_run'
@@ -251,7 +253,7 @@ export default function TestRunsPage() {
       <PageHeader
         title="시험 데이터"
         description={`장비 원본을 올리면 서버가 읽어 곡선으로 만듭니다.${
-          slug ? ` 이 부서(${slug})가 등록한 시험만 보입니다.` : ''
+          slug ? ` 부서(${slug})가 등록한 시험만 보입니다 — 전체는 주소에서 workspace 를 빼세요.` : ''
         }`}
         actions={
           <>
@@ -260,7 +262,7 @@ export default function TestRunsPage() {
               새로고침
             </Button>
             <Button variant="secondary" size="sm" asChild>
-              <Link to={slug ? `/w/${slug}/tests/upload` : '/tests/upload'}>
+              <Link to="/tests/upload">
                 <FileUp className="size-4" />
                 일괄 등록
               </Link>
@@ -367,7 +369,6 @@ export default function TestRunsPage() {
               kind="test_run"
               ids={[...picked]}
               labels={rows.filter((one) => picked.has(one.id)).map((one) => one.record_name)}
-              workspaceSlug={slug}
               auto={collecting}
             />
             {/* **올릴 때 빠뜨린 것을 나중에 채운다.** 지금까지는 사업부를
@@ -627,7 +628,7 @@ export default function TestRunsPage() {
                       한다 — 20건을 훑는 중이면 재료로 튕기는 순간 자리를 잃는다. */}
                   <Link
                     to={`/test-runs/${run.id}`}
-                    state={{ from: { to: pathname, label: '시험 데이터' } }}
+                    state={{ from: { to: `${pathname}${here}`, label: '시험 데이터' } }}
                     className="hover:text-primary hover:underline"
                   >
                     {run.record_name}
@@ -642,7 +643,7 @@ export default function TestRunsPage() {
                   {run.material_id ? (
                     <Link
                       to={`/materials/${run.material_id}`}
-                      state={{ from: { to: pathname, label: '시험 데이터' } }}
+                      state={{ from: { to: `${pathname}${here}`, label: '시험 데이터' } }}
                       className="hover:text-primary hover:underline"
                     >
                       {run.material_name ?? run.material_id}

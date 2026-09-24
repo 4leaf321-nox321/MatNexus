@@ -54,9 +54,9 @@ function answer({
 
 function show() {
   return render(
-    <MemoryRouter initialEntries={['/w/metal']}>
+    <MemoryRouter initialEntries={['/']}>
       <Routes>
-        <Route path="/w/:slug" element={<WorkspaceHomePage />} />
+        <Route path="/" element={<WorkspaceHomePage />} />
       </Routes>
     </MemoryRouter>
   )
@@ -85,11 +85,11 @@ describe('부서 홈', () => {
       expect(await screen.findByText(title)).toBeInTheDocument()
     }
 
-    // **업로드만 내 부서로 간다** — 올린 시험이 어느 부서 것이 되는가는 여기서
-    // 정해진다. 처리는 전역 목록이다: 가입자 전원이 모든 부서의 시험을 보므로,
-    // 부서로 좁히면 「이것뿐인가」 로 읽힌다.
+    // **어느 입구도 부서 주소가 아니다**(ADR 0035 3단계). 업로드만 `/w/<부서>` 로 갔는데,
+    // 올린 시험의 부서는 시편을 따르고 주소가 정하지 않았다 — 그 부서가 정하는 것이
+    // 없었다. 처리도 전사 목록이다: 가입자 전원이 모든 부서의 시험을 본다.
     const upload = (await screen.findByText('업로드')).closest('a')
-    expect(upload).toHaveAttribute('href', '/w/metal/tests/upload')
+    expect(upload).toHaveAttribute('href', '/tests/upload')
     expect((await screen.findByText('처리')).closest('a')).toHaveAttribute('href', '/tests')
   })
 

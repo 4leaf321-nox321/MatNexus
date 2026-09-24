@@ -15,7 +15,7 @@
  * 고른 상태도 없다(첫 것을 연다). 그래서 합치지 않았다.
  */
 
-import { Globe2 } from 'lucide-react'
+import { Lock } from 'lucide-react'
 
 import type { TestType } from '@/modules/tests/api'
 import { Badge } from '@/shared/components/ui/badge'
@@ -48,13 +48,12 @@ export function TestTypeListPanel({
               >
                 <div className="flex items-center gap-1">
                   <span className="truncate">{type.label}</span>
-                  {/* **누구 것인지 안 보이면 왜 못 고치는지 알 수 없다.**
-                      전역은 시스템 관리자만 손댄다 — 목록에서부터 보여야
-                      편집을 눌러 보고 403 을 받는 일이 없다. */}
-                  {type.is_global && (
-                    <Globe2
+                  {/* **못 고치는 것은 목록에서부터 표시한다** — 편집을 눌러 보고 403 을
+                      받는 일이 없게(ADR 0035). 전에는 「전역」 지구본이 그 뜻이었다. */}
+                  {type.access && !type.access.can_edit && (
+                    <Lock
                       className="text-muted-foreground size-3 shrink-0"
-                      aria-label="전역"
+                      aria-label="읽기 전용"
                     />
                   )}
                   {!type.is_active && (

@@ -37,7 +37,7 @@ from app.modules.viscoelastic.schemas import (
 )
 from app.shared.auth import current_user
 from app.shared.errors import AppError
-from app.shared.permissions import get_run
+from app.shared.permissions import get_run, require_edit
 
 router = APIRouter(prefix="/viscoelastic", tags=["viscoelastic"])
 
@@ -222,9 +222,10 @@ def set_primary(
     처리 결과의 **채택**과 같은 자리다 — 여러 벌 만들고 하나를 고른다.
     """
     curve = services.curve_or_404(db, master_curve_id)
-    # 곡선은 시험에 매달려 있다. 그 시험을 볼 수 있어야 만질 수 있다.
+    # 곡선은 시험에 매달려 있다. **대표를 고르는 것은 채택처럼 시험을 고치는 일이다**
+    # (ADR 0035) — 그 시험을 고칠 수 있는 사람만 한다.
     run = get_run(db, user, curve.test_run_id)
-    assert run is not None
+    require_edit(db, user, run, code="MNX-VISCOELASTIC-0009")
     services.mark_primary(db, curve)
     db.commit()
     db.refresh(curve)

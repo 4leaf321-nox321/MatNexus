@@ -252,12 +252,6 @@ export const DECK_FORMATS = [
   { key: 'dyna_thermal', label: 'LS-DYNA 열물성 (*MAT_THERMAL_ISOTROPIC)' },
 ] as const
 
-/** 덱 단위계 — 내장 두 계 (서버 systems.get 과 짝). */
-export const DECK_UNITS = [
-  { key: 'si', label: 'SI (kg · m · s · Pa)' },
-  { key: 'mm_n_tonne', label: 'mm · N · tonne (MPa)' },
-] as const
-
 export type CompareResult = components['schemas']['CatalogCompareOut']
 export type AshbyAxis = components['schemas']['AshbyAxisOut']
 export type AshbyResult = components['schemas']['AshbyOut']
@@ -276,7 +270,8 @@ export const catalogApi = {
   deckBuild: (body: {
     items: { mid: number; catalog_material_id: string }[]
     format: string
-    units?: string
+    /** 비우면 서버 기본(mm·N·tonne, ADR 0036). */
+    units?: string | null
   }) => api.post<DeckBuilt>('/catalog/deck/build', body),
   summary: () => api.get<CatalogSummary>('/catalog/summary'),
   /** 사내 재료의 문헌 연결. 없어도 200 — catalog_material_id 가 null 이다. */

@@ -100,21 +100,19 @@ from app.modules.workspaces.models import Workspace
 from app.shared import (
     audit,
     declared_slots,
+    definition_keys,
     display,
     filestore,
     litdeck,
     pagination,
     permissions,
     property_names,
+    unit_systems,
 )
+from app.shared.access import AccessBook, EditAccessOut, access_of
 from app.shared.auth import current_user, require_system_admin
-from app.shared.errors import AppError, Conflict, Forbidden, NotFound
+from app.shared.errors import AppError, Conflict, NotFound
 from app.shared.pagination import Page
-from app.shared.permissions import (
-    require_owner_edit,
-    resolve_owner_workspace,
-    visible_owner_clause,
-)
 from matcore import (
     cards,
     curves,
@@ -1086,7 +1084,7 @@ def _save_card(db: Session, user: User, item: PropertyCard) -> PropertyCardOut:
     )
     db.commit()
     db.refresh(item)
-    return _card_out(db, item, workspace_id=user.home_workspace_id)
+    return _card_out(db, item, access=access_of(db, user, item))
 
 
 @router.post("/preview", response_model=FitPreviewOut)
@@ -1316,8 +1314,8 @@ def _card_out(
     item: PropertyCard,
     *,
     material: Material | None = None,
-    workspace_id: uuid.UUID | None = None,
     targets: list[export.Renderer] | None = None,
+    access: EditAccessOut | None = None,
 ) -> PropertyCardOut:
     """카드 하나를 응답 모양으로.
 
@@ -1353,7 +1351,7 @@ def _card_out(
     # 정의」 는 내려받기 메뉴에서 늘 회색이다 — 만들 수는 있는데 쓸 수는 없는 것이
     # 됐다(2026-09-05 순환 점검). 목록은 한 번 만든 것을 돌려 쓴다(N+1).
     if targets is None:
-        targets = renderers.all_renderers(db, workspace_id)
+        targets = renderers.all_renderers(db)
     formats = [one.key for one in targets if not export.missing_for(deck, one)]
     if problem is None:
         problem = _table_problem(deck)
@@ -1372,9 +1370,9 @@ def _card_out(
         point_count=item.point_count,
         note=item.note,
         owner_workspace_name=workspace.name if workspace else None,
-        is_global=material is not None and material.owner_workspace_id is None,
         published_at=item.published_at,
         created_at=item.created_at,
+        access=access,
     )
 
 
@@ -2831,8 +2829,12 @@ def create_lve_card(
 #: 전부 푸는 사람만 볼 수 있다.
 NO_TEST = "none"
 
-#: 전역 재료(소유 부서 없음)를 가리키는 값. 같은 이유로 둔다.
-GLOBAL_OWNER = "global"
+#: 소속 부서가 없는 재료를 가리키는 값. 같은 이유로 둔다.
+#:
+#: 전에는 `global` 이었고 라벨이 「(전역)」 이었다 — 그 말을 다른 시스템이 「공식」 으로
+#: 읽어서 걷었다(ADR 0035). 낡은 북마크를 위해 `global` 도 같은 뜻으로 받는다.
+NO_OWNER = "none"
+_LEGACY_NO_OWNER = "global"
 
 
 def _cards_query(db: Session, user: User, material_id: uuid.UUID | None) -> Select[Any]:
@@ -2905,16 +2907,16 @@ def card_facets(
     for key, count in tally(base.c.owner_workspace_id):
         owners.append(
             CardFacetOut(
-                key=GLOBAL_OWNER if key is None else str(key),
-                label="(전역)" if key is None else names.get(key, "?"),
+                key=NO_OWNER if key is None else str(key),
+                label="(부서 없음)" if key is None else names.get(key, "?"),
                 count=count,
             )
         )
     return CardFacetsOut(
         statuses=sorted(statuses, key=lambda one: one.key),
         test_types=sorted(test_types, key=lambda one: (one.key == NO_TEST, one.label)),
-        # 전역이 먼저다 — 모든 부서가 쓰는 것이라 목록의 뿌리에 가깝다.
-        owners=sorted(owners, key=lambda one: (one.key != GLOBAL_OWNER, one.label)),
+        # 「부서 없음」 은 맨 뒤다 — 시험 없음과 같은 자리.
+        owners=sorted(owners, key=lambda one: (one.key == NO_OWNER, one.label)),
     )
 
 
@@ -2935,8 +2937,8 @@ def list_cards(
     **거르는 일은 서버가 한다.** 앞 50장만 받아 화면에서 거르면 뒤엣것이 없는
     카드가 된다 — 재료 목록 패널이 같은 이유로 그렇게 되어 있다.
 
-    `test_type_key=none` 은 **시험 없이 만든 카드**다(ADR 0016). `owner=global`
-    은 전역 재료의 카드다.
+    `test_type_key=none` 은 **시험 없이 만든 카드**다(ADR 0016). `owner=none`
+    은 소속 부서가 없는 재료의 카드다.
     """
     query = _cards_query(db, user, material_id)
     if status:
@@ -2951,7 +2953,7 @@ def list_cards(
             PropertyCard.test_type_id == (found.id if found else None),
             PropertyCard.test_type_id.is_not(None),
         )
-    if owner == GLOBAL_OWNER:
+    if owner in (NO_OWNER, _LEGACY_NO_OWNER):
         query = query.where(Material.owner_workspace_id.is_(None))
     elif owner:
         # **손으로 고친 URL 이 500 을 내면 안 된다.** `uuid.UUID` 는 아무 문자열에나
@@ -2962,7 +2964,7 @@ def list_cards(
         except ValueError as caught:
             raise AppError(
                 "MNX-FITTING-0018",
-                f"부서 값이 '{owner}' 입니다 — 부서 id 이거나 '{GLOBAL_OWNER}' 여야 합니다.",
+                f"부서 값이 '{owner}' 입니다 — 부서 id 이거나 '{NO_OWNER}' 여야 합니다.",
                 status=422,
             ) from caught
         query = query.where(Material.owner_workspace_id == owner_id)
@@ -2977,10 +2979,12 @@ def list_cards(
     rows = db.execute(
         query.order_by(PropertyCard.created_at.desc()).limit(size).offset(offset)
     ).all()
-    targets = renderers.all_renderers(db, user.home_workspace_id)
+    targets = renderers.all_renderers(db)
+    book = AccessBook(db, user).prime([card for card, _ in rows])
     return Page(
         items=[
-            _card_out(db, card, material=material, targets=targets) for card, material in rows
+            _card_out(db, card, material=material, targets=targets, access=book.of(card))
+            for card, material in rows
         ],
         total=total,
         limit=size,
@@ -2995,7 +2999,7 @@ def get_card(
     db: Session = Depends(get_db),
 ) -> PropertyCardOut:
     item = _visible_card(db, user, card_id)
-    return _card_out(db, item, workspace_id=user.home_workspace_id)
+    return _card_out(db, item, access=access_of(db, user, item))
 
 
 def _card_workspace(db: Session, item: PropertyCard) -> uuid.UUID | None:
@@ -3031,9 +3035,10 @@ def _system_out(item: UnitSystem) -> UnitSystemOut:
         label=item.label,
         declaration=item.declaration,
         # **기본은 CAE 계(mm·N·tonne)다**(2026-09-05). 화면이 그 계로 보여 주는데
-        # 덱만 SI 로 나가니 「단위가 이상하다」 가 됐다. API 인자를 안 준 옛 호출은
-        # 여전히 SI 다 — 스크립트가 전과 다른 것을 받으면 안 된다.
-        is_default=item is export.systems.MM_N_TONNE,
+        # 덱만 SI 로 나가니 「단위가 이상하다」 가 됐다. 그때는 API 인자를 안 준 옛 호출을
+        # SI 로 남겼는데, 해석 연동이 인자 없이 받아 SI 를 mm 모델에 넣을 뻔해서
+        # (2026-09-24) API 도 같은 기본이 됐다 — ADR 0036, `shared/unit_systems.DEFAULT`.
+        is_default=item.key == unit_systems.DEFAULT,
         builtin=item.builtin,
         mass=item.mass,
         length=item.length,
@@ -3042,35 +3047,14 @@ def _system_out(item: UnitSystem) -> UnitSystemOut:
     )
 
 
-def _custom_systems(db: Session) -> list[UnitSystem]:
-    """사용자가 만든 계. 읽을 때마다 유도한다 — 인수를 저장하지 않는다."""
-    return [
-        export.systems.derive(
-            row.key, row.label, mass=row.mass, length=row.length, time=row.time
-        )
-        for row in db.scalars(select(UnitSystemDef).order_by(UnitSystemDef.key))
-    ]
-
-
 def _all_systems(db: Session) -> list[UnitSystem]:
-    return [*export.SYSTEMS, *_custom_systems(db)]
+    return unit_systems.available(db)
 
 
 def _unit_system(db: Session, key: str | None) -> UnitSystem:
-    """붙박이 먼저, 그다음 사용자 계. 모르면 422 — 쓸 수 있는 것을 함께 말한다."""
-    try:
-        return export.systems.get(key)
-    except KeyError:
-        pass
-    for item in _custom_systems(db):
-        if item.key == key:
-            return item
-    known = ", ".join(one.key for one in _all_systems(db))
-    raise AppError(
-        "MNX-FITTING-0023",
-        f"모르는 단위계입니다: {key!r}. 쓸 수 있는 것: {known}",
-        status=422,
-    )
+    """붙박이 먼저, 그다음 사용자 계. **비우면 mm·N·tonne**(ADR 0036) — 계를 고르는 자리는
+    `shared/unit_systems` 하나다. 모르면 422 — 쓸 수 있는 것을 함께 말한다."""
+    return unit_systems.resolve(db, key, code="MNX-FITTING-0023")
 
 
 @router.get("/unit-systems/base-units", response_model=UnitSystemBaseUnitsOut)
@@ -3178,20 +3162,17 @@ def list_formats(
             describe=item.describe,
             requires=list(export.requires_labels(item)),
         )
-        for item in renderers.all_renderers(db, user.home_workspace_id)
+        for item in renderers.all_renderers(db)
     ]
 
 
-def _visible_profiles(db: Session, user: User) -> Any:
-    """내 부서 것 + 전역. **지운 것은 여기서 빠진다.**
+def _visible_profiles(db: Session) -> Any:
+    """살아 있는 정의 전부 — **전원이 전부 본다**(ADR 0035). **지운 것은 여기서 빠진다.**
 
     이 한 곳을 안 거르면 지운 정의가 내보내기 형식 목록에 그대로 뜬다 — 인풋
     프로파일이 같은 규칙, 같은 코드다.
     """
-    return select(ExportProfile).where(
-        visible_owner_clause(db, user, ExportProfile.owner_workspace_id),
-        ExportProfile.deleted_at.is_(None),
-    )
+    return select(ExportProfile).where(ExportProfile.deleted_at.is_(None))
 
 
 def _checked(definition: dict[str, Any], key: str, label: str) -> None:
@@ -3215,7 +3196,9 @@ def _checked(definition: dict[str, Any], key: str, label: str) -> None:
         raise AppError("MNX-FITTING-0025", str(exc), status=422) from exc
 
 
-def _profile_out(db: Session, item: ExportProfile) -> ExportProfileOut:
+def _profile_out(
+    db: Session, item: ExportProfile, access: EditAccessOut | None = None
+) -> ExportProfileOut:
     owner = db.get(Workspace, item.owner_workspace_id) if item.owner_workspace_id else None
     return ExportProfileOut(
         id=item.id,
@@ -3224,7 +3207,7 @@ def _profile_out(db: Session, item: ExportProfile) -> ExportProfileOut:
         description=item.description,
         owner_workspace_slug=owner.slug if owner else None,
         owner_workspace_name=owner.name if owner else None,
-        is_global=item.owner_workspace_id is None,
+        access=access,
         definition=item.definition,
         is_active=item.is_active,
         created_at=item.created_at,
@@ -3237,9 +3220,11 @@ def list_export_profiles(
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> list[ExportProfileOut]:
-    """내 부서 것 + 전역. 시스템 관리자는 전부."""
-    query = _visible_profiles(db, user).order_by(ExportProfile.key)
-    return [_profile_out(db, item) for item in db.scalars(query)]
+    """모든 부서의 것 — **전원이 전부 본다**(ADR 0035). 줄마다 고칠 수 있는지를 싣는다."""
+    query = _visible_profiles(db).order_by(ExportProfile.key)
+    items = list(db.scalars(query))
+    book = AccessBook(db, user).prime(items)
+    return [_profile_out(db, item, book.of(item)) for item in items]
 
 
 @router.post("/export-profiles", response_model=ExportProfileOut, status_code=201)
@@ -3248,35 +3233,36 @@ def create_export_profile(
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> ExportProfileOut:
-    """부서 관리자가 자기 부서의 해석용 물성 정의를 만든다.
+    """누구나 만든다 — 등록자가 고치고, 필요하면 부서에 편집을 준다(ADR 0035).
 
     **부서마다 쓰는 솔버가 다르다.** 그리고 같은 솔버라도 사업부마다 덱 관례가
     다르다 — 어느 키워드를 쓰는지, 표를 몇 줄로 자르는지. 그 지식은 해석을
     돌리는 사람에게 있지 시스템 관리자에게 없다.
+
+    등록 부서는 **안 보내면 내 소속**이다. 화면은 이 칸을 안 보낸다 — 전에는 그것을
+    「전역」 으로 읽어서, 부서 관리자가 만들기를 누르면 403 이 났다.
     """
-    owner_id = resolve_owner_workspace(
+    owner_id = permissions.registering_workspace(
         db,
         user,
         payload.owner_workspace_slug,
+        given="owner_workspace_slug" in payload.model_fields_set,
         what="해석용 물성 정의",
         code="MNX-FITTING-0027",
     )
-    duplicate = db.scalar(
-        select(ExportProfile).where(
-            ExportProfile.key == payload.key,
-            # **지운 것은 안 센다.** 안 거르면 지운 정의의 key 로 다시 만들 수
-            # 없으면서 화면 어디에도 그것이 없다 — 되살리는 길은 휴지통이다.
-            ExportProfile.deleted_at.is_(None),
-            ExportProfile.owner_workspace_id.is_(None)
-            if owner_id is None
-            else ExportProfile.owner_workspace_id == owner_id,
-        )
+    # **지운 것은 안 센다.** 안 거르면 지운 정의의 key 로 다시 만들 수 없으면서
+    # 화면 어디에도 그것이 없다 — 되살리는 길은 휴지통이다.
+    key = definition_keys.resolve(
+        db,
+        ExportProfile,
+        payload.key,
+        prefix="deck",
+        what="해석용 물성 정의",
+        code="MNX-FITTING-0024",
     )
-    if duplicate:
-        raise Conflict("MNX-FITTING-0024", f"이미 있는 해석용 물성 정의입니다: {payload.key}")
-    _checked(payload.definition, payload.key, payload.label)
+    _checked(payload.definition, key, payload.label)
     item = ExportProfile(
-        key=payload.key,
+        key=key,
         label=payload.label,
         description=payload.description,
         owner_workspace_id=owner_id,
@@ -3287,7 +3273,7 @@ def create_export_profile(
     db.add(item)
     db.commit()
     db.refresh(item)
-    return _profile_out(db, item)
+    return _profile_out(db, item, access_of(db, user, item))
 
 
 @router.put("/export-profiles/{key}", response_model=ExportProfileOut)
@@ -3302,12 +3288,10 @@ def update_export_profile(
     그래서 잠그지 않는다. 정의가 틀렸다는 것을 나중에 아는 것이 정상이고, 그때
     고쳐서 다시 내보내면 된다.
     """
-    item = db.scalar(_visible_profiles(db, user).where(ExportProfile.key == key))
+    item = db.scalar(_visible_profiles(db).where(ExportProfile.key == key))
     if item is None:
         raise NotFound("MNX-FITTING-0025", f"해석용 물성 정의를 찾을 수 없습니다: {key}")
-    require_owner_edit(
-        db, user, item.owner_workspace_id, what="해석용 물성 정의", code="MNX-FITTING-0027"
-    )
+    permissions.require_edit(db, user, item, code="MNX-FITTING-0027")
     _checked(payload.definition, key, payload.label)
     item.label = payload.label
     item.description = payload.description
@@ -3315,7 +3299,7 @@ def update_export_profile(
     item.is_active = payload.is_active
     db.commit()
     db.refresh(item)
-    return _profile_out(db, item)
+    return _profile_out(db, item, access_of(db, user, item))
 
 
 @router.delete("/export-profiles/{key}", status_code=204)
@@ -3329,12 +3313,10 @@ def delete_export_profile(
     매달린 것을 검사하지 않는다: 해석용 물성 정의에 딸린 데이터가 없다. 지우면 그 솔버로
     못 낼 뿐이고, 이미 나간 덱은 파일이라 그대로다.
     """
-    item = db.scalar(_visible_profiles(db, user).where(ExportProfile.key == key))
+    item = db.scalar(_visible_profiles(db).where(ExportProfile.key == key))
     if item is None:
         raise NotFound("MNX-FITTING-0025", f"해석용 물성 정의를 찾을 수 없습니다: {key}")
-    require_owner_edit(
-        db, user, item.owner_workspace_id, what="해석용 물성 정의", code="MNX-FITTING-0027"
-    )
+    permissions.require_edit(db, user, item, code="MNX-FITTING-0027")
     item.deleted_at = datetime.now(UTC)
     db.commit()
     return Response(status_code=204)
@@ -3545,7 +3527,7 @@ def export_bundle(
     적는다** — 덱 안 주석은 파일을 열어야 보이고, 안 여는 사람이 있다.
     """
     try:
-        target = renderers.renderer_for(db, user.home_workspace_id, payload.format)
+        target = renderers.renderer_for(db, payload.format)
     except export.ExportError as exc:
         raise AppError("MNX-FITTING-0009", str(exc), status=422) from exc
     system = _unit_system(db, payload.units)
@@ -3592,7 +3574,10 @@ def export_bundle(
 def export_card(
     card_id: uuid.UUID,
     format: str = Query(default="json"),
-    units: str = Query(default="si", description="덱의 단위계. 기본은 SI."),
+    units: str = Query(
+        default=unit_systems.DEFAULT,
+        description="덱의 단위계. 기본은 mm·N·tonne(ADR 0036) — SI 는 `si`.",
+    ),
     mid: int | None = Query(
         default=None,
         ge=1,
@@ -3629,7 +3614,7 @@ def export_card(
         deck = replace(deck, solver_id=mid)
     system = _unit_system(db, units)
     try:
-        target = renderers.renderer_for(db, user.home_workspace_id, format)
+        target = renderers.renderer_for(db, format)
         rendered = export.render(target, deck, system)
     except export.ExportError as exc:
         raise AppError("MNX-FITTING-0009", str(exc), status=422) from exc
@@ -3735,7 +3720,7 @@ def check_card_deck(
     deck = _deck_for_card(db, user, card_id)
     system = _unit_system(db, payload.units)
     try:
-        target = renderers.renderer_for(db, user.home_workspace_id, payload.format)
+        target = renderers.renderer_for(db, payload.format)
         rendered = export.render(target, deck, system)
     except export.ExportError as exc:
         # **못 나온 것도 검사 결과다.** 예외로 끝내면 무엇을 보려 했는지가 사라지고,
@@ -3891,13 +3876,14 @@ def update_card(
             status=409,
         )
 
+    permissions.require_edit(db, user, item, code="MNX-FITTING-0039")
     data = payload.model_dump(exclude_unset=True)
     for field in ("label", "note"):
         if field in data:
             setattr(item, field, data[field])
     db.commit()
     db.refresh(item)
-    return _card_out(db, item, workspace_id=user.home_workspace_id)
+    return _card_out(db, item, access=access_of(db, user, item))
 
 
 @router.get("/resample-methods", response_model=list[ResampleMethodOut])
@@ -3916,7 +3902,7 @@ def publish(
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> PropertyCardOut:
-    """초안을 확정한다. **부서 관리자만**(D12).
+    """초안을 확정한다. **자료 관리자만**(ADR 0035 — D12 의 「부서 관리자」 를 사람 역할로).
 
     올린 뒤에는 값을 바꿀 수 없다 — 그 값으로 해석이 돌았을 수 있다. 고치려면
     사용 중지하고(`deprecated`) 새 카드를 만든다.
@@ -3946,29 +3932,22 @@ def publish(
     )
     db.commit()
     db.refresh(item)
-    return _card_out(db, item, workspace_id=user.home_workspace_id)
+    return _card_out(db, item, access=access_of(db, user, item))
 
 
 def _require_publisher(db: Session, user: User, item: PropertyCard) -> None:
-    """**확정은 부서 관리자만**(D12). 전역 재료는 시스템 관리자만.
+    """**확정은 자료 관리자만**(ADR 0035 D4 — D12 의 「부서 관리자」 를 사람 역할로).
 
     카드를 만드는 것은 누구나 할 수 있다 — 만드는 것은 초안이고, 초안은 아직
-    아무 해석에도 안 들어간다. 확정만 막는다.
+    아무 해석에도 안 들어간다. 확정만 막는다. 확정된 카드는 **다른 시스템으로 넘어가는
+    공식 물성**이라(ADR 0035 D3) 검토의 뜻이 있고, 그래서 등록자가 스스로 하지 않는다.
+
+    전에는 재료 소속 부서의 관리자였다 — 누가 확정할 수 있는지가 재료의 소속에 숨어
+    있어서, 막힌 사람은 누구에게 부탁해야 할지 몰랐다.
     """
-    if user.is_system_admin:
-        return
-    material = db.get(Material, item.material_id)
-    if material is None:
-        raise NotFound("MNX-MATERIALS-0001", "재료를 찾을 수 없습니다.")
-    if material.owner_workspace_id is None:
-        raise Forbidden(
-            "MNX-FITTING-0006",
-            "전역 재료의 물성은 시스템 관리자만 확정할 수 있습니다.",
-        )
-    workspace = db.get(Workspace, material.owner_workspace_id)
-    if workspace is None:
-        raise NotFound("MNX-FITTING-0006", "재료의 소속 부서를 찾을 수 없습니다.")
-    permissions.require_manager(db, workspace=workspace, user=user)
+    permissions.require_steward(
+        user, code="MNX-FITTING-0006", what="카드 확정·내리기·되살리기"
+    )
 
 
 @router.post("/cards/{card_id}/restore", response_model=PropertyCardOut)
@@ -3977,7 +3956,7 @@ def restore(
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> PropertyCardOut:
-    """사용 중지한 카드를 **초안으로** 되살린다. 부서 관리자만.
+    """사용 중지한 카드를 **초안으로** 되살린다. 자료 관리자만(ADR 0035).
 
     ## 왜 초안까지만인가
 
@@ -4015,7 +3994,7 @@ def restore(
     )
     db.commit()
     db.refresh(item)
-    return _card_out(db, item, workspace_id=user.home_workspace_id)
+    return _card_out(db, item, access=access_of(db, user, item))
 
 
 @router.post("/cards/{card_id}/deprecate", response_model=PropertyCardOut)
@@ -4035,6 +4014,9 @@ def deprecate(
         # 올린 사람과 같은 권한으로만 내린다. 확정된 값을 아무나 무를 수 있으면
         # 확정에 권한을 둔 뜻이 없다.
         _require_publisher(db, user, item)
+    else:
+        # 초안을 내리는 것은 초안을 고치는 일이다.
+        permissions.require_edit(db, user, item, code="MNX-FITTING-0039")
     before = item.status
     item.status = "deprecated"
     audit.record(
@@ -4049,7 +4031,7 @@ def deprecate(
     )
     db.commit()
     db.refresh(item)
-    return _card_out(db, item, workspace_id=user.home_workspace_id)
+    return _card_out(db, item, access=access_of(db, user, item))
 
 
 @router.delete("/cards/{card_id}", status_code=204)
@@ -4067,6 +4049,7 @@ def remove_card(
             "이 값으로 해석이 돌았을 수 있습니다.",
             status=409,
         )
+    permissions.require_edit(db, user, item, code="MNX-FITTING-0039")
     # **지워도 기록은 남는다.** 대상에 외래키를 안 건 이유가 이것이다 — 카드가
     # 사라져도 "그 카드가 있었고 누가 지웠다" 는 남아야 한다.
     audit.record(
@@ -4150,7 +4133,7 @@ def deck_readiness(
         db,
         material_id=material_id,
         decks=decks,
-        renderers=renderers.all_renderers(db, user.home_workspace_id),
+        renderers=renderers.all_renderers(db),
     )
     return DeckReadinessOut.model_validate(made, from_attributes=True)
 
@@ -4174,27 +4157,20 @@ def build_bom_deck(
             f"있는 것: {', '.join(litdeck.FORMATS)}",
             status=422,
         )
-    try:
-        system = export.systems.get(payload.units)
-    except KeyError:
-        raise AppError(
-            "MNX-FITTING-0032", f"모르는 단위계입니다: {payload.units}", status=422
-        ) from None
+    # 사용자 계도 받는다 — 전에는 붙박이만 찾아서 사용자 계면 「모르는 단위계」 였다.
+    system = unit_systems.resolve(db, payload.units, code="MNX-FITTING-0032")
 
     # 솔버 — 한 파일은 한 솔버다. 요청이 형식을 주면 그것, 아니면 LS-DYNA 안에서 카드마다.
     if payload.format is not None:
         if payload.format == "json":
             raise AppError("MNX-FITTING-0038", "json 은 합칠 수 없는 형식입니다.", status=422)
         try:
-            chosen = renderers.renderer_for(db, user.home_workspace_id, payload.format)
+            chosen = renderers.renderer_for(db, payload.format)
         except export.ExportError as exc:
             raise AppError("MNX-FITTING-0038", str(exc), status=422) from exc
         card_targets: list[export.Renderer] = [chosen]
     else:
-        card_targets = [
-            renderers.renderer_for(db, user.home_workspace_id, key)
-            for key in _BOM_CARD_FORMATS
-        ]
+        card_targets = [renderers.renderer_for(db, key) for key in _BOM_CARD_FORMATS]
     family = litdeck.format_family(card_targets[0].key)
     extension = card_targets[0].extension
 
@@ -4225,7 +4201,7 @@ def build_bom_deck(
         row_targets = card_targets
         if row.format is not None:
             try:
-                override = renderers.renderer_for(db, user.home_workspace_id, row.format)
+                override = renderers.renderer_for(db, row.format)
             except export.ExportError as refused:
                 skipped.append(BomDeckSkippedOut(mid=row.mid, name=row.name, why=str(refused)))
                 continue

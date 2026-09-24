@@ -94,14 +94,16 @@ from app.shared import (
     property_names,
     property_search,
     representative,
+    unit_systems,
 )
 from app.shared import litdeck as deck_builder
 from app.shared.auth import current_user, require_system_admin
 from app.shared.errors import AppError, NotFound
 from app.shared.pagination import clamp_limit
-from app.shared.permissions import require_owner_edit, visible_material_ids, visible_materials
+from app.shared.permissions import require_edit, visible_material_ids, visible_materials
 from app.shared.text import clean, compare_key
 from matcore import export, registry, units
+from matcore.export.systems import UnitSystem
 
 router = APIRouter(prefix="/catalog", tags=["catalog"])
 
@@ -147,6 +149,10 @@ def export_catalog(
     q: str | None = Query(default=None),
     subsystem: str | None = Query(default=None),
     category: str | None = Query(default=None),
+    units: str | None = Query(
+        default=None,
+        description="값의 단위계. 비우면 mm·N·tonne(ADR 0036) — SI 는 `si`.",
+    ),
     _user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> Response:
@@ -168,7 +174,15 @@ def export_catalog(
     전부 담으면 값 4만여 건에 20MB 안팎이다. 나눠 받게 하지 않는다 — 이어 붙이는
     일을 사람에게 시키면 그 자리에서 빠뜨린다. 좁혀 받고 싶으면 목록과 같은
     조건(`q`·`category`·`subsystem`)을 준다.
+
+    ## 값은 고른 단위계로 — 기본 mm·N·tonne (ADR 0036)
+
+    `value_num`·`unit` 이 그 계이고, 저장된 값은 `value_si`·`si_unit` 으로 곁에 둔다. 문헌에는
+    그 계가 기호를 정해 두지 않은 물리량(저항률·에너지·경도 …)이 많다 — 그것은 받은 그대로
+    두고 `kept_units` 에 적는다.
     """
+    system = unit_systems.resolve(db, units, code="MNX-CATALOG-0053")
+    kept: set[str] = set()
     conditions = _catalog_filters(q, subsystem, category)
     materials = list(
         db.scalars(select(CatalogMaterial).where(*conditions).order_by(CatalogMaterial.name))
@@ -203,7 +217,7 @@ def export_catalog(
             if found:
                 sources.setdefault(found["id"], found)
                 said["source_id"] = found["id"]
-            values.append(said)
+            values.append(_value_in_units(said, system, kept))
         rows_out.append(
             {
                 "id": str(item.id),
@@ -232,14 +246,64 @@ def export_catalog(
         },
         "count": len(rows_out),
         "value_count": sum(len(one["values"]) for one in rows_out),
+        # **숫자를 읽기 전에 볼 자리** — 계와, 그 계로 못 옮겨 그대로 둔 단위.
+        "unit_system": unit_systems.describe(system),
+        "units_note": UNITS_NOTE,
+        "kept_units": sorted(kept),
         # 값의 `source_id` 가 여기를 가리킨다. 값마다 통째로 박지 않는 이유는
         # 위 주석에 있다.
         "sources": list(sources.values()),
         "materials": rows_out,
     }
     return exports.json_file(
-        payload, f"matnexus_catalog_{datetime.now(UTC):%Y%m%d}.json", pretty=False
+        payload, f"matnexus_catalog_{datetime.now(UTC):%Y%m%d}_{system.key}.json", pretty=False
     )
+
+
+#: 내보낸 파일이 제 단위를 설명하는 한 줄. 재료 내보내기와 같은 말이다.
+UNITS_NOTE = (
+    "값(`value`·`value_num`·`density`·`spec_thickness`)은 `unit_system` 의 계로 적었고, "
+    "이름에 si 가 든 칸(`value_si`·`density_si`)은 저장된 SI 다. `kept_units` 의 단위는 "
+    "이 계에 기호가 없어 받은 그대로 뒀다. 모델 파라미터의 항(`parameter_sets`·`term`)은 "
+    "자기 단위다."
+)
+
+
+def _value_in_units(
+    said: dict[str, Any], system: UnitSystem, kept: set[str]
+) -> dict[str, Any]:
+    """문헌 값 하나를 고른 계로 — `value_num`·`unit` 이 그 계, `value_si`·`si_unit` 이
+    저장된 값이다.
+
+    **모델 파라미터의 한 항(`term`)은 옮기지 않는다** — 그 값은 정의의 단위가 아니라 제
+    단위(`term_unit`, 대개 MPa·1/s·K)로 적혀 있어, SI 로 여겨 옮기면 틀린다.
+    """
+    value, unit = said.get("value_num"), said.get("unit")
+    said["value_si"], said["si_unit"] = value, unit
+    if value is None or said.get("term"):
+        return said
+    moved = unit_systems.convert(system, float(value), unit)
+    if not moved.converted:
+        # 파일에 적힌 표기 그대로 적는다 — 머리의 목록으로 값을 찾을 수 있게.
+        if unit:
+            kept.add(str(unit))
+        return said
+
+    def scaled(number: Any) -> Any:
+        """같은 단위의 곁값(불확도·요약)도 같은 계로 — 오프셋 단위는 안 옮기니 선형이다."""
+        if not isinstance(number, int | float) or isinstance(number, bool):
+            return number
+        return unit_systems.convert(system, float(number), unit).value
+
+    said["value_num"], said["unit"] = moved.value, moved.unit
+    said["uncertainty"] = scaled(said.get("uncertainty"))
+    summary = said.get("summary")
+    if isinstance(summary, dict):
+        said["summary"] = {
+            key: scaled(number) if key in ("median", "min", "max") else number
+            for key, number in summary.items()
+        }
+    return said
 
 
 def _catalog_filters(
@@ -307,7 +371,7 @@ def list_materials(
 
 
 def _my_material(db: Session, user: User, material_id: uuid.UUID) -> Material:
-    """보이는 사내 재료 — 가시 범위(전역+열린 부서+내 부서)를 지킨다."""
+    """보이는 사내 재료 — 가시 범위(`permissions.visible_materials`)를 지킨다."""
     item = db.scalar(visible_materials(db, user).where(Material.id == material_id))
     if item is None:
         raise NotFound("MNX-CATALOG-0002", "재료를 찾을 수 없습니다.")
@@ -357,17 +421,13 @@ def put_link(
 ) -> CatalogLinkOut:
     """연결하거나 바꾼다 — 재료당 하나라 다시 걸면 교체다.
 
-    권한은 재료 편집과 같다(부서 관리자, 전역은 시스템 관리자) — 연결이 채택의
-    기본 대상이 되므로 아무나 걸면 남의 재료 물성이 엉뚱한 문헌으로 채워진다.
+    권한은 재료 편집과 **같은 함수**다(ADR 0035) — 연결이 채택의 기본 대상이 되므로
+    아무나 걸면 남의 재료 물성이 엉뚱한 문헌으로 채워진다. 전에는 재료 편집(부서
+    멤버)과 규칙이 달라서(부서 관리자), 카탈로그에서 재료를 만들고 연결까지 하면
+    재료만 생기고 연결은 막혔다.
     """
     material = _my_material(db, user, material_id)
-    require_owner_edit(
-        db,
-        user,
-        material.owner_workspace_id,
-        what="재료의 문헌 연결",
-        code="MNX-CATALOG-0003",
-    )
+    require_edit(db, user, material, code="MNX-CATALOG-0003")
     linked = db.get(CatalogMaterial, payload.catalog_material_id)
     if linked is None:
         raise NotFound("MNX-CATALOG-0001", "카탈로그에 없는 재료입니다.")
@@ -387,13 +447,7 @@ def delete_link(
     db: Session = Depends(get_db),
 ) -> None:
     material = _my_material(db, user, material_id)
-    require_owner_edit(
-        db,
-        user,
-        material.owner_workspace_id,
-        what="재료의 문헌 연결",
-        code="MNX-CATALOG-0003",
-    )
+    require_edit(db, user, material, code="MNX-CATALOG-0003")
     row = db.scalar(select(CatalogLink).where(CatalogLink.material_id == material_id))
     if row is not None:
         db.delete(row)
@@ -698,7 +752,7 @@ def deck_build(
     except export.ExportError as refused:
         raise AppError("MNX-CATALOG-0005", str(refused), status=422) from refused
     suffix = "" if payload.format == "dyna_elastic" else "_thermal"
-    units_key = payload.units or "si"
+    units_key = payload.units or unit_systems.DEFAULT
     return DeckBuiltOut(
         filename=f"matnexus_catalog{suffix}_{units_key}.k",
         text=built.text,
@@ -1231,12 +1285,18 @@ def add_property_alias(
 @router.delete("/properties/aliases/{alias_id}", status_code=204)
 def remove_property_alias(
     alias_id: uuid.UUID,
-    _user: User = Depends(current_user),
+    user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> None:
+    """별칭 하나를 지운다 — **넣은 사람과 관리자만**(ADR 0035, 문헌 직접 입력과 같은 규칙).
+
+    전에는 로그인한 누구나 지울 수 있었다. 별칭은 「항복응력」 을 어느 물성으로 읽을지를
+    정하므로, 남이 지우면 그 사람의 질문이 조용히 다른 물성에 답하게 된다.
+    """
     row = db.get(PropertyAlias, alias_id)
     if row is None:
         raise NotFound("MNX-CATALOG-0023", "그 별칭을 찾을 수 없습니다.")
+    contribute.require_contributor(row.created_by_id, user)
     db.delete(row)
     db.commit()
 

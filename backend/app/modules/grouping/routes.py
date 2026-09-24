@@ -27,8 +27,8 @@ from app.modules.grouping.schemas import (
     GroupResultOut,
 )
 from app.modules.materials.models import Material
-from app.modules.workspaces.models import Workspace
 from app.shared import audit, permissions, test_type_channels
+from app.shared.access import AccessBook, EditAccessOut, access_of
 from app.shared.auth import current_user
 from app.shared.errors import Conflict, NotFound
 from matcore import groups, registry
@@ -36,7 +36,7 @@ from matcore import groups, registry
 router = APIRouter(prefix="/groups", tags=["grouping"])
 
 
-def _out(row: GroupResult) -> GroupResultOut:
+def _out(row: GroupResult, *, access: EditAccessOut | None = None) -> GroupResultOut:
     return GroupResultOut(
         id=row.id,
         material_id=row.material_id,
@@ -50,6 +50,7 @@ def _out(row: GroupResult) -> GroupResultOut:
         warnings=row.warnings,
         note=row.note,
         created_at=row.created_at,
+        access=access,
     )
 
 
@@ -122,18 +123,19 @@ def create_group(
         note=payload.note,
     )
     db.commit()
-    return _out(row)
+    return _out(row, access=access_of(db, user, row))
 
 
 def _editable(db: Session, user: User, group_id: uuid.UUID) -> GroupResult:
-    """그 묶음을 만든 부서의 멤버(또는 시스템 관리자)만 고치고 지운다."""
+    """만든 사람 · 편집을 받은 부서 · 자료 관리자만 고치고 지운다(ADR 0035).
+
+    전에는 만든 부서의 멤버였다 — 소속이 권한을 정해서, 부서를 옮긴 사람은 자기가
+    만든 묶음을 못 고쳤고 옆 부서 사람은 이유를 모른 채 막혔다.
+    """
     row = db.get(GroupResult, group_id)
     if row is None:
         raise NotFound("MNX-GROUPING-0011", "그 묶음을 찾을 수 없습니다.")
-    workspace = db.get(Workspace, row.workspace_id)
-    if workspace is None:
-        raise NotFound("MNX-GROUPING-0011", "그 묶음을 찾을 수 없습니다.")
-    permissions.require_member(db, workspace=workspace, user=user)
+    permissions.require_edit(db, user, row, code="MNX-GROUPING-0013")
     return row
 
 
@@ -149,7 +151,7 @@ def update_note(
     row.note = (payload.note or "").strip() or None
     db.commit()
     db.refresh(row)
-    return _out(row)
+    return _out(row, access=access_of(db, user, row))
 
 
 @router.delete("/{group_id}", status_code=204)
@@ -204,4 +206,6 @@ def list_for_material(
     )
     if visible is None:
         raise NotFound("MNX-GROUPING-0003", "재료를 찾을 수 없습니다.")
-    return [_out(row) for row in services.of_material(db, material_id)]
+    rows = list(services.of_material(db, material_id))
+    book = AccessBook(db, user).prime(rows)
+    return [_out(row, access=book.of(row)) for row in rows]

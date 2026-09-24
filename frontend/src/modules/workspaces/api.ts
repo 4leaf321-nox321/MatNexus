@@ -55,7 +55,7 @@ export const workspacesApi = {
   create: (slug: string, name: string, parentSlug?: string | null) =>
     api.post<Workspace>('/workspaces', { slug, name, parent_slug: parentSlug ?? null }),
 
-  update: (slug: string, payload: { name?: string; is_active?: boolean; restricted?: boolean }) =>
+  update: (slug: string, payload: { name?: string; is_active?: boolean }) =>
     api.patch<Workspace>(`/workspaces/${slug}`, payload),
 
   /** 상위 부서 바꾸기(조직 개편). `null` 이면 뿌리로 올린다.

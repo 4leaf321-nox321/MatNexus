@@ -44,6 +44,14 @@ class User(Base):
     is_system_admin: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default="false"
     )
+    is_data_manager: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false"
+    )
+    """**자료 관리자**(ADR 0035) — 부서와 무관하게 모든 자료를 고치고 카드를 확정한다.
+
+    시스템 관리자와 같은 모양(사람에게 붙는 전사 역할)이지만 계정·부서·서버는 못
+    만진다. 부서 관리자에게 두지 않은 이유: 소속이 권한을 정하면 「왜 잠겼나」 를
+    사람이 알아낼 수 없었다. 그 역할을 사람 이름으로 드러낸다."""
 
     requested_workspace_id: Mapped[uuid.UUID | None] = mapped_column(
         PgUUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="SET NULL"), nullable=True

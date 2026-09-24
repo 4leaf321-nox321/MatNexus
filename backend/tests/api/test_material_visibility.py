@@ -1,12 +1,13 @@
-"""누가 어느 부서의 물성을 보는가 — **기본은 전원, 가리는 쪽이 예외다.**
+"""누가 어느 부서의 물성을 보는가 — **전원이 전부 본다**(ADR 0035).
 
 전에는 「전역 + 내 부서」 만 보였다. 시스템 관리자가 아닌 계정으로 들어가면 다른
 사업부의 재료가 통째로 없었고, 데이터가 없는 것과 구별이 안 됐다(2026-09-05
 실사용 보고). 물성은 사업부 간 공유가 목적인 데이터다.
 
-그래서 부서에 `restricted` 손잡이를 두고 **켠 부서만** 멤버로 좁힌다. 여기서
-보는 것은 그 두 방향 다다 — 열린 부서는 남에게 보이고, 잠근 부서는 안 보이고,
-잠가도 **고칠 권한은 안 생긴다**(보는 것과 고치는 것은 다른 축).
+그 뒤 부서가 켜면 멤버로 좁히는 `restricted` 손잡이를 두었는데, 켜졌는지가 막힌 사람
+쪽에서 안 보여 「없다」 와 「가려졌다」 가 다시 같은 모양이 됐다. 그래서 걷었다 —
+가리는 손잡이가 없다. 보이는 것이 곧 **고칠 권한은 아니다**(보는 것과 고치는 것은
+다른 축).
 
 시험은 재료를 따라간다(`visible_runs`). 그래서 재료가 보이면 그 시험도 보이고,
 안 보이면 그 시험도 안 보여야 한다 — 한쪽만 보이면 「재료는 있는데 시험이 없다」
@@ -88,7 +89,7 @@ def _material_with_run(
 
 
 class TestVisibility:
-    def test_기본은_다른_부서의_재료와_시험도_보인다(
+    def test_다른_부서의_재료와_시험도_보인다(
         self, client: TestClient, db: Session, admin_headers: dict[str, str]
     ) -> None:
         for slug, name in (("dept-a", "A 부서"), ("dept-b", "B 부서")):
@@ -109,50 +110,6 @@ class TestVisibility:
         assert material_id in {row["id"] for row in listed.json()["items"]}
         run = client.get(f"/api/test-runs/{run_id}", headers=b_member)
         assert run.status_code == 200, run.text
-
-    def test_잠근_부서의_것은_멤버가_아니면_안_보인다(
-        self, client: TestClient, db: Session, admin_headers: dict[str, str]
-    ) -> None:
-        for slug, name in (("dept-a", "A 부서"), ("dept-b", "B 부서")):
-            client.post(
-                "/api/workspaces", json={"name": name, "slug": slug}, headers=admin_headers
-            )
-        material_id, run_id = _material_with_run(
-            client, db, admin_headers, owner_slug="dept-a"
-        )
-        b_member = _login_member_of(
-            client, admin_headers, slug="dept-b", email="b-member@example.com"
-        )
-        a_member = _login_member_of(
-            client, admin_headers, slug="dept-a", email="a-member@example.com"
-        )
-
-        locked = client.patch(
-            "/api/workspaces/dept-a", json={"restricted": True}, headers=admin_headers
-        )
-        assert locked.status_code == 200, locked.text
-        assert locked.json()["restricted"] is True
-
-        # 남에게는 없는 것이 된다 — 상세·목록·시험 셋 다.
-        assert client.get(f"/api/materials/{material_id}", headers=b_member).status_code == 404
-        listed = client.get("/api/materials?limit=200", headers=b_member)
-        assert material_id not in {row["id"] for row in listed.json()["items"]}
-        assert client.get(f"/api/test-runs/{run_id}", headers=b_member).status_code == 404
-
-        # 멤버에게는 그대로 보인다.
-        assert client.get(f"/api/materials/{material_id}", headers=a_member).status_code == 200
-        assert client.get(f"/api/test-runs/{run_id}", headers=a_member).status_code == 200
-
-        # 다시 열면 돌아온다 — 「안 보낸 것」 은 그대로 둔다(이름만 바꿔도 잠금이
-        # 풀리면 안 된다).
-        renamed = client.patch(
-            "/api/workspaces/dept-a", json={"name": "A"}, headers=admin_headers
-        )
-        assert renamed.json()["restricted"] is True
-        client.patch(
-            "/api/workspaces/dept-a", json={"restricted": False}, headers=admin_headers
-        )
-        assert client.get(f"/api/materials/{material_id}", headers=b_member).status_code == 200
 
     def test_보인다고_고칠_수_있는_것은_아니다(
         self, client: TestClient, db: Session, admin_headers: dict[str, str]

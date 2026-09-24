@@ -145,8 +145,9 @@ function SetupTab() {
       <section className="space-y-2">
         <h2 className="font-semibold">2. 부서 ID</h2>
         <p className="text-muted-foreground text-sm">
-          커넥터가 속할 부서. 이 부서의 시험이 됩니다 — 토큰 주인이 그 부서 구성원이어야
-          합니다.
+          커넥터가 속할 부서. 이 부서의 시험이 되고, <b>커넥터로 들어온 시험은 이 부서
+          사람이 고칩니다</b> — 스스로 붙인 시험은 등록자가 없어서입니다. 토큰 주인이 그 부서
+          구성원이어야 합니다.
         </p>
         <ErrorNotice error={error} />
         {loading && !data && <p className="text-muted-foreground text-sm">불러오는 중…</p>}
@@ -178,7 +179,6 @@ function SetupTab() {
 // --- 커넥터 -----------------------------------------------------------------
 
 function ConnectorsTab() {
-  const canEdit = isAnyManager(useAuth().user)
   const [removing, setRemoving] = useState<Connector | null>(null)
   const { data, error, loading, reload } = useResource(() => pipelinesApi.connectors(), [])
   const [busy, setBusy] = useState<string | null>(null)
@@ -275,10 +275,11 @@ function ConnectorsTab() {
                   <TableCell>
                     {/* 기본은 승인 대기다. 규칙이 「틀리게 맞으면」 엉뚱한 시편에
                         시험이 붙는다 — 대조 열이 한동안 전부 맞은 커넥터만 켠다. */}
-                    {/* **끄고 켜는 것은 부서 관리자다.** 상태를 보는 것은
-                        누구나 해야 한다 — 「내 장비가 살아 있나」 는 실험하는
-                        사람이 먼저 묻는다. 바꾸는 것은 다른 일이다. */}
-                    {canEdit ? (
+                    {/* **끄고 켜는 것은 그 커넥터 부서의 관리자다.** 상태를 보는 것은
+                        누구나 해야 한다 — 「내 장비가 살아 있나」 는 실험하는 사람이 먼저
+                        묻는다. 단추는 **줄마다** 서버가 말한다(`can_manage`) — 전에는
+                        「어느 부서든 관리자면」 이라 남의 부서 장비에도 단추가 섰다. */}
+                    {row.can_manage ? (
                       <Button
                         size="sm"
                         variant={row.auto_register ? 'secondary' : 'outline'}
@@ -297,7 +298,7 @@ function ConnectorsTab() {
                     {row.app_version ?? '—'}
                   </TableCell>
                   <TableCell className="text-right">
-                    {canEdit ? (
+                    {row.can_manage ? (
                       <div className="flex items-center justify-end gap-1">
                         <Button
                           size="sm"
@@ -358,13 +359,17 @@ function ConnectorsTab() {
 // --- 수집함 -----------------------------------------------------------------
 
 function InboxTab({ status, onOpen }: { status: string; onOpen: (id: string) => void }) {
-  const canEdit = isAnyManager(useAuth().user)
   const [filter, setFilter] = useState(status)
   useEffect(() => setFilter(status), [status])
+  /**
+   * **기본은 우리 부서 커넥터의 것.** 보기는 전원이지만(ADR 0035 3단계) 이 목록은 「처리할
+   * 것」 을 보는 자리라, 전사가 기본이면 남의 부서 대기 건이 내 할 일 사이에 섞인다.
+   */
+  const [scope, setScope] = useState<'mine' | 'all'>('mine')
   const { data, error, loading, reload } = useResource(
     // 빈 필터 = 전체. 서버에 status 를 안 보낸다.
-    () => pipelinesApi.inbox({ ...(filter ? { status: filter } : {}), limit: 100 }),
-    [filter]
+    () => pipelinesApi.inbox({ ...(filter ? { status: filter } : {}), scope, limit: 100 }),
+    [filter, scope]
   )
   const [busy, setBusy] = useState(false)
   const [said, setSaid] = useState<string | null>(null)
@@ -396,12 +401,29 @@ function InboxTab({ status, onOpen }: { status: string; onOpen: (id: string) => 
   // 함께 사라진다 — 고를 수는 있는데 승인 단추가 없으면 무엇을 하라는 건지 모른다.
   //
   // 목록 자체는 모두에게 보인다. 「내 파일이 들어왔나」 는 실험한 사람이 먼저
-  // 묻는 것이고, 붙이는 일만 부서 관리자다.
-  const pickable = canEdit && filter === 'suggested'
+  // 묻는 것이고, 붙이는 일만 그 커넥터 부서의 관리자다 — 줄마다 `can_handle`.
+  const handles = (data?.items ?? []).some((row) => row.can_handle)
+  const pickable = handles && filter === 'suggested'
 
   return (
     <div>
       <div className="mb-3 flex flex-wrap gap-1">
+        {/* 범위 — 우리 부서 커넥터 / 전사. 상태 거르기와 따로 걸린다. */}
+        <Button
+          size="sm"
+          variant={scope === 'mine' ? 'secondary' : 'ghost'}
+          onClick={() => setScope('mine')}
+        >
+          우리 부서
+        </Button>
+        <Button
+          size="sm"
+          variant={scope === 'all' ? 'secondary' : 'ghost'}
+          onClick={() => setScope('all')}
+        >
+          모든 부서
+        </Button>
+        <span className="mx-1 border-l" />
         <Button
           size="sm"
           variant={filter === '' ? 'default' : 'outline'}
@@ -453,6 +475,7 @@ function InboxTab({ status, onOpen }: { status: string; onOpen: (id: string) => 
                 <TableHead>받은 시각</TableHead>
                 <TableHead>파일</TableHead>
                 <TableHead>커넥터</TableHead>
+                <TableHead>부서</TableHead>
                 <TableHead>종류</TableHead>
                 <TableHead>힌트</TableHead>
                 <TableHead>상태</TableHead>
@@ -467,10 +490,11 @@ function InboxTab({ status, onOpen }: { status: string; onOpen: (id: string) => 
                   onOpen={onOpen}
                   picked={pickable ? picked.has(row.id) : undefined}
                   onPick={
-                    pickable
+                    pickable && row.can_handle
                       ? (event) => selection.toggle(row.id, event)
                       : undefined
                   }
+                  pickColumn={pickable}
                 />
               ))}
             </TableBody>
@@ -523,24 +547,29 @@ function InboxRow({
   onOpen,
   picked,
   onPick,
+  pickColumn = false,
 }: {
   row: InboxItem
   onOpen: (id: string) => void
   picked?: boolean
   onPick?: (event: { shiftKey?: boolean }) => void
+  /** 고르는 칸이 있는 표인가 — 내가 다룰 수 없는 줄은 칸만 비운다(열이 어긋나지 않게). */
+  pickColumn?: boolean
 }) {
   return (
     <TableRow className="cursor-pointer" onClick={() => onOpen(row.id)}>
-      {onPick !== undefined && (
+      {pickColumn && (
         <TableCell onClick={(event) => event.stopPropagation()}>
-          <input
-            type="checkbox"
-            checked={picked ?? false}
-            // **`onClick` 이다.** `onChange` 에는 shiftKey 가 안 실린다.
-            onClick={onPick}
-            onChange={() => {}}
-            aria-label={`${row.filename} 선택`}
-          />
+          {onPick !== undefined && (
+            <input
+              type="checkbox"
+              checked={picked ?? false}
+              // **`onClick` 이다.** `onChange` 에는 shiftKey 가 안 실린다.
+              onClick={onPick}
+              onChange={() => {}}
+              aria-label={`${row.filename} 선택`}
+            />
+          )}
         </TableCell>
       )}
       <TableCell className="whitespace-nowrap">{stamp(row.received_at)}</TableCell>
@@ -551,6 +580,7 @@ function InboxRow({
         )}
       </TableCell>
       <TableCell>{row.connector_name ?? '—'}</TableCell>
+      <TableCell>{row.workspace_name ?? '—'}</TableCell>
       <TableCell>{row.test_type_label ?? row.test_type_key ?? '—'}</TableCell>
       <TableCell className="max-w-xs truncate">
         {hintText(row.hints as Record<string, string | undefined>)}
@@ -570,7 +600,6 @@ function InboxRow({
 // --- 항목 하나 ----------------------------------------------------------------
 
 function ItemDialog({ id, onClose }: { id: string; onClose: () => void }) {
-  const { user } = useAuth()
   const [item, setItem] = useState<InboxItemDetail | null>(null)
   const [error, setError] = useState<Error | null>(null)
   const [busy, setBusy] = useState(false)
@@ -628,9 +657,9 @@ function ItemDialog({ id, onClose }: { id: string; onClose: () => void }) {
   }
 
   const done = item ? item.status === 'registered' || item.status === 'discarded' : true
-  // **상세는 누구나 본다. 손대는 것만 부서 관리자다.** 파일이 왜 안 붙었는지는
-  // 그 시험을 한 사람이 먼저 묻고, 그 답이 여기 있다 — 후보·오류·요약이 그것이다.
-  const canAct = !done && isAnyManager(user)
+  // **상세는 누구나 본다. 손대는 것만 그 커넥터 부서의 관리자다**(`can_handle`). 파일이
+  // 왜 안 붙었는지는 그 시험을 한 사람이 먼저 묻고, 그 답이 여기 있다 — 후보·오류·요약.
+  const canAct = !done && Boolean(item?.can_handle)
   const summary = (item?.summary ?? {}) as {
     channels?: string[]
     row_count?: number

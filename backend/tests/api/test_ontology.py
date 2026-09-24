@@ -252,43 +252,26 @@ class TestProperty:
 
 
 class TestVisibility:
-    def test_안_보이는_마디에서_길이_끊긴다(
+    def test_다른_부서_사람에게도_길이_난다(
         self, client: TestClient, db: Session, admin_headers: dict[str, str]
     ) -> None:
-        """**이 파일에서 가장 값진 시험이다.**
-
-        잠근 부서의 재료는 남에게 「없는 것」이어야 한다. 이름만 가리고 「이 시험은
-        어떤 재료와 이어져 있다」 를 남기면 그 사실 자체가 유출이다.
-        """
+        """**보기는 전원이다**(ADR 0035). 지도가 따로 가리면 「화면에는 있는데 길이
+        안 난다」 가 되고, AI 는 그것을 「이어져 있지 않다」 로 읽는다."""
         for slug, name in (("dept-a", "A 부서"), ("dept-b", "B 부서")):
             client.post(
                 "/api/workspaces", json={"name": name, "slug": slug}, headers=admin_headers
             )
         made = _chain(client, db, admin_headers, owner_slug="dept-a")
-        locked = client.patch(
-            "/api/workspaces/dept-a", json={"restricted": True}, headers=admin_headers
-        )
-        assert locked.status_code == 200, locked.text
-
         outsider = _login_member_of(
             client, admin_headers, slug="dept-b", email="ont-outsider@example.com"
         )
 
-        # 마디 자체가 없다.
         assert (
             client.get(
                 RELATED, params={"kind": "material", "id": made["material"]}, headers=outsider
             ).status_code
-            == 404
+            == 200
         )
-        # 사슬 아래쪽에서 걸어 올라와도 재료가 안 나온다.
-        assert (
-            client.get(
-                RELATED, params={"kind": "specimen", "id": made["specimen"]}, headers=outsider
-            ).status_code
-            == 404
-        )
-        # 길도 안 난다.
         answer = client.get(
             PATH,
             params={
@@ -300,35 +283,28 @@ class TestVisibility:
             headers=outsider,
         )
         assert answer.status_code == 200, answer.text
-        assert answer.json()["found"] is False
+        assert answer.json()["found"] is True
 
-    def test_같은_부서_사람에게는_보인다(
+    def test_지운_재료에서는_길이_끊긴다(
         self, client: TestClient, db: Session, admin_headers: dict[str, str]
     ) -> None:
-        """가리는 쪽이 예외다 — 안 그러면 「아무것도 안 보인다」 를 유출 방지라 부르게 된다."""
-        for slug, name in (("dept-a", "A 부서"), ("dept-b", "B 부서")):
-            client.post(
-                "/api/workspaces", json={"name": name, "slug": slug}, headers=admin_headers
-            )
-        made = _chain(client, db, admin_headers, owner_slug="dept-a")
-        client.patch(
-            "/api/workspaces/dept-a", json={"restricted": True}, headers=admin_headers
+        """가리는 것이 없어도 **지운 것은 없는 것이다.** 목록에서 사라진 재료가 지도에서
+        이어져 보이면 「지웠다」 는 화면에만 있는 말이 된다."""
+        made = _chain(client, db, admin_headers, owner_slug=None)
+        removed = client.post(
+            f"/api/materials/{made['material']}/delete-cascade",
+            json={"include_test_runs": True},
+            headers=admin_headers,
         )
-        insider = _login_member_of(
-            client, admin_headers, slug="dept-a", email="ont-insider@example.com"
+        assert removed.status_code == 200, removed.text
+        assert (
+            client.get(
+                RELATED,
+                params={"kind": "material", "id": made["material"]},
+                headers=admin_headers,
+            ).status_code
+            == 404
         )
-        answer = client.get(
-            PATH,
-            params={
-                "from_kind": "test_run",
-                "from_id": made["test_run"],
-                "to_kind": "material",
-                "to_id": made["material"],
-            },
-            headers=insider,
-        )
-        assert answer.status_code == 200, answer.text
-        assert answer.json()["found"] is True
 
 
 class Test출처와_파라미터_벌:
@@ -397,50 +373,59 @@ class Test출처와_파라미터_벌:
         cited = [one for one in got.json()["edges"] if one["relation"] == "cited_by"]
         assert len(cited) == 1, cited
 
-    def test_파라미터_벌은_재료의_가시_범위를_따른다(
+    def test_파라미터_벌은_재료를_따라간다(
         self, client: TestClient, db: Session, admin_headers: dict[str, str]
     ) -> None:
-        """**안 붙이면 남의 부서 재료가 받아 온 벌이 검색에 뜬다.**
+        """**재료가 지워지면 그 벌도 검색에서 빠진다.**
 
-        그리고 열면 404 가 난다 — 「검색에는 뜨는데 열면 없다」 가 이 규칙을 한
-        곳에 둔 이유다.
+        안 붙이면 지운 재료가 받아 온 벌이 검색에 뜨고, 열면 404 가 난다 — 「검색에는
+        뜨는데 열면 없다」 가 이 규칙을 한 곳에 둔 이유다. 보기가 전원에게 열린 뒤로
+        (ADR 0035) 가리는 것은 지운 것뿐이지만, 따라가는 규칙은 그대로다.
         """
         from app.modules.accounts.models import User
         from app.modules.materials.models import MaterialParameterSet
         from app.shared import graph, relations
 
-        for slug, name in (("pset-a", "A 부서"), ("pset-b", "B 부서")):
-            client.post(
-                "/api/workspaces", json={"name": name, "slug": slug}, headers=admin_headers
-            )
+        client.post(
+            "/api/workspaces", json={"name": "A 부서", "slug": "pset-a"}, headers=admin_headers
+        )
         made = _chain(client, db, admin_headers, owner_slug="pset-a")
-        db.add(
-            MaterialParameterSet(
-                material_id=uuid.UUID(made["material"]),
-                model="anand",
-                label="가려질 벌",
-                origin="catalog",
-                terms=[{"term": "A", "value": 1.0, "unit": "1", "text": None}],
+        kept = _chain(client, db, admin_headers, owner_slug="pset-a")
+        for material_id, label in (
+            (made["material"], "지워질 벌"),
+            (kept["material"], "남을 벌"),
+        ):
+            db.add(
+                MaterialParameterSet(
+                    material_id=uuid.UUID(material_id),
+                    model="anand",
+                    label=label,
+                    origin="catalog",
+                    terms=[{"term": "A", "value": 1.0, "unit": "1", "text": None}],
+                )
             )
-        )
         db.commit()
-        client.patch(
-            "/api/workspaces/pset-a", json={"restricted": True}, headers=admin_headers
+        removed = client.post(
+            f"/api/materials/{made['material']}/delete-cascade",
+            json={"include_test_runs": True},
+            headers=admin_headers,
         )
+        assert removed.status_code == 200, removed.text
 
-        outsider = db.scalar(select(User).where(User.email == "ont-pset-outsider@example.com"))
-        if outsider is None:
-            _login_member_of(
-                client, admin_headers, slug="pset-b", email="ont-pset-outsider@example.com"
-            )
-            outsider = db.scalar(
-                select(User).where(User.email == "ont-pset-outsider@example.com")
-            )
-        assert outsider is not None
+        _login_member_of(
+            client, admin_headers, slug="pset-a", email="ont-pset-member@example.com"
+        )
+        member = db.scalar(select(User).where(User.email == "ont-pset-member@example.com"))
+        assert member is not None
 
-        allowed = graph.visible_ids(db, outsider, relations.KINDS["parameter_set"])
-        assert allowed is not None, "가리는 규칙이 아예 없다"
-        assert db.scalars(allowed).all() == [], "남의 부서 벌이 보인다"
+        allowed = graph.visible_ids(db, member, relations.KINDS["parameter_set"])
+        assert allowed is not None, "따라가는 규칙이 아예 없다"
+        labels = set(
+            db.scalars(
+                select(MaterialParameterSet.label).where(MaterialParameterSet.id.in_(allowed))
+            )
+        )
+        assert labels == {"남을 벌"}, labels
 
 
 class Test레시피:

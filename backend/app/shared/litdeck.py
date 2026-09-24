@@ -32,7 +32,7 @@ from app.modules.catalog.models import (
     CatalogSource,
     CatalogValue,
 )
-from app.shared import representative
+from app.shared import representative, unit_systems
 from matcore import cards, export, synth
 from matcore.export import dyna as _dyna  # noqa: F401  (스칼라 렌더러를 등록시킨다)
 
@@ -245,10 +245,9 @@ def build(
             f"카탈로그에서 낼 수 있는 형식이 아닙니다: {format_key}. "
             f"있는 것: {', '.join(FORMATS)} — 곡선이 필요한 덱은 시험→카드 경로로 만드세요."
         )
-    try:
-        system = export.systems.get(units_key)
-    except KeyError:
-        raise export.ExportError(f"모르는 단위계입니다: {units_key}") from None
+    # **비우면 mm·N·tonne**(ADR 0036) — 계를 고르는 자리는 `unit_systems` 하나다. 전에는
+    # 여기서 붙박이만 찾아서, 비우면 SI 였고 사용자 계는 「모르는 단위계」 였다.
+    system = unit_systems.resolve(db, units_key, code="MNX-CATALOG-0005")
 
     seen: set[int] = set()
     for mid, _ in items:

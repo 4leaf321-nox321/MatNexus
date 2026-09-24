@@ -690,19 +690,28 @@ class Test내보내기:
         assert "_si." in si.headers["content-disposition"]
         assert "_mm_n_tonne." in mm.headers["content-disposition"]
 
-    def test_안_고르면_SI_다(
+    def test_안_고르면_mm_N_tonne_이다(
         self, client: TestClient, admin_headers: dict[str, str], card: dict[str, Any]
     ) -> None:
-        """**전과 같은 것이 나가야 한다.** 기본이 바뀌면 어제 받은 덱과 오늘
-        받은 덱이 다른 계인데 이름도 같다."""
+        """**해석이 쓰는 계가 기본이다**(ADR 0036). 전에는 인자 없는 옛 호출을 SI 로 두었는데
+        (2026-09-05), 해석 연동이 인자 없이 받아 SI 를 mm 모델에 그대로 넣을 뻔했다
+        (2026-09-24). 대신 **계가 덱 머리와 파일 이름에 적혀** 어제 받은 것과 구별된다."""
         plain = client.get(
             f"/api/fitting/cards/{card['id']}/export?format=abaqus", headers=admin_headers
         )
         told = client.get(
-            f"/api/fitting/cards/{card['id']}/export?format=abaqus&units=si",
+            f"/api/fitting/cards/{card['id']}/export?format=abaqus&units=mm_n_tonne",
             headers=admin_headers,
         )
         assert plain.text == told.text
+        assert "_mm_n_tonne." in plain.headers["content-disposition"]
+        # SI 는 **골라야** 나온다 — 그리고 고르면 그 계가 적힌다.
+        si = client.get(
+            f"/api/fitting/cards/{card['id']}/export?format=abaqus&units=si",
+            headers=admin_headers,
+        )
+        assert si.text != plain.text
+        assert "_si." in si.headers["content-disposition"]
 
     def test_모르는_단위계는_거절한다(
         self, client: TestClient, admin_headers: dict[str, str], card: dict[str, Any]
@@ -772,10 +781,14 @@ class Test내보내기:
         # 손으로 적어서 물성이 늘면 이 함수도 커졌다. 지금은 카드에 실린 블록을
         # 그대로 내고, 값의 이름·단위 선언을 같이 싣는다.
         assert body["schema"] == "matnexus.property-card/2"
-        assert body["units"]["stress"] == "Pa"
+        # 기본은 mm·N·tonne(ADR 0036) — 파일이 제 계를 말한다.
+        assert body["units"]["stress"] == "MPa"
+        assert body["units"]["symbols"]["kg/m3"] == "tonne/mm3"
         elastic = body["blocks"]["elastic"]
         assert elastic["values"]["youngs_modulus"] > 0
-        # **스스로 설명한다** — 값 옆에 이름과 단위가 함께 실린다.
+        # **스스로 설명한다** — 값 옆에 이름과 단위가 함께 실린다. `unit` 이 이 파일의
+        # 숫자의 단위다 — `si_unit` 만 두면 MPa 숫자를 Pa 로 읽는다(2026-09-24).
+        assert elastic["declared"]["youngs_modulus"]["unit"] == "MPa"
         assert elastic["declared"]["youngs_modulus"]["si_unit"] == "Pa"
         assert len(body["blocks"]["table"]["rows"]) >= 2
 
@@ -2191,11 +2204,14 @@ class Test카드_목록:
     def test_소유_부서를_함께_낸다(
         self, client: TestClient, admin_headers: dict[str, str], several: list[dict[str, Any]]
     ) -> None:
-        """**부서로 나누려면 소유가 보여야 한다.** 카드에 따로 안 두고 재료를
-        따라간다 — 두 곳에 두면 재료를 옮겼을 때 둘이 갈린다."""
+        """**부서로 나누려면 소속이 보여야 한다.** 카드에 따로 안 두고 재료를
+        따라간다 — 두 곳에 두면 재료를 옮겼을 때 둘이 갈린다.
+
+        `is_global` 은 걷었다(ADR 0035) — 받는 쪽이 「공식 카드인가」 로 읽었다."""
         assert several
         item = client.get("/api/fitting/cards", headers=admin_headers).json()["items"][0]
-        assert "is_global" in item and "owner_workspace_name" in item
+        assert "owner_workspace_name" in item
+        assert "is_global" not in item
 
     def test_거를_수_있는_것과_그_수를_준다(
         self, client: TestClient, admin_headers: dict[str, str], several: list[dict[str, Any]]
@@ -2327,7 +2343,8 @@ class Test온도표:
         )
         card = self._card(client, admin_headers, material["id"])
         text = client.get(
-            f"/api/fitting/cards/{card['id']}/export?format=json", headers=admin_headers
+            f"/api/fitting/cards/{card['id']}/export?format=json&units=si",
+            headers=admin_headers,
         ).text
         assert "206000000000" in text and "170000000000" in text
 
@@ -2668,8 +2685,8 @@ class Test되짚어_찾은_것:
             assert got.status_code == 200, got.text
             names[form] = got.headers["content-disposition"]
         assert names["openradioss"] != names["openradioss_thermal"], names
-        # 이름에 형식과 **단위계**가 함께 들어간다(v1.110.0).
-        assert "_thermal_si.rad" in names["openradioss_thermal"]
+        # 이름에 형식과 **단위계**가 함께 들어간다(v1.110.0) — 기본은 mm·N·tonne(ADR 0036).
+        assert "_thermal_mm_n_tonne.rad" in names["openradioss_thermal"]
 
 
 class Test뽑은_덱을_되읽어_대조한다:
@@ -3383,8 +3400,10 @@ class Test예제_덱_읽기:
     ) -> None:
         """**여기가 「막연하다」 를 없애는 자리다.** 화면은 숫자만 보지만, 덱을
         올린 사람은 그것이 자기 재료의 덱임을 안다."""
+        # 카드 값(SI)과 대어 이름을 붙이는 시험이라 SI 덱을 고른다.
         deck = client.get(
-            f"/api/fitting/cards/{card['id']}/export?format=abaqus", headers=admin_headers
+            f"/api/fitting/cards/{card['id']}/export?format=abaqus&units=si",
+            headers=admin_headers,
         )
         body = client.post(
             "/api/fitting/export-profiles/scan",

@@ -633,8 +633,10 @@ class Test내보내기:
         _process(client, admin_headers, loaded, UNIFORM_END)
         card = self._card(client, admin_headers, loaded["material_id"])
 
+        # 참 σ0(Pa)와 대조하는 시험이라 SI 덱을 고른다 — 기본은 mm·N·tonne(ADR 0036).
         deck = client.get(
-            f"/api/fitting/cards/{card['id']}/export?format=abaqus", headers=admin_headers
+            f"/api/fitting/cards/{card['id']}/export?format=abaqus&units=si",
+            headers=admin_headers,
         )
         assert deck.status_code == 200, deck.text
         text = deck.text

@@ -112,9 +112,8 @@ export interface MaterialQuery {
   /** 분류로 좁힌다. 서버가 정확히 일치로 거른다. */
   family?: string
   category?: string
-  scope?: 'all' | 'mine' | 'global'
-  /** 그 부서 소유만. **`scope` 로는 부족하다** — 「전역인가」 만 가르므로 부서가
-   *  여럿인 곳에서 「고분자팀 재료」 를 못 찾는다. slug 를 준다. */
+  /** 그 부서가 등록한 것만. slug 를 준다. 전에는 `scope`(전역 / 부서 것)도 있었는데
+   *  「전역」 을 걷으면서 함께 걷었다(ADR 0035). */
   workspace?: string
   /** **서버가 정렬한다.** 화면에서 하면 이 쪽에 실린 것만 정렬된다. */
   sort?: string

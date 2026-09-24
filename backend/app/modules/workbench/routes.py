@@ -11,7 +11,7 @@ import uuid
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -31,6 +31,7 @@ from app.modules.workbench.schemas import (
     RunPatchRequest,
 )
 from app.shared import permissions
+from app.shared.access import AccessBook, EditAccessOut, access_of
 from app.shared.auth import current_user
 from app.shared.errors import AppError, NotFound
 from app.shared.text import clean, compare_key
@@ -38,17 +39,27 @@ from app.shared.text import clean, compare_key
 router = APIRouter(prefix="/workbench", tags=["workbench"])
 
 
-def _run_or_404(db: Session, user: User, run_id: uuid.UUID) -> WorkbenchRun:
-    """**부서 안에서 공유한다.** 만든 사람만 열 수 있으면 「어제 하던 것을 오늘
-    다른 사람이」 가 안 된다(ADR 0025)."""
+def _run_or_404(db: Session, run_id: uuid.UUID) -> WorkbenchRun:
+    """작업 하나. **누구나 연다**(ADR 0035 3단계).
+
+    전에는 그 부서 멤버가 아니면 「없다」 였다 — 보기와 고치기가 한 판정이라, 남의
+    부서 사람에게 작업 주소를 보내면 있는 작업이 없다고 떴다. 고치는 것은 따로 본다
+    (`_editable_run`)."""
     found = db.get(WorkbenchRun, run_id)
     if found is None:
         raise NotFound("MNX-WORKBENCH-0001", "작업을 찾을 수 없습니다.")
-    if not user.is_system_admin and found.workspace_id not in permissions.my_workspace_ids(
-        db, user
-    ):
-        raise NotFound("MNX-WORKBENCH-0001", "작업을 찾을 수 없습니다.")
     return found
+
+
+def _editable_run(db: Session, user: User, run_id: uuid.UUID) -> WorkbenchRun:
+    """고칠 작업 — **그 부서 사람 · 시작한 사람 · 자료 관리자**(`permissions.require_edit`).
+
+    부서 안에서 함께 미는 것이 작업의 뜻이다(ADR 0025). 그 밖의 사람은 보기만 한다 —
+    담긴 것을 빼거나 진행을 옮기면, 그 부서 사람이 이어 할 때 무엇이 바뀌었는지 모른다.
+    """
+    run = _run_or_404(db, run_id)
+    permissions.require_edit(db, user, run, code="MNX-WORKBENCH-0004")
+    return run
 
 
 def _count(db: Session, run_id: uuid.UUID) -> int:
@@ -62,7 +73,7 @@ def _count(db: Session, run_id: uuid.UUID) -> int:
     )
 
 
-def _out(db: Session, run: WorkbenchRun) -> RunOut:
+def _out(db: Session, run: WorkbenchRun, access: EditAccessOut | None = None) -> RunOut:
     return RunOut(
         id=run.id,
         workspace_id=run.workspace_id,
@@ -77,10 +88,11 @@ def _out(db: Session, run: WorkbenchRun) -> RunOut:
         created_at=run.created_at,
         updated_at=run.updated_at,
         finished_at=run.finished_at,
+        access=access,
     )
 
 
-def _detail(db: Session, run: WorkbenchRun) -> RunDetailOut:
+def _detail(db: Session, run: WorkbenchRun, user: User) -> RunDetailOut:
     items = list(
         db.scalars(
             select(WorkbenchItem)
@@ -88,25 +100,39 @@ def _detail(db: Session, run: WorkbenchRun) -> RunDetailOut:
             .order_by(WorkbenchItem.added_at, WorkbenchItem.id)
         )
     )
-    return RunDetailOut(**_out(db, run).model_dump(), items=services.resolve(db, items))
+    return RunDetailOut(
+        **_out(db, run, access_of(db, user, run)).model_dump(),
+        items=services.resolve(db, items),
+    )
 
 
 @router.get("/runs", response_model=list[RunOut])
 def list_runs(
     status: str | None = Query(default=None, pattern="^(running|finished|dropped)$"),
+    scope: str = Query(default="mine", pattern="^(mine|all)$"),
     limit: int = Query(default=20, le=100),
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> list[RunOut]:
-    """내 부서의 작업들. **진행 중인 것이 먼저다** — 「계속」 이 이 목록이다."""
+    """작업들. **진행 중인 것이 먼저다** — 「계속」 이 이 목록이다.
+
+    `scope=mine`(기본)은 **내가 이어 할 수 있는 것** — 내 부서의 작업과 내가 시작한 것.
+    `all` 은 전사다(ADR 0035 3단계 — 보기는 전원). 기본을 좁히는 이유는 이 목록이
+    「계속」 이라서다: 남의 부서 작업이 섞이면 이어 할 것이 안 보인다.
+    """
     query = select(WorkbenchRun).order_by(WorkbenchRun.updated_at.desc()).limit(limit)
-    if not user.is_system_admin:
+    if scope == "mine":
         query = query.where(
-            WorkbenchRun.workspace_id.in_(permissions.my_workspace_ids(db, user))
+            or_(
+                WorkbenchRun.workspace_id.in_(permissions.my_workspace_ids(db, user)),
+                WorkbenchRun.owner_id == user.id,
+            )
         )
     if status:
         query = query.where(WorkbenchRun.status == status)
-    return [_out(db, run) for run in db.scalars(query)]
+    runs = list(db.scalars(query))
+    book = AccessBook(db, user).prime(runs)
+    return [_out(db, run, book.of(run)) for run in runs]
 
 
 @router.post("/runs", response_model=RunDetailOut, status_code=201)
@@ -132,7 +158,7 @@ def create_run(
     db.add(run)
     db.commit()
     db.refresh(run)
-    return _detail(db, run)
+    return _detail(db, run, user)
 
 
 @router.get("/runs/{run_id}", response_model=RunDetailOut)
@@ -141,7 +167,7 @@ def get_run(
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> RunDetailOut:
-    return _detail(db, _run_or_404(db, user, run_id))
+    return _detail(db, _run_or_404(db, run_id), user)
 
 
 @router.patch("/runs/{run_id}", response_model=RunDetailOut)
@@ -156,7 +182,7 @@ def patch_run(
     **안 보낸 것은 안 고친다.** 진행만 밀었는데 제목이 지워지면 사람은 무엇이
     지웠는지 모른다.
     """
-    run = _run_or_404(db, user, run_id)
+    run = _editable_run(db, user, run_id)
     if payload.title is not None:
         run.title = payload.title
     if payload.note is not None:
@@ -170,7 +196,7 @@ def patch_run(
         run.finished_at = datetime.now(UTC) if payload.status != "running" else None
     db.commit()
     db.refresh(run)
-    return _detail(db, run)
+    return _detail(db, run, user)
 
 
 @router.post("/runs/{run_id}/items", response_model=list[ItemOut], status_code=201)
@@ -183,7 +209,7 @@ def add_items(
     """담는다. **이미 담긴 것은 조용히 넘어간다** — 두 번 담기는 실수이지 오류가
     아니고, 여럿을 한 번에 담을 때 하나가 겹쳤다고 전부를 실패시키면 사람은 무엇이
     들어갔는지 모른다."""
-    run = _run_or_404(db, user, run_id)
+    run = _editable_run(db, user, run_id)
     already = set(
         db.scalars(
             select(WorkbenchItem.target_id).where(
@@ -216,7 +242,7 @@ def remove_item(
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> None:
-    run = _run_or_404(db, user, run_id)
+    run = _editable_run(db, user, run_id)
     item = db.get(WorkbenchItem, item_id)
     if item is None or item.run_id != run.id:
         raise NotFound("MNX-WORKBENCH-0003", "담긴 것을 찾을 수 없습니다.")

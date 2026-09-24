@@ -20,7 +20,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ChevronsUpDown, Globe2, Layers, Search } from 'lucide-react'
+import { ChevronsUpDown, Layers, Search } from 'lucide-react'
 
 import type { Recipe, RecipeStep } from '@/modules/processing/api'
 import { Badge } from '@/shared/components/ui/badge'
@@ -46,7 +46,7 @@ export function matches(recipe: Recipe, query: string): boolean {
     recipe.key,
     recipe.description ?? '',
     recipe.test_type_label,
-    recipe.owner_workspace_name ?? '전역',
+    recipe.owner_workspace_name ?? '부서 없음',
     // **단계 이름으로도 찾을 수 있어야 한다.** "네킹 자르는 레시피가 뭐였더라"
     // 가 실제로 사람이 기억하는 방식이다.
     ...(recipe.steps as unknown as RecipeStep[]).map((step) => step.plugin),
@@ -151,14 +151,12 @@ export function RecipePicker({
                 >
                   <span className="flex w-full items-center gap-1.5">
                     <span className="truncate text-sm">{item.label}</span>
-                    {item.is_global && <Globe2 className="text-muted-foreground size-3" />}
                     <span className="text-muted-foreground ml-auto shrink-0 text-xs">
                       {item.steps.length}단계
                     </span>
                   </span>
                   <span className="text-muted-foreground truncate text-xs">
-                    {item.test_type_label} ·{' '}
-                    {item.is_global ? '전역' : item.owner_workspace_name}
+                    {item.test_type_label} · {item.owner_workspace_name ?? '부서 없음'}
                   </span>
                 </button>
               ))
@@ -278,8 +276,7 @@ function RecipeBrowser({
                     {item.key}
                   </span>
                   <span className="text-muted-foreground text-xs">
-                    {item.test_type_label} ·{' '}
-                    {item.is_global ? '전역' : item.owner_workspace_name} ·{' '}
+                    {item.test_type_label} · {item.owner_workspace_name ?? '부서 없음'} ·{' '}
                     {item.steps.length}단계
                   </span>
                 </button>
@@ -292,16 +289,10 @@ function RecipeBrowser({
               <>
                 <div className="mb-2 flex flex-wrap items-center gap-2">
                   <span className="text-sm font-medium">{active.label}</span>
-                  {active.is_global ? (
-                    <Badge variant="outline" className="gap-1 text-xs">
-                      <Globe2 className="size-3" />
-                      전역
-                    </Badge>
-                  ) : (
-                    <Badge variant="secondary" className="text-xs">
-                      {active.owner_workspace_name}
-                    </Badge>
-                  )}
+                  {/* 등록한 부서 — 권한이 아니다(ADR 0035). 전에는 「전역」 이 섰다. */}
+                  <Badge variant="secondary" className="text-xs">
+                    {active.owner_workspace_name ?? '부서 없음'}
+                  </Badge>
                 </div>
                 {active.description && (
                   <p className="text-muted-foreground mb-2 text-xs">{active.description}</p>

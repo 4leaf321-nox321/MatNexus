@@ -186,6 +186,18 @@ class EquipmentUnit(Base):
     workspace_id: Mapped[uuid.UUID | None] = mapped_column(
         PgUUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="SET NULL"), index=True
     )
+    #: **누가 고치나는 위 칸이 정하지 않는다**(ADR 0035). 장비를 든 조직은 사실이지
+    #: 권한이 아니다 — 고치는 사람은 등록자 · 편집을 받은 부서 · 자료 관리자다. 전에는
+    #: 「어느 부서든 관리자면」 이었고, 그래서 남의 조직 장비를 누구 관리자든 고쳤다.
+    registered_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), index=True
+    )
+    """등록자. 3단계 전에 올린 장비는 비어 있다(누가 올렸는지 적지 않았다)."""
+    edit_workspace_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="SET NULL"), index=True
+    )
+    """편집을 받은 부서(ADR 0035) — 등록자 말고 이 부서 사람도 고친다. 뜻은
+    `Material.edit_workspace_id` 와 같다."""
     owner_name: Mapped[str | None] = mapped_column(String(120))
     owner_contact: Mapped[str | None] = mapped_column(String(120))
 

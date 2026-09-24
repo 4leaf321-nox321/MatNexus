@@ -140,8 +140,144 @@ class Test재료:
         assert {one["id"] for one in body["materials"]} == seen
         assert len(seen) == 2
 
+    def test_값은_고른_단위계_하나로_나간다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        """**한 파일에 계가 하나다**(ADR 0036). 전에는 「값은 SI 그대로」 라고 적어 두고 화면
+        응답을 그대로 담아서 밀도만 tonne/mm3, 두께는 mm 였다 — 해석 연동이 그 파일을 「전부
+        SI」 로 읽을 뻔했다(2026-09-24). 기본은 해석이 쓰는 mm·N·tonne, SI 는 골라야 나온다.
+        """
+        made = _material(
+            client, admin_headers, grade="EXPUNIT", spec_thickness=1.2, density=2.68e-9
+        )
+        saved = client.patch(
+            f"/api/materials/{made['id']}",
+            json={
+                "declared_properties": [
+                    {
+                        "item": "탄성계수",
+                        "points": [{"value": 70.3}],
+                        "input_unit": "GPa",
+                        "source": "literature",
+                        "reference": "핸드북",
+                    }
+                ]
+            },
+            headers=admin_headers,
+        )
+        assert saved.status_code == 200, saved.text
+
+        got = client.get(MATERIALS, params={"q": "EXPUNIT"}, headers=admin_headers)
+        assert "_mm_n_tonne.json" in got.headers["content-disposition"]
+        body = _download(client, admin_headers, MATERIALS, q="EXPUNIT")
+        # 파일 머리가 계를 말한다 — 숫자를 읽기 전에 볼 자리다.
+        assert body["unit_system"]["key"] == "mm_n_tonne"
+        assert body["unit_system"]["stress"] == "MPa"
+        one = body["materials"][0]
+        assert one["density"] == pytest.approx(2.68e-9) and one["density_unit"] == "tonne/mm3"
+        assert one["density_si"] == pytest.approx(2680.0)
+        assert one["spec_thickness"] == pytest.approx(1.2)
+        assert one["spec_thickness_unit"] == "mm"
+        row = one["declared_properties"][0]
+        assert row["unit"] == "MPa" and row["si_unit"] == "Pa"
+        assert row["points"][0]["value"] == pytest.approx(70300.0)
+        assert row["points"][0]["value_si"] == pytest.approx(7.03e10)
+        # 사람이 적은 단위(GPa)는 뺀다 — 여기 `value` 는 그 단위가 아니다.
+        assert "input_unit" not in row
+
+        si = _download(client, admin_headers, MATERIALS, q="EXPUNIT", units="si")
+        assert si["unit_system"]["key"] == "si"
+        one = si["materials"][0]
+        assert one["density"] == pytest.approx(2680.0) and one["density_unit"] == "kg/m3"
+        assert one["spec_thickness"] == pytest.approx(0.0012)
+        assert one["spec_thickness_unit"] == "m"
+        assert one["declared_properties"][0]["points"][0]["value"] == pytest.approx(7.03e10)
+
+        # 모르는 계는 조용히 기본으로 떨어지지 않는다 — 쓸 수 있는 것을 말하고 거절한다.
+        refused = client.get(MATERIALS, params={"units": "mks"}, headers=admin_headers)
+        assert refused.status_code == 422
+        assert "mm_n_tonne" in refused.json()["error"]["message"]
+
 
 class Test문헌:
+    def test_값은_고른_단위계로_못_옮기는_단위는_그대로_두고_적는다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        stocked: CatalogMaterial,
+    ) -> None:
+        """기본은 mm·N·tonne(ADR 0036). 문헌에는 그 계가 기호를 정해 두지 않은 물리량(저항률
+        같은 것)도 있다 — **지어내 옮기지 않고** 받은 그대로 두되 파일 머리에 적는다. 모델
+        파라미터의 항은 제 단위로 적혀 있어 옮기지 않는다."""
+        parameters.forget()
+        for mt, key, unit in (
+            (991201, "mechanical.youngs_modulus_probe", "Pa"),
+            (991202, "physical.density_probe", "kg/m^3"),
+            (991203, "electrical.resistivity_probe", "ohm*m"),
+        ):
+            db.add(
+                CatalogDefinition(
+                    mt_id=mt,
+                    key=key,
+                    name=key,
+                    domain=key.split(".")[0],
+                    si_unit=unit,
+                    value_type="number",
+                )
+            )
+        item = CatalogMaterial(mt_id=991210, name="단위 시험재", category="metal")
+        db.add(item)
+        db.flush()
+        for at, (key, value, unit, spread) in enumerate(
+            (
+                ("mechanical.youngs_modulus_probe", 2.0e11, "Pa", 1.0e9),
+                ("physical.density_probe", 7850.0, "kg/m^3", None),
+                ("electrical.resistivity_probe", 7.2e-7, "ohm*m", None),
+            )
+        ):
+            db.add(
+                CatalogValue(
+                    mt_id=991220 + at,
+                    material_id=item.id,
+                    property_key=key,
+                    value_num=value,
+                    unit=unit,
+                    uncertainty=spread,
+                    quality_tier=2,
+                )
+            )
+        db.commit()
+        parameters.forget()
+
+        body = _download(client, admin_headers, CATALOG, q="단위 시험재")
+        assert body["unit_system"]["key"] == "mm_n_tonne"
+        values = {one["property_key"]: one for one in body["materials"][0]["values"]}
+        modulus = values["mechanical.youngs_modulus_probe"]
+        assert modulus["value_num"] == pytest.approx(200000.0) and modulus["unit"] == "MPa"
+        assert modulus["value_si"] == pytest.approx(2.0e11) and modulus["si_unit"] == "Pa"
+        # 같은 단위의 곁값도 같은 계로 — 불확도만 Pa 로 남으면 그 줄에 계가 둘이다.
+        assert modulus["uncertainty"] == pytest.approx(1000.0)
+        density = values["physical.density_probe"]
+        assert density["value_num"] == pytest.approx(7.85e-9)
+        assert density["unit"] == "tonne/mm3"
+        # 이 계에 기호가 없는 단위 — 받은 그대로, 파일 머리에 적는다.
+        resistivity = values["electrical.resistivity_probe"]
+        assert resistivity["value_num"] == pytest.approx(7.2e-7)
+        assert resistivity["unit"] == "ohm*m"
+        assert "ohm*m" in body["kept_units"]
+
+        # 모델 파라미터의 항은 제 단위로 적혀 있어 옮기지 않는다.
+        rubber = _download(client, admin_headers, CATALOG, q="시험용 고무")
+        terms = rubber["materials"][0]["values"]
+        assert {one["value_num"] for one in terms} == {1000.0, 1001.0, 1002.0}
+        assert {one["unit"] for one in terms} == {"Pa"}
+
+        si = _download(client, admin_headers, CATALOG, q="단위 시험재", units="si")
+        values = {one["property_key"]: one for one in si["materials"][0]["values"]}
+        assert values["mechanical.youngs_modulus_probe"]["value_num"] == pytest.approx(2.0e11)
+        assert values["mechanical.youngs_modulus_probe"]["unit"] == "Pa"
+
     @pytest.fixture
     def stocked(self, db: Session) -> CatalogMaterial:
         """값 셋과 출처 하나를 가진 문헌 재료. 항 이름 하나는 **숫자**다."""

@@ -11,7 +11,8 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import AnalysisPage, { show } from '@/modules/statistics/AnalysisPage'
+import AnalysisPage from '@/modules/statistics/AnalysisPage'
+import { show } from '@/modules/statistics/analysisFormat'
 
 const compare = vi.fn()
 const distribution = vi.fn()
@@ -19,6 +20,7 @@ const specGap = vi.fn()
 const trend = vi.fn()
 const coverage = vi.fn()
 const materials = vi.fn()
+const cardItemSummary = vi.fn()
 
 vi.mock('@/modules/statistics/analysisApi', async () => {
   const actual = await vi.importActual<typeof import('@/modules/statistics/analysisApi')>(
@@ -33,6 +35,7 @@ vi.mock('@/modules/statistics/analysisApi', async () => {
       trend: (...a: unknown[]) => trend(...a),
       coverage: (...a: unknown[]) => coverage(...a),
       materials: (...a: unknown[]) => materials(...a),
+      cardItemSummary: (...a: unknown[]) => cardItemSummary(...a),
     },
   }
 })
@@ -69,12 +72,19 @@ beforeEach(() => {
   })
   coverage.mockResolvedValue({ test_types: [], groups: [] })
   materials.mockResolvedValue([])
+  cardItemSummary.mockResolvedValue({
+    columns: [],
+    groups: [],
+    material_total: 0,
+    card_material_count: 0,
+    source_only_count: 0,
+  })
 })
 
 describe('탭', () => {
-  it('다섯이 서고 비교가 기본이다', async () => {
+  it('여섯이 서고 비교가 기본이다', async () => {
     mount()
-    for (const name of ['재료 비교', '분포', '사양 대비', '추이', '커버리지']) {
+    for (const name of ['재료 비교', '카드 항목', '분포', '사양 대비', '추이', '커버리지']) {
       expect(screen.getByRole('tab', { name })).toBeInTheDocument()
     }
     expect(await screen.findByText(/재료 선택.*담아 주세요/)).toBeInTheDocument()

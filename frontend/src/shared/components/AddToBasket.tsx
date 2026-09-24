@@ -70,9 +70,7 @@ import { Link } from 'react-router-dom'
 
 import { activeRun, basketApi, setActiveRun } from '@/shared/api/basket'
 import type { BasketRun, ItemKind } from '@/shared/api/basket'
-import { useMaybeAuth } from '@/shared/auth/AuthContext'
 import { Button } from '@/shared/components/ui/button'
-import { DEFAULT_WORKSPACE } from '@/shared/layout/navigation'
 
 /** 옮겨 둔 자리. **기억한다** — 매번 같은 데로 돌아오면 매번 다시 치워야 한다. */
 const SPOT = 'matnexus.basket.spot'
@@ -117,19 +115,13 @@ interface BasketProps {
   labels?: string[]
   onError?: (error: Error) => void
   /**
-   * 워크벤치로 보내는 링크에 쓴다. **안 주면 내 부서로 정한다** — 부서 스코프가
-   * 아닌 화면(재료·카드 목록)에서도 돌아갈 자리는 있어야 하고, `default` 로 두면
-   * 자기 부서가 아닌 곳을 가리켜 작업 목록이 비어 보인다(`AppShell` 과 같은 규칙).
-   */
-  workspaceSlug?: string
-  /**
    * 고르는 순간 창이 뜨나. **워크벤치에서 담으러 온 길에서만 참이다**
    * (`?collect=`). 평소에는 단추만 서고, 누를 때 뜬다.
    */
   auto?: boolean
 }
 
-export function AddToBasket({ kind, ids, labels, onError, workspaceSlug, auto }: BasketProps) {
+export function AddToBasket({ kind, ids, labels, onError, auto }: BasketProps) {
   const [spot, setSpot] = useState<Spot>(() => firstSpot())
   const grab = useRef<{ dx: number; dy: number } | null>(null)
   const [open, setOpen] = useState(false)
@@ -226,7 +218,6 @@ export function AddToBasket({ kind, ids, labels, onError, workspaceSlug, auto }:
           ids={ids}
           labels={labels}
           onError={onError}
-          workspaceSlug={workspaceSlug}
         />
       </div>
     </div>
@@ -243,13 +234,10 @@ export function AddToBasket({ kind, ids, labels, onError, workspaceSlug, auto }:
  * 띠 하나에 탭으로 가른다(`fitting/SelectionBar`). 담는 규칙이 두 벌이 되지 않도록
  * 몸통을 여기서 하나로 둔다.
  */
-export function BasketForm({ kind, ids, labels, onError, workspaceSlug }: BasketProps) {
-  // **로그인 정보가 없어도 패널은 뜬다.** 이 위젯은 여러 화면에 얹히는 곁들이라,
-  // 제공자를 요구하면 그것을 품은 화면 전부가 같이 무거워진다.
-  const user = useMaybeAuth()?.user
-  const slug =
-    workspaceSlug ?? user?.home_workspace_slug ?? user?.memberships[0]?.slug ?? DEFAULT_WORKSPACE
-  const home = `/w/${slug}/workbench`
+export function BasketForm({ kind, ids, labels, onError }: BasketProps) {
+  // **워크벤치는 한 주소다**(ADR 0035 3단계). 전에는 `/w/<내 부서>/workbench` 를 지으려고
+  // 로그인 정보까지 읽었다 — 목록의 기본이 내 부서 것이라 이제 주소에 부서가 없다.
+  const home = '/workbench'
 
   const [runs, setRuns] = useState<BasketRun[] | null>(null)
   const [chosen, setChosen] = useState<string | null>(activeRun())

@@ -67,8 +67,28 @@ router = APIRouter(prefix="/pipelines", tags=["pipelines"])
 # --- 커넥터 ---------------------------------------------------------------------
 
 
+def _managed(db: Session, user: User) -> set[uuid.UUID] | None:
+    """내가 다룰 수 있는 부서 — `None` 이면 전부(시스템 관리자).
+
+    **커넥터와 수신함을 다루는 것은 그 커넥터 부서의 관리자다**(ADR 0021). 보기는 전원에게
+    열었지만(ADR 0035 3단계) 이것은 「고치기」 가 아니라 **일을 넘겨받는 역할**이라 부서
+    관리자에게 남는다 — 알림도 그 사람에게 간다(`services._notify_managers`).
+    """
+    if user.is_system_admin:
+        return None
+    return set(permissions.managed_workspace_ids(db, user))
+
+
+def _handles(managed: set[uuid.UUID] | None, workspace_id: uuid.UUID | None) -> bool:
+    return managed is None or (workspace_id is not None and workspace_id in managed)
+
+
 def _connector_out(
-    row: PipelineConnector, *, workspace_name: str | None, waiting: int
+    row: PipelineConnector,
+    *,
+    workspace_name: str | None,
+    waiting: int,
+    managed: set[uuid.UUID] | None,
 ) -> ConnectorOut:
     pending, failed = services.heartbeat_totals(row)
     return ConnectorOut(
@@ -87,6 +107,7 @@ def _connector_out(
         waiting=waiting,
         created_by_id=row.created_by_id,
         created_at=row.created_at,
+        can_manage=_handles(managed, row.workspace_id),
     )
 
 
@@ -128,19 +149,30 @@ def create_connector(
         auto_register=body.auto_register,
     )
     db.commit()
-    return _connector_out(row, workspace_name=workspace.name, waiting=0)
+    return _connector_out(
+        row, workspace_name=workspace.name, waiting=0, managed=_managed(db, user)
+    )
 
 
 @router.get("/connectors", response_model=list[ConnectorOut])
 def list_connectors(
     user: User = Depends(current_user), db: Session = Depends(get_db)
 ) -> list[ConnectorOut]:
+    """**모든 부서의 커넥터**(ADR 0035 3단계). 줄마다 이 사람이 다룰 수 있는지를 싣는다.
+
+    전에는 내 부서 것만 보였다 — 「옆 부서 장비로 잰 내 파일이 왜 안 들어왔나」 를 물을
+    데가 없었다.
+    """
     rows = list(db.scalars(services.visible_connectors(db, user)))
     names = _workspace_names(db, {r.workspace_id for r in rows})
     waiting = services.waiting_counts(db, [r.id for r in rows])
+    managed = _managed(db, user)
     return [
         _connector_out(
-            r, workspace_name=names.get(r.workspace_id), waiting=waiting.get(r.id, 0)
+            r,
+            workspace_name=names.get(r.workspace_id),
+            waiting=waiting.get(r.id, 0),
+            managed=managed,
         )
         for r in rows
     ]
@@ -167,6 +199,7 @@ def update_connector(
         row,
         workspace_name=names.get(row.workspace_id),
         waiting=services.waiting_counts(db, [row.id]).get(row.id, 0),
+        managed=_managed(db, user),
     )
 
 
@@ -313,15 +346,21 @@ def upload_inbox(
         db.rollback()
         raise
     db.commit()
-    return _item_out(item, services.context(db, [item]))
+    return _item_out(item, services.context(db, [item]), _managed(db, user))
 
 
-def _item_out(item: PipelineInboxItem, ctx: dict[str, dict[uuid.UUID, Any]]) -> InboxItemOut:
-    return InboxItemOut(**_item_fields(item, ctx))
+def _item_out(
+    item: PipelineInboxItem,
+    ctx: dict[str, dict[uuid.UUID, Any]],
+    managed: set[uuid.UUID] | None,
+) -> InboxItemOut:
+    return InboxItemOut(**_item_fields(item, ctx, managed))
 
 
 def _item_fields(
-    item: PipelineInboxItem, ctx: dict[str, dict[uuid.UUID, Any]]
+    item: PipelineInboxItem,
+    ctx: dict[str, dict[uuid.UUID, Any]],
+    managed: set[uuid.UUID] | None,
 ) -> dict[str, Any]:
     connector = ctx["connectors"].get(item.connector_id)
     test_type = ctx["types"].get(item.test_type_id) if item.test_type_id else None
@@ -346,28 +385,38 @@ def _item_fields(
         "candidate_count": len(item.candidates),
         "received_at": item.received_at,
         "resolved_at": item.resolved_at,
+        "workspace_name": ctx["workspaces"].get(connector.workspace_id) if connector else None,
+        "can_handle": _handles(managed, connector.workspace_id if connector else None),
     }
 
 
 def _visible_items(db: Session, user: User) -> Any:
-    query = select(PipelineInboxItem).join(
+    """수집함 — **전원이 본다**(ADR 0035 3단계). 다루는 것은 커넥터 부서의 관리자다.
+
+    전에는 내 부서 커넥터의 것만 보였다. 「내 파일이 어디까지 왔나」 는 파일을 낸
+    사람이 묻는데, 그 사람이 커넥터 부서에 없으면 물을 데가 없었다.
+    """
+    del user
+    return select(PipelineInboxItem).join(
         PipelineConnector, PipelineConnector.id == PipelineInboxItem.connector_id
     )
-    if not user.is_system_admin:
-        mine = select(WorkspaceMember.workspace_id).where(WorkspaceMember.user_id == user.id)
-        query = query.where(PipelineConnector.workspace_id.in_(mine))
-    return query
 
 
 @router.get("/inbox", response_model=Page[InboxItemOut])
 def list_inbox(
     status: str | None = Query(default=None),
     connector_id: uuid.UUID | None = Query(default=None),
+    scope: str = Query(default="mine", pattern="^(mine|all)$"),
     limit: int | None = Query(default=None, ge=1),
     offset: int = Query(default=0, ge=0),
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> Page[InboxItemOut]:
+    """수집함. `scope=mine`(기본)은 **내 부서 커넥터의 것**, `all` 은 전사다.
+
+    기본을 좁히는 이유: 이 목록은 「처리할 것」 을 보는 자리다 — 전사가 기본이면 남의
+    부서 대기 건이 내 할 일 사이에 섞인다. 시스템 관리자의 `mine` 은 전부다(전과 같다).
+    """
     if status is not None and status not in INBOX_STATUSES:
         raise AppError(
             "MNX-PIPE-0010",
@@ -375,6 +424,9 @@ def list_inbox(
             status=422,
         )
     query = _visible_items(db, user)
+    if scope == "mine" and not user.is_system_admin:
+        mine = select(WorkspaceMember.workspace_id).where(WorkspaceMember.user_id == user.id)
+        query = query.where(PipelineConnector.workspace_id.in_(mine))
     if status is not None:
         query = query.where(PipelineInboxItem.status == status)
     if connector_id is not None:
@@ -389,8 +441,12 @@ def list_inbox(
         )
     )
     ctx = services.context(db, items)
+    managed = _managed(db, user)
     return Page(
-        items=[_item_out(i, ctx) for i in items], total=total, limit=size, offset=offset
+        items=[_item_out(i, ctx, managed) for i in items],
+        total=total,
+        limit=size,
+        offset=offset,
     )
 
 
@@ -416,8 +472,8 @@ def _hint_out(hint: commission_hints.Hint | None) -> CommissionHintOut | None:
     )
 
 
-def _detail(db: Session, item: PipelineInboxItem) -> InboxItemDetail:
-    fields = _item_fields(item, services.context(db, [item]))
+def _detail(db: Session, item: PipelineInboxItem, user: User) -> InboxItemDetail:
+    fields = _item_fields(item, services.context(db, [item]), _managed(db, user))
     # **누가 재 달라고 한 것인지**를 여기서 붙인다(2026-09-18). 안 붙이면 사람은
     # 시편에 붙인 뒤 의뢰 화면으로 건너가 어느 건인지 스스로 떠올려야 하고, 그
     # 왕복을 안 하면 의뢰는 「시험 중」 인 채로 서 있는다.
@@ -448,7 +504,7 @@ def _detail(db: Session, item: PipelineInboxItem) -> InboxItemDetail:
 def get_item(
     item_id: uuid.UUID, user: User = Depends(current_user), db: Session = Depends(get_db)
 ) -> InboxItemDetail:
-    return _detail(db, _get_item(db, user, item_id))
+    return _detail(db, _get_item(db, user, item_id), user)
 
 
 def _manager_of_item(db: Session, user: User, item: PipelineInboxItem) -> None:
@@ -484,7 +540,7 @@ def assign_item(
             )
     services.register(db, item, specimen=specimen, test_type=test_type, actor=user)
     db.commit()
-    return _detail(db, item)
+    return _detail(db, item, user)
 
 
 @router.post("/inbox/{item_id}/approve", response_model=InboxItemDetail)
@@ -496,7 +552,7 @@ def approve_item(
     _manager_of_item(db, user, item)
     services.approve_suggested(db, item, actor=user)
     db.commit()
-    return _detail(db, item)
+    return _detail(db, item, user)
 
 
 @router.post("/inbox/approve", response_model=BulkApproveOut)
@@ -542,4 +598,4 @@ def retry_item(
     _manager_of_item(db, user, item)
     services.retry(db, item)
     db.commit()
-    return _item_out(item, services.context(db, [item]))
+    return _item_out(item, services.context(db, [item]), _managed(db, user))

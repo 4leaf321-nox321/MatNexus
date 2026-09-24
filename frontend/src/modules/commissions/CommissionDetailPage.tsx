@@ -236,13 +236,23 @@ export default function CommissionDetailPage() {
             <Timeline events={detail.events} />
           </section>
 
-          <ActionBox
-            detail={detail}
-            onDone={() => {
-              setError(null)
-              item.reload()
-            }}
-          />
+          {/* **보기는 전원, 움직이고 말하는 것은 두 쪽**(ADR 0035 3단계). 낸 부서·받는 부서가
+              아니면 읽기로만 연다 — 남의 부서 약속 한가운데 말이 끼어들지 않게. */}
+          {detail.can_comment ? (
+            <ActionBox
+              detail={detail}
+              onDone={() => {
+                setError(null)
+                item.reload()
+              }}
+            />
+          ) : (
+            <p className="text-muted-foreground rounded-md border border-dashed p-4 text-sm">
+              읽기만 됩니다 — 이 의뢰는 낸 부서({detail.requester_workspace.name})와 받는
+              부서({detail.lab_workspace.name})가 움직이고 말을 보탭니다. 물을 것이 있으면 낸
+              사람({detail.created_by ?? '—'})에게 직접 물어 주세요.
+            </p>
+          )}
 
           {editing && (
             <EditDialog

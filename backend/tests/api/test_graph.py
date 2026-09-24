@@ -199,53 +199,40 @@ class Test부분그래프와_노드:
 
 
 class Test가시성:
-    def test_잠근_부서의_재료는_남에게_노드도_선도_수도_없다(
+    def test_다른_부서의_재료도_노드와_선과_수에_든다(
         self, client: TestClient, db: Session, admin_headers: dict[str, str]
     ) -> None:
-        """**이 파일에서 가장 값진 시험이다** — MCP 온톨로지와 같은 규칙(`visible_ids`)."""
+        """**보기는 전원이다**(ADR 0035) — MCP 온톨로지와 같은 규칙(`visible_ids`).
+
+        그래프가 따로 가리면 「목록에는 있는데 그림에는 없다」 가 되고, 구조 그림의 수가
+        사람마다 달라진다 — 그때 어느 쪽이 맞는지 알 방법이 없다."""
         for slug, name in (("dept-a", "A 부서"), ("dept-b", "B 부서")):
             client.post(
                 "/api/workspaces", json={"name": name, "slug": slug}, headers=admin_headers
             )
         made = _chain(client, db, admin_headers, owner_slug="dept-a")
-        assert (
-            client.patch(
-                "/api/workspaces/dept-a", json={"restricted": True}, headers=admin_headers
-            ).status_code
-            == 200
-        )
         outsider = _login_member_of(
             client, admin_headers, slug="dept-b", email="graph-outsider@example.com"
         )
         focus = _node("material", made["material"])
-        # 노드 자체가 없다.
         for path, params in (
             ("/api/graph/neighborhood", {"focus": focus}),
             ("/api/graph/node", {"id": focus}),
             ("/api/graph/neighborhood", {"focus": _node("specimen", made["specimen"])}),
         ):
-            assert client.get(path, params=params, headers=outsider).status_code == 404
-        # 찾기·훑기에도 안 뜬다.
+            assert client.get(path, params=params, headers=outsider).status_code == 200
         material = client.get(
             f"/api/materials/{made['material']}", headers=admin_headers
         ).json()
         hits = client.get(
             "/api/graph/search", params={"q": material["grade"]}, headers=outsider
         )
-        assert all(one["id"] != focus for one in hits.json())
-        page = client.get(
-            "/api/graph/browse", params={"type": "material", "limit": 100}, headers=outsider
-        ).json()
-        assert all(one["id"] != focus for one in page["items"])
-        # 구조 그림의 수에도 안 들어간다.
+        assert any(one["id"] == focus for one in hits.json())
+
         mine = client.get(OVERVIEW, headers=outsider).json()
         theirs = client.get(OVERVIEW, headers=admin_headers).json()
 
         def count(body: dict[str, Any], slug: str) -> int:
             return int(next(n["count"] for n in body["nodes"] if n["slug"] == slug))
 
-        def edge(body: dict[str, Any], slug: str) -> int:
-            return int(next(e["count"] for e in body["edges"] if e["relation"] == slug))
-
-        assert count(mine, "material") < count(theirs, "material")
-        assert edge(mine, "derived_from") < edge(theirs, "derived_from")
+        assert count(mine, "material") == count(theirs, "material")

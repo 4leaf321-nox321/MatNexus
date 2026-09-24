@@ -25,9 +25,17 @@ export type BasketItem = components['schemas']['ItemOut']
 export type ItemKind = 'test_run' | 'material' | 'card'
 
 export const basketApi = {
-  /** 내 부서의 작업들. **「이어서 하기」 가 이 목록이다.** */
-  runs: (status?: 'running' | 'finished' | 'dropped') =>
-    api.get<BasketRun[]>(`/workbench/runs${status ? `?status=${status}` : ''}`),
+  /**
+   * 작업들. **「이어서 하기」 가 이 목록이다.** 기본은 내가 이어 할 수 있는 것(내 부서
+   * 작업 · 내가 시작한 것) — `all` 이면 전사(ADR 0035 3단계, 보기는 전원).
+   */
+  runs: (status?: 'running' | 'finished' | 'dropped', scope: 'mine' | 'all' = 'mine') => {
+    const query = new URLSearchParams()
+    if (status) query.set('status', status)
+    if (scope === 'all') query.set('scope', 'all')
+    const text = query.toString()
+    return api.get<BasketRun[]>(`/workbench/runs${text ? `?${text}` : ''}`)
+  },
 
   run: (id: string) => api.get<BasketRunDetail>(`/workbench/runs/${id}`),
 

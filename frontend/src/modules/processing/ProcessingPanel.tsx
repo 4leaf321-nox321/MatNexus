@@ -113,7 +113,11 @@ interface Props {
    * 하려면 필요하다** — 키만 보여 주면 무엇인지 코드를 읽어야 안다.
    */
   sourceChannels?: { key: string; label: string; si_unit: string }[]
-  /** 관리자인 부서. 비어 있으면 '레시피로 저장' 을 감춘다 — 서버가 거절한다. */
+  /**
+   * 레시피를 올릴 수 있는 부서 — **내가 속한 부서 전부**(ADR 0035 3단계 — 전에는 관리자인
+   * 부서만). 첫 것이 기본(내 소속)이다. 비어 있으면 '레시피로 저장' 을 감춘다 — 소속이
+   * 없으면 서버가 등록 부서를 못 정한다.
+   */
   managedWorkspaces?: { slug: string; name: string }[]
   /**
    * 이 시험이 딸린 재료. **「이 단계 그대로 여러 건에」 가 형제를 찾는 데 쓴다** —
@@ -1839,7 +1843,6 @@ function SaveRecipeDialog({
   onClose: () => void
   onSaved: (label: string) => void
 }) {
-  const [key, setKey] = useState('')
   const [label, setLabel] = useState('')
   const [owner, setOwner] = useState(workspaces[0]?.slug ?? '')
   const [error, setError] = useState<Error | null>(null)
@@ -1849,8 +1852,9 @@ function SaveRecipeDialog({
     setBusy(true)
     setError(null)
     try {
+      // **key 는 안 보낸다 — 서버가 짓는다.** key 는 전사에서 하나라(ADR 0035) 사람이
+      // 적게 하면 옆 부서가 먼저 쓴 이름 때문에 막힌다. 사람이 읽는 것은 이름이다.
       await processingApi.createRecipe({
-        key,
         label,
         description: null,
         test_type_key: testTypeKey,
@@ -1881,21 +1885,6 @@ function SaveRecipeDialog({
 
         <div className="space-y-3">
           <div className="space-y-1.5">
-            <Label htmlFor="recipe-key">키</Label>
-            <Input
-              id="recipe-key"
-              value={key}
-              placeholder="tensile_standard"
-              onChange={(event) =>
-                setKey(event.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '_'))
-              }
-            />
-            <p className="text-muted-foreground text-xs">
-              소문자·숫자·밑줄. <b>부서 안에서만 유일하면 됩니다</b> — 같은 인장이라도
-              부서마다 따르는 규격이 다르므로, 다른 부서가 같은 이름을 써도 됩니다.
-            </p>
-          </div>
-          <div className="space-y-1.5">
             <Label htmlFor="recipe-label">이름</Label>
             <Input
               id="recipe-label"
@@ -1905,7 +1894,9 @@ function SaveRecipeDialog({
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="recipe-owner">누구 것</Label>
+            {/* **등록 부서** — 권한이 아니다. 고치는 사람은 나(등록자)와, 내가 「권한」 에서
+                편집을 준 부서, 자료 관리자다(ADR 0035). */}
+            <Label htmlFor="recipe-owner">등록 부서</Label>
             <Select value={owner} onValueChange={setOwner}>
               <SelectTrigger id="recipe-owner">
                 <SelectValue placeholder="부서를 고르세요" />
@@ -1925,7 +1916,7 @@ function SaveRecipeDialog({
           <Button variant="outline" onClick={onClose}>
             취소
           </Button>
-          <Button onClick={save} disabled={busy || !key || !label || !owner}>
+          <Button onClick={save} disabled={busy || !label || !owner}>
             저장
           </Button>
         </DialogFooter>

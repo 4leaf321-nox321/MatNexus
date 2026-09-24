@@ -11,7 +11,6 @@ import {
   ChevronLeft,
   ChevronRight,
   ClipboardList,
-  Globe2,
   ListTree,
   Pencil,
   Plus,
@@ -34,6 +33,8 @@ import { tabOf } from '@/modules/materials/tabs'
 import { MasterCurveNotice } from '@/modules/materials/MasterCurveNotice'
 import { groupsApi } from '@/modules/materials/api.groups'
 import { PropertySourcesSheet } from '@/modules/materials/PropertySourcesSheet'
+import { canEdit, lockedTitle } from '@/modules/ownership/access'
+import { AccessLine } from '@/modules/ownership/AccessLine'
 import { PageHeader } from '@/shared/components/PageHeader'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
@@ -135,14 +136,24 @@ export default function MaterialDetailPage() {
                 </Link>
               </Button>
             )}
-            <Button variant="outline" onClick={() => setEditing(true)} disabled={!item}>
+            <Button
+              variant="outline"
+              onClick={() => setEditing(true)}
+              disabled={!item || !canEdit(item.access)}
+              title={lockedTitle(item?.access)}
+            >
               <Pencil className="size-4" />
               수정
             </Button>
             {/* **확인이 없었다.** 누르면 바로 지우려 들었고, 시료가 남아 있으면
                 그제서야 실패 이유가 떴다 — 그리고 거기서 할 수 있는 일이 없었다.
                 이제 무엇이 함께 사라지는지 먼저 보여 준다. */}
-            <Button variant="outline" onClick={() => setRemoving(true)} disabled={!item}>
+            <Button
+              variant="outline"
+              onClick={() => setRemoving(true)}
+              disabled={!item || !canEdit(item.access)}
+              title={lockedTitle(item?.access)}
+            >
               삭제
             </Button>
           </div>
@@ -155,6 +166,19 @@ export default function MaterialDetailPage() {
           open={sources}
           onClose={() => setSources(false)}
         />
+      )}
+
+      {/* **누가 고치나를 누르기 전에 말한다**(ADR 0035). 전에는 잠긴 이유가 소속에
+          숨어 있어서, 수정을 눌러 403 을 받고서야 알았다. */}
+      {item && (
+        <div className="-mt-2 mb-3">
+          <AccessLine
+            kind="material"
+            id={item.id}
+            access={item.access}
+            onChanged={material.reload}
+          />
+        </div>
       )}
 
       <ErrorNotice error={material.error} className="mb-4" />
@@ -200,19 +224,8 @@ export default function MaterialDetailPage() {
             }
           />
           <Field label="푸아송비" value={item.poisson_ratio == null ? '—' : String(item.poisson_ratio)} />
-          <Field
-            label="소속"
-            value={
-              item.is_global ? (
-                <Badge variant="outline" className="gap-1">
-                  <Globe2 className="size-3" />
-                  전역
-                </Badge>
-              ) : (
-                (item.owner_workspace_name ?? '—')
-              )
-            }
-          />
+          {/* 등록한 부서 — 권한이 아니다(ADR 0035). 누가 고치는지는 머리의 한 줄이 말한다. */}
+          <Field label="소속" value={item.owner_workspace_name ?? '—'} />
           <Field label="시료" value={`${item.sample_count}건`} />
           <Field
             label="등록"

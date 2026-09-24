@@ -100,6 +100,47 @@ class Test초안과_승인:
         assert sent.status_code == 403
         assert sent.json()["error"]["code"] == "MNX-GUIDE-0005"
 
+    def test_검토자는_자료_관리자다_부서_관리자가_아니다(
+        self,
+        client: TestClient,
+        db: Session,
+        workspace: Any,
+        member_headers: dict[str, str],
+        section: dict[str, Any],
+    ) -> None:
+        """전에는 「부서 관리자 이상」 이었다(ADR 0022). 부서 관리자는 고칠 권한을 갖지
+        않게 되었고(ADR 0035 D5), 승인은 검토의 뜻이 있는 일이라 자료 관리자가 한다."""
+        from app.modules.accounts.models import User
+        from app.modules.auth import security
+        from app.modules.workspaces.models import WorkspaceMember
+
+        def person(email: str, *, role: str, steward: bool) -> dict[str, str]:
+            user = User(
+                email=email,
+                password_hash=security.hash_password("pw12345678"),
+                display_name=email,
+                status="active",
+                home_workspace_id=workspace.id,
+                is_data_manager=steward,
+            )
+            db.add(user)
+            db.flush()
+            db.add(WorkspaceMember(workspace_id=workspace.id, user_id=user.id, role=role))
+            db.commit()
+            login = client.post(
+                "/api/auth/login", json={"email": email, "password": "pw12345678"}
+            )
+            return {"Authorization": f"Bearer {login.json()['access_token']}"}
+
+        lead = person("lead", role="manager", steward=False)
+        steward = person("steward", role="member", steward=True)
+        body = {"body": doc_body("관리자가 고침"), "publish": True}
+        url = f"/api/guide/sections/{section['id']}/revisions"
+        blocked = client.post(url, json=body, headers=lead)
+        assert blocked.status_code == 403, blocked.text
+        assert "자료 관리자" in blocked.json()["error"]["message"]
+        assert client.post(url, json=body, headers=steward).status_code == 201
+
     def test_승인하면_본문이_되고_판이_오른다(
         self,
         client: TestClient,

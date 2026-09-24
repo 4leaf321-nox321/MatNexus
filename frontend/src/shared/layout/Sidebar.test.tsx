@@ -26,7 +26,7 @@ vi.mock('@/shared/auth/AuthContext', () => ({
 function sidebar() {
   render(
     <MemoryRouter>
-      <Sidebar collapsed={false} workspaceSlug="ws" />
+      <Sidebar collapsed={false} />
     </MemoryRouter>
   )
 }

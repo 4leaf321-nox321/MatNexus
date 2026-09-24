@@ -171,6 +171,7 @@ const detail = (over: Record<string, unknown> = {}) => ({
   can_assign: true,
   can_resolve: true,
   can_delete: false,
+  can_comment: true,
   assignees: [{ id: 'u-2', name: '박측정' }],
   ...over,
 })
@@ -306,5 +307,25 @@ describe('측정 의뢰 상세', () => {
     expect(within(rows[0]).getByText('등록 · 접수 대기')).toBeInTheDocument()
     expect(within(rows[1]).getByText('접수 로 옮김')).toBeInTheDocument()
     expect(within(rows[1]).getByText('10월 첫 주')).toBeInTheDocument()
+  })
+  it('제3부서는 읽기만 하고 누구에게 물을지를 본다', async () => {
+    // **보기는 전원, 움직이고 말하는 것은 두 쪽**(ADR 0035 3단계). 전에는 제3부서에
+    // 「없다」 였다 — 「이 시료를 누가 재 달라고 했나」 를 옆 부서가 물을 데가 없었다.
+    await show(
+      detail({
+        side: 'viewer',
+        can_comment: false,
+        can_link: false,
+        can_assign: false,
+        can_resolve: false,
+        assignees: [],
+        allowed: [],
+        allowed_labels: {},
+        note_required: [],
+      })
+    )
+    expect(screen.queryByLabelText('댓글 등록')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '말만 남기기' })).not.toBeInTheDocument()
+    expect(screen.getByText(/읽기만 됩니다/)).toBeInTheDocument()
   })
 })

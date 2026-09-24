@@ -53,6 +53,8 @@ import {
   DropdownMenuTrigger,
 } from '@/shared/components/ui/dropdown-menu'
 import { ConfirmDialog } from '@/shared/components/ConfirmDialog'
+import { canEdit, lockedTitle } from '@/modules/ownership/access'
+import { AccessLine } from '@/modules/ownership/AccessLine'
 import { PageHeader } from '@/shared/components/PageHeader'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
@@ -103,9 +105,15 @@ export default function TestRunDetailPage() {
   const [notice, setNotice] = useState<string | null>(null)
 
   const { user } = useAuth()
-  /** 관리자인 부서만. 아닌 부서 것으로 레시피를 만들면 서버가 거절한다. */
-  const managed = (user?.memberships ?? [])
-    .filter((membership) => membership.role === 'manager')
+  /**
+   * 레시피를 올릴 부서 — **내가 속한 부서 전부**, 소속이 맨 앞(ADR 0035 3단계 — 전에는
+   * 관리자인 부서만이라 평범한 멤버에게 「레시피로 저장」 이 안 보였다).
+   */
+  const managed = [...(user?.memberships ?? [])]
+    .sort(
+      (a, b) =>
+        Number(b.slug === user?.home_workspace_slug) - Number(a.slug === user?.home_workspace_slug)
+    )
     .map((membership) => ({ slug: membership.slug, name: membership.name }))
 
   const item = run.data
@@ -352,7 +360,13 @@ export default function TestRunDetailPage() {
             </Button>
             {/* **등록한 뒤에 적을 자리.** 지그·시험자·조건과 원본 교체 — 일괄
                 수정은 한 칸씩이고 단위 딸린 조건은 못 받는다(VOC 2026-09-13). */}
-            <Button variant="outline" size="sm" onClick={() => setEditing(true)} disabled={!item}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setEditing(true)}
+              disabled={!item || !canEdit(item.access)}
+              title={lockedTitle(item?.access)}
+            >
               <Pencil className="size-4" />
               편집
             </Button>
@@ -361,7 +375,12 @@ export default function TestRunDetailPage() {
                 없었다. */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={!canEdit(item?.access)}
+                  title={lockedTitle(item?.access)}
+                >
                   <RefreshCw className="size-4" />
                   다시 읽기
                   <ChevronDown className="size-3.5" />
@@ -429,12 +448,26 @@ export default function TestRunDetailPage() {
                 )}
               </DropdownMenuContent>
             </DropdownMenu>
-            <Button variant="outline" size="sm" onClick={() => setRemoving(true)}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setRemoving(true)}
+              disabled={!canEdit(item?.access)}
+              title={lockedTitle(item?.access) ?? '시험 삭제'}
+            >
               <Trash2 className="size-4" />
             </Button>
           </>
         }
       />
+
+      {/* **누가 고치나를 누르기 전에 말한다**(ADR 0035). 채택·다시 읽기·치수 채우기도
+          이 시험을 고치는 일이다 — 올린 사람과 해석하는 사람이 다르면 그 부서에 편집을 준다. */}
+      {item && (
+        <div className="mb-3">
+          <AccessLine kind="test_run" id={item.id} access={item.access} onChanged={run.reload} />
+        </div>
+      )}
 
       <ErrorNotice error={run.error ?? action} className="mb-4" />
 

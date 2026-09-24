@@ -14,7 +14,8 @@ const MATERIAL = { material_id: 'm1', material_name: 'SECC_MDOI_1.0' }
 describe('시험 상세의 뒤로', () => {
   it('목록에서 왔으면 목록으로 간다', () => {
     // 시험 목록은 부서 스코프라 상세 화면이 그 주소를 만들 수 없다 — 목록이 준다.
-    const from = { to: '/w/qa/tests', label: '시험 데이터' }
+    // 목록이 거르기까지 들고 넘겨 준다 — 전에는 부서가 주소 경로(`/w/qa/tests`)였다.
+    const from = { to: '/tests?workspace=qa', label: '시험 데이터' }
     expect(backTarget(from, MATERIAL)).toEqual(from)
   })
 

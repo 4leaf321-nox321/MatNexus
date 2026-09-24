@@ -4,12 +4,17 @@
  * 조회는 그 부서 멤버면 되고, 변경은 부서 관리자(또는 시스템 관리자)만 할 수 있다.
  * 화면은 권한을 스스로 판정하지 않고 서버가 준 `my_role` 로 버튼만 감춘다 —
  * 판정은 서버가 하고, 화면은 그 결과를 반영할 뿐이다.
+ *
+ * **부서는 이 화면에서 고른다.** 전에는 상단 선택기가 「지금 부서」 를 정했는데, 그것이
+ * 정하는 화면이 여기 하나만 남아서 선택기를 걷고 이리로 옮겼다(ADR 0035 3단계). 주소를
+ * 안 주면 내가 관리하는 첫 부서(없으면 소속)를 연다.
  */
 
 import { useState } from 'react'
 import { Loader2, ShieldCheck, UserMinus, UserPlus } from 'lucide-react'
-import { useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 
+import { WorkspacePicker } from '@/modules/workspaces/WorkspacePicker'
 import { workspacesApi } from '@/modules/workspaces/api'
 import { useAuth } from '@/shared/auth/AuthContext'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
@@ -45,8 +50,16 @@ import {
 import { useResource } from '@/shared/hooks/useResource'
 
 export default function MembersPage() {
-  const { slug = '' } = useParams<{ slug: string }>()
   const { user } = useAuth()
+  const navigate = useNavigate()
+  const memberships = user?.memberships ?? []
+  const { slug: asked } = useParams<{ slug?: string }>()
+  const slug =
+    asked ??
+    memberships.find((m) => m.role === 'manager')?.slug ??
+    user?.home_workspace_slug ??
+    memberships[0]?.slug ??
+    ''
 
   const members = useResource(() => workspacesApi.members(slug), [slug])
   const [adding, setAdding] = useState(false)
@@ -75,14 +88,26 @@ export default function MembersPage() {
     <div>
       <PageHeader
         title="부서 멤버"
-        description={`${membership?.name ?? slug} 의 구성원과 역할입니다.`}
+        description={`${membership?.path ?? membership?.name ?? slug} 의 구성원과 역할입니다.`}
         actions={
-          canManage && (
-            <Button onClick={() => setAdding(true)}>
-              <UserPlus className="size-4" />
-              멤버 추가
-            </Button>
-          )
+          <>
+            {/* **경로가 보이는 선택기.** 소속이 여러 곳이면 같은 이름의 팀이 둘일 수 있다 —
+                상단에 있던 것을 그대로 옮겼다. */}
+            <WorkspacePicker
+              workspaces={memberships}
+              value={slug}
+              onChange={(next) => navigate(`/members/${next}`)}
+              className="h-9 max-w-64"
+              placeholder={slug || '부서 고르기'}
+              emptyLabel="소속된 부서가 없습니다"
+            />
+            {canManage && (
+              <Button onClick={() => setAdding(true)}>
+                <UserPlus className="size-4" />
+                멤버 추가
+              </Button>
+            )}
+          </>
         }
       />
 

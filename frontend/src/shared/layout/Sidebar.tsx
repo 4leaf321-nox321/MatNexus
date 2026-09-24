@@ -23,11 +23,10 @@ import { useResource } from '@/shared/hooks/useResource'
 
 interface SidebarProps {
   collapsed: boolean
-  workspaceSlug: string
   onNavigate?: () => void
 }
 
-function SidebarBody({ workspaceSlug, onNavigate }: Omit<SidebarProps, 'collapsed'>) {
+function SidebarBody({ onNavigate }: Omit<SidebarProps, 'collapsed'>) {
   const { user } = useAuth()
   // **서버가 정본이다.** 번들에 박으면 그것은 빌드된 버전이지 지금 도는 서버가
   // 아니다 — 배포가 반쯤 끝난 상태에서 둘이 갈리고, 그때 화면이 거짓말을 한다.
@@ -111,7 +110,7 @@ function SidebarBody({ workspaceSlug, onNavigate }: Omit<SidebarProps, 'collapse
               title={REALMS[key].hint}
               onClick={() => {
                 rememberRealm(key)
-                navigate(REALMS[key].home(workspaceSlug))
+                navigate(REALMS[key].home)
                 onNavigate?.()
               }}
               className={cn(
@@ -143,7 +142,7 @@ function SidebarBody({ workspaceSlug, onNavigate }: Omit<SidebarProps, 'collapse
               {group.items.map((item) => (
                 <li key={item.label}>
                   <NavLink
-                    to={itemHref(item, workspaceSlug)}
+                    to={itemHref(item)}
                     end={item.end}
                     onClick={onNavigate}
                     className={({ isActive }) =>
@@ -185,11 +184,9 @@ function SidebarBody({ workspaceSlug, onNavigate }: Omit<SidebarProps, 'collapse
 export function SidebarDrawer({
   open,
   onOpenChange,
-  workspaceSlug,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
-  workspaceSlug: string
 }) {
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -197,13 +194,13 @@ export function SidebarDrawer({
         <SheetHeader className="sr-only">
           <SheetTitle>메뉴</SheetTitle>
         </SheetHeader>
-        <SidebarBody workspaceSlug={workspaceSlug} onNavigate={() => onOpenChange(false)} />
+        <SidebarBody onNavigate={() => onOpenChange(false)} />
       </SheetContent>
     </Sheet>
   )
 }
 
-export function Sidebar({ collapsed, workspaceSlug }: SidebarProps) {
+export function Sidebar({ collapsed }: SidebarProps) {
   return (
     <aside
       data-app-chrome="sidebar"
@@ -215,7 +212,7 @@ export function Sidebar({ collapsed, workspaceSlug }: SidebarProps) {
         collapsed ? 'w-0 border-r-0' : 'w-60 border-r',
       )}
     >
-      <SidebarBody workspaceSlug={workspaceSlug} />
+      <SidebarBody />
     </aside>
   )
 }

@@ -44,6 +44,8 @@ export const STATUS_LABELS: Record<InboxStatus, string> = {
 export interface InboxQuery {
   status?: string
   connector_id?: string
+  /** `mine`(기본) — 내 부서 커넥터의 것. `all` — 전사(ADR 0035 3단계, 보기는 전원). */
+  scope?: 'mine' | 'all'
   limit?: number
   offset?: number
 }

@@ -22,6 +22,7 @@ import { EMPTY_DOC, KINDS, guideApi } from '@/modules/guide/api'
 import type { Doc, GuideDocument, Revision, SearchHit, Section } from '@/modules/guide/api'
 import { GuideEditor } from '@/modules/guide/GuideEditor'
 import { useAuth } from '@/shared/auth/AuthContext'
+import { isDataSteward } from '@/shared/auth/roles'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
@@ -80,7 +81,9 @@ export default function GuidePage() {
     return { document, section }
   }, [docs.data, documentKey, sectionKey])
 
-  const isReviewer = Boolean(user?.is_system_admin || user?.memberships.some((m) => m.role === 'manager'))
+  // **검토자는 자료 관리자다**(ADR 0035 3단계 — 전에는 부서 관리자 이상, ADR 0022). 부서
+  // 관리자는 고칠 권한을 갖지 않게 되었고, 승인은 카드 확정과 같은 검토의 일이다.
+  const isReviewer = isDataSteward(user)
 
   return (
     <div className="flex flex-col gap-4 lg:flex-row lg:items-start">

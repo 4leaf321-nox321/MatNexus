@@ -19,8 +19,9 @@ ADR 초안은 「앱 기동 시점에 `add_renderer` 로 얹는다」 였다. �
   남으면 절반만 얻는다.
 - **워커마다 상태가 갈린다.** 여럿을 띄우면 얹은 시점이 달라, 같은 요청이 어느
   워커에 닿느냐에 따라 다른 덱이 나온다 — 그리고 그것은 재현되지 않는다.
-- **레지스트리는 프로세스 전역이다.** 부서마다 정의가 다른데 전역에 얹으면 한
-  요청이 옆 요청의 덱을 바꾼다.
+- **레지스트리는 프로세스 전역이다.** 전에는 부서마다 보이는 정의가 달라 그 자체로
+  전역에 얹을 수 없었다. 보기를 전원에게 연 뒤로(ADR 0035) 목록은 하나지만, 위 두
+  이유로 여전히 요청 때 합친다.
 
 부르는 자리가 둘뿐이라(`list_formats` · `export_card`) 값도 싸다.
 """
@@ -28,9 +29,8 @@ ADR 초안은 「앱 기동 시점에 `add_renderer` 로 얹는다」 였다. �
 from __future__ import annotations
 
 import logging
-import uuid
 
-from sqlalchemy import or_, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.modules.fitting.models import ExportProfile
@@ -40,33 +40,24 @@ from matcore.export import template
 log = logging.getLogger(__name__)
 
 
-def _rows(db: Session, workspace_id: uuid.UUID | None) -> list[ExportProfile]:
-    """살아 있는 정의. **내 부서 것이 전역보다 먼저다.**
+def _rows(db: Session) -> list[ExportProfile]:
+    """살아 있는 정의 전부 — **모든 부서의 것이 모두의 목록에 뜬다**(ADR 0035).
 
-    같은 솔버라도 사업부마다 덱 관례가 다르다 — 어느 키워드를 쓰는지, 표를 몇
-    줄로 자르는지. 부서 것이 있으면 그것이 이긴다(프로파일과 같은 규칙).
+    전에는 내 부서 것과 전역만 보였고, 같은 key 면 부서 것이 전역을 덮었다(사업부마다
+    덱 관례가 달라서). key 가 전사에서 하나가 되면서 덮을 것이 없어졌다 — 사업부의
+    관례는 **다른 형식**으로 나란히 뜨고, 사람이 이름을 보고 고른다. 덮는 규칙은 고른
+    사람에게 안 보였다: 같은 「abaqus」 를 눌러도 누구냐에 따라 다른 덱이 나왔다.
     """
-    rows = db.scalars(
-        select(ExportProfile)
-        .where(
-            ExportProfile.deleted_at.is_(None),
-            ExportProfile.is_active.is_(True),
-            or_(
-                ExportProfile.owner_workspace_id.is_(None),
-                ExportProfile.owner_workspace_id == workspace_id,
-            ),
+    return list(
+        db.scalars(
+            select(ExportProfile)
+            .where(ExportProfile.deleted_at.is_(None), ExportProfile.is_active.is_(True))
+            .order_by(ExportProfile.key)
         )
-        .order_by(ExportProfile.key)
-    ).all()
-
-    # 부서 것을 나중에 넣어 전역을 덮는다.
-    chosen: dict[str, ExportProfile] = {}
-    for row in sorted(rows, key=lambda one: one.owner_workspace_id is not None):
-        chosen[row.key] = row
-    return list(chosen.values())
+    )
 
 
-def all_renderers(db: Session, workspace_id: uuid.UUID | None) -> list[export.Renderer]:
+def all_renderers(db: Session) -> list[export.Renderer]:
     """코드 렌더러 + 정의 렌더러.
 
     **깨진 정의 하나가 목록을 죽이지 않는다.** 건너뛰고 로그를 남긴다 — 목록이
@@ -75,7 +66,7 @@ def all_renderers(db: Session, workspace_id: uuid.UUID | None) -> list[export.Re
     """
     found = list(export.list_renderers())
     taken = {item.key for item in found}
-    for row in _rows(db, workspace_id):
+    for row in _rows(db):
         if row.key in taken:
             # **코드 렌더러가 이긴다.** 덮게 두면 코드 쪽 검증(키워드 확인·물리적
             # 타당성)을 정의 하나가 조용히 우회한다. 저장할 때도 막지만, 코드에

@@ -38,6 +38,8 @@ import { EditSampleDialog } from '@/modules/materials/EditSampleDialog'
 import { EditSpecimenDialog } from '@/modules/materials/EditSpecimenDialog'
 import { MillSheetDialog } from '@/modules/materials/MillSheetDialog'
 import { NewSpecimenDialog } from '@/modules/materials/NewSpecimenDialog'
+import { canEdit, lockedTitle } from '@/modules/ownership/access'
+import { AccessLine } from '@/modules/ownership/AccessLine'
 import { materialsApi } from '@/modules/materials/api'
 import type { Sample, Specimen } from '@/modules/materials/api'
 import { SpecimenTests } from '@/modules/tests/SpecimenTests'
@@ -330,7 +332,8 @@ export function SampleExplorer({
                 variant="ghost"
                 className="size-6"
                 aria-label={`${sample.record_name} 편집`}
-                title="시료 편집"
+                title={lockedTitle(sample.access) ?? '시료 편집'}
+                disabled={!canEdit(sample.access)}
                 onClick={() => {
                   // **누른 줄이 곧 대상이다.** 고르지 않고 옆 줄을 고치면, 창에
                   // 뜬 이름과 목록에서 강조된 줄이 어긋난다.
@@ -345,7 +348,8 @@ export function SampleExplorer({
                 variant="ghost"
                 className="size-6"
                 aria-label={`${sample.record_name} 삭제`}
-                title="시료 삭제"
+                title={lockedTitle(sample.access) ?? '시료 삭제'}
+                disabled={!canEdit(sample.access)}
                 onClick={() => {
                   setSampleId(sample.id)
                   setRemovingSample(true)
@@ -363,6 +367,16 @@ export function SampleExplorer({
           <p className="text-muted-foreground text-xs font-medium">
             {active?.record_name} 의 시편 {rows.length}
           </p>
+          {/* **이 시료를 누가 고치나.** 남의 재료 아래에 붙인 시료는 붙인 사람의 것이다
+              (ADR 0035) — 재료 머리의 줄과 다를 수 있어 시료마다 따로 말한다. */}
+          {active && (
+            <AccessLine
+              kind="sample"
+              id={active.id}
+              access={active.access}
+              onChanged={onChanged}
+            />
+          )}
           <div className="flex items-center gap-1">
             {/* **「줄 안에서」 모드에는 시험 열이 없다.** 그 모드에서 이 단추가
                 사라지면 기능이 없어진 것과 같으므로, 그때만 여기 둔다. */}
@@ -510,7 +524,8 @@ export function SampleExplorer({
                               size="icon"
                               variant="ghost"
                               className="size-7"
-                              title="시편 편집"
+                              title={lockedTitle(specimen.access) ?? '시편 편집'}
+                              disabled={!canEdit(specimen.access)}
                               onClick={() => setEditingSpecimen(specimen)}
                             >
                               <Pencil className="size-3.5" />
@@ -519,7 +534,8 @@ export function SampleExplorer({
                               size="icon"
                               variant="ghost"
                               className="size-7"
-                              title="시편 삭제"
+                              title={lockedTitle(specimen.access) ?? '시편 삭제'}
+                              disabled={!canEdit(specimen.access)}
                               onClick={() => setRemovingSpecimen(specimen)}
                             >
                               <Trash2 className="size-3.5" />

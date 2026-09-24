@@ -24,6 +24,8 @@ import type {
   EquipmentPart,
   EquipmentUnit,
 } from '@/modules/equipment/api'
+import { AccessLine } from '@/modules/ownership/AccessLine'
+import { canEdit, lockedTitle } from '@/modules/ownership/access'
 import type { ApiError } from '@/shared/api/client'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { PageHeader } from '@/shared/components/PageHeader'
@@ -88,7 +90,7 @@ function Facts({ unit }: { unit: EquipmentUnit }) {
   )
 }
 
-function Parts({ unitId }: { unitId: string }) {
+function Parts({ unitId, writable }: { unitId: string; writable: boolean }) {
   const [rows, setRows] = useState<EquipmentPart[] | null>(null)
   const [error, setError] = useState<ApiError | Error | null>(null)
   const [kind, setKind] = useState('load_cell')
@@ -143,7 +145,7 @@ function Parts({ unitId }: { unitId: string }) {
           value={capacity}
           onChange={(event) => setCapacity(event.target.value)}
         />
-        <Button onClick={add} disabled={label.trim() === ''}>
+        <Button onClick={add} disabled={!writable || label.trim() === ''}>
           부속 추가
         </Button>
       </div>
@@ -171,15 +173,17 @@ function Parts({ unitId }: { unitId: string }) {
                 <td className="py-2 pr-3">{part.capacity || dash}</td>
                 <td className="py-2 pr-3">{part.asset_no || dash}</td>
                 <td className="py-2 text-right">
-                  <button
-                    className="text-muted-foreground text-xs underline"
-                    onClick={async () => {
-                      await equipmentApi.removePart(part.id)
-                      load()
-                    }}
-                  >
-                    떼기
-                  </button>
+                  {writable && (
+                    <button
+                      className="text-muted-foreground text-xs underline"
+                      onClick={async () => {
+                        await equipmentApi.removePart(part.id)
+                        load()
+                      }}
+                    >
+                      떼기
+                    </button>
+                  )}
                 </td>
               </tr>
             ))}
@@ -190,7 +194,7 @@ function Parts({ unitId }: { unitId: string }) {
   )
 }
 
-function Calibrations({ unitId }: { unitId: string }) {
+function Calibrations({ unitId, writable }: { unitId: string; writable: boolean }) {
   const [rows, setRows] = useState<EquipmentCalibration[] | null>(null)
   const [error, setError] = useState<ApiError | Error | null>(null)
   const [performed, setPerformed] = useState('')
@@ -254,7 +258,7 @@ function Calibrations({ unitId }: { unitId: string }) {
           value={certificate}
           onChange={(event) => setCertificate(event.target.value)}
         />
-        <Button onClick={add} disabled={!performed}>
+        <Button onClick={add} disabled={!writable || !performed}>
           교정 기록
         </Button>
       </div>
@@ -316,6 +320,10 @@ export default function EquipmentDetailPage() {
   if (error != null) return <ErrorNotice error={error} />
   if (!unit || !id) return null
 
+  // **누가 고치나**(ADR 0035 3단계) — 등록자 · 편집을 받은 부서 · 자료 관리자. 전에는
+  // 「어느 부서든 관리자면」 이었고 화면은 아무것도 안 막아서, 멤버는 눌러 보고 403 을 봤다.
+  const writable = canEdit(unit.access)
+
   return (
     <div className="space-y-4">
       <PageHeader
@@ -323,7 +331,12 @@ export default function EquipmentDetailPage() {
         description={unit.asset_no ?? '자산번호 없음'}
         actions={
           <div className="flex gap-2">
-            <Button variant="outline" onClick={() => setEditing((was) => !was)}>
+            <Button
+              variant="outline"
+              disabled={!writable}
+              title={lockedTitle(unit.access)}
+              onClick={() => setEditing((was) => !was)}
+            >
               {editing ? '편집 닫기' : '편집'}
             </Button>
             <Button variant="outline" onClick={() => navigate('/settings/equipment')}>
@@ -331,6 +344,15 @@ export default function EquipmentDetailPage() {
             </Button>
           </div>
         }
+      />
+
+      <AccessLine
+        kind="equipment"
+        id={unit.id}
+        access={unit.access}
+        onChanged={() => {
+          equipmentApi.unit(id).then(setUnit).catch((caught) => setError(caught as ApiError | Error))
+        }}
       />
 
       {editing ? (
@@ -355,10 +377,10 @@ export default function EquipmentDetailPage() {
             <Facts unit={unit} />
           </TabsContent>
           <TabsContent value="parts" className="mt-3">
-            <Parts unitId={id} />
+            <Parts unitId={id} writable={writable} />
           </TabsContent>
           <TabsContent value="calibration" className="mt-3">
-            <Calibrations unitId={id} />
+            <Calibrations unitId={id} writable={writable} />
           </TabsContent>
         </Tabs>
       )}

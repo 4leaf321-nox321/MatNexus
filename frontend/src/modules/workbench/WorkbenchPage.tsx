@@ -62,7 +62,10 @@ const KIND_LABELS: Record<string, string> = {
 }
 
 export default function WorkbenchPage() {
-  const running = useResource(() => basketApi.runs('running'), [])
+  // **기본은 내가 이어 할 것.** 남의 부서 작업은 「모든 부서」 로 넓혀 본다 — 보기는
+  // 전원이지만(ADR 0035 3단계) 「계속」 에 섞이면 이어 할 것이 안 보인다.
+  const [scope, setScope] = useState<'mine' | 'all'>('mine')
+  const running = useResource(() => basketApi.runs('running', scope), [scope])
   const [open, setOpen] = useState<BasketRunDetail | null>(null)
   const [error, setError] = useState<Error | null>(null)
   // **담고 나서 돌아오면 그 작업이 열려야 한다.** 목록으로 떨어뜨리면 방금 담은
@@ -111,6 +114,22 @@ export default function WorkbenchPage() {
       <ErrorNotice error={running.error ?? error} className="mb-4" />
 
       {/* **이어서 하기가 먼저다.** 어제 하던 것이 아래에 묻히면 서버에 둔 뜻이 없다. */}
+      <div className="mb-2 flex items-center gap-1">
+        <Button
+          size="sm"
+          variant={scope === 'mine' ? 'secondary' : 'ghost'}
+          onClick={() => setScope('mine')}
+        >
+          우리 부서
+        </Button>
+        <Button
+          size="sm"
+          variant={scope === 'all' ? 'secondary' : 'ghost'}
+          onClick={() => setScope('all')}
+        >
+          모든 부서
+        </Button>
+      </div>
       {(running.data ?? []).length > 0 && (
         <div className="mb-6">
           <h2 className="mb-2 text-sm font-medium">계속</h2>
@@ -240,7 +259,15 @@ function RunView({
   onError: (error: Error) => void
 }) {
   const flow = workflowOf(run.workflow_key)
-  const at = String((run.steps as Record<string, unknown>)?.at ?? flow?.steps[0]?.key ?? '')
+  /**
+   * **이 작업을 이어 할 수 있나** — 그 부서 사람 · 시작한 사람 · 자료 관리자(ADR 0035 3단계).
+   * 아니면 읽기로 연다: 단계는 둘러보되 서버에 적지 않고, 담기·빼기·끝내기를 막는다.
+   */
+  const writable = run.access?.can_edit ?? true
+  const [peek, setPeek] = useState<string | null>(null)
+  const at =
+    (!writable && peek) ||
+    String((run.steps as Record<string, unknown>)?.at ?? flow?.steps[0]?.key ?? '')
   const doneKeys = new Set(
     Array.isArray((run.steps as Record<string, unknown>)?.done)
       ? ((run.steps as Record<string, unknown>).done as string[])
@@ -248,6 +275,11 @@ function RunView({
   )
 
   async function goTo(key: string, markDone?: string) {
+    // 읽기로 연 작업은 **둘러보기만** 한다 — 남의 작업의 진행을 옮기지 않는다.
+    if (!writable) {
+      setPeek(key)
+      return
+    }
     try {
       const done = markDone ? [...new Set([...doneKeys, markDone])] : [...doneKeys]
       await basketApi.patch(run.id, { steps: { ...(run.steps ?? {}), at: key, done } })
@@ -291,10 +323,18 @@ function RunView({
         </Button>
         <h1 className="text-lg font-medium">{run.title}</h1>
         <Badge variant="outline">{flow?.title ?? run.workflow_key}</Badge>
-        <Button size="sm" variant="outline" className="ml-auto" onClick={() => void finish()}>
-          <Check className="size-3.5" />이 작업 끝내기
-        </Button>
+        {writable && (
+          <Button size="sm" variant="outline" className="ml-auto" onClick={() => void finish()}>
+            <Check className="size-3.5" />이 작업 끝내기
+          </Button>
+        )}
       </div>
+
+      {!writable && (
+        <div className="text-muted-foreground mb-4 rounded-md border border-dashed p-3 text-sm">
+          읽기만 됩니다 — {run.access?.reason ?? '이 작업은 그 부서가 이어 합니다.'}
+        </div>
+      )}
 
       {/* **정의가 바뀌면 이어서 밀지 않는다.** 반쯤 읽어 미는 것이 더 나쁘다(ADR 0025). */}
       {!flow && (
@@ -408,7 +448,7 @@ function RunView({
             </div>
           )}
 
-          <Basket run={run} onChanged={onChanged} onError={onError} />
+          <Basket run={run} writable={writable} onChanged={onChanged} onError={onError} />
         </div>
       </div>
     </section>
@@ -486,10 +526,13 @@ function StepStatus({ check }: { check: StepCheck }) {
 
 function Basket({
   run,
+  writable,
   onChanged,
   onError,
 }: {
   run: BasketRunDetail
+  /** 뺄 수 있나 — 남의 부서 작업은 읽기로 연다(ADR 0035 3단계). */
+  writable: boolean
   onChanged: () => void
   onError: (error: Error) => void
 }) {
@@ -531,15 +574,17 @@ function Basket({
                 </span>
               )}
               {item.detail && <span className="text-muted-foreground">{item.detail}</span>}
-              <Button
-                size="icon"
-                variant="ghost"
-                className="ml-auto size-6"
-                aria-label={`${item.label} 제거`}
-                onClick={() => void remove(item.id)}
-              >
-                <X className="size-3" />
-              </Button>
+              {writable && (
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="ml-auto size-6"
+                  aria-label={`${item.label} 제거`}
+                  onClick={() => void remove(item.id)}
+                >
+                  <X className="size-3" />
+                </Button>
+              )}
             </div>
           ))}
         </div>

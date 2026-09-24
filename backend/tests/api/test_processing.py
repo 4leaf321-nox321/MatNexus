@@ -772,9 +772,12 @@ class Test레시피:
         assert response.status_code == 422, response.text
         assert "등록되지 않은 처리" in response.json()["error"]["message"]
 
-    def test_전역_레시피는_시스템_관리자만(
+    def test_부서_없이_올리는_레시피는_자료_관리자만(
         self, client: TestClient, db: Session, run_id: str
     ) -> None:
+        """만들기는 누구나다(ADR 0035 3단계) — 등록 부서는 **안 보내면 내 소속.** 칸을
+        비워 보내 부서 없이 올리는 것만 자료 관리자다. 부서 관리자라는 자리는 여기서
+        아무것도 더 갖지 않는다."""
         from app.modules.accounts.models import User
         from app.modules.auth import security
         from app.modules.workspaces.models import Workspace, WorkspaceMember
@@ -786,6 +789,7 @@ class Test레시피:
             password_hash=security.hash_password("member-password-1"),
             display_name="사업부 관리자",
             status="active",
+            home_workspace_id=workspace.id,
         )
         db.add(user)
         db.flush()
@@ -804,16 +808,69 @@ class Test레시피:
             "steps": STEPS,
             "is_active": True,
         }
-        blocked = client.post("/api/processing/recipes", json=payload, headers=headers)
-        assert blocked.status_code == 403, blocked.text
-
-        allowed = client.post(
+        blocked = client.post(
             "/api/processing/recipes",
-            json={**payload, "owner_workspace_slug": workspace.slug},
+            json={**payload, "owner_workspace_slug": None},
             headers=headers,
         )
+        assert blocked.status_code == 403, blocked.text
+        assert "자료 관리자만" in blocked.json()["error"]["message"]
+
+        allowed = client.post("/api/processing/recipes", json=payload, headers=headers)
         assert allowed.status_code == 201, allowed.text
-        assert allowed.json()["is_global"] is False
+        body = allowed.json()
+        assert body["owner_workspace_slug"] == workspace.slug
+        assert body["access"]["registrant"] == "사업부 관리자"
+        # 「전역」 은 응답에서 걷었다 — 받는 쪽이 「공식인가」 로 읽었다(ADR 0035).
+        assert "is_global" not in body
+
+    def test_key_를_비우면_서버가_짓고_남의_부서도_본다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str], run_id: str
+    ) -> None:
+        """key 는 전사에서 하나고 비워 두면 서버가 짓는다(ADR 0035). 남의 부서 레시피도
+        목록에 뜬다 — 같은 재료를 두 부서가 다르게 처리했으면 그 차이가 어디서 왔는지
+        레시피가 말해 준다."""
+        from app.modules.accounts.models import User
+        from app.modules.auth import security
+        from app.modules.workspaces.models import Workspace, WorkspaceMember
+
+        home = db.scalar(select(Workspace))
+        assert home is not None
+        db.add(Workspace(slug="recipe-other", name="다른 부서"))
+        user = User(
+            email="recipe-reader",
+            password_hash=security.hash_password("member-password-1"),
+            display_name="옆 부서 사람",
+            status="active",
+        )
+        db.add(user)
+        db.flush()
+        db.add(WorkspaceMember(workspace_id=home.id, user_id=user.id, role="member"))
+        db.commit()
+
+        made = client.post(
+            "/api/processing/recipes",
+            json={
+                "label": "옆 부서 규격",
+                "description": None,
+                "test_type_key": "tensile",
+                "steps": STEPS,
+                "is_active": True,
+                "owner_workspace_slug": "recipe-other",
+            },
+            headers=admin_headers,
+        )
+        assert made.status_code == 201, made.text
+        key = made.json()["key"]
+        assert key.startswith("rcp_"), key
+
+        token = client.post(
+            "/api/auth/login", json={"email": "recipe-reader", "password": "member-password-1"}
+        ).json()["access_token"]
+        listed = client.get(
+            "/api/processing/recipes", headers={"Authorization": f"Bearer {token}"}
+        ).json()
+        assert key in {row["key"] for row in listed}
 
 
 class Test배치_미리보기와_되돌리기:

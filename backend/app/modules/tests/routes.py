@@ -91,14 +91,10 @@ from app.shared import (
     standard_conditions,
 )
 from app.shared import divisions as divisions_order
+from app.shared.access import AccessBook, EditAccessOut, access_of
 from app.shared.auth import current_user, require_system_admin
 from app.shared.errors import AppError, Conflict, NotFound
 from app.shared.pagination import Page, clamp_limit
-from app.shared.permissions import (
-    require_owner_edit,
-    resolve_owner_workspace,
-    visible_owner_clause,
-)
 from matcore import naming, parsers, processing, readers, registry
 from matcore.groups import prony as _prony_group  # noqa: F401  (등록시킨다)
 from matcore.readers import profile as profiles
@@ -164,14 +160,15 @@ def _profile_extensions(
 ) -> dict[uuid.UUID, list[str]]:
     """종류별로, 그 종류를 읽는 **파일 형식**이 받는 확장자.
 
-    **가시 범위를 따른다** — 안 보이는 프로파일의 확장자를 「받는다」 고 적으면,
-    그 파일을 올린 사람은 왜 안 읽히는지 알 방법이 없다(자동 추정과 같은 판단).
+    **자동으로 읽히는 범위를 따른다**(`formats.auto_profiles`) — 남의 부서 프로파일만
+    읽는 확장자를 「받는다」 고 적으면, 그 파일을 올린 사람은 왜 자동으로 안 읽히는지
+    알 방법이 없다(자동 추정과 같은 판단).
     """
     if not type_ids:
         return {}
     found: dict[uuid.UUID, set[str]] = {}
     rows = db.scalars(
-        formats.visible_profiles(db, user).where(
+        formats.auto_profiles(db, user).where(
             FormatProfile.is_active.is_(True),
             FormatProfile.test_type_id.in_(type_ids),
         )
@@ -196,20 +193,23 @@ def _run_counts(db: Session, type_ids: list[uuid.UUID]) -> dict[uuid.UUID, int]:
     return {type_id: count for type_id, count in rows}
 
 
-def _visible_types(db: Session, user: User) -> Select[tuple[TestType]]:
-    """내 부서 것 + 전역. 재료·형식 프로파일과 **같은 규칙, 같은 코드**다.
+def _visible_types(db: Session) -> Select[tuple[TestType]]:
+    """살아 있는 시험 종류 전부. **전원이 전부 본다**(ADR 0035).
+
+    전에는 「내 부서 것 + 전역」 이었다. 그러면 시험은 전원이 보는데 그 시험을
+    해석할 **정의는 안 보이는** 비대칭이 생겼다 — 다른 시스템이 물성을 받아 가다가
+    「정의가 없다」 로 막혔다(2026-09-24).
 
     **지운 것은 여기서 빠진다.** 소프트 삭제라 행은 남는데, 이 한 곳을 안 거르면
     지운 정의가 업로드 폼의 드롭다운에 그대로 뜬다 — 목록·상세·삭제가 모두 이
     함수를 지나므로 여기가 유일한 관문이다.
     """
-    return select(TestType).where(
-        visible_owner_clause(db, user, TestType.owner_workspace_id),
-        TestType.deleted_at.is_(None),
-    )
+    return select(TestType).where(TestType.deleted_at.is_(None))
 
 
-def _type_out(db: Session, test_type: TestType) -> TestTypeOut:
+def _type_out(
+    db: Session, test_type: TestType, access: EditAccessOut | None = None
+) -> TestTypeOut:
     """정의 하나를 응답 형태로. 목록과 편집 응답이 같은 모양이어야 화면이
     저장 뒤 다시 불러오지 않아도 된다."""
     channels = list(
@@ -237,7 +237,7 @@ def _type_out(db: Session, test_type: TestType) -> TestTypeOut:
         key=test_type.key,
         owner_workspace_slug=owner.slug if owner else None,
         owner_workspace_name=owner.name if owner else None,
-        is_global=test_type.owner_workspace_id is None,
+        access=access,
         label=test_type.label,
         abbr=test_type.abbr,
         description=test_type.description,
@@ -304,11 +304,12 @@ def detect_test_type(
     # 같은 종류에 프로파일이 여럿일 수 있다(장비 소프트웨어 버전이 달라진 경우).
     # 종류별로 하나만 남기면, 우선순위는 높지만 **안 맞는** 프로파일이 맞는 것을
     # 가려 버린다. 전부 보고 우선순위 순으로 맞는 첫 번째를 쓴다.
-    # 자동 추정도 **가시 범위**를 따른다. 화면에 안 보이는 프로파일이 종류를
-    # 정해 버리면, 사람은 왜 그 종류가 골라졌는지 알 방법이 없다.
+    # 자동 추정은 **내 부서 것과 전역**만 대 본다(`formats.auto_profiles`). 보는 것은
+    # 전부지만, 남의 부서 지문이 종류를 정해 버리면 사람은 왜 그 종류가 골라졌는지
+    # 알 방법이 없다 — 시험을 읽는 쪽(`services._pick_reader`)과 같은 범위다.
     candidates = list(
         db.scalars(
-            formats.visible_profiles(db, user)
+            formats.auto_profiles(db, user)
             .where(FormatProfile.is_active.is_(True))
             .order_by(
                 FormatProfile.owner_workspace_id.is_(None),
@@ -441,9 +442,9 @@ def create_test_type(
 ) -> TestTypeOut:
     """새 시험 종류. **배포 없이 추가된다** — 그것이 정의를 데이터로 둔 이유다.
 
-    **부서 관리자도 만든다**(ADR 0006). 새 장비를 붙이는 일은 사업부에서 시작되고,
-    새 장비란 대개 없는 종류를 재는 장비다. 시스템 관리자만 만들 수 있게 두었을
-    때는 형식 프로파일 화면에서 매핑을 다 끝낸 뒤 저장 순간 403 이 났다.
+    **누구나 만든다**(ADR 0035 3단계 — 전에는 부서 관리자, 그 전에는 시스템 관리자,
+    ADR 0006). 새 장비를 붙이는 일은 사업부에서 시작되고, 새 장비란 대개 없는
+    종류를 재는 장비다. 고치는 사람은 등록자 · 편집을 받은 부서 · 자료 관리자다.
 
     키는 **전사에서 유일하다.** 두 부서가 같은 시험을 하면 종류를 둘로 만들 것이
     아니라 하나를 같이 써야 하고, 여기서 부딪히면 그 사실을 알게 된다.
@@ -460,7 +461,7 @@ def create_test_type(
             if existing.owner_workspace_id
             else None
         )
-        whose = f"{owner.name} 부서가" if owner else "전사에"
+        whose = f"{owner.name} 부서가" if owner else "먼저"
         raise Conflict(
             "MNX-TESTS-0021",
             f"이미 있는 시험 종류입니다: {payload.key} ({whose} 만들어 둔 "
@@ -470,11 +471,18 @@ def create_test_type(
     data = payload.model_dump()
     key = data.pop("key")
     owner_slug = data.pop("owner_workspace_slug", None)
-    owner_id = resolve_owner_workspace(
-        db, user, owner_slug, what="시험 종류", code="MNX-TESTS-0029"
+    owner_id = permissions.registering_workspace(
+        db,
+        user,
+        owner_slug,
+        given="owner_workspace_slug" in payload.model_fields_set,
+        what="시험 정의",
+        code="MNX-TESTS-0029",
     )
-    test_type = services.save_definition(db, key=key, owner_workspace_id=owner_id, **data)
-    return _type_out(db, test_type)
+    test_type = services.save_definition(
+        db, key=key, owner_workspace_id=owner_id, registrant_id=user.id, **data
+    )
+    return _type_out(db, test_type, access_of(db, user, test_type))
 
 
 @router.put("/{key}", response_model=TestTypeOut)
@@ -489,12 +497,10 @@ def update_test_type(
     등록된 시험이 있으면 채널의 **key·단위·차원은 거절한다** — 저장된 곡선의
     해석이 바뀌기 때문이다. 라벨·정렬·필수여부는 언제든 바꿀 수 있다.
     """
-    existing = db.scalar(_visible_types(db, user).where(TestType.key == key))
+    existing = db.scalar(_visible_types(db).where(TestType.key == key))
     if existing is None:
         raise NotFound("MNX-TESTS-0002", f"시험 종류를 찾을 수 없습니다: {key}")
-    require_owner_edit(
-        db, user, existing.owner_workspace_id, what="시험 종류", code="MNX-TESTS-0029"
-    )
+    permissions.require_edit(db, user, existing, code="MNX-TESTS-0029")
     # **덮어쓰기를 막는다**(ADR 0015). 정의를 한 벌 통째로 갈아 끼우므로, 뒤에
     # 저장한 쪽이 앞의 채널·조건을 통째로 지운다 — 덮는 것이 아니라 지우는 것이다.
     revision.guard(
@@ -506,7 +512,7 @@ def update_test_type(
     body = payload.model_dump()
     body.pop("expected_revision", None)
     test_type = services.save_definition(db, key=key, actor=user, **body)
-    return _type_out(db, test_type)
+    return _type_out(db, test_type, access_of(db, user, test_type))
 
 
 @router.delete("/{key}", status_code=204)
@@ -515,12 +521,10 @@ def delete_test_type(
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> Response:
-    existing = db.scalar(_visible_types(db, user).where(TestType.key == key))
+    existing = db.scalar(_visible_types(db).where(TestType.key == key))
     if existing is None:
         raise NotFound("MNX-TESTS-0002", f"시험 종류를 찾을 수 없습니다: {key}")
-    require_owner_edit(
-        db, user, existing.owner_workspace_id, what="시험 종류", code="MNX-TESTS-0029"
-    )
+    permissions.require_edit(db, user, existing, code="MNX-TESTS-0029")
     services.delete_definition(db, key)
     return Response(status_code=204)
 
@@ -536,7 +540,7 @@ def list_test_types(
     화면이 이 응답만으로 업로드 폼을 그릴 수 있어야 한다 — 그것이 정의를 DB 에
     둔 이유다.
     """
-    query = _visible_types(db, user).order_by(TestType.sort_order, TestType.label)
+    query = _visible_types(db).order_by(TestType.sort_order, TestType.label)
     if not include_inactive:
         query = query.where(TestType.is_active.is_(True))
     types = list(db.scalars(query))
@@ -564,6 +568,7 @@ def list_test_types(
     counts = _run_counts(db, ids)
     # **한 번에 긁는다.** 종류마다 물으면 목록 하나에 쿼리가 종류 수만큼 붙는다.
     profile_suffixes = _profile_extensions(db, user, ids)
+    book = AccessBook(db, user).prime(types)
     # 소유 부서를 한 번에 긁는다. 종류마다 `db.get` 하면 목록 하나에 쿼리가
     # 종류 수만큼 붙는다(CLAUDE.md: N+1 은 명시적 join 으로 막는다).
     owner_ids = {t.owner_workspace_id for t in types if t.owner_workspace_id}
@@ -583,7 +588,7 @@ def list_test_types(
             owner_workspace_name=(
                 owners[t.owner_workspace_id].name if t.owner_workspace_id in owners else None
             ),
-            is_global=t.owner_workspace_id is None,
+            access=book.of(t),
             label=t.label,
             abbr=t.abbr,
             description=t.description,
@@ -705,7 +710,12 @@ def _context(db: Session, runs: list[TestRun]) -> dict[str, dict[uuid.UUID, Any]
     }
 
 
-def _run_out(run: TestRun, ctx: dict[str, dict[uuid.UUID, Any]]) -> TestRunOut:
+def _run_out(
+    run: TestRun,
+    ctx: dict[str, dict[uuid.UUID, Any]],
+    *,
+    access: EditAccessOut | None = None,
+) -> TestRunOut:
     specimen = ctx["specimens"].get(run.specimen_id)
     sample = ctx["samples"].get(specimen.sample_id) if specimen else None
     material = ctx["materials"].get(sample.material_id) if sample else None
@@ -760,6 +770,7 @@ def _run_out(run: TestRun, ctx: dict[str, dict[uuid.UUID, Any]]) -> TestRunOut:
         temperature_step_count=run.temperature_step_count,
         adopted_result_id=run.adopted_result_id,
         created_at=run.created_at,
+        access=access,
     )
 
 
@@ -988,7 +999,7 @@ def upload_test_run(
     # 파싱 작업은 없는" 상태가 생긴다.
     queue.enqueue(db, kind=kinds.TESTS_PARSE_UPLOAD, payload={"test_run_id": str(run.id)})
     db.commit()
-    return _run_out(run, _context(db, [run]))
+    return _run_out(run, _context(db, [run]), access=access_of(db, user, run))
 
 
 # --- 조회 -------------------------------------------------------------------
@@ -1084,10 +1095,10 @@ def list_runs(
 ) -> Page[TestRunOut]:
     """**가시 범위와 기본 필터는 다른 것이다.**
 
-    가시 범위(`visible_runs`)는 "볼 권한이 있는가"이고 재료를 따라간다. 그런데
-    화면이 `/w/:slug/tests` 라고 말해 놓고 전사를 보여 주면, 사이드바의 '부서'
-    라는 말이 거짓이 된다. 부서가 하나뿐인 동안은 드러나지 않지만 두 번째 부서가
-    쓰기 시작하면 바로 이상해진다.
+    가시 범위(`visible_runs`)는 "볼 권한이 있는가"이고 재료를 따라간다 — 전원이
+    전부 본다(ADR 0035). `workspace` 는 **그 부서가 등록한 시험만** 남기는 거르기다.
+    전에는 화면 주소(`/w/:slug/tests`)가 이것을 정했는데, 상단 부서 선택기와 함께
+    부서 주소를 걷으면서(3단계) 목록의 거르기(`/tests?workspace=`)가 됐다.
 
     `workspace` 는 **좁히기만 한다.** 권한을 넓히지 않는다 — 남의 부서 slug 를
     넣어도 원래 볼 수 있던 것 안에서만 걸러진다.
@@ -1211,8 +1222,12 @@ def list_runs(
         )
     )
     ctx = _context(db, runs)
+    book = AccessBook(db, user).prime(runs)
     return Page(
-        items=[_run_out(run, ctx) for run in runs], total=total, limit=size, offset=offset
+        items=[_run_out(run, ctx, access=book.of(run)) for run in runs],
+        total=total,
+        limit=size,
+        offset=offset,
     )
 
 
@@ -1438,7 +1453,7 @@ def get_run(
         .where(TestSummary.test_run_id == run.id)
         .order_by(TestSummary.source, TestSummary.key)
     )
-    base = _run_out(run, ctx)
+    base = _run_out(run, ctx, access=access_of(db, user, run))
     fits = db.scalar(
         select(func.count())
         .select_from(PronyFit)
@@ -1567,6 +1582,7 @@ def retype(
     얻는다.
     """
     run = services.get_run(db, user, run_id)
+    permissions.require_edit(db, user, run, code="MNX-TESTS-0042")
 
     made = db.scalar(
         select(func.count()).select_from(Curve).where(Curve.test_run_id == run.id)
@@ -1661,6 +1677,7 @@ def update_run(
     같이 오므로 받을 수 있다. 바뀐 칸만 감사 기록에 남긴다.
     """
     run = services.get_run(db, user, run_id)
+    permissions.require_edit(db, user, run, code="MNX-TESTS-0042")
     data = payload.model_dump(exclude_unset=True)
     changes: dict[str, dict[str, Any]] = {}
 
@@ -1716,7 +1733,7 @@ def update_run(
         )
     db.commit()
     db.refresh(run)
-    return _run_out(run, _context(db, [run]))
+    return _run_out(run, _context(db, [run]), access=access_of(db, user, run))
 
 
 @runs_router.post("/{run_id}/source", response_model=SourceReplaceOut, status_code=202)
@@ -1736,6 +1753,7 @@ def replace_source(
     전의 결과가 「옛 곡선의 것」 으로 보이게 한다 — 다시 돌릴지는 사람이 정한다.
     """
     run = services.get_run(db, user, run_id)
+    permissions.require_edit(db, user, run, code="MNX-TESTS-0042")
     definition = db.get(TestType, run.test_type_id)
     assert definition is not None
     now = _now()
@@ -1818,6 +1836,7 @@ def reparse(
     비워 보내면 **고정을 푼다** — 프로파일을 고친 뒤 자동으로 되돌리는 길이다.
     """
     run = services.get_run(db, user, run_id)
+    permissions.require_edit(db, user, run, code="MNX-TESTS-0042")
     if not run.source_path:
         raise AppError("MNX-TESTS-0014", "원본 파일이 없어 다시 읽을 수 없습니다.", status=422)
 
@@ -1829,7 +1848,7 @@ def reparse(
         # **이 시험 종류의 것만.** 다른 종류의 프로파일로 읽으면 채널 이름이
         # 안 맞아 어차피 실패하는데, 그 실패는 「형식이 틀렸다」 로 안 읽힌다.
         profile = db.scalar(
-            formats.visible_profiles(db, user).where(
+            formats.visible_profiles(db).where(
                 FormatProfile.key == key,
                 FormatProfile.test_type_id == run.test_type_id,
             )
@@ -1927,6 +1946,7 @@ def bulk_update_runs(
     updated = 0
     unchanged = 0
     blocked: list[str] = []
+    editor = permissions.editor(db, user)
 
     for run_id in payload.run_ids:
         try:
@@ -1934,6 +1954,11 @@ def bulk_update_runs(
         except AppError:
             # **이름을 모르면 id 라도 준다.** 조용히 세지 않는 것이 요점이다.
             blocked.append(str(run_id))
+            continue
+        if not editor.allows(run):
+            # 막힌 까닭과 **누구에게 물으면 되는지**를 이름과 함께 준다.
+            locked = permissions.locked(db, run, code="MNX-TESTS-0042")
+            blocked.append(f"{run.record_name} — {locked.message}")
             continue
 
         before = _before_of(run, field)
@@ -2004,12 +2029,17 @@ def delete_runs(
     """
     deleted = 0
     blocked: list[str] = []
+    editor = permissions.editor(db, user)
     for run_id in payload.run_ids:
         try:
             run = services.get_run(db, user, run_id)
         except AppError:
             # **이름을 모르면 id 라도 준다.** 조용히 세지 않는 것이 요점이다.
             blocked.append(str(run_id))
+            continue
+        if not editor.allows(run):
+            locked = permissions.locked(db, run, code="MNX-TESTS-0042")
+            blocked.append(f"{run.record_name} — {locked.message}")
             continue
         run.deleted_at = _now()
         vocabulary_services.release_bindings(db, run, vocabulary_services.TEST_RUN_BINDINGS)
@@ -2040,6 +2070,7 @@ def delete_run(
     커밋이 실패했을 때 파일만 사라진 상태가 된다.
     """
     run = services.get_run(db, user, run_id)
+    permissions.require_edit(db, user, run, code="MNX-TESTS-0042")
     run.deleted_at = _now()
     vocabulary_services.release_bindings(db, run, vocabulary_services.TEST_RUN_BINDINGS)
     # **되돌릴 수 있어도 남긴다.** 되돌리려면 먼저 지워졌다는 것을 알아야 하고,
@@ -2171,6 +2202,9 @@ def apply_instrument_dimensions(
     """
     run = permissions.get_run(db, user, run_id)
     specimen = permissions.visible_specimen(db, user, run.specimen_id)
+    # **치수를 채우는 것은 시편을 고치는 일이다**(ADR 0035) — 시험을 올린 사람과 시편을
+    # 등록한 사람이 다를 수 있다. 막히면 시편의 등록자·편집 부서를 말한다.
+    permissions.require_edit(db, user, specimen, code="MNX-MATERIALS-0034")
     fields = specimen_size.dimension_fields(db, specimen)
     found = curvedata.instrument_dimensions(run.source_metadata, fields)
     if not found:

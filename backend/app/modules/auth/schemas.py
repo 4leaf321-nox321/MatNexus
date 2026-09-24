@@ -45,6 +45,8 @@ class UserOut(BaseModel):
     display_name: str
     status: str
     is_system_admin: bool
+    is_data_manager: bool = False
+    """자료 관리자(ADR 0035). 화면이 확정 단추를 보일지 정한다."""
     must_change_password: bool
     home_workspace_slug: str | None
     memberships: list[WorkspaceMembershipOut]

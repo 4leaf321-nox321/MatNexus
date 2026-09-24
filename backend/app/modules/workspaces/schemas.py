@@ -34,8 +34,6 @@ class WorkspaceOut(BaseModel):
     path: str
     sort_order: int
     is_active: bool
-    restricted: bool
-    """재료를 멤버에게만 보이나. 기본 `false` — 가입자 전원이 본다."""
     created_at: datetime
     member_count: int
     managers_only_system_admin: bool = False
@@ -90,8 +88,6 @@ class WorkspaceUpdateRequest(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=100)
     is_active: bool | None = None
     """false 로 두면 보관 상태. 자료는 남기고 새 활동만 막는다(삭제하지 않는다)."""
-    restricted: bool | None = None
-    """true 로 두면 이 부서의 재료·시험을 **멤버에게만** 보인다. 안 보내면 그대로."""
 
 
 class MemberOut(BaseModel):

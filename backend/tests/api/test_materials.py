@@ -153,6 +153,32 @@ class TestUnits:
         assert sample.json()["density_unit"] == "tonne/mm3"
         assert sample.json()["density"] == pytest.approx(7.9e-9)
 
+    def test_다른_시스템이_읽을_SI_밀도를_곁에_둔다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        """한 응답에서 밀도만 표시 단위(tonne/mm3)이고 선언 물성은 SI 라, 받는 쪽이 「전부
+        SI」 로 읽으면 밀도만 10¹² 배 틀렸다(2026-09-24, 해석 연동이 받은 데이터에서 짚었다).
+        `density` 는 화면 수정 창이 되보내는 값이라 그대로 두고 **SI 칸을 곁에 둔다.**"""
+        material = _create_material(client, admin_headers, density=2.68e-9)
+        assert material["density"] == pytest.approx(2.68e-9)
+        assert material["density_si"] == pytest.approx(2680.0)
+        listed = client.get("/api/materials", headers=admin_headers).json()
+        row = next(one for one in listed["items"] if one["id"] == material["id"])
+        assert row["density_si"] == pytest.approx(2680.0)
+
+        sample = client.post(
+            f"/api/materials/{material['id']}/samples",
+            json={"lot_no": "L1", "density": 2.7, "density_unit": "g/cm3"},
+            headers=admin_headers,
+        )
+        assert sample.status_code == 201, sample.text
+        assert sample.json()["density"] == pytest.approx(2.7e-9)
+        assert sample.json()["density_si"] == pytest.approx(2700.0)
+
+        # 밀도를 안 적었으면 둘 다 비어 있다 — 0 이 아니다.
+        bare = _create_material(client, admin_headers, grade="SPCC")
+        assert bare["density"] is None and bare["density_si"] is None
+
     def test_단위_없이_고친_값은_표시_단위로_읽는다(
         self, client: TestClient, db: Session, admin_headers: dict[str, str]
     ) -> None:

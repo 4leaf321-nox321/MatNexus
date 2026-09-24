@@ -94,20 +94,43 @@ def get_material(db: Session, user: User, material_id: uuid.UUID) -> Material:
     return material
 
 
-def require_writable(db: Session, user: User, material: Material) -> None:
-    """전역 재료는 관리자만 고친다.
+def foreign_descendants(
+    db: Session, editor: permissions.Editor, material: Material
+) -> list[str]:
+    """통째로 지우면 함께 사라질 **남의 자료** — 사람 말로(`시험 5건(김철수)`).
 
-    아니면 A부서가 이름을 바꿔 B부서 데이터의 맥락이 사라진다 — 전역으로 올린
-    순간 그 재료는 특정 부서의 것이 아니게 된다.
+    재료를 고칠 수 있다고 그 아래 남이 붙인 시료·시편·시험까지 지울 수 있으면 안 된다
+    (ADR 0035 D4 계층). 층마다 제 등록자가 있고, 지우는 것은 그 사람의 일이다. 막을 때
+    **누구의 무엇 때문인지** 말해야 사람이 그 사람을 찾아간다.
     """
-    if user.is_system_admin:
-        return
-    if material.owner_workspace_id is None:
-        raise Forbidden(
-            "MNX-MATERIALS-0007", "전역 재료는 시스템 관리자만 수정할 수 있습니다."
+    if editor.steward:
+        return []
+    samples, specimens, runs = deletable_tree(db, material)
+    counts: dict[tuple[str, uuid.UUID | None], int] = {}
+    rows: list[tuple[str, list[Sample] | list[Specimen] | list[TestRun]]] = [
+        ("시료", samples),
+        ("시편", specimens),
+        ("시험", runs),
+    ]
+    for label, found in rows:
+        for row in found:
+            if not editor.allows(row):
+                key = (label, row.registered_by_id)
+                counts[key] = counts.get(key, 0) + 1
+    if not counts:
+        return []
+    people = {
+        user_id: name
+        for user_id, name in db.execute(
+            select(User.id, User.display_name).where(
+                User.id.in_([uid for _, uid in counts if uid is not None])
+            )
         )
-    if material.owner_workspace_id not in my_workspace_ids(db, user):
-        raise Forbidden("MNX-MATERIALS-0008", "이 재료를 수정할 권한이 없습니다.")
+    }
+    return [
+        f"{label} {count}건({people.get(uid, '등록자 없음') if uid else '등록자 없음'})"
+        for (label, uid), count in counts.items()
+    ]
 
 
 def resolve_workspace(db: Session, user: User, slug: str | None) -> Workspace:

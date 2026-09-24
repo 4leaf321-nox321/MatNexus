@@ -4,8 +4,9 @@
  * 메뉴를 컴포넌트에서 분리해 두는 이유: 어떤 화면이 있어야 하는지가 한 곳에
  * 적혀 있어야 라우터·사이드바·권한이 서로 어긋나지 않는다. RA도 같은 형태다.
  *
- * `resolve` 는 부서(workspace) 스코프 경로다. 부서 모델은 Phase 1에서 들어오고,
- * 그전까지는 DEFAULT_WORKSPACE 를 쓴다.
+ * **부서가 주소를 정하지 않는다**(ADR 0035 3단계). 전에는 `resolve` 가 「지금 부서」 로
+ * `/w/<부서>/…` 를 지었고, 그 부서는 상단 선택기가 정했다. 보기는 전원이고 고칠 권한은
+ * 사람이 정하니 그 선택이 정하는 것이 없어져 둘 다 걷었다 — 메뉴는 전부 고정 주소다.
  */
 
 import {
@@ -38,6 +39,7 @@ import {
   SlidersHorizontal,
   Split,
   Tags,
+  Trash2,
   Waypoints,
   UserCog,
   Wrench,
@@ -45,9 +47,6 @@ import {
   Workflow,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
-
-/** 부서 모델이 없는 동안 쓰는 임시 slug. Phase 1에서 실제 소속 부서로 대체된다. */
-export const DEFAULT_WORKSPACE = 'default'
 
 /**
  * 영역 — 사이드바 맨 위에서 갈라지는 두 세계.
@@ -68,19 +67,16 @@ export type NavRealm = 'material' | 'composite'
 
 export const REALM_ORDER: NavRealm[] = ['material', 'composite']
 
-export const REALMS: Record<
-  NavRealm,
-  { label: string; hint: string; home: (slug: string) => string }
-> = {
+export const REALMS: Record<NavRealm, { label: string; hint: string; home: string }> = {
   material: {
     label: '재료 물성',
     hint: '재료 → 시료 → 시편 → 시험 — 잰 값',
-    home: (slug) => `/w/${slug}`,
+    home: '/',
   },
   composite: {
     label: '복합 물성',
     hint: '부품 → 구성체 → 시험법 → 역공학 — 추정값',
-    home: () => '/composite',
+    home: '/composite',
   },
 }
 
@@ -99,10 +95,8 @@ export type NavAudience = 'everyone' | 'manager' | 'system_admin'
 export interface NavItem {
   label: string
   icon: LucideIcon
-  /** 고정 경로 */
-  to?: string
-  /** 부서 스코프 경로 */
-  resolve?: (slug: string) => string
+  /** 경로. **부서를 담지 않는다** — 「지금 부서」 가 없어졌다(ADR 0035 3단계). */
+  to: string
   /** NavLink 의 end 옵션 (부모 경로가 자식에도 활성화되지 않게) */
   end?: boolean
   /** 기본은 `everyone`. */
@@ -135,7 +129,7 @@ export const NAV_GROUPS: NavGroup[] = [
     // 둘을 옮기고 나니 홈만 남았고, 하나짜리에 제목을 달면 「여기 더 있다」 로
     // 읽힌다.
     realm: 'material',
-    items: [{ label: '홈', icon: Home, resolve: (s) => `/w/${s}`, end: true }],
+    items: [{ label: '홈', icon: Home, to: '/', end: true }],
   },
   {
     // **데이터 사슬.** 재료 → 시편 → 시험 → 물성 카드 순으로 선다 — 화면의
@@ -332,8 +326,12 @@ export const NAV_GROUPS: NavGroup[] = [
       //
       // **「미구현」 배지를 뗐다.** 목록에서 담을 수 있게 된 뒤에도 배지가 남아
       // 있어서, 담고 나서 **돌아올 자리로 안 읽혔다** — 실제로 그 자리에서 걸렸다.
-      { label: '워크벤치', icon: SlidersHorizontal, resolve: (s) => `/w/${s}/workbench` },
+      { label: '워크벤치', icon: SlidersHorizontal, to: '/workbench' },
       { label: '알림', icon: Bell, to: '/notifications' },
+      // **지운 것을 제 손으로 되살린다**(ADR 0035 3단계). 전에는 시스템 관리자만 봤다 —
+      // 잘못 누른 사람이 되돌릴 길이 없어서 부탁이 관리자에게 갔다. 내가 되살릴 수
+      // 있는 것만 보인다.
+      { label: '휴지통', icon: Trash2, to: '/trash' },
       // 팝업이었다가 화면이 됐다 — 액세스 토큰까지 붙자 팝업이 좁았다.
       { label: '내 정보', icon: UserCog, to: '/me' },
     ],
@@ -381,8 +379,9 @@ export const NAV_GROUPS: NavGroup[] = [
     //
     // **모두가 본다.** 서버의 읽기 엔드포인트는 넷 다 이미 `current_user` 였다 —
     // 막고 있던 것은 사이드바뿐이었고, 그래서 실험한 사람이 「내 파일이 왜 안
-    // 들어왔나」·「이 장비 형식이 뭘로 잡혀 있나」 를 물을 데가 없었다. 고치는
-    // 것은 여전히 부서 관리자다(화면이 쓰기 단추를 가린다, `shared/auth/roles`).
+    // 들어왔나」·「이 장비 형식이 뭘로 잡혀 있나」 를 물을 데가 없었다. **만드는 것도
+    // 누구나**, 고치는 것은 정의마다 등록자 · 편집을 받은 부서 · 자료 관리자다(ADR 0035
+    // 3단계 — 전에는 부서 관리자). 화면은 서버가 줄마다 싣는 `access` 로 단추를 가린다.
     // **'수집' 을 뗐다**(2026-08-30). 솔버 덱 정의가 들어오면서 이 그룹이 더는
     // 들어오는 쪽만이 아니게 됐다 — 장비 파일 정의가 「어떻게 읽나」 라면 덱 정의는
     // 「어떻게 쓰나」 다. 둘 다 **데이터를 무엇으로 다루나** 라는 한 가지 일이고,
@@ -458,7 +457,7 @@ export const NAV_GROUPS: NavGroup[] = [
     title: '내 부서',
     audience: 'manager',
     items: [
-      { label: '부서 멤버', icon: Users, resolve: (s) => `/w/${s}/members`, audience: 'manager' },
+      { label: '부서 멤버', icon: Users, to: '/members', audience: 'manager' },
       {
         // **기록만 쌓이고 볼 자리가 없으면 자산이 아니다.** 레시피·프로파일에서
         // 같은 판단을 했다. 여기에는 만들기·고치기·지우기가 없다 — 고칠 수
@@ -525,8 +524,8 @@ export const NAV_GROUPS: NavGroup[] = [
   },
 ]
 
-export function itemHref(item: NavItem, slug: string): string {
-  return item.to ?? item.resolve?.(slug) ?? '/'
+export function itemHref(item: NavItem): string {
+  return item.to
 }
 
 /** 이 사람에게 보이는가. 서버가 최종 판정을 한다 — 여기는 표시일 뿐이다. */

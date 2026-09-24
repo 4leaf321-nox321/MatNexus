@@ -27,6 +27,12 @@ const deprecate = vi.fn()
 const restore = vi.fn()
 const create = vi.fn()
 
+// **확정·내리기·되살리기는 자료 관리자의 단추다**(ADR 0035). 이 파일은 그 단추들이
+// 무엇을 하는지를 보므로 자료 관리자로 연다.
+vi.mock('@/shared/auth/AuthContext', () => ({
+  useAuth: () => ({ user: { is_system_admin: false, is_data_manager: true, memberships: [] } }),
+}))
+
 vi.mock('@/modules/fitting/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/modules/fitting/api')>()),
   fittingApi: {

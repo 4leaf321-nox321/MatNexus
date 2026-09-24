@@ -283,10 +283,11 @@ class TestMaterials:
             "both",
         )
 
-    def test_잠긴_부서의_재료는_뜻으로도_안_샌다(
+    def test_남의_부서_것은_뜻으로도_찾고_지우면_사라진다(
         self, client: TestClient, db: Session, admin_headers: dict[str, str]
     ) -> None:
-        """조각 표에는 부서가 없다 — 검색이 권한을 다시 안 걸면 색인이 유출 통로다."""
+        """조각 표에는 부서도 삭제 표시도 없다 — 검색이 가시 범위를 다시 안 걸면 색인이
+        지운 재료를 계속 내놓는다. 보기는 전원이라(ADR 0035) 남의 부서 것은 찾힌다."""
         for slug, name in (("sem-a", "A 부서"), ("sem-b", "B 부서")):
             client.post(
                 "/api/workspaces", json={"name": name, "slug": slug}, headers=admin_headers
@@ -296,7 +297,7 @@ class TestMaterials:
             json={
                 "family": "Metal",
                 "category": "Steel",
-                "grade": "SEMSECRET",
+                "grade": "SEMOPEN",
                 "note": MATERIAL_NOTE,
                 "workspace_slug": "sem-a",
             },
@@ -304,10 +305,6 @@ class TestMaterials:
         )
         assert made.status_code == 201, made.text
         material_id = made.json()["id"]
-        locked = client.patch(
-            "/api/workspaces/sem-a", json={"restricted": True}, headers=admin_headers
-        )
-        assert locked.status_code == 200, locked.text
         semantic.reindex(db)
         row = db.execute(
             text(f"SELECT title, body FROM {semantic.TABLE} WHERE entity_id = :id"),
@@ -315,23 +312,20 @@ class TestMaterials:
         ).first()
         assert row is not None
         query = f"{row[0]}\n{row[1]}"[:200]
-
         outsider = _member_of(client, admin_headers, "sem-b")
-        hidden = client.get(
-            "/api/search",
-            params={"q": query, "mode": "similar", "kind": ["material"]},
-            headers=outsider,
-        ).json()
-        assert material_id not in [
-            one["id"] for group in hidden["groups"] for one in group["hits"]
-        ], hidden
-        # 주인에게는 보인다.
-        mine = client.get(
-            "/api/search",
-            params={"q": query, "mode": "similar", "kind": ["material"]},
-            headers=admin_headers,
-        ).json()
-        assert material_id in [one["id"] for group in mine["groups"] for one in group["hits"]]
+
+        def found() -> list[str]:
+            body = client.get(
+                "/api/search",
+                params={"q": query, "mode": "similar", "kind": ["material"]},
+                headers=outsider,
+            ).json()
+            return [one["id"] for group in body["groups"] for one in group["hits"]]
+
+        assert material_id in found()
+        removed = client.delete(f"/api/materials/{material_id}", headers=admin_headers)
+        assert removed.status_code == 204, removed.text
+        assert material_id not in found()
 
 
 class Test관리_화면:

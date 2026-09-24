@@ -14,7 +14,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react'
-import { Check, ChevronsUpDown, Globe2, Search } from 'lucide-react'
+import { Check, ChevronsUpDown, Search } from 'lucide-react'
 
 import { materialsApi } from '@/modules/materials/api'
 import type { Material } from '@/modules/materials/api'
@@ -159,9 +159,6 @@ export function MaterialPicker({
                   </span>
                 )}
               </span>
-              {material.is_global && (
-                <Globe2 className="text-muted-foreground size-3.5 shrink-0" />
-              )}
             </button>
           ))}
         </div>

@@ -65,9 +65,9 @@ class CommissionOut(BaseModel):
     is_mine: bool
     """내가 낸 것인가."""
     side: str
-    """이 사람이 이 건에서 어느 쪽인가 — `requester` · `lab` · `both` · `viewer`(시스템
-    관리자가 어느 쪽도 아닐 때). 화면이 「내가 낸 것 / 우리 부서가 받은 것」 탭과
-    단추를 이것으로 가른다 — 부서 멤버십을 화면이 다시 따지지 않는다."""
+    """이 사람이 이 건에서 어느 쪽인가 — `requester` · `lab` · `both` · `viewer`(어느 쪽도
+    아닌 사람 — 보기는 전원이라 생긴다, ADR 0035 3단계). 화면이 「내가 낸 것 / 우리 부서가
+    받은 것」 탭과 단추를 이것으로 가른다 — 부서 멤버십을 화면이 다시 따지지 않는다."""
     event_count: int
     """등록을 뺀 이벤트 수."""
     can_delete: bool
@@ -134,6 +134,9 @@ class CommissionDetailOut(CommissionOut):
     """담당자를 정할 수 있는가 — 받는 쪽."""
     can_resolve: bool
     """시료를 잇거나 항목의 시험 종류를 정할 수 있는가 — 받는 쪽, 완료·반려 전."""
+    can_comment: bool = True
+    """말을 보탤 수 있는가 — 낸 쪽·받는 쪽. **보기는 전원이다**(ADR 0035): 둘 다
+    아니면 화면은 읽기로만 연다."""
     assignees: list[NamedOut] = Field(default_factory=list)
     """담당자 후보 — 받는 부서 멤버. `can_assign` 일 때만."""
 

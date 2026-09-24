@@ -17,11 +17,8 @@ from sqlalchemy.orm import Session
 
 from app.jobs import kinds, queue
 from app.modules.accounts.models import User
-from app.modules.fitting.models import ExportProfile
 from app.modules.materials.models import Material
 from app.modules.pipelines.models import PipelineConnector
-from app.modules.processing.models import ProcessingRecipe
-from app.modules.tests.models import FormatProfile
 from app.modules.workspaces.models import Workspace, WorkspaceMember
 from app.modules.workspaces.schemas import (
     MemberOut,
@@ -91,7 +88,6 @@ def workspace_out(
         depth=depth or 0,
         path=path or workspace.name,
         sort_order=workspace.sort_order,
-        restricted=workspace.restricted,
         is_active=workspace.is_active,
         created_at=workspace.created_at,
         member_count=_member_count(db, workspace.id),
@@ -168,9 +164,9 @@ def export_rows(db: Session) -> list[list[object]]:
 
     ## 우리가 모르는 칸은 아는 척하지 않는다
 
-    `description` 과 `external_view_default` 는 **비운다.** 이쪽 부서에는 설명 칸이
-    없고, `restricted` 는 물성 열람 제한이라 저쪽의 보고서 공개 정책과 다른 물음이다
-    — 채워 보내면 그 값이 저쪽에서 정책이 된다.
+    `description` 과 `external_view_default` 는 **비운다.** 이쪽 부서에는 설명 칸도
+    열람 정책도 없다(보기는 전원이다, ADR 0035) — 채워 보내면 그 값이 저쪽에서
+    정책이 된다.
 
     `kind` 는 실제 값(org·personal)을 낸다. 개인 공간을 빼고 내면 「부서 수」 가
     화면과 달라 사람이 헷갈리고, 받는 쪽 가져오기는 어차피 personal 을 건너뛴다.
@@ -329,7 +325,6 @@ def update(
     slug: str,
     name: str | None,
     is_active: bool | None,
-    restricted: bool | None = None,
 ) -> Workspace:
     workspace = workspace_by_slug(db, slug)
     if name is not None:
@@ -338,9 +333,6 @@ def update(
         if not is_active:
             _ensure_no_active_children(db, workspace)
         workspace.is_active = is_active
-    if restricted is not None:
-        # 「안 보낸 것」 과 「끈 것」 을 가른다 — None 은 그대로 둔다.
-        workspace.restricted = restricted
     db.commit()
     return workspace
 
@@ -398,11 +390,11 @@ _HISTORY_COLUMNS = {("users", "requested_workspace_id")}
 #: **DB 의 부분 유니크 인덱스와 같은 칸이어야 한다**(`trash/services._UNIQUE_COLUMNS`
 #: 와 같은 목록). 합치기는 이 칸들을 일괄 UPDATE 하므로 양쪽에 같은 값이 있으면
 #: IntegrityError 로 터지고, 잡는 곳이 없어 500 이었다(2026-09-05 점검).
+#:
+#: 장비 파일 정의·레시피·해석용 물성 정의는 **빠졌다** — key 가 전사에서 하나가 되어
+#: (ADR 0035) 두 부서가 같은 key 를 가질 수 없다.
 MERGE_UNIQUE: tuple[tuple[Any, str, str, str], ...] = (
     (Material, "record_name", "owner_workspace_id", "재료"),
-    (FormatProfile, "key", "owner_workspace_id", "장비 파일 정의"),
-    (ProcessingRecipe, "key", "owner_workspace_id", "레시피"),
-    (ExportProfile, "key", "owner_workspace_id", "해석용 물성 정의"),
     (PipelineConnector, "hostname", "workspace_id", "장비 커넥터"),
 )
 

@@ -7,12 +7,13 @@
  * 정렬은 물성 많은 순 — 쓸 것이 많은 재료가 먼저다.
  */
 
-import { Download, FileCode2, GitCompare, Grid3X3, ScatterChart } from 'lucide-react'
+import { FileCode2, GitCompare, Grid3X3, ScatterChart } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 
 import { CATEGORY_LABELS, catalogApi } from '@/modules/catalog/api'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
+import { ExportJsonMenu } from '@/shared/components/ExportJsonMenu'
 import { PageHeader } from '@/shared/components/PageHeader'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
@@ -26,6 +27,7 @@ import {
   TableRow,
 } from '@/shared/components/ui/table'
 import { downloadFile } from '@/shared/api/client'
+import type { UnitSystem } from '@/shared/api/unitSystems'
 import { useResource } from '@/shared/hooks/useResource'
 
 const STEP = 50
@@ -65,16 +67,18 @@ export default function CatalogPage() {
    *
    * **전부 받으면 70MB 가 넘는다**(값 4만여 건 · 조건과 근거가 값마다 붙는다).
    * 그래서 거른 채로 받는 길을 먼저 둔다 — 좁혀 놓고 누르면 그만큼만 온다.
+   *
+   * 값은 고른 단위계로 나간다(ADR 0036). 그 계에 기호가 없는 단위(저항률 …)는 받은
+   * 그대로 두고 파일 머리의 `kept_units` 에 적힌다.
    */
-  async function exportJson() {
+  async function exportJson(system: UnitSystem, filename: string) {
     setExporting(true)
     try {
-      const query = new URLSearchParams()
+      const query = new URLSearchParams({ units: system.key })
       if (q) query.set('q', q)
       if (subsystem !== undefined) query.set('subsystem', subsystem)
       if (category) query.set('category', category)
-      const suffix = query.toString() ? `?${query}` : ''
-      await downloadFile(`/catalog/export${suffix}`, 'matnexus_catalog.json')
+      await downloadFile(`/catalog/export?${query}`, filename)
     } finally {
       setExporting(false)
     }
@@ -116,10 +120,11 @@ export default function CatalogPage() {
             </Button>
             {/* **지금 거른 것을 그대로 받는다.** 화면과 다른 것이 내려오면
                 사람은 그 사실을 모른 채 그 파일로 계산한다. */}
-            <Button variant="outline" onClick={() => void exportJson()} disabled={exporting}>
-              <Download className="size-4" />
-              {exporting ? '내보내는 중…' : 'JSON 내보내기'}
-            </Button>
+            <ExportJsonMenu
+              stem="matnexus_catalog"
+              busy={exporting}
+              onExport={(system, filename) => void exportJson(system, filename)}
+            />
           </div>
         }
       />

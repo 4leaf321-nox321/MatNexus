@@ -118,6 +118,22 @@ export default function AccountsAdminPage() {
     await run(account.id, () => accountsApi.setSystemAdmin(account.id, grant))
   }
 
+  /** 자료 관리자 — **부서와 무관하게 모든 자료를 고치고 카드를 확정한다**(ADR 0035).
+   *
+   *  부서 관리자에게 두지 않은 까닭: 소속이 권한을 정하면 「왜 잠겼나」 를 사람이 알아낼
+   *  수 없었다. 누가 전사 자료를 고칠 수 있는지를 사람 이름으로 드러낸다. */
+  async function toggleDataManager(account: Account) {
+    const grant = !account.is_data_manager
+    const asked = window.confirm(
+      grant
+        ? `'${account.display_name}' 을 자료 관리자로 지정합니다.\n` +
+            '어느 부서 자료든 고치고 지울 수 있고, 물성 카드를 확정합니다.'
+        : `'${account.display_name}' 의 자료 관리자를 해제합니다.`
+    )
+    if (!asked) return
+    await run(account.id, () => accountsApi.setDataManager(account.id, grant))
+  }
+
   async function run(id: string, action: () => Promise<unknown>) {
     setBusyId(id)
     setError(null)
@@ -227,6 +243,9 @@ export default function AccountsAdminPage() {
                   {account.deleted_at ? account.email.split('#deleted-')[0] : account.email}
                   {account.is_system_admin && (
                     <span className="text-muted-foreground ml-2 text-xs">시스템 관리자</span>
+                  )}
+                  {account.is_data_manager && (
+                    <span className="text-muted-foreground ml-2 text-xs">자료 관리자</span>
                   )}
                 </TableCell>
                 <TableCell>{account.display_name}</TableCell>
@@ -340,6 +359,18 @@ export default function AccountsAdminPage() {
                             {account.is_system_admin ? '관리자 해제' : '관리자 지정'}
                           </Button>
                         )}
+
+                      {(account.is_data_manager || account.status === 'active') && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={busyId === account.id}
+                          onClick={() => void toggleDataManager(account)}
+                          title="자료 관리자 — 모든 자료를 고치고 카드를 확정합니다"
+                        >
+                          {account.is_data_manager ? '자료 관리자 해제' : '자료 관리자 지정'}
+                        </Button>
+                      )}
 
                       {account.status !== 'pending' && (
                         <Button

@@ -17,13 +17,14 @@ describe('realmOf', () => {
   })
 
   it('재료 쪽 주소는 기억과 무관하게 재료 물성이다', () => {
-    for (const path of ['/materials', '/materials/abc', '/specimens', '/tests', '/test-runs/1', '/cards', '/compare', '/w/metal', '/w/metal/tests/upload']) {
+    // `/` 는 재료 물성의 홈이다 — 전에는 `/w/<부서>` 였다(ADR 0035 3단계에서 걷었다).
+    for (const path of ['/', '/materials', '/materials/abc', '/specimens', '/tests', '/tests/upload', '/test-runs/1', '/cards', '/compare']) {
       expect(realmOf(path, 'composite'), path).toBe('material')
     }
   })
 
   it('공용 화면에서는 마지막 영역을 유지한다', () => {
-    for (const path of ['/notifications', '/vocabulary', '/settings/formats', '/w/metal/workbench', '/me']) {
+    for (const path of ['/notifications', '/vocabulary', '/settings/formats', '/workbench', '/trash', '/me']) {
       expect(realmOf(path, 'composite'), path).toBe('composite')
       expect(realmOf(path, 'material'), path).toBe('material')
     }

@@ -44,12 +44,15 @@ DMA 는 읽히기는 하지만 담을 시험 종류가 없다 — 정의만 있�
 from __future__ import annotations
 
 import copy
+import logging
 from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.modules.tests.models import FormatProfile, TestType
+
+log = logging.getLogger(__name__)
 
 #: 옛 앱의 인장 결과 파일. 시험 종류는 `tensile`.
 LEGACY_TENSILE_KEY = "legacy_mtet"
@@ -323,6 +326,15 @@ def ensure_builtin_format_profiles(db: Session) -> list[str]:
             )
         )
         if existing is not None:
+            continue
+        # **key 는 전사에서 하나다**(ADR 0035). 부서가 먼저 같은 key 로 만들어 뒀으면
+        # 기본 것을 안 넣는다 — 넣으면 유니크 인덱스가 막아 설치 스크립트가 통째로
+        # 멈춘다. 그 부서 것이 그 장비를 이미 읽고 있다는 뜻이기도 하다.
+        held = db.scalar(select(FormatProfile).where(FormatProfile.key == key))
+        if held is not None:
+            log.warning(
+                "기본 형식 프로파일 %s 를 건너뜁니다 — 부서 것이 같은 key 를 씁니다", key
+            )
             continue
 
         test_type = db.scalar(select(TestType).where(TestType.key == type_key))

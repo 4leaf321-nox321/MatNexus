@@ -910,7 +910,7 @@ function ExploreView({
       if (colorBy === 'workspace') {
         return one.owner_workspace_slug
           ? { key: one.owner_workspace_slug, label: one.owner_workspace_slug }
-          : { key: '__global__', label: '전역' }
+          : { key: '__none__', label: '부서 없음' }
       }
       if (colorBy === 'status') return { key: one.status, label: one.status }
       return { key: one.type_slug, label: one.type_label }

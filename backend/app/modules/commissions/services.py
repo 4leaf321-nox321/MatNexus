@@ -11,7 +11,7 @@ from collections import defaultdict
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import Select, and_, func, select
+from sqlalchemy import Select, and_, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.jobs import kinds, queue
@@ -58,10 +58,12 @@ def _now() -> datetime:
 
 
 def visible(db: Session, user: User) -> Select[tuple[Commission]]:
-    """낸 부서 멤버 + 받는 부서 멤버 + 시스템 관리자. 작성 중은 낸 사람만.
+    """**낸 것은 전원이 본다.** 작성 중은 낸 사람만(ADR 0035 3단계).
 
-    시료의 가시 범위를 따르지 않는 이유: 의뢰는 두 부서 사이의 약속이라 제3부서가
-    볼 것이 아니다 — 시료가 열린 부서 것이어도 그렇다.
+    전에는 낸 부서·받는 부서 멤버만 봤다 — 두 부서 사이의 약속이라 제3부서가 볼
+    것이 아니라는 판단이었다. 그런데 그 판정이 움직이는 권한과 한 자리여서, 「이
+    시료를 누가 재 달라고 했나」 를 옆 부서가 물을 길이 없었다. **움직이고 말을
+    보태는 것은 여전히 두 쪽이다**(`side_of`·`can_comment`).
     """
     # 규칙은 `shared/permissions.visible_commissions` 한 곳 — 그래프·홈 요약이 같은 것을 쓴다.
     return permissions.visible_commissions(db, user)
@@ -86,6 +88,15 @@ def side_of(db: Session, item: Commission, user: User) -> str:
     if lab:
         return "lab"
     return "viewer"
+
+
+def can_comment(side: str, user: User) -> bool:
+    """말을 보탤 수 있는가 — **낸 쪽과 받는 쪽**(시스템 관리자는 막힌 건을 푸는 사람).
+
+    보기를 전원에게 열면서 떼었다. 전에는 보는 사람이 곧 두 쪽이라 「보면 말한다」
+    였다 — 그대로 두면 제3부서의 말이 두 부서의 약속 한가운데 끼어든다.
+    """
+    return user.is_system_admin or side != "viewer"
 
 
 def is_lab_side(side: str, user: User) -> bool:
@@ -242,13 +253,14 @@ def _deliverable_keys() -> set[str]:
     return {spec.key for spec in cards.list_blocks()} | {DELIVERABLE_CURVES}
 
 
-def visible_test_type(db: Session, user: User, key: str) -> TestType:
+def visible_test_type(db: Session, key: str) -> TestType:
+    """의뢰에 적을 수 있는 시험 종류 — 살아 있고 쓰는 것. **부서를 안 가린다**(ADR 0035):
+    받는 부서의 종류로 재 달라고 하는 것이 의뢰의 흔한 모양이다."""
     test_type = db.scalar(
         select(TestType).where(
             TestType.key == key,
             TestType.deleted_at.is_(None),
             TestType.is_active.is_(True),
-            permissions.visible_owner_clause(db, user, TestType.owner_workspace_id),
         )
     )
     if test_type is None:
@@ -274,7 +286,7 @@ def build_items(
         values: dict[str, Any] = {}
         input_units: dict[str, str] = {}
         if key:
-            test_type = visible_test_type(db, user, key)
+            test_type = visible_test_type(db, key)
             values, input_units = conditions.normalize_conditions(
                 db, test_type, dict(one.conditions), dict(one.condition_units)
             )
@@ -692,11 +704,23 @@ def specimen_names(db: Session, runs: list[TestRun]) -> dict[uuid.UUID, str]:
 
 
 def scope_clause(db: Session, user: User, scope: str) -> Any:
-    """목록 탭 — `mine`(내가 낸 것) · `received`(우리 부서가 받은 것) · `all`."""
+    """목록 탭 — `ours`(우리 부서가 낸 것·받은 것) · `mine`(내가 낸 것) ·
+    `received`(우리 부서가 받은 것) · `all`(전사).
+
+    **`ours` 가 전에는 「전체」 였다.** 보는 범위가 곧 두 쪽이었으므로 「전체」 가 곧 우리
+    부서 것이었다. 보기를 전원에게 연 뒤(ADR 0035 3단계) 「전체」 는 정말 전사가 됐고,
+    게시판이 매일 보던 모양을 지키려고 그 자리를 이름을 붙여 남겼다.
+    """
+    mine = select(WorkspaceMember.workspace_id).where(WorkspaceMember.user_id == user.id)
+    if scope == "ours":
+        return or_(
+            Commission.requester_workspace_id.in_(mine),
+            Commission.lab_workspace_id.in_(mine),
+            Commission.created_by_id == user.id,
+        )
     if scope == "mine":
         return Commission.created_by_id == user.id
     if scope == "received":
-        mine = select(WorkspaceMember.workspace_id).where(WorkspaceMember.user_id == user.id)
         return and_(Commission.lab_workspace_id.in_(mine), Commission.status != "draft")
     if scope == "all":
         return None

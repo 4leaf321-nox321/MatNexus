@@ -8,6 +8,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from app.shared.access import EditAccessOut
+
 # --- 처리 (Phase 3) ---------------------------------------------------------
 
 
@@ -234,9 +236,13 @@ class RecipeUpdateRequest(RecipeSaveRequest):
 
 
 class RecipeCreateRequest(RecipeSaveRequest):
-    key: str = Field(min_length=1, max_length=80, pattern=r"^[a-z][a-z0-9_]*$")
+    key: str | None = Field(
+        default=None, min_length=1, max_length=80, pattern=r"^[a-z][a-z0-9_]*$"
+    )
+    """**비워 두면 서버가 짓는다**(`rcp_1a2b3c4d`). key 는 전사에서 하나다(ADR 0035)."""
     owner_workspace_slug: str | None = None
-    """비우면 전역 — **시스템 관리자만** 할 수 있다."""
+    """등록 부서. **안 보내면 내 소속 부서**, 비워서 보내면(`null`) 부서 없이 — 그것은
+    자료 관리자만(`permissions.registering_workspace`). 권한이 아니라 적어 두는 칸이다."""
 
 
 class RecipeOut(BaseModel):
@@ -246,7 +252,9 @@ class RecipeOut(BaseModel):
     description: str | None
     owner_workspace_slug: str | None
     owner_workspace_name: str | None
-    is_global: bool
+    """**등록한 부서** — 권한이 아니다(ADR 0035). 비면 부서 없이 올린 것이다."""
+    access: EditAccessOut | None = None
+    """**이 사람이** 고칠 수 있나, 못 하면 누구에게."""
     test_type_key: str
     test_type_label: str
     steps: list[dict[str, Any]]

@@ -41,6 +41,9 @@
 
 전도도의 값이 같은 것이 함정이다 — 숫자를 안 바꾼다고 기호까지 안 바꾸면,
 받는 사람이 그 덱을 SI 로 읽는다.
+
+카드 블록이 안 드는 역학 물리량(선하중 N/mm · 표면에너지 mJ/mm² · 파괴인성
+MPa·mm^0.5 …)도 같은 식으로 따라온다 — 재료·문헌 내보내기가 쓴다(`EXCHANGED`).
 """
 
 from __future__ import annotations
@@ -58,6 +61,46 @@ from matcore import units
 #: 속도 의존(`1/s`)·선형탄성구간(`Hz`) 카드가 기본 계(mm·N·tonne)로 내려받기가 전부
 #: 422 였다. 기본 계를 SI 에서 바꾼 날 드러났다.
 DECLARED = ("1", "Pa", "K", "s", "kg/m3", "1/K", "J/(kg.K)", "W/(m.K)", "1/s", "Hz", "Pa.s")
+
+#: **나가는 파일이 드는 역학 물리량**(ADR 0036, 2026-09-24). 카드 블록은 안 들지만 재료·문헌
+#: 내보내기가 기본 계로 나가면서 옮기게 됐다. 기준은 하나다 — **질량·길이·시간(과 온도)으로
+#: 짜인 SI 단위.** 계가 정하는 것이 그 셋이라 인수가 차원식으로 정해진다. 전기·자기(전류가
+#: 든다)·물질량(mol)·로그(dB)·눈금(HV·Shore)은 계가 정하지 않아 여기 없다 — 내보내기가 받은
+#: 그대로 두고 파일 머리에 적는다(`app/shared/unit_systems`).
+EXCHANGED = (
+    "m",
+    "m2",
+    "kg",
+    "N",
+    "rad",
+    "rad/s",
+    "N/m",
+    "J",
+    "J/m",
+    "J/m2",
+    "J/m3",
+    "J/kg",
+    "W/m2",
+    "K.m2/W",
+    "m/s",
+    "m2/s",
+    "1/Pa",
+    "Pa.m0.5",
+    "kg/(m2.s)",
+    "kg/(m.s)",
+    "kg/m2",
+    "m2/kg",
+    "m3/kg",
+    "Pa.s/m",
+    "m/cycle",
+    "m3/(m2.s)",
+    "m3/(N.m)",
+    "1/m3",
+    "m3/(m2.s.Pa)",
+)
+
+#: 계가 기호를 아는 SI 단위 전부 — 붙박이 계도, 유도한 계도 이 전부에 기호를 든다.
+KNOWN = DECLARED + EXCHANGED
 
 
 @dataclass(frozen=True)
@@ -110,7 +153,7 @@ SI = UnitSystem(
     mass="kg",
     length="m",
     time="s",
-    symbols={item: item for item in DECLARED},
+    symbols={item: item for item in KNOWN},
 )
 
 MM_N_TONNE = UnitSystem(
@@ -137,15 +180,49 @@ MM_N_TONNE = UnitSystem(
         # 점도(유변 카드). 1 Pa·s = 1e-6 N·s/mm²(= MPa·s). 기호를 `MPa.s` 로 두면
         # 단위표의 대소문자 없는 찾기가 `mPa.s` 로 읽는다 — 1e9 배 사고라 피한다.
         "Pa.s": "N.s/mm2",
+        # --- 나가는 파일이 드는 역학 물리량(`EXCHANGED`) — m·kg·Pa·J·W 를 이 계의 것으로.
+        "m": "mm",
+        "m2": "mm2",
+        "kg": "tonne",
+        "N": "N",
+        "rad": "rad",
+        "rad/s": "rad/s",
+        "N/m": "N/mm",
+        "J": "mJ",
+        # 값이 같다(인수 1) — 전도도와 같은 함정이라 기호는 바꿔 적는다.
+        "J/m": "mJ/mm",
+        "J/m2": "mJ/mm2",
+        "J/m3": "mJ/mm3",
+        "J/kg": "mJ/tonne",
+        "W/m2": "mW/mm2",
+        "K.m2/W": "K.mm2/mW",
+        "m/s": "mm/s",
+        "m2/s": "mm2/s",
+        "1/Pa": "1/MPa",
+        "Pa.m0.5": "MPa.mm0.5",
+        "kg/(m2.s)": "tonne/(mm2.s)",
+        "kg/(m.s)": "tonne/(mm.s)",
+        "kg/m2": "tonne/mm2",
+        "m2/kg": "mm2/tonne",
+        "m3/kg": "mm3/tonne",
+        # 음향 임피던스. `MPa.s/mm` 는 사람이 `mPa.s` 로 읽는다 — 점도와 같은 이유.
+        "Pa.s/m": "N.s/mm3",
+        "m/cycle": "mm/cycle",
+        "m3/(m2.s)": "mm3/(mm2.s)",
+        "m3/(N.m)": "mm3/(N.mm)",
+        "1/m3": "1/mm3",
+        "m3/(m2.s.Pa)": "mm3/(mm2.s.MPa)",
     },
 )
 
 SYSTEMS: tuple[UnitSystem, ...] = (SI, MM_N_TONNE)
 
 
-#: 카드가 드는 SI 단위의 차원 지수 — (질량, 길이, 시간). 온도는 K 그대로다(오프셋 없음).
-#: 절대온도의 역수·비열·전도도의 K 는 지수에 안 들어가고 기호에만 붙는다.
-EXPONENTS: dict[str, tuple[int, int, int]] = {
+#: 계가 아는 SI 단위의 차원 지수 — (질량, 길이, 시간). 온도는 K 그대로다(오프셋 없음).
+#: 절대온도의 역수·비열·전도도의 K 는 지수에 안 들어가고 기호에만 붙는다. 각(rad)·주기
+#: (cycle)도 그렇다. **손으로 적는 표라** 시험이 기호를 밑기호로 풀어 다시 세어 대조한다 —
+#: mm·N·tonne 은 시간이 s 라 시간 지수가 틀려도 숫자가 같게 나와서 그 계로는 안 드러난다.
+EXPONENTS: dict[str, tuple[float, float, float]] = {
     "1": (0, 0, 0),
     "Pa": (1, -1, -2),
     "K": (0, 0, 0),
@@ -157,16 +234,50 @@ EXPONENTS: dict[str, tuple[int, int, int]] = {
     "1/s": (0, 0, -1),
     "Hz": (0, 0, -1),
     "Pa.s": (1, -1, -1),
+    "m": (0, 1, 0),
+    "m2": (0, 2, 0),
+    "kg": (1, 0, 0),
+    "N": (1, 1, -2),
+    "rad": (0, 0, 0),
+    "rad/s": (0, 0, -1),
+    "N/m": (1, 0, -2),
+    "J": (1, 2, -2),
+    "J/m": (1, 1, -2),
+    "J/m2": (1, 0, -2),
+    "J/m3": (1, -1, -2),
+    "J/kg": (0, 2, -2),
+    "W/m2": (1, 0, -3),
+    "K.m2/W": (-1, 0, 3),
+    "m/s": (0, 1, -1),
+    "m2/s": (0, 2, -1),
+    "1/Pa": (-1, 1, 2),
+    "Pa.m0.5": (1, -0.5, -2),
+    "kg/(m2.s)": (1, -2, -1),
+    "kg/(m.s)": (1, -1, -1),
+    "kg/m2": (1, -2, 0),
+    "m2/kg": (-1, 2, 0),
+    "m3/kg": (-1, 3, 0),
+    "Pa.s/m": (1, -2, -1),
+    "m/cycle": (0, 1, 0),
+    "m3/(m2.s)": (0, 1, -1),
+    "m3/(N.m)": (-1, 1, 2),
+    "1/m3": (0, -3, 0),
+    "m3/(m2.s.Pa)": (-1, 2, 1),
 }
 
-#: 분모에 K 가 드는 것. 지수로는 0 이지만 기호에는 있어야 한다 — mm2/(ms2.K).
+#: 지수로는 0 이지만 기호에는 있어야 하는 것 — 기본 단위로 지을 때(`_compose`) 붙인다.
+#: 분모에 K(mm2/(ms2.K)) · 분자에 K(K.ms3/kg) · 분자에 rad(rad/ms) · 분모에 cycle(mm/cycle).
 _PER_KELVIN = frozenset({"J/(kg.K)", "W/(m.K)"})
+_TIMES_KELVIN = frozenset({"K.m2/W"})
+_TIMES_RADIAN = frozenset({"rad/s"})
+_PER_CYCLE = frozenset({"m/cycle"})
 
 
-def _power(symbol: str, exponent: int) -> str:
+def _power(symbol: str, exponent: float) -> str:
     if exponent == 1:
         return symbol
-    return f"{symbol}{exponent}"
+    # `mm2` · `mm0.5` — 정수 지수에 `.0` 이 붙으면 표가 못 읽는다.
+    return f"{symbol}{exponent:g}"
 
 
 def _compose(mass: str, length: str, time: str, si_unit: str) -> str:
@@ -174,8 +285,14 @@ def _compose(mass: str, length: str, time: str, si_unit: str) -> str:
     m, l_, t = EXPONENTS[si_unit]
     above = [_power(base, e) for base, e in ((mass, m), (length, l_), (time, t)) if e > 0]
     below = [_power(base, -e) for base, e in ((mass, m), (length, l_), (time, t)) if e < 0]
+    if si_unit in _TIMES_KELVIN:
+        above.insert(0, "K")
+    if si_unit in _TIMES_RADIAN:
+        above.insert(0, "rad")
     if si_unit in _PER_KELVIN:
         below.append("K")
+    if si_unit in _PER_CYCLE:
+        below.append("cycle")
     top = ".".join(above) if above else "1"
     if not below:
         return top
@@ -236,6 +353,24 @@ def _tokens(symbol: str) -> set[str]:
     return set(re.findall(r"[A-Za-z]+", symbol))
 
 
+#: 계가 정하는 차원 — 기호에 든 이 차원의 단위는 그 계의 기본 단위여야 한다.
+_BASE_DIMENSIONS = frozenset({"mass", "length", "time"})
+
+
+def _foreign(symbol: str, bases: tuple[str, str, str]) -> bool:
+    """그 계의 것이 아닌 질량·길이·시간 단위가 기호에 드는가.
+
+    kg·mm·ms 계의 질량 플럭스는 인수가 `tonne/(mm2.s)` 와 같다(1e9). 인수만 보고 그 기호를
+    집으면 받는 사람이 「이 파일은 tonne·s 계인가」 를 묻는다 — 기본 단위로 짓는 편이
+    (`kg/(mm2.ms)`) 그 파일이 어느 계인지를 말한다(2026-09-24, 기호표를 넓히다 드러났다).
+    """
+    for token in _tokens(symbol):
+        unit = units.UNITS.get(token)
+        if unit is not None and unit.dimension in _BASE_DIMENSIONS and token not in bases:
+            return True
+    return False
+
+
 def _symbol_for(si_unit: str, factor: float, bases: tuple[str, str, str]) -> str:
     if EXPONENTS[si_unit] == (0, 0, 0):
         # 무차원·온도는 어느 계나 같다. 표에서 찾으면 mm 계가 `mm/mm` 를 집는다.
@@ -251,6 +386,7 @@ def _symbol_for(si_unit: str, factor: float, bases: tuple[str, str, str]) -> str
         if unit.dimension == dimension
         and unit.offset == 0
         and abs(float(unit.factor) - factor) <= 1e-9 * max(factor, 1e-30)
+        and not _foreign(symbol, bases)
     ]
     if not candidates:
         return _compose(*bases, si_unit)

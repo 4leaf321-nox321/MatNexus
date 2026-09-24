@@ -25,15 +25,7 @@ import type { Overview } from '@/modules/statistics/api'
 import { Badge } from '@/shared/components/ui/badge'
 import { Skeleton } from '@/shared/components/ui/skeleton'
 
-export function OverviewPanel({
-  data,
-  loading,
-  workspaceSlug,
-}: {
-  data: Overview | null
-  loading: boolean
-  workspaceSlug: string
-}) {
+export function OverviewPanel({ data, loading }: { data: Overview | null; loading: boolean }) {
   if (loading && !data) {
     return (
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
@@ -105,7 +97,7 @@ export function OverviewPanel({
           <AlertTriangle className="size-4 shrink-0 text-amber-600 dark:text-amber-500" />
           <span className="text-muted-foreground text-xs">남은 일</span>
           {data.parse_failed > 0 && (
-            <Pending to={`/w/${workspaceSlug}/tests?status=failed`}>
+            <Pending to="/tests?status=failed">
               읽기 실패 {data.parse_failed}
             </Pending>
           )}
@@ -130,7 +122,7 @@ export function OverviewPanel({
             <Pending to="/commissions?scope=mine">낸 의뢰 진행 중 {data.commissions_mine_open}</Pending>
           )}
           {data.waiting_to_process > 0 && (
-            <Pending to={`/w/${workspaceSlug}/tests`}>처리 대기 {data.waiting_to_process}</Pending>
+            <Pending to="/tests">처리 대기 {data.waiting_to_process}</Pending>
           )}
           {data.card_draft > 0 && (
             <Pending to="/cards?status=draft">
@@ -162,7 +154,7 @@ export function OverviewPanel({
 
         <Tile label="시편" value={data.specimen_count} to="/specimens" />
 
-        <Tile label="시험" value={data.run_count} to={`/w/${workspaceSlug}/tests`}>
+        <Tile label="시험" value={data.run_count} to="/tests">
           <Split items={data.test_types} />
         </Tile>
 

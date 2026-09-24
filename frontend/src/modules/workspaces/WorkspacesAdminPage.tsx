@@ -34,8 +34,6 @@ import {
   Search,
   Trash2,
   Users,
-  Globe,
-  Lock,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
@@ -242,42 +240,8 @@ export default function WorkspacesAdminPage() {
                   보관
                 </Badge>
               )}
-              {/* **가리는 쪽이 예외다.** 기본은 가입자 전원이 모든 부서의 물성을
-                  보므로, 열린 부서에는 표를 안 달고 제한한 부서에만 단다. */}
-              {workspace.restricted && (
-                <Badge variant="outline" className="gap-1 text-amber-700 dark:text-amber-400">
-                  <Lock className="size-3" />
-                  멤버만
-                </Badge>
-              )}
 
               <div className="ml-auto flex items-center gap-1">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={busy}
-                  aria-label={
-                    workspace.restricted
-                      ? `${workspace.name} 물성을 모두에게 공개`
-                      : `${workspace.name} 물성을 멤버에게만 공개`
-                  }
-                  title={
-                    workspace.restricted
-                      ? '지금은 이 부서 멤버만 이 부서의 재료·시험을 봅니다. 누르면 가입자 전원에게 공개합니다.'
-                      : '지금은 가입자 전원이 이 부서의 재료·시험을 봅니다. 누르면 멤버에게만 보입니다. 고치는 권한은 바뀌지 않습니다.'
-                  }
-                  onClick={() =>
-                    run(workspace.slug, () =>
-                      workspacesApi.update(workspace.slug, { restricted: !workspace.restricted })
-                    )
-                  }
-                >
-                  {workspace.restricted ? (
-                    <Lock className="size-3.5" />
-                  ) : (
-                    <Globe className="size-3.5" />
-                  )}
-                </Button>
                 {/* 끝이면 눌러도 안 움직이므로 아예 막는다 — 눌리는데 반응이 없으면
                     고장으로 보인다. */}
                 <Button
@@ -335,7 +299,7 @@ export default function WorkspacesAdminPage() {
                 </Button>
 
                 <Button size="sm" variant="outline" asChild>
-                  <Link to={`/w/${workspace.slug}/members`}>
+                  <Link to={`/members/${workspace.slug}`}>
                     <Users className="size-3.5" />
                     멤버
                   </Link>

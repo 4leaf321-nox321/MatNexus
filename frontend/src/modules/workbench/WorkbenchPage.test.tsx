@@ -52,7 +52,7 @@ const DETAIL = {
   items: [],
 }
 
-function show(at = '/w/metal/workbench') {
+function show(at = '/workbench') {
   render(
     <MemoryRouter initialEntries={[at]}>
       <WorkbenchPage />
@@ -219,7 +219,7 @@ describe('담고 나서 돌아오면', () => {
     // 여럿이면 어느 것이었는지 헷갈린다. 목록 화면의 「워크벤치로」 가 이 주소를 준다.
     run.mockResolvedValue(DETAIL)
     runs.mockResolvedValue([DETAIL, { ...DETAIL, id: 'r2', title: '도어트림 검토' }])
-    show('/w/metal/workbench?run=r1')
+    show('/workbench?run=r1')
     expect(await screen.findByLabelText('바구니')).toBeInTheDocument()
     expect(run).toHaveBeenCalledWith('r1')
   })
@@ -227,7 +227,7 @@ describe('담고 나서 돌아오면', () => {
   it('모르는 작업이면 목록을 보여 준다', async () => {
     // 남이 끝냈거나 지운 작업의 주소를 눌렀을 수 있다. **빈 화면으로 두지 않는다.**
     run.mockRejectedValue(new Error('없습니다'))
-    show('/w/metal/workbench?run=없는것')
+    show('/workbench?run=없는것')
     expect(await screen.findByText('해석에 쓸 물성 준비')).toBeInTheDocument()
   })
 })

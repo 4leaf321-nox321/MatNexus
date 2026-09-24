@@ -53,6 +53,17 @@ def test_선언된_단위는_모든_내장_단위계가_기호를_안다() -> No
     assert not gaps, f"단위계가 기호를 모르는 선언 단위: {gaps}"
 
 
+def test_나가는_파일의_단위도_모든_내장_단위계가_안다() -> None:
+    """재료·문헌 내보내기가 드는 역학 물리량(`EXCHANGED`, ADR 0036). 한 계라도 모르면 그
+    값만 SI 로 남은 파일이 나간다 — 값마다 단위는 붙지만 「이 파일은 한 계」 가 깨진다."""
+    gaps = {
+        system.key: [unit for unit in systems.KNOWN if unit not in system.symbols]
+        for system in systems.SYSTEMS
+    }
+    gaps = {key: units for key, units in gaps.items() if units}
+    assert not gaps, f"단위계가 기호를 모르는 단위: {gaps}"
+
+
 def test_확장_블록도_종류가_된다() -> None:
     """확장이 블록을 더하면 화면에서 카드 종류가 돼야 한다 — `kind_priority` 가 기본으로
     켜져 있고(`None` 이 아님), 내장 기본 블록(탄성·소성 표·모델 파라미터)만 종류가 아니다."""

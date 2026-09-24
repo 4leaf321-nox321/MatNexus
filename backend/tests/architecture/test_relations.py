@@ -238,6 +238,10 @@ PENDING_TABLES: dict[str, str] = {
     "소유 조직은 권한이지 물성이 아니다 —"
     " 가시 범위(`graph.visible_ids`)가 이미 그것으로 거른다"
 )
+편집 = (
+    "편집을 받은 부서는 **고칠 권한**이다(ADR 0035) — 물성의 관계가 아니고,"
+    " 화면·응답은 `shared/access` 가 이름으로 싣는다"
+)
 
 EXCLUDED_FKS: dict[tuple[str, str], str] = {
     ("equipment_units", "instrument_term_id"): 축,
@@ -262,6 +266,15 @@ EXCLUDED_FKS: dict[tuple[str, str], str] = {
     ("processing_recipes", "owner_workspace_id"): 소유,
     ("commissions", "requester_workspace_id"): 소유,
     ("commissions", "lab_workspace_id"): 소유,
+    ("materials", "edit_workspace_id"): 편집,
+    ("samples", "edit_workspace_id"): 편집,
+    ("specimens", "edit_workspace_id"): 편집,
+    ("test_runs", "edit_workspace_id"): 편집,
+    ("property_cards", "edit_workspace_id"): 편집,
+    # 3단계 — 정의와 장비도 사람이 고친다.
+    ("test_types", "edit_workspace_id"): 편집,
+    ("processing_recipes", "edit_workspace_id"): 편집,
+    ("equipment_units", "edit_workspace_id"): 편집,
     # 용어끼리의 상하(등급 172개가 분류 아래에 선다). **들머리가 없어서 지금은
     # 뜻이 없다** — 재료에서 용어로 가는 길을 위의 `축` 판단으로 일부러 안 냈으니,
     # 용어 상하만 이어 두면 아무 데서도 그 사슬에 못 들어간다. 축을 열면 이것도

@@ -51,6 +51,8 @@ import { blank, BLOCKS, fieldLabel, FORMATS, fromDefinitionLine, fromScan, toDef
 import type { DeckLine, FieldSpec, LineKind } from '@/modules/fitting/deckLines'
 import { fromSections, lineRanges, summarize, toSections } from '@/modules/fitting/deckSections'
 import type { Section } from '@/modules/fitting/deckSections'
+import { AccessLine } from '@/modules/ownership/AccessLine'
+import { canEdit, lockedTitle } from '@/modules/ownership/access'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { PageHeader } from '@/shared/components/PageHeader'
 import { Button } from '@/shared/components/ui/button'
@@ -101,7 +103,6 @@ export default function ExportProfileEditorPage() {
   const navigate = useNavigate()
   const editing = Boolean(key)
 
-  const [profileKey, setProfileKey] = useState(key ?? '')
   const [label, setLabel] = useState('')
   const [extension, setExtension] = useState('inp')
   const [describe, setDescribe] = useState('')
@@ -373,6 +374,11 @@ export default function ExportProfileEditorPage() {
     return [...items].sort((a, b) => score(b) - score(a))
   }, [cards.data, referencedBlocks])
 
+  /** 고치러 들어온 정의 — 없으면 만드는 중이다. */
+  const found = (existing.data as ExportProfile | null) ?? null
+  /** 저장할 수 있나 — 만드는 중이면 언제나, 고치는 중이면 그 정의의 `access`. */
+  const writable = !editing || canEdit(found?.access)
+
   async function save() {
     setError(null)
     setSaving(true)
@@ -380,7 +386,9 @@ export default function ExportProfileEditorPage() {
       if (editing && key) {
         await fittingApi.saveExportProfile(key, { label, definition, is_active: true })
       } else {
-        await fittingApi.createExportProfile({ key: profileKey, label, definition, is_active: true })
+        // **key 는 안 보낸다 — 서버가 짓는다.** 전사에서 하나라(ADR 0035) 사람이 적게
+        // 하면 옆 부서가 먼저 쓴 이름 때문에 막힌다. 파일로 들여올 때만 key 를 준다.
+        await fittingApi.createExportProfile({ label, definition, is_active: true })
       }
       navigate('/settings/export-profiles')
     } catch (caught) {
@@ -399,13 +407,30 @@ export default function ExportProfileEditorPage() {
         title={editing ? `해석용 물성 정의 · ${key}` : '해석용 물성 정의 생성'}
         description="물성 묶음을 쌓습니다. 오른쪽은 고른 카드로 지금 정의를 실제로 그려 본 것입니다 — 저장하기 전에 봅니다."
         actions={
-          <Button onClick={() => void save()} disabled={saving || !label || !profileKey}>
+          <Button
+            onClick={() => void save()}
+            disabled={saving || !label || !writable}
+            title={writable ? undefined : lockedTitle(found?.access)}
+          >
             저장
           </Button>
         }
       />
 
       {error ? <ErrorNotice error={error} className="mb-4" /> : null}
+
+      {/* **누가 고치나** — 등록자 · 편집 부서, 못 고치면 누구에게(ADR 0035 3단계). 전에는
+          부서 관리자만 고쳤고 이 화면은 그 사실을 저장을 눌러 403 을 받고서야 알렸다. */}
+      {found && (
+        <div className="mb-4">
+          <AccessLine
+            kind="export_profile"
+            id={found.id}
+            access={found.access}
+            onChanged={() => existing.reload()}
+          />
+        </div>
+      )}
 
       <CardPickerDialog
         open={picking}
@@ -435,13 +460,11 @@ export default function ExportProfileEditorPage() {
           <div className="grid gap-3 sm:grid-cols-4">
             <div className="space-y-1.5">
               <Label className="text-xs">key</Label>
-              <Input
-                className="h-8 font-mono text-xs"
-                value={profileKey}
-                disabled={editing}
-                onChange={(event) => setProfileKey(event.target.value)}
-                placeholder="optistruct"
-              />
+              {editing ? (
+                <Input className="h-8 font-mono text-xs" value={key ?? ''} disabled />
+              ) : (
+                <p className="text-muted-foreground pt-1.5 text-xs">저장하면 서버가 짓습니다.</p>
+              )}
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">이름</Label>

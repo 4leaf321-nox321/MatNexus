@@ -11,14 +11,13 @@
  */
 
 import { useState } from 'react'
-import { FileCode2, Globe2, Pencil, Plus, Trash2 } from 'lucide-react'
+import { FileCode2, Pencil, Plus, Trash2 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
+import { canEdit, lockedTitle } from '@/modules/ownership/access'
 import { testsApi } from '@/modules/tests/api'
 import type { FormatProfile, ProfileDefinition } from '@/modules/tests/api'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
-import { useAuth } from '@/shared/auth/AuthContext'
-import { isAnyManager } from '@/shared/auth/roles'
 import { PageHeader } from '@/shared/components/PageHeader'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
@@ -34,7 +33,6 @@ import { TestTypeFilterPanel } from '@/modules/tests/TestTypeFilterPanel'
 import { useResource } from '@/shared/hooks/useResource'
 
 export default function FormatProfilesPage() {
-  const canEdit = isAnyManager(useAuth().user)
   const profiles = useResource(() => testsApi.formats(), [])
   const [error, setError] = useState<Error | null>(null)
   // `null` 이면 전체. **DMA 프로파일을 찾는 사람에게 인장 프로파일은 소음이다.**
@@ -67,18 +65,14 @@ export default function FormatProfilesPage() {
         title="형식 프로파일"
         description="장비 파일을 어떻게 읽을지. 구조는 코드가 자동으로 읽고, '이 열이 무엇인가'만 여기에 저장합니다 — 새 장비를 붙이는 데 배포가 필요 없습니다."
         actions={
-          // **볼 수는 있어도 고치는 것은 부서 관리자다.** 목록을 모두에게 연 것은
-          // 「우리가 무엇을 읽을 수 있나」 를 누구나 물어야 해서고, 그 답을 보는
-          // 것과 정의를 바꾸는 것은 다른 일이다. 서버가 판정하지만 **눌러 보고
-          // 403 을 알게 하지는 않는다.**
-          canEdit ? (
-            <Button asChild>
-              <Link to="/settings/formats/new">
-                <Plus className="size-4" />
-                프로파일 생성
-              </Link>
-            </Button>
-          ) : null
+          // **만들기는 누구나다**(ADR 0035 3단계 — 전에는 부서 관리자). 새 장비를 붙이는
+          // 사람은 대개 그 장비를 쓰는 사람이다. 고치는 것은 줄마다 다르다(`access`).
+          <Button asChild>
+            <Link to="/settings/formats/new">
+              <Plus className="size-4" />
+              프로파일 생성
+            </Link>
+          </Button>
         }
       />
 
@@ -106,7 +100,7 @@ export default function FormatProfilesPage() {
           <TableHeader>
             <TableRow>
               <TableHead>이름</TableHead>
-              <TableHead>누구 것</TableHead>
+              <TableHead>등록 부서</TableHead>
               <TableHead>시험 종류</TableHead>
               <TableHead>지문</TableHead>
               <TableHead>열</TableHead>
@@ -131,20 +125,10 @@ export default function FormatProfilesPage() {
                       <p className="text-muted-foreground mt-0.5 text-xs">{item.description}</p>
                     )}
                   </TableCell>
-                  {/* **장비는 부서마다 다르다.** 누구 것인지 안 보이면 왜 내
-                      파일이 저 규칙으로 읽혔는지 알 수 없다. */}
-                  <TableCell>
-                    {item.is_global ? (
-                      <Badge variant="outline" className="gap-1">
-                        <Globe2 className="size-3" />
-                        전역
-                      </Badge>
-                    ) : (
-                      <span className="text-muted-foreground text-xs">
-                        {item.owner_workspace_name}
-                      </span>
-                    )}
-                  </TableCell>
+                  {/* **장비는 부서마다 다르다.** 어느 부서가 올렸는지 안 보이면 왜 내
+                      파일이 저 규칙으로 읽혔는지 알 수 없다 — 자동으로 읽을 때는 올린 사람
+                      부서의 것과 부서 없이 올린 것만 대 본다. */}
+                  <TableCell>{item.owner_workspace_name ?? '부서 없음'}</TableCell>
                   <TableCell>{item.test_type_label}</TableCell>
                   <TableCell>
                     <div className="flex flex-wrap gap-1">
@@ -173,24 +157,26 @@ export default function FormatProfilesPage() {
                     {item.priority}
                   </TableCell>
                   <TableCell className="text-right">
-                    {canEdit && (
-                      <>
-                        <Button size="sm" variant="outline" asChild>
-                          <Link to={`/settings/formats/${item.key}`}>
-                            <Pencil className="size-3.5" />
-                            편집
-                          </Link>
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          title="지웁니다. 이미 읽은 데이터는 그대로 남습니다."
-                          onClick={() => remove(item)}
-                        >
-                          <Trash2 className="size-3.5" />
-                        </Button>
-                      </>
-                    )}
+                    {/* **여는 것은 누구나** — 편집기가 읽기로 열고 누가 고치는지 말한다.
+                        지우기는 못 하면 막고 까닭을 단다(ADR 0035). */}
+                    <Button size="sm" variant="outline" asChild>
+                      <Link to={`/settings/formats/${item.key}`}>
+                        <Pencil className="size-3.5" />
+                        {canEdit(item.access) ? '편집' : '보기'}
+                      </Link>
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      disabled={!canEdit(item.access)}
+                      title={
+                        lockedTitle(item.access) ??
+                        '지웁니다. 이미 읽은 데이터는 그대로 남습니다.'
+                      }
+                      onClick={() => remove(item)}
+                    >
+                      <Trash2 className="size-3.5" />
+                    </Button>
                   </TableCell>
                 </TableRow>
               )
@@ -200,10 +186,10 @@ export default function FormatProfilesPage() {
       )}
 
       <p className="text-muted-foreground mt-4 text-xs">
-        <b>부서 관리자가 자기 부서 프로파일을 만듭니다.</b> 장비는 부서마다 다르고, 남의
-        부서 파일을 어떻게 읽을지는 그 부서가 가장 잘 압니다. 여러 부서가 같은 장비를
-        쓰게 되면 시스템 관리자가 전역으로 올립니다. 파일을 읽을 때는 <b>내 부서 것이
-        전역보다 먼저</b>입니다.
+        <b>누구나 만들고, 등록자가 고칩니다</b> — 함께 고칠 부서는 편집기의 「권한」 에서
+        줍니다. 장비는 부서마다 다르고, 남의 부서 파일을 어떻게 읽을지는 그 부서가 가장 잘
+        압니다. 파일을 자동으로 읽을 때는 <b>올린 사람 부서의 것과 부서 없이 올린 것</b>만
+        대 보고, 그중 <b>부서 것이 먼저</b>입니다. 남의 부서 것은 시험 상세에서 골라 읽습니다.
       </p>
       <p className="text-muted-foreground mt-2 text-xs">
         프로파일을 고쳐도 <b>이미 읽은 데이터는 바뀌지 않습니다.</b> 원본을 그대로

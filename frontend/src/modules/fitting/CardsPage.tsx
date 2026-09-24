@@ -22,7 +22,7 @@
  * 내보낸다(ADR 0024 ②) — 받은 쪽이 「그때 그 카드가 맞나」 를 검산할 수 있다.
  */
 
-import { AlertTriangle, Globe2, Search } from 'lucide-react'
+import { AlertTriangle, Search } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 
@@ -245,10 +245,8 @@ function Row({
         {card.material_name}
       </Link>
 
-      {card.is_global && (
-        <Globe2 className="text-muted-foreground size-3.5" aria-label="전역" />
-      )}
-      {!card.is_global && card.owner_workspace_name && (
+      {/* 재료의 소속 — 권한이 아니다(ADR 0035). 전에는 부서가 없으면 「전역」 지구본이 섰다. */}
+      {card.owner_workspace_name && (
         <span className="text-muted-foreground text-xs">{card.owner_workspace_name}</span>
       )}
 

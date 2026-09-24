@@ -369,6 +369,8 @@ class Test덱_만들기:
                     {"mid": 102, "catalog_material_id": str(fr4.id)},
                 ],
                 "format": "dyna_elastic",
+                # SI 숫자를 대조하는 시험이라 SI 를 고른다 — 기본은 mm·N·tonne(ADR 0036).
+                "units": "si",
             },
             headers=admin_headers,
         )

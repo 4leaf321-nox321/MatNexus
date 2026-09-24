@@ -137,7 +137,12 @@ def resolve_or_create(
 
 
 def _may_coin(db: Session, created_by_id: uuid.UUID | None) -> bool:
-    """`managed` 축에 **새 값을 세울** 수 있는가 — 부서 관리자·시스템 관리자만.
+    """`managed` 축에 **새 값을 세울** 수 있는가 — 자료 관리자·시스템 관리자만.
+
+    전에는 부서 관리자였다(ADR 0032 D2). 부서 관리자가 고칠 권한을 갖지 않게 되면서
+    (ADR 0035 3단계) 검토의 뜻이 있는 일은 자료 관리자가 맡는다 — 카드 확정과 같은
+    자리다. 0032 가 걱정한 「시스템 관리자 한 명에게 몰리면 일단 승인이 된다」 는
+    자료 관리자를 **사업부마다 여럿** 세우는 것으로 푼다.
 
     **사람이 아닌 경로는 막지 않는다**(`created_by_id` 가 없을 때). 씨앗·이관
     스크립트·커넥터 자동 등록이 그 길로 들어오는데, 거기서 막으면 배포가 멈추거나
@@ -148,7 +153,7 @@ def _may_coin(db: Session, created_by_id: uuid.UUID | None) -> bool:
     user = db.get(User, created_by_id)
     if user is None:
         return True
-    return permissions.is_any_manager(db, user)
+    return permissions.is_data_steward(user)
 
 
 def _cannot_coin(db: Session, vocabulary: Vocabulary, value: str) -> AppError:
@@ -171,13 +176,23 @@ def _cannot_coin(db: Session, vocabulary: Vocabulary, value: str) -> AppError:
         )
     ]
     hint = f" 비슷한 값: {', '.join(near)}." if near else ""
+    # **누구에게 부탁할지 이름으로.** 「관리자에게」 만 적으면 그게 누구인지 또 물어야
+    # 한다 — 막힌 사람에게 다음 한 걸음을 준다(ADR 0035).
+    stewards = permissions.data_steward_names(db)
+    ask = f"({', '.join(stewards)})" if stewards else ""
     return AppError(
         "MNX-VOCABULARY-0011",
-        f"'{vocabulary.label}' 에 **새 값**을 세우는 것은 부서 관리자만 할 수 있습니다 — "
+        f"'{vocabulary.label}' 에 **새 값**을 세우는 것은 자료 관리자만 할 수 있습니다 — "
         f"'{value}' 는 아직 목록에 없습니다.{hint} "
-        f"이미 있는 값이면 그대로 고르시고, 정말 새 값이면 부서 관리자에게 등록을 요청하세요.",
+        f"이미 있는 값이면 그대로 고르시고, 정말 새 값이면 자료 관리자{ask}에게 "
+        f"등록을 요청하세요.",
         status=403,
-        details={"axis": vocabulary.slug, "value": value, "similar": near},
+        details={
+            "axis": vocabulary.slug,
+            "value": value,
+            "similar": near,
+            "data_managers": stewards,
+        },
     )
 
 

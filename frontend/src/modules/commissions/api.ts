@@ -15,7 +15,14 @@ export type CommissionCreate = components['schemas']['CommissionCreateRequest']
 export type CommissionUpdate = components['schemas']['CommissionUpdateRequest']
 type EventRequest = components['schemas']['CommissionEventRequest']
 
-export type Scope = 'mine' | 'received' | 'all'
+/**
+ * 게시판 범위. `ours` — 우리 부서가 낸 것·받은 것(기본). `all` — 전사.
+ *
+ * 전에는 「전체」 가 곧 우리 부서 것이었다 — 보는 범위가 두 쪽뿐이었으니까. 보기를
+ * 전원에게 연 뒤(ADR 0035 3단계) 「전체」 는 정말 전사가 됐고, 매일 보던 모양을
+ * `ours` 로 이름 붙여 남겼다.
+ */
+export type Scope = 'ours' | 'mine' | 'received' | 'all'
 
 export interface CommissionListParams {
   scope?: Scope

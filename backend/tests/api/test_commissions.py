@@ -415,14 +415,29 @@ class Test흐름:
 
 
 class Test권한:
-    def test_제3부서는_못_보고_낸_쪽은_시험을_못_붙인다(
+    def test_제3부서는_보되_움직이지도_말하지도_못한다(
         self, client: TestClient, db: Session, world: dict[str, Any]
     ) -> None:
+        """**보기는 전원이다**(ADR 0035 3단계) — 전에는 제3부서에 「없다」 였다. 그런데
+        「이 시료를 누가 재 달라고 했나」 를 옆 부서가 물을 길이 없었다. 움직이고 말을
+        보태는 것은 약속한 두 쪽만이다."""
         kim, lee, oh = world["kim"], world["lee"], world["oh"]
         made = _create(client, kim, world["sample"]["id"])
-        assert client.get(f"/api/commissions/{made['id']}", headers=oh).status_code == 404
-        assert client.get("/api/commissions", headers=oh).json()["total"] == 0
-        assert _move(client, oh, made["id"], None, "끼어들기").status_code == 404
+        seen = client.get(f"/api/commissions/{made['id']}", headers=oh)
+        assert seen.status_code == 200, seen.text
+        body = seen.json()
+        assert body["side"] == "viewer"
+        assert body["allowed"] == [] and body["can_comment"] is False
+        assert body["can_edit"] is False and body["can_link"] is False
+        # 게시판의 「우리 부서」 는 여전히 두 쪽의 것만 — 「전체」 에는 뜬다.
+        assert client.get("/api/commissions?scope=ours", headers=oh).json()["total"] == 0
+        assert client.get("/api/commissions?scope=all", headers=oh).json()["total"] == 1
+        butt_in = _move(client, oh, made["id"], None, "끼어들기")
+        assert butt_in.status_code == 403, butt_in.text
+        assert butt_in.json()["error"]["code"] == "MNX-COMMISSIONS-0033"
+        # **작성 중은 낸 사람의 것이다** — 보기를 열어도 그것은 안 보인다.
+        draft = _create(client, kim, world["sample"]["id"], title="아직 쓰는 중", submit=False)
+        assert client.get(f"/api/commissions/{draft['id']}", headers=oh).status_code == 404
 
         # 낸 사람은 접수를 못 한다. 받는 쪽은 작성 중으로 못 되돌린다.
         assert _move(client, kim, made["id"], "accepted", "내가 접수").status_code == 403
@@ -926,19 +941,21 @@ class Test온톨로지:
         assert found["found"], found
         assert [one["relation"] for one in found["steps"]] == ["about_sample", "derived_from"]
 
-        # **제3부서에는 마디가 없다** — 검색에 뜨는데 열면 404 가 아니라, 처음부터 없다.
+        # **제3부서도 마디를 본다**(ADR 0035 3단계) — 목록과 지도가 같은 규칙이다.
         assert (
             client.get(
                 "/api/ontology/related",
                 params={"kind": "commission", "id": made["id"]},
                 headers=oh,
             ).status_code
-            == 404
+            == 200
         )
+        # 작성 중은 낸 사람의 것이다 — 지도에도 처음부터 없다(열면 404 가 아니라 마디가 없다).
+        draft = _create(client, kim, world["sample"]["id"], title="쓰는 중", submit=False)
         assert (
             client.get(
                 "/api/ontology/related",
-                params={"kind": "commission_item", "id": item_id},
+                params={"kind": "commission", "id": draft["id"]},
                 headers=oh,
             ).status_code
             == 404

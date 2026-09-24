@@ -5,6 +5,7 @@
  *   빌드 페이로드 — 카드가 있으면 card_id(문헌은 비움), 없으면 문헌으로
  *   빌드 뒤 매칭 기억과 문헌 연결(둘 다 고른 줄)이 저장된다
  *   엑셀 다열은 열 매핑을 물어본다
+ *   단위계는 고른 키를 그대로 싣는다 — 비우면 서버 기본(mm·N·tonne)이 된다
  */
 
 import { render, screen, waitFor } from '@testing-library/react'
@@ -39,7 +40,12 @@ function mockApis({
 } = {}) {
   get.mockImplementation((url: unknown) => {
     const path = String(url)
-    if (path.startsWith('/fitting/unit-systems')) return Promise.resolve([])
+    // 기본이 첫째가 아니다 — 순서로 고르면 통과해 버린다.
+    if (path.startsWith('/fitting/unit-systems'))
+      return Promise.resolve([
+        { key: 'si', label: 'SI (kg · m · s · Pa)', is_default: false },
+        { key: 'mm_n_tonne', label: 'mm · N · tonne (MPa)', is_default: true },
+      ])
     if (path.startsWith('/fitting/formats'))
       return Promise.resolve([
         { key: 'abaqus', label: 'Abaqus', extension: 'inp', describe: '', requires: [] },
@@ -135,7 +141,8 @@ describe('BOM 혼합 덱', () => {
       { rows: Array<Record<string, unknown>>; units: unknown; format: unknown },
     ]
     expect(body.rows[0]).toMatchObject({ mid: 1, card_id: CARD_ID, catalog_material_id: null })
-    expect(body.units).toBeNull()
+    // 안 고르면 서버가 기본이라 한 계 — 키를 적어 보낸다(ADR 0036).
+    expect(body.units).toBe('mm_n_tonne')
     // 솔버를 안 고르면 서버 기본(LS-DYNA 자동) — null 로 간다.
     expect(body.format).toBeNull()
 
@@ -143,6 +150,25 @@ describe('BOM 혼합 덱', () => {
     const putUrls = put.mock.calls.map(([url]) => String(url))
     expect(putUrls).toContain('/workbench/bom-aliases')
     expect(putUrls).toContain(`/catalog/links/${MATERIAL_ID}`)
+  })
+
+  it('SI 를 고르면 si 가 실린다 — 비워 보내면 mm·N·tonne 이 된다', async () => {
+    // 전에는 「SI 면 비워 보낸다」 였다. 서버 기본이 mm·N·tonne 으로 바뀐 뒤로 그 빈칸은
+    // mm 덱이 되어, SI 를 고른 사람이 오류 없이 1000배 다른 덱을 받을 뻔했다(2026-09-24).
+    mockApis({ remembered: [{ query: 'SGARC440', material_id: MATERIAL_ID }, null] })
+    const user = userEvent.setup()
+    await pasteAndMatch(user)
+    await screen.findByText('SGARC440_-_1.2')
+
+    await user.selectOptions(await screen.findByDisplayValue('mm · N · tonne (MPa)'), 'si')
+    await user.click(screen.getByRole('button', { name: '덱 생성' }))
+    await waitFor(() => expect(screen.getByText('bom_deck_si.k')).toBeInTheDocument())
+
+    const [, body] = post.mock.calls.find(([url]) => String(url) === '/fitting/decks/bom') as [
+      string,
+      { units: unknown },
+    ]
+    expect(body.units).toBe('si')
   })
 
   it('확정 카드가 없는 재료는 문헌 스칼라로 메꾼다', async () => {

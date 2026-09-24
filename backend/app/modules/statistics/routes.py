@@ -35,6 +35,9 @@ from app.modules.statistics.schemas import (
     AnalysisScalarOut,
     AnalysisSpecGapOut,
     AnalysisTrendOut,
+    CardItemCellOut,
+    CardItemRowsOut,
+    CardItemSummaryOut,
     CompareCellOut,
     CompareMaterialOut,
     CompareOut,
@@ -66,7 +69,7 @@ from app.modules.statistics.schemas import (
 )
 from app.modules.tests.models import TestRun, TestType
 from app.modules.workspaces.models import WorkspaceMember
-from app.shared import alias_candidates, curvedata, ops, permissions
+from app.shared import alias_candidates, curvedata, ops, pagination, permissions
 from app.shared import divisions as divisions_order
 from app.shared.auth import current_user
 from app.shared.errors import AppError, NotFound
@@ -710,6 +713,67 @@ def analysis_coverage(
     return AnalysisCoverageOut.model_validate(analysis.coverage(db, user))
 
 
+@router.get("/analysis/card-items", response_model=CardItemSummaryOut)
+def analysis_card_items(
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> CardItemSummaryOut:
+    """카드 항목 요약 — 재료군·분류 x 카드 항목란. **어느 재료에서 무엇까지 볼 수 있나.**
+
+    점탄성·경화식·소성 표는 스칼라가 아니라서 비교·분포에 안 나온다. 줄이 재료가 아니라
+    분류라 재료가 1만이어도 응답이 분류 수만큼이다 — 재료 줄은 `/card-items/materials`,
+    칸 하나의 값은 `/card-items/cell` 이 준다(재료마다 한 장에 싣던 첫 판은 1만 개에서
+    10 MB 였다).
+    """
+    return CardItemSummaryOut.model_validate(analysis.card_item_summary(db, user))
+
+
+@router.get("/analysis/card-items/materials", response_model=CardItemRowsOut)
+def analysis_card_item_rows(
+    q: str | None = Query(default=None),
+    family: str | None = Query(default=None),
+    category: str | None = Query(default=None),
+    item: str | None = Query(default=None),
+    with_sources: bool = Query(default=False),
+    limit: int | None = Query(default=None, ge=1, le=pagination.MAX_LIMIT),
+    offset: int = Query(default=0, ge=0),
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> CardItemRowsOut:
+    """카드 항목 전체 — 재료 줄. **거르고 자르는 것은 서버다.**
+
+    `family`·`category` 는 요약에서 들어오는 길이고(같은 값), `item` 은 그 항목란이 **보이는**
+    재료만이다. 시험·선언만 있는 칸은 `with_sources` 일 때만 보인다 — 줄에도 열의 수에도.
+    """
+    return CardItemRowsOut.model_validate(
+        analysis.card_item_rows(
+            db,
+            user,
+            q=q,
+            family=family,
+            category=category,
+            item=item,
+            with_sources=with_sources,
+            limit=pagination.clamp_limit(limit),
+            offset=offset,
+        )
+    )
+
+
+@router.get("/analysis/card-items/cell", response_model=CardItemCellOut)
+def analysis_card_item_cell(
+    material_id: uuid.UUID = Query(),
+    item: str = Query(),
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> CardItemCellOut:
+    """칸 하나 — 카드마다 든 값, 그 항목란을 내는 시험의 채택 결과, 그 칸으로 갈 선언 물성.
+
+    **누를 때만 받는다** — 목록이 칸마다 값을 실으면 재료 수에 비례해 응답이 는다.
+    """
+    return CardItemCellOut.model_validate(analysis.card_item_cell(db, user, material_id, item))
+
+
 @router.get("/divisions", response_model=DivisionOverviewOut)
 def divisions(
     user: User = Depends(current_user),
@@ -815,6 +879,15 @@ def overview(
     def count(query: Select[Any]) -> int:
         return int(db.scalar(select(func.count()).select_from(query.subquery())) or 0)
 
+    connectors = permissions.visible_connectors(db, user)
+    if not user.is_system_admin:
+        connectors = connectors.where(
+            PipelineConnector.workspace_id.in_(
+                select(WorkspaceMember.workspace_id).where(WorkspaceMember.user_id == user.id)
+            )
+        )
+    my_connectors = connectors.subquery()
+
     return OverviewOut(
         material_count=count(select(materials.c[0])),
         families=families,
@@ -859,10 +932,9 @@ def overview(
             if user.is_system_admin
             else None
         ),
-        # **커넥터의 가시성을 그대로 쓴다.** 여기서 범위 규칙을 새로 만들면 홈의
-        # 숫자와 커넥터 화면의 숫자가 갈리고, 그때 어느 쪽이 맞는지 알 수 없다.
         # **의뢰 목록과 같은 가시 규칙.** 받은 것은 우리 부서가 받는 쪽인 접수 대기, 낸 것은
-        # 우리 부서가 낸 쪽인 진행 중 — 시스템 관리자는 전부를 본다.
+        # 우리 부서가 낸 쪽인 진행 중 — 시스템 관리자는 전부를 본다. 보기는 이제 전원이라
+        # (ADR 0035 3단계) 「우리 부서」 로 좁히는 것은 아래 조건이 한다.
         commissions_received_waiting=count(
             select(Commission.id).where(
                 Commission.id.in_(
@@ -895,14 +967,18 @@ def overview(
                 else true(),
             )
         ),
+        # **커넥터의 가시성을 그대로 쓰고, 우리 부서 커넥터로 좁힌다.** 가시성 규칙을 여기서
+        # 새로 만들면 홈의 숫자와 커넥터 화면의 숫자가 갈린다. 보기는 전원이지만(ADR 0035)
+        # 이 칸은 **할 일**이라 내 부서 커넥터의 것만 센다 — 수신함의 기본 범위(`mine`)와 같다.
+        #
+        # **서브쿼리의 열로 고른다.** 전에는 `select(PipelineConnector.id)` 에
+        # `.select_from(서브쿼리)` 였는데, 그러면 SQL 이 `FROM (서브쿼리), pipeline_connectors`
+        # 로 **곱해져** 서브쿼리가 하나라도 있으면 모든 커넥터(지운 것까지)가 잡혔다 — 홈의
+        # 숫자가 조용히 부풀었다(2026-09-24, 렌더된 SQL 로 확인).
         inbox_waiting=count(
             select(PipelineInboxItem.id).where(
                 PipelineInboxItem.status.in_(("needs_specimen", "suggested")),
-                PipelineInboxItem.connector_id.in_(
-                    select(PipelineConnector.id).select_from(
-                        permissions.visible_connectors(db, user).subquery()
-                    )
-                ),
+                PipelineInboxItem.connector_id.in_(select(my_connectors.c.id)),
             )
         ),
     )

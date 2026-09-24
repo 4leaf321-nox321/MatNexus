@@ -8,7 +8,7 @@
 
 `draft → published → deprecated`. **리뷰 큐와 승인자는 두지 않는다** — 운영
 규칙이 보이기 전에 절차를 만들면 그 절차가 일을 정의해 버린다. `published` 로
-올리는 권한만 부서 관리자에게 준다(D12).
+올리는 권한만 자료 관리자에게 준다(D12 — ADR 0035 가 부서 관리자에서 옮겼다).
 
 ## 물성의 갈래는 데이터다
 
@@ -85,7 +85,7 @@ class PropertyCard(Base):
     status: Mapped[str] = mapped_column(
         String(20), default="draft", server_default="draft", index=True
     )
-    """`draft` | `published` | `deprecated`. `published` 전환은 부서 관리자만(D12)."""
+    """`draft` | `published` | `deprecated`. `published` 전환은 자료 관리자만(ADR 0035)."""
 
     ensemble_result_id: Mapped[uuid.UUID | None] = mapped_column(
         PgUUID(as_uuid=True), ForeignKey("ensemble_results.id"), index=True, nullable=True
@@ -115,6 +115,14 @@ class PropertyCard(Base):
     created_by_id: Mapped[uuid.UUID | None] = mapped_column(
         PgUUID(as_uuid=True), ForeignKey("users.id"), index=True, nullable=True
     )
+    edit_workspace_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("workspaces.id", ondelete="SET NULL"),
+        index=True,
+        nullable=True,
+    )
+    """편집을 받은 부서(ADR 0035) — 등록자 말고 이 부서 사람도 고친다. 뜻은
+    `Material.edit_workspace_id` 와 같다. 카드에는 소속 칸이 없다 — 재료의 소속을 따른다."""
     published_by_id: Mapped[uuid.UUID | None] = mapped_column(
         PgUUID(as_uuid=True), ForeignKey("users.id"), nullable=True
     )
@@ -177,12 +185,11 @@ class ExportProfile(Base):
     __tablename__ = "export_profiles"
     __table_args__ = (
         Index(
-            "uq_export_profiles_scope_key",
-            "owner_workspace_id",
+            # **전사에서 하나다**(ADR 0035). key 가 곧 덱 형식 이름이라, 둘이면 덱을
+            # 낼 때 어느 정의로 적을지가 사람마다 달라진다.
+            "uq_export_profiles_key",
             "key",
             unique=True,
-            # 없으면 NULL != NULL 이라 **전역 정의끼리 같은 key 가 허용된다**(ADR 0004).
-            postgresql_nulls_not_distinct=True,
             # **지운 행은 key 를 잡아 두지 않는다** — 재료가 그대로 터졌다(2026-08-28).
             postgresql_where=text("deleted_at IS NULL"),
         ),
@@ -192,19 +199,22 @@ class ExportProfile(Base):
         PgUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
     key: Mapped[str] = mapped_column(String(50), index=True)
+    """덱 형식 이름. 비워 두면 서버가 짓는다(`deck_1a2b3c4d`)."""
     label: Mapped[str] = mapped_column(String(100))
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     owner_workspace_id: Mapped[uuid.UUID | None] = mapped_column(
         PgUUID(as_uuid=True), ForeignKey("workspaces.id"), index=True, nullable=True
     )
-    """만든 부서. **`NULL` 이면 전역이다.**
+    """**등록한 부서** — 권한이 아니다(ADR 0035). `NULL` 이면 부서 없이 올린 것이다.
 
     부서마다 쓰는 솔버가 다르다. 그리고 같은 솔버라도 **사업부마다 덱 관례가
     다르다** — 어느 키워드를 쓰는지, 표를 몇 줄로 자르는지. 그 지식은 해석을
     돌리는 사람에게 있지 시스템 관리자에게 없다.
 
-    읽을 때는 **내 부서 것이 전역보다 먼저다**(프로파일과 같은 규칙)."""
+    전에는 같은 key 의 부서 것이 전역을 덮었는데, key 가 전사에서 하나가 되면서
+    (ADR 0035) 덮을 것이 없다 — 사업부의 덱 관례는 **다른 형식**으로 목록에 나란히
+    뜨고, 사람이 이름을 보고 고른다."""
 
     definition: Mapped[dict[str, Any]] = mapped_column(
         JSONB, default=dict, server_default="{}"
@@ -215,6 +225,15 @@ class ExportProfile(Base):
     created_by_id: Mapped[uuid.UUID | None] = mapped_column(
         PgUUID(as_uuid=True), ForeignKey("users.id"), index=True, nullable=True
     )
+    """등록자 — 이 정의를 고치는 첫째 사람(ADR 0035)."""
+    edit_workspace_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("workspaces.id", ondelete="SET NULL"),
+        index=True,
+        nullable=True,
+    )
+    """편집을 받은 부서(ADR 0035) — 등록자 말고 이 부서 사람도 고친다. 뜻은
+    `Material.edit_workspace_id` 와 같다. 등록 부서(`owner_workspace_id`)는 권한이 아니다."""
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

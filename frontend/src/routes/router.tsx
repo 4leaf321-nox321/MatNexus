@@ -9,7 +9,7 @@
  */
 
 import { lazy } from 'react'
-import { createBrowserRouter, Navigate } from 'react-router-dom'
+import { createBrowserRouter, Navigate, useLocation, useParams } from 'react-router-dom'
 
 import ForcePasswordChangePage from '@/modules/auth/ForcePasswordChangePage'
 import LoginPage from '@/modules/auth/LoginPage'
@@ -20,11 +20,10 @@ import SpecimensPage from '@/modules/materials/SpecimensPage'
 import NotificationsPage from '@/modules/notifications/NotificationsPage'
 import TestRunDetailPage from '@/modules/tests/TestRunDetailPage'
 import TestRunsPage from '@/modules/tests/TestRunsPage'
-import { useAuth } from '@/shared/auth/AuthContext'
 import { ProtectedRoute } from '@/shared/auth/ProtectedRoute'
 import { Placeholder } from '@/shared/components/Placeholder'
 import { AppShell } from '@/shared/layout/AppShell'
-import { DEFAULT_WORKSPACE, realmGroups } from '@/shared/layout/navigation'
+import { realmGroups } from '@/shared/layout/navigation'
 
 /**
  * **화면 대부분을 나눠 싣는다.**
@@ -108,17 +107,35 @@ const compositeStubs = realmGroups('composite')
   }))
 
 /**
- * 첫 화면 — **내 부서로 보낸다.**
+ * **옛 부서 주소**(`/w/<부서>/…`)를 새 주소로 보낸다.
  *
- * 여태 `/w/default` 로 고정이었다. 서버는 `home_workspace_slug` 를 이미 주고
- * 있었는데 화면이 안 썼다 — 그래서 개발본부 사람이 로그인하면 사이드바의
- * '시험 데이터' 가 `default` 부서를 가리켰고, 목록이 비어 보였다. 자기 부서
- * 데이터를 못 찾는 것과 구별이 안 된다.
+ * 상단의 부서 선택기를 걷었다(ADR 0035 3단계). 보기는 전원이고 고칠 권한은 사람이
+ * 정하니, 「지금 어느 부서에 서 있나」 가 정하는 것이 없어졌다 — 홈·워크벤치는 이미
+ * 부서와 상관없이 같은 것을 보였고, 시험 목록은 거르기 하나였다. 그런데 주소는
+ * 북마크·알림·문서에 남아 있다. 버리면 누른 사람이 「없는 페이지」 를 본다.
+ *
+ *     /w/<부서>              → /
+ *     /w/<부서>/tests        → /tests?workspace=<부서>   (그 부서로 거른 목록 — 뜻을 지킨다)
+ *     /w/<부서>/tests/upload → /tests/upload
+ *     /w/<부서>/workbench    → /workbench                (`?run=` 은 그대로)
+ *     /w/<부서>/members      → /members/<부서>
  */
-function HomeRedirect() {
-  const { user } = useAuth()
-  const slug = user?.home_workspace_slug ?? user?.memberships[0]?.slug ?? DEFAULT_WORKSPACE
-  return <Navigate to={`/w/${slug}`} replace />
+type LegacyTarget = 'home' | 'tests' | 'upload' | 'workbench' | 'members'
+
+function LegacyWorkspaceRedirect({ to }: { to: LegacyTarget }) {
+  const { slug = '' } = useParams<{ slug?: string }>()
+  const { search } = useLocation()
+  const asked = new URLSearchParams(search)
+  if (to === 'tests' && slug) asked.set('workspace', slug)
+  const query = asked.toString() ? `?${asked.toString()}` : ''
+  const path = {
+    home: '/',
+    tests: '/tests',
+    upload: '/tests/upload',
+    workbench: '/workbench',
+    members: slug ? `/members/${slug}` : '/members',
+  }[to]
+  return <Navigate to={`${path}${query}`} replace />
 }
 
 export const router = createBrowserRouter([
@@ -132,7 +149,12 @@ export const router = createBrowserRouter([
         path: '/',
         element: <AppShell />,
         children: [
-          { index: true, element: <HomeRedirect /> },
+          // **첫 화면은 부서가 아니다.** 전에는 `/w/<내 부서>` 로 보냈는데, 그 화면은
+          // 어느 부서를 골라도 같은 것을 보였다 — 부서가 뜻을 가진 곳이 없었다(ADR 0035).
+          { index: true, element: <WorkspaceHomePage /> },
+          // 워크벤치 — 작업은 부서 안에서 함께 밀지만 **보기는 전원**이다(ADR 0035 3단계).
+          // 목록의 기본이 내 부서 것이라 주소에 부서가 필요 없다.
+          { path: 'workbench', element: <WorkbenchPage /> },
 
           // 카탈로그 (전사)
           // **한 칸으로 무엇이든.** 상단 검색이 여기로 보낸다 — 주소가 곧 검색이라
@@ -148,13 +170,13 @@ export const router = createBrowserRouter([
           // 바꿔 준다 — 검색 결과가 든 것은 시편 식별자 하나뿐이라, 이 문이
           // 없으면 「시편으로 가라」 를 적을 방법이 없다.
           { path: 'specimens/:id', element: <SpecimenEntry /> },
-          // **전역 시험 목록.** 사이드바의 「시험」 이 여기다 — 옆의 재료·시편과
-          // 같은 범위여야 한다. `/w/<부서>/tests` 도 살아 있고 그쪽은 홈에서
-          // 사업부 현황을 눌러 들어가는 길이다(같은 화면이 slug 유무로 갈린다).
+          // **시험 목록.** 사이드바의 「시험」 이 여기다 — 옆의 재료·시편과 같은 범위여야
+          // 한다. 부서로 좁힌 목록은 `?workspace=<부서>` 다 — 전에는 `/w/<부서>/tests` 로
+          // 따로 섰는데, 부서 주소를 걷으면서(ADR 0035 3단계) 거르기 하나로 합쳤다.
           { path: 'tests', element: <TestRunsPage /> },
-          // **전역 일괄 등록.** 재료 화면의 「파일 여러 개 업로드」 가 `/tests/upload` 로
-          // 보내는데 부서 스코프(`/w/:slug/tests/upload`)에만 있어 404 였다(VOC 2026-09-13).
-          // 위의 전역 시험 목록과 같은 이유로 둘 다 산다.
+          // **일괄 등록.** 재료 화면의 「파일 여러 개 업로드」 가 `/tests/upload` 로 보내는데
+          // 부서 스코프(`/w/:slug/tests/upload`)에만 있어 404 였다(VOC 2026-09-13). 이제
+          // 이 주소 하나다 — 올린 시험의 부서는 시편을 따르고 주소가 정하지 않는다.
           { path: 'tests/upload', element: <BatchUploadPage /> },
           // 측정 의뢰 — 시험 옆. 「재 달라」 는 절차가 잰 데이터(시험) 바로 앞에 선다.
           { path: 'commissions', element: <CommissionsPage /> },
@@ -222,6 +244,14 @@ export const router = createBrowserRouter([
           // 시편을 못 정한 파일을 붙이는 것도 부서 관리자가 한다(ADR 0021).
           { path: 'settings/connectors', element: <ConnectorsPage /> },
 
+          // **부서 멤버.** 부서는 화면 안에서 고른다 — 상단 선택기가 하던 일이다.
+          // 주소에 부서를 둔 것은 링크로 가리키려고다(부서 정보 화면이 여기로 보낸다).
+          { path: 'members', element: <MembersPage /> },
+          { path: 'members/:slug', element: <MembersPage /> },
+          // **지운 것 — 내가 되살릴 수 있는 것만**(ADR 0035 3단계). 관리 › 서버 › 휴지통과
+          // 같은 화면이고, 거기서는 영구 삭제까지 한다(시스템 관리자).
+          { path: 'trash', element: <TrashPage /> },
+
           // 관리 (전사)
           { path: 'admin/accounts', element: <AccountsAdminPage /> },
           { path: 'admin/workspaces', element: <WorkspacesAdminPage /> },
@@ -239,18 +269,15 @@ export const router = createBrowserRouter([
           // 저장소 정리는 이 화면의 탭 하나다 — 주소는 둘로 남는다(`SubTabs`).
           { path: 'server', element: <ServerPage /> },
 
-          // 부서 스코프
+          // **옛 부서 주소** — 새 주소로 보낸다(`LegacyWorkspaceRedirect`).
           {
             path: 'w/:slug',
             children: [
-              { index: true, element: <WorkspaceHomePage /> },
-              { path: 'tests', element: <TestRunsPage /> },
-              { path: 'tests/upload', element: <BatchUploadPage /> },
-              { path: 'workbench', element: <WorkbenchPage /> },
-              // 부서 스코프 `statistics`·`exports` 는 뺐다. 워크벤치의 3번·5번
-              // 탭과 같은 것이고, 결과 열람은 재료 상세의 '물성'·'CAE 카드' 다
-              // — 같은 이름의 빈 화면이 남아 있으면 어느 쪽이 진짜인지 알 수 없다.
-              { path: 'members', element: <MembersPage /> },
+              { index: true, element: <LegacyWorkspaceRedirect to="home" /> },
+              { path: 'tests', element: <LegacyWorkspaceRedirect to="tests" /> },
+              { path: 'tests/upload', element: <LegacyWorkspaceRedirect to="upload" /> },
+              { path: 'workbench', element: <LegacyWorkspaceRedirect to="workbench" /> },
+              { path: 'members', element: <LegacyWorkspaceRedirect to="members" /> },
             ],
           },
 

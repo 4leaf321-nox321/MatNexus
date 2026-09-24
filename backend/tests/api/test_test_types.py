@@ -451,37 +451,40 @@ class TestEditWithData:
 
 
 class TestPermissions:
-    def test_일반_사용자는_정의를_바꿀_수_없다(
-        self, client: TestClient, db: Session, tensile: None
+    def test_일반_사용자는_남의_정의를_못_바꾸고_제_것은_만든다(
+        self, client: TestClient, db: Session, tensile: None, workspace: Any
     ) -> None:
-        from sqlalchemy import select
-
         from app.modules.accounts.models import User
         from app.modules.auth import security
-        from app.modules.workspaces.models import Workspace
+        from app.modules.workspaces.models import WorkspaceMember
 
-        workspace = db.scalar(select(Workspace))
-        db.add(
-            User(
-                email="member",
-                password_hash=security.hash_password("member-password-1"),
-                display_name="일반 사용자",
-                status="active",
-                is_system_admin=False,
-                home_workspace_id=workspace.id if workspace else None,
-            )
+        # 소속 부서가 있어야 만든다 — 정의의 등록 부서가 그것이다(ADR 0035 3단계).
+        member = User(
+            email="member",
+            password_hash=security.hash_password("member-password-1"),
+            display_name="일반 사용자",
+            status="active",
+            is_system_admin=False,
+            home_workspace_id=workspace.id,
         )
+        db.add(member)
+        db.flush()
+        db.add(WorkspaceMember(workspace_id=workspace.id, user_id=member.id, role="member"))
         db.commit()
         token = client.post(
             "/api/auth/login", json={"email": "member", "password": "member-password-1"}
         ).json()["access_token"]
         headers = {"Authorization": f"Bearer {token}"}
 
-        assert (
-            client.post("/api/test-types", json=COMPRESSION, headers=headers).status_code
-            == 403
-        )
-        assert client.delete("/api/test-types/tensile", headers=headers).status_code == 403
+        # **만들기는 누구나**(ADR 0035 3단계) — 새 장비를 붙이는 사람이 관리자를 기다리지
+        # 않는다. 만든 사람이 등록자다.
+        made = client.post("/api/test-types", json=COMPRESSION, headers=headers)
+        assert made.status_code == 201, made.text
+        assert made.json()["access"]["registrant"] == "일반 사용자"
+        # 기본 종류(인장)는 등록자가 없다 — 자료 관리자만 고친다.
+        blocked = client.delete("/api/test-types/tensile", headers=headers)
+        assert blocked.status_code == 403, blocked.text
+        assert "자료 관리자" in blocked.json()["error"]["message"]
         # 읽기는 된다 — 업로드 폼을 그리려면 정의가 필요하다
         assert client.get("/api/test-types", headers=headers).status_code == 200
 

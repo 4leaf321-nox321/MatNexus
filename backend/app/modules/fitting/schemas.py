@@ -8,6 +8,9 @@ from typing import Any
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from app.shared.access import EditAccessOut
+from app.shared.unit_systems import DEFAULT as DEFAULT_UNITS
+
 #: 밀도가 SI(kg/m³)로 왔는지 가르는 울타리. 에어로젤 1 kg/m³ 부터 오스뮴 22,600 까지가
 #: 안이고, 표시 단위(tonne/mm³)로 잘못 넘긴 7.85e-9 는 밖이다.
 DENSITY_SI_RANGE = (0.5, 50_000.0)
@@ -321,7 +324,9 @@ class ExportProfileOut(BaseModel):
     description: str | None = None
     owner_workspace_slug: str | None = None
     owner_workspace_name: str | None = None
-    is_global: bool
+    """**등록한 부서** — 권한이 아니다(ADR 0035). 비면 부서 없이 올린 것이다."""
+    access: EditAccessOut | None = None
+    """**이 사람이** 고칠 수 있나, 못 하면 누구에게."""
     definition: dict[str, Any]
     is_active: bool
     created_at: datetime
@@ -329,8 +334,8 @@ class ExportProfileOut(BaseModel):
 
 
 class ExportProfileSaveRequest(BaseModel):
-    """고칠 때 보내는 것. **소유는 여기서 안 바꾼다** — 전역 승격은 성격이 다른
-    결정이라 별도 경로다(장비 파일 정의과 같은 규칙)."""
+    """고칠 때 보내는 것. **등록 부서는 여기서 안 바꾼다**(장비 파일 정의와 같은 규칙).
+    고칠 사람은 「권한」 에서 넘긴다(`/ownership`)."""
 
     label: str = Field(min_length=1, max_length=100)
     description: str | None = None
@@ -339,10 +344,12 @@ class ExportProfileSaveRequest(BaseModel):
 
 
 class ExportProfileCreateRequest(ExportProfileSaveRequest):
-    key: str = Field(min_length=1, max_length=50)
+    key: str | None = Field(default=None, min_length=1, max_length=50)
+    """**비워 두면 서버가 짓는다**(`deck_1a2b3c4d`). key 는 전사에서 하나다(ADR 0035).
+    파일로 들여올 때는 파일의 key 를 그대로 준다 — 두 번 들여오면 409 로 막히게."""
     owner_workspace_slug: str | None = None
-    """어느 부서의 것으로 만들까. 안 주면 내 부서. **시스템 관리자만 전역으로
-    만든다** — 전역은 여러 부서가 함께 쓰므로 한 부서가 고치면 남의 덱이 바뀐다."""
+    """등록 부서. **안 보내면 내 소속 부서**, 비워서 보내면(`null`) 부서 없이 — 그것은
+    자료 관리자만(`permissions.registering_workspace`). 권한이 아니라 적어 두는 칸이다."""
 
 
 class DeckScanIn(BaseModel):
@@ -397,7 +404,7 @@ class DeckPreviewIn(BaseModel):
     """어느 카드로 시험 삼아 그려 볼까. 실물 카드라야 뜻이 있다 — 지어낸 값으로는
     「이 카드에는 밀도가 없다」 같은 것이 안 드러난다."""
 
-    units: str = "si"
+    units: str = DEFAULT_UNITS
 
 
 class DeckKeyOut(BaseModel):
@@ -439,7 +446,7 @@ class DeckCheckRequest(BaseModel):
     """뽑은 덱을 **되읽어 카드와 대조한다.**"""
 
     format: str
-    units: str = "si"
+    units: str = DEFAULT_UNITS
     expect: dict[str, float] = {}
     """사람이 아는 값. `{"youngs_modulus": 205000000000.0}` 처럼 **SI 로** 준다 —
     덱의 단위계로 환산하는 일은 서버가 한다(그 환산이 검사 대상이기도 하다)."""
@@ -602,10 +609,11 @@ class PropertyCardOut(BaseModel):
     point_count: int
     note: str | None
     owner_workspace_name: str | None = None
-    """재료의 소유 부서. **카드에 따로 안 둔다** — 재료를 따라간다."""
-    is_global: bool = False
+    """재료의 소속 부서. **카드에 따로 안 둔다** — 재료를 따라간다. 권한이 아니다."""
     published_at: datetime | None
     created_at: datetime
+    access: EditAccessOut | None = None
+    """지금 이 사람이 고칠 수 있나 — 못 하면 누구에게 물으면 되는지(ADR 0035)."""
 
 
 class CardFacetOut(BaseModel):
@@ -634,7 +642,7 @@ class CardFacetsOut(BaseModel):
     """`test_type_key`. **시험 없이 만든 카드는 `none` 으로 온다** — 안 그러면
     선언 물성 카드가 어느 필터에도 안 걸려 목록에서 사라진다."""
     owners: list[CardFacetOut]
-    """소유 부서. 전역은 `global`."""
+    """재료의 소속 부서. 부서가 없는 재료는 `none`."""
 
 
 class DeclaredSlotOut(BaseModel):
@@ -761,8 +769,8 @@ class CardBundleRequest(BaseModel):
     format: str = "json"
     """덱 형식. 코드 렌더러와 DB 정의 둘 다에서 찾는다."""
 
-    units: str = "si"
-    """덱의 단위계. 파일 이름과 덱 머리에 들어간다."""
+    units: str = DEFAULT_UNITS
+    """덱의 단위계. 파일 이름과 덱 머리에 들어간다. 기본은 mm·N·tonne(ADR 0036)."""
 
 
 class GroupCardSaveRequest(BaseModel):

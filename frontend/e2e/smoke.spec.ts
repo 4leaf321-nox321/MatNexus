@@ -124,7 +124,7 @@ test('로그인부터 곡선까지', async ({ page }) => {
   })
 
   await test.step('파일 올리기', async () => {
-    await page.goto('/w/default/tests/upload')
+    await page.goto('/tests/upload')
     await page.locator('input[type="file"]').setInputFiles(TRA)
 
     // 종류는 서버가 추정한다(확장자 또는 프로파일 지문). 사람이 안 골라도 채워진다.
@@ -247,7 +247,7 @@ test('읽지 못한 파일은 이유를 보여 준다', async ({ page }) => {
   await page.getByRole('button', { name: '로그인' }).click()
   await expect(page.getByRole('banner')).toBeVisible()
 
-  await page.goto('/w/default/tests')
+  await page.goto('/tests')
   // 목록 화면이 뜨는 것까지만 본다 — 실패한 시험이 있으면 상태로 보인다.
   await expect(page.getByRole('heading', { name: /시험/ })).toBeVisible()
 })

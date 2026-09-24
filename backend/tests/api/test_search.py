@@ -24,8 +24,8 @@ from app.modules.tests.definitions import ensure_builtin_test_types
 TRA = Path(__file__).resolve().parents[1] / "fixtures" / "Example.tra"
 SEARCH = "/api/search"
 
-#: 부서를 잠그면 남에게 사라져야 하는 종류. 기준정보(`term`)는 여기 없다 —
-#: 전 부서가 같은 낱말을 보는 것이 그 표의 목적이다(아래 시험이 그것을 적어 둔다).
+#: 재료 계층의 종류 — 재료가 지워지면 함께 사라져야 한다. 기준정보(`term`)는 여기
+#: 없다 — 재료와 수명이 다르다(낱말은 재료를 지워도 남는다).
 GATED = {"material", "sample", "specimen", "test_run"}
 
 
@@ -221,59 +221,39 @@ class TestDestination:
 
 
 class TestVisibility:
-    def test_안_보이는_것은_결과에도_없다(
+    def test_다른_부서의_것도_결과에_있다(
         self, client: TestClient, db: Session, admin_headers: dict[str, str]
     ) -> None:
-        """**이 파일에서 가장 값진 시험이다.**
-
-        이름만 보여 주고 못 열게 하면 사람은 고장으로 읽고, 이름 자체가 이미
-        유출이다(재료명에 과제명이 들어간다).
-        """
+        """**보기는 전원이다**(ADR 0035). 검색이 따로 가리면 「목록에는 있는데 검색에는
+        없다」 가 되고, 사람은 그것을 「없다」 로 읽는다."""
         for slug, name in (("dept-a", "A 부서"), ("dept-b", "B 부서")):
             client.post(
                 "/api/workspaces", json={"name": name, "slug": slug}, headers=admin_headers
             )
-        _chain(client, db, admin_headers, grade="SRCHSECRET", owner_slug="dept-a")
-        locked = client.patch(
-            "/api/workspaces/dept-a", json={"restricted": True}, headers=admin_headers
-        )
-        assert locked.status_code == 200, locked.text
+        _chain(client, db, admin_headers, grade="SRCHOPEN", owner_slug="dept-a")
 
         outsider = _login_member_of(
             client, admin_headers, slug="dept-b", email=f"srch-{uuid.uuid4().hex[:6]}@x.com"
         )
-        body = client.get(SEARCH, params={"q": "SRCHSECRET"}, headers=outsider).json()
-        assert not (GATED & _kinds(body)), body
+        body = client.get(SEARCH, params={"q": "SRCHOPEN"}, headers=outsider).json()
+        assert _kinds(body) >= GATED, body
 
-        # 주인에게는 그대로 보인다 — 가리는 쪽이 예외다.
-        mine = client.get(SEARCH, params={"q": "SRCHSECRET"}, headers=admin_headers).json()
-        assert _kinds(mine) >= GATED
-
-    def test_기준정보_값은_전사_공용이라_남는다(
+    def test_지운_것은_결과에_없고_낱말은_남는다(
         self, client: TestClient, db: Session, admin_headers: dict[str, str]
     ) -> None:
-        """**경계를 시험이 적어 둔다.**
+        """가리는 것이 없어도 **지운 것은 없는 것이다.** 목록에서 사라진 재료가 검색에
+        남으면 「지웠다」 는 화면에만 있는 말이 된다.
 
-        재료를 만들면 등급이 기준정보에 자동 등록되고, 기준정보는 원래 전 부서가
-        같은 것을 본다(그것이 어휘를 하나로 두는 목적이다). 그래서 부서를 잠가도
-        그 **낱말**은 남는다 — 검색이 만든 구멍이 아니라 기준정보 화면에서 이미
-        보이던 것이다.
-
-        이 시험이 있는 이유는 나중에 「검색이 샌다」 로 읽히지 않게 하려는 것이다.
-        낱말까지 가려야 한다면 그때 고칠 자리는 기준정보의 자동 등록이지 검색이
-        아니다.
+        등급 낱말은 남는다 — 재료를 만들 때 기준정보에 자동 등록되고, 기준정보는 재료와
+        수명이 다르다. 검색이 만든 구멍이 아니라 기준정보 화면에서 원래 보이는 것이다.
         """
-        for slug, name in (("dept-a", "A 부서"), ("dept-b", "B 부서")):
-            client.post(
-                "/api/workspaces", json={"name": name, "slug": slug}, headers=admin_headers
-            )
-        _chain(client, db, admin_headers, grade="SRCHTERM", owner_slug="dept-a")
-        client.patch(
-            "/api/workspaces/dept-a", json={"restricted": True}, headers=admin_headers
+        made = _chain(client, db, admin_headers, grade="SRCHGONE", owner_slug=None)
+        removed = client.post(
+            f"/api/materials/{made['material']}/delete-cascade",
+            json={"include_test_runs": True},
+            headers=admin_headers,
         )
+        assert removed.status_code == 200, removed.text
 
-        outsider = _login_member_of(
-            client, admin_headers, slug="dept-b", email=f"srch-{uuid.uuid4().hex[:6]}@x.com"
-        )
-        body = client.get(SEARCH, params={"q": "SRCHTERM"}, headers=outsider).json()
+        body = client.get(SEARCH, params={"q": "SRCHGONE"}, headers=admin_headers).json()
         assert _kinds(body) == {"term"}, body

@@ -23,6 +23,22 @@
 (그것이 위 수정이다) 되살릴 자리가 이미 차 있을 수 있다. 그때 조용히 덮으면 살아
 있는 데이터가 다친다.
 
+## 누가 되살리나 — 지울 수 있는 사람이 (ADR 0035 3단계)
+
+    재료·시료·시편·시험·정의   고칠 수 있는 사람 — 등록자 · 편집을 받은 부서 · 자료 관리자
+                               (`permissions.Editor`). 함께 돌아오는 것 **전부**를 그래야 한다
+    장비 커넥터                 그 커넥터 부서의 관리자
+    안내서                      검토자(자료 관리자)
+    영영 지우기                 시스템 관리자만 — 되돌릴 수 없고 디스크를 치운다
+
+전에는 전부 시스템 관리자였다. 등록자가 지울 수는 있는데 되살릴 수는 없었다 — 잘못
+누른 사람이 제 손으로 되돌릴 길이 없어서, 사고가 날 때마다 관리자에게 부탁이 갔다.
+**함께 돌아오는 것 전부를 본다**: 재료 하나를 되살리면 그 아래 남이 붙인 시험까지
+살아난다 — 지우기가 남의 것이 딸린 재료를 막는 것과 같은 규칙이다.
+
+목록도 사람마다 다르다 — **내가 되살릴 수 있는 것만** 보인다(관리자는 전부). 남의
+지운 것을 늘어놓으면 누를 수 없는 단추가 목록을 채운다.
+
 ## 영영 지우기 — 되돌릴 수 없다
 
 행을 진짜로 지우고 곡선 파일까지 치운다. **이 길에는 자동이 없다** — 오래된 것을
@@ -39,7 +55,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import delete, false, func, select, update
 from sqlalchemy.orm import Session
 
 from app.modules.accounts.models import User
@@ -52,8 +68,8 @@ from app.modules.processing.models import ProcessingRecipe, ProcessingResult
 from app.modules.statistics.models import EnsembleResult
 from app.modules.tests.models import Curve, FormatProfile, TestRun, TestSummary, TestType
 from app.modules.vocabulary import services as vocabulary_services
-from app.shared import audit, filestore
-from app.shared.errors import AppError, Conflict, NotFound
+from app.shared import audit, filestore, permissions
+from app.shared.errors import AppError, Conflict, Forbidden, NotFound
 
 #: 재료 계층과 시험. **아래로 딸린 것이 있다** — 재료를 되살리면 그 아래 시료·
 #: 시편·시험이 함께 돌아온다.
@@ -104,10 +120,11 @@ _MODELS: dict[str, tuple[Any, str]] = {
 #: 통과한 것이 DB 에서 막혀 500 이 된다.
 _UNIQUE_COLUMNS = {
     "test_type": ("key",),
-    "format_profile": ("owner_workspace_id", "key"),
-    "recipe": ("owner_workspace_id", "key"),
+    # 정의 셋의 key 는 **전사에서 하나다**(ADR 0035) — 부서 범위가 없다.
+    "format_profile": ("key",),
+    "recipe": ("key",),
     "connector": ("workspace_id", "hostname"),
-    "export_profile": ("owner_workspace_id", "key"),
+    "export_profile": ("key",),
     # 전사 유일. 주소에 쓰는 이름이라 부서 범위가 없다.
     "guide_document": ("key",),
 }
@@ -166,16 +183,35 @@ def _name(kind: str, row: Any) -> str:
     return str(getattr(row, "record_name", "") or "")
 
 
-def _rows(db: Session, kind: str, *, limit: int) -> list[Any]:
+#: 고칠 권한(`permissions.require_edit`)이 붙는 종류 — 되살리는 것도 그 규칙이다.
+EDITABLE_KINDS = (*TREE_KINDS, "test_type", "format_profile", "recipe", "export_profile")
+
+
+def _mine(db: Session, user: User, kind: str) -> Any:
+    """**이 사람이 되살릴 수 있는 것**만 남기는 조건. `None` 이면 전부.
+
+    되살리는 규칙(`_require_restore`)과 같은 뜻이어야 한다 — 목록에 떴는데 누르면 막히거나,
+    되살릴 수 있는데 목록에 안 뜨면 사람은 둘 중 무엇을 믿을지 모른다. 재료처럼 아래가
+    딸린 것은 목록에서는 **그 행**만 보고, 아래에 남의 것이 있으면 `blocked` 가 말한다.
+    """
+    model = _MODELS[kind][0]
+    if kind in EDITABLE_KINDS:
+        return permissions.editable_clause(db, user, model)
+    if kind == "connector":
+        if user.is_system_admin:
+            return None
+        return model.workspace_id.in_(permissions.managed_workspace_ids(db, user))
+    # 안내서 — 검토자만.
+    return None if permissions.is_data_steward(user) else false()
+
+
+def _rows(db: Session, kind: str, *, limit: int, user: User) -> list[Any]:
     model, _ = _MODELS[kind]
-    return list(
-        db.scalars(
-            select(model)
-            .where(model.deleted_at.is_not(None))
-            .order_by(model.deleted_at.desc())
-            .limit(limit)
-        )
-    )
+    query = select(model).where(model.deleted_at.is_not(None))
+    mine = _mine(db, user, kind)
+    if mine is not None:
+        query = query.where(mine)
+    return list(db.scalars(query.order_by(model.deleted_at.desc()).limit(limit)))
 
 
 # --- 아래에 무엇이 딸려 있나 -------------------------------------------------
@@ -307,18 +343,19 @@ def _seq_taken(db: Session, model: Any, where: Any, row: Any, label: str) -> str
 # --- 목록 -------------------------------------------------------------------
 
 
-def listing(db: Session, *, kind: str | None, limit: int) -> list[Item]:
-    """지운 것 목록. **최근에 지운 것부터.**
+def listing(db: Session, *, kind: str | None, limit: int, user: User) -> list[Item]:
+    """지운 것 목록. **최근에 지운 것부터.** 이 사람이 되살릴 수 있는 것만(`_mine`).
 
     `kind` 를 주면 그 종류만. 안 주면 넷을 모아 한 표로 낸다 — 사람은 "무엇을
     지웠더라" 를 종류로 기억하지 않는다.
     """
     kinds = [kind] if kind else list(KINDS)
     items: list[Item] = []
+    editor = permissions.editor(db, user)
     for one in kinds:
         if one not in _MODELS:
             raise AppError("MNX-TRASH-0001", f"모르는 종류입니다: {one}", status=422)
-        for row in _rows(db, one, limit=limit):
+        for row in _rows(db, one, limit=limit, user=user):
             items.append(
                 Item(
                     kind=one,
@@ -329,11 +366,77 @@ def listing(db: Session, *, kind: str | None, limit: int) -> list[Item]:
                     workspace_id=getattr(row, "workspace_id", None)
                     or getattr(row, "owner_workspace_id", None),
                     below=_below(db, one, row),
-                    blocked=_blocker(db, one, row),
+                    blocked=_blocker(db, one, row) or _foreign(db, editor, one, row),
                 )
             )
     items.sort(key=lambda item: item.deleted_at, reverse=True)
     return items[:limit]
+
+
+# --- 누가 되살리나 ------------------------------------------------------------
+
+
+def _foreign(db: Session, editor: permissions.Editor, kind: str, row: Any) -> str | None:
+    """함께 돌아올 것 중 **이 사람이 못 고치는 것** — 있으면 그 까닭.
+
+    지우기가 남의 것이 딸린 재료를 막는 것(`materials.services.foreign_descendants`)과
+    같은 규칙이다. 되살리기가 더 넓으면, 지울 수 없던 남의 시험을 되살리기로 건드리게
+    된다.
+    """
+    if kind not in TREE_KINDS:
+        return None
+    tree = _tree(db, kind, row)
+    counts: dict[tuple[str, uuid.UUID | None], int] = {}
+    for one in TREE_KINDS:
+        for target in tree[one]:
+            if target.id == row.id or editor.allows(target):
+                continue
+            key = (_MODELS[one][1], permissions.owner_of(target)[0])
+            counts[key] = counts.get(key, 0) + 1
+    if not counts:
+        return None
+    ids = {user_id for _, user_id in counts if user_id is not None}
+    names = (
+        {
+            found.id: found.display_name
+            for found in db.scalars(select(User).where(User.id.in_(ids)))
+        }
+        if ids
+        else {}
+    )
+    said = ", ".join(
+        f"{label} {count}건({names.get(user_id, '등록자 없음') if user_id else '등록자 없음'})"
+        for (label, user_id), count in counts.items()
+    )
+    return (
+        f"함께 돌아올 것 중 남의 자료가 있습니다: {said}. "
+        "그 사람이나 자료 관리자가 되살립니다."
+    )
+
+
+def _require_restore(db: Session, user: User, kind: str, row: Any) -> None:
+    """되살릴 수 있는가 — **지울 수 있는 사람이 되살린다**(ADR 0035 3단계).
+
+    전에는 시스템 관리자만이었다. 등록자가 지울 수는 있는데 되살릴 수는 없어서, 잘못
+    누른 사람이 제 손으로 되돌릴 길이 없었다.
+    """
+    if kind in EDITABLE_KINDS:
+        permissions.require_edit(db, user, row, code="MNX-TRASH-0006")
+        foreign = _foreign(db, permissions.editor(db, user), kind, row)
+        if foreign:
+            raise Forbidden("MNX-TRASH-0006", foreign)
+        return
+    if kind == "connector":
+        if user.is_system_admin or row.workspace_id in permissions.managed_workspace_ids(
+            db, user
+        ):
+            return
+        raise Forbidden(
+            "MNX-TRASH-0006", "장비 커넥터는 그 커넥터 부서의 관리자가 되살립니다."
+        )
+    if permissions.is_data_steward(user):
+        return
+    raise Forbidden("MNX-TRASH-0006", "안내서는 검토자(자료 관리자)가 되살립니다.")
 
 
 def _get(db: Session, kind: str, item_id: uuid.UUID) -> Any:
@@ -406,6 +509,7 @@ def restore(db: Session, kind: str, item_id: uuid.UUID, *, actor: User) -> Done:
     **커밋은 부르는 쪽이 한다**(`delete_tree` 와 같은 규칙).
     """
     row = _get(db, kind, item_id)
+    _require_restore(db, actor, kind, row)
     blocked = _blocker(db, kind, row)
     if blocked:
         raise Conflict("MNX-TRASH-0004", blocked)

@@ -502,6 +502,32 @@ class Test워커:
         db.refresh(run)
         assert run.status == "parsed", run.parse_error
 
+    def test_스스로_붙인_시험은_커넥터_부서가_고친다(
+        self,
+        client: TestClient,
+        db: Session,
+        pat: dict[str, str],
+        connector: dict[str, Any],
+        specimen: dict[str, Any],
+        tensile: None,
+        workspace: Any,
+    ) -> None:
+        """커넥터는 등록할 때 부서를 고른다(ADR 0035). 스스로 붙인 시험은 등록자가
+        없으니, 그 부서가 편집을 받지 않으면 자료 관리자만 고칠 수 있다."""
+        client.patch(
+            f"/api/pipelines/connectors/{connector['id']}",
+            json={"auto_register": True},
+            headers=pat,
+        )
+        received = _send(client, pat, connector["id"]).json()
+        _run_worker(db, kinds.PIPELINES_PARSE_INBOX)
+        item = db.get(PipelineInboxItem, uuid.UUID(received["id"]))
+        assert item is not None and item.status == "registered", item and item.error
+        run = db.get(TestRun, item.test_run_id)
+        assert run is not None
+        assert run.registered_by_id is None
+        assert run.edit_workspace_id == workspace.id
+
     def test_재료_코드가_없으면_찍지_않는다(
         self,
         client: TestClient,

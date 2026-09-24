@@ -16,6 +16,7 @@ from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy.orm import Session
 
 TYPE: dict[str, Any] = {
     "key": "peel",
@@ -222,3 +223,26 @@ class Test레시피:
         assert back.status_code == 200, back.text
         listed = client.get("/api/processing/recipes", headers=admin_headers).json()
         assert "smooth5" in [one["key"] for one in listed]
+
+    def test_지운_사이_남의_부서가_key_를_쓰면_사람_말로_막는다(
+        self, client: TestClient, admin_headers: dict[str, str], peel: None, db: Session
+    ) -> None:
+        """key 는 전사에서 하나다(ADR 0035). 지운 사이 다른 부서가 같은 key 로 만들었으면
+        되살릴 자리가 없다 — 부서 범위로 세면 여기를 통과하고 DB 가 막아 500 이 된다."""
+        from app.modules.workspaces.models import Workspace
+
+        db.add(Workspace(slug="trash-other", name="다른 부서"))
+        db.commit()
+        client.post("/api/processing/recipes", json=RECIPE, headers=admin_headers)
+        client.delete("/api/processing/recipes/smooth5", headers=admin_headers)
+        taken = client.post(
+            "/api/processing/recipes",
+            json={**RECIPE, "owner_workspace_slug": "trash-other"},
+            headers=admin_headers,
+        )
+        assert taken.status_code == 201, taken.text
+
+        item = client.get("/api/trash?kind=recipe", headers=admin_headers).json()[0]
+        back = client.post(f"/api/trash/recipe/{item['id']}/restore", headers=admin_headers)
+        assert back.status_code == 409, back.text
+        assert "같은 자리를 쓰는" in back.json()["error"]["message"]

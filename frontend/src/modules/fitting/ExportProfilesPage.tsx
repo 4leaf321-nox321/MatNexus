@@ -11,7 +11,7 @@
  */
 
 import { useRef, useState } from 'react'
-import { Download, FileOutput, Globe2, Pencil, Plus, Trash2, Upload } from 'lucide-react'
+import { Download, FileOutput, Pencil, Plus, Trash2, Upload } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
 import { ImportProfilesDialog } from '@/modules/fitting/ImportProfilesDialog'
@@ -27,8 +27,9 @@ import {
   toFileEntry,
 } from '@/modules/fitting/profileFile'
 import type { ProfileInFile } from '@/modules/fitting/profileFile'
+import { canEdit, lockedTitle } from '@/modules/ownership/access'
 import { useAuth } from '@/shared/auth/AuthContext'
-import { isAnyManager, isSystemAdmin } from '@/shared/auth/roles'
+import { isSystemAdmin } from '@/shared/auth/roles'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { PageHeader } from '@/shared/components/PageHeader'
 import { Badge } from '@/shared/components/ui/badge'
@@ -45,7 +46,6 @@ import { useResource } from '@/shared/hooks/useResource'
 
 export default function ExportProfilesPage() {
   const { user } = useAuth()
-  const canEdit = isAnyManager(user)
   const profiles = useResource(() => fittingApi.exportProfiles(), [])
   const [error, setError] = useState<Error | null>(null)
   const [said, setSaid] = useState<string | null>(null)
@@ -91,10 +91,10 @@ export default function ExportProfilesPage() {
         title="해석용 물성 정의"
         description="물성 카드를 어느 솔버의 입력으로 쓸지. 키워드 이름·차례·칸 폭을 여기에 저장합니다 — 새 솔버를 붙이는 데 배포가 필요 없습니다."
         actions={
-          // **볼 수는 있어도 고치는 것은 부서 관리자다.** 목록을 모두에게 연 것은
-          // 「우리가 어떤 솔버로 낼 수 있나」 를 누구나 물어야 해서다.
-          canEdit ? (
-            <span className="flex flex-wrap gap-2">
+          // **만들기·불러오기는 누구나다**(ADR 0035 3단계 — 전에는 부서 관리자였고, 그나마
+          // 화면이 부서를 안 보내서 「전역」 으로 읽혀 403 이 났다). 올린 정의의 등록 부서는
+          // 내 소속이다. 고치는 것은 줄마다 다르다(`access`).
+          <span className="flex flex-wrap gap-2">
               {/* **개발 서버에서 만들어 운영으로 옮기는 길이다.** 정의는 코드가
                   아니라 데이터라(ADR 0023) 배포 없이 붙는데, 그러면 서버 사이를
                   옮기는 길도 있어야 한다 — 없으면 운영에서 손으로 다시 만든다. */}
@@ -136,7 +136,6 @@ export default function ExportProfilesPage() {
                 </Link>
               </Button>
             </span>
-          ) : null
         }
       />
 
@@ -160,7 +159,7 @@ export default function ExportProfilesPage() {
               <TableHead>key</TableHead>
               <TableHead>이름</TableHead>
               <TableHead>확장자</TableHead>
-              <TableHead>소유</TableHead>
+              <TableHead>등록 부서</TableHead>
               <TableHead className="w-24" />
             </TableRow>
           </TableHeader>
@@ -181,22 +180,11 @@ export default function ExportProfilesPage() {
                   )}
                 </TableCell>
                 <TableCell>
-                  {/* **전역은 여러 부서가 함께 쓴다.** 한 부서가 고치면 남의 덱이
-                      바뀌므로, 어느 쪽인지 표에서 바로 보여야 한다. */}
-                  {item.is_global ? (
-                    <Badge variant="secondary">
-                      <Globe2 className="size-3" />
-                      전역
-                    </Badge>
-                  ) : (
-                    <span className="text-muted-foreground text-sm">
-                      {item.owner_workspace_name ?? '내 부서'}
-                    </span>
-                  )}
+                  {/* 등록한 부서 — 권한이 아니다(ADR 0035). 누가 고치는지는 편집기가 말한다. */}
+                  {item.owner_workspace_name ?? '부서 없음'}
                 </TableCell>
                 <TableCell className="text-right">
-                  {canEdit ? (
-                    <span className="flex justify-end gap-1">
+                  <span className="flex justify-end gap-1">
                       {/* **한 벌만 옮기는 것이 흔한 일이다** — 방금 만든 이것을
                           운영으로 보낸다. 전부 내보내고 파일을 손으로 자르게 하지
                           않는다. */}
@@ -208,7 +196,13 @@ export default function ExportProfilesPage() {
                       >
                         <Download className="size-4" />
                       </Button>
-                      <Button variant="ghost" size="icon" asChild title="편집">
+                      {/* **여는 것은 누구나** — 편집기가 읽기로 열고 누가 고치는지 말한다. */}
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        asChild
+                        title={canEdit(item.access) ? '편집' : '보기'}
+                      >
                         <Link to={`/settings/export-profiles/${item.key}`}>
                           <Pencil className="size-4" />
                         </Link>
@@ -216,13 +210,13 @@ export default function ExportProfilesPage() {
                       <Button
                         variant="ghost"
                         size="icon"
-                        title="삭제"
+                        disabled={!canEdit(item.access)}
+                        title={lockedTitle(item.access) ?? '삭제'}
                         onClick={() => void remove(item)}
                       >
                         <Trash2 className="size-4" />
                       </Button>
-                    </span>
-                  ) : null}
+                  </span>
                 </TableCell>
               </TableRow>
             ))}

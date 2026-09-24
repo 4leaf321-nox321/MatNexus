@@ -8,7 +8,7 @@
 import { vocabularyApi } from '@/modules/vocabulary/api'
 import { coinHint, mayCoin, useEntryPolicy } from '@/modules/vocabulary/entryPolicy'
 import { useMaybeAuth } from '@/shared/auth/AuthContext'
-import { isAnyManager } from '@/shared/auth/roles'
+import { isDataSteward } from '@/shared/auth/roles'
 import { OptionPicker } from '@/shared/components/OptionPicker'
 import { Label } from '@/shared/components/ui/label'
 
@@ -57,7 +57,8 @@ export function VocabularyField({
   const policy = useEntryPolicy(slug)
   // 로그인 정보가 없는 자리에 얹힐 수 있다 — 그때는 **모른다**(`null`).
   const auth = useMaybeAuth()
-  const canCoin = mayCoin(policy, auth ? isAnyManager(auth.user) : null)
+  // 새 용어는 자료 관리자가 세운다(ADR 0035 3단계 — 전에는 부서 관리자).
+  const canCoin = mayCoin(policy, auth ? isDataSteward(auth.user) : null)
 
   return (
     <div className={compact ? 'space-y-1' : 'space-y-1.5'}>

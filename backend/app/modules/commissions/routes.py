@@ -236,6 +236,7 @@ def _detail(db: Session, item: Commission, viewer: User) -> CommissionDetailOut:
         can_link=services.can_link(item, side, viewer),
         can_assign=can_assign,
         can_resolve=services.can_resolve(item, side, viewer),
+        can_comment=services.can_comment(side, viewer),
         assignees=(
             [
                 NamedOut(id=user_id, name=name)
@@ -255,7 +256,7 @@ def list_statuses(user: User = Depends(current_user)) -> list[CommissionStatusOu
 
 @router.get("", response_model=Page[CommissionOut])
 def list_commissions(
-    scope: str = Query(default="all", pattern="^(mine|received|all)$"),
+    scope: str = Query(default="all", pattern="^(ours|mine|received|all)$"),
     status: str | None = Query(default=None),
     q: str | None = Query(default=None, max_length=200),
     limit: int | None = Query(default=None, le=1000),
@@ -263,7 +264,7 @@ def list_commissions(
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> Page[CommissionOut]:
-    """낸 부서·받는 부서가 보는 게시판. 최신이 위다."""
+    """의뢰 게시판. 최신이 위다. **누구나 본다** — 작성 중은 낸 사람만(ADR 0035)."""
     query = services.visible(db, user)
     clause = services.scope_clause(db, user, scope)
     if clause is not None:
@@ -447,9 +448,19 @@ def add_event(
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> CommissionDetailOut:
-    """상태를 옮기거나 말을 보탠다. **갈 수 있는 곳만 간다.**"""
+    """상태를 옮기거나 말을 보탠다. **갈 수 있는 곳만 간다.**
+
+    **낸 쪽과 받는 쪽만.** 보기는 전원이지만(ADR 0035) 이 건의 흐름에 말을 얹는 것은
+    약속한 두 쪽이다 — 제3부서가 끼어들면 누구에게 답해야 하는지가 흐려진다.
+    """
     item = services.get(db, user, commission_id)
     side = services.side_of(db, item, user)
+    if not services.can_comment(side, user):
+        raise Forbidden(
+            "MNX-COMMISSIONS-0033",
+            "이 의뢰는 낸 부서와 받는 부서만 움직이고 말을 보탤 수 있습니다 — "
+            "읽기만 됩니다. 물을 것이 있으면 낸 사람에게 직접 물어 주세요.",
+        )
     note = (payload.note or "").strip() or None
     target = payload.status
     if target is not None:
@@ -642,7 +653,7 @@ def resolve_item(
             "시험이 붙은 항목의 종류는 바꿀 수 없습니다 — 먼저 시험 연결을 푸세요.",
             status=422,
         )
-    test_type = services.visible_test_type(db, user, payload.test_type_key)
+    test_type = services.visible_test_type(db, payload.test_type_key)
     values, input_units = conditions.normalize_conditions(
         db, test_type, dict(payload.conditions), dict(payload.condition_units)
     )

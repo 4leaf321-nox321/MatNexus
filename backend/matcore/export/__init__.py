@@ -1391,6 +1391,17 @@ def render_json(deck: Deck) -> Rendered:
     # 되므로 부르는 쪽마다 부른다.
     cards.load_builtin()
 
+    def in_file(si_unit: Any) -> str | None:
+        """이 파일의 계에서 그 물리량을 무엇으로 적었나. **`si_unit` 만 두면 거짓말이다** —
+        mm·N·tonne 파일에서 값은 MPa 인데 곁에 `si_unit: "Pa"` 만 적혀 있으면 받는 쪽은 Pa
+        로 읽는다(2026-09-24, 재료 내보내기의 밀도가 그렇게 읽혔다)."""
+        if not isinstance(si_unit, str):
+            return None
+        try:
+            return deck.units.symbol(si_unit)
+        except KeyError:
+            return None
+
     blocks: dict[str, Any] = {}
     for key, payload in deck.blocks.items():
         try:
@@ -1400,16 +1411,28 @@ def render_json(deck: Deck) -> Rendered:
         blocks[key] = {
             "label": spec.label if spec else key,
             "values": deck.values(key),
-            # 값의 뜻과 단위. **받는 사람이 되짚을 수 있어야 한다.**
+            # 값의 뜻과 단위. **받는 사람이 되짚을 수 있어야 한다.** `unit` 이 이 파일의
+            # 숫자의 단위이고, `si_unit` 은 같은 물리량의 SI 기호다.
             "declared": (
                 {
-                    item.key: {"label": item.label, "si_unit": item.si_unit}
+                    item.key: {
+                        "label": item.label,
+                        "unit": in_file(item.si_unit),
+                        "si_unit": item.si_unit,
+                    }
                     for item in (*spec.produces, *spec.rows)
                 }
                 if spec
                 else {}
             ),
-            "rows": deck.rows(key),
+            # 행이 자기 단위를 들면(경화식 파라미터) 그 행의 숫자도 이 계로 옮겨져 있다 —
+            # 그 단위를 행마다 적는다.
+            "rows": [
+                {**row, "unit": in_file(row["si_unit"])}
+                if isinstance(row, Mapping) and isinstance(row.get("si_unit"), str)
+                else row
+                for row in deck.rows(key)
+            ],
             "notes": list(payload.get("notes", [])) if isinstance(payload, Mapping) else [],
         }
 
@@ -1423,6 +1446,8 @@ def render_json(deck: Deck) -> Rendered:
             "time": deck.units.time,
             "stress": deck.units.symbol("Pa"),
             "system": deck.units.key,
+            # SI 기호 → 이 계의 기호, 전부. 받는 쪽이 값마다 `unit` 을 안 읽어도 계를 안다.
+            "symbols": dict(deck.units.symbols),
         },
         "blocks": blocks,
         "provenance": list(deck.provenance),

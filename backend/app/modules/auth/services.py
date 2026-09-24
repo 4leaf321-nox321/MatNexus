@@ -303,6 +303,7 @@ def user_out(db: Session, user: User) -> UserOut:
         display_name=user.display_name,
         status=user.status,
         is_system_admin=user.is_system_admin,
+        is_data_manager=user.is_data_manager,
         must_change_password=user.must_change_password,
         home_workspace_slug=home_slug,
         memberships=[

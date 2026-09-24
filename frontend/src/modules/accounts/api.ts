@@ -68,6 +68,10 @@ export const accountsApi = {
       is_system_admin: grant,
     } satisfies SystemAdminRequest),
 
+  /** 자료 관리자(ADR 0035) — 모든 자료를 고치고 카드를 확정한다. 계정·서버는 못 만진다. */
+  setDataManager: (id: string, grant: boolean) =>
+    api.post<Account>(`/accounts/${id}/data-manager`, { is_data_manager: grant }),
+
   resetPassword: (id: string) => api.post<TemporaryPassword>(`/accounts/${id}/reset-password`),
 
   /** 삭제 전 미리보기 — 무엇이 딸려 있는지 보고 결정한다. */

@@ -9,6 +9,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from app.modules.workbench.models import ITEM_KINDS
+from app.shared.access import EditAccessOut
 
 #: 한 작업에 담을 수 있는 수. **막는 값이 아니라 사고를 막는 값이다** — 실수로
 #: 전부 고른 채 담으면 화면이 수백 줄을 그린다.
@@ -84,6 +85,9 @@ class RunOut(BaseModel):
     created_at: datetime
     updated_at: datetime
     finished_at: datetime | None
+    access: EditAccessOut | None = None
+    """**이 사람이** 이어 할 수 있나(ADR 0035 3단계). 보기는 전원이다 — 못 하면 화면은
+    읽기로만 열고, 누구의 작업인지 말한다."""
 
 
 class RunDetailOut(RunOut):

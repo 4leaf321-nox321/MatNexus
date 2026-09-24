@@ -176,6 +176,7 @@ def create_run(
     test_type: TestType,
     source: Source,
     registered_by_id: uuid.UUID | None,
+    edit_workspace_id: uuid.UUID | None = None,
     tested_at: datetime | None = None,
     operator: str | None = None,
     instrument: str | None = None,
@@ -209,6 +210,7 @@ def create_run(
             note=note,
             status="uploaded",
             registered_by_id=registered_by_id,
+            edit_workspace_id=edit_workspace_id,
             parse_profile_id=profile_id,
         )
         vocabulary_services.apply_bindings(

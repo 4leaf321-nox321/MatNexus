@@ -651,9 +651,14 @@ class Test진행을_적어_둔다:
         assert body["finished_at"]
 
 
-class Test남의_부서는_안_보인다:
-    """**공유의 단위는 부서다.** 전사로 열면 남의 부서 작업이 목록에 섞이고, 그
-    목록은 「이어서 하기」 로 쓰이는 자리라 금세 못 쓰게 된다."""
+class Test남의_부서는_보기만_한다:
+    """**함께 미는 단위는 부서다.** 전사로 열면 남의 부서 작업이 목록에 섞이고, 그
+    목록은 「이어서 하기」 로 쓰이는 자리라 금세 못 쓰게 된다 — 그래서 목록의 기본은
+    내 부서 것이다.
+
+    **보기는 전원이다**(ADR 0035 3단계). 전에는 남의 부서 사람에게 작업 주소를 보내면
+    「없다」 가 떴다. 연다 — 다만 담고 빼고 진행을 옮기는 것은 그 부서 사람 · 시작한
+    사람 · 자료 관리자다."""
 
     @staticmethod
     def _outsider(client: TestClient, db: Session) -> dict[str, str]:
@@ -676,14 +681,36 @@ class Test남의_부서는_안_보인다:
         ).json()["access_token"]
         return {"Authorization": f"Bearer {token}"}
 
-    def test_못_연다(self, client: TestClient, db: Session, run: dict[str, Any]) -> None:
+    def test_열되_못_고친다(
+        self, client: TestClient, db: Session, run: dict[str, Any]
+    ) -> None:
         headers = self._outsider(client, db)
-        response = client.get(f"/api/workbench/runs/{run['id']}", headers=headers)
-        assert response.status_code == 404, response.text
+        opened = client.get(f"/api/workbench/runs/{run['id']}", headers=headers)
+        assert opened.status_code == 200, opened.text
+        access = opened.json()["access"]
+        assert access["can_edit"] is False
+        # 누구에게 물을지 — 작업의 부서와 시작한 사람.
+        assert "금속재료팀" in access["reason"]
 
-    def test_목록에도_안_뜬다(
+        renamed = client.patch(
+            f"/api/workbench/runs/{run['id']}",
+            json={"title": "남이 바꾼 이름"},
+            headers=headers,
+        )
+        assert renamed.status_code == 403, renamed.text
+        assert renamed.json()["error"]["code"] == "MNX-WORKBENCH-0004"
+        added = client.post(
+            f"/api/workbench/runs/{run['id']}/items",
+            json={"kind": "material", "target_ids": [str(uuid.uuid4())]},
+            headers=headers,
+        )
+        assert added.status_code == 403, added.text
+
+    def test_목록의_기본은_내_부서_것이고_전체로_넓힌다(
         self, client: TestClient, db: Session, run: dict[str, Any]
     ) -> None:
         headers = self._outsider(client, db)
         rows = client.get("/api/workbench/runs", headers=headers).json()
         assert run["id"] not in [one["id"] for one in rows]
+        everyone = client.get("/api/workbench/runs?scope=all", headers=headers).json()
+        assert run["id"] in [one["id"] for one in everyone]

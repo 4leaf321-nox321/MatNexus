@@ -6,23 +6,25 @@
 
 **시스템 관리자 전용이 아니다.** 처음에는 그렇게 만들었는데 실무가 막혔다 —
 장비는 부서마다 다른데 **남의 부서 파일을 어떻게 읽을지를 시스템 관리자가 알 리
-없다.** 그 지식은 사업부에 있다. 그래서 재료와 같은 모델을 쓴다(ADR 0004).
+없다.** 그 지식은 사업부에 있다.
 
-    부서 관리자   자기 부서 프로파일을 만들고 고친다
-    시스템 관리자  전역 프로파일을 만들고, 부서 것을 전역으로 올린다
+    만들기   누구나. 등록 부서는 내 소속(부서 없이 올리는 것은 자료 관리자만)
+    고치기   등록자 · 편집을 받은 부서 · 자료 관리자 (ADR 0035 3단계)
 
-읽을 때는 **내 부서 것이 전역보다 먼저다.** 같은 장비라도 부서마다 소프트웨어
-설정이 달라 열 이름이 조금씩 다른 일이 실제로 있다.
+**보는 것은 전원이다**(ADR 0035). 목록·상세·「이 형식으로 다시 읽기」 는 모든
+부서의 것을 고를 수 있다. 다만 **자동으로 고를 때**는 내 부서 것과 부서 없는 것만
+대 본다(`auto_profiles`) — 남의 부서 지문이 내 파일을 먼저 가로채면 사람은 왜 그
+종류가 골라졌는지 모른다. 그 안에서는 **내 부서 것이 먼저다.** 같은 장비라도
+부서마다 소프트웨어 설정이 달라 열 이름이 조금씩 다른 일이 실제로 있다.
 """
 
 from __future__ import annotations
 
-import uuid
 from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, File, Form, Query, Response, UploadFile
-from sqlalchemy import Select, select
+from sqlalchemy import Select, or_, select
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -49,14 +51,11 @@ from app.modules.tests.schemas import (
     TriedSummaryOut,
 )
 from app.modules.workspaces.models import Workspace
-from app.shared import audit, dependents
+from app.shared import audit, definition_keys, dependents, permissions
+from app.shared.access import AccessBook, EditAccessOut, access_of
 from app.shared.auth import current_user
-from app.shared.errors import AppError, Conflict, NotFound
-from app.shared.permissions import (
-    require_owner_edit,
-    resolve_owner_workspace,
-    visible_owner_clause,
-)
+from app.shared.errors import AppError, NotFound
+from app.shared.permissions import my_workspace_ids
 from matcore import readers, units
 from matcore.parsers import ParseError
 from matcore.readers import profile as profiles
@@ -67,29 +66,37 @@ router = APIRouter(prefix="/formats", tags=["tests"])
 PREVIEW_ROWS = 8
 
 
-def visible_profiles(db: Session, user: User) -> Select[tuple[FormatProfile]]:
-    """내 부서 것 + 전역. 재료·시험 종류와 **같은 규칙, 같은 코드**다.
+def visible_profiles(db: Session) -> Select[tuple[FormatProfile]]:
+    """살아 있는 프로파일 전부. **전원이 전부 본다**(ADR 0035).
 
     **지운 것은 여기서 빠진다.** 소프트 삭제라 행은 남는다 — 이 한 곳을 안 거르면
     지운 프로파일이 업로드 화면의 형식 목록에 그대로 뜬다.
     """
-    return select(FormatProfile).where(
-        visible_owner_clause(db, user, FormatProfile.owner_workspace_id),
-        FormatProfile.deleted_at.is_(None),
+    return select(FormatProfile).where(FormatProfile.deleted_at.is_(None))
+
+
+def auto_profiles(db: Session, user: User) -> Select[tuple[FormatProfile]]:
+    """**자동으로 고를 때** 대 보는 것 — 내 부서가 등록한 것과 부서 없이 올린 것.
+
+    보는 것은 전부인데 자동은 좁힌다. 남의 부서 지문이 내 파일에 맞으면 그쪽이 종류를
+    정해 버리고, 사람은 왜 그렇게 골라졌는지 알 길이 없다. 시험을 읽는 쪽
+    (`services._pick_reader`)도 그 시험의 부서 것과 부서 없는 것만 본다 — 두 곳이 같은
+    범위다. 시스템 관리자는 전과 같이 전부를 대 본다.
+    """
+    query = visible_profiles(db)
+    if user.is_system_admin:
+        return query
+    return query.where(
+        or_(
+            FormatProfile.owner_workspace_id.is_(None),
+            FormatProfile.owner_workspace_id.in_(my_workspace_ids(db, user)),
+        )
     )
 
 
-def _require_edit(db: Session, user: User, profile: FormatProfile) -> None:
-    require_owner_edit(
-        db, user, profile.owner_workspace_id, what="프로파일", code="MNX-TESTS-0027"
-    )
-
-
-def _resolve_owner(db: Session, user: User, slug: str | None) -> uuid.UUID | None:
-    return resolve_owner_workspace(db, user, slug, what="프로파일", code="MNX-TESTS-0027")
-
-
-def _out(db: Session, item: FormatProfile) -> FormatProfileOut:
+def _out(
+    db: Session, item: FormatProfile, access: EditAccessOut | None = None
+) -> FormatProfileOut:
     test_type = db.get(TestType, item.test_type_id)
     owner = db.get(Workspace, item.owner_workspace_id) if item.owner_workspace_id else None
     return FormatProfileOut(
@@ -97,7 +104,7 @@ def _out(db: Session, item: FormatProfile) -> FormatProfileOut:
         key=item.key,
         owner_workspace_slug=owner.slug if owner else None,
         owner_workspace_name=owner.name if owner else None,
-        is_global=item.owner_workspace_id is None,
+        access=access,
         label=item.label,
         description=item.description,
         test_type_key=test_type.key if test_type else "?",
@@ -277,13 +284,13 @@ def list_profiles(
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> list[FormatProfileOut]:
-    """내 부서 것 + 전역. 시스템 관리자는 전부."""
-    query = visible_profiles(db, user).order_by(
-        FormatProfile.priority.desc(), FormatProfile.key
-    )
+    """모든 부서의 것 — **전원이 전부 본다**(ADR 0035). 줄마다 고칠 수 있는지를 싣는다."""
+    query = visible_profiles(db).order_by(FormatProfile.priority.desc(), FormatProfile.key)
     if test_type:
         query = query.where(FormatProfile.test_type_id == _resolve_type(db, test_type).id)
-    return [_out(db, item) for item in db.scalars(query)]
+    items = list(db.scalars(query))
+    book = AccessBook(db, user).prime(items)
+    return [_out(db, item, book.of(item)) for item in items]
 
 
 def _audit_profile(db: Session, user: User, item: FormatProfile, *, made: bool) -> None:
@@ -311,29 +318,33 @@ def create_profile(
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> FormatProfileOut:
-    """부서 관리자가 자기 부서 프로파일을 만든다.
+    """누구나 만든다 — 등록자가 고치고, 필요하면 부서에 편집을 준다(ADR 0035).
 
     **장비는 부서마다 다르다.** 남의 부서 파일을 어떻게 읽을지를 시스템 관리자가
     알 리 없다 — 그 지식은 사업부에 있다.
     """
-    owner_id = _resolve_owner(db, user, payload.owner_workspace_slug)
-    duplicate = db.scalar(
-        select(FormatProfile).where(
-            FormatProfile.key == payload.key,
-            # **지운 것은 안 센다.** 안 거르면 지운 프로파일의 key 로 다시 만들 수
-            # 없으면서 화면 어디에도 그것이 없다 — 되살리는 길은 휴지통이다.
-            FormatProfile.deleted_at.is_(None),
-            FormatProfile.owner_workspace_id.is_(None)
-            if owner_id is None
-            else FormatProfile.owner_workspace_id == owner_id,
-        )
+    owner_id = permissions.registering_workspace(
+        db,
+        user,
+        payload.owner_workspace_slug,
+        given="owner_workspace_slug" in payload.model_fields_set,
+        what="장비 파일 정의",
+        code="MNX-TESTS-0027",
     )
-    if duplicate:
-        raise Conflict("MNX-TESTS-0024", f"이미 있는 프로파일입니다: {payload.key}")
+    # **지운 것은 안 센다.** 안 거르면 지운 프로파일의 key 로 다시 만들 수 없으면서
+    # 화면 어디에도 그것이 없다 — 되살리는 길은 휴지통이다.
+    key = definition_keys.resolve(
+        db,
+        FormatProfile,
+        payload.key,
+        prefix="fmt",
+        what="장비 파일 정의",
+        code="MNX-TESTS-0024",
+    )
     test_type = _resolve_type(db, payload.test_type_key)
     _validate(payload.definition, db, test_type)
     item = FormatProfile(
-        key=payload.key,
+        key=key,
         label=payload.label,
         description=payload.description,
         test_type_id=test_type.id,
@@ -348,7 +359,7 @@ def create_profile(
     _audit_profile(db, user, item, made=True)
     db.commit()
     db.refresh(item)
-    return _out(db, item)
+    return _out(db, item, access_of(db, user, item))
 
 
 @router.put("/{key}", response_model=FormatProfileOut)
@@ -364,23 +375,24 @@ def update_profile(
     알게 되는 것이 정상이고, 그때 고쳐서 **원본으로 다시 읽으면** 되기 때문이다.
     원본을 그대로 보관하는 두 번째 이유가 이것이다.
     """
-    item = db.scalar(visible_profiles(db, user).where(FormatProfile.key == key))
+    item = db.scalar(visible_profiles(db).where(FormatProfile.key == key))
     if item is None:
         raise NotFound("MNX-TESTS-0025", f"프로파일을 찾을 수 없습니다: {key}")
-    _require_edit(db, user, item)
+    permissions.require_edit(db, user, item, code="MNX-TESTS-0027")
     test_type = _resolve_type(db, payload.test_type_key)
     _validate(payload.definition, db, test_type)
     item.label = payload.label
     item.description = payload.description
     item.test_type_id = test_type.id
-    # 소유는 여기서 안 바꾼다. 전역 승격은 성격이 다른 결정이라 별도 경로다.
+    # 등록 부서는 여기서 안 바꾼다 — 자동 추정의 범위가 바뀌는 일이라 성격이 다르다.
+    # 고칠 사람은 「권한」 에서 넘긴다(`/ownership`).
     item.definition = payload.definition
     item.priority = payload.priority
     item.is_active = payload.is_active
     _audit_profile(db, user, item, made=False)
     db.commit()
     db.refresh(item)
-    return _out(db, item)
+    return _out(db, item, access_of(db, user, item))
 
 
 @router.delete("/{key}", status_code=204)
@@ -389,10 +401,10 @@ def delete_profile(
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> Response:
-    item = db.scalar(visible_profiles(db, user).where(FormatProfile.key == key))
+    item = db.scalar(visible_profiles(db).where(FormatProfile.key == key))
     if item is None:
         raise NotFound("MNX-TESTS-0025", f"프로파일을 찾을 수 없습니다: {key}")
-    _require_edit(db, user, item)
+    permissions.require_edit(db, user, item, code="MNX-TESTS-0027")
 
     # **매달린 것이 있으면 막는다.** 안 막으면 FK 가 막고, 그건 500 이 된다 —
     # 사람은 "서버 오류가 발생했습니다" 만 보고 무엇이 걸렸는지 알 수 없다.

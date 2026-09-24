@@ -102,13 +102,13 @@ describe('자리', () => {
     expect(labels.slice(0, 4)).toEqual(['재료', '시편', '시험', '물성 카드'])
   })
 
-  it('카탈로그는 전부 전역 경로다 — 하나만 부서로 좁으면 「이것뿐인가」 가 된다', () => {
-    // 시험이 `/w/<부서>/tests` 였다. 재료·시편은 다 보이는데 시험만 자기 부서
-    // 것만 보이면, 그 목록이 짧은 이유를 화면에서 알 수 없다.
-    const catalog = NAV_GROUPS.find((group) => group.title === '카탈로그')
-    for (const item of catalog?.items ?? []) {
-      expect(item.resolve, item.label).toBeUndefined()
+  it('메뉴 주소에 부서가 없다 — 「지금 부서」 를 걷었다', () => {
+    // 시험이 `/w/<부서>/tests` 였다. 재료·시편은 다 보이는데 시험만 자기 부서 것만
+    // 보이면, 그 목록이 짧은 이유를 화면에서 알 수 없었다. 3단계에서 홈·워크벤치·
+    // 부서 멤버까지 부서 주소를 걷었다(ADR 0035) — 상단 부서 선택기도 함께.
+    for (const item of NAV_GROUPS.flatMap((group) => group.items)) {
       expect(item.to, item.label).toBeTruthy()
+      expect(item.to.startsWith('/w/'), item.label).toBe(false)
     }
   })
 

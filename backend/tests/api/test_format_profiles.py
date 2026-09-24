@@ -160,6 +160,9 @@ def dma(client: TestClient, admin_headers: dict[str, str]) -> None:
             "test_type_key": "dma_sweep",
             "definition": DMA_PROFILE,
             "priority": 10,
+            # **부서 없이** — 모든 부서의 자동 추정에 드는 것(전에는 「전역」). 안 보내면
+            # 만든 사람의 소속 부서가 된다(ADR 0035 3단계).
+            "owner_workspace_slug": None,
         },
         headers=admin_headers,
     )
@@ -1098,8 +1101,8 @@ class Test부서가장비를붙인다:
     """**관리자 전용으로 두었더니 실무가 막혔다.**
 
     장비는 부서마다 다른데, 남의 부서 파일을 어떻게 읽을지를 시스템 관리자가 알
-    리 없다 — 그 지식은 사업부에 있다. 그래서 재료와 같은 모델을 쓴다: 부서가
-    만들고, 전역 승격은 관리자(ADR 0004).
+    리 없다 — 그 지식은 사업부에 있다. 그래서 **누구나 만들고, 등록자·편집을 받은
+    부서·자료 관리자가 고친다**(ADR 0035 3단계 — 전에는 부서 관리자였다).
     """
 
     @pytest.fixture
@@ -1116,6 +1119,8 @@ class Test부서가장비를붙인다:
             password_hash=security.hash_password("member-password-1"),
             display_name="사업부 관리자",
             status="active",
+            # 소속 부서 — 가입 승인이 멤버십과 함께 채운다. 정의의 등록 부서가 이것이다.
+            home_workspace_id=workspace.id,
         )
         db.add(user)
         db.flush()
@@ -1135,6 +1140,7 @@ class Test부서가장비를붙인다:
             password_hash=security.hash_password("member-password-1"),
             display_name="시험 담당자",
             status="active",
+            home_workspace_id=workspace.id,
         )
         db.add(user)
         db.flush()
@@ -1155,72 +1161,108 @@ class Test부서가장비를붙인다:
             **overrides,
         }
 
-    def test_부서_관리자가_만든다(
-        self,
-        client: TestClient,
-        admin_headers: dict[str, str],
-        manager: dict[str, str],
-        workspace: Workspace,
-        dma: None,
-    ) -> None:
-        response = client.post(
-            "/api/formats",
-            json=self._payload(owner_workspace_slug=workspace.slug),
-            headers=manager,
-        )
-        assert response.status_code == 201, response.text
-        assert response.json()["owner_workspace_slug"] == workspace.slug
-        assert response.json()["is_global"] is False
-
-    def test_평범한_멤버는_못_만든다(
+    def test_평범한_멤버도_만들고_등록자가_된다(
         self,
         client: TestClient,
         plain_member: dict[str, str],
         workspace: Workspace,
         dma: None,
     ) -> None:
-        """만드는 것은 부서의 판단이다. 아무나 만들면 같은 장비 프로파일이
-        여럿 생겨 어느 것이 이기는지 모르게 된다."""
-        response = client.post(
-            "/api/formats",
-            json=self._payload(owner_workspace_slug=workspace.slug),
-            headers=plain_member,
-        )
-        assert response.status_code == 403
+        """전에는 부서 관리자만 만들었다. 새 장비를 붙이는 사람은 대개 그 장비를 쓰는
+        사람이고, 관리자를 기다리는 동안 파일은 수신함에 쌓였다(ADR 0035 3단계).
 
-    def test_전역은_시스템_관리자만(
+        등록 부서는 **안 보내면 내 소속**이다 — 권한이 아니라 자동 추정의 범위다."""
+        response = client.post("/api/formats", json=self._payload(), headers=plain_member)
+        assert response.status_code == 201, response.text
+        body = response.json()
+        assert body["owner_workspace_slug"] == workspace.slug
+        assert "is_global" not in body
+        assert body["access"]["can_edit"] is True
+        assert body["access"]["registrant"] == "시험 담당자"
+
+    def test_남이_만든_것은_이름을_대며_막는다(
         self,
         client: TestClient,
         manager: dict[str, str],
+        plain_member: dict[str, str],
         dma: None,
     ) -> None:
-        """전역은 **여러 부서가 함께 쓴다.** 한 부서가 만들거나 고치면 다른 부서의
-        파일이 다르게 읽힌다."""
-        blocked = client.post("/api/formats", json=self._payload(), headers=manager)
-        assert blocked.status_code == 403
-        assert "부서를 고르세요" in blocked.json()["error"]["message"]
-
-    def test_전역_프로파일은_부서_관리자가_못_고친다(
-        self,
-        client: TestClient,
-        admin_headers: dict[str, str],
-        manager: dict[str, str],
-        dma: None,
-    ) -> None:
-        # `dma` 픽스처가 만든 ta_dma850 은 전역이다.
-        response = client.put(
-            "/api/formats/ta_dma850",
+        """**부서 관리자라고 부서 것을 고치지 않는다.** 등록자가 편집을 주지 않았으면
+        등록자와 자료 관리자만 — 막을 때는 누구에게 물을지 이름으로 말한다."""
+        made = client.post("/api/formats", json=self._payload(), headers=plain_member)
+        assert made.status_code == 201, made.text
+        blocked = client.put(
+            "/api/formats/dept_dma",
             json={
-                "label": "몰래 고치기",
+                "label": "관리자가 고치기",
                 "test_type_key": "dma_sweep",
                 "definition": DMA_PROFILE,
             },
             headers=manager,
         )
-        assert response.status_code == 403
-        assert "여러 부서가 함께" in response.json()["error"]["message"]
+        assert blocked.status_code == 403, blocked.text
+        error = blocked.json()["error"]
+        assert "등록자 시험 담당자" in error["message"]
+        assert error["details"]["registrant"] == "시험 담당자"
 
-    def test_남의_부서_프로파일은_보이지도_않는다(
+    def test_부서_없이_올리는_것은_자료_관리자만(
+        self,
+        client: TestClient,
+        manager: dict[str, str],
+        admin_headers: dict[str, str],
+        dma: None,
+    ) -> None:
+        """부서 없는 정의는 **모든 부서의 자동 추정에 든다** — 한 사람이 모두의 파일
+        읽기를 바꾸는 자리라 관리자만. 칸을 안 보낸 것과 비워 보낸 것을 가른다."""
+        blocked = client.post(
+            "/api/formats",
+            json=self._payload(owner_workspace_slug=None),
+            headers=manager,
+        )
+        assert blocked.status_code == 403, blocked.text
+        assert "자료 관리자만" in blocked.json()["error"]["message"]
+
+        made = client.post(
+            "/api/formats",
+            json=self._payload(key="shared_dma", owner_workspace_slug=None),
+            headers=admin_headers,
+        )
+        assert made.status_code == 201, made.text
+        assert made.json()["owner_workspace_slug"] is None
+
+    def test_부서_없는_정의는_자료_관리자가_고친다(
+        self,
+        client: TestClient,
+        db: Session,
+        manager: dict[str, str],
+        dma: None,
+    ) -> None:
+        """`dma` 픽스처의 ta_dma850 은 부서 없이 시스템 관리자가 올렸다 — 부서 관리자는
+        못 고치고, 자료 관리자는 고친다(전에는 시스템 관리자만)."""
+        body = {"label": "고친 이름", "test_type_key": "dma_sweep", "definition": DMA_PROFILE}
+        blocked = client.put("/api/formats/ta_dma850", json=body, headers=manager)
+        assert blocked.status_code == 403, blocked.text
+        assert "자료 관리자" in blocked.json()["error"]["message"]
+
+        steward = User(
+            email="steward",
+            password_hash=security.hash_password("member-password-1"),
+            display_name="자료 관리자 한 명",
+            status="active",
+            is_data_manager=True,
+        )
+        db.add(steward)
+        db.commit()
+        token = client.post(
+            "/api/auth/login", json={"email": "steward", "password": "member-password-1"}
+        ).json()["access_token"]
+        done = client.put(
+            "/api/formats/ta_dma850", json=body, headers={"Authorization": f"Bearer {token}"}
+        )
+        assert done.status_code == 200, done.text
+        assert done.json()["label"] == "고친 이름"
+
+    def test_남의_부서_프로파일도_보인다(
         self,
         client: TestClient,
         db: Session,
@@ -1228,6 +1270,8 @@ class Test부서가장비를붙인다:
         manager: dict[str, str],
         dma: None,
     ) -> None:
+        """**보기는 전원이다**(ADR 0035). 전에는 남의 부서 것이 안 보여서, 같은 장비를
+        쓰는 옆 부서가 이미 만든 정의를 모르고 다시 만들었다."""
         other = Workspace(slug="other", name="다른 부서")
         db.add(other)
         db.commit()
@@ -1239,8 +1283,55 @@ class Test부서가장비를붙인다:
         )
 
         keys = {row["key"] for row in client.get("/api/formats", headers=manager).json()}
-        assert "other_dma" not in keys
-        assert "ta_dma850" in keys  # 전역은 보인다
+        assert {"other_dma", "ta_dma850"} <= keys
+
+    def test_key_는_전사에서_하나다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        workspace: Workspace,
+        dma: None,
+    ) -> None:
+        """전에는 부서마다 같은 key 를 쓸 수 있었다. 보기를 열자 같은 key 가 둘 보였고
+        `/formats/{key}` 가 그중 아무거나 집었다 — 그래서 전사에서 하나다."""
+        other = Workspace(slug="other", name="다른 부서")
+        db.add(other)
+        db.commit()
+        first = client.post(
+            "/api/formats",
+            json=self._payload(owner_workspace_slug=workspace.slug),
+            headers=admin_headers,
+        )
+        assert first.status_code == 201, first.text
+        clash = client.post(
+            "/api/formats",
+            json=self._payload(owner_workspace_slug="other"),
+            headers=admin_headers,
+        )
+        assert clash.status_code == 409, clash.text
+        # 누가 쓰고 있는지와 빠져나갈 길(비워 두기)을 함께 말한다.
+        message = clash.json()["error"]["message"]
+        assert "우리 부서 DMA" in message and "비워 두면" in message
+
+    def test_key_를_비우면_서버가_짓는다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        workspace: Workspace,
+        dma: None,
+    ) -> None:
+        payload = {
+            k: v
+            for k, v in self._payload(owner_workspace_slug=workspace.slug).items()
+            if k != "key"
+        }
+        made = client.post("/api/formats", json=payload, headers=admin_headers)
+        assert made.status_code == 201, made.text
+        key = made.json()["key"]
+        assert key.startswith("fmt_"), key
+        listed = client.get("/api/formats", headers=admin_headers).json()
+        assert key in {row["key"] for row in listed}
 
     def test_내_부서_것이_전역보다_먼저_읽는다(
         self,

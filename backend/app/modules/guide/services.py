@@ -49,13 +49,23 @@ def _now() -> datetime:
 
 
 def is_reviewer(db: Session, user: User) -> bool:
-    """검토자 — 부서 관리자 이상. 재료·프로파일을 만드는 역할과 같다."""
-    return user.is_system_admin or permissions.is_any_manager(db, user)
+    """검토자 — 자료 관리자와 시스템 관리자(ADR 0035 3단계).
+
+    전에는 「부서 관리자 이상 — 재료·프로파일을 만드는 역할과 같다」 였다(ADR 0022).
+    그 역할이 사라졌다: 정의는 누구나 만들고, 부서 관리자는 고칠 권한을 갖지 않는다.
+    승인은 검토의 뜻이 있는 일이라 카드 확정·새 기준정보 값과 같은 자리로 간다.
+    """
+    del db
+    return permissions.is_data_steward(user)
 
 
 def require_reviewer(db: Session, user: User) -> None:
     if not is_reviewer(db, user):
-        raise Forbidden("MNX-GUIDE-0005", "검토자(부서 관리자 이상)만 할 수 있습니다.")
+        raise Forbidden(
+            "MNX-GUIDE-0005",
+            "검토자(자료 관리자·시스템 관리자)만 할 수 있습니다. "
+            "초안은 누구나 낼 수 있습니다 — 검토자가 승인하면 본문이 됩니다.",
+        )
 
 
 # --- 본문 -----------------------------------------------------------------------

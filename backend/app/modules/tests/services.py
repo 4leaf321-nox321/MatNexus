@@ -186,11 +186,13 @@ def save_definition(
     conditions: list[dict[str, Any]],
     owner_workspace_id: uuid.UUID | None = None,
     actor: User | None = None,
+    registrant_id: uuid.UUID | None = None,
 ) -> TestType:
     """정의 한 벌을 저장한다. 없으면 만들고, 있으면 갈아 끼운다.
 
-    `owner_workspace_id` 는 **만들 때만** 쓴다. 소유를 옮기는 것(전역 승격)은
-    성격이 다른 결정이라 이 경로로 조용히 일어나면 안 된다.
+    `owner_workspace_id`(등록 부서)와 `registrant_id`(등록자)는 **만들 때만** 쓴다.
+    고칠 사람을 바꾸는 것은 「권한」 이 하는 일이라(`/ownership`) 이 경로로 조용히
+    일어나면 안 된다.
 
     `actor` 를 주면 **고칠 때만** 감사 기록을 남긴다. 만드는 것은 되돌릴 수 있고
     아직 아무것도 안 가리키지만, 고치는 것은 이미 저장된 곡선의 읽는 법을
@@ -233,7 +235,9 @@ def save_definition(
     _guard_channel_dictionary(db, test_type.id if test_type else None, channels)
 
     if test_type is None:
-        test_type = TestType(key=key, owner_workspace_id=owner_workspace_id)
+        test_type = TestType(
+            key=key, owner_workspace_id=owner_workspace_id, created_by_id=registrant_id
+        )
         db.add(test_type)
     else:
         _guard_locked_changes(db, test_type, channels, conditions)

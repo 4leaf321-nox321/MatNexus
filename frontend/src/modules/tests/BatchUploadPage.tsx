@@ -34,7 +34,7 @@ import {
   Upload,
   X,
 } from 'lucide-react'
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 
 import { LENGTH_UNIT, materialsApi } from '@/modules/materials/api'
 import type { Material, Sample, Specimen } from '@/modules/materials/api'
@@ -144,7 +144,6 @@ export default function BatchUploadPage() {
   const [asked] = useSearchParams()
   const askedMaterial = asked.get('material')
   const askedSample = asked.get('sample')
-  const { slug } = useParams<{ slug?: string }>()
   const navigate = useNavigate()
   const types = useResource(() => testsApi.types(), [])
 
@@ -475,7 +474,7 @@ export default function BatchUploadPage() {
         title="일괄 등록"
         description="파일을 한꺼번에 올립니다. 줄마다 다른 재료·시료·시험 종류를 가리킬 수 있습니다."
         actions={
-          <Button variant="outline" onClick={() => navigate(slug ? `/w/${slug}/tests` : '/tests')}>
+          <Button variant="outline" onClick={() => navigate('/tests')}>
             목록으로
           </Button>
         }
@@ -1048,7 +1047,7 @@ export default function BatchUploadPage() {
               <Button
                 variant="outline"
                 className="ml-auto"
-                onClick={() => navigate(slug ? `/w/${slug}/tests` : '/tests')}
+                onClick={() => navigate('/tests')}
               >
                 목록에서 확인
               </Button>

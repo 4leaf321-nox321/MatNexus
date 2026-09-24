@@ -81,7 +81,9 @@ class Test혼합_한_파일:
                 "rows": [
                     {"mid": 1, "name": "SGARC440", "card_id": str(card.id)},
                     {"mid": 2, "name": "SUS304", "catalog_material_id": str(ids["sus"])},
-                ]
+                ],
+                # SI 숫자를 대조하는 시험이라 SI 를 고른다 — 기본은 mm·N·tonne(ADR 0036).
+                "units": "si",
             },
             headers=admin_headers,
         )

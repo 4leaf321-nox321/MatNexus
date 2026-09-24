@@ -74,6 +74,8 @@ const CONNECTOR = {
   waiting: 2,
   created_by_id: 'u1',
   created_at: '2026-08-01T00:00:00Z',
+  // 이 사람이 이 커넥터를 다루나 — 서버가 커넥터마다 말한다(ADR 0035 3단계).
+  can_manage: true,
 }
 
 const WAITING = {
@@ -95,6 +97,9 @@ const WAITING = {
   candidate_count: 2,
   received_at: '2026-08-28T05:12:00Z',
   resolved_at: null,
+  workspace_name: '금속재료팀',
+  // 이 사람이 이 파일을 처리하나 — 커넥터 부서의 관리자다(ADR 0021 · 0035).
+  can_handle: true,
 }
 
 const DETAIL = {
@@ -156,7 +161,8 @@ describe('전체 탭', () => {
   it('가장 왼쪽이고 기본이다 — 상태를 안 거르고 다 보여 준다', async () => {
     mount('/settings/connectors')
     expect(await screen.findByText('Example.tra')).toBeInTheDocument()
-    expect(inbox).toHaveBeenCalledWith({ limit: 100 })
+    // 상태는 안 거른다. 범위는 우리 부서가 기본이다(ADR 0035 3단계 — 아래 「보기는 전원」).
+    expect(inbox).toHaveBeenCalledWith({ scope: 'mine', limit: 100 })
   })
 })
 
@@ -323,12 +329,13 @@ describe('커넥터 정리', () => {
     expect(await screen.findByText(/이미 들어온 파일과 그것으로 만든 시험은 그대로/)).toBeVisible()
   })
 
-  it('멤버에게는 치우는 단추가 없다', async () => {
-    memberships = [{ role: 'member' }]
+  it('그 커넥터 부서의 관리자가 아니면 치우는 단추가 없다', async () => {
+    // **「어느 부서든 관리자면」 이 아니다** — 남의 부서 장비에 단추가 서면 누르고 403 을
+    // 본다. 서버가 커넥터마다 말한다(`can_manage`, ADR 0035 3단계).
+    connectors.mockResolvedValue([{ ...CONNECTOR, can_manage: false }])
     mount('/settings/connectors?tab=connectors')
     await screen.findByText('ZWICK-PC')
     expect(screen.queryByTitle(/목록에서 치웁니다/)).not.toBeInTheDocument()
-    memberships = [{ role: 'manager' }]
   })
 })
 
@@ -341,6 +348,9 @@ describe('멤버', () => {
    */
   beforeEach(() => {
     memberships = [{ role: 'member' }]
+    // 멤버에게는 서버가 「다룰 수 없다」 고 싣는다.
+    connectors.mockResolvedValue([{ ...CONNECTOR, can_manage: false }])
+    inbox.mockResolvedValue({ items: [{ ...WAITING, can_handle: false }] })
   })
 
   afterEach(() => {
@@ -368,3 +378,20 @@ describe('멤버', () => {
   })
 })
 
+describe('보기는 전원', () => {
+  it('수집함은 우리 부서가 기본이고 모든 부서로 넓힌다', async () => {
+    // **처리할 것을 보는 자리라 기본을 좁힌다**(ADR 0035 3단계) — 전사가 기본이면 남의
+    // 부서 대기 건이 내 할 일 사이에 섞인다. 넓히면 「내 파일이 어디까지 왔나」 를 옆
+    // 부서 장비에 대해서도 묻는다.
+    const user = userEvent.setup()
+    mount()
+    await screen.findByText('Example.tra')
+    expect(inbox).toHaveBeenLastCalledWith(expect.objectContaining({ scope: 'mine' }))
+    await user.click(screen.getByRole('button', { name: '모든 부서' }))
+    await waitFor(() =>
+      expect(inbox).toHaveBeenLastCalledWith(expect.objectContaining({ scope: 'all' }))
+    )
+    // 줄마다 어느 부서의 파일인지 — 처리할 사람이 거기 있다.
+    expect(screen.getByText('금속재료팀')).toBeInTheDocument()
+  })
+})

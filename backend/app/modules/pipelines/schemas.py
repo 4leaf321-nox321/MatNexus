@@ -53,6 +53,10 @@ class ConnectorOut(BaseModel):
     """서버 쪽 수집함에서 사람을 기다리는 것(`needs_specimen`·`failed`)."""
     created_by_id: uuid.UUID | None
     created_at: datetime
+    can_manage: bool = False
+    """**이 사람이** 이 커넥터를 켜고 끄고 치우며 그 수신함을 처리할 수 있나 — 커넥터
+    부서의 관리자와 시스템 관리자. 보기는 전원이다(ADR 0035 3단계): 화면이 단추를
+    커넥터마다 가린다(전에는 「어느 부서든 관리자면」 이라 남의 장비 단추가 떠 있었다)."""
 
 
 class HeartbeatSource(BaseModel):
@@ -211,6 +215,11 @@ class InboxItemOut(BaseModel):
     candidate_count: int = 0
     received_at: datetime
     resolved_at: datetime | None = None
+    workspace_name: str | None = None
+    """이 파일을 받은 커넥터의 부서 — **처리할 사람이 거기 있다.**"""
+    can_handle: bool = False
+    """**이 사람이** 시편을 붙이고 승인·버리기·다시 읽기를 할 수 있나 — 커넥터 부서의
+    관리자와 시스템 관리자(ADR 0021). 보기는 전원이다(ADR 0035 3단계)."""
 
 
 class InboxItemDetail(InboxItemOut):

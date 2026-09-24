@@ -48,11 +48,11 @@ from app.modules.equipment.schemas import (
 from app.modules.vocabulary import services as vocabulary_services
 from app.modules.vocabulary.models import VocabularyTerm
 from app.modules.workspaces.models import Workspace
-from app.shared import audit, dependents
+from app.shared import audit, dependents, permissions
+from app.shared.access import AccessBook
 from app.shared.auth import current_user
 from app.shared.errors import AppError, Conflict, NotFound
 from app.shared.pagination import Page
-from app.shared.permissions import is_any_manager
 
 router = APIRouter(prefix="/equipment", tags=["equipment"])
 
@@ -64,20 +64,16 @@ DUE_SOON_DAYS = 30
 BOUND_FIELDS = tuple(one.field for one in vocabulary_services.EQUIPMENT_BINDINGS)
 
 
-def _require_manager(db: Session, user: User) -> None:
-    """**부서 하나라도 관리자면 된다.**
+def _require_edit(db: Session, user: User, unit: EquipmentUnit) -> None:
+    """**고치는 사람은 등록자 · 편집을 받은 부서 · 자료 관리자다**(ADR 0035 3단계).
 
-    장비는 부서에 매여 있지 않다 — 「생기연 DMA」 를 재료연구팀 사람이 쓴다.
-    `workspace_id` 는 관리 책임을 적는 칸이지 접근을 가르는 칸이 아니다(모델 주석).
-    그래서 여기서는 「관리자인가」 만 본다.
+    전에는 「어느 부서든 관리자면」 이었다 — 장비는 부서에 매여 있지 않아서(「생기연
+    DMA」 를 재료연구팀 사람이 쓴다) 관리자인지만 봤다. 그러다 보니 **남의 조직 장비를
+    누구 관리자든** 고쳤고, 평범한 멤버는 제가 들여온 장비의 교정 한 줄도 못 적었다.
+    `workspace_id`(장비를 든 조직)는 여전히 권한이 아니다 — 사실을 적는 칸이다.
+    부속·교정은 장비에 딸린 것이라 그 장비를 고칠 수 있는 사람이 적는다.
     """
-    if user.is_system_admin or is_any_manager(db, user):
-        return
-    raise AppError(
-        "MNX-EQUIPMENT-0001",
-        "장비를 고치려면 부서 관리자여야 합니다.",
-        status=403,
-    )
+    permissions.require_edit(db, user, unit, code="MNX-EQUIPMENT-0001")
 
 
 def _term_ref(
@@ -228,7 +224,7 @@ def _to_out(
     )
 
 
-def _load_out(db: Session, units: list[EquipmentUnit]) -> list[EquipmentUnitOut]:
+def _load_out(db: Session, units: list[EquipmentUnit], user: User) -> list[EquipmentUnitOut]:
     ids = [unit.id for unit in units]
     term_ids = {
         one
@@ -242,7 +238,13 @@ def _load_out(db: Session, units: list[EquipmentUnit]) -> list[EquipmentUnitOut]
     )
     calibrations = _calibration_map(db, ids)
     parts = _part_counts(db, ids)
-    return [_to_out(unit, terms, workspaces, calibrations, parts) for unit in units]
+    book = AccessBook(db, user).prime(units)
+    return [
+        _to_out(unit, terms, workspaces, calibrations, parts).model_copy(
+            update={"access": book.of(unit)}
+        )
+        for unit in units
+    ]
 
 
 def _get(db: Session, unit_id: uuid.UUID) -> EquipmentUnit:
@@ -301,7 +303,7 @@ def list_units(
     calibration_due: bool = Query(default=False),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
-    _user: User = Depends(current_user),
+    user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> Page[EquipmentUnitOut]:
     """**서버가 상한을 강제한다**(AGENTS.md) — `le=200`.
@@ -356,7 +358,7 @@ def list_units(
     units = list(
         db.scalars(query.order_by(EquipmentUnit.name).limit(limit).offset(offset)).all()
     )
-    return Page(items=_load_out(db, units), total=total, limit=limit, offset=offset)
+    return Page(items=_load_out(db, units, user), total=total, limit=limit, offset=offset)
 
 
 @router.get("/summary", response_model=EquipmentSummaryOut)
@@ -428,10 +430,10 @@ def summary(
 @router.get("/units/{unit_id}", response_model=EquipmentUnitOut)
 def get_unit(
     unit_id: uuid.UUID,
-    _user: User = Depends(current_user),
+    user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> EquipmentUnitOut:
-    return _load_out(db, [_get(db, unit_id)])[0]
+    return _load_out(db, [_get(db, unit_id)], user)[0]
 
 
 # --- 쓰기 ---------------------------------------------------------------------
@@ -443,13 +445,13 @@ def create_unit(
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> EquipmentUnitOut:
-    _require_manager(db, user)
+    """**누구나 올린다**(ADR 0035). 올린 사람이 등록자다 — 편집을 줄 부서는 「권한」 에서."""
     key = models.asset_key(payload.asset_no)
     _assert_asset_free(db, key)
     data = payload.model_dump()
     names = {field: data.pop(field) for field in BOUND_FIELDS}
     data["workspace_id"] = _workspace_id(db, data.pop("workspace"))
-    unit = EquipmentUnit(**data, asset_key=key)
+    unit = EquipmentUnit(**data, asset_key=key, registered_by_id=user.id)
     db.add(unit)
     # **기준정보는 기계가 해석한다** — 없는 이름은 만들고, FK 와 문자열을 함께
     # 채우고, 사용수까지 옮긴다. 라우트가 직접 하면 축마다 같은 코드가 생긴다.
@@ -462,7 +464,7 @@ def create_unit(
     )
     db.commit()
     db.refresh(unit)
-    return _load_out(db, [unit])[0]
+    return _load_out(db, [unit], user)[0]
 
 
 @router.patch("/units/{unit_id}", response_model=EquipmentUnitOut)
@@ -473,8 +475,8 @@ def update_unit(
     db: Session = Depends(get_db),
 ) -> EquipmentUnitOut:
     """**보낸 것만 바꾼다.** 안 보낸 것과 비운 것을 구별한다(AGENTS.md)."""
-    _require_manager(db, user)
     unit = _get(db, unit_id)
+    _require_edit(db, user, unit)
     data = payload.model_dump(exclude_unset=True)
     if "asset_no" in data:
         key = models.asset_key(data["asset_no"])
@@ -497,7 +499,7 @@ def update_unit(
         )
     db.commit()
     db.refresh(unit)
-    return _load_out(db, [unit])[0]
+    return _load_out(db, [unit], user)[0]
 
 
 @router.delete("/units/{unit_id}", status_code=204)
@@ -511,8 +513,8 @@ def delete_unit(
     부속·교정은 함께 지워진다(장비를 떠나 살지 않는다). 그 밖의 참조가 있으면
     거절하고 무엇이 가리키는지 말해 준다 — 폐기하려는 것이면 `status='retired'` 다.
     """
-    _require_manager(db, user)
     unit = _get(db, unit_id)
+    _require_edit(db, user, unit)
     found = [
         one
         for one in dependents.references_to(db, table="equipment_units", pk=unit.id)
@@ -564,8 +566,7 @@ def create_part(
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> EquipmentPartOut:
-    _require_manager(db, user)
-    _get(db, unit_id)
+    _require_edit(db, user, _get(db, unit_id))
     part = EquipmentPart(unit_id=unit_id, **payload.model_dump())
     db.add(part)
     db.commit()
@@ -580,10 +581,10 @@ def update_part(
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> EquipmentPartOut:
-    _require_manager(db, user)
     part = db.get(EquipmentPart, part_id)
     if part is None:
         raise NotFound("MNX-EQUIPMENT-0005", "그 부속을 찾을 수 없습니다.")
+    _require_edit(db, user, _get(db, part.unit_id))
     for field, value in payload.model_dump(exclude_unset=True).items():
         setattr(part, field, value)
     db.commit()
@@ -597,10 +598,10 @@ def delete_part(
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> None:
-    _require_manager(db, user)
     part = db.get(EquipmentPart, part_id)
     if part is None:
         raise NotFound("MNX-EQUIPMENT-0005", "그 부속을 찾을 수 없습니다.")
+    _require_edit(db, user, _get(db, part.unit_id))
     db.delete(part)
     db.commit()
 
@@ -633,8 +634,7 @@ def create_calibration(
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> EquipmentCalibrationOut:
-    _require_manager(db, user)
-    _get(db, unit_id)
+    _require_edit(db, user, _get(db, unit_id))
     if payload.valid_until and payload.valid_until < payload.performed_on:
         raise AppError(
             "MNX-EQUIPMENT-0006",
@@ -662,8 +662,9 @@ def bulk_create(
     기준정보는 **이름으로 온다**(사람이 엑셀에 id 를 적지 않는다). 없는 이름은
     새 값이 되는데, 그것이 이 화면에서 가장 흔한 사고다(오타 하나가 새 조직을
     만든다). 그래서 드라이런이 **무엇이 새로 생기는지 먼저 보여 준다.**
+
+    **누구나 올린다**(ADR 0035) — 올린 사람이 줄마다 등록자다.
     """
-    _require_manager(db, user)
     axes = {
         one.field: vocabulary_services.get_vocabulary(db, one.slug)
         for one in vocabulary_services.EQUIPMENT_BINDINGS
@@ -711,7 +712,7 @@ def bulk_create(
                 created += 1
                 continue
 
-            unit = EquipmentUnit(**values, asset_key=key)
+            unit = EquipmentUnit(**values, asset_key=key, registered_by_id=user.id)
             db.add(unit)
             vocabulary_services.apply_bindings(
                 db,

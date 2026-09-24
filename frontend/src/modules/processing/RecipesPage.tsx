@@ -13,13 +13,13 @@
  */
 
 import { useState } from 'react'
-import { FlaskConical, Globe2, Trash2 } from 'lucide-react'
+import { FlaskConical, Trash2, Users } from 'lucide-react'
 
 import { processingApi } from '@/modules/processing/api'
 import type { Recipe, RecipeStep } from '@/modules/processing/api'
+import { OwnershipDialog } from '@/modules/ownership/OwnershipDialog'
+import { canEdit, lockedTitle } from '@/modules/ownership/access'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
-import { useAuth } from '@/shared/auth/AuthContext'
-import { isAnyManager } from '@/shared/auth/roles'
 import { PageHeader } from '@/shared/components/PageHeader'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
@@ -35,9 +35,10 @@ import { ownerOf, TestTypeFilterPanel } from '@/modules/tests/TestTypeFilterPane
 import { useResource } from '@/shared/hooks/useResource'
 
 export default function RecipesPage() {
-  const canEdit = isAnyManager(useAuth().user)
   const recipes = useResource(() => processingApi.recipes(), [])
   const [error, setError] = useState<Error | null>(null)
+  /** 「권한」 을 연 레시피 — 등록자·편집 부서를 보고 넘긴다(ADR 0035 3단계). */
+  const [handing, setHanding] = useState<Recipe | null>(null)
   const [open, setOpen] = useState<string | null>(null)
   // `null` 이면 전체. **인장 레시피를 손보는 사람에게 DMA 레시피는 소음이다.**
   const [kind, setKind] = useState<string | null>(null)
@@ -107,7 +108,7 @@ export default function RecipesPage() {
           <TableHeader>
             <TableRow>
               <TableHead>이름</TableHead>
-              <TableHead>누구 것</TableHead>
+              <TableHead>등록 부서</TableHead>
               <TableHead>시험 종류</TableHead>
               <TableHead>단계</TableHead>
               <TableHead />
@@ -125,19 +126,15 @@ export default function RecipesPage() {
                   {item.description && (
                     <p className="text-muted-foreground mt-0.5 text-xs">{item.description}</p>
                   )}
-                </TableCell>
-                <TableCell>
-                  {item.is_global ? (
-                    <Badge variant="outline" className="gap-1">
-                      <Globe2 className="size-3" />
-                      전역
-                    </Badge>
-                  ) : (
-                    <span className="text-muted-foreground text-xs">
-                      {item.owner_workspace_name}
-                    </span>
+                  {/* 누가 고치나 — 레시피는 부서의 규격이라 등록자가 부서에 편집을 준다. */}
+                  {item.access && (
+                    <p className="text-muted-foreground mt-0.5 text-xs">
+                      등록자 {item.access.registrant ?? '없음'} · 편집 부서{' '}
+                      {item.access.edit_workspace ?? '없음'}
+                    </p>
                   )}
                 </TableCell>
+                <TableCell>{item.owner_workspace_name ?? '부서 없음'}</TableCell>
                 <TableCell>{item.test_type_label}</TableCell>
                 <TableCell>
                   <button
@@ -157,17 +154,26 @@ export default function RecipesPage() {
                     </ol>
                   )}
                 </TableCell>
-                <TableCell className="text-right">
-                  {/* **볼 수는 있어도 지우는 것은 부서 관리자다.** 레시피는
-                      「이 시험을 어떻게 처리했나」 의 답이라 누구나 봐야 하지만,
-                      지우는 것은 다른 일이다. 서버가 판정하지만 **눌러 보고
-                      403 을 알게 하지는 않는다.** */}
+                <TableCell className="text-right whitespace-nowrap">
+                  {/* **보는 것은 누구나, 지우는 것은 고칠 수 있는 사람**(ADR 0035). 레시피는
+                      「이 시험을 어떻게 처리했나」 의 답이라 누구나 봐야 한다. 못 지우면
+                      단추를 막고 누구에게 물을지 단다 — 눌러 보고 403 을 알게 하지 않는다. */}
                   <Button
                     size="sm"
                     variant="ghost"
-                    className={canEdit ? undefined : 'invisible'}
-                    disabled={!canEdit}
-                    title="지웁니다. 이 레시피로 만든 결과는 그대로 남습니다."
+                    title="권한 — 등록자와 편집 부서"
+                    onClick={() => setHanding(item)}
+                  >
+                    <Users className="size-3.5" />
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={!canEdit(item.access)}
+                    title={
+                      lockedTitle(item.access) ??
+                      '지웁니다. 이 레시피로 만든 결과는 그대로 남습니다.'
+                    }
                     onClick={() => remove(item)}
                   >
                     <Trash2 className="size-3.5" />
@@ -177,6 +183,15 @@ export default function RecipesPage() {
             ))}
           </TableBody>
         </Table>
+      )}
+
+      {handing && (
+        <OwnershipDialog
+          kind="recipe"
+          id={handing.id}
+          onClose={() => setHanding(null)}
+          onChanged={() => recipes.reload()}
+        />
       )}
 
       <p className="text-muted-foreground mt-4 text-xs">

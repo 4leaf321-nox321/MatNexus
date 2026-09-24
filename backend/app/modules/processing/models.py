@@ -47,19 +47,17 @@ class ProcessingRecipe(Base):
     바꿨다고 저장된 결과가 다시 계산되면 안 되고, 반대로 레시피를 고쳤다고
     예전 결과가 무엇으로 나왔는지 잊혀도 안 된다(CLAUDE.md 의 불변/가변 분리).
 
-    소유는 재료·형식 프로파일·시험 종류와 **같은 모델**이다(ADR 0004·0006) —
-    `owner_workspace_id IS NULL` 이면 전역. 부서마다 규격이 달라 탄성 구간을
-    다르게 잡는 일이 실제로 있고, 그 판단은 그 부서가 한다.
+    부서마다 규격이 달라 탄성 구간을 다르게 잡는 일이 실제로 있고, 그 판단은 그
+    부서가 한다. 그래서 **등록한 부서**(`owner_workspace_id`)를 적어 둔다 — 다만 그것은
+    권한이 아니다. 고치는 사람은 등록자 · 편집을 받은 부서 · 자료 관리자다(ADR 0035).
     """
 
     __tablename__ = "processing_recipes"
     __table_args__ = (
         Index(
-            "uq_processing_recipes_scope_key",
-            "owner_workspace_id",
+            "uq_processing_recipes_key",
             "key",
             unique=True,
-            postgresql_nulls_not_distinct=True,
             # **지운 행은 key 를 잡아 두지 않는다.** 재료에서 배운 것과 같다.
             postgresql_where=text("deleted_at IS NULL"),
         ),
@@ -72,11 +70,12 @@ class ProcessingRecipe(Base):
         PgUUID(as_uuid=True), ForeignKey("workspaces.id"), nullable=True, index=True
     )
     key: Mapped[str] = mapped_column(String(80), index=True)
-    """**시험 종류와 달리 부서마다 같은 키를 쓸 수 있다.**
+    """**전사에서 하나다**(ADR 0035). 비워 두면 서버가 짓는다(`rcp_1a2b3c4d`).
 
-    시험 종류 키를 전사 유일로 둔 것은 두 부서가 같은 시험을 하면 하나를 같이
-    써야 하기 때문이었다. 레시피는 반대다 — 같은 인장이라도 부서마다 따르는
-    규격이 다르고, `tensile_standard` 라는 이름을 각자 쓰는 것이 자연스럽다."""
+    전에는 부서마다 같은 key 를 쓸 수 있었다 — 같은 인장이라도 부서마다 규격이
+    다르니 `tensile_standard` 를 각자 쓰라는 뜻이었다. 보기를 전원에게 열자 같은
+    key 가 둘 보였고 `/recipes/{key}` 가 아무거나 집었다. 부서마다 다른 규격은
+    이제 **이름(label)** 이 가른다."""
     label: Mapped[str] = mapped_column(String(120))
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
 
@@ -98,6 +97,15 @@ class ProcessingRecipe(Base):
     created_by_id: Mapped[uuid.UUID | None] = mapped_column(
         PgUUID(as_uuid=True), ForeignKey("users.id"), index=True, nullable=True
     )
+    """등록자 — 이 레시피를 고치는 첫째 사람(ADR 0035)."""
+    edit_workspace_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("workspaces.id", ondelete="SET NULL"),
+        index=True,
+        nullable=True,
+    )
+    """편집을 받은 부서(ADR 0035) — 등록자 말고 이 부서 사람도 고친다. 뜻은
+    `Material.edit_workspace_id` 와 같다. 등록 부서(`owner_workspace_id`)는 권한이 아니다."""
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

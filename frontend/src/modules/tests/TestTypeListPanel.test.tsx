@@ -7,7 +7,7 @@
  * 여기서 지키는 것은 셋이다.
  *
  *   고르기 전에 규모를 안다   채널 11개짜리를 열기 전에 알아야 한다
- *   전역을 목록에서 짚는다     편집을 눌러 보고 403 을 받는 일이 없게
+ *   못 고치는 것을 짚는다      편집을 눌러 보고 403 을 받는 일이 없게(ADR 0035)
  *   중단된 것을 짚는다        안 쓰는 종류가 섞여 있으면 목록이 거짓말을 한다
  */
 
@@ -34,7 +34,16 @@ function type(overrides: Record<string, unknown> = {}) {
     run_count: 120,
     owner_workspace_slug: null,
     owner_workspace_name: null,
-    is_global: true,
+    // 기본 종류 — 등록자가 없어 자료 관리자만 고친다.
+    access: {
+      can_edit: false,
+      can_hand_over: false,
+      registrant_id: null,
+      registrant: null,
+      edit_workspace_slug: null,
+      edit_workspace: null,
+      reason: '자료 관리자만 고칠 수 있습니다.',
+    },
     channels: [{ key: 'force' }, { key: 'displacement' }, { key: 'width' }],
     conditions: [{ key: 'temperature' }],
     ...overrides,
@@ -47,7 +56,15 @@ const TYPES = [
     id: 't2',
     key: 'dma_sweep',
     label: 'DMA 스윕',
-    is_global: false,
+    access: {
+      can_edit: true,
+      can_hand_over: true,
+      registrant_id: 'u1',
+      registrant: '앨리스',
+      edit_workspace_slug: null,
+      edit_workspace: null,
+      reason: null,
+    },
     run_count: 2,
     channels: new Array(11).fill({ key: 'x' }),
     conditions: new Array(3).fill({ key: 'y' }),
@@ -81,13 +98,14 @@ describe('시험 종류 목록', () => {
     expect(screen.getByRole('button', { name: /옛 장비/ })).not.toHaveTextContent('시험 0')
   })
 
-  it('전역을 목록에서 짚는다', () => {
-    // **편집을 눌러 보고 403 을 받는 일이 없어야 한다.**
+  it('못 고치는 것을 목록에서 짚는다', () => {
+    // **편집을 눌러 보고 403 을 받는 일이 없어야 한다.** 전에는 「전역」 지구본이 그
+    // 뜻이었다 — 이제 서버가 사람마다 말한다(`access`, ADR 0035).
     panel()
-    const global = screen.getByRole('button', { name: /인장시험/ })
-    expect(global.querySelector('[aria-label="전역"]')).not.toBeNull()
-    const owned = screen.getByRole('button', { name: /DMA 스윕/ })
-    expect(owned.querySelector('[aria-label="전역"]')).toBeNull()
+    const locked = screen.getByRole('button', { name: /인장시험/ })
+    expect(locked.querySelector('[aria-label="읽기 전용"]')).not.toBeNull()
+    const mine = screen.getByRole('button', { name: /DMA 스윕/ })
+    expect(mine.querySelector('[aria-label="읽기 전용"]')).toBeNull()
   })
 
   it('중단된 것을 짚는다', () => {

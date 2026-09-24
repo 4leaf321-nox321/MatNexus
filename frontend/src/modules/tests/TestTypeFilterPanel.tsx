@@ -18,7 +18,7 @@
  *
  * ## 부서 축은 켜야 나온다
  *
- * 레시피는 부서가 갖거나 전역이다. 그런데 **부서가 하나뿐인 조직에서는 그 축이
+ * 레시피는 등록한 부서가 있거나 없다. 그런데 **부서가 하나뿐인 조직에서는 그 축이
  * 늘 한 줄짜리 소음**이다 — 개발 DB 도 지금 부서 둘에 레시피는 한 부서 것뿐이다.
  *
  * 그래서 기본은 꺼져 있고, 필요할 때 켠다. 켜 두면 **다음에 올 때도 켜져 있다**
@@ -44,15 +44,19 @@ export interface HasTestType {
 /** 부서 축을 쓰려면 이것도 있어야 한다. 없으면 그 축을 아예 안 그린다. */
 export interface HasOwner {
   owner_workspace_name?: string | null
-  is_global?: boolean
 }
 
-/** 전역인 것들을 묶는 이름. 부서 이름과 같은 자리에 놓는다. */
-export const GLOBAL = '(전역)'
+/**
+ * 부서 없이 올린 것들을 묶는 이름. 부서 이름과 같은 자리에 놓는다.
+ *
+ * 전에는 「(전역)」 이었다 — 그 말을 다른 시스템이 「공식」 으로 읽어서 걷었다(ADR 0035).
+ * 등록한 부서가 없다는 사실만 말한다.
+ */
+export const GLOBAL = '(부서 없음)'
 
-/** 소유를 사람이 읽는 이름 하나로. */
+/** 등록 부서를 사람이 읽는 이름 하나로. */
 export function ownerOf(row: HasOwner): string {
-  return row.is_global ? GLOBAL : (row.owner_workspace_name ?? GLOBAL)
+  return row.owner_workspace_name ?? GLOBAL
 }
 
 /** 목록에 실제로 있는 소유자와 그 개수. */
@@ -64,7 +68,7 @@ export function ownersIn(rows: HasOwner[]): { key: string; label: string; count:
   }
   return [...seen]
     .map(([label, count]) => ({ key: label, label, count }))
-    // 전역이 먼저다 — 모든 부서가 쓰는 것이라 목록의 뿌리에 가깝다.
+    // 부서 없는 것이 먼저다 — 기본 정의(씨앗)가 거기 있다.
     .sort((a, b) =>
       a.label === GLOBAL ? -1 : b.label === GLOBAL ? 1 : a.label.localeCompare(b.label, 'ko')
     )

@@ -16,12 +16,13 @@
 ## 권한은 여기서 건다 — `property_search` 와 반대다
 
 값 검색은 부르는 쪽이 「문헌·사내」 둘을 이름으로 지정하므로 권한도 거기서 줬다.
-트래버설은 다르다 — **부르는 쪽은 걷다가 어느 표에 닿을지 모른다.** 「이 장비로
-잰 시험」 을 물었을 뿐인데 남의 부서 재료 이름이 딸려 나온다. 그래서 `user` 를
-선택 인자가 아니라 **필수**로 받고, 종류마다 가시 범위를 걸어 걷는다.
+트래버설은 다르다 — **부르는 쪽은 걷다가 어느 표에 닿을지 모른다.** 그래서 `user`
+를 선택 인자가 아니라 **필수**로 받고, 종류마다 가시 범위를 걸어 걷는다.
 
-안 보이는 마디에서는 **길이 끊긴다.** 이름만 가리고 계속 걸으면 「A 는 B 와
-이어져 있다」 는 사실 자체가 새기 때문이다.
+지금 가려지는 것은 **지운 것과 남의 측정 의뢰**뿐이다 — 자료와 정의는 전원이 본다
+(ADR 0035). 그래도 판정을 여기 두는 이유는 같다: 규칙이 다시 달라지면 여기만
+고치면 된다. 안 보이는 마디에서는 **길이 끊긴다.** 이름만 가리고 계속 걸으면
+「A 는 B 와 이어져 있다」 는 사실 자체가 새기 때문이다.
 
 ## 재귀 CTE 를 안 쓴다
 
@@ -37,7 +38,7 @@ from collections import deque
 from dataclasses import dataclass, field
 from typing import Any
 
-from sqlalchemy import Select, or_, select
+from sqlalchemy import Select, select
 from sqlalchemy.orm import Session
 
 from app.database import Base
@@ -172,15 +173,10 @@ def visible_ids(db: Session, user: User, kind: relations.EntityKind) -> Select[A
             return commissions
         return select(CommissionItem.id).where(CommissionItem.commission_id.in_(commissions))
     if kind.slug == "recipe":
-        # 레시피는 전역 것 + 내 부서 것 — 레시피 목록(`processing.routes`)과 같은 규칙.
-        mine = permissions.my_workspace_ids(db, user)
-        return select(ProcessingRecipe.id).where(
-            ProcessingRecipe.deleted_at.is_(None),
-            or_(
-                ProcessingRecipe.owner_workspace_id.is_(None),
-                ProcessingRecipe.owner_workspace_id.in_(mine),
-            ),
-        )
+        # 레시피는 살아 있는 것 전부 — 레시피 목록(`processing.routes`)과 같은 규칙.
+        # 보기는 전원이다(ADR 0035). 여기만 「내 부서 + 전역」 으로 남으면 목록에는
+        # 있는데 검색·지도에는 없는 레시피가 생긴다.
+        return select(ProcessingRecipe.id).where(ProcessingRecipe.deleted_at.is_(None))
     if kind.slug == "parameter_set":
         # **재료를 따라간다.** 안 붙이면 남의 부서 재료가 받아 온 벌이 검색에 뜨고,
         # 열면 404 가 난다 — 이 함수가 있는 이유가 그 어긋남을 막는 것이다.

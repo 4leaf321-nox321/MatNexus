@@ -8,6 +8,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from app.shared.access import EditAccessOut
+
 #: 한 번에 묶을 수 있는 시험 수. 시편 수십 장이 정상인 물성이 있다(피로).
 MAX_MEMBERS = 200
 
@@ -96,3 +98,5 @@ class GroupResultOut(BaseModel):
     warnings: list[str]
     note: str | None
     created_at: datetime
+    access: EditAccessOut | None = None
+    """지금 이 사람이 고칠 수 있나 — 못 하면 누구에게 물으면 되는지(ADR 0035)."""

@@ -19,6 +19,20 @@ const restore = vi.fn()
 const purge = vi.fn()
 const purgeMany = vi.fn()
 
+/**
+ * 보는 사람. 기본은 시스템 관리자 — 영구 삭제까지 하는 사람이다. **누구나 여는 휴지통**
+ * (ADR 0035 3단계)은 아래 `평범한 사람` 이 따로 본다.
+ */
+let viewer: { is_system_admin: boolean; is_data_manager: boolean; memberships: never[] } = {
+  is_system_admin: true,
+  is_data_manager: false,
+  memberships: [],
+}
+
+vi.mock('@/shared/auth/AuthContext', () => ({
+  useAuth: () => ({ user: viewer }),
+}))
+
 vi.mock('@/modules/trash/api', async () => {
   const actual = await vi.importActual<typeof import('@/modules/trash/api')>(
     '@/modules/trash/api'
@@ -69,6 +83,7 @@ const MIDDLE = {
 }
 
 beforeEach(() => {
+  viewer = { is_system_admin: true, is_data_manager: false, memberships: [] }
   list.mockReset()
   restore.mockReset()
   purge.mockReset()
@@ -304,5 +319,24 @@ describe('골라서 한꺼번에 삭제', () => {
     await waitFor(() =>
       expect(screen.queryByRole('button', { name: '선택한 것 영구 삭제' })).toBeNull()
     )
+  })
+})
+
+describe('평범한 사람', () => {
+  it('되살리기만 하고 영구 삭제와 서버 탭은 안 보인다', async () => {
+    /**
+     * **누구나 연다**(ADR 0035 3단계) — 등록자가 제가 지운 것을 되살린다. 영구 삭제는
+     * 되돌릴 수 없고 디스크를 치우는 일이라 그대로 시스템 관리자다. 서버 탭(저장소 정리)도
+     * 그 사람의 것이다.
+     */
+    viewer = { is_system_admin: false, is_data_manager: false, memberships: [] }
+    render(<MemoryRouter initialEntries={['/trash']}><TrashPage /></MemoryRouter>)
+    await screen.findByText('SECC__01_MD_01')
+
+    expect(screen.getAllByRole('button', { name: '복원' })[0]).not.toBeDisabled()
+    expect(screen.queryByRole('button', { name: '영구 삭제' })).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('이 쪽 전부 선택')).not.toBeInTheDocument()
+    expect(screen.queryByText('저장소 정리')).not.toBeInTheDocument()
+    expect(screen.getByText(/내가 되살릴 수 있는 것/)).toBeInTheDocument()
   })
 })

@@ -26,11 +26,18 @@ vi.mock('@/modules/vocabulary/api', () => ({
   },
 }))
 
+/** 자료 관리자인가 — 새 용어를 세우는 사람이다(ADR 0035 3단계, 전에는 부서 관리자). */
+let steward = false
+/** 부서 관리자인가 — **새 용어를 못 세운다.** 자리가 권한을 갖지 않게 됐다. */
 let manager = false
 
 vi.mock('@/shared/auth/AuthContext', () => ({
   useMaybeAuth: () => ({
-    user: { is_system_admin: false, memberships: [{ role: manager ? 'manager' : 'member' }] },
+    user: {
+      is_system_admin: false,
+      is_data_manager: steward,
+      memberships: [{ role: manager ? 'manager' : 'member' }],
+    },
   }),
 }))
 
@@ -41,6 +48,7 @@ const AXES = [
 
 beforeEach(() => {
   forgetAxisPolicies()
+  steward = false
   manager = false
   list.mockReset()
   list.mockResolvedValue(AXES)
@@ -64,12 +72,20 @@ describe('관리되는 축의 「새로 추가」', () => {
   it('일반 사용자에게는 안 보이고, 대신 누구에게 부탁할지가 보인다', async () => {
     await typeNew('grade', 'Grade', '새등급')
 
-    expect(await screen.findByText(/부서 관리자만/)).toBeInTheDocument()
+    expect(await screen.findByText(/자료 관리자만/)).toBeInTheDocument()
     expect(screen.queryByText(/새로 추가/)).not.toBeInTheDocument()
   })
 
-  it('부서 관리자에게는 보인다', async () => {
+  it('부서 관리자도 못 세운다 — 자리는 권한이 아니다', async () => {
     manager = true
+    await typeNew('grade', 'Grade', '새등급')
+
+    expect(await screen.findByText(/자료 관리자만/)).toBeInTheDocument()
+    expect(screen.queryByText(/새로 추가/)).not.toBeInTheDocument()
+  })
+
+  it('자료 관리자에게는 보인다', async () => {
+    steward = true
     const user = await typeNew('grade', 'Grade', '새등급')
 
     await user.click(await screen.findByText(/새로 추가/))
@@ -86,12 +102,12 @@ describe('관리되는 축의 「새로 추가」', () => {
   it('서버가 그래도 막으면 서버의 말을 보여 준다', async () => {
     // 화면의 판정이 서버와 어긋날 수 있다 — 권한이 방금 바뀌었거나, 축 목록을
     // 못 받아 왔거나. 조용히 아무 일도 안 일어나면 단추가 고장 난 것처럼 보인다.
-    manager = true
-    create.mockRejectedValue(new Error("'Grade' 에 새 값을 세우는 것은 부서 관리자만"))
+    steward = true
+    create.mockRejectedValue(new Error("'Grade' 에 새 값을 세우는 것은 자료 관리자만"))
     const user = await typeNew('grade', 'Grade', '새등급')
 
     await user.click(await screen.findByText(/새로 추가/))
-    expect(await screen.findByText(/부서 관리자만/)).toBeInTheDocument()
+    expect(await screen.findByText(/자료 관리자만/)).toBeInTheDocument()
   })
 
   it('축 목록은 피커가 몇이든 한 번만 받는다', async () => {

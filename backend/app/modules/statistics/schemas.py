@@ -390,6 +390,131 @@ class AnalysisCoverageOut(BaseModel):
     groups: list[CoverageGroupOut]
 
 
+class CardItemValueOut(BaseModel):
+    """항목란에 든 값 하나. 숫자는 **SI** 다 — 화면이 표시 단위로 바꾼다."""
+
+    label: str
+    value: float | str | None
+    """글자인 값도 있다(경화식의 「식」). `None` 이면 이름만 안다 — 레지스트리가 모르는
+    항목란이라 단위를 몰라서 숫자를 안 보인다."""
+    si_unit: str
+
+
+class CardItemCardOut(BaseModel):
+    id: uuid.UUID
+    label: str
+    status: str
+    values: list[CardItemValueOut]
+    row_count: int
+    """표의 줄 수. 0 이면 표가 없는 항목란이다."""
+
+
+class CardItemTestOut(BaseModel):
+    """이 항목란을 내는 시험 가운데 **채택된 결과가 있는 것.**"""
+
+    key: str
+    label: str
+    adopted_count: int
+
+
+class CardItemCellOut(BaseModel):
+    """칸 하나의 속 — 누를 때만 받는다(`/analysis/card-items/cell`)."""
+
+    state: str
+    """`published` · `draft` · `deprecated`(사용 중지한 카드에만) · `source`(카드는 없고
+    그 항목란을 내는 시험의 채택 결과나 그 칸으로 갈 선언 물성만 있다)."""
+    cards: list[CardItemCardOut]
+    """이 항목란이 든 카드 — 확정 · 초안 · 사용 중지 차례."""
+    tests: list[CardItemTestOut]
+    declared: list[CardItemValueOut]
+    """이 항목란의 칸으로 갈 선언 물성(선언 카드를 만들면 실릴 값)."""
+
+
+class CardItemColumnOut(BaseModel):
+    """카드 항목란 하나 — **아무 재료에도 없어도 열로 선다.**
+
+    수는 그 응답이 다룬 재료 가운데서 센다 — 요약은 전부, 전체는 거른 재료.
+    """
+
+    key: str
+    label: str
+    help: str
+    tests: list[str]
+    """이 항목란을 내는 시험 종류의 이름. 비어 있으면 사람이 적거나 문헌에서 오는 항목란."""
+    registered: bool
+    """`False` 면 레지스트리가 모르는 항목란 — 꺼졌거나 만든 확장이 사라졌다."""
+    published_materials: int
+    card_materials: int
+    """확정이든 초안이든 카드에 이 항목란이 있는 재료 수."""
+    deprecated_materials: int
+    """사용 중지한 카드에만 있는 재료 수. 이것까지 0 이어야 빈 열이다 — 안 세면 「중지」
+    칸만 있는 열이 빈 열로 접힌다."""
+    source_materials: int
+    """카드는 없고 시험·선언만 있는 재료 수."""
+
+
+class CardItemTallyOut(BaseModel):
+    """분류 하나 · 항목란 하나 — 칸의 상태별 재료 수."""
+
+    published: int
+    draft: int
+    deprecated: int
+    source: int
+
+
+class CardItemGroupOut(BaseModel):
+    """요약의 한 줄 — **재료가 아니라 분류다.** 재료가 1만이어도 줄은 분류 수다."""
+
+    family: str
+    category: str
+    material_count: int
+    """이 분류의 재료 전부 — 칸이 없는 재료까지. 카드가 하나도 없는 분류도 줄로 선다."""
+    card_materials: int
+    source_only_materials: int
+    cells: dict[str, CardItemTallyOut]
+
+
+class CardItemSummaryOut(BaseModel):
+    columns: list[CardItemColumnOut]
+    groups: list[CardItemGroupOut]
+    material_total: int
+    card_material_count: int
+    """카드(사용 중지 포함)에 든 칸이 하나라도 있는 재료."""
+    source_only_count: int
+    """카드는 없고 시험·선언만 있는 재료. 나머지(`material_total` 에서 둘을 뺀 것)는 둘 다
+    없다."""
+
+
+class CardItemStateOut(BaseModel):
+    state: str
+    card_count: int
+    """이 항목란이 든 카드 장 수(사용 중지 포함). 시험·선언만 있는 칸은 0."""
+    tests: bool
+    """그 항목란을 내는 시험의 채택 결과가 있나 — 「시험 있음」 과 「선언 있음」 을 가른다."""
+    declared: bool
+    """그 칸으로 갈 선언 물성이 있나."""
+
+
+class CardItemRowOut(BaseModel):
+    """전체의 한 줄 — 재료 하나. **보이는 칸만** 싣는다."""
+
+    material_id: uuid.UUID
+    material_name: str
+    family: str
+    category: str
+    cells: dict[str, CardItemStateOut]
+
+
+class CardItemRowsOut(BaseModel):
+    columns: list[CardItemColumnOut]
+    """거른 재료 가운데서 센 열 — 분류로 들어오면 그 분류의 수다."""
+    rows: list[CardItemRowOut]
+    total: int
+    """거른 뒤의 재료 수. `rows` 는 그중 `offset` 부터 `limit` 줄."""
+    limit: int
+    offset: int
+
+
 class DivisionTallyOut(BaseModel):
     """사업부 하나의 현황 — 그 사업부의 시험이 걸친 재료·시료·시편과 시험 수.
 

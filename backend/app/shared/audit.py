@@ -44,6 +44,7 @@ ACCOUNT_DECIDED = "account.decided"
 ACCOUNT_SUSPENDED = "account.suspended"
 ACCOUNT_HOME_CHANGED = "account.home_changed"
 ACCOUNT_ADMIN_CHANGED = "account.admin_changed"
+ACCOUNT_DATA_MANAGER_CHANGED = "account.data_manager_changed"
 ACCOUNT_DELETED = "account.deleted"
 GROUP_RESULT_DELETED = "group_result.deleted"
 #: 처리 결과를 **실제로 지운** 일. 결과는 되살릴 수 없고(휴지통이 없다) 그 값이
@@ -90,6 +91,14 @@ TRASH_RESTORED = "trash.restored"
 TRASH_PURGED = "trash.purged"
 VOCABULARY_RENAMED = "vocabulary.renamed"
 TEST_TYPE_CHANGED = "test_type.changed"
+#: 마이그레이션이 남기는 둘(ADR 0035). 코드는 이 값을 쓰지 않는다 — 감사 화면에서
+#: 무엇을 찾아야 하는지 여기 적어 둔다. 앞의 것은 겹친 정의 key 를 바꾼 일(주소가
+#: 바뀐다), 뒤의 것은 부서 열람 제한이 켜져 있던 부서(지우면 어느 부서였는지 사라진다).
+DEFINITION_KEY_RENAMED = "definition.key_renamed"
+WORKSPACE_RESTRICTION_REMOVED = "workspace.restriction_removed"
+#: 등록자·편집 부서를 넘긴 일(ADR 0035). **권한이 실린 변경이다** — 넘긴 뒤에는
+#: 「등록자」 칸이 새 사람을 가리키므로, 처음 올린 사람은 이 기록에만 남는다.
+OWNERSHIP_CHANGED = "ownership.changed"
 
 
 def diff(before: dict[str, Any], after: dict[str, Any]) -> dict[str, Any]:

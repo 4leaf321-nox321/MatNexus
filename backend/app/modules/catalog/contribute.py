@@ -48,7 +48,7 @@ from app.modules.catalog.schemas import (
     CatalogSourceIn,
     CatalogValueCreate,
 )
-from app.shared import dependents
+from app.shared import dependents, permissions
 from app.shared.errors import AppError, Forbidden, NotFound
 from app.shared.text import clean, compare_key
 from matcore import units
@@ -457,7 +457,7 @@ def delete_material(db: Session, material_id: uuid.UUID, user: User) -> None:
             "이관해 온 재료는 여기서 못 지웁니다 — 원본(MaterialTwin)이 정본입니다.",
             status=422,
         )
-    _require_owner(material.created_by_id, user)
+    require_contributor(material.created_by_id, user)
     refs = dependents.references_to(db, table="catalog_materials", pk=material.id)
     if refs:
         # 값(CASCADE)이든 사내 재료 연결(CASCADE)이든 — 조용히 같이 지우지 않는다.
@@ -665,7 +665,7 @@ def delete_value(db: Session, value_id: uuid.UUID, user: User) -> None:
             "이관해 온 값은 여기서 못 지웁니다 — 원본(MaterialTwin)이 정본입니다.",
             status=422,
         )
-    _require_owner(row.created_by_id, user)
+    require_contributor(row.created_by_id, user)
     source_id = row.source_id
     db.delete(row)
     db.flush()
@@ -695,9 +695,12 @@ def _drop_orphan_source(db: Session, source_id: uuid.UUID | None) -> None:
     db.flush()
 
 
-def _require_owner(created_by_id: uuid.UUID | None, user: User) -> None:
-    """넣은 사람이거나 시스템 관리자만 지운다."""
-    if user.is_system_admin or created_by_id == user.id:
+def require_contributor(created_by_id: uuid.UUID | None, user: User) -> None:
+    """넣은 사람이거나 관리자(시스템·자료)만 지운다 — 사내 자료와 같은 사람 기준(ADR 0035).
+
+    부서 편집 부여는 없다. 문헌은 부서의 것이 아니라 전사의 것이다.
+    """
+    if permissions.is_data_steward(user) or created_by_id == user.id:
         return
     raise Forbidden("MNX-CATALOG-0047", "다른 사람이 넣은 것은 지울 수 없습니다.")
 

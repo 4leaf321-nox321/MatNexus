@@ -66,8 +66,12 @@ class WorkbenchRun(Base):
     workspace_id: Mapped[uuid.UUID] = mapped_column(
         PgUUID(as_uuid=True), ForeignKey("workspaces.id"), index=True
     )
-    """**부서 안에서 공유한다.** 만든 사람만 보면 「어제 하던 것을 오늘 다른
-    사람이」 가 안 된다. 누가 무엇을 밀었는지는 감사 기록이 답한다."""
+    """**부서 안에서 함께 민다.** 만든 사람만 고치면 「어제 하던 것을 오늘 다른
+    사람이」 가 안 된다. 누가 무엇을 밀었는지는 감사 기록이 답한다.
+
+    **보기는 전원이다**(ADR 0035 3단계). 이 칸은 누가 **고치나**만 정한다 — 이 부서
+    사람과 시작한 사람(`owner_id`), 그리고 자료 관리자. 전에는 보기까지 이 칸이 정해서,
+    남의 부서 사람에게 작업 주소를 보내면 「없다」 가 떴다."""
 
     owner_id: Mapped[uuid.UUID | None] = mapped_column(
         PgUUID(as_uuid=True), ForeignKey("users.id"), nullable=True

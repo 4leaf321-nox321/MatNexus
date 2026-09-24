@@ -245,7 +245,19 @@ class Material(Base):
         PgUUID(as_uuid=True), ForeignKey("users.id"), index=True, nullable=True
     )
     """소유 컬럼 이름 규약(개발계획 Phase 1-3). 이 이름을 쓰면 계정 삭제 시
-    자료 승계가 자동으로 편입된다."""
+    자료 승계가 자동으로 편입된다. **고칠 권한의 첫째 자리다**(ADR 0035)."""
+    edit_workspace_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("workspaces.id", ondelete="SET NULL"),
+        index=True,
+        nullable=True,
+    )
+    """**편집을 받은 부서**(ADR 0035). 등록자 말고 이 부서 사람도 고친다. 비어 있으면
+    등록자와 자료 관리자만 고친다.
+
+    소속(`owner_workspace_id`)과 다른 칸이다 — 소속은 누구 팀 자료인지와 이름이
+    겹치는 범위를 정하고, 이 칸은 권한만 정한다. 둘을 한 칸에 두면 「새 자료는
+    등록자만」 을 표현할 수 없다(소속은 비울 수 없다). 부서를 지우면 부여만 끊긴다."""
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
@@ -434,6 +446,14 @@ class Sample(Base):
     registered_by_id: Mapped[uuid.UUID | None] = mapped_column(
         PgUUID(as_uuid=True), ForeignKey("users.id"), index=True, nullable=True
     )
+    edit_workspace_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("workspaces.id", ondelete="SET NULL"),
+        index=True,
+        nullable=True,
+    )
+    """편집을 받은 부서(ADR 0035) — 등록자 말고 이 부서 사람도 고친다. 뜻은
+    `Material.edit_workspace_id` 와 같다. 소속(`workspace_id`)은 권한이 아니다."""
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -545,6 +565,14 @@ class Specimen(Base):
     registered_by_id: Mapped[uuid.UUID | None] = mapped_column(
         PgUUID(as_uuid=True), ForeignKey("users.id"), index=True, nullable=True
     )
+    edit_workspace_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("workspaces.id", ondelete="SET NULL"),
+        index=True,
+        nullable=True,
+    )
+    """편집을 받은 부서(ADR 0035) — 등록자 말고 이 부서 사람도 고친다. 뜻은
+    `Material.edit_workspace_id` 와 같다. 소속(`workspace_id`)은 권한이 아니다."""
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

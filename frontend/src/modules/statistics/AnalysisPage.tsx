@@ -1,7 +1,8 @@
 /**
- * 물성 분석 — **다섯 물음, 한 화면.**
+ * 물성 분석 — **여섯 물음, 한 화면.**
  *
  *     비교        어느 재료가 센가
+ *     카드 항목   어느 재료에서 무엇까지 볼 수 있나 (점탄성·경화식처럼 스칼라가 아닌 것)
  *     분포        우리 값이 보통 어디쯤인가 · 이상치는 무엇인가
  *     사양 대비   카탈로그 값과 우리가 잰 값이 얼마나 다른가
  *     추이        해가 가며 값이 흐르는가
@@ -23,7 +24,9 @@
 import { useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 
+import { TABLE_PAD, show, showWithUnit } from '@/modules/statistics/analysisFormat'
 import { analysisApi } from '@/modules/statistics/analysisApi'
+import { CardItemsTab } from '@/modules/statistics/CardItemsTab'
 import type { AnalysisScalar, Spread } from '@/modules/statistics/analysisApi'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { PageHeader } from '@/shared/components/PageHeader'
@@ -47,41 +50,17 @@ import {
 } from '@/shared/components/ui/table'
 import { Tabs, TabsList, TabsTrigger } from '@/shared/components/ui/tabs'
 import { useResource } from '@/shared/hooks/useResource'
-import { axisLabel, display, toDisplay } from '@/shared/units'
+import { axisLabel } from '@/shared/units'
 
 const TABS = [
   { key: 'compare', label: '재료 비교' },
+  { key: 'card-items', label: '카드 항목' },
   { key: 'distribution', label: '분포' },
   { key: 'spec', label: '사양 대비' },
   { key: 'trend', label: '추이' },
   { key: 'coverage', label: '커버리지' },
 ] as const
 type Tab = (typeof TABS)[number]['key']
-
-/** SI 값을 표시 단위로. **자릿수는 크기에 맞춘다** — 0.0000002 도 200000 도 안 읽힌다. */
-export function show(value: number, siUnit: string): string {
-  const shown = toDisplay(value, siUnit)
-  const size = Math.abs(shown)
-  if (size === 0) return '0'
-  if (size >= 1000) return shown.toFixed(0)
-  if (size >= 10) return shown.toFixed(1)
-  if (size >= 0.1) return shown.toFixed(3)
-  return shown.toPrecision(3)
-}
-
-/**
- * 값 옆에 단위 — `320.0 MPa`. **머리에 단위를 못 두는 표**에서 쓴다: 줄마다 항목(과
- * 단위)이 다른 「선언 vs 실측」, 열이 연도인 「추이」. 단위가 어디에도 없으면 숫자가
- * Pa 인지 MPa 인지 사람이 짐작해야 한다(2026-09-14 지적).
- */
-export function showWithUnit(value: number, siUnit: string): string {
-  const { unit } = display(siUnit)
-  return unit ? `${show(value, siUnit)} ${unit}` : show(value, siUnit)
-}
-
-const TABLE_PAD =
-  '[&_td]:px-3 [&_th]:px-3 [&_td:first-child]:pl-4 [&_th:first-child]:pl-4 ' +
-  '[&_td:last-child]:pr-4 [&_th:last-child]:pr-4'
 
 export default function AnalysisPage() {
   const [params, setParams] = useSearchParams()
@@ -105,6 +84,7 @@ export default function AnalysisPage() {
       </Tabs>
 
       {tab === 'compare' && <CompareTab />}
+      {tab === 'card-items' && <CardItemsTab />}
       {tab === 'distribution' && <DistributionTab />}
       {tab === 'spec' && <SpecGapTab />}
       {tab === 'trend' && <TrendTab />}

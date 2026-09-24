@@ -284,6 +284,43 @@ UNITS: dict[str, Unit] = {
         _u("m3/C", "hall_coefficient", "1"),  # 홀 계수
         _u("m3/(mol.s)", "rate_constant", "1"),  # 반응속도상수
         _u("W/m2", "heat_flux", "1"),  # 열유속
+        # --- mm·N·tonne 계의 기호 — 나가는 파일이 쓴다(ADR 0036, 2026-09-24) ---------------
+        #
+        # 재료·문헌 내보내기가 기본 계(mm·N·tonne)로 나가면서, 카드 블록이 안 드는 역학
+        # 물리량(선하중·표면에너지·파괴인성 …)도 그 계로 옮기게 됐다. 옮길 기호가 **이 표에
+        # 있어야** 계를 유도할 때(`export.systems.derive`) 같은 기호를 찾는다 — 붙박이 계와
+        # 유도한 계가 다른 기호를 쓰면 어느 쪽이 틀렸는지 파일을 열어도 모른다.
+        #
+        # 기호는 SI 기호의 m·kg·Pa·J·W 를 그 계의 mm·tonne·MPa·mJ·mW 로 바꾼 것이다. 인수는
+        # 둘이 지킨다 — 접두어로 지어지는 것은 아래 `test_표와_어긋나지_않는다` 가, tonne·
+        # cycle 이 든 것은 차원식(`systems.EXPONENTS`)과 대조하는 유도 시험이 본다.
+        #
+        # **`mJ` 가 들어오면서 `MJ`(메가줄)는 「대소문자로 갈린다」 로 거절된다** — 글자
+        # 그대로면 메가, 되돌리면 밀리라 10⁹ 배다. `MPa.s` 와 같은 규칙이다(`canonical`).
+        _u("N/mm", "line_force", "1000"),
+        _u("mJ", "energy", "0.001"),
+        _u("mJ/mm", "energy_per_length", "1"),
+        _u("mJ/mm2", "energy_per_area", "1000"),
+        _u("mJ/mm3", "energy_density", "1000000"),
+        _u("mJ/tonne", "specific_energy", "0.000001"),
+        _u("mW/mm2", "heat_flux", "1000"),
+        _u("K.mm2/mW", "thermal_resistance", "0.001"),
+        # 1e6·√0.001 — 조합이 짓는 값 그대로 적는다. 손으로 자르면 표와 조합이 갈린다.
+        _u("MPa.mm0.5", "fracture_toughness", "31622.77660168379331998893544"),
+        _u("tonne/(mm2.s)", "mass_flux", "1000000000"),
+        _u("tonne/(mm.s)", "mass_permeability", "1000000"),
+        _u("tonne/mm2", "areal_density", "1000000000"),
+        _u("mm2/tonne", "specific_area", "0.000000001"),
+        _u("mm3/tonne", "specific_volume", "0.000000000001"),
+        # 음향 임피던스. `MPa.s/mm` 로 적으면 사람이 `mPa.s` 로 읽는다 — 점도(`N.s/mm2`)와
+        # 같은 이유로 힘·시간·길이로 적는다.
+        _u("N.s/mm3", "acoustic_impedance", "1000000000"),
+        _u("mm/cycle", "crack_growth_rate", "0.001"),
+        # 부피 플럭스는 속도(`mm/s`)와 서명이 같아 조합이 안 된다(`compose`) — 표에 적는다.
+        _u("mm3/(mm2.s)", "volumetric_flux", "0.001"),
+        _u("mm3/(N.mm)", "specific_wear_rate", "0.000001"),
+        _u("1/mm3", "number_density", "1000000000"),
+        _u("mm3/(mm2.s.MPa)", "gas_permeance_volumetric", "0.000000001"),
     )
 }
 

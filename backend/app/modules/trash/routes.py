@@ -1,11 +1,13 @@
 """휴지통 — 지운 것을 보고, 되살리고, 영영 지운다.
 
-## 시스템 관리자만
+## 되살리기는 지울 수 있는 사람이, 영영 지우기는 시스템 관리자가 (ADR 0035 3단계)
 
-되살리기는 **남의 부서 데이터까지 건드리는 일**이다. 재료는 전역일 수 있고, 그
-아래에는 여러 부서의 시료가 매달린다 — 부서 관리자에게 열면 소관 밖을 되살리게
-된다. 감사 화면이 「부서 관리자는 자기 부서 것만」 인 것과 다른 판단인데, 그쪽은
-읽기이고 이쪽은 쓰기다.
+전에는 넷 다 시스템 관리자였다 — 되살리기가 **남의 데이터까지 건드리는 일**이라서였다
+(재료 아래에는 여러 사람의 시료가 매달린다). 그 걱정은 규칙으로 푼다: 되살리는 사람은
+**함께 돌아오는 것 전부**를 고칠 수 있어야 한다(`services._require_restore`). 그러면
+등록자가 제가 지운 것을 제 손으로 되돌린다 — 전에는 지울 수는 있는데 되살릴 수는 없었다.
+
+영영 지우기는 그대로 시스템 관리자다. 되돌릴 수 없고, 디스크를 치우는 일이다.
 """
 
 from __future__ import annotations
@@ -24,7 +26,7 @@ from app.modules.trash.schemas import (
     TrashPurgedManyOut,
     TrashPurgeManyIn,
 )
-from app.shared.auth import require_system_admin
+from app.shared.auth import current_user, require_system_admin
 from app.shared.errors import AppError
 from app.shared.pagination import clamp_limit
 
@@ -35,10 +37,10 @@ router = APIRouter(prefix="/trash", tags=["trash"])
 def list_trash(
     kind: str | None = Query(default=None),
     limit: int | None = Query(default=None),
-    user: User = Depends(require_system_admin),
+    user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> list[TrashItemOut]:
-    """지운 것. **최근에 지운 것부터.**
+    """지운 것 — **이 사람이 되살릴 수 있는 것만.** 최근에 지운 것부터.
 
     줄마다 「되살리면 무엇이 함께 오는가」 와 「왜 못 되살리는가」 를 함께 낸다 —
     화면이 그것을 스스로 세게 하면 사람이 본 숫자와 실제가 어긋난다.
@@ -54,7 +56,7 @@ def list_trash(
             below=item.below,
             blocked=item.blocked,
         )
-        for item in services.listing(db, kind=kind, limit=clamp_limit(limit))
+        for item in services.listing(db, kind=kind, limit=clamp_limit(limit), user=user)
     ]
 
 
@@ -62,10 +64,10 @@ def list_trash(
 def restore(
     kind: str,
     item_id: uuid.UUID,
-    user: User = Depends(require_system_admin),
+    user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> TrashDoneOut:
-    """되살린다 — 이 행과 그 아래 **함께 지워진** 것 전부."""
+    """되살린다 — 이 행과 그 아래 **함께 지워진** 것 전부. 그 전부를 고칠 수 있어야 한다."""
     done = services.restore(db, kind, item_id, actor=user)
     db.commit()
     return TrashDoneOut(name=done.name, counts=done.counts, said=done.said)

@@ -38,9 +38,11 @@ import { ROW_FOCUS_STYLE, useRowFocus } from '@/shared/hooks/useRowFocus'
 const PAGE = 50
 
 const SCOPES: { key: Scope; label: string }[] = [
+  { key: 'ours', label: '우리 부서' },
   { key: 'mine', label: '내가 낸 것' },
   { key: 'received', label: '우리 부서가 받은 것' },
-  { key: 'all', label: '전체' },
+  // **모든 부서** — 보기는 전원이다(ADR 0035 3단계). 남의 부서 의뢰는 읽기만 된다.
+  { key: 'all', label: '모든 부서' },
 ]
 
 /** 상태 배지. 이름은 서버가 준 것, 색만 여기서. */
@@ -74,7 +76,9 @@ export default function CommissionsPage() {
   const [asked] = useSearchParams()
   const askedScope = asked.get('scope')
   const [scope, setScope] = useState<Scope>(
-    askedScope === 'mine' || askedScope === 'received' ? askedScope : 'all'
+    askedScope === 'mine' || askedScope === 'received' || askedScope === 'all'
+      ? askedScope
+      : 'ours'
   )
   const [status, setStatus] = useState<string>(asked.get('status') ?? '')
   const [typed, setTyped] = useState('')
@@ -154,7 +158,7 @@ export default function CommissionsPage() {
 
       {!page.loading && rows.length === 0 && (
         <div className="text-muted-foreground rounded-md border py-12 text-center text-sm">
-          {status || q || scope !== 'all' ? '거른 조건에 맞는 것이 없습니다.' : '측정 의뢰가 없습니다.'}
+          {status || q || scope !== 'ours' ? '거른 조건에 맞는 것이 없습니다.' : '측정 의뢰가 없습니다.'}
         </div>
       )}
 

@@ -13,6 +13,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+from app.shared.access import EditAccessOut
+
 # --- 정의 -------------------------------------------------------------------
 
 
@@ -43,11 +45,12 @@ class TestTypeOut(BaseModel):
     key: str
     owner_workspace_slug: str | None
     owner_workspace_name: str | None
-    is_global: bool
-    """누가 만들었나. **안 보이면 왜 못 고치는지 알 수 없다.**
+    """**등록한 부서** — 권한이 아니다(ADR 0035). 비면 부서 없이 올린 것이다.
 
-    전역은 여러 부서가 함께 쓰므로 시스템 관리자만 고친다. 화면이 그 사실을
-    보여 주지 않으면 편집 버튼을 눌러 보고 403 을 받고서야 알게 된다."""
+    전에는 `is_global` 도 실었다(「전역이면 시스템 관리자만」). 받는 쪽이 그것을
+    「공식인가」 로 읽었고, 3단계에서 고칠 권한이 사람 기준이 되면서 걷었다."""
+    access: EditAccessOut | None = None
+    """**이 사람이** 고칠 수 있나, 못 하면 누구에게 — 단추를 누르기 전에 안다."""
     label: str
     abbr: str
     description: str | None
@@ -392,6 +395,8 @@ class TestRunOut(BaseModel):
     channels: list[str]
     warnings: list[str]
     created_at: datetime
+    access: EditAccessOut | None = None
+    """지금 이 사람이 고칠 수 있나 — 못 하면 누구에게 물으면 되는지(ADR 0035)."""
 
 
 class TestSummaryOut(BaseModel):
@@ -677,7 +682,8 @@ class TestTypeCreateRequest(TestTypeSaveRequest):
     **전사에서 유일하다.** 두 부서가 같은 시험을 하면 종류를 둘로 만들 것이
     아니라 하나를 같이 써야 한다(ADR 0006)."""
     owner_workspace_slug: str | None = None
-    """누구 것으로 만들지. 비우면 전역 — **시스템 관리자만** 할 수 있다."""
+    """등록 부서. **안 보내면 내 소속 부서**, 비워서 보내면(`null`) 부서 없이 — 그것은
+    자료 관리자만(`permissions.registering_workspace`). 권한이 아니라 적어 두는 칸이다."""
 
 
 class DefinitionLocksOut(BaseModel):
@@ -759,8 +765,9 @@ class FormatProfileOut(BaseModel):
     key: str
     owner_workspace_slug: str | None
     owner_workspace_name: str | None
-    is_global: bool
-    """`NULL` 소유 = 전역. 여러 부서가 함께 쓰므로 시스템 관리자만 고친다."""
+    """**등록한 부서.** 비면 부서 없이 올린 것 — 모든 부서의 자동 추정에 든다. 권한이
+    아니다(ADR 0035): 고칠 수 있는지는 `access` 가 말한다."""
+    access: EditAccessOut | None = None
     label: str
     description: str | None
     test_type_key: str
@@ -782,12 +789,18 @@ class FormatProfileSaveRequest(BaseModel):
 
 
 class FormatProfileCreateRequest(FormatProfileSaveRequest):
-    key: str = Field(min_length=1, max_length=50, pattern=r"^[a-z][a-z0-9_]*$")
+    key: str | None = Field(
+        default=None, min_length=1, max_length=50, pattern=r"^[a-z][a-z0-9_]*$"
+    )
+    """**비워 두면 서버가 짓는다**(`fmt_1a2b3c4d`). key 는 전사에서 하나다(ADR 0035) —
+    사람이 적게 하면 옆 부서가 먼저 쓴 이름 때문에 막힌다. 파일로 옮겨 오는 것처럼
+    같은 key 를 지켜야 할 때만 준다."""
     owner_workspace_slug: str | None = None
-    """누구 것으로 만들지. `None` 이면 전역이고 **시스템 관리자만** 할 수 있다.
+    """등록 부서. **안 보내면 내 소속 부서.** 비워서 보내면(`null`) 부서 없이 — 모든
+    부서의 자동 추정에 들어가므로 자료 관리자만 한다(`permissions.registering_workspace`).
 
     장비는 부서마다 다르다 — 남의 부서 파일을 어떻게 읽을지를 시스템 관리자가
-    알 리 없어서, 부서 관리자가 자기 부서 것을 만든다."""
+    알 리 없어서, 그 부서 사람이 자기 부서 것을 만든다."""
 
 
 class TriedChannelOut(BaseModel):

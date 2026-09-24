@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field, model_validator
 #: 화면이 기본으로 쓰는 단위. **정본은 `app/shared/display`** 다 — 재료 모듈과
 #: 적합 모듈이 같은 값을 보여 줘야 해서 모듈 밖에 둔다. 여기서는 이름만 다시
 #: 내보낸다(이 이름으로 읽는 자리가 여럿이라).
+from app.shared.access import EditAccessOut
 from app.shared.display import DENSITY_UNIT as DENSITY_UNIT
 from app.shared.display import LENGTH_UNIT as LENGTH_UNIT
 from app.shared.facets import FacetOut
@@ -192,8 +193,10 @@ class MaterialOut(BaseModel):
     alias: str | None
     owner_workspace_id: uuid.UUID | None
     owner_workspace_name: str | None
-    """NULL 이면 전역 재료다. 화면이 그 사실을 표시할 수 있어야 한다."""
-    is_global: bool
+    """**등록한 부서** — 권한이 아니다(ADR 0035). 고칠 수 있는지는 `access` 가 말한다.
+
+    전에는 `is_global`(부서가 없으면 참)도 실었다. 받는 쪽이 그것을 「공식 자료인가」
+    로 읽었고, 전역 재료는 0건이라 「공식 자료가 없다」 로 막혔다(2026-09-24)."""
 
     family: str
     category: str
@@ -210,8 +213,16 @@ class MaterialOut(BaseModel):
     """이 재료를 어디에 쓰는가. **재료의 용도이지 로트의 행선지가 아니다.**"""
 
     density: float | None
+    """공칭 밀도 — **화면 표시값**이다(단위는 `density_unit`, 지금 tonne/mm3). 로트 실측은
+    시료에 있고, 카드는 실측을 먼저 본다. **다른 시스템은 `density_si` 를 읽는다.**"""
     density_unit: str = DENSITY_UNIT
-    """공칭 밀도. 로트 실측은 시료에 있고, 카드는 실측을 먼저 본다."""
+    density_si: float | None = None
+    """같은 공칭 밀도의 **SI(kg/m³)** 값 — 선언 물성의 `value_si` 와 같은 계다.
+
+    한 응답에서 밀도만 표시 단위(tonne/mm3)이고 나머지는 SI 라, 받는 쪽이 「전부 SI」
+    로 읽으면 밀도만 10¹² 배 틀린다(2026-09-24, 해석 연동 쪽이 받은 데이터에서 짚었다).
+    `density` 는 화면 수정 창이 그대로 되돌려 보내는 값이라 SI 로 못 바꾸고, SI 칸을
+    곁에 둔다."""
     poisson_ratio: float | None
     """인장시험이 주지 않는 값이다 — 대개 문헌값이고 재료 등급에 붙는다."""
 
@@ -225,6 +236,8 @@ class MaterialOut(BaseModel):
     sample_count: int
     created_at: datetime
     updated_at: datetime
+    access: EditAccessOut | None = None
+    """지금 이 사람이 고칠 수 있나 — 못 하면 누구에게 물으면 되는지(ADR 0035)."""
 
 
 class MaterialTreeSummaryOut(BaseModel):
@@ -261,8 +274,8 @@ class MaterialCreateRequest(BaseModel):
     note: str | None = None
     legacy_id: str | None = Field(default=None, max_length=200)
     workspace_slug: str | None = None
-    """생략하면 내 소속 부서. 전역 재료를 만드는 경로는 따로 두지 않는다 —
-    승격은 이미 있는 재료를 올리는 일이지 처음부터 전역으로 만드는 일이 아니다."""
+    """등록 부서. 생략하면 내 소속 부서 — 내가 속한 부서만 고른다. 권한이 아니다:
+    고치는 사람은 등록자 · 편집을 받은 부서 · 자료 관리자다(ADR 0035)."""
 
 
 class ClassificationOut(BaseModel):
@@ -430,8 +443,11 @@ class SampleOut(BaseModel):
     production_date: date | None
 
     density: float | None
+    """**이 로트에서 잰 값이다** — 화면 표시값(단위는 `density_unit`). 공칭은 재료에 있다.
+    **다른 시스템은 `density_si` 를 읽는다.**"""
     density_unit: str = DENSITY_UNIT
-    """**이 로트에서 잰 값이다.** 공칭은 재료에 있다."""
+    density_si: float | None = None
+    """같은 실측 밀도의 **SI(kg/m³)** 값 — 재료의 `density_si` 와 같은 까닭으로 둔다."""
 
     declared_properties: list[DeclaredPropertyOut] = []
     """밀시트가 준 값들(ADR 0016). **재료의 같은 칸과 층이 다르다** — 여기 것은
@@ -441,6 +457,8 @@ class SampleOut(BaseModel):
     note: str | None
     specimen_count: int
     created_at: datetime
+    access: EditAccessOut | None = None
+    """지금 이 사람이 고칠 수 있나 — 못 하면 누구에게 물으면 되는지(ADR 0035)."""
 
     test_run_count: int = 0
     adopted_count: int = 0
@@ -551,6 +569,8 @@ class SpecimenOut(BaseModel):
 
     note: str | None
     created_at: datetime
+    access: EditAccessOut | None = None
+    """지금 이 사람이 고칠 수 있나 — 못 하면 누구에게 물으면 되는지(ADR 0035)."""
 
     test_run_count: int = 0
     adopted_count: int = 0

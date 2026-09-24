@@ -72,6 +72,9 @@ import { cardKind, kindLabel } from '@/modules/fitting/cardKind'
 import { LveCardDialog } from '@/modules/fitting/LveCardDialog'
 import { hasLve } from '@/modules/fitting/lve'
 import { useResource } from '@/shared/hooks/useResource'
+import { canEdit, lockedTitle } from '@/modules/ownership/access'
+import { useAuth } from '@/shared/auth/AuthContext'
+import { isDataSteward } from '@/shared/auth/roles'
 import { axisLabel, formatScalar, toDisplay } from '@/shared/units'
 
 /** 이 이상 어긋나면 눈에 띄게 한다. 커널이 같은 값에서 경고를 단다. */
@@ -1168,6 +1171,10 @@ function CardList({
   onChanged: () => void
   onError: (error: Error) => void
 }) {
+  // **확정은 자료 관리자가 한다**(ADR 0035). 등록자가 스스로 확정하면 검토의 뜻이
+  // 없다 — 확정된 카드는 다른 시스템으로 넘어가는 공식 물성이다. 단추를 미리 가린다.
+  const { user } = useAuth()
+  const steward = isDataSteward(user)
   // 카드마다 부르지 않는다 — 목록에 20장이 있으면 같은 요청이 20번 나간다.
   const formats = useResource(() => fittingApi.formats(), [])
   // **화면이 물성의 이름을 모른다.** 무엇을 그릴지는 이 선언이 정한다.
@@ -1298,28 +1305,33 @@ function CardList({
                   <Button
                     size="sm"
                     variant="ghost"
-                    title="이름·메모 편집 (값은 안 바뀝니다)"
+                    title={lockedTitle(card.access) ?? '이름·메모 편집 (값은 안 바뀝니다)'}
+                    disabled={!canEdit(card.access)}
                     onClick={() => setRenaming(card.id)}
                   >
                     <Pencil className="size-3.5" />
                   </Button>
-                  <Button
-                    size="sm"
-                    onClick={() => act(() => fittingApi.publish(card.id))}
-                    title="확정 — 부서 관리자만. 올린 뒤에는 값을 바꿀 수 없습니다."
-                  >
-                    확정
-                  </Button>
+                  {steward && (
+                    <Button
+                      size="sm"
+                      onClick={() => act(() => fittingApi.publish(card.id))}
+                      title="확정 — 자료 관리자만. 올린 뒤에는 값을 바꿀 수 없습니다."
+                    >
+                      확정
+                    </Button>
+                  )}
                   <Button
                     size="sm"
                     variant="ghost"
+                    title={lockedTitle(card.access) ?? '초안 지우기'}
+                    disabled={!canEdit(card.access)}
                     onClick={() => act(() => fittingApi.remove(card.id))}
                   >
                     <Trash2 className="size-3.5" />
                   </Button>
                 </>
               )}
-              {card.status === 'published' && (
+              {card.status === 'published' && steward && (
                 <Button
                   size="sm"
                   variant="outline"
@@ -1331,7 +1343,7 @@ function CardList({
               )}
               {/* **되살릴 길을 둔다.** 없으면 남는 방법이 같은 값으로 카드를 새로
                   만드는 것뿐인데, 그러면 만든 사람·만든 때가 실제와 달라진다. */}
-              {card.status === 'deprecated' && (
+              {card.status === 'deprecated' && steward && (
                 <Button
                   size="sm"
                   variant="outline"

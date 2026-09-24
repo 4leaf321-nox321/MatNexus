@@ -7,7 +7,8 @@
 
   1. 행 하나가 목록에 뜨고 덱을 낸다 — 이것이 되면 「배포 없이 새 솔버」 다.
   2. **코드 렌더러를 못 덮는다.** 덮게 두면 코드 쪽 검증을 정의 하나가 우회한다.
-  3. **부서 것이 전역을 덮는다.** 같은 솔버라도 사업부마다 덱 관례가 다르다.
+  3. **모든 부서의 정의가 모두의 목록에 뜬다.** key 가 전사에서 하나라(ADR 0035)
+     덮을 것이 없다 — 사업부의 덱 관례는 다른 형식으로 나란히 뜬다.
   4. **깨진 정의 하나가 목록을 안 죽인다.** 목록이 안 뜨면 고치러 들어갈 화면도
      그 목록 위에 있어서, 사람이 손쓸 길이 사라진다.
 """
@@ -92,62 +93,50 @@ class Test행_하나가_솔버가_된다:
         # 코드 렌더러가 사라지지 않는다.
         assert {"abaqus", "openradioss", "json"} <= set(by_key)
 
-    def test_칸_폭이_지켜진다(self, db: Session, workspace: Any) -> None:
+    def test_칸_폭이_지켜진다(self, db: Session) -> None:
         """**칸이 어긋나면 다른 필드로 읽힌다** — 그리고 솔버는 그것을 오류로
         알려 주지 않는다. 정의가 적은 폭이 실제 덱에 그대로 나와야 한다."""
         _profile(db)
-        made = renderers.renderer_for(db, workspace.id, "optistruct")
+        made = renderers.renderer_for(db, "optistruct")
         line = made.render(_deck()).text.splitlines()[2]
         assert len(line) == 16, f"8칸 둘이어야 하는데 {len(line)}칸입니다: {line!r}"
 
-    def test_지운_정의는_안_온다(self, db: Session, workspace: Any) -> None:
+    def test_지운_정의는_안_온다(self, db: Session) -> None:
         from datetime import UTC, datetime
 
         row = _profile(db)
         row.deleted_at = datetime.now(UTC)
         db.flush()
-        assert "optistruct" not in {
-            item.key for item in renderers.all_renderers(db, workspace.id)
-        }
+        assert "optistruct" not in {item.key for item in renderers.all_renderers(db)}
 
 
 class Test덮어쓰기:
-    def test_코드_렌더러를_못_덮는다(self, db: Session, workspace: Any) -> None:
+    def test_코드_렌더러를_못_덮는다(self, db: Session) -> None:
         """덮게 두면 **코드 쪽 검증을 정의 하나가 조용히 우회한다** — 키워드 확인도
         물리적 타당성도 그 코드 안에 있다."""
         _profile(db, "abaqus", definition={**DEFINITION, "label": "가짜 Abaqus"})
-        made = renderers.renderer_for(db, workspace.id, "abaqus")
+        made = renderers.renderer_for(db, "abaqus")
         assert made.label != "가짜 Abaqus"
         assert made.extension == "inp"
 
         # **목록에도 하나여야 한다.** 고르는 쪽은 먼저 나온 것을 쓰니 둘이어도
         # 덱은 맞게 나오지만, 화면에는 같은 이름이 두 줄 뜬다 — 그리고 사람은
         # 아래쪽을 눌러 보고 왜 같은지 묻는다.
-        keys = [item.key for item in renderers.all_renderers(db, workspace.id)]
+        keys = [item.key for item in renderers.all_renderers(db)]
         assert keys.count("abaqus") == 1, f"목록에 abaqus 가 {keys.count('abaqus')}개"
 
-    def test_부서_것이_전역을_덮는다(self, db: Session, workspace: Any) -> None:
-        """같은 솔버라도 사업부마다 덱 관례가 다르다 — 어느 키워드를 쓰는지, 표를
-        몇 줄로 자르는지. 그 지식은 해석을 돌리는 사람에게 있다."""
-        _profile(db, definition={**DEFINITION, "label": "전역"})
-        _profile(
-            db,
-            workspace_id=workspace.id,
-            definition={**DEFINITION, "label": "우리 부서"},
-        )
-        made = renderers.renderer_for(db, workspace.id, "optistruct")
-        assert made.label == "우리 부서"
-
-    def test_남의_부서_것은_안_보인다(self, db: Session, workspace: Any) -> None:
+    def test_남의_부서_것도_형식_목록에_뜬다(self, db: Session) -> None:
+        """**보기는 전원이다**(ADR 0035). 전에는 내 부서 것과 전역만 보였고, 같은 key 면
+        부서 것이 전역을 덮었다 — 같은 「optistruct」 를 눌러도 누구냐에 따라 다른 덱이
+        나왔다. 이제 key 가 전사에서 하나라 덮을 것이 없다."""
         from app.modules.workspaces.models import Workspace
 
         other = Workspace(slug="polymer", name="고분자팀")
         db.add(other)
         db.flush()
         _profile(db, workspace_id=other.id, definition={**DEFINITION, "label": "남"})
-        assert "optistruct" not in {
-            item.key for item in renderers.all_renderers(db, workspace.id)
-        }
+        made = renderers.renderer_for(db, "optistruct")
+        assert made.label == "남"
 
 
 class Test깨진_정의:
@@ -214,6 +203,21 @@ class Test정의를_만들고_고친다:
     ) -> None:
         assert self._create(client, admin_headers).status_code == 201
         assert self._create(client, admin_headers).status_code == 409
+
+    def test_key_를_비우면_서버가_짓는다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        """key 는 전사에서 하나다(ADR 0035). 사람에게 받으면 옆 부서가 먼저 쓴 이름
+        때문에 막히므로, 비워 두면 서버가 짓는다 — 두 번 만들어도 부딪히지 않는다."""
+        first = client.post("/api/fitting/export-profiles", json=VALID, headers=admin_headers)
+        second = client.post("/api/fitting/export-profiles", json=VALID, headers=admin_headers)
+        assert first.status_code == 201, first.text
+        assert second.status_code == 201, second.text
+        keys = {first.json()["key"], second.json()["key"]}
+        assert len(keys) == 2
+        assert all(one.startswith("deck_") for one in keys), keys
+        formats = client.get("/api/fitting/formats", headers=admin_headers).json()
+        assert keys <= {item["key"] for item in formats}
 
     def test_고치면_다음_요청부터_먹는다(
         self, client: TestClient, admin_headers: dict[str, str]

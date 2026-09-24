@@ -51,8 +51,12 @@ import type {
   TablePreview,
   TestType,
 } from '@/modules/tests/api'
-import { WorkspacePicker } from '@/modules/workspaces/WorkspacePicker'
+import { AccessLine } from '@/modules/ownership/AccessLine'
+import { canEdit, lockedTitle } from '@/modules/ownership/access'
+import { RegisteringWorkspaceField } from '@/modules/workspaces/RegisteringWorkspaceField'
+import { defaultRegisteringSlug } from '@/modules/workspaces/registering'
 import { useAuth } from '@/shared/auth/AuthContext'
+import { isDataSteward } from '@/shared/auth/roles'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { PageHeader } from '@/shared/components/PageHeader'
 import { Badge } from '@/shared/components/ui/badge'
@@ -360,12 +364,11 @@ export default function FormatProfileEditorPage() {
     is_active: true,
   })
   /**
-   * 누구 것으로 만들지. **`null` 이면 전역이고 시스템 관리자만 할 수 있다.**
-   *
-   * 관리자 전용으로 두었더니 실무가 막혔다 — 장비는 부서마다 다른데 남의 부서
-   * 파일을 어떻게 읽을지를 시스템 관리자가 알 리 없다. 그 지식은 사업부에 있다.
+   * **등록 부서.** 기본은 내 소속이고, `null` 은 부서 없이(자료 관리자만) — 모든 부서의
+   * 자동 추정에 들어간다. 권한이 아니다: 고치는 사람은 등록자 · 편집을 받은 부서 · 자료
+   * 관리자다(ADR 0035 3단계 — 전에는 「전역이면 시스템 관리자, 부서면 그 부서 관리자」).
    */
-  const [owner, setOwner] = useState<string | null>(null)
+  const [owner, setOwner] = useState<string | null>(() => defaultRegisteringSlug(user))
   const [extensions, setExtensions] = useState<string[]>([])
   const [headerAny, setHeaderAny] = useState<string[]>([])
   const [metaAny, setMetaAny] = useState<string[]>([])
@@ -560,15 +563,8 @@ export default function FormatProfileEditorPage() {
 
   const testType = (types.data ?? []).find((item) => item.key === form.test_type_key) ?? null
 
-  /** 내가 관리자인 부서만. 아닌 부서 것으로 만들면 서버가 거절한다. */
-  const managed = (user?.memberships ?? [])
-    .filter((membership) => membership.role === 'manager')
-    .map((membership) => ({
-      slug: membership.slug,
-      name: membership.name,
-      path: membership.path,
-      depth: membership.depth,
-    }))
+  /** 이 정의를 지금 이 사람이 고칠 수 있나 — 만드는 중이면 언제나(ADR 0035). */
+  const editable = creating || canEdit(existing.data?.access)
 
   /** 규칙에 걸리는 표. 정규식을 치는 동안 어느 표가 남는지 바로 보여 준다 —
    *  안 그러면 저장하고 파싱해 봐야 안다. */
@@ -865,15 +861,15 @@ export default function FormatProfileEditorPage() {
       where: '④',
     },
     {
-      // **전역은 시스템 관리자만 고친다.** 편집 화면에서는 ⑥ 에 고를 것이 없으므로
-      // 「누구 것인지」 라고만 적으면 무엇을 적어야 하는지 알 수 없다(VOC 2026-09-13).
-      ok: owner !== null || Boolean(user?.is_system_admin),
+      // **못 고치는 정의면 무엇을 해야 하는지 적는다.** 「누구 것인지」 라고만 적으면
+      // 무엇을 적어야 하는지 알 수 없었다(VOC 2026-09-13). 만들 때는 등록 부서를 고른다 —
+      // 부서 없이는 자료 관리자만.
+      ok: creating ? owner !== null || isDataSteward(user) : editable,
       label: creating
-        ? '누구 것인지'
-        : '전역 프로파일 — 시스템 관리자만 고칩니다. 「내 부서 것으로 복제」 하세요',
+        ? '등록 부서'
+        : `고칠 수 없는 정의 — ${lockedTitle(existing.data?.access) ?? ''} 「내 것으로 복제」 하세요`,
       where: creating ? '⑥' : '위',
     },
-    { ok: Boolean(form.key), label: '키', where: '⑥' },
     { ok: Boolean(form.label), label: '이름', where: '⑥' },
     { ok: file === null || tried !== null, label: '적용 미리보기', where: '오른쪽' },
   ]
@@ -1156,7 +1152,9 @@ export default function FormatProfileEditorPage() {
         is_active: form.is_active,
       }
       if (creating) {
-        await testsApi.createFormat({ ...payload, key: form.key, owner_workspace_slug: owner })
+        // **key 는 안 보낸다 — 서버가 짓는다.** 전사에서 하나라(ADR 0035) 사람이 적게
+        // 하면 옆 부서가 먼저 쓴 이름 때문에 막힌다.
+        await testsApi.createFormat({ ...payload, owner_workspace_slug: owner })
       }
       else await testsApi.updateFormat(form.key, payload)
       // 저장됐으면 임시본은 뜻이 없다. 남겨 두면 다음에 열 때 「복원할까요」 가
@@ -1171,24 +1169,27 @@ export default function FormatProfileEditorPage() {
   }
 
   /**
-   * 전역 프로파일을 **내 부서 것으로** 복제한다.
+   * 못 고치는 정의를 **내 것으로** 복제한다 — 내가 등록자, 등록 부서는 내 소속.
    *
-   * 전역은 여러 부서가 함께 쓰므로 시스템 관리자만 고친다. 그런데 장비 파일을
-   * 어떻게 읽을지는 사업부가 안다 — 막힌 자리에서 「그럼 어떻게 하나」 의 답이
-   * 이것이다. 같은 지문이면 우선순위를 하나 높여 부서 것이 먼저 잡히게 한다.
+   * 남이 올린 정의는 그 사람과 편집을 받은 부서·자료 관리자가 고친다(ADR 0035). 그런데
+   * 장비 파일을 어떻게 읽을지는 쓰는 사람이 안다 — 막힌 자리에서 「그럼 어떻게 하나」 의
+   * 답이 이것이다. 같은 지문이면 우선순위를 하나 높여 내 부서 것이 먼저 잡히게 한다.
    */
   function cloneForMyWorkspace() {
-    const mine = managed[0]
-    if (!mine) return
+    const slug = defaultRegisteringSlug(user)
+    const mine = (user?.memberships ?? []).find((one) => one.slug === slug)
+    if (!slug) return
     const state = {
       ...draftState(),
       form: {
         ...form,
-        key: `${form.key}_${mine.slug}`.replace(/[^a-z0-9_]/g, '_').slice(0, 50),
-        label: `${form.label} (${mine.name})`,
+        // 새 key 는 저장할 때 서버가 짓는다 — 원본 key 를 들고 가면 편집 화면이 그것을
+        // 제 것인 양 보인다.
+        key: '',
+        label: `${form.label} (${mine?.name ?? slug})`,
         priority: form.priority + 1,
       },
-      owner: mine.slug,
+      owner: slug,
     }
     const clone: ProfileDraft = {
       version: DRAFT_VERSION,
@@ -1298,24 +1299,24 @@ export default function FormatProfileEditorPage() {
       {/* **막힌 이유와 갈 길을 한자리에.** 전에는 오른쪽 목록에 ✗ 하나만 있었고
           이유는 ⑥ 의 작은 글씨에 있었다 — 사람은 ⑥ 에 무엇을 적어야 하는지
           물었다(VOC 2026-09-13). */}
-      {!creating && existing.data?.is_global && !user?.is_system_admin && (
+      {!creating && existing.data && !editable && (
         <div className="mb-4 flex flex-wrap items-center gap-2 rounded-md border border-amber-500/40 bg-amber-500/5 p-3 text-sm">
           <TriangleAlert className="size-4 shrink-0 text-amber-700" />
           <span>
-            <b>전역 프로파일</b>이라 저장할 수 없습니다 — 여러 부서가 함께 쓰므로 시스템
-            관리자만 고칩니다. 내 부서 것으로 복제하면 지금 화면 그대로 부서 프로파일이
-            되고, 같은 파일은 그것이 먼저 잡습니다.
+            <b>저장할 수 없는 정의</b>입니다 — {lockedTitle(existing.data.access)} 내 것으로
+            복제하면 지금 화면 그대로 내 정의가 되고, 내 부서의 같은 파일은 그것이 먼저
+            잡습니다.
           </span>
           <Button
             size="sm"
             variant="secondary"
             className="ml-auto"
-            disabled={managed.length === 0}
-            title={managed.length === 0 ? '관리하는 부서가 없습니다' : undefined}
+            disabled={!defaultRegisteringSlug(user)}
+            title={defaultRegisteringSlug(user) ? undefined : '소속된 부서가 없습니다'}
             onClick={cloneForMyWorkspace}
           >
             <Copy className="size-4" />
-            내 부서 것으로 복제
+            내 것으로 복제
           </Button>
         </div>
       )}
@@ -2408,23 +2409,18 @@ export default function FormatProfileEditorPage() {
           <Section
             step="⑥"
             title="이름 지정"
-            hint="키는 나중에 못 바꿉니다. 지문이 겹치면 우선순위가 높은 쪽이 이깁니다."
+            hint="키는 저장할 때 서버가 짓고, 바뀌지 않습니다. 지문이 겹치면 우선순위가 높은 쪽이 이깁니다."
           >
             <div className="grid gap-3 sm:grid-cols-4">
               <div className="space-y-1.5">
-                <Label className="text-xs">
-                  키 {!form.key && <span className="text-destructive">*</span>}
-                </Label>
-                <Input
-                  className="h-8 font-mono text-xs"
-                  value={form.key}
-                  disabled={!creating}
-                  placeholder="ta_dma850"
-                  onChange={(event) =>
-                    setForm((current) => ({ ...current, key: event.target.value }))
-                  }
-                />
-                <p className="text-muted-foreground text-xs">소문자·숫자·밑줄</p>
+                <Label className="text-xs">키</Label>
+                {creating ? (
+                  <p className="text-muted-foreground pt-1.5 text-xs">
+                    저장하면 서버가 짓습니다 — 전사에서 하나입니다.
+                  </p>
+                ) : (
+                  <Input className="h-8 font-mono text-xs" value={form.key} disabled />
+                )}
               </div>
               <div className="space-y-1.5 sm:col-span-2">
                 <Label className="text-xs">
@@ -2453,37 +2449,24 @@ export default function FormatProfileEditorPage() {
             </div>
 
             <div className="mt-3 space-y-1.5">
-              <Label className="text-xs">누구 것인가</Label>
+              <Label className="text-xs">등록 부서</Label>
               {creating ? (
-                <>
-                  <WorkspacePicker
-                    workspaces={managed}
-                    value={owner}
-                    onChange={setOwner}
-                    placeholder={
-                      user?.is_system_admin ? '전역 — 모든 부서가 씁니다' : '부서를 고르세요'
-                    }
-                    className="w-full"
-                    emptyLabel="관리하는 부서가 없습니다"
-                  />
-                  <p className="text-muted-foreground text-xs">
-                    {user?.is_system_admin
-                      ? '비워 두면 전역입니다 — 모든 부서가 쓰고, 시스템 관리자만 고칠 수 있습니다.'
-                      : '부서 관리자인 부서만 고를 수 있습니다. 전역은 시스템 관리자가 만듭니다.'}
-                  </p>
-                </>
+                <RegisteringWorkspaceField value={owner} onChange={setOwner} autoDetect />
               ) : (
-                <p className="text-sm">
-                  {existing.data?.is_global ? (
-                    <>
-                      <b>전역</b> — 모든 부서가 씁니다. 시스템 관리자만 고칠 수 있습니다.
-                    </>
-                  ) : (
-                    <>
-                      <b>{existing.data?.owner_workspace_name}</b> 소유
-                    </>
+                <>
+                  <p className="text-sm">
+                    <b>{existing.data?.owner_workspace_name ?? '부서 없음'}</b>
+                  </p>
+                  {/* 누가 고치나 — 「권한」 에서 넘기거나 부서에 편집을 준다(ADR 0035). */}
+                  {existing.data && (
+                    <AccessLine
+                      kind="format_profile"
+                      id={existing.data.id}
+                      access={existing.data.access}
+                      onChanged={() => existing.reload()}
+                    />
                   )}
-                </p>
+                </>
               )}
             </div>
 

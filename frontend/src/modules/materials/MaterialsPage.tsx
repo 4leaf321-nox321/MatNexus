@@ -12,8 +12,6 @@ import {
   Boxes,
   ChevronLeft,
   ChevronRight,
-  Download,
-  Globe2,
   Plus,
   Search,
   Trash2,
@@ -31,6 +29,7 @@ import { fetchAll } from '@/shared/api/paging'
 import { ConfirmDialog } from '@/shared/components/ConfirmDialog'
 import { AddToBasket } from '@/shared/components/AddToBasket'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
+import { ExportJsonMenu } from '@/shared/components/ExportJsonMenu'
 import {
   ColumnFilter,
   ColumnLabel,
@@ -38,9 +37,9 @@ import {
   FILTER_ROW,
 } from '@/shared/components/ColumnFilter'
 import { downloadFile } from '@/shared/api/client'
+import type { UnitSystem } from '@/shared/api/unitSystems'
 import { PageHeader } from '@/shared/components/PageHeader'
 import { Stamp } from '@/shared/components/Stamp'
-import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
 import { Input } from '@/shared/components/ui/input'
 import {
@@ -130,10 +129,9 @@ export default function MaterialsPage() {
     code,
     family,
     category,
-    // 값이 `global` 이면 전역만, 부서 slug 면 그 부서만. 서버가 둘을 다른 칸으로
-    // 받는다 — 「전역」 은 소유가 없는 것이라 부서 목록에 낄 수 없다.
-    scope: (scope === 'global' ? 'global' : undefined) as 'global' | undefined,
-    workspace: scope && scope !== 'global' ? scope : undefined,
+    // 부서 slug 면 그 부서가 등록한 것만. 「전역」 칸은 걷었다(ADR 0035) — 부서 없는
+    // 재료는 만들 길이 없고, 그 말을 다른 시스템이 「공식」 으로 읽었다.
+    workspace: scope || undefined,
     sort: sort.key,
     desc: sort.descending,
   }
@@ -195,11 +193,13 @@ export default function MaterialsPage() {
    * **목록이 서버에 보내는 것과 같은 값을 보낸다** — 여기서 다르게 만들면
    * 「화면에서 본 것」 과 「받아 간 파일」 이 갈리고, 받아 간 쪽이 틀렸다는 것을
    * 알아챌 방법이 없다.
+   *
+   * 값은 고른 단위계 하나로 나간다(ADR 0036) — 밀도·두께·선언 물성이 같은 계다.
    */
-  async function exportJson() {
+  async function exportJson(system: UnitSystem, filename: string) {
     setExporting(true)
     try {
-      const query = new URLSearchParams()
+      const query = new URLSearchParams({ units: system.key })
       for (const [key, value] of [
         ['q', applied],
         ['name', name],
@@ -207,13 +207,11 @@ export default function MaterialsPage() {
         ['code', code],
         ['family', family],
         ['category', category],
-        ['scope', scope === 'global' ? 'global' : ''],
-        ['workspace', scope && scope !== 'global' ? scope : ''],
+        ['workspace', scope],
       ] as const) {
         if (value) query.set(key, value)
       }
-      const suffix = query.toString() ? `?${query}` : ''
-      await downloadFile(`/materials/export${suffix}`, 'matnexus_materials.json')
+      await downloadFile(`/materials/export?${query}`, filename)
     } finally {
       setExporting(false)
     }
@@ -244,10 +242,11 @@ export default function MaterialsPage() {
             </Button>
             {/* **지금 거른 것을 그대로 받는다.** 화면과 다른 것이 내려오면
                 사람은 그 사실을 모른 채 그 파일로 계산한다. */}
-            <Button variant="outline" onClick={() => void exportJson()} disabled={exporting}>
-              <Download className="size-4" />
-              {exporting ? '내보내는 중…' : 'JSON 내보내기'}
-            </Button>
+            <ExportJsonMenu
+              stem="matnexus_materials"
+              busy={exporting}
+              onExport={(system, filename) => void exportJson(system, filename)}
+            />
             <Button onClick={() => setRegistering(true)}>
               <Plus className="size-4" />
               재료 등록
@@ -546,13 +545,10 @@ export default function MaterialsPage() {
                   <ColumnFilter
                     label="소속"
                     value={scope}
-                    options={[
-                      { value: 'global', label: '전역' },
-                      ...(workspaces.data ?? []).map((one) => ({
-                        value: one.slug,
-                        label: one.name,
-                      })),
-                    ]}
+                    options={(workspaces.data ?? []).map((one) => ({
+                      value: one.slug,
+                      label: one.name,
+                    }))}
                     onChange={(next) => {
                       setScope(next)
                       setOffset(0)
@@ -604,18 +600,8 @@ export default function MaterialsPage() {
                   <TableCell>
                     <Stamp at={material.created_at} />
                   </TableCell>
-                  <TableCell>
-                    {material.is_global ? (
-                      <Badge variant="outline" className="gap-1">
-                        <Globe2 className="size-3" />
-                        전역
-                      </Badge>
-                    ) : (
-                      <span className="text-muted-foreground text-sm">
-                        {material.owner_workspace_name ?? '—'}
-                      </span>
-                    )}
-                  </TableCell>
+                  {/* 등록한 부서 — 권한이 아니다(ADR 0035). 누가 고치는지는 상세가 말한다. */}
+                  <TableCell>{material.owner_workspace_name ?? '—'}</TableCell>
                 </TableRow>
               ))}
             </TableBody>

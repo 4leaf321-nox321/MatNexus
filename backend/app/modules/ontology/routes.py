@@ -83,9 +83,7 @@ def get_ontology(
         deck_requirements=DeckRequirementsOut(
             format_needs={
                 key: list(blocks)
-                for key, blocks in deckmap.format_needs(
-                    deckmap.all_renderers(db, user.home_workspace_id)
-                ).items()
+                for key, blocks in deckmap.format_needs(deckmap.all_renderers(db)).items()
             },
             block_from_tests={key: list(one["from_tests"]) for key, one in sources.items()},
             block_fills={key: list(one["fills"]) for key, one in sources.items()},
@@ -123,7 +121,8 @@ def get_related(
     if here is None:
         raise AppError(
             "MNX-ONTOLOGY-0002",
-            "그 마디를 찾을 수 없습니다 — 없거나, 볼 권한이 없습니다.",
+            "그 마디를 찾을 수 없습니다 — 없거나 지워졌습니다(측정 의뢰는 낸 부서·받는 "
+            "부서만 봅니다).",
             status=404,
         )
 
@@ -168,7 +167,7 @@ def get_path(
         return PathOut(
             found=False,
             note=f"{max_depth} 홉 안에 길이 없습니다 — 양끝이 실제로 안 이어져 있거나, "
-            "가운데 마디를 볼 권한이 없습니다.",
+            "가운데 마디가 지워졌습니다(측정 의뢰는 낸 부서·받는 부서만 봅니다).",
         )
 
     refs = [(from_kind, str(from_id))]

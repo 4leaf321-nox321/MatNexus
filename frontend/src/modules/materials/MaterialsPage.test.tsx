@@ -26,6 +26,30 @@ vi.mock('@/shared/api/client', async (importOriginal) => ({
   downloadFile: (...args: unknown[]) => download(...args),
 }))
 
+// 계 목록은 서버가 준다(ADR 0036). **기본이 첫째가 아니다** — 순서로 고르면 통과해 버린다.
+vi.mock('@/shared/api/unitSystems', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/shared/api/unitSystems')>()),
+  unitSystemsApi: {
+    list: () =>
+      Promise.resolve([
+        { key: 'si', label: 'SI (kg · m · s · Pa)', is_default: false },
+        { key: 'mm_n_tonne', label: 'mm · N · tonne (MPa)', is_default: true },
+      ]),
+  },
+}))
+
+// 계 목록은 서버가 준다(ADR 0036). **기본이 첫째가 아니다** — 순서로 고르면 통과해 버린다.
+vi.mock('@/shared/api/unitSystems', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/shared/api/unitSystems')>()),
+  unitSystemsApi: {
+    list: () =>
+      Promise.resolve([
+        { key: 'si', label: 'SI (kg · m · s · Pa)', is_default: false },
+        { key: 'mm_n_tonne', label: 'mm · N · tonne (MPa)', is_default: true },
+      ]),
+  },
+}))
+
 vi.mock('@/modules/materials/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/modules/materials/api')>()),
   materialsApi: {
@@ -207,17 +231,23 @@ describe('일괄 삭제', () => {
       await screen.findByText(/재료 2건과 함께 시료 2건 · 시편 6건을 지웠습니다/)
     ).toBeInTheDocument()
   })
-  it('지금 거른 조건 그대로 내보낸다', async () => {
+  it('지금 거른 조건 그대로, 고른 단위계로 내보낸다', async () => {
     // **「화면에서 본 것」 과 「받아 간 파일」 이 달라지면 안 된다** — 받아 간
-    // 쪽이 틀렸다는 것을 알아챌 방법이 없다.
+    // 쪽이 틀렸다는 것을 알아챌 방법이 없다. 계는 고르지 않으면 서버 기본이고, 파일
+    // 이름이 그 계를 말한다(ADR 0036).
     const user = userEvent.setup()
     show()
     await screen.findByRole('link', { name: 'SPCC_-_1.2' })
 
     await user.click(screen.getByRole('button', { name: /JSON 내보내기/ }))
-    expect(download).toHaveBeenCalledWith(
-      expect.stringContaining('/materials/export'),
-      expect.stringContaining('.json')
+    await user.click(
+      await screen.findByRole('menuitem', { name: /matnexus_materials_mm_n_tonne\.json/ })
     )
+    await waitFor(() => expect(download).toHaveBeenCalled())
+    const [url, filename] = download.mock.calls[0] as [string, string]
+    const sent = new URL(url, 'http://localhost')
+    expect(sent.pathname).toBe('/materials/export')
+    expect(sent.searchParams.get('units')).toBe('mm_n_tonne')
+    expect(filename).toBe('matnexus_materials_mm_n_tonne.json')
   })
 })

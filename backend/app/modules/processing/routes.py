@@ -56,15 +56,19 @@ from app.modules.processing.schemas import (
 from app.modules.statistics.models import EnsembleResult
 from app.modules.tests.models import Curve, TestRun, TestSummary, TestType
 from app.modules.workspaces.models import Workspace
-from app.shared import audit, curvedata, filestore, revision, test_type_channels
+from app.shared import (
+    audit,
+    curvedata,
+    definition_keys,
+    filestore,
+    permissions,
+    revision,
+    test_type_channels,
+)
+from app.shared.access import AccessBook, EditAccessOut, access_of
 from app.shared.auth import current_user
 from app.shared.errors import AppError, Conflict, NotFound
-from app.shared.permissions import (
-    get_run,
-    require_owner_edit,
-    resolve_owner_workspace,
-    visible_owner_clause,
-)
+from app.shared.permissions import get_run
 from matcore import curves, processing, registry, runtime
 from matcore.parsers import Channel
 
@@ -185,10 +189,10 @@ def _run_pipeline(
     return result, curve
 
 
-def _recipe_or_none(db: Session, user: User, key: str | None) -> ProcessingRecipe | None:
+def _recipe_or_none(db: Session, key: str | None) -> ProcessingRecipe | None:
     if not key:
         return None
-    recipe = db.scalar(_visible_recipes(db, user).where(ProcessingRecipe.key == key))
+    recipe = db.scalar(_visible_recipes(db).where(ProcessingRecipe.key == key))
     if recipe is None:
         raise NotFound("MNX-PROCESSING-0005", f"레시피를 찾을 수 없습니다: {key}")
     return recipe
@@ -501,7 +505,7 @@ def create_result(
         run,
         payload.source_curve_key,
         payload.steps,
-        _recipe_or_none(db, user, payload.recipe_key),
+        _recipe_or_none(db, payload.recipe_key),
         user,
     )
     # **「이 결과 누가 돌렸지」.** 사람이 화면에서 돌린 것은 안 남는다 — 결과 자체가
@@ -520,6 +524,19 @@ def create_result(
     db.commit()
     db.refresh(item)
     return _result_out(item)
+
+
+def _require_result_removal(
+    db: Session, user: User, run: TestRun, item: ProcessingResult
+) -> None:
+    """처리 결과를 지울 수 있나 — **만든 사람**이거나 그 시험을 고칠 수 있는 사람.
+
+    결과는 불변이라 고치는 길이 없고 지우는 길만 있다. 전에는 부서 관리자만 지울 수
+    있어서 자기가 돌려 본 결과를 자기가 못 치웠다(ADR 0035 배경).
+    """
+    if item.created_by_id is not None and item.created_by_id == user.id:
+        return
+    permissions.require_edit(db, user, run, code="MNX-PROCESSING-0015")
 
 
 def _jsonable(options: dict[str, Any]) -> dict[str, Any]:
@@ -599,16 +616,17 @@ def list_results(
 # --- 레시피 ------------------------------------------------------------------
 
 
-def _visible_recipes(db: Session, user: User) -> Select[tuple[ProcessingRecipe]]:
-    """내 부서 것 + 전역. 재료·프로파일·시험 종류와 **같은 규칙, 같은 코드**다.
+def _visible_recipes(db: Session) -> Select[tuple[ProcessingRecipe]]:
+    """살아 있는 레시피 전부. **전원이 전부 본다**(ADR 0035).
+
+    남의 부서가 어떤 규격으로 탄성 구간을 잡는지 보이는 것이 공유의 절반이다 — 같은
+    재료를 두 부서가 다르게 처리했으면 그 차이가 어디서 왔는지 레시피가 말해 준다.
+    고치는 것은 등록자 · 편집을 받은 부서 · 자료 관리자다(`permissions.require_edit`).
 
     **지운 것은 여기서 빠진다.** 소프트 삭제라 행은 남는다 — 이 한 곳을 안 거르면
     지운 레시피가 처리 탭의 레시피 고르기에 그대로 뜬다.
     """
-    return select(ProcessingRecipe).where(
-        visible_owner_clause(db, user, ProcessingRecipe.owner_workspace_id),
-        ProcessingRecipe.deleted_at.is_(None),
-    )
+    return select(ProcessingRecipe).where(ProcessingRecipe.deleted_at.is_(None))
 
 
 def _audit_recipe(db: Session, user: User, item: ProcessingRecipe, *, made: bool) -> None:
@@ -630,7 +648,9 @@ def _audit_recipe(db: Session, user: User, item: ProcessingRecipe, *, made: bool
     )
 
 
-def _recipe_out(db: Session, item: ProcessingRecipe) -> RecipeOut:
+def _recipe_out(
+    db: Session, item: ProcessingRecipe, access: EditAccessOut | None = None
+) -> RecipeOut:
     owner = db.get(Workspace, item.owner_workspace_id) if item.owner_workspace_id else None
     test_type = db.get(TestType, item.test_type_id)
     return RecipeOut(
@@ -641,7 +661,7 @@ def _recipe_out(db: Session, item: ProcessingRecipe) -> RecipeOut:
         revision=item.revision,
         owner_workspace_slug=owner.slug if owner else None,
         owner_workspace_name=owner.name if owner else None,
-        is_global=item.owner_workspace_id is None,
+        access=access,
         test_type_key=test_type.key if test_type else "?",
         test_type_label=test_type.label if test_type else "?",
         steps=item.steps,
@@ -688,10 +708,12 @@ def list_recipes(
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> list[RecipeOut]:
-    query = _visible_recipes(db, user).order_by(ProcessingRecipe.label)
+    query = _visible_recipes(db).order_by(ProcessingRecipe.label)
     if test_type:
         query = query.where(ProcessingRecipe.test_type_id == _resolve_type(db, test_type).id)
-    return [_recipe_out(db, item) for item in db.scalars(query)]
+    items = list(db.scalars(query))
+    book = AccessBook(db, user).prime(items)
+    return [_recipe_out(db, item, book.of(item)) for item in items]
 
 
 @router.post("/recipes", response_model=RecipeOut, status_code=201)
@@ -700,29 +722,32 @@ def create_recipe(
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> RecipeOut:
-    """부서 관리자가 자기 부서 레시피를 만든다.
+    """누구나 만든다 — 등록자가 고치고, 필요하면 부서에 편집을 준다(ADR 0035).
 
     **부서마다 규격이 다르다.** 탄성 구간을 어디로 잡을지는 따르는 규격이 정하고,
-    그 판단은 그 부서가 한다 — 형식 프로파일과 같은 이유다(ADR 0005·0006).
+    그 판단은 그 부서가 한다 — 형식 프로파일과 같은 이유다(ADR 0005·0006). 그래서
+    등록 부서를 적어 둔다(안 보내면 내 소속).
     """
-    owner_id = resolve_owner_workspace(
-        db, user, payload.owner_workspace_slug, what="레시피", code="MNX-PROCESSING-0007"
+    owner_id = permissions.registering_workspace(
+        db,
+        user,
+        payload.owner_workspace_slug,
+        given="owner_workspace_slug" in payload.model_fields_set,
+        what="레시피",
+        code="MNX-PROCESSING-0007",
     )
-    duplicate = db.scalar(
-        select(ProcessingRecipe).where(
-            ProcessingRecipe.key == payload.key,
-            # **지운 것은 안 센다.** 위 프로파일·시험 정의와 같은 이유다.
-            ProcessingRecipe.deleted_at.is_(None),
-            ProcessingRecipe.owner_workspace_id.is_(None)
-            if owner_id is None
-            else ProcessingRecipe.owner_workspace_id == owner_id,
-        )
+    # **지운 것은 안 센다.** 위 프로파일·시험 정의와 같은 이유다.
+    key = definition_keys.resolve(
+        db,
+        ProcessingRecipe,
+        payload.key,
+        prefix="rcp",
+        what="레시피",
+        code="MNX-PROCESSING-0008",
     )
-    if duplicate:
-        raise Conflict("MNX-PROCESSING-0008", f"이미 있는 레시피입니다: {payload.key}")
     _validate(payload.steps)
     item = ProcessingRecipe(
-        key=payload.key,
+        key=key,
         label=payload.label,
         description=payload.description,
         owner_workspace_id=owner_id,
@@ -736,7 +761,7 @@ def create_recipe(
     _audit_recipe(db, user, item, made=True)
     db.commit()
     db.refresh(item)
-    return _recipe_out(db, item)
+    return _recipe_out(db, item, access_of(db, user, item))
 
 
 @router.put("/recipes/{key}", response_model=RecipeOut)
@@ -751,12 +776,10 @@ def update_recipe(
     결과가 단계를 통째로 스냅샷해 두기 때문이다. 레시피를 고치는 것이 과거의
     숫자를 소급해 바꾸면, 어제 보고서에 적은 항복강도가 오늘 다른 값이 된다.
     """
-    item = db.scalar(_visible_recipes(db, user).where(ProcessingRecipe.key == key))
+    item = db.scalar(_visible_recipes(db).where(ProcessingRecipe.key == key))
     if item is None:
         raise NotFound("MNX-PROCESSING-0009", f"레시피를 찾을 수 없습니다: {key}")
-    require_owner_edit(
-        db, user, item.owner_workspace_id, what="레시피", code="MNX-PROCESSING-0007"
-    )
+    permissions.require_edit(db, user, item, code="MNX-PROCESSING-0007")
     # **덮어쓰기를 막는다**(ADR 0015). 레시피는 단계를 통째로 갈아 끼우므로,
     # 뒤에 저장한 쪽이 앞의 단계 구성을 지운다.
     revision.guard(
@@ -772,7 +795,7 @@ def update_recipe(
     _audit_recipe(db, user, item, made=False)
     db.commit()
     db.refresh(item)
-    return _recipe_out(db, item)
+    return _recipe_out(db, item, access_of(db, user, item))
 
 
 @router.delete("/recipes/{key}", status_code=204)
@@ -781,12 +804,10 @@ def delete_recipe(
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> Response:
-    item = db.scalar(_visible_recipes(db, user).where(ProcessingRecipe.key == key))
+    item = db.scalar(_visible_recipes(db).where(ProcessingRecipe.key == key))
     if item is None:
         raise NotFound("MNX-PROCESSING-0009", f"레시피를 찾을 수 없습니다: {key}")
-    require_owner_edit(
-        db, user, item.owner_workspace_id, what="레시피", code="MNX-PROCESSING-0007"
-    )
+    permissions.require_edit(db, user, item, code="MNX-PROCESSING-0007")
     # **결과는 남는다.** `recipe_id` 를 끊을 뿐이다 — 스냅샷이 있으므로 결과는
     # 자기가 무엇으로 계산됐는지 여전히 안다. 레시피를 지웠다고 이미 보고서에
     # 들어간 숫자의 출처가 사라지면 안 된다.
@@ -858,6 +879,9 @@ def adopt(
     if item is None:
         raise NotFound("MNX-PROCESSING-0010", "처리 결과를 찾을 수 없습니다.")
     run = get_run(db, user, item.test_run_id)
+    # **채택은 시험을 고치는 일이다**(ADR 0035) — 「이 시험의 물성은 이것」 이라는
+    # 선언이라 통계·카드가 그것을 읽는다. 해석하는 사람이 다르면 그 부서에 편집을 준다.
+    permissions.require_edit(db, user, run, code="MNX-PROCESSING-0017")
     run.adopted_result_id = item.id
     _project_summaries(db, run, item)
     db.commit()
@@ -957,13 +981,7 @@ def delete_result(
     if item is None:
         raise NotFound("MNX-PROCESSING-0010", "처리 결과를 찾을 수 없습니다.")
     run = get_run(db, user, item.test_run_id)
-    require_owner_edit(
-        db,
-        user,
-        run.workspace_id,
-        what="이 시험의 처리 결과",
-        code="MNX-PROCESSING-0015",
-    )
+    _require_result_removal(db, user, run, item)
 
     if run.adopted_result_id == item.id:
         raise Conflict(
@@ -1017,6 +1035,7 @@ def unadopt(
     if item is None:
         raise NotFound("MNX-PROCESSING-0010", "처리 결과를 찾을 수 없습니다.")
     run = get_run(db, user, item.test_run_id)
+    permissions.require_edit(db, user, run, code="MNX-PROCESSING-0017")
     if run.adopted_result_id != item.id:
         raise AppError("MNX-PROCESSING-0011", "채택된 결과가 아닙니다.", status=409)
     run.adopted_result_id = None
@@ -1095,13 +1114,7 @@ def undo_batch(
             continue
         try:
             run = get_run(db, user, item.test_run_id)
-            require_owner_edit(
-                db,
-                user,
-                run.workspace_id,
-                what="이 시험의 처리 결과",
-                code="MNX-PROCESSING-0015",
-            )
+            _require_result_removal(db, user, run, item)
             used = db.scalar(
                 select(func.count())
                 .select_from(EnsembleResult)
@@ -1183,7 +1196,8 @@ def run_batch(
             f"나눠서 돌리세요.",
             status=422,
         )
-    recipe = _recipe_or_none(db, user, payload.recipe_key)
+    recipe = _recipe_or_none(db, payload.recipe_key)
+    editor = permissions.editor(db, user)
 
     items: list[BatchItemOut] = []
     #: 감사 한 줄에 적을 부서. 여러 부서면 비운다(아래).
@@ -1206,6 +1220,23 @@ def run_batch(
         # 이번에 못 냈다」 와 「원래도 없었다」 는 다른 말이다.
         before = _adopted_scalars(db, run)
         was_adopted = run.adopted_result_id
+
+        # **채택까지 걸면 그 시험을 고칠 수 있어야 한다**(ADR 0035). 결과만 쌓는 것은
+        # 누구나 하지만, 「이 시험의 물성」 을 바꾸는 것은 고치는 일이다. 미리보기에서도
+        # 같은 자리에서 막아야 걸어 보고 나서 놀라지 않는다.
+        if payload.adopt and not editor.allows(run):
+            locked = permissions.locked(db, run, code="MNX-PROCESSING-0017")
+            items.append(
+                BatchItemOut(
+                    test_run_id=run.id,
+                    record_name=run.record_name,
+                    status="failed",
+                    error=f"{locked.message} 채택 없이 결과만 쌓으려면 채택을 끄세요.",
+                    previous=before,
+                    previous_adopted_id=was_adopted,
+                )
+            )
+            continue
 
         try:
             if payload.dry_run:

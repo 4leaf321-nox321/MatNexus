@@ -98,12 +98,15 @@ from app.shared import (
     permissions,
     sorting,
     specimen_size,
+    unit_systems,
 )
+from app.shared.access import AccessBook, EditAccessOut, access_of
 from app.shared.auth import current_user
 from app.shared.errors import AppError, Conflict, NotFound
 from app.shared.pagination import Page, clamp_limit
 from matcore import naming, units
 from matcore import specimen as specimen_kit
+from matcore.export.systems import UnitSystem
 
 logger = logging.getLogger(__name__)
 
@@ -125,6 +128,7 @@ def _material_out(
     sample_count: int,
     workspace_name: str | None,
     uses: dict[str, list[str]] | None = None,
+    access: EditAccessOut | None = None,
 ) -> MaterialOut:
     """`uses` 는 **밖에서 미리 읽어 넘긴다** — 목록이 재료마다 물으면 N+1 이다."""
     unit = material.input_units.get("spec_thickness", LENGTH_UNIT)
@@ -140,7 +144,6 @@ def _material_out(
         alias=material.alias,
         owner_workspace_id=material.owner_workspace_id,
         owner_workspace_name=workspace_name,
-        is_global=material.owner_workspace_id is None,
         family=material.family,
         category=material.category,
         grade=material.grade,
@@ -151,6 +154,9 @@ def _material_out(
         applied_parts=(uses or {}).get("part", []),
         density=services.from_si(material.density_si, density_unit),
         density_unit=density_unit,
+        # **SI 칸을 곁에 둔다** — 위 `density` 는 화면 표시값이라, 다른 시스템이 선언 물성의
+        # SI 와 함께 읽으면 밀도만 10¹² 배 틀린다(2026-09-24).
+        density_si=material.density_si,
         poisson_ratio=material.poisson_ratio,
         declared_properties=[
             _declared_out(row) for row in (material.declared_properties or [])
@@ -160,6 +166,7 @@ def _material_out(
         sample_count=sample_count,
         created_at=material.created_at,
         updated_at=material.updated_at,
+        access=access,
     )
 
 
@@ -277,6 +284,7 @@ def _sample_out(
     workspace_name: str | None,
     runs: RunTally = (0, 0, 0),
     registered_by: str | None = None,
+    access: EditAccessOut | None = None,
 ) -> SampleOut:
     # 재료와 같은 이유로 늘 표시 단위(`material_out` 참고).
     unit = DENSITY_UNIT
@@ -300,10 +308,12 @@ def _sample_out(
         production_date=sample.production_date,
         density=services.from_si(sample.density_si, unit),
         density_unit=unit,
+        density_si=sample.density_si,
         declared_properties=[_declared_out(row) for row in (sample.declared_properties or [])],
         note=sample.note,
         specimen_count=specimen_count,
         created_at=sample.created_at,
+        access=access,
     )
 
 
@@ -332,6 +342,7 @@ def _specimen_out(
     runs: RunTally = (0, 0, 0),
     sizes: specimen_size.Sizes | None = None,
     registered_by: str | None = None,
+    access: EditAccessOut | None = None,
 ) -> SpecimenOut:
     unit = specimen.input_units.get("length", LENGTH_UNIT)
     return SpecimenOut(
@@ -353,6 +364,7 @@ def _specimen_out(
         sizes=_brief_sizes(sizes),
         note=specimen.note,
         created_at=specimen.created_at,
+        access=access,
     )
 
 
@@ -552,8 +564,11 @@ def export_materials(
     code: str | None = Query(default=None),
     family: str | None = Query(default=None),
     category: str | None = Query(default=None),
-    scope: str = Query(default="all", pattern="^(all|mine|global)$"),
     workspace: str | None = Query(default=None),
+    units: str | None = Query(
+        default=None,
+        description="값의 단위계. 비우면 mm·N·tonne(ADR 0036) — SI 는 `si`.",
+    ),
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> Response:
@@ -574,9 +589,15 @@ def export_materials(
     들어간다** — 곡선은 파일이고(수십 MB), 그것까지 담으면 이 파일은 열어 볼 수
     없는 것이 된다. 시험 자료가 필요하면 그것은 다른 내보내기다.
 
-    값은 **SI 그대로**다. 화면 표시 단위로 바꾸지 않는다 — 받아서 계산에 쓰는
-    파일이라, 단위가 화면 설정에 따라 달라지면 그 파일을 믿을 수 없다.
+    ## 값은 **고른 단위계 하나**로 — 기본 mm·N·tonne (ADR 0036)
+
+    전에는 「값은 SI 그대로」 라고 적어 두고, 화면 응답을 그대로 담아서 **밀도만 tonne/mm3,
+    두께는 mm** 였다 — 해석 연동이 받은 파일에서 짚었다(2026-09-24). 이제 파일 머리
+    (`unit_system`)가 계를 말하고, 값은 그 계로, `value_si`·`density_si` 는 SI 로 곁에 둔다.
+    그 계에 기호가 없는 단위는 받은 그대로 두고 `kept_units` 에 적는다(`shared/unit_systems`).
     """
+    system = unit_systems.resolve(db, units, code="MNX-MATERIALS-0036")
+    kept: set[str] = set()
     query = _filtered_materials(
         db,
         user,
@@ -586,7 +607,6 @@ def export_materials(
         code=code,
         family=family,
         category=category,
-        scope=scope,
         workspace=workspace,
     )
     rows = list(db.scalars(query.order_by(Material.code)))
@@ -616,22 +636,31 @@ def export_materials(
                 ("code", code),
                 ("family", family),
                 ("category", category),
-                ("scope", scope if scope != "all" else None),
                 ("workspace", workspace),
             )
             if value
         },
         "count": len(rows),
+        # **숫자를 읽기 전에 볼 자리** — 계와, 그 계로 못 옮겨 그대로 둔 단위.
+        "unit_system": unit_systems.describe(system),
+        "units_note": UNITS_NOTE,
         "materials": [
             {
-                **_material_out(
+                **_in_units(
                     one,
-                    sample_count=counts.get(one.id, 0),
-                    workspace_name=(
-                        names.get(one.owner_workspace_id) if one.owner_workspace_id else None
-                    ),
-                    uses=uses.get(one.id),
-                ).model_dump(mode="json"),
+                    _material_out(
+                        one,
+                        sample_count=counts.get(one.id, 0),
+                        workspace_name=(
+                            names.get(one.owner_workspace_id)
+                            if one.owner_workspace_id
+                            else None
+                        ),
+                        uses=uses.get(one.id),
+                    ).model_dump(mode="json", exclude={"access"}),
+                    system,
+                    kept,
+                ),
                 "parameter_sets": [
                     _parameter_set_out(row).model_dump(mode="json")
                     for row in sets.get(one.id, [])
@@ -640,7 +669,71 @@ def export_materials(
             for one in rows
         ],
     }
-    return exports.json_file(payload, f"matnexus_materials_{datetime.now(UTC):%Y%m%d}.json")
+    payload["kept_units"] = sorted(kept)
+    return exports.json_file(
+        payload, f"matnexus_materials_{datetime.now(UTC):%Y%m%d}_{system.key}.json"
+    )
+
+
+#: 내보낸 파일이 제 단위를 설명하는 한 줄. 문헌 내보내기와 같은 말이다.
+UNITS_NOTE = (
+    "값(`value`·`value_num`·`density`·`spec_thickness`)은 `unit_system` 의 계로 적었고, "
+    "이름에 si 가 든 칸(`value_si`·`density_si`)은 저장된 SI 다. `kept_units` 의 단위는 "
+    "이 계에 기호가 없어 받은 그대로 뒀다. 모델 파라미터의 항(`parameter_sets`·`term`)은 "
+    "자기 단위다."
+)
+
+
+def _in_units(
+    material: Material, body: dict[str, Any], system: UnitSystem, kept: set[str]
+) -> dict[str, Any]:
+    """화면 모양의 재료 한 줄을 **고른 계 하나로** — 밀도·두께·선언 물성.
+
+    화면 응답은 밀도를 표시 단위(tonne/mm3), 두께를 넣은 단위, 선언 물성의 `value` 를 사람이
+    적은 단위로 준다. 그대로 담으면 한 파일에 계가 셋이다. 여기서 SI(저장값)에서 다시 옮긴다
+    — 표시값을 되옮기면 반올림이 한 번 더 붙는다.
+    """
+    density = (
+        unit_systems.convert(system, material.density_si, "kg/m3")
+        if material.density_si is not None
+        else None
+    )
+    body["density"] = density.value if density else None
+    body["density_unit"] = unit_systems.convert(system, 1.0, "kg/m3").unit
+    thickness = (
+        unit_systems.convert(system, material.spec_thickness_m, "m")
+        if material.spec_thickness_m is not None
+        else None
+    )
+    body["spec_thickness"] = thickness.value if thickness else None
+    body["spec_thickness_unit"] = unit_systems.convert(system, 1.0, "m").unit
+
+    declared = []
+    for row in body.get("declared_properties") or []:
+        unit: str | None = None
+        points = []
+        for point in row.get("points") or []:
+            moved = unit_systems.convert(system, float(point["value_si"]), row.get("si_unit"))
+            if not moved.converted and moved.unit:
+                kept.add(moved.unit)
+            unit = moved.unit or None
+            points.append(
+                {
+                    "temperature_k": point.get("temperature_k"),
+                    "value": moved.value,
+                    "value_si": point["value_si"],
+                }
+            )
+        # 사람이 적은 단위(`input_unit`)는 뺀다 — 여기 `value` 는 그 단위가 아니다.
+        declared.append(
+            {
+                **{key: value for key, value in row.items() if key != "input_unit"},
+                "unit": unit,
+                "points": points,
+            }
+        )
+    body["declared_properties"] = declared
+    return body
 
 
 def _filtered_materials(
@@ -653,7 +746,6 @@ def _filtered_materials(
     code: str | None = None,
     family: str | None = None,
     category: str | None = None,
-    scope: str = "all",
     workspace: str | None = None,
 ) -> Select[tuple[Material]]:
     """목록이 거르는 규칙. **내보내기와 한 벌로 쓴다.**
@@ -694,12 +786,9 @@ def _filtered_materials(
             db, vocabulary_services.get_vocabulary(db, slug), value
         )
         query = query.where(column == term.id if term else false())
-    if scope == "global":
-        query = query.where(Material.owner_workspace_id.is_(None))
-    elif scope == "mine":
-        query = query.where(Material.owner_workspace_id.is_not(None))
-    # **어느 부서 것인가.** `scope` 는 「전역인가 아닌가」 만 갈랐다 — 부서가 여럿인
-    # 곳에서는 그것으로 「고분자팀 재료」 를 못 찾는다. slug 로 그 부서만 남긴다.
+    # **어느 부서가 올렸나.** 전에는 `scope`(전역 / 부서 것)도 있었는데, 「전역인가」 만
+    # 갈라서 부서가 여럿인 곳에서 「고분자팀 재료」 를 못 찾았다 — 그리고 「전역」 이라는
+    # 말을 걷으면서(ADR 0035) 함께 걷었다. slug 로 그 부서만 남긴다.
     if workspace:
         query = query.where(
             Material.owner_workspace_id == permissions.workspace_by_slug(db, workspace).id
@@ -719,7 +808,6 @@ def list_materials(
     code: str | None = Query(default=None, description="재료번호. 패딩 없이 쳐도 된다"),
     family: str | None = None,
     category: str | None = None,
-    scope: str = Query(default="all", pattern="^(all|mine|global)$"),
     workspace: str | None = Query(default=None),
     sort: str | None = Query(default=None, description="정렬할 열. 기본은 등록 일시"),
     desc: bool = Query(default=True, description="내림차순. 기본은 최근 등록순"),
@@ -737,7 +825,6 @@ def list_materials(
         code=code,
         family=family,
         category=category,
-        scope=scope,
         workspace=workspace,
     )
     total = db.scalar(select(func.count()).select_from(query.subquery())) or 0
@@ -762,6 +849,7 @@ def list_materials(
     names = services.workspace_names(db, [m.owner_workspace_id for m in rows])
     # **한 번에 읽는다.** 재료마다 물으면 200건짜리 화면에서 200번이 된다.
     uses = services.uses_of(db, [m.id for m in rows])
+    book = AccessBook(db, user).prime(rows)
     return Page(
         items=[
             _material_out(
@@ -771,6 +859,7 @@ def list_materials(
                     names.get(m.owner_workspace_id) if m.owner_workspace_id else None
                 ),
                 uses=uses.get(m.id),
+                access=book.of(m),
             )
             for m in rows
         ],
@@ -870,6 +959,7 @@ def create_material(
         sample_count=0,
         workspace_name=workspace.name,
         uses=services.uses_of(db, [material.id]).get(material.id),
+        access=access_of(db, user, material),
     )
 
 
@@ -889,12 +979,23 @@ def bulk_delete_plan(
     blocked: list[MaterialBlockedOut] = []
     counted = 0
 
+    editor = permissions.editor(db, user)
     for material_id in payload.material_ids:
         try:
             material = services.get_material(db, user, material_id)
-            services.require_writable(db, user, material)
+            permissions.require_edit(db, user, material, code="MNX-MATERIALS-0008")
         except AppError as exc:
             blocked.append(MaterialBlockedOut(id=material_id, name=None, reason=exc.message))
+            continue
+        foreign = services.foreign_descendants(db, editor, material)
+        if foreign:
+            blocked.append(
+                MaterialBlockedOut(
+                    id=material.id,
+                    name=material.record_name,
+                    reason="아래에 남의 자료가 있습니다: " + " · ".join(foreign),
+                )
+            )
             continue
         plan = services.delete_plan(db, material)
         totals["samples"] += plan.samples
@@ -926,14 +1027,27 @@ def delete_materials(
     tally = {"samples": 0, "specimens": 0, "test_runs": 0}
     now = _now()
 
+    editor = permissions.editor(db, user)
     for material_id in payload.material_ids:
         try:
             material = services.get_material(db, user, material_id)
-            services.require_writable(db, user, material)
+            permissions.require_edit(db, user, material, code="MNX-MATERIALS-0008")
         except AppError as exc:
             # **이름을 모르면 id 라도 준다.** 조용히 세지 않는 것이 요점이다.
             blocked.append(MaterialBlockedOut(id=material_id, name=None, reason=exc.message))
             continue
+        if payload.cascade:
+            # **남이 붙인 것은 통째로 지우지 않는다**(ADR 0035 D4 계층).
+            foreign = services.foreign_descendants(db, editor, material)
+            if foreign:
+                blocked.append(
+                    MaterialBlockedOut(
+                        id=material.id,
+                        name=material.record_name,
+                        reason="아래에 남의 자료가 있습니다: " + " · ".join(foreign),
+                    )
+                )
+                continue
 
         if not payload.cascade:
             remaining = counts.get(material.id, 0)
@@ -1039,8 +1153,9 @@ def create_bulk(
                         f"그 재료에 시료·시편을 더하려면 **같은 줄에 시료·시편을 "
                         f"함께 적으세요** — 그러면 있는 재료를 그대로 씁니다.",
                     )
-                else:
-                    services.require_writable(db, user, material)
+                # 있는 재료 아래에 시료를 붙이는 것은 **누구나 한다**(ADR 0035 D4) —
+                # 붙인 사람이 그 시료의 등록자다. 재료의 권한에 딸려 가면 그 재료를
+                # 처음 올린 사람만 그 아래를 늘릴 수 있다.
         except AppError as exc:
             blocked.append(BulkBlockedOut(row=item.row, reason=exc.message))
             blocked.extend(_skipped(item, "재료를 만들지 못해 건너뛰었습니다"))
@@ -1158,6 +1273,7 @@ def get_material(
             names.get(material.owner_workspace_id) if material.owner_workspace_id else None
         ),
         uses=services.uses_of(db, [material.id]).get(material.id),
+        access=access_of(db, user, material),
     )
 
 
@@ -1380,7 +1496,7 @@ def update_material(
     db: Session = Depends(get_db),
 ) -> MaterialOut:
     material = services.get_material(db, user, material_id)
-    services.require_writable(db, user, material)
+    permissions.require_edit(db, user, material, code="MNX-MATERIALS-0008")
 
     data = payload.model_dump(exclude_unset=True)
     for field in ("details", "alias", "note", "poisson_ratio"):
@@ -1453,6 +1569,7 @@ def update_material(
             names.get(material.owner_workspace_id) if material.owner_workspace_id else None
         ),
         uses=services.uses_of(db, [material.id]).get(material.id),
+        access=access_of(db, user, material),
     )
 
 
@@ -1463,7 +1580,7 @@ def delete_material(
     db: Session = Depends(get_db),
 ) -> Response:
     material = services.get_material(db, user, material_id)
-    services.require_writable(db, user, material)
+    permissions.require_edit(db, user, material, code="MNX-MATERIALS-0008")
 
     remaining = services.sample_counts(db, [material.id]).get(material.id, 0)
     if remaining:
@@ -1541,9 +1658,18 @@ def delete_material_cascade(
     자식은 남는다** — 그 자식은 화면 어디에서도 닿을 수 없게 된다.
     """
     material = services.get_material(db, user, material_id)
-    services.require_writable(db, user, material)
+    permissions.require_edit(db, user, material, code="MNX-MATERIALS-0008")
 
     # **허락을 먼저 본다.** 지우기 시작한 뒤에 막으면 절반만 지워진 트리가 남는다.
+    # 재료를 고칠 수 있어도 **남이 붙인 것**은 못 지운다 — 누구의 무엇인지 말한다.
+    foreign = services.foreign_descendants(db, permissions.editor(db, user), material)
+    if foreign:
+        raise Conflict(
+            "MNX-MATERIALS-0035",
+            "아래에 남의 자료가 있어 통째로 지울 수 없습니다: "
+            + " · ".join(foreign)
+            + ". 그 사람이 지우거나 등록자를 넘겨받은 뒤, 또는 자료 관리자에게 부탁하세요.",
+        )
     waiting = services.delete_plan(db, material)
     if waiting.test_runs and not payload.include_test_runs:
         raise Conflict(
@@ -1586,6 +1712,7 @@ def list_samples(
     tallies = _run_tallies(
         db, group_by=Specimen.sample_id, ids=[s.id for s in rows], join_specimen=True
     )
+    book = AccessBook(db, user).prime(rows)
     return [
         _sample_out(
             s,
@@ -1593,6 +1720,7 @@ def list_samples(
             workspace_name=names.get(s.workspace_id),
             registered_by=people.get(s.registered_by_id),
             runs=tallies.get(s.id, (0, 0, 0)),
+            access=book.of(s),
         )
         for s in rows
     ]
@@ -1668,6 +1796,7 @@ def create_sample(
         specimen_count=0,
         workspace_name=workspace.name,
         registered_by=services.registrant_names([sample], db).get(sample.registered_by_id),
+        access=access_of(db, user, sample),
     )
 
 
@@ -1776,6 +1905,7 @@ def get_sample(
         specimen_count=services.specimen_counts(db, [sample.id]).get(sample.id, 0),
         workspace_name=names.get(sample.workspace_id),
         registered_by=services.registrant_names([sample], db).get(sample.registered_by_id),
+        access=access_of(db, user, sample),
     )
 
 
@@ -1787,6 +1917,7 @@ def update_sample(
     db: Session = Depends(get_db),
 ) -> SampleOut:
     sample = _get_sample(db, user, sample_id)
+    permissions.require_edit(db, user, sample, code="MNX-MATERIALS-0033")
     data = payload.model_dump(exclude_unset=True)
 
     for field in (
@@ -1825,6 +1956,7 @@ def update_sample(
         specimen_count=services.specimen_counts(db, [sample.id]).get(sample.id, 0),
         workspace_name=names.get(sample.workspace_id),
         registered_by=services.registrant_names([sample], db).get(sample.registered_by_id),
+        access=access_of(db, user, sample),
     )
 
 
@@ -1835,6 +1967,7 @@ def delete_sample(
     db: Session = Depends(get_db),
 ) -> Response:
     sample = _get_sample(db, user, sample_id)
+    permissions.require_edit(db, user, sample, code="MNX-MATERIALS-0033")
     remaining = services.specimen_counts(db, [sample.id]).get(sample.id, 0)
     if remaining:
         raise Conflict(
@@ -1874,12 +2007,14 @@ def list_specimens(
     # 대개 같은 규격이라 한 벌만 읽으면 된다.
     sizes = specimen_size.sizes_for(db, rows)
     people = services.registrant_names(rows, db)
+    book = AccessBook(db, user).prime(rows)
     return [
         _specimen_out(
             item,
             runs=tallies.get(item.id, (0, 0, 0)),
             sizes=sizes.get(item.id),
             registered_by=people.get(item.registered_by_id),
+            access=book.of(item),
         )
         for item in rows
     ]
@@ -1959,6 +2094,7 @@ def create_specimen(
     return _specimen_out(
         specimen,
         registered_by=services.registrant_names([specimen], db).get(specimen.registered_by_id),
+        access=access_of(db, user, specimen),
     )
 
 
@@ -2166,6 +2302,7 @@ def list_all_specimens(
         join_specimen=False,
     )
     people = services.registrant_names(specimens, db)
+    book = AccessBook(db, user).prime(specimens)
 
     return Page(
         items=[
@@ -2175,6 +2312,7 @@ def list_all_specimens(
                     runs=tallies.get(specimen.id, (0, 0, 0)),
                     sizes=sizes.get(specimen.id),
                     registered_by=people.get(specimen.registered_by_id),
+                    access=book.of(specimen),
                 ).model_dump(),
                 material_id=material_row.id,
                 material_name=material_row.record_name,
@@ -2240,12 +2378,18 @@ def bulk_update_specimens(
     blocked: list[str] = []
     renamed: list[str] = []
 
+    editor = permissions.editor(db, user)
     for specimen_id in payload.specimen_ids:
         try:
             specimen = _get_specimen(db, user, specimen_id)
         except AppError:
             # **이름을 모르면 id 라도 준다.** 조용히 세지 않는 것이 요점이다.
             blocked.append(str(specimen_id))
+            continue
+        if not editor.allows(specimen):
+            # 막힌 까닭과 **누구에게 물으면 되는지**를 이름과 함께 준다.
+            locked = permissions.locked(db, specimen, code="MNX-MATERIALS-0034")
+            blocked.append(f"{specimen.record_name} — {locked.message}")
             continue
 
         before = getattr(specimen, field)
@@ -2306,6 +2450,7 @@ def get_specimen(
             one,
             sizes=specimen_size.sizes_of(db, one),
             registered_by=services.registrant_names([one], db).get(one.registered_by_id),
+            access=access_of(db, user, one),
         ).model_dump(),
         material_id=material.id,
         material_name=material.record_name,
@@ -2328,6 +2473,7 @@ def update_specimen(
     일이라 조용히 하면 안 된다.
     """
     specimen = _get_specimen(db, user, specimen_id)
+    permissions.require_edit(db, user, specimen, code="MNX-MATERIALS-0034")
     data = payload.model_dump(exclude_unset=True)
     unit = data.get("length_unit") or specimen.input_units.get("length", LENGTH_UNIT)
 
@@ -2369,6 +2515,7 @@ def update_specimen(
             registered_by=services.registrant_names([specimen], db).get(
                 specimen.registered_by_id
             ),
+            access=access_of(db, user, specimen),
         ),
         renamed=renamed or None,
     )
@@ -2467,6 +2614,9 @@ def put_specimen_dimensions(
     복사하면 그 순간 둘이 같아 보이고, 규격을 고쳐도 시편은 옛 값을 든 채 남는다.
     """
     specimen = _get_specimen(db, user, specimen_id)
+    # **치수를 적는 것도 시편을 고치는 일이다**(ADR 0035). 재는 사람이 다르면 그
+    # 부서에 편집을 준다.
+    permissions.require_edit(db, user, specimen, code="MNX-MATERIALS-0034")
 
     values: dict[str, float] = {}
     for key, raw in payload.dimensions.items():
@@ -2496,6 +2646,7 @@ def delete_specimen(
     db: Session = Depends(get_db),
 ) -> Response:
     specimen = _get_specimen(db, user, specimen_id)
+    permissions.require_edit(db, user, specimen, code="MNX-MATERIALS-0034")
     runs = (
         db.scalar(
             select(func.count())
@@ -2574,7 +2725,7 @@ def adopt_parameter_set(
     카드에 바로 넣지 않는 이유 중 하나다 — 후보를 견주고 고르는 일이 남아야 한다.
     """
     material = services.get_material(db, user, material_id)
-    services.require_writable(db, user, material)
+    permissions.require_edit(db, user, material, code="MNX-MATERIALS-0008")
 
     found = catalog_parameters.sets(
         db, key=payload.property_key, material_id=payload.catalog_material_id
@@ -2667,7 +2818,7 @@ def drop_parameter_set(
     db: Session = Depends(get_db),
 ) -> Response:
     material = services.get_material(db, user, material_id)
-    services.require_writable(db, user, material)
+    permissions.require_edit(db, user, material, code="MNX-MATERIALS-0008")
     row = db.scalar(
         select(MaterialParameterSet).where(
             MaterialParameterSet.id == set_id,

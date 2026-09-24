@@ -1,9 +1,11 @@
 /**
- * 상단 바 — 사이드바 토글 · 부서 선택 · 테마 · 계정 메뉴.
+ * 상단 바 — 사이드바 토글 · 전체 검색 · 테마 · 계정 메뉴.
  *
- * 부서 선택기는 **내가 속한 부서만** 보여 준다. 시스템 관리자라도 여기서는 자기
- * 소속만 오간다 — 전사 목록은 부서 관리 화면의 일이다. 두 목적을 한 위젯에
- * 섞으면 "내 부서"라는 개념이 흐려진다.
+ * **부서 선택기를 걷었다**(ADR 0035 3단계). 그것이 정하는 것은 `/w/<부서>/…` 주소
+ * 하나였는데, 그 화면들은 부서를 골라도 같은 것을 보였다(홈·워크벤치) — 보기는
+ * 전원이고 고칠 권한은 사람이 정하니 「지금 어느 부서에 서 있나」 가 정하는 것이
+ * 없었다. 남아 있으면 사람은 그것이 권한을 바꾸는 줄 안다. 내 소속과 역할은 계정
+ * 메뉴에 적는다 — 선택이 아니라 사실이라서다.
  */
 
 import { useState } from 'react'
@@ -20,9 +22,8 @@ import {
   User,
   UserCog,
 } from 'lucide-react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 
-import { WorkspacePicker } from '@/modules/workspaces/WorkspacePicker'
 import { useLeftPanel, useRightPanel } from '@/shared/layout/SidePanel'
 import { useAuth } from '@/shared/auth/AuthContext'
 import { Button } from '@/shared/components/ui/button'
@@ -35,24 +36,21 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/shared/components/ui/dropdown-menu'
-import { Separator } from '@/shared/components/ui/separator'
 import { ChangePasswordDialog } from '@/shared/layout/ChangePasswordDialog'
 import { NotificationBell } from '@/shared/layout/NotificationBell'
 import { useTheme } from '@/shared/theme/ThemeProvider'
 
 interface HeaderProps {
   onToggleSidebar: () => void
-  workspaceSlug: string
 }
 
-export function Header({ onToggleSidebar, workspaceSlug }: HeaderProps) {
+export function Header({ onToggleSidebar }: HeaderProps) {
   const { theme, toggle } = useTheme()
   const rightPanel = useRightPanel()
   const leftPanel = useLeftPanel()
   const { user, logout } = useAuth()
   const [changingPassword, setChangingPassword] = useState(false)
   const navigate = useNavigate()
-  const params = useParams<{ slug?: string }>()
   const [query, setQuery] = useState('')
 
   // **상단은 넘기기만 한다.** 결과를 여기서 그리면 화면마다 다른 자리에 뜨고,
@@ -64,17 +62,13 @@ export function Header({ onToggleSidebar, workspaceSlug }: HeaderProps) {
   }
 
   const memberships = user?.memberships ?? []
-  const current = memberships.find((m) => m.slug === workspaceSlug)
+  // **내 소속** — 가입 승인 때 정해진 대표 부서. 선택이 아니라 사실이라 계정 메뉴에 적는다.
+  const home = memberships.find((m) => m.slug === user?.home_workspace_slug)
+  const managing = memberships.filter((m) => m.role === 'manager')
 
   async function signOut() {
     await logout()
     navigate('/login', { replace: true })
-  }
-
-  function switchTo(slug: string) {
-    // 부서 스코프 화면(/w/:slug/...)에 있으면 같은 화면의 다른 부서로, 아니면 홈으로.
-    const suffix = params.slug ? window.location.pathname.split(`/w/${params.slug}`)[1] : ''
-    navigate(`/w/${slug}${suffix ?? ''}`)
   }
 
   return (
@@ -104,24 +98,6 @@ export function Header({ onToggleSidebar, workspaceSlug }: HeaderProps) {
         >
           <PanelLeftClose className="size-4" />
         </Button>
-      )}
-
-      <Separator orientation="vertical" className="mx-1 h-6" />
-
-      {/* **경로가 보이는 선택기.** 소속이 여러 곳이면 `품질팀` 이 둘일 수 있고,
-          이름만 보여 주면 지금 어느 부서에 있는지 알 수 없다. 부서가 많아지면
-          검색으로 좁힌다 — 목록이 길어질수록 드롭다운은 못 쓰게 된다. */}
-      <WorkspacePicker
-        workspaces={memberships}
-        value={workspaceSlug}
-        onChange={switchTo}
-        className="h-8 max-w-64 border-0 shadow-none"
-        placeholder={workspaceSlug}
-        emptyLabel="소속된 부서가 없습니다"
-      />
-
-      {current?.role === 'manager' && (
-        <span className="text-muted-foreground text-xs">부서 관리자</span>
       )}
 
       <div className="flex-1" />
@@ -178,8 +154,21 @@ export function Header({ onToggleSidebar, workspaceSlug }: HeaderProps) {
           <DropdownMenuLabel className="font-normal">
             <p className="text-sm font-medium">{user?.display_name}</p>
             <p className="text-muted-foreground truncate text-xs">{user?.email}</p>
+            {/* **소속과 역할.** 상단 선택기가 걷히면서 내 부서를 보여 주는 자리가 여기다
+                — 「이 부서에 편집을 준다」 를 볼 때 내가 그 부서 사람인지 알아야 한다. */}
+            <p className="text-muted-foreground mt-1 truncate text-xs">
+              소속 {home?.path ?? home?.name ?? '없음'}
+            </p>
             {user?.is_system_admin && (
-              <p className="text-muted-foreground mt-1 text-xs">시스템 관리자</p>
+              <p className="text-muted-foreground text-xs">시스템 관리자</p>
+            )}
+            {user?.is_data_manager && !user.is_system_admin && (
+              <p className="text-muted-foreground text-xs">자료 관리자</p>
+            )}
+            {managing.length > 0 && (
+              <p className="text-muted-foreground truncate text-xs">
+                부서 관리자 — {managing.map((m) => m.name).join(', ')}
+              </p>
             )}
           </DropdownMenuLabel>
           <DropdownMenuSeparator />

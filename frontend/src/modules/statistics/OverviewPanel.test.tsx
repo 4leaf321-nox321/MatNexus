@@ -56,7 +56,7 @@ const OPS = {
 function panel(overrides: Partial<Overview> = {}) {
   render(
     <MemoryRouter>
-      <OverviewPanel data={{ ...REAL, ...overrides }} loading={false} workspaceSlug="metal" />
+      <OverviewPanel data={{ ...REAL, ...overrides }} loading={false} />
     </MemoryRouter>
   )
 }
@@ -146,7 +146,8 @@ describe('홈 요약', () => {
     panel({ parse_failed: 3 })
     expect(screen.getByRole('link', { name: /읽기 실패 3/ })).toHaveAttribute(
       'href',
-      '/w/metal/tests?status=failed'
+      // 부서 주소가 아니다 — 홈의 숫자는 전사를 세고, 링크도 전사 목록이다(ADR 0035).
+      '/tests?status=failed'
     )
     expect(screen.getByRole('link', { name: /처리 대기 71/ })).toBeInTheDocument()
   })
@@ -180,7 +181,7 @@ describe('홈 요약', () => {
   it('아직 못 받았으면 자리만 잡는다', () => {
     render(
       <MemoryRouter>
-        <OverviewPanel data={null} loading workspaceSlug="metal" />
+        <OverviewPanel data={null} loading />
       </MemoryRouter>
     )
     expect(screen.queryByText('남은 일')).not.toBeInTheDocument()

@@ -19,6 +19,7 @@ from app.modules.equipment.models import (
     PART_KINDS,
     STATUSES,
 )
+from app.shared.access import EditAccessOut
 
 
 def _one_of(value: str, allowed: tuple[str, ...], what: str) -> str:
@@ -182,6 +183,9 @@ class EquipmentUnitOut(BaseModel):
 
     created_at: datetime
     updated_at: datetime
+    access: EditAccessOut | None = None
+    """**이 사람이** 고칠 수 있나, 못 하면 누구에게(ADR 0035). 장비를 든 조직(`org`)은
+    권한이 아니다 — 고치는 사람은 등록자 · 편집을 받은 부서 · 자료 관리자다."""
 
 
 class EquipmentUnitCreate(BaseModel):

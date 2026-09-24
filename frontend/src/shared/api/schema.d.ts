@@ -159,6 +159,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/accounts/{account_id}/data-manager": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Set Data Manager
+         * @description 자료 관리자를 주거나 뺀다 — **시스템 관리자만**(ADR 0035).
+         */
+        post: operations["set_data_manager_api_accounts__account_id__data_manager_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/accounts/{account_id}/dependents": {
         parameters: {
             query?: never;
@@ -577,6 +597,12 @@ export interface paths {
          *     전부 담으면 값 4만여 건에 20MB 안팎이다. 나눠 받게 하지 않는다 — 이어 붙이는
          *     일을 사람에게 시키면 그 자리에서 빠뜨린다. 좁혀 받고 싶으면 목록과 같은
          *     조건(`q`·`category`·`subsystem`)을 준다.
+         *
+         *     ## 값은 고른 단위계로 — 기본 mm·N·tonne (ADR 0036)
+         *
+         *     `value_num`·`unit` 이 그 계이고, 저장된 값은 `value_si`·`si_unit` 으로 곁에 둔다. 문헌에는
+         *     그 계가 기호를 정해 두지 않은 물리량(저항률·에너지·경도 …)이 많다 — 그것은 받은 그대로
+         *     두고 `kept_units` 에 적는다.
          */
         get: operations["export_catalog_api_catalog_export_get"];
         put?: never;
@@ -604,8 +630,10 @@ export interface paths {
          * Put Link
          * @description 연결하거나 바꾼다 — 재료당 하나라 다시 걸면 교체다.
          *
-         *     권한은 재료 편집과 같다(부서 관리자, 전역은 시스템 관리자) — 연결이 채택의
-         *     기본 대상이 되므로 아무나 걸면 남의 재료 물성이 엉뚱한 문헌으로 채워진다.
+         *     권한은 재료 편집과 **같은 함수**다(ADR 0035) — 연결이 채택의 기본 대상이 되므로
+         *     아무나 걸면 남의 재료 물성이 엉뚱한 문헌으로 채워진다. 전에는 재료 편집(부서
+         *     멤버)과 규칙이 달라서(부서 관리자), 카탈로그에서 재료를 만들고 연결까지 하면
+         *     재료만 생기고 연결은 막혔다.
          */
         put: operations["put_link_api_catalog_links__material_id__put"];
         post?: never;
@@ -839,7 +867,13 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** Remove Property Alias */
+        /**
+         * Remove Property Alias
+         * @description 별칭 하나를 지운다 — **넣은 사람과 관리자만**(ADR 0035, 문헌 직접 입력과 같은 규칙).
+         *
+         *     전에는 로그인한 누구나 지울 수 있었다. 별칭은 「항복응력」 을 어느 물성으로 읽을지를
+         *     정하므로, 남이 지우면 그 사람의 질문이 조용히 다른 물성에 답하게 된다.
+         */
         delete: operations["remove_property_alias_api_catalog_properties_aliases__alias_id__delete"];
         options?: never;
         head?: never;
@@ -1144,7 +1178,7 @@ export interface paths {
         };
         /**
          * List Commissions
-         * @description 낸 부서·받는 부서가 보는 게시판. 최신이 위다.
+         * @description 의뢰 게시판. 최신이 위다. **누구나 본다** — 작성 중은 낸 사람만(ADR 0035).
          */
         get: operations["list_commissions_api_commissions_get"];
         put?: never;
@@ -1238,6 +1272,9 @@ export interface paths {
         /**
          * Add Event
          * @description 상태를 옮기거나 말을 보탠다. **갈 수 있는 곳만 간다.**
+         *
+         *     **낸 쪽과 받는 쪽만.** 보기는 전원이지만(ADR 0035) 이 건의 흐름에 말을 얹는 것은
+         *     약속한 두 쪽이다 — 제3부서가 끼어들면 누구에게 답해야 하는지가 흐려진다.
          */
         post: operations["add_event_api_commissions__commission_id__events_post"];
         delete?: never;
@@ -1388,7 +1425,10 @@ export interface paths {
          */
         get: operations["list_units_api_equipment_units_get"];
         put?: never;
-        /** Create Unit */
+        /**
+         * Create Unit
+         * @description **누구나 올린다**(ADR 0035). 올린 사람이 등록자다 — 편집을 줄 부서는 「권한」 에서.
+         */
         post: operations["create_unit_api_equipment_units_post"];
         delete?: never;
         options?: never;
@@ -1412,6 +1452,8 @@ export interface paths {
          *     기준정보는 **이름으로 온다**(사람이 엑셀에 id 를 적지 않는다). 없는 이름은
          *     새 값이 되는데, 그것이 이 화면에서 가장 흔한 사고다(오타 하나가 새 조직을
          *     만든다). 그래서 드라이런이 **무엇이 새로 생기는지 먼저 보여 준다.**
+         *
+         *     **누구나 올린다**(ADR 0035) — 올린 사람이 줄마다 등록자다.
          */
         post: operations["bulk_create_api_equipment_units_bulk_post"];
         delete?: never;
@@ -1584,8 +1626,8 @@ export interface paths {
          *     **거르는 일은 서버가 한다.** 앞 50장만 받아 화면에서 거르면 뒤엣것이 없는
          *     카드가 된다 — 재료 목록 패널이 같은 이유로 그렇게 되어 있다.
          *
-         *     `test_type_key=none` 은 **시험 없이 만든 카드**다(ADR 0016). `owner=global`
-         *     은 전역 재료의 카드다.
+         *     `test_type_key=none` 은 **시험 없이 만든 카드**다(ADR 0016). `owner=none`
+         *     은 소속 부서가 없는 재료의 카드다.
          */
         get: operations["list_cards_api_fitting_cards_get"];
         put?: never;
@@ -2041,7 +2083,7 @@ export interface paths {
         put?: never;
         /**
          * Publish
-         * @description 초안을 확정한다. **부서 관리자만**(D12).
+         * @description 초안을 확정한다. **자료 관리자만**(ADR 0035 — D12 의 「부서 관리자」 를 사람 역할로).
          *
          *     올린 뒤에는 값을 바꿀 수 없다 — 그 값으로 해석이 돌았을 수 있다. 고치려면
          *     사용 중지하고(`deprecated`) 새 카드를 만든다.
@@ -2067,7 +2109,7 @@ export interface paths {
         put?: never;
         /**
          * Restore
-         * @description 사용 중지한 카드를 **초안으로** 되살린다. 부서 관리자만.
+         * @description 사용 중지한 카드를 **초안으로** 되살린다. 자료 관리자만(ADR 0035).
          *
          *     ## 왜 초안까지만인가
          *
@@ -2120,17 +2162,20 @@ export interface paths {
         };
         /**
          * List Export Profiles
-         * @description 내 부서 것 + 전역. 시스템 관리자는 전부.
+         * @description 모든 부서의 것 — **전원이 전부 본다**(ADR 0035). 줄마다 고칠 수 있는지를 싣는다.
          */
         get: operations["list_export_profiles_api_fitting_export_profiles_get"];
         put?: never;
         /**
          * Create Export Profile
-         * @description 부서 관리자가 자기 부서의 해석용 물성 정의를 만든다.
+         * @description 누구나 만든다 — 등록자가 고치고, 필요하면 부서에 편집을 준다(ADR 0035).
          *
          *     **부서마다 쓰는 솔버가 다르다.** 그리고 같은 솔버라도 사업부마다 덱 관례가
          *     다르다 — 어느 키워드를 쓰는지, 표를 몇 줄로 자르는지. 그 지식은 해석을
          *     돌리는 사람에게 있지 시스템 관리자에게 없다.
+         *
+         *     등록 부서는 **안 보내면 내 소속**이다. 화면은 이 칸을 안 보낸다 — 전에는 그것을
+         *     「전역」 으로 읽어서, 부서 관리자가 만들기를 누르면 403 이 났다.
          */
         post: operations["create_export_profile_api_fitting_export_profiles_post"];
         delete?: never;
@@ -2440,13 +2485,13 @@ export interface paths {
         };
         /**
          * List Profiles
-         * @description 내 부서 것 + 전역. 시스템 관리자는 전부.
+         * @description 모든 부서의 것 — **전원이 전부 본다**(ADR 0035). 줄마다 고칠 수 있는지를 싣는다.
          */
         get: operations["list_profiles_api_formats_get"];
         put?: never;
         /**
          * Create Profile
-         * @description 부서 관리자가 자기 부서 프로파일을 만든다.
+         * @description 누구나 만든다 — 등록자가 고치고, 필요하면 부서에 편집을 준다(ADR 0035).
          *
          *     **장비는 부서마다 다르다.** 남의 부서 파일을 어떻게 읽을지를 시스템 관리자가
          *     알 리 없다 — 그 지식은 사업부에 있다.
@@ -3314,8 +3359,12 @@ export interface paths {
          *     들어간다** — 곡선은 파일이고(수십 MB), 그것까지 담으면 이 파일은 열어 볼 수
          *     없는 것이 된다. 시험 자료가 필요하면 그것은 다른 내보내기다.
          *
-         *     값은 **SI 그대로**다. 화면 표시 단위로 바꾸지 않는다 — 받아서 계산에 쓰는
-         *     파일이라, 단위가 화면 설정에 따라 달라지면 그 파일을 믿을 수 없다.
+         *     ## 값은 **고른 단위계 하나**로 — 기본 mm·N·tonne (ADR 0036)
+         *
+         *     전에는 「값은 SI 그대로」 라고 적어 두고, 화면 응답을 그대로 담아서 **밀도만 tonne/mm3,
+         *     두께는 mm** 였다 — 해석 연동이 받은 파일에서 짚었다(2026-09-24). 이제 파일 머리
+         *     (`unit_system`)가 계를 말하고, 값은 그 계로, `value_si`·`density_si` 는 SI 로 곁에 둔다.
+         *     그 계에 기호가 없는 단위는 받은 그대로 두고 `kept_units` 에 적는다(`shared/unit_systems`).
          */
         get: operations["export_materials_api_materials_export_get"];
         put?: never;
@@ -3924,6 +3973,81 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ownership/people": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * People
+         * @description 넘겨받을 사람을 **이름으로** 찾는다 — 지금 로그인할 수 있는 사람만.
+         *
+         *     계정 목록은 시스템 관리자 것이라, 등록자가 넘길 사람을 고를 길이 없었다. 여기는
+         *     그 한 가지 일만 한다: 이름과 대표 소속.
+         */
+        get: operations["people_api_ownership_people_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ownership/stewards": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Stewards
+         * @description **자료 관리자는 누구인가** — 새 기준정보 값·카드 확정·핸드북 승인을 부탁할 사람.
+         *
+         *     자료 관리자가 없으면 시스템 관리자를 댄다. 막힌 사람이 「관리자에게 문의하세요」 만
+         *     받으면 그게 누구인지 또 물어야 한다(ADR 0035) — 403 은 그 이름을 `details` 로 주지만,
+         *     **막히기 전에** 물을 자리가 없었다(AI 가 새 등급을 미리보기로 막고도 이름을 못 댔다).
+         */
+        get: operations["stewards_api_ownership_stewards_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ownership/{kind}/{row_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Ownership
+         * @description 지금 누가 고치나, 그리고 **아래에 무엇이 몇 건 딸렸나** — 넘기기 전에 본다.
+         */
+        get: operations["get_ownership_api_ownership__kind___row_id__get"];
+        /**
+         * Change Ownership
+         * @description 등록자·편집 부서를 넘긴다. **등록자와 관리자만.**
+         *
+         *     **안 보낸 칸은 그대로다.** `edit_workspace_slug` 를 `null` 로 **보내면** 부여를
+         *     걷는다 — 안 보낸 것과 비운 것을 가르지 않으면, 등록자만 넘기려다 부서 부여가
+         *     함께 사라진다(선언 물성·일괄 수정이 같은 자리에서 걸렸다, AGENTS.md).
+         */
+        put: operations["change_ownership_api_ownership__kind___row_id__put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/pipelines/connectors": {
         parameters: {
             query?: never;
@@ -3931,7 +4055,13 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List Connectors */
+        /**
+         * List Connectors
+         * @description **모든 부서의 커넥터**(ADR 0035 3단계). 줄마다 이 사람이 다룰 수 있는지를 싣는다.
+         *
+         *     전에는 내 부서 것만 보였다 — 「옆 부서 장비로 잰 내 파일이 왜 안 들어왔나」 를 물을
+         *     데가 없었다.
+         */
         get: operations["list_connectors_api_pipelines_connectors_get"];
         put?: never;
         /**
@@ -4008,7 +4138,13 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List Inbox */
+        /**
+         * List Inbox
+         * @description 수집함. `scope=mine`(기본)은 **내 부서 커넥터의 것**, `all` 은 전사다.
+         *
+         *     기본을 좁히는 이유: 이 목록은 「처리할 것」 을 보는 자리다 — 전사가 기본이면 남의
+         *     부서 대기 건이 내 할 일 사이에 섞인다. 시스템 관리자의 `mine` 은 전부다(전과 같다).
+         */
         get: operations["list_inbox_api_pipelines_inbox_get"];
         put?: never;
         /**
@@ -4321,10 +4457,11 @@ export interface paths {
         put?: never;
         /**
          * Create Recipe
-         * @description 부서 관리자가 자기 부서 레시피를 만든다.
+         * @description 누구나 만든다 — 등록자가 고치고, 필요하면 부서에 편집을 준다(ADR 0035).
          *
          *     **부서마다 규격이 다르다.** 탄성 구간을 어디로 잡을지는 따르는 규격이 정하고,
-         *     그 판단은 그 부서가 한다 — 형식 프로파일과 같은 이유다(ADR 0005·0006).
+         *     그 판단은 그 부서가 한다 — 형식 프로파일과 같은 이유다(ADR 0005·0006). 그래서
+         *     등록 부서를 적어 둔다(안 보내면 내 소속).
          */
         post: operations["create_recipe_api_processing_recipes_post"];
         delete?: never;
@@ -4902,6 +5039,76 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/statistics/analysis/card-items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Analysis Card Items
+         * @description 카드 항목 요약 — 재료군·분류 x 카드 항목란. **어느 재료에서 무엇까지 볼 수 있나.**
+         *
+         *     점탄성·경화식·소성 표는 스칼라가 아니라서 비교·분포에 안 나온다. 줄이 재료가 아니라
+         *     분류라 재료가 1만이어도 응답이 분류 수만큼이다 — 재료 줄은 `/card-items/materials`,
+         *     칸 하나의 값은 `/card-items/cell` 이 준다(재료마다 한 장에 싣던 첫 판은 1만 개에서
+         *     10 MB 였다).
+         */
+        get: operations["analysis_card_items_api_statistics_analysis_card_items_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/statistics/analysis/card-items/cell": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Analysis Card Item Cell
+         * @description 칸 하나 — 카드마다 든 값, 그 항목란을 내는 시험의 채택 결과, 그 칸으로 갈 선언 물성.
+         *
+         *     **누를 때만 받는다** — 목록이 칸마다 값을 실으면 재료 수에 비례해 응답이 는다.
+         */
+        get: operations["analysis_card_item_cell_api_statistics_analysis_card_items_cell_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/statistics/analysis/card-items/materials": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Analysis Card Item Rows
+         * @description 카드 항목 전체 — 재료 줄. **거르고 자르는 것은 서버다.**
+         *
+         *     `family`·`category` 는 요약에서 들어오는 길이고(같은 값), `item` 은 그 항목란이 **보이는**
+         *     재료만이다. 시험·선언만 있는 칸은 `with_sources` 일 때만 보인다 — 줄에도 열의 수에도.
+         */
+        get: operations["analysis_card_item_rows_api_statistics_analysis_card_items_materials_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/statistics/analysis/compare": {
         parameters: {
             query?: never;
@@ -5194,10 +5401,10 @@ export interface paths {
          * List Runs
          * @description **가시 범위와 기본 필터는 다른 것이다.**
          *
-         *     가시 범위(`visible_runs`)는 "볼 권한이 있는가"이고 재료를 따라간다. 그런데
-         *     화면이 `/w/:slug/tests` 라고 말해 놓고 전사를 보여 주면, 사이드바의 '부서'
-         *     라는 말이 거짓이 된다. 부서가 하나뿐인 동안은 드러나지 않지만 두 번째 부서가
-         *     쓰기 시작하면 바로 이상해진다.
+         *     가시 범위(`visible_runs`)는 "볼 권한이 있는가"이고 재료를 따라간다 — 전원이
+         *     전부 본다(ADR 0035). `workspace` 는 **그 부서가 등록한 시험만** 남기는 거르기다.
+         *     전에는 화면 주소(`/w/:slug/tests`)가 이것을 정했는데, 상단 부서 선택기와 함께
+         *     부서 주소를 걷으면서(3단계) 목록의 거르기(`/tests?workspace=`)가 됐다.
          *
          *     `workspace` 는 **좁히기만 한다.** 권한을 넓히지 않는다 — 남의 부서 slug 를
          *     넣어도 원래 볼 수 있던 것 안에서만 걸러진다.
@@ -5588,9 +5795,9 @@ export interface paths {
          * Create Test Type
          * @description 새 시험 종류. **배포 없이 추가된다** — 그것이 정의를 데이터로 둔 이유다.
          *
-         *     **부서 관리자도 만든다**(ADR 0006). 새 장비를 붙이는 일은 사업부에서 시작되고,
-         *     새 장비란 대개 없는 종류를 재는 장비다. 시스템 관리자만 만들 수 있게 두었을
-         *     때는 형식 프로파일 화면에서 매핑을 다 끝낸 뒤 저장 순간 403 이 났다.
+         *     **누구나 만든다**(ADR 0035 3단계 — 전에는 부서 관리자, 그 전에는 시스템 관리자,
+         *     ADR 0006). 새 장비를 붙이는 일은 사업부에서 시작되고, 새 장비란 대개 없는
+         *     종류를 재는 장비다. 고치는 사람은 등록자 · 편집을 받은 부서 · 자료 관리자다.
          *
          *     키는 **전사에서 유일하다.** 두 부서가 같은 시험을 하면 종류를 둘로 만들 것이
          *     아니라 하나를 같이 써야 하고, 여기서 부딪히면 그 사실을 알게 된다.
@@ -5740,7 +5947,7 @@ export interface paths {
         };
         /**
          * List Trash
-         * @description 지운 것. **최근에 지운 것부터.**
+         * @description 지운 것 — **이 사람이 되살릴 수 있는 것만.** 최근에 지운 것부터.
          *
          *     줄마다 「되살리면 무엇이 함께 오는가」 와 「왜 못 되살리는가」 를 함께 낸다 —
          *     화면이 그것을 스스로 세게 하면 사람이 본 숫자와 실제가 어긋난다.
@@ -5814,7 +6021,7 @@ export interface paths {
         put?: never;
         /**
          * Restore
-         * @description 되살린다 — 이 행과 그 아래 **함께 지워진** 것 전부.
+         * @description 되살린다 — 이 행과 그 아래 **함께 지워진** 것 전부. 그 전부를 고칠 수 있어야 한다.
          */
         post: operations["restore_api_trash__kind___item_id__restore_post"];
         delete?: never;
@@ -6798,7 +7005,11 @@ export interface paths {
         };
         /**
          * List Runs
-         * @description 내 부서의 작업들. **진행 중인 것이 먼저다** — 「계속」 이 이 목록이다.
+         * @description 작업들. **진행 중인 것이 먼저다** — 「계속」 이 이 목록이다.
+         *
+         *     `scope=mine`(기본)은 **내가 이어 할 수 있는 것** — 내 부서의 작업과 내가 시작한 것.
+         *     `all` 은 전사다(ADR 0035 3단계 — 보기는 전원). 기본을 좁히는 이유는 이 목록이
+         *     「계속」 이라서다: 남의 부서 작업이 섞이면 이어 할 것이 안 보인다.
          */
         get: operations["list_runs_api_workbench_runs_get"];
         put?: never;
@@ -7170,6 +7381,11 @@ export interface components {
              * Format: uuid
              */
             id: string;
+            /**
+             * Is Data Manager
+             * @default false
+             */
+            is_data_manager: boolean;
             /** Is System Admin */
             is_system_admin: boolean;
             /** Memberships */
@@ -8342,7 +8558,7 @@ export interface components {
             format: string;
             /**
              * Units
-             * @default si
+             * @default mm_n_tonne
              */
             units: string;
         };
@@ -8377,6 +8593,178 @@ export interface components {
             statuses: components["schemas"]["CardFacetOut"][];
             /** Test Types */
             test_types: components["schemas"]["CardFacetOut"][];
+        };
+        /** CardItemCardOut */
+        CardItemCardOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Label */
+            label: string;
+            /** Row Count */
+            row_count: number;
+            /** Status */
+            status: string;
+            /** Values */
+            values: components["schemas"]["CardItemValueOut"][];
+        };
+        /**
+         * CardItemCellOut
+         * @description 칸 하나의 속 — 누를 때만 받는다(`/analysis/card-items/cell`).
+         */
+        CardItemCellOut: {
+            /** Cards */
+            cards: components["schemas"]["CardItemCardOut"][];
+            /** Declared */
+            declared: components["schemas"]["CardItemValueOut"][];
+            /** State */
+            state: string;
+            /** Tests */
+            tests: components["schemas"]["CardItemTestOut"][];
+        };
+        /**
+         * CardItemColumnOut
+         * @description 카드 항목란 하나 — **아무 재료에도 없어도 열로 선다.**
+         *
+         *     수는 그 응답이 다룬 재료 가운데서 센다 — 요약은 전부, 전체는 거른 재료.
+         */
+        CardItemColumnOut: {
+            /** Card Materials */
+            card_materials: number;
+            /** Deprecated Materials */
+            deprecated_materials: number;
+            /** Help */
+            help: string;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Published Materials */
+            published_materials: number;
+            /** Registered */
+            registered: boolean;
+            /** Source Materials */
+            source_materials: number;
+            /** Tests */
+            tests: string[];
+        };
+        /**
+         * CardItemGroupOut
+         * @description 요약의 한 줄 — **재료가 아니라 분류다.** 재료가 1만이어도 줄은 분류 수다.
+         */
+        CardItemGroupOut: {
+            /** Card Materials */
+            card_materials: number;
+            /** Category */
+            category: string;
+            /** Cells */
+            cells: {
+                [key: string]: components["schemas"]["CardItemTallyOut"];
+            };
+            /** Family */
+            family: string;
+            /** Material Count */
+            material_count: number;
+            /** Source Only Materials */
+            source_only_materials: number;
+        };
+        /**
+         * CardItemRowOut
+         * @description 전체의 한 줄 — 재료 하나. **보이는 칸만** 싣는다.
+         */
+        CardItemRowOut: {
+            /** Category */
+            category: string;
+            /** Cells */
+            cells: {
+                [key: string]: components["schemas"]["CardItemStateOut"];
+            };
+            /** Family */
+            family: string;
+            /**
+             * Material Id
+             * Format: uuid
+             */
+            material_id: string;
+            /** Material Name */
+            material_name: string;
+        };
+        /** CardItemRowsOut */
+        CardItemRowsOut: {
+            /** Columns */
+            columns: components["schemas"]["CardItemColumnOut"][];
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+            /** Rows */
+            rows: components["schemas"]["CardItemRowOut"][];
+            /** Total */
+            total: number;
+        };
+        /** CardItemStateOut */
+        CardItemStateOut: {
+            /** Card Count */
+            card_count: number;
+            /** Declared */
+            declared: boolean;
+            /** State */
+            state: string;
+            /** Tests */
+            tests: boolean;
+        };
+        /** CardItemSummaryOut */
+        CardItemSummaryOut: {
+            /** Card Material Count */
+            card_material_count: number;
+            /** Columns */
+            columns: components["schemas"]["CardItemColumnOut"][];
+            /** Groups */
+            groups: components["schemas"]["CardItemGroupOut"][];
+            /** Material Total */
+            material_total: number;
+            /** Source Only Count */
+            source_only_count: number;
+        };
+        /**
+         * CardItemTallyOut
+         * @description 분류 하나 · 항목란 하나 — 칸의 상태별 재료 수.
+         */
+        CardItemTallyOut: {
+            /** Deprecated */
+            deprecated: number;
+            /** Draft */
+            draft: number;
+            /** Published */
+            published: number;
+            /** Source */
+            source: number;
+        };
+        /**
+         * CardItemTestOut
+         * @description 이 항목란을 내는 시험 가운데 **채택된 결과가 있는 것.**
+         */
+        CardItemTestOut: {
+            /** Adopted Count */
+            adopted_count: number;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+        };
+        /**
+         * CardItemValueOut
+         * @description 항목란에 든 값 하나. 숫자는 **SI** 다 — 화면이 표시 단위로 바꾼다.
+         */
+        CardItemValueOut: {
+            /** Label */
+            label: string;
+            /** Si Unit */
+            si_unit: string;
+            /** Value */
+            value: number | string | null;
         };
         /**
          * CardSlotIn
@@ -9084,6 +9472,11 @@ export interface components {
             assignees?: components["schemas"]["NamedOut"][];
             /** Can Assign */
             can_assign: boolean;
+            /**
+             * Can Comment
+             * @default true
+             */
+            can_comment: boolean;
             /** Can Delete */
             can_delete: boolean;
             /** Can Edit */
@@ -9462,6 +9855,11 @@ export interface components {
              */
             auto_register: boolean;
             /**
+             * Can Manage
+             * @default false
+             */
+            can_manage: boolean;
+            /**
              * Created At
              * Format: date-time
              */
@@ -9753,6 +10151,14 @@ export interface components {
             /** Y */
             y: string;
         };
+        /**
+         * DataManagerRequest
+         * @description 자료 관리자를 주거나 뺀다 — 시스템 관리자 권한과 같은 모양(참·거짓 한 칸).
+         */
+        DataManagerRequest: {
+            /** Is Data Manager */
+            is_data_manager: boolean;
+        };
         /** DatabaseOut */
         DatabaseOut: {
             /** Pool */
@@ -9870,7 +10276,7 @@ export interface components {
             format: string;
             /**
              * Units
-             * @default si
+             * @default mm_n_tonne
              */
             units: string;
         };
@@ -9947,7 +10353,7 @@ export interface components {
             };
             /**
              * Units
-             * @default si
+             * @default mm_n_tonne
              */
             units: string;
         };
@@ -10559,6 +10965,26 @@ export interface components {
             total: number;
         };
         /**
+         * EditAccessOut
+         * @description 이 자료를 **지금 이 사람이** 고칠 수 있나.
+         */
+        EditAccessOut: {
+            /** Can Edit */
+            can_edit: boolean;
+            /** Can Hand Over */
+            can_hand_over: boolean;
+            /** Edit Workspace */
+            edit_workspace: string | null;
+            /** Edit Workspace Slug */
+            edit_workspace_slug: string | null;
+            /** Reason */
+            reason: string | null;
+            /** Registrant */
+            registrant: string | null;
+            /** Registrant Id */
+            registrant_id: string | null;
+        };
+        /**
          * EmpiricalOut
          * @description **분포를 가정하지 않은** 요약. n 이 몇이든 나온다.
          *
@@ -10967,6 +11393,7 @@ export interface components {
          * @description 목록과 상세가 같은 모양을 쓴다 — 목록에서 본 것이 상세에 없으면 놀란다.
          */
         EquipmentUnitOut: {
+            access?: components["schemas"]["EditAccessOut"] | null;
             /** Asset No */
             asset_no: string | null;
             /** Attributes */
@@ -11169,7 +11596,7 @@ export interface components {
              */
             is_active: boolean;
             /** Key */
-            key: string;
+            key?: string | null;
             /** Label */
             label: string;
             /** Owner Workspace Slug */
@@ -11180,6 +11607,7 @@ export interface components {
          * @description 저장된 해석용 물성 정의 하나.
          */
         ExportProfileOut: {
+            access?: components["schemas"]["EditAccessOut"] | null;
             /**
              * Created At
              * Format: date-time
@@ -11198,8 +11626,6 @@ export interface components {
             id: string;
             /** Is Active */
             is_active: boolean;
-            /** Is Global */
-            is_global: boolean;
             /** Key */
             key: string;
             /** Label */
@@ -11216,8 +11642,8 @@ export interface components {
         };
         /**
          * ExportProfileSaveRequest
-         * @description 고칠 때 보내는 것. **소유는 여기서 안 바꾼다** — 전역 승격은 성격이 다른
-         *     결정이라 별도 경로다(장비 파일 정의과 같은 규칙).
+         * @description 고칠 때 보내는 것. **등록 부서는 여기서 안 바꾼다**(장비 파일 정의와 같은 규칙).
+         *     고칠 사람은 「권한」 에서 넘긴다(`/ownership`).
          */
         ExportProfileSaveRequest: {
             /** Definition */
@@ -11468,7 +11894,7 @@ export interface components {
              */
             is_active: boolean;
             /** Key */
-            key: string;
+            key?: string | null;
             /** Label */
             label: string;
             /** Owner Workspace Slug */
@@ -11483,6 +11909,7 @@ export interface components {
         };
         /** FormatProfileOut */
         FormatProfileOut: {
+            access?: components["schemas"]["EditAccessOut"] | null;
             /**
              * Created At
              * Format: date-time
@@ -11501,8 +11928,6 @@ export interface components {
             id: string;
             /** Is Active */
             is_active: boolean;
-            /** Is Global */
-            is_global: boolean;
             /** Key */
             key: string;
             /** Label */
@@ -11879,6 +12304,7 @@ export interface components {
         };
         /** GroupResultOut */
         GroupResultOut: {
+            access?: components["schemas"]["EditAccessOut"] | null;
             /**
              * Created At
              * Format: date-time
@@ -12161,6 +12587,11 @@ export interface components {
         /** InboxItemDetail */
         InboxItemDetail: {
             /**
+             * Can Handle
+             * @default false
+             */
+            can_handle: boolean;
+            /**
              * Candidate Count
              * @default 0
              */
@@ -12225,9 +12656,16 @@ export interface components {
             test_type_key: string | null;
             /** Test Type Label */
             test_type_label?: string | null;
+            /** Workspace Name */
+            workspace_name?: string | null;
         };
         /** InboxItemOut */
         InboxItemOut: {
+            /**
+             * Can Handle
+             * @default false
+             */
+            can_handle: boolean;
             /**
              * Candidate Count
              * @default 0
@@ -12278,6 +12716,8 @@ export interface components {
             test_type_key: string | null;
             /** Test Type Label */
             test_type_label?: string | null;
+            /** Workspace Name */
+            workspace_name?: string | null;
         };
         /** IncompleteOut */
         IncompleteOut: {
@@ -12854,6 +13294,7 @@ export interface components {
         };
         /** MaterialOut */
         MaterialOut: {
+            access?: components["schemas"]["EditAccessOut"] | null;
             /** Alias */
             alias: string | null;
             /** Applied Parts */
@@ -12876,6 +13317,8 @@ export interface components {
             declared_properties: components["schemas"]["DeclaredPropertyOut"][];
             /** Density */
             density: number | null;
+            /** Density Si */
+            density_si?: number | null;
             /**
              * Density Unit
              * @default tonne/mm3
@@ -12892,8 +13335,6 @@ export interface components {
              * Format: uuid
              */
             id: string;
-            /** Is Global */
-            is_global: boolean;
             /** Legacy Id */
             legacy_id: string | null;
             /** Note */
@@ -13519,6 +13960,82 @@ export interface components {
             /** Waiting To Process */
             waiting_to_process: number;
         };
+        /** OwnershipChangeOut */
+        OwnershipChangeOut: {
+            access: components["schemas"]["EditAccessOut"];
+            /** Changed */
+            changed: number;
+            /** Skipped */
+            skipped: components["schemas"]["OwnershipSkippedOut"][];
+        };
+        /**
+         * OwnershipChangeRequest
+         * @description 넘길 것. **안 보낸 칸은 그대로 둔다** — 부분 수정의 규칙(AGENTS.md).
+         *
+         *     `edit_workspace_slug` 는 `null` 을 **보내면** 부여를 걷는다. 안 보내면 그대로다.
+         *     등록자는 비울 수 없다 — 넘기기만 한다(등록자 없는 자료는 관리자만 고친다).
+         */
+        OwnershipChangeRequest: {
+            /** Edit Workspace Slug */
+            edit_workspace_slug?: string | null;
+            /**
+             * Include Children
+             * @default false
+             */
+            include_children: boolean;
+            /** Registrant Id */
+            registrant_id?: string | null;
+        };
+        /**
+         * OwnershipChildrenOut
+         * @description 아래에 딸린 한 종류 — **몇 건이고, 그중 내가 넘길 수 있는 것이 몇 건인가.**
+         *
+         *     「하위까지」 를 누르기 전에 보여 준다. 남이 붙인 것은 못 넘기므로(등록자와 관리자만)
+         *     둘을 갈라 적어야 사람이 결과를 미리 안다.
+         */
+        OwnershipChildrenOut: {
+            /** Changeable */
+            changeable: number;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "material" | "sample" | "specimen" | "test_run" | "property_card" | "group_result" | "test_type" | "format_profile" | "recipe" | "export_profile" | "equipment";
+            /** Label */
+            label: string;
+            /** Total */
+            total: number;
+        };
+        /** OwnershipOut */
+        OwnershipOut: {
+            access: components["schemas"]["EditAccessOut"];
+            /** Children */
+            children: components["schemas"]["OwnershipChildrenOut"][];
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "material" | "sample" | "specimen" | "test_run" | "property_card" | "group_result" | "test_type" | "format_profile" | "recipe" | "export_profile" | "equipment";
+            /** Name */
+            name: string;
+        };
+        /** OwnershipSkippedOut */
+        OwnershipSkippedOut: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "material" | "sample" | "specimen" | "test_run" | "property_card" | "group_result" | "test_type" | "format_profile" | "recipe" | "export_profile" | "equipment";
+            /** Name */
+            name: string;
+            /** Reason */
+            reason: string;
+        };
         /** Page[CommissionOut] */
         Page_CommissionOut_: {
             /** Items */
@@ -13795,6 +14312,21 @@ export interface components {
             id: string;
             /** Name */
             name: string;
+        };
+        /**
+         * PersonOut
+         * @description 넘겨받을 사람 후보. **아이디(메일)는 안 싣는다** — 고르는 데는 이름과 소속이면 된다.
+         */
+        PersonOut: {
+            /** Display Name */
+            display_name: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Workspace */
+            workspace: string | null;
         };
         /** ProcessOut */
         ProcessOut: {
@@ -14344,6 +14876,7 @@ export interface components {
         };
         /** PropertyCardOut */
         PropertyCardOut: {
+            access?: components["schemas"]["EditAccessOut"] | null;
             /**
              * Available Formats
              * @default []
@@ -14363,11 +14896,6 @@ export interface components {
              * Format: uuid
              */
             id: string;
-            /**
-             * Is Global
-             * @default false
-             */
-            is_global: boolean;
             /** Label */
             label: string;
             /**
@@ -14926,7 +15454,7 @@ export interface components {
              */
             is_active: boolean;
             /** Key */
-            key: string;
+            key?: string | null;
             /** Label */
             label: string;
             /** Owner Workspace Slug */
@@ -14940,6 +15468,7 @@ export interface components {
         };
         /** RecipeOut */
         RecipeOut: {
+            access?: components["schemas"]["EditAccessOut"] | null;
             /**
              * Created At
              * Format: date-time
@@ -14954,8 +15483,6 @@ export interface components {
             id: string;
             /** Is Active */
             is_active: boolean;
-            /** Is Global */
-            is_global: boolean;
             /** Key */
             key: string;
             /** Label */
@@ -15381,6 +15908,7 @@ export interface components {
         };
         /** RunDetailOut */
         RunDetailOut: {
+            access?: components["schemas"]["EditAccessOut"] | null;
             /**
              * Created At
              * Format: date-time
@@ -15479,6 +16007,7 @@ export interface components {
         };
         /** RunOut */
         RunOut: {
+            access?: components["schemas"]["EditAccessOut"] | null;
             /**
              * Created At
              * Format: date-time
@@ -15567,6 +16096,7 @@ export interface components {
         };
         /** SampleOut */
         SampleOut: {
+            access?: components["schemas"]["EditAccessOut"] | null;
             /**
              * Adopted Count
              * @default 0
@@ -15586,6 +16116,8 @@ export interface components {
             declared_properties: components["schemas"]["DeclaredPropertyOut"][];
             /** Density */
             density: number | null;
+            /** Density Si */
+            density_si?: number | null;
             /**
              * Density Unit
              * @default tonne/mm3
@@ -16332,6 +16864,7 @@ export interface components {
         };
         /** SpecimenOut */
         SpecimenOut: {
+            access?: components["schemas"]["EditAccessOut"] | null;
             /**
              * Adopted Count
              * @default 0
@@ -16407,6 +16940,7 @@ export interface components {
          *     되고, 시편에 칸이 하나 늘 때 한쪽만 고쳐진다.
          */
         SpecimenRowOut: {
+            access?: components["schemas"]["EditAccessOut"] | null;
             /**
              * Adopted Count
              * @default 0
@@ -17198,6 +17732,7 @@ export interface components {
         };
         /** TestRunDetailOut */
         TestRunDetailOut: {
+            access?: components["schemas"]["EditAccessOut"] | null;
             /** Adopted Result Id */
             adopted_result_id?: string | null;
             /** Channels */
@@ -17305,6 +17840,7 @@ export interface components {
         };
         /** TestRunOut */
         TestRunOut: {
+            access?: components["schemas"]["EditAccessOut"] | null;
             /** Adopted Result Id */
             adopted_result_id?: string | null;
             /** Channels */
@@ -17502,6 +18038,7 @@ export interface components {
         TestTypeOut: {
             /** Abbr */
             abbr: string;
+            access?: components["schemas"]["EditAccessOut"] | null;
             /** Channels */
             channels: components["schemas"]["TestChannelOut"][];
             /** Conditions */
@@ -17517,8 +18054,6 @@ export interface components {
             id: string;
             /** Is Active */
             is_active: boolean;
-            /** Is Global */
-            is_global: boolean;
             /** Key */
             key: string;
             /** Label */
@@ -17875,6 +18410,11 @@ export interface components {
              * Format: uuid
              */
             id: string;
+            /**
+             * Is Data Manager
+             * @default false
+             */
+            is_data_manager: boolean;
             /** Is System Admin */
             is_system_admin: boolean;
             /** Memberships */
@@ -18287,8 +18827,6 @@ export interface components {
             parent_slug: string | null;
             /** Path */
             path: string;
-            /** Restricted */
-            restricted: boolean;
             /** Slug */
             slug: string;
             /** Sort Order */
@@ -18334,8 +18872,6 @@ export interface components {
             is_active?: boolean | null;
             /** Name */
             name?: string | null;
-            /** Restricted */
-            restricted?: boolean | null;
         };
         /**
          * YearTallyOut
@@ -18651,6 +19187,41 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["ApproveRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_data_manager_api_accounts__account_id__data_manager_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                account_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DataManagerRequest"];
             };
         };
         responses: {
@@ -19322,6 +19893,8 @@ export interface operations {
                 q?: string | null;
                 subsystem?: string | null;
                 category?: string | null;
+                /** @description 값의 단위계. 비우면 mm·N·tonne(ADR 0036) — SI 는 `si`. */
+                units?: string | null;
             };
             header?: never;
             path?: never;
@@ -21744,7 +22317,7 @@ export interface operations {
         parameters: {
             query?: {
                 format?: string;
-                /** @description 덱의 단위계. 기본은 SI. */
+                /** @description 덱의 단위계. 기본은 mm·N·tonne(ADR 0036) — SI 는 `si`. */
                 units?: string;
                 /** @description 덱 안의 재료 번호. 비우면 카드 id 에서 만든 수. */
                 mid?: number | null;
@@ -23757,7 +24330,6 @@ export interface operations {
                 code?: string | null;
                 family?: string | null;
                 category?: string | null;
-                scope?: string;
                 workspace?: string | null;
                 /** @description 정렬할 열. 기본은 등록 일시 */
                 sort?: string | null;
@@ -23953,8 +24525,9 @@ export interface operations {
                 code?: string | null;
                 family?: string | null;
                 category?: string | null;
-                scope?: string;
                 workspace?: string | null;
+                /** @description 값의 단위계. 비우면 mm·N·tonne(ADR 0036) — SI 는 `si`. */
+                units?: string | null;
             };
             header?: never;
             path?: never;
@@ -24953,6 +25526,125 @@ export interface operations {
             };
         };
     };
+    people_api_ownership_people_get: {
+        parameters: {
+            query?: {
+                q?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PersonOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stewards_api_ownership_stewards_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PersonOut"][];
+                };
+            };
+        };
+    };
+    get_ownership_api_ownership__kind___row_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                kind: "material" | "sample" | "specimen" | "test_run" | "property_card" | "group_result" | "test_type" | "format_profile" | "recipe" | "export_profile" | "equipment";
+                row_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OwnershipOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    change_ownership_api_ownership__kind___row_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                kind: "material" | "sample" | "specimen" | "test_run" | "property_card" | "group_result" | "test_type" | "format_profile" | "recipe" | "export_profile" | "equipment";
+                row_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OwnershipChangeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OwnershipChangeOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_connectors_api_pipelines_connectors_get: {
         parameters: {
             query?: never;
@@ -25110,6 +25802,7 @@ export interface operations {
             query?: {
                 status?: string | null;
                 connector_id?: string | null;
+                scope?: string;
                 limit?: number | null;
                 offset?: number;
             };
@@ -26556,6 +27249,95 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SpecimenSizesOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    analysis_card_items_api_statistics_analysis_card_items_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardItemSummaryOut"];
+                };
+            };
+        };
+    };
+    analysis_card_item_cell_api_statistics_analysis_card_items_cell_get: {
+        parameters: {
+            query: {
+                material_id: string;
+                item: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardItemCellOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    analysis_card_item_rows_api_statistics_analysis_card_items_materials_get: {
+        parameters: {
+            query?: {
+                q?: string | null;
+                family?: string | null;
+                category?: string | null;
+                item?: string | null;
+                with_sources?: boolean;
+                limit?: number | null;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardItemRowsOut"];
                 };
             };
             /** @description Validation Error */
@@ -29406,6 +30188,7 @@ export interface operations {
         parameters: {
             query?: {
                 status?: string | null;
+                scope?: string;
                 limit?: number;
             };
             header?: never;

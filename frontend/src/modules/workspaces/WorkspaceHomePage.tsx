@@ -1,5 +1,5 @@
 /**
- * 부서 홈 — **여기서 무엇을 어디서 하는지 말한다.**
+ * 홈 — **여기서 무엇을 어디서 하는지 말한다.**
  *
  * 이 자리가 여태 「구현 예정: Phase 1」 공사 표지판이었다. 로그인하면 맨 처음
  * 뜨는 화면이 그것이라, 사이드바에 메뉴가 스무 개 넘게 있어도 **어디부터
@@ -16,14 +16,13 @@
 
 import { ArrowRight, FileUp, Layers, PackageCheck, SlidersHorizontal } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
-import { Link, useParams } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 
 import { materialsApi } from '@/modules/materials/api'
 import { RUN_STATUS_LABEL, testsApi } from '@/modules/tests/api'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { Badge } from '@/shared/components/ui/badge'
 import { Skeleton } from '@/shared/components/ui/skeleton'
-import { DEFAULT_WORKSPACE } from '@/shared/layout/navigation'
 import { statisticsApi } from '@/modules/statistics/api'
 import { DivisionPanel } from '@/modules/statistics/DivisionPanel'
 import { OverviewPanel } from '@/modules/statistics/OverviewPanel'
@@ -81,13 +80,10 @@ function Step({ index, icon: Icon, title, detail, to, action, count, loading }: 
 }
 
 export default function WorkspaceHomePage() {
-  // **부서는 올리는 자리에만 남는다.** 이 화면은 어느 부서를 골라도 같은 것을
-  // 보여 준다 — 재료는 전사 카탈로그고, 이제 시험도 그렇다(가입자 전원이 모든
-  // 부서의 물성을 본다, `permissions.py`). 그런데 제목에 부서 이름·경로·ID 가
-  // 서 있어서 「기본 부서의 화면」 으로 읽혔다. 부서가 실제로 뜻을 갖는 곳은
-  // 업로드 하나다 — 올린 시험이 어느 부서 것이 되는가.
-  const { slug } = useParams<{ slug?: string }>()
-  const workspaceSlug = slug ?? DEFAULT_WORKSPACE
+  // **부서가 없는 화면이다**(ADR 0035 3단계). 전에는 `/w/<부서>` 였지만 어느 부서를
+  // 골라도 같은 것을 보였다 — 재료는 전사 카탈로그고 시험도 그렇다(가입자 전원이
+  // 모든 부서의 물성을 본다, `permissions.py`). 부서 이름이 제목에 서 있어서 「기본
+  // 부서의 화면」 으로 읽혔고, 그 부서가 정하는 것은 링크 넷뿐이었다.
 
   // 최근 목록과 총 건수를 한 번에 받는다(`total` 이 함께 온다).
   const recent = useResource(() => testsApi.runs({ limit: RECENT }), [])
@@ -122,11 +118,7 @@ export default function WorkspaceHomePage() {
 
       {/* **매일 오는 사람에게는 안내가 아니라 현황이 필요하다.** 아래 4단계는
           한 번 읽으면 끝인데 자리는 계속 차지한다 — 요약을 그 위에 둔다. */}
-      <OverviewPanel
-        data={summary.data ?? null}
-        loading={summary.loading}
-        workspaceSlug={workspaceSlug}
-      />
+      <OverviewPanel data={summary.data ?? null} loading={summary.loading} />
 
       <DivisionPanel data={divisions.data ?? null} loading={divisions.loading} />
 
@@ -136,7 +128,7 @@ export default function WorkspaceHomePage() {
           icon={FileUp}
           title="업로드"
           detail="장비 파일을 그대로 올립니다. 어떻게 읽을지는 부서가 정한 「파일 형식」이 압니다 — 손으로 옮겨 적지 않습니다."
-          to={`/w/${workspaceSlug}/tests/upload`}
+          to="/tests/upload"
           action="파일 업로드"
           count={{ value: recent.data?.total ?? 0, unit: '건 등록됨' }}
           loading={loading}

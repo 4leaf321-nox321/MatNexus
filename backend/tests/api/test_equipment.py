@@ -325,12 +325,14 @@ class Test붙여넣기:
 
 
 class Test권한:
-    def test_읽기는_모두가_쓰기는_관리자가(
+    def test_누구나_올리고_남의_장비는_이름을_대며_막는다(
         self, client: TestClient, db: Session, workspace: Any, admin_headers: dict[str, str]
     ) -> None:
         """**장비 목록은 실험하는 사람이 매일 본다** — 관리 메뉴에 숨으면 못 찾는다.
 
-        고치는 것은 부서 관리자다(데이터 체계 그룹의 다른 화면들과 같은 모양).
+        올리는 것은 누구나, 고치는 것은 등록자 · 편집을 받은 부서 · 자료 관리자다(ADR 0035
+        3단계). 전에는 「어느 부서든 관리자면」 이라 남의 조직 장비를 누구 관리자든
+        고쳤고, 평범한 멤버는 제가 들여온 장비의 교정 한 줄도 못 적었다.
         """
         from app.modules.accounts.models import User
         from app.modules.auth import security
@@ -353,6 +355,23 @@ class Test권한:
         headers = {"Authorization": f"Bearer {token}"}
 
         assert client.get(UNITS, headers=headers).status_code == 200
-        blocked = client.post(UNITS, json={"name": "새 장비"}, headers=headers)
+        mine = client.post(UNITS, json={"name": "새 장비"}, headers=headers)
+        assert mine.status_code == 201, mine.text
+        assert mine.json()["access"]["registrant"] == "시험 담당자"
+        # 제 장비에는 교정을 적는다.
+        calibrated = client.post(
+            f"{UNITS}/{mine.json()['id']}/calibrations",
+            json={"performed_on": "2026-09-01", "result": "pass"},
+            headers=headers,
+        )
+        assert calibrated.status_code == 201, calibrated.text
+
+        # 남이 올린 장비는 못 고친다 — 누구에게 물을지 이름으로 말한다.
+        theirs = make(client, admin_headers, name="관리자가 올린 장비")
+        blocked = client.patch(
+            f"{UNITS}/{theirs['id']}", json={"notes": "몰래"}, headers=headers
+        )
         assert blocked.status_code == 403, blocked.text
-        assert blocked.json()["error"]["code"] == "MNX-EQUIPMENT-0001"
+        error = blocked.json()["error"]
+        assert error["code"] == "MNX-EQUIPMENT-0001"
+        assert "등록자 시스템 관리자" in error["message"]

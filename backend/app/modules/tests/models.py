@@ -73,7 +73,8 @@ SUMMARY_SOURCES = ("instrument", "matnexus")
 
 
 class TestType(Base):
-    """시험 종류 정의. 부서 관리자와 시스템 관리자가 추가·수정한다."""
+    """시험 종류 정의. 누구나 만들고, 등록자·편집을 받은 부서·자료 관리자가 고친다
+    (ADR 0035 3단계 — 전에는 부서 관리자와 시스템 관리자였다)."""
 
     __tablename__ = "test_types"
     __table_args__ = (
@@ -94,12 +95,26 @@ class TestType(Base):
     owner_workspace_id: Mapped[uuid.UUID | None] = mapped_column(
         PgUUID(as_uuid=True), ForeignKey("workspaces.id"), nullable=True, index=True
     )
-    """누구 것인가. `NULL` 이면 전역(재료·프로파일과 같은 모델, ADR 0004·0006).
+    """**등록한 부서** — 권한이 아니다(ADR 0035). `NULL` 이면 부서 없이 올린 것이다.
 
     **처음에는 시스템 관리자 전용이었다.** 그런데 형식 프로파일을 부서 소유로
     연 순간 막다른 길이 생겼다 — 부서 관리자가 새 장비를 붙이려면 시험 종류가
     먼저 있어야 하는데, 그것을 만들 권한이 없었다. 새 장비란 대개 **없는 종류**를
-    재는 장비다. 문을 반쪽만 연 셈이었다(ADR 0006)."""
+    재는 장비다. 문을 반쪽만 연 셈이었다(ADR 0006). 이제는 누구나 만든다."""
+    created_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("users.id"), index=True, nullable=True
+    )
+    """등록자 — 이 정의를 고치는 첫째 사람(ADR 0035). 3단계 전에 만든 종류는 비어
+    있다(누가 만들었는지 적지 않았다) — 그런 것은 편집을 받은 부서와 자료 관리자가
+    고친다."""
+    edit_workspace_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("workspaces.id", ondelete="SET NULL"),
+        index=True,
+        nullable=True,
+    )
+    """편집을 받은 부서(ADR 0035) — 등록자 말고 이 부서 사람도 고친다. 뜻은
+    `Material.edit_workspace_id` 와 같다. 등록 부서(`owner_workspace_id`)는 권한이 아니다."""
     key: Mapped[str] = mapped_column(String(50), index=True)
     """`tensile`, `dma_strain_sweep`. 코드가 참조하는 안정된 이름이다.
 
@@ -460,6 +475,14 @@ class TestRun(Base):
     registered_by_id: Mapped[uuid.UUID | None] = mapped_column(
         PgUUID(as_uuid=True), ForeignKey("users.id"), index=True, nullable=True
     )
+    edit_workspace_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("workspaces.id", ondelete="SET NULL"),
+        index=True,
+        nullable=True,
+    )
+    """편집을 받은 부서(ADR 0035) — 등록자 말고 이 부서 사람도 고친다. 뜻은
+    `Material.edit_workspace_id` 와 같다. 소속(`workspace_id`)은 권한이 아니다."""
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -590,13 +613,11 @@ class FormatProfile(Base):
     __tablename__ = "format_profiles"
     __table_args__ = (
         Index(
-            "uq_format_profiles_scope_key",
-            "owner_workspace_id",
+            # **전사에서 하나다**(ADR 0035). 부서 안에서만 하나였을 때는 보기를 전원에게
+            # 열자 `/formats/{key}` 가 같은 key 중 아무거나 집었다 — `shared/definition_keys`.
+            "uq_format_profiles_key",
             "key",
             unique=True,
-            # PG15+. 없으면 NULL != NULL 이라 **전역 프로파일끼리 같은 키가 허용된다.**
-            # 재료가 같은 문제를 겪어 같은 방식으로 막았다(ADR 0004).
-            postgresql_nulls_not_distinct=True,
             # **지운 행은 key 를 잡아 두지 않는다.** 그냥 유니크면 지운 프로파일의
             # key 로 다시 만들 수 없는데 화면 어디에도 그것이 없다(2026-08-28 재료).
             postgresql_where=text("deleted_at IS NULL"),
@@ -618,16 +639,20 @@ class FormatProfile(Base):
     owner_workspace_id: Mapped[uuid.UUID | None] = mapped_column(
         PgUUID(as_uuid=True), ForeignKey("workspaces.id"), index=True, nullable=True
     )
-    """만든 부서. **`NULL` 이면 전역이다** — 재료와 같은 모델(ADR 0004).
+    """**등록한 부서.** `NULL` 이면 부서 없이 올린 것 — 모든 부서의 자동 추정에 든다.
 
     관리자 전용으로 두었더니 실무가 막혔다: **장비는 부서마다 다른데, 남의 부서
     파일을 어떻게 읽을지를 시스템 관리자가 알 리 없다.** 그 지식은 사업부에 있다.
+    그래서 부서가 자기 프로파일을 만든다(이제는 누구나, ADR 0035).
 
-    그래서 부서 관리자가 자기 부서 프로파일을 만든다. 여러 부서가 같은 장비를
-    쓰게 되면 관리자가 전역으로 올린다(이 컬럼을 NULL 로 — 승격은 UPDATE 한 줄).
+    읽을 때는 **내 부서 것이 부서 없는 것보다 먼저다.** 같은 장비라도 부서마다
+    소프트웨어 설정이 달라 열 이름이 조금씩 다른 일이 실제로 있다.
 
-    읽을 때는 **내 부서 것이 전역보다 먼저다.** 같은 장비라도 부서마다 소프트웨어
-    설정이 달라 열 이름이 조금씩 다른 일이 실제로 있다."""
+    **보는 것은 전원이고 고칠 권한은 사람이 정한다**(ADR 0035 — 등록자 · 편집을 받은
+    부서 · 자료 관리자). 이 칸은 **자동으로 고를 때의 후보와 순서만** 정한다 — 남의
+    부서 지문이 내 파일을 먼저 가로채면 왜 그 종류가 골라졌는지 사람이 모른다. 남의
+    부서 것은 사람이 골라서 쓴다. 부서 없이 올리는 것은 관리자만 한다 — 그것은 모든
+    부서의 파일을 먼저 대 보는 자리이기 때문이다."""
 
     definition: Mapped[dict[str, Any]] = mapped_column(
         JSONB, default=dict, server_default="{}"
@@ -644,6 +669,15 @@ class FormatProfile(Base):
     created_by_id: Mapped[uuid.UUID | None] = mapped_column(
         PgUUID(as_uuid=True), ForeignKey("users.id"), index=True, nullable=True
     )
+    """등록자 — 이 정의를 고치는 첫째 사람(ADR 0035)."""
+    edit_workspace_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("workspaces.id", ondelete="SET NULL"),
+        index=True,
+        nullable=True,
+    )
+    """편집을 받은 부서(ADR 0035) — 등록자 말고 이 부서 사람도 고친다. 뜻은
+    `Material.edit_workspace_id` 와 같다. 등록 부서(`owner_workspace_id`)는 권한이 아니다."""
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

@@ -21,6 +21,7 @@ from app.modules.accounts.schemas import (
     AccountSummaryOut,
     ApproveRequest,
     CreateAccountRequest,
+    DataManagerRequest,
     DeleteAccountRequest,
     DeleteAccountResponse,
     HomeWorkspaceRequest,
@@ -184,6 +185,20 @@ def set_system_admin(
     """시스템 관리자 권한을 주거나 뺀다 — **시스템 관리자만.**"""
     user = services.set_system_admin(
         db, user_id=account_id, grant=payload.is_system_admin, actor=admin
+    )
+    return services.account_out(db, user)
+
+
+@router.post("/{account_id}/data-manager", response_model=AccountOut)
+def set_data_manager(
+    account_id: uuid.UUID,
+    payload: DataManagerRequest,
+    admin: User = Depends(require_system_admin),
+    db: Session = Depends(get_db),
+) -> AccountOut:
+    """자료 관리자를 주거나 뺀다 — **시스템 관리자만**(ADR 0035)."""
+    user = services.set_data_manager(
+        db, user_id=account_id, grant=payload.is_data_manager, actor=admin
     )
     return services.account_out(db, user)
 

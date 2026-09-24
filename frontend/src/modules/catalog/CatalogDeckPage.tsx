@@ -13,13 +13,15 @@
 import { Check, Copy, Download, FileCode2 } from 'lucide-react'
 import { useState } from 'react'
 
-import { DECK_FORMATS, DECK_UNITS, catalogApi } from '@/modules/catalog/api'
+import { DECK_FORMATS, catalogApi } from '@/modules/catalog/api'
 import type { DeckBuilt, DeckMatchRow } from '@/modules/catalog/api'
+import { chosenSystem, unitSystemsApi } from '@/shared/api/unitSystems'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { PageHeader } from '@/shared/components/PageHeader'
 import { Button } from '@/shared/components/ui/button'
 import { Input } from '@/shared/components/ui/input'
 import { Textarea } from '@/shared/components/ui/textarea'
+import { useResource } from '@/shared/hooks/useResource'
 
 interface Row {
   query: string
@@ -32,7 +34,11 @@ export default function CatalogDeckPage() {
   const [text, setText] = useState('')
   const [rows, setRows] = useState<Row[] | null>(null)
   const [format, setFormat] = useState<string>(DECK_FORMATS[0].key)
-  const [units, setUnits] = useState<string>(DECK_UNITS[0].key)
+  // 계 목록과 기본은 서버가 준다(ADR 0036) — 전에는 붙박이 둘을 적어 두고 SI 가 첫째라,
+  // 부서가 만든 계는 못 골랐고 기본은 해석이 쓰는 계가 아니었다.
+  const systems = useResource(() => unitSystemsApi.list(), [])
+  const [units, setUnits] = useState<string | null>(null)
+  const system = chosenSystem(systems.data ?? [], units)
   const [built, setBuilt] = useState<DeckBuilt | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<Error | null>(null)
@@ -78,7 +84,9 @@ export default function CatalogDeckPage() {
       const items = rows
         .filter((row) => row.choice)
         .map((row) => ({ mid: row.mid, catalog_material_id: row.choice as string }))
-      setBuilt(await catalogApi.deckBuild({ items, format, units }))
+      setBuilt(
+        await catalogApi.deckBuild({ items, format, units: system?.key ?? null })
+      )
     } catch (caught) {
       setError(caught instanceof Error ? caught : new Error('덱을 만들지 못했습니다.'))
     } finally {
@@ -195,10 +203,10 @@ export default function CatalogDeckPage() {
             <select
               aria-label="단위계"
               className="border-input bg-background h-9 rounded-md border px-2 text-sm"
-              value={units}
+              value={system?.key ?? ''}
               onChange={(event) => setUnits(event.target.value)}
             >
-              {DECK_UNITS.map((one) => (
+              {(systems.data ?? []).map((one) => (
                 <option key={one.key} value={one.key}>
                   {one.label}
                 </option>

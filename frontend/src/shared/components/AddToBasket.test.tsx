@@ -56,7 +56,7 @@ const RUN = {
 function show(ids = ['c1'], labels?: string[]) {
   render(
     <MemoryRouter>
-      <AddToBasket kind="card" ids={ids} labels={labels} workspaceSlug="metal" auto />
+      <AddToBasket kind="card" ids={ids} labels={labels} auto />
     </MemoryRouter>
   )
 }
@@ -211,7 +211,8 @@ describe('기억해 둔 작업', () => {
     show()
     await userEvent.click(await screen.findByRole('button', { name: /추가/ }))
     const back = await screen.findByRole('link', { name: '워크벤치로' })
-    expect(back).toHaveAttribute('href', '/w/metal/workbench?run=r1')
+    // 워크벤치는 한 주소다 — 부서 주소를 걷었다(ADR 0035 3단계).
+    expect(back).toHaveAttribute('href', '/workbench?run=r1')
   })
 
   it('담고 나면 그 작업을 기억한다', async () => {
@@ -234,7 +235,7 @@ describe('언제 뜨는가', () => {
     runs.mockResolvedValue([RUN])
     render(
       <MemoryRouter>
-        <AddToBasket kind="card" ids={['c1']} workspaceSlug="metal" />
+        <AddToBasket kind="card" ids={['c1']} />
       </MemoryRouter>
     )
     expect(await screen.findByRole('button', { name: /워크벤치에 추가/ })).toBeInTheDocument()
@@ -246,7 +247,7 @@ describe('언제 뜨는가', () => {
     runs.mockResolvedValue([RUN])
     render(
       <MemoryRouter>
-        <AddToBasket kind="card" ids={['c1']} workspaceSlug="metal" />
+        <AddToBasket kind="card" ids={['c1']} />
       </MemoryRouter>
     )
     await user.click(await screen.findByRole('button', { name: /워크벤치에 추가/ }))
@@ -257,7 +258,7 @@ describe('언제 뜨는가', () => {
     runs.mockResolvedValue([RUN])
     render(
       <MemoryRouter>
-        <AddToBasket kind="card" ids={['c1']} workspaceSlug="metal" auto />
+        <AddToBasket kind="card" ids={['c1']} auto />
       </MemoryRouter>
     )
     expect(await screen.findByRole('region', { name: '추가' })).toBeInTheDocument()
@@ -269,7 +270,7 @@ describe('언제 뜨는가', () => {
     runs.mockResolvedValue([RUN])
     render(
       <MemoryRouter>
-        <AddToBasket kind="card" ids={['c1']} workspaceSlug="metal" auto />
+        <AddToBasket kind="card" ids={['c1']} auto />
       </MemoryRouter>
     )
     await user.click(await screen.findByRole('button', { name: '닫기' }))

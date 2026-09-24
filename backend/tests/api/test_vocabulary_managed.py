@@ -10,7 +10,7 @@
 그래서 문은 **새 값에만** 단다:
 
     기존 등급으로 재료 만들기     누구나 (같은 등급 다른 두께는 흔한 일이다)
-    새 등급을 세우기              부서 관리자
+    새 등급을 세우기              자료 관리자 (ADR 0035 3단계 — 전에는 부서 관리자)
     로트·별칭·메모                누구나 (용어가 아니다 — 그냥 글자 칸)
     씨앗·이관·커넥터              안 막는다 (사람이 아닌 경로)
 """
@@ -67,7 +67,7 @@ def seeded(client: TestClient, db: Session, admin_headers: dict[str, str]) -> No
     assert made.status_code == 201, made.text
 
 
-class Test새_값은_부서_관리자만:
+class Test새_값은_자료_관리자만:
     def test_이미_있는_등급이면_누구나_만든다(
         self,
         client: TestClient,
@@ -95,12 +95,14 @@ class Test새_값은_부서_관리자만:
         assert got.status_code == 403, got.text
         body = got.json()["error"]
         assert body["code"] == "MNX-VOCABULARY-0011"
-        assert "부서 관리자" in body["message"]
+        assert "자료 관리자" in body["message"]
         assert "SECC" in body["details"]["similar"]
+        # **누구에게 부탁할지 이름으로** — 자료 관리자가 없으면 시스템 관리자를 댄다.
+        assert body["details"]["data_managers"]
         # 막혔으면 **아무것도 안 생긴다** — 반쯤 만든 재료가 남으면 더 나쁘다.
         assert db.scalar(select(Material).where(Material.grade == "SECC강판")) is None
 
-    def test_부서_관리자는_새_등급을_세운다(
+    def test_자료_관리자는_새_등급을_세우고_부서_관리자는_못_세운다(
         self,
         client: TestClient,
         db: Session,
@@ -108,8 +110,16 @@ class Test새_값은_부서_관리자만:
         admin_headers: dict[str, str],
         seeded: None,
     ) -> None:
+        """부서 관리자라는 자리는 고칠 권한을 갖지 않는다(ADR 0035 D5). 새 용어는 검토의
+        뜻이 있는 일이라 카드 확정과 같은 자리 — 자료 관리자다."""
         _member(db, workspace, email="manager-a", role="manager")
-        got = _create(client, _headers(client, "manager-a"), grade="DP980")
+        blocked = _create(client, _headers(client, "manager-a"), grade="DP980")
+        assert blocked.status_code == 403, blocked.text
+
+        steward = _member(db, workspace, email="steward-a", role="member")
+        steward.is_data_manager = True
+        db.commit()
+        got = _create(client, _headers(client, "steward-a"), grade="DP980")
         assert got.status_code == 201, got.text
         assert got.json()["grade"] == "DP980"
 

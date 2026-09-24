@@ -850,6 +850,7 @@ def register(
     if not item.source_path:
         raise AppError("MNX-PIPE-0008", "원본 파일이 없습니다.", status=422)
     record = item.summary.get("record") or {}
+    connector = db.get(PipelineConnector, item.connector_id)
     run = ingest.create_run(
         db,
         specimen=specimen,
@@ -861,6 +862,10 @@ def register(
             size=item.size,
         ),
         registered_by_id=actor.id if actor else None,
+        # **커넥터의 부서가 그 시험을 고친다**(ADR 0035). 커넥터는 등록할 때 부서를
+        # 고르고, 그 장비로 들어온 시험은 그 부서 사람이 다룬다 — 스스로 붙인 시험은
+        # 등록자가 없으니 이것이 없으면 자료 관리자만 고칠 수 있다.
+        edit_workspace_id=connector.workspace_id if connector else None,
         tested_at=_tested_at(item),
         operator=record.get("operator") or item.hints.get("operator"),
         instrument=record.get("instrument") or item.hints.get("instrument"),
@@ -955,7 +960,7 @@ def approve_suggested(db: Session, item: PipelineInboxItem, *, actor: User) -> T
 def context(db: Session, items: list[PipelineInboxItem]) -> dict[str, dict[uuid.UUID, Any]]:
     """목록에 필요한 주변 정보를 한 번에(N+1 방지)."""
     if not items:
-        return {"connectors": {}, "types": {}, "profiles": {}, "runs": {}}
+        return {"connectors": {}, "types": {}, "profiles": {}, "runs": {}, "workspaces": {}}
     connectors = {
         c.id: c
         for c in db.scalars(
@@ -973,4 +978,16 @@ def context(db: Session, items: list[PipelineInboxItem]) -> dict[str, dict[uuid.
     }
     run_ids = {i.test_run_id for i in items if i.test_run_id}
     runs = {r.id: r for r in db.scalars(select(TestRun).where(TestRun.id.in_(run_ids)))}
-    return {"connectors": connectors, "types": types, "profiles": profiles, "runs": runs}
+    # 커넥터의 부서 이름 — 보기를 전원에게 열면서(ADR 0035) 줄마다 「누가 처리하나」 가
+    # 필요해졌다.
+    space_ids = {c.workspace_id for c in connectors.values()}
+    workspaces = {
+        w.id: w.name for w in db.scalars(select(Workspace).where(Workspace.id.in_(space_ids)))
+    }
+    return {
+        "connectors": connectors,
+        "types": types,
+        "profiles": profiles,
+        "runs": runs,
+        "workspaces": workspaces,
+    }

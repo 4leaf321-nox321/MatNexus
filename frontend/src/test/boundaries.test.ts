@@ -48,6 +48,10 @@ const ALLOWED: Record<string, { to: string; why: string }[]> = {
   ],
   equipment: [
     {
+      to: 'ownership',
+      why: '**누가 고치나를 누르기 전에 말한다**(ADR 0035 3단계). 장비도 등록자 · 편집을 받은 부서 · 자료 관리자가 고친다 — 그 한 줄과 넘기는 창은 ownership 의 것이다. 자료 화면과 같은 부품을 써야 「읽기 전용」 을 말하는 방식이 갈리지 않는다.',
+    },
+    {
       to: 'vocabulary',
       why: '장비 유형·시험실·제조사가 기준정보 값이다. 피커를 여기서 다시 만들면 `search`·`onCreate` 를 베껴 쓰게 되고 그중 하나만 고쳐지는 날이 온다 — `VocabularyField` 가 그것을 한곳으로 모으려고 있는 부품이고(그 파일 머리말), 시험 모듈도 같은 이유로 이 예외를 쓴다.',
     },
@@ -99,6 +103,10 @@ const ALLOWED: Record<string, { to: string; why: string }[]> = {
       to: 'viscoelastic',
       why: '시험 상세가 그 시험의 점탄성 탭을 끼워 넣는다. 겹치기는 **한 시험 안의 온도가 다른 스윕 여럿**을 고르는 일이라, 그 시험을 떠나면 무엇을 겹치는지가 사라진다. 바로 위 processing 과 같은 방향·같은 이유고 둘은 한 화면을 나눠 그린다.',
     },
+    {
+      to: 'ownership',
+      why: '**누가 고치나를 누르기 전에 말한다**(ADR 0035). 자료마다 등록자·편집 부서와 못 고치는 까닭(`access`)이 붙어 오고, 그것을 한 줄로 그리고 넘기는 창을 여는 부품은 ownership 의 것이다. 화면마다 다시 그리면 「읽기 전용」 을 말하는 방식이 갈리고, 막힌 사람이 누구에게 물을지가 화면마다 다르게 적힌다.',
+    },
   ],
   viscoelastic: [
     {
@@ -118,6 +126,10 @@ const ALLOWED: Record<string, { to: string; why: string }[]> = {
   ],
   processing: [
     {
+      to: 'ownership',
+      why: '레시피의 「권한」 창(ADR 0035 3단계). 레시피는 부서의 규격이라 등록자가 부서에 편집을 준다 — 넘기는 창은 ownership 의 것이고 재료·시험 화면과 같은 것을 연다.',
+    },
+    {
       to: 'tests',
       why: '처리 결과도 곡선이라 같은 CurveChart 로 그린다. 차트를 shared 로 올리지 않은 이유: 축 라벨·단위 표기·LTTB 안내 문구가 전부 시험 도메인의 것이라, shared 로 올리면 공통이 도메인을 알게 된다.',
     },
@@ -134,6 +146,10 @@ const ALLOWED: Record<string, { to: string; why: string }[]> = {
     {
       to: 'tests',
       why: '적합 결과를 대표 곡선과 겹쳐 그린다. 겹쳐 보지 않으면 RMSE 가 작아도 항복 근처만 크게 어긋난 것을 못 본다 — 그것은 숫자가 아니라 모양으로 보인다. 통계·처리가 같은 이유로 CurveChart 를 쓴다.',
+    },
+    {
+      to: 'ownership',
+      why: '**누가 고치나를 누르기 전에 말한다**(ADR 0035). 자료마다 등록자·편집 부서와 못 고치는 까닭(`access`)이 붙어 오고, 그것을 한 줄로 그리고 넘기는 창을 여는 부품은 ownership 의 것이다. 화면마다 다시 그리면 「읽기 전용」 을 말하는 방식이 갈리고, 막힌 사람이 누구에게 물을지가 화면마다 다르게 적힌다.',
     },
   ],
   materials: [
@@ -157,6 +173,10 @@ const ALLOWED: Record<string, { to: string; why: string }[]> = {
       to: 'fitting',
       why: '재료 상세의 CAE 카드 탭. 카드는 재료 하나의 물성 한 벌이고, 그 입력이 바로 옆 물성 탭의 대표 곡선이다 — 다른 화면으로 보내면 근거와 결론이 떨어진다.',
     },
+    {
+      to: 'ownership',
+      why: '**누가 고치나를 누르기 전에 말한다**(ADR 0035). 자료마다 등록자·편집 부서와 못 고치는 까닭(`access`)이 붙어 오고, 그것을 한 줄로 그리고 넘기는 창을 여는 부품은 ownership 의 것이다. 화면마다 다시 그리면 「읽기 전용」 을 말하는 방식이 갈리고, 막힌 사람이 누구에게 물을지가 화면마다 다르게 적힌다.',
+    },
   ],
   auth: [
     {
@@ -172,6 +192,12 @@ const ALLOWED: Record<string, { to: string; why: string }[]> = {
     {
       to: 'workspaces',
       why: '가입 승인이 곧 부서 배정이다. 승인 화면에서 부서를 고르지 못하면 승인 뒤 다른 화면에 다시 가야 한다.',
+    },
+  ],
+  ownership: [
+    {
+      to: 'workspaces',
+      why: '편집을 줄 부서를 고른다 — 부서 트리(경로 포함)를 아는 것은 부서 모듈이고, 넘기는 창은 그 선택기(`WorkspacePicker`)를 조립만 한다. 장비·의뢰가 같은 이유로 이 예외를 쓴다.',
     },
   ],
   workspaces: [

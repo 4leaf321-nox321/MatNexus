@@ -25,7 +25,6 @@ const SAVED = {
   test_type_key: 'tensile',
   priority: 10,
   is_active: true,
-  is_global: true,
   owner_workspace_slug: null,
   owner_workspace_name: null,
   definition: {
@@ -70,7 +69,6 @@ const TYPE = {
   revision: 3,
   owner_workspace_slug: null,
   owner_workspace_name: null,
-  is_global: true,
   sort_order: 0,
   channels: [
     {
@@ -120,12 +118,18 @@ vi.mock('@/modules/tests/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/modules/tests/api')>()),
   testsApi: {
     types: () => Promise.resolve([TYPE]),
-    formats: () => Promise.resolve([SAVED]),
+    formats: () => Promise.resolve([{ ...SAVED, access: savedAccess }]),
     updateFormat: (...args: unknown[]) => updateFormat(...args),
     previewFormat: (...args: unknown[]) => previewFormat(...args),
     tryFormat: () => Promise.resolve({ curves: [], summary: [], metadata: {}, warnings: [] }),
   },
 }))
+
+/**
+ * 저장된 정의를 **이 사람이** 고칠 수 있나 — 서버가 정의마다 싣는다(ADR 0035 3단계).
+ * 기본은 비어 있다: 화면은 모르면 연다(판정은 서버가 한다).
+ */
+let savedAccess: Record<string, unknown> | undefined
 
 /** 누가 보는가. 시험이 바꿔 끼운다 — 기본은 시스템 관리자. */
 const viewer: { user: Record<string, unknown> } = {
@@ -151,35 +155,49 @@ beforeEach(() => {
   previewFormat.mockReset()
   window.localStorage.clear()
   viewer.user = { is_system_admin: true, memberships: [] }
+  savedAccess = undefined
 })
 
-describe('부서 관리자가 전역 프로파일을 열었을 때', () => {
+describe('고칠 수 없는 정의를 열었을 때', () => {
   beforeEach(() => {
+    // 부서 관리자라도 남이 올린 정의는 못 고친다 — 자리는 권한이 아니다(ADR 0035 3단계).
     viewer.user = {
       is_system_admin: false,
+      home_workspace_slug: 'qa',
       memberships: [{ slug: 'qa', name: '품질팀', path: '품질팀', depth: 0, role: 'manager' }],
+    }
+    savedAccess = {
+      can_edit: false,
+      can_hand_over: false,
+      registrant_id: null,
+      registrant: null,
+      edit_workspace_slug: null,
+      edit_workspace: null,
+      reason: '자료 관리자만 고칠 수 있습니다.',
     }
   })
 
-  it('왜 저장이 막히는지 말하고, 내 부서 것으로 복제하면 새 프로파일 화면에 그대로 펴진다', async () => {
+  it('왜 저장이 막히는지 말하고, 내 것으로 복제하면 새 프로파일 화면에 그대로 펴진다', async () => {
     const user = userEvent.setup()
     open()
     await screen.findByDisplayValue('옛 앱 인장 결과')
 
-    // 저장은 막히고, 이유가 목록의 ✗ 한 줄이 아니라 문장으로 있다.
+    // 저장은 막히고, 이유가 목록의 ✗ 한 줄이 아니라 문장으로 있다 — **누구에게 물을지**까지.
     expect(screen.getByRole('button', { name: '저장' })).toBeDisabled()
     expect(
       screen.getByText((_, node) =>
-        node?.tagName === 'SPAN' && /전역 프로파일이라 저장할 수 없습니다/.test(node.textContent ?? '')
+        node?.tagName === 'SPAN' && /저장할 수 없는 정의입니다 — 자료 관리자만/.test(node.textContent ?? '')
       )
     ).toBeInTheDocument()
-    expect(screen.getByText(/시스템 관리자만 고칩니다. 「내 부서 것으로 복제」/)).toBeInTheDocument()
+    expect(screen.getByText(/고칠 수 없는 정의 — .*「내 것으로 복제」/)).toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: '내 부서 것으로 복제' }))
+    await user.click(screen.getByRole('button', { name: '내 것으로 복제' }))
 
-    // 새 프로파일 — 키·이름은 부서로 갈라지고, 지문·매핑은 그대로다.
+    // 새 프로파일 — 이름은 부서로 갈라지고, 지문·매핑은 그대로다. key 는 원본 것을
+    // 들고 가지 않는다 — 저장할 때 서버가 짓는다(전사에서 하나, ADR 0035).
     expect(await screen.findByText('형식 프로파일 생성')).toBeInTheDocument()
-    expect(screen.getByDisplayValue('legacy_mtet_qa')).toBeInTheDocument()
+    expect(screen.queryByDisplayValue('legacy_mtet')).not.toBeInTheDocument()
+    expect(screen.getByText(/저장하면 서버가 짓습니다/)).toBeInTheDocument()
     expect(screen.getByDisplayValue('옛 앱 인장 결과 (품질팀)')).toBeInTheDocument()
     expect(screen.getByDisplayValue('11')).toBeInTheDocument()
     expect(screen.getByDisplayValue('.mtet')).toBeInTheDocument()

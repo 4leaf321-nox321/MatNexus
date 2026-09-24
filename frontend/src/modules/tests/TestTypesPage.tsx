@@ -16,15 +16,15 @@
  */
 
 import { useState } from 'react'
-import { Globe2, ListTree, Lock, Pencil, Plug, Plus, Trash2 } from 'lucide-react'
+import { ListTree, Lock, Pencil, Plug, Plus, Trash2 } from 'lucide-react'
 
+import { AccessLine } from '@/modules/ownership/AccessLine'
+import { canEdit, lockedTitle } from '@/modules/ownership/access'
 import { testsApi } from '@/modules/tests/api'
 import type { TestType } from '@/modules/tests/api'
 import { TestTypeEditor } from '@/modules/tests/TestTypeEditor'
 import { display } from '@/shared/units'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
-import { useAuth } from '@/shared/auth/AuthContext'
-import { isAnyManager } from '@/shared/auth/roles'
 import { PageHeader } from '@/shared/components/PageHeader'
 import { Button } from '@/shared/components/ui/button'
 import { Badge } from '@/shared/components/ui/badge'
@@ -40,7 +40,6 @@ import { TestTypeListPanel } from '@/modules/tests/TestTypeListPanel'
 import { useResource } from '@/shared/hooks/useResource'
 
 export default function TestTypesPage() {
-  const canEdit = isAnyManager(useAuth().user)
   const types = useResource(() => testsApi.types(), [])
   const [editing, setEditing] = useState<TestType | null>(null)
   const [open, setOpen] = useState(false)
@@ -69,21 +68,17 @@ export default function TestTypesPage() {
         title="시험종류 정의"
         description="어떤 시험을 받을 수 있고, 각각 어떤 채널과 조건을 갖는지. 정의는 코드가 아니라 데이터입니다 — 배포 없이 추가됩니다."
         actions={
-          // **볼 수는 있어도 고치는 것은 부서 관리자다.** 목록을 모두에게 연 것은
-          // 「우리 시험이 무엇을 받나」 를 누구나 물어야 해서고, 그 답을 보는 것과
-          // 정의를 바꾸는 것은 다른 일이다. 서버가 판정하지만 **눌러 보고 403 을
-          // 알게 하지는 않는다.**
-          canEdit ? (
-            <Button
-              onClick={() => {
-                setEditing(null)
-                setOpen(true)
-              }}
-            >
-              <Plus className="size-4" />
-              종류 생성
-            </Button>
-          ) : null
+          // **만들기는 누구나다**(ADR 0035 3단계 — 전에는 부서 관리자). 새 장비를 붙이는
+          // 사람이 관리자를 기다리지 않는다. 고치는 것은 정의마다 다르다(`access`).
+          <Button
+            onClick={() => {
+              setEditing(null)
+              setOpen(true)
+            }}
+          >
+            <Plus className="size-4" />
+            종류 생성
+          </Button>
         }
       />
 
@@ -115,17 +110,11 @@ export default function TestTypesPage() {
                 {active.key}
               </Badge>
               <Badge variant="outline">{active.abbr}</Badge>
-              {/* **누구 것인지 안 보이면 왜 못 고치는지 알 수 없다.** 전역은 여러
-                  부서가 함께 써서 시스템 관리자만 손댄다 — 그 사실이 화면에
-                  없으면 편집을 눌러 보고 403 을 받고서야 알게 된다. */}
-              {active.is_global ? (
-                <Badge variant="outline" className="gap-1" title="모든 부서가 씁니다. 시스템 관리자만 고칠 수 있습니다.">
-                  <Globe2 className="size-3" />
-                  전역
-                </Badge>
-              ) : (
-                <Badge variant="secondary">{active.owner_workspace_name}</Badge>
-              )}
+              {/* **등록한 부서** — 권한이 아니다. 누가 고치는지는 아래 한 줄이 말한다.
+                  전에는 여기 「전역」 이 섰고, 그 말을 다른 시스템이 「공식」 으로 읽었다. */}
+              <Badge variant="secondary" title="등록한 부서">
+                {active.owner_workspace_name ?? '부서 없음'}
+              </Badge>
               {!active.is_active && <Badge variant="destructive">중단</Badge>}
               {active.run_count > 0 && (
                 <Badge variant="outline" className="gap-1" title="등록된 시험이 있어 채널의 키·단위가 잠깁니다">
@@ -136,35 +125,44 @@ export default function TestTypesPage() {
               <span className="text-muted-foreground ml-auto text-xs">
                 최대 {Math.round(active.max_upload_bytes_effective / (1024 * 1024))}MB
               </span>
-              {canEdit && (
-                <>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => {
-                      setEditing(active)
-                      setOpen(true)
-                    }}
-                  >
-                    <Pencil className="size-3.5" />
-                    편집
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    disabled={active.run_count > 0}
-                    title={
-                      active.run_count > 0
-                        ? '등록된 시험이 있습니다. 더 쓰지 않으려면 편집에서 중단으로 바꾸세요.'
-                        : '삭제'
-                    }
-                    onClick={() => remove(active)}
-                  >
-                    <Trash2 className="size-3.5" />
-                  </Button>
-                </>
-              )}
+              {/* **못 고치는 단추는 누르기 전에 막고 까닭을 단다**(ADR 0035). */}
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={!canEdit(active.access)}
+                title={lockedTitle(active.access)}
+                onClick={() => {
+                  setEditing(active)
+                  setOpen(true)
+                }}
+              >
+                <Pencil className="size-3.5" />
+                편집
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={active.run_count > 0 || !canEdit(active.access)}
+                title={
+                  lockedTitle(active.access) ??
+                  (active.run_count > 0
+                    ? '등록된 시험이 있습니다. 더 쓰지 않으려면 편집에서 중단으로 바꾸세요.'
+                    : '삭제')
+                }
+                onClick={() => remove(active)}
+              >
+                <Trash2 className="size-3.5" />
+              </Button>
             </header>
+            {/* 누가 고치나 — 등록자 · 편집 부서, 못 고치면 누구에게. 「권한」 에서 넘긴다. */}
+            <div className="border-b px-4 py-2">
+              <AccessLine
+                kind="test_type"
+                id={active.id}
+                access={active.access}
+                onChanged={() => types.reload()}
+              />
+            </div>
 
             <div className="space-y-4 p-4">
               {active.description && (

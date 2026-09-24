@@ -6,7 +6,7 @@
  *   상한에 닿으면 말한다      더 못 보여 줄 때 「좁혀 달라」 고 말한다
  */
 
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -21,6 +21,18 @@ const download = vi.fn()
 vi.mock('@/shared/api/client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/shared/api/client')>()),
   downloadFile: (...args: unknown[]) => download(...args),
+}))
+
+// 계 목록은 서버가 준다(ADR 0036). **기본이 첫째가 아니다** — 순서로 고르면 통과해 버린다.
+vi.mock('@/shared/api/unitSystems', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/shared/api/unitSystems')>()),
+  unitSystemsApi: {
+    list: () =>
+      Promise.resolve([
+        { key: 'si', label: 'SI (kg · m · s · Pa)', is_default: false },
+        { key: 'mm_n_tonne', label: 'mm · N · tonne (MPa)', is_default: true },
+      ]),
+  },
 }))
 
 vi.mock('@/modules/catalog/api', async (importOriginal) => ({
@@ -120,9 +132,16 @@ describe('문헌 물성 목록', () => {
     await screen.findByText('SUS304')
 
     await user.click(screen.getByRole('button', { name: /JSON 내보내기/ }))
-    expect(download).toHaveBeenCalledWith(
-      expect.stringContaining('/catalog/export?q=SUS'),
-      expect.stringContaining('.json')
+    await user.click(
+      await screen.findByRole('menuitem', { name: /matnexus_catalog_mm_n_tonne\.json/ })
     )
+    await waitFor(() => expect(download).toHaveBeenCalled())
+    const [url, filename] = download.mock.calls[0] as [string, string]
+    const sent = new URL(url, 'http://localhost')
+    expect(sent.pathname).toBe('/catalog/export')
+    expect(sent.searchParams.get('q')).toBe('SUS')
+    // 값은 고른 계로 나간다 — 안 고르면 서버 기본(ADR 0036).
+    expect(sent.searchParams.get('units')).toBe('mm_n_tonne')
+    expect(filename).toBe('matnexus_catalog_mm_n_tonne.json')
   })
 })

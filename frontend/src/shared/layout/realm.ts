@@ -25,9 +25,8 @@ const MATERIAL_PATHS = [
   /^\/test-runs(\/|$)/,
   /^\/cards(\/|$)/,
   /^\/compare(\/|$)/,
-  // 부서 홈과 부서 시험 목록·일괄 등록. 워크벤치·멤버는 공용이다.
-  /^\/w\/[^/]+$/,
-  /^\/w\/[^/]+\/tests(\/|$)/,
+  // 재료 물성의 홈. 전에는 `/w/<부서>` 였다(ADR 0035 3단계에서 걷었다).
+  /^\/$/,
 ]
 
 export function realmOf(pathname: string, stored: NavRealm | null): NavRealm {

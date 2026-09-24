@@ -84,18 +84,24 @@ def candidates(items: Sequence[Mapping[str, Any]], limit: int = 5) -> list[str]:
     return [str(one.get("value")) for one in items][:limit]
 
 
-def refusal(blocked: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+def refusal(
+    blocked: Sequence[Mapping[str, Any]], stewards: Sequence[str] = ()
+) -> dict[str, Any]:
     """거절하되 **다음에 할 일**을 준다 — 서버의 거절문과 같은 결이다.
 
     「권한이 없습니다」 로 끝내면 AI 는 그 말을 사람에게 옮기고 끝난다. 후보가
-    있으면 대개 그 자리에서 해결된다.
+    있으면 대개 그 자리에서 해결된다. 새 값을 세우는 것은 **자료 관리자**다(ADR 0035
+    — 전에는 부서 관리자, ADR 0032 D2). 그 이름(`stewards`)을 함께 준다 — 역할만 말하면
+    그게 누구인지 또 물어야 한다(2026-09-24 AI 점검에서 실제로 그렇게 멈췄다).
     """
+    who = f"자료 관리자({', '.join(stewards)})" if stewards else "자료 관리자"
     return {
         "error": "기준정보에 없는 값이 있어 **아무것도 만들지 않았습니다** — "
-        "새 용어는 사람이 세웁니다(부서 관리자, ADR 0032).",
+        f"새 용어는 사람이 세웁니다({who}, ADR 0032·0035).",
         "blocked": list(blocked),
+        "ask": list(stewards),
         "hint": "후보(`candidates`) 중에 같은 것이 있으면 그 표기로 다시 부르세요. "
-        "정말 새 값이면 사람에게 전하세요 — 화면의 「기준정보」 에서 부서 관리자가 "
+        f"정말 새 값이면 사람에게 전하세요 — 화면의 「기준정보」 에서 {who}가 "
         "세웁니다. 비슷하다고 아무거나 고르지 마세요: 다른 등급을 고르면 그 뒤의 "
         "통계·카드가 조용히 섞입니다.",
     }

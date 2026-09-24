@@ -64,7 +64,7 @@ export interface CardQuery {
   status?: string
   /** 시험종류 key. **`none` 은 시험 없이 만든 카드**다(ADR 0016). */
   test_type_key?: string
-  /** 부서 id. `global` 은 전역 재료의 카드. */
+  /** 부서 id. `none` 은 소속 부서가 없는 재료의 카드. */
   owner?: string
   q?: string
   limit?: number
@@ -73,8 +73,12 @@ export interface CardQuery {
 
 /** 시험 없이 만든 카드를 가리키는 값. 서버의 `NO_TEST` 와 같다. */
 export const NO_TEST = 'none'
-/** 전역 재료를 가리키는 값. 서버의 `GLOBAL_OWNER` 와 같다. */
-export const GLOBAL_OWNER = 'global'
+/**
+ * 소속 부서가 없는 재료를 가리키는 값. 서버의 `NO_OWNER` 와 같다.
+ *
+ * 전에는 `global`(「전역」)이었다 — 그 말을 다른 시스템이 「공식」 으로 읽어서 걷었다(ADR 0035).
+ */
+export const NO_OWNER = 'none'
 
 function search(query: CardQuery): string {
   const params = new URLSearchParams()
@@ -88,7 +92,7 @@ function search(query: CardQuery): string {
 export const fittingApi = {
   families: () => api.get<Family[]>('/fitting/families'),
 
-  /** 저장된 덱 정의. 내 부서 것 + 전역. */
+  /** 저장된 덱 정의 — 모든 부서의 것(ADR 0035). 줄마다 고칠 수 있는지(`access`)가 온다. */
   exportProfiles: () => api.get<ExportProfile[]>('/fitting/export-profiles'),
   createExportProfile: (payload: ExportProfileCreate) =>
     api.post<ExportProfile>('/fitting/export-profiles', payload),
@@ -119,7 +123,8 @@ export const fittingApi = {
   /** 이 카드로 덱을 그릴 때 집히는 값·표 — 미리보기와 같은 덱, 같은 조회 규칙. */
   deckKeys: (cardId: string) => api.get<DeckKeys>(`/fitting/cards/${cardId}/deck-keys`),
 
-  previewDeck: (definition: unknown, cardId: string, units = 'si') =>
+  /** `units` 는 늘 받는다 — 화면이 기본을 적어 두면 서버 기본(ADR 0036)과 갈린다. */
+  previewDeck: (definition: unknown, cardId: string, units: string) =>
     api.post<DeckPreview>('/fitting/export-profiles/preview', {
       definition,
       card_id: cardId,

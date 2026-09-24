@@ -83,8 +83,13 @@ def test_거절은_다음에_할_일을_준다() -> None:
     """「권한이 없습니다」 로 끝내면 AI 는 그 말만 옮기고 끝난다. 갈림은 대개
     오타에서 나므로 후보가 있으면 그 자리에서 해결된다."""
     got = term_gate.refusal(
-        [{"field": "grade", "axis": "grade", "value": "SECC강판", "candidates": ["SECC"]}]
+        [{"field": "grade", "axis": "grade", "value": "SECC강판", "candidates": ["SECC"]}],
+        ["김자료"],
     )
     assert "만들지 않았습니다" in got["error"]
     assert got["blocked"][0]["candidates"] == ["SECC"]
-    assert "부서 관리자" in got["hint"]
+    # **누구에게 부탁할지 이름으로** — 새 값은 자료 관리자가 세운다(ADR 0035 3단계).
+    assert "자료 관리자(김자료)" in got["hint"]
+    assert got["ask"] == ["김자료"]
+    # 이름을 못 읽어 왔어도 역할은 말한다.
+    assert "자료 관리자" in term_gate.refusal([])["hint"]

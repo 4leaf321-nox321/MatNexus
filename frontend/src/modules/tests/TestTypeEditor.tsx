@@ -17,7 +17,8 @@
 import { useEffect, useState } from 'react'
 import { Lock, Plus, Rows3, Trash2 } from 'lucide-react'
 
-import { WorkspacePicker } from '@/modules/workspaces/WorkspacePicker'
+import { RegisteringWorkspaceField } from '@/modules/workspaces/RegisteringWorkspaceField'
+import { defaultRegisteringSlug } from '@/modules/workspaces/registering'
 import { testsApi } from '@/modules/tests/api'
 import { useAuth } from '@/shared/auth/AuthContext'
 import type { Parser, StandardCondition, TestType, TestTypeCapability } from '@/modules/tests/api'
@@ -89,15 +90,7 @@ export function TestTypeEditor({ type, open, onClose, onSaved }: Props) {
     () => (open ? testsApi.standardConditions() : Promise.resolve([])),
     [open]
   )
-  /** 내가 관리자인 부서만. 아닌 부서 것으로 만들면 서버가 거절한다. */
-  const managed = (user?.memberships ?? [])
-    .filter((membership) => membership.role === 'manager')
-    .map((membership) => ({
-      slug: membership.slug,
-      name: membership.name,
-      path: membership.path,
-      depth: membership.depth,
-    }))
+  /** 등록 부서 — `null` 이면 부서 없이(자료 관리자만). 권한이 아니다(ADR 0035 3단계). */
   const [owner, setOwner] = useState<string | null>(null)
   const [form, setForm] = useState({
     key: '',
@@ -120,7 +113,7 @@ export function TestTypeEditor({ type, open, onClose, onSaved }: Props) {
   useEffect(() => {
     if (!open) return
     setError(null)
-    setOwner(type?.owner_workspace_slug ?? null)
+    setOwner(type ? type.owner_workspace_slug : defaultRegisteringSlug(user))
     setForm({
       key: type?.key ?? '',
       label: type?.label ?? '',
@@ -151,6 +144,9 @@ export function TestTypeEditor({ type, open, onClose, onSaved }: Props) {
         existing: true,
       }))
     )
+    // `user` 는 일부러 안 건다 — 토큰이 갱신될 때마다 로그인 정보가 새로 오는데, 그때마다
+    // 쓰던 폼이 처음으로 돌아가면 안 된다. 등록 부서의 기본값은 열 때 한 번 정한다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, type])
 
   async function save() {
@@ -245,24 +241,11 @@ export function TestTypeEditor({ type, open, onClose, onSaved }: Props) {
         <ErrorNotice error={parsers.error ?? error} />
 
         <div className="space-y-1.5">
-          <Label className="text-xs">누구 것인가</Label>
+          <Label className="text-xs">등록 부서</Label>
           {creating ? (
             <>
-              <WorkspacePicker
-                workspaces={managed}
-                value={owner}
-                onChange={setOwner}
-                placeholder={
-                  user?.is_system_admin ? '전역 — 모든 부서가 씁니다' : '부서를 고르세요'
-                }
-                className="w-full"
-                emptyLabel="관리하는 부서가 없습니다"
-              />
+              <RegisteringWorkspaceField value={owner} onChange={setOwner} />
               <p className="text-muted-foreground text-xs">
-                {user?.is_system_admin
-                  ? '비워 두면 전역입니다 — 모든 부서가 쓰고, 시스템 관리자만 고칠 수 있습니다.'
-                  : '부서 관리자인 부서만 고를 수 있습니다. 전역은 시스템 관리자가 만듭니다.'}
-                {' '}
                 <b>채널 이름은 전사에서 뜻이 같아야 합니다</b> — 이미 다른 종류가 쓰는
                 이름을 다른 차원·단위로 정의하면 서버가 거절합니다. 곡선을 겹쳐 그릴 때
                 축이 어긋나기 때문입니다.
@@ -270,15 +253,12 @@ export function TestTypeEditor({ type, open, onClose, onSaved }: Props) {
             </>
           ) : (
             <p className="text-sm">
-              {type?.is_global ? (
-                <>
-                  <b>전역</b> — 모든 부서가 씁니다. 시스템 관리자만 고칠 수 있습니다.
-                </>
-              ) : (
-                <>
-                  <b>{type?.owner_workspace_name}</b> 소유
-                </>
-              )}
+              <b>{type?.owner_workspace_name ?? '부서 없음'}</b>
+              <span className="text-muted-foreground">
+                {' '}
+                — 등록자 {type?.access?.registrant ?? '없음'} · 편집 부서{' '}
+                {type?.access?.edit_workspace ?? '없음'}
+              </span>
             </p>
           )}
         </div>

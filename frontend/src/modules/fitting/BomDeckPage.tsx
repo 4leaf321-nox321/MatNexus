@@ -18,6 +18,7 @@ import { useMemo, useState } from 'react'
 
 import { api } from '@/shared/api/client'
 import type { components } from '@/shared/api/schema'
+import { chosenSystem } from '@/shared/api/unitSystems'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { PageHeader } from '@/shared/components/PageHeader'
 import { Button } from '@/shared/components/ui/button'
@@ -96,7 +97,9 @@ export default function BomDeckPage() {
   const [nameCol, setNameCol] = useState(1)
   const [rows, setRows] = useState<Row[] | null>(null)
   const [catalogRows, setCatalogRows] = useState<Map<string, CatalogMatchRow>>(new Map())
-  const [units, setUnits] = useState('si')
+  // 안 고르면 서버가 기본이라 한 계(ADR 0036). 전에는 'si' 를 적어 두고 SI 면 비워
+  // 보냈는데, 비운 것은 이제 mm·N·tonne 이다 — SI 를 고른 사람이 mm 덱을 받을 뻔했다.
+  const [units, setUnits] = useState<string | null>(null)
   // **한 파일은 한 솔버다.** 비우면 전처럼 LS-DYNA 안에서 카드마다 가장 곡선다운 형식.
   const [format, setFormat] = useState('')
   const [busy, setBusy] = useState(false)
@@ -105,6 +108,7 @@ export default function BomDeckPage() {
 
   const systems = useResource(() => api.get<UnitSystemOut[]>('/fitting/unit-systems'), [])
   const formats = useResource(() => api.get<ExportFormat[]>('/fitting/formats'), [])
+  const system = chosenSystem(systems.data ?? [], units)
 
   const columns = useMemo(() => splitColumns(pasted), [pasted])
   const width = Math.max(0, ...columns.map((line) => line.length))
@@ -193,7 +197,7 @@ export default function BomDeckPage() {
           catalog_material_id: row.cardId ? null : (row.catalog?.id ?? null),
           synthesize: !row.cardId && row.synthesize,
         })),
-        units: units === 'si' ? null : units,
+        units: system?.key ?? null,
         format: format || null,
       })
       setBuilt(made)
@@ -362,17 +366,14 @@ export default function BomDeckPage() {
             단위계
             <select
               className="border-input rounded border px-1 py-0.5"
-              value={units}
+              value={system?.key ?? ''}
               onChange={(event) => setUnits(event.target.value)}
             >
-              <option value="si">SI (m·kg·s)</option>
-              {(systems.data ?? [])
-                .filter((one) => one.key !== 'si')
-                .map((one) => (
-                  <option key={one.key} value={one.key}>
-                    {one.label}
-                  </option>
-                ))}
+              {(systems.data ?? []).map((one) => (
+                <option key={one.key} value={one.key}>
+                  {one.label}
+                </option>
+              ))}
             </select>
           </label>
           <Button size="sm" onClick={() => void build()} disabled={busy || ready.length === 0}>

@@ -28,12 +28,22 @@
  * 골라서 한꺼번에 지우는 길은 **요청 하나**로 간다. 화면이 하나씩 부르면, 재료와
  * 그 아래 시료를 함께 골랐을 때 두 번째 요청이 「없는 행」 으로 터지고 **앞엣것은
  * 이미 지워져 되돌릴 수도 없다.** 겹친 선택을 푸는 것은 계층을 아는 쪽의 일이다.
+ *
+ * ## 누구나 연다 — 보이는 것은 내가 되살릴 수 있는 것 (ADR 0035 3단계)
+ *
+ * 전에는 시스템 관리자의 화면이었다. 등록자가 지울 수는 있는데 되살릴 수는 없어서, 잘못
+ * 누른 사람이 제 손으로 되돌릴 길이 없었다. 이제 **지울 수 있는 사람이 되살린다** —
+ * 목록도 서버가 그 사람 것으로 거른다. **영구 삭제는 그대로 시스템 관리자다** — 되돌릴
+ * 수 없고 디스크를 치우는 일이다. 관리 › 서버 › 휴지통은 같은 화면이다(탭이 붙는다).
  */
 
 import { useState } from 'react'
+import { useLocation } from 'react-router-dom'
 
 import { TRASH_GROUPS, trashApi } from '@/modules/trash/api'
 import type { TrashItem } from '@/modules/trash/api'
+import { useAuth } from '@/shared/auth/AuthContext'
+import { isSystemAdmin } from '@/shared/auth/roles'
 import { ConfirmDialog } from '@/shared/components/ConfirmDialog'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { PageHeader } from '@/shared/components/PageHeader'
@@ -61,6 +71,11 @@ function below(counts: Record<string, number>): string {
 }
 
 export default function TrashPage() {
+  // **영구 삭제는 시스템 관리자만** — 서버도 막는다. 다른 사람에게는 단추도 고르는 칸도
+  // 안 보인다(눌러 보고 403 을 알게 하지 않는다).
+  const canPurge = isSystemAdmin(useAuth().user)
+  // 관리 › 서버 아래에서 열렸나 — 그때만 서버 탭을 붙인다.
+  const underServer = useLocation().pathname.startsWith('/admin/')
   const [kind, setKind] = useState('')
   const [busy, setBusy] = useState<string | null>(null)
   const [said, setSaid] = useState<string | null>(null)
@@ -120,17 +135,24 @@ export default function TrashPage() {
   return (
     <div className="space-y-4">
       {/* **휴지통은 서버의 한 면이다.** 지운 것이 어디로 갔는지(휴지통)와 무엇이 쌓였는지
-          (저장소 정리)는 같은 「공간」 의 물음이라 서버 탭 아래 나란히 선다(2026-09-14). */}
-      <SubTabs
-        items={[
-          { to: '/server', label: '서버 정보' },
-          { to: '/admin/storage', label: '저장소 정리' },
-          { to: '/admin/trash', label: '휴지통' },
-        ]}
-      />
+          (저장소 정리)는 같은 「공간」 의 물음이라 서버 탭 아래 나란히 선다(2026-09-14).
+          누구나 여는 `/trash` 에서는 탭이 없다 — 나머지 둘은 시스템 관리자의 것이다. */}
+      {underServer && (
+        <SubTabs
+          items={[
+            { to: '/server', label: '서버 정보' },
+            { to: '/admin/storage', label: '저장소 정리' },
+            { to: '/admin/trash', label: '휴지통' },
+          ]}
+        />
+      )}
       <PageHeader
         title="휴지통"
-        description="지운 재료·시료·시편·시험입니다. 삭제는 행을 남기므로 되살릴 수 있습니다 — 다만 영구 삭제는 되돌릴 수 없습니다."
+        description={
+          canPurge
+            ? '지운 것 전부입니다. 삭제는 행을 남기므로 되살릴 수 있습니다 — 다만 영구 삭제는 되돌릴 수 없습니다.'
+            : '내가 되살릴 수 있는 것 — 내가 등록했거나 편집을 받은 부서의 것입니다. 함께 돌아올 것 중 남의 자료가 있으면 그 사람이 되살립니다.'
+        }
       />
 
       <ErrorNotice error={failed ?? items.error} />
@@ -196,7 +218,7 @@ export default function TrashPage() {
 
       {/* **고른 것이 있을 때만 뜬다.** 늘 떠 있으면 「0개 선택」 이라는 빈 줄이
           표 위를 차지하고, 실제로 고른 순간의 변화가 안 보인다. */}
-      {chosen.length > 0 && (
+      {canPurge && chosen.length > 0 && (
         <div className="flex flex-wrap items-center gap-3 rounded-md border bg-muted/40 px-3 py-2 text-sm">
           <span>
             <b>{chosen.length}건</b> 선택
@@ -227,17 +249,19 @@ export default function TrashPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-8">
-                  <input
-                    type="checkbox"
-                    aria-label="이 쪽 전부 선택"
-                    checked={selection.allOn}
-                    ref={(node) => {
-                      if (node) node.indeterminate = selection.someOn
-                    }}
-                    onChange={(event) => selection.setAll(event.target.checked)}
-                  />
-                </TableHead>
+                {canPurge && (
+                  <TableHead className="w-8">
+                    <input
+                      type="checkbox"
+                      aria-label="이 쪽 전부 선택"
+                      checked={selection.allOn}
+                      ref={(node) => {
+                        if (node) node.indeterminate = selection.someOn
+                      }}
+                      onChange={(event) => selection.setAll(event.target.checked)}
+                    />
+                  </TableHead>
+                )}
                 <TableHead className="whitespace-nowrap">언제 지웠나</TableHead>
                 <TableHead>종류</TableHead>
                 <TableHead>이름</TableHead>
@@ -248,16 +272,18 @@ export default function TrashPage() {
             <TableBody>
               {rows.map((row) => (
                 <TableRow key={keyOf(row)}>
-                  <TableCell>
-                    <input
-                      type="checkbox"
-                      aria-label={`${row.name || '이름 없음'} 선택`}
-                      checked={selection.picked.has(keyOf(row))}
-                      // **`onClick` 이다.** `onChange` 에는 shiftKey 가 안 실린다.
-                      onClick={(event) => selection.toggle(keyOf(row), event)}
-                      onChange={() => {}}
-                    />
-                  </TableCell>
+                  {canPurge && (
+                    <TableCell>
+                      <input
+                        type="checkbox"
+                        aria-label={`${row.name || '이름 없음'} 선택`}
+                        checked={selection.picked.has(keyOf(row))}
+                        // **`onClick` 이다.** `onChange` 에는 shiftKey 가 안 실린다.
+                        onClick={(event) => selection.toggle(keyOf(row), event)}
+                        onChange={() => {}}
+                      />
+                    </TableCell>
+                  )}
                   <TableCell className="whitespace-nowrap tabular-nums">
                     {stamp(row.deleted_at)}
                   </TableCell>
@@ -289,15 +315,17 @@ export default function TrashPage() {
                     >
                       {busy === `restore-${row.id}` ? '되살리는 중…' : '복원'}
                     </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="text-destructive ml-1 h-7 text-xs"
-                      disabled={busy !== null}
-                      onClick={() => setPurging(row)}
-                    >
-                      영구 삭제
-                    </Button>
+                    {canPurge && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="text-destructive ml-1 h-7 text-xs"
+                        disabled={busy !== null}
+                        onClick={() => setPurging(row)}
+                      >
+                        영구 삭제
+                      </Button>
+                    )}
                   </TableCell>
                 </TableRow>
               ))}

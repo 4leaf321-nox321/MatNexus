@@ -2,11 +2,20 @@ import * as React from "react"
 
 import { cn } from "@/shared/lib/utils"
 
-function Table({ className, ...props }: React.ComponentProps<"table">) {
+/**
+ * `containerClassName` 은 표를 감싼 스크롤 상자에 준다. 표가 길고 넓으면 가로 스크롤바가
+ * 표의 맨 아래에 붙어 안 보인다 — 상자에 높이를 주고 머리·왼쪽 칸을 붙여 두려면 상자가
+ * 두 방향으로 스크롤해야 한다(물성 분석 「카드 항목」, 2026-09-24).
+ */
+function Table({
+  className,
+  containerClassName,
+  ...props
+}: React.ComponentProps<"table"> & { containerClassName?: string }) {
   return (
     <div
       data-slot="table-container"
-      className="relative w-full overflow-x-auto"
+      className={cn("relative w-full overflow-x-auto", containerClassName)}
     >
       <table
         data-slot="table"

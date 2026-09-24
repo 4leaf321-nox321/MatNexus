@@ -38,12 +38,17 @@ vi.mock('@/modules/guide/GuideEditor', () => ({
   ),
 }))
 
-const account: { admin: boolean; role: string } = { admin: false, role: 'member' }
+const account: { admin: boolean; role: string; steward?: boolean } = {
+  admin: false,
+  role: 'member',
+}
 vi.mock('@/shared/auth/AuthContext', () => ({
   useAuth: () => ({
     user: {
       id: 'u1',
       is_system_admin: account.admin,
+      // **검토자는 자료 관리자다**(ADR 0035 3단계 — 전에는 부서 관리자 이상).
+      is_data_manager: account.steward ?? false,
       memberships: [{ slug: 'metal', role: account.role }],
     },
   }),
@@ -103,6 +108,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   account.admin = false
   account.role = 'member'
+  account.steward = false
   documents.mockResolvedValue([DOC])
   section.mockResolvedValue(SECTION)
   submit.mockResolvedValue({ id: 'r1', status: 'pending' })
@@ -143,7 +149,7 @@ describe('절', () => {
   })
 
   it('검토자는 바로 반영한다', async () => {
-    account.role = 'manager'
+    account.steward = true
     submit.mockResolvedValue({ id: 'r1', status: 'approved' })
     const user = userEvent.setup()
     mount('/guide/dma-prony/master-curve')

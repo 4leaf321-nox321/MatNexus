@@ -94,6 +94,11 @@
             "title": "Id",
             "type": "string"
           },
+          "is_data_manager": {
+            "default": false,
+            "title": "Is Data Manager",
+            "type": "boolean"
+          },
           "is_system_admin": {
             "title": "Is System Admin",
             "type": "boolean"
@@ -3195,7 +3200,7 @@
             "type": "string"
           },
           "units": {
-            "default": "si",
+            "default": "mm_n_tonne",
             "title": "Units",
             "type": "string"
           }
@@ -3261,6 +3266,411 @@
           "owners"
         ],
         "title": "CardFacetsOut",
+        "type": "object"
+      },
+      "CardItemCardOut": {
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "row_count": {
+            "title": "Row Count",
+            "type": "integer"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "values": {
+            "items": {
+              "$ref": "#/components/schemas/CardItemValueOut"
+            },
+            "title": "Values",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "status",
+          "values",
+          "row_count"
+        ],
+        "title": "CardItemCardOut",
+        "type": "object"
+      },
+      "CardItemCellOut": {
+        "description": "칸 하나의 속 — 누를 때만 받는다(`/analysis/card-items/cell`).",
+        "properties": {
+          "cards": {
+            "items": {
+              "$ref": "#/components/schemas/CardItemCardOut"
+            },
+            "title": "Cards",
+            "type": "array"
+          },
+          "declared": {
+            "items": {
+              "$ref": "#/components/schemas/CardItemValueOut"
+            },
+            "title": "Declared",
+            "type": "array"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          },
+          "tests": {
+            "items": {
+              "$ref": "#/components/schemas/CardItemTestOut"
+            },
+            "title": "Tests",
+            "type": "array"
+          }
+        },
+        "required": [
+          "state",
+          "cards",
+          "tests",
+          "declared"
+        ],
+        "title": "CardItemCellOut",
+        "type": "object"
+      },
+      "CardItemColumnOut": {
+        "description": "카드 항목란 하나 — **아무 재료에도 없어도 열로 선다.**\n\n수는 그 응답이 다룬 재료 가운데서 센다 — 요약은 전부, 전체는 거른 재료.",
+        "properties": {
+          "card_materials": {
+            "title": "Card Materials",
+            "type": "integer"
+          },
+          "deprecated_materials": {
+            "title": "Deprecated Materials",
+            "type": "integer"
+          },
+          "help": {
+            "title": "Help",
+            "type": "string"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "published_materials": {
+            "title": "Published Materials",
+            "type": "integer"
+          },
+          "registered": {
+            "title": "Registered",
+            "type": "boolean"
+          },
+          "source_materials": {
+            "title": "Source Materials",
+            "type": "integer"
+          },
+          "tests": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tests",
+            "type": "array"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "help",
+          "tests",
+          "registered",
+          "published_materials",
+          "card_materials",
+          "deprecated_materials",
+          "source_materials"
+        ],
+        "title": "CardItemColumnOut",
+        "type": "object"
+      },
+      "CardItemGroupOut": {
+        "description": "요약의 한 줄 — **재료가 아니라 분류다.** 재료가 1만이어도 줄은 분류 수다.",
+        "properties": {
+          "card_materials": {
+            "title": "Card Materials",
+            "type": "integer"
+          },
+          "category": {
+            "title": "Category",
+            "type": "string"
+          },
+          "cells": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/CardItemTallyOut"
+            },
+            "title": "Cells",
+            "type": "object"
+          },
+          "family": {
+            "title": "Family",
+            "type": "string"
+          },
+          "material_count": {
+            "title": "Material Count",
+            "type": "integer"
+          },
+          "source_only_materials": {
+            "title": "Source Only Materials",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "family",
+          "category",
+          "material_count",
+          "card_materials",
+          "source_only_materials",
+          "cells"
+        ],
+        "title": "CardItemGroupOut",
+        "type": "object"
+      },
+      "CardItemRowOut": {
+        "description": "전체의 한 줄 — 재료 하나. **보이는 칸만** 싣는다.",
+        "properties": {
+          "category": {
+            "title": "Category",
+            "type": "string"
+          },
+          "cells": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/CardItemStateOut"
+            },
+            "title": "Cells",
+            "type": "object"
+          },
+          "family": {
+            "title": "Family",
+            "type": "string"
+          },
+          "material_id": {
+            "format": "uuid",
+            "title": "Material Id",
+            "type": "string"
+          },
+          "material_name": {
+            "title": "Material Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "material_id",
+          "material_name",
+          "family",
+          "category",
+          "cells"
+        ],
+        "title": "CardItemRowOut",
+        "type": "object"
+      },
+      "CardItemRowsOut": {
+        "properties": {
+          "columns": {
+            "items": {
+              "$ref": "#/components/schemas/CardItemColumnOut"
+            },
+            "title": "Columns",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/CardItemRowOut"
+            },
+            "title": "Rows",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "columns",
+          "rows",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "CardItemRowsOut",
+        "type": "object"
+      },
+      "CardItemStateOut": {
+        "properties": {
+          "card_count": {
+            "title": "Card Count",
+            "type": "integer"
+          },
+          "declared": {
+            "title": "Declared",
+            "type": "boolean"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          },
+          "tests": {
+            "title": "Tests",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "state",
+          "card_count",
+          "tests",
+          "declared"
+        ],
+        "title": "CardItemStateOut",
+        "type": "object"
+      },
+      "CardItemSummaryOut": {
+        "properties": {
+          "card_material_count": {
+            "title": "Card Material Count",
+            "type": "integer"
+          },
+          "columns": {
+            "items": {
+              "$ref": "#/components/schemas/CardItemColumnOut"
+            },
+            "title": "Columns",
+            "type": "array"
+          },
+          "groups": {
+            "items": {
+              "$ref": "#/components/schemas/CardItemGroupOut"
+            },
+            "title": "Groups",
+            "type": "array"
+          },
+          "material_total": {
+            "title": "Material Total",
+            "type": "integer"
+          },
+          "source_only_count": {
+            "title": "Source Only Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "columns",
+          "groups",
+          "material_total",
+          "card_material_count",
+          "source_only_count"
+        ],
+        "title": "CardItemSummaryOut",
+        "type": "object"
+      },
+      "CardItemTallyOut": {
+        "description": "분류 하나 · 항목란 하나 — 칸의 상태별 재료 수.",
+        "properties": {
+          "deprecated": {
+            "title": "Deprecated",
+            "type": "integer"
+          },
+          "draft": {
+            "title": "Draft",
+            "type": "integer"
+          },
+          "published": {
+            "title": "Published",
+            "type": "integer"
+          },
+          "source": {
+            "title": "Source",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "published",
+          "draft",
+          "deprecated",
+          "source"
+        ],
+        "title": "CardItemTallyOut",
+        "type": "object"
+      },
+      "CardItemTestOut": {
+        "description": "이 항목란을 내는 시험 가운데 **채택된 결과가 있는 것.**",
+        "properties": {
+          "adopted_count": {
+            "title": "Adopted Count",
+            "type": "integer"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "adopted_count"
+        ],
+        "title": "CardItemTestOut",
+        "type": "object"
+      },
+      "CardItemValueOut": {
+        "description": "항목란에 든 값 하나. 숫자는 **SI** 다 — 화면이 표시 단위로 바꾼다.",
+        "properties": {
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "si_unit": {
+            "title": "Si Unit",
+            "type": "string"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "required": [
+          "label",
+          "value",
+          "si_unit"
+        ],
+        "title": "CardItemValueOut",
         "type": "object"
       },
       "CardSlotIn": {
@@ -5353,6 +5763,11 @@
             "title": "Can Assign",
             "type": "boolean"
           },
+          "can_comment": {
+            "default": true,
+            "title": "Can Comment",
+            "type": "boolean"
+          },
           "can_delete": {
             "title": "Can Delete",
             "type": "boolean"
@@ -6482,6 +6897,11 @@
             "title": "Auto Register",
             "type": "boolean"
           },
+          "can_manage": {
+            "default": false,
+            "title": "Can Manage",
+            "type": "boolean"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -7224,6 +7644,20 @@
         "title": "CurveStatsOut",
         "type": "object"
       },
+      "DataManagerRequest": {
+        "description": "자료 관리자를 주거나 뺀다 — 시스템 관리자 권한과 같은 모양(참·거짓 한 칸).",
+        "properties": {
+          "is_data_manager": {
+            "title": "Is Data Manager",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "is_data_manager"
+        ],
+        "title": "DataManagerRequest",
+        "type": "object"
+      },
       "DatabaseOut": {
         "properties": {
           "pool": {
@@ -7478,7 +7912,7 @@
             "type": "string"
           },
           "units": {
-            "default": "si",
+            "default": "mm_n_tonne",
             "title": "Units",
             "type": "string"
           }
@@ -7631,7 +8065,7 @@
             "type": "object"
           },
           "units": {
-            "default": "si",
+            "default": "mm_n_tonne",
             "title": "Units",
             "type": "string"
           }
@@ -9139,6 +9573,86 @@
         "title": "DriftReportOut",
         "type": "object"
       },
+      "EditAccessOut": {
+        "description": "이 자료를 **지금 이 사람이** 고칠 수 있나.",
+        "properties": {
+          "can_edit": {
+            "title": "Can Edit",
+            "type": "boolean"
+          },
+          "can_hand_over": {
+            "title": "Can Hand Over",
+            "type": "boolean"
+          },
+          "edit_workspace": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Edit Workspace"
+          },
+          "edit_workspace_slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Edit Workspace Slug"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "registrant": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Registrant"
+          },
+          "registrant_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Registrant Id"
+          }
+        },
+        "required": [
+          "can_edit",
+          "can_hand_over",
+          "registrant_id",
+          "registrant",
+          "edit_workspace_slug",
+          "edit_workspace",
+          "reason"
+        ],
+        "title": "EditAccessOut",
+        "type": "object"
+      },
       "EmpiricalOut": {
         "description": "**분포를 가정하지 않은** 요약. n 이 몇이든 나온다.\n\n적합이 하나도 못 돌 때(n < 8) 화면이 빈손이 되지 않게 하는 것이 첫 목적이다.\n전에는 「표본 모자람」 배지 셋만 떴고, 그것은 막다른 길이었다 — 사람이 할 수\n있는 판단이 아무것도 없었다.",
         "properties": {
@@ -10503,6 +11017,16 @@
       "EquipmentUnitOut": {
         "description": "목록과 상세가 같은 모양을 쓴다 — 목록에서 본 것이 상세에 없으면 놀란다.",
         "properties": {
+          "access": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EditAccessOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "asset_no": {
             "anyOf": [
               {
@@ -11211,10 +11735,17 @@
             "type": "boolean"
           },
           "key": {
-            "maxLength": 50,
-            "minLength": 1,
-            "title": "Key",
-            "type": "string"
+            "anyOf": [
+              {
+                "maxLength": 50,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Key"
           },
           "label": {
             "maxLength": 100,
@@ -11236,8 +11767,7 @@
         },
         "required": [
           "label",
-          "definition",
-          "key"
+          "definition"
         ],
         "title": "ExportProfileCreateRequest",
         "type": "object"
@@ -11245,6 +11775,16 @@
       "ExportProfileOut": {
         "description": "저장된 해석용 물성 정의 하나.",
         "properties": {
+          "access": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EditAccessOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -11273,10 +11813,6 @@
           },
           "is_active": {
             "title": "Is Active",
-            "type": "boolean"
-          },
-          "is_global": {
-            "title": "Is Global",
             "type": "boolean"
           },
           "key": {
@@ -11319,7 +11855,6 @@
           "id",
           "key",
           "label",
-          "is_global",
           "definition",
           "is_active",
           "created_at",
@@ -11329,7 +11864,7 @@
         "type": "object"
       },
       "ExportProfileSaveRequest": {
-        "description": "고칠 때 보내는 것. **소유는 여기서 안 바꾼다** — 전역 승격은 성격이 다른\n결정이라 별도 경로다(장비 파일 정의과 같은 규칙).",
+        "description": "고칠 때 보내는 것. **등록 부서는 여기서 안 바꾼다**(장비 파일 정의와 같은 규칙).\n고칠 사람은 「권한」 에서 넘긴다(`/ownership`).",
         "properties": {
           "definition": {
             "additionalProperties": true,
@@ -11918,11 +12453,18 @@
             "type": "boolean"
           },
           "key": {
-            "maxLength": 50,
-            "minLength": 1,
-            "pattern": "^[a-z][a-z0-9_]*$",
-            "title": "Key",
-            "type": "string"
+            "anyOf": [
+              {
+                "maxLength": 50,
+                "minLength": 1,
+                "pattern": "^[a-z][a-z0-9_]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Key"
           },
           "label": {
             "maxLength": 100,
@@ -11955,14 +12497,23 @@
         "required": [
           "label",
           "test_type_key",
-          "definition",
-          "key"
+          "definition"
         ],
         "title": "FormatProfileCreateRequest",
         "type": "object"
       },
       "FormatProfileOut": {
         "properties": {
+          "access": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EditAccessOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -11991,10 +12542,6 @@
           },
           "is_active": {
             "title": "Is Active",
-            "type": "boolean"
-          },
-          "is_global": {
-            "title": "Is Global",
             "type": "boolean"
           },
           "key": {
@@ -12050,7 +12597,6 @@
           "key",
           "owner_workspace_slug",
           "owner_workspace_name",
-          "is_global",
           "label",
           "description",
           "test_type_key",
@@ -13058,6 +13604,16 @@
       },
       "GroupResultOut": {
         "properties": {
+          "access": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EditAccessOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -13865,6 +14421,11 @@
       },
       "InboxItemDetail": {
         "properties": {
+          "can_handle": {
+            "default": false,
+            "title": "Can Handle",
+            "type": "boolean"
+          },
           "candidate_count": {
             "default": 0,
             "title": "Candidate Count",
@@ -14033,6 +14594,17 @@
               }
             ],
             "title": "Test Type Label"
+          },
+          "workspace_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workspace Name"
           }
         },
         "required": [
@@ -14059,6 +14631,11 @@
       },
       "InboxItemOut": {
         "properties": {
+          "can_handle": {
+            "default": false,
+            "title": "Can Handle",
+            "type": "boolean"
+          },
           "candidate_count": {
             "default": 0,
             "title": "Candidate Count",
@@ -14195,6 +14772,17 @@
               }
             ],
             "title": "Test Type Label"
+          },
+          "workspace_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workspace Name"
           }
         },
         "required": [
@@ -15714,6 +16302,16 @@
       },
       "MaterialOut": {
         "properties": {
+          "access": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EditAccessOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "alias": {
             "anyOf": [
               {
@@ -15771,6 +16369,17 @@
             ],
             "title": "Density"
           },
+          "density_si": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Density Si"
+          },
           "density_unit": {
             "default": "tonne/mm3",
             "title": "Density Unit",
@@ -15799,10 +16408,6 @@
             "format": "uuid",
             "title": "Id",
             "type": "string"
-          },
-          "is_global": {
-            "title": "Is Global",
-            "type": "boolean"
           },
           "legacy_id": {
             "anyOf": [
@@ -15897,7 +16502,6 @@
           "alias",
           "owner_workspace_id",
           "owner_workspace_name",
-          "is_global",
           "family",
           "category",
           "grade",
@@ -17558,6 +18162,193 @@
         "title": "OverviewOut",
         "type": "object"
       },
+      "OwnershipChangeOut": {
+        "properties": {
+          "access": {
+            "$ref": "#/components/schemas/EditAccessOut"
+          },
+          "changed": {
+            "title": "Changed",
+            "type": "integer"
+          },
+          "skipped": {
+            "items": {
+              "$ref": "#/components/schemas/OwnershipSkippedOut"
+            },
+            "title": "Skipped",
+            "type": "array"
+          }
+        },
+        "required": [
+          "changed",
+          "skipped",
+          "access"
+        ],
+        "title": "OwnershipChangeOut",
+        "type": "object"
+      },
+      "OwnershipChangeRequest": {
+        "description": "넘길 것. **안 보낸 칸은 그대로 둔다** — 부분 수정의 규칙(AGENTS.md).\n\n`edit_workspace_slug` 는 `null` 을 **보내면** 부여를 걷는다. 안 보내면 그대로다.\n등록자는 비울 수 없다 — 넘기기만 한다(등록자 없는 자료는 관리자만 고친다).",
+        "properties": {
+          "edit_workspace_slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Edit Workspace Slug"
+          },
+          "include_children": {
+            "default": false,
+            "title": "Include Children",
+            "type": "boolean"
+          },
+          "registrant_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Registrant Id"
+          }
+        },
+        "title": "OwnershipChangeRequest",
+        "type": "object"
+      },
+      "OwnershipChildrenOut": {
+        "description": "아래에 딸린 한 종류 — **몇 건이고, 그중 내가 넘길 수 있는 것이 몇 건인가.**\n\n「하위까지」 를 누르기 전에 보여 준다. 남이 붙인 것은 못 넘기므로(등록자와 관리자만)\n둘을 갈라 적어야 사람이 결과를 미리 안다.",
+        "properties": {
+          "changeable": {
+            "title": "Changeable",
+            "type": "integer"
+          },
+          "kind": {
+            "enum": [
+              "material",
+              "sample",
+              "specimen",
+              "test_run",
+              "property_card",
+              "group_result",
+              "test_type",
+              "format_profile",
+              "recipe",
+              "export_profile",
+              "equipment"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "kind",
+          "label",
+          "total",
+          "changeable"
+        ],
+        "title": "OwnershipChildrenOut",
+        "type": "object"
+      },
+      "OwnershipOut": {
+        "properties": {
+          "access": {
+            "$ref": "#/components/schemas/EditAccessOut"
+          },
+          "children": {
+            "items": {
+              "$ref": "#/components/schemas/OwnershipChildrenOut"
+            },
+            "title": "Children",
+            "type": "array"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "material",
+              "sample",
+              "specimen",
+              "test_run",
+              "property_card",
+              "group_result",
+              "test_type",
+              "format_profile",
+              "recipe",
+              "export_profile",
+              "equipment"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "id",
+          "name",
+          "access",
+          "children"
+        ],
+        "title": "OwnershipOut",
+        "type": "object"
+      },
+      "OwnershipSkippedOut": {
+        "properties": {
+          "kind": {
+            "enum": [
+              "material",
+              "sample",
+              "specimen",
+              "test_run",
+              "property_card",
+              "group_result",
+              "test_type",
+              "format_profile",
+              "recipe",
+              "export_profile",
+              "equipment"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "name",
+          "reason"
+        ],
+        "title": "OwnershipSkippedOut",
+        "type": "object"
+      },
       "Page_CommissionOut_": {
         "properties": {
           "items": {
@@ -18228,6 +19019,38 @@
           "name"
         ],
         "title": "Person",
+        "type": "object"
+      },
+      "PersonOut": {
+        "description": "넘겨받을 사람 후보. **아이디(메일)는 안 싣는다** — 고르는 데는 이름과 소속이면 된다.",
+        "properties": {
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "workspace": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workspace"
+          }
+        },
+        "required": [
+          "id",
+          "display_name",
+          "workspace"
+        ],
+        "title": "PersonOut",
         "type": "object"
       },
       "ProcessOut": {
@@ -19447,6 +20270,16 @@
       },
       "PropertyCardOut": {
         "properties": {
+          "access": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EditAccessOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "available_formats": {
             "default": [],
             "items": {
@@ -19469,11 +20302,6 @@
             "format": "uuid",
             "title": "Id",
             "type": "string"
-          },
-          "is_global": {
-            "default": false,
-            "title": "Is Global",
-            "type": "boolean"
           },
           "label": {
             "title": "Label",
@@ -20985,11 +21813,18 @@
             "type": "boolean"
           },
           "key": {
-            "maxLength": 80,
-            "minLength": 1,
-            "pattern": "^[a-z][a-z0-9_]*$",
-            "title": "Key",
-            "type": "string"
+            "anyOf": [
+              {
+                "maxLength": 80,
+                "minLength": 1,
+                "pattern": "^[a-z][a-z0-9_]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Key"
           },
           "label": {
             "maxLength": 120,
@@ -21024,14 +21859,23 @@
         "required": [
           "label",
           "test_type_key",
-          "steps",
-          "key"
+          "steps"
         ],
         "title": "RecipeCreateRequest",
         "type": "object"
       },
       "RecipeOut": {
         "properties": {
+          "access": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EditAccessOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -21055,10 +21899,6 @@
           },
           "is_active": {
             "title": "Is Active",
-            "type": "boolean"
-          },
-          "is_global": {
-            "title": "Is Global",
             "type": "boolean"
           },
           "key": {
@@ -21124,7 +21964,6 @@
           "description",
           "owner_workspace_slug",
           "owner_workspace_name",
-          "is_global",
           "test_type_key",
           "test_type_label",
           "steps",
@@ -22072,6 +22911,16 @@
       },
       "RunDetailOut": {
         "properties": {
+          "access": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EditAccessOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -22301,6 +23150,16 @@
       },
       "RunOut": {
         "properties": {
+          "access": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EditAccessOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -22593,6 +23452,16 @@
       },
       "SampleOut": {
         "properties": {
+          "access": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EditAccessOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "adopted_count": {
             "default": 0,
             "title": "Adopted Count",
@@ -22632,6 +23501,17 @@
               }
             ],
             "title": "Density"
+          },
+          "density_si": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Density Si"
           },
           "density_unit": {
             "default": "tonne/mm3",
@@ -24518,6 +25398,16 @@
       },
       "SpecimenOut": {
         "properties": {
+          "access": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EditAccessOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "adopted_count": {
             "default": 0,
             "title": "Adopted Count",
@@ -24665,6 +25555,16 @@
       "SpecimenRowOut": {
         "description": "평면 목록의 한 줄 — **시편에 재료·시료를 얹은 것.**\n\n시편만으로는 표가 안 읽힌다. `SECC__01_MD_01` 이 어느 재료의 것인지 이름에\n묻혀 있어서, 사람은 그 규칙을 외우고 있어야 한다.\n\n**상속으로 얹는다.** 시편이 가진 것(규격·치수·시험 수)을 다시 적으면 두 벌이\n되고, 시편에 칸이 하나 늘 때 한쪽만 고쳐진다.",
         "properties": {
+          "access": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EditAccessOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "adopted_count": {
             "default": 0,
             "title": "Adopted Count",
@@ -26611,6 +27511,16 @@
       },
       "TestRunDetailOut": {
         "properties": {
+          "access": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EditAccessOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "adopted_result_id": {
             "anyOf": [
               {
@@ -26990,6 +27900,16 @@
       },
       "TestRunOut": {
         "properties": {
+          "access": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EditAccessOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "adopted_result_id": {
             "anyOf": [
               {
@@ -27608,6 +28528,16 @@
             "title": "Abbr",
             "type": "string"
           },
+          "access": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EditAccessOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "channels": {
             "items": {
               "$ref": "#/components/schemas/TestChannelOut"
@@ -27647,10 +28577,6 @@
           },
           "is_active": {
             "title": "Is Active",
-            "type": "boolean"
-          },
-          "is_global": {
-            "title": "Is Global",
             "type": "boolean"
           },
           "key": {
@@ -27730,7 +28656,6 @@
           "key",
           "owner_workspace_slug",
           "owner_workspace_name",
-          "is_global",
           "label",
           "abbr",
           "description",
@@ -28523,6 +29448,11 @@
             "format": "uuid",
             "title": "Id",
             "type": "string"
+          },
+          "is_data_manager": {
+            "default": false,
+            "title": "Is Data Manager",
+            "type": "boolean"
           },
           "is_system_admin": {
             "title": "Is System Admin",
@@ -29533,10 +30463,6 @@
             "title": "Path",
             "type": "string"
           },
-          "restricted": {
-            "title": "Restricted",
-            "type": "boolean"
-          },
           "slug": {
             "title": "Slug",
             "type": "string"
@@ -29556,7 +30482,6 @@
           "path",
           "sort_order",
           "is_active",
-          "restricted",
           "created_at",
           "member_count",
           "my_role"
@@ -29667,17 +30592,6 @@
               }
             ],
             "title": "Name"
-          },
-          "restricted": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Restricted"
           }
         },
         "title": "WorkspaceUpdateRequest",
@@ -30184,6 +31098,60 @@
           }
         },
         "summary": "Approve",
+        "tags": [
+          "accounts"
+        ]
+      }
+    },
+    "/api/accounts/{account_id}/data-manager": {
+      "post": {
+        "description": "자료 관리자를 주거나 뺀다 — **시스템 관리자만**(ADR 0035).",
+        "operationId": "set_data_manager_api_accounts__account_id__data_manager_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Account Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DataManagerRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Data Manager",
         "tags": [
           "accounts"
         ]
@@ -31124,7 +32092,7 @@
     },
     "/api/catalog/export": {
       "get": {
-        "description": "문헌 물성을 **JSON 파일로** 내려준다 — 재료·값·출처를 함께.\n\n## 거르는 규칙은 목록과 한 벌이다\n\n`_catalog_filters` 를 함께 쓴다. 두 곳에 적으면 「화면에서 본 것」 과 「받아 간\n파일」 이 달라지고, 받아 간 쪽이 틀렸다는 것을 알아챌 방법이 없다.\n\n## 대표 표시를 붙여 낸다\n\n같은 물성에 값이 여럿인 것이 이 카탈로그의 성질이다. 대표 표시 없이 값만\n내보내면 받은 사람은 **아무거나 고르게 된다** — `representative` 를 두는\n이유가 바로 그것을 막는 것이라, 상세 화면과 같은 함수로 붙인다.\n\n## 크기\n\n전부 담으면 값 4만여 건에 20MB 안팎이다. 나눠 받게 하지 않는다 — 이어 붙이는\n일을 사람에게 시키면 그 자리에서 빠뜨린다. 좁혀 받고 싶으면 목록과 같은\n조건(`q`·`category`·`subsystem`)을 준다.",
+        "description": "문헌 물성을 **JSON 파일로** 내려준다 — 재료·값·출처를 함께.\n\n## 거르는 규칙은 목록과 한 벌이다\n\n`_catalog_filters` 를 함께 쓴다. 두 곳에 적으면 「화면에서 본 것」 과 「받아 간\n파일」 이 달라지고, 받아 간 쪽이 틀렸다는 것을 알아챌 방법이 없다.\n\n## 대표 표시를 붙여 낸다\n\n같은 물성에 값이 여럿인 것이 이 카탈로그의 성질이다. 대표 표시 없이 값만\n내보내면 받은 사람은 **아무거나 고르게 된다** — `representative` 를 두는\n이유가 바로 그것을 막는 것이라, 상세 화면과 같은 함수로 붙인다.\n\n## 크기\n\n전부 담으면 값 4만여 건에 20MB 안팎이다. 나눠 받게 하지 않는다 — 이어 붙이는\n일을 사람에게 시키면 그 자리에서 빠뜨린다. 좁혀 받고 싶으면 목록과 같은\n조건(`q`·`category`·`subsystem`)을 준다.\n\n## 값은 고른 단위계로 — 기본 mm·N·tonne (ADR 0036)\n\n`value_num`·`unit` 이 그 계이고, 저장된 값은 `value_si`·`si_unit` 으로 곁에 둔다. 문헌에는\n그 계가 기호를 정해 두지 않은 물리량(저항률·에너지·경도 …)이 많다 — 그것은 받은 그대로\n두고 `kept_units` 에 적는다.",
         "operationId": "export_catalog_api_catalog_export_get",
         "parameters": [
           {
@@ -31173,6 +32141,24 @@
                 }
               ],
               "title": "Category"
+            }
+          },
+          {
+            "description": "값의 단위계. 비우면 mm·N·tonne(ADR 0036) — SI 는 `si`.",
+            "in": "query",
+            "name": "units",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "값의 단위계. 비우면 mm·N·tonne(ADR 0036) — SI 는 `si`.",
+              "title": "Units"
             }
           }
         ],
@@ -31280,7 +32266,7 @@
         ]
       },
       "put": {
-        "description": "연결하거나 바꾼다 — 재료당 하나라 다시 걸면 교체다.\n\n권한은 재료 편집과 같다(부서 관리자, 전역은 시스템 관리자) — 연결이 채택의\n기본 대상이 되므로 아무나 걸면 남의 재료 물성이 엉뚱한 문헌으로 채워진다.",
+        "description": "연결하거나 바꾼다 — 재료당 하나라 다시 걸면 교체다.\n\n권한은 재료 편집과 **같은 함수**다(ADR 0035) — 연결이 채택의 기본 대상이 되므로\n아무나 걸면 남의 재료 물성이 엉뚱한 문헌으로 채워진다. 전에는 재료 편집(부서\n멤버)과 규칙이 달라서(부서 관리자), 카탈로그에서 재료를 만들고 연결까지 하면\n재료만 생기고 연결은 막혔다.",
         "operationId": "put_link_api_catalog_links__material_id__put",
         "parameters": [
           {
@@ -31892,6 +32878,7 @@
     },
     "/api/catalog/properties/aliases/{alias_id}": {
       "delete": {
+        "description": "별칭 하나를 지운다 — **넣은 사람과 관리자만**(ADR 0035, 문헌 직접 입력과 같은 규칙).\n\n전에는 로그인한 누구나 지울 수 있었다. 별칭은 「항복응력」 을 어느 물성으로 읽을지를\n정하므로, 남이 지우면 그 사람의 질문이 조용히 다른 물성에 답하게 된다.",
         "operationId": "remove_property_alias_api_catalog_properties_aliases__alias_id__delete",
         "parameters": [
           {
@@ -32762,7 +33749,7 @@
     },
     "/api/commissions": {
       "get": {
-        "description": "낸 부서·받는 부서가 보는 게시판. 최신이 위다.",
+        "description": "의뢰 게시판. 최신이 위다. **누구나 본다** — 작성 중은 낸 사람만(ADR 0035).",
         "operationId": "list_commissions_api_commissions_get",
         "parameters": [
           {
@@ -32771,7 +33758,7 @@
             "required": false,
             "schema": {
               "default": "all",
-              "pattern": "^(mine|received|all)$",
+              "pattern": "^(ours|mine|received|all)$",
               "title": "Scope",
               "type": "string"
             }
@@ -33117,7 +34104,7 @@
     },
     "/api/commissions/{commission_id}/events": {
       "post": {
-        "description": "상태를 옮기거나 말을 보탠다. **갈 수 있는 곳만 간다.**",
+        "description": "상태를 옮기거나 말을 보탠다. **갈 수 있는 곳만 간다.**\n\n**낸 쪽과 받는 쪽만.** 보기는 전원이지만(ADR 0035) 이 건의 흐름에 말을 얹는 것은\n약속한 두 쪽이다 — 제3부서가 끼어들면 누구에게 답해야 하는지가 흐려진다.",
         "operationId": "add_event_api_commissions__commission_id__events_post",
         "parameters": [
           {
@@ -33690,6 +34677,7 @@
         ]
       },
       "post": {
+        "description": "**누구나 올린다**(ADR 0035). 올린 사람이 등록자다 — 편집을 줄 부서는 「권한」 에서.",
         "operationId": "create_unit_api_equipment_units_post",
         "requestBody": {
           "content": {
@@ -33731,7 +34719,7 @@
     },
     "/api/equipment/units/bulk": {
       "post": {
-        "description": "엑셀에서 복사해 붙인 표를 받는다 — **드라이런이 기본이다.**\n\n기준정보는 **이름으로 온다**(사람이 엑셀에 id 를 적지 않는다). 없는 이름은\n새 값이 되는데, 그것이 이 화면에서 가장 흔한 사고다(오타 하나가 새 조직을\n만든다). 그래서 드라이런이 **무엇이 새로 생기는지 먼저 보여 준다.**",
+        "description": "엑셀에서 복사해 붙인 표를 받는다 — **드라이런이 기본이다.**\n\n기준정보는 **이름으로 온다**(사람이 엑셀에 id 를 적지 않는다). 없는 이름은\n새 값이 되는데, 그것이 이 화면에서 가장 흔한 사고다(오타 하나가 새 조직을\n만든다). 그래서 드라이런이 **무엇이 새로 생기는지 먼저 보여 준다.**\n\n**누구나 올린다**(ADR 0035) — 올린 사람이 줄마다 등록자다.",
         "operationId": "bulk_create_api_equipment_units_bulk_post",
         "requestBody": {
           "content": {
@@ -34281,7 +35269,7 @@
     },
     "/api/fitting/cards": {
       "get": {
-        "description": "물성 카드 목록.\n\n**거르는 일은 서버가 한다.** 앞 50장만 받아 화면에서 거르면 뒤엣것이 없는\n카드가 된다 — 재료 목록 패널이 같은 이유로 그렇게 되어 있다.\n\n`test_type_key=none` 은 **시험 없이 만든 카드**다(ADR 0016). `owner=global`\n은 전역 재료의 카드다.",
+        "description": "물성 카드 목록.\n\n**거르는 일은 서버가 한다.** 앞 50장만 받아 화면에서 거르면 뒤엣것이 없는\n카드가 된다 — 재료 목록 패널이 같은 이유로 그렇게 되어 있다.\n\n`test_type_key=none` 은 **시험 없이 만든 카드**다(ADR 0016). `owner=none`\n은 소속 부서가 없는 재료의 카드다.",
         "operationId": "list_cards_api_fitting_cards_get",
         "parameters": [
           {
@@ -35109,13 +36097,13 @@
             }
           },
           {
-            "description": "덱의 단위계. 기본은 SI.",
+            "description": "덱의 단위계. 기본은 mm·N·tonne(ADR 0036) — SI 는 `si`.",
             "in": "query",
             "name": "units",
             "required": false,
             "schema": {
-              "default": "si",
-              "description": "덱의 단위계. 기본은 SI.",
+              "default": "mm_n_tonne",
+              "description": "덱의 단위계. 기본은 mm·N·tonne(ADR 0036) — SI 는 `si`.",
               "title": "Units",
               "type": "string"
             }
@@ -35223,7 +36211,7 @@
     },
     "/api/fitting/cards/{card_id}/publish": {
       "post": {
-        "description": "초안을 확정한다. **부서 관리자만**(D12).\n\n올린 뒤에는 값을 바꿀 수 없다 — 그 값으로 해석이 돌았을 수 있다. 고치려면\n사용 중지하고(`deprecated`) 새 카드를 만든다.\n\n**리뷰 큐는 없다**(D8). 상태만 두고, 절차는 운영 규칙이 보인 뒤에 만든다 —\n절차를 먼저 만들면 그 절차가 일을 정의해 버린다.",
+        "description": "초안을 확정한다. **자료 관리자만**(ADR 0035 — D12 의 「부서 관리자」 를 사람 역할로).\n\n올린 뒤에는 값을 바꿀 수 없다 — 그 값으로 해석이 돌았을 수 있다. 고치려면\n사용 중지하고(`deprecated`) 새 카드를 만든다.\n\n**리뷰 큐는 없다**(D8). 상태만 두고, 절차는 운영 규칙이 보인 뒤에 만든다 —\n절차를 먼저 만들면 그 절차가 일을 정의해 버린다.",
         "operationId": "publish_api_fitting_cards__card_id__publish_post",
         "parameters": [
           {
@@ -35267,7 +36255,7 @@
     },
     "/api/fitting/cards/{card_id}/restore": {
       "post": {
-        "description": "사용 중지한 카드를 **초안으로** 되살린다. 부서 관리자만.\n\n## 왜 초안까지만인가\n\n확정으로 바로 되돌리면 **틀려서 중지한 카드가 조용히 다시 쓰이게 된다.** 중지한\n이유는 기록에 안 남고(상태 하나뿐이다), 되살리는 사람이 그 이유를 안다는 보장도\n없다. 초안으로 두면 값은 그대로 살아나되 「쓰겠다」 는 선언은 다시 받는다.\n\n## 왜 필요한가\n\n실수로 누를 수 있는 자리다. 여기까지 막아 두면 남는 길은 **같은 값으로 카드를\n새로 만드는 것**뿐인데, 그러면 만든 사람·만든 때가 실제와 달라지고 이력이 한 줄\n더 늘어난다 — 실수를 지우려다 기록을 더 흐린다.",
+        "description": "사용 중지한 카드를 **초안으로** 되살린다. 자료 관리자만(ADR 0035).\n\n## 왜 초안까지만인가\n\n확정으로 바로 되돌리면 **틀려서 중지한 카드가 조용히 다시 쓰이게 된다.** 중지한\n이유는 기록에 안 남고(상태 하나뿐이다), 되살리는 사람이 그 이유를 안다는 보장도\n없다. 초안으로 두면 값은 그대로 살아나되 「쓰겠다」 는 선언은 다시 받는다.\n\n## 왜 필요한가\n\n실수로 누를 수 있는 자리다. 여기까지 막아 두면 남는 길은 **같은 값으로 카드를\n새로 만드는 것**뿐인데, 그러면 만든 사람·만든 때가 실제와 달라지고 이력이 한 줄\n더 늘어난다 — 실수를 지우려다 기록을 더 흐린다.",
         "operationId": "restore_api_fitting_cards__card_id__restore_post",
         "parameters": [
           {
@@ -35353,7 +36341,7 @@
     },
     "/api/fitting/export-profiles": {
       "get": {
-        "description": "내 부서 것 + 전역. 시스템 관리자는 전부.",
+        "description": "모든 부서의 것 — **전원이 전부 본다**(ADR 0035). 줄마다 고칠 수 있는지를 싣는다.",
         "operationId": "list_export_profiles_api_fitting_export_profiles_get",
         "responses": {
           "200": {
@@ -35377,7 +36365,7 @@
         ]
       },
       "post": {
-        "description": "부서 관리자가 자기 부서의 해석용 물성 정의를 만든다.\n\n**부서마다 쓰는 솔버가 다르다.** 그리고 같은 솔버라도 사업부마다 덱 관례가\n다르다 — 어느 키워드를 쓰는지, 표를 몇 줄로 자르는지. 그 지식은 해석을\n돌리는 사람에게 있지 시스템 관리자에게 없다.",
+        "description": "누구나 만든다 — 등록자가 고치고, 필요하면 부서에 편집을 준다(ADR 0035).\n\n**부서마다 쓰는 솔버가 다르다.** 그리고 같은 솔버라도 사업부마다 덱 관례가\n다르다 — 어느 키워드를 쓰는지, 표를 몇 줄로 자르는지. 그 지식은 해석을\n돌리는 사람에게 있지 시스템 관리자에게 없다.\n\n등록 부서는 **안 보내면 내 소속**이다. 화면은 이 칸을 안 보낸다 — 전에는 그것을\n「전역」 으로 읽어서, 부서 관리자가 만들기를 누르면 403 이 났다.",
         "operationId": "create_export_profile_api_fitting_export_profiles_post",
         "requestBody": {
           "content": {
@@ -35949,7 +36937,7 @@
     },
     "/api/formats": {
       "get": {
-        "description": "내 부서 것 + 전역. 시스템 관리자는 전부.",
+        "description": "모든 부서의 것 — **전원이 전부 본다**(ADR 0035). 줄마다 고칠 수 있는지를 싣는다.",
         "operationId": "list_profiles_api_formats_get",
         "parameters": [
           {
@@ -36001,7 +36989,7 @@
         ]
       },
       "post": {
-        "description": "부서 관리자가 자기 부서 프로파일을 만든다.\n\n**장비는 부서마다 다르다.** 남의 부서 파일을 어떻게 읽을지를 시스템 관리자가\n알 리 없다 — 그 지식은 사업부에 있다.",
+        "description": "누구나 만든다 — 등록자가 고치고, 필요하면 부서에 편집을 준다(ADR 0035).\n\n**장비는 부서마다 다르다.** 남의 부서 파일을 어떻게 읽을지를 시스템 관리자가\n알 리 없다 — 그 지식은 사업부에 있다.",
         "operationId": "create_profile_api_formats_post",
         "requestBody": {
           "content": {
@@ -38153,17 +39141,6 @@
           },
           {
             "in": "query",
-            "name": "scope",
-            "required": false,
-            "schema": {
-              "default": "all",
-              "pattern": "^(all|mine|global)$",
-              "title": "Scope",
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
             "name": "workspace",
             "required": false,
             "schema": {
@@ -38458,7 +39435,7 @@
     },
     "/api/materials/export": {
       "get": {
-        "description": "보이는 재료를 **JSON 파일로** 내려준다.\n\n## 목록과 같은 것을 담는다\n\n거르는 규칙은 목록과 **한 함수를 쓴다**(`_filtered_materials`). 두 곳에 적으면\n한쪽만 고쳐지고, 그때 「화면에서 본 것」 과 「받아 간 파일」 이 달라진다 —\n받아 간 쪽이 틀렸다는 것을 알아챌 방법이 없다.\n\n**쪽 넘김은 없다.** 거른 것을 전부 담는다 — 나눠 받은 파일을 사람이 다시\n이어 붙이게 하면 그 자리에서 빠뜨린다.\n\n## 무엇이 들어가고 무엇이 안 들어가나\n\n재료 자체와 **선언 물성·파라미터 벌**이 들어간다. 시료·시편·시험·곡선은 **안\n들어간다** — 곡선은 파일이고(수십 MB), 그것까지 담으면 이 파일은 열어 볼 수\n없는 것이 된다. 시험 자료가 필요하면 그것은 다른 내보내기다.\n\n값은 **SI 그대로**다. 화면 표시 단위로 바꾸지 않는다 — 받아서 계산에 쓰는\n파일이라, 단위가 화면 설정에 따라 달라지면 그 파일을 믿을 수 없다.",
+        "description": "보이는 재료를 **JSON 파일로** 내려준다.\n\n## 목록과 같은 것을 담는다\n\n거르는 규칙은 목록과 **한 함수를 쓴다**(`_filtered_materials`). 두 곳에 적으면\n한쪽만 고쳐지고, 그때 「화면에서 본 것」 과 「받아 간 파일」 이 달라진다 —\n받아 간 쪽이 틀렸다는 것을 알아챌 방법이 없다.\n\n**쪽 넘김은 없다.** 거른 것을 전부 담는다 — 나눠 받은 파일을 사람이 다시\n이어 붙이게 하면 그 자리에서 빠뜨린다.\n\n## 무엇이 들어가고 무엇이 안 들어가나\n\n재료 자체와 **선언 물성·파라미터 벌**이 들어간다. 시료·시편·시험·곡선은 **안\n들어간다** — 곡선은 파일이고(수십 MB), 그것까지 담으면 이 파일은 열어 볼 수\n없는 것이 된다. 시험 자료가 필요하면 그것은 다른 내보내기다.\n\n## 값은 **고른 단위계 하나**로 — 기본 mm·N·tonne (ADR 0036)\n\n전에는 「값은 SI 그대로」 라고 적어 두고, 화면 응답을 그대로 담아서 **밀도만 tonne/mm3,\n두께는 mm** 였다 — 해석 연동이 받은 파일에서 짚었다(2026-09-24). 이제 파일 머리\n(`unit_system`)가 계를 말하고, 값은 그 계로, `value_si`·`density_si` 는 SI 로 곁에 둔다.\n그 계에 기호가 없는 단위는 받은 그대로 두고 `kept_units` 에 적는다(`shared/unit_systems`).",
         "operationId": "export_materials_api_materials_export_get",
         "parameters": [
           {
@@ -38559,17 +39536,6 @@
           },
           {
             "in": "query",
-            "name": "scope",
-            "required": false,
-            "schema": {
-              "default": "all",
-              "pattern": "^(all|mine|global)$",
-              "title": "Scope",
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
             "name": "workspace",
             "required": false,
             "schema": {
@@ -38582,6 +39548,24 @@
                 }
               ],
               "title": "Workspace"
+            }
+          },
+          {
+            "description": "값의 단위계. 비우면 mm·N·tonne(ADR 0036) — SI 는 `si`.",
+            "in": "query",
+            "name": "units",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "값의 단위계. 비우면 mm·N·tonne(ADR 0036) — SI 는 `si`.",
+              "title": "Units"
             }
           }
         ],
@@ -40058,8 +41042,224 @@
         ]
       }
     },
+    "/api/ownership/people": {
+      "get": {
+        "description": "넘겨받을 사람을 **이름으로** 찾는다 — 지금 로그인할 수 있는 사람만.\n\n계정 목록은 시스템 관리자 것이라, 등록자가 넘길 사람을 고를 길이 없었다. 여기는\n그 한 가지 일만 한다: 이름과 대표 소속.",
+        "operationId": "people_api_ownership_people_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "default": "",
+              "maxLength": 100,
+              "title": "Q",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/PersonOut"
+                  },
+                  "title": "Response People Api Ownership People Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "People",
+        "tags": [
+          "ownership"
+        ]
+      }
+    },
+    "/api/ownership/stewards": {
+      "get": {
+        "description": "**자료 관리자는 누구인가** — 새 기준정보 값·카드 확정·핸드북 승인을 부탁할 사람.\n\n자료 관리자가 없으면 시스템 관리자를 댄다. 막힌 사람이 「관리자에게 문의하세요」 만\n받으면 그게 누구인지 또 물어야 한다(ADR 0035) — 403 은 그 이름을 `details` 로 주지만,\n**막히기 전에** 물을 자리가 없었다(AI 가 새 등급을 미리보기로 막고도 이름을 못 댔다).",
+        "operationId": "stewards_api_ownership_stewards_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/PersonOut"
+                  },
+                  "title": "Response Stewards Api Ownership Stewards Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Stewards",
+        "tags": [
+          "ownership"
+        ]
+      }
+    },
+    "/api/ownership/{kind}/{row_id}": {
+      "get": {
+        "description": "지금 누가 고치나, 그리고 **아래에 무엇이 몇 건 딸렸나** — 넘기기 전에 본다.",
+        "operationId": "get_ownership_api_ownership__kind___row_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "kind",
+            "required": true,
+            "schema": {
+              "enum": [
+                "material",
+                "sample",
+                "specimen",
+                "test_run",
+                "property_card",
+                "group_result",
+                "test_type",
+                "format_profile",
+                "recipe",
+                "export_profile",
+                "equipment"
+              ],
+              "title": "Kind",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "row_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Row Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OwnershipOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Ownership",
+        "tags": [
+          "ownership"
+        ]
+      },
+      "put": {
+        "description": "등록자·편집 부서를 넘긴다. **등록자와 관리자만.**\n\n**안 보낸 칸은 그대로다.** `edit_workspace_slug` 를 `null` 로 **보내면** 부여를\n걷는다 — 안 보낸 것과 비운 것을 가르지 않으면, 등록자만 넘기려다 부서 부여가\n함께 사라진다(선언 물성·일괄 수정이 같은 자리에서 걸렸다, AGENTS.md).",
+        "operationId": "change_ownership_api_ownership__kind___row_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "kind",
+            "required": true,
+            "schema": {
+              "enum": [
+                "material",
+                "sample",
+                "specimen",
+                "test_run",
+                "property_card",
+                "group_result",
+                "test_type",
+                "format_profile",
+                "recipe",
+                "export_profile",
+                "equipment"
+              ],
+              "title": "Kind",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "row_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Row Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OwnershipChangeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OwnershipChangeOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Change Ownership",
+        "tags": [
+          "ownership"
+        ]
+      }
+    },
     "/api/pipelines/connectors": {
       "get": {
+        "description": "**모든 부서의 커넥터**(ADR 0035 3단계). 줄마다 이 사람이 다룰 수 있는지를 싣는다.\n\n전에는 내 부서 것만 보였다 — 「옆 부서 장비로 잰 내 파일이 왜 안 들어왔나」 를 물을\n데가 없었다.",
         "operationId": "list_connectors_api_pipelines_connectors_get",
         "responses": {
           "200": {
@@ -40266,6 +41466,7 @@
     },
     "/api/pipelines/inbox": {
       "get": {
+        "description": "수집함. `scope=mine`(기본)은 **내 부서 커넥터의 것**, `all` 은 전사다.\n\n기본을 좁히는 이유: 이 목록은 「처리할 것」 을 보는 자리다 — 전사가 기본이면 남의\n부서 대기 건이 내 할 일 사이에 섞인다. 시스템 관리자의 `mine` 은 전부다(전과 같다).",
         "operationId": "list_inbox_api_pipelines_inbox_get",
         "parameters": [
           {
@@ -40299,6 +41500,17 @@
                 }
               ],
               "title": "Connector Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "scope",
+            "required": false,
+            "schema": {
+              "default": "mine",
+              "pattern": "^(mine|all)$",
+              "title": "Scope",
+              "type": "string"
             }
           },
           {
@@ -41037,7 +42249,7 @@
         ]
       },
       "post": {
-        "description": "부서 관리자가 자기 부서 레시피를 만든다.\n\n**부서마다 규격이 다르다.** 탄성 구간을 어디로 잡을지는 따르는 규격이 정하고,\n그 판단은 그 부서가 한다 — 형식 프로파일과 같은 이유다(ADR 0005·0006).",
+        "description": "누구나 만든다 — 등록자가 고치고, 필요하면 부서에 편집을 준다(ADR 0035).\n\n**부서마다 규격이 다르다.** 탄성 구간을 어디로 잡을지는 따르는 규격이 정하고,\n그 판단은 그 부서가 한다 — 형식 프로파일과 같은 이유다(ADR 0005·0006). 그래서\n등록 부서를 적어 둔다(안 보내면 내 소속).",
         "operationId": "create_recipe_api_processing_recipes_post",
         "requestBody": {
           "content": {
@@ -42570,6 +43782,218 @@
         ]
       }
     },
+    "/api/statistics/analysis/card-items": {
+      "get": {
+        "description": "카드 항목 요약 — 재료군·분류 x 카드 항목란. **어느 재료에서 무엇까지 볼 수 있나.**\n\n점탄성·경화식·소성 표는 스칼라가 아니라서 비교·분포에 안 나온다. 줄이 재료가 아니라\n분류라 재료가 1만이어도 응답이 분류 수만큼이다 — 재료 줄은 `/card-items/materials`,\n칸 하나의 값은 `/card-items/cell` 이 준다(재료마다 한 장에 싣던 첫 판은 1만 개에서\n10 MB 였다).",
+        "operationId": "analysis_card_items_api_statistics_analysis_card_items_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CardItemSummaryOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Analysis Card Items",
+        "tags": [
+          "statistics"
+        ]
+      }
+    },
+    "/api/statistics/analysis/card-items/cell": {
+      "get": {
+        "description": "칸 하나 — 카드마다 든 값, 그 항목란을 내는 시험의 채택 결과, 그 칸으로 갈 선언 물성.\n\n**누를 때만 받는다** — 목록이 칸마다 값을 실으면 재료 수에 비례해 응답이 는다.",
+        "operationId": "analysis_card_item_cell_api_statistics_analysis_card_items_cell_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "material_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Material Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "item",
+            "required": true,
+            "schema": {
+              "title": "Item",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CardItemCellOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Analysis Card Item Cell",
+        "tags": [
+          "statistics"
+        ]
+      }
+    },
+    "/api/statistics/analysis/card-items/materials": {
+      "get": {
+        "description": "카드 항목 전체 — 재료 줄. **거르고 자르는 것은 서버다.**\n\n`family`·`category` 는 요약에서 들어오는 길이고(같은 값), `item` 은 그 항목란이 **보이는**\n재료만이다. 시험·선언만 있는 칸은 `with_sources` 일 때만 보인다 — 줄에도 열의 수에도.",
+        "operationId": "analysis_card_item_rows_api_statistics_analysis_card_items_materials_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "family",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Family"
+            }
+          },
+          {
+            "in": "query",
+            "name": "category",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Category"
+            }
+          },
+          {
+            "in": "query",
+            "name": "item",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Item"
+            }
+          },
+          {
+            "in": "query",
+            "name": "with_sources",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "With Sources",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 200,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Limit"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CardItemRowsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Analysis Card Item Rows",
+        "tags": [
+          "statistics"
+        ]
+      }
+    },
     "/api/statistics/analysis/compare": {
       "get": {
         "description": "재료 몇 개를 나란히. **항목이 열, 재료가 행이다.**\n\n안 고르면 빈 표를 준다 — 전체를 자동으로 세우면 94개짜리 표가 나온다.",
@@ -43159,7 +44583,7 @@
     },
     "/api/test-runs": {
       "get": {
-        "description": "**가시 범위와 기본 필터는 다른 것이다.**\n\n가시 범위(`visible_runs`)는 \"볼 권한이 있는가\"이고 재료를 따라간다. 그런데\n화면이 `/w/:slug/tests` 라고 말해 놓고 전사를 보여 주면, 사이드바의 '부서'\n라는 말이 거짓이 된다. 부서가 하나뿐인 동안은 드러나지 않지만 두 번째 부서가\n쓰기 시작하면 바로 이상해진다.\n\n`workspace` 는 **좁히기만 한다.** 권한을 넓히지 않는다 — 남의 부서 slug 를\n넣어도 원래 볼 수 있던 것 안에서만 걸러진다.\n\n`adopted=false` 는 **\"올렸는데 아직 아무것도 안 한 것\"** 을 세는 자리다.\n부서 홈이 \"처리 대기 N건\" 을 말하려면 서버가 세야 한다 — 목록을 받아 화면이\n세면 상한(`limit`)에 걸린 순간 숫자가 조용히 틀린다.",
+        "description": "**가시 범위와 기본 필터는 다른 것이다.**\n\n가시 범위(`visible_runs`)는 \"볼 권한이 있는가\"이고 재료를 따라간다 — 전원이\n전부 본다(ADR 0035). `workspace` 는 **그 부서가 등록한 시험만** 남기는 거르기다.\n전에는 화면 주소(`/w/:slug/tests`)가 이것을 정했는데, 상단 부서 선택기와 함께\n부서 주소를 걷으면서(3단계) 목록의 거르기(`/tests?workspace=`)가 됐다.\n\n`workspace` 는 **좁히기만 한다.** 권한을 넓히지 않는다 — 남의 부서 slug 를\n넣어도 원래 볼 수 있던 것 안에서만 걸러진다.\n\n`adopted=false` 는 **\"올렸는데 아직 아무것도 안 한 것\"** 을 세는 자리다.\n부서 홈이 \"처리 대기 N건\" 을 말하려면 서버가 세야 한다 — 목록을 받아 화면이\n세면 상한(`limit`)에 걸린 순간 숫자가 조용히 틀린다.",
         "operationId": "list_runs_api_test_runs_get",
         "parameters": [
           {
@@ -44352,7 +45776,7 @@
         ]
       },
       "post": {
-        "description": "새 시험 종류. **배포 없이 추가된다** — 그것이 정의를 데이터로 둔 이유다.\n\n**부서 관리자도 만든다**(ADR 0006). 새 장비를 붙이는 일은 사업부에서 시작되고,\n새 장비란 대개 없는 종류를 재는 장비다. 시스템 관리자만 만들 수 있게 두었을\n때는 형식 프로파일 화면에서 매핑을 다 끝낸 뒤 저장 순간 403 이 났다.\n\n키는 **전사에서 유일하다.** 두 부서가 같은 시험을 하면 종류를 둘로 만들 것이\n아니라 하나를 같이 써야 하고, 여기서 부딪히면 그 사실을 알게 된다.",
+        "description": "새 시험 종류. **배포 없이 추가된다** — 그것이 정의를 데이터로 둔 이유다.\n\n**누구나 만든다**(ADR 0035 3단계 — 전에는 부서 관리자, 그 전에는 시스템 관리자,\nADR 0006). 새 장비를 붙이는 일은 사업부에서 시작되고, 새 장비란 대개 없는\n종류를 재는 장비다. 고치는 사람은 등록자 · 편집을 받은 부서 · 자료 관리자다.\n\n키는 **전사에서 유일하다.** 두 부서가 같은 시험을 하면 종류를 둘로 만들 것이\n아니라 하나를 같이 써야 하고, 여기서 부딪히면 그 사실을 알게 된다.",
         "operationId": "create_test_type_api_test_types_post",
         "requestBody": {
           "content": {
@@ -44600,7 +46024,7 @@
     },
     "/api/trash": {
       "get": {
-        "description": "지운 것. **최근에 지운 것부터.**\n\n줄마다 「되살리면 무엇이 함께 오는가」 와 「왜 못 되살리는가」 를 함께 낸다 —\n화면이 그것을 스스로 세게 하면 사람이 본 숫자와 실제가 어긋난다.",
+        "description": "지운 것 — **이 사람이 되살릴 수 있는 것만.** 최근에 지운 것부터.\n\n줄마다 「되살리면 무엇이 함께 오는가」 와 「왜 못 되살리는가」 를 함께 낸다 —\n화면이 그것을 스스로 세게 하면 사람이 본 숫자와 실제가 어긋난다.",
         "operationId": "list_trash_api_trash_get",
         "parameters": [
           {
@@ -44775,7 +46199,7 @@
     },
     "/api/trash/{kind}/{item_id}/restore": {
       "post": {
-        "description": "되살린다 — 이 행과 그 아래 **함께 지워진** 것 전부.",
+        "description": "되살린다 — 이 행과 그 아래 **함께 지워진** 것 전부. 그 전부를 고칠 수 있어야 한다.",
         "operationId": "restore_api_trash__kind___item_id__restore_post",
         "parameters": [
           {
@@ -47291,7 +48715,7 @@
     },
     "/api/workbench/runs": {
       "get": {
-        "description": "내 부서의 작업들. **진행 중인 것이 먼저다** — 「계속」 이 이 목록이다.",
+        "description": "작업들. **진행 중인 것이 먼저다** — 「계속」 이 이 목록이다.\n\n`scope=mine`(기본)은 **내가 이어 할 수 있는 것** — 내 부서의 작업과 내가 시작한 것.\n`all` 은 전사다(ADR 0035 3단계 — 보기는 전원). 기본을 좁히는 이유는 이 목록이\n「계속」 이라서다: 남의 부서 작업이 섞이면 이어 할 것이 안 보인다.",
         "operationId": "list_runs_api_workbench_runs_get",
         "parameters": [
           {
@@ -47309,6 +48733,17 @@
                 }
               ],
               "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "scope",
+            "required": false,
+            "schema": {
+              "default": "mine",
+              "pattern": "^(mine|all)$",
+              "title": "Scope",
+              "type": "string"
             }
           },
           {

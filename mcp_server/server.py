@@ -9,7 +9,7 @@
 
 받은 `Authorization` 헤더를 백엔드로 넘기기만 한다. **만능 토큰을 두지 않는다** —
 서버가 자기 자격으로 부르면 그 순간 모든 사용자가 같은 권한을 갖는다. 부서
-가시성·전역 재료·편집 권한은 지금 있는 코드가 판정한다(규칙이 두 벌이 되면
+가시성·편집 권한은 지금 있는 코드가 판정한다(규칙이 두 벌이 되면
 갈라지고, 갈라진 쪽이 MCP 면 그것은 권한 우회다).
 
 ## 얇은 프록시다 — DB 를 직접 안 읽는다
@@ -249,6 +249,20 @@ async def _send(
 # ── 값에 근거를 붙인다 (D8) ────────────────────────────────────────────────────
 
 
+def _density_si(row: dict[str, Any]) -> tuple[Any, Any]:
+    """밀도를 **SI(kg/m³)** 로 — (값, 단위).
+
+    재료·시료 API 의 `density` 는 화면 표시값(tonne/mm3)이라, 선언 물성의 SI 와 한
+    응답에 섞였다 — 해석 연동 쪽이 「전부 SI」 로 읽을 뻔했다(2026-09-24). 서버가
+    `density_si` 를 곁에 두게 되어 여기서는 그것을 낸다 — **환산을 여기서 하지 않는다**
+    (규칙이 두 벌이 되면 갈라진다). 옛 서버라 `density_si` 가 없으면 표시값과 그 단위를
+    그대로 낸다 — 단위를 떼지 않는 한 틀리게 읽히지는 않는다.
+    """
+    if "density_si" in row:
+        return row.get("density_si"), "kg/m3"
+    return row.get("density"), row.get("density_unit")
+
+
 def _declared_value(row: dict[str, Any]) -> dict[str, Any]:
     """선언 물성 한 줄 → **근거가 붙은 값.**
 
@@ -317,7 +331,7 @@ def get_guide(topic: str | None = None) -> str:
     전형적인 흐름이 적혀 있다. `topic` 으로 한 절만 받을 수 있다:
     `overview` · `units` · `properties` · `trust` · `layers` · `ontology` ·
     `processing` · `definitions` · `coverage` · `cards` · `statistics` · `viscoelastic` ·
-    `workflow` · `absence` · `limits`.
+    `workflow` · `exchange` · `absence` · `limits`.
     """
     try:
         text = GUIDE_PATH.read_text(encoding="utf-8")
@@ -374,8 +388,10 @@ async def search_materials(
                 "family": one.get("family"),
                 "category": one.get("category"),
                 "grade": one.get("grade"),
+                # **등록한 부서다 — 권한이 아니다.** 전에는 `is_global` 도 실었는데, 받는
+                # 쪽이 그것을 「공식 자료인가」 로 읽었고, 전역이 0건이라 「정의가 없다」
+                # 고 판단했다(2026-09-24). 공식인지는 카드 확정으로 본다(ADR 0035).
                 "workspace": one.get("owner_workspace_name"),
-                "is_global": one.get("is_global"),
                 "sample_count": one.get("sample_count"),
             }
             for one in got.get("items", [])
@@ -499,9 +515,9 @@ async def get_material(ctx: Context, material_id: str) -> dict[str, Any]:
     `caveat` 가 있으면 그대로 사람에게 전한다 — 초안 카드나 합성 표를 실측처럼
     옮기면 그 값으로 해석이 돌아간다.
 
-    **선언 물성(`declared_properties`)의 값은 정본 SI** 다(응력 Pa · 온도 K).
-    재료 기본 칸(`basics`)은 값과 **단위가 함께** 오니 그 단위로 읽어라 — 밀도는
-    화면 표시 단위(tonne/mm3 등)일 수 있다.
+    **값은 전부 정본 SI 다** — 선언 물성(`declared_properties`, 응력 Pa · 온도 K)도
+    기본 칸(`basics`, 밀도 kg/m3)도. 값에는 **단위가 함께** 오니 그 단위로 읽어라. 화면은
+    밀도를 tonne/mm3 로 보여 준다 — 사람이 화면 숫자(7.85e-9)를 말하면 같은 값이다.
 
     **이름이나 재료 번호를 줘도 된다** — 딱 하나 맞으면 그것으로 본다(여럿이면 후보를 준다).
     """
@@ -517,15 +533,14 @@ async def get_material(ctx: Context, material_id: str) -> dict[str, Any]:
     link = await _get(ctx, f"/catalog/links/{material_id}")
 
     basics: dict[str, Any] = {}
-    if material.get("density") is not None:
-        # **단위를 이름에 박지 않는다.** 재료 API 의 밀도는 SI 가 아니라 화면
-        # 표시 단위(tonne/mm3 등)로 오고 `density_unit` 이 함께 온다 — 실측
-        # (2026-09-06)에서 2680 kg/m3 인 알루미늄이 `density_kg_m3: 2.68e-09` 로
-        # 나갔다. 환산은 여기서 안 한다(규칙이 두 벌이 되면 갈라진다) — 값과
-        # 단위를 함께 실어 읽는 쪽이 단위를 보고 말하게 한다.
+    density, density_unit = _density_si(material)
+    if density is not None:
+        # **단위를 이름에 박지 않는다** — 실측(2026-09-06)에서 2680 kg/m3 인 알루미늄이
+        # `density_kg_m3: 2.68e-09` 로 나갔다. 값과 단위를 함께 싣고, 값은 SI 다
+        # (`_density_si`) — 선언 물성과 한 응답에서 계가 갈리지 않게(2026-09-24).
         basics["density"] = {
-            "value": material["density"],
-            "unit": material.get("density_unit"),
+            "value": density,
+            "unit": density_unit,
             "origin": "declared:material",
             "caveat": "재료의 공칭값 — 시료 실측이 있으면 카드는 그쪽을 먼저 쓴다",
         }
@@ -547,8 +562,8 @@ async def get_material(ctx: Context, material_id: str) -> dict[str, Any]:
             "grade": material.get("grade"),
             "details": material.get("details"),
         },
+        # 등록한 부서 — 권한도 공식 여부도 아니다(위 `search_materials` 참조).
         "workspace": material.get("owner_workspace_name"),
-        "is_global": material.get("is_global"),
         "basics": basics,
         "declared_properties": [
             _declared_value(row) for row in material.get("declared_properties") or []
@@ -1322,9 +1337,10 @@ def _sample_brief(one: dict[str, Any]) -> dict[str, Any]:
         "lot_no": one.get("lot_no"),
         "manufacturer": one.get("manufacturer"),
         "production_date": one.get("production_date"),
-        # **밀도는 SI 가 아니다** — 재료 API 와 같이 표시 단위로 온다. 단위를 함께 싣는다.
-        "density": one.get("density"),
-        "density_unit": one.get("density_unit"),
+        # **밀도도 SI(kg/m³)다**(`_density_si`) — 시료 API 의 `density` 는 표시값이라
+        # 그대로 옮기면 선언 물성과 계가 갈린다(2026-09-24). 단위를 함께 싣는다.
+        "density": _density_si(one)[0],
+        "density_unit": _density_si(one)[1],
         "declared_count": len(one.get("declared_properties") or []),
         "specimen_count": one.get("specimen_count"),
         "test_run_count": one.get("test_run_count"),
@@ -1513,7 +1529,16 @@ async def _new_terms(ctx: Context, values: dict[str, str | None]) -> dict[str, A
                 "candidates": term_gate.candidates(items),
             }
         )
-    return term_gate.refusal(blocked) if blocked else None
+    if not blocked:
+        return None
+    # **누구에게 부탁할지 이름으로.** 못 읽어 오면 이름 없이 간다 — 거절 자체를 세우지 않는다.
+    stewards = await _get(ctx, "/ownership/stewards")
+    names = (
+        [str(one.get("display_name")) for one in stewards]
+        if isinstance(stewards, list)
+        else []
+    )
+    return term_gate.refusal(blocked, names)
 
 
 @mcp.tool()
@@ -2440,8 +2465,9 @@ async def create_card_from_group(
 
         poisson_ratio · density   시험이 주지 않는 값. 비우면 재료에서 물려받고, 없으면
                                   서버가 거절한다 — **지어 넣지 마라**, 사람에게 물어라.
-                                  density 는 **SI(kg/m³)** 다. 재료 API 의 표시값(tonne/mm³)을
-                                  그대로 넣으면 범위 밖으로 거절된다.
+                                  density 는 **SI(kg/m³)** 다 — `get_material` 이 주는 값
+                                  그대로다. 화면·REST 재료 API 의 `density`(tonne/mm³
+                                  표시값)를 넣으면 범위 밖으로 거절된다.
     """
     body = {
         "group_result_id": group_result_id,
@@ -2568,10 +2594,11 @@ async def create_card_from_tests(
     `poisson_ratio` 는 **인장시험이 주지 않는 값이다.** 모르면 비워 둔다 — 0.3 으로
     채우면 그것이 측정값인지 기본값인지 나중에 아무도 모른다. `density` 도 같다.
 
-    ## `density` 는 SI(kg/m³) 다 — 재료 API 의 숫자를 그대로 옮기지 마라
+    ## `density` 는 SI(kg/m³) 다 — 화면의 숫자를 옮기지 마라
 
-    `get_material` 은 밀도를 **표시 단위(tonne/mm³)** 로 준다 — 강판이 `7.85e-9`.
-    이 인자는 kg/m³ 라 강판은 `7850` 이다. 그 숫자를 그대로 넘기면 서버가 범위
+    `get_material` 도 밀도를 SI 로 준다(`basics.density`, 강판이 `7850`) — 그 값이면
+    된다. **화면은 tonne/mm³ 로 보여 준다**(강판이 `7.85e-9`) — 사람이 화면 숫자를
+    불러 주면 그대로 넘기지 말고 `convert_unit` 에 시켜라. 그대로 넘기면 서버가 범위
     밖(0.5~50,000)이라고 거절한다. 대개는 비워 두면 된다 — 재료·시료에 적힌 밀도를
     카드가 알아서 물려받는다.
 
@@ -3600,6 +3627,13 @@ async def save_format_profile(
 
     **기본이 미리보기(dry_run=True)다.**
 
+    ## 누가 만들고 누가 고치나 (ADR 0035 3단계)
+
+    누구나 만든다 — 토큰의 주인이 **등록자**가 되고, 등록자 · 편집을 받은 부서 · 자료
+    관리자가 고친다. `workspace` 는 **등록 부서**다(권한이 아니다): 안 주면 내 소속 부서.
+    파일을 자동으로 읽을 때 올린 사람 부서의 것과 부서 없는 것만 대 보므로, 등록 부서가
+    곧 「어느 부서 파일에 먼저 대 보나」 다. 부서 없이 올리는 것은 자료 관리자만 한다.
+
     ## 화면이 못 고치는 정의를 지을 수 있다
 
     화면의 편집기는 정의의 일부만 다룬다 — 실측(2026-08-26)으로 드러난 함정이
@@ -3608,15 +3642,18 @@ async def save_format_profile(
     수 없는 프로파일이 생긴다.** 복잡한 정의를 지었으면 그 사실을 사용자에게
     말해라 — 「이건 화면에서 편집이 안 될 수 있습니다」.
     """
-    body = {
+    body: dict[str, Any] = {
         "key": key,
         "label": label,
         "test_type_key": test_type,
         "definition": definition,
         "description": description,
-        "owner_workspace_slug": workspace,
         "is_active": True,
     }
+    # **안 줬으면 안 보낸다.** 서버는 「안 보낸 것」(= 내 소속)과 「비워 보낸 것」(= 부서
+    # 없이, 자료 관리자만)을 가른다 — `None` 을 실어 보내면 평범한 사람의 저장이 403 이 된다.
+    if workspace:
+        body["owner_workspace_slug"] = workspace
     if dry_run:
         return {
             "dry_run": True,
@@ -4102,14 +4139,15 @@ async def list_commissions(
 ) -> dict[str, Any]:
     """측정 의뢰 목록 — 「누가 무엇을 왜 재 달라고 했고 어디까지 됐나」(v1.234).
 
-        scope   mine(우리 부서가 낸 것) · received(우리 부서가 받은 것) · all
+        scope   ours(우리 부서가 낸 것·받은 것) · mine(내가 낸 것) ·
+                received(우리 부서가 받은 것) · all(전사)
         status  draft · submitted(접수 대기) · accepted · in_progress · on_hold ·
                 delivered(결과 전달) · closed · rejected
 
-    **낸 부서·받는 부서만 본다** — 두 부서 사이의 약속이라 제3부서 것은 목록에 없다.
-    남의 의뢰가 안 보이는 것은 정상이고 「없다」 고 말하면 틀린다 — 「내가 볼 수 있는
-    범위에는 없다」 로 말해라. 한 건을 열려면 `get_commission`. 의뢰에서 시험·값으로
-    내려가는 길은 `get_ontology` 의 레시피(`commission` → `item_of` → `requested_by`).
+    **낸 것은 전원이 본다**(ADR 0035 3단계) — 작성 중인 것만 낸 사람의 것이다. 다만
+    **움직이고 말을 보태는 것은 낸 쪽과 받는 쪽**이다: 남의 부서 의뢰는 읽기만 된다.
+    한 건을 열려면 `get_commission`. 의뢰에서 시험·값으로 내려가는 길은 `get_ontology`
+    의 레시피(`commission` → `item_of` → `requested_by`).
     """
     params: dict[str, Any] = {"scope": scope, "limit": max_limit(limit)}
     if status:
@@ -4390,6 +4428,9 @@ async def save_recipe(
     **기본이 미리보기(dry_run=True)다.** 레시피는 한 사람의 설정이 아니라 그 부서의
     합의라, 만들기 전에 무엇이 저장될지 보여야 한다.
 
+    토큰의 주인이 등록자가 되고, 등록 부서는 그 사람의 소속이다(ADR 0035 3단계). 부서
+    사람이 함께 고치게 하려면 사용자가 화면의 「권한」 에서 부서에 편집을 준다.
+
     새로 짓기 전에 `list_recipes` 로 이미 있는 것을 본다 — 비슷한 것이 있으면 그것을
     쓰는 편이 낫다. 레시피가 갈리면 같은 시험의 결과를 서로 못 견준다.
     """
@@ -4668,8 +4709,8 @@ _RECIPES: list[dict[str, str]] = [
         "steps": 'search_all(q=의뢰 제목, kind="commission") → related(kind="commission", id=…) '
         '→ 항목마다 related(kind="commission_item", id=…, relation="requested_by") → '
         'related(kind="test_run", id=…, relation="processed_from")',
-        "note": "의뢰 → 항목 → 시험 → 처리 결과 → 카드. 낸 부서·받는 부서만 본다 — 남의 의뢰는 "
-        "404 가 정상이다.",
+        "note": "의뢰 → 항목 → 시험 → 처리 결과 → 카드. 낸 것은 전원이 본다(작성 중만 낸 "
+        "사람의 것) — 404 면 지워졌거나 작성 중이다.",
     },
     {
         "question": "이 값은 어느 계산식으로 나왔나 / 이 식으로 계산한 결과들",
@@ -4773,9 +4814,8 @@ async def related(
 
     ## 안 보이는 것은 안 온다
 
-    권한 밖의 마디에서는 **길이 끊긴다.** 「이어져 있는데 이름만 가려진 것」이
-    아니라 아예 없는 것처럼 온다 — 그러니 「자료가 없다」 와 「권한이 없다」 를
-    구분해서 단정하지 마라.
+    자료·정의·측정 의뢰는 전원이 본다(ADR 0035) — 길이 끊겼으면 **지워졌거나 없는
+    것**이다. 예외는 작성 중인 의뢰 하나다(낸 사람만 본다).
     """
     return await _get(
         ctx,
@@ -4806,7 +4846,8 @@ async def find_path(
         tested → part_of → derived_from        시험 → 시편 → 시료 → 재료
 
     `found` 가 거짓이면 **길이 없는 것이다.** 지어내지 마라 — 양끝이 실제로 안
-    이어져 있거나, 가운데 마디를 볼 권한이 없다. `note` 에 그렇게 적혀 온다.
+    이어져 있거나, 가운데 마디가 지워졌다(작성 중인 측정 의뢰만은 낸 사람이 본다).
+    `note` 에 그렇게 적혀 온다.
     """
     return await _get(
         ctx,

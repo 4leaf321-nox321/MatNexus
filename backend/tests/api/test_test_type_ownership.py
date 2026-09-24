@@ -1,4 +1,4 @@
-"""시험 종류의 소유와 권한 — **문을 안전하게 열었는가**(ADR 0006).
+"""시험 종류의 권한 — **문을 안전하게 열었는가**(ADR 0006 · ADR 0035 3단계).
 
 왜 열었나. 형식 프로파일을 부서 소유로 바꾼 순간 막다른 길이 생겼다. 부서
 관리자가 새 장비를 붙이려면 시험 종류가 먼저 있어야 하는데 그것을 만들 권한이
@@ -10,6 +10,10 @@
 Pa 로, B부서가 같은 이름을 MPa 로 정의하면 두 부서 곡선을 겹쳐 그린 순간
 10⁶ 배 어긋난 그림이 나오는데 **축 이름이 같아서 아무도 이상하다고 느끼지
 못한다.** 그래서 이름의 뜻을 강제하는 검사가 이 파일의 절반이다.
+
+**3단계에서 문을 끝까지 열었다**(ADR 0035). 만들기는 누구나, 고치기는 등록자 ·
+편집을 받은 부서 · 자료 관리자다 — 부서 관리자라는 자리는 정의를 고치지 않는다. 그래서
+위험을 막는 것은 이제 **사람이 아니라 검사**다(채널 이름의 뜻).
 
 정의 편집 자체(무엇을 잠그는가)는 `test_test_types.py` 가 본다.
 """
@@ -54,6 +58,8 @@ def _add_user(db: Session, workspace: Workspace, email: str, role: str) -> None:
         password_hash=security.hash_password("member-password-1"),
         display_name=email,
         status="active",
+        # 소속 부서 — 가입 승인이 멤버십과 함께 채운다. 정의의 등록 부서가 이것이다.
+        home_workspace_id=workspace.id,
     )
     db.add(user)
     db.flush()
@@ -79,47 +85,55 @@ def _payload(**overrides: Any) -> dict[str, Any]:
 
 
 class Test누가만드는가:
-    def test_부서_관리자가_만든다(
-        self, client: TestClient, manager: dict[str, str], workspace: Workspace
-    ) -> None:
-        # **이 하나가 없으면 이 변경의 이유가 사라진다.**
-        response = client.post(
-            "/api/test-types",
-            json=_payload(owner_workspace_slug=workspace.slug),
-            headers=manager,
-        )
-        assert response.status_code == 201, response.text
-        assert response.json()["owner_workspace_slug"] == workspace.slug
-        assert response.json()["is_global"] is False
-
-    def test_평범한_멤버는_못_만든다(
+    def test_평범한_멤버도_만들고_등록자가_된다(
         self, client: TestClient, plain_member: dict[str, str], workspace: Workspace
     ) -> None:
-        # 문을 여는 것과 활짝 여는 것은 다르다. 시험 종류는 설정이지 일상 업무가
-        # 아니다 — 재료 등록과 성격이 다르다.
-        response = client.post(
-            "/api/test-types",
-            json=_payload(owner_workspace_slug=workspace.slug),
-            headers=plain_member,
-        )
-        assert response.status_code == 403, response.text
+        """**이 하나가 없으면 3단계의 이유가 사라진다.** 전에는 부서 관리자만 만들어서,
+        새 장비를 붙이는 사람이 관리자를 기다렸다. 등록 부서는 안 보내면 내 소속이다."""
+        response = client.post("/api/test-types", json=_payload(), headers=plain_member)
+        assert response.status_code == 201, response.text
+        body = response.json()
+        assert body["owner_workspace_slug"] == workspace.slug
+        assert "is_global" not in body
+        assert body["access"]["registrant"] == "type-worker"
+        assert body["access"]["can_edit"] is True
 
-    def test_전역은_시스템_관리자만(
+    def test_부서_관리자도_남의_정의는_못_고친다(
+        self,
+        client: TestClient,
+        manager: dict[str, str],
+        plain_member: dict[str, str],
+    ) -> None:
+        """부서 관리자는 정의를 고치는 자리가 아니다(ADR 0035 D5). 등록자가 부서에 편집을
+        주면 그때 고친다 — 막을 때는 누구에게 물을지 이름으로."""
+        made = client.post("/api/test-types", json=_payload(), headers=plain_member)
+        assert made.status_code == 201, made.text
+        body = {k: v for k, v in RIG.items() if k != "key"}
+        body["expected_revision"] = made.json()["revision"]
+        blocked = client.put("/api/test-types/dept_rig", json=body, headers=manager)
+        assert blocked.status_code == 403, blocked.text
+        assert "등록자 type-worker" in blocked.json()["error"]["message"]
+
+    def test_부서_없이_올리는_것은_자료_관리자만(
         self,
         client: TestClient,
         manager: dict[str, str],
         admin_headers: dict[str, str],
     ) -> None:
-        # 전역은 **여러 부서가 함께 쓴다.** 한 부서가 만들면 다른 부서 화면에
-        # 그냥 나타나고, 그 부서는 왜 생겼는지 알 방법이 없다.
-        blocked = client.post("/api/test-types", json=_payload(), headers=manager)
+        """칸을 **비워 보낸 것**만 부서 없이다 — 안 보낸 것은 내 소속이다(AGENTS.md)."""
+        blocked = client.post(
+            "/api/test-types", json=_payload(owner_workspace_slug=None), headers=manager
+        )
         assert blocked.status_code == 403, blocked.text
+        assert "자료 관리자만" in blocked.json()["error"]["message"]
 
-        allowed = client.post("/api/test-types", json=_payload(), headers=admin_headers)
+        allowed = client.post(
+            "/api/test-types", json=_payload(owner_workspace_slug=None), headers=admin_headers
+        )
         assert allowed.status_code == 201, allowed.text
-        assert allowed.json()["is_global"] is True
+        assert allowed.json()["owner_workspace_slug"] is None
 
-    def test_전역_종류를_부서_관리자가_못_고친다(
+    def test_기본_종류는_부서_관리자가_못_고친다(
         self, client: TestClient, manager: dict[str, str], db: Session
     ) -> None:
         ensure_builtin_test_types(db)
@@ -129,10 +143,11 @@ class Test누가만드는가:
         payload["expected_revision"] = 1
         response = client.put("/api/test-types/tensile", json=payload, headers=manager)
         assert response.status_code == 403, response.text
-        # 이유가 없으면 "권한 없음" 은 벽이다. 왜 안 되는지를 말해야 한다.
-        assert "시스템 관리자" in response.json()["error"]["message"]
+        # 이유가 없으면 "권한 없음" 은 벽이다. 누구에게 물을지를 말해야 한다 — 기본
+        # 종류는 등록자가 없으니 자료 관리자다.
+        assert "자료 관리자" in response.json()["error"]["message"]
 
-    def test_전역_종류를_부서_관리자가_못_지운다(
+    def test_기본_종류를_부서_관리자가_못_지운다(
         self, client: TestClient, manager: dict[str, str], db: Session
     ) -> None:
         ensure_builtin_test_types(db)
@@ -245,7 +260,7 @@ class Test가시범위:
         assert response.status_code == 409, response.text
         assert "인장" in response.json()["error"]["message"]
 
-    def test_남의_부서_종류는_안_보이고_전역은_보인다(
+    def test_남의_부서_종류도_보인다(
         self,
         client: TestClient,
         admin_headers: dict[str, str],
@@ -265,6 +280,7 @@ class Test가시범위:
         keys = {
             row["key"] for row in client.get("/api/test-types", headers=plain_member).json()
         }
-        assert "other_rig" not in keys
-        # 감추는 쪽으로만 기울면 사람은 그 기능이 없는 줄 안다. 전역은 보여야 한다.
-        assert "tensile" in keys
+        # **보기는 전원이다**(ADR 0035). 전에는 남의 부서 종류가 안 보여서, 시험은
+        # 보이는데 그 시험을 해석할 정의는 없는 비대칭이 생겼다 — 다른 시스템이 물성을
+        # 받아 가다 「정의가 없다」 로 막혔다(2026-09-24).
+        assert {"other_rig", "tensile"} <= keys

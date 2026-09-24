@@ -6,8 +6,6 @@
 
 from __future__ import annotations
 
-import uuid
-
 from sqlalchemy.orm import Session
 
 from app.shared.deckmap import all_renderers
@@ -16,11 +14,11 @@ from matcore import export
 __all__ = ["all_renderers", "renderer_for"]
 
 
-def renderer_for(db: Session, workspace_id: uuid.UUID | None, key: str) -> export.Renderer:
+def renderer_for(db: Session, key: str) -> export.Renderer:
     """하나를 고른다. 없으면 **있는 것을 알려 준다** — 화면과 목록이 어긋났을 때
     사람이 다음에 무엇을 할지 알아야 한다."""
-    for item in all_renderers(db, workspace_id):
+    for item in all_renderers(db):
         if item.key == key:
             return item
-    known = ", ".join(sorted(item.key for item in all_renderers(db, workspace_id)))
+    known = ", ".join(sorted(item.key for item in all_renderers(db)))
     raise export.ExportError(f"모르는 형식입니다: {key}. 있는 것: {known}")

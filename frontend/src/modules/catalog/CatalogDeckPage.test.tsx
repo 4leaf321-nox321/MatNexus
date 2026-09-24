@@ -4,6 +4,7 @@
  *   매칭은 후보를 사람 앞에 세운다     자동 확정하지 않는다
  *   MID 없는 줄은 이어지는 번호        지정과 자동이 섞여도 안 겹친다
  *   모자란 재료는 이유와 함께 선다      조용히 빠진 재료는 없는 재료다
+ *   단위계는 서버 목록에서            안 고르면 서버 기본 — 화면이 SI 를 적어 두지 않는다
  */
 
 import { render, screen, waitFor } from '@testing-library/react'
@@ -21,6 +22,19 @@ vi.mock('@/modules/catalog/api', async (importOriginal) => ({
   catalogApi: {
     deckMatch: (...args: unknown[]) => deckMatch(...args),
     deckBuild: (...args: unknown[]) => deckBuild(...args),
+  },
+}))
+
+//: 기본이 첫째가 아니다 — 순서로 고르면 통과해 버린다. 부서가 만든 계도 하나 선다.
+vi.mock('@/shared/api/unitSystems', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/shared/api/unitSystems')>()),
+  unitSystemsApi: {
+    list: () =>
+      Promise.resolve([
+        { key: 'si', label: 'SI (kg · m · s · Pa)', is_default: false },
+        { key: 'mm_n_tonne', label: 'mm · N · tonne (MPa)', is_default: true },
+        { key: 'mm_ms_kg', label: 'mm · ms · kg (GPa)', is_default: false },
+      ]),
   },
 }))
 
@@ -95,5 +109,23 @@ describe('BOM 3단계', () => {
     expect(await screen.findByText(/어느 논문/)).toBeInTheDocument()
     expect(screen.getByText(/물성이 모자라 덱에 못 실은 재료 1건/)).toBeInTheDocument()
     expect(screen.getByText(/없는 것: 푸아송비, 밀도/)).toBeInTheDocument()
+  })
+
+  it('단위계는 서버 목록에서 고르고, 안 고르면 서버 기본이다', async () => {
+    // 전에는 붙박이 둘을 화면에 적어 두고 SI 가 첫째였다 — 부서가 만든 계는 못 골랐고,
+    // 기본은 해석이 쓰는 계가 아니었다(ADR 0036).
+    await toStep2()
+    const units = screen.getByLabelText('단위계')
+    await waitFor(() => expect(units).toHaveValue('mm_n_tonne'))
+    expect(screen.getByRole('option', { name: /mm · ms · kg/ })).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: /덱 생성/ }))
+    await waitFor(() => expect(deckBuild).toHaveBeenCalledTimes(1))
+    expect(deckBuild.mock.calls[0][0]).toMatchObject({ units: 'mm_n_tonne' })
+
+    await userEvent.selectOptions(units, 'si')
+    await userEvent.click(screen.getByRole('button', { name: /덱 생성/ }))
+    await waitFor(() => expect(deckBuild).toHaveBeenCalledTimes(2))
+    expect(deckBuild.mock.calls[1][0]).toMatchObject({ units: 'si' })
   })
 })

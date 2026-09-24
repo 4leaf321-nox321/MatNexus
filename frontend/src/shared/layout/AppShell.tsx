@@ -6,10 +6,9 @@
  */
 
 import { Suspense, useState } from 'react'
-import { Outlet, useLocation, useParams } from 'react-router-dom'
+import { Outlet, useLocation } from 'react-router-dom'
 
 import { NoticePopup } from '@/modules/notices/NoticePopup'
-import { useAuth } from '@/shared/auth/AuthContext'
 import { Skeleton } from '@/shared/components/ui/skeleton'
 import { Header } from '@/shared/layout/Header'
 import { LoginNotice } from '@/shared/layout/LoginNotice'
@@ -20,7 +19,6 @@ import {
   RightPanelProvider,
 } from '@/shared/layout/SidePanel'
 import { Sidebar, SidebarDrawer } from '@/shared/layout/Sidebar'
-import { DEFAULT_WORKSPACE } from '@/shared/layout/navigation'
 import { cn } from '@/shared/lib/utils'
 
 /** 화면 조각을 받아 오는 동안. **빈 화면을 보이지 않는다.** */
@@ -55,15 +53,11 @@ export const FULL_HEIGHT = [/^\/materials\/[^/]+$/]
 export function AppShell() {
   const [collapsed, setCollapsed] = useState(false)
   const [drawer, setDrawer] = useState(false)
-  const { slug } = useParams<{ slug?: string }>()
   const { pathname } = useLocation()
   const tall = FULL_HEIGHT.some((one) => one.test(pathname))
-  const { user } = useAuth()
-  // 부서 스코프가 아닌 화면(재료·알림·관리)에서도 사이드바의 '홈'·'워크벤치'·
-  // '부서 멤버' 는 **어느 부서인지** 정해야 한다. `default` 로 두면 자기 부서가
-  // 아닌 곳을 가리켜 목록이 비어 보이고, 데이터가 없는 것과 구별이 안 된다.
-  const workspaceSlug =
-    slug ?? user?.home_workspace_slug ?? user?.memberships[0]?.slug ?? DEFAULT_WORKSPACE
+  // **「지금 부서」 가 없다**(ADR 0035 3단계). 전에는 여기서 주소·소속으로 부서를 정해
+  // 사이드바와 상단 선택기에 넘겼다 — 보기는 전원이고 고칠 권한은 사람이 정하니, 그
+  // 부서가 정하는 것이 남지 않았다.
 
   return (
     /* 오른쪽 영역의 여닫기는 **상단 바**가 한다 — 껍데기를 여닫는 단추는 다
@@ -72,8 +66,8 @@ export function AppShell() {
     <RightPanelProvider>
       <LeftPanelProvider>
       <div className="flex h-svh overflow-hidden">
-      <Sidebar collapsed={collapsed} workspaceSlug={workspaceSlug} />
-      <SidebarDrawer open={drawer} onOpenChange={setDrawer} workspaceSlug={workspaceSlug} />
+      <Sidebar collapsed={collapsed} />
+      <SidebarDrawer open={drawer} onOpenChange={setDrawer} />
 
       {/* 화면이 채우는 왼쪽 영역 — **사이드바 바로 옆**이다. 재료 상세가 다른
           재료 목록을 여기 넣는다. 아무도 안 쓰면 폭이 0 이다. */}
@@ -89,7 +83,6 @@ export function AppShell() {
               setDrawer(true)
             }
           }}
-          workspaceSlug={workspaceSlug}
         />
         {/* 로그인 직후 한 번 — 「아이디에 @samsung.com 이 붙었습니다」. */}
         <LoginNotice />

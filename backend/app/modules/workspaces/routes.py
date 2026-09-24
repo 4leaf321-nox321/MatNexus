@@ -200,7 +200,6 @@ def update_workspace(
         slug=slug,
         name=payload.name,
         is_active=payload.is_active,
-        restricted=payload.restricted,
     )
     return services.workspace_out(db, workspace, admin)
 

@@ -70,7 +70,8 @@ export function useEntryPolicy(slug: string): MaybePolicy {
 }
 
 /**
- * 이 사람이 이 축에 **새 값을 세울** 수 있나.
+ * 이 사람이 이 축에 **새 값을 세울** 수 있나 — `managed` 축은 **자료 관리자**다(ADR 0035
+ * 3단계 — 전에는 부서 관리자, ADR 0032 D2). 인자 이름이 `manager` 인 것은 그 흔적이다.
  *
  * `manager` 가 `null` 이면 **모른다** — 로그인 정보가 없는 자리에 얹힌 피커다
  * (`useMaybeAuth`). 모를 때는 감추지 않는다: 없는 권한을 준 것이 아니라, 판정을
@@ -91,7 +92,7 @@ export function mayCoin(policy: MaybePolicy, manager: boolean | null): boolean {
  */
 export function coinHint(policy: MaybePolicy, label: string): string | undefined {
   if (policy === 'managed') {
-    return `새 ${label} 을(를) 세우는 것은 부서 관리자만 할 수 있습니다 — 목록에서 고르거나 관리자에게 등록을 요청하세요.`
+    return `새 ${label} 을(를) 세우는 것은 자료 관리자만 할 수 있습니다 — 목록에서 고르거나 자료 관리자에게 등록을 요청하세요.`
   }
   if (policy === 'closed') {
     return `${label} 은(는) 관리자가 등록한 값만 고를 수 있습니다.`

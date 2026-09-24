@@ -54,6 +54,8 @@ class AccountOut(BaseModel):
     display_name: str
     status: str
     is_system_admin: bool
+    is_data_manager: bool = False
+    """자료 관리자(ADR 0035) — 모든 자료를 고치고 카드를 확정한다."""
     must_change_password: bool
     home_workspace_slug: str | None
     requested_workspace_slug: str | None
@@ -108,6 +110,12 @@ class SystemAdminRequest(BaseModel):
     """
 
     is_system_admin: bool
+
+
+class DataManagerRequest(BaseModel):
+    """자료 관리자를 주거나 뺀다 — 시스템 관리자 권한과 같은 모양(참·거짓 한 칸)."""
+
+    is_data_manager: bool
 
 
 class ReferenceOut(BaseModel):

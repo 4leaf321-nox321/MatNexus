@@ -48,7 +48,8 @@ describe('레시피 검색', () => {
   it('부서로 찾는다', () => {
     // "TD 부서 표준" 이 사람이 기억하는 방식이다.
     expect(matches(recipe(), 'TD')).toBe(true)
-    expect(matches(recipe({ is_global: true, owner_workspace_name: null }), '전역')).toBe(true)
+    // 등록 부서가 없는 것은 「부서 없음」 으로 찾힌다 — 「전역」 은 걷었다(ADR 0035).
+    expect(matches(recipe({ owner_workspace_name: null }), '부서 없음')).toBe(true)
   })
 
   it('단계 이름으로 찾는다', () => {
