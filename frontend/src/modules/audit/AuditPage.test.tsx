@@ -8,7 +8,7 @@
  *   지워진 계정을 짚는다      id 는 비고 이름만 남는다 — 그 사실이 보여야 한다
  */
 
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -44,11 +44,24 @@ beforeEach(() => {
   list.mockResolvedValue([entry()])
 })
 
+/**
+ * **표가 그려질 때까지 기다리고, 그 안에서 찾는다.**
+ *
+ * 행위 이름(「물성 카드 확정」)은 위쪽 「행위로 필터」 에도 `<option>` 으로 늘 있다. 그래서
+ * `findByText` 로 기다리면 표가 아니라 그 옵션이 먼저 잡혀 **아무것도 안 기다린다** — 바로
+ * 뒤의 동기 검사가 목록 응답과 경주했다. CI 에서 실제로 졌다(2026-09-24, 배지를 못 찾음).
+ * 응답을 50ms 늦추면 매번 진다 — 그리고 「단추가 없다」 는 빈 화면에서 틀린 이유로 통과했다.
+ */
+async function table() {
+  return within(await screen.findByRole('table'))
+}
+
 describe('변경 이력', () => {
   it('행위를 사람이 읽는 말로 보인다', async () => {
     render(<AuditPage />)
-    expect(await screen.findByText('물성 카드 확정')).toBeInTheDocument()
-    expect(screen.getByText('DP600 MD')).toBeInTheDocument()
+    const rows = await table()
+    expect(rows.getByText('물성 카드 확정')).toBeInTheDocument()
+    expect(rows.getByText('DP600 MD')).toBeInTheDocument()
   })
 
   it('모르는 코드도 감추지 않는다', async () => {
@@ -79,7 +92,7 @@ describe('변경 이력', () => {
     render(<AuditPage />)
     // **없는 것을 검사할 때가 더 위험하다.** 안 그려진 화면에서는 무엇이든
     // 없으므로, 기다리지 않으면 **틀린 이유로 통과한다.**
-    await screen.findByText('물성 카드 확정')
+    await table()
     for (const name of [/생성/, /추가/, /편집/, /삭제/, /삭제/]) {
       expect(screen.queryByRole('button', { name })).not.toBeInTheDocument()
     }
@@ -98,7 +111,7 @@ describe('들어온 길', () => {
     // 물어지는 것은 「이거 사람이 확인한 거 맞나」 다.
     const user = userEvent.setup()
     render(<AuditPage />)
-    await screen.findByText('물성 카드 확정')
+    await table()
     await user.selectOptions(screen.getByLabelText('들어온 길로 필터'), 'mcp')
     await waitFor(() => expect(list).toHaveBeenCalledWith({ client: 'mcp' }))
   })
@@ -108,7 +121,7 @@ describe('들어온 길', () => {
     // 거른 결과가 비었을 때 앞의 말만 하면 거른 줄을 잊는다.
     const user = userEvent.setup()
     render(<AuditPage />)
-    await screen.findByText('물성 카드 확정')
+    await table()
     list.mockResolvedValue([])
     await user.selectOptions(screen.getByLabelText('들어온 길로 필터'), 'mcp')
     expect(await screen.findByText(/아직 AI 가 쓴 적이 없다는 뜻/)).toBeInTheDocument()
@@ -119,8 +132,9 @@ describe('들어온 길', () => {
       entry({ action: 'card.created_by_client', client: 'mcp', actor_label: '홍길동' }),
     ])
     render(<AuditPage />)
-    expect(await screen.findByText('AI 가 물성 카드 생성')).toBeInTheDocument()
+    const rows = await table()
+    expect(rows.getByText('AI 가 물성 카드 생성')).toBeInTheDocument()
     // 배지로 짚는다 — 같은 말이 위쪽 「경로」 고르개에도 있다.
-    expect(screen.getByTitle(/AI\(MCP\) 를 거쳐 한 일입니다/)).toBeInTheDocument()
+    expect(rows.getByTitle(/AI\(MCP\) 를 거쳐 한 일입니다/)).toBeInTheDocument()
   })
 })
