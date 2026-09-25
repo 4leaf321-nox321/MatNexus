@@ -87,6 +87,30 @@ function Invoke-Native([string]$exe, [string[]]$arguments, [string]$what, [int[]
     return $code
 }
 
+<#
+파일스토어가 **어디 있나 — 앱이 보는 곳을 본다**(`backend\.env` 의 FILESTORE_DIR, 2026-09-25).
+
+전에는 `<AppPath>_data\filestore` 로 박아 두었다. 설치가 .env 에 그 값을 적으므로 평소에는
+같았지만, 저장소를 다른 드라이브로 옮기려고 .env 만 고치면 **백업은 옛 폴더를 뜨거나
+「파일스토어가 없습니다」 경고만 남기고 건너뛰었다** — 새 시험 파일이 조용히 백업에서 빠진다.
+복구도 옛 자리에 되돌려 앱이 못 찾았다. DB 접속 정보를 .env 에서 읽는 것과 같은 이유다 —
+스크립트가 따로 설정을 가지면 앱과 다른 것을 다룬다. 적혀 있지 않으면 설치의 기본 자리다.
+#>
+function Get-FilestoreDir([string]$appEnv, [string]$appPath) {
+    $fallback = Join-Path ($appPath + '_data') 'filestore'
+    if (-not ($appEnv -and (Test-Path $appEnv))) { return $fallback }
+    $line = Get-Content $appEnv -Encoding UTF8 |
+        Where-Object { $_ -match '^\s*FILESTORE_DIR\s*=' } | Select-Object -Last 1
+    if (-not $line) { return $fallback }
+    $value = ($line -replace '^\s*FILESTORE_DIR\s*=', '').Trim().Trim([char]34).Trim([char]39)
+    if (-not $value) { return $fallback }
+    # 상대 경로면 앱이 도는 자리(backend)를 기준으로 푼다 — 앱과 같은 곳을 가리키게.
+    if (-not [System.IO.Path]::IsPathRooted($value)) {
+        $value = Join-Path (Join-Path $appPath 'backend') $value
+    }
+    return $value
+}
+
 $envFile = Join-Path $AppPath 'backend\.env'
 if (-not (Test-Path $envFile)) { throw "backend\.env 를 찾을 수 없습니다: $envFile" }
 
@@ -100,7 +124,6 @@ if ($dsn -notmatch '://(?<user>[^:]+):(?<pw>[^@]*)@(?<host>[^:/]+):(?<port>\d+)/
 $dbUser = $Matches['user']; $dbPw = $Matches['pw']
 $dbHost = $Matches['host']; $dbPort = $Matches['port']; $dbName = $Matches['db']
 
-$dataPath = $AppPath + '_data'
 $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
 $dbDir = Join-Path $BackupRoot 'db'
 $envDir = Join-Path $BackupRoot 'env'
@@ -138,7 +161,7 @@ Move-Item -Force $partPath $dumpPath
 # --- 운영 데이터: 미러 ------------------------------------------------------------
 # robocopy 종료 코드는 비트 플래그다 — 0~7 이 성공(1 = 복사함, 2 = 여분 있음, 4 = 불일치),
 # 8 이상이 실패. 5.1 이 stderr 를 오류로 바꾸는 것과 별개로 코드로 판정한다.
-$storeSource = Join-Path $dataPath 'filestore'
+$storeSource = Get-FilestoreDir $envFile $AppPath
 $fileCount = 0
 if (Test-Path $storeSource) {
     Write-Log "파일스토어 미러: $storeSource → $storeTarget"
@@ -177,7 +200,7 @@ $dumpMb = [math]::Round((Get-Item $dumpPath).Length / 1MB, 1)
     "받은 시각   : $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')",
     "앱 경로     : $AppPath",
     "데이터베이스: $dbName @ ${dbHost}:${dbPort}  ($(Split-Path $dumpPath -Leaf), ${dumpMb}MB)",
-    "파일스토어  : $fileCount 개 파일 (미러: $storeTarget)",
+    "파일스토어  : $fileCount 개 파일 (원본: $storeSource → 미러: $storeTarget)",
     "보관        : 일 ${KeepDaily}벌 + 일요일분 ${KeepWeekly}벌 (덤프 $($keep.Count)개 남음)",
     '',
     '복구 방법:',

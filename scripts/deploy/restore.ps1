@@ -90,7 +90,7 @@ Windows PowerShell 5.1 은 네이티브 명령이 stderr 로 한 줄만 내도 �
 오류로 바꾼다. `pg_restore` 는 진행 상황을 stderr 로 내므로 그대로 두면 성공한
 복구가 실패로 보인다 — 판정은 **종료 코드로만** 한다.
 #>
-function Invoke-Native([string]$exe, [string[]]$arguments, [string]$what) {
+function Invoke-Native([string]$exe, [string[]]$arguments, [string]$what, [int[]]$okCodes = @(0)) {
     $previous = $ErrorActionPreference
     $ErrorActionPreference = 'Continue'
     try {
@@ -99,7 +99,31 @@ function Invoke-Native([string]$exe, [string[]]$arguments, [string]$what) {
     } finally {
         $ErrorActionPreference = $previous
     }
-    if ($code -ne 0) { throw "$what 실패 (exit $code)" }
+    if ($okCodes -notcontains $code) { throw "$what 실패 (exit $code)" }
+}
+
+<#
+파일스토어가 **어디 있나 — 앱이 보는 곳을 본다**(`backend\.env` 의 FILESTORE_DIR, 2026-09-25).
+
+전에는 `<AppPath>_data\filestore` 로 박아 두었다. 설치가 .env 에 그 값을 적으므로 평소에는
+같았지만, 저장소를 다른 드라이브로 옮기려고 .env 만 고치면 **백업은 옛 폴더를 뜨거나
+「파일스토어가 없습니다」 경고만 남기고 건너뛰었다** — 새 시험 파일이 조용히 백업에서 빠진다.
+복구도 옛 자리에 되돌려 앱이 못 찾았다. DB 접속 정보를 .env 에서 읽는 것과 같은 이유다 —
+스크립트가 따로 설정을 가지면 앱과 다른 것을 다룬다. 적혀 있지 않으면 설치의 기본 자리다.
+#>
+function Get-FilestoreDir([string]$appEnv, [string]$appPath) {
+    $fallback = Join-Path ($appPath + '_data') 'filestore'
+    if (-not ($appEnv -and (Test-Path $appEnv))) { return $fallback }
+    $line = Get-Content $appEnv -Encoding UTF8 |
+        Where-Object { $_ -match '^\s*FILESTORE_DIR\s*=' } | Select-Object -Last 1
+    if (-not $line) { return $fallback }
+    $value = ($line -replace '^\s*FILESTORE_DIR\s*=', '').Trim().Trim([char]34).Trim([char]39)
+    if (-not $value) { return $fallback }
+    # 상대 경로면 앱이 도는 자리(backend)를 기준으로 푼다 — 앱과 같은 곳을 가리키게.
+    if (-not [System.IO.Path]::IsPathRooted($value)) {
+        $value = Join-Path (Join-Path $appPath 'backend') $value
+    }
+    return $value
 }
 
 # --- 백업 확인 ----------------------------------------------------------------
@@ -223,13 +247,21 @@ try {
     # --- 파일스토어 ------------------------------------------------------------
     $storeTarget = $null
     if ($AppPath) {
-        $storeTarget = Join-Path ($AppPath + '_data') 'filestore'
+        # 앱의 .env 를 본다 — 백업의 .env 는 옛 서버의 경로를 들고 있을 수 있다.
+        $storeTarget = Get-FilestoreDir (Join-Path $AppPath 'backend\.env') $AppPath
         if (Test-Path $storeSource) {
-            Write-Log "파일스토어 되돌리기: $storeTarget"
-            New-Item -ItemType Directory -Force -Path (Split-Path $storeTarget) | Out-Null
+            Write-Log "파일스토어 되돌리기: $storeSource → $storeTarget"
+            New-Item -ItemType Directory -Force -Path $storeTarget | Out-Null
             # **지우고 넣지 않는다.** 백업에 없는 파일이 지금 있을 수 있고,
-            # 그것을 지우는 판단은 이 스크립트가 할 것이 아니다.
-            Copy-Item -Recurse -Force $storeSource $storeTarget
+            # 그것을 지우는 판단은 이 스크립트가 할 것이 아니다 — 그래서 /MIR 가 아니라 /E.
+            #
+            # **폴더를 통째로 복사하지 않고 안의 것을 넣는다.** 전에는 `Copy-Item -Recurse
+            # <원본> <대상>` 이었는데, 대상이 이미 있으면 그 **안에** `filestore\` 를 한 겹 더
+            # 만든다(PowerShell 의 동작). 운영 중인 서버에 되돌리면 파일이 `filestore\filestore\…`
+            # 로 들어가고, 아래 검사는 원래 있던 파일을 보고 「전부 있다」 고 통과시켰다(2026-09-25).
+            # robocopy 종료 코드는 비트 플래그다 — 0~7 이 성공, 8 이상이 실패.
+            Invoke-Native 'robocopy.exe' @($storeSource, $storeTarget, '/E', '/R:2', '/W:5',
+                '/NFL', '/NDL', '/NJH', '/NP') 'robocopy' @(0, 1, 2, 3, 4, 5, 6, 7) | Out-Null
         } else {
             Write-Warning '백업에 파일스토어가 없습니다. DB 만 되돌렸습니다.'
         }

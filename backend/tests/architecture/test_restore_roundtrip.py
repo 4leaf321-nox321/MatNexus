@@ -39,6 +39,7 @@ from app.config import get_settings
 
 ROOT = Path(__file__).resolve().parents[3]
 RESTORE = ROOT / "scripts" / "deploy" / "restore.ps1"
+BACKUP = ROOT / "scripts" / "deploy" / "backup.ps1"
 
 #: 도구가 없으면 이 시험은 건너뛴다. **없다고 실패로 적지 않는다** — CI 러너에
 #: postgres 클라이언트가 없을 수 있고, 그것은 이 스크립트의 문제가 아니다.
@@ -280,3 +281,94 @@ def test_있는_DB_를_말없이_덮지_않는다(backup: Path, spare: str, asci
     # -Force 면 덮되, 무엇을 지우는지 먼저 적는다.
     forced = _restore(backup, spare, app=ascii_tmp / "app", force=True)
     assert forced.returncode == 0, _text(forced)
+
+
+# ── 파일스토어의 자리 — 앱이 보는 곳(`backend\.env` 의 FILESTORE_DIR) ─────────────────
+#
+# 실측(2026-09-25): 운영에서 저장소를 다른 드라이브로 옮기려고 .env 만 고치면, 백업은
+# `<AppPath>_data\filestore` 를 박아 두고 있어 **옛 폴더를 뜨거나 건너뛰었다** — 새 시험
+# 파일이 조용히 백업에서 빠진다. 복구도 옛 자리에 되돌렸고, 이미 있는 폴더에는 그 안에
+# `filestore\` 를 한 겹 더 만들었다.
+
+
+def _app_with_env(app: Path, **lines: str) -> Path:
+    """`<app>\backend\.env` 를 적는다 — 스크립트가 읽는 앱의 설정."""
+    (app / "backend").mkdir(parents=True, exist_ok=True)
+    env = app / "backend" / ".env"
+    env.write_text(
+        "".join(f"{key}={value}\n" for key, value in lines.items()), encoding="utf-8"
+    )
+    return env
+
+
+def test_앱이_보는_저장소로_되돌린다(backup: Path, spare: str, ascii_tmp: Path) -> None:
+    """.env 의 FILESTORE_DIR 이 설치의 기본 자리가 아니면 **그쪽으로** 되돌린다."""
+    app = ascii_tmp / "app"
+    moved = ascii_tmp / "d_drive" / "filestore"
+    _app_with_env(app, FILESTORE_DIR=str(moved))
+
+    done = _restore(backup, spare, app=app)
+    assert done.returncode == 0, _text(done)
+    assert (moved / "a" / "one.tra").exists(), "앱이 보는 자리로 안 돌아왔다"
+    assert not (ascii_tmp / "app_data" / "filestore").exists(), "옛 기본 자리에 되돌렸다"
+
+
+def test_있는_저장소_안에_한_겹_더_넣지_않는다(
+    backup: Path, spare: str, ascii_tmp: Path
+) -> None:
+    """운영 중인 서버에 되돌리는 경우 — 저장소 폴더가 이미 있다. `Copy-Item -Recurse` 는 그
+    **안에** `filestore\` 를 만들어 파일이 엉뚱한 자리로 갔고, 검사는 원래 있던 파일을 보고
+    통과시켰다. 원래 있던 파일은 지우지 않는다(백업에 없는 것을 지우는 판단은 복구의 일이
+    아니다)."""
+    app = ascii_tmp / "app"
+    store = ascii_tmp / "app_data" / "filestore"
+    store.mkdir(parents=True)
+    (store / "keep.tra").write_bytes(b"k")
+
+    done = _restore(backup, spare, app=app)
+    assert done.returncode == 0, _text(done)
+    assert (store / "a" / "one.tra").exists()
+    assert (store / "b" / "one.parquet").exists()
+    assert not (store / "filestore").exists(), "저장소 안에 filestore 를 한 겹 더 만들었다"
+    assert (store / "keep.tra").exists(), "있던 파일을 지웠다"
+
+
+def test_백업은_앱이_보는_저장소를_뜬다(backup: Path, ascii_tmp: Path) -> None:
+    """.env 의 FILESTORE_DIR 을 따라간다 — 옛 기본 자리에 옛 파일이 남아 있어도 그쪽을 안
+    본다."""
+    dsn = next(
+        line
+        for line in (backup / ".env").read_text(encoding="utf-8").splitlines()
+        if line.startswith("DATABASE_URL=")
+    ).removeprefix("DATABASE_URL=")
+    app = ascii_tmp / "app"
+    moved = ascii_tmp / "d_drive" / "filestore"
+    (moved / "a").mkdir(parents=True)
+    (moved / "a" / "new.tra").write_bytes(b"n")
+    # 옮기기 전의 자리 — 여기를 뜨면 새 파일이 빠진다.
+    stale = ascii_tmp / "app_data" / "filestore"
+    stale.mkdir(parents=True)
+    (stale / "old.tra").write_bytes(b"o")
+    _app_with_env(app, DATABASE_URL=dsn, FILESTORE_DIR=str(moved))
+    root = ascii_tmp / "backup_root"
+
+    done = subprocess.run(
+        [
+            "powershell",
+            "-NoProfile",
+            "-NonInteractive",
+            "-File",
+            str(BACKUP),
+            "-AppPath",
+            str(app),
+            "-BackupRoot",
+            str(root),
+            "-PgDumpExe",
+            str(_tool("pg_dump")),
+        ],
+        capture_output=True,
+    )
+    assert done.returncode == 0, _text(done)
+    assert (root / "filestore" / "a" / "new.tra").exists(), "앱이 보는 저장소를 안 떴다"
+    assert not (root / "filestore" / "old.tra").exists(), "옛 기본 자리를 떴다"
+    assert str(moved) in (root / "LAST_BACKUP.txt").read_text(encoding="utf-8-sig")
