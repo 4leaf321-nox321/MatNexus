@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import uuid
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -25,6 +26,16 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.modules.audit.models import AuditEntry
+from app.modules.tests import services as test_services
+from app.modules.tests.definitions import ensure_builtin_test_types
+
+TRA = Path(__file__).resolve().parents[1] / "fixtures" / "Example.tra"
+
+#: 시편 치수를 숫자로 직접 준다 — 여기서 보는 것은 계산이 아니라 **남았는가** 다.
+STEPS: list[dict[str, Any]] = [
+    {"plugin": "tensile.engineering", "options": {"gauge_length": 0.05, "area": 12.12e-6}},
+    {"plugin": "tensile.strength", "options": {}},
+]
 
 TAXONOMY = {"family": "Metal", "category": "Steel", "grade": "HISTGRADE"}
 
@@ -199,6 +210,124 @@ class Test남이_고치면:
         )
         assert plan.status_code == 200, plan.text
         assert _mine(client, alice) == []
+
+
+class Test바꾼_줄만:
+    """**판정을 지난 줄이 아니라 바꾼 줄만** 적는다(2026-09-25 점검에서 잡았다).
+
+    처음에는 일괄 경로가 판정하는 순간 적었다. 그 뒤에 「이미 같은 값」 · 「시료가 남아
+    있다」 로 건너뛴 줄에도 「고쳤다」 가 남아, 등록자가 없는 일을 봤다. 처리 배치는
+    시험마다 커밋해서 한 줄로 묶이지도 않았다."""
+
+    def test_이미_같은_값이던_시편은_안_센다(
+        self, client: TestClient, people: dict[str, tuple[str, dict[str, str]]]
+    ) -> None:
+        _, alice = people["alice"]
+        _, bora = people["bora"]
+        material = _material(client, alice)
+        sample = client.post(
+            f"/api/materials/{material['id']}/samples", json={}, headers=alice
+        ).json()
+        ids = [
+            client.post(
+                f"/api/samples/{sample['id']}/specimens",
+                json={"orientation": orientation},
+                headers=alice,
+            ).json()["id"]
+            for orientation in ("MD", "MD", "TD")
+        ]
+        done = client.post(
+            "/api/specimens/bulk-update",
+            json={"specimen_ids": ids, "field": "orientation", "value": "TD"},
+            headers=bora,
+        ).json()
+        assert (done["updated"], done["unchanged"]) == (2, 1)
+        seen = [one for one in _mine(client, alice) if one["action"] == "data.edited_by_other"]
+        assert len(seen) == 1
+        assert seen[0]["changes"]["count"] == 2, "안 바뀐 시편까지 셌다"
+
+    def test_막혀서_안_지운_재료는_안_남는다(
+        self, client: TestClient, people: dict[str, tuple[str, dict[str, str]]]
+    ) -> None:
+        """판정은 지났지만 시료가 남아 막힌 재료 — 지우지 않았으니 「고쳤다」 도 없다. 함께
+        고른 다른 재료는 지워졌으니 그것만 남는다."""
+        _, alice = people["alice"]
+        _, bora = people["bora"]
+        kept = _material(client, alice)
+        client.post(f"/api/materials/{kept['id']}/samples", json={}, headers=alice)
+        gone = _material(client, alice)
+        done = client.post(
+            "/api/materials/delete",
+            json={"material_ids": [kept["id"], gone["id"]]},
+            headers=bora,
+        )
+        assert done.status_code == 200, done.text
+        assert len(done.json()["blocked"]) == 1
+        touched = {
+            one["target_id"]
+            for one in _mine(client, alice)
+            if one["action"] == "data.edited_by_other"
+        }
+        assert touched == {gone["id"]}, "막힌 재료에도 「고쳤다」 가 남았다"
+
+    def test_남의_시험을_배치로_채택하면_한_줄이다(
+        self,
+        client: TestClient,
+        db: Session,
+        people: dict[str, tuple[str, dict[str, str]]],
+    ) -> None:
+        """배치는 시험마다 커밋한다(하나가 실패해도 나머지는 남게). 돌면서 적으면 시험 수만큼
+        줄이 생겨, 끝의 한 트랜잭션에서 등록자마다 한 줄로 적는다."""
+        ensure_builtin_test_types(db)
+        db.commit()
+        _, alice = people["alice"]
+        _, bora = people["bora"]
+        material = _material(client, alice)
+        sample = client.post(
+            f"/api/materials/{material['id']}/samples", json={}, headers=alice
+        ).json()
+        runs = []
+        for _ in range(2):
+            specimen = client.post(
+                f"/api/samples/{sample['id']}/specimens",
+                json={"orientation": "MD"},
+                headers=alice,
+            ).json()
+            made = client.post(
+                "/api/test-runs",
+                data={
+                    "specimen_id": specimen["id"],
+                    "test_type": "tensile",
+                    "conditions": "{}",
+                },
+                files={"file": ("Example.tra", TRA.read_bytes())},
+                headers=alice,
+            ).json()
+            assert test_services.parse_run(db, uuid.UUID(made["id"])) == "parsed"
+            runs.append(made["id"])
+
+        done = client.post(
+            "/api/processing/batch",
+            json={"test_run_ids": runs, "steps": STEPS, "adopt": True},
+            headers=bora,
+        )
+        assert done.status_code == 200, done.text
+        assert done.json()["succeeded"] == 2
+        seen = [one for one in _mine(client, alice) if one["action"] == "data.edited_by_other"]
+        assert len(seen) == 1, "배치 채택이 시험마다 한 줄로 남았다"
+        assert seen[0]["target_table"] == "test_runs"
+        assert seen[0]["changes"]["count"] == 2
+
+        # 돌려 보기만 한 배치는 아무것도 안 바꾸니 안 남는다.
+        client.post(
+            "/api/processing/batch",
+            json={"test_run_ids": runs, "steps": STEPS, "adopt": True, "dry_run": True},
+            headers=bora,
+        )
+        again = [
+            one for one in _mine(client, alice) if one["action"] == "data.edited_by_other"
+        ]
+        assert len(again) == 1
 
 
 class Test제_이력:

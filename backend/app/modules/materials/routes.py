@@ -988,7 +988,8 @@ def bulk_delete_plan(
     for material_id in payload.material_ids:
         try:
             material = services.get_material(db, user, material_id)
-            permissions.require_edit(db, user, material, code="MNX-MATERIALS-0008")
+            # 미리보기다 — 커밋이 없어 기록도 안 남지만, 뜻을 드러내 적는다.
+            permissions.require_edit(db, user, material, code="MNX-MATERIALS-0008", note=False)
         except AppError as exc:
             blocked.append(MaterialBlockedOut(id=material_id, name=None, reason=exc.message))
             continue
@@ -1036,7 +1037,8 @@ def delete_materials(
     for material_id in payload.material_ids:
         try:
             material = services.get_material(db, user, material_id)
-            permissions.require_edit(db, user, material, code="MNX-MATERIALS-0008")
+            # 막힌 줄을 모으며 도는 길 — 기록은 실제로 지우는 자리에서(`note_edit`).
+            permissions.require_edit(db, user, material, code="MNX-MATERIALS-0008", note=False)
         except AppError as exc:
             # **이름을 모르면 id 라도 준다.** 조용히 세지 않는 것이 요점이다.
             blocked.append(MaterialBlockedOut(id=material_id, name=None, reason=exc.message))
@@ -1079,6 +1081,8 @@ def delete_materials(
                 )
                 continue
 
+        # **여기까지 온 것만 지운다** — 남의 재료면 이제 적는다(위에서 막힌 것은 안 적는다).
+        permissions.note_edit(db, user, material)
         if payload.cascade:
             done = services.delete_tree(db, material, actor=user, now=now)
             tally["samples"] += done.samples
@@ -2408,8 +2412,7 @@ def bulk_update_specimens(
             # **이름을 모르면 id 라도 준다.** 조용히 세지 않는 것이 요점이다.
             blocked.append(str(specimen_id))
             continue
-        # 판정하고, 남의 시편이면 그 사실을 남긴다(`admits` — 일괄로 고친 것도 등록자가 본다).
-        if not permissions.admits(db, user, editor, specimen):
+        if not editor.allows(specimen):
             # 막힌 까닭과 **누구에게 물으면 되는지**를 이름과 함께 준다.
             locked = permissions.locked(db, specimen, code="MNX-MATERIALS-0034")
             blocked.append(f"{specimen.record_name} — {locked.message}")
@@ -2419,6 +2422,9 @@ def bulk_update_specimens(
         if before == raw:
             unchanged += 1
             continue
+        # **바꾸는 줄에서만** 남의 시편인지 적는다 — 이미 같은 값이던 줄까지 적으면 등록자는
+        # 안 바뀐 것을 「고쳤다」 로 본다.
+        permissions.note_edit(db, user, specimen)
 
         if field == "orientation":
             assert raw is not None  # 위에서 걸렀다

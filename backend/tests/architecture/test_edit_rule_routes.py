@@ -58,9 +58,6 @@ MARKERS = (
     "require_contributor(",
     "_require_edit(",
     "_editable_run(",
-    # 일괄 쓰기가 줄마다 묻는 판정 — `editor.allows` 에 「남의 자료를 고쳤다」 는 흔적을 더한
-    # 것이다(2026-09-25). 시편·시험 일괄 수정, 시험 일괄 삭제, 처리 배치의 채택이 이것을 쓴다.
-    "admits(",
 )
 
 #: 손잡이 → 그 안에 있어야 하는 판정.

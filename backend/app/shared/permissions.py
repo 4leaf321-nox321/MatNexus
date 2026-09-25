@@ -472,31 +472,26 @@ def data_steward_names(db: Session) -> list[str]:
     )
 
 
-def require_edit(db: Session, user: User, row: Owned, *, code: str) -> None:
+def require_edit(db: Session, user: User, row: Owned, *, code: str, note: bool = True) -> None:
     """고칠 수 있는가. **자료를 고치는 길은 전부 여기를 지난다**(ADR 0035).
 
     막히면 누가 고칠 수 있는지를 **이름으로** 함께 낸다 — 등록자, 편집을 받은 부서,
     자료 관리자. 화면은 같은 말을 단추 옆에 미리 보인다(`shared/access`).
+
+    허락하면 남의 자료인지 적는다(`note_edit`) — 한 건을 고치는 길은 판정 뒤에 막히면 예외로
+    끝나 커밋이 없으니, 여기서 적어도 **커밋된 쓰기에만** 남는다. **여럿을 돌며 막힌 줄을
+    모으고 나머지를 커밋하는 길은 `note=False` 로 부르고, 실제로 바꾸는 줄에서 `note_edit`
+    을 부른다** — 판정 뒤에 「시료가 남아 있다」 로 건너뛴 재료에 「고쳤다」 가 남으면
+    등록자는 없는 일을 본다(2026-09-25 점검에서 잡았다).
     """
     if editor(db, user).allows(row):
-        _note_edit(db, user, row)
+        if note:
+            note_edit(db, user, row)
         return
     raise locked(db, row, code=code)
 
 
-def admits(db: Session, user: User, judge: Editor, row: Owned) -> bool:
-    """`Editor.allows` 에 **쓰기의 흔적**을 더한 것 — 일괄 쓰기가 줄마다 부른다.
-
-    일괄 수정은 막힌 줄을 모아 알려 주느라 `require_edit`(막히면 멈춘다) 대신 판정을 직접
-    묻는다. 그 길로 고친 남의 자료도 `require_edit` 로 고친 것과 같이 남아야 한다 — 안 그러면
-    자료 관리자가 일괄로 고친 것만 등록자에게 안 보인다."""
-    if not judge.allows(row):
-        return False
-    _note_edit(db, user, row)
-    return True
-
-
-def _note_edit(db: Session, user: User, row: Owned) -> None:
+def note_edit(db: Session, user: User, row: Owned) -> None:
     """**남의 자료를 고치면 남긴다**(2026-09-25, ADR 0035 남은 것).
 
     고칠 권한이 등록자 밖으로 넓어진 대가다 — 자료 관리자와 편집을 받은 부서가 고칠 수

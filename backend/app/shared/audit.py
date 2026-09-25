@@ -236,7 +236,10 @@ def record_edit_by_other(
         )
         return
 
-    key = (registrant_id, table, basis, id(db.get_transaction()))
+    # **트랜잭션 객체를 열쇠에 둔다**(`id()` 가 아니라) — 커밋·롤백 뒤 파이썬이 같은 id 를
+    # 다시 쓰면, 롤백으로 버려진 기록을 계속 고쳐 새 기록이 사라진다. 객체를 쥐고 있으면
+    # 그 id 는 다시 안 쓰인다.
+    key = (registrant_id, table, basis, db.get_transaction())
     groups: dict[Any, dict[str, Any]] = scratch.setdefault("edited_by_other", {})
     group = groups.get(key)
     if group is None:

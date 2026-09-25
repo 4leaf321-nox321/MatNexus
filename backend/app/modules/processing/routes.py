@@ -1202,6 +1202,8 @@ def run_batch(
     items: list[BatchItemOut] = []
     #: 감사 한 줄에 적을 부서. 여러 부서면 비운다(아래).
     workspaces: list[uuid.UUID | None] = []
+    #: 채택까지 된 시험 — 남의 것이면 끝에서 한 번에 적는다(`note_edit`).
+    took: list[TestRun] = []
     for run_id in payload.test_run_ids:
         # 못 보는 시험도 **건별 실패**로 남긴다. 여기서 404 를 던지면 앞의 성공까지
         # 없던 일이 되고, 사람은 무엇이 문제인지 모른 채 처음부터 다시 한다.
@@ -1224,8 +1226,7 @@ def run_batch(
         # **채택까지 걸면 그 시험을 고칠 수 있어야 한다**(ADR 0035). 결과만 쌓는 것은
         # 누구나 하지만, 「이 시험의 물성」 을 바꾸는 것은 고치는 일이다. 미리보기에서도
         # 같은 자리에서 막아야 걸어 보고 나서 놀라지 않는다.
-        # 채택은 그 시험을 고치는 일이라, 남의 시험이면 그 사실이 남는다(`admits`).
-        if payload.adopt and not permissions.admits(db, user, editor, run):
+        if payload.adopt and not editor.allows(run):
             locked = permissions.locked(db, run, code="MNX-PROCESSING-0017")
             items.append(
                 BatchItemOut(
@@ -1277,6 +1278,7 @@ def run_batch(
             run.adopted_result_id = stored.id
             _project_summaries(db, run, stored)
             adopted = True
+            took.append(run)
         db.commit()
         db.refresh(stored)
         items.append(
@@ -1296,6 +1298,11 @@ def run_batch(
     # **배치는 한 줄로 남긴다.** 건별로 남기면 한 번 돌린 것이 감사 표 50줄이 되고,
     # 그 표에서 정작 찾을 것(계정·삭제)을 못 찾는다 — 그것이 이 표의 원래 규칙이다.
     if succeeded and not payload.dry_run:
+        # **채택은 그 시험을 고치는 일이다** — 남의 시험을 채택했으면 여기서 한 번에 적는다.
+        # 시험마다 커밋해서(하나가 실패해도 나머지는 남게) 돌면서 적으면 시험 수만큼 줄이
+        # 생긴다. 끝의 한 트랜잭션에 모아 등록자마다 한 줄로 남긴다 — 실제로 채택된 것만.
+        for one in took:
+            permissions.note_edit(db, user, one)
         spaces = {one for one in workspaces if one is not None}
         audit.record_by_client(
             db,

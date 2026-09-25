@@ -1955,8 +1955,7 @@ def bulk_update_runs(
             # **이름을 모르면 id 라도 준다.** 조용히 세지 않는 것이 요점이다.
             blocked.append(str(run_id))
             continue
-        # 판정하고, 남의 시험이면 그 사실을 남긴다(`admits`).
-        if not permissions.admits(db, user, editor, run):
+        if not editor.allows(run):
             # 막힌 까닭과 **누구에게 물으면 되는지**를 이름과 함께 준다.
             locked = permissions.locked(db, run, code="MNX-TESTS-0042")
             blocked.append(f"{run.record_name} — {locked.message}")
@@ -1992,6 +1991,8 @@ def bulk_update_runs(
         if before == after:
             unchanged += 1
             continue
+        # **바뀐 줄에서만** 남의 시험인지 적는다 — 이미 같은 값이던 줄은 안 적는다.
+        permissions.note_edit(db, user, run)
 
         audit.record(
             db,
@@ -2038,10 +2039,11 @@ def delete_runs(
             # **이름을 모르면 id 라도 준다.** 조용히 세지 않는 것이 요점이다.
             blocked.append(str(run_id))
             continue
-        if not permissions.admits(db, user, editor, run):
+        if not editor.allows(run):
             locked = permissions.locked(db, run, code="MNX-TESTS-0042")
             blocked.append(f"{run.record_name} — {locked.message}")
             continue
+        permissions.note_edit(db, user, run)
         run.deleted_at = _now()
         vocabulary_services.release_bindings(db, run, vocabulary_services.TEST_RUN_BINDINGS)
         audit.record(
