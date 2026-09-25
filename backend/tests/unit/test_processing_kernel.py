@@ -1877,11 +1877,16 @@ class Test항복_강하_정리:
                 mild_steel(),
             )
 
-    def test_하항복점을_소성_시작으로_넘길_수_있다(self) -> None:
-        # 규격(ISO 6892-1)의 값이자, `tensile.true_plastic` 의 항복강도 자리에 `@` 로 들어간다.
+    def test_외부_하항복강도_참조를_소성_시작에_연결한다(self) -> None:
+        # 외부 입력으로 받은 사용자 지정 proof_stress 참조도 호환해 첫 곡선 교점을 쓴다.
+        frame = mild_steel()
+        strain = frame.columns["strain_engineering"]
+        stress = frame.columns["stress_engineering"]
+        above = int(np.flatnonzero(stress >= 278e6)[0])
+        fraction = (278e6 - stress[above - 1]) / (stress[above] - stress[above - 1])
+        expected_strain = strain[above - 1] + fraction * (strain[above] - strain[above - 1])
         result = processing.apply(
             [
-                Step("tensile.yield_drop", {"method": "lower_yield"}),
                 Step(
                     "tensile.elastic_modulus", {"method": "manual", "manual_modulus": E_TRUE}
                 ),
@@ -1893,12 +1898,15 @@ class Test항복_강하_정리:
                     },
                 ),
             ],
-            mild_steel(),
+            frame,
+            given=(processing.Scalar("lower_yield_strength", "외부 하항복강도", 278e6, "Pa"),),
         )
-        plastic = result.frame.columns["stress_true"][
-            result.frame.columns["strain_true_plastic"] > 0
-        ]
-        assert plastic[0] == pytest.approx(278e6, rel=0.02)
+        assert result.frame.columns["strain_engineering"][0] == pytest.approx(expected_strain)
+        assert result.frame.columns["stress_engineering"][0] == pytest.approx(278e6)
+        assert result.frame.columns["strain_true_plastic"][0] == 0.0
+        assert result.frame.columns["stress_true"][0] == pytest.approx(
+            278e6 * (1.0 + expected_strain)
+        )
         assert "proof_strain" not in result.stages[-1].options
         assert any("좌표 없이" in note for note in result.notes)
 
