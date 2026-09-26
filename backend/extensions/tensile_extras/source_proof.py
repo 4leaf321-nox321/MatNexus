@@ -249,7 +249,7 @@ def source_proof_stress(frame: Frame, options: dict[str, Any]) -> StepResult:
             "1",
         ),
         Scalar(
-            "source_proof_coincident_forward_residual_segment_count",
+            "source_proof_forward_coincident_segment_count",
             "내력 검색 전진 일치 잔차 선분 수",
             float(coincident_count),
             "1",

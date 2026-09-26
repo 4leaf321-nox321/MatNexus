@@ -378,13 +378,13 @@ register(
             si_unit="1",
         ),
         Produced(
-            key="source_proof_coincident_forward_residual_segment_count",
+            key="source_proof_forward_coincident_segment_count",
             label="전진 일치 잔차 선분 수",
             si_unit="1",
         ),
     ),
     order=72,
-    version="1",
+    version="2",
     prepare_options=source_proof.prepare_options,
 )(source_proof.source_proof_stress)
 
@@ -1148,7 +1148,7 @@ register(
             "1",
         ),
         Produced(
-            "band_model_source_event_isotonic_released_anchor_count",
+            "band_model_source_iso_released_anchor_count",
             "연결 성분에서 해제한 내부 앵커 수",
             "1",
         ),
@@ -1158,7 +1158,7 @@ register(
             "1",
         ),
         Produced(
-            "band_model_source_event_isotonic_max_abs_distortion",
+            "band_model_source_iso_max_abs_distortion",
             "등위회귀 최대 절대 왜곡",
             "Pa",
         ),
@@ -1168,14 +1168,14 @@ register(
             "Pa",
         ),
         Produced(
-            "band_model_source_event_isotonic_remaining_unedited_declines",
+            "band_model_source_iso_remaining_unedited_declines",
             "적합하지 않은 인접 원행에 남은 하강 수",
             "1",
         ),
         *_MODEL_CARD_EFFECT_VALUES,
     ),
     order=82,
-    version="3",
+    version="4",
     prepare_options=band_model.prepare_options,
 )(band_model.band_model)
 

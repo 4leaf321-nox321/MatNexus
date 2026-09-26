@@ -2644,7 +2644,7 @@ def _source_event_isotonic_no_band_result(
             "1",
         ),
         Scalar(
-            "band_model_source_event_isotonic_released_anchor_count",
+            "band_model_source_iso_released_anchor_count",
             "연결 성분에서 해제한 내부 앵커 수",
             float(released_internal_anchors),
             "1",
@@ -2656,7 +2656,7 @@ def _source_event_isotonic_no_band_result(
             "1",
         ),
         Scalar(
-            "band_model_source_event_isotonic_max_abs_distortion",
+            "band_model_source_iso_max_abs_distortion",
             "등위회귀 최대 절대 왜곡",
             maximum_distortion,
             "Pa",
@@ -2668,7 +2668,7 @@ def _source_event_isotonic_no_band_result(
             "Pa",
         ),
         Scalar(
-            "band_model_source_event_isotonic_remaining_unedited_declines",
+            "band_model_source_iso_remaining_unedited_declines",
             "적합하지 않은 인접 원행에 남은 하강 수",
             float(unedited_declines),
             "1",
