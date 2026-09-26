@@ -27,6 +27,7 @@ from . import (  # noqa: F401  (card 는 import 만으로 블록·렌더러를 �
     model_support,
     plastic_domain,
     prepeak_prefix,
+    proof_anchor_guard,
     ratio,
     source_elastic,
     source_proof,
@@ -106,6 +107,77 @@ register(
     scope="uniform_true_plastic_card",
     candidate_only=True,
 )(prepeak_prefix.prepeak_prefix)
+
+register(
+    id="tensile.proof_anchor_guard",
+    kind="processing",
+    label="진소성 proof anchor 검증",
+    applies_to=("tensile",),
+    requires_channels=(("displacement",), ("force",)),
+    params=(
+        ParamSpec(
+            name="proof_stress",
+            label="항복강도",
+            type="float",
+            required=True,
+            unit="Pa",
+            help="진소성변형률 0에 놓인 proof 응력의 공칭값입니다.",
+        ),
+        ParamSpec(
+            name="proof_strain",
+            label="항복 변형률",
+            type="float",
+            required=True,
+            unit="1",
+            dimension="strain",
+            help="proof 응력과 짝지은 공학 변형률입니다.",
+        ),
+        ParamSpec(
+            name="x",
+            label="진소성변형률 열",
+            type="str",
+            role="column",
+            default=proof_anchor_guard.DEFAULT_X,
+            unit="1",
+            dimension="strain",
+        ),
+        ParamSpec(
+            name="stress",
+            label="진응력 열",
+            type="str",
+            role="column",
+            default=proof_anchor_guard.DEFAULT_STRESS,
+            unit="Pa",
+        ),
+    ),
+    makes_values=(
+        Produced(
+            "proof_anchor_expected_stress",
+            "proof anchor 예상 진응력",
+            "Pa",
+        ),
+        Produced(
+            "proof_anchor_observed_stress",
+            "proof anchor 관측 진응력",
+            "Pa",
+        ),
+        Produced(
+            "proof_anchor_error_pa",
+            "proof anchor 차이 (관측-예상)",
+            "Pa",
+        ),
+        Produced(
+            "proof_anchor_verified_code",
+            "proof anchor 검증 상태 (1=검증)",
+            "1",
+        ),
+    ),
+    order=91,
+    version="1",
+    prepare_options=proof_anchor_guard.prepare_options,
+    scope="uniform_true_plastic_card",
+    candidate_only=True,
+)(proof_anchor_guard.proof_anchor_guard)
 
 _MODEL_CARD_EFFECT_VALUES = (
     Produced("model_card_input_points", "모델 단계 입력 관측점 수", "1"),
