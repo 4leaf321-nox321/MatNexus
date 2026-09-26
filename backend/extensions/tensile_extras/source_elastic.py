@@ -11,12 +11,20 @@ import numpy as np
 from matcore.processing import Frame, ProcessingError, Scalar, StepResult
 from matcore.processing.tensile import elastic_modulus as _core_elastic_modulus
 
-AUTO_POLICY = "auto_rows_v1"
+AUTO_POLICY_V1 = "auto_rows_v1"
+AUTO_POLICY_V2 = "auto_rows_v2"
+# Keep the public alias used by existing recipes and callers.  v1 remains the
+# default so a saved recipe that omits ``policy`` is replayed byte-for-byte.
+AUTO_POLICY = AUTO_POLICY_V1
 MANUAL_POLICY = "manual_rows"
-POLICIES = (AUTO_POLICY, MANUAL_POLICY)
+# Keep the legacy metadata contract stable.  The v2 route is registered under
+# its own plugin id so old clients still see the original two choices.
+POLICIES = (AUTO_POLICY_V1, MANUAL_POLICY)
+V2_POLICIES = (AUTO_POLICY_V2,)
 AUTO_LOW_FRACTION = 0.10
 AUTO_HIGH_FRACTION = 0.40
 MIN_FIT_ROWS = 5
+MIN_V2_SUPPORT_MEMBERS = MIN_FIT_ROWS + 1
 MIN_R_SQUARED = 0.98
 
 _STRAIN = "strain_engineering"
@@ -37,20 +45,34 @@ class _RawFit:
     reason: str
 
 
+@dataclass(frozen=True)
+class _LooCheck:
+    """Fixed-window leave-one-out diagnostics for the v2 auto policy."""
+
+    minimum_r_squared: float | None
+    failed_rows: tuple[int, ...]
+    worst_failed_row: int | None
+    worst_failed_reason: str | None
+
+
 def source_elastic_modulus(frame: Frame, options: dict[str, Any]) -> StepResult:
     """Measure E on original acquired rows and return the exact input frame.
 
     ``auto_rows_v1`` uses the first global stress maximum and the original-row
-    envelope of pre-peak rows in the 10--40% stress band. A globally strict
-    strain input delegates to the existing public elastic-modulus function so
-    its scalar and note behavior remains exact. Non-strict inputs fit the
-    complete envelope in acquisition order, including any local reversals.
+    envelope of pre-peak rows in the 10--40% stress band. ``auto_rows_v2`` uses
+    that exact same fixed window and baseline fit, then requires every
+    leave-one-original-row-out fit to have a finite positive slope and
+    ``R² >= MIN_R_SQUARED`` before exposing E to downstream steps. A globally
+    strict strain input delegates to the existing public elastic-modulus
+    function so v1's scalar and note behavior remains exact. Non-strict inputs
+    fit the complete envelope in acquisition order, including any local
+    reversals.
     """
     policy = _validated_policy(options)
     strain_key, stress_key = _channel_keys(options)
     strain, stress = _pair(frame, strain_key, stress_key)
 
-    if policy == AUTO_POLICY:
+    if policy in (AUTO_POLICY_V1, AUTO_POLICY_V2):
         if not np.all(np.isfinite(stress)):
             raise ProcessingError(
                 "원행 자동 탄성 창의 최대 응력을 고를 수 없습니다 — 응력 열에 "
@@ -62,7 +84,7 @@ def source_elastic_modulus(frame: Frame, options: dict[str, Any]) -> StepResult:
                 frame,
                 {"method": "auto", "strain": strain_key, "stress": stress_key},
             )
-            return _augment_core_result(
+            result = _augment_core_result(
                 frame,
                 core,
                 policy=policy,
@@ -71,6 +93,16 @@ def source_elastic_modulus(frame: Frame, options: dict[str, Any]) -> StepResult:
                 source_rows=members,
                 strain=strain,
             )
+            if policy == AUTO_POLICY_V2 and members.size:
+                rows = np.arange(int(members[0]), int(members[-1]) + 1, dtype=np.int64)
+                return _apply_loo_guard(
+                    result,
+                    strain[rows],
+                    stress[rows],
+                    source_rows=rows,
+                    support_members=int(members.size),
+                )
+            return result
         if members.size == 0:
             return _no_band_result(
                 frame,
@@ -159,26 +191,48 @@ def source_elastic_modulus(frame: Frame, options: dict[str, Any]) -> StepResult:
     effective_options = _effective_options(
         policy, strain_key, stress_key, start_index=start_index, end_index=end_index
     )
-    return StepResult(
+    result = StepResult(
         frame,
         notes=(note,),
         scalars=output_scalars,
         effective_options=effective_options,
     )
+    if policy == AUTO_POLICY_V2:
+        return _apply_loo_guard(
+            result,
+            fit_strain,
+            fit_stress,
+            source_rows=rows,
+            support_members=int(members.size),
+        )
+    return result
 
 
-def _policy(options: dict[str, Any]) -> str:
+def legacy_source_elastic_modulus(frame: Frame, options: dict[str, Any]) -> StepResult:
+    """Preserve the legacy route's two-policy API contract."""
     policy = options.get("policy", AUTO_POLICY)
     if policy not in POLICIES:
         raise ProcessingError(
             f"원행 탄성 정책은 {', '.join(POLICIES)} 중 하나여야 합니다: {policy!r}."
+        )
+    return source_elastic_modulus(frame, options)
+
+
+def _policy(options: dict[str, Any]) -> str:
+    policy = options.get("policy", AUTO_POLICY)
+    allowed = (*POLICIES, *V2_POLICIES)
+    if policy not in allowed:
+        raise ProcessingError(
+            f"원행 탄성 정책은 {', '.join(allowed)} 중 하나여야 합니다: {policy!r}."
         )
     return str(policy)
 
 
 def _validated_policy(options: dict[str, Any]) -> str:
     policy = _policy(options)
-    if policy == AUTO_POLICY and ("start_index" in options or "end_index" in options):
+    if policy in (AUTO_POLICY_V1, AUTO_POLICY_V2) and (
+        "start_index" in options or "end_index" in options
+    ):
         raise ProcessingError(
             "자동 원행 탄성 정책에서는 start_index와 end_index를 지정할 수 없습니다."
         )
@@ -190,6 +244,17 @@ def _validated_policy(options: dict[str, Any]) -> str:
         names = ", ".join(sorted(repr(name) for name in unknown))
         raise ProcessingError(f"원행 탄성 단계에 알 수 없는 옵션이 있습니다: {names}.")
     return policy
+
+
+def prepare_v2_options(options: dict[str, Any]) -> dict[str, Any]:
+    """Supply and constrain the policy for the dedicated v2 plugin route."""
+    prepared = dict(options)
+    policy = prepared.setdefault("policy", AUTO_POLICY_V2)
+    if policy != AUTO_POLICY_V2:
+        raise ProcessingError(
+            f"v2 원행 탄성 플러그인은 정책 '{AUTO_POLICY_V2}'만 지원합니다: {policy!r}."
+        )
+    return prepared
 
 
 def _channel_keys(options: dict[str, Any]) -> tuple[str, str]:
@@ -269,7 +334,12 @@ def _require_finite_pairs(
         )
 
 
-def _centered_ols(strain: np.ndarray, stress: np.ndarray) -> _RawFit:
+def _centered_ols(
+    strain: np.ndarray,
+    stress: np.ndarray,
+    *,
+    minimum_fit_rows: int = MIN_FIT_ROWS,
+) -> _RawFit:
     count = int(strain.size)
     if count == 0:
         return _RawFit(0, None, None, None, None, None, False, "선택된 원행이 없습니다")
@@ -305,11 +375,11 @@ def _centered_ols(strain: np.ndarray, stress: np.ndarray) -> _RawFit:
                 raise ProcessingError("원행 최소제곱 R²가 유한하지 않습니다.")
 
     reasons: list[str] = []
-    if count < MIN_FIT_ROWS:
-        reasons.append(f"원행이 {count}개라 최소 {MIN_FIT_ROWS}개보다 적음")
+    if count < minimum_fit_rows:
+        reasons.append(f"원행이 {count}개라 최소 {minimum_fit_rows}개보다 적음")
     distinct = int(np.unique(strain).size)
-    if distinct < MIN_FIT_ROWS:
-        reasons.append(f"서로 다른 변형률이 {distinct}개라 최소 {MIN_FIT_ROWS}개보다 적음")
+    if distinct < minimum_fit_rows:
+        reasons.append(f"서로 다른 변형률이 {distinct}개라 최소 {minimum_fit_rows}개보다 적음")
     if not math.isfinite(span) or span <= 0:
         reasons.append("첫 행에서 끝 행까지 변형률 폭이 양수가 아님")
 
@@ -336,6 +406,181 @@ def _centered_ols(strain: np.ndarray, stress: np.ndarray) -> _RawFit:
         r_squared=r_squared,
         accepted=not reasons,
         reason="; ".join(reasons) if reasons else "",
+    )
+
+
+def _loo_check(
+    strain: np.ndarray,
+    stress: np.ndarray,
+    *,
+    source_rows: np.ndarray,
+) -> _LooCheck:
+    """Check the fixed baseline window after removing each original row once.
+
+    The baseline window is deliberately passed in by the caller.  This helper
+    never recomputes the peak or stress band after deleting a row, because that
+    would make the diagnostic a different selection policy.
+    """
+    checks: list[tuple[int, _RawFit]] = []
+    for offset, source_row in enumerate(source_rows):
+        keep = np.ones(strain.size, dtype=bool)
+        keep[offset] = False
+        checks.append(
+            (
+                int(source_row),
+                _centered_ols(
+                    strain[keep],
+                    stress[keep],
+                    # A five-row baseline produces a four-row diagnostic.  The
+                    # diagnostic still needs two distinct points for OLS, but
+                    # must not inherit the production five-row minimum.
+                    minimum_fit_rows=2,
+                ),
+            )
+        )
+
+    finite_r_squared = [
+        fit.r_squared
+        for _, fit in checks
+        if fit.r_squared is not None and math.isfinite(fit.r_squared)
+    ]
+    minimum_r_squared = min(finite_r_squared) if finite_r_squared else None
+
+    failed: list[tuple[int, _RawFit, str]] = []
+    for source_row, fit in checks:
+        if fit.slope is None or not math.isfinite(fit.slope) or fit.slope <= 0:
+            reason = "기울기가 유한한 양수가 아님"
+        elif fit.r_squared is None or not math.isfinite(fit.r_squared):
+            reason = "R²가 유한하지 않음"
+        elif fit.r_squared < MIN_R_SQUARED:
+            reason = f"R²가 {MIN_R_SQUARED:.2f} 미만임"
+        else:
+            continue
+        failed.append((source_row, fit, reason))
+
+    worst_failed: tuple[int, _RawFit, str] | None = None
+    if failed:
+        worst_failed = min(
+            failed,
+            key=lambda item: (
+                item[1].r_squared
+                if item[1].r_squared is not None and math.isfinite(item[1].r_squared)
+                else math.inf,
+                item[0],
+            ),
+        )
+
+    return _LooCheck(
+        minimum_r_squared=minimum_r_squared,
+        failed_rows=tuple(item[0] for item in failed),
+        worst_failed_row=worst_failed[0] if worst_failed is not None else None,
+        worst_failed_reason=worst_failed[2] if worst_failed is not None else None,
+    )
+
+
+def _apply_loo_guard(
+    result: StepResult,
+    strain: np.ndarray,
+    stress: np.ndarray,
+    *,
+    source_rows: np.ndarray,
+    support_members: int,
+) -> StepResult:
+    """Expose an accepted baseline E only when its fixed-window LOO passes."""
+    baseline = next(
+        (scalar for scalar in result.scalars if scalar.key == "youngs_modulus"),
+        None,
+    )
+    if baseline is None:
+        # v2 must retain the baseline's existing hold reason when the baseline
+        # itself did not produce E; it must not turn a short/invalid window into
+        # a different decision.
+        return result
+
+    check = _loo_check(strain, stress, source_rows=source_rows)
+    diagnostics: list[Scalar] = [
+        Scalar(
+            "elastic_support_member_count",
+            "자동 띠 원행 지지점 수",
+            float(support_members),
+            "1",
+        )
+    ]
+    if check.minimum_r_squared is not None:
+        diagnostics.append(
+            Scalar(
+                "elastic_loo_min_r_squared",
+                "고정 원행 LOO 최소 R²",
+                check.minimum_r_squared,
+                "1",
+            )
+        )
+
+    support_margin_ok = support_members >= MIN_V2_SUPPORT_MEMBERS
+    if support_margin_ok and not check.failed_rows:
+        note = (
+            f"{AUTO_POLICY_V2}: 원래 고른 원행 구간을 고정한 채 각 원행 1개를 한 번씩 "
+            f"제외해 확인했습니다(자동 띠 지지점 {support_members}개). "
+            f"LOO 최소 R²={check.minimum_r_squared:.6f}; "
+            "모든 진단의 기울기가 유한한 양수이고 기준을 통과해 탄성계수를 냈습니다."
+        )
+        return StepResult(
+            result.frame,
+            notes=(*result.notes, note),
+            scalars=(*result.scalars, *diagnostics),
+            effective_options=result.effective_options,
+        )
+
+    kept = tuple(
+        scalar
+        for scalar in result.scalars
+        if scalar.key not in {"youngs_modulus", "elastic_intercept", "elastic_slope_reference"}
+    )
+    diagnostics.append(
+        Scalar("elastic_slope_reference", "참고 기울기(믿을 수 없음)", baseline.value, "Pa")
+    )
+    if check.worst_failed_row is not None:
+        diagnostics.append(
+            Scalar(
+                "elastic_loo_failed_row",
+                "LOO 실패 원행 인덱스 (현재 입력, 0부터)",
+                float(check.worst_failed_row),
+                "1",
+            )
+        )
+    minimum = (
+        f"{check.minimum_r_squared:.6f}"
+        if check.minimum_r_squared is not None
+        else "산출 불가"
+    )
+    failed = ", ".join(str(row) for row in check.failed_rows)
+    failed_row = (
+        f"최저 실패 원행 {check.worst_failed_row} ({check.worst_failed_reason})"
+        if check.worst_failed_row is not None
+        else "실패 원행을 특정할 수 없음"
+    )
+    reasons: list[str] = []
+    if not support_margin_ok:
+        reasons.append(
+            f"자동 띠 지지점이 {support_members}개라 최소 {MIN_V2_SUPPORT_MEMBERS}개보다 "
+            f"적습니다(한 행을 제외해도 기존 최소 {MIN_FIT_ROWS}개를 남겨야 합니다)"
+        )
+    if check.failed_rows:
+        reasons.append(
+            f"원래 창 고정 LOO 최소 R²={minimum}; {failed_row}; 실패 원행 목록 [{failed}]"
+        )
+    elif not support_margin_ok:
+        reasons.append(f"원래 창 고정 LOO 최소 R²={minimum}(직선성 기준은 통과)")
+    note = (
+        f"{AUTO_POLICY_V2}: 원래 고른 원행 구간을 다시 고르지 않고 확인한 결과 "
+        f"탄성계수를 내지 않았습니다: {'; '.join(reasons)}. "
+        "참고 기울기는 원래 전체 구간의 값이며 뒤 단계로 전달하지 않습니다."
+    )
+    return StepResult(
+        result.frame,
+        notes=(*result.notes, note),
+        scalars=(*kept, *diagnostics),
+        effective_options=result.effective_options,
     )
 
 
@@ -570,8 +815,9 @@ def _provenance_note(
         bounds = "선택된 원행 구간 없음"
     else:
         bounds = f"현재 입력 원행 [{start_index}, {end_index}]"
+    version = " (v1)" if policy in (AUTO_POLICY_V1, MANUAL_POLICY) else ""
     return (
-        f"원행 탄성 정책 {policy} (v1), {bounds}; 변형률 열 '{strain_key}', "
+        f"원행 탄성 정책 {policy}{version}, {bounds}; 변형률 열 '{strain_key}', "
         f"응력 열 '{stress_key}', 비증가 단계 {nonincreasing_steps}개. "
         "인덱스는 현재 입력 프레임 기준이며 원본 행 배열은 바꾸지 않았습니다."
     )

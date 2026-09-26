@@ -57,63 +57,73 @@ _MODEL_CARD_EFFECT_VALUES = (
     ),
 )
 
-register(
-    id="tensile.source_elastic_modulus",
-    kind="processing",
-    label="원행 탄성계수",
-    params=(
+
+def _source_elastic_params(
+    *,
+    choices: tuple[str, ...],
+    default: str,
+    choice_labels: dict[str, str],
+    help_text: str,
+    include_manual: bool,
+) -> tuple[ParamSpec, ...]:
+    params = [
         ParamSpec(
             name="policy",
             label="원행 탄성 구간",
             type="choice",
-            choices=source_elastic.POLICIES,
-            default=source_elastic.AUTO_POLICY,
-            choice_labels={
-                source_elastic.AUTO_POLICY: "최대응력 띠의 원행 구간",
-                source_elastic.MANUAL_POLICY: "현재 입력 원행 직접 지정",
-            },
-            help=(
-                "자동은 첫 최대응력의 10~40% 띠를 포함하는 원행 구간을 씁니다. "
-                "현재 입력 전체를 정렬·평활·이동하지 않습니다."
+            choices=choices,
+            default=default,
+            choice_labels=choice_labels,
+            help=help_text,
+        )
+    ]
+    if include_manual:
+        params.extend(
+            (
+                ParamSpec(
+                    name="start_index",
+                    label="시작 원행 인덱스 (현재 입력, 0부터)",
+                    type="int",
+                    required=True,
+                    when={"policy": (source_elastic.MANUAL_POLICY,)},
+                    help="포함할 현재 입력 프레임의 시작 행입니다.",
+                ),
+                ParamSpec(
+                    name="end_index",
+                    label="끝 원행 인덱스 (현재 입력, 0부터)",
+                    type="int",
+                    required=True,
+                    when={"policy": (source_elastic.MANUAL_POLICY,)},
+                    help="포함할 현재 입력 프레임의 끝 행입니다.",
+                ),
+            )
+        )
+    params.extend(
+        (
+            ParamSpec(
+                name="strain",
+                label="변형률 열",
+                type="str",
+                role="column",
+                default="strain_engineering",
+                unit="1",
+                dimension="strain",
             ),
-        ),
-        ParamSpec(
-            name="start_index",
-            label="시작 원행 인덱스 (현재 입력, 0부터)",
-            type="int",
-            required=True,
-            when={"policy": (source_elastic.MANUAL_POLICY,)},
-            help="포함할 현재 입력 프레임의 시작 행입니다.",
-        ),
-        ParamSpec(
-            name="end_index",
-            label="끝 원행 인덱스 (현재 입력, 0부터)",
-            type="int",
-            required=True,
-            when={"policy": (source_elastic.MANUAL_POLICY,)},
-            help="포함할 현재 입력 프레임의 끝 행입니다.",
-        ),
-        ParamSpec(
-            name="strain",
-            label="변형률 열",
-            type="str",
-            role="column",
-            default="strain_engineering",
-            unit="1",
-            dimension="strain",
-        ),
-        ParamSpec(
-            name="stress",
-            label="응력 열",
-            type="str",
-            role="column",
-            default="stress_engineering",
-            unit="Pa",
-        ),
-    ),
-    applies_to=("tensile",),
-    requires_channels=(("displacement",), ("force",)),
-    makes_values=(
+            ParamSpec(
+                name="stress",
+                label="응력 열",
+                type="str",
+                role="column",
+                default="stress_engineering",
+                unit="Pa",
+            ),
+        )
+    )
+    return tuple(params)
+
+
+def _source_elastic_values(*, include_loo: bool) -> tuple[Produced, ...]:
+    values = (
         Produced(
             key="youngs_modulus",
             label="탄성계수",
@@ -149,9 +159,77 @@ register(
             si_unit="1",
             help="실제 적합 구간의 인접 원행에서 변형률이 감소하거나 같은 횟수.",
         ),
+    )
+    if include_loo:
+        values += (
+            Produced(
+                key="elastic_support_member_count",
+                label="자동 띠 원행 지지점 수",
+                si_unit="1",
+                help="v2의 10~40% 최대응력 띠 안에 실제로 있던 원행 수.",
+            ),
+            Produced(
+                key="elastic_loo_min_r_squared",
+                label="고정 원행 LOO 최소 R²",
+                si_unit="1",
+                help="v2가 같은 원행 구간에서 한 행씩 제외해 얻은 최소 R².",
+            ),
+            Produced(
+                key="elastic_loo_failed_row",
+                label="LOO 실패 원행 인덱스 (현재 입력, 0부터)",
+                si_unit="1",
+                help="v2 고정창 진단에서 가장 낮은 실패 R²를 낸 원행.",
+            ),
+        )
+    return values
+
+
+register(
+    id="tensile.source_elastic_modulus",
+    kind="processing",
+    label="원행 탄성계수",
+    params=_source_elastic_params(
+        choices=source_elastic.POLICIES,
+        default=source_elastic.AUTO_POLICY,
+        choice_labels={
+            source_elastic.AUTO_POLICY: "최대응력 띠의 원행 구간",
+            source_elastic.MANUAL_POLICY: "현재 입력 원행 직접 지정",
+        },
+        help_text=(
+            "자동은 첫 최대응력의 10~40% 띠를 포함하는 원행 구간을 씁니다. "
+            "현재 입력 전체를 정렬·평활·이동하지 않습니다."
+        ),
+        include_manual=True,
     ),
+    applies_to=("tensile",),
+    requires_channels=(("displacement",), ("force",)),
+    makes_values=_source_elastic_values(include_loo=False),
     order=71,
     version="1",
+)(source_elastic.legacy_source_elastic_modulus)
+
+register(
+    id="tensile.source_elastic_modulus_v2",
+    kind="processing",
+    label="원행 탄성계수 (고정창 LOO v2)",
+    params=_source_elastic_params(
+        choices=source_elastic.V2_POLICIES,
+        default=source_elastic.AUTO_POLICY_V2,
+        choice_labels={
+            source_elastic.AUTO_POLICY_V2: "최대응력 띠 + 고정 원행 LOO 검사",
+        },
+        help_text=(
+            "v1과 같은 첫 최대응력 10~40% 원행 구간을 고정하고, 원행 하나씩 "
+            "제외한 직선성까지 확인합니다. 수동 구간은 기존 원행 탄성계수 단계에서 씁니다."
+        ),
+        include_manual=False,
+    ),
+    applies_to=("tensile",),
+    requires_channels=(("displacement",), ("force",)),
+    makes_values=_source_elastic_values(include_loo=True),
+    order=15,
+    version="1",
+    prepare_options=source_elastic.prepare_v2_options,
 )(source_elastic.source_elastic_modulus)
 
 register(

@@ -25,6 +25,19 @@ scalars and notes. Otherwise it performs centered OLS on every row in the
 source envelope in acquisition order, including local strain reversals, with
 the existing minimum-row, numerical, positive-slope, and R² guards.
 
+For an explicit stronger automatic check, use the separate
+`tensile.source_elastic_modulus_v2` plugin with `policy: "auto_rows_v2"`.
+It keeps the v1 10–40% first-peak band and its fixed original-row fit window,
+requires at least six actual band-support rows, and checks every fixed-window
+fit after removing each original row once: each must have a finite positive E slope
+and R² ≥ 0.98. The stage does not reorder, smooth, or mutate the input frame.
+If the gate is not met, it retains the window diagnostics but does not emit
+`youngs_modulus`, so downstream E-dependent steps cannot proceed. This is a
+numerical robustness gate, not physical material certification; the existing
+manual v1 route remains available. Seven versioned reference/import v2
+effective-card recipe examples are in
+[`recipes/effective_card_domain_v2_examples.json`](recipes/effective_card_domain_v2_examples.json).
+
 Select `manual_rows` to provide inclusive `start_index` and `end_index` values
 for the current input frame. Manual windows use the same fit guards; their row
 indices are not claimed to be original CSV line numbers. `source_elastic_*`
