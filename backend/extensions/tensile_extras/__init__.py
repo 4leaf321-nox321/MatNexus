@@ -26,12 +26,86 @@ from . import (  # noqa: F401  (card 는 import 만으로 블록·렌더러를 �
     model_curve,
     model_support,
     plastic_domain,
+    prepeak_prefix,
     ratio,
     source_elastic,
     source_proof,
     temperature,
     terminal_domain,
 )
+
+register(
+    id="tensile.prepeak_prefix",
+    kind="processing",
+    label="최대공칭응력 전 원행 경계",
+    applies_to=("tensile",),
+    requires_channels=(("displacement",), ("force",)),
+    params=(
+        ParamSpec(
+            name="strain",
+            label="공학 변형률 열",
+            type="str",
+            role="column",
+            default=prepeak_prefix.DEFAULT_STRAIN,
+            unit="1",
+            dimension="strain",
+            help="취득 순서를 유지한 공학 변형률 열입니다.",
+        ),
+        ParamSpec(
+            name="stress",
+            label="공학 응력 열",
+            type="str",
+            role="column",
+            default=prepeak_prefix.DEFAULT_STRESS,
+            unit="Pa",
+            help="취득 순서를 유지한 공학 응력 열입니다.",
+        ),
+    ),
+    makes_values=(
+        Produced("prepeak_prefix_input_points", "입력 원행 수", "1"),
+        Produced(
+            "prepeak_prefix_peak_input_index",
+            "최대응력 입력 원행 위치",
+            "1",
+            help="현재 취득 순서 프레임에서 0부터 세는 첫 최대응력 행입니다.",
+        ),
+        Produced(
+            "prepeak_prefix_peak_input_strain",
+            "최대응력 입력 원행 변형률",
+            "1",
+            help="최대공칭응력점의 공학 변형률이며 균일변형 상한 후보의 좌표입니다.",
+        ),
+        Produced(
+            "prepeak_prefix_peak_input_stress",
+            "최대응력 입력 원행 응력",
+            "Pa",
+            help="최대공칭응력점의 공학 응력입니다.",
+        ),
+        Produced("prepeak_prefix_removed_points", "제외한 말단 원행 수", "1"),
+        Produced(
+            "prepeak_prefix_order_evidence_code",
+            "취득 순서 증거 상태 (0=없음, 1=검증)",
+            "1",
+            help="매핑 원행 열이 없으면 0이며 결과 note에 순서 증거 없음을 남깁니다.",
+        ),
+        Produced(
+            "prepeak_prefix_force_peak_index",
+            "원하중 최댓값 원행 위치 (-1=비교 불가)",
+            "1",
+        ),
+        Produced(
+            "prepeak_prefix_force_peak_match_code",
+            "원하중 peak 검증 상태 (0=비교 불가, 1=검증)",
+            "1",
+            help="원하중과 공칭응력의 peak 위치·양의 일정 비례를 검증한 상태입니다.",
+        ),
+    ),
+    order=18,
+    version="1",
+    prepare_options=prepeak_prefix.prepare_options,
+    scope="uniform_true_plastic_card",
+    candidate_only=True,
+)(prepeak_prefix.prepeak_prefix)
 
 _MODEL_CARD_EFFECT_VALUES = (
     Produced("model_card_input_points", "모델 단계 입력 관측점 수", "1"),
