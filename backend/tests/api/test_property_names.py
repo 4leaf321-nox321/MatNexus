@@ -331,8 +331,12 @@ class Test매핑_화면:
         assert body["axis_slug"] == "property_item"
         row = next(one for one in body["rows"] if one["key"] == YIELD_STRENGTH[0])
         assert [link["item"] for link in row["links"]] == ["항복강도"]
-        # 잰 값은 코드가 정한다 — `proof_stress` 가 항복강도다.
-        assert [one["scalar_key"] for one in row["measured"]] == ["proof_stress"]
+        # 서로 다른 두 계산이 같은 물성 키에 각자의 `proof_stress` 를 낸다.
+        # 화면에는 어느 단계가 그 값을 만들었는지도 함께 보여야 한다.
+        assert [(one["plugin_id"], one["scalar_key"]) for one in row["measured"]] == [
+            ("tensile.proof_stress", "proof_stress"),
+            ("tensile.source_proof_stress", "proof_stress"),
+        ]
         assert row["measured"][0]["plugin_label"] == "오프셋 항복강도"
         # **안 이어진 항목을 센다.** 「굴곡강도」 는 만들어만 두고 아무 데도 안 이었다.
         assert [one["item"] for one in body["unlinked_items"]] == ["굴곡강도"]

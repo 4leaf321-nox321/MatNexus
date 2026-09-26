@@ -1,0 +1,717 @@
+{
+  "schema": "matnexus.tensile.stable_band_model_v1_examples/1",
+  "description": "R17 versioned references copied from the R16 seven-method recipes. Six methods use the original-row stable-band/event model; the upper-envelope control stage and every other pipeline stage are preserved. These are reviewed examples, not universal defaults.",
+  "recipes": [
+    {
+      "key": "r17_stable_band_model_v1_lower_envelope",
+      "label": "안정 밴드 소성 모델 적응형 소성영역 참고 레시피 — 하측 포락선",
+      "description": "R17 explicit stable-band/event model reference example for lower_envelope_auto_v1; all R15 downstream stages and options are retained. The terminal onset is an approximate model-domain boundary, not a fracture or universal softening classifier.",
+      "test_type_key": "tensile",
+      "steps": [
+        {
+          "plugin": "tensile.engineering",
+          "options": {
+            "gauge_length": "@specimen_gauge_length",
+            "area": "@specimen_area"
+          }
+        },
+        {
+          "plugin": "tensile.terminal_domain",
+          "options": {
+            "policy": "terminal_loss_auto_v2",
+            "strain": "strain_engineering",
+            "stress": "stress_engineering",
+            "time": "time"
+          }
+        },
+        {
+          "plugin": "tensile.strength",
+          "options": {}
+        },
+        {
+          "plugin": "tensile.elastic_modulus",
+          "options": {
+            "method": "auto"
+          }
+        },
+        {
+          "plugin": "tensile.proof_stress",
+          "options": {
+            "offset_strain": 0.002,
+            "youngs_modulus": "@youngs_modulus",
+            "search_start": "@elastic_window_end"
+          }
+        },
+        {
+          "plugin": "tensile.necking_candidate",
+          "options": {}
+        },
+        {
+          "plugin": "tensile.band_model",
+          "options": {
+            "policy": "band_and_events_auto_v1",
+            "method": "lower_envelope",
+            "strain": "strain_engineering",
+            "stress": "stress_engineering",
+            "time": "time",
+            "minimum_band_rows": 20,
+            "minimum_progress_span": 0.1,
+            "maximum_stress_over_peak": 0.9,
+            "maximum_range_over_peak": 0.02,
+            "maximum_gap_over_band_span": 0.1,
+            "loading_floor_fraction": 0.4
+          }
+        },
+        {
+          "plugin": "tensile.model_anchor",
+          "options": {
+            "offset_strain": 0.002,
+            "youngs_modulus": "@youngs_modulus"
+          }
+        },
+        {
+          "plugin": "tensile.plastic_domain",
+          "options": {}
+        },
+        {
+          "plugin": "tensile.true_plastic",
+          "options": {
+            "youngs_modulus": "@youngs_modulus",
+            "proof_stress": "@plastic_domain_proof_stress",
+            "proof_strain": "@plastic_domain_proof_strain"
+          }
+        },
+        {
+          "plugin": "curve.sort_unique",
+          "options": {
+            "x": "strain_true_plastic",
+            "duplicate_policy": "first"
+          }
+        },
+        {
+          "plugin": "curve.monotone",
+          "options": {
+            "column": "stress_true",
+            "x": "strain_true_plastic"
+          }
+        },
+        {
+          "plugin": "curve.resample",
+          "options": {
+            "x": "strain_true_plastic",
+            "count": 300,
+            "start": 0
+          }
+        }
+      ]
+    },
+    {
+      "key": "r17_stable_band_model_v1_isotonic",
+      "label": "안정 밴드 소성 모델 적응형 소성영역 참고 레시피 — 단조 포락선",
+      "description": "R17 explicit stable-band/event model reference example for isotonic_auto_v1; all R15 downstream stages and options are retained. The terminal onset is an approximate model-domain boundary, not a fracture or universal softening classifier.",
+      "test_type_key": "tensile",
+      "steps": [
+        {
+          "plugin": "tensile.engineering",
+          "options": {
+            "gauge_length": "@specimen_gauge_length",
+            "area": "@specimen_area"
+          }
+        },
+        {
+          "plugin": "tensile.terminal_domain",
+          "options": {
+            "policy": "terminal_loss_auto_v2",
+            "strain": "strain_engineering",
+            "stress": "stress_engineering",
+            "time": "time"
+          }
+        },
+        {
+          "plugin": "tensile.strength",
+          "options": {}
+        },
+        {
+          "plugin": "tensile.elastic_modulus",
+          "options": {
+            "method": "auto"
+          }
+        },
+        {
+          "plugin": "tensile.proof_stress",
+          "options": {
+            "offset_strain": 0.002,
+            "youngs_modulus": "@youngs_modulus",
+            "search_start": "@elastic_window_end"
+          }
+        },
+        {
+          "plugin": "tensile.necking_candidate",
+          "options": {}
+        },
+        {
+          "plugin": "tensile.band_model",
+          "options": {
+            "policy": "band_and_events_auto_v1",
+            "method": "isotonic",
+            "strain": "strain_engineering",
+            "stress": "stress_engineering",
+            "time": "time",
+            "minimum_band_rows": 20,
+            "minimum_progress_span": 0.1,
+            "maximum_stress_over_peak": 0.9,
+            "maximum_range_over_peak": 0.02,
+            "maximum_gap_over_band_span": 0.1,
+            "loading_floor_fraction": 0.4
+          }
+        },
+        {
+          "plugin": "tensile.model_anchor",
+          "options": {
+            "offset_strain": 0.002,
+            "youngs_modulus": "@youngs_modulus"
+          }
+        },
+        {
+          "plugin": "tensile.plastic_domain",
+          "options": {}
+        },
+        {
+          "plugin": "tensile.true_plastic",
+          "options": {
+            "youngs_modulus": "@youngs_modulus",
+            "proof_stress": "@plastic_domain_proof_stress",
+            "proof_strain": "@plastic_domain_proof_strain"
+          }
+        },
+        {
+          "plugin": "curve.sort_unique",
+          "options": {
+            "x": "strain_true_plastic",
+            "duplicate_policy": "first"
+          }
+        },
+        {
+          "plugin": "curve.monotone",
+          "options": {
+            "column": "stress_true",
+            "x": "strain_true_plastic"
+          }
+        },
+        {
+          "plugin": "curve.resample",
+          "options": {
+            "x": "strain_true_plastic",
+            "count": 300,
+            "start": 0
+          }
+        }
+      ]
+    },
+    {
+      "key": "r17_stable_band_model_v1_median_plateau",
+      "label": "안정 밴드 소성 모델 적응형 소성영역 참고 레시피 — 중앙값 평탄부",
+      "description": "R17 explicit stable-band/event model reference example for median_plateau_auto_v1; all R15 downstream stages and options are retained. The terminal onset is an approximate model-domain boundary, not a fracture or universal softening classifier.",
+      "test_type_key": "tensile",
+      "steps": [
+        {
+          "plugin": "tensile.engineering",
+          "options": {
+            "gauge_length": "@specimen_gauge_length",
+            "area": "@specimen_area"
+          }
+        },
+        {
+          "plugin": "tensile.terminal_domain",
+          "options": {
+            "policy": "terminal_loss_auto_v2",
+            "strain": "strain_engineering",
+            "stress": "stress_engineering",
+            "time": "time"
+          }
+        },
+        {
+          "plugin": "tensile.strength",
+          "options": {}
+        },
+        {
+          "plugin": "tensile.elastic_modulus",
+          "options": {
+            "method": "auto"
+          }
+        },
+        {
+          "plugin": "tensile.proof_stress",
+          "options": {
+            "offset_strain": 0.002,
+            "youngs_modulus": "@youngs_modulus",
+            "search_start": "@elastic_window_end"
+          }
+        },
+        {
+          "plugin": "tensile.necking_candidate",
+          "options": {}
+        },
+        {
+          "plugin": "tensile.band_model",
+          "options": {
+            "policy": "band_and_events_auto_v1",
+            "method": "median_plateau",
+            "strain": "strain_engineering",
+            "stress": "stress_engineering",
+            "time": "time",
+            "minimum_band_rows": 20,
+            "minimum_progress_span": 0.1,
+            "maximum_stress_over_peak": 0.9,
+            "maximum_range_over_peak": 0.02,
+            "maximum_gap_over_band_span": 0.1,
+            "loading_floor_fraction": 0.4
+          }
+        },
+        {
+          "plugin": "tensile.model_anchor",
+          "options": {
+            "offset_strain": 0.002,
+            "youngs_modulus": "@youngs_modulus"
+          }
+        },
+        {
+          "plugin": "tensile.plastic_domain",
+          "options": {}
+        },
+        {
+          "plugin": "tensile.true_plastic",
+          "options": {
+            "youngs_modulus": "@youngs_modulus",
+            "proof_stress": "@plastic_domain_proof_stress",
+            "proof_strain": "@plastic_domain_proof_strain"
+          }
+        },
+        {
+          "plugin": "curve.sort_unique",
+          "options": {
+            "x": "strain_true_plastic",
+            "duplicate_policy": "first"
+          }
+        },
+        {
+          "plugin": "curve.monotone",
+          "options": {
+            "column": "stress_true",
+            "x": "strain_true_plastic"
+          }
+        },
+        {
+          "plugin": "curve.resample",
+          "options": {
+            "x": "strain_true_plastic",
+            "count": 300,
+            "start": 0
+          }
+        }
+      ]
+    },
+    {
+      "key": "r17_stable_band_model_v1_linear",
+      "label": "안정 밴드 소성 모델 적응형 소성영역 참고 레시피 — 선형 항복강하",
+      "description": "R17 explicit stable-band/event model reference example for linear_auto_v1; all R15 downstream stages and options are retained. The terminal onset is an approximate model-domain boundary, not a fracture or universal softening classifier.",
+      "test_type_key": "tensile",
+      "steps": [
+        {
+          "plugin": "tensile.engineering",
+          "options": {
+            "gauge_length": "@specimen_gauge_length",
+            "area": "@specimen_area"
+          }
+        },
+        {
+          "plugin": "tensile.terminal_domain",
+          "options": {
+            "policy": "terminal_loss_auto_v2",
+            "strain": "strain_engineering",
+            "stress": "stress_engineering",
+            "time": "time"
+          }
+        },
+        {
+          "plugin": "tensile.strength",
+          "options": {}
+        },
+        {
+          "plugin": "tensile.elastic_modulus",
+          "options": {
+            "method": "auto"
+          }
+        },
+        {
+          "plugin": "tensile.proof_stress",
+          "options": {
+            "offset_strain": 0.002,
+            "youngs_modulus": "@youngs_modulus",
+            "search_start": "@elastic_window_end"
+          }
+        },
+        {
+          "plugin": "tensile.necking_candidate",
+          "options": {}
+        },
+        {
+          "plugin": "tensile.band_model",
+          "options": {
+            "policy": "band_and_events_auto_v1",
+            "method": "linear",
+            "strain": "strain_engineering",
+            "stress": "stress_engineering",
+            "time": "time",
+            "minimum_band_rows": 20,
+            "minimum_progress_span": 0.1,
+            "maximum_stress_over_peak": 0.9,
+            "maximum_range_over_peak": 0.02,
+            "maximum_gap_over_band_span": 0.1,
+            "loading_floor_fraction": 0.4
+          }
+        },
+        {
+          "plugin": "tensile.model_anchor",
+          "options": {
+            "offset_strain": 0.002,
+            "youngs_modulus": "@youngs_modulus"
+          }
+        },
+        {
+          "plugin": "tensile.plastic_domain",
+          "options": {}
+        },
+        {
+          "plugin": "tensile.true_plastic",
+          "options": {
+            "youngs_modulus": "@youngs_modulus",
+            "proof_stress": "@plastic_domain_proof_stress",
+            "proof_strain": "@plastic_domain_proof_strain"
+          }
+        },
+        {
+          "plugin": "curve.sort_unique",
+          "options": {
+            "x": "strain_true_plastic",
+            "duplicate_policy": "first"
+          }
+        },
+        {
+          "plugin": "curve.monotone",
+          "options": {
+            "column": "stress_true",
+            "x": "strain_true_plastic"
+          }
+        },
+        {
+          "plugin": "curve.resample",
+          "options": {
+            "x": "strain_true_plastic",
+            "count": 300,
+            "start": 0
+          }
+        }
+      ]
+    },
+    {
+      "key": "r17_stable_band_model_v1_least_squares",
+      "label": "안정 밴드 소성 모델 적응형 소성영역 참고 레시피 — 최소제곱 직선",
+      "description": "R17 explicit stable-band/event model reference example for least_squares_auto_v1; all R15 downstream stages and options are retained. The terminal onset is an approximate model-domain boundary, not a fracture or universal softening classifier.",
+      "test_type_key": "tensile",
+      "steps": [
+        {
+          "plugin": "tensile.engineering",
+          "options": {
+            "gauge_length": "@specimen_gauge_length",
+            "area": "@specimen_area"
+          }
+        },
+        {
+          "plugin": "tensile.terminal_domain",
+          "options": {
+            "policy": "terminal_loss_auto_v2",
+            "strain": "strain_engineering",
+            "stress": "stress_engineering",
+            "time": "time"
+          }
+        },
+        {
+          "plugin": "tensile.strength",
+          "options": {}
+        },
+        {
+          "plugin": "tensile.elastic_modulus",
+          "options": {
+            "method": "auto"
+          }
+        },
+        {
+          "plugin": "tensile.proof_stress",
+          "options": {
+            "offset_strain": 0.002,
+            "youngs_modulus": "@youngs_modulus",
+            "search_start": "@elastic_window_end"
+          }
+        },
+        {
+          "plugin": "tensile.necking_candidate",
+          "options": {}
+        },
+        {
+          "plugin": "tensile.band_model",
+          "options": {
+            "policy": "band_and_events_auto_v1",
+            "method": "least_squares",
+            "strain": "strain_engineering",
+            "stress": "stress_engineering",
+            "time": "time",
+            "minimum_band_rows": 20,
+            "minimum_progress_span": 0.1,
+            "maximum_stress_over_peak": 0.9,
+            "maximum_range_over_peak": 0.02,
+            "maximum_gap_over_band_span": 0.1,
+            "loading_floor_fraction": 0.4
+          }
+        },
+        {
+          "plugin": "tensile.model_anchor",
+          "options": {
+            "offset_strain": 0.002,
+            "youngs_modulus": "@youngs_modulus"
+          }
+        },
+        {
+          "plugin": "tensile.plastic_domain",
+          "options": {}
+        },
+        {
+          "plugin": "tensile.true_plastic",
+          "options": {
+            "youngs_modulus": "@youngs_modulus",
+            "proof_stress": "@plastic_domain_proof_stress",
+            "proof_strain": "@plastic_domain_proof_strain"
+          }
+        },
+        {
+          "plugin": "curve.sort_unique",
+          "options": {
+            "x": "strain_true_plastic",
+            "duplicate_policy": "first"
+          }
+        },
+        {
+          "plugin": "curve.monotone",
+          "options": {
+            "column": "stress_true",
+            "x": "strain_true_plastic"
+          }
+        },
+        {
+          "plugin": "curve.resample",
+          "options": {
+            "x": "strain_true_plastic",
+            "count": 300,
+            "start": 0
+          }
+        }
+      ]
+    },
+    {
+      "key": "r17_stable_band_model_v1_robust_linear",
+      "label": "안정 밴드 소성 모델 적응형 소성영역 참고 레시피 — 강건 선형 모델",
+      "description": "R17 explicit stable-band/event model reference example for robust_linear_auto_v1; all R15 downstream stages and options are retained. The terminal onset is an approximate model-domain boundary, not a fracture or universal softening classifier.",
+      "test_type_key": "tensile",
+      "steps": [
+        {
+          "plugin": "tensile.engineering",
+          "options": {
+            "gauge_length": "@specimen_gauge_length",
+            "area": "@specimen_area"
+          }
+        },
+        {
+          "plugin": "tensile.terminal_domain",
+          "options": {
+            "policy": "terminal_loss_auto_v2",
+            "strain": "strain_engineering",
+            "stress": "stress_engineering",
+            "time": "time"
+          }
+        },
+        {
+          "plugin": "tensile.strength",
+          "options": {}
+        },
+        {
+          "plugin": "tensile.elastic_modulus",
+          "options": {
+            "method": "auto"
+          }
+        },
+        {
+          "plugin": "tensile.proof_stress",
+          "options": {
+            "offset_strain": 0.002,
+            "youngs_modulus": "@youngs_modulus",
+            "search_start": "@elastic_window_end"
+          }
+        },
+        {
+          "plugin": "tensile.necking_candidate",
+          "options": {}
+        },
+        {
+          "plugin": "tensile.band_model",
+          "options": {
+            "policy": "band_and_events_auto_v1",
+            "method": "robust_linear",
+            "strain": "strain_engineering",
+            "stress": "stress_engineering",
+            "time": "time",
+            "minimum_band_rows": 20,
+            "minimum_progress_span": 0.1,
+            "maximum_stress_over_peak": 0.9,
+            "maximum_range_over_peak": 0.02,
+            "maximum_gap_over_band_span": 0.1,
+            "loading_floor_fraction": 0.4
+          }
+        },
+        {
+          "plugin": "tensile.model_anchor",
+          "options": {
+            "offset_strain": 0.002,
+            "youngs_modulus": "@youngs_modulus"
+          }
+        },
+        {
+          "plugin": "tensile.plastic_domain",
+          "options": {}
+        },
+        {
+          "plugin": "tensile.true_plastic",
+          "options": {
+            "youngs_modulus": "@youngs_modulus",
+            "proof_stress": "@plastic_domain_proof_stress",
+            "proof_strain": "@plastic_domain_proof_strain"
+          }
+        },
+        {
+          "plugin": "curve.sort_unique",
+          "options": {
+            "x": "strain_true_plastic",
+            "duplicate_policy": "first"
+          }
+        },
+        {
+          "plugin": "curve.monotone",
+          "options": {
+            "column": "stress_true",
+            "x": "strain_true_plastic"
+          }
+        },
+        {
+          "plugin": "curve.resample",
+          "options": {
+            "x": "strain_true_plastic",
+            "count": 300,
+            "start": 0
+          }
+        }
+      ]
+    },
+    {
+      "key": "r17_stable_band_model_v1_upper_envelope_auto_v1",
+      "label": "안정 밴드 소성 모델 적응형 소성영역 참고 레시피 — 상측 포락선",
+      "description": "R17 explicit stable-band/event model reference example for upper_envelope_auto_v1; all R15 downstream stages and options are retained. The terminal onset is an approximate model-domain boundary, not a fracture or universal softening classifier.",
+      "test_type_key": "tensile",
+      "steps": [
+        {
+          "plugin": "tensile.engineering",
+          "options": {
+            "gauge_length": "@specimen_gauge_length",
+            "area": "@specimen_area"
+          }
+        },
+        {
+          "plugin": "tensile.terminal_domain",
+          "options": {
+            "policy": "terminal_loss_auto_v2",
+            "strain": "strain_engineering",
+            "stress": "stress_engineering",
+            "time": "time"
+          }
+        },
+        {
+          "plugin": "tensile.strength",
+          "options": {}
+        },
+        {
+          "plugin": "tensile.elastic_modulus",
+          "options": {
+            "method": "auto"
+          }
+        },
+        {
+          "plugin": "tensile.proof_stress",
+          "options": {
+            "offset_strain": 0.002,
+            "youngs_modulus": "@youngs_modulus",
+            "search_start": "@elastic_window_end"
+          }
+        },
+        {
+          "plugin": "tensile.necking_candidate",
+          "options": {}
+        },
+        {
+          "plugin": "tensile.model_curve",
+          "options": {
+            "method": "upper_envelope_auto_v1"
+          }
+        },
+        {
+          "plugin": "tensile.model_anchor",
+          "options": {
+            "offset_strain": 0.002,
+            "youngs_modulus": "@youngs_modulus"
+          }
+        },
+        {
+          "plugin": "tensile.plastic_domain",
+          "options": {}
+        },
+        {
+          "plugin": "tensile.true_plastic",
+          "options": {
+            "youngs_modulus": "@youngs_modulus",
+            "proof_stress": "@plastic_domain_proof_stress",
+            "proof_strain": "@plastic_domain_proof_strain"
+          }
+        },
+        {
+          "plugin": "curve.sort_unique",
+          "options": {
+            "x": "strain_true_plastic",
+            "duplicate_policy": "first"
+          }
+        },
+        {
+          "plugin": "curve.monotone",
+          "options": {
+            "column": "stress_true",
+            "x": "strain_true_plastic"
+          }
+        },
+        {
+          "plugin": "curve.resample",
+          "options": {
+            "x": "strain_true_plastic",
+            "count": 300,
+            "start": 0
+          }
+        }
+      ]
+    }
+  ]
+}

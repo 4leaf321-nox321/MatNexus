@@ -59,6 +59,14 @@ describe('표준 단계', () => {
     expect(at('curve.crop')).toBeLessThan(at('tensile.true_plastic'))
   })
 
+  it('오프셋 항복강도와 교점 변형률을 진소성에 함께 전달한다', () => {
+    const step = TENSILE_STANDARD[at('tensile.true_plastic')]
+    expect(step.options).toMatchObject({
+      proof_stress: '@proof_stress',
+      proof_strain: '@proof_strain',
+    })
+  })
+
   it('진소성을 낸 뒤 다시 정렬하고 재샘플한다', () => {
     expect(at('tensile.true_plastic')).toBeLessThan(last('curve.sort_unique'))
     expect(last('curve.sort_unique')).toBeLessThan(last('curve.resample'))

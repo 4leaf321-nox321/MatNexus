@@ -1,0 +1,106 @@
+{
+  "schema": "matnexus.tensile.uniform_true_plastic_candidate_v1/1",
+  "description": "R36 C-style uniform true-plastic candidate only. This is not the polymer softening path and provides no auto card approval. It requires provenance order_evidence_code=1 and force_peak_match_code=1, plus final-output adoption review and inspection of remaining monotone lift before use.",
+  "recipes": [
+    {
+      "key": "r36_uniform_true_plastic_candidate_v1",
+      "label": "R36 C-style 균일 진소성 후보",
+      "description": "Uniform true-plastic candidate ONLY for the C-style route: not the polymer softening path, with no auto card approval. Use requires provenance order_evidence_code=1 and force_peak_match_code=1, final-output adoption review, and inspection of remaining monotone lift.",
+      "test_type_key": "tensile",
+      "steps": [
+        {
+          "plugin": "tensile.engineering",
+          "options": {
+            "gauge_length": "@specimen_gauge_length",
+            "area": "@specimen_area"
+          }
+        },
+        {
+          "plugin": "tensile.source_elastic_modulus_v2",
+          "options": {
+            "policy": "auto_rows_v2"
+          }
+        },
+        {
+          "plugin": "tensile.prepeak_prefix",
+          "options": {}
+        },
+        {
+          "plugin": "tensile.source_proof_stress",
+          "options": {
+            "policy": "first_positive_forward_v1",
+            "youngs_modulus": "@youngs_modulus",
+            "offset_strain": 0.002,
+            "start_index": "@source_elastic_end_index",
+            "search_start": "@elastic_window_end"
+          }
+        },
+        {
+          "plugin": "curve.sort_unique",
+          "options": {
+            "x": "strain_engineering",
+            "duplicate_policy": "mean"
+          }
+        },
+        {
+          "plugin": "tensile.strength",
+          "options": {}
+        },
+        {
+          "plugin": "tensile.necking_candidate",
+          "options": {}
+        },
+        {
+          "plugin": "tensile.plastic_domain",
+          "options": {
+            "proof_strain": "@proof_strain",
+            "proof_stress": "@proof_stress",
+            "end_strain": "@necking_candidate_strain",
+            "necking_limit": "@necking_candidate_strain"
+          }
+        },
+        {
+          "plugin": "tensile.true_plastic",
+          "options": {
+            "youngs_modulus": "@youngs_modulus",
+            "proof_stress": "@plastic_domain_proof_stress",
+            "proof_strain": "@plastic_domain_proof_strain"
+          }
+        },
+        {
+          "plugin": "curve.sort_unique",
+          "options": {
+            "x": "strain_true_plastic",
+            "duplicate_policy": "first"
+          }
+        },
+        {
+          "plugin": "tensile.proof_anchor_guard",
+          "options": {
+            "proof_stress": "@plastic_domain_proof_stress",
+            "proof_strain": "@plastic_domain_proof_strain"
+          }
+        },
+        {
+          "plugin": "curve.monotone",
+          "options": {
+            "column": "stress_true",
+            "x": "strain_true_plastic",
+            "method": "envelope",
+            "strict": true,
+            "step_ratio": 1e-6,
+            "min_slope": 0.0
+          }
+        },
+        {
+          "plugin": "curve.resample",
+          "options": {
+            "x": "strain_true_plastic",
+            "count": 300,
+            "start": 0
+          }
+        }
+      ]
+    }
+  ]
+}

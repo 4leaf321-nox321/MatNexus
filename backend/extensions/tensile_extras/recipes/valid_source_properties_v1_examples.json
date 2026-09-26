@@ -1,0 +1,727 @@
+{
+  "schema": "matnexus.tensile.retained_source_examples/1",
+  "description": "R14 retained-source comparison/reference recipes with frozen downstream options, including resampling from zero; some records hold. Not auto-installed or universal card defaults.",
+  "recipes": [
+    {
+      "key": "r14_retained_source_lower_envelope_auto_v1",
+      "label": "보존 원자료 비교 레시피 — 하측 포락선",
+      "description": "R14 retained-source comparison example for lower_envelope_auto_v1. Reference only: downstream holds are possible; this is not material-card approval. Frozen resampling starts at zero; holds are possible, and this is not card approval.",
+      "test_type_key": "tensile",
+      "steps": [
+        {
+          "plugin": "tensile.engineering",
+          "options": {
+            "gauge_length": "@specimen_gauge_length",
+            "area": "@specimen_area"
+          }
+        },
+        {
+          "plugin": "tensile.terminal_domain",
+          "options": {
+            "policy": "terminal_loss_auto_v1",
+            "strain": "strain_engineering",
+            "stress": "stress_engineering",
+            "time": "time"
+          }
+        },
+        {
+          "plugin": "tensile.strength",
+          "options": {}
+        },
+        {
+          "plugin": "tensile.elastic_modulus",
+          "options": {
+            "method": "auto"
+          }
+        },
+        {
+          "plugin": "tensile.proof_stress",
+          "options": {
+            "offset_strain": 0.002,
+            "youngs_modulus": "@youngs_modulus"
+          }
+        },
+        {
+          "plugin": "tensile.necking_candidate",
+          "options": {}
+        },
+        {
+          "plugin": "tensile.yield_drop",
+          "options": {
+            "method": "lower_envelope_auto_v1"
+          }
+        },
+        {
+          "plugin": "tensile.model_anchor",
+          "options": {
+            "offset_strain": 0.002,
+            "youngs_modulus": "@youngs_modulus"
+          }
+        },
+        {
+          "plugin": "curve.resample",
+          "options": {
+            "x": "strain_engineering",
+            "count": 400,
+            "start": 0
+          }
+        },
+        {
+          "plugin": "curve.crop",
+          "options": {
+            "x": "strain_engineering",
+            "end": "@necking_candidate_strain"
+          }
+        },
+        {
+          "plugin": "tensile.true_plastic",
+          "options": {
+            "youngs_modulus": "@youngs_modulus",
+            "proof_stress": "@model_proof_stress",
+            "proof_strain": "@model_proof_strain"
+          }
+        },
+        {
+          "plugin": "curve.sort_unique",
+          "options": {
+            "x": "strain_true_plastic",
+            "duplicate_policy": "last"
+          }
+        },
+        {
+          "plugin": "curve.monotone",
+          "options": {
+            "column": "stress_true",
+            "x": "strain_true_plastic"
+          }
+        },
+        {
+          "plugin": "curve.resample",
+          "options": {
+            "x": "strain_true_plastic",
+            "count": 300,
+            "start": 0
+          }
+        }
+      ]
+    },
+    {
+      "key": "r14_retained_source_isotonic_auto_v1",
+      "label": "보존 원자료 비교 레시피 — 단조 포락선",
+      "description": "R14 retained-source comparison example for isotonic_auto_v1. Reference only: downstream holds are possible; this is not material-card approval. Frozen resampling starts at zero; holds are possible, and this is not card approval.",
+      "test_type_key": "tensile",
+      "steps": [
+        {
+          "plugin": "tensile.engineering",
+          "options": {
+            "gauge_length": "@specimen_gauge_length",
+            "area": "@specimen_area"
+          }
+        },
+        {
+          "plugin": "tensile.terminal_domain",
+          "options": {
+            "policy": "terminal_loss_auto_v1",
+            "strain": "strain_engineering",
+            "stress": "stress_engineering",
+            "time": "time"
+          }
+        },
+        {
+          "plugin": "tensile.strength",
+          "options": {}
+        },
+        {
+          "plugin": "tensile.elastic_modulus",
+          "options": {
+            "method": "auto"
+          }
+        },
+        {
+          "plugin": "tensile.proof_stress",
+          "options": {
+            "offset_strain": 0.002,
+            "youngs_modulus": "@youngs_modulus"
+          }
+        },
+        {
+          "plugin": "tensile.necking_candidate",
+          "options": {}
+        },
+        {
+          "plugin": "tensile.yield_drop",
+          "options": {
+            "method": "isotonic_auto_v1"
+          }
+        },
+        {
+          "plugin": "tensile.model_anchor",
+          "options": {
+            "offset_strain": 0.002,
+            "youngs_modulus": "@youngs_modulus"
+          }
+        },
+        {
+          "plugin": "curve.resample",
+          "options": {
+            "x": "strain_engineering",
+            "count": 400,
+            "start": 0
+          }
+        },
+        {
+          "plugin": "curve.crop",
+          "options": {
+            "x": "strain_engineering",
+            "end": "@necking_candidate_strain"
+          }
+        },
+        {
+          "plugin": "tensile.true_plastic",
+          "options": {
+            "youngs_modulus": "@youngs_modulus",
+            "proof_stress": "@model_proof_stress",
+            "proof_strain": "@model_proof_strain"
+          }
+        },
+        {
+          "plugin": "curve.sort_unique",
+          "options": {
+            "x": "strain_true_plastic",
+            "duplicate_policy": "last"
+          }
+        },
+        {
+          "plugin": "curve.monotone",
+          "options": {
+            "column": "stress_true",
+            "x": "strain_true_plastic"
+          }
+        },
+        {
+          "plugin": "curve.resample",
+          "options": {
+            "x": "strain_true_plastic",
+            "count": 300,
+            "start": 0
+          }
+        }
+      ]
+    },
+    {
+      "key": "r14_retained_source_median_plateau_auto_v1",
+      "label": "보존 원자료 비교 레시피 — 중앙값 평탄부",
+      "description": "R14 retained-source comparison example for median_plateau_auto_v1. Reference only: downstream holds are possible; this is not material-card approval. Frozen resampling starts at zero; holds are possible, and this is not card approval.",
+      "test_type_key": "tensile",
+      "steps": [
+        {
+          "plugin": "tensile.engineering",
+          "options": {
+            "gauge_length": "@specimen_gauge_length",
+            "area": "@specimen_area"
+          }
+        },
+        {
+          "plugin": "tensile.terminal_domain",
+          "options": {
+            "policy": "terminal_loss_auto_v1",
+            "strain": "strain_engineering",
+            "stress": "stress_engineering",
+            "time": "time"
+          }
+        },
+        {
+          "plugin": "tensile.strength",
+          "options": {}
+        },
+        {
+          "plugin": "tensile.elastic_modulus",
+          "options": {
+            "method": "auto"
+          }
+        },
+        {
+          "plugin": "tensile.proof_stress",
+          "options": {
+            "offset_strain": 0.002,
+            "youngs_modulus": "@youngs_modulus"
+          }
+        },
+        {
+          "plugin": "tensile.necking_candidate",
+          "options": {}
+        },
+        {
+          "plugin": "tensile.yield_drop",
+          "options": {
+            "method": "median_plateau_auto_v1"
+          }
+        },
+        {
+          "plugin": "tensile.model_anchor",
+          "options": {
+            "offset_strain": 0.002,
+            "youngs_modulus": "@youngs_modulus"
+          }
+        },
+        {
+          "plugin": "curve.resample",
+          "options": {
+            "x": "strain_engineering",
+            "count": 400,
+            "start": 0
+          }
+        },
+        {
+          "plugin": "curve.crop",
+          "options": {
+            "x": "strain_engineering",
+            "end": "@necking_candidate_strain"
+          }
+        },
+        {
+          "plugin": "tensile.true_plastic",
+          "options": {
+            "youngs_modulus": "@youngs_modulus",
+            "proof_stress": "@model_proof_stress",
+            "proof_strain": "@model_proof_strain"
+          }
+        },
+        {
+          "plugin": "curve.sort_unique",
+          "options": {
+            "x": "strain_true_plastic",
+            "duplicate_policy": "last"
+          }
+        },
+        {
+          "plugin": "curve.monotone",
+          "options": {
+            "column": "stress_true",
+            "x": "strain_true_plastic"
+          }
+        },
+        {
+          "plugin": "curve.resample",
+          "options": {
+            "x": "strain_true_plastic",
+            "count": 300,
+            "start": 0
+          }
+        }
+      ]
+    },
+    {
+      "key": "r14_retained_source_linear_auto_v1",
+      "label": "보존 원자료 비교 레시피 — 선형 항복강하",
+      "description": "R14 retained-source comparison example for linear_auto_v1. Reference only: downstream holds are possible; this is not material-card approval. Frozen resampling starts at zero; holds are possible, and this is not card approval.",
+      "test_type_key": "tensile",
+      "steps": [
+        {
+          "plugin": "tensile.engineering",
+          "options": {
+            "gauge_length": "@specimen_gauge_length",
+            "area": "@specimen_area"
+          }
+        },
+        {
+          "plugin": "tensile.terminal_domain",
+          "options": {
+            "policy": "terminal_loss_auto_v1",
+            "strain": "strain_engineering",
+            "stress": "stress_engineering",
+            "time": "time"
+          }
+        },
+        {
+          "plugin": "tensile.strength",
+          "options": {}
+        },
+        {
+          "plugin": "tensile.elastic_modulus",
+          "options": {
+            "method": "auto"
+          }
+        },
+        {
+          "plugin": "tensile.proof_stress",
+          "options": {
+            "offset_strain": 0.002,
+            "youngs_modulus": "@youngs_modulus"
+          }
+        },
+        {
+          "plugin": "tensile.necking_candidate",
+          "options": {}
+        },
+        {
+          "plugin": "tensile.yield_drop",
+          "options": {
+            "method": "linear_auto_v1"
+          }
+        },
+        {
+          "plugin": "tensile.model_anchor",
+          "options": {
+            "offset_strain": 0.002,
+            "youngs_modulus": "@youngs_modulus"
+          }
+        },
+        {
+          "plugin": "curve.resample",
+          "options": {
+            "x": "strain_engineering",
+            "count": 400,
+            "start": 0
+          }
+        },
+        {
+          "plugin": "curve.crop",
+          "options": {
+            "x": "strain_engineering",
+            "end": "@necking_candidate_strain"
+          }
+        },
+        {
+          "plugin": "tensile.true_plastic",
+          "options": {
+            "youngs_modulus": "@youngs_modulus",
+            "proof_stress": "@model_proof_stress",
+            "proof_strain": "@model_proof_strain"
+          }
+        },
+        {
+          "plugin": "curve.sort_unique",
+          "options": {
+            "x": "strain_true_plastic",
+            "duplicate_policy": "last"
+          }
+        },
+        {
+          "plugin": "curve.monotone",
+          "options": {
+            "column": "stress_true",
+            "x": "strain_true_plastic"
+          }
+        },
+        {
+          "plugin": "curve.resample",
+          "options": {
+            "x": "strain_true_plastic",
+            "count": 300,
+            "start": 0
+          }
+        }
+      ]
+    },
+    {
+      "key": "r14_retained_source_least_squares_auto_v1",
+      "label": "보존 원자료 비교 레시피 — 최소제곱 직선",
+      "description": "R14 retained-source comparison example for least_squares_auto_v1. Reference only: downstream holds are possible; this is not material-card approval. Frozen resampling starts at zero; holds are possible, and this is not card approval.",
+      "test_type_key": "tensile",
+      "steps": [
+        {
+          "plugin": "tensile.engineering",
+          "options": {
+            "gauge_length": "@specimen_gauge_length",
+            "area": "@specimen_area"
+          }
+        },
+        {
+          "plugin": "tensile.terminal_domain",
+          "options": {
+            "policy": "terminal_loss_auto_v1",
+            "strain": "strain_engineering",
+            "stress": "stress_engineering",
+            "time": "time"
+          }
+        },
+        {
+          "plugin": "tensile.strength",
+          "options": {}
+        },
+        {
+          "plugin": "tensile.elastic_modulus",
+          "options": {
+            "method": "auto"
+          }
+        },
+        {
+          "plugin": "tensile.proof_stress",
+          "options": {
+            "offset_strain": 0.002,
+            "youngs_modulus": "@youngs_modulus"
+          }
+        },
+        {
+          "plugin": "tensile.necking_candidate",
+          "options": {}
+        },
+        {
+          "plugin": "tensile.yield_drop",
+          "options": {
+            "method": "least_squares_auto_v1"
+          }
+        },
+        {
+          "plugin": "tensile.model_anchor",
+          "options": {
+            "offset_strain": 0.002,
+            "youngs_modulus": "@youngs_modulus"
+          }
+        },
+        {
+          "plugin": "curve.resample",
+          "options": {
+            "x": "strain_engineering",
+            "count": 400,
+            "start": 0
+          }
+        },
+        {
+          "plugin": "curve.crop",
+          "options": {
+            "x": "strain_engineering",
+            "end": "@necking_candidate_strain"
+          }
+        },
+        {
+          "plugin": "tensile.true_plastic",
+          "options": {
+            "youngs_modulus": "@youngs_modulus",
+            "proof_stress": "@model_proof_stress",
+            "proof_strain": "@model_proof_strain"
+          }
+        },
+        {
+          "plugin": "curve.sort_unique",
+          "options": {
+            "x": "strain_true_plastic",
+            "duplicate_policy": "last"
+          }
+        },
+        {
+          "plugin": "curve.monotone",
+          "options": {
+            "column": "stress_true",
+            "x": "strain_true_plastic"
+          }
+        },
+        {
+          "plugin": "curve.resample",
+          "options": {
+            "x": "strain_true_plastic",
+            "count": 300,
+            "start": 0
+          }
+        }
+      ]
+    },
+    {
+      "key": "r14_retained_source_robust_linear_auto_v1",
+      "label": "보존 원자료 비교 레시피 — 강건 선형 모델",
+      "description": "R14 retained-source comparison example for robust_linear_auto_v1. Reference only: downstream holds are possible; this is not material-card approval. Frozen resampling starts at zero; holds are possible, and this is not card approval.",
+      "test_type_key": "tensile",
+      "steps": [
+        {
+          "plugin": "tensile.engineering",
+          "options": {
+            "gauge_length": "@specimen_gauge_length",
+            "area": "@specimen_area"
+          }
+        },
+        {
+          "plugin": "tensile.terminal_domain",
+          "options": {
+            "policy": "terminal_loss_auto_v1",
+            "strain": "strain_engineering",
+            "stress": "stress_engineering",
+            "time": "time"
+          }
+        },
+        {
+          "plugin": "tensile.strength",
+          "options": {}
+        },
+        {
+          "plugin": "tensile.elastic_modulus",
+          "options": {
+            "method": "auto"
+          }
+        },
+        {
+          "plugin": "tensile.proof_stress",
+          "options": {
+            "offset_strain": 0.002,
+            "youngs_modulus": "@youngs_modulus"
+          }
+        },
+        {
+          "plugin": "tensile.necking_candidate",
+          "options": {}
+        },
+        {
+          "plugin": "tensile.yield_drop",
+          "options": {
+            "method": "robust_linear_auto_v1"
+          }
+        },
+        {
+          "plugin": "tensile.model_anchor",
+          "options": {
+            "offset_strain": 0.002,
+            "youngs_modulus": "@youngs_modulus"
+          }
+        },
+        {
+          "plugin": "curve.resample",
+          "options": {
+            "x": "strain_engineering",
+            "count": 400,
+            "start": 0
+          }
+        },
+        {
+          "plugin": "curve.crop",
+          "options": {
+            "x": "strain_engineering",
+            "end": "@necking_candidate_strain"
+          }
+        },
+        {
+          "plugin": "tensile.true_plastic",
+          "options": {
+            "youngs_modulus": "@youngs_modulus",
+            "proof_stress": "@model_proof_stress",
+            "proof_strain": "@model_proof_strain"
+          }
+        },
+        {
+          "plugin": "curve.sort_unique",
+          "options": {
+            "x": "strain_true_plastic",
+            "duplicate_policy": "last"
+          }
+        },
+        {
+          "plugin": "curve.monotone",
+          "options": {
+            "column": "stress_true",
+            "x": "strain_true_plastic"
+          }
+        },
+        {
+          "plugin": "curve.resample",
+          "options": {
+            "x": "strain_true_plastic",
+            "count": 300,
+            "start": 0
+          }
+        }
+      ]
+    },
+    {
+      "key": "r14_retained_source_upper_envelope_auto_v1",
+      "label": "보존 원자료 비교 레시피 — 상측 포락선",
+      "description": "R14 retained-source comparison example for upper_envelope_auto_v1. Reference only: downstream holds are possible; this is not material-card approval. Frozen resampling starts at zero; holds are possible, and this is not card approval.",
+      "test_type_key": "tensile",
+      "steps": [
+        {
+          "plugin": "tensile.engineering",
+          "options": {
+            "gauge_length": "@specimen_gauge_length",
+            "area": "@specimen_area"
+          }
+        },
+        {
+          "plugin": "tensile.terminal_domain",
+          "options": {
+            "policy": "terminal_loss_auto_v1",
+            "strain": "strain_engineering",
+            "stress": "stress_engineering",
+            "time": "time"
+          }
+        },
+        {
+          "plugin": "tensile.strength",
+          "options": {}
+        },
+        {
+          "plugin": "tensile.elastic_modulus",
+          "options": {
+            "method": "auto"
+          }
+        },
+        {
+          "plugin": "tensile.proof_stress",
+          "options": {
+            "offset_strain": 0.002,
+            "youngs_modulus": "@youngs_modulus"
+          }
+        },
+        {
+          "plugin": "tensile.necking_candidate",
+          "options": {}
+        },
+        {
+          "plugin": "tensile.model_curve",
+          "options": {
+            "method": "upper_envelope_auto_v1"
+          }
+        },
+        {
+          "plugin": "tensile.model_anchor",
+          "options": {
+            "offset_strain": 0.002,
+            "youngs_modulus": "@youngs_modulus"
+          }
+        },
+        {
+          "plugin": "curve.resample",
+          "options": {
+            "x": "strain_engineering",
+            "count": 400,
+            "start": 0
+          }
+        },
+        {
+          "plugin": "curve.crop",
+          "options": {
+            "x": "strain_engineering",
+            "end": "@necking_candidate_strain"
+          }
+        },
+        {
+          "plugin": "tensile.true_plastic",
+          "options": {
+            "youngs_modulus": "@youngs_modulus",
+            "proof_stress": "@model_proof_stress",
+            "proof_strain": "@model_proof_strain"
+          }
+        },
+        {
+          "plugin": "curve.sort_unique",
+          "options": {
+            "x": "strain_true_plastic",
+            "duplicate_policy": "last"
+          }
+        },
+        {
+          "plugin": "curve.monotone",
+          "options": {
+            "column": "stress_true",
+            "x": "strain_true_plastic"
+          }
+        },
+        {
+          "plugin": "curve.resample",
+          "options": {
+            "x": "strain_true_plastic",
+            "count": 300,
+            "start": 0
+          }
+        }
+      ]
+    }
+  ]
+}
