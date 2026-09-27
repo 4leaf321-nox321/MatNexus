@@ -459,6 +459,87 @@ def _source_elastic_values(*, include_loo: bool) -> tuple[Produced, ...]:
     return values
 
 
+def _source_elastic_v3_values() -> tuple[Produced, ...]:
+    return (
+        Produced(
+            key="source_elastic_v3_fallback_attempted_code",
+            label="v3 대체 창 검사 여부",
+            si_unit="1",
+            help="v2가 Young's modulus를 내지 않았을 때만 첫 연속 원행 구간을 검사합니다.",
+        ),
+        Produced(
+            key="source_elastic_v3_fallback_used_code",
+            label="v3 대체 창 E 사용 여부",
+            si_unit="1",
+            help=(
+                "수치 gate를 통과한 첫 연속 구간을 후보로 출력했는지 표시합니다. "
+                "물리 타당성 승인 표시는 아닙니다."
+            ),
+        ),
+        Produced(
+            key="source_elastic_v3_candidate_start_index",
+            label="v3 첫 통과 구간 시작 인덱스 (현재 입력, 0부터)",
+            si_unit="1",
+        ),
+        Produced(
+            key="source_elastic_v3_candidate_end_index",
+            label="v3 첫 통과 구간 끝 인덱스 (현재 입력, 0부터)",
+            si_unit="1",
+        ),
+        Produced(
+            key="elastic_v3_candidate_point_count",
+            label="v3 첫 통과 구간 원행 수",
+            si_unit="1",
+        ),
+        Produced(
+            key="elastic_v3_candidate_slope",
+            label="v3 첫 통과 구간 후보 기울기 (승인되지 않은 값)",
+            si_unit="Pa",
+        ),
+        Produced(
+            key="elastic_v3_candidate_r_squared",
+            label="v3 첫 통과 구간 후보 R²",
+            si_unit="1",
+        ),
+        Produced(
+            key="elastic_v3_candidate_loo_min_r_squared",
+            label="v3 고정 창 LOO 최소 R²",
+            si_unit="1",
+        ),
+    )
+
+
+def _source_elastic_values_v3() -> tuple[Produced, ...]:
+    """Describe diagnostics against the selected fit window for the v3 route."""
+    return (
+        *_source_elastic_values(include_loo=False),
+        Produced(
+            key="elastic_support_member_count",
+            label="선택 E 창 원행 지지점 수",
+            si_unit="1",
+            help=(
+                "출력된 E 적합창에 포함된 원행 수입니다. v2 결과 유지 시에는 v2 창, "
+                "v3 대체 결과 사용 시에는 첫 연속 통과 구간을 가리킵니다."
+            ),
+        ),
+        Produced(
+            key="elastic_loo_min_r_squared",
+            label="선택 E 창 고정 원행 LOO 최소 R²",
+            si_unit="1",
+            help=(
+                "출력된 E 적합창에서 원행을 하나씩 제외한 최소 R²입니다. v2 결과 유지 시에는 "
+                "v2 창, v3 대체 결과 사용 시에는 첫 연속 통과 구간 기준입니다."
+            ),
+        ),
+        Produced(
+            key="elastic_loo_failed_row",
+            label="선택 E 창 LOO 실패 원행 인덱스 (현재 입력, 0부터)",
+            si_unit="1",
+            help="선택된 E 적합창 진단에서 가장 낮은 실패 R²를 낸 원행입니다.",
+        ),
+    )
+
+
 register(
     id="tensile.source_elastic_modulus",
     kind="processing",
@@ -505,6 +586,31 @@ register(
     order=15,
     version="1",
     prepare_options=source_elastic.prepare_v2_options,
+)(source_elastic.source_elastic_modulus)
+
+register(
+    id="tensile.source_elastic_modulus_v3",
+    kind="processing",
+    label="원행 탄성계수 (첫 통과 후보 v3)",
+    params=_source_elastic_params(
+        choices=source_elastic.V3_POLICIES,
+        default=source_elastic.AUTO_POLICY_V3,
+        choice_labels={
+            source_elastic.AUTO_POLICY_V3: "v2 보류 시 첫 연속 통과 구간 후보",
+        },
+        help_text=(
+            "명시적으로 선택하는 후보 경로입니다. v2가 E를 내면 그대로 유지합니다. "
+            "v2 보류 시 첫 10~40% 연속 원행 통과 구간만 검사하며, 수치 기준 통과도 "
+            "물리 타당성 승인을 뜻하지 않습니다."
+        ),
+        include_manual=False,
+    ),
+    applies_to=("tensile",),
+    requires_channels=(("displacement",), ("force",)),
+    makes_values=(*_source_elastic_values_v3(), *_source_elastic_v3_values()),
+    order=16,
+    version="1",
+    prepare_options=source_elastic.prepare_v3_options,
 )(source_elastic.source_elastic_modulus)
 
 register(

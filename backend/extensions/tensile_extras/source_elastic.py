@@ -13,6 +13,7 @@ from matcore.processing.tensile import elastic_modulus as _core_elastic_modulus
 
 AUTO_POLICY_V1 = "auto_rows_v1"
 AUTO_POLICY_V2 = "auto_rows_v2"
+AUTO_POLICY_V3 = "auto_rows_v3"
 # Keep the public alias used by existing recipes and callers.  v1 remains the
 # default so a saved recipe that omits ``policy`` is replayed byte-for-byte.
 AUTO_POLICY = AUTO_POLICY_V1
@@ -21,10 +22,14 @@ MANUAL_POLICY = "manual_rows"
 # its own plugin id so old clients still see the original two choices.
 POLICIES = (AUTO_POLICY_V1, MANUAL_POLICY)
 V2_POLICIES = (AUTO_POLICY_V2,)
+V3_POLICIES = (AUTO_POLICY_V3,)
 AUTO_LOW_FRACTION = 0.10
 AUTO_HIGH_FRACTION = 0.40
+V3_START_MAX_FRACTION = 0.15
+V3_END_MIN_FRACTION = 0.35
 MIN_FIT_ROWS = 5
 MIN_V2_SUPPORT_MEMBERS = MIN_FIT_ROWS + 1
+MIN_V3_SUPPORT_ROWS = MIN_V2_SUPPORT_MEMBERS
 MIN_R_SQUARED = 0.98
 
 _STRAIN = "strain_engineering"
@@ -71,6 +76,16 @@ def source_elastic_modulus(frame: Frame, options: dict[str, Any]) -> StepResult:
     policy = _validated_policy(options)
     strain_key, stress_key = _channel_keys(options)
     strain, stress = _pair(frame, strain_key, stress_key)
+
+    if policy == AUTO_POLICY_V3:
+        return _source_elastic_modulus_v3(
+            frame,
+            options,
+            strain_key=strain_key,
+            stress_key=stress_key,
+            strain=strain,
+            stress=stress,
+        )
 
     if policy in (AUTO_POLICY_V1, AUTO_POLICY_V2):
         if not np.all(np.isfinite(stress)):
@@ -220,7 +235,7 @@ def legacy_source_elastic_modulus(frame: Frame, options: dict[str, Any]) -> Step
 
 def _policy(options: dict[str, Any]) -> str:
     policy = options.get("policy", AUTO_POLICY)
-    allowed = (*POLICIES, *V2_POLICIES)
+    allowed = (*POLICIES, *V2_POLICIES, *V3_POLICIES)
     if policy not in allowed:
         raise ProcessingError(
             f"원행 탄성 정책은 {', '.join(allowed)} 중 하나여야 합니다: {policy!r}."
@@ -230,7 +245,7 @@ def _policy(options: dict[str, Any]) -> str:
 
 def _validated_policy(options: dict[str, Any]) -> str:
     policy = _policy(options)
-    if policy in (AUTO_POLICY_V1, AUTO_POLICY_V2) and (
+    if policy in (AUTO_POLICY_V1, AUTO_POLICY_V2, AUTO_POLICY_V3) and (
         "start_index" in options or "end_index" in options
     ):
         raise ProcessingError(
@@ -255,6 +270,307 @@ def prepare_v2_options(options: dict[str, Any]) -> dict[str, Any]:
             f"v2 원행 탄성 플러그인은 정책 '{AUTO_POLICY_V2}'만 지원합니다: {policy!r}."
         )
     return prepared
+
+
+def prepare_v3_options(options: dict[str, Any]) -> dict[str, Any]:
+    """Supply and constrain the policy for the opt-in v3 plugin route."""
+    prepared = dict(options)
+    policy = prepared.setdefault("policy", AUTO_POLICY_V3)
+    if policy != AUTO_POLICY_V3:
+        raise ProcessingError(
+            f"v3 원행 탄성 플러그인은 정책 '{AUTO_POLICY_V3}'만 지원합니다: {policy!r}."
+        )
+    return prepared
+
+
+def _source_elastic_modulus_v3(
+    frame: Frame,
+    options: dict[str, Any],
+    *,
+    strain_key: str,
+    stress_key: str,
+    strain: np.ndarray,
+    stress: np.ndarray,
+) -> StepResult:
+    """Keep a passing v2 E; otherwise try only the first qualifying band passage.
+
+    The passage gate is a conservative source-loading screen for this opt-in
+    estimate. Passing it does not establish that the fitted slope is a
+    physically approved Young's modulus.
+    """
+    baseline_options = dict(options)
+    baseline_options["policy"] = AUTO_POLICY_V2
+    baseline = source_elastic_modulus(frame, baseline_options)
+    effective = _effective_options(AUTO_POLICY_V3, strain_key, stress_key)
+    baseline_emitted_e = any(scalar.key == "youngs_modulus" for scalar in baseline.scalars)
+    fallback_scalars = (
+        Scalar(
+            "source_elastic_v3_fallback_attempted_code",
+            "v3 대체 창 검사 여부",
+            0.0 if baseline_emitted_e else 1.0,
+            "1",
+        ),
+        Scalar(
+            "source_elastic_v3_fallback_used_code",
+            "v3 대체 창 E 사용 여부",
+            0.0,
+            "1",
+        ),
+    )
+    if baseline_emitted_e:
+        return StepResult(
+            frame,
+            notes=(
+                *baseline.notes,
+                f"{AUTO_POLICY_V3}: {AUTO_POLICY_V2}가 탄성계수를 냈으므로 "
+                "그 결과를 그대로 유지했습니다. 대체 원행 구간은 적용하지 않았습니다.",
+            ),
+            scalars=(*baseline.scalars, *fallback_scalars),
+            effective_options=effective,
+        )
+
+    passage = _first_v3_band_passage(stress)
+    if passage is None:
+        return StepResult(
+            frame,
+            notes=(
+                *baseline.notes,
+                f"{AUTO_POLICY_V3}: v2가 E를 내지 않았고, 첫 최대응력 10~40% 띠에서 "
+                "시작 응력 15% 이하·끝 응력 35% 이상인 연속 원행 통과 구간을 찾지 못했습니다. "
+                "대체 E를 내지 않았습니다.",
+            ),
+            scalars=(*baseline.scalars, *fallback_scalars),
+            effective_options=effective,
+        )
+
+    start_index, end_index, peak_stress = passage
+    rows = np.arange(start_index, end_index + 1, dtype=np.int64)
+    fit_strain = strain[rows]
+    fit_stress = stress[rows]
+    support_count = int(rows.size)
+    start_fraction = float(fit_stress[0] / peak_stress)
+    end_fraction = float(fit_stress[-1] / peak_stress)
+    diagnostics: list[Scalar] = [
+        Scalar(
+            "source_elastic_v3_candidate_start_index",
+            "v3 첫 통과 구간 시작 인덱스 (현재 입력, 0부터)",
+            float(start_index),
+            "1",
+        ),
+        Scalar(
+            "source_elastic_v3_candidate_end_index",
+            "v3 첫 통과 구간 끝 인덱스 (현재 입력, 0부터)",
+            float(end_index),
+            "1",
+        ),
+        Scalar(
+            "elastic_v3_candidate_point_count",
+            "v3 첫 통과 구간 원행 수",
+            float(support_count),
+            "1",
+        ),
+    ]
+    reasons: list[str] = []
+    if start_fraction > V3_START_MAX_FRACTION:
+        reasons.append(
+            f"첫 통과 구간 시작 응력이 최대응력의 {V3_START_MAX_FRACTION:.0%}보다 큼"
+        )
+    if end_fraction < V3_END_MIN_FRACTION:
+        reasons.append(f"첫 통과 구간 끝 응력이 최대응력의 {V3_END_MIN_FRACTION:.0%}보다 작음")
+    if support_count < MIN_V3_SUPPORT_ROWS:
+        reasons.append(f"원행 {support_count}개가 최소 {MIN_V3_SUPPORT_ROWS}개보다 적음")
+    if not np.all(np.isfinite(fit_strain)) or not np.all(np.isfinite(fit_stress)):
+        reasons.append("구간에 유한하지 않은 변형률·응력이 있음")
+    else:
+        if not _strictly_increasing(fit_strain):
+            reasons.append("변형률이 원래 행 순서에서 엄격히 증가하지 않음")
+        # This source-loading requirement is intentionally stricter than the
+        # numerical E fit and is not a general material-physics rule.
+        if not _strictly_increasing(fit_stress):
+            reasons.append("응력이 원래 행 순서에서 엄격히 증가하지 않음")
+
+    fit: _RawFit | None = None
+    loo: _LooCheck | None = None
+    if np.all(np.isfinite(fit_strain)) and np.all(np.isfinite(fit_stress)):
+        fit = _centered_ols(fit_strain, fit_stress)
+        if fit.slope is None or not math.isfinite(fit.slope) or fit.slope <= 0:
+            reasons.append("기울기가 유한한 양수가 아님")
+        if (
+            fit.r_squared is None
+            or not math.isfinite(fit.r_squared)
+            or fit.r_squared < MIN_R_SQUARED
+        ):
+            reasons.append(f"기본 적합 R²가 {MIN_R_SQUARED:.2f} 미만임")
+        if fit.reason:
+            reasons.extend(item for item in fit.reason.split("; ") if item not in reasons)
+        if support_count >= MIN_V3_SUPPORT_ROWS:
+            loo = _loo_check(fit_strain, fit_stress, source_rows=rows)
+            if loo.failed_rows:
+                reasons.append(
+                    f"고정 창 원행 LOO {len(loo.failed_rows)}개에서 양수 기울기 또는 "
+                    f"R² {MIN_R_SQUARED:.2f} 기준을 통과하지 못함"
+                )
+            if loo.minimum_r_squared is None:
+                reasons.append("고정 창 원행 LOO R²를 계산할 수 없음")
+        else:
+            reasons.append(f"고정 창 원행 LOO에는 최소 {MIN_V3_SUPPORT_ROWS}개 원행이 필요함")
+    if fit is not None:
+        if fit.slope is not None and math.isfinite(fit.slope):
+            diagnostics.append(
+                Scalar(
+                    "elastic_v3_candidate_slope",
+                    "v3 첫 통과 구간 후보 기울기 (승인되지 않은 값)",
+                    fit.slope,
+                    "Pa",
+                )
+            )
+        if fit.r_squared is not None and math.isfinite(fit.r_squared):
+            diagnostics.append(
+                Scalar(
+                    "elastic_v3_candidate_r_squared",
+                    "v3 첫 통과 구간 후보 R²",
+                    fit.r_squared,
+                    "1",
+                )
+            )
+    if loo is not None and loo.minimum_r_squared is not None:
+        diagnostics.append(
+            Scalar(
+                "elastic_v3_candidate_loo_min_r_squared",
+                "v3 고정 창 LOO 최소 R²",
+                loo.minimum_r_squared,
+                "1",
+            )
+        )
+    diagnostic_note = (
+        f"{AUTO_POLICY_V3}: 첫 최대응력 {peak_stress:.6g} Pa의 10~40% 띠에서 "
+        f"첫 통과 구간 [{start_index}, {end_index}] ({support_count}행, "
+        f"시작 {start_fraction:.3%}, 끝 {end_fraction:.3%})을 선택했습니다. "
+        f"허용 경계는 시작 ≤{V3_START_MAX_FRACTION:.0%}, "
+        f"끝 ≥{V3_END_MIN_FRACTION:.0%}입니다."
+    )
+    if fit is not None and fit.slope is not None and fit.r_squared is not None:
+        diagnostic_note += (
+            f" 후보 기울기 {fit.slope / 1e9:.6g} GPa, R²={fit.r_squared:.6f}, "
+            + (
+                f"고정 창 LOO 최소 R²={loo.minimum_r_squared:.6f}"
+                if loo and loo.minimum_r_squared is not None
+                else "후보 LOO R² 산출 불가"
+            )
+        )
+    passed = (
+        not reasons
+        and fit is not None
+        and fit.accepted
+        and loo is not None
+        and not loo.failed_rows
+    )
+    if not passed:
+        reason_text = "; ".join(dict.fromkeys(reasons)) or "수치 기준을 만족하지 못함"
+        return StepResult(
+            frame,
+            notes=(
+                *baseline.notes,
+                f"{diagnostic_note} 대체 E를 내지 않았습니다: {reason_text}.",
+            ),
+            scalars=(
+                *baseline.scalars,
+                *fallback_scalars,
+                *diagnostics,
+            ),
+            effective_options=effective,
+        )
+
+    assert fit is not None and loo is not None
+    candidate_scalars = _raw_scalars(
+        fit,
+        start_index=start_index,
+        end_index=end_index,
+        nonincreasing_steps=0,
+        include_window=True,
+    )
+    candidate_scalars += (
+        Scalar(
+            "elastic_support_member_count",
+            "v3 선택 통과 구간 원행 수",
+            float(support_count),
+            "1",
+        ),
+        Scalar(
+            "elastic_loo_min_r_squared",
+            "v3 고정 구간 LOO 최소 R²",
+            float(loo.minimum_r_squared),
+            "1",
+        ),
+    )
+    replaced = {
+        "youngs_modulus",
+        "elastic_intercept",
+        "elastic_slope_reference",
+        "elastic_r_squared",
+        "elastic_point_count",
+        "elastic_window_start",
+        "elastic_window_end",
+        "source_elastic_start_index",
+        "source_elastic_end_index",
+        "source_elastic_nonincreasing_step_count",
+        "elastic_support_member_count",
+        "elastic_loo_min_r_squared",
+        "elastic_loo_failed_row",
+    }
+    baseline_context = tuple(s for s in baseline.scalars if s.key not in replaced)
+    approval_note = (
+        "이 v3 대체 기울기는 수치 후보일 뿐이며, 재료·시험 조건에서 물리적으로 "
+        "타당한 Young's modulus로 승인된 값이 아닙니다."
+    )
+    return StepResult(
+        frame,
+        notes=(
+            *baseline.notes,
+            diagnostic_note,
+            f"{AUTO_POLICY_V3}: 응력·변형률의 원행 단조성, 기본 적합 및 "
+            "고정 창 LOO 기준을 통과했습니다. "
+            f"{approval_note}",
+        ),
+        scalars=(
+            *baseline_context,
+            *candidate_scalars,
+            *fallback_scalars[:1],
+            Scalar(
+                "source_elastic_v3_fallback_used_code",
+                "v3 대체 창 E 사용 여부",
+                1.0,
+                "1",
+            ),
+            *diagnostics,
+        ),
+        effective_options=effective,
+    )
+
+
+def _first_v3_band_passage(
+    stress: np.ndarray,
+) -> tuple[int, int, float] | None:
+    """Return the first contiguous in-band run; later runs are never substituted."""
+    if stress.size == 0 or not np.all(np.isfinite(stress)):
+        return None
+    peak_index = int(np.argmax(stress))
+    peak = float(stress[peak_index])
+    if peak <= 0:
+        return None
+    prefix = stress[: peak_index + 1]
+    inside = (prefix >= AUTO_LOW_FRACTION * peak) & (prefix <= AUTO_HIGH_FRACTION * peak)
+    members = np.flatnonzero(inside)
+    if members.size == 0:
+        return None
+    run_start = int(members[0])
+    previous = run_start
+    for raw_index in members[1:]:
+        index = int(raw_index)
+        if index != previous + 1:
+            return run_start, previous, peak
+        previous = index
+    return run_start, previous, peak
 
 
 def _channel_keys(options: dict[str, Any]) -> tuple[str, str]:
