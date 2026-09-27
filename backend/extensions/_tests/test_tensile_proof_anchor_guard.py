@@ -217,11 +217,13 @@ def test_uniform_candidate_recipe_has_guarded_r36_stage_order_and_refs() -> None
         "tensile.source_elastic_modulus_v2",
         "tensile.prepeak_prefix",
         "tensile.source_proof_stress",
+        "tensile.source_support_order_guard",
         "curve.sort_unique",
         "tensile.strength",
         "tensile.necking_candidate",
         "tensile.plastic_domain",
         "tensile.true_plastic",
+        "tensile.plastic_coordinate_order_guard",
         "curve.sort_unique",
         "tensile.proof_anchor_guard",
         "curve.monotone",
@@ -250,26 +252,38 @@ def test_uniform_candidate_recipe_has_guarded_r36_stage_order_and_refs() -> None
         "search_start": "@elastic_window_end",
     }
     assert steps[4]["options"] == {
+        "proof_left_index": "@source_proof_left_index",
+        "proof_right_index": "@source_proof_right_index",
+        "proof_strain": "@proof_strain",
+        "peak_index": "@prepeak_prefix_peak_input_index",
+        "peak_strain": "@prepeak_prefix_peak_input_strain",
+        "order_evidence_code": "@prepeak_prefix_order_evidence_code",
+        "force_peak_match_code": "@prepeak_prefix_force_peak_match_code",
+    }
+    assert steps[5]["options"] == {
         "x": "strain_engineering",
         "duplicate_policy": "mean",
     }
-    assert steps[7]["options"] == {
+    assert steps[8]["options"] == {
         "proof_strain": "@proof_strain",
         "proof_stress": "@proof_stress",
         "end_strain": "@necking_candidate_strain",
         "necking_limit": "@necking_candidate_strain",
     }
-    true_options = steps[8]["options"]
+    true_options = steps[9]["options"]
     assert true_options["proof_stress"] == "@plastic_domain_proof_stress"
     assert true_options["proof_strain"] == "@plastic_domain_proof_strain"
-    assert steps[9]["options"] == {
+    assert steps[10]["options"] == {
+        "x": "strain_true_plastic",
+    }
+    assert steps[11]["options"] == {
         "x": "strain_true_plastic",
         "duplicate_policy": "first",
     }
-    guard_options = steps[10]["options"]
+    guard_options = steps[12]["options"]
     assert guard_options["proof_stress"] == true_options["proof_stress"]
     assert guard_options["proof_strain"] == true_options["proof_strain"]
-    assert steps[11]["options"] == {
+    assert steps[13]["options"] == {
         "column": "stress_true",
         "x": "strain_true_plastic",
         "method": "envelope",
@@ -277,7 +291,7 @@ def test_uniform_candidate_recipe_has_guarded_r36_stage_order_and_refs() -> None
         "step_ratio": 1e-6,
         "min_slope": 0.0,
     }
-    assert steps[12]["options"] == {
+    assert steps[14]["options"] == {
         "x": "strain_true_plastic",
         "count": 300,
         "start": 0,

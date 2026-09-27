@@ -1,11 +1,11 @@
 {
   "schema": "matnexus.tensile.uniform_true_plastic_candidate_v1/1",
-  "description": "R36 C-style uniform true-plastic candidate only. This is not the polymer softening path and provides no auto card approval. It requires provenance order_evidence_code=1 and force_peak_match_code=1, plus final-output adoption review and inspection of remaining monotone lift before use.",
+  "description": "R36 C-style uniform true-plastic candidate only. This is not the polymer softening path and provides no auto card approval. It requires provenance order_evidence_code=1 and force_peak_match_code=1, proof-to-peak source support order and true-plastic coordinate-order guards, plus final-output adoption review and inspection of remaining monotone lift before use.",
   "recipes": [
     {
       "key": "r36_uniform_true_plastic_candidate_v1",
       "label": "R36 C-style 균일 진소성 후보",
-      "description": "Uniform true-plastic candidate ONLY for the C-style route: not the polymer softening path, with no auto card approval. Use requires provenance order_evidence_code=1 and force_peak_match_code=1, final-output adoption review, and inspection of remaining monotone lift.",
+      "description": "Uniform true-plastic candidate ONLY for the C-style route: not the polymer softening path, with no auto card approval. Use requires provenance order_evidence_code=1 and force_peak_match_code=1, proof-to-peak source support order and true-plastic coordinate-order guards, final-output adoption review, and inspection of remaining monotone lift.",
       "test_type_key": "tensile",
       "steps": [
         {
@@ -33,6 +33,18 @@
             "offset_strain": 0.002,
             "start_index": "@source_elastic_end_index",
             "search_start": "@elastic_window_end"
+          }
+        },
+        {
+          "plugin": "tensile.source_support_order_guard",
+          "options": {
+            "proof_left_index": "@source_proof_left_index",
+            "proof_right_index": "@source_proof_right_index",
+            "proof_strain": "@proof_strain",
+            "peak_index": "@prepeak_prefix_peak_input_index",
+            "peak_strain": "@prepeak_prefix_peak_input_strain",
+            "order_evidence_code": "@prepeak_prefix_order_evidence_code",
+            "force_peak_match_code": "@prepeak_prefix_force_peak_match_code"
           }
         },
         {
@@ -65,6 +77,12 @@
             "youngs_modulus": "@youngs_modulus",
             "proof_stress": "@plastic_domain_proof_stress",
             "proof_strain": "@plastic_domain_proof_strain"
+          }
+        },
+        {
+          "plugin": "tensile.plastic_coordinate_order_guard",
+          "options": {
+            "x": "strain_true_plastic"
           }
         },
         {
