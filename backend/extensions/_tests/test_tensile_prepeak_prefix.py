@@ -118,6 +118,83 @@ def test_prepeak_prefix_rejects_noninteger_order_evidence() -> None:
         apply([Step("tensile.prepeak_prefix", {})], frame)
 
 
+def test_prepeak_prefix_accepts_source_data_and_physical_row_pair() -> None:
+    frame = _frame([0.0, 0.01, 0.02, 0.015], [1.0, 5.0, 9.0, 8.0])
+    frame.columns["source_data_row"] = np.asarray([1.0, 2.0, 3.0, 4.0])
+    frame.columns["source_physical_line"] = np.asarray([2.0, 3.0, 4.0, 5.0])
+    frame.units["source_data_row"] = "1"
+    frame.units["source_physical_line"] = "1"
+    del frame.columns["source_row"]
+    del frame.units["source_row"]
+
+    stage = apply([Step("tensile.prepeak_prefix", {})], frame).stages[-1]
+
+    np.testing.assert_array_equal(stage.frame.columns["source_data_row"], [1.0, 2.0, 3.0])
+    np.testing.assert_array_equal(stage.frame.columns["source_physical_line"], [2.0, 3.0, 4.0])
+    assert "source_data_row" in " ".join(stage.notes)
+    assert "source_physical_line" in " ".join(stage.notes)
+
+
+@pytest.mark.parametrize("column", ["source_data_row", "source_physical_line"])
+def test_prepeak_prefix_rejects_single_source_row_pair_column(column: str) -> None:
+    frame = _frame([0.0, 0.01, 0.02, 0.015], [1.0, 5.0, 9.0, 8.0])
+    frame.columns[column] = np.asarray([1.0, 2.0, 3.0, 4.0])
+    frame.units[column] = "1"
+
+    with pytest.raises(ProcessingError, match="두 열을 함께"):
+        apply([Step("tensile.prepeak_prefix", {})], frame)
+
+
+@pytest.mark.parametrize(
+    ("data_unit", "physical_unit", "remove_physical", "message"),
+    [
+        ("?", None, True, "단위는 '1'"),
+        ("?", "1", False, "단위는 '1'"),
+        ("mm", "mm", False, "단위는 '1'"),
+    ],
+)
+def test_prepeak_prefix_rejects_unusable_source_pair_units(
+    data_unit: str, physical_unit: str | None, remove_physical: bool, message: str
+) -> None:
+    frame = _frame([0.0, 0.01, 0.02, 0.015], [1.0, 5.0, 9.0, 8.0])
+    frame.columns["source_data_row"] = np.asarray([1.0, 2.0, 3.0, 4.0])
+    frame.columns["source_physical_line"] = np.asarray([2.0, 3.0, 4.0, 5.0])
+    frame.units["source_data_row"] = data_unit
+    frame.units["source_physical_line"] = physical_unit
+    if remove_physical:
+        del frame.columns["source_physical_line"]
+        del frame.units["source_physical_line"]
+
+    with pytest.raises(ProcessingError, match=message):
+        apply([Step("tensile.prepeak_prefix", {})], frame)
+
+
+@pytest.mark.parametrize(
+    ("data_row", "physical_line", "message"),
+    [
+        ([1.0, 3.0, 2.0, 4.0], [2.0, 4.0, 3.0, 5.0], "엄격히 증가"),
+        ([1.0, 2.0, 2.0, 4.0], [2.0, 3.0, 3.0, 5.0], "엄격히 증가"),
+        ([1.0, 2.5, 3.0, 4.0], [2.0, 3.0, 4.0, 5.0], "정수가 아닌"),
+        ([1.0, 2.0, 3.0, 4.0], [2.0, 3.0, 5.0, 6.0], "대응 차이"),
+        ([1.0, 2.0, 4.0, 5.0], [2.0, 3.0, 5.0, 6.0], "1부터 연속"),
+        ([0.0, 1.0, 2.0, 3.0], [1.0, 2.0, 3.0, 4.0], "1 이상"),
+        ([1.0, 2.0, 3.0, 4.0], [1.0, 2.0, 3.0, 4.0], "source_physical_line.*source_data_row"),
+        ([2.0, 3.0, 4.0, 5.0], [1.0, 2.0, 3.0, 4.0], "source_physical_line.*source_data_row"),
+    ],
+)
+def test_prepeak_prefix_rejects_invalid_source_row_pair(
+    data_row: list[float], physical_line: list[float], message: str
+) -> None:
+    frame = _frame([0.0, 0.01, 0.02, 0.015], [1.0, 5.0, 9.0, 8.0])
+    frame.columns["source_data_row"] = np.asarray(data_row)
+    frame.columns["source_physical_line"] = np.asarray(physical_line)
+    frame.units["source_data_row"] = "1"
+    frame.units["source_physical_line"] = "1"
+
+    with pytest.raises(ProcessingError, match=message):
+        apply([Step("tensile.prepeak_prefix", {})], frame)
+
+
 def test_prepeak_prefix_rejects_force_peak_mismatch() -> None:
     frame = _frame([0.0, 0.01, 0.02, 0.03], [1.0, 4.0, 8.0, 7.0])
     frame.columns["force"] = np.asarray([1.0, 4.0, 7.0, 8.0])

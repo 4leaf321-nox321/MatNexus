@@ -30,6 +30,16 @@ def _source_frame(strain: list[float]) -> Frame:
     )
 
 
+def _source_pair_frame(strain: list[float]) -> Frame:
+    frame = _source_frame(strain)
+    count = len(strain)
+    frame.columns["source_data_row"] = np.arange(1, count + 1, dtype=np.float64)
+    frame.columns["source_physical_line"] = np.arange(2, count + 2, dtype=np.float64)
+    frame.units["source_data_row"] = "1"
+    frame.units["source_physical_line"] = "1"
+    return frame
+
+
 def _source_guard(frame: Frame, **overrides: object) -> processing.PipelineResult:
     options: dict[str, object] = {
         "proof_left_index": 2,
@@ -66,6 +76,18 @@ def _plastic_frame(
     )
 
 
+def _plastic_pair_frame(x: list[float]) -> Frame:
+    frame = _plastic_frame(
+        x,
+        [438.5, *[float(row) for row in range(439, 438 + len(x))]],
+        source_name="source_data_row",
+    )
+    frame.columns["source_physical_line"] = frame.columns["source_data_row"] + 2.0
+    frame.units["source_data_row"] = "1"
+    frame.units["source_physical_line"] = "1"
+    return frame
+
+
 def _plastic_guard(
     frame: Frame, *, include_source_index: bool = True, **overrides: object
 ) -> processing.PipelineResult:
@@ -98,6 +120,8 @@ def test_guard_registration_and_produced_keys_are_bounded() -> None:
         "prepared_row",
         "source_csv_line",
         "source_excel_row",
+        "source_data_row",
+        "source_physical_line",
     )
     assert source_index.role is None
 
@@ -144,6 +168,119 @@ def test_source_guard_distinguishes_exact_proof_boundaries(
     )
     assert _scalar(result, "source_support_proof_mode_code") == mode
     assert _scalar(result, "source_support_points") == points
+
+
+def test_source_guard_accepts_source_data_and_physical_row_pair() -> None:
+    frame = _source_pair_frame([0.0, 0.0009, 0.0008, 0.0012, 0.0016, 0.004])
+    del frame.columns["source_row"]
+    del frame.units["source_row"]
+
+    result = _source_guard(
+        frame,
+        proof_left_index=3,
+        proof_right_index=4,
+        proof_strain=0.0014,
+        peak_index=5,
+        peak_strain=0.004,
+    )
+
+    assert _scalar(result, "source_support_order_code") == 1.0
+
+
+@pytest.mark.parametrize("column", ["source_data_row", "source_physical_line"])
+def test_source_guard_rejects_single_source_row_pair_column(column: str) -> None:
+    frame = _source_frame([0.0, 0.0009, 0.0008, 0.0012, 0.0016, 0.004])
+    frame.columns[column] = np.arange(1, 7, dtype=np.float64)
+    frame.units[column] = "1"
+
+    with pytest.raises(ProcessingError, match="두 열을 함께"):
+        _source_guard(
+            frame,
+            proof_left_index=3,
+            proof_right_index=4,
+            proof_strain=0.0014,
+            peak_index=5,
+            peak_strain=0.004,
+        )
+
+
+def test_source_guard_rejects_unknown_units_for_source_row_pair() -> None:
+    frame = _source_pair_frame([0.0, 0.0009, 0.0008, 0.0012, 0.0016, 0.004])
+    del frame.columns["source_row"]
+    del frame.units["source_row"]
+    frame.units["source_data_row"] = "?"
+    frame.units["source_physical_line"] = "?"
+
+    with pytest.raises(ProcessingError, match="단위는 '1'"):
+        _source_guard(
+            frame,
+            proof_left_index=3,
+            proof_right_index=4,
+            proof_strain=0.0014,
+            peak_index=5,
+            peak_strain=0.004,
+        )
+
+
+@pytest.mark.parametrize(
+    ("data_row", "physical_line", "message"),
+    [
+        (
+            [1.0, 3.0, 2.0, 4.0, 5.0, 6.0],
+            [2.0, 4.0, 3.0, 5.0, 6.0, 7.0],
+            "엄격히 증가",
+        ),
+        (
+            [1.0, 2.0, 2.0, 4.0, 5.0, 6.0],
+            [2.0, 3.0, 3.0, 5.0, 6.0, 7.0],
+            "엄격히 증가",
+        ),
+        (
+            [1.0, 2.5, 3.0, 4.0, 5.0, 6.0],
+            [2.0, 3.0, 4.0, 5.0, 6.0, 7.0],
+            "정수가 아닌",
+        ),
+        (
+            [1.0, 2.0, 3.0, 4.0, 5.0, 6.0],
+            [2.0, 3.0, 5.0, 6.0, 7.0, 8.0],
+            "대응 차이",
+        ),
+        (
+            [1.0, 2.0, 4.0, 5.0, 6.0, 7.0],
+            [2.0, 3.0, 5.0, 6.0, 7.0, 8.0],
+            "1부터 연속",
+        ),
+        ([0.0, 1.0, 2.0, 3.0, 4.0, 5.0], [1.0, 2.0, 3.0, 4.0, 5.0, 6.0], "1 이상"),
+        (
+            [1.0, 2.0, 3.0, 4.0, 5.0, 6.0],
+            [1.0, 2.0, 3.0, 4.0, 5.0, 6.0],
+            "source_physical_line.*source_data_row",
+        ),
+        (
+            [2.0, 3.0, 4.0, 5.0, 6.0, 7.0],
+            [1.0, 2.0, 3.0, 4.0, 5.0, 6.0],
+            "source_physical_line.*source_data_row",
+        ),
+    ],
+)
+def test_source_guard_rejects_invalid_source_row_pair(
+    data_row: list[float], physical_line: list[float], message: str
+) -> None:
+    frame = _source_frame([0.0, 0.0009, 0.0008, 0.0012, 0.0016, 0.004])
+    frame.columns["source_data_row"] = np.asarray(data_row)
+    frame.columns["source_physical_line"] = np.asarray(physical_line)
+    frame.units["source_data_row"] = "1"
+    frame.units["source_physical_line"] = "1"
+
+    with pytest.raises(ProcessingError, match=message):
+        _source_guard(
+            frame,
+            proof_left_index=3,
+            proof_right_index=4,
+            proof_strain=0.0014,
+            peak_index=5,
+            peak_strain=0.004,
+        )
 
 
 def test_source_guard_holds_preproof_coordinate_intrusion_after_stable_sort() -> None:
@@ -278,6 +415,89 @@ def test_plastic_guard_auto_choice_value_selects_csv_line_evidence() -> None:
     result = _plastic_guard(frame, source_index="auto")
 
     assert result.stages[-1].options["source_index"] == "source_csv_line"
+
+
+def test_plastic_guard_accepts_source_data_and_physical_row_pair() -> None:
+    result = _plastic_guard(
+        _plastic_pair_frame([0.0, 0.0, 0.01, 0.02]), include_source_index=False
+    )
+
+    assert result.stages[-1].options["source_index"] == "source_data_row"
+    assert "source_data_row" in " ".join(result.notes)
+
+
+@pytest.mark.parametrize("column", ["source_data_row", "source_physical_line"])
+def test_plastic_guard_rejects_single_source_row_pair_column(column: str) -> None:
+    frame = _plastic_frame(
+        [0.0, 0.0, 0.01, 0.02],
+        [438.5, 439.0, 440.0, 441.0],
+        source_name=column,
+    )
+
+    with pytest.raises(ProcessingError, match="두 열을 함께"):
+        _plastic_guard(frame, include_source_index=False)
+
+
+def test_plastic_guard_accepts_fractional_proof_anchor_offset_rounding() -> None:
+    frame = _plastic_pair_frame([0.0, 0.0, 0.01, 0.02])
+    frame.columns["source_physical_line"][0] += 2.0e-10
+
+    result = _plastic_guard(frame, include_source_index=False)
+
+    assert result.stages[-1].options["source_index"] == "source_data_row"
+
+
+@pytest.mark.parametrize(
+    ("data_unit", "physical_unit", "remove_physical", "message"),
+    [
+        ("?", None, True, "단위는 '1'"),
+        ("?", "1", False, "단위는 '1'"),
+        ("mm", "mm", False, "단위는 '1'"),
+    ],
+)
+def test_plastic_guard_rejects_unusable_source_pair_units(
+    data_unit: str, physical_unit: str | None, remove_physical: bool, message: str
+) -> None:
+    frame = _plastic_pair_frame([0.0, 0.0, 0.01, 0.02])
+    frame.units["source_data_row"] = data_unit
+    frame.units["source_physical_line"] = physical_unit
+    if remove_physical:
+        del frame.columns["source_physical_line"]
+        del frame.units["source_physical_line"]
+
+    with pytest.raises(ProcessingError, match=message):
+        _plastic_guard(frame, include_source_index=False)
+
+
+@pytest.mark.parametrize(
+    ("data_row", "physical_line", "message"),
+    [
+        ([438.5, 440.0, 439.0, 441.0], [440.5, 442.0, 441.0, 443.0], "엄격히 증가"),
+        ([438.5, 439.0, 439.0, 441.0], [440.5, 441.0, 441.0, 443.0], "엄격히 증가"),
+        ([438.5, 439.5, 440.0, 441.0], [440.5, 441.0, 442.0, 443.0], "정수가 아닌"),
+        ([1.5, 2.0, 3.0, 4.0], [2.5, 4.0, 5.0, 6.0], "대응 차이"),
+        ([1.5, 2.0, 4.0, 5.0], [3.5, 4.0, 6.0, 7.0], "연속한"),
+        ([0.5, 1.0, 2.0, 3.0], [1.5, 2.0, 3.0, 4.0], "1기반"),
+        ([1.5, 2.0, 3.0, 4.0], [1.5, 2.0, 3.0, 4.0], "source_physical_line.*source_data_row"),
+        ([2.5, 3.0, 4.0, 5.0], [1.5, 2.0, 3.0, 4.0], "source_physical_line.*source_data_row"),
+    ],
+)
+def test_plastic_guard_rejects_invalid_source_row_pair(
+    data_row: list[float], physical_line: list[float], message: str
+) -> None:
+    frame = _plastic_frame([0.0, 0.0, 0.01, 0.02], data_row, source_name="source_data_row")
+    frame.columns["source_physical_line"] = np.asarray(physical_line)
+    frame.units["source_physical_line"] = "1"
+
+    with pytest.raises(ProcessingError, match=message):
+        _plastic_guard(frame, include_source_index=False)
+
+
+def test_plastic_guard_rejects_arbitrary_explicit_source_index() -> None:
+    frame = _plastic_frame([0.0, 0.0, 0.01, 0.02], [438.5, 439.0, 440.0, 441.0])
+
+    with pytest.raises(ProcessingError, match="지원하지 않는 source_index"):
+        _plastic_guard(frame, source_index="arbitrary")
 
 
 def test_plastic_guard_auto_falls_back_to_next_valid_evidence_column() -> None:

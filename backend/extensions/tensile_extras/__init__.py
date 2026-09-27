@@ -208,6 +208,8 @@ register(
                 "prepared_row": "prepared_row",
                 "source_csv_line": "source_csv_line",
                 "source_excel_row": "source_excel_row",
+                "source_data_row": "source_data_row",
+                "source_physical_line": "source_physical_line",
             },
             choice_help={
                 "auto": "검증된 취득 순서 증거 열을 우선순위대로 선택합니다.",
@@ -215,8 +217,14 @@ register(
                 "prepared_row": "준비 단계가 보존한 원자료 행 번호를 직접 지정합니다.",
                 "source_csv_line": "CSV 원자료 행 번호를 직접 지정합니다.",
                 "source_excel_row": "Excel 원자료 행 번호를 직접 지정합니다.",
+                "source_data_row": "원자료 수치 데이터 행 번호를 직접 지정합니다.",
+                "source_physical_line": "원자료 물리 파일 행 번호를 직접 지정합니다.",
             },
-            help="자동은 검증된 취득 순서 증거를 선택하고, 필요하면 열을 직접 지정합니다.",
+            help=(
+                "자동은 검증된 취득 순서 증거를 선택하고, 필요하면 허용된 열을 직접 "
+                "지정합니다. source_data_row와 source_physical_line이 함께 있으면 "
+                "둘의 행별 대응도 검증합니다."
+            ),
         ),
     ),
     makes_values=(

@@ -23,7 +23,11 @@ ORDER_EVIDENCE_COLUMNS = (
     "prepared_row",
     "source_csv_line",
     "source_excel_row",
+    "source_data_row",
+    "source_physical_line",
 )
+SOURCE_ROW_PAIR = ("source_data_row", "source_physical_line")
+MAX_EXACT_INTEGER = float(1 << 53)
 OPTION_KEYS = frozenset(
     {
         "proof_left_index",
@@ -83,8 +87,8 @@ def source_support_order_guard(frame: Frame, options: dict[str, Any]) -> StepRes
     evidence_columns = _evidence_columns(frame, strain.size)
     if not evidence_columns:
         raise ProcessingError(
-            "취득 순서 증거 열(source_row/prepared_row/source_csv_line/source_excel_row)이 "
-            "없어 원행 support 순서를 확인할 수 없습니다."
+            "취득 순서 증거 열(" + "/".join(ORDER_EVIDENCE_COLUMNS) + ")이 없어 "
+            "원행 support 순서를 확인할 수 없습니다."
         )
 
     left = _row_index(options.get("proof_left_index"), "proof_left_index")
@@ -229,7 +233,8 @@ def source_support_order_guard(frame: Frame, options: dict[str, Any]) -> StepRes
     mode_label = {0: "보간 교점", 1: "왼쪽 정확 경계", 2: "오른쪽 정확 경계"}[proof_mode]
     notes = (
         f"proof {mode_label}부터 prefix peak까지 {len(time_positions)}개 원행의 "
-        "시간 순서와 좌표창 지원 집합을 확인했습니다.",
+        "시간 순서와 좌표창 지원 집합을 확인했습니다. "
+        f"취득 순서 증거 열: {', '.join(evidence_columns)}.",
         f"proof 앞 변형률 후퇴 진단 {prefix_backsteps}개는 이 guard의 보류 조건으로 "
         "사용하지 않았습니다. stable 정렬·중복 평균이 proof 경계쌍도 "
         "바꾸지 않는지 확인했습니다.",
@@ -322,6 +327,7 @@ def _first_group_offender(group: np.ndarray, expected: int) -> int:
 
 def _evidence_columns(frame: Frame, size: int) -> tuple[str, ...]:
     present: list[str] = []
+    validated: dict[str, np.ndarray] = {}
     for name in ORDER_EVIDENCE_COLUMNS:
         if name not in frame.columns:
             continue
@@ -329,14 +335,67 @@ def _evidence_columns(frame: Frame, size: int) -> tuple[str, ...]:
         values = _numeric_column(frame, name, "원행 증거")
         if values.size != size:
             raise ProcessingError(f"원행 증거 열 '{name}'의 길이가 변형률과 다릅니다.")
+        if np.any(np.abs(values) > MAX_EXACT_INTEGER):
+            raise ProcessingError(
+                f"원행 증거 열 '{name}'에 정확히 표현할 수 없는 정수가 있습니다."
+            )
         if np.any(values != np.floor(values)):
             raise ProcessingError(f"원행 증거 열 '{name}'에 정수가 아닌 값이 있습니다.")
         if values.size >= 2 and np.any(np.diff(values) <= 0.0):
             raise ProcessingError(
                 f"원행 증거 열 '{name}'이 엄격히 증가하지 않습니다. 취득 순서를 확인하세요."
             )
+        validated[name] = values
         present.append(name)
+    _validate_source_row_pair(validated)
     return tuple(present)
+
+
+def _validate_source_row_pair(values: dict[str, np.ndarray]) -> None:
+    data_name, physical_name = SOURCE_ROW_PAIR
+    present = tuple(name for name in SOURCE_ROW_PAIR if name in values)
+    if not present:
+        return
+    if len(present) != len(SOURCE_ROW_PAIR):
+        raise ProcessingError(
+            "source_data_row와 source_physical_line은 원행 pair 증거라서 두 열을 함께 "
+            "제공해야 합니다. 한 열만 있는 입력은 처리하지 않습니다."
+        )
+    data = values[data_name]
+    physical = values[physical_name]
+    if data.size != physical.size:
+        raise ProcessingError("source_data_row와 source_physical_line의 길이가 서로 다릅니다.")
+    if data.size == 0:
+        return
+    if np.any(data < 1.0) or np.any(physical < 1.0):
+        raise ProcessingError(
+            "source_data_row와 source_physical_line은 1기반 원행 증거라서 모든 값이 "
+            "1 이상이어야 합니다."
+        )
+    if np.any(physical <= data):
+        raise ProcessingError(
+            "source_physical_line은 헤더를 포함한 물리 파일 행이므로 "
+            "source_data_row보다 커야 합니다."
+        )
+    expected_data = np.arange(1.0, data.size + 1.0, dtype=np.float64)
+    if not np.array_equal(data, expected_data):
+        raise ProcessingError(
+            "source_support prefix의 source_data_row는 현재 입력에서 1부터 연속한 "
+            "1..N이어야 합니다. 발췌·재배열된 행은 후보로 처리하지 않습니다."
+        )
+    offset = physical - data
+    if offset[0] < 1.0 or offset[0] != np.floor(offset[0]):
+        raise ProcessingError(
+            "source_physical_line-source_data_row offset은 1 이상의 정수여야 합니다."
+        )
+    if not np.all(np.isfinite(offset)) or not np.allclose(
+        offset, offset[0], rtol=0.0, atol=1e-9
+    ):
+        raise ProcessingError(
+            "source_data_row와 source_physical_line의 행별 대응 차이가 일정하지 않아 "
+            "처리하지 않습니다. 원자료의 빈 줄로 offset이 달라지는 경우도 후보를 "
+            "보류합니다."
+        )
 
 
 def _first_difference(expected: np.ndarray, actual: np.ndarray) -> tuple[int, int]:

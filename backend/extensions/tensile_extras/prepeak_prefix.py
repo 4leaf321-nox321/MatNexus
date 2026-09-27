@@ -22,7 +22,11 @@ ORDER_EVIDENCE_COLUMNS = (
     "prepared_row",
     "source_csv_line",
     "source_excel_row",
+    "source_data_row",
+    "source_physical_line",
 )
+SOURCE_ROW_PAIR = ("source_data_row", "source_physical_line")
+MAX_EXACT_INTEGER = float(1 << 53)
 OPTION_KEYS = frozenset({"strain", "stress"})
 MIN_INPUT_POINTS = 2
 
@@ -56,7 +60,7 @@ def prepeak_prefix(frame: Frame, options: dict[str, Any]) -> StepResult:
     _require_unit(frame, stress_name, "Pa", "응력")
 
     n, columns = _numeric_columns(frame)
-    order_columns = _validate_order_evidence(columns)
+    order_columns = _validate_order_evidence(frame, columns)
     if n < MIN_INPUT_POINTS:
         raise ProcessingError(
             "prepeak prefix를 적용하려면 동일 길이의 유한한 입력 행이 최소 2개 필요합니다."
@@ -214,10 +218,16 @@ def _numeric_columns(frame: Frame) -> tuple[int, dict[str, np.ndarray]]:
     return expected, columns
 
 
-def _validate_order_evidence(columns: dict[str, np.ndarray]) -> tuple[str, ...]:
+def _validate_order_evidence(frame: Frame, columns: dict[str, np.ndarray]) -> tuple[str, ...]:
     present = tuple(name for name in ORDER_EVIDENCE_COLUMNS if name in columns)
     for name in present:
+        _require_unit(frame, name, "1", "원행 증거")
         values = columns[name]
+        if np.any(np.abs(values) > MAX_EXACT_INTEGER):
+            raise ProcessingError(
+                f"순서 증거 열 '{name}' 에 정확히 표현할 수 없는 정수가 있어 "
+                "처리하지 않습니다."
+            )
         if np.any(values != np.floor(values)):
             raise ProcessingError(
                 f"순서 증거 열 '{name}' 에 정수가 아닌 원행 값이 있어 처리하지 않습니다."
@@ -227,7 +237,55 @@ def _validate_order_evidence(columns: dict[str, np.ndarray]) -> tuple[str, ...]:
                 f"순서 증거 열 '{name}' 이 엄격히 증가하지 않아 처리하지 않습니다. "
                 "취득 순서가 정렬·중복 제거로 바뀌었는지 확인하세요."
             )
+    _validate_source_row_pair(columns)
     return present
+
+
+def _validate_source_row_pair(columns: dict[str, np.ndarray]) -> None:
+    data_name, physical_name = SOURCE_ROW_PAIR
+    present = tuple(name for name in SOURCE_ROW_PAIR if name in columns)
+    if not present:
+        return
+    if len(present) != len(SOURCE_ROW_PAIR):
+        raise ProcessingError(
+            "source_data_row와 source_physical_line은 원행 pair 증거라서 두 열을 함께 "
+            "제공해야 합니다. 한 열만 있는 입력은 처리하지 않습니다."
+        )
+    data = columns[data_name]
+    physical = columns[physical_name]
+    if data.size != physical.size:
+        raise ProcessingError("source_data_row와 source_physical_line의 길이가 서로 다릅니다.")
+    if data.size == 0:
+        return
+    if np.any(data < 1.0) or np.any(physical < 1.0):
+        raise ProcessingError(
+            "source_data_row와 source_physical_line은 1기반 원행 증거라서 모든 값이 "
+            "1 이상이어야 합니다."
+        )
+    if np.any(physical <= data):
+        raise ProcessingError(
+            "source_physical_line은 헤더를 포함한 물리 파일 행이므로 "
+            "source_data_row보다 커야 합니다."
+        )
+    expected_data = np.arange(1.0, data.size + 1.0, dtype=np.float64)
+    if not np.array_equal(data, expected_data):
+        raise ProcessingError(
+            "prepeak 원자료의 source_data_row는 현재 입력에서 1부터 연속한 1..N이어야 "
+            "합니다. 발췌·재배열된 행은 후보로 처리하지 않습니다."
+        )
+    offset = physical - data
+    if offset[0] < 1.0 or offset[0] != np.floor(offset[0]):
+        raise ProcessingError(
+            "source_physical_line-source_data_row offset은 1 이상의 정수여야 합니다."
+        )
+    if not np.all(np.isfinite(offset)) or not np.allclose(
+        offset, offset[0], rtol=0.0, atol=1e-9
+    ):
+        raise ProcessingError(
+            "source_data_row와 source_physical_line의 행별 대응 차이가 일정하지 않아 "
+            "처리하지 않습니다. 원자료의 빈 줄로 offset이 달라지는 경우도 후보를 "
+            "보류합니다."
+        )
 
 
 def _validate_force_evidence(

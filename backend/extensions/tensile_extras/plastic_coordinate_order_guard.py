@@ -16,7 +16,11 @@ SOURCE_EVIDENCE_COLUMNS = (
     "prepared_row",
     "source_csv_line",
     "source_excel_row",
+    "source_data_row",
+    "source_physical_line",
 )
+SOURCE_ROW_PAIR = ("source_data_row", "source_physical_line")
+MAX_EXACT_INTEGER = float(1 << 53)
 OPTION_KEYS = frozenset({"x", "source_index"})
 
 
@@ -26,6 +30,15 @@ def prepare_options(options: dict[str, Any]) -> dict[str, Any]:
     if unknown:
         names = ", ".join(repr(name) for name in unknown)
         raise ProcessingError(f"진소성 좌표 순서 guard에 알 수 없는 옵션이 있습니다: {names}.")
+    source_option = prepared.get("source_index")
+    if source_option is not None and (
+        not isinstance(source_option, str)
+        or (source_option != "auto" and source_option not in SOURCE_EVIDENCE_COLUMNS)
+    ):
+        names = ", ".join(repr(name) for name in SOURCE_EVIDENCE_COLUMNS)
+        raise ProcessingError(
+            f"지원하지 않는 source_index '{source_option}'입니다. 허용 값: 'auto', {names}."
+        )
     return prepared
 
 
@@ -57,6 +70,7 @@ def plastic_coordinate_order_guard(frame: Frame, options: dict[str, Any]) -> Ste
         )
     _require_unit(frame, x_name, "1", "진소성변형률")
     x = _numeric_column(frame, x_name, "진소성변형률")
+    _validate_source_row_pair(frame, x.size)
     if explicit_source_index:
         source = _validated_source_column(frame, source_name, x.size)
     else:
@@ -213,6 +227,8 @@ def _validated_source_column(frame: Frame, name: str, size: int) -> np.ndarray:
             f"({values.size} 대 {size})."
         )
     measured = values[1:]
+    if np.any(np.abs(measured) > MAX_EXACT_INTEGER):
+        raise ProcessingError(f"원행 증거 열 '{name}'에 정확히 표현할 수 없는 값이 있습니다.")
     if np.any(measured != np.floor(measured)):
         raise ProcessingError(
             f"원행 증거 열 '{name}'의 proof 뒤에 정수가 아닌 파생 행이 포함되어 있습니다."
@@ -220,6 +236,68 @@ def _validated_source_column(frame: Frame, name: str, size: int) -> np.ndarray:
     if measured.size >= 2 and np.any(np.diff(measured) <= 0.0):
         raise ProcessingError(f"원행 순서 증거 열 '{name}'이 엄격히 증가하지 않습니다.")
     return values
+
+
+def _validate_source_row_pair(frame: Frame, size: int) -> None:
+    data_name, physical_name = SOURCE_ROW_PAIR
+    present = tuple(name for name in SOURCE_ROW_PAIR if name in frame.columns)
+    for name in present:
+        _require_unit(frame, name, "1", "원행 증거")
+    if not present:
+        return
+    if len(present) != len(SOURCE_ROW_PAIR):
+        raise ProcessingError(
+            "source_data_row와 source_physical_line은 원행 pair 증거라서 두 열을 함께 "
+            "제공해야 합니다. 한 열만 있는 입력은 처리하지 않습니다."
+        )
+    data = _validated_source_column(frame, data_name, size)
+    physical = _validated_source_column(frame, physical_name, size)
+    if data.size != physical.size:
+        raise ProcessingError("source_data_row와 source_physical_line의 길이가 서로 다릅니다.")
+    if data.size == 0:
+        return
+    if np.any(data < 1.0) or np.any(physical < 1.0):
+        raise ProcessingError(
+            "source_data_row와 source_physical_line은 1기반 원행 증거라서 모든 값이 "
+            "1 이상이어야 합니다. proof anchor의 fractional 값도 1 이상이어야 합니다."
+        )
+    if np.any(physical <= data):
+        raise ProcessingError(
+            "source_physical_line은 헤더를 포함한 물리 파일 행이므로 "
+            "source_data_row보다 커야 합니다."
+        )
+    measured_data = data[1:]
+    measured_physical = physical[1:]
+    if measured_data.size >= 2 and (
+        np.any(np.diff(measured_data) != 1.0) or np.any(np.diff(measured_physical) != 1.0)
+    ):
+        raise ProcessingError(
+            "source_data_row와 source_physical_line의 proof 뒤 측정행이 연속한 "
+            "정수행이 아닙니다."
+        )
+    if np.any(np.diff(data) <= 0.0) or np.any(np.diff(physical) <= 0.0):
+        raise ProcessingError(
+            "source_data_row와 source_physical_line이 엄격히 증가하지 않아 처리하지 않습니다."
+        )
+    offset = physical - data
+    measured_offset = offset[1:]
+    if np.any(measured_offset < 1.0) or np.any(measured_offset != np.floor(measured_offset)):
+        raise ProcessingError(
+            "source_physical_line-source_data_row의 측정행 offset은 1 이상의 정수여야 합니다."
+        )
+    if measured_offset.size == 0:
+        return
+    expected_offset = float(measured_offset[0])
+    if (
+        not np.all(np.isfinite(offset))
+        or not np.isclose(offset[0], expected_offset, rtol=0.0, atol=1e-9)
+        or not np.allclose(measured_offset, expected_offset, rtol=0.0, atol=1e-9)
+    ):
+        raise ProcessingError(
+            "source_data_row와 source_physical_line의 행별 대응 차이가 일정하지 않아 "
+            "처리하지 않습니다. 원자료의 빈 줄로 offset이 달라지는 경우도 후보를 "
+            "보류합니다."
+        )
 
 
 def _column_name(options: dict[str, Any], key: str, default: str) -> str:
