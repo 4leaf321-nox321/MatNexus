@@ -21,6 +21,7 @@ from matcore.registry import ParamSpec, Produced, register
 from . import (  # noqa: F401  (card 는 import 만으로 블록·렌더러를 등록한다)
     band_model,
     card,
+    coordinate_projected,
     effective_card_domain,
     model_anchor,
     model_curve,
@@ -32,6 +33,7 @@ from . import (  # noqa: F401  (card 는 import 만으로 블록·렌더러를 �
     ratio,
     source_elastic,
     source_proof,
+    source_stress_snapshot,
     source_support_order_guard,
     temperature,
     terminal_domain,
@@ -841,6 +843,51 @@ register(
 )(model_support.model_support)
 
 register(
+    id="tensile.source_stress_snapshot",
+    kind="processing",
+    label="모델 입력 원응력 snapshot",
+    applies_to=("tensile",),
+    requires_channels=(("displacement",), ("force",)),
+    params=(
+        ParamSpec(
+            name="strain",
+            label="공학 변형률 열",
+            type="str",
+            role="column",
+            default=source_stress_snapshot.DEFAULT_STRAIN,
+            unit="1",
+            dimension="strain",
+        ),
+        ParamSpec(
+            name="stress",
+            label="공학 응력 열",
+            type="str",
+            role="column",
+            default=source_stress_snapshot.DEFAULT_STRESS,
+            unit="Pa",
+        ),
+        ParamSpec(
+            name="snapshot",
+            label="원응력 snapshot 열",
+            type="str",
+            default=source_stress_snapshot.DEFAULT_SNAPSHOT,
+            unit="Pa",
+            help="band_model 전에 현재 공학 응력을 별도 열로 보존합니다.",
+        ),
+    ),
+    makes_columns=(
+        Produced(
+            source_stress_snapshot.DEFAULT_SNAPSHOT,
+            "모델 입력 원응력 snapshot",
+            "Pa",
+        ),
+    ),
+    order=81,
+    version="1",
+    prepare_options=source_stress_snapshot.prepare_options,
+)(source_stress_snapshot.source_stress_snapshot)
+
+register(
     id="tensile.yield_ratio",
     kind="processing",
     label="항복비",
@@ -1633,6 +1680,150 @@ register(
     version="1",
     prepare_options=model_anchor.prepare_options,
 )(model_anchor.model_anchor)
+
+register(
+    id="tensile.coordinate_projected_v1",
+    kind="processing",
+    label="좌표 투영 모델(v1)",
+    applies_to=("tensile",),
+    requires_channels=(("displacement",), ("force",)),
+    params=(
+        ParamSpec(
+            name="method",
+            label="원 모델 방법",
+            type="choice",
+            choices=coordinate_projected.METHOD_CHOICES,
+            default=coordinate_projected.DEFAULT_METHOD,
+            choice_labels={method: method for method in coordinate_projected.METHOD_CHOICES},
+            help=(
+                "band_model이 바꾼 행만 좌표 순서 조건 안에서 보정합니다. 결과는 "
+                "별도 coordinate-projected model로 기록됩니다."
+            ),
+        ),
+        ParamSpec(
+            name="youngs_modulus",
+            label="탄성계수",
+            type="float",
+            unit="Pa",
+            default="@youngs_modulus",
+            required=True,
+        ),
+        ParamSpec(
+            name="proof_strain",
+            label="모델 proof 변형률",
+            type="float",
+            unit="1",
+            dimension="strain",
+            default="@model_proof_strain",
+            required=True,
+            links_to="model_proof_strain",
+        ),
+        ParamSpec(
+            name="proof_stress",
+            label="모델 proof 응력",
+            type="float",
+            unit="Pa",
+            default="@model_proof_stress",
+            required=True,
+            links_to="model_proof_stress",
+        ),
+        ParamSpec(
+            name="offset_strain",
+            label="모델 proof 오프셋",
+            type="float",
+            unit="1",
+            dimension="strain",
+            default="@model_proof_offset",
+            required=True,
+            links_to="model_proof_offset",
+        ),
+        ParamSpec(
+            name="search_start",
+            label="proof 탐색 시작",
+            type="float",
+            unit="1",
+            dimension="strain",
+            help="model_anchor에서 탐색 시작을 지정했다면 같은 값을 넣습니다.",
+        ),
+        ParamSpec(
+            name="search_end",
+            label="proof 탐색 끝",
+            type="float",
+            unit="1",
+            dimension="strain",
+            help="model_anchor에서 탐색 끝을 지정했다면 같은 값을 넣습니다.",
+        ),
+        ParamSpec(
+            name="end_strain",
+            label="좌표 투영 상한",
+            type="float",
+            unit="1",
+            dimension="strain",
+            help=(
+                "선택하면 이 변형률 이하의 모델 행만 투영합니다. 카드 경계가 확정된 "
+                "레시피에서는 그 경계를 넣어 말단의 원행을 보존합니다."
+            ),
+        ),
+        ParamSpec(
+            name="strain",
+            label="공학 변형률 열",
+            type="str",
+            role="column",
+            default=coordinate_projected.DEFAULT_STRAIN,
+            unit="1",
+            dimension="strain",
+        ),
+        ParamSpec(
+            name="stress",
+            label="공학 응력 열",
+            type="str",
+            role="column",
+            default=coordinate_projected.DEFAULT_STRESS,
+            unit="Pa",
+        ),
+        ParamSpec(
+            name="snapshot",
+            label="원응력 snapshot 열",
+            type="str",
+            role="column",
+            default=coordinate_projected.DEFAULT_SNAPSHOT,
+            unit="Pa",
+        ),
+        ParamSpec(
+            name="source_index",
+            label="원행 대응 열",
+            type="str",
+            role="column",
+            default=coordinate_projected.DEFAULT_SOURCE_INDEX,
+            unit="1",
+        ),
+    ),
+    makes_values=(
+        Produced(
+            "coordinate_projected_correction_count",
+            "좌표 투영 응력 보정 점 수",
+            "1",
+        ),
+        Produced(
+            "coordinate_projected_max_abs_change",
+            "좌표 투영 최대 응력 보정 폭",
+            "Pa",
+        ),
+        Produced(
+            "coordinate_projected_first_source_row",
+            "좌표 투영 첫 원행",
+            "1",
+        ),
+        Produced(
+            "coordinate_projected_last_source_row",
+            "좌표 투영 마지막 원행",
+            "1",
+        ),
+    ),
+    order=86,
+    version="1",
+    prepare_options=coordinate_projected.prepare_options,
+)(coordinate_projected.coordinate_projected)
 
 register(
     id="tensile.plastic_domain",
