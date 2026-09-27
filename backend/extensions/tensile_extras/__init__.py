@@ -22,6 +22,7 @@ from . import (  # noqa: F401  (card 는 import 만으로 블록·렌더러를 �
     acquisition_frontier,
     band_model,
     card,
+    card_review,
     coordinate_projected,
     effective_card_domain,
     model_anchor,
@@ -245,6 +246,125 @@ register(
     scope="uniform_true_plastic_card",
     candidate_only=True,
 )(proof_anchor_guard.proof_anchor_guard)
+
+register(
+    id="tensile.card_review_evidence_v1",
+    kind="processing",
+    label="카드 검토 경계 evidence",
+    applies_to=("tensile",),
+    requires_channels=(("displacement",), ("force",)),
+    params=(
+        ParamSpec(
+            name="model_card_changed_points",
+            label="모델 카드 변경점 수",
+            type="int",
+            default="@model_card_changed_points",
+            required=True,
+            help="앞 단계 모델 카드 영향 진단이 낸 변경 관측점 수입니다.",
+        ),
+        ParamSpec(
+            name="card_domain_beyond_source_neck",
+            label="원자료 네킹 후보 뒤 카드 끝 여부",
+            type="bool",
+            default="@card_domain_beyond_source_neck",
+            required=True,
+            help="카드 범위가 원자료 네킹 후보 뒤까지 갔는지 나타내는 0/1 진단입니다.",
+        ),
+        ParamSpec(
+            name="card_domain_effect_info_known",
+            label="모델 응력 변경 시 effect scope metadata 제공 여부",
+            type="bool",
+            default="@card_domain_effect_info_known",
+            required=True,
+            help=(
+                "모델 응력이 변경된 경우 effect scope metadata가 제공되었는지 나타내는 "
+                "0/1 진단입니다. 모델 응력이 바뀌지 않은 uniform source-neck 후보의 "
+                "선택적 metadata 부재만으로 범위 위험을 세우지 않습니다."
+            ),
+        ),
+        ParamSpec(
+            name="card_domain_effect_truncated",
+            label="모델 영향 지지 끝 전 카드 종료 여부",
+            type="bool",
+            default="@card_domain_effect_truncated",
+            required=True,
+            help="카드 끝이 모델 영향 지지 끝보다 앞인지 나타내는 0/1 진단입니다.",
+        ),
+        ParamSpec(
+            name="monotone_points",
+            label="단조 보정점 수",
+            type="int",
+            default="@monotone_points",
+            required=True,
+            help="단조 단계가 값을 바꾼 관측점 수입니다.",
+        ),
+        ParamSpec(
+            name="monotone_max_lift",
+            label="단조 보정 최대 절대 변화",
+            type="float",
+            default="@monotone_max_lift",
+            required=True,
+            help=(
+                "단조 단계의 최대 절대 변화 진단입니다. positive lift 또는 카드·재료·"
+                "solver 승인값이 아닙니다."
+            ),
+        ),
+    ),
+    makes_values=(
+        Produced(
+            "card_review_required_code",
+            "카드 검토 필요 상태 (1=수치 후보)",
+            "1",
+            help=(
+                "수치 후보가 있음을 알리는 경계 상태입니다. 물리 타당성, 재료 카드, "
+                "solver 승인을 뜻하지 않습니다."
+            ),
+        ),
+        Produced(
+            "card_review_model_edit_code",
+            "카드 검토 모델 변경 원인 (1=변경점 있음)",
+            "1",
+            help="model_card_changed_points가 0보다 클 때 1입니다.",
+        ),
+        Produced(
+            "card_review_scope_code",
+            (
+                "카드 검토 범위 원인 (1=모델 응력 변경·"
+                "effect scope metadata absent 또는 범위 초과)"
+            ),
+            "1",
+            help=(
+                "원자료 네킹 후보 뒤 확장 또는 모델 영향 절단이면 1입니다. "
+                "effect_info_known=0은 model stress changed but effect scope metadata "
+                "absent인 "
+                "경우에만 1 원인입니다."
+            ),
+        ),
+        Produced(
+            "card_review_monotone_adjust_code",
+            "카드 검토 단조 보정 원인 (1=보정점 있음)",
+            "1",
+            help=(
+                "monotone_points가 0보다 클 때 1입니다. monotone_max_lift는 절대 변화 "
+                "진단(absolute change diagnostic)이며 positive lift가 아닙니다."
+            ),
+        ),
+        Produced(
+            "card_review_observed_risk_code",
+            "카드 검토 관측 위험 상태 (1=원인 있음)",
+            "1",
+            help=(
+                "세 자동 처리 원인의 OR입니다. 0이어도 카드 승인·재료 승인·solver "
+                "승인이 아닙니다 (0 is not card/material/solver approval)."
+            ),
+        ),
+    ),
+    order=94,
+    version="1",
+    prepare_options=card_review.prepare_options,
+    scope="uniform_true_plastic_card",
+    candidate_only=True,
+)(card_review.card_review_evidence)
 
 register(
     id="tensile.plastic_coordinate_order_guard",
