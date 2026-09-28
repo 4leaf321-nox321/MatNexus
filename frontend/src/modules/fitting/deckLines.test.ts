@@ -265,3 +265,64 @@ describe('비운 칸', () => {
     ])
   })
 })
+
+describe('넓힌 문법 (ADR 0038) — 폼이 못 그려도 잃지 않는다', () => {
+  it('each · pack · fail · 말만 남기는 줄은 원형 그대로 왕복한다', () => {
+    // **기본 형식을 옮긴 정의판이 이 줄들로 되어 있다.** 폼으로 옮겼다 돌리면서 칸이
+    // 빠지면, 고치러 들어와 저장만 눌러도 코드판과 같던 덱이 달라진다.
+    const original = [
+      {
+        each: 'curves',
+        as: 'curve',
+        lines: [{ text: '*PLASTIC, RATE={_key:.12E}' }, { rows: 'curve', fields: [] }],
+      },
+      {
+        pack: [{ expr: '_id', format: ['spec', '<16d'] }, { rows: 'curve', fields: [] }],
+        per_line: 4,
+        first: 'MAT1*   ',
+        next: '*       ',
+        pad_to: 8,
+        pad: ' '.repeat(16),
+        rstrip: true,
+        when: 'has(elastic.density)',
+      },
+      { fail: '합이 {sum(prony, g):.4f} 입니다', when: 'sum(prony, g) >= 1' },
+      { note: 'Prony {count(prony)}항' },
+    ]
+    for (const one of original) {
+      const form = fromDefinitionLine(one)
+      expect(form.kind).toBe('advanced')
+      expect(toDefinitionLine(form)).toEqual(one)
+    }
+  })
+
+  it('묶음의 인자와 칸의 조건·대신할 글자·형식 문자열을 지킨다', () => {
+    const original = [
+      { block: 'header', comment: '$' },
+      {
+        fields: [
+          { value: 'elastic.density', format: ['spec', '>10d'], default: '' },
+          { const: 'x', when: 'has(elastic.density)' },
+        ],
+        prefix: 'MAT1*   ',
+      },
+    ]
+    const round = original.map((one) => toDefinitionLine(fromDefinitionLine(one)))
+    expect(round).toEqual(original)
+  })
+})
+
+describe('빈 구분자', () => {
+  it('예제 덱에서 읽은 고정폭 줄은 저장해도 칸을 붙여 적는다', () => {
+    // **안 보내면 서버가 `", "` 를 끼운다** — LS-DYNA 카드의 칸 사이에 쉼표가 들어가
+    // 다른 필드로 읽힌다. 전에는 예제 덱에서 시작한 고정폭 정의가 저장 한 번에 그랬다.
+    const [line] = fromScan({
+      lines: [{ kind: 'fields', cells: [{ suggested: null }, { suggested: null }], join: '', width: 10, precision: 3 }],
+    })
+    expect(toDefinitionLine(line).join).toBe('')
+  })
+
+  it('안 적었으면 안 보낸다 — 서버의 기본값을 쓴다', () => {
+    expect('join' in toDefinitionLine({ kind: 'fields', fields: [] })).toBe(false)
+  })
+})

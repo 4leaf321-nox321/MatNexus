@@ -5,7 +5,8 @@
 이 묶음이 그 점들을 잇는다. 구성원은 **요약값에서** 선언으로 모은다(`from: summary`) —
 곡선 열이 없는 첫 묶음이다. 계산은 `sn.py`, 카드 블록은 `card.py`.
 
-솔버 덱은 아직 안 낸다 — LS-DYNA *MAT_ADD_FATIGUE 의 자리를 검증할 실측이 없다.
+솔버 덱은 LS-DYNA *MAT_ADD_FATIGUE 하나다(`card.py`, 2026-09-27 — 칸은 R13·R17 매뉴얼로
+맞췄다). 나머지 솔버를 안 내는 이유도 거기 적었다.
 """
 
 from __future__ import annotations

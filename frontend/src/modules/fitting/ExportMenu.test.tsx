@@ -29,12 +29,14 @@ import type { ExportFormat, PropertyCard } from '@/modules/fitting/api'
 
 const download = vi.fn((..._args: unknown[]) => Promise.resolve())
 const unitSystems = vi.fn()
+const pairedFormats = vi.fn()
 
 vi.mock('@/modules/fitting/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/modules/fitting/api')>()),
   fittingApi: {
     download: (...args: unknown[]) => download(...args),
     unitSystems: () => unitSystems(),
+    pairedFormats: (...args: unknown[]) => pairedFormats(...args),
   },
 }))
 
@@ -89,7 +91,7 @@ describe('단위계를 고른다', () => {
   it('안 고르면 서버가 기본이라 한 것으로 낸다', async () => {
     // **화면이 `si` 를 적어 두지 않는다.** 기본이 무엇인지는 서버가 안다.
     await open()
-    await userEvent.click(screen.getByText('Abaqus'))
+    await userEvent.click(screen.getByRole('menuitem', { name: /Abaqus/ }))
     await waitFor(() => expect(download).toHaveBeenCalled())
     const [, , , picked] = download.mock.calls[0] as unknown as unknown[]
     expect(picked).toMatchObject({ key: 'si' })
@@ -98,7 +100,7 @@ describe('단위계를 고른다', () => {
   it('고른 계가 실린다', async () => {
     await open()
     await userEvent.click(screen.getByRole('button', { name: /mm · N · tonne/ }))
-    await userEvent.click(screen.getByText('Abaqus'))
+    await userEvent.click(screen.getByRole('menuitem', { name: /Abaqus/ }))
     await waitFor(() => expect(download).toHaveBeenCalled())
     const [, , , picked] = download.mock.calls[0] as unknown as unknown[]
     expect(picked).toMatchObject({ key: 'mm_n_tonne' })
@@ -124,11 +126,71 @@ describe('단위계를 고른다', () => {
 })
 
 describe('낼 수 없는 형식', () => {
-  it('이유를 미리 말하고 못 누르게 한다', async () => {
-    // 내려받기를 누른 뒤에 "밀도가 없습니다" 를 보는 것은 늦다.
+  it('접혀 있다가 펼치면 이유를 말하고 못 누르게 한다', async () => {
+    // 내려받기를 누른 뒤에 "밀도가 없습니다" 를 보는 것은 늦다. 형식이 서른 개 가까이라
+    // 못 내는 것은 접어 두지만, **없애지 않는다** — 왜 못 내는지가 그 자리에 있다.
     await open()
+    expect(screen.queryByText('OpenRadioss')).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: /못 내는 형식 1개/ }))
     expect(screen.getByText(/밀도 가 있어야 냅니다/)).toBeInTheDocument()
     await userEvent.click(screen.getByText('OpenRadioss'))
     expect(download).not.toHaveBeenCalled()
+  })
+})
+
+describe('솔버로 묶는다', () => {
+  it('괄호 앞이 같은 형식은 한 제목 아래 선다', async () => {
+    const models = [
+      { key: 'ansys_elastic', label: 'ANSYS (선형)', extension: 'mac', describe: 'MP', requires: [] },
+      { key: 'ansys_plastic', label: 'ANSYS (탄소성)', extension: 'mac', describe: 'TB', requires: [] },
+      { key: 'dyna', label: 'LS-DYNA (탄소성)', extension: 'k', describe: '024', requires: [] },
+    ] as ExportFormat[]
+    const card = {
+      ...CARD,
+      available_formats: models.map((one) => one.key),
+    } as unknown as PropertyCard
+    render(<ExportMenu card={card} formats={models} onError={() => {}} />)
+    await userEvent.click(screen.getByRole('button', { name: /내보내기/ }))
+    expect(await screen.findAllByText('ANSYS')).toHaveLength(1)
+    expect(screen.getByText('LS-DYNA')).toBeInTheDocument()
+    await userEvent.click(screen.getByText('ANSYS (탄소성)'))
+    await waitFor(() => expect(download).toHaveBeenCalled())
+    expect(download.mock.calls[0][1]).toMatchObject({ key: 'ansys_plastic' })
+  })
+})
+
+describe('짝 카드와 합쳐 낸다', () => {
+  it('짝을 고르면 새로 낼 수 있는 형식이 서고, 그 짝을 실어 내려받는다', async () => {
+    // 이방성(r값) 카드는 혼자서는 Hill 형식을 못 낸다 — 경화 곡선·탄성이 MD 카드에 있다.
+    const hill = [
+      { key: 'dyna_hill', label: 'LS-DYNA (이방성 Hill48 · 쉘)', extension: 'k', describe: '036', requires: ['탄성계수'] },
+    ] as ExportFormat[]
+    const aniso = {
+      id: 'a1',
+      material_id: 'm1',
+      label: '이방성 r',
+      orientation: null,
+      available_formats: [],
+    } as unknown as PropertyCard
+    const md = {
+      id: 'c-md',
+      material_id: 'm1',
+      label: '인장 MD',
+      orientation: 'MD',
+      available_formats: [],
+    } as unknown as PropertyCard
+    const other = { ...md, id: 'c-x', material_id: 'm2', label: '다른 재료' } as PropertyCard
+    pairedFormats.mockResolvedValue({ available_formats: ['dyna_hill'], borrowed_blocks: ['table'] })
+    render(<ExportMenu card={aniso} formats={hill} onError={() => {}} siblings={[aniso, md, other]} />)
+    await userEvent.click(screen.getByRole('button', { name: /내보내기/ }))
+    // 같은 재료의 다른 카드만 짝 후보다 — 자기 자신과 다른 재료는 안 선다.
+    expect(await screen.findByRole('button', { name: /인장 MD · MD/ })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /다른 재료/ })).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: /인장 MD · MD/ }))
+    expect(pairedFormats).toHaveBeenCalledWith('a1', 'c-md')
+    await userEvent.click(await screen.findByRole('menuitem', { name: /LS-DYNA \(이방성/ }))
+    await waitFor(() => expect(download).toHaveBeenCalled())
+    const call = download.mock.calls[0] as unknown as unknown[]
+    expect(call[4]).toBe('c-md')
   })
 })

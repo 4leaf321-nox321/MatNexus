@@ -246,11 +246,14 @@ export type CatalogLink = components['schemas']['CatalogLinkOut']
 export type DeckMatchRow = components['schemas']['DeckMatchRowOut']
 export type DeckBuilt = components['schemas']['DeckBuiltOut']
 
-/** 카탈로그에서 낼 수 있는 덱 형식 — 스칼라 렌더러만 (서버 FORMATS 와 짝). */
-export const DECK_FORMATS = [
-  { key: 'dyna_elastic', label: 'LS-DYNA 탄성 (*MAT_ELASTIC)' },
-  { key: 'dyna_thermal', label: 'LS-DYNA 열물성 (*MAT_THERMAL_ISOTROPIC)' },
-] as const
+/**
+ * 문헌 재료로 낼 수 있는 덱 형식 — **서버가 판정한다**(`/catalog/deck/formats`).
+ *
+ * 전에는 LS-DYNA 두 형식을 여기와 서버에 따로 적어 두었다. 지금은 카드 내보내기와 같은
+ * 목록(코드판 + 해석용 물성 정의)에서 문헌이 채울 수 있는 것만 온다 — 새 형식을 붙이면
+ * 이 화면을 안 고쳐도 목록에 선다.
+ */
+export type DeckFormat = components['schemas']['DeckFormatOut']
 
 export type CompareResult = components['schemas']['CatalogCompareOut']
 export type AshbyAxis = components['schemas']['AshbyAxisOut']
@@ -267,6 +270,7 @@ export const catalogApi = {
     ),
   coverage: () => api.get<CoverageResult>('/catalog/coverage'),
   deckMatch: (text: string) => api.post<DeckMatchRow[]>('/catalog/deck/match', { text }),
+  deckFormats: () => api.get<DeckFormat[]>('/catalog/deck/formats'),
   deckBuild: (body: {
     items: { mid: number; catalog_material_id: string }[]
     format: string

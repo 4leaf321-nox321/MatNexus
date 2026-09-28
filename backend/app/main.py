@@ -61,7 +61,12 @@ from app.shared.access_log import AccessLogMiddleware
 from app.shared.errors import NotFound, register_error_handlers
 from app.shared.request_context import RequestIdMiddleware
 from matcore import extensions
-from matcore.export import dyna as _dyna  # noqa: F401  (LS-DYNA 렌더러를 등록시킨다)
+
+# 솔버별 렌더러 — 모듈을 읽으면 등록된다(`register_renderer`).
+from matcore.export import ansys as _ansys  # noqa: F401  (ANSYS)
+from matcore.export import bulk as _bulk  # noqa: F401  (Nastran · OptiStruct)
+from matcore.export import dyna as _dyna  # noqa: F401  (LS-DYNA)
+from matcore.export import radioss as _radioss  # noqa: F401  (Radioss)
 
 logger = logging.getLogger(__name__)
 

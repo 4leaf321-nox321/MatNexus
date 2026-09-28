@@ -16,7 +16,7 @@ from typing import Any
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
-from test_catalog import make_snapshot
+from test_catalog import link_builtin, make_snapshot
 
 from app.modules.catalog import importer as catalog_importer
 from app.modules.catalog.models import CatalogMaterial
@@ -58,6 +58,8 @@ def make_card(db: Session) -> tuple[Material, PropertyCard]:
 
 def catalog_ids(db: Session, tmp_path: Path) -> dict[str, Any]:
     catalog_importer.run(db, make_snapshot(tmp_path))
+    # 문헌 값은 사내 물성 매핑을 거쳐 실린다 — 운영과 같은 기본 연결을 깐다.
+    link_builtin(db)
     db.commit()
     sus = db.scalar(select(CatalogMaterial).where(CatalogMaterial.mt_id == 1))
     fr4 = db.scalar(select(CatalogMaterial).where(CatalogMaterial.mt_id == 2))
@@ -184,6 +186,8 @@ class Test합성_곡선:
                 quality_tier=2,
             )
         )
+        # 새로 심은 정의에도 기본 연결(항복강도 ↔ 키)이 서야 매핑을 거쳐 실린다.
+        link_builtin(db)
         db.commit()
 
     def test_합성을_켜면_문헌_스칼라로_곡선_덱이_나온다(
@@ -214,7 +218,8 @@ class Test합성_곡선:
         assert made["synthetic_count"] == 1 and made["literature_count"] == 0
         # 곡선 덱(*MAT_024)으로 나가고, 지어냈다는 사실이 각주에 있다.
         assert "*MAT_PIECEWISE_LINEAR_PLASTICITY" in made["text"]
-        assert "합성 곡선" in made["text"] and "실측이 아니다" in made["text"]
+        # 선언 카드의 합성과 같은 조립기·같은 말이다(2026-09-28 — 문헌도 사내 매핑을 거친다).
+        assert "합성 소성 표" in made["text"] and "실측이 아니다" in made["text"]
         # 어느 스칼라의 어느 출처였는지도 각주로 남는다.
         assert "항복강도" in made["text"]
 
@@ -345,10 +350,11 @@ class Test솔버를_고른다:
         assert made["filename"].endswith(".inp")
         assert made["card_count"] == 2
 
-    def test_다른_솔버_줄과_문헌_줄은_건너뛰고_이유를_말한다(
+    def test_다른_솔버_줄은_건너뛰고_문헌_줄은_그_솔버로_싣는다(
         self, client: TestClient, db: Session, admin_headers: dict[str, str], tmp_path: Path
     ) -> None:
-        """조용히 섞이면 솔버가 다른 카드를 읽는다. 문헌은 LS-DYNA 형식만 낼 수 있다."""
+        """조용히 섞이면 솔버가 다른 카드를 읽는다. **문헌 줄은 이 파일의 솔버로 싣는다** —
+        전에는 LS-DYNA 만 됐고 Abaqus 파일이면 문헌 줄이 빠졌다(2026-09-28 이전)."""
         material, _ = make_card(db)
         ids = catalog_ids(db, tmp_path)
         body = client.post(
@@ -367,8 +373,42 @@ class Test솔버를_고른다:
         made = body.json()
         why = {one["mid"]: one["why"] for one in made["skipped"]}
         assert "다른 솔버" in why[2]
-        assert "LS-DYNA" in why[3]
-        assert made["card_count"] == 1
+        assert 3 not in why
+        assert made["card_count"] == 1 and made["literature_count"] == 1
+        # 이 솔버의 구조(선형) 형식 — Abaqus *ELASTIC 으로 SUS304 가 선다.
+        assert made["literature_format"] == "abaqus_elastic"
+        assert made["text"].count("*MATERIAL, NAME=") == 2
+        assert "사내 물성 매핑을 거쳐" in made["text"]
+
+    def test_radioss_는_카드와_문헌이_한_UNIT_한_END_로_선다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str], tmp_path: Path
+    ) -> None:
+        """Starter 는 첫 `/END` 에서 읽기를 멈춘다 — 줄마다 남으면 둘째 줄부터 안 읽힌다.
+
+        실측(2026-09-28, OpenRadioss): 전의 합치기로 낸 파일에서 둘째 재료를 가리키는
+        부품이 「MATERIAL ID DOES NOT EXIST」 였다. 오류 없이 파일은 나왔었다.
+        """
+        material, _ = make_card(db)
+        ids = catalog_ids(db, tmp_path)
+        body = client.post(
+            "/api/fitting/decks/bom",
+            json={
+                "format": "openradioss",
+                "rows": [
+                    {"mid": 1, "name": "A", "material_id": str(material.id)},
+                    {"mid": 2, "name": "B", "catalog_material_id": str(ids["sus"])},
+                ],
+            },
+            headers=admin_headers,
+        )
+        assert body.status_code == 200, body.text
+        made = body.json()
+        assert made["card_count"] == 1 and made["literature_count"] == 1
+        assert made["literature_format"] == "openradioss_elastic"
+        lines = made["text"].rstrip("\n").split("\n")
+        assert lines.count("/END") == 1 and lines[-1] == "/END"
+        assert sum(line.startswith("/UNIT/") for line in lines) == 1
+        assert "/MAT/LAW36/1/1" in lines and "/MAT/LAW1/2/1" in lines
 
     def test_카드가_없는_재료는_이유와_함께_건너뛴다(
         self, client: TestClient, db: Session, admin_headers: dict[str, str]

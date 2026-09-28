@@ -23,6 +23,8 @@ export type UnitSystemBaseUnits = components['schemas']['UnitSystemBaseUnitsOut'
 export type PropertyCardSaveRequest = components['schemas']['PropertyCardSaveRequest']
 type PropertyCardUpdate = components['schemas']['PropertyCardUpdateRequest']
 export type ExportFormat = components['schemas']['ExportFormatOut']
+export type PairedFormats = components['schemas']['PairedFormatsOut']
+export type BuiltinFormat = components['schemas']['BuiltinFormatOut']
 export type DeckReadiness = components['schemas']['DeckReadinessOut']
 export type ReadinessMissing = components['schemas']['ReadinessMissingOut']
 export type ResampleMethod = components['schemas']['ResampleMethodOut']
@@ -270,6 +272,13 @@ export const fittingApi = {
   /** 솔버 목록. **화면이 손으로 적지 않는다** — 새 솔버가 붙으면 따라온다. */
   formats: () => api.get<ExportFormat[]>('/fitting/formats'),
 
+  /** 기본 제공 형식 전부 — **멈춘 것도** 사연과 함께(ADR 0037). `formats` 는 멈춘 것을 뺀다. */
+  builtinFormats: () => api.get<BuiltinFormat[]>('/fitting/builtin-formats'),
+  /** 기본 형식을 내린다 — 시스템 관리자. 고쳐 배포할 때까지 메뉴·카드·내려받기에서 빠진다. */
+  holdFormat: (key: string, reason: string) =>
+    api.put<BuiltinFormat>(`/fitting/builtin-formats/${key}/hold`, { reason }),
+  releaseFormat: (key: string) => api.delete<void>(`/fitting/builtin-formats/${key}/hold`),
+
   /** 이 재료로 어느 형식이 나오나 · 왜 안 나오나 · 어디서 채우나 — 판정은 내보내기와 같다. */
   deckReadiness: (materialId: string) =>
     api.get<DeckReadiness>(`/fitting/materials/${materialId}/deck-readiness`),
@@ -303,11 +312,25 @@ export const fittingApi = {
    * 답을 낸다. 서버도 같은 이름을 붙이지만 이 함수가 이름을 정하므로 여기서도
    * 적어야 한다.
    */
-  download: (id: string, format: ExportFormat, label: string, system: UnitSystem) =>
+  download: (
+    id: string,
+    format: ExportFormat,
+    label: string,
+    system: UnitSystem,
+    withCard?: string
+  ) =>
     downloadFile(
-      `/fitting/cards/${id}/export?format=${format.key}&units=${system.key}`,
+      `/fitting/cards/${id}/export?format=${format.key}&units=${system.key}` +
+        (withCard ? `&with_card=${withCard}` : ''),
       `${filename(label)}_${system.key}.${format.extension}`
     ),
+
+  /**
+   * 짝 카드와 합치면 **새로** 낼 수 있게 되는 형식(ADR 0037). 이방성(r값) 카드는 혼자서는 Hill
+   * 형식을 못 낸다 — 경화 곡선·탄성이 MD 카드에 있다. 판정은 서버가 렌더와 같은 규칙으로 한다.
+   */
+  pairedFormats: (id: string, withCard: string) =>
+    api.get<PairedFormats>(`/fitting/cards/${id}/paired-formats?with_card=${withCard}`),
 
   /**
    * 고른 카드를 **한 묶음으로** 내려받는다 — 덱 + manifest + 체크섬(ADR 0024 ②).

@@ -18,9 +18,8 @@ r̄ 는 세 방향을 함께 써서 나오므로 **방향이 없는 값**이다.
 규칙(`_lineage_of_group`)의 예외이고, 그 예외는 블록이 `meta["cross_orientation"]` 으로
 선언한다 — 카드를 만드는 쪽이 그 표시를 본다.
 
-계산은 `rvalue.py`, 카드 블록은 `card.py`. 솔버 덱은 아직 안 낸다 — Hill48 을 받는
-형식(*MAT_036 등)의 칸 자리를 검증할 실측이 없다. 낼 때는 내보내기 정의(데이터)로
-`anisotropy.hill_f` 를 가리키면 된다.
+계산은 `rvalue.py`, 카드 블록은 `card.py`, Hill48 솔버 덱은 `deck.py`(2026-09-27). 덱은
+이방성 카드에 **MD 카드를 짝으로 골라** 낸다 — 경화 곡선·탄성이 거기 있다(ADR 0037).
 """
 
 from __future__ import annotations
@@ -30,7 +29,11 @@ from typing import Any
 from matcore.processing import Frame, StepResult
 from matcore.registry import ParamSpec, Produced, register
 
-from . import card, rvalue  # noqa: F401  (card 는 import 만으로 블록을 등록한다)
+from . import (  # noqa: F401  (card·deck 은 import 만으로 블록·렌더러를 등록한다)
+    card,
+    deck,
+    rvalue,
+)
 
 
 @register(

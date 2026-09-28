@@ -44,7 +44,7 @@ interface Row {
   cardLabel: string | null
   /** 문헌 매칭 — 사내가 없으면 이걸로 메꾸고, 둘 다면 연결도 건다. */
   catalog: { id: string; name: string } | null
-  /** 문헌 스칼라로 곡선을 지어 *MAT_024 까지 — 사람이 켜야 켜진다(합성 표지 필수). */
+  /** 문헌 스칼라로 곡선을 지어 그 솔버의 탄소성 형식까지 — 사람이 켜야 켜진다(합성 표지 필수). */
   synthesize: boolean
   fromMemory: boolean
 }
@@ -387,6 +387,9 @@ export default function BomDeckPage() {
               </Button>
               <span className="text-muted-foreground text-xs">
                 사내 카드 {built.card_count} · 문헌 {built.literature_count}
+                {built.literature_count > 0 && built.literature_format
+                  ? ` (${built.literature_format})`
+                  : ''}
                 {built.synthetic_count > 0 && ` · 합성 곡선 ${built.synthetic_count}`}
                 {built.skipped.length > 0 && ` · 건너뜀 ${built.skipped.length}`}
               </span>

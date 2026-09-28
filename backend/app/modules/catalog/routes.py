@@ -66,6 +66,7 @@ from app.modules.catalog.schemas import (
     DeckBuildIn,
     DeckBuiltOut,
     DeckCandidateOut,
+    DeckFormatOut,
     DeckMatchIn,
     DeckMatchRowOut,
     DeckSkippedOut,
@@ -735,14 +736,37 @@ def deck_match(
     ]
 
 
+@router.get("/deck/formats", response_model=list[DeckFormatOut])
+def deck_formats(
+    _user: User = Depends(current_user), db: Session = Depends(get_db)
+) -> list[DeckFormatOut]:
+    """문헌 재료로 낼 수 있는 형식 — **카드 내보내기와 같은 목록**(코드판 + 해석용 물성
+    정의, 사용 중단 제외)에서 문헌이 채울 수 있는 물성만 요구하는 것.
+
+    전에는 `dyna_elastic`·`dyna_thermal` 둘이 화면과 서버에 따로 박혀 있었다. 지금은
+    판정이라 새 형식·새 정의가 저절로 따라온다. 곡선이 필요한 형식은 여기 없다 — 문헌
+    값에는 곡선이 없다(BOM 덱의 「곡선 합성」 은 따로).
+    """
+    return [
+        DeckFormatOut(
+            key=one.key,
+            label=one.label,
+            solver=deck_builder.solver_of(one),
+            extension=one.extension,
+            describe=one.describe,
+        )
+        for one in deck_builder.literature_formats(db)
+    ]
+
+
 @router.post("/deck/build", response_model=DeckBuiltOut)
 def deck_build(
     payload: DeckBuildIn,
     _user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> DeckBuiltOut:
-    """확정된 목록 → LS-DYNA 덱 한 파일. 쓰인 값마다 출처 각주가 $ 주석으로
-    들어간다. 모자란 재료는 거르지 않고 알린다."""
+    """확정된 목록 → 솔버 덱 한 파일. 문헌 값은 사내 물성 매핑을 거쳐 실리고, 쓰인 값마다
+    출처 각주가 덱 머리에 들어간다. 모자란 재료는 거르지 않고 알린다."""
     try:
         built = deck_builder.build(
             db,
@@ -752,12 +776,14 @@ def deck_build(
         )
     except export.ExportError as refused:
         raise AppError("MNX-CATALOG-0005", str(refused), status=422) from refused
-    suffix = "" if payload.format == "dyna_elastic" else "_thermal"
+    target = built.target
+    assert target is not None
     units_key = payload.units or unit_systems.DEFAULT
     return DeckBuiltOut(
-        filename=f"matnexus_catalog{suffix}_{units_key}.k",
+        filename=f"matnexus_catalog{target.suffix}_{units_key}.{target.extension}",
         text=built.text,
         material_count=built.material_count,
+        solver=deck_builder.solver_of(target),
         skipped=[
             DeckSkippedOut(mid=one.mid, name=one.name, missing=list(one.missing))
             for one in built.skipped

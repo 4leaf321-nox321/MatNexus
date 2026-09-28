@@ -1298,7 +1298,12 @@ function CardList({
             </span>
 
             <div className="ml-auto flex gap-1">
-              <ExportMenu card={card} formats={formats.data ?? []} onError={onError} />
+              <ExportMenu
+                card={card}
+                formats={formats.data ?? []}
+                onError={onError}
+                siblings={cards}
+              />
               {card.status === 'draft' && (
                 <>
                   {/* **오타를 고치려고 적합을 다시 돌리게 하지 않는다.** */}

@@ -260,6 +260,34 @@ class ResampleMethodOut(BaseModel):
     help: str
 
 
+class FormatHoldOut(BaseModel):
+    """기본 형식을 내린 사연 — 누가·언제·왜."""
+
+    reason: str
+    held_by_name: str | None
+    held_at: datetime
+
+
+class BuiltinFormatOut(BaseModel):
+    """기본 제공 형식(코드 렌더러) 하나 — **멈춘 것도 보인다.**
+
+    내보내기 형식 목록(`/fitting/formats`)은 멈춘 것을 뺀다. 그런데 다시 쓰게 하려면
+    멈춘 것이 어딘가에 보여야 한다 — 이 목록이 그 자리다.
+    """
+
+    key: str
+    label: str
+    extension: str
+    describe: str
+    hold: FormatHoldOut | None
+
+
+class FormatHoldIn(BaseModel):
+    reason: str = Field(min_length=2, max_length=500)
+    """왜 내리나 — 내려받기 거절 메시지에 그대로 나온다. 「틀렸다」 만으로는 받은 사람이
+    그때 받은 덱을 다시 받아야 하는지 모른다."""
+
+
 class ExportFormatOut(BaseModel):
     key: str
     label: str
@@ -268,6 +296,15 @@ class ExportFormatOut(BaseModel):
     requires: list[str]
     """이 형식에 반드시 있어야 하는 값. **화면이 미리 알려 줄 수 있어야 한다** —
     내려받기를 누른 뒤에 "푸아송비가 없습니다" 를 보는 것은 늦다."""
+
+
+class PairedFormatsOut(BaseModel):
+    """짝 카드와 합쳤을 때 **새로** 낼 수 있게 되는 형식."""
+
+    available_formats: list[str]
+    """카드 혼자로는 못 내다가 짝과 합치면 나오는 형식의 key."""
+    borrowed_blocks: list[str]
+    """짝 카드에서 가져온 블록 — 이 카드에 없던 것."""
 
 
 class ReadinessTestWayOut(BaseModel):
@@ -890,8 +927,9 @@ class BomDeckRowIn(BaseModel):
     format: str | None = None
     """이 줄만 다른 형식으로. 비우면 요청의 `format`. 같은 솔버여야 한다."""
     synthesize: bool = False
-    """문헌 스칼라로 곡선을 **지어** *MAT_024 까지 낸다 — 사람이 켜야 켜진다.
-    지은 곡선은 덱 각주에 「합성 — 실측이 아니다」 와 모델·주의가 실린다."""
+    """문헌 스칼라로 곡선을 **지어** 그 파일 솔버의 탄소성 형식까지 낸다(LS-DYNA 면 *MAT_024)
+    — 사람이 켜야 켜진다. 지은 곡선은 덱 각주에 「합성 — 실측이 아니다」 와 모델·주의가
+    실린다."""
 
 
 class BomDeckIn(BaseModel):
@@ -902,9 +940,10 @@ class BomDeckIn(BaseModel):
     """카드에 쓸 **솔버 형식**(`GET /fitting/formats` 의 key — abaqus · openradioss · dyna …).
     비우면 전처럼 LS-DYNA 안에서 카드마다 가장 곡선다운 것을 고른다. 한 파일은 한
     솔버다 — 줄마다 다른 솔버를 섞을 수 없다."""
-    lit_format: str = "dyna_elastic"
-    """문헌 재료(스칼라)에 쓸 형식. 문헌은 LS-DYNA 형식만 낼 수 있어, `format` 이 다른
-    솔버면 문헌 줄은 건너뛰고 이유를 적는다."""
+    lit_format: str | None = None
+    """문헌 재료에 쓸 형식(`GET /catalog/deck/formats` 의 key). **비우면 이 파일 솔버의
+    기본** — LS-DYNA 면 `dyna_elastic`, Abaqus 면 `abaqus_elastic` 처럼 구조(선형) 형식.
+    문헌 값은 사내 물성 매핑을 거쳐 실린다(2026-09-28 — 전에는 LS-DYNA 만 됐다)."""
 
 
 class BomDeckSkippedOut(BaseModel):
@@ -925,6 +964,8 @@ class BomDeckOut(BaseModel):
     literature_count: int
     synthetic_count: int = 0
     """합성 곡선으로 실린 부품 수 — 문헌 스칼라 수와도 갈라 보인다."""
+    literature_format: str | None = None
+    """문헌 줄에 쓴 형식 — 비워 보냈으면 서버가 고른 것이다."""
 
 
 # ── 카드 항목란을 화면에서 정의한다 (ADR 0033) ────────────────────────────────

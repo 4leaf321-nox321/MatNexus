@@ -226,7 +226,8 @@ MaterialTwin 의 방법론 문서(1MB+)는 코드와 별개의 자산이니 폴�
   YS>UTS 모순은 tier 정합 조합으로 교체 + 각주), 원본에 없던 한 층을 더했다:
   진응력-진소성변형률 표 변환(첫 점 (0, 진항복) 앵커, 단조 강제 — *MAT_024
   규약). 순수 계산은 `matcore/synth.py`, 대표 스칼라 선발·모순 정합은
-  `shared/litdeck.synthetic_assembly`. 소비처는 BOM 혼합 덱의 문헌 줄 —
+  `shared/litdeck.synthetic_assembly`(2026-09-28 부터 `shared/literature_material` —
+  ADR 0039). 소비처는 BOM 혼합 덱의 문헌 줄 —
   **사람이 「곡선 합성」 을 켜야 켜지고**(조용히 합성하지 않는다), 덱 각주에
   「합성 — 실측이 아니다」 와 모델·주의·스칼라별 출처가 실린다. 카탈로그
   상세의 곡선 미리보기 그래프는 이번 스코프에서 뺐다(덱 경로가 본질).

@@ -566,10 +566,35 @@ export interface paths {
         put?: never;
         /**
          * Deck Build
-         * @description 확정된 목록 → LS-DYNA 덱 한 파일. 쓰인 값마다 출처 각주가 $ 주석으로
-         *     들어간다. 모자란 재료는 거르지 않고 알린다.
+         * @description 확정된 목록 → 솔버 덱 한 파일. 문헌 값은 사내 물성 매핑을 거쳐 실리고, 쓰인 값마다
+         *     출처 각주가 덱 머리에 들어간다. 모자란 재료는 거르지 않고 알린다.
          */
         post: operations["deck_build_api_catalog_deck_build_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/catalog/deck/formats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Deck Formats
+         * @description 문헌 재료로 낼 수 있는 형식 — **카드 내보내기와 같은 목록**(코드판 + 해석용 물성
+         *     정의, 사용 중단 제외)에서 문헌이 채울 수 있는 물성만 요구하는 것.
+         *
+         *     전에는 `dyna_elastic`·`dyna_thermal` 둘이 화면과 서버에 따로 박혀 있었다. 지금은
+         *     판정이라 새 형식·새 정의가 저절로 따라온다. 곡선이 필요한 형식은 여기 없다 — 문헌
+         *     값에는 곡선이 없다(BOM 덱의 「곡선 합성」 은 따로).
+         */
+        get: operations["deck_formats_api_catalog_deck_formats_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1643,6 +1668,59 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/fitting/builtin-formats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Builtin Formats
+         * @description 기본 제공 형식 전부 — **멈춘 것도** 사연과 함께(ADR 0037).
+         *
+         *     내보내기 형식 목록(`/formats`)은 멈춘 것을 뺀다. 다시 쓰게 하려면 멈춘 것이 보이는
+         *     자리가 있어야 하고, 쓰는 사람도 「어제 있던 형식이 왜 없나」 를 여기서 본다.
+         */
+        get: operations["list_builtin_formats_api_fitting_builtin_formats_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/fitting/builtin-formats/{key}/hold": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Hold Builtin Format
+         * @description 기본 형식을 **내린다** — 시스템 관리자. 고쳐 배포할 때까지 메뉴·카드·내려받기에서
+         *     빠진다.
+         *
+         *     코드로 만든 형식은 화면에서 못 고친다. 틀린 것이 발견되면 배포까지 공백이 생기고, 그
+         *     사이 사람들은 틀린 덱을 계속 받는다 — 그 공백을 막는 자리다. 이미 내려져 있으면 사유를
+         *     고친다. 걸고 푼 일은 감사 기록에 남는다: 언제부터 언제까지 내려져 있었는지가 「그때 받은
+         *     덱을 다시 받아야 하나」 를 가른다.
+         */
+        put: operations["hold_builtin_format_api_fitting_builtin_formats__key__hold_put"];
+        post?: never;
+        /**
+         * Release Builtin Format
+         * @description 다시 쓴다 — 시스템 관리자. 고친 판이 배포된 뒤에 푼다.
+         */
+        delete: operations["release_builtin_format_api_fitting_builtin_formats__key__hold_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/fitting/cards": {
         parameters: {
             query?: never;
@@ -2097,6 +2175,30 @@ export interface paths {
          *     통과해도 그 덱을 그대로 쓰면 안 되는 경우가 있다.
          */
         post: operations["check_card_deck_api_fitting_cards__card_id__export_check_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/fitting/cards/{card_id}/paired-formats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Paired Formats
+         * @description 짝 카드와 합치면 **새로 낼 수 있게 되는 형식** — 내려받기를 누르기 전에 말한다.
+         *
+         *     카드 목록의 `available_formats` 는 카드 혼자의 판정이다. 이방성 카드는 혼자서는 Hill
+         *     형식을 못 내므로, 짝을 고른 뒤의 판정을 따로 준다 — 판정은 렌더와 같은 규칙
+         *     (`missing_for`)이다.
+         */
+        get: operations["paired_formats_api_fitting_cards__card_id__paired_formats_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -8120,11 +8222,8 @@ export interface components {
         BomDeckIn: {
             /** Format */
             format?: string | null;
-            /**
-             * Lit Format
-             * @default dyna_elastic
-             */
-            lit_format: string;
+            /** Lit Format */
+            lit_format?: string | null;
             /** Rows */
             rows: components["schemas"]["BomDeckRowIn"][];
             /** Units */
@@ -8140,6 +8239,8 @@ export interface components {
             format_family: string;
             /** Literature Count */
             literature_count: number;
+            /** Literature Format */
+            literature_format?: string | null;
             /** Notes */
             notes: string[];
             /** Skipped */
@@ -8187,6 +8288,24 @@ export interface components {
             name: string;
             /** Why */
             why: string;
+        };
+        /**
+         * BuiltinFormatOut
+         * @description 기본 제공 형식(코드 렌더러) 하나 — **멈춘 것도 보인다.**
+         *
+         *     내보내기 형식 목록(`/fitting/formats`)은 멈춘 것을 뺀다. 그런데 다시 쓰게 하려면
+         *     멈춘 것이 어딘가에 보여야 한다 — 이 목록이 그 자리다.
+         */
+        BuiltinFormatOut: {
+            /** Describe */
+            describe: string;
+            /** Extension */
+            extension: string;
+            hold: components["schemas"]["FormatHoldOut"] | null;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
         };
         /** BulkApproveIn */
         BulkApproveIn: {
@@ -10291,6 +10410,11 @@ export interface components {
             notes: string[];
             /** Skipped */
             skipped: components["schemas"]["DeckSkippedOut"][];
+            /**
+             * Solver
+             * @default dyna
+             */
+            solver: string;
             /** Text */
             text: string;
         };
@@ -10368,6 +10492,22 @@ export interface components {
              * @default mm_n_tonne
              */
             units: string;
+        };
+        /**
+         * DeckFormatOut
+         * @description 문헌 재료로 낼 수 있는 형식 하나 — 카드 내보내기와 같은 목록에서 골랐다.
+         */
+        DeckFormatOut: {
+            /** Describe */
+            describe: string;
+            /** Extension */
+            extension: string;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Solver */
+            solver: string;
         };
         /**
          * DeckKeyOut
@@ -11968,6 +12108,26 @@ export interface components {
             upper: number;
             /** Value */
             value: number;
+        };
+        /** FormatHoldIn */
+        FormatHoldIn: {
+            /** Reason */
+            reason: string;
+        };
+        /**
+         * FormatHoldOut
+         * @description 기본 형식을 내린 사연 — 누가·언제·왜.
+         */
+        FormatHoldOut: {
+            /**
+             * Held At
+             * Format: date-time
+             */
+            held_at: string;
+            /** Held By Name */
+            held_by_name: string | null;
+            /** Reason */
+            reason: string;
         };
         /** FormatProfileCreateRequest */
         FormatProfileCreateRequest: {
@@ -14258,6 +14418,16 @@ export interface components {
             offset: number;
             /** Total */
             total: number;
+        };
+        /**
+         * PairedFormatsOut
+         * @description 짝 카드와 합쳤을 때 **새로** 낼 수 있게 되는 형식.
+         */
+        PairedFormatsOut: {
+            /** Available Formats */
+            available_formats: string[];
+            /** Borrowed Blocks */
+            borrowed_blocks: string[];
         };
         /**
          * ParameterSetAdoptIn
@@ -20008,6 +20178,26 @@ export interface operations {
             };
         };
     };
+    deck_formats_api_catalog_deck_formats_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeckFormatOut"][];
+                };
+            };
+        };
+    };
     deck_match_api_catalog_deck_match_post: {
         parameters: {
             query?: never;
@@ -21948,6 +22138,90 @@ export interface operations {
             };
         };
     };
+    list_builtin_formats_api_fitting_builtin_formats_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BuiltinFormatOut"][];
+                };
+            };
+        };
+    };
+    hold_builtin_format_api_fitting_builtin_formats__key__hold_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FormatHoldIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BuiltinFormatOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    release_builtin_format_api_fitting_builtin_formats__key__hold_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_cards_api_fitting_cards_get: {
         parameters: {
             query?: {
@@ -22475,6 +22749,8 @@ export interface operations {
                 units?: string;
                 /** @description 덱 안의 재료 번호. 비우면 카드 id 에서 만든 수. */
                 mid?: number | null;
+                /** @description 짝 카드 — 이 카드에 없는 블록을 채운다. 같은 재료의 카드만. 이방성(r값) 카드에 MD 카드의 경화 곡선·탄성을 붙여 Hill 재료를 낼 때 쓴다. */
+                with_card?: string | null;
             };
             header?: never;
             path: {
@@ -22526,6 +22802,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DeckCheckOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    paired_formats_api_fitting_cards__card_id__paired_formats_get: {
+        parameters: {
+            query: {
+                /** @description 짝 카드. 같은 재료의 카드만. */
+                with_card: string;
+            };
+            header?: never;
+            path: {
+                card_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PairedFormatsOut"];
                 };
             };
             /** @description Validation Error */

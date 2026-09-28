@@ -47,8 +47,17 @@ import type {
   ExportProfile,
   PropertyCard,
 } from '@/modules/fitting/api'
-import { blank, BLOCKS, fieldLabel, FORMATS, fromDefinitionLine, fromScan, toDefinitionLine } from '@/modules/fitting/deckLines'
-import type { DeckLine, FieldSpec, LineKind } from '@/modules/fitting/deckLines'
+import {
+  blank,
+  BLOCKS,
+  describeAdvanced,
+  fieldLabel,
+  FORMATS,
+  fromDefinitionLine,
+  fromScan,
+  toDefinitionLine,
+} from '@/modules/fitting/deckLines'
+import type { DeckLine, FieldSpec, Format, LineKind } from '@/modules/fitting/deckLines'
 import { fromSections, lineRanges, summarize, toSections } from '@/modules/fitting/deckSections'
 import type { Section } from '@/modules/fitting/deckSections'
 import { AccessLine } from '@/modules/ownership/AccessLine'
@@ -76,13 +85,21 @@ import {
 import { useResource } from '@/shared/hooks/useResource'
 import { formatScalar } from '@/shared/units'
 
-type Format = string | [string, number, number]
-
 /** 형식 이름 하나로 칸 형식 값을 만든다 — 고정폭은 폭·자릿수가 함께 있어야 뜻이 선다. */
 function formatOf(name: string, was?: Format): Format {
+  if (name === 'spec') {
+    // 형식 문자열 — 정수 칸 `>10d` · 유효숫자 `.6g`. 전에 적은 것이 있으면 지킨다.
+    return ['spec', Array.isArray(was) && was[0] === 'spec' ? String(was[1]) : '.6g']
+  }
   if (!name.startsWith('fixed')) return name
-  return [name, Array.isArray(was) ? was[1] : 20, Array.isArray(was) ? was[2] : 9]
+  const numbers = Array.isArray(was) && typeof was[1] === 'number' ? was : null
+  return [name, numbers ? numbers[1] : 20, numbers ? Number(numbers[2]) : 9] as Format
 }
+
+/** 편집기가 폼으로 그리는 정의 칸. 그 밖의 칸(needs · keywords · suffix · tables …)은
+ *  **그대로 들고 다닌다** — 전에는 저장 한 번에 빠져, 「낼 수 있나」 판정과 표 정의가
+ *  사라졌다(2026-09-28, 기본 형식을 옮긴 정의판에서 드러났다). */
+const FORM_KEYS = new Set(['extension', 'describe', 'field_format', 'lines'])
 
 function formatName(format?: Format): string {
   return Array.isArray(format) ? format[0] : (format ?? 'free')
@@ -106,6 +123,10 @@ export default function ExportProfileEditorPage() {
   const [label, setLabel] = useState('')
   const [extension, setExtension] = useState('inp')
   const [describe, setDescribe] = useState('')
+  // 폼이 모르는 정의 칸 — needs · keywords · suffix · tables. 「고급」 에서 JSON 으로 고친다.
+  const [extras, setExtras] = useState<Record<string, unknown>>({})
+  // **켜짐을 지킨다.** 꺼진 정의(기본 형식의 정의판)를 고쳐 저장했다고 메뉴에 서면 안 된다.
+  const [active, setActive] = useState(true)
   const [sections, setSections] = useState<Section[]>([emptySection()])
   // **칸 형식은 정의에서 한 번 고른다.** 칸마다 고르게 했더니 스무 칸을 스무 번 골랐다 —
   // 솔버는 하나의 형식을 쓴다. 칸별 예외는 「고급」 에 남긴다.
@@ -152,6 +173,10 @@ export default function ExportProfileEditorPage() {
     setLabel(found.label)
     setExtension(String(definition.extension ?? 'inp'))
     setDescribe(String(definition.describe ?? ''))
+    setExtras(
+      Object.fromEntries(Object.entries(definition).filter(([one]) => !FORM_KEYS.has(one)))
+    )
+    setActive(found.is_active)
     const raw = Array.isArray(definition.lines) ? definition.lines : []
     const lines = raw.map((one) => fromDefinitionLine(one as Record<string, unknown>))
     setSections(toSections(lines))
@@ -181,12 +206,13 @@ export default function ExportProfileEditorPage() {
   const ranges = useMemo(() => lineRanges(sections), [sections])
   const definition = useMemo(
     () => ({
+      ...extras,
       extension,
       describe: describe || '해석용 물성 정의',
       field_format: formatDefault,
       lines: lines.map(toDefinitionLine),
     }),
-    [extension, describe, formatDefault, lines]
+    [extras, extension, describe, formatDefault, lines]
   )
 
   // **적는 대로 그려 본다.** 저장을 눌러야 알게 하면 그때는 이미 고칠 마음이 식는다.
@@ -384,7 +410,7 @@ export default function ExportProfileEditorPage() {
     setSaving(true)
     try {
       if (editing && key) {
-        await fittingApi.saveExportProfile(key, { label, definition, is_active: true })
+        await fittingApi.saveExportProfile(key, { label, definition, is_active: active })
       } else {
         // **key 는 안 보낸다 — 서버가 짓는다.** 전사에서 하나라(ADR 0035) 사람이 적게
         // 하면 옆 부서가 먼저 쓴 이름 때문에 막힌다. 파일로 들여올 때만 key 를 준다.
@@ -500,6 +526,8 @@ export default function ExportProfileEditorPage() {
             </div>
           </div>
 
+          <ExtrasEditor extras={extras} onChange={setExtras} active={active} editing={editing} />
+
           {/* **빈 폼에서 시작하지 않게.** 블록 하나로 묶음 초안이, 파일 하나로 줄·칸 폭이 온다. */}
           <div className="bg-muted/40 rounded-md border border-dashed p-3">
             <div className="flex flex-wrap items-center gap-2">
@@ -583,7 +611,7 @@ export default function ExportProfileEditorPage() {
                             keyword: { ...section.keyword, kind: 'text', text: event.target.value },
                           })
                         }
-                        placeholder="*ELASTIC  ({name}·{units} 를 쓸 수 있습니다)"
+                        placeholder="*ELASTIC  ({name}·{units}·{id}·{식:형식} 를 쓸 수 있습니다)"
                         aria-label={`${n}번 묶음 키워드`}
                       />
                     ) : (
@@ -689,6 +717,16 @@ export default function ExportProfileEditorPage() {
                         >
                           <Plus className="size-3" />
                           {n}번 묶음에 코드 묶음
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 text-xs"
+                          title="묶음마다 반복(each) · 칸을 N 개씩 끊기(pack) · 값 검사(fail) — JSON 으로 적는다"
+                          onClick={() => addLine(index, 'advanced')}
+                        >
+                          <Plus className="size-3" />
+                          {n}번 묶음에 고급 줄
                         </Button>
                       </div>
 
@@ -886,7 +924,9 @@ function LineEditor({
         ? '표'
         : line.kind === 'plain'
           ? '글자'
-          : '코드 묶음'
+          : line.kind === 'advanced'
+            ? '고급'
+            : '코드 묶음'
   return (
     <div className="rounded-md border border-dashed p-2">
       <div className="flex flex-wrap items-center gap-2">
@@ -902,6 +942,21 @@ function LineEditor({
             placeholder="그대로 나갈 글자 — 1, 0, 0"
             aria-label={`${lineNo}번 줄 글자`}
           />
+        )}
+
+        {line.kind === 'advanced' && (
+          <span className="text-muted-foreground flex-1 text-xs">
+            {describeAdvanced(line.raw ?? {})}
+          </span>
+        )}
+
+        {line.kind === 'block' && line.extra && (
+          // 묶음의 인자 — 머리의 주석 기호(`comment`) 같은 것. 폼이 모르는 칸이라 보여만 준다.
+          <span className="text-muted-foreground font-mono text-xs">
+            {Object.entries(line.extra)
+              .map(([name, value]) => `${name}=${String(value)}`)
+              .join(' ')}
+          </span>
         )}
 
         {line.kind === 'block' && (
@@ -966,6 +1021,15 @@ function LineEditor({
           <Trash2 className="size-4" />
         </Button>
       </div>
+
+      {line.kind === 'advanced' && (
+        <JsonBox
+          value={line.raw ?? {}}
+          onChange={(raw) => onChange({ raw })}
+          label={`${lineNo}번 줄 JSON`}
+          rows={Math.min(16, JSON.stringify(line.raw ?? {}, null, 2).split('\n').length + 1)}
+        />
+      )}
 
       {(line.kind === 'fields' || line.kind === 'rows') && (
         <div className="mt-2 space-y-1.5 pl-7">
@@ -1096,7 +1160,8 @@ function LineEditor({
                 className="h-8 font-mono text-xs"
                 value={line.join ?? ''}
                 onChange={(event) => onChange({ join: event.target.value })}
-                placeholder="구분자 (기본 ', ')"
+                // 비운 것과 안 적은 것이 다르다 — 비우면 칸을 붙여 적는다(고정폭).
+                placeholder={line.join === '' ? '없음 — 칸을 붙여 적음' : "구분자 (기본 ', ')"}
                 aria-label={`${lineNo}번 줄 구분자`}
               />
               <Input
@@ -1128,7 +1193,16 @@ function LineEditor({
                       ))}
                     </SelectContent>
                   </Select>
-                  {Array.isArray(field.format) && (
+                  {Array.isArray(field.format) && field.format[0] === 'spec' && (
+                    <Input
+                      className="h-7 w-28 font-mono text-xs"
+                      value={String(field.format[1])}
+                      onChange={(event) => onField(at, { format: ['spec', event.target.value] })}
+                      placeholder=">10d"
+                      aria-label={`${lineNo}번 줄 ${at + 1}번 칸 형식 문자열`}
+                    />
+                  )}
+                  {Array.isArray(field.format) && field.format[0] !== 'spec' && (
                     <>
                       <Input
                         className="h-7 w-16 font-mono text-xs"
@@ -1167,6 +1241,98 @@ function LineEditor({
         </div>
       )}
     </div>
+  )
+}
+
+/**
+ * JSON 칸 — 고급 줄과 정의 칸(needs · tables …). **읽히는 것만 바꾼다** — 적는 중의
+ * 깨진 JSON 으로 정의를 덮으면 미리보기가 오류로 가득 차고, 되돌릴 길이 없다.
+ */
+function JsonBox({
+  value,
+  onChange,
+  label,
+  rows,
+}: {
+  value: unknown
+  onChange: (next: Record<string, unknown>) => void
+  label: string
+  rows: number
+}) {
+  const [text, setText] = useState(() => JSON.stringify(value, null, 2))
+  const [problem, setProblem] = useState<string | null>(null)
+  // **밖에서 바뀌면 따라간다** — 줄을 지우거나 옮기면 같은 칸이 다른 줄을 받는다. 적는 중인
+  // (아직 안 읽히는) 글자는 그대로 둔다.
+  useEffect(() => {
+    let shown: unknown
+    try {
+      shown = JSON.parse(text)
+    } catch {
+      return
+    }
+    if (JSON.stringify(shown) !== JSON.stringify(value)) setText(JSON.stringify(value, null, 2))
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 적는 글자(text)로는 다시 돌지 않는다
+  }, [value])
+  return (
+    <div className="mt-2 space-y-1 pl-7">
+      <textarea
+        className="border-input bg-background w-full rounded-md border p-2 font-mono text-xs"
+        rows={rows}
+        value={text}
+        aria-label={label}
+        onChange={(event) => {
+          setText(event.target.value)
+          try {
+            const parsed: unknown = JSON.parse(event.target.value)
+            if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+              setProblem('{ … } 모양이어야 합니다.')
+              return
+            }
+            setProblem(null)
+            onChange(parsed as Record<string, unknown>)
+          } catch {
+            setProblem('JSON 으로 읽히지 않습니다 — 고칠 때까지 전의 것을 씁니다.')
+          }
+        }}
+      />
+      {problem ? <p className="text-destructive text-xs">{problem}</p> : null}
+    </div>
+  )
+}
+
+/**
+ * 정의 칸 가운데 폼이 모르는 것 — `needs`(낼 수 있나 판정) · `keywords` · `suffix` ·
+ * `tables`(표 거르기·묶기). 기본 형식을 옮긴 정의판은 이것이 절반이다.
+ */
+function ExtrasEditor({
+  extras,
+  onChange,
+  active,
+  editing,
+}: {
+  extras: Record<string, unknown>
+  onChange: (next: Record<string, unknown>) => void
+  active: boolean
+  editing: boolean
+}) {
+  const names = Object.keys(extras)
+  return (
+    <details className="rounded-md border p-3 text-xs">
+      <summary className="text-muted-foreground cursor-pointer">
+        고급 — 정의 칸{names.length ? ` (${names.join(' · ')})` : ''}
+        {editing && !active ? ' · 꺼진 정의 — 저장해도 꺼진 채로 둡니다' : ''}
+      </summary>
+      <p className="text-muted-foreground mt-2">
+        needs(카드에 무엇이 있어야 내나) · keywords(덱에 꼭 있어야 할 글자) · suffix(파일 이름 꼬리) ·
+        tables(표 거르기·정렬·묶기). JSON 으로 고칩니다.
+      </p>
+      <JsonBox
+        value={extras}
+        onChange={onChange}
+        label="정의 칸 JSON"
+        rows={Math.min(24, JSON.stringify(extras, null, 2).split('\n').length + 1)}
+      />
+    </details>
   )
 }
 

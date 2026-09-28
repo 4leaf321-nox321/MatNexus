@@ -32,7 +32,7 @@ export const STEP_GAPS: StepGap[] = [
   {
     plugin: 'tensile.true_plastic',
     label: '진응력·진소성변형률',
-    lost: '진응력 곡선과 CAE 카드(Abaqus·OpenRadioss)를 만들 수 없습니다',
+    lost: '진응력 곡선과 탄소성 솔버 덱(Abaqus·ANSYS·LS-DYNA·Nastran 등)을 만들 수 없습니다',
   },
   {
     plugin: 'curve.resample',

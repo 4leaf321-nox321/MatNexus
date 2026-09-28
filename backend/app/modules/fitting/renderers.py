@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from sqlalchemy.orm import Session
 
-from app.shared.deckmap import all_renderers
+from app.shared.deckmap import all_renderers, held_message, holds
 from matcore import export
 
 __all__ = ["all_renderers", "renderer_for"]
@@ -20,5 +20,9 @@ def renderer_for(db: Session, key: str) -> export.Renderer:
     for item in all_renderers(db):
         if item.key == key:
             return item
+    stopped = holds(db).get(key)
+    if stopped is not None:
+        # 「모르는 형식」 이 아니라 **멈췄다고** 말한다 — 어제까지 되던 형식이다.
+        raise export.ExportError(held_message(stopped))
     known = ", ".join(sorted(item.key for item in all_renderers(db)))
     raise export.ExportError(f"모르는 형식입니다: {key}. 있는 것: {known}")

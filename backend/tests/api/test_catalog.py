@@ -18,7 +18,20 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.modules.catalog import importer
+from app.modules.catalog.links import ensure_builtin_property_links
 from app.modules.catalog.models import CatalogMaterial, CatalogValue
+from app.modules.vocabulary.definitions import ensure_builtin_property_items
+
+
+def link_builtin(db: Session) -> None:
+    """기본 물성 항목과 문헌 키의 연결 — 배포가 까는 것(`scripts/refresh_builtins.py`).
+
+    문헌 덱은 **사내 물성 매핑을 거쳐** 값을 싣는다(2026-09-28). 연결이 없으면 문헌 값이
+    덱에 안 실리는 것이 맞는 결과라, 덱 시험은 운영과 같은 연결을 먼저 깐다.
+    """
+    ensure_builtin_property_items(db)
+    ensure_builtin_property_links(db)
+    db.flush()
 
 
 def make_snapshot(path: Path) -> Path:
@@ -356,6 +369,7 @@ class Test덱_만들기:
         self, client: TestClient, db: Session, admin_headers: dict[str, str], tmp_path: Path
     ) -> None:
         importer.run(db, make_snapshot(tmp_path))
+        link_builtin(db)
         db.commit()
         sus = db.scalar(select(CatalogMaterial).where(CatalogMaterial.mt_id == 1))
         fr4 = db.scalar(select(CatalogMaterial).where(CatalogMaterial.mt_id == 2))
@@ -392,6 +406,7 @@ class Test덱_만들기:
         self, client: TestClient, db: Session, admin_headers: dict[str, str], tmp_path: Path
     ) -> None:
         importer.run(db, make_snapshot(tmp_path))
+        link_builtin(db)
         db.commit()
         sus = db.scalar(select(CatalogMaterial).where(CatalogMaterial.mt_id == 1))
         assert sus is not None

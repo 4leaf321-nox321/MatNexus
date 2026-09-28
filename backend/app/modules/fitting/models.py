@@ -166,6 +166,29 @@ class UnitSystemDef(Base):
     )
 
 
+class ExportFormatHold(Base):
+    """기본 제공 형식(코드 렌더러)의 **사용 중단** — 고쳐 배포할 때까지 메뉴에서 내린다.
+
+    코드로 만든 형식은 화면에서 고칠 수 없다(ADR 0023·0037). 틀린 것이 발견되면 고쳐
+    배포하기까지 공백이 생기고, 그 사이 사람들은 틀린 덱을 계속 내려받는다. 이 행이 있으면
+    그 형식이 목록·카드의 「낼 수 있는 형식」·내려받기에서 빠진다. **다시 쓰면 행을 지운다** —
+    걸었던 일과 푼 일은 감사 기록에 남는다(누가·언제·왜).
+    """
+
+    __tablename__ = "export_format_holds"
+
+    key: Mapped[str] = mapped_column(String(80), primary_key=True)
+    """코드 렌더러의 key(`dyna_viscoelastic` 등)."""
+    reason: Mapped[str] = mapped_column(Text)
+    """왜 내렸나 — 목록과 내려받기 거절 메시지에 그대로 나온다."""
+    held_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+    held_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
 class ExportProfile(Base):
     """솔버 덱을 **어떻게 적을지** 를 담은 규칙. 코드가 아니라 데이터다(ADR 0023).
 

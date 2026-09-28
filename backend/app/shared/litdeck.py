@@ -3,18 +3,25 @@
 `shared` 에 사는 이유: 카탈로그의 문헌 덱과 워크벤치의 혼합 덱(사내 카드 우선 +
 문헌 보충)이 같은 조립 부품을 쓰는데, 모듈끼리는 직접 못 부른다(경계 규칙).
 
-문헌 카탈로그의 대표값을 렌더러 틀의 `Deck` 으로 조립한다. 흐름:
+    재료명 목록 붙여넣기 → 후보 매칭(사람이 확정) → 가상 사내 재료 → 선언 카드 조립기 → 렌더러
 
-    재료명 목록 붙여넣기 → 후보 매칭(사람이 확정) → 대표값 조립 → 렌더러
+## 사내 물성 매핑을 거친다 (2026-09-28)
 
-값은 SI 그대로 흐르고(단위 등가는 `mapping.SI_UNIT_EQUIV` 계약 테스트가 지킨다),
-**쓰인 값마다 출처 각주가 덱 머리의 `$` 주석으로 들어간다** — 덱만 받은 사람이
-숫자의 무게(실측인지 추정인지, 어느 논문인지)를 되짚을 수 있어야 한다. tier4 도
-똑같이 실리고 각주로 구별된다(2026-09-06 사용자 결정).
+문헌 값은 **「사내 재료에 반영했다면 적혔을」 선언 물성**으로 옮긴 뒤(저장은 안 한다,
+`shared/literature_material`) 선언 물성 카드의 조립기(`shared/declared_card`)로 블록이
+된다. 전에는 문헌 키를 블록 칸으로 바로 옮기는 표(`DECK_SLOTS`, 다섯 줄)가 따로 있었고,
+그 표가 사내 매핑과 어긋나 선팽창계수가 문헌에 있어도 안 실렸다. 덱 각주도 사내 항목
+이름(「선팽창계수(CTE)」)으로 적는다.
 
-카탈로그 재료는 스칼라뿐이라(소성 표 없음) 낼 수 있는 형식은 스칼라 렌더러
-(`dyna_elastic`·`dyna_thermal`)다. 곡선이 필요한 덱(*MAT_024)은 시험→카드
-경로의 것이다.
+**쓰인 값마다 출처 각주가 덱 머리에 들어간다** — 덱만 받은 사람이 숫자의 무게(실측인지
+추정인지, 어느 논문인지)를 되짚을 수 있어야 한다. tier4 도 똑같이 실리고 각주로
+구별된다(2026-09-06 사용자 결정).
+
+## 형식은 판정한다
+
+전에는 `dyna_elastic`·`dyna_thermal` 둘이 고정이었다. 지금은 **카드 내보내기와 같은
+형식 목록**(코드판 + 해석용 물성 정의, 사용 중단 제외)에서, 문헌이 채울 수 있는 블록만
+요구하는 형식을 고른다(`literature_formats`). 곡선이 필요한 형식은 「곡선 합성」 을 켤 때만.
 """
 
 from __future__ import annotations
@@ -22,34 +29,27 @@ from __future__ import annotations
 import re
 import uuid
 from dataclasses import dataclass, field
+from typing import Any
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.modules.catalog.models import (
-    QUALITY_TIERS,
-    CatalogMaterial,
-    CatalogSource,
-    CatalogValue,
+from app.modules.catalog.models import CatalogMaterial, CatalogValue
+from app.shared import (
+    deckmap,
+    declared_card,
+    declared_slots,
+    literature_material,
+    unit_systems,
 )
-from app.shared import representative, unit_systems
-from matcore import cards, export, synth
-from matcore.export import dyna as _dyna  # noqa: F401  (스칼라 렌더러를 등록시킨다)
-
-#: MT 물성 키 → Deck 블록 자리. 매핑에 없는 값은 덱에 안 실린다.
-DECK_SLOTS: dict[str, tuple[str, str]] = {
-    "mechanical.youngs_modulus": ("elastic", "youngs_modulus"),
-    "mechanical.poisson_ratio": ("elastic", "poisson_ratio"),
-    "physical.density": ("elastic", "density"),
-    "thermal.specific_heat": ("thermal", "specific_heat"),
-    "thermal.conductivity": ("thermal", "thermal_conductivity"),
-}
-
-#: 카탈로그에서 낼 수 있는 형식 — 스칼라 렌더러만.
-FORMATS = ("dyna_elastic", "dyna_thermal")
+from matcore import cards, export
 
 #: 한 번에 받는 줄 수 상한. BOM 은 수십 줄이지 수천 줄이 아니다.
 MAX_LINES = 200
+
+#: 문헌이 채우는 블록 — 선언 물성 카드가 짓는 것과 같다. 「곡선 합성」 을 켜면 소성 표도.
+LITERATURE_BLOCKS = ("elastic", "thermal")
+SYNTHETIC_BLOCK = "table"
 
 
 @dataclass(frozen=True)
@@ -114,57 +114,187 @@ def candidates(
     return ranked[:limit]
 
 
+# ── 형식 ──────────────────────────────────────────────────────────────────
+
+#: key 앞부분이 곧 솔버인 이름들 — 코드판의 규약(`<솔버>[_<변형>]`).
+SOLVERS = ("dyna", "openradioss", "abaqus", "ansys", "nastran", "optistruct")
+
+#: 확장자 → 솔버. 화면에서 만든 정의는 key 가 `deck_1a2b3c4d` 라 앞부분이 솔버가 아니다.
+SOLVER_OF_EXTENSION = {
+    "k": "dyna",
+    "key": "dyna",
+    "dyn": "dyna",
+    "rad": "openradioss",
+    "inp": "abaqus",
+    "mac": "ansys",
+    "cdb": "ansys",
+    "bdf": "nastran",
+    "nas": "nastran",
+    "dat": "nastran",
+    "fem": "optistruct",
+}
+
+
+def solver_of(target: export.Renderer) -> str:
+    """이 형식의 솔버 — 한 파일에는 한 솔버만 선다.
+
+    정의가 적은 `solver` 가 이기고, 없으면 key 앞부분(코드판의 규약), 그것도 아니면
+    확장자다. **이름 규약만 믿으면** 화면에서 만든 LS-DYNA 정의가 합칠 때 `*KEYWORD` 를
+    재료마다 되풀이한다.
+    """
+    if target.solver:
+        return target.solver
+    head = target.key.split("_", 1)[0]
+    if head in SOLVERS:
+        return head
+    return SOLVER_OF_EXTENSION.get(target.extension.lower().lstrip("."), head)
+
+
+def find_format(db: Session, key: str) -> export.Renderer:
+    """형식 하나 — **카드 내보내기와 같은 목록**(코드판 + 해석용 물성 정의)에서.
+
+    멈춘 형식이면 멈춘 이유로 거절한다 — 전에는 코드판 key 를 박아 두고 불러서 정의를
+    못 썼고, 사용 중단도 따로 막아야 했다.
+    """
+    deckmap.ensure_usable(db, key)
+    for one in deckmap.all_renderers(db):
+        if one.key == key:
+            return one
+    raise export.ExportError(f"모르는 형식입니다: {key}")
+
+
+def _fillable(block: str) -> set[str]:
+    """문헌(선언 물성)으로 채울 수 있는 칸 — 문헌 키를 든 칸, 그리고 밀도·푸아송비."""
+    try:
+        spec = cards.block(block)
+    except KeyError:
+        return set()
+    found = {slot.key for slot in spec.produces if slot.property_key}
+    if block == "elastic":
+        found |= set(declared_card.FROM_RECORD)
+    return found
+
+
+def takes_literature(target: export.Renderer, *, synthesize: bool = False) -> bool:
+    """이 형식을 문헌 재료로 낼 수 있나 — **요구하는 것을 문헌이 다 채울 수 있나**로 판정.
+
+    곡선(소성 표)을 요구하면 합성을 켤 때만. 여러 재료를 한 파일로 합칠 수 없는 형식
+    (JSON)은 뺀다. 값이 실제로 있는지는 재료마다 다르다 — 그것은 덱을 낼 때 본다.
+    """
+    if "json" in target.media_type:
+        return False
+    cards.load_builtin()
+    allowed = {*LITERATURE_BLOCKS, *((SYNTHETIC_BLOCK,) if synthesize else ())}
+    for need in target.needs:
+        if need.optional:
+            continue
+        if need.block not in allowed:
+            return False
+        if need.block == SYNTHETIC_BLOCK:
+            continue
+        if need.at_least or not set(need.values) <= _fillable(need.block):
+            return False
+    return True
+
+
+def literature_formats(db: Session, *, synthesize: bool = False) -> list[export.Renderer]:
+    """문헌 재료로 낼 수 있는 형식 — 카드 내보내기와 같은 목록에서, 사용 중단 제외."""
+    return [
+        one
+        for one in deckmap.all_renderers(db)
+        if takes_literature(one, synthesize=synthesize)
+    ]
+
+
+def default_literature_format(
+    db: Session, solver: str, *, curve: bool = False
+) -> export.Renderer | None:
+    """솔버 하나의 문헌 형식 기본값. `curve` 면 곡선 형식(합성 곡선 줄).
+
+    구조 형식(탄성계수를 요구하는 것)이 열 형식보다 앞선다 — 부품표는 대개 구조 해석이다.
+    같으면 목록 차례(코드판이 등록된 차례)다.
+    """
+    pool = [
+        one
+        for one in literature_formats(db, synthesize=curve)
+        if solver_of(one) == solver
+        and (not curve or any(need.block == SYNTHETIC_BLOCK for need in one.needs))
+    ]
+
+    def structural(one: export.Renderer) -> int:
+        wants = any(
+            need.block == "elastic" and "youngs_modulus" in need.values for need in one.needs
+        )
+        return 0 if wants else 1
+
+    pool.sort(key=structural)
+    return pool[0] if pool else None
+
+
+# ── 조립 ──────────────────────────────────────────────────────────────────
+
+
 @dataclass
 class Assembled:
-    blocks: dict[str, dict[str, object]] = field(default_factory=dict)
+    blocks: dict[str, Any] = field(default_factory=dict)
     provenance: list[str] = field(default_factory=list)
 
 
-def assemble(db: Session, material: CatalogMaterial) -> Assembled:
-    """대표값을 Deck 블록으로 — **쓰인 값마다 각주 한 줄.**
+def assemble(
+    db: Session, material: CatalogMaterial, *, synthesize: bool = False
+) -> Assembled | str:
+    """문헌 재료 하나를 블록으로 — **선언 물성 카드와 같은 조립기**. 못 지으면 이유 글자.
 
-    같은 물성에 후보가 여럿이면 대표값 선택기(고체상→등급→기준온도 근접)가
-    고른 것을 쓴다 — 화면 상세가 보여 주는 그 대표와 같은 값이다.
+    가상 사내 재료(`literature_material`)를 선언 카드가 짓는 대로 짓는다: 탄성·열 블록,
+    온도별 표, 사내 항목 연결로 빈 칸 채우기(카드를 내보낼 때와 같다), 합성 소성 표.
     """
-    rows = list(
-        db.execute(
-            select(CatalogValue, CatalogSource)
-            .outerjoin(CatalogSource, CatalogSource.id == CatalogValue.source_id)
-            .where(
-                CatalogValue.material_id == material.id,
-                CatalogValue.property_key.in_(DECK_SLOTS),
-                CatalogValue.value_num.is_not(None),
-            )
-        )
+    cards.load_builtin()
+    virtual = literature_material.virtual(db, material, synthesize=synthesize)
+    stand_in = virtual.material
+    elastic, thermal, _ = declared_card.declared_blocks(db, stand_in, None, None)
+    elastic_rows = declared_card.declared_table(
+        stand_in,
+        declared_card.declared_items("elastic"),
+        constants=declared_card.constants(elastic),
     )
-    marks = representative.annotate([value for value, _ in rows])
-    out = Assembled(provenance=[f"문헌 카탈로그: {material.name}"])
-    for value, source in rows:
-        if not marks[value.id].representative:
-            continue
-        block, key = DECK_SLOTS[value.property_key]
-        out.blocks.setdefault(block, {"values": {}})["values"][key] = value.value_num  # type: ignore[index]
-        cite_parts = [
-            part
-            for part in (
-                source.title if source else None,
-                str(source.year) if source and source.year else None,
-                f"doi:{source.doi}" if source and source.doi else None,
-                value.source_detail,
+    thermal_rows = declared_card.declared_table(
+        stand_in, declared_card.declared_items("thermal")
+    )
+    blocks: dict[str, Any] = {
+        **declared_card.temperature_aware("elastic", elastic, elastic_rows),
+        **declared_card.temperature_aware("thermal", thermal, thermal_rows),
+    }
+    declared_slots.fill(db, stand_in, blocks)
+    provenance = list(virtual.provenance)
+    if synthesize:
+        made = declared_card.synthetic_plastic(stand_in, elastic)
+        if isinstance(made, str):
+            if made.startswith("소성 표가"):
+                return made
+            # 선언 카드의 말(「선언 물성에 적으세요」)은 문헌 재료에 안 맞는다.
+            return (
+                "곡선을 합성할 스칼라가 모자랍니다 — 탄성계수와 항복강도(또는 인장강도)가 "
+                "있어야 합니다. 문헌 값은 사내 물성 항목과 이어져 있어야 실립니다."
             )
-            if part
-        ]
-        tier = QUALITY_TIERS.get(value.quality_tier, str(value.quality_tier))
-        out.provenance.append(
-            f"{key} = {value.value_num:.6E} — {' · '.join(cite_parts) or '출처 미상'} "
-            f"[tier {value.quality_tier}: {tier}]"
-        )
-        if marks[value.id].n_candidates > 1:
-            out.provenance.append(
-                f"  ({key}: 후보 {marks[value.id].n_candidates}개 중 대표값 — "
-                f"화면의 같은 선택입니다)"
-            )
-    return out
+        rows, notes = made
+        blocks[SYNTHETIC_BLOCK] = {"rows": rows}
+        provenance.extend(notes)
+    return Assembled(blocks=blocks, provenance=provenance)
+
+
+def literature_deck(
+    db: Session, material: CatalogMaterial, mid: int, *, synthesize: bool = False
+) -> export.Deck | str:
+    """문헌 재료 하나 → 덱 재료 하나. 못 지으면 이유 글자(합성할 스칼라가 모자라다 등)."""
+    made = assemble(db, material, synthesize=synthesize)
+    if isinstance(made, str):
+        return made
+    return export.Deck(
+        name=export.sanitize_name(material.grade or material.name, fallback="MAT"),
+        solver_id=mid,
+        blocks=made.blocks,
+        provenance=tuple(made.provenance),
+    )
 
 
 @dataclass(frozen=True)
@@ -180,49 +310,70 @@ class Built:
     skipped: tuple[Skipped, ...]
     notes: tuple[str, ...]
     material_count: int
+    target: export.Renderer | None = None
+
+
+# ── 합치기 ─────────────────────────────────────────────────────────────────
 
 
 def combine(rendered: list[str]) -> str:
-    """재료별 덱을 한 파일로 — *KEYWORD/*END 는 한 번만.
+    """LS-DYNA — 재료별 덱을 한 파일로, `*KEYWORD`/`*END` 는 한 번만.
 
-    문헌 덱과 혼합 덱(워크벤치)이 같이 쓴다 — LS-DYNA 는 한 파일에 서로 다른
-    *MAT_ 카드가 섞이는 것이 정상이라(재료마다 다른 법칙) 텍스트 합본으로 된다.
+    LS-DYNA 는 한 파일에 서로 다른 *MAT_ 카드가 섞이는 것이 정상이라(재료마다 다른 법칙)
+    텍스트 합본으로 된다. 정의가 머리·끝 줄을 안 적었어도 받는다.
     """
     bodies: list[str] = []
     for text in rendered:
         lines = text.rstrip("\n").split("\n")
-        assert lines[0] == "*KEYWORD" and lines[-1] == "*END"
-        bodies.append("\n".join(lines[1:-1]))
+        if lines and lines[0].strip().upper() == "*KEYWORD":
+            lines = lines[1:]
+        if lines and lines[-1].strip().upper() == "*END":
+            lines = lines[:-1]
+        bodies.append("\n".join(lines))
     return "*KEYWORD\n" + "\n$\n".join(bodies) + "\n*END\n"
 
 
-def format_family(format_key: str) -> str:
-    """형식 key 의 솔버 — `dyna_elastic` → `dyna`, `abaqus_rate` → `abaqus`.
+def _radioss_body(lines: list[str], first: bool) -> list[str]:
+    """Radioss 재료 하나의 줄 — 끝 `/END` 는 떼고, 둘째부터는 머리와 `/UNIT/1` 도 뗀다.
 
-    한 파일에는 한 솔버만 선다. 이름 규약(`<솔버>[_<변형>]`)이 곧 판정이다 —
-    렌더러마다 `solver` 칸을 더하지 않는 이유는, 정의 렌더러(ExportProfile)도 같은
-    규약으로 key 를 짓기 때문이다.
+    **`/END` 는 파일 끝에 하나만.** Starter 는 첫 `/END` 에서 읽기를 멈춘다 — 재료마다
+    남겨 두면 첫 재료 뒤는 통째로 안 읽힌다(2026-09-28, OpenRadioss 로 확인: 둘째 재료를
+    가리키는 부품이 「MATERIAL ID DOES NOT EXIST」). `/UNIT/1` 은 한 파일이 한 계라 첫
+    재료의 것 하나면 되고, 같은 번호를 둘 두면 번호가 겹친다.
     """
-    return format_key.split("_", 1)[0]
+    if lines and lines[-1] == "/END":
+        lines = lines[:-1]
+    if first:
+        return lines
+    out: list[str] = []
+    skip = 0
+    for line in lines:
+        if skip:
+            skip -= 1
+            continue
+        if line == "#RADIOSS STARTER":
+            continue
+        if line.startswith("/UNIT/"):
+            # 번호 줄 · 이름 · 머리 주석 · 코드 줄 — 넷이 한 블록이다(`_unit_block`).
+            skip = 3
+            continue
+        out.append(line)
+    return out
 
 
 def combine_family(rendered: list[str], family: str) -> str:
     """재료별 덱을 **그 솔버의 규약으로** 한 파일로.
 
-    LS-DYNA 는 `*KEYWORD`/`*END` 를 한 번만, OpenRadioss 는 `#RADIOSS STARTER` 를 한
-    번만, Abaqus 는 `*MATERIAL` 묶음이 이어 서면 그대로 성립한다. 모르는 솔버는
-    Abaqus 처럼 잇는다 — 머리말이 있는 형식이면 그 형식이 여기 한 줄을 더한다.
+    LS-DYNA 는 `*KEYWORD`/`*END` 를 한 번만, Radioss 는 머리·`/UNIT`·`/END` 를 한 번만,
+    Abaqus·ANSYS·Nastran 은 재료 묶음이 이어 서면 그대로 성립한다. 모르는 솔버도 잇는다.
     """
     if family == "dyna":
         return combine(rendered)
     if family == "openradioss":
-        bodies: list[str] = []
+        lines: list[str] = []
         for index, text in enumerate(rendered):
-            lines = text.rstrip("\n").split("\n")
-            if index > 0 and lines and lines[0] == "#RADIOSS STARTER":
-                lines = lines[1:]
-            bodies.append("\n".join(lines))
-        return "\n".join(bodies) + "\n"
+            lines.extend(_radioss_body(text.rstrip("\n").split("\n"), first=index == 0))
+        return "\n".join([*lines, "/END"]) + "\n"
     return "\n".join(text.rstrip("\n") for text in rendered) + "\n"
 
 
@@ -240,10 +391,13 @@ def build(
     # 블록의 단위 선언이 있어야 to_system 이 환산한다 — 없으면 mm 계 덱이
     # **오류 없이 SI 숫자로** 나간다(2026-09-06 실측). 멱등이라 매번 불러도 된다.
     cards.load_builtin()
-    if format_key not in FORMATS:
+    target = find_format(db, format_key)
+    if not takes_literature(target):
+        known = ", ".join(one.key for one in literature_formats(db))
         raise export.ExportError(
-            f"카탈로그에서 낼 수 있는 형식이 아닙니다: {format_key}. "
-            f"있는 것: {', '.join(FORMATS)} — 곡선이 필요한 덱은 시험→카드 경로로 만드세요."
+            f"문헌 재료로 낼 수 없는 형식입니다: {format_key} — 문헌이 채우지 못하는 물성"
+            f"(곡선 등)을 요구합니다. 있는 것: {known}. 곡선이 필요한 덱은 시험→카드 경로나 "
+            f"BOM 덱의 「곡선 합성」 으로 만드세요."
         )
     # **비우면 mm·N·tonne**(ADR 0036) — 계를 고르는 자리는 `unit_systems` 하나다. 전에는
     # 여기서 붙박이만 찾아서, 비우면 SI 였고 사용자 계는 「모르는 단위계」 였다.
@@ -266,18 +420,13 @@ def build(
         material = db.get(CatalogMaterial, material_id)
         if material is None:
             raise export.ExportError(f"카탈로그에 없는 재료입니다: {material_id}")
-        made = assemble(db, material)
-        deck = export.Deck(
-            name=export.sanitize_name(material.grade or material.name, fallback="MAT"),
-            solver_id=mid,
-            blocks=made.blocks,
-            provenance=tuple(made.provenance),
-        )
-        missing = export.missing_for(deck, format_key)
+        deck = literature_deck(db, material, mid)
+        assert not isinstance(deck, str)  # 합성을 안 켜면 늘 덱이 선다
+        missing = export.missing_for(deck, target)
         if missing:
             skipped.append(Skipped(mid=mid, name=material.name, missing=tuple(missing)))
             continue
-        result = export.render(format_key, deck, system)
+        result = export.render(target, deck, system)
         rendered.append(result.text)
         notes.extend(result.notes)
     if not rendered:
@@ -287,128 +436,9 @@ def build(
             + "; ".join(f"{one.name}({', '.join(one.missing)})" for one in skipped)
         )
     return Built(
-        text=combine(rendered),
+        text=combine_family(rendered, solver_of(target)),
         skipped=tuple(skipped),
         notes=tuple(dict.fromkeys(notes)),
         material_count=len(rendered),
+        target=target,
     )
-
-
-# ── 합성 곡선 — 문헌 스칼라로 소성 표까지 (이식 5단계) ─────────────────────────
-
-#: 합성에 쓰는 스칼라 넷. MT key 는 안정 id 라 개명에 안 깨진다.
-STRENGTH_KEYS = (
-    "mechanical.youngs_modulus",
-    "mechanical.yield_strength",
-    "mechanical.tensile_strength",
-    "mechanical.elongation_at_break",
-)
-
-
-@dataclass(frozen=True)
-class SyntheticAssembly:
-    curve: synth.SyntheticCurve
-    provenance: tuple[str, ...]
-    """스칼라별 출처 각주 + 합성 모델·주의 — 덱 머리에 그대로 실린다."""
-
-
-def _strength_candidates(
-    db: Session, material: CatalogMaterial
-) -> tuple[dict[str, list[tuple[float, int]]], dict[str, str]]:
-    """키마다 (값, tier) 후보 전부(대표가 먼저) + 대표값의 출처 각주."""
-    rows = list(
-        db.execute(
-            select(CatalogValue, CatalogSource)
-            .outerjoin(CatalogSource, CatalogSource.id == CatalogValue.source_id)
-            .where(
-                CatalogValue.material_id == material.id,
-                CatalogValue.property_key.in_(STRENGTH_KEYS),
-                CatalogValue.value_num.is_not(None),
-            )
-        )
-    )
-    marks = representative.annotate([value for value, _ in rows])
-    found: dict[str, list[tuple[float, int]]] = {key: [] for key in STRENGTH_KEYS}
-    cites: dict[str, str] = {}
-    for value, source in sorted(rows, key=lambda pair: not marks[pair[0].id].representative):
-        found[value.property_key].append((float(value.value_num), value.quality_tier))
-        if marks[value.id].representative:
-            parts = [
-                part
-                for part in (
-                    source.title if source else None,
-                    str(source.year) if source and source.year else None,
-                    value.source_detail,
-                )
-                if part
-            ]
-            cites[value.property_key] = (
-                f"{' · '.join(parts) or '출처 미상'} [tier {value.quality_tier}]"
-            )
-    return found, cites
-
-
-def synthetic_assembly(db: Session, material: CatalogMaterial) -> SyntheticAssembly | None:
-    """재료의 대표 스칼라로 곡선을 합성한다 — 근거가 모자라면 None.
-
-    **항복 > 인장강도 모순은 정합 조합으로 바꾼다**(MT 원본의 판단): 대표값은
-    물성마다 독립으로 뽑혀 서로 다른 출처·제품에서 올 수 있고, 그대로 합성하면
-    물리적으로 불가능한 곡선이 된다. tier 합이 가장 좋은 정합(항복 ≤ 인장)
-    조합으로 바꾸고 **그 사실을 각주로 말한다.**
-    """
-    candidates, cites = _strength_candidates(db, material)
-
-    def top(key: str) -> float | None:
-        rows = candidates.get(key) or []
-        return rows[0][0] if rows else None
-
-    E = top(STRENGTH_KEYS[0])
-    sigy = top(STRENGTH_KEYS[1])
-    uts = top(STRENGTH_KEYS[2])
-    elongation = top(STRENGTH_KEYS[3])
-
-    fix_note: str | None = None
-    if sigy is not None and uts is not None and sigy > uts:
-        best: tuple[tuple[int, int, int], float, float] | None = None
-        for ys, tier_y in candidates[STRENGTH_KEYS[1]]:
-            for ut, tier_u in candidates[STRENGTH_KEYS[2]]:
-                if ys <= ut:
-                    score = (tier_y + tier_u, tier_y, tier_u)
-                    if best is None or score < best[0]:
-                        best = (score, ys, ut)
-        if best is None:
-            fix_note = (
-                f"항복({sigy / 1e6:.0f} MPa)이 인장강도({uts / 1e6:.0f} MPa)보다 커서"
-                " (출처 불일치) 인장강도를 빼고 합성했다."
-            )
-            uts = None
-        else:
-            _, ys, ut = best
-            if (ys, ut) != (sigy, uts):
-                fix_note = (
-                    f"대표값 조합이 물리적으로 모순(항복 {sigy / 1e6:.0f} >"
-                    f" 인장 {uts / 1e6:.0f} MPa)이라, 정합한 조합(항복 {ys / 1e6:.0f} /"
-                    f" 인장 {ut / 1e6:.0f} MPa)으로 바꿔 합성했다."
-                )
-            sigy, uts = ys, ut
-
-    curve = synth.synthesize(E, sigy, uts, elongation)
-    if curve is None:
-        return None
-
-    labels = {
-        STRENGTH_KEYS[0]: "탄성계수",
-        STRENGTH_KEYS[1]: "항복강도",
-        STRENGTH_KEYS[2]: "인장강도",
-        STRENGTH_KEYS[3]: "연신율",
-    }
-    provenance = [
-        f"합성 곡선 — 실측이 아니다. 모델: {curve.model}",
-        f"  {curve.note}",
-    ]
-    if fix_note:
-        provenance.append(f"  {fix_note}")
-    for key in STRENGTH_KEYS:
-        if key in cites:
-            provenance.append(f"{labels[key]} — {cites[key]}")
-    return SyntheticAssembly(curve=curve, provenance=tuple(provenance))

@@ -11,9 +11,10 @@
 
 from __future__ import annotations
 
-from app.modules.fitting.routes import FROM_RECORD, _declared_items
 from app.modules.vocabulary.definitions import BUILTIN_ITEM_OF_KEY, BUILTIN_PROPERTY_ITEMS
 from app.shared import property_names
+from app.shared.declared_card import FROM_RECORD
+from app.shared.declared_card import declared_items as _declared_items
 from matcore import cards
 
 

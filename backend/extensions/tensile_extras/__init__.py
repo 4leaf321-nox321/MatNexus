@@ -18,8 +18,9 @@ from __future__ import annotations
 
 from matcore.registry import ParamSpec, Produced, register
 
-from . import (  # noqa: F401  (card 는 import 만으로 블록·렌더러를 등록한다)
+from . import (  # noqa: F401  (card·deck 은 import 만으로 블록·렌더러를 등록한다)
     card,
+    deck,
     ratio,
     temperature,
 )

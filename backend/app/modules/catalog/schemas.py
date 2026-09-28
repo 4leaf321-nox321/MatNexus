@@ -141,8 +141,20 @@ class DeckBuildItemIn(BaseModel):
 class DeckBuildIn(BaseModel):
     items: list[DeckBuildItemIn]
     format: str = "dyna_elastic"
+    """문헌 재료로 낼 형식 — `GET /catalog/deck/formats` 의 key."""
     units: str | None = None
-    """단위계 key. 비우면 SI."""
+    """단위계 key. 비우면 mm·N·tonne(ADR 0036)."""
+
+
+class DeckFormatOut(BaseModel):
+    """문헌 재료로 낼 수 있는 형식 하나 — 카드 내보내기와 같은 목록에서 골랐다."""
+
+    key: str
+    label: str
+    solver: str
+    """솔버 — 한 파일에는 한 솔버만 선다."""
+    extension: str
+    describe: str
 
 
 class DeckSkippedOut(BaseModel):
@@ -155,6 +167,8 @@ class DeckBuiltOut(BaseModel):
     filename: str
     text: str
     material_count: int
+    solver: str = "dyna"
+    """이 파일의 솔버 — 받는 쪽이 확장자로 짐작하지 않게."""
     skipped: list[DeckSkippedOut]
     notes: list[str]
 

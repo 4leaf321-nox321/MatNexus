@@ -183,11 +183,24 @@ class Test형식목록:
     def test_점탄성이_목록에_있다(self) -> None:
         assert "abaqus_viscoelastic" in {item.key for item in list_renderers()}
 
-    def test_OpenRadioss_점탄성은_없다(self) -> None:
-        """**LAW62 는 고무 초탄성 경로다.** 검증 못 하는 솔버 문법을 지어내지
-        않는다 — 65 도 같은 이유로 Abaqus 만 낸다."""
+    def test_Radioss_점탄성은_LAW62_가_아니라_LAW42_다(self) -> None:
+        """처음에는 Radioss 점탄성을 안 냈다 — **검증 못 하는 솔버 문법을 지어내지 않는다.**
+        LAW62 는 고무 초탄성(Ogden) 경로였고 그 칸을 대조할 길이 없었다.
+
+        2026-09-27 에 OpenRadioss 의 파서 형식(`matl42_Ogden.cfg`)과 계산 루틴(`sigeps42`)
+        으로 LAW42+Prony 를 대조했다 — μ 가 장기 전단탄성률이고 Gᵢ 가 더해진다. 그래서
+        생겼고, **LAW62 는 여전히 안 쓴다.**"""
+        import matcore.export.radioss  # noqa: F401  (렌더러 등록)
+
         keys = {item.key for item in list_renderers()}
-        assert not any("radioss" in key and "visco" in key for key in keys)
+        assert "openradioss_viscoelastic" in keys
+        assert (
+            "/MAT/LAW42"
+            in render(
+                "openradioss_viscoelastic",
+                card(),
+            ).text
+        )
 
     def test_탄소성_카드는_그대로다(self) -> None:
         """점탄성을 붙이면서 기존 경로가 안 깨져야 한다."""

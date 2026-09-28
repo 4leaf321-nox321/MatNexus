@@ -160,6 +160,7 @@ export default function CardsPage() {
             key={card.id}
             card={card}
             formats={formats.data ?? []}
+            siblings={rows.filter((one) => one.material_id === card.material_id)}
             onError={setError}
             picked={picked.has(card.id)}
             onPick={(next) =>
@@ -204,12 +205,15 @@ export default function CardsPage() {
 function Row({
   card,
   formats,
+  siblings,
   onError,
   picked,
   onPick,
 }: {
   card: PropertyCard
   formats: Parameters<typeof ExportMenu>[0]['formats']
+  /** 이 쪽에 보이는 같은 재료의 카드 — 짝 카드로 고를 수 있다(ADR 0037). */
+  siblings: PropertyCard[]
   onError: (error: Error) => void
   picked: boolean
   onPick: (next: boolean) => void
@@ -284,7 +288,7 @@ function Row({
       )}
 
       <div className="ml-auto">
-        <ExportMenu card={card} formats={formats} onError={onError} />
+        <ExportMenu card={card} formats={formats} onError={onError} siblings={siblings} />
       </div>
     </div>
   )

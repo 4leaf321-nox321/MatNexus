@@ -16,12 +16,14 @@ import CatalogDeckPage from '@/modules/catalog/CatalogDeckPage'
 
 const deckMatch = vi.fn()
 const deckBuild = vi.fn()
+const deckFormats = vi.fn()
 
 vi.mock('@/modules/catalog/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/modules/catalog/api')>()),
   catalogApi: {
     deckMatch: (...args: unknown[]) => deckMatch(...args),
     deckBuild: (...args: unknown[]) => deckBuild(...args),
+    deckFormats: () => deckFormats(),
   },
 }))
 
@@ -66,10 +68,19 @@ const BUILT = {
   notes: [],
 }
 
+//: 서버가 판정한 목록 — LS-DYNA 만이 아니다(2026-09-28). 기본(dyna_elastic)이 첫째가
+//: 아니게 둔다 — 순서로 고르면 통과해 버린다.
+const FORMATS = [
+  { key: 'abaqus_elastic', label: 'Abaqus (선형)', solver: 'abaqus', extension: 'inp', describe: '' },
+  { key: 'dyna_elastic', label: 'LS-DYNA (선형)', solver: 'dyna', extension: 'k', describe: '' },
+  { key: 'dyna_thermal', label: 'LS-DYNA (열물성)', solver: 'dyna', extension: 'k', describe: '' },
+]
+
 beforeEach(() => {
   vi.clearAllMocks()
   deckMatch.mockResolvedValue(MATCHED)
   deckBuild.mockResolvedValue(BUILT)
+  deckFormats.mockResolvedValue(FORMATS)
 })
 
 async function toStep2() {
@@ -109,6 +120,19 @@ describe('BOM 3단계', () => {
     expect(await screen.findByText(/어느 논문/)).toBeInTheDocument()
     expect(screen.getByText(/물성이 모자라 덱에 못 실은 재료 1건/)).toBeInTheDocument()
     expect(screen.getByText(/없는 것: 푸아송비, 밀도/)).toBeInTheDocument()
+  })
+
+  it('형식은 서버가 판정한 목록에서 고른다 — 다른 솔버도 선다', async () => {
+    // 전에는 LS-DYNA 두 형식이 화면에 박혀 있었다. 목록이 서면(데이터로 그려진 것을
+    // 기다린다) 기본은 전과 같은 dyna_elastic 이고, Abaqus 를 고르면 그것이 간다.
+    await toStep2()
+    const format = screen.getByLabelText('덱 형식')
+    await screen.findByRole('option', { name: 'Abaqus (선형)' })
+    expect(format).toHaveValue('dyna_elastic')
+    await userEvent.selectOptions(format, 'abaqus_elastic')
+    await userEvent.click(screen.getByRole('button', { name: /덱 생성/ }))
+    await waitFor(() => expect(deckBuild).toHaveBeenCalledTimes(1))
+    expect(deckBuild.mock.calls[0][0]).toMatchObject({ format: 'abaqus_elastic' })
   })
 
   it('단위계는 서버 목록에서 고르고, 안 고르면 서버 기본이다', async () => {

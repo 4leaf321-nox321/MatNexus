@@ -213,6 +213,13 @@ def card_blocks(
                     "stress_amplitude": float(p["stress_amplitude"]),
                     "cycles_to_failure": float(p["cycles_to_failure"]),
                     "runout": 1.0 if p.get("runout") else 0.0,
+                    # 응력비 — S-N 곡선은 R 하나의 것이라 덱이 그것을 적는다(평균응력 보정을
+                    # 두 번 하지 않게). 모르면 안 싣는다.
+                    **(
+                        {"stress_ratio": float(p["stress_ratio"])}
+                        if isinstance(p.get("stress_ratio"), int | float)
+                        else {}
+                    ),
                 }
                 for p in points
             ],

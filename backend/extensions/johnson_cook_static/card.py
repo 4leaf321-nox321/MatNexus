@@ -7,6 +7,15 @@
 못 낸다** — 같은 재료를 여러 온도로 당긴 데이터가 없다. 그래서 015 를 내면 m 을
 지어내야 하고, 098 을 내면 지어낼 것이 없다. **식에 없는 항은 가정할 일도 없다.**
 
+## 다른 솔버 (2026-09-27)
+
+    Radioss     /MAT/LAW2 — 온도항은 T_melt 를 비워 끈다(1e20 → T* = 0). 여기 있다.
+                OpenRadioss 로 돌려 σ = a + b·εp^n 이 손계산과 맞았다(766.50 · 766.47 MPa).
+    ANSYS       MAPDL 에 Johnson-Cook 이 없다(TB,RATE 는 Perzyna·Peirce·EVH·Anand 뿐)
+    Abaqus      *PLASTIC, HARDENING=JOHNSON COOK 은 m·θmelt·θtransition 이 필수다 — 끄는 칸이
+                없어 지어내야 한다. 표(*PLASTIC)로는 이미 나간다
+    OptiStruct  MATS1 의 JHCOOK 은 명시 해석 전용이고 칸 차례를 다 대조하지 못했다
+
 ## 왜 렌더러가 확장 안에 있나
 
 `matcore/export/dyna.py`(중심 코드)에 두면 그 파일이 `johnson_cook_static` 이라는
@@ -138,4 +147,89 @@ def render_dyna_johnson_cook(deck: Deck) -> Rendered:
         f"{_f10(0.0)}{_f10(0.0)}{_f10(0.0)}{_f10(float(reference))}"
     )
     lines.append("*END")
+    return Rendered(text="\n".join(lines) + "\n", notes=tuple(notes))
+
+
+@register_renderer(
+    key="openradioss_johnson_cook",
+    label="Radioss (Johnson-Cook)",
+    extension="rad",
+    suffix="_jc",
+    describe=(
+        "/MAT/LAW2(PLAS_JOHNS) — σ=(a+b·εp^n)(1+c·ln ε̇*). 온도항은 비운다(T_melt 가 비면 "
+        "꺼진다). c 는 속도 묶음이 있으면 채우고, 없으면 0(준정적)으로 두고 덱에 적는다."
+    ),
+    keywords=("/MAT/LAW2/", "/UNIT/1", "/END"),
+    needs=(
+        Need("elastic", values=("youngs_modulus", "poisson_ratio", "density")),
+        Need("hardening", rows_min=3),
+        Need("rate_table", optional=True),
+    ),
+)
+def render_openradioss_johnson_cook(deck: Deck) -> Rendered:
+    """LAW2 는 칸이 다섯 줄이다(OpenRadioss `matl2_plas_johns.cfg`):
+
+        rho
+        E  ν  Iflag(10)  VP(10)  Pmin
+        a  b  n  εp_max  σ_max0
+        c  ε̇0  ICC(10)  Fsmooth(10)  Fcut  Chard
+        m  T_melt  rho_Cp  T_r  T_max
+
+    **온도항은 끄는 칸이 따로 없다** — m=0 은 파서가 1 로 바꾼다. T_melt 를 비우면 1e20 이 되어
+    T* 가 0 에 머문다: 온도를 안 잰 카드에서 지어낼 것이 없다. rho_Cp 도 비운다(단열 가열
+    없음).
+    VP=1 은 소성변형률 속도로 속도항을 읽는다 — *MAT_098 의 VP=1 과 같은 선택이다.
+    """
+    from matcore.export import _fixed, _unit_block
+
+    found = _params(deck)
+    youngs = deck.number("elastic", "youngs_modulus")
+    poisson = deck.number("elastic", "poisson_ratio")
+    density = deck.number("elastic", "density")
+    if youngs is None or poisson is None or density is None:
+        raise ExportError("LAW2 는 탄성계수·푸아송비·밀도가 다 있어야 합니다.")
+    rate_c = deck.number("rate_table", "jc_c")
+    reference = deck.number("rate_table", "reference_rate")
+    notes: list[str] = []
+    lines = [
+        "#RADIOSS STARTER",
+        f"# MatNexus — {deck.name}",
+        *(f"# {one}" for one in deck.provenance),
+    ]
+    lines.extend(_unit_block(deck))
+    lines.append(
+        "# sigma = (a + b*eps_p^n) * (1 + c*ln(eps_dot/eps_dot0)) - temperature term off"
+    )
+    if rate_c is None:
+        lines.append("# c = 0 (quasi-static): no strain-rate groups on the card.")
+        notes.append(
+            "속도 묶음이 없어 c=0 으로 두고 그 사실을 덱에 적었습니다. 속도가 다른 인장 "
+            "시험을 「속도별 소성 곡선」 으로 묶으면 채워집니다."
+        )
+    elif reference is None:
+        raise ExportError(
+            "속도 묶음에 C 는 있는데 기준 속도가 없습니다. C 는 기준 속도와 한 몸이라 그것 "
+            "없이는 덱에 적을 수 없습니다."
+        )
+    else:
+        lines.append(f"# c fitted against the reference rate {reference:.4g} (deck units).")
+    lines.append("# T_melt blank = 1e20: T* stays 0 (no temperature data on this card).")
+    lines.append(f"/MAT/LAW2/{deck.solver_id}/1")
+    lines.append(deck.name)
+    lines.append(f"#{'RHO_I':>19}")
+    lines.append(_fixed(density))
+    lines.append(f"#{'E':>19}{'nu':>20}{'Iflag':>10}{'VP':>10}{'Pmin':>20}")
+    lines.append(f"{_fixed(youngs)}{_fixed(poisson)}{0:>10}{1:>10}")
+    lines.append(f"#{'a':>19}{'b':>20}{'n':>20}{'Eps_p_max':>20}{'Sig_max0':>20}")
+    lines.append(_fixed(found[_A]) + _fixed(found[_B]) + _fixed(found[_N]))
+    lines.append(
+        f"#{'c':>19}{'Eps_dot_0':>20}{'ICC':>10}{'Fsmooth':>10}{'Fcut':>20}{'Chard':>20}"
+    )
+    lines.append(
+        _fixed(rate_c if rate_c is not None else 0.0)
+        + (_fixed(reference) if rate_c is not None and reference is not None else "")
+    )
+    lines.append(f"#{'m':>19}{'T_melt':>20}{'rho_Cp':>20}{'T_r':>20}{'T_max':>20}")
+    lines.append("")
+    lines.append("/END")
     return Rendered(text="\n".join(lines) + "\n", notes=tuple(notes))

@@ -43,7 +43,10 @@ def _load() -> None:
     # 묶음은 `load_builtin` 이 없다 — app 의 grouping 서비스가 import 로 등록시킨다.
     # 여기는 app 을 안 띄우므로 같은 둘을 직접 읽는다.
     # LS-DYNA 렌더러도 import 로 등록된다(`app/main.py` 와 같은 줄).
+    from matcore.export import ansys as _ansys  # noqa: F401
+    from matcore.export import bulk as _bulk  # noqa: F401
     from matcore.export import dyna as _dyna  # noqa: F401
+    from matcore.export import radioss as _radioss  # noqa: F401
     from matcore.groups import prony as _prony  # noqa: F401
     from matcore.groups import rate as _rate  # noqa: F401
 

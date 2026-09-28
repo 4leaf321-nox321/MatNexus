@@ -19,7 +19,9 @@
  * `when` 은 렌더러가 줄마다 본다. 묶음의 조건은 저장할 때 그 묶음의 모든 줄에 같은
  * 값으로 적히고, 읽을 때는 줄들의 `when` 이 모두 같으면 묶음 조건으로 접힌다. 다르면
  * 그대로 두고 「줄마다 다르다」 고 표시한다 — 정보를 잃지 않는다. `note` 는 렌더러가
- * 줄마다 한 번씩 쌓으므로 **머리(첫 줄)에만** 적는다.
+ * 줄마다 한 번씩 쌓으므로 묶음의 말은 **머리(첫 줄)에만** 적는다. 몸 줄이 제 말을 들고
+ * 있으면 **그대로 둔다** — 기본 형식을 옮긴 정의판에는 말만 남기는 줄·값 줄의 말이 있고,
+ * 전에는 저장 한 번에 지워졌다(2026-09-28).
  */
 
 import type { DeckLine } from '@/modules/fitting/deckLines'
@@ -84,8 +86,6 @@ export function fromSections(sections: Section[]): DeckLine[] {
       if (at === 0) {
         if (section.note) next.note = section.note
         else delete next.note
-      } else {
-        delete next.note
       }
       out.push(next)
     })
@@ -111,11 +111,13 @@ export function summarize(section: Section): string {
   const rows = section.body.filter((one) => one.kind === 'rows').length
   const plain = section.body.filter((one) => one.kind === 'plain').length
   const blocks = section.body.filter((one) => one.kind === 'block').length
+  const advanced = section.body.filter((one) => one.kind === 'advanced').length
   return [
     fields > 0 ? `값 줄 ${fields}` : '',
     rows > 0 ? `표 ${rows}` : '',
     plain > 0 ? `글자 줄 ${plain}` : '',
     blocks > 0 ? '코드 묶음' : '',
+    advanced > 0 ? `고급 줄 ${advanced}` : '',
   ]
     .filter(Boolean)
     .join(' · ')

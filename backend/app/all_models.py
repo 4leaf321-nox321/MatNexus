@@ -28,7 +28,12 @@ from app.modules.equipment.models import (
     EquipmentPart,
     EquipmentUnit,
 )
-from app.modules.fitting.models import CardBlock, ExportProfile, PropertyCard
+from app.modules.fitting.models import (
+    CardBlock,
+    ExportFormatHold,
+    ExportProfile,
+    PropertyCard,
+)
 from app.modules.formulas.models import Formula
 from app.modules.grouping.models import GroupResult
 from app.modules.guide.models import (
@@ -90,6 +95,7 @@ __all__ = [
     "EquipmentCalibration",
     "EquipmentPart",
     "EquipmentUnit",
+    "ExportFormatHold",
     "ExportProfile",
     "FormatProfile",
     "Formula",

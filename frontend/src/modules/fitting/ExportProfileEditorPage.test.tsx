@@ -20,11 +20,13 @@ const cards = vi.fn()
 const blocks = vi.fn()
 const deckKeys = vi.fn()
 const previewDeck = vi.fn()
+const exportProfiles = vi.fn()
+const saveExportProfile = vi.fn()
 
 vi.mock('@/modules/fitting/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/modules/fitting/api')>()),
   fittingApi: {
-    exportProfiles: () => Promise.resolve([]),
+    exportProfiles: () => exportProfiles(),
     cards: (...args: unknown[]) => cards(...args),
     blocks: () => blocks(),
     deckKeys: (...args: unknown[]) => deckKeys(...args),
@@ -36,7 +38,7 @@ vi.mock('@/modules/fitting/api', async (importOriginal) => ({
       ]),
     scanDeck: () => Promise.resolve({ lines: [], notes: [] }),
     createExportProfile: () => Promise.resolve({}),
-    saveExportProfile: () => Promise.resolve({}),
+    saveExportProfile: (...args: unknown[]) => saveExportProfile(...args),
   },
 }))
 vi.mock('@/modules/fitting/CardPickerDialog', () => ({ CardPickerDialog: () => null }))
@@ -155,6 +157,8 @@ beforeEach(() => {
   blocks.mockResolvedValue(SPECS)
   deckKeys.mockResolvedValue(KEYS)
   previewDeck.mockResolvedValue({ text: '*MATERIAL', error: null, missing: [], notes: [] })
+  exportProfiles.mockResolvedValue([])
+  saveExportProfile.mockResolvedValue({})
 })
 
 describe('값을 고른다', () => {
@@ -324,5 +328,84 @@ describe('미리보기 줄 연결', () => {
       one.className.includes('bg-amber')
     )
     expect(marked.map((one) => one.textContent)).toEqual(['*MATERIAL', '*ELASTIC', '2.0E11, 0.3'])
+  })
+})
+
+describe('있는 정의를 고친다 — 저장 한 번에 달라지지 않는다', () => {
+  // 기본 형식을 옮긴 정의판의 모양(ADR 0038): 정의 칸(needs · keywords · suffix · tables) ·
+  // 묶음 인자 · 고급 줄 · 칸의 조건. 전에는 저장 한 번에 이것들이 빠지고 켜졌다.
+  const DEFINITION = {
+    extension: 'bdf',
+    describe: '큰칸 MAT1',
+    suffix: '_elastic',
+    keywords: ['MAT1*'],
+    needs: [{ block: 'elastic', values: ['youngs_modulus', 'poisson_ratio'] }],
+    tables: { alpha: { of: 'thermal', where: 'has(temperature)', sort: ['temperature'] } },
+    lines: [
+      { block: 'header', comment: '$' },
+      { text: '$ Consistent units: {units}' },
+      { fail: '푸아송비가 {elastic.poisson_ratio:g} 입니다', when: 'elastic.poisson_ratio >= 0.5' },
+      {
+        pack: [
+          { expr: '_id', format: ['spec', '<16d'] },
+          { value: 'elastic.density', format: ['fixed_left', 16, 8], default: ' '.repeat(16) },
+        ],
+        per_line: 4,
+        first: 'MAT1*   ',
+        next: '*       ',
+        rstrip: true,
+      },
+      { note: '말만 남긴다' },
+    ],
+  }
+
+  it('정의 칸과 고급 줄을 그대로 저장하고, 꺼진 정의는 꺼진 채로 둔다', async () => {
+    exportProfiles.mockResolvedValue([
+      {
+        id: 'p1',
+        key: 'nastran_elastic_def',
+        label: 'Nastran (선형) · 정의',
+        description: null,
+        owner_workspace_slug: null,
+        owner_workspace_name: null,
+        access: { can_edit: true },
+        definition: DEFINITION,
+        is_active: false,
+        created_at: '2026-09-28T00:00:00Z',
+        updated_at: '2026-09-28T00:00:00Z',
+      },
+    ])
+    render(
+      <MemoryRouter initialEntries={['/settings/export-profiles/nastran_elastic_def']}>
+        <Routes>
+          <Route path="/settings/export-profiles/:key" element={<ExportProfileEditorPage />} />
+        </Routes>
+      </MemoryRouter>
+    )
+    // 데이터로 그려진 것을 기다린다 — 고급 줄의 설명이 서야 정의가 폼에 들어온 것이다.
+    await screen.findByText(/칸을 4개씩 끊어 적기/)
+    expect(screen.getByLabelText('정의 칸 JSON')).toHaveValue(
+      JSON.stringify(
+        {
+          suffix: '_elastic',
+          keywords: ['MAT1*'],
+          needs: DEFINITION.needs,
+          tables: DEFINITION.tables,
+        },
+        null,
+        2
+      )
+    )
+    await userEvent.click(screen.getByRole('button', { name: '저장' }))
+    await waitFor(() => expect(saveExportProfile).toHaveBeenCalled())
+    const [key, body] = saveExportProfile.mock.calls[0] as [
+      string,
+      { definition: Record<string, unknown>; is_active: boolean },
+    ]
+    expect(key).toBe('nastran_elastic_def')
+    expect(body.is_active).toBe(false)
+    const { field_format: _format, ...saved } = body.definition
+    void _format
+    expect(saved).toEqual(DEFINITION)
   })
 })

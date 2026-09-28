@@ -44,17 +44,28 @@ def test_사칙연산과_거듭제곱_괄호_함수() -> None:
         "",
         "__import__('os')",
         "a.b.c",
-        "a if b else c",
         "a[0]",
         "lambda: 1",
-        "a and b",
         "a << 2",
-        "'x'",
+        "a | b",
+        "a is b",
+        "a in b",
+        "f'{a}'",
         "open('f')",
         "a +",
+        "(x := 1)",
+        "[a for a in b]",
+        "count(1)",  # 표 함수의 첫 인자는 표 이름이다
+        "sum(table)",  # 식이 빠졌다
+        "has(a, b)",
+        "max(a, key=b)",
+        "True",
+        "None",
     ],
 )
 def test_허용_밖은_거절한다(text: str) -> None:
+    """2026-09-28 부터 `a if b else c` · `a and b` · `'x'` 는 된다(ADR 0038) — 조건과
+    글자 값이 필요했다. 그래도 **호출·인덱스·대입·내포는 여전히 막는다.**"""
     with pytest.raises(expr.BadExpression):
         expr.parse(text)
 
@@ -156,8 +167,9 @@ class Test정의에서:
         assert made.text == "*MAT, X\n1, 0, 0\n"
 
     def test_모르는_자리표는_이름을_대며_멈춘다(self) -> None:
-        spec: dict[str, Any] = {"lines": [{"text": "{id}"}]}
+        # `{id}` 는 2026-09-28 부터 재료 번호다(ADR 0038) — 맨 이름은 여전히 모른다.
+        spec: dict[str, Any] = {"lines": [{"text": "{nope}"}]}
         with pytest.raises(export.ExportError) as caught:
             template.render(spec, _deck())
-        assert "{id}" in str(caught.value)
+        assert "{nope}" in str(caught.value)
         assert "{{" in str(caught.value)

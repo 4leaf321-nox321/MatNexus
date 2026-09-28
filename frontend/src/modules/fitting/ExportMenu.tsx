@@ -23,9 +23,10 @@
  */
 
 import { useState } from 'react'
-import { FileDown } from 'lucide-react'
+import { ChevronDown, ChevronRight, FileDown } from 'lucide-react'
 
 import { fittingApi } from '@/modules/fitting/api'
+import { groupBySolver } from '@/modules/fitting/formatGroups'
 import type { ExportFormat, PropertyCard } from '@/modules/fitting/api'
 import { Button } from '@/shared/components/ui/button'
 import {
@@ -42,20 +43,43 @@ export function ExportMenu({
   card,
   formats,
   onError,
+  siblings = [],
 }: {
   card: PropertyCard
   formats: ExportFormat[]
   onError: (error: Error) => void
+  /** 같은 재료의 다른 카드 — **짝 카드**로 고를 수 있다(ADR 0037). 이방성(r값) 카드는 혼자서는
+   *  Hill 형식을 못 낸다: 경화 곡선·탄성이 MD 카드에 있다. 카드를 합쳐 새로 만들지 않고 내보낼
+   *  때만 합친다. */
+  siblings?: PropertyCard[]
 }) {
   const systems = useResource(() => fittingApi.unitSystems(), [])
   const [chosen, setChosen] = useState<string | null>(null)
-  const available = systems.data ?? []
+  const [showBlocked, setShowBlocked] = useState(false)
+  const [pair, setPair] = useState<{ card: PropertyCard; keys: string[] } | null>(null)
+  const systemList = systems.data ?? []
   // 고르기 전에는 서버가 기본이라고 말한 것. **화면이 'si' 를 적어 두지 않는다.**
   const system =
-    available.find((one) => one.key === chosen) ??
-    available.find((one) => one.is_default) ??
-    available[0] ??
+    systemList.find((one) => one.key === chosen) ??
+    systemList.find((one) => one.is_default) ??
+    systemList[0] ??
     null
+
+  const available = formats.filter((one) => card.available_formats.includes(one.key))
+  const blocked = formats.filter((one) => !card.available_formats.includes(one.key))
+
+  const partners = siblings.filter(
+    (one) => one.id !== card.id && one.material_id === card.material_id
+  )
+
+  function download(format: ExportFormat, withCard?: string) {
+    if (!system) return
+    fittingApi
+      .download(card.id, format, card.label, system, withCard)
+      .catch((caught: unknown) =>
+        onError(caught instanceof Error ? caught : new Error('내보내지 못했습니다.'))
+      )
+  }
 
   return (
     <DropdownMenu>
@@ -65,11 +89,11 @@ export function ExportMenu({
           내보내기
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-80">
+      <DropdownMenuContent align="end" className="max-h-[70vh] w-80 overflow-y-auto">
         <DropdownMenuLabel className="font-normal">
           <p className="text-xs font-medium">덱의 단위계</p>
           <div className="mt-1.5 flex gap-1">
-            {available.map((one) => (
+            {systemList.map((one) => (
               <button
                 key={one.key}
                 type="button"
@@ -103,35 +127,138 @@ export function ExportMenu({
           </p>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
-        {formats.map((format) => {
-          const blocked = !card.available_formats.includes(format.key)
-          return (
-            <DropdownMenuItem
-              key={format.key}
-              disabled={blocked || system === null}
-              onSelect={() => {
-                if (!system) return
-                fittingApi
-                  .download(card.id, format, card.label, system)
-                  .catch((caught: unknown) =>
-                    onError(
-                      caught instanceof Error ? caught : new Error('내보내지 못했습니다.')
-                    )
-                  )
+        {/* **낼 수 있는 것을 솔버로 묶어 먼저.** 솔버 × 물성 모델로 형식이 서른 개 가까이라
+            (2026-09-27) 한 줄로 늘어놓으면 고를 것을 찾는 데 시간이 든다. 못 내는 것은
+            접어 둔다 — 없애지 않는다: 「왜 못 내나」 가 그 자리에 적혀 있다. */}
+        {groupBySolver(available).map((group) => (
+          <div key={group.solver}>
+            <p className="text-muted-foreground px-2 pt-2 pb-0.5 text-xs font-medium">
+              {group.solver}
+            </p>
+            {group.items.map((format) => (
+              <FormatItem
+                key={format.key}
+                format={format}
+                blocked={false}
+                disabled={system === null}
+                onSelect={() => download(format)}
+              />
+            ))}
+          </div>
+        ))}
+        {available.length === 0 ? (
+          <p className="text-muted-foreground px-2 py-1.5 text-xs">
+            이 카드로 낼 수 있는 형식이 아직 없습니다.
+          </p>
+        ) : null}
+        {blocked.length > 0 && partners.length > 0 ? (
+          <>
+            <DropdownMenuSeparator />
+            <div className="px-2 py-1.5">
+              <p className="text-xs font-medium">짝 카드와 합쳐 내기</p>
+              <p className="text-muted-foreground mt-0.5 text-xs">
+                이 카드에 없는 것(경화 곡선·탄성)을 같은 재료의 다른 카드에서 가져옵니다 — 이방성
+                카드는 <b>압연 방향(MD)</b> 카드를 고르세요.
+              </p>
+              <div className="mt-1.5 flex flex-wrap gap-1">
+                {partners.map((one) => (
+                  <button
+                    key={one.id}
+                    type="button"
+                    className={`rounded-md border px-2 py-0.5 text-xs ${
+                      pair?.card.id === one.id ? 'bg-primary text-primary-foreground' : ''
+                    }`}
+                    onClick={(event) => {
+                      // 메뉴가 닫히면 안 된다 — 짝을 고른 다음에 형식을 고른다.
+                      event.preventDefault()
+                      fittingApi
+                        .pairedFormats(card.id, one.id)
+                        .then((found) => setPair({ card: one, keys: found.available_formats }))
+                        .catch((caught: unknown) =>
+                          onError(
+                            caught instanceof Error ? caught : new Error('짝 카드를 못 읽었습니다.')
+                          )
+                        )
+                    }}
+                  >
+                    {one.label}
+                    {one.orientation ? ` · ${one.orientation}` : ''}
+                  </button>
+                ))}
+              </div>
+              {pair && pair.keys.length === 0 ? (
+                <p className="text-muted-foreground mt-1.5 text-xs">
+                  이 짝으로 새로 낼 수 있는 형식이 없습니다.
+                </p>
+              ) : null}
+            </div>
+            {pair
+              ? formats
+                  .filter((one) => pair.keys.includes(one.key))
+                  .map((format) => (
+                    <FormatItem
+                      key={`pair-${format.key}`}
+                      format={format}
+                      blocked={false}
+                      disabled={system === null}
+                      onSelect={() => download(format, pair.card.id)}
+                    />
+                  ))
+              : null}
+          </>
+        ) : null}
+        {blocked.length > 0 ? (
+          <>
+            <DropdownMenuSeparator />
+            <button
+              type="button"
+              className="text-muted-foreground flex w-full items-center gap-1 px-2 py-1.5 text-left text-xs"
+              onClick={(event) => {
+                // 펼쳐도 메뉴가 닫히면 안 된다 — 계를 고르는 단추와 같다.
+                event.preventDefault()
+                setShowBlocked((open) => !open)
               }}
             >
-              <div>
-                <p className="text-sm">{format.label}</p>
-                <p className="text-muted-foreground text-xs">
-                  {blocked
-                    ? `${format.requires.join('·')} 가 있어야 냅니다. 카드에 아직 없습니다.`
-                    : format.describe}
-                </p>
-              </div>
-            </DropdownMenuItem>
-          )
-        })}
+              {showBlocked ? (
+                <ChevronDown className="size-3.5" />
+              ) : (
+                <ChevronRight className="size-3.5" />
+              )}
+              이 카드로는 못 내는 형식 {blocked.length}개
+            </button>
+            {showBlocked
+              ? blocked.map((format) => (
+                  <FormatItem key={format.key} format={format} blocked disabled onSelect={() => {}} />
+                ))
+              : null}
+          </>
+        ) : null}
       </DropdownMenuContent>
     </DropdownMenu>
+  )
+}
+
+function FormatItem({
+  format,
+  blocked,
+  disabled,
+  onSelect,
+}: {
+  format: ExportFormat
+  blocked: boolean
+  disabled: boolean
+  onSelect: () => void
+}) {
+  return (
+    <DropdownMenuItem disabled={blocked || disabled} onSelect={onSelect}>
+      <div>
+        <p className="text-sm">{format.label}</p>
+        <p className="text-muted-foreground text-xs">
+          {blocked
+            ? `${format.requires.join('·')} 가 있어야 냅니다. 카드에 아직 없습니다.`
+            : format.describe}
+        </p>
+      </div>
+    </DropdownMenuItem>
   )
 }

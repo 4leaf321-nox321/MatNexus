@@ -33,7 +33,7 @@ import logging
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.modules.fitting.models import ExportProfile
+from app.modules.fitting.models import ExportFormatHold, ExportProfile
 from matcore import cards, export
 from matcore.export import template
 
@@ -57,6 +57,34 @@ def _rows(db: Session) -> list[ExportProfile]:
     )
 
 
+def holds(db: Session) -> dict[str, ExportFormatHold]:
+    """사용 중단된 기본 형식 — key 마다 누가·언제·왜(ADR 0037).
+
+    코드로 만든 형식은 화면에서 못 고친다. 틀린 것이 발견되면 고쳐 배포할 때까지 여기서
+    내린다 — 그동안 사람들이 틀린 덱을 계속 받지 않게.
+    """
+    return {row.key: row for row in db.scalars(select(ExportFormatHold))}
+
+
+def held_message(row: ExportFormatHold) -> str:
+    return (
+        f"'{row.key}' 형식은 사용 중단됐습니다 — {row.reason} "
+        f"({row.held_at:%Y-%m-%d}). 고쳐 배포할 때까지 이 형식으로는 내보내지 않습니다."
+    )
+
+
+def ensure_usable(db: Session, key: str) -> None:
+    """형식 key 를 **바로** 부르는 길(문헌 덱·BOM)이 멈춘 형식을 못 쓰게 한다.
+
+    목록(`all_renderers`)은 멈춘 것을 이미 뺀다. 그런데 key 를 코드에 적어 두고 부르는
+    자리는 목록을 안 지나므로 여기서 막는다 — 안 막으면 메뉴에서는 사라졌는데 BOM 덱으로는
+    그 형식이 계속 나간다.
+    """
+    row = db.get(ExportFormatHold, key)
+    if row is not None:
+        raise export.ExportError(held_message(row))
+
+
 def all_renderers(db: Session) -> list[export.Renderer]:
     """코드 렌더러 + 정의 렌더러.
 
@@ -64,8 +92,13 @@ def all_renderers(db: Session) -> list[export.Renderer]:
     안 뜨면 사람은 어느 정의가 문제인지 볼 길조차 없어지고, 고치러 들어갈 화면도
     그 목록 위에 있다.
     """
-    found = list(export.list_renderers())
-    taken = {item.key for item in found}
+    # **멈춘 기본 형식은 뺀다** — 목록·카드의 「낼 수 있는 형식」·온톨로지 지도가 전부
+    # 이 목록을 읽으므로, 여기서 한 번 빼면 모두에서 빠진다. key 는 그대로 차지한다 —
+    # 멈춘 사이 같은 key 의 정의가 대신 나서면 사람은 고쳐진 줄 안다.
+    stopped = holds(db)
+    code = list(export.list_renderers())
+    taken = {item.key for item in code}
+    found = [item for item in code if item.key not in stopped]
     for row in _rows(db):
         if row.key in taken:
             # **코드 렌더러가 이긴다.** 덮게 두면 코드 쪽 검증(키워드 확인·물리적

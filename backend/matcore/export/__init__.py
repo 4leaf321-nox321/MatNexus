@@ -445,6 +445,12 @@ class Renderer:
     빠진 파일은 솔버가 오류 없이 무시하기도 한다."""
     needs: tuple[Need, ...] = ()
     media_type: str = "text/plain; charset=utf-8"
+    solver: str = ""
+    """어느 솔버의 덱인가 — 여러 재료를 한 파일로 합칠 때 그 솔버의 규약을 고른다.
+
+    비면 key 앞부분(`dyna_elastic` → `dyna`)이나 확장자로 짐작한다(`shared/litdeck`).
+    화면에서 만든 정의는 key 가 `deck_1a2b3c4d` 라 앞부분이 솔버가 아니다 — 그래서
+    정의가 이 칸을 적을 수 있다."""
 
 
 _RENDERERS: dict[str, Renderer] = {}
@@ -546,22 +552,22 @@ THERMAL_KEYWORDS: tuple[tuple[str, str, str], ...] = (
 )
 
 
-def _elastic_lines(deck: Deck, youngs: float | None, poisson: float | None) -> list[str]:
-    """`*ELASTIC` — 한 줄이거나 온도별 표.
+def elastic_by_temperature(deck: Deck) -> list[tuple[float, float, float]]:
+    """온도별 탄성 표 — `(온도, 탄성계수, 푸아송비)` 를 온도 순으로. **두 줄이 안 되면 빈
+    목록이다** — 상수 재료이고, 그때는 블록의 값(`values`)을 쓴다.
 
-    **온도 열은 표가 있을 때만 붙인다.** 한 온도짜리에 붙이면 솔버가 「이
-    온도에서만 유효」로 읽고, 그 밖에서 외삽 규칙이 달라진다 — 상수인 재료가
-    갑자기 온도 의존이 된다.
+    **줄을 조용히 버리지 않는다.** 솔버는 한 온도에 E·ν 를 함께 받으므로 하나라도
+    비면 그 온도를 낼 수 없는데, 그냥 빼면 덱은 나가고 그 구간에서 솔버가 이웃 온도의
+    값을 쓴다 — 오류 없이 다른 재료가 된다.
+
+    **온도 순으로 준다.** 솔버마다 표를 오름차순으로 요구한다(`MPTEMP`·`TABLEM1`) —
+    어긋난 차례를 받아 주는 솔버도 있고 거절하는 솔버도 있어서, 한곳에서 맞춘다.
     """
-    assert youngs is not None and poisson is not None
     needed = ("temperature", "youngs_modulus", "poisson_ratio")
     given = deck.rows("elastic")
     rows = [
         row for row in given if all(isinstance(row.get(key), (int, float)) for key in needed)
     ]
-    # **줄을 조용히 버리지 않는다.** `*ELASTIC` 은 한 줄에 `(E, ν, T)` 를 받으므로
-    # 하나라도 비면 그 온도를 낼 수 없는데, 그냥 빼면 덱은 나가고 그 구간에서
-    # 솔버가 이웃 온도의 값을 쓴다 — 오류 없이 다른 재료가 된다.
     if len(rows) < len(given):
         holes = sorted(
             {
@@ -572,23 +578,149 @@ def _elastic_lines(deck: Deck, youngs: float | None, poisson: float | None) -> l
             }
         )
         raise ExportError(
-            f"온도별 탄성 표에 빈 칸이 있습니다({', '.join(holes)}). *ELASTIC 은 한 줄에 "
-            f"탄성계수·푸아송비·온도가 다 있어야 합니다 — 빈 칸을 이웃 값으로 메우는 "
+            f"온도별 탄성 표에 빈 칸이 있습니다({', '.join(holes)}). 솔버는 한 온도에 "
+            f"탄성계수·푸아송비·온도가 다 있어야 받습니다 — 빈 칸을 이웃 값으로 메우는 "
             f"것은 값을 지어내는 일이라 하지 않습니다."
         )
     if len(rows) < 2:
+        return []
+    return sorted(
+        (float(row["temperature"]), float(row["youngs_modulus"]), float(row["poisson_ratio"]))
+        for row in rows
+    )
+
+
+def rate_curves(
+    deck: Deck,
+) -> tuple[list[tuple[float, list[tuple[float, float]]]], list[str]]:
+    """속도별 소성 표를 **속도마다 나눠 정리한다** — `([(속도, 점들)], 남길 말)`.
+
+    행은 `rate_table` 의 `(속도, 소성변형률, 응력)` 이다. 곡선마다 `prepare` 를 따로
+    돈다 — 한 속도의 표가 규칙을 어기면 그 속도를 짚어 말한다. **속도가 하나뿐이면
+    거부한다**: 그 덱은 탄소성 형식이 낼 것이고, 여기서 내면 속도 의존이 있는 척이 된다.
+    """
+    by_rate: dict[float, list[tuple[float, float]]] = {}
+    for row in deck.rows("rate_table"):
+        try:
+            rate = float(row["strain_rate"])
+            by_rate.setdefault(rate, []).append(
+                (float(row["plastic_strain"]), float(row["true_stress"]))
+            )
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ExportError(
+                "속도별 소성 표의 행에 속도·변형률·응력이 다 있어야 합니다."
+            ) from exc
+    if len(by_rate) < 2:
+        raise ExportError(
+            "속도가 하나뿐입니다. 속도 의존 덱은 둘 이상의 속도가 있어야 합니다 — "
+            "하나면 탄소성 형식을 쓰세요."
+        )
+    curves: list[tuple[float, list[tuple[float, float]]]] = []
+    notes: list[str] = []
+    for rate in sorted(by_rate):
+        points, said = prepare(tuple(sorted(by_rate[rate])))
+        notes.extend(f"속도 {rate:.3g} 1/s: {line}" for line in said)
+        curves.append((rate, points))
+    return curves, notes
+
+
+def prony_terms(deck: Deck, *, limit: int | None = None) -> tuple[tuple[float, float], ...]:
+    """Prony 항 — `(상대 탄성률 gᵢ, 완화시간 τᵢ)`, 카드에 적힌 차례 그대로.
+
+    **정렬하지 않는다.** Prony 는 점이 아니라 항이라 차례를 바꿔도 같은 재료지만, 덱이
+    카드와 같은 차례여야 사람이 두 화면을 나란히 대조한다.
+
+    거부하는 것 셋 — 항이 없다 · 항이 솔버의 상한을 넘는다 · **gᵢ 의 합이 1 이상이다**
+    (평형 탄성률이 0 이하라는 뜻이라 솔버가 거부하거나 발산한다).
+    """
+    terms = tuple(
+        (float(row["relative_modulus"]), float(row["relaxation_time_s"]))
+        for row in deck.rows("viscoelastic")
+        if isinstance(row.get("relative_modulus"), int | float)
+        and isinstance(row.get("relaxation_time_s"), int | float)
+    )
+    if not terms:
+        raise ExportError(
+            "점탄성 카드인데 Prony 계수가 없습니다. 마스터커브를 만들고 "
+            "Prony 를 맞춘 뒤에 내보내세요."
+        )
+    if limit is not None and len(terms) > limit:
+        raise ExportError(
+            f"Prony 가 {len(terms)}항입니다 — 이 솔버는 {limit}항까지 받습니다. "
+            f"적합의 항 수를 줄이세요."
+        )
+    if any(tau <= 0.0 for _, tau in terms):
+        raise ExportError("완화시간이 0 이하인 Prony 항이 있습니다 — 적합을 다시 보세요.")
+    total = sum(g for g, _ in terms)
+    if total >= 1.0:
+        raise ExportError(
+            f"Prony 상대 탄성률의 합이 {total:.4f} 로 1 이상입니다. "
+            f"평형 탄성률이 0 이하라는 뜻이라 솔버가 거부합니다."
+        )
+    return terms
+
+
+#: 초탄성 식 → 계수 이름. **순서가 아니라 이름으로 찾는다** — 파라미터가 하나 늘어난
+#: 식이 붙으면 배열 순서로 넘긴 쪽부터 조용히 어긋난다(65 가 그랬다).
+HYPERELASTIC_PARAMETERS: dict[str, tuple[str, ...]] = {
+    "neo_hookean": ("c10",),
+    "mooney_rivlin": ("c10", "c01"),
+    "yeoh": ("c10", "c20", "c30"),
+    "ogden_1": ("mu", "alpha"),
+}
+
+
+def hyperelastic_terms(deck: Deck) -> tuple[str, dict[str, float]]:
+    """초탄성 카드의 `(식, {계수: 값})`. 모르는 식이거나 계수가 빠지면 거부한다.
+
+    **Ogden 의 μ 는 Abaqus 규약이다**(`matcore/fitting/hyperelastic.py`): 초기
+    전단탄성률이 μ 그 자체다. 솔버마다 같은 기호를 다르게 쓰므로(μ/α 규약이면
+    G = μα/2) 렌더러가 제 솔버의 규약으로 옮긴다 — 옮긴 식을 덱에 적는다.
+    """
+    family = deck.values("hyperelastic").get("family")
+    if not family:
+        raise ExportError("초탄성 카드가 아닙니다. 어느 식으로 맞췄는지가 없습니다.")
+    names = HYPERELASTIC_PARAMETERS.get(str(family))
+    if names is None:
+        known = ", ".join(sorted(HYPERELASTIC_PARAMETERS))
+        raise ExportError(
+            f"'{family}' 는 덱으로 옮기는 법을 모르는 식입니다. 있는 것: {known}"
+        )
+    values = {
+        str(row["name"]): float(row["value"])
+        for row in deck.rows("hyperelastic")
+        if "name" in row and isinstance(row.get("value"), int | float)
+    }
+    missing = [name for name in names if name not in values]
+    if missing:
+        raise ExportError(
+            f"{family} 에 필요한 계수가 없습니다: {', '.join(missing)}. "
+            f"카드가 다른 식으로 맞춰졌을 수 있습니다."
+        )
+    return str(family), {name: values[name] for name in names}
+
+
+def _elastic_lines(deck: Deck, youngs: float | None, poisson: float | None) -> list[str]:
+    """`*ELASTIC` — 한 줄이거나 온도별 표.
+
+    **온도 열은 표가 있을 때만 붙인다.** 한 온도짜리에 붙이면 솔버가 「이
+    온도에서만 유효」로 읽고, 그 밖에서 외삽 규칙이 달라진다 — 상수인 재료가
+    갑자기 온도 의존이 된다.
+    """
+    assert youngs is not None and poisson is not None
+    rows = elastic_by_temperature(deck)
+    if not rows:
         return ["*ELASTIC, TYPE=ISOTROPIC", f"{_free(youngs)}, {_free(poisson)}"]
 
     lines = [
         f"** ELASTIC: 온도 {len(rows)}점 "
-        f"({float(rows[0]['temperature']):.5g}~{float(rows[-1]['temperature']):.5g} K). "
+        f"({rows[0][0]:.5g}~{rows[-1][0]:.5g} K). "
         f"표 밖에서는 끝값이 유지됩니다.",
         "*ELASTIC, TYPE=ISOTROPIC",
     ]
     lines.extend(
-        f"{_free(float(row['youngs_modulus']))}, {_free(float(row['poisson_ratio']))}, "
-        f"{_free(float(row['temperature']))}"
-        for row in rows
+        f"{_free(one_e)}, {_free(one_nu)}, {_free(temperature)}"
+        for temperature, one_e, one_nu in rows
     )
     return lines
 
@@ -666,7 +798,7 @@ def _thermal_lines(deck: Deck) -> list[str]:
 
 @register_renderer(
     key="abaqus",
-    label="Abaqus",
+    label="Abaqus (탄소성)",
     extension="inp",
     describe="*MATERIAL / *ELASTIC / *PLASTIC — 표 형식 소성. 단위는 덱 머리에 적힌다.",
     keywords=("*MATERIAL", "*ELASTIC", "*PLASTIC"),
@@ -765,9 +897,21 @@ def _register_template_blocks() -> None:
     """코드가 만드는 줄 묶음을 템플릿 쪽에 넘긴다.
 
     **여기서 넘기는 이유는 순환이다** — `template` 이 이 모듈을 맨 위에서 부르면
-    서로를 기다린다. 넘기는 것은 셋뿐이고, 셋 다 조판이 아니라 검증·분기가 있다.
+    서로를 기다린다. 넘기는 것은 조판이 아니라 데이터·검증이 있는 것뿐이다:
+
+        header        출처·등급 줄 — 카드 밖(DB)에서 온다. `comment` 로 주석 기호를 준다
+                      (Abaqus `**` · LS-DYNA·Nastran `$` · ANSYS `!` · Radioss `#`)
+        elastic       Abaqus *ELASTIC — 온도별 표의 빈 칸을 검사한다
+        thermal       Abaqus 열 키워드 — 표가 이기고, ZERO 는 기준 온도가 있을 때만
+        radioss_unit  Radioss /UNIT — 우리 기호를 Radioss 단위 코드로(tonne → Mg)
     """
-    template.register_block("header", lambda deck: _header(deck, "**"))
+    template.register_block("header", lambda deck, comment="**": _header(deck, str(comment)))
+    # 출처 줄만 — 머리 제목·단위 말 없이(Johnson-Cook 덱의 머리가 이 모양이다).
+    template.register_block(
+        "provenance",
+        lambda deck, comment="**": [f"{comment} {line}" for line in deck.provenance],
+    )
+    template.register_block("radioss_unit", lambda deck: _unit_block(deck))
     template.register_block(
         "elastic",
         lambda deck: _elastic_lines(
@@ -790,8 +934,9 @@ _register_template_blocks()
     describe=("*ELASTIC + *VISCOELASTIC, TIME=PRONY — 선형 점탄성. 기준 온도 하나에서 유효."),
     keywords=("*MATERIAL", "*ELASTIC", "*VISCOELASTIC"),
     needs=(
-        # **OpenRadioss 는 없다.** LAW62 는 고무 초탄성(Ogden)+Prony 경로라
-        # 선형 점탄성과 다른 모형이다. 65 도 같은 이유로 Abaqus 만 낸다.
+        # 다른 솔버의 점탄성은 각 모듈에 있다(ansys·dyna·bulk·radioss). Radioss 는 LAW62
+        # 가 아니라 LAW42+Prony 다 — μ 가 장기 전단탄성률이고 Gᵢ 가 더해진다(2026-09-27,
+        # OpenRadioss sigeps42 로 확인). 작은 변형에서 선형 점탄성과 같다.
         Need("elastic", values=("youngs_modulus", "poisson_ratio")),
         Need("thermal", optional=True),
         Need("viscoelastic", rows_min=1),
@@ -997,9 +1142,12 @@ def render_abaqus_hyperelastic(deck: Deck) -> Rendered:
 
 @register_renderer(
     key="openradioss",
-    label="OpenRadioss",
+    label="Radioss (탄소성)",
     extension="rad",
-    describe="/MAT/LAW36 + /FUNCT — 표 형식 소성. /UNIT 블록으로 단위를 선언한다.",
+    describe=(
+        "/MAT/LAW36 + /FUNCT — 표 형식 소성. /UNIT 블록으로 단위를 선언한다"
+        "(OpenRadioss·Altair Radioss 공통 Starter 형식)."
+    ),
     keywords=("/MAT/LAW36", "/FUNCT/", "/UNIT/1", "/END"),
     needs=(
         # LAW36 은 RHO_I 가 자리 있는 필드다. 비울 수 없다.
@@ -1013,42 +1161,82 @@ def render_openradioss(deck: Deck) -> Rendered:
     **고정 20칸 형식이다.** 칸이 하나 어긋나면 다른 필드로 읽히고, 솔버는 오류 없이
     엉뚱한 재료로 계산한다.
     """
-    youngs = deck.number("elastic", "youngs_modulus")
-    poisson = deck.number("elastic", "poisson_ratio")
-    density = deck.number("elastic", "density")
     points, notes = prepare(deck.pairs("table", "plastic_strain", "true_stress"))
-    assert youngs is not None and poisson is not None and density is not None
-
     lines = ["#RADIOSS STARTER", *_header(deck, "#")]
     # **단위를 선언한다.** Abaqus 와 달리 이 솔버는 단위 블록이 있어서 값이 아니라
     # 선언으로 맞출 수 있다.
     lines.extend(_unit_block(deck))
-    lines.append(f"/MAT/LAW36/{deck.solver_id}/1")
-    lines.append(deck.name)
+    # 변형률 속도 하나짜리 표다. 속도 의존을 넣으려면 곡선이 여러 개 있어야 하고,
+    # 그것은 시험이 여러 속도로 있어야 한다는 뜻이다(`openradioss_rate`).
+    lines.extend(law36_lines(deck, [(0.0, deck.solver_id, points)]))
+    lines.append("/END")
+    return Rendered(text="\n".join(lines) + "\n", notes=tuple(notes))
+
+
+def _chunks(items: list[str], size: int = 5) -> list[str]:
+    """Radioss 가 한 줄에 다섯씩 받는 목록 — 함수 번호·배율·속도."""
+    return ["".join(items[start : start + size]) for start in range(0, len(items), size)]
+
+
+def law36_lines(
+    deck: Deck,
+    curves: list[tuple[float, int, list[tuple[float, float]]]],
+    *,
+    fsmooth: int | None = None,
+    vp: int | None = None,
+) -> list[str]:
+    """`/MAT/LAW36` + 곡선마다 `/FUNCT` — `curves` 는 `(속도, 함수 번호, 점들)`.
+
+    칸은 파서의 형식 문자열 그대로다(OpenRadioss `matl36_plas_tab.cfg`):
+
+        N_funct·Fsmooth   10칸 둘
+        Chard·Fcut·Eps_f  20칸 셋, 그다음 **10칸이 빈다**
+        VP                **91~100열** — 80열 다음에 바로 적으면 빈 칸에 떨어져 0 으로 읽힌다
+
+    **`fct_IDp` 줄은 비어 있어도 적는다.** 파서가 그 줄을 무조건 읽는다 — 전에 이 줄의
+    주석만 쓰고 값 줄을 빼서, 곡선 번호가 압력 의존 함수(`fct_IDp`) 자리로 가고 줄이
+    하나씩 밀렸다(2026-09-27, 파서 형식으로 확인).
+
+    곡선 번호·배율·속도는 **다섯씩 한 줄**이고, 셋이 차례로 선다(섞이지 않는다).
+    """
+    youngs = deck.number("elastic", "youngs_modulus")
+    poisson = deck.number("elastic", "poisson_ratio")
+    density = deck.number("elastic", "density")
+    assert youngs is not None and poisson is not None and density is not None
+    count = len(curves)
+    lines = [f"/MAT/LAW36/{deck.solver_id}/1", deck.name]
     lines.append(f"#{'RHO_I':>19}")
     lines.append(_fixed(density))
     lines.append(f"#{'E':>19}{'nu':>20}{'Eps_p_max':>20}{'Eps_t':>20}{'Eps_m':>20}")
     lines.append(_fixed(youngs) + _fixed(poisson))
     lines.append(
-        f"#{'N_funct':>9}{'F_smooth':>10}{'C_hard':>20}{'F_cut':>20}{'Eps_f':>20}{'VP':>20}"
+        f"#{'N_funct':>9}{'Fsmooth':>10}{'Chard':>20}{'Fcut':>20}{'Eps_f':>20}"
+        f"{'':>10}{'VP':>10}"
     )
-    lines.append(f"{1:>10}")
-    lines.append(f"#{'fct_IDp':>9}{'Fscale':>20}{'Fct_IDE':>10}{'EInf':>20}{'CE':>20}")
-    lines.append("# func_ID1")
-    lines.append(f"{deck.solver_id:>10}")
-    lines.append(f"#{'Fscale_1':>19}")
-    lines.append(_fixed(1.0))
-    lines.append(f"#{'Eps_dot_1':>19}")
-    # 변형률 속도 하나짜리 표다. 속도 의존을 넣으려면 곡선이 여러 개 있어야 하고,
-    # 그것은 시험이 여러 속도로 있어야 한다는 뜻이다.
-    lines.append(_fixed(0.0))
-    lines.append(f"/FUNCT/{deck.solver_id}")
-    lines.append(f"{deck.name}_TRUE_STRESS_VS_TRUE_PLASTIC_STRAIN")
-    lines.append(f"#{'X':>19}{'Y':>20}")
-    # **소성변형률이 먼저, 응력이 나중이다.** Abaqus 와 순서가 반대다.
-    lines.extend(f"{strain:>20.12E}{stress:>20.9E}" for strain, stress in points)
-    lines.append("/END")
-    return Rendered(text="\n".join(lines) + "\n", notes=tuple(notes))
+    head = f"{count:>10}" + (f"{fsmooth:>10}" if fsmooth is not None else "")
+    if vp is not None:
+        head = f"{head:<90}{vp:>10}"
+    lines.append(head)
+    lines.append(f"#{'fct_IDp':>9}{'Fscale':>20}{'Fct_IDE':>10}{'Einf':>20}{'CE':>20}")
+    lines.append(f"{0:>10}")
+    lines.append("#" + "".join(f"{f'fct_ID{index}':>10}" for index in range(1, 6))[1:])
+    lines.extend(_chunks([f"{fid:>10}" for _, fid, _ in curves]))
+    lines.append("#" + "".join(f"{f'Fscale_{index}':>20}" for index in range(1, 6))[1:])
+    lines.extend(_chunks([_fixed(1.0) for _ in curves]))
+    lines.append("#" + "".join(f"{f'Eps_dot_{index}':>20}" for index in range(1, 6))[1:])
+    lines.extend(_chunks([_fixed(rate) for rate, _, _ in curves]))
+    for rate, fid, points in curves:
+        lines.append(f"/FUNCT/{fid}")
+        # 제목 줄은 100자까지다 — 속도를 붙일 때는 이름을 줄여 속도가 잘리지 않게 한다.
+        lines.append(
+            f"{deck.name[:60]}_TRUE_STRESS_AT_RATE_{rate:.4g}"
+            if count > 1
+            else f"{deck.name}_TRUE_STRESS_VS_TRUE_PLASTIC_STRAIN"
+        )
+        lines.append(f"#{'X':>19}{'Y':>20}")
+        # **소성변형률이 먼저, 응력이 나중이다.** Abaqus 와 순서가 반대다.
+        lines.extend(f"{strain:>20.12E}{stress:>20.9E}" for strain, stress in points)
+    return lines
 
 
 def _thermal_points(deck: Deck, key: str) -> list[tuple[float, float]]:
@@ -1102,7 +1290,7 @@ def _linear_in_temperature(points: list[tuple[float, float]]) -> tuple[float, fl
 
 @register_renderer(
     key="openradioss_thermal",
-    label="OpenRadioss (열물성)",
+    label="Radioss (열물성)",
     extension="rad",
     suffix="_thermal",
     describe=(
@@ -1194,10 +1382,17 @@ def render_openradioss_thermal(deck: Deck) -> Rendered:
         f"# RHOCP = density x specific_heat = {_free(density)} x {_free(heats[0][1])}"
     )
     lines.append(f"# CONDUCTIVITY = AS + BS*T  ({len(conductivities)} point(s))")
+    # **제목 줄이 없는 블록이다**(OpenRadioss `mat_HEAT.cfg`). 전에는 `/MAT` 처럼 이름을
+    # 한 줄 적어서, 그 줄이 T0·RHOCP 줄로 읽히고 값이 한 줄씩 밀렸다(2026-09-27).
+    # 이름은 주석으로 남긴다 — 덱에서 짝을 찾을 때 쓴다.
+    lines.append(f"# {deck.name}")
     lines.append(f"/HEAT/MAT/{deck.solver_id}/1")
-    lines.append(deck.name)
     lines.append(f"#{'T0':>19}{'RHOCP':>20}{'AS':>20}{'BS':>20}")
     lines.append(_fixed(initial) + _fixed(volumetric) + _fixed(intercept) + _fixed(slope))
+    # 둘째 줄도 파서가 무조건 읽는다. 비우면 기본값(녹는점 1e20 · EFRAC 1)이다 — 0 을
+    # 적으면 녹는점이 0 인 재료가 된다.
+    lines.append(f"#{'T_melt':>19}{'AL':>20}{'BL':>20}{'EFRAC':>20}")
+    lines.append("")
     lines.append("/END")
     return Rendered(text="\n".join(lines) + "\n", notes=tuple(notes))
 
@@ -1237,28 +1432,12 @@ def render_abaqus_rate(deck: Deck) -> Rendered:
     youngs = deck.number("elastic", "youngs_modulus")
     poisson = deck.number("elastic", "poisson_ratio")
     density = deck.number("elastic", "density")
-
-    by_rate: dict[float, list[tuple[float, float]]] = {}
-    for row in deck.rows("rate_table"):
-        try:
-            rate = float(row["strain_rate"])
-            by_rate.setdefault(rate, []).append(
-                (float(row["plastic_strain"]), float(row["true_stress"]))
-            )
-        except (KeyError, TypeError, ValueError) as exc:
-            raise ExportError(
-                "속도별 소성 표의 행에 속도·변형률·응력이 다 있어야 합니다."
-            ) from exc
-    if len(by_rate) < 2:
-        raise ExportError(
-            "속도가 하나뿐입니다. 속도 의존 덱은 둘 이상의 속도가 있어야 합니다 — "
-            "하나면 Abaqus 형식을 쓰세요."
-        )
+    curves, curve_notes = rate_curves(deck)
 
     notes: list[str] = []
     lines = _header(deck, "**")
     lines.append(f"** Consistent units: {deck.units.declaration}")
-    rates = sorted(by_rate)
+    rates = [rate for rate, _ in curves]
     lines.append(
         f"** Rate dependent plasticity: {len(rates)} strain rates "
         f"({_free(rates[0])} ~ {_free(rates[-1])} 1/s), tabular, interpolated by Abaqus"
@@ -1287,9 +1466,8 @@ def render_abaqus_rate(deck: Deck) -> Rendered:
         lines.append(f"{_free(density)},")
     lines.extend(_elastic_lines(deck, youngs, poisson))
     lines.extend(_thermal_lines(deck))
-    for rate in rates:
-        points, said = prepare(tuple(sorted(by_rate[rate])))
-        notes.extend(f"속도 {rate:.3g} 1/s: {line}" for line in said)
+    notes.extend(curve_notes)
+    for rate, points in curves:
         lines.append(
             f"*PLASTIC, HARDENING=ISOTROPIC, EXTRAPOLATION=CONSTANT, RATE={_free(rate)}"
         )
@@ -1349,6 +1527,100 @@ def render_abaqus_lve(deck: Deck) -> Rendered:
         lines.append("*DENSITY")
         lines.append(f"{_free(density)},")
     lines.extend(_elastic_lines(deck, youngs, poisson))
+    lines.extend(_thermal_lines(deck))
+    return Rendered(text="\n".join(lines) + "\n", notes=tuple(notes))
+
+
+@register_renderer(
+    key="abaqus_elastic",
+    label="Abaqus (선형)",
+    extension="inp",
+    suffix="_elastic",
+    describe=(
+        "*ELASTIC(+*DENSITY·열물성) — 선형 탄성. 소성 표가 없는 카드(문헌·선언 값·DMA 선형 "
+        "구간)용. 온도별 표면 온도 열이 붙는다."
+    ),
+    keywords=("*MATERIAL", "*ELASTIC"),
+    needs=(
+        Need("elastic", values=("youngs_modulus", "poisson_ratio")),
+        Need("elastic", values=("density",), optional=True),
+        Need("thermal", optional=True),
+        Need("lve", optional=True),
+    ),
+)
+def render_abaqus_elastic(deck: Deck) -> Rendered:
+    """Abaqus 선형 탄성 — **소성 표가 없는 카드를 위한 자리.**
+
+    전에는 Abaqus 형식이 소성 표(`abaqus`)나 DMA 선형 구간(`abaqus_lve`)을 요구해서, 문헌
+    값이나 선언 물성만 든 카드는 다른 솔버로는 나가는데 Abaqus 로만 못 나갔다(2026-09-27,
+    형식 표를 솔버·물성 모델로 채우면서 드러났다). 선형탄성구간 카드면 유효 한계를 적는다.
+    """
+    youngs = deck.number("elastic", "youngs_modulus")
+    poisson = deck.number("elastic", "poisson_ratio")
+    density = deck.number("elastic", "density")
+    limit = deck.number("lve", "lve_strain_limit")
+
+    notes: list[str] = []
+    lines = _header(deck, "**")
+    lines.append(f"** Consistent units: {deck.units.declaration}")
+    if limit is not None:
+        lines.append(
+            f"** ELASTIC is the DMA storage modulus in the linear range - valid up to strain "
+            f"{_free(limit)}"
+        )
+    lines.append("** No plasticity: use for small-strain / vibration analyses only")
+    if density is None:
+        notes.append("밀도가 카드에 없어 *DENSITY 를 빼고 그 사실을 덱 주석에 적었습니다.")
+        lines.append(
+            "** DENSITY: 측정값이 없어 비웠습니다. "
+            "동적 해석에는 이 덱이 그대로 쓰이지 못합니다."
+        )
+    lines.append(f"*MATERIAL, NAME={deck.name}")
+    if density is not None:
+        lines.append("*DENSITY")
+        lines.append(f"{_free(density)},")
+    lines.extend(_elastic_lines(deck, youngs, poisson))
+    lines.extend(_thermal_lines(deck))
+    return Rendered(text="\n".join(lines) + "\n", notes=tuple(notes))
+
+
+@register_renderer(
+    key="abaqus_thermal",
+    label="Abaqus (열물성)",
+    extension="inp",
+    suffix="_thermal",
+    describe=(
+        "*CONDUCTIVITY·*SPECIFIC HEAT·*DENSITY(·*EXPANSION) — 열전도 해석용. 탄성 값이 없는 "
+        "열물성 카드도 낸다."
+    ),
+    keywords=("*MATERIAL", "*CONDUCTIVITY"),
+    needs=(
+        Need("thermal", values=("thermal_conductivity",)),
+        Need("elastic", values=("density",), optional=True),
+    ),
+)
+def render_abaqus_thermal(deck: Deck) -> Rendered:
+    """Abaqus 열물성 — **탄성이 없는 카드**를 위한 자리.
+
+    다른 Abaqus 형식도 열물성을 곁들여 싣지만 모두 탄성계수·푸아송비를 요구한다. 핸드북의
+    열물성만 든 카드는 그래서 Abaqus 로 못 나갔다. 과도 열해석은 밀도 곱하기 비열이 열용량이라,
+    밀도가 없으면 그 사실을 적는다(정상 해석에는 상관없다).
+    """
+    density = deck.number("elastic", "density")
+    notes: list[str] = []
+    lines = _header(deck, "**")
+    lines.append(f"** Consistent units: {deck.units.declaration}")
+    lines.append("** Heat transfer material - pair it with the structural material if needed.")
+    if density is None:
+        notes.append(
+            "밀도가 카드에 없어 *DENSITY 를 뺐습니다 — 과도 열해석의 열용량(밀도 곱하기 "
+            "비열)이 서지 않습니다. 정상 해석에는 상관없습니다."
+        )
+        lines.append("** DENSITY: not on the card - transient heat capacity needs it.")
+    lines.append(f"*MATERIAL, NAME={deck.name}")
+    if density is not None:
+        lines.append("*DENSITY")
+        lines.append(f"{_free(density)},")
     lines.extend(_thermal_lines(deck))
     return Rendered(text="\n".join(lines) + "\n", notes=tuple(notes))
 
@@ -1465,7 +1737,38 @@ def _unit_block(deck: Deck) -> list[str]:
     """
     system = deck.units
     name = f"MNX_{system.mass}_{system.length}_{system.time}".upper()
-    return ["/UNIT/1", name, f"{system.mass:<20}{system.length:<20}{system.time}"]
+    return [
+        "/UNIT/1",
+        name,
+        f"#{'MU_M':>19}{'MU_L':>20}{'MU_T':>20}",
+        _radioss_unit(system.mass, "g")
+        + _radioss_unit(system.length, "m")
+        + _radioss_unit(system.time, "s"),
+    ]
+
+
+#: Radioss 단위 코드 = SI 접두사 + 밑 글자(질량 `g` · 길이 `m` · 시간 `s`). 파서가 **끝 글자**
+#: 를 보고 차원을 가른다(OpenRadioss `unit_code.F`).
+_RADIOSS_PREFIXES = (
+    "y", "z", "a", "f", "p", "n", "mu", "u", "m", "c", "d", "", "da", "h", "k", "K",
+    "M", "G", "T", "P", "E", "Z", "Y",
+)  # fmt: skip
+
+#: 우리 기호 → Radioss 코드. **`tonne` 은 오류 573 이다** — 끝 글자가 `g` 가 아니라서
+#: 못 읽는다. 톤의 정식 표기는 메가그램 `Mg` 다(2026-09-27, 파서로 확인). 전에는
+#: 기본 계(mm·N·tonne)로 낸 모든 Radioss 덱의 `/UNIT` 가 `tonne` 이었다.
+_RADIOSS_ALIASES = {"tonne": "Mg", "t": "Mg"}
+
+
+def _radioss_unit(symbol: str, base: str) -> str:
+    """단위 하나를 `/UNIT` 의 20칸으로. 코드로 못 적으면 **SI 기본 단위에 대한 배수**로
+    적는다 — 파서가 둘 다 받는다. 모르는 글자를 그대로 두면 Starter 가 멈춘다."""
+    code = _RADIOSS_ALIASES.get(symbol, symbol)
+    if code.endswith(base) and code[: -len(base)] in _RADIOSS_PREFIXES:
+        return f"{code:>20}"
+    from matcore import units
+
+    return f"{float(units.unit_of(symbol).factor):>20.9E}"
 
 
 def block_spec(key: str) -> Any:

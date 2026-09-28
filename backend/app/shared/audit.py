@@ -122,6 +122,11 @@ EDITED_BY_OTHER = "data.edited_by_other"
 #: 등록자·편집 부서를 넘긴 일(ADR 0035). **권한이 실린 변경이다** — 넘긴 뒤에는
 #: 「등록자」 칸이 새 사람을 가리키므로, 처음 올린 사람은 이 기록에만 남는다.
 OWNERSHIP_CHANGED = "ownership.changed"
+#: 기본 제공 형식(코드 렌더러)을 **내리고 다시 쓴 일**(ADR 0037). 그 형식으로 받은 덱이
+#: 틀렸다는 뜻이라, 언제부터 언제까지 내려져 있었고 왜였는지가 나중에 「그때 받은 덱을
+#: 다시 받아야 하나」 를 가른다.
+FORMAT_HELD = "export_format.held"
+FORMAT_RELEASED = "export_format.released"
 
 
 def diff(before: dict[str, Any], after: dict[str, Any]) -> dict[str, Any]:

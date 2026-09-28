@@ -99,3 +99,14 @@ describe('펼치기', () => {
     ])
   })
 })
+
+describe('몸 줄의 말', () => {
+  it('묶음의 말은 머리에, 몸 줄이 든 제 말은 그대로 둔다', () => {
+    // 말만 남기는 줄(`{note}`)이 몸에 있으면 그 말이 곧 줄이다 — 지우면 빈 줄이 된다.
+    const lines: DeckLine[] = [
+      { kind: 'text', text: '*MAT' },
+      { kind: 'advanced', raw: { note: '알림' }, note: '알림' },
+    ]
+    expect(fromSections(toSections(lines))).toEqual(lines)
+  })
+})

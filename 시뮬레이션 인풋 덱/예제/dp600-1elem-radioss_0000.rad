@@ -44,8 +44,8 @@ DP600  E=210 GPa  rho=7.85e-9 Mg/mm3
              7.85E-9
 #                  E                  Nu           Eps_p_max               EPS_t               EPS_m
               210000                 0.3
-#  N_funct   Fsmooth               Chard                Fcut               EPS_f        VP
-         1         1                                                                     1
+#  N_funct   Fsmooth               Chard                Fcut               EPS_f                  VP
+         1         1                                                                               1
 #  fct_IDp              Fscale
          0
 #  fct_ID1

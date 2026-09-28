@@ -31,6 +31,7 @@ from app.modules.catalog.models import CatalogMaterial
 from app.modules.fitting import blocks, bundle, card_tiers, readiness, renderers
 from app.modules.fitting.models import (
     CardBlock,
+    ExportFormatHold,
     ExportProfile,
     PropertyCard,
     UnitSystemDef,
@@ -40,6 +41,7 @@ from app.modules.fitting.schemas import (
     BomDeckIn,
     BomDeckOut,
     BomDeckSkippedOut,
+    BuiltinFormatOut,
     CardBlockCreate,
     CardBlockOut,
     CardBlockUpdate,
@@ -72,10 +74,13 @@ from app.modules.fitting.schemas import (
     FitPreviewOut,
     FitPreviewRequest,
     FittedParameterOut,
+    FormatHoldIn,
+    FormatHoldOut,
     GroupCardSaveRequest,
     InheritedValueOut,
     LveCardSaveRequest,
     MemberCurveOut,
+    PairedFormatsOut,
     PropertyCardOut,
     PropertyCardSaveRequest,
     PropertyCardUpdateRequest,
@@ -99,18 +104,32 @@ from app.modules.viscoelastic.models import MasterCurve, PronyFit
 from app.modules.workspaces.models import Workspace
 from app.shared import (
     audit,
+    deckmap,
+    declared_card,
     declared_slots,
     definition_keys,
-    display,
     filestore,
     litdeck,
     pagination,
     permissions,
-    property_names,
     unit_systems,
 )
 from app.shared.access import AccessBook, EditAccessOut, access_of
 from app.shared.auth import current_user, require_system_admin
+from app.shared.declared_card import (
+    INHERITED_UNITS,
+)
+from app.shared.declared_card import constants as _constants
+from app.shared.declared_card import declared as _declared
+from app.shared.declared_card import declared_items as _declared_items
+from app.shared.declared_card import declared_row as _declared_row
+from app.shared.declared_card import declared_table as _declared_table
+from app.shared.declared_card import inherit_density as _inherit_density
+from app.shared.declared_card import inherit_poisson as _inherit_poisson
+from app.shared.declared_card import item_of as _item_of
+from app.shared.declared_card import synthetic_plastic as _synthetic_plastic
+from app.shared.declared_card import temperature_aware as _temperature_aware
+from app.shared.declared_card import thermal_block as _thermal_block
 from app.shared.errors import AppError, Conflict, NotFound
 from app.shared.pagination import Page
 from matcore import (
@@ -123,7 +142,6 @@ from matcore import (
     resample,
     runtime,
     statistics,
-    synth,
     units,
 )
 from matcore.export import scan, template
@@ -234,21 +252,34 @@ def _origin(source: str) -> str:
     return SOURCE_NOTES.get(source, "")
 
 
-@dataclass(frozen=True)
-class Inherited:
-    """물려받은 값 하나와 **어디서 왔는지.**
+def _declared_blocks(
+    db: Session,
+    material: Material,
+    poisson_override: float | None,
+    density_override: float | None,
+) -> tuple[dict[str, Any], dict[str, Any], list[InheritedValueOut]]:
+    """적어 둔 값만으로 만들 블록들과 **그 근거 목록** — 조립은 `shared/declared_card`.
 
-    카드는 불변이라 값을 참조로 두면 안 된다 — 재료의 밀도를 고치는 순간 이미
-    확정한 카드가 조용히 달라진다. 그래서 값은 복사한다. 대신 출처를 함께
-    복사한다: 덱만 받은 사람이 7850 을 보고 그것이 실측인지 관례값인지 물을 때,
-    답할 데가 있어야 한다.
+    근거 목록을 화면의 모양(`InheritedValueOut`)으로 옮기는 것만 여기서 한다.
     """
-
-    value: float | None
-    source: str
-    """`sample` | `material` | `manual` | `measured` | `conflict` | `missing`."""
-    detail: str | None = None
-    """사람이 읽는 한 줄. 갈렸으면 무엇과 무엇이 갈렸는지 여기 적는다."""
+    elastic, thermal, found = declared_card.declared_blocks(
+        db, material, poisson_override, density_override
+    )
+    return (
+        elastic,
+        thermal,
+        [
+            InheritedValueOut(
+                key=key,
+                label=label,
+                value=one.value,
+                si_unit=INHERITED_UNITS[key],
+                source=one.source,
+                detail=one.detail,
+            )
+            for key, label, one in found
+        ],
+    )
 
 
 def _samples_of(db: Session, group: statistics_services.Group) -> list[Sample]:
@@ -266,222 +297,6 @@ def _samples_of(db: Session, group: statistics_services.Group) -> list[Sample]:
     )
 
 
-def _inherit_density(
-    material: Material, samples: list[Sample], override: float | None
-) -> Inherited:
-    """시료 실측 → 재료 공칭 순. **로트마다 다를 수 있는 값이다.**
-
-    강판은 로트가 달라도 7850 이지만 복합재·발포재·소결재는 실제로 다르다.
-    그래서 실측이 있으면 그것을 먼저 쓴다.
-    """
-    if override is not None:
-        return Inherited(override, "manual", "직접 입력한 값입니다.")
-
-    measured = {s.density_si for s in samples if s.density_si is not None}
-    if len(measured) == 1:
-        value = next(iter(measured))
-        return Inherited(
-            value, "sample", f"시료에서 잰 값입니다 ({display.density_text(value)})."
-        )
-    if len(measured) > 1:
-        # **말없이 하나 고르지 않는다.** 어느 로트의 값을 썼는지 모르는 카드는
-        # 근거가 없는 것과 같다.
-        joined = ", ".join(display.density_text(v) for v in sorted(measured))
-        return Inherited(
-            None,
-            "conflict",
-            f"시료마다 밀도가 다릅니다({joined}) — 쓸 값을 직접 넣으세요.",
-        )
-    if material.density_si is not None:
-        return Inherited(
-            material.density_si,
-            "material",
-            f"재료의 공칭값입니다 ({display.density_text(material.density_si)}).",
-        )
-    return Inherited(None, "missing", "재료에도 시료에도 밀도가 없습니다.")
-
-
-def _declared(material: Material, item: str) -> Inherited:
-    """재료에 **사람이 적어 둔** 물성 하나(ADR 0016).
-
-    시험이 안 주는 값들이다 — 탄성계수는 시험을 안 한 재료에서, 열물성은
-    언제나 여기서 온다.
-
-    출처를 `declared:<어디서>` 로 남긴다. `measured` 와 한 글자도 안 겹쳐야
-    한다 — 덱을 받은 사람이 **잰 값인지 적은 값인지** 구별할 수 있어야 하고,
-    그 구별이 이 저장소가 카드에 근거를 박는 이유 전부다.
-    """
-    row = _declared_row(material, item)
-    if row is None:
-        return Inherited(None, "missing", f"재료에 '{item}' 이 없습니다.")
-    where = str(row.get("source") or "declared")
-    reference = str(row.get("reference") or "").strip()
-    points = _declared_points(row)
-    # **대푯값은 첫 점이다.** 온도를 안 타는 값이면 그것뿐이고, 표라면 가장 낮은
-    # 온도(대개 상온)다 — 표 자체는 블록의 `rows` 로 따로 실린다.
-    spread = (
-        f" (온도 {len(points)}점: "
-        f"{_celsius(points[0]['temperature_k'])}~{_celsius(points[-1]['temperature_k'])})"
-        if len(points) > 1
-        else ""
-    )
-    return Inherited(
-        float(points[0]["value_si"]),
-        f"declared:{where}",
-        f"사람이 적은 값입니다 — {reference or '근거 문서 없음'}.{spread}",
-    )
-
-
-def _celsius(kelvin: float | None) -> str:
-    """섭씨로 적는다. **상온을 298 로 적는 사람은 없다.**
-
-    환산은 `shared/display` 를 거친다. `- 273.15` 를 손으로 적으면 표 바깥에
-    정본이 하나 더 생기고, 표를 바꾼 날 이 자리만 옛 값을 낸다 — 화면 쪽에서
-    같은 부류를 다섯 군데 걷어냈다.
-    """
-    return "?" if kelvin is None else display.quantity(kelvin, "degC")
-
-
-def _declared_points(row: dict[str, Any]) -> list[dict[str, Any]]:
-    """한 줄이 든 온도-값 점들. 값이 숫자가 아닌 점은 없는 것으로 본다."""
-    return [
-        point
-        for point in (row.get("points") or [])
-        if isinstance(point, dict) and isinstance(point.get("value_si"), (int, float))
-    ]
-
-
-def _declared_row(material: Material, item: str) -> dict[str, Any] | None:
-    """선언 물성 한 줄. 쓸 수 있는 점이 없으면 없는 것으로 본다."""
-    for row in material.declared_properties or []:
-        if str(row.get("item")) == item and _declared_points(row):
-            return dict(row)
-    return None
-
-
-#: 선언 물성이 아니라 **재료·시료가 드는 값** — 표의 열이 아니라 상수로 실린다.
-#: 푸아송비는 재료 컬럼에서, 밀도는 시료 실측에서 온다.
-FROM_RECORD = ("poisson_ratio", "density")
-
-
-def _declared_items(block: str) -> dict[str, str]:
-    """이 항목란의 **칸 → 기준정보 항목 이름.** 항목란 선언에서 만든다.
-
-    전에는 이 표를 라우터가 한글 이름으로 들고 있었다(`THERMAL_ITEMS`,
-    `_declared(material, "탄성계수")`). 그 자리가 둘이 되면서 선언 물성이 카드로
-    가는 길이 **여섯 물성에 묶였고**, 새 물성은 이름을 코드에 더해야 했다.
-    지금은 칸이 자기 물성 키를 들고(`Produced.property_key`), 키 ↔ 이름의 정본은
-    기준정보 씨앗 하나다(`shared/property_names.builtin_item`).
-
-    기본 항목이 아닌 키(확장이 선언한 것)는 여기서 빠진다 — 그쪽은 「사내 항목
-    연결」 을 거쳐 `shared/declared_slots` 가 채운다.
-    """
-    cards.load_builtin()
-    try:
-        spec = cards.block(block)
-    except KeyError:
-        return {}
-    found: dict[str, str] = {}
-    for slot in spec.produces:
-        if slot.key in FROM_RECORD:
-            continue
-        item = property_names.builtin_item(slot.property_key)
-        if item:
-            found[slot.key] = item
-    return found
-
-
-#: 물려받는 값의 저장 단위. **응답에 값과 함께 실린다** — SI 값만 주면 받는 쪽이
-#: 단위를 짐작하고, 밀도에서 그것이 10¹² 배로 틀렸다(2026-09-06·09-11).
-INHERITED_UNITS: dict[str, str] = {
-    "youngs_modulus": "Pa",
-    "poisson_ratio": "1",
-    "density": "kg/m3",
-    "thermal_expansion": "1/K",
-    "specific_heat": "J/(kg.K)",
-    "thermal_conductivity": "W/(m.K)",
-}
-
-
-def _thermal_block(material: Material) -> dict[str, Any]:
-    """선언 물성에서 열물성 블록을 만든다. 셋 다 없으면 빈 dict.
-
-    **하나만 있어도 낸다.** 열팽창만 아는 재료로 열응력 해석은 돌아간다 —
-    셋을 다 요구하면 그 재료는 영영 덱이 안 나온다.
-
-    기준 온도는 **값들이 서로 다른 온도에서 왔으면 안 적는다.** 하나를 골라
-    적으면 나머지 둘이 그 온도의 값인 것처럼 보인다.
-    """
-    values: dict[str, Any] = {}
-    temperatures: set[float | None] = set()
-    for key, item in _declared_items("thermal").items():
-        found = _declared(material, item)
-        if found.value is None:
-            continue
-        values[key] = found.value
-        values[f"{key}_source"] = found.source
-        # **근거 문서를 카드 안에 복사한다.** 재료의 선언 물성을 나중에 고쳐도
-        # 이미 확정한 카드가 무엇을 근거로 했는지는 그대로 남아야 한다 —
-        # 값을 복사하면서 근거를 참조로 두면 그 둘이 어긋난다.
-        row = _declared_row(material, item) or {}
-        if row.get("reference"):
-            values[f"{key}_reference"] = str(row["reference"])
-        # **물성마다 자기 온도를 든다.** 한 통에 모아 두면 「비열을 잰 온도」가
-        # 열팽창의 기준 온도로 나가는 일이 생긴다 — 실제로 그랬다(§10.5).
-        points = _declared_points(row)
-        if len(points) == 1 and isinstance(points[0].get("temperature_k"), (int, float)):
-            values[f"{key}_temperature"] = float(points[0]["temperature_k"])
-            temperatures.add(float(points[0]["temperature_k"]))
-        else:
-            # 표인 물성은 온도를 하나로 말할 수 없다. **그것을 셈에 넣지 않으면**
-            # 나머지 둘이 우연히 같을 때 「전부 그 온도」로 읽힌다.
-            temperatures.add(None)
-
-    # 블록 전체의 기준 온도. **전부 한 점이고 그 온도가 같을 때만** 뜻이 있다.
-    if values and len(temperatures) == 1 and None not in temperatures:
-        values["reference_temperature"] = next(iter(temperatures))
-    return values
-
-
-def _item_of(block: str, slot: str) -> str:
-    """칸 하나가 받는 기준정보 항목 이름. 없으면 빈 글자 — 그러면 값이 안 실린다.
-
-    **틀린 값이 실리는 것보다 안 실리는 것이 낫다**(항목을 지우거나 이름을 바꾼
-    경우가 그렇다).
-    """
-    return _declared_items(block).get(slot, "")
-
-
-def _constants(values: dict[str, Any]) -> dict[str, float]:
-    """온도를 안 타는 값들 — 표의 모든 줄에 같이 실린다.
-
-    **푸아송비와 밀도가 그렇다.** 선언 물성이 아니라 재료 컬럼이나 측정에서
-    오는데, 표에 안 실으면 `*ELASTIC` 이 줄을 못 만든다 — 한 줄에 `(E, ν, T)`
-    가 다 있어야 하기 때문이다.
-    """
-    return {
-        key: float(values[key])
-        for key in ("poisson_ratio", "density")
-        if isinstance(values.get(key), (int, float))
-    }
-
-
-def _temperature_aware(
-    block: str, values: dict[str, Any], rows: list[dict[str, Any]]
-) -> dict[str, Any]:
-    """블록 하나. **표는 온도를 탈 때만 붙는다.**
-
-    한 온도짜리에 표를 붙이면 솔버가 「이 온도에서만 유효」로 읽고, 그 밖에서
-    외삽 규칙이 달라진다 — 상수인 재료가 갑자기 온도 의존이 된다.
-    """
-    if not values:
-        return {}
-    payload: dict[str, Any] = {"values": values}
-    if len(rows) > 1:
-        payload["rows"] = rows
-    return {block: payload}
-
-
 def _visible_material(db: Session, user: User, material_id: uuid.UUID) -> Material:
     """볼 권한이 있는 재료 하나."""
     material = db.scalar(
@@ -490,196 +305,6 @@ def _visible_material(db: Session, user: User, material_id: uuid.UUID) -> Materi
     if material is None:
         raise NotFound("MNX-MATERIALS-0001", "재료를 찾을 수 없습니다.")
     return material
-
-
-def _declared_blocks(
-    db: Session,
-    material: Material,
-    poisson_override: float | None,
-    density_override: float | None,
-) -> tuple[dict[str, Any], dict[str, Any], list[InheritedValueOut]]:
-    """적어 둔 값만으로 만들 블록들과 **그 근거 목록.**
-
-    미리보기와 저장이 **같은 함수를 쓴다.** 각자 만들면 화면이 "실린다" 고 한
-    값이 안 실리거나 그 반대가 되는데, 그때 사람은 화면을 믿을 근거를 잃는다
-    (`FitPreviewOut.elastic` 이 같은 이유로 적합 응답에 실린다).
-
-    밀도는 **시료 실측을 여전히 먼저 본다.** 시험을 안 했어도 시료의 밀도는 잰
-    값일 수 있고, 이 경로가 그것을 무시하면 같은 재료가 어느 버튼을 눌렀느냐에
-    따라 다른 밀도를 갖는다.
-    """
-    modulus_item = _item_of("elastic", "youngs_modulus")
-    stated = _declared(material, modulus_item)
-    stated_row = _declared_row(material, modulus_item)
-    poisson = _inherit_poisson(material, poisson_override)
-    # **지운 시료는 안 본다.** 밀도를 잘못 적어 지운 시료의 값이 카드에
-    # 「실측」으로 박히면, 지운 그 값으로 해석을 돌리게 된다.
-    samples = list(
-        db.scalars(
-            select(Sample).where(
-                Sample.material_id == material.id, Sample.deleted_at.is_(None)
-            )
-        )
-    )
-    density = _inherit_density(material, samples, density_override)
-
-    elastic: dict[str, Any] = {
-        **(
-            {
-                "youngs_modulus": stated.value,
-                "youngs_modulus_source": stated.source,
-                **(
-                    {"youngs_modulus_reference": str(stated_row["reference"])}
-                    if stated_row and stated_row.get("reference")
-                    else {}
-                ),
-            }
-            if stated.value is not None
-            else {}
-        ),
-        **(
-            {"poisson_ratio": poisson.value, "poisson_ratio_source": poisson.source}
-            if poisson.value is not None
-            else {}
-        ),
-        **(
-            {"density": density.value, "density_source": density.source}
-            if density.value is not None
-            else {}
-        ),
-    }
-    thermal = _thermal_block(material)
-
-    found = [
-        InheritedValueOut(
-            key=key,
-            label=label,
-            value=one.value,
-            si_unit=INHERITED_UNITS[key],
-            source=one.source,
-            detail=one.detail,
-        )
-        for key, label, one in (
-            ("youngs_modulus", modulus_item, stated),
-            ("poisson_ratio", "푸아송비", poisson),
-            ("density", "밀도", density),
-            *(
-                (key, label, _declared(material, label))
-                for key, label in _declared_items("thermal").items()
-                if key in thermal
-            ),
-        )
-        if one.value is not None
-    ]
-    return elastic, thermal, found
-
-
-#: 합성 소성 표의 재료가 되는 선언 물성 — **물성 키로 든다.**
-#:
-#: 이 셋은 카드 항목란의 칸이 아니라 곡선을 짓는 입력이라 항목란에서 끌어올 자리가
-#: 없다. 그래서 키를 여기 적되 **이름은 안 적는다** — 이름의 정본은 기준정보
-#: 씨앗이고, 키는 사람이 고치지 않는 식별자다.
-SYNTH_KEYS = (
-    "mechanical.yield_strength",
-    "mechanical.tensile_strength",
-    "mechanical.elongation_at_break",
-)
-
-
-def _synth_items() -> list[str]:
-    """합성에 쓰는 항목 이름 셋 — 순서는 `SYNTH_KEYS` 그대로(항복·인장·연신)."""
-    return [property_names.builtin_item(key) or "" for key in SYNTH_KEYS]
-
-
-def _synthetic_plastic(
-    material: Material, elastic: dict[str, Any]
-) -> tuple[list[dict[str, Any]], list[str]] | str:
-    """선언 스칼라로 소성 표를 짓는다 — 못 지으면 **이유 문자열**을 돌려준다.
-
-    E 는 elastic 블록에 이미 선 값(선언 탄성계수)을 그대로 쓴다 — 합성이 다른
-    E 를 쓰면 카드 안에서 탄성과 소성이 서로 다른 재료가 된다.
-    """
-    E = elastic.get("youngs_modulus")
-    if not isinstance(E, (int, float)):
-        return "탄성계수가 없습니다 — 선언 물성에 먼저 적으세요."
-    items = _synth_items()
-    scalars = {item: _declared(material, item) for item in items}
-    yield_item, tensile_item, elongation_item = items
-    curve = synth.synthesize(
-        float(E),
-        scalars[yield_item].value,
-        scalars[tensile_item].value,
-        scalars[elongation_item].value,
-    )
-    if curve is None:
-        return "항복강도(또는 인장강도)가 없습니다 — 지어낼 근거가 없습니다."
-    if not curve.table_rows:
-        return f"소성 표가 안 나오는 재료입니다({curve.model})."
-    # 첫 줄에 모델, 둘째 줄에 주의 — 둘 다 "합성" 으로 시작해야 덱 각주까지
-    # 따라간다(네킹 줄과 같은 규칙). 접두어는 여기서 한 번만 붙인다.
-    notes = [
-        f"합성 소성 표 — 실측이 아니다. 모델: {curve.model}",
-        f"합성 주의 — {curve.note}",
-    ]
-    for item in items:
-        one = scalars[item]
-        if one.value is None:
-            continue
-        row = _declared_row(material, item) or {}
-        reference = str(row.get("reference") or "").strip()
-        notes.append(
-            f"합성 입력 {item}: {one.source}" + (f" — {reference}" if reference else "")
-        )
-    return [dict(one) for one in curve.table_rows], notes
-
-
-def _declared_table(
-    material: Material,
-    columns: dict[str, str],
-    *,
-    constants: dict[str, float] | None = None,
-) -> list[dict[str, Any]]:
-    """여러 물성을 온도 격자에 올린 표. `columns` 는 `{블록 열: 물성 항목}`.
-
-    온도를 **합집합으로 모으고 값이 없는 칸은 비워 둔다.** 0 으로 채우면 비열
-    0 인 재료가 되고, 빼 버리면 그 온도가 통째로 사라진다.
-
-    ## 점이 하나면 상수다
-
-    모든 줄에 같은 값을 쓴다. **지어내는 것이 아니라 명시된 모형 가정**이고,
-    빼 두면 솔버가 그 온도에서 그 값을 모른다. `constants` 도 같은 자리다 —
-    선언 물성이 아니라 재료 컬럼이나 측정에서 온 값들이다(푸아송비·밀도).
-
-    ## 격자가 어긋나는지는 여기서 안 본다
-
-    `*ELASTIC` 은 한 줄에 `(E, ν, T)` 를 받으므로 둘이 같은 온도에 있어야
-    하지만, `*EXPANSION` 은 자기 표를 따로 갖는다 — **블록마다 다르다.** 그
-    판단은 그 키워드를 아는 렌더러가 한다(`_elastic_lines`).
-    """
-    grids: dict[str, dict[float, float]] = {}
-    singles: dict[str, float] = dict(constants or {})
-    for column, item in columns.items():
-        points = _declared_points(_declared_row(material, item) or {})
-        if not points:
-            continue
-        if len(points) == 1:
-            singles[column] = float(points[0]["value_si"])
-            continue
-        grids[column] = {
-            float(point["temperature_k"]): float(point["value_si"]) for point in points
-        }
-
-    if not grids:
-        return []
-
-    rows: list[dict[str, Any]] = []
-    for temperature in sorted({one for found in grids.values() for one in found}):
-        row: dict[str, Any] = {"temperature": temperature, **singles}
-        for column, found in grids.items():
-            if temperature in found:
-                row[column] = found[temperature]
-        rows.append(row)
-    return rows
 
 
 #: 기대값과 카드 값이 이만큼 안에 들면 같다고 본다. 사람이 「205 GPa」 라고 말할
@@ -824,19 +449,6 @@ def _thermal_notes(material: Material, thermal: dict[str, Any]) -> list[str]:
         for found in [_declared(material, label)]
         if found.detail
     ]
-
-
-def _inherit_poisson(material: Material, override: float | None) -> Inherited:
-    """**재료에서만 온다.** 로트마다 달라지는 값이 아니다."""
-    if override is not None:
-        return Inherited(override, "manual", "직접 입력한 값입니다.")
-    if material.poisson_ratio is not None:
-        return Inherited(material.poisson_ratio, "material", "재료에 적힌 값입니다.")
-    return Inherited(
-        None,
-        "missing",
-        "재료에 푸아송비가 없습니다 — 인장시험은 이 값을 주지 않습니다.",
-    )
 
 
 def _chosen(
@@ -3140,6 +2752,116 @@ def delete_unit_system(
     db.commit()
 
 
+def _builtin(key: str) -> export.Renderer:
+    for item in export.list_renderers():
+        if item.key == key:
+            return item
+    raise NotFound(
+        "MNX-FITTING-0041",
+        f"기본 제공 형식이 아닙니다: {key}. 해석용 물성 정의는 그 화면에서 멈추거나 지웁니다.",
+    )
+
+
+def _hold_out(db: Session, row: ExportFormatHold) -> FormatHoldOut:
+    person = db.get(User, row.held_by_id) if row.held_by_id else None
+    return FormatHoldOut(
+        reason=row.reason,
+        held_by_name=person.display_name if person else None,
+        held_at=row.held_at,
+    )
+
+
+def _builtin_out(
+    db: Session, item: export.Renderer, row: ExportFormatHold | None
+) -> BuiltinFormatOut:
+    return BuiltinFormatOut(
+        key=item.key,
+        label=item.label,
+        extension=item.extension,
+        describe=item.describe,
+        hold=_hold_out(db, row) if row is not None else None,
+    )
+
+
+@router.get("/builtin-formats", response_model=list[BuiltinFormatOut])
+def list_builtin_formats(
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> list[BuiltinFormatOut]:
+    """기본 제공 형식 전부 — **멈춘 것도** 사연과 함께(ADR 0037).
+
+    내보내기 형식 목록(`/formats`)은 멈춘 것을 뺀다. 다시 쓰게 하려면 멈춘 것이 보이는
+    자리가 있어야 하고, 쓰는 사람도 「어제 있던 형식이 왜 없나」 를 여기서 본다.
+    """
+    del user
+    stopped = deckmap.holds(db)
+    return [_builtin_out(db, item, stopped.get(item.key)) for item in export.list_renderers()]
+
+
+@router.put("/builtin-formats/{key}/hold", response_model=BuiltinFormatOut)
+def hold_builtin_format(
+    key: str,
+    payload: FormatHoldIn,
+    user: User = Depends(require_system_admin),
+    db: Session = Depends(get_db),
+) -> BuiltinFormatOut:
+    """기본 형식을 **내린다** — 시스템 관리자. 고쳐 배포할 때까지 메뉴·카드·내려받기에서
+    빠진다.
+
+    코드로 만든 형식은 화면에서 못 고친다. 틀린 것이 발견되면 배포까지 공백이 생기고, 그
+    사이 사람들은 틀린 덱을 계속 받는다 — 그 공백을 막는 자리다. 이미 내려져 있으면 사유를
+    고친다. 걸고 푼 일은 감사 기록에 남는다: 언제부터 언제까지 내려져 있었는지가 「그때 받은
+    덱을 다시 받아야 하나」 를 가른다.
+    """
+    item = _builtin(key)
+    reason = payload.reason.strip()
+    row = db.get(ExportFormatHold, key)
+    if row is None:
+        row = ExportFormatHold(key=key, reason=reason, held_by_id=user.id)
+        db.add(row)
+    else:
+        row.reason = reason
+        row.held_by_id = user.id
+        row.held_at = datetime.now(UTC)
+    audit.record(
+        db,
+        action=audit.FORMAT_HELD,
+        actor=user,
+        target_table="export_format_holds",
+        target_id=None,
+        target_label=f"{item.label} ({key})",
+        reason=reason,
+    )
+    db.commit()
+    db.refresh(row)
+    return _builtin_out(db, item, row)
+
+
+@router.delete("/builtin-formats/{key}/hold", status_code=204)
+def release_builtin_format(
+    key: str,
+    user: User = Depends(require_system_admin),
+    db: Session = Depends(get_db),
+) -> Response:
+    """다시 쓴다 — 시스템 관리자. 고친 판이 배포된 뒤에 푼다."""
+    item = _builtin(key)
+    row = db.get(ExportFormatHold, key)
+    if row is None:
+        raise NotFound("MNX-FITTING-0042", f"사용 중단된 형식이 아닙니다: {key}")
+    audit.record(
+        db,
+        action=audit.FORMAT_RELEASED,
+        actor=user,
+        target_table="export_format_holds",
+        target_id=None,
+        target_label=f"{item.label} ({key})",
+        changes={"reason": {"before": row.reason, "after": None}},
+    )
+    db.delete(row)
+    db.commit()
+    return Response(status_code=204)
+
+
 @router.get("/formats", response_model=list[ExportFormatOut])
 def list_formats(
     user: User = Depends(current_user),
@@ -3391,7 +3113,9 @@ def preview_deck(
     )
 
 
-def _deck_for_card(db: Session, user: User, card_id: uuid.UUID) -> export.Deck:
+def _deck_for_card(
+    db: Session, user: User, card_id: uuid.UUID, with_card: uuid.UUID | None = None
+) -> export.Deck:
     """카드 하나를 덱으로 — 이름·근거 줄까지 붙여서.
 
     **내려받기와 미리보기가 같은 덱을 봐야 한다.** 다르면 미리보기가 「이렇게
@@ -3503,7 +3227,78 @@ def _deck_for_card(db: Session, user: User, card_id: uuid.UUID) -> export.Deck:
     # 문헌과 같은 1~4 척도, 카드가 자기 근거에서 산출한다.
     provenance.extend(card_tiers.summary_lines(item))
 
-    return _deck(item, name=export.sanitize_name(base), provenance=tuple(provenance))
+    deck = _deck(item, name=export.sanitize_name(base), provenance=tuple(provenance))
+    return deck if with_card is None else _paired(db, user, item, deck, with_card)
+
+
+def _paired(
+    db: Session, user: User, item: PropertyCard, deck: export.Deck, with_card: uuid.UUID
+) -> export.Deck:
+    """**짝 카드**의 블록으로 이 카드에 없는 자리를 채운다(ADR 0037, 2026-09-27).
+
+    이방성(r값) 카드에는 방향이 없고 r 셋만 있다(ADR 0034). Hill 재료는 거기에 **기준
+    방향의 경화 곡선과 탄성**이 한 재료 카드에 함께 들어가야 한다(*MAT_036 · LAW43) —
+    그것은 MD 카드에 있다. 카드를 합쳐 새 카드를 만들면 같은 곡선이 두 카드에 생기므로,
+    내보낼 때만 합친다.
+
+    **이 카드의 블록이 이긴다** — 짝은 빈자리만 채운다. **같은 재료만** — 다른 재료의
+    곡선에 이 재료의 r 을 얹으면 덱은 돌고 재료는 어느 쪽도 아니다.
+    """
+    if with_card == item.id:
+        raise AppError(
+            "MNX-FITTING-0040",
+            "짝 카드로 자기 자신을 골랐습니다 — 다른 카드를 고르세요.",
+            status=422,
+        )
+    other = _visible_card(db, user, with_card)
+    if other.material_id != item.material_id:
+        raise AppError(
+            "MNX-FITTING-0040",
+            "짝 카드는 같은 재료의 카드여야 합니다 — 다른 재료의 곡선에 이 재료의 값을 "
+            "얹으면 덱은 돌고 재료는 어느 쪽도 아니게 됩니다.",
+            status=422,
+        )
+    companion = _deck_for_card(db, user, with_card)
+    borrowed = sorted(set(companion.blocks) - set(deck.blocks))
+    label = other.label + (f" ({other.orientation})" if other.orientation else "")
+    return replace(
+        deck,
+        blocks={**companion.blocks, **deck.blocks},
+        provenance=(
+            *deck.provenance,
+            f"짝 카드 {label} — 이 카드에 없는 {', '.join(borrowed) or '(없음)'} 을 "
+            f"거기서 가져왔습니다:",
+            *(f"  {line}" for line in companion.provenance),
+        ),
+    )
+
+
+@router.get("/cards/{card_id}/paired-formats", response_model=PairedFormatsOut)
+def paired_formats(
+    card_id: uuid.UUID,
+    with_card: uuid.UUID = Query(description="짝 카드. 같은 재료의 카드만."),
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> PairedFormatsOut:
+    """짝 카드와 합치면 **새로 낼 수 있게 되는 형식** — 내려받기를 누르기 전에 말한다.
+
+    카드 목록의 `available_formats` 는 카드 혼자의 판정이다. 이방성 카드는 혼자서는 Hill
+    형식을 못 내므로, 짝을 고른 뒤의 판정을 따로 준다 — 판정은 렌더와 같은 규칙
+    (`missing_for`)이다.
+    """
+    cards.load_builtin()
+    alone = _deck_for_card(db, user, card_id)
+    paired = _deck_for_card(db, user, card_id, with_card)
+    targets = renderers.all_renderers(db)
+    before = {one.key for one in targets if not export.missing_for(alone, one)}
+    return PairedFormatsOut(
+        available_formats=[
+            one.key
+            for one in targets
+            if one.key not in before and not export.missing_for(paired, one)
+        ],
+        borrowed_blocks=sorted(set(paired.blocks) - set(alone.blocks)),
+    )
 
 
 @router.post("/cards/bundle")
@@ -3584,6 +3379,13 @@ def export_card(
         le=export.MAX_SOLVER_ID,
         description="덱 안의 재료 번호. 비우면 카드 id 에서 만든 수.",
     ),
+    with_card: uuid.UUID | None = Query(
+        default=None,
+        description=(
+            "짝 카드 — 이 카드에 없는 블록을 채운다. 같은 재료의 카드만. 이방성(r값) "
+            "카드에 MD 카드의 경화 곡선·탄성을 붙여 Hill 재료를 낼 때 쓴다."
+        ),
+    ),
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> Response:
@@ -3609,7 +3411,7 @@ def export_card(
     어느 쪽이 어느 계인지 파일을 열어야 알게 되고, 그때 안 열어 보는 사람이
     생긴다.
     """
-    deck = _deck_for_card(db, user, card_id)
+    deck = _deck_for_card(db, user, card_id, with_card)
     if mid is not None:
         deck = replace(deck, solver_id=mid)
     system = _unit_system(db, units)
@@ -4150,29 +3952,32 @@ def build_bom_deck(
     부품은 해석에서 갑자기 없는 재료다. MID 는 파일 안에서 유일해야 한다.
     """
     cards.load_builtin()  # 블록 단위 선언 — 없으면 mm 계가 SI 숫자로 나간다(실측)
-    if payload.lit_format not in litdeck.FORMATS:
-        raise AppError(
-            "MNX-FITTING-0031",
-            f"문헌 재료에 쓸 수 없는 형식입니다: {payload.lit_format}. "
-            f"있는 것: {', '.join(litdeck.FORMATS)}",
-            status=422,
-        )
     # 사용자 계도 받는다 — 전에는 붙박이만 찾아서 사용자 계면 「모르는 단위계」 였다.
     system = unit_systems.resolve(db, payload.units, code="MNX-FITTING-0032")
 
     # 솔버 — 한 파일은 한 솔버다. 요청이 형식을 주면 그것, 아니면 LS-DYNA 안에서 카드마다.
+    # 형식은 **카드 내보내기와 같은 목록**(코드판 + 해석용 물성 정의)에서 찾는다 — 멈춘
+    # 형식은 그 목록에 없다.
     if payload.format is not None:
-        if payload.format == "json":
-            raise AppError("MNX-FITTING-0038", "json 은 합칠 수 없는 형식입니다.", status=422)
         try:
             chosen = renderers.renderer_for(db, payload.format)
         except export.ExportError as exc:
             raise AppError("MNX-FITTING-0038", str(exc), status=422) from exc
+        if "json" in chosen.media_type:
+            raise AppError("MNX-FITTING-0038", "json 은 합칠 수 없는 형식입니다.", status=422)
         card_targets: list[export.Renderer] = [chosen]
     else:
-        card_targets = [renderers.renderer_for(db, key) for key in _BOM_CARD_FORMATS]
-    family = litdeck.format_family(card_targets[0].key)
+        try:
+            card_targets = [renderers.renderer_for(db, key) for key in _BOM_CARD_FORMATS]
+        except export.ExportError as exc:
+            raise AppError("MNX-FITTING-0038", str(exc), status=422) from exc
+    family = litdeck.solver_of(card_targets[0])
     extension = card_targets[0].extension
+
+    # 문헌 줄의 형식 — 주면 그것(문헌이 채울 수 있고 같은 솔버), 안 주면 이 솔버의 기본.
+    # 문헌 값은 사내 물성 매핑을 거쳐 실린다(`shared/literature_material`).
+    lit_target = _bom_literature_format(db, payload.lit_format, family)
+    curve_target = _bom_curve_format(db, card_targets, family)
 
     seen: set[int] = set()
     for row in payload.rows:
@@ -4205,7 +4010,7 @@ def build_bom_deck(
             except export.ExportError as refused:
                 skipped.append(BomDeckSkippedOut(mid=row.mid, name=row.name, why=str(refused)))
                 continue
-            if litdeck.format_family(override.key) != family:
+            if litdeck.solver_of(override) != family:
                 skipped.append(
                     BomDeckSkippedOut(
                         mid=row.mid,
@@ -4243,14 +4048,17 @@ def build_bom_deck(
             continue
 
         if row.catalog_material_id is not None:
-            if family != "dyna":
+            lit_row_target = curve_target if row.synthesize else lit_target
+            if lit_row_target is None:
                 skipped.append(
                     BomDeckSkippedOut(
                         mid=row.mid,
                         name=row.name,
                         why=(
-                            "문헌 재료는 LS-DYNA 형식으로만 낼 수 있습니다 — "
-                            f"이 파일은 {family} 입니다."
+                            f"이 파일의 솔버({family})에는 "
+                            + ("곡선을 합성해 낼 " if row.synthesize else "문헌 재료를 낼 ")
+                            + "형식이 없습니다 — 문헌 값이 채울 수 있는 물성만 요구하는 "
+                            "형식이 있어야 합니다(사용 중단된 형식은 안 씁니다)."
                         ),
                     )
                 )
@@ -4263,32 +4071,15 @@ def build_bom_deck(
                     )
                 )
                 continue
-            made_blocks = litdeck.assemble(db, material)
-            blocks = dict(made_blocks.blocks)
-            provenance = list(made_blocks.provenance)
-            target_format = payload.lit_format
-            if row.synthesize:
-                # 문헌 스칼라로 곡선을 짓는다 — 소성 표가 나와야 뜻이 있다.
-                made_synth = litdeck.synthetic_assembly(db, material)
-                if made_synth is None or not made_synth.curve.table_rows:
-                    why = (
-                        "곡선을 합성할 스칼라가 모자랍니다 — 탄성계수와 항복강도"
-                        "(또는 인장강도)가 있어야 합니다."
-                        if made_synth is None
-                        else f"소성 표가 안 나오는 재료입니다({made_synth.curve.model})."
-                    )
-                    skipped.append(BomDeckSkippedOut(mid=row.mid, name=row.name, why=why))
-                    continue
-                blocks["table"] = {"rows": [dict(one) for one in made_synth.curve.table_rows]}
-                provenance.extend(made_synth.provenance)
-                target_format = "dyna"  # 곡선 덱(*MAT_024)
-            deck = export.Deck(
-                name=export.sanitize_name(material.grade or material.name, fallback="MAT"),
-                solver_id=row.mid,
-                blocks=blocks,
-                provenance=tuple(provenance),
+            # **사내 물성 매핑을 거친다** — 반영했다면 적혔을 선언 물성을 선언 카드의
+            # 조립기로 짓는다(저장은 안 한다). 곡선 합성도 그 조립기의 것이다.
+            deck_or_why = litdeck.literature_deck(
+                db, material, row.mid, synthesize=row.synthesize
             )
-            missing = export.missing_for(deck, target_format)
+            if isinstance(deck_or_why, str):
+                skipped.append(BomDeckSkippedOut(mid=row.mid, name=row.name, why=deck_or_why))
+                continue
+            missing = export.missing_for(deck_or_why, lit_row_target)
             if missing:
                 skipped.append(
                     BomDeckSkippedOut(
@@ -4298,7 +4089,11 @@ def build_bom_deck(
                     )
                 )
                 continue
-            made = export.render(target_format, deck, system)
+            try:
+                made = export.render(lit_row_target, deck_or_why, system)
+            except export.ExportError as refused:
+                skipped.append(BomDeckSkippedOut(mid=row.mid, name=row.name, why=str(refused)))
+                continue
             rendered.append(made.text)
             notes.extend(made.notes)
             if row.synthesize:
@@ -4330,7 +4125,50 @@ def build_bom_deck(
         card_count=card_count,
         literature_count=literature_count,
         synthetic_count=synthetic_count,
+        literature_format=lit_target.key if lit_target else None,
     )
+
+
+def _bom_literature_format(
+    db: Session, requested: str | None, family: str
+) -> export.Renderer | None:
+    """BOM 의 문헌 줄에 쓸 형식. 주면 그것 — 문헌이 채울 수 있고 같은 솔버여야 한다."""
+    if requested is None:
+        return litdeck.default_literature_format(db, family)
+    try:
+        target = litdeck.find_format(db, requested)
+    except export.ExportError as exc:
+        raise AppError("MNX-FITTING-0038", str(exc), status=422) from exc
+    if not litdeck.takes_literature(target):
+        known = ", ".join(one.key for one in litdeck.literature_formats(db))
+        raise AppError(
+            "MNX-FITTING-0031",
+            f"문헌 재료에 쓸 수 없는 형식입니다: {requested} — 문헌이 채우지 못하는 물성"
+            f"(곡선 등)을 요구합니다. 있는 것: {known}",
+            status=422,
+        )
+    if litdeck.solver_of(target) != family:
+        raise AppError(
+            "MNX-FITTING-0031",
+            f"{requested} 는 다른 솔버의 형식입니다 — 이 파일은 {family} 입니다.",
+            status=422,
+        )
+    return target
+
+
+def _bom_curve_format(
+    db: Session, card_targets: list[export.Renderer], family: str
+) -> export.Renderer | None:
+    """합성 곡선 줄에 쓸 형식 — 카드 형식이 곡선 형식이면 그것, 아니면 이 솔버의 곡선 기본.
+
+    전에는 `dyna`(*MAT_024)로 박혀 있어서 다른 솔버 파일에서는 합성 줄이 못 섰다.
+    """
+    for one in card_targets:
+        if litdeck.takes_literature(one, synthesize=True) and any(
+            need.block == litdeck.SYNTHETIC_BLOCK for need in one.needs
+        ):
+            return one
+    return litdeck.default_literature_format(db, family, curve=True)
 
 
 # ── 카드 항목란을 화면에서 정의한다 (ADR 0033) ────────────────────────────────

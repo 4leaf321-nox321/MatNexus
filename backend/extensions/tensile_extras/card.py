@@ -6,8 +6,8 @@
     덱     Abaqus `*PLASTIC` 은 데이터 줄 셋째 열이 온도다. 온도별로 행을 나눠 싣고
            Abaqus 가 온도 사이를 보간한다. Johnson-Cook m 은 요약이라 주석으로만.
 
-LS-DYNA 는 `*MAT_106` + `*DEFINE_TABLE` 이 필요한데 카드 다섯 장의 자리를 검증할
-실측이 없어 아직 안 낸다 — 지어내지 않는다.
+다른 솔버(ANSYS · LS-DYNA · Nastran · OptiStruct · Radioss)의 온도 의존 덱은 `deck.py` 에
+있다(2026-09-27, ADR 0037 과 같은 방법으로 칸을 맞췄다).
 """
 
 from __future__ import annotations

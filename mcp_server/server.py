@@ -2088,8 +2088,13 @@ async def build_deck(
     `openradioss` · `dyna` · `dyna_viscoelastic` …. **한 파일은 한 솔버다.** 비우면
     LS-DYNA 안에서 카드마다 가장 곡선다운 형식을 고른다. 줄 하나만 다른 형식으로
     내려면 그 줄에 `"format"` 을 준다 — 같은 솔버 안에서만 된다(다른 솔버면 그 줄은
-    `skipped` 에 이유와 함께). 문헌 재료(`catalog_material_id`)는 LS-DYNA 형식만 낼
-    수 있어, 다른 솔버를 골랐으면 문헌 줄은 건너뛴다.
+    `skipped` 에 이유와 함께). 문헌 재료(`catalog_material_id`)도 **이 파일의 솔버로**
+    실린다 — 그 솔버의 선형 형식(탄성·밀도·열물성)으로, 어느 형식이었는지는
+    `literature_format` 에 온다.
+
+    문헌 값은 **사내 물성 매핑을 거쳐** 실린다(기준정보의 「사내 물성 항목」 과 이어진
+    것만). 안 이어진 값은 덱에 없고, 덱 머리 각주에 그 이름이 적힌다 — 사람에게 그대로
+    전해라. 매핑을 이으면 실린다.
 
     `mid` 는 **요청 쪽 모델의 번호 그대로** 덱에 박힌다(1~9,999,999, 파일 안에서
     유일). 돌아온 `format_family` 가 이 파일의 솔버다.
@@ -2101,8 +2106,8 @@ async def build_deck(
     관행)이고 SI 가 아니다** — 받는 쪽 해석 모델의 계를 사용자에게 확인하고 넘겨라.
     어느 계로 뽑았는지는 덱 머리에도 적히지만 사람에게 말로도 전한다.
 
-    `synthesize_missing_curves=True` 면 문헌 스칼라로 **곡선을 지어** 소성 덱까지
-    낸다 — 지어낸 곡선은 덱 각주에 「합성 — 실측이 아니다」 로 남고, 사람에게도
+    `synthesize_missing_curves=True` 면 문헌 스칼라로 **곡선을 지어** 그 솔버의 소성
+    덱까지 낸다 — 지어낸 곡선은 덱 각주에 「합성 — 실측이 아니다」 로 남고, 사람에게도
     그렇게 전해야 한다. 기본은 꺼져 있다.
 
     ## 파일을 건네려면 `include_text=True`
@@ -2145,6 +2150,7 @@ async def build_deck(
         "line_count": len(text.splitlines()),
         "card_count": got.get("card_count"),
         "literature_count": got.get("literature_count"),
+        "literature_format": got.get("literature_format"),
         "synthetic_count": got.get("synthetic_count", 0),
         "skipped": got.get("skipped", []),
         # **기본은 머리(출처 각주)만이다.** 수백 줄이면 대화가 그것으로 찬다.

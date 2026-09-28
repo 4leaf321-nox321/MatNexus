@@ -11,6 +11,8 @@
 
 from __future__ import annotations
 
+from typing import Any, ClassVar
+
 import pytest
 
 import matcore.export.dyna  # noqa: F401  (렌더러 등록)
@@ -134,3 +136,134 @@ class Test열물성:
         made = render("dyna_thermal", bare)
         assert "TRO: no measured density" in made.text
         assert any("밀도" in note for note in made.notes)
+
+
+# ── 카드를 건너뛰지 않는다 · 장기 탄성률 · 속도별 표 · 초탄성 (2026-09-27) ──────────────
+#
+# 매뉴얼(R13·R17)의 규칙은 「따로 적지 않았으면 카드는 필수」 다. 빠진 카드는 다음 줄이
+# 그 자리로 읽힌다 — 오류 없이 다른 재료다.
+
+
+def _between(text: str, start: str, end: str) -> list[str]:
+    lines = text.splitlines()
+    first = lines.index(start)
+    last = next(i for i in range(first + 1, len(lines)) if lines[i].startswith(end))
+    return [line for line in lines[first + 1 : last] if not line.startswith("$")]
+
+
+class Test빠진_카드:
+    def test_MAT_024_는_카드_넷이다(self) -> None:
+        """LCSS 가 있어도 3·4번 카드(EPS·ES)는 있어야 한다."""
+        body = _between(
+            render("dyna", deck()).text, "*MAT_PIECEWISE_LINEAR_PLASTICITY", "*DEFINE_CURVE"
+        )
+        assert len(body) == 4
+        assert body[2] == body[3] == f"{0:>10}" * 8
+
+    def test_MAT_076_은_2번_카드와_장기_항이_있다(self) -> None:
+        """2번 카드는 「Prony 를 쓰면 비워 두라」 는 칸이지 빼도 되는 카드가 아니다. 그리고
+        076 에는 평형 탄성률 칸이 없다 — β=0 항이 없으면 재료가 전단 강성 0 으로 흘러내린다."""
+        made = render(
+            "dyna_viscoelastic",
+            Test점탄성_076().viscoelastic(
+                [{"relative_modulus": 0.3, "relaxation_time_s": 10.0}]
+            ),
+        )
+        body = _between(made.text, "*MAT_GENERAL_VISCOELASTIC", "*END")
+        assert body[1] == f"{0:>10}" * 8
+        # G0 = 1e9 · G∞ = 0.7e9 (β=0) · G1 = 0.3e9 (β=0.1)
+        assert body[2] == f"{0.7e9:>10.3E}{0.0:>10.3E}"
+        assert body[3] == f"{0.3e9:>10.3E}{0.1:>10.3E}"
+
+
+def _rate_deck(*ends: float) -> Deck:
+    rows: list[dict[str, float]] = []
+    for index, (rate, end) in enumerate(zip((0.001, 100.0), ends, strict=True)):
+        rows.extend(
+            {
+                "strain_rate": rate,
+                "plastic_strain": x,
+                "true_stress": (350e6 + 400e6 * x) * (1 + 0.1 * index),
+            }
+            for x in (0.0, end / 2, end)
+        )
+    return deck(rate_table={"values": {"rate_count": 2}, "rows": rows})
+
+
+class Test속도별_표:
+    def test_표_뒤에_곡선이_값의_차례대로(self) -> None:
+        """짝은 번호가 아니라 **자리**다. 곡선 사이에 다른 키워드가 끼면 안 된다."""
+        text = render("dyna_rate", _rate_deck(0.2, 0.2), MM_N_TONNE).text
+        lines = [line for line in text.splitlines() if not line.startswith("$")]
+        table = lines.index("*DEFINE_TABLE")
+        assert lines[table + 1] == f"{101:>10}"
+        assert lines[table + 2 : table + 4] == [f"{0.001:>20.12E}", f"{100.0:>20.12E}"]
+        assert lines[table + 4] == "*DEFINE_CURVE"
+        curves = [i for i, line in enumerate(lines) if line == "*DEFINE_CURVE"]
+        assert [lines[i + 1][:10].strip() for i in curves] == ["10101", "10102"]
+        # LCSS 가 표를 가리키고 VP=1 이다.
+        card2 = _between(text, "*MAT_PIECEWISE_LINEAR_PLASTICITY", "*DEFINE_TABLE")[1]
+        assert card2[20:30].strip() == "101" and card2[40:50].strip() == "1.0"
+
+    def test_끝이_다르면_짧은_끝에서_자르고_말한다(self) -> None:
+        """표의 곡선은 같은 x 에서 끝나야 한다. 긴 곡선을 늘리지 않고 자른다."""
+        made = render("dyna_rate", _rate_deck(0.4, 0.2), MM_N_TONNE)
+        ends = [
+            float(line[:20])
+            for line in made.text.splitlines()
+            if len(line) == 40 and not line.startswith("$")
+        ]
+        assert max(ends) == pytest.approx(0.2)
+        assert any("잘랐습니다" in note for note in made.notes)
+
+
+class Test초탄성:
+    RUBBER: ClassVar[dict[str, Any]] = {"values": {"poisson_ratio": 0.4995, "density": 1100.0}}
+
+    def hyper(self, family: str, **params: float) -> Deck:
+        rows = [
+            {"name": key, "value": value, "si_unit": "1" if key == "alpha" else "Pa"}
+            for key, value in params.items()
+        ]
+        return Deck(
+            name="EPDM",
+            solver_id=7,
+            blocks={
+                "elastic": self.RUBBER,
+                "hyperelastic": {"values": {"family": family}, "rows": rows},
+            },
+        )
+
+    def test_Mooney_는_027_이고_2번_카드가_있다(self) -> None:
+        text = render(
+            "dyna_hyperelastic", self.hyper("mooney_rivlin", c10=0.6e6, c01=0.15e6), MM_N_TONNE
+        ).text
+        body = _between(text, "*MAT_MOONEY-RIVLIN_RUBBER", "*END")
+        assert (
+            body[0]
+            == f"{7:>10}{1.1e-9:>10.3E}{0.4995:>10.3E}{0.6:>10.3E}{0.15:>10.3E}{0.0:>10.3E}"
+        )
+        assert body[1] == f"{0:>10}" * 4
+
+    def test_Ogden_은_2μ_나누기_α_로_옮긴다(self) -> None:
+        """077_O 는 G = Σμα/2 — 카드의 μ(Abaqus 규약, G = μ)를 그대로 넣으면 G 가 α/2 배."""
+        text = render(
+            "dyna_hyperelastic", self.hyper("ogden_1", mu=1.5e6, alpha=3.0), MM_N_TONNE
+        ).text
+        body = _between(text, "*MAT_OGDEN_RUBBER", "*END")
+        assert body[1] == f"{1.0:>10.3E}" and body[2] == f"{3.0:>10.3E}"
+
+    def test_푸아송비_없이는_안_낸다(self) -> None:
+        bare = Deck(
+            name="EPDM",
+            solver_id=7,
+            blocks={
+                "elastic": {"values": {"density": 1100.0}},
+                "hyperelastic": {
+                    "values": {"family": "neo_hookean"},
+                    "rows": [{"name": "c10", "value": 0.5e6}],
+                },
+            },
+        )
+        with pytest.raises(ExportError, match="푸아송비"):
+            render("dyna_hyperelastic", bare)

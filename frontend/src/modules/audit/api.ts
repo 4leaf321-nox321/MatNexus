@@ -108,6 +108,8 @@ export const ACTION_LABELS: Record<string, string> = {
   // 등록자가 아닌 사람이 고친 일 — 판정 자리가 남긴다(2026-09-25). 등록자는 「내 자료
   // 변경 이력」 에서 본다.
   'data.edited_by_other': '남의 자료 고침',
+  'export_format.held': '기본 형식 사용 중단',
+  'export_format.released': '기본 형식 다시 사용',
   // 아래 둘은 배포(마이그레이션)가 한 번 남긴다 — 배포 뒤 확인할 목록이다.
   'workspace.restriction_removed': '부서 열람 제한 해제',
   'definition.key_renamed': '정의 키 변경(겹침 정리)',

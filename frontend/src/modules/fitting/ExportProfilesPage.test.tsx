@@ -15,6 +15,7 @@ import ExportProfilesPage from '@/modules/fitting/ExportProfilesPage'
 import { makeFile, toFileEntry } from '@/modules/fitting/profileFile'
 
 const exportProfiles = vi.fn()
+const formats = vi.fn()
 const createExportProfile = vi.fn()
 const saveExportProfile = vi.fn()
 
@@ -22,6 +23,7 @@ vi.mock('@/modules/fitting/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/modules/fitting/api')>()),
   fittingApi: {
     exportProfiles: () => exportProfiles(),
+    builtinFormats: () => formats(),
     createExportProfile: (...args: unknown[]) => createExportProfile(...args),
     saveExportProfile: (...args: unknown[]) => saveExportProfile(...args),
     removeExportProfile: vi.fn(),
@@ -73,8 +75,22 @@ function show() {
   )
 }
 
+//: 기본 제공 형식 — 하나는 **내려져 있다**(사연과 함께 선다).
+const FORMATS = [
+  { key: 'ansys_elastic', label: 'ANSYS (선형)', extension: 'mac', describe: 'MP,EX', hold: null },
+  {
+    key: 'ansys_plastic',
+    label: 'ANSYS (탄소성)',
+    extension: 'mac',
+    describe: 'TB,PLASTIC',
+    hold: { reason: '표가 한 칸 밀렸다', held_by_name: '관리자', held_at: '2026-09-27T00:00:00Z' },
+  },
+]
+
 beforeEach(() => {
   exportProfiles.mockReset()
+  formats.mockReset()
+  formats.mockResolvedValue(FORMATS)
   createExportProfile.mockReset()
   saveExportProfile.mockReset()
   exportProfiles.mockResolvedValue([LSDYNA])
@@ -206,5 +222,25 @@ describe('내보내기', () => {
     await waitFor(() =>
       expect(screen.getByRole('button', { name: '전부 내보내기' })).toBeDisabled()
     )
+  })
+})
+
+describe('기본 제공 형식', () => {
+  it('코드 형식을 솔버로 묶어 보인다', async () => {
+    // 이 화면에 정의만 뜨니 「ANSYS 는 정의 하나뿐」 으로 읽혔다(2026-09-27).
+    show()
+    expect(await screen.findByText('ANSYS (탄소성)')).toBeInTheDocument()
+    expect(screen.getByText('ANSYS (선형)')).toBeInTheDocument()
+    expect(screen.getAllByText('ANSYS')).toHaveLength(1)
+  })
+
+  it('내려진 형식은 사연과 함께 서고 시스템 관리자가 다시 쓸 수 있다', async () => {
+    // 내보내기 메뉴에서는 사라진다 — 「어제 있던 형식이 왜 없나」 를 여기서 본다.
+    show()
+    expect(await screen.findByText('사용 중단')).toBeInTheDocument()
+    expect(screen.getByText(/표가 한 칸 밀렸다/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '다시 쓰기' })).toBeInTheDocument()
+    // 내려지지 않은 것에는 「사용 중단」 단추가 선다.
+    expect(screen.getAllByRole('button', { name: '사용 중단' })).toHaveLength(1)
   })
 })

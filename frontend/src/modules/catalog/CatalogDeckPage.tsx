@@ -1,19 +1,21 @@
 /**
- * 카탈로그 → LS-DYNA 덱 — **BOM 붙여넣기 3단계** (MaterialTwin 이식 2단계).
+ * 카탈로그 → 솔버 덱 — **BOM 붙여넣기 3단계** (MaterialTwin 이식 2단계).
  *
  *   ① 붙여넣기      `MID, 재료명` 또는 `재료명` 줄들
  *   ② 매칭 확인     줄마다 후보 중 하나를 사람이 고른다 (적합도·물성 수 표시)
  *   ③ 덱           미리보기 · 복사 · 내려받기 — 값마다 출처 각주가 $ 주석으로
  *
- * 카탈로그 재료는 스칼라뿐이라 낼 수 있는 것은 탄성·열물성 덱이다. 곡선이
- * 필요한 덱(*MAT_024)은 시험→카드 경로에서 나온다. 모자란 재료는 덱에서
- * 조용히 빠지지 않고 「무엇이 없는지」 와 함께 아래에 선다.
+ * 카탈로그 재료는 스칼라뿐이라 낼 수 있는 것은 탄성·열물성 덱이다 — 솔버는 서버가 판정한
+ * 목록에서 고른다(LS-DYNA · Abaqus · ANSYS · Nastran · OptiStruct · Radioss, 해석용 물성
+ * 정의까지). 문헌 값은 **사내 물성 매핑을 거쳐** 실린다(2026-09-28). 곡선이 필요한 덱은
+ * 시험→카드 경로에서 나온다. 모자란 재료는 덱에서 조용히 빠지지 않고 「무엇이 없는지」 와
+ * 함께 아래에 선다.
  */
 
 import { Check, Copy, Download, FileCode2 } from 'lucide-react'
 import { useState } from 'react'
 
-import { DECK_FORMATS, catalogApi } from '@/modules/catalog/api'
+import { catalogApi } from '@/modules/catalog/api'
 import type { DeckBuilt, DeckMatchRow } from '@/modules/catalog/api'
 import { chosenSystem, unitSystemsApi } from '@/shared/api/unitSystems'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
@@ -33,7 +35,14 @@ interface Row {
 export default function CatalogDeckPage() {
   const [text, setText] = useState('')
   const [rows, setRows] = useState<Row[] | null>(null)
-  const [format, setFormat] = useState<string>(DECK_FORMATS[0].key)
+  // 형식 목록은 서버가 판정한다. 고르기 전에는 LS-DYNA 탄성(전의 기본), 없으면 첫 것.
+  const formats = useResource(() => catalogApi.deckFormats(), [])
+  const [picked, setPicked] = useState<string | null>(null)
+  const format =
+    picked ??
+    formats.data?.find((one) => one.key === 'dyna_elastic')?.key ??
+    formats.data?.[0]?.key ??
+    'dyna_elastic'
   // 계 목록과 기본은 서버가 준다(ADR 0036) — 전에는 붙박이 둘을 적어 두고 SI 가 첫째라,
   // 부서가 만든 계는 못 골랐고 기본은 해석이 쓰는 계가 아니었다.
   const systems = useResource(() => unitSystemsApi.list(), [])
@@ -192,9 +201,9 @@ export default function CatalogDeckPage() {
               aria-label="덱 형식"
               className="border-input bg-background h-9 rounded-md border px-2 text-sm"
               value={format}
-              onChange={(event) => setFormat(event.target.value)}
+              onChange={(event) => setPicked(event.target.value)}
             >
-              {DECK_FORMATS.map((one) => (
+              {(formats.data ?? []).map((one) => (
                 <option key={one.key} value={one.key}>
                   {one.label}
                 </option>

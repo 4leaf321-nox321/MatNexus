@@ -5,15 +5,17 @@
  * 어떤 솔버 덱으로 쓰나. 둘 다 **코드가 아니라 데이터**이고, 그래서 새 솔버를
  * 붙이는 데 배포가 필요 없다(ADR 0023).
  *
- * **코드로 만든 형식은 여기 안 뜬다.** Abaqus·OpenRadioss·JSON 은 검증과 분기가
- * 있어 코드에 남아 있고, 이 화면은 정의로 붙인 것만 다룬다 — 지울 수 있는 것과
- * 없는 것을 한 표에 섞으면 지우기가 왜 안 되는지 화면에 안 나온다.
+ * **코드로 만든 형식은 정의 표에 안 섞는다.** 검증과 분기가 있어 코드에 남은 것들이고,
+ * 지울 수 있는 것과 없는 것을 한 표에 섞으면 지우기가 왜 안 되는지 화면에 안 나온다.
+ * 대신 아래에 따로 보인다(`BuiltinFormatsSection`) — 안 보이니 「이 솔버는 정의 하나뿐」
+ * 으로 읽혔다(2026-09-27).
  */
 
 import { useRef, useState } from 'react'
 import { Download, FileOutput, Pencil, Plus, Trash2, Upload } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
+import { BuiltinFormatsSection } from '@/modules/fitting/BuiltinFormatsSection'
 import { ImportProfilesDialog } from '@/modules/fitting/ImportProfilesDialog'
 import { UnitSystemsSection } from '@/modules/fitting/UnitSystemsSection'
 import { fittingApi } from '@/modules/fitting/api'
@@ -149,8 +151,8 @@ export default function ExportProfilesPage() {
 
       {rows.length === 0 && !profiles.loading ? (
         <p className="text-muted-foreground rounded-md border border-dashed p-6 text-sm">
-          아직 정의가 없습니다. Abaqus·OpenRadioss·중립 JSON 은 코드로 만들어져 있어
-          여기 없어도 내보낼 수 있습니다 — 그 밖의 솔버를 여기에 더합니다.
+          아직 정의가 없습니다. 아래 「기본 제공 형식」 은 코드로 만들어져 있어 정의 없이도
+          내보낼 수 있습니다 — 그 밖의 솔버나 부서의 덱 관례를 여기에 더합니다.
         </p>
       ) : (
         <Table>
@@ -223,6 +225,9 @@ export default function ExportProfilesPage() {
           </TableBody>
         </Table>
       )}
+
+      {/* 코드로 만든 형식 — 정의와 섞지 않고 따로. 멈춘 것도 사연과 함께 선다. */}
+      <BuiltinFormatsSection />
 
       {/* **단위계는 전사가 같은 것을 봐야 한다** — 만드는 것은 시스템 관리자다.
           정의(솔버 형식)와 한 화면에 두는 이유: 덱을 내려받을 때 둘을 함께 고른다. */}

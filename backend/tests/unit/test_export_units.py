@@ -96,7 +96,10 @@ class Test덱이_자기_계를_말한다:
         """OpenRadioss 는 단위 블록이 있다 — **솔버가 그것을 그대로 믿는다.**"""
         mm = export.render("openradioss", DECK, MM_N_TONNE).text
         assert "MNX_TONNE_MM_S" in mm
-        assert "tonne               mm                  s" in mm
+        # **톤은 `Mg` 로 적는다.** Radioss 파서는 끝 글자로 차원을 가려 `tonne` 을 못 읽는다
+        # (오류 573) — 전에는 기본 계로 낸 Radioss 덱이 전부 여기서 멈췄다.
+        assert f"{'Mg':>20}{'mm':>20}{'s':>20}" in mm
+        assert "tonne " not in mm
         assert "MNX_KG_M_S" not in mm
 
     def test_기본은_SI_다(self) -> None:
