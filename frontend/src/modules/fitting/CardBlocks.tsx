@@ -15,6 +15,7 @@
  * 감췄는지 말한다** — 조용히 자르면 그것이 전부인 줄 안다.
  */
 
+import { CardRemarks } from '@/modules/fitting/CardRemarks'
 import type { BlockSpec, Produced, PropertyCard } from '@/modules/fitting/api'
 import { Badge } from '@/shared/components/ui/badge'
 import { formatScalar } from '@/shared/units'
@@ -148,6 +149,8 @@ export function CardBlocks({ specs, card }: { specs: BlockSpec[]; card: Property
       {card.problem && (
         <p className="text-amber-700 text-xs dark:text-amber-500">{card.problem}</p>
       )}
+      {/* 근거 시험이 다른 두께의 재료로 옮겨진 일 따위 — 값은 그대로라 말로 남는다. */}
+      <CardRemarks card={card} />
 
       {present.map((spec) => {
         const payload = blocks[spec.key]

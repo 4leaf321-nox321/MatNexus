@@ -3730,6 +3730,59 @@
         "title": "CardItemValueOut",
         "type": "object"
       },
+      "CardRemarkOut": {
+        "description": "카드에 붙은 코멘트(2026-09-29). **카드의 값·근거와 따로 산다** — 확정 카드에도.",
+        "properties": {
+          "comment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By Name"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "message",
+          "created_at"
+        ],
+        "title": "CardRemarkOut",
+        "type": "object"
+      },
       "CardSlotIn": {
         "description": "항목란이 담는 값 하나, 또는 표의 열 하나.",
         "properties": {
@@ -7503,6 +7556,54 @@
           "needs"
         ],
         "title": "CrossSectionOut",
+        "type": "object"
+      },
+      "CurveBasisIn": {
+        "description": "대표 곡선을 **무엇으로** 만들까(2026-09-29). 비우면 평균 — 전과 같다.\n\n해석은 평균만 쓰지 않는다 — 강도 평가는 하한, 충돌 에너지·성형 하중은 상한 곡선으로 한\n번 더 돌린다. 상·하한은 방법을 함께 준다:\n\n    sd          점마다 평균 ± k·표준편차 — k 는 기본값이 없다(1 · 2 · 3 이 흔하다)\n    tolerance   한쪽 공차 한계(B 기준 90%·95%, 시편 3개부터) — K 는 시편 수가 정한다\n    envelope    점마다 최솟값·최댓값(포락선)\n    specimen    가장 낮은·높은 시편 하나의 곡선 그대로\n\n**곡선에만 적용한다.** 탄성계수·푸아송비·밀도는 평균·물려받은 값 그대로다.",
+        "properties": {
+          "k": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 5.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "K"
+          },
+          "kind": {
+            "default": "mean",
+            "enum": [
+              "mean",
+              "median",
+              "upper",
+              "lower"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "method": {
+            "anyOf": [
+              {
+                "enum": [
+                  "sd",
+                  "tolerance",
+                  "envelope",
+                  "specimen"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Method"
+          }
+        },
+        "title": "CurveBasisIn",
         "type": "object"
       },
       "CurveOut": {
@@ -12323,6 +12424,11 @@
       },
       "FitPreviewOut": {
         "properties": {
+          "basis_label": {
+            "default": "평균",
+            "title": "Basis Label",
+            "type": "string"
+          },
           "elastic": {
             "default": [],
             "items": {
@@ -12351,6 +12457,24 @@
               "type": "string"
             },
             "title": "Notes",
+            "type": "array"
+          },
+          "reference_points": {
+            "default": [],
+            "items": {
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "type": "array"
+            },
+            "title": "Reference Points",
             "type": "array"
           },
           "sample_count": {
@@ -12394,6 +12518,16 @@
       },
       "FitPreviewRequest": {
         "properties": {
+          "basis": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CurveBasisIn"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "blend_primary": {
             "anyOf": [
               {
@@ -16552,6 +16686,17 @@
             ],
             "title": "Legacy Id"
           },
+          "matched": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matched"
+          },
           "note": {
             "anyOf": [
               {
@@ -20625,6 +20770,14 @@
             ],
             "title": "Published At"
           },
+          "remarks": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/CardRemarkOut"
+            },
+            "title": "Remarks",
+            "type": "array"
+          },
           "source": {
             "additionalProperties": true,
             "title": "Source",
@@ -20666,6 +20819,16 @@
       },
       "PropertyCardSaveRequest": {
         "properties": {
+          "basis": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CurveBasisIn"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "blend_weight": {
             "anyOf": [
               {
@@ -22525,6 +22688,277 @@
         "title": "RelatedOut",
         "type": "object"
       },
+      "RelocateCardOut": {
+        "description": "옮기는 시험을 근거로 쓴 카드. **옮기는 것은 막지 않는다** — 코멘트는 반드시 붙는다.",
+        "properties": {
+          "can_deprecate": {
+            "title": "Can Deprecate",
+            "type": "boolean"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "material_name": {
+            "title": "Material Name",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "test_runs": {
+            "title": "Test Runs",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "status",
+          "material_name",
+          "test_runs",
+          "can_deprecate"
+        ],
+        "title": "RelocateCardOut",
+        "type": "object"
+      },
+      "RelocateOut": {
+        "properties": {
+          "blocked": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Blocked",
+            "type": "array"
+          },
+          "cards_deprecated": {
+            "title": "Cards Deprecated",
+            "type": "integer"
+          },
+          "cards_noted": {
+            "title": "Cards Noted",
+            "type": "integer"
+          },
+          "created_materials": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Created Materials",
+            "type": "array"
+          },
+          "joined_materials": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Joined Materials",
+            "type": "array"
+          },
+          "moved": {
+            "title": "Moved",
+            "type": "integer"
+          },
+          "split_samples": {
+            "title": "Split Samples",
+            "type": "integer"
+          },
+          "test_runs": {
+            "title": "Test Runs",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "moved",
+          "test_runs",
+          "created_materials",
+          "joined_materials",
+          "split_samples",
+          "cards_noted",
+          "cards_deprecated",
+          "blocked"
+        ],
+        "title": "RelocateOut",
+        "type": "object"
+      },
+      "RelocatePlanOut": {
+        "properties": {
+          "blocked": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Blocked",
+            "type": "array"
+          },
+          "cards": {
+            "items": {
+              "$ref": "#/components/schemas/RelocateCardOut"
+            },
+            "title": "Cards",
+            "type": "array"
+          },
+          "records": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Records",
+            "type": "array"
+          },
+          "samples": {
+            "items": {
+              "$ref": "#/components/schemas/RelocateSampleOut"
+            },
+            "title": "Samples",
+            "type": "array"
+          },
+          "specimens": {
+            "title": "Specimens",
+            "type": "integer"
+          },
+          "targets": {
+            "items": {
+              "$ref": "#/components/schemas/RelocateTargetOut"
+            },
+            "title": "Targets",
+            "type": "array"
+          },
+          "test_runs": {
+            "title": "Test Runs",
+            "type": "integer"
+          },
+          "thickness": {
+            "title": "Thickness",
+            "type": "number"
+          },
+          "thickness_unit": {
+            "title": "Thickness Unit",
+            "type": "string"
+          }
+        },
+        "required": [
+          "specimens",
+          "test_runs",
+          "thickness",
+          "thickness_unit",
+          "targets",
+          "samples",
+          "cards",
+          "records",
+          "blocked"
+        ],
+        "title": "RelocatePlanOut",
+        "type": "object"
+      },
+      "RelocateSampleOut": {
+        "description": "시료가 통째로 가는가, 시편 일부만 새 시료로 가는가.",
+        "properties": {
+          "lot_no": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lot No"
+          },
+          "sample_id": {
+            "format": "uuid",
+            "title": "Sample Id",
+            "type": "string"
+          },
+          "sample_name": {
+            "title": "Sample Name",
+            "type": "string"
+          },
+          "specimens": {
+            "title": "Specimens",
+            "type": "integer"
+          },
+          "whole": {
+            "title": "Whole",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "sample_id",
+          "sample_name",
+          "lot_no",
+          "whole",
+          "specimens"
+        ],
+        "title": "RelocateSampleOut",
+        "type": "object"
+      },
+      "RelocateTargetOut": {
+        "description": "원 재료 하나가 옮겨 갈 곳.",
+        "properties": {
+          "exists": {
+            "title": "Exists",
+            "type": "boolean"
+          },
+          "from_material_id": {
+            "format": "uuid",
+            "title": "From Material Id",
+            "type": "string"
+          },
+          "from_material_name": {
+            "title": "From Material Name",
+            "type": "string"
+          },
+          "specimens": {
+            "title": "Specimens",
+            "type": "integer"
+          },
+          "test_runs": {
+            "title": "Test Runs",
+            "type": "integer"
+          },
+          "to_material_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "To Material Id"
+          },
+          "to_material_name": {
+            "title": "To Material Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "from_material_id",
+          "from_material_name",
+          "to_material_id",
+          "to_material_name",
+          "exists",
+          "specimens",
+          "test_runs"
+        ],
+        "title": "RelocateTargetOut",
+        "type": "object"
+      },
       "ReparseOut": {
         "properties": {
           "message": {
@@ -23316,6 +23750,14 @@
               "$ref": "#/components/schemas/RunFacetOut"
             },
             "title": "Divisions",
+            "type": "array"
+          },
+          "instruments": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/RunFacetOut"
+            },
+            "title": "Instruments",
             "type": "array"
           },
           "materials": {
@@ -24474,6 +24916,18 @@
           "score": {
             "title": "Score",
             "type": "number"
+          },
+          "via": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "이름이 아닌 칸으로 걸렸으면 그 칸과 값 — 「별칭 도어 이너 강판」",
+            "title": "Via"
           }
         },
         "required": [
@@ -25454,13 +25908,21 @@
             },
             "title": "Standards",
             "type": "array"
+          },
+          "thickness_gaps": {
+            "items": {
+              "$ref": "#/components/schemas/FacetOut"
+            },
+            "title": "Thickness Gaps",
+            "type": "array"
           }
         },
         "required": [
           "materials",
           "lots",
           "standards",
-          "orientations"
+          "orientations",
+          "thickness_gaps"
         ],
         "title": "SpecimenFacetsOut",
         "type": "object"
@@ -25790,6 +26252,64 @@
         "title": "SpecimenOut",
         "type": "object"
       },
+      "SpecimenRelocateRequest": {
+        "description": "고른 시편을 **다른 두께의 같은 재료**로(2026-09-29). 계획과 실행이 같은 본문이다.",
+        "properties": {
+          "card_actions": {
+            "additionalProperties": {
+              "enum": [
+                "note",
+                "deprecate"
+              ],
+              "type": "string"
+            },
+            "default": {},
+            "propertyNames": {
+              "format": "uuid"
+            },
+            "title": "Card Actions",
+            "type": "object"
+          },
+          "comment": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment"
+          },
+          "spec_thickness": {
+            "exclusiveMinimum": 0.0,
+            "title": "Spec Thickness",
+            "type": "number"
+          },
+          "spec_thickness_unit": {
+            "default": "m",
+            "title": "Spec Thickness Unit",
+            "type": "string"
+          },
+          "specimen_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 500,
+            "minItems": 1,
+            "title": "Specimen Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "specimen_ids",
+          "spec_thickness"
+        ],
+        "title": "SpecimenRelocateRequest",
+        "type": "object"
+      },
       "SpecimenRowOut": {
         "description": "평면 목록의 한 줄 — **시편에 재료·시료를 얹은 것.**\n\n시편만으로는 표가 안 읽힌다. `SECC__01_MD_01` 이 어느 재료의 것인지 이름에\n묻혀 있어서, 사람은 그 규칙을 외우고 있어야 한다.\n\n**상속으로 얹는다.** 시편이 가진 것(규격·치수·시험 수)을 다시 적으면 두 벌이\n되고, 시편에 칸이 하나 늘 때 한쪽만 고쳐진다.",
         "properties": {
@@ -25936,6 +26456,16 @@
               }
             ],
             "title": "Thickness"
+          },
+          "thickness_gap": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ThicknessGapOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "width": {
             "anyOf": [
@@ -27837,6 +28367,17 @@
             "title": "Master Curve Count",
             "type": "integer"
           },
+          "matched": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matched"
+          },
           "material_id": {
             "anyOf": [
               {
@@ -28208,6 +28749,17 @@
             "default": 0,
             "title": "Master Curve Count",
             "type": "integer"
+          },
+          "matched": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matched"
           },
           "material_id": {
             "anyOf": [
@@ -28997,6 +29549,39 @@
           "expected_revision"
         ],
         "title": "TestTypeUpdateRequest",
+        "type": "object"
+      },
+      "ThicknessGapOut": {
+        "description": "시편 두께가 재료의 기준 두께와 얼마나 다른가 — **잰 값 가운데 가장 크게 어긋난 것.**\n\n두께가 다른 재료에 잘못 넣은 시편을 찾는 표시다(ADR 0042). 시편에 적은 두께와 시험\n파일이 잰 두께를 본다 — 규격 공칭·재료에서 물려받은 두께는 잰 것이 아니라서 안 본다.",
+        "properties": {
+          "deviation": {
+            "title": "Deviation",
+            "type": "number"
+          },
+          "source": {
+            "enum": [
+              "measured",
+              "run"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "spec": {
+            "title": "Spec",
+            "type": "number"
+          },
+          "value": {
+            "title": "Value",
+            "type": "number"
+          }
+        },
+        "required": [
+          "spec",
+          "value",
+          "deviation",
+          "source"
+        ],
+        "title": "ThicknessGapOut",
         "type": "object"
       },
       "TrashDoneOut": {
@@ -39550,7 +40135,65 @@
         "operationId": "list_materials_api_materials_get",
         "parameters": [
           {
-            "description": "이름·별칭·Family·Category·Grade·Details 부분 일치. 낱말마다 나눠 AND",
+            "description": "정렬할 열. 기본은 등록 일시",
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "정렬할 열. 기본은 등록 일시",
+              "title": "Sort"
+            }
+          },
+          {
+            "description": "내림차순. 기본은 최근 등록순",
+            "in": "query",
+            "name": "desc",
+            "required": false,
+            "schema": {
+              "default": true,
+              "description": "내림차순. 기본은 최근 등록순",
+              "title": "Desc",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 1000,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Limit"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "이름·별칭·번호·Family·Category(이름이 Grade·Details 를 품는다), 그리고 용도·제조사·거래처·로트. 낱말마다 나눠 AND",
             "in": "query",
             "name": "q",
             "required": false,
@@ -39563,8 +40206,20 @@
                   "type": "null"
                 }
               ],
-              "description": "이름·별칭·Family·Category·Grade·Details 부분 일치. 낱말마다 나눠 AND",
+              "description": "이름·별칭·번호·Family·Category(이름이 Grade·Details 를 품는다), 그리고 용도·제조사·거래처·로트. 낱말마다 나눠 AND",
               "title": "Q"
+            }
+          },
+          {
+            "description": "`exact`(이름·별칭·번호가 정확히) · `contains`(포함, 기본) · `similar`(오타·뜻까지 — 가까운 순으로 서고 줄마다 `matched` 가 붙는다)",
+            "in": "query",
+            "name": "mode",
+            "required": false,
+            "schema": {
+              "default": "contains",
+              "description": "`exact`(이름·별칭·번호가 정확히) · `contains`(포함, 기본) · `similar`(오타·뜻까지 — 가까운 순으로 서고 줄마다 `matched` 가 붙는다)",
+              "title": "Mode",
+              "type": "string"
             }
           },
           {
@@ -39670,9 +40325,9 @@
             }
           },
           {
-            "description": "정렬할 열. 기본은 등록 일시",
+            "description": "적용 제품·부위 부분 일치",
             "in": "query",
-            "name": "sort",
+            "name": "use",
             "required": false,
             "schema": {
               "anyOf": [
@@ -39683,48 +40338,167 @@
                   "type": "null"
                 }
               ],
-              "description": "정렬할 열. 기본은 등록 일시",
-              "title": "Sort"
+              "description": "적용 제품·부위 부분 일치",
+              "title": "Use"
             }
           },
           {
-            "description": "내림차순. 기본은 최근 등록순",
+            "description": "시료의 제조사·유통사·주 벤더 부분 일치(기준정보 별칭 포함)",
             "in": "query",
-            "name": "desc",
-            "required": false,
-            "schema": {
-              "default": true,
-              "description": "내림차순. 기본은 최근 등록순",
-              "title": "Desc",
-              "type": "boolean"
-            }
-          },
-          {
-            "in": "query",
-            "name": "limit",
+            "name": "maker",
             "required": false,
             "schema": {
               "anyOf": [
                 {
-                  "maximum": 1000,
-                  "type": "integer"
+                  "type": "string"
                 },
                 {
                   "type": "null"
                 }
               ],
-              "title": "Limit"
+              "description": "시료의 제조사·유통사·주 벤더 부분 일치(기준정보 별칭 포함)",
+              "title": "Maker"
             }
           },
           {
+            "description": "시료 로트 번호 부분 일치",
             "in": "query",
-            "name": "offset",
+            "name": "lot",
             "required": false,
             "schema": {
-              "default": 0,
-              "minimum": 0,
-              "title": "Offset",
-              "type": "integer"
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "시료 로트 번호 부분 일치",
+              "title": "Lot"
+            }
+          },
+          {
+            "description": "스펙 두께 하한(그 값 포함) — `thickness_unit` 으로",
+            "in": "query",
+            "name": "thickness_min",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "스펙 두께 하한(그 값 포함) — `thickness_unit` 으로",
+              "title": "Thickness Min"
+            }
+          },
+          {
+            "description": "스펙 두께 상한(그 값 포함)",
+            "in": "query",
+            "name": "thickness_max",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "스펙 두께 상한(그 값 포함)",
+              "title": "Thickness Max"
+            }
+          },
+          {
+            "description": "두께 범위의 단위. 비우면 SI(m) — 화면은 `mm` 를 보낸다",
+            "in": "query",
+            "name": "thickness_unit",
+            "required": false,
+            "schema": {
+              "default": "m",
+              "description": "두께 범위의 단위. 비우면 SI(m) — 화면은 `mm` 를 보낸다",
+              "title": "Thickness Unit",
+              "type": "string"
+            }
+          },
+          {
+            "description": "이 종류(키)의 시험이 있는 재료",
+            "in": "query",
+            "name": "test_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "이 종류(키)의 시험이 있는 재료",
+              "title": "Test Type"
+            }
+          },
+          {
+            "description": "물성 카드 — `published` 확정 카드 있음 · `any` 초안 포함 있음 · `none` 없음",
+            "in": "query",
+            "name": "card",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^(published|any|none)$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "물성 카드 — `published` 확정 카드 있음 · `any` 초안 포함 있음 · `none` 없음",
+              "title": "Card"
+            }
+          },
+          {
+            "description": "이날 이후 등록(그날 포함, DB 시간대)",
+            "in": "query",
+            "name": "registered_from",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "이날 이후 등록(그날 포함, DB 시간대)",
+              "title": "Registered From"
+            }
+          },
+          {
+            "description": "이날까지 등록(그날 포함)",
+            "in": "query",
+            "name": "registered_to",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "이날까지 등록(그날 포함)",
+              "title": "Registered To"
             }
           }
         ],
@@ -39953,6 +40727,25 @@
         "operationId": "export_materials_api_materials_export_get",
         "parameters": [
           {
+            "description": "값의 단위계. 비우면 mm·N·tonne(ADR 0036) — SI 는 `si`.",
+            "in": "query",
+            "name": "units",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "값의 단위계. 비우면 mm·N·tonne(ADR 0036) — SI 는 `si`.",
+              "title": "Units"
+            }
+          },
+          {
+            "description": "이름·별칭·번호·Family·Category(이름이 Grade·Details 를 품는다), 그리고 용도·제조사·거래처·로트. 낱말마다 나눠 AND",
             "in": "query",
             "name": "q",
             "required": false,
@@ -39965,10 +40758,24 @@
                   "type": "null"
                 }
               ],
+              "description": "이름·별칭·번호·Family·Category(이름이 Grade·Details 를 품는다), 그리고 용도·제조사·거래처·로트. 낱말마다 나눠 AND",
               "title": "Q"
             }
           },
           {
+            "description": "`exact`(이름·별칭·번호가 정확히) · `contains`(포함, 기본) · `similar`(오타·뜻까지 — 가까운 순으로 서고 줄마다 `matched` 가 붙는다)",
+            "in": "query",
+            "name": "mode",
+            "required": false,
+            "schema": {
+              "default": "contains",
+              "description": "`exact`(이름·별칭·번호가 정확히) · `contains`(포함, 기본) · `similar`(오타·뜻까지 — 가까운 순으로 서고 줄마다 `matched` 가 붙는다)",
+              "title": "Mode",
+              "type": "string"
+            }
+          },
+          {
+            "description": "이름만 부분 일치",
             "in": "query",
             "name": "name",
             "required": false,
@@ -39981,10 +40788,12 @@
                   "type": "null"
                 }
               ],
+              "description": "이름만 부분 일치",
               "title": "Name"
             }
           },
           {
+            "description": "별칭만 부분 일치",
             "in": "query",
             "name": "alias",
             "required": false,
@@ -39997,10 +40806,12 @@
                   "type": "null"
                 }
               ],
+              "description": "별칭만 부분 일치",
               "title": "Alias"
             }
           },
           {
+            "description": "재료번호. 패딩 없이 쳐도 된다",
             "in": "query",
             "name": "code",
             "required": false,
@@ -40013,6 +40824,7 @@
                   "type": "null"
                 }
               ],
+              "description": "재료번호. 패딩 없이 쳐도 된다",
               "title": "Code"
             }
           },
@@ -40065,9 +40877,9 @@
             }
           },
           {
-            "description": "값의 단위계. 비우면 mm·N·tonne(ADR 0036) — SI 는 `si`.",
+            "description": "적용 제품·부위 부분 일치",
             "in": "query",
-            "name": "units",
+            "name": "use",
             "required": false,
             "schema": {
               "anyOf": [
@@ -40078,8 +40890,167 @@
                   "type": "null"
                 }
               ],
-              "description": "값의 단위계. 비우면 mm·N·tonne(ADR 0036) — SI 는 `si`.",
-              "title": "Units"
+              "description": "적용 제품·부위 부분 일치",
+              "title": "Use"
+            }
+          },
+          {
+            "description": "시료의 제조사·유통사·주 벤더 부분 일치(기준정보 별칭 포함)",
+            "in": "query",
+            "name": "maker",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "시료의 제조사·유통사·주 벤더 부분 일치(기준정보 별칭 포함)",
+              "title": "Maker"
+            }
+          },
+          {
+            "description": "시료 로트 번호 부분 일치",
+            "in": "query",
+            "name": "lot",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "시료 로트 번호 부분 일치",
+              "title": "Lot"
+            }
+          },
+          {
+            "description": "스펙 두께 하한(그 값 포함) — `thickness_unit` 으로",
+            "in": "query",
+            "name": "thickness_min",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "스펙 두께 하한(그 값 포함) — `thickness_unit` 으로",
+              "title": "Thickness Min"
+            }
+          },
+          {
+            "description": "스펙 두께 상한(그 값 포함)",
+            "in": "query",
+            "name": "thickness_max",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "스펙 두께 상한(그 값 포함)",
+              "title": "Thickness Max"
+            }
+          },
+          {
+            "description": "두께 범위의 단위. 비우면 SI(m) — 화면은 `mm` 를 보낸다",
+            "in": "query",
+            "name": "thickness_unit",
+            "required": false,
+            "schema": {
+              "default": "m",
+              "description": "두께 범위의 단위. 비우면 SI(m) — 화면은 `mm` 를 보낸다",
+              "title": "Thickness Unit",
+              "type": "string"
+            }
+          },
+          {
+            "description": "이 종류(키)의 시험이 있는 재료",
+            "in": "query",
+            "name": "test_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "이 종류(키)의 시험이 있는 재료",
+              "title": "Test Type"
+            }
+          },
+          {
+            "description": "물성 카드 — `published` 확정 카드 있음 · `any` 초안 포함 있음 · `none` 없음",
+            "in": "query",
+            "name": "card",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^(published|any|none)$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "물성 카드 — `published` 확정 카드 있음 · `any` 초안 포함 있음 · `none` 없음",
+              "title": "Card"
+            }
+          },
+          {
+            "description": "이날 이후 등록(그날 포함, DB 시간대)",
+            "in": "query",
+            "name": "registered_from",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "이날 이후 등록(그날 포함, DB 시간대)",
+              "title": "Registered From"
+            }
+          },
+          {
+            "description": "이날까지 등록(그날 포함)",
+            "in": "query",
+            "name": "registered_to",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "이날까지 등록(그날 포함)",
+              "title": "Registered To"
             }
           }
         ],
@@ -44070,6 +45041,26 @@
             }
           },
           {
+            "description": "재료의 기준 두께와 이 비율(0.1 = 10%) 이상 다른 시편만. 시편에 적은 두께와 시험 파일이 잰 두께를 본다",
+            "in": "query",
+            "name": "thickness_gap",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "exclusiveMinimum": 0,
+                  "maximum": 10,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "재료의 기준 두께와 이 비율(0.1 = 10%) 이상 다른 시편만. 시편에 적은 두께와 시험 파일이 잰 두께를 본다",
+              "title": "Thickness Gap"
+            }
+          },
+          {
             "description": "정렬할 열. 기본은 등록 일시",
             "in": "query",
             "name": "sort",
@@ -44215,6 +45206,90 @@
           }
         },
         "summary": "Specimen Facets",
+        "tags": [
+          "materials"
+        ]
+      }
+    },
+    "/api/specimens/relocate": {
+      "post": {
+        "description": "고른 시편을 **다른 두께의 같은 재료**로 옮긴다.\n\n옮겨 갈 재료가 같은 부서에 있으면 그리로 합치고, 없으면 원 재료를 복사해 두께만 바꿔\n만든다. 시료는 고른 시편이 전부면 통째로, 일부면 로트 정보를 복사한 새 시료로 간다.\n이름은 시험까지 새 재료 기준으로 바뀐다.\n\n**걸린 카드에는 코멘트가 반드시 붙는다**(`card_actions` 로 사용 중지도 고른다). 한 건이\n막혀도 나머지 시편은 간다 — 막힌 것은 이유와 함께 돌려준다.",
+        "operationId": "relocate_api_specimens_relocate_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SpecimenRelocateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RelocateOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Relocate",
+        "tags": [
+          "materials"
+        ]
+      }
+    },
+    "/api/specimens/relocate-plan": {
+      "post": {
+        "description": "고른 시편을 **다른 두께의 같은 재료**로 옮기면 무엇이 어디로 가는지 — 쓰지 않는다.\n\n두께가 다른 재료에 잘못 넣은 시편을 바로잡는 길이다(2026-09-29). 재료 수정으로 두께를\n바꾸면 제대로 들어간 시료까지 함께 옮겨진다 — 그래서 고른 시편만 옮긴다.\n\n**걸린 카드를 미리 보인다** — 옮기는 시험으로 만든 카드(확정 포함)와, 그 카드를 사용\n중지할 수 있는지. 옮기는 것은 막지 않는다(`relocation` 머리말).",
+        "operationId": "relocate_plan_api_specimens_relocate_plan_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SpecimenRelocateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RelocatePlanOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Relocate Plan",
         "tags": [
           "materials"
         ]
@@ -45247,7 +46322,7 @@
     },
     "/api/test-runs": {
       "get": {
-        "description": "**가시 범위와 기본 필터는 다른 것이다.**\n\n가시 범위(`visible_runs`)는 \"볼 권한이 있는가\"이고 재료를 따라간다 — 전원이\n전부 본다(ADR 0035). `workspace` 는 **그 부서가 등록한 시험만** 남기는 거르기다.\n전에는 화면 주소(`/w/:slug/tests`)가 이것을 정했는데, 상단 부서 선택기와 함께\n부서 주소를 걷으면서(3단계) 목록의 거르기(`/tests?workspace=`)가 됐다.\n\n`workspace` 는 **좁히기만 한다.** 권한을 넓히지 않는다 — 남의 부서 slug 를\n넣어도 원래 볼 수 있던 것 안에서만 걸러진다.\n\n`adopted=false` 는 **\"올렸는데 아직 아무것도 안 한 것\"** 을 세는 자리다.\n부서 홈이 \"처리 대기 N건\" 을 말하려면 서버가 세야 한다 — 목록을 받아 화면이\n세면 상한(`limit`)에 걸린 순간 숫자가 조용히 틀린다.",
+        "description": "**가시 범위와 기본 필터는 다른 것이다.**\n\n가시 범위(`visible_runs`)는 \"볼 권한이 있는가\"이고 재료를 따라간다 — 전원이\n전부 본다(ADR 0035). `workspace` 는 **그 부서가 등록한 시험만** 남기는 거르기다.\n전에는 화면 주소(`/w/:slug/tests`)가 이것을 정했는데, 상단 부서 선택기와 함께\n부서 주소를 걷으면서(3단계) 목록의 거르기(`/tests?workspace=`)가 됐다.\n\n`workspace` 는 **좁히기만 한다.** 권한을 넓히지 않는다 — 남의 부서 slug 를\n넣어도 원래 볼 수 있던 것 안에서만 걸러진다.\n\n`adopted=false` 는 **\"올렸는데 아직 아무것도 안 한 것\"** 을 세는 자리다.\n부서 홈이 \"처리 대기 N건\" 을 말하려면 서버가 세야 한다 — 목록을 받아 화면이\n세면 상한(`limit`)에 걸린 순간 숫자가 조용히 틀린다.\n\n## 이름 말고 다른 조건으로(2026-09-29)\n\n시험일 기간 · 장비 · **시험 조건의 범위**(「80~100 °C 에서 잰 것」). 조건은 부서마다\n칸 이름이 달라서(`temp`·`temperature`) 표준 키(`canonical_key`)로 모아 묻는다 — 값\n검색(`/catalog/properties/search`)과 같은 규칙이고, 칸을 표준 키에 안 이은 시험 종류는\n안 걸린다. 단위는 필수다 — 「80」 만으로는 °C 인지 K 인지 모른다.",
         "operationId": "list_runs_api_test_runs_get",
         "parameters": [
           {
@@ -45502,6 +46577,146 @@
               ],
               "description": "**채택된 결과**에 이 단계가 없는가",
               "title": "Step Missing"
+            }
+          },
+          {
+            "description": "`q` 의 방식 — `exact`(이름·파일명이 정확히) · `contains`(포함, 기본) · `similar`(오타·재료의 뜻까지 — 가까운 순으로 서고 줄마다 `matched` 가 붙는다)",
+            "in": "query",
+            "name": "mode",
+            "required": false,
+            "schema": {
+              "default": "contains",
+              "description": "`q` 의 방식 — `exact`(이름·파일명이 정확히) · `contains`(포함, 기본) · `similar`(오타·재료의 뜻까지 — 가까운 순으로 서고 줄마다 `matched` 가 붙는다)",
+              "title": "Mode",
+              "type": "string"
+            }
+          },
+          {
+            "description": "이날 이후 시험(그날 포함, DB 시간대)",
+            "in": "query",
+            "name": "tested_from",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "이날 이후 시험(그날 포함, DB 시간대)",
+              "title": "Tested From"
+            }
+          },
+          {
+            "description": "이날까지 시험(그날 포함)",
+            "in": "query",
+            "name": "tested_to",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "이날까지 시험(그날 포함)",
+              "title": "Tested To"
+            }
+          },
+          {
+            "description": "장비 이름 — 정확히. `__none__` 은 장비를 안 적은 것",
+            "in": "query",
+            "name": "instrument",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "장비 이름 — 정확히. `__none__` 은 장비를 안 적은 것",
+              "title": "Instrument"
+            }
+          },
+          {
+            "description": "표준 조건 키 — `temperature` · `strain_rate` … (`GET /test-types/standard-conditions`). 부서마다 칸 이름이 달라도 한 키로 모인다",
+            "in": "query",
+            "name": "condition",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "표준 조건 키 — `temperature` · `strain_rate` … (`GET /test-types/standard-conditions`). 부서마다 칸 이름이 달라도 한 키로 모인다",
+              "title": "Condition"
+            }
+          },
+          {
+            "description": "**조건 범위의 단위(필수)** — 「degC」·「°C」·「1/s」",
+            "in": "query",
+            "name": "condition_unit",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "**조건 범위의 단위(필수)** — 「degC」·「°C」·「1/s」",
+              "title": "Condition Unit"
+            }
+          },
+          {
+            "description": "조건 하한(그 값 포함)",
+            "in": "query",
+            "name": "condition_min",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "조건 하한(그 값 포함)",
+              "title": "Condition Min"
+            }
+          },
+          {
+            "description": "조건 상한(그 값 포함)",
+            "in": "query",
+            "name": "condition_max",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "조건 상한(그 값 포함)",
+              "title": "Condition Max"
             }
           },
           {

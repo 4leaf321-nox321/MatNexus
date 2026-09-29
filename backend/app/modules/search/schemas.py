@@ -18,6 +18,10 @@ class SearchHitOut(BaseModel):
     )
     parent_kind: str | None = None
     parent_id: str | None = None
+    via: str | None = Field(
+        default=None,
+        description="이름이 아닌 칸으로 걸렸으면 그 칸과 값 — 「별칭 도어 이너 강판」",
+    )
 
 
 class SearchGroupOut(BaseModel):

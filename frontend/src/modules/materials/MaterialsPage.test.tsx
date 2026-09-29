@@ -6,11 +6,12 @@
  * 어긋나면 그 「예」 는 다른 것에 대한 대답이 된다.
  */
 
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { LENGTH_UNIT } from '@/modules/materials/api'
 import MaterialsPage from '@/modules/materials/MaterialsPage'
 
 const list = vi.fn()
@@ -20,6 +21,13 @@ const removeMany = vi.fn()
 const workspaces = vi.fn()
 
 const download = vi.fn()
+const testTypes = vi.fn()
+
+// 상세 조건의 「이 시험이 있는 재료」 선택지. 상세 조건을 열 때만 부른다.
+vi.mock('@/modules/tests/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/modules/tests/api')>()),
+  testsApi: { types: () => testTypes() },
+}))
 
 vi.mock('@/shared/api/client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/shared/api/client')>()),
@@ -94,6 +102,8 @@ function plan(samples: number, specimens: number, test_runs: number, blocked = [
 
 beforeEach(() => {
   list.mockReset()
+  download.mockReset()
+  testTypes.mockResolvedValue([{ key: 'tensile', label: '인장시험' }])
   classifications.mockReset()
   bulkDeletePlan.mockReset()
   workspaces.mockResolvedValue([{ id: 'w1', slug: 'metal', name: '금속재료팀' }])
@@ -250,5 +260,106 @@ describe('일괄 삭제', () => {
     expect(sent.pathname).toBe('/materials/export')
     expect(sent.searchParams.get('units')).toBe('mm_n_tonne')
     expect(filename).toBe('matnexus_materials_mm_n_tonne.json')
+  })
+})
+
+describe('찾기 — 방식과 상세 조건 (2026-09-29)', () => {
+  /** 마지막으로 서버에 보낸 질의. */
+  function lastQuery(): Record<string, unknown> {
+    return (list.mock.calls.at(-1)?.[0] ?? {}) as Record<string, unknown>
+  }
+
+  it('「비슷」 은 곧바로 그 방식으로 묻고, 줄마다 왜 걸렸는지 선다', async () => {
+    list.mockResolvedValue({
+      items: [
+        { ...material('m1', 'SPCC_-_1.2'), matched: 'meaning' },
+        { ...material('m2', 'SGCC_-_0.8'), matched: 'similar' },
+      ],
+      total: 2,
+      limit: 50,
+      offset: 0,
+    })
+    const user = userEvent.setup()
+    show()
+    await screen.findByRole('link', { name: 'SPCC_-_1.2' })
+
+    await user.type(screen.getByRole('textbox', { name: '재료 찾기' }), '아연도금 강판')
+    await user.click(screen.getByRole('button', { name: '찾기' }))
+    await waitFor(() => expect(lastQuery().q).toBe('아연도금 강판'))
+    // 「포함」 은 서버 기본값이라 안 보낸다.
+    expect(lastQuery().mode).toBeUndefined()
+
+    const modes = screen.getByRole('group', { name: '찾는 방식' })
+    await user.click(within(modes).getByRole('button', { name: '비슷' }))
+    await waitFor(() => expect(lastQuery().mode).toBe('similar'))
+    expect(lastQuery().q).toBe('아연도금 강판')
+
+    // **왜 걸렸는지** — 뜻으로만 걸린 줄에 이유가 없으면 엉뚱한 결과로 읽힌다.
+    expect(await screen.findByText('뜻이 가까움')).toBeInTheDocument()
+    expect(screen.getByText('비슷함')).toBeInTheDocument()
+  })
+
+  it('상세 조건은 찾기를 누를 때 걸리고, 두께는 화면 단위를 함께 싣는다', async () => {
+    const user = userEvent.setup()
+    show()
+    await screen.findByRole('link', { name: 'SPCC_-_1.2' })
+
+    await user.click(screen.getByRole('button', { name: /상세 조건/ }))
+    await user.type(screen.getByRole('textbox', { name: '용도(적용 제품·부위)' }), '범퍼')
+    await user.type(screen.getByRole('spinbutton', { name: '두께 하한' }), '1')
+    await user.type(screen.getByRole('spinbutton', { name: '두께 상한' }), '1.2')
+    // 선택지는 서버가 준다 — 그려진 뒤에 고른다.
+    await screen.findByRole('option', { name: '인장시험' })
+    await user.selectOptions(
+      screen.getByRole('combobox', { name: '이 시험이 있는 재료' }),
+      'tensile'
+    )
+
+    // 적기만 해서는 안 걸린다 — 한 글자마다 목록을 다시 부르지 않는다.
+    expect(list.mock.calls.some(([query]) => (query as Record<string, unknown>).use)).toBe(
+      false
+    )
+
+    await user.click(screen.getByRole('button', { name: '이 조건으로 찾기' }))
+    await waitFor(() => expect(lastQuery().use).toBe('범퍼'))
+    // **단위 없이 1.2 를 보내면 서버는 1.2 m 로 읽는다.**
+    expect(lastQuery()).toMatchObject({
+      thickness_min: 1,
+      thickness_max: 1.2,
+      thickness_unit: LENGTH_UNIT,
+      test_type: 'tensile',
+    })
+    expect(screen.getByRole('button', { name: /상세 조건 · 3/ })).toBeInTheDocument()
+
+    // 초기화는 곧바로 푼다.
+    await user.click(screen.getByRole('button', { name: '초기화' }))
+    await waitFor(() => expect(lastQuery().use).toBeUndefined())
+    expect(lastQuery().thickness_unit).toBeUndefined()
+  })
+
+  it('내보내기에 방식과 상세 조건이 그대로 실린다 — 정렬은 빼고', async () => {
+    const user = userEvent.setup()
+    show()
+    await screen.findByRole('link', { name: 'SPCC_-_1.2' })
+
+    await user.type(screen.getByRole('textbox', { name: '재료 찾기' }), 'SECC')
+    const modes = screen.getByRole('group', { name: '찾는 방식' })
+    await user.click(within(modes).getByRole('button', { name: '비슷' }))
+    await user.click(screen.getByRole('button', { name: /상세 조건/ }))
+    await user.type(screen.getByRole('textbox', { name: '제조사·거래처' }), '포스코')
+    await user.click(screen.getByRole('button', { name: '찾기' }))
+    await waitFor(() => expect(lastQuery().maker).toBe('포스코'))
+
+    await user.click(screen.getByRole('button', { name: /JSON 내보내기/ }))
+    await user.click(
+      await screen.findByRole('menuitem', { name: /matnexus_materials_mm_n_tonne\.json/ })
+    )
+    await waitFor(() => expect(download).toHaveBeenCalled())
+    const [url] = download.mock.calls.at(-1) as [string, string]
+    const sent = new URL(url, 'http://localhost')
+    expect(sent.searchParams.get('q')).toBe('SECC')
+    expect(sent.searchParams.get('mode')).toBe('similar')
+    expect(sent.searchParams.get('maker')).toBe('포스코')
+    expect(sent.searchParams.get('sort')).toBeNull()
   })
 })

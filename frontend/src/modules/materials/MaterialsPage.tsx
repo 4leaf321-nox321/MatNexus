@@ -14,6 +14,7 @@ import {
   ChevronRight,
   Plus,
   Search,
+  SlidersHorizontal,
   Trash2,
   TriangleAlert,
 } from 'lucide-react'
@@ -24,7 +25,16 @@ import { materialsApi } from '@/modules/materials/api'
 import type { BulkDeletePlan } from '@/modules/materials/api'
 import { categoriesOf, familiesOf } from '@/modules/materials/classification'
 import { BulkMaterialDialog } from '@/modules/materials/BulkMaterialDialog'
+import { MaterialSearchFields } from '@/modules/materials/MaterialSearchFields'
+import {
+  EMPTY_DETAIL,
+  detailCount,
+  detailQuery,
+  sameDetail,
+} from '@/modules/materials/materialSearch'
+import type { MaterialDetail } from '@/modules/materials/materialSearch'
 import { NewMaterialDialog } from '@/modules/materials/NewMaterialDialog'
+import { testsApi } from '@/modules/tests/api'
 import { fetchAll } from '@/shared/api/paging'
 import { ConfirmDialog } from '@/shared/components/ConfirmDialog'
 import { AddToBasket } from '@/shared/components/AddToBasket'
@@ -39,6 +49,7 @@ import {
 import { downloadFile } from '@/shared/api/client'
 import type { UnitSystem } from '@/shared/api/unitSystems'
 import { PageHeader } from '@/shared/components/PageHeader'
+import { MatchBadge, SearchModeToggle } from '@/shared/components/SearchMode'
 import { Stamp } from '@/shared/components/Stamp'
 import { Button } from '@/shared/components/ui/button'
 import { Input } from '@/shared/components/ui/input'
@@ -55,6 +66,7 @@ import { ROW_FOCUS_STYLE, useRowFocus } from '@/shared/hooks/useRowFocus'
 import { useRowSelection } from '@/shared/hooks/useRowSelection'
 import { useSort } from '@/shared/hooks/useSort'
 import { RecordName } from '@/shared/components/RecordName'
+import type { SearchMode } from '@/shared/searchModes'
 import { formatScalar } from '@/shared/units'
 
 /**
@@ -72,6 +84,14 @@ export default function MaterialsPage() {
   const collecting = asked.get('collect') === 'material'
   const [query, setQuery] = useState('')
   const [applied, setApplied] = useState('')
+  // **찾는 방식** — 전체 검색과 같은 셋(2026-09-29). 「포함」 하나였을 때는 오타 하나면
+  // 0건이었다. 바꾸면 곧바로 다시 찾는다 — 방식은 고르는 것이지 적는 것이 아니다.
+  const [mode, setMode] = useState<SearchMode>('contains')
+  // **상세 조건** — 이름 말고 다른 것으로. 적는 중(`draft`)과 걸린 것(`detail`)을 가른다 —
+  // 찾기 상자와 같은 이유로, 찾기를 누를 때 건다.
+  const [detailOpen, setDetailOpen] = useState(false)
+  const [draft, setDraft] = useState<MaterialDetail>(EMPTY_DETAIL)
+  const [detail, setDetail] = useState<MaterialDetail>(EMPTY_DETAIL)
   const [registering, setRegistering] = useState(false)
   const [bulk, setBulk] = useState(false)
   const [size, setSize] = useState<PageSize>(PAGE_SIZES[0])
@@ -125,6 +145,8 @@ export default function MaterialsPage() {
 
   const filters = {
     q: applied,
+    // 「포함」 은 서버 기본값이라 안 보낸다 — 주소가 짧고, 내보낸 파일의 조건에도 안 남는다.
+    mode: mode === 'contains' ? undefined : mode,
     name,
     alias,
     code,
@@ -133,9 +155,16 @@ export default function MaterialsPage() {
     // 부서 slug 면 그 부서가 등록한 것만. 「전역」 칸은 걷었다(ADR 0035) — 부서 없는
     // 재료는 만들 길이 없고, 그 말을 다른 시스템이 「공식」 으로 읽었다.
     workspace: scope || undefined,
+    ...detailQuery(detail),
     sort: sort.key,
     desc: sort.descending,
   }
+  const detailOn = detailCount(detail)
+  // 시험 종류는 **상세 조건을 열 때만** 읽는다 — 목록을 볼 때마다 부를 까닭이 없다.
+  const testTypes = useResource(
+    () => (detailOpen ? testsApi.types() : Promise.resolve([])),
+    [detailOpen]
+  )
 
   // 소속 거르기의 선택지. **부서 이름을 보여야** 「고분자팀 재료」 를 고를 수 있다.
   const workspaces = useResource(() => materialsApi.workspaces(), [])
@@ -145,7 +174,7 @@ export default function MaterialsPage() {
       all
         ? fetchAll((limit, from) => materialsApi.list({ ...filters, limit, offset: from }))
         : materialsApi.list({ ...filters, limit: size, offset }),
-    [applied, name, alias, code, family, category, scope, sort, size, offset, all]
+    [applied, mode, detail, name, alias, code, family, category, scope, sort, size, offset, all]
   )
 
   async function removePicked() {
@@ -201,16 +230,11 @@ export default function MaterialsPage() {
     setExporting(true)
     try {
       const query = new URLSearchParams({ units: system.key })
-      for (const [key, value] of [
-        ['q', applied],
-        ['name', name],
-        ['alias', alias],
-        ['code', code],
-        ['family', family],
-        ['category', category],
-        ['workspace', scope],
-      ] as const) {
-        if (value) query.set(key, value)
+      // **목록의 조건을 그대로 싣는다** — 하나씩 옮겨 적었더니 새 조건(방식·상세)이 생길 때
+      // 여기만 빠질 자리가 됐다. 정렬은 파일에 뜻이 없어 뺀다(서버가 번호순으로 담는다).
+      for (const [key, value] of Object.entries(filters)) {
+        if (key === 'sort' || key === 'desc') continue
+        if (value !== undefined && value !== '') query.set(key, String(value))
       }
       await downloadFile(`/materials/export?${query}`, filename)
     } finally {
@@ -257,26 +281,70 @@ export default function MaterialsPage() {
       />
 
       <form
-        className="mb-4 flex gap-2"
+        className="mb-4 space-y-2"
         onSubmit={(event) => {
           event.preventDefault()
           setApplied(query.trim())
+          setDetail(draft)
           // 검색은 결과 집합을 바꾼다. 3페이지에 머문 채로 좁히면 빈 화면이 뜬다.
           setOffset(0)
         }}
       >
-        <div className="relative flex-1">
-          <Search className="text-muted-foreground absolute top-1/2 left-3 size-4 -translate-y-1/2" />
-          <Input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="이름 · 별칭 · Grade 로 찾기"
-            className="pl-9"
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative min-w-[16rem] flex-1">
+            <Search className="text-muted-foreground absolute top-1/2 left-3 size-4 -translate-y-1/2" />
+            {/* **이름 밖의 말도 찾는다**(2026-09-29) — 용도·제조사·로트. 자리표시가
+                「이름 · 별칭 · Grade」 였고 실제로 그것밖에 못 찾았다. */}
+            <Input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="이름 · 별칭 · 번호 · 분류 · 용도 · 제조사 · 로트로 찾기"
+              aria-label="재료 찾기"
+              className="pl-9"
+            />
+          </div>
+          <SearchModeToggle
+            mode={mode}
+            onChange={(next) => {
+              setMode(next)
+              setOffset(0)
+            }}
           />
+          <Button
+            type="button"
+            variant={detailOn > 0 ? 'secondary' : 'ghost'}
+            aria-expanded={detailOpen}
+            onClick={() => setDetailOpen((open) => !open)}
+          >
+            <SlidersHorizontal className="size-4" />
+            상세 조건{detailOn > 0 && ` · ${detailOn}`}
+          </Button>
+          <Button type="submit" variant="secondary">
+            찾기
+          </Button>
         </div>
-        <Button type="submit" variant="secondary">
-          찾기
-        </Button>
+        {detailOpen && (
+          <MaterialSearchFields
+            value={draft}
+            onChange={setDraft}
+            testTypes={testTypes.data ?? []}
+            dirty={!sameDetail(draft, detail)}
+            onReset={() => {
+              // **푸는 것은 곧바로 건다.** 비운 칸을 보고도 목록이 그대로면 초기화가 안 먹은
+              // 것처럼 보인다.
+              setDraft(EMPTY_DETAIL)
+              setDetail(EMPTY_DETAIL)
+              setOffset(0)
+            }}
+          />
+        )}
+        {/* **「비슷」 은 가까운 순이다.** 말하지 않으면 등록순인 줄 알고 열 정렬을 의심한다. */}
+        {mode === 'similar' && applied && (
+          <p className="text-muted-foreground text-xs">
+            「비슷」 은 오타·표기 흔들림과 뜻이 가까운 재료까지 찾아 가까운 순으로 세웁니다 — 열
+            정렬은 같은 가까움 안에서만 먹습니다.
+          </p>
+        )}
       </form>
 
       {/* **분류 피커를 표 위에서 걷어냈다**(v1.128.0). 어느 상자가 어느 열을
@@ -421,8 +489,10 @@ export default function MaterialsPage() {
       {!materials.loading && rows.length === 0 && (
         <div className="text-muted-foreground rounded-md border py-12 text-center text-sm">
           <Boxes className="mx-auto mb-2 size-5 opacity-50" />
-          {applied || family || category
-            ? '조건에 맞는 재료가 없습니다. 검색어나 분류를 넓혀 보세요.'
+          {applied || name || alias || code || family || category || scope || detailOn > 0
+            ? mode === 'similar'
+              ? '조건에 맞는 재료가 없습니다. 검색어나 조건을 넓혀 보세요.'
+              : '조건에 맞는 재료가 없습니다. 검색어나 조건을 넓히거나 「비슷」 으로 찾아 보세요.'
             : '등록된 재료가 없습니다.'}
         </div>
       )}
@@ -586,6 +656,8 @@ export default function MaterialsPage() {
                     >
                       <RecordName name={material.record_name} />
                     </Link>
+                    {/* 「비슷」 으로 찾았을 때만 선다 — 왜 걸렸는지 모르면 엉뚱한 결과로 읽힌다. */}
+                    <MatchBadge matched={material.matched} />
                   </TableCell>
                   <TableCell>{material.alias ?? '—'}</TableCell>
                   <TableCell>{material.family}</TableCell>

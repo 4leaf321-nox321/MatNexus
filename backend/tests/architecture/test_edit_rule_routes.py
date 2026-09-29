@@ -80,6 +80,12 @@ EXEMPT: dict[tuple[str, str], str] = {
     ("materials", "create_bulk"): _만들기 + " — 있는 재료 아래에 붙이는 것도 만들기다",
     ("materials", "create_sample"): _만들기,
     ("materials", "create_specimen"): _만들기,
+    ("materials", "relocate_plan"): _읽기 + " — 옮기면 무엇이 어디로 가는지",
+    (
+        "materials",
+        "relocate",
+    ): "시편을 다른 두께 재료로 — `relocation.make_plan` 이 시편마다 `editor.allows` 로 "
+    "본다(일괄 수정과 같은 규칙), 카드 사용 중지는 옮기기 전에 전부 판정한다",
     ("tests", "detect_test_type"): _읽기,
     ("tests", "create_test_type"): _정의,
     ("tests", "preview_summary_import"): _읽기,

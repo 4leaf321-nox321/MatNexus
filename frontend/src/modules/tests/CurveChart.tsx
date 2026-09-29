@@ -30,6 +30,8 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 
+import { AxisScaleToggle } from '@/shared/components/AxisScaleToggle'
+
 export interface CurveChartProps {
   points: [number, number][]
   xLabel: string
@@ -50,6 +52,10 @@ export interface CurveChartProps {
    *
    * 눈금 라벨은 **원래 값**으로 적는다(1e-6 · 0.001 · 1 …). 사람은 Hz 로 읽지
    * log Hz 로 읽지 않는다.
+   *
+   * **처음 보일 축일 뿐이다(2026-09-29).** 차트 위의 「가로축 · 세로축 선형/로그」 단추로
+   * 사람이 바꾼다 — 모든 곡선에서. 로그 축에서는 0 이하 점을 그리지 않고 몇 점을 뺐는지
+   * 적는다(변형률처럼 0 에서 시작하는 곡선에서 한 점 때문에 축이 수백 자릿수로 무너졌다).
    */
   logX?: boolean
   logY?: boolean
@@ -69,7 +75,7 @@ export interface CurveChartProps {
    * 축 범위에 함께 넣는다. 안 넣으면 판 밖으로 나간 곡선이 잘려 보이고,
    * **잘린 그림은 흩어짐을 실제보다 작아 보이게 한다.**
    */
-  background?: { points: [number, number][]; label: string; tone?: string }[]
+  background?: { points: [number, number][]; label: string; tone?: string; dashed?: boolean }[]
   /**
    * `tone` 은 그 선의 색(Tailwind `stroke-*` 클래스). **안 주면 전부 같은
    * 파랑**이고, 그것이 시편 원곡선에는 맞다 — 서로 구별할 것이 아니라 흩어짐을
@@ -77,6 +83,8 @@ export interface CurveChartProps {
    *
    * 처리 단계를 겹칠 때는 다르다. 「자르기 전」 과 「자른 뒤」 가 같은 색이면
    * 어느 쪽이 어느 쪽인지 그림에서 알 수 없고, 그러면 겹쳐 놓은 뜻이 없다.
+   *
+   * `dashed` 는 **참고선**이다 — 하한 곡선 곁의 평균처럼, 원곡선들과 섞여 보이면 안 되는 선.
    */
 }
 
@@ -175,6 +183,34 @@ function ticks(min: number, max: number, count = 5): number[] {
   return result
 }
 
+/** 로그 축에 그릴 수 있는 점인가 — 로그 축에서는 양수만. */
+function drawable(point: [number, number], logX: boolean, logY: boolean): boolean {
+  return (!logX || point[0] > 0) && (!logY || point[1] > 0)
+}
+
+/**
+ * 곡선을 SVG 경로로. **그릴 수 없는 점(로그 축의 0 이하)에서 펜을 든다** — 이어 그리면
+ * 없는 선분이 생긴다.
+ */
+function pathOf(
+  points: [number, number][],
+  toX: (value: number) => number,
+  toY: (value: number) => number,
+  ok: (point: [number, number]) => boolean,
+): string {
+  let up = true
+  const parts: string[] = []
+  for (const point of points) {
+    if (!ok(point)) {
+      up = true
+      continue
+    }
+    parts.push(`${up ? 'M' : 'L'}${toX(point[0])},${toY(point[1])}`)
+    up = false
+  }
+  return parts.join(' ')
+}
+
 function format(value: number): string {
   const magnitude = Math.abs(value)
   if (magnitude === 0) return '0'
@@ -190,11 +226,17 @@ export function CurveChart({
   overlay,
   background,
   pointsLabel,
-  logX = false,
-  logY = false,
+  logX: initialLogX = false,
+  logY: initialLogY = false,
   marker,
 }: CurveChartProps) {
   const [hover, setHover] = useState<number | null>(null)
+  // **받은 로그 여부는 처음 축일 뿐** — 사람이 차트 위에서 바꾼다. 부르는 쪽이 바꾸면
+  // (마스터커브 ↔ 원곡선 전환 등) 그 값으로 다시 선다.
+  const [logX, setLogX] = useState(initialLogX)
+  const [logY, setLogY] = useState(initialLogY)
+  useEffect(() => setLogX(initialLogX), [initialLogX])
+  useEffect(() => setLogY(initialLogY), [initialLogY])
   /**
    * 지금 보고 있는 범위. **`null` 이면 전체**다.
    *
@@ -247,11 +289,14 @@ export function CurveChart({
     if (points.length === 0) return null
     // 겹쳐 그리는 선도 축 범위에 넣는다. 안 넣으면 적합 곡선이 판을 벗어나
     // 잘려 보이고, 잘린 그림으로는 잘 맞는지 알 수 없다.
-    const all = [
+    const every = [
       ...points,
       ...(overlay?.points ?? []),
       ...(background ?? []).flatMap((one) => one.points),
     ]
+    // 로그 축에 0 이하 점은 없다 — 넣으면 log10(0) 이 축을 수백 자릿수로 늘린다.
+    const drawn = every.filter((point) => drawable(point, logX, logY))
+    const all = drawn.length > 0 ? drawn : every
     // 로그 축이면 **자리 계산만** log10 으로 한다. 원래 값은 그대로 두고 눈금
     // 라벨에서 되돌린다 — 툴팁이 log 값을 보여 주면 아무도 못 읽는다.
     const tx = (value: number) => (logX ? Math.log10(Math.max(value, Number.MIN_VALUE)) : value)
@@ -289,6 +334,11 @@ export function CurveChart({
       fromY: (value: number) => (logY ? 10 ** value : value),
       plotWidth,
       plotHeight,
+      /** 로그 축이라 그리지 않은 점의 수. */
+      hidden: every.length - drawn.length,
+      /** 축마다 양수가 하나라도 있나 — 없으면 그 축은 로그로 못 바꾼다. */
+      positiveX: every.some((point) => point[0] > 0),
+      positiveY: every.some((point) => point[1] > 0),
     }
   }, [points, overlay, background, height, logX, logY, view])
 
@@ -312,8 +362,16 @@ export function CurveChart({
   wholeRef.current = scale.whole
   const zoomed = view !== null
 
-  const path = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${scale.toX(p[0])},${scale.toY(p[1])}`).join(' ')
-  const active = hover === null ? null : points[hover]
+  const ok = (point: [number, number]) => drawable(point, logX, logY)
+  const path = pathOf(points, scale.toX, scale.toY, ok)
+  const active = hover === null || !ok(points[hover]) ? null : points[hover]
+  /** 눈금을 바꾸면 확대 범위(변환된 축의 값)가 뜻을 잃는다 — 전체로 돌린다. */
+  const switchAxis = (axis: 'x' | 'y', log: boolean) => {
+    setView(null)
+    setHover(null)
+    if (axis === 'x') setLogX(log)
+    else setLogY(log)
+  }
 
   /**
    * 마우스가 가리키는 x 에서 **각 곡선이 얼마인가.**
@@ -338,8 +396,25 @@ export function CurveChart({
     <div className="rounded-md border p-2">
       {/* **확대하는 방법을 적어 둔다.** 굴려 보기 전에는 되는지 알 수 없고,
           안 되는 줄 알면 아무도 안 굴린다. */}
-      <div className="text-muted-foreground mb-1 flex items-center gap-2 px-1 text-xs">
+      <div className="text-muted-foreground mb-1 flex flex-wrap items-center gap-2 px-1 text-xs">
         <span>휠로 확대 · 끌어서 이동</span>
+        <AxisScaleToggle
+          name="가로축"
+          log={logX}
+          disabled={!scale.positiveX}
+          onChange={(log) => switchAxis('x', log)}
+        />
+        <AxisScaleToggle
+          name="세로축"
+          log={logY}
+          disabled={!scale.positiveY}
+          onChange={(log) => switchAxis('y', log)}
+        />
+        {scale.hidden > 0 && (
+          <span className="text-amber-700 dark:text-amber-500">
+            로그 눈금이라 0 이하 {scale.hidden}점은 그리지 않았습니다
+          </span>
+        )}
         {zoomed && (
           <>
             <span className="text-foreground tabular-nums">
@@ -399,6 +474,7 @@ export function CurveChart({
           let best = 0
           let bestDistance = Infinity
           points.forEach((p, index) => {
+            if (!ok(p)) return
             const distance = Math.abs(scale.toX(p[0]) - svgX)
             if (distance < bestDistance) {
               bestDistance = distance
@@ -451,7 +527,7 @@ export function CurveChart({
           </g>
         ))}
 
-        {marker !== undefined && (
+        {marker !== undefined && (!logX || marker.x > 0) && (
           <g>
             <line
               x1={scale.toX(marker.x)}
@@ -477,15 +553,14 @@ export function CurveChart({
         {(background ?? []).map((one) => (
           <path
             key={one.label}
-            d={one.points
-              .map((p, i) => `${i === 0 ? 'M' : 'L'}${scale.toX(p[0])},${scale.toY(p[1])}`)
-              .join(' ')}
+            d={pathOf(one.points, scale.toX, scale.toY, ok)}
             fill="none"
             // **흐리되 보여야 한다.** 30% 회색 1px 로 뒀더니 대표선 아래에서
             // 사실상 안 보였고, 그러면 이 선을 그리는 뜻이 없다.
             className={one.tone ?? 'stroke-sky-600 dark:stroke-sky-400'}
-            strokeWidth={1.1}
-            opacity={0.45}
+            strokeWidth={one.dashed ? 1.4 : 1.1}
+            strokeDasharray={one.dashed ? '4 3' : undefined}
+            opacity={one.dashed ? 0.8 : 0.45}
           >
             <title>{one.label}</title>
           </path>
@@ -495,11 +570,7 @@ export function CurveChart({
 
         {overlay && overlay.points.length > 0 && (
           <path
-            d={overlay.points
-              .map(
-                (p, i) => `${i === 0 ? 'M' : 'L'}${scale.toX(p[0])},${scale.toY(p[1])}`
-              )
-              .join(' ')}
+            d={pathOf(overlay.points, scale.toX, scale.toY, ok)}
             fill="none"
             className="stroke-amber-600 dark:stroke-amber-500"
             strokeWidth={1.75}

@@ -15,11 +15,21 @@
  */
 
 import { useEffect, useState } from 'react'
-import { AlertTriangle, ChevronLeft, ChevronRight, FileUp, FlaskConical, Layers, PencilLine, Plus, RefreshCw, Search, Star, Trash2, X } from 'lucide-react'
+import { AlertTriangle, ChevronLeft, ChevronRight, FileUp, FlaskConical, Layers, PencilLine, Plus, RefreshCw, Search, SlidersHorizontal, Star, Trash2, X } from 'lucide-react'
 import { Link, useLocation, useSearchParams } from 'react-router-dom'
 
 import { BatchDialog } from '@/modules/processing/BatchDialog'
 import { RUN_STATUS_LABEL, isPending, testsApi } from '@/modules/tests/api'
+import type { StandardCondition } from '@/modules/tests/api'
+import { RunSearchFields } from '@/modules/tests/RunSearchFields'
+import {
+  EMPTY_RUN_DETAIL,
+  RUN_DETAIL_KEYS,
+  runDetailCount,
+  runDetailQuery,
+  sameRunDetail,
+} from '@/modules/tests/runSearch'
+import type { RunDetail } from '@/modules/tests/runSearch'
 import { UploadDialog } from '@/modules/tests/UploadDialog'
 import { fetchAll } from '@/shared/api/paging'
 import { AddToBasket } from '@/shared/components/AddToBasket'
@@ -33,6 +43,7 @@ import {
 } from '@/shared/components/ColumnFilter'
 import { Stamp } from '@/shared/components/Stamp'
 import { PageHeader } from '@/shared/components/PageHeader'
+import { MatchBadge, SearchModeToggle } from '@/shared/components/SearchMode'
 import { BulkEditDialog } from '@/modules/tests/BulkEditDialog'
 import { ConfirmDialog } from '@/shared/components/ConfirmDialog'
 import { Badge } from '@/shared/components/ui/badge'
@@ -50,6 +61,8 @@ import { useResource } from '@/shared/hooks/useResource'
 import { ROW_FOCUS_STYLE, useRowFocus } from '@/shared/hooks/useRowFocus'
 import { useRowSelection } from '@/shared/hooks/useRowSelection'
 import { useSort } from '@/shared/hooks/useSort'
+import { isSearchMode } from '@/shared/searchModes'
+import type { SearchMode } from '@/shared/searchModes'
 
 const POLL_MS = 3000
 
@@ -108,6 +121,29 @@ export default function TestRunsPage() {
    * 「찾기」 를 누를 때만 간다.
    */
   const [query, setQuery] = useState('')
+  // **찾는 방식** — 전체 검색과 같은 셋(2026-09-29). 걸러진 조건(`filters`)에 산다 — 바꾸면
+  // 곧바로 다시 찾는다. 「포함」 은 서버 기본값이라 안 보낸다.
+  const mode: SearchMode = isSearchMode(filters.mode) ? filters.mode : 'contains'
+  // **상세 조건** — 시험일 · 장비 · 조건 범위. 적는 중(`draft`)과 걸린 것(`detail`)을 가른다.
+  const [detailOpen, setDetailOpen] = useState(false)
+  const [draft, setDraft] = useState<RunDetail>(EMPTY_RUN_DETAIL)
+  const [detail, setDetail] = useState<RunDetail>(EMPTY_RUN_DETAIL)
+  // 표준 조건은 **상세 조건을 처음 열 때** 읽고 들고 있는다 — 목록만 보는 사람에게는
+  // 필요 없는 왕복이다.
+  const [standards, setStandards] = useState<StandardCondition[]>([])
+  useEffect(() => {
+    if (!detailOpen || standards.length > 0) return
+    let cancelled = false
+    testsApi
+      .standardConditions()
+      .then((rows) => {
+        if (!cancelled) setStandards(rows)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [detailOpen, standards.length])
   // 기본은 **최근 등록순.** 전에도 그랬고, 이제 다른 열로도 바꿀 수 있다.
   const { sort, handle } = useSort('created_at', {
     // **이 브라우저가 기억한다.** 계정이 아니다 — 같은 PC 를 다른 사람이
@@ -145,14 +181,28 @@ export default function TestRunsPage() {
   // 거르기 목록은 필터와 함께 안 바뀐다 — 「무엇이 있나」를 답하는 자리다.
   const facets = useResource(() => testsApi.runFacets(slug), [slug])
 
-  /** 찾기 상자가 적용한 글자. `filters` 에 섞어 두면 열 필터와 함께 흐른다. */
-  function search(text: string) {
+  /**
+   * 찾기 상자가 적용한 글자와 **상세 조건.** `filters` 에 섞어 두면 열 필터와 함께 흐른다.
+   *
+   * 상세 조건은 **옛 것을 걷고** 새로 싣는다 — 기간을 지웠는데 옛 `tested_from` 이 남으면
+   * 사람은 지운 조건에 여전히 걸려 있는 목록을 본다.
+   */
+  function search(text: string, next: RunDetail = detail) {
     setOffset(0)
     selection.clear()
+    setDetail(next)
     // 빈 글자는 **아예 안 보낸다** — `q=` 를 보내면 서버가 빈 조건으로 한 번 더
     // 훑는다. 지운 것과 안 친 것을 같게 본다.
-    setFilters((current) => ({ ...current, q: text || undefined }))
+    setFilters((current) => {
+      const kept = Object.fromEntries(
+        Object.entries(current).filter(
+          ([key]) => !(RUN_DETAIL_KEYS as readonly string[]).includes(key)
+        )
+      )
+      return { ...kept, q: text || undefined, ...runDetailQuery(next, standards) }
+    })
   }
+  const detailOn = runDetailCount(filters)
 
   /**
    * 서버가 센 줄을 거르개 선택지로 바꾼다.
@@ -221,6 +271,12 @@ export default function TestRunsPage() {
   }
   const rows = runs.data?.items ?? []
   const total = runs.data?.total ?? 0
+  /** 무엇이든 걸려 있나 — 방식(`mode`)은 조건이 아니다. */
+  const narrowed =
+    Boolean(slug) ||
+    Object.entries(filters).some(
+      ([key, value]) => key !== 'mode' && value !== undefined && value !== ''
+    )
   const truncated = all && rows.length < total
   const pending = rows.some((run) => isPending(run.status))
 
@@ -280,40 +336,79 @@ export default function TestRunsPage() {
           필터와 성격이 다르다 — 열 필터는 「이 열이 이 값인 것」 이고, 이건
           「어디든 이 글자가 있는 것」 이다. 그래서 표 위에 따로 둔다. */}
       <form
-        className="mb-4 flex gap-2"
+        className="mb-4 space-y-2"
         onSubmit={(event) => {
           event.preventDefault()
-          search(query.trim())
+          search(query.trim(), draft)
         }}
       >
-        <div className="relative flex-1">
-          <Search className="text-muted-foreground absolute top-1/2 left-3 size-4 -translate-y-1/2" />
-          <Input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="재료 · 시편 · 시험 이름 · 원본 파일명으로 찾기"
-            className="pl-9"
-            aria-label="시험 찾기"
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative min-w-[16rem] flex-1">
+            <Search className="text-muted-foreground absolute top-1/2 left-3 size-4 -translate-y-1/2" />
+            {/* 낱말로 나눠 찾는다 — 「SECC 인장」 처럼 재료와 **시험 종류 이름**을 함께 쳐도
+                걸린다(2026-09-29). 전에는 통째로 한 글자열이라 0건이었다. */}
+            <Input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="재료 · 시편 · 시험 이름 · 시험 종류 · 원본 파일명으로 찾기"
+              className="pl-9"
+              aria-label="시험 찾기"
+            />
+          </div>
+          <SearchModeToggle
+            mode={mode}
+            onChange={(next) => narrow('mode', next === 'contains' ? undefined : next)}
           />
-        </div>
-        {/* **지우는 길을 둔다.** 상자를 비우고 엔터를 치면 되지만, 찾은 뒤에는
-            상자에 글자가 남아 있어 「지금 걸러진 상태인가」 가 헷갈린다. */}
-        {filters.q && (
           <Button
             type="button"
-            variant="ghost"
-            onClick={() => {
-              setQuery('')
-              search('')
-            }}
+            variant={detailOn > 0 ? 'secondary' : 'ghost'}
+            aria-expanded={detailOpen}
+            onClick={() => setDetailOpen((open) => !open)}
           >
-            <X className="size-4" />
-            삭제
+            <SlidersHorizontal className="size-4" />
+            상세 조건{detailOn > 0 && ` · ${detailOn}`}
           </Button>
+          {/* **지우는 길을 둔다.** 상자를 비우고 엔터를 치면 되지만, 찾은 뒤에는
+              상자에 글자가 남아 있어 「지금 걸러진 상태인가」 가 헷갈린다. */}
+          {filters.q && (
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => {
+                setQuery('')
+                search('')
+              }}
+            >
+              <X className="size-4" />
+              삭제
+            </Button>
+          )}
+          <Button type="submit" variant="secondary">
+            찾기
+          </Button>
+        </div>
+        {detailOpen && (
+          <RunSearchFields
+            value={draft}
+            onChange={setDraft}
+            standards={standards}
+            instruments={facets.data?.instruments ?? []}
+            dirty={!sameRunDetail(draft, detail)}
+            onReset={() => {
+              // **푸는 것은 곧바로 건다** — 비운 칸을 보고도 목록이 그대로면 초기화가 안 먹은
+              // 것처럼 보인다. 적용한 검색어는 그대로 둔다.
+              setDraft(EMPTY_RUN_DETAIL)
+              search(filters.q ?? '', EMPTY_RUN_DETAIL)
+            }}
+          />
         )}
-        <Button type="submit" variant="secondary">
-          찾기
-        </Button>
+        {/* **「비슷」 은 가까운 순이다.** 말하지 않으면 등록순인 줄 알고 열 정렬을 의심한다. */}
+        {mode === 'similar' && filters.q && (
+          <p className="text-muted-foreground text-xs">
+            「비슷」 은 오타·표기 흔들림과, 재료의 뜻이 가까운 시험까지 찾아 가까운 순으로
+            세웁니다 — 열 정렬은 같은 가까움 안에서만 먹습니다.
+          </p>
+        )}
       </form>
 
       {filters.q && (
@@ -443,7 +538,16 @@ export default function TestRunsPage() {
         </p>
       )}
 
-      {!runs.loading && rows.length === 0 && (
+      {/* **거른 것과 없는 것을 가른다.** 조건에 걸려 0건인데 「등록된 시험이 없습니다」 라고
+          하면 사람은 자료가 없는 줄 알고 다시 올린다. */}
+      {!runs.loading && rows.length === 0 && narrowed && (
+        <div className="text-muted-foreground rounded-md border py-12 text-center text-sm">
+          <FlaskConical className="mx-auto mb-2 size-5 opacity-50" />
+          조건에 맞는 시험이 없습니다. 검색어나 조건을 넓혀 보세요.
+          {filters.q && mode !== 'similar' && ' 「비슷」 으로 바꾸면 오타와 재료의 뜻까지 봅니다.'}
+        </div>
+      )}
+      {!runs.loading && rows.length === 0 && !narrowed && (
         <div className="text-muted-foreground rounded-md border py-12 text-center text-sm">
           <FlaskConical className="mx-auto mb-2 size-5 opacity-50" />
           등록된 시험이 없습니다.
@@ -636,6 +740,8 @@ export default function TestRunsPage() {
                   {run.warnings.length > 0 && (
                     <AlertTriangle className="ml-1 inline size-3 text-amber-500" />
                   )}
+                  {/* 「비슷」 으로 찾았을 때만 — 뜻을 재는 것은 시험이 아니라 재료다. */}
+                  <MatchBadge matched={run.matched} meaning="재료의 뜻이 가까움" />
                 </TableCell>
                 <TableCell className="font-mono">
                   {/* **재료로도 들어간다**(2026-09-05). 시험을 보다가 「이 재료가 뭐였지」 로

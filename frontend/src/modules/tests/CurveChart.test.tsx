@@ -9,7 +9,7 @@
  * 않는다) 둘 다 본다.
  */
 
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 
 import { CurveChart } from '@/modules/tests/CurveChart'
@@ -261,5 +261,55 @@ describe('확대와 값 읽기', () => {
       ({ left: 0, top: 0, width: 760, height: 380 }) as DOMRect
     fireEvent.mouseMove(svg, { clientX: 400, clientY: 100 })
     expect(container.querySelector('ul')).toBeNull()
+  })
+})
+
+describe('눈금 토글 — 모든 곡선에서 선형 ↔ 로그 (2026-09-29)', () => {
+  /** 변형률처럼 0 에서 시작하는 곡선. */
+  const FROM_ZERO: [number, number][] = [
+    [0, 0],
+    [0.01, 100],
+    [1, 300],
+    [100, 500],
+  ]
+
+  it('가로축을 로그로 바꾸면 0 인 점은 그리지 않고 몇 점을 뺐는지 적는다', () => {
+    const { container } = render(<CurveChart points={FROM_ZERO} xLabel="변형률" yLabel="응력" />)
+    expect(xCoordinates(container)).toHaveLength(4)
+    const xAxis = screen.getByRole('group', { name: '가로축 눈금' })
+    fireEvent.click(within(xAxis).getByRole('button', { name: '로그' }))
+
+    // 0 한 점이 빠지고, 남은 세 점은 로그 자리 — 0.01 · 1 · 100 이 같은 간격이다.
+    const xs = xCoordinates(container)
+    expect(xs).toHaveLength(3)
+    expect(xs[1]).toBeCloseTo((xs[0] + xs[2]) / 2, 6)
+    expect(screen.getByText(/0 이하 1점은 그리지 않았습니다/)).toBeInTheDocument()
+    expect(within(xAxis).getByRole('button', { name: '로그' })).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('다시 선형으로 돌리면 모든 점이 돌아온다', () => {
+    const { container } = render(<CurveChart points={FROM_ZERO} xLabel="변형률" yLabel="응력" logX />)
+    expect(xCoordinates(container)).toHaveLength(3)
+    const xAxis = screen.getByRole('group', { name: '가로축 눈금' })
+    fireEvent.click(within(xAxis).getByRole('button', { name: '선형' }))
+    expect(xCoordinates(container)).toHaveLength(4)
+    expect(screen.queryByText(/그리지 않았습니다/)).not.toBeInTheDocument()
+  })
+
+  it('양수가 하나도 없는 축은 로그로 바꿀 수 없다', () => {
+    render(
+      <CurveChart
+        points={[
+          [1, -5],
+          [2, -3],
+        ]}
+        xLabel="x"
+        yLabel="y"
+      />
+    )
+    const yAxis = screen.getByRole('group', { name: '세로축 눈금' })
+    expect(within(yAxis).getByRole('button', { name: '로그' })).toBeDisabled()
+    const xAxis = screen.getByRole('group', { name: '가로축 눈금' })
+    expect(within(xAxis).getByRole('button', { name: '로그' })).toBeEnabled()
   })
 })

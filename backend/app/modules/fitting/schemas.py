@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -83,6 +83,25 @@ class FitOut(BaseModel):
     화면에서 그러면 안 된다.**"""
 
 
+class CurveBasisIn(BaseModel):
+    """대표 곡선을 **무엇으로** 만들까(2026-09-29). 비우면 평균 — 전과 같다.
+
+    해석은 평균만 쓰지 않는다 — 강도 평가는 하한, 충돌 에너지·성형 하중은 상한 곡선으로 한
+    번 더 돌린다. 상·하한은 방법을 함께 준다:
+
+        sd          점마다 평균 ± k·표준편차 — k 는 기본값이 없다(1 · 2 · 3 이 흔하다)
+        tolerance   한쪽 공차 한계(B 기준 90%·95%, 시편 3개부터) — K 는 시편 수가 정한다
+        envelope    점마다 최솟값·최댓값(포락선)
+        specimen    가장 낮은·높은 시편 하나의 곡선 그대로
+
+    **곡선에만 적용한다.** 탄성계수·푸아송비·밀도는 평균·물려받은 값 그대로다.
+    """
+
+    kind: Literal["mean", "median", "upper", "lower"] = "mean"
+    method: Literal["sd", "tolerance", "envelope", "specimen"] | None = None
+    k: float | None = Field(default=None, gt=0, le=5)
+
+
 class FitPreviewRequest(BaseModel):
     material_id: uuid.UUID
     test_type_key: str
@@ -100,6 +119,8 @@ class FitPreviewRequest(BaseModel):
     """
     families: list[str] = []
     """비우면 등록된 식 전부를 견준다."""
+    basis: CurveBasisIn | None = None
+    """대표 곡선의 기준 — 평균(기본) · 중앙값 · 상한 · 하한."""
     extrapolate_to: float | None = Field(default=None, gt=0, le=10.0)
     """여기까지 늘려 **그려 준다.** 저장하지 않는다.
 
@@ -168,6 +189,11 @@ class ShortRunOut(BaseModel):
 class FitPreviewOut(BaseModel):
     source_points: list[tuple[float, float]]
     """적합에 쓴 점(소성변형률, 진응력). 대표 곡선에서 왔다."""
+    basis_label: str = "평균"
+    """대표 곡선이 무엇인가 — 「하한 — 평균 - 2σ」. 카드 근거에도 같은 말이 남는다."""
+    reference_points: list[tuple[float, float]] = []
+    """상·하한·중앙값이면 **평균 곡선**(같은 축, 같은 다듬기) — 얼마나 물러섰는지 견줘 보라고
+    함께 준다. 평균이면 비어 있다."""
     members: list[MemberCurveOut] = []
     """대표를 만든 시편들의 원곡선. 같은 축이다."""
     short_runs: list[ShortRunOut] = []
@@ -195,6 +221,9 @@ class PropertyCardSaveRequest(BaseModel):
     그러니 고를 수만 있으면 두 장이 각자의 근거를 갖는다.
     """
     label: str = Field(min_length=1, max_length=120)
+    basis: CurveBasisIn | None = None
+    """대표 곡선의 기준 — 평균(기본) · 중앙값 · 상한 · 하한. 카드 근거에 남는다
+    (`source.curve_basis`)."""
     family: str | None = None
     """비우면 표만 저장한다 — 식이 안 맞는 재료에서는 표가 더 정확하다."""
     poisson_ratio: float | None = Field(default=None, gt=0, lt=0.5)
@@ -618,6 +647,20 @@ class BlockSpecOut(BaseModel):
     화면이 이것으로 카드 목록을 가른다(블록 이름을 화면에 박지 않는다)."""
 
 
+class CardRemarkOut(BaseModel):
+    """카드에 붙은 코멘트(2026-09-29). **카드의 값·근거와 따로 산다** — 확정 카드에도."""
+
+    id: uuid.UUID
+    kind: str
+    """`relocated`(근거 시험이 다른 두께의 재료로 옮겨짐) · `comment`."""
+    message: str
+    """서버가 적은 사실."""
+    comment: str | None = None
+    """사람이 적은 말."""
+    created_by_name: str | None = None
+    created_at: datetime
+
+
 class PropertyCardOut(BaseModel):
     id: uuid.UUID
     material_id: uuid.UUID
@@ -640,6 +683,8 @@ class PropertyCardOut(BaseModel):
     problem: str | None = None
     """이 카드를 풀지 못한 이유. 실린 블록을 만든 계산이 지금 코드에 없을 때
     채워진다 — **목록에서 없던 일로 하지 않는다.**"""
+    remarks: list[CardRemarkOut] = []
+    """붙은 코멘트 — 근거 시험이 다른 재료로 옮겨진 일 따위(오래된 것부터)."""
     point_count: int
     note: str | None
     owner_workspace_name: str | None = None

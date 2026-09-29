@@ -45,12 +45,22 @@ import { VocabularyField } from '@/modules/vocabulary/VocabularyField'
 import { nominalSizes, SIZE_FIELDS } from '@/modules/tests/nominalSizes'
 import type { Nominal } from '@/modules/tests/nominalSizes'
 import { testsApi } from '@/modules/tests/api'
+import { overrideCount, rowConditions } from '@/modules/tests/batchConditions'
+import type { ConditionDraft } from '@/modules/tests/batchConditions'
 import type { TestType } from '@/modules/tests/api'
 import { conditionUnits, display } from '@/shared/units'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { PageHeader } from '@/shared/components/PageHeader'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/shared/components/ui/dialog'
 import { Input } from '@/shared/components/ui/input'
 import { Label } from '@/shared/components/ui/label'
 import {
@@ -117,6 +127,11 @@ interface Row {
   gauge: string
   /** 기존 시편 id 이거나, `new:<방향>` 이면 올릴 때 새로 만든다. */
   specimen: string | null
+  /**
+   * **이 줄만의 시험 조건**(2026-09-29). 비운 칸은 아래 종류 기본값을 따른다. 전에는 조건이
+   * 종류마다 한 벌이라 온도가 다른 파일을 섞으면 전부 같은 조건으로 올라갔다.
+   */
+  conditions: ConditionDraft
   status: RowStatus
   message?: string
 }
@@ -230,6 +245,7 @@ export default function BatchUploadPage() {
       thickness: '',
       width: '',
       gauge: '',
+      conditions: {},
       status: 'incomplete' as RowStatus,
     }))
     setRows((current) => [...current, ...added])
@@ -309,8 +325,18 @@ export default function BatchUploadPage() {
   }, [rows, nominal])
 
   function patch(key: string, change: Partial<Row>) {
-    setRows((current) => current.map((row) => (row.key === key ? { ...row, ...change } : row)))
+    setRows((current) =>
+      current.map((row) => {
+        if (row.key !== key) return row
+        // **종류가 바뀌면 줄의 개별 조건을 비운다** — 칸 정의가 종류마다 다르다.
+        const retyped = change.typeKey !== undefined && change.typeKey !== row.typeKey
+        return { ...row, ...(retyped ? { conditions: {} } : {}), ...change }
+      })
+    )
   }
+
+  /** 조건을 줄별로 고치는 창이 열린 줄. */
+  const [conditionRow, setConditionRow] = useState<string | null>(null)
 
   /** 일괄 지정이 걸리는 줄 — **고른 것 중 아직 안 올린 것.** */
   const assignable = rows.filter((row) => row.selected && row.status !== 'done')
@@ -405,7 +431,13 @@ export default function BatchUploadPage() {
           specimenId,
           testType: row.typeKey as string,
           file: row.file,
-          conditions: numericConditions(row.typeKey as string, conditions, availableTypes),
+          // 종류 기본값 위에 이 줄의 값을 얹는다(비운 칸은 기본값).
+          conditions: rowConditions(
+            row.typeKey as string,
+            conditions,
+            row.conditions,
+            availableTypes
+          ),
           conditionUnits: conditionUnits(definition?.conditions ?? []),
           division: row.division || undefined,
         })
@@ -778,6 +810,7 @@ export default function BatchUploadPage() {
                       규격을 골라도 표가 그대로라, 걸렸는지 알 길이 없었다. */}
                   <TableHead className="w-40">시편 규격</TableHead>
                   <TableHead className="w-56">치수 (두께·폭·게이지, mm)</TableHead>
+                  <TableHead className="w-28">조건</TableHead>
                   <TableHead className="w-24">사업부</TableHead>
                   <TableHead className="w-44">상태</TableHead>
                 </TableRow>
@@ -944,6 +977,28 @@ export default function BatchUploadPage() {
                       </div>
                     </TableCell>
 
+                    {/* **줄마다 다른 조건.** 비워 두면 아래 종류 기본값을 따른다. */}
+                    <TableCell>
+                      {(() => {
+                        const type = availableTypes.find((one) => one.key === row.typeKey)
+                        if (!type || type.conditions.length === 0) {
+                          return <span className="text-muted-foreground">—</span>
+                        }
+                        const count = overrideCount(row.conditions)
+                        return (
+                          <Button
+                            size="sm"
+                            variant={count > 0 ? 'secondary' : 'ghost'}
+                            className="h-7 px-2"
+                            onClick={() => setConditionRow(row.key)}
+                            title="이 줄만의 시험 조건 — 비운 칸은 종류 기본값을 따릅니다"
+                          >
+                            {count > 0 ? `개별 ${count}` : '기본값'}
+                          </Button>
+                        )
+                      })()}
+                    </TableCell>
+
                     {/* 옆에서 일괄로 넣은 값이 줄마다 보인다 — 안 보이면
                         「넣었나」 를 확인할 데가 없다. 다른 줄만 고치려면 그
                         줄을 골라 다시 일괄 지정한다(규격·치수와 같은 방식). */}
@@ -966,7 +1021,7 @@ export default function BatchUploadPage() {
                 <p className="mb-2 text-sm font-medium">
                   {type.label} 조건
                   <span className="text-muted-foreground ml-2 text-xs">
-                    이 종류의 모든 줄에 같이 적용됩니다
+                    이 종류의 기본값입니다. 줄마다 다른 조건은 표의 「조건」 에서 바꿉니다
                   </span>
                 </p>
                 <div className="grid grid-cols-4 gap-3">
@@ -1056,6 +1111,59 @@ export default function BatchUploadPage() {
         </>
       )}
 
+      {(() => {
+        const row = rows.find((one) => one.key === conditionRow)
+        const type = row ? availableTypes.find((one) => one.key === row.typeKey) : undefined
+        return (
+          <Dialog open={Boolean(row && type)} onOpenChange={(next) => !next && setConditionRow(null)}>
+            <DialogContent className="sm:max-w-xl">
+              <DialogHeader>
+                <DialogTitle>이 줄의 시험 조건</DialogTitle>
+                <DialogDescription>
+                  {row?.file.name} · {type?.label}. 비운 칸은 종류 기본값(흐린 글씨)을 따릅니다.
+                </DialogDescription>
+              </DialogHeader>
+              {row && type && (
+                <div className="grid grid-cols-2 gap-3">
+                  {type.conditions.map((field) => (
+                    <div key={field.key} className="space-y-1">
+                      <Label htmlFor={`row-cond-${field.key}`} className="text-muted-foreground text-xs">
+                        {field.label}
+                        {field.si_unit && ` (${display(field.si_unit, field.dimension).unit})`}
+                        {field.is_required && <span className="text-destructive"> *</span>}
+                      </Label>
+                      <Input
+                        id={`row-cond-${field.key}`}
+                        className="h-8"
+                        type={field.value_type === 'number' ? 'number' : 'text'}
+                        step="any"
+                        placeholder={conditions[type.key]?.[field.key] || '기본값 없음'}
+                        value={row.conditions[field.key] ?? ''}
+                        onChange={(event) =>
+                          patch(row.key, {
+                            conditions: { ...row.conditions, [field.key]: event.target.value },
+                          })
+                        }
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
+              <DialogFooter>
+                <Button
+                  variant="ghost"
+                  onClick={() => row && patch(row.key, { conditions: {} })}
+                  disabled={!row || overrideCount(row.conditions) === 0}
+                >
+                  기본값으로
+                </Button>
+                <Button onClick={() => setConditionRow(null)}>닫기</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        )
+      })()}
+
       <NewSampleDialog
         materialId={commonMaterial}
         open={newSample}
@@ -1119,20 +1227,3 @@ function RowStatusCell({ row }: { row: Row }) {
   return <Badge variant="outline">준비됨</Badge>
 }
 
-/** 문자열로 받은 조건을 정의에 맞춰 숫자로 바꾼다. 빈 칸은 보내지 않는다. */
-function numericConditions(
-  typeKey: string,
-  all: Record<string, Record<string, string>>,
-  types: TestType[]
-): Record<string, unknown> {
-  const definition = types.find((type) => type.key === typeKey)
-  const raw = all[typeKey] ?? {}
-  return Object.fromEntries(
-    Object.entries(raw)
-      .filter(([, value]) => value !== '')
-      .map(([key, value]) => {
-        const field = definition?.conditions.find((c) => c.key === key)
-        return [key, field?.value_type === 'number' ? Number(value) : value]
-      })
-  )
-}

@@ -27,14 +27,19 @@
  * 재료·로트·규격·방향은 **서버가 센 목록에서 고른다**(재료·시험 목록과 같은
  * 두 층 머리, 2026-09-12). 치면 「SECC」 가 「SECC-1」 까지 물고, 「규격 없음」 은
  * 쳐서는 표현이 안 된다 — 목록이 많으면 칸 안에서 찾아 고른다.
+ *
+ * 치수는 **재료의 기준 두께와 얼마나 다른가**로 거른다(2026-09-29). 두께가 다른 재료에
+ * 넣은 시편을 찾아 「다른 두께로 옮기기」 로 옮기는 자리다(ADR 0042).
  */
 
 import { useEffect, useState } from 'react'
-import { FlaskConical, PencilLine } from 'lucide-react'
+import { FlaskConical, MoveRight, PencilLine } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
 import { materialsApi } from '@/modules/materials/api'
+import type { SpecimenRow } from '@/modules/materials/api'
 import { BulkSpecimenDialog } from '@/modules/materials/BulkSpecimenDialog'
+import { RelocateDialog } from '@/modules/materials/RelocateDialog'
 import {
   ColumnFilter,
   ColumnLabel,
@@ -98,6 +103,41 @@ function Sizes({ row }: { row: { sizes: { label: string; value: number | null; s
   )
 }
 
+//: 견준 두께가 어디서 왔나.
+const GAP_SOURCES: Record<string, string> = {
+  measured: '시편에 적은 두께',
+  run: '시험 파일이 잰 두께',
+}
+
+/**
+ * **기준 두께와 크게 다르면 그 줄에서 말한다**(ADR 0042) — 두께가 다른 재료에 넣은 시편을
+ * 찾는 표시다. 기준(`from`)은 가장 작은 거르기 선택지라, 배지가 선 줄은 거르면 나온다.
+ *
+ * 시험 파일이 잰 두께는 치수 칸에 안 보인다(시험마다 다르다) — 그래서 무엇과 무엇을
+ * 견줬는지를 배지가 말한다.
+ */
+function ThicknessGap({ gap, from }: { gap: SpecimenRow['thickness_gap']; from: number | null }) {
+  // 경계는 서버와 같게 — 0.95 / 1.0 은 부동소수로 5% 에 조금 못 미친다(`thickness_gap.EPSILON`).
+  if (!gap || from == null || Math.abs(gap.deviation) < from - 1e-9) return null
+  const percent = `${gap.deviation > 0 ? '+' : ''}${Math.round(gap.deviation * 100)}%`
+  const value = formatScalar(gap.value, 'm', 'length')
+  return (
+    <Badge
+      variant="outline"
+      className="border-amber-500/50 font-normal text-amber-700 dark:text-amber-500"
+      title={
+        `${GAP_SOURCES[gap.source] ?? '잰 두께'} ${value} — ` +
+        `재료의 기준 두께 ${formatScalar(gap.spec, 'm', 'length')} 와 ${percent} 다릅니다. ` +
+        '다른 두께의 재료에 넣은 것이면 골라서 「다른 두께로 옮기기」 로 옮기세요.'
+      }
+    >
+      {/* **시험 파일이 잰 값은 치수 칸에 없다** — 그 칸에는 재료 두께가 흐리게 서 있어서,
+          값을 안 적으면 「0.8 mm 인데 +25%?」 로 읽힌다(2026-09-29 화면 확인). */}
+      {gap.source === 'run' ? `시험 파일 ${value} · ` : ''}기준 대비 {percent}
+    </Badge>
+  )
+}
+
 /** 서버가 센 줄을 거르개 선택지로 — 값은 이름이 아니라 key 다(재료는 id). */
 function pickable(rows: { key: string; label: string; count: number }[] | undefined) {
   return (rows ?? []).map((one) => ({ value: one.key, label: one.label, count: one.count }))
@@ -109,7 +149,11 @@ export default function SpecimensPage() {
   const [name, setName] = useState('')
   const [orientation, setOrientation] = useState('')
   const [standard, setStandard] = useState('')
+  // **기준 두께와 차이** — 선택지의 key 가 비율이다(`0.1` = 10%).
+  const [gap, setGap] = useState('')
   const facets = useResource(() => materialsApi.specimenFacets(), [])
+  const gapSteps = (facets.data?.thickness_gaps ?? []).map((one) => Number(one.key))
+  const gapFrom = gapSteps.length > 0 ? Math.min(...gapSteps) : null
   const [offset, setOffset] = useState(0)
   // 기본은 **최근 등록순.** 목록에 늘 순서가 있어야 한다.
   const { sort, handle } = useSort('created_at', {
@@ -122,6 +166,9 @@ export default function SpecimensPage() {
     allowed: ['created_at', 'material_name', 'lot_no', 'record_name', 'orientation', 'standard'],
   })
   const [editing, setEditing] = useState(false)
+  // **다른 두께로 옮기기**(2026-09-29) — 두께가 다른 재료에 잘못 넣은 시편을 바로잡는다.
+  const [relocating, setRelocating] = useState(false)
+  const [notice, setNotice] = useState<string | null>(null)
 
   // **거르면 첫 쪽으로 돌아간다.** 3쪽을 보다 거르면 걸러진 결과의 3쪽이 나오는데,
   // 그게 비어 있으면 사람은 "없다" 로 읽는다.
@@ -130,7 +177,7 @@ export default function SpecimensPage() {
     // **선택도 함께 푼다.** 걸러서 안 보이게 된 줄이 골라진 채 남으면, 「12건에
     // 걸기」 가 화면에 없는 것까지 건드린다.
     selection.clear()
-  }, [material, lot, name, orientation, standard])
+  }, [material, lot, name, orientation, standard, gap])
 
   const page = useResource(
     () =>
@@ -140,12 +187,13 @@ export default function SpecimensPage() {
         q: name,
         orientation,
         standard_exact: standard,
+        thickness_gap: gap ? Number(gap) : undefined,
         sort: sort.key,
         desc: sort.descending,
         limit: PAGE,
         offset,
       }),
-    [material, lot, name, orientation, standard, sort, offset]
+    [material, lot, name, orientation, standard, gap, sort, offset]
   )
 
   const rows = page.data?.items ?? []
@@ -157,7 +205,7 @@ export default function SpecimensPage() {
 
   const picked = selection.picked
   const total = page.data?.total ?? 0
-  const filtered = !!(material || lot || name || orientation || standard)
+  const filtered = !!(material || lot || name || orientation || standard || gap)
 
   return (
     <div className="space-y-4">
@@ -183,6 +231,7 @@ export default function SpecimensPage() {
               setName('')
               setOrientation('')
               setStandard('')
+              setGap('')
             }}
           >
             필터 해제
@@ -209,8 +258,44 @@ export default function SpecimensPage() {
             <PencilLine className="size-4" />
             일괄 수정
           </Button>
+          {/* **재료 이름의 두께와 시편 치수가 한 줄에 보이는 자리다** — 잘못 들어간 것이
+              눈에 띄는 곳에서 바로 옮긴다. 재료 수정으로 두께를 바꾸면 제대로 들어간
+              시료까지 옮겨진다. */}
+          <Button size="sm" variant="outline" onClick={() => setRelocating(true)}>
+            <MoveRight className="size-4" />
+            다른 두께로 옮기기
+          </Button>
         </div>
       )}
+
+      {notice && (
+        <p className="bg-muted/40 rounded-md border px-3 py-2 text-sm">{notice}</p>
+      )}
+
+      <RelocateDialog
+        open={relocating}
+        specimenIds={[...picked]}
+        onClose={() => setRelocating(false)}
+        onDone={(done) => {
+          // **무엇이 어디로 갔는지 말한다** — 「옮겼습니다」 만으로는 새 재료가 생겼는지 모른다.
+          const where = [
+            ...done.created_materials.map((name) => `${name}(새로 만듦)`),
+            ...done.joined_materials,
+          ].join(', ')
+          setNotice(
+            `시편 ${done.moved}개(시험 ${done.test_runs}건)를 ${where} 로 옮겼습니다.` +
+              (done.cards_noted > 0
+                ? ` 카드 ${done.cards_noted}장에 코멘트를 남겼습니다` +
+                  (done.cards_deprecated > 0 ? `(정리 ${done.cards_deprecated}장).` : '.')
+                : '') +
+              (done.blocked.length > 0 ? ` 못 옮긴 것 ${done.blocked.length}개.` : '')
+          )
+          selection.clear()
+          page.reload()
+          // 옮긴 시편은 이제 기준과 맞는다 — 선택지 옆의 수도 다시 센다.
+          facets.reload()
+        }}
+      />
 
       <BulkSpecimenDialog
         open={editing}
@@ -220,7 +305,10 @@ export default function SpecimensPage() {
           // **선택은 닫을 때 푼다.** 걸자마자 풀면 창이 「0건」 으로 바뀐다.
           selection.clear()
         }}
-        onDone={() => page.reload()}
+        onDone={() => {
+          page.reload()
+          facets.reload()
+        }}
       />
 
       <div className="overflow-x-auto rounded-md border">
@@ -292,14 +380,20 @@ export default function SpecimensPage() {
                   options={pickable(facets.data?.standards)}
                 />
               </TableHead>
-              {/* 치수와 시험 수는 **서버가 거르는 축이 아니다.** 거르는 칸을
-                  두면 눌러도 아무 일이 안 일어나거나, 이 쪽에 실린 것만 걸러
-                  거짓말을 한다. */}
+              {/* 시험 수는 **서버가 거르는 축이 아니다.** 거르는 칸을 두면 눌러도
+                  아무 일이 안 일어나거나, 이 쪽에 실린 것만 걸러 거짓말을 한다.
+                  치수는 **기준 두께와의 차이** 하나로만 거른다 — 서버가 시편에 적은
+                  두께와 시험 파일이 잰 두께를 재료의 기준 두께와 견줘 센다. */}
               {/* **치수는 내용만큼 넓다.** `min-w-[10rem]` 이 이 열을 160px 에
                   묶어서, `width 12.47 mm · thickness 0.986 mm · gauge_length 50 mm`
                   가 두 줄로 접혔다. `w-px` 는 표에서 「내용만큼」 이라는 뜻이다. */}
               <TableHead className={`w-px whitespace-nowrap ${FILTER_HEAD}`}>
-                <ColumnLabel>치수</ColumnLabel>
+                <ColumnFilter
+                  label="치수"
+                  value={gap}
+                  onChange={setGap}
+                  options={pickable(facets.data?.thickness_gaps)}
+                />
               </TableHead>
               <TableHead className={`text-right ${FILTER_HEAD}`}>
                 <ColumnLabel align="right">시험</ColumnLabel>
@@ -353,7 +447,12 @@ export default function SpecimensPage() {
                   )}
                 </TableCell>
                 <TableCell>
-                  <Sizes row={row} />
+                  {/* **배지는 치수 아래 줄에 선다.** 옆에 두면 이 열이 배지만큼 넓어져
+                      시험·등록 일시가 화면 밖으로 밀렸다(2026-09-29 화면 확인). */}
+                  <div className="flex flex-col items-start gap-1">
+                    <Sizes row={row} />
+                    <ThicknessGap gap={row.thickness_gap} from={gapFrom} />
+                  </div>
                 </TableCell>
                 <TableCell className="text-right tabular-nums">
                   {row.test_run_count > 0 ? (

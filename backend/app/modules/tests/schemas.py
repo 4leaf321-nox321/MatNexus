@@ -289,6 +289,8 @@ class RunFacetsOut(BaseModel):
     materials: list[RunFacetOut] = []
     """재료별 건수. `key` 는 식별자이고 `label` 이 이름이다 — 이름은 기준정보
     개명을 따라 바뀌지만 거르는 값은 안 바뀌어야 한다."""
+    instruments: list[RunFacetOut] = []
+    """장비별 건수(2026-09-29). 「이 장비로 잰 것」 을 찾으려면 상세를 하나씩 열어야 했다."""
 
 
 class SourceVersionOut(BaseModel):
@@ -397,6 +399,9 @@ class TestRunOut(BaseModel):
     created_at: datetime
     access: EditAccessOut | None = None
     """지금 이 사람이 고칠 수 있나 — 못 하면 누구에게 물으면 되는지(ADR 0035)."""
+    matched: str | None = None
+    """**「비슷」 으로 찾았을 때만** — 왜 걸렸나(`contains` · `similar` · `meaning`).
+    `meaning` 은 이 시험의 **재료**가 뜻으로 가까웠다는 뜻이다(2026-09-29)."""
 
 
 class TestSummaryOut(BaseModel):

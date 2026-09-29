@@ -11,11 +11,12 @@ from __future__ import annotations
 import logging
 import re
 import uuid
-from datetime import UTC, datetime
+from dataclasses import dataclass
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query, Response
-from sqlalchemy import ColumnElement, Select, false, func, or_, select
+from sqlalchemy import ColumnElement, Select, and_, false, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, aliased
 
@@ -24,11 +25,13 @@ from app.database import get_db
 from app.modules.accounts.models import User
 from app.modules.catalog import parameters as catalog_parameters
 from app.modules.catalog.models import CatalogDefinition
-from app.modules.materials import declared, services
+from app.modules.fitting.models import PropertyCard
+from app.modules.materials import declared, relocation, services, thickness_gap
 from app.modules.materials.models import (
     ORIENTATIONS,
     Material,
     MaterialParameterSet,
+    MaterialUse,
     Sample,
     Specimen,
 )
@@ -65,6 +68,11 @@ from app.modules.materials.schemas import (
     PropertyCoverageOut,
     PropertyItemOut,
     PropertySourcesOut,
+    RelocateCardOut,
+    RelocateOut,
+    RelocatePlanOut,
+    RelocateSampleOut,
+    RelocateTargetOut,
     SampleCreateRequest,
     SampleOut,
     SampleUpdateRequest,
@@ -75,6 +83,7 @@ from app.modules.materials.schemas import (
     SpecimenCreateRequest,
     SpecimenFacetsOut,
     SpecimenOut,
+    SpecimenRelocateRequest,
     SpecimenRowOut,
     SpecimenSizeOut,
     SpecimenSizesOut,
@@ -82,10 +91,11 @@ from app.modules.materials.schemas import (
     SpecimenUpdateOut,
     SpecimenUpdateRequest,
     SpecimenWarningOut,
+    ThicknessGapOut,
     ValueSourceOut,
 )
 from app.modules.processing.models import ProcessingResult
-from app.modules.tests.models import TestRun
+from app.modules.tests.models import TestRun, TestType
 from app.modules.vocabulary import services as vocabulary_services
 from app.modules.vocabulary.models import VocabularyTerm
 from app.modules.workspaces.models import Workspace
@@ -96,7 +106,9 @@ from app.shared import (
     display,
     exports,
     facets,
+    list_search,
     permissions,
+    semantic,
     sorting,
     specimen_size,
     unit_systems,
@@ -130,6 +142,7 @@ def _material_out(
     workspace_name: str | None,
     uses: dict[str, list[str]] | None = None,
     access: EditAccessOut | None = None,
+    matched: str | None = None,
 ) -> MaterialOut:
     """`uses` 는 **밖에서 미리 읽어 넘긴다** — 목록이 재료마다 물으면 N+1 이다."""
     # **밀도·두께는 SI 로 낸다**(2026-09-24) — 선언 물성과 같은 계이고, 표시는 화면의 일이다.
@@ -163,6 +176,7 @@ def _material_out(
         created_at=material.created_at,
         updated_at=material.updated_at,
         access=access,
+        matched=matched,
     )
 
 
@@ -444,6 +458,47 @@ _SEARCH_AXES = (
 )
 
 
+#: 용도 축 — 재료의 칸이 아니라 `material_uses` 의 줄이다(v1.89.0).
+_USE_AXES = ("product", "part")
+#: 시료의 회사 축 — 제조사, 그리고 유통사·주 벤더가 한 축(`vendor`)을 함께 쓴다.
+_MAKER_AXES = ("manufacturer", "vendor")
+
+
+def _materials_beside(db: Session, word: str) -> list[uuid.UUID]:
+    """재료의 칸이 **아닌** 곳에서 이 낱말이 걸리는 재료 — 용도 · 제조사·거래처 · 로트.
+
+    「범퍼」 「포스코」 「L2409」 로 치면 이름에 그 말이 없어 0건이었다(2026-09-29 지적:
+    이름·별칭·Grade 말고도 찾게). 사람이 재료를 떠올리는 말은 이름보다 그 재료가 어디에
+    쓰이고 어디서 왔는지인 때가 많다.
+
+    **id 로 풀어서 건다.** `IN (SELECT …)` 로 두면 `OR` 가지가 필터로 강등돼 BitmapOr 에
+    못 낀다(아래 `_search_terms` 의 기준정보 가지와 같은 함정). 값이 박힌 `IN (id, …)` 은
+    기본키 색인을 탄다. 기준정보는 별칭까지 본다 — `POSCO` 로 쳐도 포스코가 걸린다.
+    """
+    found: set[uuid.UUID] = set()
+    uses = vocabulary_services.term_ids_matching(db, _USE_AXES, word)
+    if uses:
+        found.update(
+            db.scalars(select(MaterialUse.material_id).where(MaterialUse.term_id.in_(uses)))
+        )
+    makers = vocabulary_services.term_ids_matching(db, _MAKER_AXES, word)
+    beside: list[Any] = [Sample.lot_no.ilike(f"%{word}%")]
+    if makers:
+        beside += [
+            Sample.manufacturer_term_id.in_(makers),
+            Sample.distributor_term_id.in_(makers),
+            Sample.primary_vendor_term_id.in_(makers),
+        ]
+    found.update(
+        db.scalars(
+            select(Sample.material_id)
+            .where(Sample.deleted_at.is_(None), or_(*beside))
+            .distinct()
+        )
+    )
+    return sorted(found)
+
+
 def _search_terms(db: Session, q: str | None) -> list[Any]:
     """검색어를 낱말로 나눠 **낱말마다 조건 하나**로 만든다(AND).
 
@@ -474,8 +529,151 @@ def _search_terms(db: Session, q: str | None) -> list[Any]:
         )
         if ids:
             branches += [column.in_(ids) for _, column in _SEARCH_AXES]
+        # 용도·제조사·로트 — 재료 id 로 풀린다(`_materials_beside`).
+        beside = _materials_beside(db, word)
+        if beside:
+            branches.append(Material.id.in_(beside))
         conditions.append(or_(*branches))
     return conditions
+
+
+def _exact_terms(q: str) -> ColumnElement[bool]:
+    """「일치」 — 이름·별칭이 **정확히** 그 말이거나(대소문자만 무시), 그 재료번호.
+
+    번호·코드를 아는 사람이 쓴다. 분류·용도까지 넓히지 않는다 — 「정확히 그 이름」 이
+    전체 검색의 「일치」 와 같은 뜻이다.
+    """
+    branches: list[Any] = [list_search.exactly(column, q) for column in _SEARCH_TEXT]
+    shape = re.fullmatch(r"[Mm]-?(\d{1,6})", q)
+    if shape is not None:
+        branches.append(Material.code == f"M-{int(shape.group(1)):06d}")
+    return or_(*branches)
+
+
+@dataclass(frozen=True)
+class MaterialFilters:
+    """목록과 내보내기가 함께 받는 거르기 — **한 벌이다.**
+
+    두 라우트에 따로 적으면 한쪽에만 새 조건이 붙고, 그때 「화면에서 본 것」 과 「받아 간
+    파일」 이 달라진다(`export_materials` 의 머리말). 쿼리 문자열은 `material_filters` 가
+    읽는다 — 이 클래스는 기본값이 평범해서 파이썬에서 그대로 만들어 써도 된다.
+    """
+
+    q: str | None = None
+    mode: str = "contains"
+    name: str | None = None
+    alias: str | None = None
+    code: str | None = None
+    family: str | None = None
+    category: str | None = None
+    workspace: str | None = None
+    use: str | None = None
+    maker: str | None = None
+    lot: str | None = None
+    thickness_min: float | None = None
+    thickness_max: float | None = None
+    thickness_unit: str = "m"
+    test_type: str | None = None
+    card: str | None = None
+    registered_from: date | None = None
+    registered_to: date | None = None
+
+    def given(self) -> dict[str, Any]:
+        """걸린 조건만 — 내보낸 파일의 `filters` 에 적는다. 기본값(「포함」·단위)은 뺀다."""
+        made: dict[str, Any] = {}
+        for key, value in self.__dict__.items():
+            if value is None or value == "":
+                continue
+            if key == "mode" and value == "contains":
+                continue
+            if (
+                key == "thickness_unit"
+                and self.thickness_min is None
+                and self.thickness_max is None
+            ):
+                continue
+            made[key] = value.isoformat() if isinstance(value, date) else value
+        return made
+
+
+def material_filters(
+    q: str | None = Query(
+        default=None,
+        description=(
+            "이름·별칭·번호·Family·Category(이름이 Grade·Details 를 품는다), 그리고 용도·"
+            "제조사·거래처·로트. 낱말마다 나눠 AND"
+        ),
+    ),
+    mode: str = Query(
+        default="contains",
+        description=(
+            "`exact`(이름·별칭·번호가 정확히) · `contains`(포함, 기본) · "
+            "`similar`(오타·뜻까지 — 가까운 순으로 서고 줄마다 `matched` 가 붙는다)"
+        ),
+    ),
+    name: str | None = Query(default=None, description="이름만 부분 일치"),
+    alias: str | None = Query(default=None, description="별칭만 부분 일치"),
+    code: str | None = Query(default=None, description="재료번호. 패딩 없이 쳐도 된다"),
+    family: str | None = Query(default=None),
+    category: str | None = Query(default=None),
+    workspace: str | None = Query(default=None),
+    use: str | None = Query(default=None, description="적용 제품·부위 부분 일치"),
+    maker: str | None = Query(
+        default=None, description="시료의 제조사·유통사·주 벤더 부분 일치(기준정보 별칭 포함)"
+    ),
+    lot: str | None = Query(default=None, description="시료 로트 번호 부분 일치"),
+    thickness_min: float | None = Query(
+        default=None, description="스펙 두께 하한(그 값 포함) — `thickness_unit` 으로"
+    ),
+    thickness_max: float | None = Query(
+        default=None, description="스펙 두께 상한(그 값 포함)"
+    ),
+    thickness_unit: str = Query(
+        default="m", description="두께 범위의 단위. 비우면 SI(m) — 화면은 `mm` 를 보낸다"
+    ),
+    test_type: str | None = Query(default=None, description="이 종류(키)의 시험이 있는 재료"),
+    card: str | None = Query(
+        default=None,
+        pattern="^(published|any|none)$",
+        description=(
+            "물성 카드 — `published` 확정 카드 있음 · `any` 초안 포함 있음 · `none` 없음"
+        ),
+    ),
+    registered_from: date | None = Query(
+        default=None, description="이날 이후 등록(그날 포함, DB 시간대)"
+    ),
+    registered_to: date | None = Query(default=None, description="이날까지 등록(그날 포함)"),
+) -> MaterialFilters:
+    list_search.check_mode(mode, code="MNX-MATERIALS-0039")
+    return MaterialFilters(
+        q=q,
+        mode=mode,
+        name=name,
+        alias=alias,
+        code=code,
+        family=family,
+        category=category,
+        workspace=workspace,
+        use=use,
+        maker=maker,
+        lot=lot,
+        thickness_min=thickness_min,
+        thickness_max=thickness_max,
+        thickness_unit=thickness_unit,
+        test_type=test_type,
+        card=card,
+        registered_from=registered_from,
+        registered_to=registered_to,
+    )
+
+
+@dataclass(frozen=True)
+class _Filtered:
+    """거른 목록. 「비슷」 이면 **가까운 순**과 **줄마다의 이유**가 함께 온다."""
+
+    query: Select[tuple[Material]]
+    order: ColumnElement[float] | None = None
+    why: ColumnElement[str] | None = None
 
 
 # **고정 경로는 `/{material_id}` 보다 위에 둔다.** 아래 두면 FastAPI 가
@@ -553,13 +751,7 @@ EXPORT_KIND = "matnexus.materials"
 
 @router.get("/export")
 def export_materials(
-    q: str | None = Query(default=None),
-    name: str | None = Query(default=None),
-    alias: str | None = Query(default=None),
-    code: str | None = Query(default=None),
-    family: str | None = Query(default=None),
-    category: str | None = Query(default=None),
-    workspace: str | None = Query(default=None),
+    filters: MaterialFilters = Depends(material_filters),
     units: str | None = Query(
         default=None,
         description="값의 단위계. 비우면 mm·N·tonne(ADR 0036) — SI 는 `si`.",
@@ -593,17 +785,7 @@ def export_materials(
     """
     system = unit_systems.resolve(db, units, code="MNX-MATERIALS-0036")
     kept: set[str] = set()
-    query = _filtered_materials(
-        db,
-        user,
-        q=q,
-        name=name,
-        alias=alias,
-        code=code,
-        family=family,
-        category=category,
-        workspace=workspace,
-    )
+    query = _filtered_materials(db, user, filters).query
     rows = list(db.scalars(query.order_by(Material.code)))
     counts = services.sample_counts(db, [one.id for one in rows])
     names = services.workspace_names(db, [one.owner_workspace_id for one in rows])
@@ -622,19 +804,7 @@ def export_materials(
         "exported_at": datetime.now(UTC).isoformat(),
         # **무슨 조건으로 거른 것인가.** 안 적으면 「전부인 줄 알았는데 아니었다」 가
         # 나중에 드러나고, 그때는 이미 그 파일로 무언가를 계산한 뒤다.
-        "filters": {
-            key: value
-            for key, value in (
-                ("q", q),
-                ("name", name),
-                ("alias", alias),
-                ("code", code),
-                ("family", family),
-                ("category", category),
-                ("workspace", workspace),
-            )
-            if value
-        },
+        "filters": filters.given(),
         "count": len(rows),
         # **숫자를 읽기 전에 볼 자리** — 계와, 그 계로 못 옮겨 그대로 둔 단위.
         "unit_system": unit_systems.describe(system),
@@ -732,26 +902,46 @@ def _in_units(
     return body
 
 
-def _filtered_materials(
-    db: Session,
-    user: User,
-    *,
-    q: str | None = None,
-    name: str | None = None,
-    alias: str | None = None,
-    code: str | None = None,
-    family: str | None = None,
-    category: str | None = None,
-    workspace: str | None = None,
-) -> Select[tuple[Material]]:
+def _filtered_materials(db: Session, user: User, filters: MaterialFilters) -> _Filtered:
     """목록이 거르는 규칙. **내보내기와 한 벌로 쓴다.**
 
     두 곳에 적으면 한쪽만 고쳐지고, 그때 「화면에서 본 것」 과 「받아 간 파일」 이
     달라진다 — 받아 간 쪽이 틀렸다는 것을 알아챌 방법이 없다.
     """
     query = services.visible_materials(db, user)
-    for condition in _search_terms(db, q):
-        query = query.where(condition)
+    order: ColumnElement[float] | None = None
+    why: ColumnElement[str] | None = None
+    needle = (filters.q or "").strip()
+    if needle and filters.mode == "exact":
+        query = query.where(_exact_terms(needle))
+    elif needle and filters.mode == "similar":
+        # **「비슷」 = 포함 · 글자가 비슷 · 뜻이 가까움 중 하나**(`shared/list_search`).
+        # 트라이그램은 이름·별칭에만 건다 — 둘 다 trgm 색인이 있다
+        # (`tests/architecture/test_search_index`).
+        words_hit = and_(*_search_terms(db, needle))
+        text_similar = or_(*(list_search.resembles(column, needle) for column in _SEARCH_TEXT))
+        meaning = list_search.meaning_ids(db, needle, kind="material")
+        found: list[Any] = [words_hit, text_similar]
+        if meaning:
+            found.append(Material.id.in_(meaning))
+        query = query.where(or_(*found))
+        order = list_search.closeness(
+            _SEARCH_TEXT,
+            needle,
+            words_hit=words_hit,
+            id_column=Material.id,
+            meaning=meaning,
+        )
+        why = list_search.why(
+            words_hit=words_hit,
+            text_similar=text_similar,
+            id_column=Material.id,
+            meaning=meaning,
+        )
+    else:
+        for condition in _search_terms(db, needle):
+            query = query.where(condition)
+    name, alias, code = filters.name, filters.alias, filters.code
     # **열 머리의 거르기.** `q` 는 여러 칸을 한꺼번에 뒤지는데(이름·별칭·분류),
     # 열 머리에서 거를 때는 **그 열만** 봐야 한다 — 「이름」 칸에 친 글자가 별칭에
     # 걸려 나오면 그 칸이 무엇을 거르는지 알 수 없게 된다.
@@ -773,8 +963,8 @@ def _filtered_materials(
     # **없는 값으로 거르면 0건이어야 한다.** `== None` 으로 두면 그 축이 비어 있는
     # 재료가 전부 걸린다 — 조용히 틀리는 쪽이다.
     for value, slug, column in (
-        (family, "family", Material.family_term_id),
-        (category, "category", Material.category_term_id),
+        (filters.family, "family", Material.family_term_id),
+        (filters.category, "category", Material.category_term_id),
     ):
         if not value:
             continue
@@ -785,26 +975,112 @@ def _filtered_materials(
     # **어느 부서가 올렸나.** 전에는 `scope`(전역 / 부서 것)도 있었는데, 「전역인가」 만
     # 갈라서 부서가 여럿인 곳에서 「고분자팀 재료」 를 못 찾았다 — 그리고 「전역」 이라는
     # 말을 걷으면서(ADR 0035) 함께 걷었다. slug 로 그 부서만 남긴다.
-    if workspace:
+    if filters.workspace:
         query = query.where(
-            Material.owner_workspace_id == permissions.workspace_by_slug(db, workspace).id
+            Material.owner_workspace_id
+            == permissions.workspace_by_slug(db, filters.workspace).id
         )
+    query = _narrowed(db, query, filters)
+    return _Filtered(query=query, order=order, why=why)
 
+
+def _narrowed(
+    db: Session, query: Select[tuple[Material]], filters: MaterialFilters
+) -> Select[tuple[Material]]:
+    """**이름 말고 다른 조건으로** 좁힌다(2026-09-29 지적: 이름·별칭·Grade 말고도 찾게).
+
+    전부 `AND` 다 — 찾기 상자(`q`)와 달리 칸 하나가 조건 하나다. 그래서 `IN (SELECT …)`
+    로 써도 된다: 강등이 문제 되는 것은 `OR` 가지일 때뿐이고(`_search_terms`), `AND` 의
+    반조인은 플래너가 제대로 푼다.
+
+    **없는 값으로 거르면 0건이다** — 모르는 시험 종류·안 걸리는 제조사를 조건에서 빼 버리면
+    거르려고 눌렀는데 늘어난다(`family` 거르기와 같은 규칙).
+    """
+    live_samples = Sample.deleted_at.is_(None)
+    if filters.use:
+        terms = vocabulary_services.term_ids_matching(db, _USE_AXES, filters.use)
+        query = query.where(
+            Material.id.in_(
+                select(MaterialUse.material_id).where(MaterialUse.term_id.in_(terms))
+            )
+            if terms
+            else false()
+        )
+    if filters.maker:
+        terms = vocabulary_services.term_ids_matching(db, _MAKER_AXES, filters.maker)
+        query = query.where(
+            Material.id.in_(
+                select(Sample.material_id).where(
+                    live_samples,
+                    or_(
+                        Sample.manufacturer_term_id.in_(terms),
+                        Sample.distributor_term_id.in_(terms),
+                        Sample.primary_vendor_term_id.in_(terms),
+                    ),
+                )
+            )
+            if terms
+            else false()
+        )
+    if filters.lot:
+        query = query.where(
+            Material.id.in_(
+                select(Sample.material_id).where(
+                    live_samples, Sample.lot_no.ilike(f"%{filters.lot.strip()}%")
+                )
+            )
+        )
+    if filters.thickness_min is not None or filters.thickness_max is not None:
+        # **사람 단위로 받아 SI 로 견준다.** 화면은 mm 로 친다 — 단위 없이 1.0 을 보내면
+        # 1 m 가 된다(두께 칸과 같은 함정, 2026-09-24). 끝값은 포함이고, 부동소수 꼬리
+        # (`1.2 * 0.001`)에 걸려 경계가 빠지지 않게 조금 넉넉히 잡는다.
+        low = services.to_si(
+            filters.thickness_min, filters.thickness_unit, field="두께", dimension="length"
+        )
+        high = services.to_si(
+            filters.thickness_max, filters.thickness_unit, field="두께", dimension="length"
+        )
+        if low is not None:
+            query = query.where(Material.spec_thickness_m >= low * (1 - 1e-9))
+        if high is not None:
+            query = query.where(Material.spec_thickness_m <= high * (1 + 1e-9))
+    if filters.test_type:
+        kind = db.scalar(select(TestType.id).where(TestType.key == filters.test_type))
+        query = query.where(
+            Material.id.in_(
+                select(Sample.material_id)
+                .join(Specimen, Specimen.sample_id == Sample.id)
+                .join(TestRun, TestRun.specimen_id == Specimen.id)
+                .where(
+                    TestRun.test_type_id == kind,
+                    TestRun.deleted_at.is_(None),
+                    Specimen.deleted_at.is_(None),
+                    live_samples,
+                )
+            )
+            if kind is not None
+            else false()
+        )
+    if filters.card:
+        # 폐기(`deprecated`) 카드는 없는 것으로 친다 — 「카드 있음」 을 보고 열었는데
+        # 쓸 수 없는 카드뿐이면 조용히 틀린 것이다.
+        statuses = ("published",) if filters.card == "published" else ("draft", "published")
+        carded = select(PropertyCard.material_id).where(PropertyCard.status.in_(statuses))
+        query = query.where(
+            ~Material.id.in_(carded) if filters.card == "none" else Material.id.in_(carded)
+        )
+    # **날짜는 DB 시간대로 자른다**(서울). 끝날은 그날 끝까지 — 「9월 29일까지」 에 29일에
+    # 올린 것이 빠지면 안 된다.
+    if filters.registered_from is not None:
+        query = query.where(Material.created_at >= filters.registered_from)
+    if filters.registered_to is not None:
+        query = query.where(Material.created_at < filters.registered_to + timedelta(days=1))
     return query
 
 
 @router.get("", response_model=Page[MaterialOut])
 def list_materials(
-    q: str | None = Query(
-        default=None,
-        description="이름·별칭·Family·Category·Grade·Details 부분 일치. 낱말마다 나눠 AND",
-    ),
-    name: str | None = Query(default=None, description="이름만 부분 일치"),
-    alias: str | None = Query(default=None, description="별칭만 부분 일치"),
-    code: str | None = Query(default=None, description="재료번호. 패딩 없이 쳐도 된다"),
-    family: str | None = None,
-    category: str | None = None,
-    workspace: str | None = Query(default=None),
+    filters: MaterialFilters = Depends(material_filters),
     sort: str | None = Query(default=None, description="정렬할 열. 기본은 등록 일시"),
     desc: bool = Query(default=True, description="내림차순. 기본은 최근 등록순"),
     limit: int | None = Query(default=None, le=1000),
@@ -812,34 +1088,30 @@ def list_materials(
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> Page[MaterialOut]:
-    query = _filtered_materials(
-        db,
-        user,
-        q=q,
-        name=name,
-        alias=alias,
-        code=code,
-        family=family,
-        category=category,
-        workspace=workspace,
-    )
+    found = _filtered_materials(db, user, filters)
+    query = found.query
     total = db.scalar(select(func.count()).select_from(query.subquery())) or 0
     size = clamp_limit(limit)
-    rows = list(
-        db.scalars(
-            query.order_by(
-                *sorting.order_by(
-                    MATERIAL_SORTS,
-                    sort=sort,
-                    desc=desc,
-                    default="created_at",
-                    tiebreaker=Material.id,
-                )
-            )
-            .limit(size)
-            .offset(offset)
-        )
+    ordering = sorting.order_by(
+        MATERIAL_SORTS,
+        sort=sort,
+        desc=desc,
+        default="created_at",
+        tiebreaker=Material.id,
     )
+    if found.order is not None:
+        # **「비슷」 은 가까운 순이 먼저다.** 흐린 검색은 순위가 전부다 — 등록순으로 두면
+        # 제대로 맞은 것이 3쪽에 가 있다. 열 정렬은 같은 점수 안에서 먹는다.
+        ordering = [found.order.desc(), *ordering]
+    reasons: dict[uuid.UUID, str | None] = {}
+    if found.why is not None:
+        picked = db.execute(
+            query.add_columns(found.why).order_by(*ordering).limit(size).offset(offset)
+        ).all()
+        rows = [row[0] for row in picked]
+        reasons = {row[0].id: row[1] for row in picked}
+    else:
+        rows = list(db.scalars(query.order_by(*ordering).limit(size).offset(offset)))
 
     counts = services.sample_counts(db, [m.id for m in rows])
     names = services.workspace_names(db, [m.owner_workspace_id for m in rows])
@@ -856,6 +1128,7 @@ def list_materials(
                 ),
                 uses=uses.get(m.id),
                 access=book.of(m),
+                matched=reasons.get(m.id),
             )
             for m in rows
         ],
@@ -865,91 +1138,6 @@ def list_materials(
     )
 
 
-def _record_name(payload: MaterialCreateRequest) -> str:
-    """이 값들이 만들 재료 이름. **이름을 만드는 곳은 서버 하나다**(ADR 0004)."""
-    return services.material_record_name(
-        grade=payload.grade,
-        details=payload.details,
-        spec_thickness_m=services.to_si(
-            payload.spec_thickness,
-            payload.spec_thickness_unit,
-            field="두께",
-            dimension="length",
-        ),
-    )
-
-
-def _make_material(
-    db: Session, user: User, payload: MaterialCreateRequest, *, workspace: Workspace
-) -> Material:
-    """재료 하나를 만들어 세션에 넣는다 — **커밋은 부르는 쪽이 한다.**
-
-    하나씩 등록하는 길과 한꺼번에 넣는 길이 같은 코드를 지나게 하려고 뺐다.
-    두 벌로 두면 한쪽에만 기준정보 연결이 붙거나, 한쪽만 단위를 기록하는 일이
-    생긴다 — 그때 나는 차이는 몇 달 뒤 목록에서야 보인다.
-    """
-    record_name = _record_name(payload)
-    services.ensure_name_free(db, owner_workspace_id=workspace.id, record_name=record_name)
-
-    material = Material(
-        owner_workspace_id=workspace.id,
-        record_name=record_name,
-        alias=payload.alias,
-        details=payload.details,
-        spec_thickness_m=services.to_si(
-            payload.spec_thickness,
-            payload.spec_thickness_unit,
-            field="두께",
-            dimension="length",
-        ),
-        density_si=services.density_to_si(payload.density, payload.density_unit),
-        poisson_ratio=payload.poisson_ratio,
-        input_units={
-            "spec_thickness": payload.spec_thickness_unit,
-            "density": payload.density_unit,
-        },
-        note=payload.note,
-        legacy_id=payload.legacy_id,
-        registered_by_id=user.id,
-    )
-    # Grade 는 기준정보를 거친다(ADR 0010). `SECC`/`secc` 가 서로 다른 재료를 만드는
-    # 것을 막는다 — 이 축의 이득이 가장 크다.
-    vocabulary_services.apply_bindings(
-        db,
-        material,
-        vocabulary_services.MATERIAL_BINDINGS,
-        payload.model_dump(),
-        created_by_id=user.id,
-    )
-    db.add(material)
-    try:
-        db.flush()
-    except IntegrityError as exc:
-        # **`ensure_name_free` 를 지나왔어도 부딪힌다.** 검사와 넣기 사이에 남이
-        # 같은 이름을 넣을 수 있다 — 그때 500 을 내면 사람은 자기가 뭘 잘못했는지
-        # 알 수 없다. 이름은 사람이 정한 값이라 말없이 바꾸지 않는다.
-        db.rollback()
-        raise Conflict(
-            "MNX-MATERIALS-0004",
-            f"같은 이름의 재료가 이미 있습니다: {material.record_name}",
-        ) from exc
-    # 용도는 재료의 칸이 아니라 매달린 줄이라, 재료가 id 를 받은 뒤에 붙는다.
-    services.set_uses(db, material, "product", payload.applied_products, created_by_id=user.id)
-    services.set_uses(db, material, "part", payload.applied_parts, created_by_id=user.id)
-    # **AI 가 만들었으면 남긴다**(화면에서 만든 것은 안 남는다 — `record_by_client`). 등록자
-    # 칸은 토큰 주인이라, 사람이 만든 재료와 구별할 길이 이것뿐이다(카드와 같은 까닭).
-    audit.record_by_client(
-        db,
-        action=audit.MATERIAL_CREATED_BY_CLIENT,
-        actor=user,
-        target_table="materials",
-        target_id=material.id,
-        target_label=material.record_name,
-        workspace_id=material.owner_workspace_id,
-    )
-    return material
-
-
 @router.post("", response_model=MaterialOut, status_code=201)
 def create_material(
     payload: MaterialCreateRequest,
@@ -957,7 +1145,10 @@ def create_material(
     db: Session = Depends(get_db),
 ) -> MaterialOut:
     workspace = services.resolve_workspace(db, user, payload.workspace_slug)
-    material = _make_material(db, user, payload, workspace=workspace)
+    material = services.make_material(db, user, payload, workspace=workspace)
+    # **뜻으로도 곧바로 걸리게** — 밤의 전체 색인까지 기다리면 방금 넣은 재료가 목록의
+    # 「비슷」 에 안 나온다(2026-09-29). 임베딩은 워커가 한다.
+    semantic.queue_materials(db, [material.id])
     db.commit()
     return _material_out(
         material,
@@ -1143,18 +1334,20 @@ def create_bulk(
     made: list[BulkMadeOut] = []
     blocked: list[BulkBlockedOut] = []
     materials = samples = specimens = 0
+    #: 새로 만든 재료 — 끝에 **한 작업으로** 뜻 색인을 건다(스무 줄이어도 작업은 하나).
+    fresh: list[uuid.UUID] = []
 
     for item in payload.materials:
         try:
             with db.begin_nested():
                 workspace = services.resolve_workspace(db, user, item.workspace_slug)
-                record_name = _record_name(item)
+                record_name = services.record_name_for(item)
                 material = services.find_by_name(
                     db, owner_workspace_id=workspace.id, record_name=record_name
                 )
                 reused = material is not None
                 if material is None:
-                    material = _make_material(db, user, item, workspace=workspace)
+                    material = services.make_material(db, user, item, workspace=workspace)
                 elif not item.samples:
                     raise Conflict(
                         "MNX-MATERIALS-0004",
@@ -1175,6 +1368,7 @@ def create_bulk(
         )
         if not reused:
             materials += 1
+            fresh.append(material.id)
 
         for entry in item.samples:
             try:
@@ -1203,6 +1397,7 @@ def create_bulk(
                     BulkMadeOut(row=one.row, kind="specimen", name=specimen.record_name)
                 )
 
+    semantic.queue_materials(db, fresh)
     db.commit()
     return BulkOut(
         materials=materials,
@@ -1563,6 +1758,8 @@ def update_material(
         services.rename_descendants(db, material)
 
     _audit_if_not_human(db, user, material, sorted(data))
+    # 메모·별칭·용도가 바뀌면 뜻도 바뀐다 — 그 재료만 다시 색인한다.
+    semantic.queue_materials(db, [material.id])
     db.commit()
     names = services.workspace_names(db, [material.owner_workspace_id])
     return _material_out(
@@ -2173,6 +2370,17 @@ def _specimen_scope(db: Session, user: User) -> list[ColumnElement[bool]]:
     ]
 
 
+def _gap_out(gap: thickness_gap.Gap | None) -> ThicknessGapOut | None:
+    if gap is None:
+        return None
+    return ThicknessGapOut(
+        spec=gap.spec,
+        value=gap.value,
+        deviation=gap.deviation,
+        source="run" if gap.source == "run" else "measured",
+    )
+
+
 def _visible_specimen_rows(
     db: Session, user: User
 ) -> Select[tuple[Specimen, Sample, Material]]:
@@ -2232,6 +2440,15 @@ def specimen_facets(
         lots=facets.plain_rows(pairs(base.c.lot_no)),
         standards=facets.plain_rows(pairs(base.c.standard)),
         orientations=facets.plain_rows(pairs(base.c.orientation)),
+        # **두께가 다른 재료에 넣은 시편을 찾는 자리**(ADR 0042). 수는 목록의 거르기와
+        # 같은 식(`thickness_gap.worst`)으로 센다.
+        thickness_gaps=[
+            facets.FacetOut(
+                key=f"{step:g}", label=f"기준 두께와 {step:.0%} 이상 차이", count=count
+            )
+            for step, count in thickness_gap.tally(db, _specimen_scope(db, user))
+            if count > 0
+        ],
     )
 
 
@@ -2250,6 +2467,14 @@ def list_all_specimens(
     standard: str | None = Query(default=None, description="시편 규격 부분 일치"),
     standard_exact: str | None = Query(
         default=None, description="규격 정확히. `__none__` 이면 규격 없는 시편"
+    ),
+    gap: float | None = Query(
+        default=None,
+        alias="thickness_gap",
+        gt=0,
+        le=10,
+        description="재료의 기준 두께와 이 비율(0.1 = 10%) 이상 다른 시편만. "
+        "시편에 적은 두께와 시험 파일이 잰 두께를 본다",
     ),
     sort: str | None = Query(default=None, description="정렬할 열. 기본은 등록 일시"),
     desc: bool = Query(default=True, description="내림차순. 기본은 최근 등록순"),
@@ -2299,6 +2524,8 @@ def list_all_specimens(
         query = query.where(Specimen.orientation.is_(None))
     elif orientation:
         query = query.where(Specimen.orientation == orientation)
+    if gap is not None:
+        query = thickness_gap.at_least(query, gap)
 
     total = db.scalar(select(func.count()).select_from(query.subquery())) or 0
     size = clamp_limit(limit)
@@ -2329,6 +2556,7 @@ def list_all_specimens(
     )
     people = services.registrant_names(specimens, db)
     book = AccessBook(db, user).prime(specimens)
+    gaps = thickness_gap.gaps_for(db, [one.id for one in specimens])
 
     return Page(
         items=[
@@ -2344,12 +2572,133 @@ def list_all_specimens(
                 material_name=material_row.record_name,
                 lot_no=sample_row.lot_no,
                 sample_name=sample_row.record_name,
+                thickness_gap=_gap_out(gaps.get(specimen.id)),
             )
             for specimen, sample_row, material_row in rows
         ],
         total=int(total),
         limit=size,
         offset=offset,
+    )
+
+
+def _relocate_plan_out(plan: relocation.Plan) -> RelocatePlanOut:
+    samples: dict[uuid.UUID, RelocateSampleOut] = {}
+    for move in plan.moves:
+        found = samples.get(move.sample.id)
+        if found is None:
+            samples[move.sample.id] = RelocateSampleOut(
+                sample_id=move.sample.id,
+                sample_name=move.sample.record_name,
+                lot_no=move.sample.lot_no,
+                whole=plan.whole.get(move.sample.id, False),
+                specimens=1,
+            )
+        else:
+            found.specimens += 1
+    return RelocatePlanOut(
+        specimens=len(plan.moves),
+        test_runs=sum(len(listed) for listed in plan.runs.values()),
+        thickness=units.from_si(plan.thickness_m, plan.unit),
+        thickness_unit=plan.unit,
+        targets=[
+            RelocateTargetOut(
+                from_material_id=target.source.id,
+                from_material_name=target.source.record_name,
+                to_material_id=target.existing.id if target.existing else None,
+                to_material_name=target.name,
+                exists=target.existing is not None,
+                specimens=len(target.moves),
+                test_runs=sum(
+                    len(plan.runs.get(move.specimen.id, [])) for move in target.moves
+                ),
+            )
+            for target in plan.targets.values()
+        ],
+        samples=list(samples.values()),
+        cards=[
+            RelocateCardOut(
+                id=one.card.id,
+                label=one.card.label,
+                status=one.card.status,
+                material_name=one.material.record_name,
+                test_runs=len(one.run_ids),
+                can_deprecate=one.can_deprecate,
+                reason=one.reason,
+            )
+            for one in plan.cards
+        ],
+        records=plan.records,
+        blocked=plan.blocked,
+    )
+
+
+@specimens_router.post("/relocate-plan", response_model=RelocatePlanOut)
+def relocate_plan(
+    payload: SpecimenRelocateRequest,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> RelocatePlanOut:
+    """고른 시편을 **다른 두께의 같은 재료**로 옮기면 무엇이 어디로 가는지 — 쓰지 않는다.
+
+    두께가 다른 재료에 잘못 넣은 시편을 바로잡는 길이다(2026-09-29). 재료 수정으로 두께를
+    바꾸면 제대로 들어간 시료까지 함께 옮겨진다 — 그래서 고른 시편만 옮긴다.
+
+    **걸린 카드를 미리 보인다** — 옮기는 시험으로 만든 카드(확정 포함)와, 그 카드를 사용
+    중지할 수 있는지. 옮기는 것은 막지 않는다(`relocation` 머리말).
+    """
+    return _relocate_plan_out(
+        relocation.make_plan(
+            db,
+            user,
+            payload.specimen_ids,
+            thickness=payload.spec_thickness,
+            unit=payload.spec_thickness_unit,
+        )
+    )
+
+
+@specimens_router.post("/relocate", response_model=RelocateOut)
+def relocate(
+    payload: SpecimenRelocateRequest,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> RelocateOut:
+    """고른 시편을 **다른 두께의 같은 재료**로 옮긴다.
+
+    옮겨 갈 재료가 같은 부서에 있으면 그리로 합치고, 없으면 원 재료를 복사해 두께만 바꿔
+    만든다. 시료는 고른 시편이 전부면 통째로, 일부면 로트 정보를 복사한 새 시료로 간다.
+    이름은 시험까지 새 재료 기준으로 바뀐다.
+
+    **걸린 카드에는 코멘트가 반드시 붙는다**(`card_actions` 로 사용 중지도 고른다). 한 건이
+    막혀도 나머지 시편은 간다 — 막힌 것은 이유와 함께 돌려준다.
+    """
+    plan = relocation.make_plan(
+        db,
+        user,
+        payload.specimen_ids,
+        thickness=payload.spec_thickness,
+        unit=payload.spec_thickness_unit,
+    )
+    if not plan.moves:
+        raise AppError(
+            "MNX-MATERIALS-0043",
+            "옮길 수 있는 시편이 없습니다. " + " · ".join(plan.blocked),
+            status=422,
+        )
+    done = relocation.execute(
+        db, user, plan, card_actions=dict(payload.card_actions), comment=payload.comment
+    )
+    db.commit()
+    return RelocateOut(
+        moved=done.moved,
+        test_runs=done.test_runs,
+        created_materials=done.created,
+        joined_materials=done.joined,
+        split_samples=done.split_samples,
+        cards_noted=done.cards_noted,
+        cards_deprecated=done.cards_deprecated,
+        blocked=plan.blocked,
     )
 
 
@@ -2485,6 +2834,7 @@ def get_specimen(
         material_name=material.record_name,
         lot_no=sample.lot_no,
         sample_name=sample.record_name,
+        thickness_gap=_gap_out(thickness_gap.gaps_for(db, [one.id]).get(one.id)),
     )
 
 

@@ -14,6 +14,7 @@ import { NewSampleDialog } from '@/modules/materials/NewSampleDialog'
 
 const createSample = vi.fn()
 const samples = vi.fn()
+const getMaterial = vi.fn()
 
 vi.mock('@/modules/materials/api', async (importOriginal) => {
   const original = await importOriginal<typeof import('@/modules/materials/api')>()
@@ -22,6 +23,7 @@ vi.mock('@/modules/materials/api', async (importOriginal) => {
     materialsApi: {
       createSample: (...args: unknown[]) => createSample(...args),
       samples: (...args: unknown[]) => samples(...args),
+      get: (...args: unknown[]) => getMaterial(...args),
     },
   }
 })
@@ -54,6 +56,9 @@ beforeEach(() => {
   createSample.mockResolvedValue({ id: 's4', seq_no: 4 })
   samples.mockReset()
   samples.mockResolvedValue([{ ...LATEST, id: 's1', seq_no: 1, manufacturer: '옛 제조사' }, LATEST])
+  getMaterial.mockReset()
+  // 재료 밀도는 SI(kg/m³)로 온다 — 화면은 tonne/mm³ 로 보인다.
+  getMaterial.mockResolvedValue({ id: 'm1', density: 7850, density_unit: 'kg/m3' })
 })
 
 describe('시료 추가', () => {
@@ -106,5 +111,28 @@ describe('시료 추가', () => {
     await user.click(screen.getByRole('button', { name: '초기화' }))
     expect(screen.getByLabelText('제조사')).toHaveValue('')
     expect(screen.queryByText(/채워 두었습니다/)).toBeNull()
+  })
+})
+
+describe('시료 추가 — 입력 칸 (2026-09-29)', () => {
+  it('밀도 칸의 placeholder 는 재료에 적힌 밀도를 표시 단위로 보인다', async () => {
+    render(<NewSampleDialog materialId="m1" open onClose={vi.fn()} onCreated={vi.fn()} />)
+    await waitFor(() =>
+      expect(screen.getByLabelText(/밀도/)).toHaveAttribute('placeholder', '재료 밀도 7.85e-9')
+    )
+    expect(getMaterial).toHaveBeenCalledWith('m1')
+  })
+
+  it('재료에 밀도가 없으면 예시를 보인다', async () => {
+    getMaterial.mockResolvedValue({ id: 'm1', density: null, density_unit: 'kg/m3' })
+    render(<NewSampleDialog materialId="m1" open onClose={vi.fn()} onCreated={vi.fn()} />)
+    await screen.findByText(/채워 두었습니다/)
+    expect(screen.getByLabelText(/밀도/)).toHaveAttribute('placeholder', '예: 7.85e-9')
+  })
+
+  it('생산일의 연도는 네 자리까지다 — 날짜 칸에 최댓값이 걸린다', async () => {
+    render(<NewSampleDialog materialId="m1" open onClose={vi.fn()} onCreated={vi.fn()} />)
+    await screen.findByText(/채워 두었습니다/)
+    expect(screen.getByLabelText('생산일')).toHaveAttribute('max', '9999-12-31')
   })
 })

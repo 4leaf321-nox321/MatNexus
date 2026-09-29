@@ -523,3 +523,252 @@ def curve_stats(grids: list[np.ndarray], values: list[np.ndarray]) -> CurveStats
             f"({len(grid)}점, x {float(grid[0]):.6g}~{float(grid[-1]):.6g}).",
         ),
     )
+
+
+# --- 대표 곡선을 무엇으로 — 평균 · 중앙값 · 상한 · 하한 (2026-09-29) ------------------------
+#
+# 카드를 만들 때 대표 곡선이 **늘 평균**이었다. 통계 화면은 평균·중앙값을 둘 다 내며 「어느
+# 것을 쓸지는 피팅할 때 고르면 된다」 고 적어 두었는데, 정작 피팅에는 고를 자리가 없었다.
+# 그리고 해석은 평균만 쓰지 않는다 — 강도 평가는 **하한**, 충돌 에너지·성형 하중은 **상한**
+# 곡선으로 한 번 더 돌린다(2026-09-29 요청: 「상한치, 하한치를 뽑는 방법」).
+
+#: 대표 곡선의 기준.
+CURVE_BASES = ("mean", "median", "upper", "lower")
+
+#: 상·하한을 내는 방법.
+#:
+#:     sd          점마다 평균 ± k·표준편차         흔히 쓰는 폭. k 는 사람이 고른다
+#:     tolerance   점마다 평균 ± K(n)·표준편차      한쪽 공차 한계(B 기준 90%·95%)
+#:     envelope    점마다 최댓값·최솟값(포락선)     잰 것의 끝. 서로 다른 시편의 점이 섞인다
+#:     specimen    가장 높은·낮은 시편 하나의 곡선  한 시편의 모양을 그대로 지킨다
+BOUND_METHODS = ("sd", "tolerance", "envelope", "specimen")
+
+#: 공차 한계의 기본 — **B 기준**(MMPDS): 모집단의 90% 를 95% 신뢰로 덮는다.
+TOLERANCE_COVERAGE = 0.90
+TOLERANCE_CONFIDENCE = 0.95
+
+#: 표준편차 배수의 상한. 그보다 넓히는 것은 통계가 아니라 여유율이다 — 그것은 해석 쪽이
+#: 제 기준으로 곱한다.
+MAX_SIGMA = 5.0
+
+
+@dataclass(frozen=True)
+class CurveBasis:
+    """대표 곡선을 **무엇으로** 만들까. 비워 두면(기본값) 평균이다."""
+
+    kind: str = "mean"
+    method: str | None = None
+    k: float | None = None
+    """`sd` 의 표준편차 배수. **기본값이 없다** — 얼마나 벌릴지는 데이터가 못 정한다."""
+
+    @property
+    def bounded(self) -> bool:
+        return self.kind in ("upper", "lower")
+
+
+@dataclass(frozen=True)
+class PickedCurve:
+    """고른 대표 곡선. `label` 이 카드 근거와 화면에 그대로 선다."""
+
+    points: list[tuple[float, float]]
+    label: str
+    notes: tuple[str, ...]
+    specimen_index: int | None = None
+    """`specimen` 이면 고른 시편의 자리. 부르는 쪽이 이름으로 되짚는다."""
+    factor: float | None = None
+    """`sd` 의 k, `tolerance` 의 K."""
+
+
+def check_basis(basis: CurveBasis) -> None:
+    """기준이 말이 되는가. **조용히 평균으로 떨어뜨리지 않는다** — 하한을 달라 했는데
+    평균이 오면 그 카드는 이름만 하한이다."""
+    if basis.kind not in CURVE_BASES:
+        raise StatisticsError(f"모르는 기준입니다: {basis.kind} — {' · '.join(CURVE_BASES)}.")
+    if not basis.bounded:
+        if basis.method is not None or basis.k is not None:
+            raise StatisticsError("평균·중앙값에는 방법(method)·배수(k)가 없습니다.")
+        return
+    if basis.method is None:
+        raise StatisticsError(
+            "상·하한은 방법을 함께 주세요 — sd(평균 ± k·표준편차) · tolerance(공차 한계) · "
+            "envelope(포락선) · specimen(실제 시편)."
+        )
+    if basis.method not in BOUND_METHODS:
+        raise StatisticsError(
+            f"모르는 방법입니다: {basis.method} — {' · '.join(BOUND_METHODS)}."
+        )
+    if basis.method == "sd":
+        if basis.k is None:
+            raise StatisticsError(
+                "표준편차 배수 k 를 주세요 — 얼마나 벌릴지는 데이터가 정하지 못합니다"
+                "(1 · 2 · 3 이 흔합니다)."
+            )
+        if not 0 < basis.k <= MAX_SIGMA:
+            raise StatisticsError(f"k 는 0 초과 {MAX_SIGMA:g} 이하입니다: {basis.k}")
+    elif basis.k is not None:
+        raise StatisticsError(f"'{basis.method}' 에는 배수 k 가 없습니다.")
+
+
+def tolerance_factor(
+    count: int,
+    *,
+    coverage: float = TOLERANCE_COVERAGE,
+    confidence: float = TOLERANCE_CONFIDENCE,
+) -> float:
+    """한쪽 공차 한계의 K — 정규분포 가정(비중심 t 분포).
+
+        K = t'(신뢰수준; 자유도 n-1, 비중심 d) / sqrt(n),   d = z_p * sqrt(n)
+
+    B 기준(90%·95%)에서 n=3 이면 6.16, 5 면 3.41, 10 이면 2.36 이다. **표본이 적을수록
+    넓다** — 세 개로 「모집단의 90%」 를 말하려면 그만큼 물러서야 한다. 그것이 정직한 답이다.
+    """
+    if count < 2:
+        raise StatisticsError(f"공차 한계는 시편 2개부터입니다 (지금 {count}개).")
+    # 무거운 모듈이라 쓸 때 부른다 — 통계를 import 하는 곳마다 scipy 를 싣지 않는다.
+    from scipy import stats as distributions
+
+    z = float(distributions.norm.ppf(coverage))
+    t = float(distributions.nct.ppf(confidence, df=count - 1, nc=z * math.sqrt(count)))
+    return t / math.sqrt(count)
+
+
+def _share_inside(k: float) -> float:
+    """정규분포에서 평균 - k·표준편차 위에(또는 + 아래에) 있는 비율 — Phi(k)."""
+    return 0.5 * (1.0 + math.erf(k / math.sqrt(2.0)))
+
+
+def pick_curve(grid: np.ndarray, values: list[np.ndarray], basis: CurveBasis) -> PickedCurve:
+    """같은 격자로 맞춘 시편 곡선들에서 **기준대로** 대표 곡선 하나를 고른다.
+
+    격자는 부르는 쪽이 이미 맞췄다(`curve_stats` 가 거부하지 않은 격자, 또는 `align_grids`).
+    여기는 맞추지 않는다 — 조용히 섞이는 것을 막는 규칙이 이 패키지의 머리말이다.
+    """
+    check_basis(basis)
+    count = len(values)
+    if count == 0:
+        raise StatisticsError("곡선이 없습니다.")
+    stacked = np.vstack(values)
+    if stacked.shape[1] != len(grid):
+        raise StatisticsError("x 와 y 의 점 수가 다릅니다.")
+    xs = [float(one) for one in grid]
+    lower = basis.kind == "lower"
+    side = "하한" if lower else "상한"
+    toward = "낮은" if lower else "높은"
+    sign = "-" if lower else "+"
+
+    if basis.kind == "mean":
+        return PickedCurve(
+            points=list(zip(xs, (float(one) for one in stacked.mean(axis=0)), strict=True)),
+            label="평균",
+            notes=(),
+        )
+    if basis.kind == "median":
+        middle = np.median(stacked, axis=0)
+        return PickedCurve(
+            points=list(zip(xs, (float(one) for one in middle), strict=True)),
+            label="중앙값",
+            notes=(f"점마다 시편 {count}개의 중앙값입니다 — 이상치 하나에 덜 끌려갑니다.",),
+        )
+
+    # ── 상·하한 ─────────────────────────────────────────────────────────────
+    if count < MIN_SAMPLES:
+        raise StatisticsError(
+            f"시편이 {count}개라 {side}을 낼 수 없습니다 — 흩어짐을 모릅니다. 시편을 더 "
+            "채택하거나 평균(그 시편의 곡선)을 쓰세요."
+        )
+
+    if basis.method == "envelope":
+        edge = stacked.min(axis=0) if lower else stacked.max(axis=0)
+        return PickedCurve(
+            points=list(zip(xs, (float(one) for one in edge), strict=True)),
+            label=f"{side} — 포락선(점마다 {'최솟값' if lower else '최댓값'})",
+            notes=(
+                f"점마다 시편 {count}개 중 가장 {toward} 값을 이었습니다 — 서로 다른 "
+                "시편의 점이 섞이므로 한 시편의 모양은 아닙니다. 시편이 적으면 우연히 튄 "
+                "하나가 곡선을 정합니다.",
+            ),
+        )
+
+    if basis.method == "specimen":
+        # **곡선 전체의 높이**로 줄 세운다(공통 구간 평균). 한 점의 값으로 고르면 그 점에서만
+        # 낮고 나머지는 높은 시편이 뽑힌다.
+        levels = stacked.mean(axis=1)
+        index = int(np.argmin(levels) if lower else np.argmax(levels))
+        return PickedCurve(
+            points=list(zip(xs, (float(one) for one in stacked[index]), strict=True)),
+            label=f"{side} — 가장 {toward} 시편",
+            notes=(
+                f"시편 {count}개 가운데 공통 구간 전체의 평균 높이가 가장 {toward} 시편의 "
+                "곡선 그대로입니다 — 점마다 섞지 않아 한 시편의 모양을 지킵니다.",
+            ),
+            specimen_index=index,
+        )
+
+    # sd · tolerance — 점마다 평균 ± 배수·표준편차
+    where = "위" if lower else "아래"
+    if basis.method == "tolerance":
+        if count < MIN_FOR_SPREAD:
+            raise StatisticsError(
+                f"공차 한계는 시편 {MIN_FOR_SPREAD}개부터 냅니다 (지금 {count}개) — 2개면 "
+                f"K 가 {tolerance_factor(2):.1f} 이라 뜻이 없습니다. 평균 ± k·표준편차나 "
+                "포락선을 쓰세요."
+            )
+        factor = tolerance_factor(count)
+        label = (
+            f"{side} — 공차 한계(B 기준 {TOLERANCE_COVERAGE:.0%}·{TOLERANCE_CONFIDENCE:.0%}, "
+            f"K={factor:.3g})"
+        )
+        said = (
+            f"점마다 평균 {sign} K·표준편차, K={factor:.3g}(시편 {count}개, 한쪽 공차 "
+            f"한계)입니다 — 모집단의 {TOLERANCE_COVERAGE:.0%} 가 이 선 {where}에 있다고 "
+            f"{TOLERANCE_CONFIDENCE:.0%} 신뢰로 말할 수 있습니다(정규분포 가정). 시편이 "
+            "적을수록 K 가 커집니다."
+        )
+    else:
+        assert basis.k is not None
+        factor = basis.k
+        label = f"{side} — 평균 {sign} {factor:g}σ"
+        said = (
+            f"점마다 평균 {sign} {factor:g}·표준편차(표본, n-1)입니다 — 정규분포라면 약 "
+            f"{_share_inside(factor):.1%} 가 이 선 {where}에 있습니다. 시편이 적으면 "
+            "표준편차 자체가 흔들립니다 — 통계적 허용값이 필요하면 공차 한계를 쓰세요."
+        )
+    notes = [said]
+    if count == MIN_SAMPLES:
+        notes.append("시편 2개로 낸 표준편차는 믿기 어렵습니다 — 폭이 우연에 크게 흔들립니다.")
+
+    mean = stacked.mean(axis=0)
+    sd = stacked.std(axis=0, ddof=1)
+    picked = mean - factor * sd if lower else mean + factor * sd
+
+    if lower:
+        # **0 아래로 내려가는 하한은 뜻이 없다**(응력·강도는 양수다). 조용히 0 에 붙이면
+        # 그럴듯한 곡선이 나오고, 그 곡선은 아무것도 말하지 않는다.
+        crossed = np.nonzero((mean > 0) & (picked <= 0))[0]
+        if crossed.size:
+            at = int(crossed[0])
+            raise StatisticsError(
+                f"하한이 x={xs[at]:.4g} 에서 0 아래로 내려갑니다(평균 {float(mean[at]):.4g}, "
+                f"표준편차 {float(sd[at]):.4g}, 배수 {factor:.3g}) — 표본이 적거나 흩어짐이 "
+                "커서 이 방법으로는 뜻 있는 하한이 안 나옵니다. 배수를 줄이거나 포락선·실제 "
+                "시편을 쓰세요."
+            )
+
+    # **평균은 오르는데 한계선이 내려가는 자리**를 말한다. 흩어짐이 커지는 구간(네킹 근처)에서
+    # 생기고, 소성 표로 내보내면 표 정리가 「응력이 떨어진다」 로 거절한다(`export.prepare`).
+    scale = float(np.max(np.abs(mean))) or 1.0
+    rising = bool(np.all(np.diff(mean) >= -1e-9 * scale))
+    drops = np.nonzero(np.diff(picked) < -1e-9 * scale)[0]
+    if rising and drops.size:
+        at = int(drops[0]) + 1
+        notes.append(
+            f"이 {side} 곡선은 x={xs[at]:.4g} 부터 앞 점보다 내려가는 자리가 있습니다 — 그 "
+            "구간에서 시편 사이 흩어짐이 커지기 때문입니다. 소성 표로 내보낼 때 표 정리가 "
+            "응력이 떨어지는 표를 거절하므로, 배수를 줄이거나 포락선·실제 시편을 쓰세요."
+        )
+    return PickedCurve(
+        points=list(zip(xs, (float(one) for one in picked), strict=True)),
+        label=label,
+        notes=tuple(notes),
+        factor=factor,
+    )

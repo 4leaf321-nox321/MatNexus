@@ -101,6 +101,14 @@ class EntityKind:
     soft_delete: bool = False
     """`deleted_at` 을 쓰나. 안 보면 **지운 재료가 그래프에 남는다.**"""
 
+    also_columns: tuple[tuple[str, str], ...] = ()
+    """이름 말고도 **전체 검색이 함께 보는 칸** — (열, 사람 말).
+
+    재료 별칭 「도어 이너 강판」 이나 장비가 준 파일명으로 치면 이름에는 없어서 0건이었다
+    (2026-09-29). 재료 목록은 별칭으로 찾는데 상단 검색만 못 찾으면 사람은 둘 중 하나가
+    고장 났다고 읽는다. **trgm 색인이 있는 칸만** 둔다 — 색인 없는 `OR` 가지 하나가 나머지
+    색인까지 무의미하게 만든다(`tests/architecture/test_search_index`)."""
+
 
 @dataclass(frozen=True)
 class RelationType:
@@ -131,6 +139,7 @@ KINDS: dict[str, EntityKind] = {
             module="materials",
             name_columns=("record_name",),
             soft_delete=True,
+            also_columns=(("alias", "별칭"),),
         ),
         EntityKind(
             slug="sample",
@@ -139,6 +148,7 @@ KINDS: dict[str, EntityKind] = {
             module="materials",
             name_columns=("record_name",),
             soft_delete=True,
+            also_columns=(("lot_no", "로트"),),
         ),
         EntityKind(
             slug="specimen",
@@ -147,6 +157,7 @@ KINDS: dict[str, EntityKind] = {
             module="materials",
             name_columns=("record_name",),
             soft_delete=True,
+            also_columns=(("standard", "규격"),),
         ),
         EntityKind(
             slug="test_run",
@@ -155,6 +166,7 @@ KINDS: dict[str, EntityKind] = {
             module="tests",
             name_columns=("record_name",),
             soft_delete=True,
+            also_columns=(("source_filename", "원본 파일명"),),
         ),
         EntityKind(
             slug="test_type",

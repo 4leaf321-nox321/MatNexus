@@ -28,6 +28,8 @@ export interface SearchHit {
   matched: string
   parent_kind?: string | null
   parent_id?: string | null
+  /** 이름이 아닌 칸으로 걸렸으면 그 칸과 값 — 「별칭 도어 이너 강판」(2026-09-29). */
+  via?: string | null
 }
 
 export function destinationOf(hit: SearchHit): Destination {
@@ -82,13 +84,10 @@ export function destinationOf(hit: SearchHit): Destination {
   }
 }
 
-/** 왜 걸렸는지를 사람 말로. 「비슷」 이 왜 떴는지 안 보이면 결과가 엉뚱해 보인다. */
-export const MATCH_LABELS: Record<string, string> = {
-  exact: '정확히 일치',
-  prefix: '앞이 일치',
-  contains: '포함',
-  similar: '비슷함',
-  // 3단계 — 글자는 안 겹치는데 뜻이 가깝다. **이 표시가 없으면 엉뚱한 결과로 읽힌다.**
-  meaning: '뜻이 가까움',
-  both: '글자·뜻 둘 다',
-}
+/**
+ * 왜 걸렸는지를 사람 말로. 「비슷」 이 왜 떴는지 안 보이면 결과가 엉뚱해 보인다.
+ *
+ * **표는 `shared` 에 하나다**(2026-09-29) — 재료·시험 목록의 「비슷」 도 같은 말로 이유를
+ * 단다. 두 벌이면 한 화면에서만 말이 바뀐다.
+ */
+export { MATCH_LABELS } from '@/shared/searchModes'

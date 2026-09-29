@@ -6,7 +6,7 @@
  * 골랐는데 다음 쪽의 MD 가 안 나오면, 사람은 그것을 「없다」 로 읽는다.
  */
 
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -16,6 +16,8 @@ import SpecimensPage from '@/modules/materials/SpecimensPage'
 const specimenRows = vi.fn()
 const bulkUpdateSpecimens = vi.fn()
 const specimenFacets = vi.fn()
+const relocatePlan = vi.fn()
+const relocate = vi.fn()
 
 //: 서버가 센 거르기 목록 — 재료는 id 가 key, 규격은 「(없음)」 이 끝에 선다.
 const FACETS = {
@@ -31,6 +33,11 @@ const FACETS = {
   orientations: [
     { key: 'MD', label: 'MD', count: 2 },
     { key: 'TD', label: 'TD', count: 1 },
+  ],
+  // key 는 비율 — 0개인 선택지는 서버가 안 준다.
+  thickness_gaps: [
+    { key: '0.05', label: '기준 두께와 5% 이상 차이', count: 2 },
+    { key: '0.2', label: '기준 두께와 20% 이상 차이', count: 1 },
   ],
 }
 
@@ -52,6 +59,8 @@ vi.mock('@/modules/materials/api', async () => {
       specimenRows: (...args: unknown[]) => specimenRows(...args),
       specimenFacets: (...args: unknown[]) => specimenFacets(...args),
       bulkUpdateSpecimens: (...args: unknown[]) => bulkUpdateSpecimens(...args),
+      relocatePlan: (...args: unknown[]) => relocatePlan(...args),
+      relocate: (...args: unknown[]) => relocate(...args),
     },
   }
 })
@@ -105,6 +114,39 @@ beforeEach(() => {
     unchanged: 0,
     blocked: [],
     renamed: [],
+  })
+  relocatePlan.mockReset()
+  relocate.mockReset()
+  relocatePlan.mockResolvedValue({
+    specimens: 1,
+    test_runs: 2,
+    thickness: 1.2,
+    thickness_unit: 'mm',
+    targets: [
+      {
+        from_material_id: 'm1',
+        from_material_name: 'SECC_MDOI_1.0',
+        to_material_id: null,
+        to_material_name: 'SECC_MDOI_1.2',
+        exists: false,
+        specimens: 1,
+        test_runs: 2,
+      },
+    ],
+    samples: [],
+    cards: [],
+    records: [],
+    blocked: [],
+  })
+  relocate.mockResolvedValue({
+    moved: 1,
+    test_runs: 2,
+    created_materials: ['SECC_MDOI_1.2'],
+    joined_materials: [],
+    split_samples: 1,
+    cards_noted: 1,
+    cards_deprecated: 0,
+    blocked: [],
   })
 })
 
@@ -238,6 +280,78 @@ describe('일괄 수정', () => {
     await waitFor(() =>
       expect(screen.queryByRole('button', { name: '일괄 수정' })).not.toBeInTheDocument()
     )
+  })
+})
+
+
+describe('다른 두께로 옮기기', () => {
+  it('고른 시편만 옮기고, 무엇이 어디로 갔는지 말한 뒤 표를 다시 읽는다', async () => {
+    // 「옮겼습니다」 만으로는 새 재료가 생겼는지, 카드에 무엇이 붙었는지 모른다.
+    open()
+    await screen.findByText('SECC_MDOI_1.0')
+    expect(screen.queryByRole('button', { name: '다른 두께로 옮기기' })).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByLabelText('SECC_MDOI_1.0__01_MD_01 선택'))
+    await userEvent.click(screen.getByRole('button', { name: '다른 두께로 옮기기' }))
+    const dialog = await screen.findByRole('dialog')
+    await userEvent.type(within(dialog).getByLabelText(/기준 두께/), '1.2')
+    // 그려진 계획을 기다린다 — 옮기기 단추는 계획이 와야 풀린다.
+    await within(dialog).findByText(/없어서 새로 만듭니다/)
+    const calls = specimenRows.mock.calls.length
+    await userEvent.click(within(dialog).getByRole('button', { name: '시편 1개 옮기기' }))
+
+    expect(
+      await screen.findByText(/SECC_MDOI_1\.2\(새로 만듦\) 로 옮겼습니다/)
+    ).toHaveTextContent('카드 1장에 코멘트를 남겼습니다')
+    expect(relocate.mock.calls[0][0]).toMatchObject({ specimen_ids: ['sp1'] })
+    await waitFor(() => expect(specimenRows.mock.calls.length).toBeGreaterThan(calls))
+  })
+})
+
+
+describe('기준 두께와 차이', () => {
+  it('치수 열은 기준 두께와의 차이로 거르고, 고른 것은 서버로 나간다', async () => {
+    // **화면에서 거르면 이 쪽에 실린 것만 걸러진다** — 다른 두께에 넣은 시편이 다음 쪽에
+    // 있으면 「없다」 로 읽힌다.
+    open()
+    await screen.findByText('SECC_MDOI_1.0')
+
+    const picker = await screen.findByLabelText('치수 로 필터')
+    expect(
+      within(picker).getByRole('option', { name: '기준 두께와 20% 이상 차이 (1)' })
+    ).toBeInTheDocument()
+    await userEvent.selectOptions(picker, '0.2')
+    await waitFor(() =>
+      expect(specimenRows).toHaveBeenLastCalledWith(
+        expect.objectContaining({ thickness_gap: 0.2, offset: 0 })
+      )
+    )
+  })
+
+  it('크게 다른 줄에는 무엇과 무엇을 견줬는지 말한다', async () => {
+    // 시험 파일이 잰 두께는 치수 칸에 안 보인다 — 배지가 말하지 않으면 왜 걸렸는지 모른다.
+    specimenRows.mockResolvedValue(
+      page([
+        {
+          ...ROW,
+          thickness_gap: { spec: 0.0008, value: 0.001, deviation: 0.25, source: 'run' },
+        },
+        {
+          ...ROW,
+          id: 'sp2',
+          record_name: 'SECC_MDOI_1.0__01_MD_02',
+          thickness_gap: { spec: 0.0008, value: 0.000816, deviation: 0.02, source: 'measured' },
+        },
+      ])
+    )
+    open()
+
+    // 시험 파일이 잰 값은 치수 칸에 없으니 배지가 적는다.
+    const badge = await screen.findByText('시험 파일 1 mm · 기준 대비 +25%')
+    expect(badge).toHaveAttribute('title', expect.stringContaining('시험 파일이 잰 두께 1 mm'))
+    expect(badge).toHaveAttribute('title', expect.stringContaining('기준 두께 0.8 mm'))
+    // 압연 공차(2%)는 표시하지 않는다 — 가장 작은 선택지(5%)보다 작다.
+    expect(screen.getAllByText(/기준 대비/)).toHaveLength(1)
   })
 })
 

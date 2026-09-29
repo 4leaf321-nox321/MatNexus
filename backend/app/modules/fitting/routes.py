@@ -34,6 +34,7 @@ from app.modules.fitting.models import (
     ExportFormatHold,
     ExportProfile,
     PropertyCard,
+    PropertyCardRemark,
     UnitSystemDef,
 )
 from app.modules.fitting.schemas import (
@@ -48,8 +49,10 @@ from app.modules.fitting.schemas import (
     CardBundleRequest,
     CardFacetOut,
     CardFacetsOut,
+    CardRemarkOut,
     CardSlotIn,
     CardValueOut,
+    CurveBasisIn,
     DeckCheckItemOut,
     DeckCheckOut,
     DeckCheckRequest,
@@ -507,6 +510,27 @@ def _available_columns(db: Session, user: User, payload: FitPreviewRequest) -> s
     return found
 
 
+@dataclass(frozen=True)
+class _Represented:
+    """대표 곡선 — 적합에 쓸 축의 점과, 그것이 **무엇인지**(평균·하한 …)."""
+
+    group: statistics_services.Group
+    x: np.ndarray
+    y: np.ndarray
+    notes: list[str]
+    label: str
+    reference: list[tuple[float, float]]
+    """평균이 아니면 평균 곡선(같은 축, 같은 다듬기). 평균이면 비어 있다."""
+
+
+def _basis(payload: CurveBasisIn | None) -> statistics.CurveBasis | None:
+    return (
+        statistics.CurveBasis(kind=payload.kind, method=payload.method, k=payload.k)
+        if payload is not None
+        else None
+    )
+
+
 def _representative(
     db: Session,
     user: User,
@@ -515,7 +539,8 @@ def _representative(
     orientation: str,
     family: fitting.Family | None = None,
     test_run_ids: list[uuid.UUID] | None = None,
-) -> tuple[statistics_services.Group, np.ndarray, np.ndarray, list[str]]:
+    basis: statistics.CurveBasis | None = None,
+) -> _Represented:
     """대표 곡선에서 **그 식이 쓰는 축**을 꺼낸다.
 
     금속 경화식은 진응력·진소성변형률, 고무 초탄성은 공칭이다 — 축은 식이 안다
@@ -556,7 +581,7 @@ def _representative(
     # 「레시피의 재샘플 구간을 고정한 뒤 다시 처리하세요」 로 막았고, 시편 열 개면
     # 그것이 열 번의 일이었다(2026-09-18 요청).
     curve, notes = statistics_services.curve_table(
-        db, group, x=x_column, y=y_column, align=True
+        db, group, x=x_column, y=y_column, align=True, basis=basis
     )
     # **유난히 짧은 시편은 자동으로 빼지 않고 말한다.** 그 시편이 공통 구간의 끝을
     # 정하면 나머지의 뒤쪽이 통째로 잘린다 — 빼는 것은 사람이 정한다.
@@ -575,6 +600,14 @@ def _representative(
             *notes,
         ]
     if curve is None:
+        if basis is not None and basis.kind != "mean":
+            # **기준이 못 선 것은 곡선이 없는 것과 다르다.** 열이 없다고 안내하면 레시피를
+            # 뒤지게 된다 — 이유는 시편 수·흩어짐이다(`statistics.pick_curve` 의 말).
+            raise AppError(
+                "MNX-FITTING-0043",
+                "이 기준으로 대표 곡선을 만들 수 없습니다. " + " ".join(notes),
+                status=422,
+            )
         raise AppError(
             "MNX-FITTING-0003",
             "대표 곡선을 만들 수 없습니다. "
@@ -582,12 +615,21 @@ def _representative(
             + f" 레시피가 '{x_column}'·'{y_column}' 열을 만드는지 확인하세요.",
             status=422,
         )
-    mean = np.asarray(curve["mean"], dtype=np.float64)
+    # **고른 기준의 곡선이 적합의 입력이다**(2026-09-29). 기준을 안 줬으면 평균 — 전과 같다.
+    chosen = np.asarray(curve.get("picked", curve["mean"]), dtype=np.float64)
+    label = str(curve.get("picked_label", "평균"))
     # **적합 전에 구간을 다듬는다.** 무엇을 다듬는지는 식이 안다 — 금속은 탄성
     # 구간의 자국을 걷고(안 걷으면 x 가 전부 0 인 점 수십 개가 적합을 지배해서
     # 식이 맞는데도 R² 가 0.4 로 나온다), 고무는 식이 성립하지 않는 점을 걷는다.
     prepare = (family.prepare if family else None) or fitting.plastic_branch
-    strain, stress, trimmed = prepare(mean[:, 0], mean[:, 1])
+    strain, stress, trimmed = prepare(chosen[:, 0], chosen[:, 1])
+    reference: list[tuple[float, float]] = []
+    if label != "평균":
+        # 평균도 **같은 다듬기**를 거쳐 곁에 둔다 — 다듬기 전의 평균을 깔면 탄성 구간의
+        # 자국까지 그려져, 얼마나 물러섰는지 견줄 수가 없다.
+        mean = np.asarray(curve["mean"], dtype=np.float64)
+        mean_x, mean_y, _ = prepare(mean[:, 0], mean[:, 1])
+        reference = [(float(px), float(py)) for px, py in zip(mean_x, mean_y, strict=True)]
     single = (
         [
             "시편 1개의 곡선으로 적합했습니다 — 재료의 대푯값이 아니라 그 시편의 "
@@ -597,7 +639,14 @@ def _representative(
         if len(group.members) == 1
         else []
     )
-    return group, strain, stress, [*notes, *single, *trimmed]
+    return _Represented(
+        group=group,
+        x=strain,
+        y=stress,
+        notes=[*notes, *single, *trimmed],
+        label=label,
+        reference=reference,
+    )
 
 
 def _fit_out(
@@ -766,9 +815,11 @@ def preview(
     group = None
     strain = np.asarray([], dtype=np.float64)
     stress = np.asarray([], dtype=np.float64)
+    basis_label = "평균"
+    reference: list[tuple[float, float]] = []
     for axes in dict.fromkeys((item.x_column, item.y_column) for item in chosen):
         same = [item for item in chosen if (item.x_column, item.y_column) == axes]
-        found, x, y, axis_notes = _representative(
+        found = _representative(
             db,
             user,
             payload.material_id,
@@ -776,12 +827,15 @@ def preview(
             payload.orientation,
             same[0],
             payload.test_run_ids,
+            _basis(payload.basis),
         )
+        x, y = found.x, found.y
         if group is None:
             # **점은 첫 축의 것이다.** 축이 섞이면 아래에서 그 사실을 말한다 —
             # 그래프 하나에 두 축의 점을 겹쳐 놓으면 무엇을 보는지 알 수 없다.
-            group, strain, stress = found, x, y
-            notes.extend(axis_notes)
+            group, strain, stress = found.group, x, y
+            basis_label, reference = found.label, found.reference
+            notes.extend(found.notes)
         # **자기 축의 곡선에 맞춘다.** 여기서 `strain`(첫 축의 점)을 넘기면 두
         # 번째 축의 식이 남의 데이터에 맞춰지고, 그 결과는 그럴듯하게 나온다.
         results.extend(fitting.compare(x, y, families=tuple(item.key for item in same)))
@@ -868,6 +922,8 @@ def preview(
     ]
     return FitPreviewOut(
         source_points=[(float(x), float(y)) for x, y in zip(strain, stress, strict=True)],
+        basis_label=basis_label,
+        reference_points=reference,
         members=drawn_members,
         short_runs=short_runs,
         sample_count=len(group.members),
@@ -921,6 +977,33 @@ def _table_problem(deck: export.Deck) -> str | None:
     return None
 
 
+def _remarks_of(
+    db: Session, card_ids: list[uuid.UUID]
+) -> dict[uuid.UUID, list[CardRemarkOut]]:
+    """카드들의 코멘트를 **한 번에** — 목록이 카드마다 물으면 50장이면 50번이다."""
+    found: dict[uuid.UUID, list[CardRemarkOut]] = {}
+    if not card_ids:
+        return found
+    rows = db.execute(
+        select(PropertyCardRemark, User.display_name)
+        .outerjoin(User, User.id == PropertyCardRemark.created_by_id)
+        .where(PropertyCardRemark.card_id.in_(card_ids))
+        .order_by(PropertyCardRemark.created_at)
+    ).all()
+    for remark, name in rows:
+        found.setdefault(remark.card_id, []).append(
+            CardRemarkOut(
+                id=remark.id,
+                kind=remark.kind,
+                message=remark.message,
+                comment=remark.comment,
+                created_by_name=name,
+                created_at=remark.created_at,
+            )
+        )
+    return found
+
+
 def _card_out(
     db: Session,
     item: PropertyCard,
@@ -928,6 +1011,7 @@ def _card_out(
     material: Material | None = None,
     targets: list[export.Renderer] | None = None,
     access: EditAccessOut | None = None,
+    remarks: list[CardRemarkOut] | None = None,
 ) -> PropertyCardOut:
     """카드 하나를 응답 모양으로.
 
@@ -979,6 +1063,9 @@ def _card_out(
         blocks=item.blocks,
         available_formats=formats,
         problem=problem,
+        remarks=remarks
+        if remarks is not None
+        else _remarks_of(db, [item.id]).get(item.id, []),
         point_count=item.point_count,
         note=item.note,
         owner_workspace_name=workspace.name if workspace else None,
@@ -1004,7 +1091,8 @@ def create_card(
     if payload.family and spec is None:
         raise NotFound("MNX-FITTING-0013", f"모르는 적합식입니다: {payload.family}")
 
-    group, strain, stress, notes = _representative(
+    basis = _basis(payload.basis)
+    represented = _representative(
         db,
         user,
         payload.material_id,
@@ -1012,7 +1100,21 @@ def create_card(
         payload.orientation,
         spec,
         payload.test_run_ids,
+        basis,
     )
+    group, strain, stress, notes = (
+        represented.group,
+        represented.x,
+        represented.y,
+        represented.notes,
+    )
+    if basis is not None and basis.bounded:
+        # **곡선에만 적용했다는 것을 카드가 말한다.** 이름만 「하한」 이면 탄성계수까지 하한인
+        # 줄 안다.
+        notes.append(
+            f"대표 곡선은 {represented.label} 입니다 — 곡선(소성 표·식)에만 적용했고, "
+            "탄성계수·푸아송비·밀도는 평균·물려받은 값 그대로입니다."
+        )
 
     fitted: dict[str, Any] = {}
     if spec is not None:
@@ -1281,6 +1383,20 @@ def create_card(
             # 값이 무엇에서 나왔는지에 더해 **무엇 위에서 계산됐는지**.
             "runtime": runtime.manifest(),
             **({"resample": resampled} if resampled else {}),
+            # **무엇으로 만든 대표 곡선인가**(2026-09-29). 안 주면 평균이라 안 적는다 — 전과
+            # 같은 카드는 전과 같은 근거를 든다.
+            **(
+                {
+                    "curve_basis": {
+                        "kind": basis.kind,
+                        "method": basis.method,
+                        "k": basis.k,
+                        "label": represented.label,
+                    }
+                }
+                if basis is not None
+                else {}
+            ),
         },
         blocks={
             **_temperature_aware("elastic", elastic, elastic_rows),
@@ -1770,6 +1886,7 @@ def _from_group(db: Session, user: User, group_id: uuid.UUID) -> _ViscoelasticSo
     specimens = [db.get(Specimen, run.specimen_id) for run in runs]
     if any(one is None for one in specimens):
         raise NotFound("MNX-FITTING-0011", "묶음의 시편을 따라갈 수 없습니다.")
+    _refuse_moved_members(db, row, runs, [one for one in specimens if one is not None])
     orientations = {one.orientation for one in specimens if one}
     if len(orientations) != 1:
         raise AppError(
@@ -1952,6 +2069,30 @@ class _Lineage:
     """방향을 가로지르는 묶음이면 **없다** — 이방성의 r̄ 가 그렇다."""
 
 
+def _refuse_moved_members(
+    db: Session, row: GroupResult, runs: list[TestRun], specimens: list[Specimen]
+) -> None:
+    """**묶은 뒤에 다른 재료로 옮겨진 시험이 있으면 멈춘다**(2026-09-29).
+
+    시편을 다른 두께의 재료로 옮겨도 묶음은 원 재료에 그때의 기록으로 남는다. 묶음은 재료에
+    붙고 카드는 그 재료로 가므로, 그대로 만들면 **두께가 다른 근거가 조용히 섞인 카드**가 원
+    재료에 선다. 옮긴 뒤의 시험으로 다시 묶게 한다.
+    """
+    moved = []
+    for run, specimen in zip(runs, specimens, strict=True):
+        sample = db.get(Sample, specimen.sample_id)
+        if sample is None or sample.material_id != row.material_id:
+            moved.append(run.record_name)
+    if moved:
+        shown = ", ".join(moved[:3]) + (" …" if len(moved) > 3 else "")
+        raise AppError(
+            "MNX-FITTING-0044",
+            f"묶은 뒤에 다른 재료로 옮겨진 시험이 {len(moved)}건 있습니다({shown}). "
+            "이 재료에 남은 시험으로 다시 묶으세요.",
+            status=422,
+        )
+
+
 def _lineage_of_group(
     db: Session, user: User, row: GroupResult, *, mixed_orientation: bool = False
 ) -> _Lineage:
@@ -1979,6 +2120,7 @@ def _lineage_of_group(
     if any(one is None for one in specimens):
         raise NotFound("MNX-FITTING-0011", "묶음의 시편을 따라갈 수 없습니다.")
     found = [one for one in specimens if one is not None]
+    _refuse_moved_members(db, row, runs, found)
     orientations = {one.orientation for one in found}
     if len(orientations) != 1 and not mixed_orientation:
         raise AppError(
@@ -2593,9 +2735,17 @@ def list_cards(
     ).all()
     targets = renderers.all_renderers(db)
     book = AccessBook(db, user).prime([card for card, _ in rows])
+    remarks = _remarks_of(db, [card.id for card, _ in rows])
     return Page(
         items=[
-            _card_out(db, card, material=material, targets=targets, access=book.of(card))
+            _card_out(
+                db,
+                card,
+                material=material,
+                targets=targets,
+                access=book.of(card),
+                remarks=remarks.get(card.id, []),
+            )
             for card, material in rows
         ],
         total=total,

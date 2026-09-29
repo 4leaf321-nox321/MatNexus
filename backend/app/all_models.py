@@ -33,6 +33,7 @@ from app.modules.fitting.models import (
     ExportFormatHold,
     ExportProfile,
     PropertyCard,
+    PropertyCardRemark,
 )
 from app.modules.formulas.models import Formula
 from app.modules.grouping.models import GroupResult
@@ -123,6 +124,7 @@ __all__ = [
     "ProcessingResultFormula",
     "PropertyAlias",
     "PropertyCard",
+    "PropertyCardRemark",
     "PropertyLink",
     "RefreshToken",
     "Sample",

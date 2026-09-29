@@ -93,6 +93,17 @@ def condition_bounds(
         )
     if units.canonical(unit) is None:
         raise AppError("MNX-CATALOG-0032", f"모르는 단위입니다: '{unit}'.", status=422)
+    # **차원이 다르면 답하지 않는다**(2026-09-29). 온도를 `mm` 로 물으면 환산은 무사히
+    # 끝나고 엉뚱한 범위가 걸린다 — 값 쪽(`bounds`)은 진작 막고 있었고 조건만 빠져 있었다.
+    if not units.same_dimension(
+        units.unit_of(unit).dimension, units.unit_of(standard.si_unit).dimension
+    ):
+        raise AppError(
+            "MNX-CATALOG-0032",
+            f"조건 {standard.label} 의 단위는 '{standard.si_unit}' 차원인데 '{unit}' 로 "
+            "물었습니다 — 차원이 다릅니다.",
+            status=422,
+        )
     if near is None and minimum is None and maximum is None:
         raise AppError(
             "MNX-CATALOG-0051",

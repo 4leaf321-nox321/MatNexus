@@ -812,3 +812,86 @@ describe('구간이 짧은 시편', () => {
     )
   })
 })
+
+describe('대표 곡선 — 평균만이 아니라 하한·상한으로도 (2026-09-29)', () => {
+  /** 「탄소성 카드」 로 모달을 연다 — 아직 맞춰 보지 않는다. */
+  async function openFit() {
+    panel()
+    await userEvent.click(await screen.findByRole('button', { name: /^탄소성 카드$/ }))
+    return screen.findByRole('group', { name: '대표 곡선' })
+  }
+
+  it('하한과 방법을 고르면 그 기준으로 맞춰 보고, 카드에도 싣는다', async () => {
+    preview.mockResolvedValue({
+      ...body([fit()]),
+      basis_label: '하한 — 평균 - 2σ',
+      reference_points: [
+        [0.001, 2.7e8],
+        [0.2, 4.6e8],
+      ],
+    })
+    create.mockResolvedValue({})
+    const kinds = await openFit()
+
+    await userEvent.click(within(kinds).getByRole('button', { name: '하한' }))
+    // **방법까지 골라야 선다** — 반쯤 고른 기준으로 맞춰 보게 두지 않는다.
+    const fitButton = screen.getByRole('button', { name: /경화식 맞춰 보기/ })
+    expect(fitButton).toBeDisabled()
+    const methods = screen.getByRole('group', { name: '하한을 내는 방법' })
+    await userEvent.click(within(methods).getByRole('button', { name: '평균 - 2σ' }))
+    expect(fitButton).toBeEnabled()
+
+    await userEvent.click(fitButton)
+    await waitFor(() => expect(preview).toHaveBeenCalled())
+    expect(preview.mock.calls.at(-1)?.[0]).toMatchObject({
+      basis: { kind: 'lower', method: 'sd', k: 2 },
+    })
+    // 무엇의 그림인지 머리에 적는다 — 그리고 평균이 어느 선인지 말한다.
+    expect(
+      await screen.findByText(/시편 3개의 대표 곡선\(하한 — 평균 - 2σ\)/)
+    ).toBeInTheDocument()
+    expect(screen.getByText(/회색 점선이 평균/)).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: /이 값으로 카드 생성/ }))
+    // 이름에 기준이 붙는다 — 「인장 MD」 두 장이 평균과 하한이면 목록에서 못 가른다.
+    expect(await screen.findByDisplayValue('인장 MD · 하한 -2σ')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: '초안으로 저장' }))
+    await waitFor(() => expect(create).toHaveBeenCalled())
+    expect(create.mock.calls[0][0]).toMatchObject({
+      basis: { kind: 'lower', method: 'sd', k: 2 },
+      label: '인장 MD · 하한 -2σ',
+    })
+  })
+
+  it('평균이면 기준을 안 싣는다 — 전과 같은 카드다', async () => {
+    preview.mockResolvedValue(body([fit()]))
+    panel()
+    await compare()
+    expect(preview.mock.calls.at(-1)?.[0]).toMatchObject({ basis: null })
+  })
+
+  it('시편이 1개면 하한·상한을 못 고른다 — 흩어짐을 모른다', async () => {
+    forMaterial.mockResolvedValue({
+      material_id: 'm1',
+      material_name: 'DP600',
+      groups: [
+        {
+          test_type_key: 'tensile',
+          test_type_label: '인장',
+          orientation: 'MD',
+          sample_count: 1,
+          test_run_ids: ['r-1'],
+          record_names: ['SECC__01__MD_01__TEN_01'],
+          scalars: [],
+          curve: null,
+          notes: [],
+          skipped_unadopted: 0,
+        },
+      ],
+    })
+    const kinds = await openFit()
+    expect(within(kinds).getByRole('button', { name: '하한' })).toBeDisabled()
+    expect(within(kinds).getByRole('button', { name: '상한' })).toBeDisabled()
+    expect(within(kinds).getByRole('button', { name: '평균' })).toBeEnabled()
+  })
+})

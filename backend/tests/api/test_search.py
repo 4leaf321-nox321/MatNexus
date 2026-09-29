@@ -257,3 +257,70 @@ class TestVisibility:
 
         body = client.get(SEARCH, params={"q": "SRCHGONE"}, headers=admin_headers).json()
         assert _kinds(body) == {"term"}, body
+
+
+class Test이름_곁의_칸:
+    """**이름 말고 곁의 칸으로도 찾는다** — 재료 별칭 · 시료 로트 · 시험 원본 파일명
+    (2026-09-29). 재료 목록은 별칭으로 찾는데 상단 검색만 못 찾으면 사람은 둘 중 하나가
+    고장 났다고 읽는다. 그리고 이름에 없는 말로 떴으면 **어디서 걸렸는지**를 단다."""
+
+    def test_별칭으로_찾고_어디서_걸렸는지_단다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        made = client.post(
+            "/api/materials",
+            json={
+                "family": "Metal",
+                "category": "Steel",
+                "grade": "SECCX",
+                "alias": "도어 이너 강판",
+            },
+            headers=admin_headers,
+        )
+        assert made.status_code == 201, made.text
+
+        body = client.get(SEARCH, params={"q": "도어 이너"}, headers=admin_headers).json()
+        assert [
+            (one["id"], one["matched"], one["via"]) for one in _hits(body, "material")
+        ] == [(made.json()["id"], "prefix", "별칭 도어 이너 강판")]
+
+    def test_이름으로_걸린_것이_곁의_칸으로_걸린_것보다_위다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        for body in (
+            {"family": "Metal", "category": "Steel", "grade": "PLAIN", "alias": "DOORX panel"},
+            {"family": "Metal", "category": "Steel", "grade": "DOORX"},
+        ):
+            made = client.post("/api/materials", json=body, headers=admin_headers)
+            assert made.status_code == 201, made.text
+
+        hits = _hits(
+            client.get(SEARCH, params={"q": "DOORX"}, headers=admin_headers).json(), "material"
+        )
+        assert [one["via"] for one in hits] == [None, "별칭 DOORX panel"]
+
+    def test_시료는_로트로_시험은_원본_파일명으로(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str]
+    ) -> None:
+        chain = _chain(client, db, admin_headers, grade="LOTX")
+        sample = client.post(
+            f"/api/materials/{chain['material']}/samples",
+            json={"lot_no": "LOT-7788"},
+            headers=admin_headers,
+        )
+        assert sample.status_code == 201, sample.text
+
+        lots = _hits(
+            client.get(SEARCH, params={"q": "LOT-7788"}, headers=admin_headers).json(),
+            "sample",
+        )
+        assert [(one["id"], one["via"]) for one in lots] == [
+            (sample.json()["id"], "로트 LOT-7788")
+        ]
+        files = _hits(
+            client.get(SEARCH, params={"q": "Example.tra"}, headers=admin_headers).json(),
+            "test_run",
+        )
+        assert [(one["id"], one["via"]) for one in files] == [
+            (chain["test_run"], "원본 파일명 Example.tra")
+        ]

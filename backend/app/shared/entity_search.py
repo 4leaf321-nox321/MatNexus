@@ -82,6 +82,10 @@ class Hit:
     parent_id: str | None = None
     """제 화면이 없는 종류를 데려갈 곳(재료·시험)."""
 
+    via: str | None = None
+    """**이름이 아닌 칸으로 걸렸으면** 그 칸과 값 — 「별칭 도어 이너 강판」(2026-09-29).
+    이름에 없는 말로 떴는데 이유가 없으면 엉뚱한 결과로 읽힌다."""
+
 
 @dataclass
 class Group:
@@ -208,10 +212,28 @@ def search_kind(
     where = _condition(name, needle, mode)
     if where is None:
         return [], False
+    # **이름 곁의 칸도 본다**(`EntityKind.also_columns`) — 별칭·로트·규격·원본 파일명.
+    # 이름에 걸린 것이 곁의 칸에만 걸린 것보다 위다(곁의 칸 점수는 0.9 배).
+    also = [
+        (label, cast(func.coalesce(table.c[column], ""), String))
+        for column, label in kind.also_columns
+    ]
+    by_also = [
+        condition
+        for _, column in also
+        if (condition := _condition(column, needle, mode)) is not None
+    ]
+    score: ColumnElement[float] = func.greatest(
+        _scored(name, needle), *(_scored(column, needle) * 0.9 for _, column in also)
+    )
 
     query: Select[Any] = select(
-        table.c[kind.id_column], name.label("name"), _scored(name, needle).label("score")
-    ).where(where)
+        table.c[kind.id_column],
+        name.label("name"),
+        score.label("score"),
+        where.label("by_name"),
+        *(column.label(f"also_{at}") for at, (_, column) in enumerate(also)),
+    ).where(or_(where, *by_also))
     if kind.soft_delete:
         query = query.where(table.c["deleted_at"].is_(None))
     guard = graph.visible_ids(db, user, kind)
@@ -219,19 +241,10 @@ def search_kind(
         query = query.where(table.c[kind.id_column].in_(guard))
 
     # **하나 더 받아 「잘렸다」 를 안다.** 조용히 자르면 사람은 그것이 전부인 줄 안다.
-    rows = db.execute(
-        query.order_by(_scored(name, needle).desc(), func.length(name)).limit(limit + 1)
-    ).all()
+    rows = db.execute(query.order_by(score.desc(), func.length(name)).limit(limit + 1)).all()
 
     found = [
-        Hit(
-            kind=kind.slug,
-            id=str(row[0]),
-            name=row[1] or "",
-            score=float(row[2] or 0.0),
-            matched=_matched(row[1] or "", needle),
-        )
-        for row in rows[:limit]
+        _hit(kind.slug, row, needle, [label for label, _ in also]) for row in rows[:limit]
     ]
     owners = _parents(db, kind.slug, [_coerce(one.id) for one in found])
     if owners:
@@ -244,10 +257,47 @@ def search_kind(
                 matched=one.matched,
                 parent_kind=owners.get(one.id, (None, None))[0],
                 parent_id=owners.get(one.id, (None, None))[1],
+                via=one.via,
             )
             for one in found
         ]
     return found, len(rows) > limit
+
+
+def _hit(slug: str, row: Any, needle: str, also: list[str]) -> Hit:
+    """한 줄 → 결과. 이름으로 안 걸렸으면 **어느 칸으로 걸렸는지**(`via`)를 단다."""
+    name = row[1] or ""
+    if row[3] or not also:
+        return Hit(
+            kind=slug,
+            id=str(row[0]),
+            name=name,
+            score=float(row[2] or 0.0),
+            matched=_matched(name, needle),
+        )
+    # 곁의 칸 가운데 **값이 가장 잘 맞는 것**을 이유로 단다 — 일치 · 앞 · 포함 · 비슷
+    # 순서로 가장 가까운 것.
+    order = {"exact": 0, "prefix": 1, "contains": 2, "similar": 3}
+    candidates = [
+        (label, str(row[4 + at] or "")) for at, label in enumerate(also) if row[4 + at]
+    ]
+    if not candidates:
+        return Hit(
+            kind=slug,
+            id=str(row[0]),
+            name=name,
+            score=float(row[2] or 0.0),
+            matched=_matched(name, needle),
+        )
+    label, value = min(candidates, key=lambda one: order[_matched(one[1], needle)])
+    return Hit(
+        kind=slug,
+        id=str(row[0]),
+        name=name,
+        score=float(row[2] or 0.0),
+        matched=_matched(value, needle),
+        via=f"{label} {value}",
+    )
 
 
 def _coerce(value: str) -> Any:
@@ -348,6 +398,7 @@ def _fuse_meaning(
                     matched="both",
                     parent_kind=hit.parent_kind,
                     parent_id=hit.parent_id,
+                    via=hit.via,
                 )
                 break
         else:

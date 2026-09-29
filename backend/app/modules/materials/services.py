@@ -16,10 +16,12 @@ from datetime import datetime
 from typing import Any
 
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.modules.accounts.models import User
 from app.modules.materials.models import USE_AXES, Material, MaterialUse, Sample, Specimen
+from app.modules.materials.schemas import MaterialCreateRequest
 from app.modules.tests.models import TestRun, TestType
 from app.modules.vocabulary import services as vocabulary_services
 from app.modules.workspaces.models import Workspace
@@ -787,3 +789,88 @@ def rename_materials_of_grade(db: Session, term_id: uuid.UUID) -> None:
 
 
 vocabulary_hooks.on_rename("grade", rename_materials_of_grade)
+
+
+def record_name_for(payload: MaterialCreateRequest) -> str:
+    """이 값들이 만들 재료 이름. **이름을 만드는 곳은 서버 하나다**(ADR 0004)."""
+    return material_record_name(
+        grade=payload.grade,
+        details=payload.details,
+        spec_thickness_m=to_si(
+            payload.spec_thickness,
+            payload.spec_thickness_unit,
+            field="두께",
+            dimension="length",
+        ),
+    )
+
+
+def make_material(
+    db: Session, user: User, payload: MaterialCreateRequest, *, workspace: Workspace
+) -> Material:
+    """재료 하나를 만들어 세션에 넣는다 — **커밋은 부르는 쪽이 한다.**
+
+    하나씩 등록하는 길과 한꺼번에 넣는 길이 같은 코드를 지나게 하려고 뺐다.
+    두 벌로 두면 한쪽에만 기준정보 연결이 붙거나, 한쪽만 단위를 기록하는 일이
+    생긴다 — 그때 나는 차이는 몇 달 뒤 목록에서야 보인다.
+    """
+    record_name = record_name_for(payload)
+    ensure_name_free(db, owner_workspace_id=workspace.id, record_name=record_name)
+
+    material = Material(
+        owner_workspace_id=workspace.id,
+        record_name=record_name,
+        alias=payload.alias,
+        details=payload.details,
+        spec_thickness_m=to_si(
+            payload.spec_thickness,
+            payload.spec_thickness_unit,
+            field="두께",
+            dimension="length",
+        ),
+        density_si=density_to_si(payload.density, payload.density_unit),
+        poisson_ratio=payload.poisson_ratio,
+        input_units={
+            "spec_thickness": payload.spec_thickness_unit,
+            "density": payload.density_unit,
+        },
+        note=payload.note,
+        legacy_id=payload.legacy_id,
+        registered_by_id=user.id,
+    )
+    # Grade 는 기준정보를 거친다(ADR 0010). `SECC`/`secc` 가 서로 다른 재료를 만드는
+    # 것을 막는다 — 이 축의 이득이 가장 크다.
+    vocabulary_services.apply_bindings(
+        db,
+        material,
+        vocabulary_services.MATERIAL_BINDINGS,
+        payload.model_dump(),
+        created_by_id=user.id,
+    )
+    db.add(material)
+    try:
+        db.flush()
+    except IntegrityError as exc:
+        # **`ensure_name_free` 를 지나왔어도 부딪힌다.** 검사와 넣기 사이에 남이
+        # 같은 이름을 넣을 수 있다 — 그때 500 을 내면 사람은 자기가 뭘 잘못했는지
+        # 알 수 없다. 이름은 사람이 정한 값이라 말없이 바꾸지 않는다.
+        db.rollback()
+        raise Conflict(
+            "MNX-MATERIALS-0004",
+            f"같은 이름의 재료가 이미 있습니다: {material.record_name}",
+        ) from exc
+    # 용도는 재료의 칸이 아니라 매달린 줄이라, 재료가 id 를 받은 뒤에 붙는다.
+    set_uses(db, material, "product", payload.applied_products, created_by_id=user.id)
+    set_uses(db, material, "part", payload.applied_parts, created_by_id=user.id)
+    # **AI 가 만들었으면 남긴다**(화면에서 만든 것은 안 남는다 — `record_by_client`). 등록자
+    # 칸은 토큰 주인이라, 사람이 만든 재료와 구별할 길이 이것뿐이다(카드와 같은 까닭).
+    audit.record_by_client(
+        db,
+        action=audit.MATERIAL_CREATED_BY_CLIENT,
+        actor=user,
+        target_table="materials",
+        target_id=material.id,
+        target_label=material.record_name,
+        workspace_id=material.owner_workspace_id,
+    )
+    return material

@@ -83,6 +83,7 @@ def search(
                         matched=hit.matched,
                         parent_kind=hit.parent_kind,
                         parent_id=hit.parent_id,
+                        via=hit.via,
                     )
                     for hit in one.hits
                 ],

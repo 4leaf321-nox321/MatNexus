@@ -34,6 +34,10 @@ from app.shared.request_context import get_client, get_request_id, get_scratch
 #: 안 넣는 편이 낫다.
 CARD_PUBLISHED = "card.published"
 CARD_DEPRECATED = "card.deprecated"
+#: 카드에 코멘트가 붙었다 — 근거 시험이 다른 두께의 재료로 옮겨졌을 때(2026-09-29).
+CARD_REMARKED = "card.remarked"
+#: 시편을 다른 두께의 같은 재료로 옮겼다(2026-09-29) — 무엇이 어디서 어디로.
+SPECIMENS_RELOCATED = "specimens.relocated"
 CARD_RESTORED = "card.restored"
 WORKSPACE_MERGED = "workspace.merged"
 CARD_DELETED = "card.deleted"

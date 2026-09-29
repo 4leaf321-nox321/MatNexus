@@ -381,7 +381,13 @@ def short_members(group: Group, *, x: str, y: str) -> list[ShortMember]:
 
 
 def curve_table(
-    db: Session, group: Group, *, x: str, y: str, align: bool = False
+    db: Session,
+    group: Group,
+    *,
+    x: str,
+    y: str,
+    align: bool = False,
+    basis: statistics.CurveBasis | None = None,
 ) -> tuple[dict[str, Any] | None, list[str]]:
     """점별 곡선 통계. 격자가 다르면 계산하지 않고 이유를 돌려준다.
 
@@ -390,7 +396,16 @@ def curve_table(
     자리라 맞추는 대신 이유를 말한다(ADR 0008). 카드를 만드는 쪽(적합)이 켠다: 시편
     열 개의 재샘플 끝을 하나씩 고쳐 다시 돌리는 것은 일이 되고, 맞췄다는 문장이 카드
     근거에 남으면 조용히 섞이는 것이 아니다(2026-09-18 요청).
+
+    `basis` 를 주면 **그 기준으로 고른 곡선**(`picked`)과 그 이름(`picked_label`)을 함께
+    싣는다 — 평균 · 중앙값 · 상한 · 하한(`statistics.pick_curve`, 2026-09-29). 안 주면 싣지
+    않는다(통계 화면은 평균·중앙값을 따로 받는다).
     """
+    if basis is not None:
+        try:
+            statistics.check_basis(basis)
+        except statistics.StatisticsError as exc:
+            return None, [str(exc)]
     if len(group.members) == 1:
         # **1건이면 그 곡선이 곧 대표다.**
         #
@@ -417,6 +432,19 @@ def curve_table(
             (0.0 if px is None else float(px), 0.0 if py is None else float(py))
             for px, py in zip(raw[x], raw[y], strict=True)
         ]
+        picked: dict[str, Any] = {}
+        if basis is not None:
+            # **1건이면 상·하한은 없다** — 흩어짐을 모른다. 평균·중앙값은 그 곡선 자체다.
+            if basis.bounded:
+                return None, [
+                    f"시편이 1개('{member.run.record_name}')라 "
+                    f"{'하한' if basis.kind == 'lower' else '상한'}을 낼 수 없습니다 — "
+                    "흩어짐을 모릅니다. 시편을 더 채택하거나 평균(그 시편의 곡선)을 쓰세요."
+                ]
+            picked = {
+                "picked": points,
+                "picked_label": "평균" if basis.kind == "mean" else "중앙값",
+            }
         return (
             {
                 "x": x,
@@ -429,6 +457,7 @@ def curve_table(
                 "median": points,
                 "sd": [],
                 "count": [(px, 1.0) for px, _ in points],
+                **picked,
             },
             [
                 f"시편 1개('{member.run.record_name}')의 곡선입니다 — "
@@ -465,6 +494,20 @@ def curve_table(
             note += f" 가장 짧은 곡선은 '{shortest}' 입니다."
         return None, [note]
 
+    chosen: dict[str, Any] = {}
+    chosen_notes: list[str] = []
+    if basis is not None:
+        try:
+            choice = statistics.pick_curve(grids[0], values, basis)
+        except statistics.StatisticsError as exc:
+            return None, [*aligned_notes, str(exc)]
+        label = choice.label
+        if choice.specimen_index is not None:
+            # **어느 시편인지 이름으로.** 자리 번호만 남기면 반년 뒤 아무도 되짚지 못한다.
+            label = f"{label}({group.members[choice.specimen_index].run.record_name})"
+        chosen = {"picked": choice.points, "picked_label": label}
+        chosen_notes = list(choice.notes)
+
     return (
         {
             "x": x,
@@ -474,8 +517,9 @@ def curve_table(
             "median": stats.median_curve,
             "sd": [(point.x, point.y.sample_sd) for point in stats.points],
             "count": [(point.x, float(point.y.count)) for point in stats.points],
+            **chosen,
         },
-        [*aligned_notes, *stats.notes],
+        [*aligned_notes, *stats.notes, *chosen_notes],
     )
 
 

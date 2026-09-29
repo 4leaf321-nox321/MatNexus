@@ -70,7 +70,8 @@ const FIELDS: { key: keyof SampleForm; label: string; type?: string; placeholder
   { key: 'alias', label: '별칭' },
   // 제조사·유통사·주 벤더·판매유형은 여기 없다 — 기준정보 피커로 따로 그린다.
   { key: 'production_date', label: '생산일', type: 'date' },
-  { key: 'density', label: `밀도 (${DENSITY_SYMBOL}, 이 로트 실측)`, placeholder: '7.85e-9' },
+  // placeholder 는 **재료에 적힌 밀도**를 보인다(부르는 쪽이 넘긴다) — 없으면 예시.
+  { key: 'density', label: `밀도 (${DENSITY_SYMBOL}, 이 로트 실측)`, placeholder: '예: 7.85e-9' },
 ]
 
 //: 기준정보를 거치는 칸. **유통사와 주 벤더가 같은 축을 본다** — 같은 회사가 로트에
@@ -86,9 +87,14 @@ interface Props {
   idPrefix: string
   form: SampleForm
   onChange: (key: keyof SampleForm, value: string) => void
+  /**
+   * 재료에 적힌 밀도(표시 단위 문자열). 밀도 칸의 placeholder 로 보인다 — 로트 실측이
+   * 재료값과 얼마나 다른지 적는 사람이 바로 견준다(2026-09-29). 없으면 예시가 선다.
+   */
+  materialDensity?: string
 }
 
-export function SampleFields({ idPrefix, form, onChange }: Props) {
+export function SampleFields({ idPrefix, form, onChange, materialDensity }: Props) {
   return (
     <>
       {/* **제조사만 기준정보 피커다.**
@@ -115,7 +121,9 @@ export function SampleFields({ idPrefix, form, onChange }: Props) {
               id={`${idPrefix}-${key}`}
               type={type}
               inputMode={key === 'density' ? 'decimal' : undefined}
-              placeholder={placeholder}
+              placeholder={
+                key === 'density' && materialDensity ? `재료 밀도 ${materialDensity}` : placeholder
+              }
               value={form[key]}
               onChange={(event) => onChange(key, event.target.value)}
             />

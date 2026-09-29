@@ -6,7 +6,7 @@
  * 다음에 뽑는 덱이 달라지는데, 파일은 사람 컴퓨터에 있고 서버에는 흔적이 없다.
  */
 
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -237,9 +237,14 @@ describe('기본 제공 형식', () => {
   it('내려진 형식은 사연과 함께 서고 시스템 관리자가 다시 쓸 수 있다', async () => {
     // 내보내기 메뉴에서는 사라진다 — 「어제 있던 형식이 왜 없나」 를 여기서 본다.
     show()
-    expect(await screen.findByText('사용 중단')).toBeInTheDocument()
-    expect(screen.getByText(/표가 한 칸 밀렸다/)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '다시 쓰기' })).toBeInTheDocument()
+    // **사연(데이터)을 기다린다.** 「사용 중단」 은 머리 설명글에도 있어서 데이터보다 먼저
+    // 선다 — 전에는 그것을 기다린 뒤 사연을 곧바로 찾아서, 부하가 걸린 실행에서 아직 안
+    // 그려진 표를 봤다(2026-09-29, 여러 파일을 함께 돌릴 때만 떨어졌다).
+    const reason = await screen.findByText(/표가 한 칸 밀렸다/)
+    // 표시와 「다시 쓰기」 는 **그 형식의 줄에** 선다.
+    const row = reason.closest('tr') as HTMLElement
+    expect(within(row).getByText('사용 중단')).toBeInTheDocument()
+    expect(within(row).getByRole('button', { name: '다시 쓰기' })).toBeInTheDocument()
     // 내려지지 않은 것에는 「사용 중단」 단추가 선다.
     expect(screen.getAllByRole('button', { name: '사용 중단' })).toHaveLength(1)
   })

@@ -313,6 +313,13 @@ def _card_summary(card: dict[str, Any]) -> dict[str, Any]:
     synthetic = source.get("synthetic_plastic")
     if synthetic:
         caveats.append(f"합성 소성 표 — 실측이 아니다({synthetic.get('model')})")
+    # **카드에 붙은 코멘트**(2026-09-29) — 근거 시험이 다른 두께의 재료로 옮겨지면 카드는
+    # 그대로 두고 코멘트가 붙는다. 확정 카드여도 값이 그 시험을 포함해 계산된 것이다.
+    remarks = card.get("remarks") or []
+    if any(one.get("kind") == "relocated" for one in remarks):
+        caveats.append("근거 시험 일부가 다른 두께의 재료로 옮겨졌다 — 값은 그 시험을 포함해 계산됐다")
+    elif remarks:
+        caveats.append(f"코멘트 {len(remarks)}건 — get_card 의 remarks 를 함께 전하라")
     return {
         "id": card.get("id"),
         "label": card.get("label"),
@@ -1918,6 +1925,17 @@ async def get_card(ctx: Context, card_id: str) -> dict[str, Any]:
         "test_run_ids": (card.get("source") or {}).get("test_run_ids"),
         "notes": (card.get("source") or {}).get("notes"),
     }
+    remarks = card.get("remarks") or []
+    if remarks:
+        out["remarks"] = [
+            {
+                "message": one.get("message"),
+                "comment": one.get("comment"),
+                "by": one.get("created_by_name"),
+                "at": one.get("created_at"),
+            }
+            for one in remarks
+        ]
     return out
 
 # ── 덱 (3단계) ────────────────────────────────────────────────────────────────

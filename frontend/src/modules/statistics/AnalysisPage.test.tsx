@@ -6,7 +6,7 @@
  * 조용히 틀린 수를 읽게 만든다.
  */
 
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -189,6 +189,38 @@ describe('분포', () => {
     mount('distribution')
     await screen.findByText('Metal')
     expect(screen.queryByRole('button', { name: '사업부' })).not.toBeInTheDocument()
+  })
+
+  it('값 축을 로그로 바꾸면 상자 자리가 로그로 잡히고, 0 이하 값이 있는 열은 선형이라고 적는다', async () => {
+    // 1e8 · 1e9 · 1e10 이 로그 눈금에서는 같은 간격이다 — 중앙(1e9)이 한가운데(50%)에 선다.
+    const DECADE = { ...SPREAD, minimum: 1e8, q1: 3e8, median: 1e9, q3: 3e9, maximum: 1e10, outliers: [] }
+    const SIGNED = { ...SPREAD, minimum: -5, q1: 0, median: 1, q3: 2, maximum: 4, outliers: [] }
+    distribution.mockResolvedValue({
+      group_by: 'family',
+      selected: [
+        { key: 'tensile_strength', label: '인장강도', si_unit: 'Pa', count: 5 },
+        { key: 'strain_shift', label: '보정량', si_unit: '1', count: 5 },
+      ],
+      groups: [{ group: 'Metal', cells: { tensile_strength: DECADE, strain_shift: SIGNED } }],
+      scalars: [
+        { key: 'tensile_strength', label: '인장강도', si_unit: 'Pa', count: 5 },
+        { key: 'strain_shift', label: '보정량', si_unit: '1', count: 5 },
+      ],
+      skipped_unadopted: 0,
+    })
+    mount('distribution')
+    await screen.findByText('Metal')
+    const medianAt = () => {
+      const svg = screen.getAllByRole('img', { name: '흩어짐' })[0]
+      // 세 번째 요소가 중앙값 선이다(수염 → 상자 → 중앙).
+      return Number(svg.querySelectorAll('line')[1].getAttribute('x1'))
+    }
+    expect(medianAt()).toBeCloseTo(((1e9 - 1e8) / (1e10 - 1e8)) * 100, 3)
+    await userEvent.click(
+      within(screen.getByRole('group', { name: '값 축 눈금' })).getByRole('button', { name: '로그' })
+    )
+    expect(medianAt()).toBeCloseTo(50, 3)
+    expect(screen.getByText('0 이하 값이 있어 선형')).toBeInTheDocument()
   })
 })
 

@@ -37,11 +37,14 @@ import { DeclaredCardDialog } from '@/modules/fitting/DeclaredCardDialog'
 import { GroupsPanel } from '@/modules/materials/GroupsPanel'
 import { groupsApi } from '@/modules/materials/api.groups'
 import { InheritedFields, densityToSi } from '@/modules/fitting/InheritedFields'
-import { DeckReadinessTable } from '@/modules/fitting/DeckReadinessTable'
+import { DeckReadinessCheck } from '@/modules/fitting/DeckReadinessTable'
 import { ExportMenu } from '@/modules/fitting/ExportMenu'
 import { STATUS_LABELS, fittingApi } from '@/modules/fitting/api'
 import { RunPicker } from '@/modules/fitting/RunPicker'
 import type { RunChoice } from '@/modules/fitting/RunPicker'
+import { CurveBasisPicker } from '@/modules/fitting/CurveBasisPicker'
+import { basisReady, basisRequest, basisSuffix } from '@/modules/fitting/curveBasis'
+import type { CurveBasis } from '@/modules/fitting/curveBasis'
 import type {
   Fit,
   FitPreview,
@@ -68,6 +71,7 @@ import {
 import { Input } from '@/shared/components/ui/input'
 import { Label } from '@/shared/components/ui/label'
 import { BlockChips, CardBlocks } from '@/modules/fitting/CardBlocks'
+import { RemarkBadge } from '@/modules/fitting/CardRemarks'
 import { cardKind, kindLabel } from '@/modules/fitting/cardKind'
 import { LveCardDialog } from '@/modules/fitting/LveCardDialog'
 import { hasLve } from '@/modules/fitting/lve'
@@ -193,6 +197,11 @@ export function FittingPanel({ materialId }: Props) {
    * 사실이 카드 근거에도 그대로 남는다.
    */
   const [usedRuns, setUsedRuns] = useState<string[] | null>(null)
+  /**
+   * 대표 곡선을 무엇으로 — 평균 · 중앙값 · 하한 · 상한(2026-09-29). 전에는 늘 평균이었다.
+   * 통계 화면이 「어느 것을 쓸지는 피팅할 때 고르면 된다」 고 적어 두고도 고를 자리가 없었다.
+   */
+  const [basis, setBasis] = useState<CurveBasis>({ kind: 'mean' })
   // **눈으로 보고 정하는 값들이다.** 저장 모달에 있었더니 숫자를 타이핑하고
   // 저장 버튼을 누른 뒤에야 결과를 봤다 — 194 MPa 가 갈리는 결정을 눈 감고
   // 내리는 셈이었다. 여기로 올려 그래프와 함께 움직이게 한다.
@@ -300,6 +309,8 @@ export function FittingPanel({ materialId }: Props) {
         // **저장하고 나서야 알면 늦다.** 뺀 것과 안 뺀 것의 적합이 어떻게
         // 다른지 눈으로 보고 정해야 한다.
         test_run_ids: usedRuns,
+        // 평균이면 안 싣는다 — 서버 기본이 평균이다.
+        basis: basisRequest(basis),
         extrapolate_to: extrapolate === '' ? null : Number(extrapolate),
         // 셋을 함께 줘야 혼합 곡선이 후보에 하나 더 붙는다.
         blend_primary: blendWith && chosen ? chosen : null,
@@ -336,11 +347,12 @@ export function FittingPanel({ materialId }: Props) {
   // **조정하면 다시 그린다.** 계산은 서버가 한다 — 화면이 식을 복제하면 두
   // 곳이 갈리고, 그때 그래프가 카드와 다른 곡선을 보여 준다.
   useEffect(() => {
-    if (!group || !preview) return
+    // 상·하한은 방법까지 골라야 선다 — 고르는 중에는 옛 그림을 둔다(머리에 무엇의 그림인지 적혀 있다).
+    if (!group || !preview || !basisReady(basis)) return
     const timer = setTimeout(() => void run(group, true), 350)
     return () => clearTimeout(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [extrapolate, blendWith, blendWeight, chosen, usedRuns])
+  }, [extrapolate, blendWith, blendWeight, chosen, usedRuns, basis])
 
   /**
    * 고른 묶음의 시험들. **이상치 후보에 표를 달아 둔다** — 통계 화면과 같은
@@ -465,6 +477,9 @@ export function FittingPanel({ materialId }: Props) {
           <Info className="size-4" />
           정보
         </Button>
+        {/* 「이 재료로 어느 솔버 형식이 나오나」 — 전에는 탭 아래에 표가 늘 펼쳐져 있었다.
+            형식이 50개가 넘자 누를 것 없는 긴 표가 됐다 — 점검용이라 모달로 연다(2026-09-29). */}
+        <DeckReadinessCheck materialId={materialId} className="ml-auto" />
       </div>
       <Dialog open={showingKinds} onOpenChange={(next) => !next && setShowingKinds(false)}>
         <DialogContent className="sm:max-w-3xl">
@@ -555,7 +570,7 @@ export function FittingPanel({ materialId }: Props) {
             <DialogHeader>
               <DialogTitle>{fitKind} 카드 생성</DialogTitle>
               <DialogDescription>
-                채택된 곡선을 평균 낸 대표 곡선에 {fitFamilyWord} 여럿을 맞춰 나란히 놓고, 하나를
+                채택된 곡선으로 만든 대표 곡선(평균·중앙값·하한·상한)에 {fitFamilyWord} 여럿을 맞춰 나란히 놓고, 하나를
                 골라 식 계수{fitBlock === 'hardening' && '와 소성 표'}를 카드로 만듭니다. 「생성」
                 전까지는 아무것도 저장되지 않습니다.
               </DialogDescription>
@@ -605,15 +620,28 @@ export function FittingPanel({ materialId }: Props) {
               </div>
             )}
 
+            {/* **대표 곡선을 무엇으로**(2026-09-29). 평균만 있던 자리에 중앙값·하한·상한을 둔다 —
+                강도 평가는 하한, 충돌 에너지·성형 하중은 상한 곡선으로 한 번 더 돌린다. */}
+            {fittableGroups.length > 0 && (
+              <div className="mt-3">
+                <Step n={3} label="대표 곡선" className="mb-1" />
+                <CurveBasisPicker
+                  value={basis}
+                  onChange={setBasis}
+                  samples={usedRuns?.length ?? group?.sample_count ?? 0}
+                />
+              </div>
+            )}
+
             {fittableGroups.length > 0 && (
               <div className="mt-3 mb-4">
                 <div className="mb-1 flex flex-wrap items-center gap-2">
-                  <Step n={3} label="어느 식에 맞출까" />
+                  <Step n={4} label="어느 식에 맞출까" />
                   <Button
                     size="sm"
                     variant="secondary"
                     className="ml-auto"
-                    disabled={!group || busy}
+                    disabled={!group || busy || !basisReady(basis)}
                     onClick={() => group && run(group)}
                   >
                     {/* '적합해 보기' 는 "적합해 보인다"(suitable) 로 읽힌다. '견주기'
@@ -677,9 +705,6 @@ export function FittingPanel({ materialId }: Props) {
           }}
         />
       )}
-      {/* 카드 목록 아래 — 「이 재료로 어느 솔버 형식이 나오나」. 카드를 하나씩 열어 내보내기
-          메뉴를 보지 않아도 형식마다 한 줄로 답한다(2026-09-16). */}
-      <DeckReadinessTable materialId={materialId} />
 
       <DeclaredCardDialog
         materialId={materialId}
@@ -701,6 +726,8 @@ export function FittingPanel({ materialId }: Props) {
           family={chosen}
           block={fitBlock ?? 'hardening'}
           testRunIds={usedRuns}
+          basis={basisRequest(basis)}
+          basisLabel={preview?.basis_label ?? '평균'}
           elastic={preview?.elastic ?? []}
           onClose={() => setSaving(false)}
           onSaved={() => {
@@ -779,6 +806,28 @@ function FitComparison({
     label: member.record_name,
     points: shown(member.points as [number, number][]),
   }))
+  // **평균이 아니면 평균을 곁에 깐다** — 얼마나 물러섰는지(또는 올라섰는지) 견줘 보라고.
+  const basisLabel = preview.basis_label ?? '평균'
+  const reference = (preview.reference_points ?? []) as [number, number][]
+  // 원곡선들과 섞여 보이지 않게 **회색 점선**으로 — 같은 파랑이면 어느 것이 평균인지 모른다.
+  const background =
+    reference.length > 0
+      ? [
+          ...raw,
+          {
+            label: '평균(참고)',
+            points: shown(reference),
+            tone: 'stroke-zinc-500 dark:stroke-zinc-300',
+            dashed: true,
+          },
+        ]
+      : raw
+  const sourceLabel =
+    preview.sample_count === 1
+      ? '시편 1개의 곡선'
+      : basisLabel === '평균'
+        ? '대표 곡선'
+        : `대표 곡선 · ${basisLabel}`
 
   return (
     <div className="mb-6 rounded-md border">
@@ -795,7 +844,7 @@ function FitComparison({
           {/* 1개짜리를 '대표 곡선' 이라 쓰면 여러 시편의 평균으로 읽힌다. */}
           {preview.sample_count === 1
             ? `시편 1개의 곡선 ${preview.source_points.length}점`
-            : `시편 ${preview.sample_count}개의 대표 곡선 ${preview.source_points.length}점`}
+            : `시편 ${preview.sample_count}개의 대표 곡선(${basisLabel}) ${preview.source_points.length}점`}
         </span>
         <Button size="sm" className="ml-auto" onClick={onSave}>
           <Plus className="size-3.5" />
@@ -849,6 +898,13 @@ function FitComparison({
           </div>
 
         </div>
+
+        {reference.length > 0 && (
+          <p className="text-muted-foreground text-xs">
+            아래 그림의 <b>회색 점선이 평균</b>입니다 — 고른 대표 곡선({basisLabel})이 평균에서
+            얼마나 물러섰는지 견줘 보세요.
+          </p>
+        )}
 
         {preview.notes.length > 0 && (
           <ul className="text-muted-foreground space-y-1 text-xs">
@@ -916,8 +972,8 @@ function FitComparison({
           <>
             <CurveChart
               points={shown(preview.source_points as [number, number][])}
-              background={raw}
-              pointsLabel={preview.sample_count === 1 ? '시편 1개의 곡선' : '대표 곡선'}
+              background={background}
+              pointsLabel={sourceLabel}
               xLabel={xLabel}
               yLabel={yLabel}
               height={300}
@@ -934,14 +990,14 @@ function FitComparison({
           <>
             <CurveChart
               points={shown(preview.source_points as [number, number][])}
-              background={raw}
+              background={background}
               // **저장될 곡선을 그린다.** 상대를 골랐으면 카드에 실리는 것은 혼합이다 —
               // 주식만 그려 두면 사람은 본 것과 다른 카드를 받는다.
               overlay={{
                 points: shown((blended ?? fit).curve as [number, number][]),
                 label: `${(blended ?? fit).label} 적합`,
               }}
-              pointsLabel={preview.sample_count === 1 ? '시편 1개의 곡선' : '대표 곡선'}
+              pointsLabel={sourceLabel}
               xLabel={xLabel}
               yLabel={yLabel}
               height={300}
@@ -1368,8 +1424,9 @@ function CardList({
               <CardBlocks specs={specs} card={card} />
             </div>
           ) : (
-            <div className="mt-1 pl-8">
+            <div className="mt-1 flex flex-wrap items-center gap-1 pl-8">
               <BlockChips specs={specs} card={card} />
+              <RemarkBadge card={card} />
             </div>
           )}
         </div>
@@ -1411,6 +1468,8 @@ function SaveDialog({
   group,
   family,
   testRunIds,
+  basis,
+  basisLabel,
   block,
   elastic,
   onClose,
@@ -1430,6 +1489,10 @@ function SaveDialog({
   materialId: string
   /** 이 카드에 쓸 시험. **`null` 이면 채택된 전부.** */
   testRunIds: string[] | null
+  /** 대표 곡선의 기준. `null` 이면 평균 — 요청에 안 싣는다. */
+  basis: CurveBasis | null
+  /** 미리보기가 준 기준의 이름 — 「하한 — 평균 - 2σ」. */
+  basisLabel: string
   group: GroupKey
   family: string | null
   /** 어느 블록의 카드인가 — 소성 표를 다시 고르는 것은 탄소성(hardening)에만 뜻이 있다. */
@@ -1462,8 +1525,12 @@ function SaveDialog({
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
-    if (open) setLabel(`${group.test_type_label} ${group.orientation}`)
-  }, [open, group])
+    // **이름에 기준을 붙여 둔다** — 「인장 MD」 두 장이 평균과 하한이면 목록에서 못 가른다.
+    if (open)
+      setLabel(
+        `${group.test_type_label} ${group.orientation}${basisSuffix(basis ?? { kind: 'mean' })}`
+      )
+  }, [open, group, basis])
 
   async function submit() {
     setBusy(true)
@@ -1477,6 +1544,8 @@ function SaveDialog({
         family,
         // 비우면 채택된 전부. 뺀 것이 있으면 그 사실이 카드 근거에 남는다.
         test_run_ids: testRunIds,
+        // 평균이면 안 싣는다 — 전과 같은 카드는 전과 같은 근거를 든다.
+        basis,
         // **빈칸은 보내지 않는다.** 0.3 으로 채우면 그것이 측정값인지 기본값인지
         // 나중에 알 수 없다.
         poisson_ratio: poisson === '' ? null : Number(poisson),
@@ -1516,6 +1585,12 @@ function SaveDialog({
               value={label}
               onChange={(event) => setLabel(event.target.value)}
             />
+            {/* **무엇으로 만든 곡선인지 저장 전에 한 번 더.** 비교 화면에서 고른 것이지만,
+                이름만 보고 누르면 하한 카드를 평균인 줄 알고 만든다. */}
+            <p className="text-muted-foreground text-xs">
+              대표 곡선: <b className="text-foreground">{basisLabel}</b>
+              {basis && basis.kind !== 'median' && ' — 곡선에만 적용, 탄성계수·밀도는 그대로'}
+            </p>
           </div>
 
           {/* **빈칸이 곧 '물려받는다' 는 뜻이다.** 값은 적합 응답이 준다 — 재료 API

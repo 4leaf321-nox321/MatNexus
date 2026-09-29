@@ -239,6 +239,11 @@ class MaterialOut(BaseModel):
     updated_at: datetime
     access: EditAccessOut | None = None
     """지금 이 사람이 고칠 수 있나 — 못 하면 누구에게 물으면 되는지(ADR 0035)."""
+    matched: str | None = None
+    """**「비슷」 으로 찾았을 때만** — 왜 걸렸나(`contains` · `similar` · `meaning`).
+
+    뜻으로만 걸린 줄에 이유가 없으면 엉뚱한 결과로 읽힌다(2026-09-29). 값은 전체 검색의
+    `matched` 와 같은 말이다."""
 
 
 class MaterialTreeSummaryOut(BaseModel):
@@ -640,6 +645,26 @@ class SpecimenFacetsOut(BaseModel):
     standards: list[FacetOut]
     """빈 규격은 `(없음)` 으로 끝에 선다 — 규격을 안 붙인 시편을 찾는 자리."""
     orientations: list[FacetOut]
+    thickness_gaps: list[FacetOut]
+    """기준 두께와 이만큼 이상 다른 시편 수. key 는 비율(`0.1` = 10%)이고 **0개인 선택지는
+    안 준다** — 골라도 0건인 선택지가 섞이면 사람은 거르기를 안 믿는다."""
+
+
+class ThicknessGapOut(BaseModel):
+    """시편 두께가 재료의 기준 두께와 얼마나 다른가 — **잰 값 가운데 가장 크게 어긋난 것.**
+
+    두께가 다른 재료에 잘못 넣은 시편을 찾는 표시다(ADR 0042). 시편에 적은 두께와 시험
+    파일이 잰 두께를 본다 — 규격 공칭·재료에서 물려받은 두께는 잰 것이 아니라서 안 본다.
+    """
+
+    spec: float
+    """재료의 기준(스펙) 두께. SI(m)."""
+    value: float
+    """견준 실측 두께. SI(m)."""
+    deviation: float
+    """(실측 - 기준) / 기준. 부호가 있다 — 0.25 는 25% 두껍다."""
+    source: Literal["measured", "run"]
+    """`measured` 시편에 적은 값 · `run` 시험 파일이 잰 값."""
 
 
 class SpecimenRowOut(SpecimenOut):
@@ -657,6 +682,8 @@ class SpecimenRowOut(SpecimenOut):
     lot_no: str | None
     """시료의 로트. **번호가 아니라 로트다** — 사람이 기억하는 것은 이쪽이다."""
     sample_name: str
+    thickness_gap: ThicknessGapOut | None = None
+    """기준 두께와의 차이. 재료에 기준 두께가 없거나 잰 두께가 없으면 비어 있다."""
 
 
 class SpecimenSizeOut(BaseModel):
@@ -935,3 +962,80 @@ class ParameterSetAdoptIn(BaseModel):
         ),
     )
     notes: str | None = None
+
+
+class SpecimenRelocateRequest(BaseModel):
+    """고른 시편을 **다른 두께의 같은 재료**로(2026-09-29). 계획과 실행이 같은 본문이다."""
+
+    specimen_ids: list[uuid.UUID] = Field(min_length=1, max_length=500)
+    spec_thickness: float = Field(gt=0)
+    """옮겨 갈 재료의 스펙 두께. `spec_thickness_unit` 으로."""
+    spec_thickness_unit: str = SI_LENGTH
+    """비우면 SI(m) — 화면은 `mm` 를 보낸다(두께 칸과 같은 규칙)."""
+    card_actions: dict[uuid.UUID, Literal["note", "deprecate"]] = {}
+    """걸린 카드마다 — `note`(코멘트만, 기본) · `deprecate`(사용 중지 + 코멘트)."""
+    comment: str | None = Field(default=None, max_length=1000)
+    """걸린 카드에 함께 남길 말. 비어도 코멘트는 붙는다 — 옮겼다는 사실은 서버가 적는다."""
+
+
+class RelocateTargetOut(BaseModel):
+    """원 재료 하나가 옮겨 갈 곳."""
+
+    from_material_id: uuid.UUID
+    from_material_name: str
+    to_material_id: uuid.UUID | None
+    """이미 있으면 그 재료. 없으면 `None` — 원 재료를 복사해 새로 만든다."""
+    to_material_name: str
+    exists: bool
+    specimens: int
+    test_runs: int
+
+
+class RelocateSampleOut(BaseModel):
+    """시료가 통째로 가는가, 시편 일부만 새 시료로 가는가."""
+
+    sample_id: uuid.UUID
+    sample_name: str
+    lot_no: str | None
+    whole: bool
+    specimens: int
+
+
+class RelocateCardOut(BaseModel):
+    """옮기는 시험을 근거로 쓴 카드. **옮기는 것은 막지 않는다** — 코멘트는 반드시 붙는다."""
+
+    id: uuid.UUID
+    label: str
+    status: str
+    material_name: str
+    test_runs: int
+    """이 카드가 근거로 쓴 시험 가운데 옮기는 것."""
+    can_deprecate: bool
+    reason: str | None = None
+    """사용 중지를 못 하면 그 까닭."""
+
+
+class RelocatePlanOut(BaseModel):
+    specimens: int
+    test_runs: int
+    thickness: float
+    thickness_unit: str
+    targets: list[RelocateTargetOut]
+    samples: list[RelocateSampleOut]
+    cards: list[RelocateCardOut]
+    records: list[str]
+    """옮기는 시험을 쓴 묶음·저장한 대표 곡선 — 원 재료에 그때의 기록으로 남는다."""
+    blocked: list[str]
+    """못 옮기는 시편과 이유 — 권한 밖 · 이미 그 두께."""
+
+
+class RelocateOut(BaseModel):
+    moved: int
+    test_runs: int
+    created_materials: list[str]
+    joined_materials: list[str]
+    split_samples: int
+    """시편 일부만 옮겨 로트 정보를 복사한 새 시료 수."""
+    cards_noted: int
+    cards_deprecated: int
+    blocked: list[str]

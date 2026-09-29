@@ -28,6 +28,8 @@ import type { SearchHit } from '@/modules/search/destinations'
 import { api } from '@/shared/api/client'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { PageHeader } from '@/shared/components/PageHeader'
+import { SearchModeToggle } from '@/shared/components/SearchMode'
+import { isSearchMode } from '@/shared/searchModes'
 import { Button } from '@/shared/components/ui/button'
 import { Input } from '@/shared/components/ui/input'
 import { useResource } from '@/shared/hooks/useResource'
@@ -48,16 +50,12 @@ interface Answer {
   groups: Group[]
 }
 
-const MODES = [
-  { key: 'exact', label: '일치', hint: '정확히 그 이름' },
-  { key: 'contains', label: '포함', hint: '그 말이 들어간 것' },
-  { key: 'similar', label: '비슷', hint: '오타·표기 흔들림, 뜻이 가까운 것까지' },
-] as const
-
 export default function SearchPage() {
   const [params, setParams] = useSearchParams()
   const query = params.get('q') ?? ''
-  const mode = params.get('mode') ?? 'contains'
+  // 셋은 재료·시험 목록과 **같은 정의**를 쓴다(`shared/searchModes`).
+  const asked = params.get('mode')
+  const mode = isSearchMode(asked) ? asked : 'contains'
   const focus = params.get('kind')
 
   const [typed, setTyped] = useState(query)
@@ -99,7 +97,6 @@ export default function SearchPage() {
   }
 
   const groups = useMemo(() => data?.groups ?? [], [data])
-  const active = MODES.find((one) => one.key === mode) ?? MODES[1]
 
   return (
     <div className="max-w-4xl">
@@ -117,20 +114,7 @@ export default function SearchPage() {
           className="max-w-md"
           autoFocus
         />
-        <div className="flex gap-1">
-          {MODES.map((one) => (
-            <Button
-              key={one.key}
-              type="button"
-              size="sm"
-              variant={one.key === mode ? 'default' : 'outline'}
-              onClick={() => choose('mode', one.key)}
-            >
-              {one.label}
-            </Button>
-          ))}
-        </div>
-        <span className="text-muted-foreground text-xs">{active.hint}</span>
+        <SearchModeToggle mode={mode} onChange={(next) => choose('mode', next)} showHint />
         {/* **꺼져 있다는 것을 말한다.** 안 말하면 「왜 이건 안 나오지」 를 데이터
             탓으로 돌리게 된다 — 실제로는 엔진이 없는 것이다. */}
         {mode === 'similar' && data && !data.meaning && (
@@ -200,6 +184,8 @@ export default function SearchPage() {
                       )}
                       <div className="text-muted-foreground text-xs">
                         {MATCH_LABELS[hit.matched] ?? hit.matched}
+                        {/* **이름에 없는 말로 떴으면 어디서 걸렸는지** — 없으면 엉뚱해 보인다. */}
+                        {hit.via && ` · ${hit.via}`}
                         {where.approximate && ' · 목록에서 찾으세요'}
                       </div>
                     </div>

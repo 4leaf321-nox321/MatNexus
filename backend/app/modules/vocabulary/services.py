@@ -810,11 +810,21 @@ def term_ids_matching(db: Session, slugs: Sequence[str], word: str) -> list[uuid
     axis_ids = list(db.scalars(select(Vocabulary.id).where(Vocabulary.slug.in_(slugs))))
     if not axis_ids:
         return []
+    # **별칭으로도 찾는다**(2026-09-29). `POSCO` 를 `포스코` 의 별칭으로 이어 둔 것은 「같은
+    # 회사」 라는 뜻인데, 검색만 그것을 몰라서 `POSCO` 로 치면 포스코 시료가 안 나왔다.
+    # 별칭 표에도 trgm 색인이 있다(`ix_vocabulary_aliases_norm_trgm`).
     return list(
         db.scalars(
-            select(VocabularyTerm.id).where(
+            select(VocabularyTerm.id)
+            .where(
                 VocabularyTerm.vocabulary_id.in_(axis_ids),
                 VocabularyTerm.normalized.ilike(f"%{key}%"),
+            )
+            .union(
+                select(VocabularyAlias.term_id).where(
+                    VocabularyAlias.vocabulary_id.in_(axis_ids),
+                    VocabularyAlias.normalized.ilike(f"%{key}%"),
+                )
             )
         )
     )

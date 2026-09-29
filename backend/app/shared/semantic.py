@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any
 
@@ -38,6 +39,8 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
+from app.jobs import kinds as job_kinds
+from app.jobs import queue
 from app.shared import embeddings
 
 logger = logging.getLogger(__name__)
@@ -293,7 +296,7 @@ def collect(db: Session) -> list[Chunk]:
     return made
 
 
-def _material_chunks(db: Session) -> list[Chunk]:
+def _material_chunks(db: Session, *, ids: Iterable[str] | None = None) -> list[Chunk]:
     """사내 재료 — **이름이 아니라 「말로 된 설명」 을 심는다**(2026-09-15).
 
     「SECC」 만 심으면 임베딩에 담길 뜻이 없다. 사람이 뜻으로 묻는 것은 「아연도금
@@ -304,16 +307,21 @@ def _material_chunks(db: Session) -> list[Chunk]:
 
     설명거리가 분류밖에 없는 재료도 심는다 — 「금속 · 강 · SECC」 만으로도 「강판」 은
     닿는다. 권한은 검색 쪽이 `graph.fetch` 로 다시 건다.
+
+    `ids` 를 주면 그 재료만 — 저장 뒤 그 재료만 다시 색인할 때(`reindex_materials`).
     """
+    only = sorted(set(ids)) if ids is not None else None
     rows = db.execute(
-        text("""
+        text(f"""
         SELECT m.id::text, m.record_name, m.alias, m.family, m.category, m.grade,
                m.details, m.note,
                (SELECT string_agg(u.value, ', ' ORDER BY u.axis, u.position)
                   FROM material_uses u WHERE u.material_id = m.id) AS uses
         FROM materials m
         WHERE m.deleted_at IS NULL
-        """)
+        {"AND m.id::text = ANY(:ids)" if only is not None else ""}
+        """),
+        {"ids": only} if only is not None else {},
     ).all()
     made: list[Chunk] = []
     for material_id, name, alias, family, category, grade, details, note, uses in rows:
@@ -351,12 +359,87 @@ def reindex(db: Session, *, batch: int | None = None) -> dict[str, int]:
     if not ensure_schema(db):
         return {"chunks": 0, "skipped": 1}
 
-    model = get_settings().embedding_model if embeddings.backend() == "ollama" else "mock"
     chunks = collect(db)
-    size = batch or get_settings().embedding_batch
+    seen = _store(db, chunks, batch=batch)
+    written = len(chunks)
 
+    # **사라진 것을 지운다.** 절을 지웠는데 조각이 남으면 검색 결과에서 「없는 문서」 로
+    # 나오고, 눌러도 아무 데도 안 간다.
+    removed = 0
+    rows = db.execute(text(f"SELECT kind, entity_id, seq FROM {TABLE}")).all()
+    stale = [one for one in rows if (one[0], one[1], one[2]) not in seen]
+    for kind, entity_id, seq in stale:
+        db.execute(
+            text(f"DELETE FROM {TABLE} WHERE kind = :k AND entity_id = :e AND seq = :s"),
+            {"k": kind, "e": entity_id, "s": seq},
+        )
+        removed += 1
+    db.commit()
+    return {"chunks": written, "removed": removed}
+
+
+def reindex_materials(db: Session, ids: Iterable[str]) -> dict[str, int]:
+    """재료 **몇 개만** 다시 색인한다 — 저장 뒤 곧바로 뜻으로 걸리게(2026-09-29).
+
+    전체 색인(`reindex`)은 하루 한 번이라, 오늘 넣은 재료는 내일에야 목록의 「비슷」 에
+    뜻으로 걸렸다. 지운 재료·줄어든 메모의 조각은 여기서 걷는다 — 남으면 「없는 재료」 가
+    뜻으로 걸린다.
+    """
+    wanted = sorted({str(one) for one in ids})
+    if not wanted or not embeddings.enabled() or not ensure_schema(db):
+        return {"chunks": 0, "skipped": 1}
+    chunks = _material_chunks(db, ids=wanted)
+    seen = _store(db, chunks)
+    removed = 0
+    rows = db.execute(
+        text(
+            f"SELECT entity_id, seq FROM {TABLE} "
+            "WHERE kind = 'material' AND entity_id = ANY(:ids)"
+        ),
+        {"ids": wanted},
+    ).all()
+    for entity_id, seq in rows:
+        if ("material", entity_id, seq) in seen:
+            continue
+        db.execute(
+            text(
+                f"DELETE FROM {TABLE} WHERE kind = 'material' AND entity_id = :e AND seq = :s"
+            ),
+            {"e": entity_id, "s": seq},
+        )
+        removed += 1
+    db.commit()
+    return {"chunks": len(chunks), "removed": removed}
+
+
+def queue_materials(db: Session, ids: Iterable[uuid.UUID | str]) -> None:
+    """재료가 바뀌었다 — **그 재료만** 뒤에서 다시 색인하게 넣는다. 커밋은 부르는 쪽이 한다.
+
+    엔진이 꺼져 있으면 넣지 않는다 — 할 일 없는 작업이 큐에 쌓이면 진짜 실패가 묻힌다.
+    재시도하지 않는다: 엔진이 잠깐 죽었으면 밤의 전체 색인이 어차피 채운다.
+    """
+    wanted = sorted({str(one) for one in ids})
+    if not wanted or not embeddings.enabled():
+        return
+    queue.enqueue(
+        db,
+        kind=job_kinds.SEARCH_INDEX_MATERIALS,
+        payload={"material_ids": wanted},
+        max_attempts=1,
+    )
+
+
+def _store(
+    db: Session, chunks: list[Chunk], *, batch: int | None = None
+) -> set[tuple[str, str, int]]:
+    """조각을 임베딩해 넣는다(있으면 갈아 끼운다). 넣은 (종류, id, 차례)를 돌려준다.
+
+    조각 단위로 갈아 끼운다 — 중간에 실패해도 이미 넣은 것은 남고, 다시 돌리면 이어서
+    채운다.
+    """
+    model = get_settings().embedding_model if embeddings.backend() == "ollama" else "mock"
+    size = batch or get_settings().embedding_batch
     seen: set[tuple[str, str, int]] = set()
-    written = 0
     for at in range(0, len(chunks), size):
         window = chunks[at : at + size]
         vectors = embeddings.embed([f"{one.title}\n{one.body}" for one in window])
@@ -383,29 +466,30 @@ def reindex(db: Session, *, batch: int | None = None) -> dict[str, int]:
                 },
             )
             seen.add((one.kind, one.entity_id, one.seq))
-            written += 1
         db.commit()
-
-    # **사라진 것을 지운다.** 절을 지웠는데 조각이 남으면 검색 결과에서 「없는 문서」 로
-    # 나오고, 눌러도 아무 데도 안 간다.
-    removed = 0
-    rows = db.execute(text(f"SELECT kind, entity_id, seq FROM {TABLE}")).all()
-    stale = [one for one in rows if (one[0], one[1], one[2]) not in seen]
-    for kind, entity_id, seq in stale:
-        db.execute(
-            text(f"DELETE FROM {TABLE} WHERE kind = :k AND entity_id = :e AND seq = :s"),
-            {"k": kind, "e": entity_id, "s": seq},
-        )
-        removed += 1
-    db.commit()
-    return {"chunks": written, "removed": removed}
+    return seen
 
 
-def search(db: Session, query: str, *, limit: int = SEARCH_LIMIT) -> list[Match]:
+def search(
+    db: Session,
+    query: str,
+    *,
+    limit: int = SEARCH_LIMIT,
+    kinds: tuple[str, ...] | None = None,
+) -> list[Match]:
     """뜻이 가까운 조각들. **못 쓰면 빈 목록이다** — 예외를 던지지 않는다.
 
     검색은 이 기능 없이도 답해야 한다. 엔진이 죽었다고 검색 화면이 오류를 띄우면,
     사람은 검색이 고장 났다고 읽는다.
+
+    ## `kinds` — 한 종류 안에서만(2026-09-29)
+
+    재료 목록의 「비슷」 은 재료만 묻는다. 전체에서 40개를 받아 재료만 남기면 핸드북 절이
+    위를 차지해 재료가 0~2개만 남는다 — 핸드북이 642조각, 재료가 135조각이다.
+
+    그래서 종류를 주면 **색인(HNSW)을 안 타고 그 종류를 다 잰다.** HNSW 는 가까운 것을
+    먼저 몇 개 모은 뒤에 거르므로, 거르는 조건이 있으면 모자라게 돌려준다(pgvector 의 알려진
+    성질). 한 종류는 많아야 재료 수만큼이라 다 재도 싸다.
     """
     if not query.strip() or not available(db):
         return []
@@ -415,15 +499,34 @@ def search(db: Session, query: str, *, limit: int = SEARCH_LIMIT) -> list[Match]
         logger.warning("의미 검색을 건너뜁니다: %s", failed)
         return []
 
-    rows = db.execute(
-        text(f"""
-        SELECT kind, entity_id, title, body, 1 - (embedding <=> CAST(:q AS vector)) AS score
-        FROM {TABLE}
-        ORDER BY embedding <=> CAST(:q AS vector)
-        LIMIT :limit
-        """),
-        {"q": _to_literal(vector), "limit": limit},
-    ).all()
+    if kinds:
+        # `MATERIALIZED` 가 요점이다 — 안 두면 플래너가 CTE 를 풀어 HNSW 로 다시 간다.
+        rows = db.execute(
+            text(f"""
+            WITH measured AS MATERIALIZED (
+                SELECT kind, entity_id, title, body,
+                       embedding <=> CAST(:q AS vector) AS distance
+                FROM {TABLE}
+                WHERE kind = ANY(:kinds)
+            )
+            SELECT kind, entity_id, title, body, 1 - distance AS score
+            FROM measured
+            ORDER BY distance
+            LIMIT :limit
+            """),
+            {"q": _to_literal(vector), "kinds": list(kinds), "limit": limit},
+        ).all()
+    else:
+        rows = db.execute(
+            text(f"""
+            SELECT kind, entity_id, title, body,
+                   1 - (embedding <=> CAST(:q AS vector)) AS score
+            FROM {TABLE}
+            ORDER BY embedding <=> CAST(:q AS vector)
+            LIMIT :limit
+            """),
+            {"q": _to_literal(vector), "limit": limit},
+        ).all()
 
     # 같은 절의 조각이 여럿 걸린다 — **가장 가까운 조각 하나만** 남긴다. 안 그러면
     # 결과 열 줄이 같은 문서의 다른 문단으로 채워진다.

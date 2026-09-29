@@ -139,6 +139,42 @@ class PropertyCard(Base):
     )
 
 
+class PropertyCardRemark(Base):
+    """카드에 붙는 **코멘트** — 카드의 값·근거는 불변이라 따로 둔다(2026-09-29).
+
+    근거 시험이 다른 재료로 옮겨졌을 때(두께를 잘못 넣은 시편을 바로잡을 때) 그 사실을 카드에
+    남긴다. 확정 카드라도 옮기는 것은 막지 않는다 — 막으면 잘못 넣은 자료를 영영 못 고친다.
+    대신 카드를 보는 사람이 「이 값의 근거 일부가 다른 두께의 재료로 갔다」 를 알게 한다.
+
+    카드 행에 적지 않는 이유: 확정 카드는 값도 근거도 안 바뀌어야 하는데, 한 행에 섞어 두면
+    「카드가 바뀌었다」 와 「카드에 말이 붙었다」 를 구별할 수 없다(AGENTS.md — 불변과 가변을
+    섞지 않는다).
+    """
+
+    __tablename__ = "property_card_remarks"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    card_id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("property_cards.id", ondelete="CASCADE"), index=True
+    )
+    kind: Mapped[str] = mapped_column(String(40), default="comment")
+    """`relocated`(근거 시험이 다른 재료로 옮겨짐) · `comment`."""
+    message: Mapped[str] = mapped_column(Text)
+    """서버가 적는 사실 — 「근거 시험 2건이 SECC_MDOI_1.2 로 옮겨졌습니다」."""
+    comment: Mapped[str | None] = mapped_column(Text, nullable=True)
+    """사람이 적은 말. 비어도 된다."""
+    payload: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, server_default="{}")
+    """무엇이 어디로 갔는지(시험 id · 옮겨 간 재료) — 되짚을 때 쓴다."""
+    created_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("users.id"), index=True, nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
 class UnitSystemDef(Base):
     """사용자가 만든 덱 단위계 — **질량·길이·시간 셋만 저장한다.**
 

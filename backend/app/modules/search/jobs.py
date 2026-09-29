@@ -39,3 +39,22 @@ def reindex(db: Session, payload: dict[str, Any]) -> None:
         # 엔진이 잠깐 죽은 것과 설정이 꺼진 것은 다르다 — 이쪽은 재시도할 값이 있다.
         logger.warning("색인 실패: %s", failed)
         raise
+
+
+@handlers.handler(kinds.SEARCH_INDEX_MATERIALS)
+def index_materials(db: Session, payload: dict[str, Any]) -> None:
+    """재료 몇 개만 다시 색인한다 — 저장 뒤 곧바로 뜻으로 걸리게(2026-09-29).
+
+    꺼져 있으면 조용히 넘어간다(위와 같은 이유). 실패는 던진다 — 한 번만 돌고, 못 채운 것은
+    밤의 전체 색인이 채운다.
+    """
+    if not embeddings.enabled():
+        return
+    ids = [str(one) for one in payload.get("material_ids") or []]
+    counted = semantic.reindex_materials(db, ids)
+    logger.info(
+        "재료 색인: %s건 · 조각 %s개 · 정리 %s개",
+        len(ids),
+        counted.get("chunks"),
+        counted.get("removed"),
+    )

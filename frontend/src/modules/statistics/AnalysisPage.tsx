@@ -28,6 +28,7 @@ import { TABLE_PAD, show, showWithUnit } from '@/modules/statistics/analysisForm
 import { analysisApi } from '@/modules/statistics/analysisApi'
 import { CardItemsTab } from '@/modules/statistics/CardItemsTab'
 import type { AnalysisScalar, Spread } from '@/modules/statistics/analysisApi'
+import { AxisScaleToggle } from '@/shared/components/AxisScaleToggle'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { PageHeader } from '@/shared/components/PageHeader'
 import { Badge } from '@/shared/components/ui/badge'
@@ -478,6 +479,8 @@ const DISTRIBUTION_GROUPS = [
 function DistributionTab() {
   const [scalars, setScalars] = useState<string[]>([])
   const [groupBy, setGroupBy] = useState<string>('family')
+  /** 값 축 로그 눈금(2026-09-29). 0 이하 값이 있는 열은 선형 그대로 — 표에 그렇게 적는다. */
+  const [log, setLog] = useState(false)
   const report = useResource(
     () => analysisApi.distribution(scalars, groupBy),
     [scalars.join(','), groupBy]
@@ -488,16 +491,23 @@ function DistributionTab() {
   /** 눈금은 **항목마다 따로**다 — 인장강도(수백 MPa)와 R²(0~1)를 같은 자로 재면
    *  한쪽이 선이 된다. 열마다 그 열의 범위로 그린다. */
   const bounds = useMemo(() => {
-    const out: Record<string, { low: number; high: number }> = {}
+    const out: Record<string, { low: number; high: number; positive: boolean }> = {}
     for (const one of selected) {
       const spans = (data?.groups ?? []).flatMap((group) => {
         const cell = group.cells[one.key]
         return cell ? [cell.minimum, cell.maximum, ...cell.outliers] : []
       })
-      if (spans.length) out[one.key] = { low: Math.min(...spans), high: Math.max(...spans) }
+      if (spans.length)
+        out[one.key] = {
+          low: Math.min(...spans),
+          high: Math.max(...spans),
+          // 로그 눈금은 전부 양수일 때만 — 한 값이라도 0 이하면 그 열은 선형으로 둔다.
+          positive: spans.every((value) => value > 0),
+        }
     }
     return out
   }, [data, selected])
+  const anyPositive = Object.values(bounds).some((one) => one.positive)
 
   return (
     <div>
@@ -508,6 +518,9 @@ function DistributionTab() {
           onChange={setScalars}
         />
         <GroupPicker value={groupBy} onChange={setGroupBy} options={DISTRIBUTION_GROUPS} />
+        <span className="text-muted-foreground text-xs">
+          <AxisScaleToggle name="값 축" log={log} disabled={!anyPositive} onChange={setLog} />
+        </span>
       </div>
       <ErrorNotice error={report.error} className="mb-3" />
       {data && data.groups.length === 0 && (
@@ -522,6 +535,12 @@ function DistributionTab() {
                 {selected.map((one) => (
                   <TableHead key={one.key} className="text-center">
                     {axisLabel(one.label, one.si_unit)}
+                    {log && bounds[one.key] && !bounds[one.key].positive && (
+                      // 로그를 켰는데 이 열만 선형이면 말한다 — 모르면 눈금을 잘못 읽는다.
+                      <span className="text-muted-foreground block text-xs font-normal">
+                        0 이하 값이 있어 선형
+                      </span>
+                    )}
                   </TableHead>
                 ))}
               </TableRow>
@@ -537,7 +556,12 @@ function DistributionTab() {
                       <TableCell key={one.key} className="min-w-56 text-center">
                         {cell && span ? (
                           <>
-                            <BoxPlot spread={cell} low={span.low} high={span.high} />
+                            <BoxPlot
+                              spread={cell}
+                              low={span.low}
+                              high={span.high}
+                              log={log && span.positive}
+                            />
                             <div className="text-muted-foreground mt-0.5 text-xs tabular-nums">
                               중앙 {show(cell.median, one.si_unit)} · n={cell.count}
                               {cell.outliers.length > 0 && (
@@ -566,10 +590,22 @@ function DistributionTab() {
   )
 }
 
-/** 상자그림 한 칸. 라이브러리 없이 — 상자 하나에 recharts 를 부를 이유가 없다. */
-function BoxPlot({ spread, low, high }: { spread: Spread; low: number; high: number }) {
-  const span = high - low || 1
-  const at = (value: number) => ((value - low) / span) * 100
+/** 상자그림 한 칸. 라이브러리 없이 — 상자 하나에 recharts 를 부를 이유가 없다.
+ *  `log` 면 자리를 log10 으로 잡는다(값은 전부 양수일 때만 켜진다). */
+function BoxPlot({
+  spread,
+  low,
+  high,
+  log = false,
+}: {
+  spread: Spread
+  low: number
+  high: number
+  log?: boolean
+}) {
+  const t = (value: number) => (log ? Math.log10(value) : value)
+  const span = t(high) - t(low) || 1
+  const at = (value: number) => ((t(value) - t(low)) / span) * 100
   return (
     <svg viewBox="0 0 100 20" className="h-5 w-full" role="img" aria-label="흩어짐">
       <line

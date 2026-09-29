@@ -19,6 +19,7 @@
 import { useEffect, useState } from 'react'
 
 import { DENSITY_UNIT, materialsApi } from '@/modules/materials/api'
+import { editableText } from '@/shared/units'
 import type { Sample } from '@/modules/materials/api'
 import { EMPTY_SAMPLE, SampleFields, samplePayload } from '@/modules/materials/SampleFields'
 import type { SampleForm } from '@/modules/materials/SampleFields'
@@ -59,6 +60,26 @@ export function NewSampleDialog({ materialId, open, onClose, onCreated }: Props)
   const [saving, setSaving] = useState(false)
   /** 무엇을 물려받았나 — 이름을 적어야 사람이 「이게 왜 채워져 있나」 를 안다. */
   const [inheritedFrom, setInheritedFrom] = useState<string | null>(null)
+  /** 재료에 적힌 밀도(표시 단위) — 밀도 칸의 placeholder. */
+  const [materialDensity, setMaterialDensity] = useState<string>('')
+
+  // 창을 열 때 재료의 밀도를 읽어 밀도 칸 placeholder 로 쓴다. 못 읽으면 예시가 선다.
+  useEffect(() => {
+    if (!open || !materialId) return
+    let alive = true
+    setMaterialDensity('')
+    materialsApi
+      .get(materialId)
+      .then((material) => {
+        if (alive) setMaterialDensity(editableText(material.density, material.density_unit))
+      })
+      .catch(() => {
+        /* 거들기다 — 못 읽으면 예시 */
+      })
+    return () => {
+      alive = false
+    }
+  }, [open, materialId])
 
   // 창을 열 때 그 재료의 가장 최근 시료를 보고 채워 둔다. 이미 적은 것은 안 덮는다.
   useEffect(() => {
@@ -143,6 +164,7 @@ export function NewSampleDialog({ materialId, open, onClose, onCreated }: Props)
         <SampleFields
           idPrefix="new-sample"
           form={form}
+          materialDensity={materialDensity}
           onChange={(key, value) => setForm((current) => ({ ...current, [key]: value }))}
         />
 

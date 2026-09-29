@@ -106,6 +106,36 @@ describe('SearchPage', () => {
     expect(link).toHaveAttribute('href', '/specimens/s1')
   })
 
+  it('이름에 없는 말로 걸렸으면 어디서 걸렸는지 적는다 (2026-09-29)', async () => {
+    // 별칭 「도어 이너 강판」 으로 쳤는데 이름(`SECCX_-_-`)만 보이면 엉뚱한 결과로 읽힌다.
+    get.mockResolvedValue({
+      query: '도어 이너',
+      mode: 'contains',
+      total: 1,
+      groups: [
+        {
+          kind: 'material',
+          label: '재료',
+          module: 'materials',
+          truncated: false,
+          hits: [
+            {
+              kind: 'material',
+              id: 'm1',
+              name: 'SECCX_-_-',
+              score: 0.72,
+              matched: 'prefix',
+              via: '별칭 도어 이너 강판',
+            },
+          ],
+        },
+      ],
+    })
+    show('?q=도어 이너')
+
+    expect(await screen.findByText(/앞이 일치 · 별칭 도어 이너 강판/)).toBeInTheDocument()
+  })
+
   it('못 찾으면 비슷 모드를 권한다', async () => {
     get.mockResolvedValue({ query: 'zzz', mode: 'contains', total: 0, groups: [] })
     show('?q=zzz')

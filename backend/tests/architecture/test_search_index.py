@@ -25,9 +25,11 @@ from typing import cast
 from sqlalchemy import Table
 from sqlalchemy.orm import DeclarativeBase
 
+from app.database import Base
 from app.modules.materials.models import Material
 from app.modules.materials.routes import _SEARCH_AXES, _SEARCH_TEXT
 from app.modules.vocabulary.models import VocabularyTerm
+from app.shared import relations
 
 #: 문자열 컬럼에 남아 있지만 이제 검색이 안 보는 것. Contract 2단계에서 컬럼과
 #: 함께 지운다 — 지금 지우면 읽기 전환을 되돌릴 데가 없다.
@@ -68,3 +70,23 @@ def test_기준정보_찾기가_trgm_인덱스를_탄다() -> None:
     """축으로 좁혀도 `normalized ILIKE '%낱말%'` 은 여전히 색인이 필요하다 —
     강종처럼 값이 수만 개인 축이 검색 축이 되는 날이 온다."""
     assert "normalized" in _gin(VocabularyTerm)
+
+
+def test_전체_검색이_곁에서_보는_칸도_trgm_인덱스가_있다() -> None:
+    """`EntityKind.also_columns` — 이름과 함께 `OR` 로 걸린다. 색인이 없으면 그 가지 하나가
+    이름 색인까지 무의미하게 만든다(위의 118ms 대 4.6ms 와 같은 함정)."""
+    import app.all_models  # noqa: F401  (모든 표를 메타데이터에 올린다)
+
+    for kind in relations.KINDS.values():
+        if not kind.also_columns:
+            continue
+        table = Base.metadata.tables[kind.table]
+        indexed = {
+            next(iter(index.columns)).name
+            for index in table.indexes
+            if index.dialect_options["postgresql"].get("using") == "gin"
+        }
+        for column, label in kind.also_columns:
+            assert column in indexed, (
+                f"{kind.slug}.{column}({label}) 을 전체 검색이 보는데 trgm 색인이 없습니다."
+            )

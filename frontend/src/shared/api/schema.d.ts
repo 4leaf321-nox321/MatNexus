@@ -5165,6 +5165,59 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/specimens/relocate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Relocate
+         * @description 고른 시편을 **다른 두께의 같은 재료**로 옮긴다.
+         *
+         *     옮겨 갈 재료가 같은 부서에 있으면 그리로 합치고, 없으면 원 재료를 복사해 두께만 바꿔
+         *     만든다. 시료는 고른 시편이 전부면 통째로, 일부면 로트 정보를 복사한 새 시료로 간다.
+         *     이름은 시험까지 새 재료 기준으로 바뀐다.
+         *
+         *     **걸린 카드에는 코멘트가 반드시 붙는다**(`card_actions` 로 사용 중지도 고른다). 한 건이
+         *     막혀도 나머지 시편은 간다 — 막힌 것은 이유와 함께 돌려준다.
+         */
+        post: operations["relocate_api_specimens_relocate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/specimens/relocate-plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Relocate Plan
+         * @description 고른 시편을 **다른 두께의 같은 재료**로 옮기면 무엇이 어디로 가는지 — 쓰지 않는다.
+         *
+         *     두께가 다른 재료에 잘못 넣은 시편을 바로잡는 길이다(2026-09-29). 재료 수정으로 두께를
+         *     바꾸면 제대로 들어간 시료까지 함께 옮겨진다 — 그래서 고른 시편만 옮긴다.
+         *
+         *     **걸린 카드를 미리 보인다** — 옮기는 시험으로 만든 카드(확정 포함)와, 그 카드를 사용
+         *     중지할 수 있는지. 옮기는 것은 막지 않는다(`relocation` 머리말).
+         */
+        post: operations["relocate_plan_api_specimens_relocate_plan_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/specimens/{specimen_id}": {
         parameters: {
             query?: never;
@@ -5603,6 +5656,13 @@ export interface paths {
          *     `adopted=false` 는 **"올렸는데 아직 아무것도 안 한 것"** 을 세는 자리다.
          *     부서 홈이 "처리 대기 N건" 을 말하려면 서버가 세야 한다 — 목록을 받아 화면이
          *     세면 상한(`limit`)에 걸린 순간 숫자가 조용히 틀린다.
+         *
+         *     ## 이름 말고 다른 조건으로(2026-09-29)
+         *
+         *     시험일 기간 · 장비 · **시험 조건의 범위**(「80~100 °C 에서 잰 것」). 조건은 부서마다
+         *     칸 이름이 달라서(`temp`·`temperature`) 표준 키(`canonical_key`)로 모아 묻는다 — 값
+         *     검색(`/catalog/properties/search`)과 같은 규칙이고, 칸을 표준 키에 안 이은 시험 종류는
+         *     안 걸린다. 단위는 필수다 — 「80」 만으로는 °C 인지 K 인지 모른다.
          */
         get: operations["list_runs_api_test_runs_get"];
         put?: never;
@@ -8975,6 +9035,30 @@ export interface components {
             value: number | string | null;
         };
         /**
+         * CardRemarkOut
+         * @description 카드에 붙은 코멘트(2026-09-29). **카드의 값·근거와 따로 산다** — 확정 카드에도.
+         */
+        CardRemarkOut: {
+            /** Comment */
+            comment?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Created By Name */
+            created_by_name?: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Kind */
+            kind: string;
+            /** Message */
+            message: string;
+        };
+        /**
          * CardSlotIn
          * @description 항목란이 담는 값 하나, 또는 표의 열 하나.
          */
@@ -10283,6 +10367,32 @@ export interface components {
             label: string;
             /** Needs */
             needs: components["schemas"]["CrossSectionNeedOut"][];
+        };
+        /**
+         * CurveBasisIn
+         * @description 대표 곡선을 **무엇으로** 만들까(2026-09-29). 비우면 평균 — 전과 같다.
+         *
+         *     해석은 평균만 쓰지 않는다 — 강도 평가는 하한, 충돌 에너지·성형 하중은 상한 곡선으로 한
+         *     번 더 돌린다. 상·하한은 방법을 함께 준다:
+         *
+         *         sd          점마다 평균 ± k·표준편차 — k 는 기본값이 없다(1 · 2 · 3 이 흔하다)
+         *         tolerance   한쪽 공차 한계(B 기준 90%·95%, 시편 3개부터) — K 는 시편 수가 정한다
+         *         envelope    점마다 최솟값·최댓값(포락선)
+         *         specimen    가장 낮은·높은 시편 하나의 곡선 그대로
+         *
+         *     **곡선에만 적용한다.** 탄성계수·푸아송비·밀도는 평균·물려받은 값 그대로다.
+         */
+        CurveBasisIn: {
+            /** K */
+            k?: number | null;
+            /**
+             * Kind
+             * @default mean
+             * @enum {string}
+             */
+            kind: "mean" | "median" | "upper" | "lower";
+            /** Method */
+            method?: ("sd" | "tolerance" | "envelope" | "specimen") | null;
         };
         /**
          * CurveOut
@@ -12041,6 +12151,11 @@ export interface components {
         /** FitPreviewOut */
         FitPreviewOut: {
             /**
+             * Basis Label
+             * @default 평균
+             */
+            basis_label: string;
+            /**
              * Elastic
              * @default []
              */
@@ -12054,6 +12169,14 @@ export interface components {
             members: components["schemas"]["app__modules__fitting__schemas__MemberCurveOut"][];
             /** Notes */
             notes: string[];
+            /**
+             * Reference Points
+             * @default []
+             */
+            reference_points: [
+                number,
+                number
+            ][];
             /** Sample Count */
             sample_count: number;
             /**
@@ -12069,6 +12192,7 @@ export interface components {
         };
         /** FitPreviewRequest */
         FitPreviewRequest: {
+            basis?: components["schemas"]["CurveBasisIn"] | null;
             /** Blend Primary */
             blend_primary?: string | null;
             /** Blend Weight */
@@ -13584,6 +13708,8 @@ export interface components {
             id: string;
             /** Legacy Id */
             legacy_id: string | null;
+            /** Matched */
+            matched?: string | null;
             /** Note */
             note: string | null;
             /** Owner Workspace Id */
@@ -15211,6 +15337,11 @@ export interface components {
             problem?: string | null;
             /** Published At */
             published_at: string | null;
+            /**
+             * Remarks
+             * @default []
+             */
+            remarks: components["schemas"]["CardRemarkOut"][];
             /** Source */
             source: {
                 [key: string]: unknown;
@@ -15222,6 +15353,7 @@ export interface components {
         };
         /** PropertyCardSaveRequest */
         PropertyCardSaveRequest: {
+            basis?: components["schemas"]["CurveBasisIn"] | null;
             /** Blend Weight */
             blend_weight?: number | null;
             /** Blend With */
@@ -15932,6 +16064,111 @@ export interface components {
              */
             truncated: boolean;
         };
+        /**
+         * RelocateCardOut
+         * @description 옮기는 시험을 근거로 쓴 카드. **옮기는 것은 막지 않는다** — 코멘트는 반드시 붙는다.
+         */
+        RelocateCardOut: {
+            /** Can Deprecate */
+            can_deprecate: boolean;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Label */
+            label: string;
+            /** Material Name */
+            material_name: string;
+            /** Reason */
+            reason?: string | null;
+            /** Status */
+            status: string;
+            /** Test Runs */
+            test_runs: number;
+        };
+        /** RelocateOut */
+        RelocateOut: {
+            /** Blocked */
+            blocked: string[];
+            /** Cards Deprecated */
+            cards_deprecated: number;
+            /** Cards Noted */
+            cards_noted: number;
+            /** Created Materials */
+            created_materials: string[];
+            /** Joined Materials */
+            joined_materials: string[];
+            /** Moved */
+            moved: number;
+            /** Split Samples */
+            split_samples: number;
+            /** Test Runs */
+            test_runs: number;
+        };
+        /** RelocatePlanOut */
+        RelocatePlanOut: {
+            /** Blocked */
+            blocked: string[];
+            /** Cards */
+            cards: components["schemas"]["RelocateCardOut"][];
+            /** Records */
+            records: string[];
+            /** Samples */
+            samples: components["schemas"]["RelocateSampleOut"][];
+            /** Specimens */
+            specimens: number;
+            /** Targets */
+            targets: components["schemas"]["RelocateTargetOut"][];
+            /** Test Runs */
+            test_runs: number;
+            /** Thickness */
+            thickness: number;
+            /** Thickness Unit */
+            thickness_unit: string;
+        };
+        /**
+         * RelocateSampleOut
+         * @description 시료가 통째로 가는가, 시편 일부만 새 시료로 가는가.
+         */
+        RelocateSampleOut: {
+            /** Lot No */
+            lot_no: string | null;
+            /**
+             * Sample Id
+             * Format: uuid
+             */
+            sample_id: string;
+            /** Sample Name */
+            sample_name: string;
+            /** Specimens */
+            specimens: number;
+            /** Whole */
+            whole: boolean;
+        };
+        /**
+         * RelocateTargetOut
+         * @description 원 재료 하나가 옮겨 갈 곳.
+         */
+        RelocateTargetOut: {
+            /** Exists */
+            exists: boolean;
+            /**
+             * From Material Id
+             * Format: uuid
+             */
+            from_material_id: string;
+            /** From Material Name */
+            from_material_name: string;
+            /** Specimens */
+            specimens: number;
+            /** Test Runs */
+            test_runs: number;
+            /** To Material Id */
+            to_material_id: string | null;
+            /** To Material Name */
+            to_material_name: string;
+        };
         /** ReparseOut */
         ReparseOut: {
             /** Message */
@@ -16271,6 +16508,11 @@ export interface components {
         RunFacetsOut: {
             /** Divisions */
             divisions: components["schemas"]["RunFacetOut"][];
+            /**
+             * Instruments
+             * @default []
+             */
+            instruments: components["schemas"]["RunFacetOut"][];
             /**
              * Materials
              * @default []
@@ -16655,6 +16897,11 @@ export interface components {
             parent_kind?: string | null;
             /** Score */
             score: number;
+            /**
+             * Via
+             * @description 이름이 아닌 칸으로 걸렸으면 그 칸과 값 — 「별칭 도어 이너 강판」
+             */
+            via?: string | null;
         };
         /** SearchOut */
         SearchOut: {
@@ -17061,6 +17308,8 @@ export interface components {
             orientations: components["schemas"]["FacetOut"][];
             /** Standards */
             standards: components["schemas"]["FacetOut"][];
+            /** Thickness Gaps */
+            thickness_gaps: components["schemas"]["FacetOut"][];
         };
         /**
          * SpecimenFieldOut
@@ -17222,6 +17471,30 @@ export interface components {
             workspace_id: string;
         };
         /**
+         * SpecimenRelocateRequest
+         * @description 고른 시편을 **다른 두께의 같은 재료**로(2026-09-29). 계획과 실행이 같은 본문이다.
+         */
+        SpecimenRelocateRequest: {
+            /**
+             * Card Actions
+             * @default {}
+             */
+            card_actions: {
+                [key: string]: "note" | "deprecate";
+            };
+            /** Comment */
+            comment?: string | null;
+            /** Spec Thickness */
+            spec_thickness: number;
+            /**
+             * Spec Thickness Unit
+             * @default m
+             */
+            spec_thickness_unit: string;
+            /** Specimen Ids */
+            specimen_ids: string[];
+        };
+        /**
          * SpecimenRowOut
          * @description 평면 목록의 한 줄 — **시편에 재료·시료를 얹은 것.**
          *
@@ -17300,6 +17573,7 @@ export interface components {
             test_run_count: number;
             /** Thickness */
             thickness: number | null;
+            thickness_gap?: components["schemas"]["ThicknessGapOut"] | null;
             /** Width */
             width: number | null;
             /**
@@ -18055,6 +18329,8 @@ export interface components {
              * @default 0
              */
             master_curve_count: number;
+            /** Matched */
+            matched?: string | null;
             /** Material Id */
             material_id: string | null;
             /** Material Name */
@@ -18160,6 +18436,8 @@ export interface components {
              * @default 0
              */
             master_curve_count: number;
+            /** Matched */
+            matched?: string | null;
             /** Material Id */
             material_id: string | null;
             /** Material Name */
@@ -18401,6 +18679,26 @@ export interface components {
              * @default 0
              */
             sort_order: number;
+        };
+        /**
+         * ThicknessGapOut
+         * @description 시편 두께가 재료의 기준 두께와 얼마나 다른가 — **잰 값 가운데 가장 크게 어긋난 것.**
+         *
+         *     두께가 다른 재료에 잘못 넣은 시편을 찾는 표시다(ADR 0042). 시편에 적은 두께와 시험
+         *     파일이 잰 두께를 본다 — 규격 공칭·재료에서 물려받은 두께는 잰 것이 아니라서 안 본다.
+         */
+        ThicknessGapOut: {
+            /** Deviation */
+            deviation: number;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "measured" | "run";
+            /** Spec */
+            spec: number;
+            /** Value */
+            value: number;
         };
         /**
          * TrashDoneOut
@@ -24784,8 +25082,16 @@ export interface operations {
     list_materials_api_materials_get: {
         parameters: {
             query?: {
-                /** @description 이름·별칭·Family·Category·Grade·Details 부분 일치. 낱말마다 나눠 AND */
+                /** @description 정렬할 열. 기본은 등록 일시 */
+                sort?: string | null;
+                /** @description 내림차순. 기본은 최근 등록순 */
+                desc?: boolean;
+                limit?: number | null;
+                offset?: number;
+                /** @description 이름·별칭·번호·Family·Category(이름이 Grade·Details 를 품는다), 그리고 용도·제조사·거래처·로트. 낱말마다 나눠 AND */
                 q?: string | null;
+                /** @description `exact`(이름·별칭·번호가 정확히) · `contains`(포함, 기본) · `similar`(오타·뜻까지 — 가까운 순으로 서고 줄마다 `matched` 가 붙는다) */
+                mode?: string;
                 /** @description 이름만 부분 일치 */
                 name?: string | null;
                 /** @description 별칭만 부분 일치 */
@@ -24795,12 +25101,26 @@ export interface operations {
                 family?: string | null;
                 category?: string | null;
                 workspace?: string | null;
-                /** @description 정렬할 열. 기본은 등록 일시 */
-                sort?: string | null;
-                /** @description 내림차순. 기본은 최근 등록순 */
-                desc?: boolean;
-                limit?: number | null;
-                offset?: number;
+                /** @description 적용 제품·부위 부분 일치 */
+                use?: string | null;
+                /** @description 시료의 제조사·유통사·주 벤더 부분 일치(기준정보 별칭 포함) */
+                maker?: string | null;
+                /** @description 시료 로트 번호 부분 일치 */
+                lot?: string | null;
+                /** @description 스펙 두께 하한(그 값 포함) — `thickness_unit` 으로 */
+                thickness_min?: number | null;
+                /** @description 스펙 두께 상한(그 값 포함) */
+                thickness_max?: number | null;
+                /** @description 두께 범위의 단위. 비우면 SI(m) — 화면은 `mm` 를 보낸다 */
+                thickness_unit?: string;
+                /** @description 이 종류(키)의 시험이 있는 재료 */
+                test_type?: string | null;
+                /** @description 물성 카드 — `published` 확정 카드 있음 · `any` 초안 포함 있음 · `none` 없음 */
+                card?: string | null;
+                /** @description 이날 이후 등록(그날 포함, DB 시간대) */
+                registered_from?: string | null;
+                /** @description 이날까지 등록(그날 포함) */
+                registered_to?: string | null;
             };
             header?: never;
             path?: never;
@@ -24983,15 +25303,41 @@ export interface operations {
     export_materials_api_materials_export_get: {
         parameters: {
             query?: {
+                /** @description 값의 단위계. 비우면 mm·N·tonne(ADR 0036) — SI 는 `si`. */
+                units?: string | null;
+                /** @description 이름·별칭·번호·Family·Category(이름이 Grade·Details 를 품는다), 그리고 용도·제조사·거래처·로트. 낱말마다 나눠 AND */
                 q?: string | null;
+                /** @description `exact`(이름·별칭·번호가 정확히) · `contains`(포함, 기본) · `similar`(오타·뜻까지 — 가까운 순으로 서고 줄마다 `matched` 가 붙는다) */
+                mode?: string;
+                /** @description 이름만 부분 일치 */
                 name?: string | null;
+                /** @description 별칭만 부분 일치 */
                 alias?: string | null;
+                /** @description 재료번호. 패딩 없이 쳐도 된다 */
                 code?: string | null;
                 family?: string | null;
                 category?: string | null;
                 workspace?: string | null;
-                /** @description 값의 단위계. 비우면 mm·N·tonne(ADR 0036) — SI 는 `si`. */
-                units?: string | null;
+                /** @description 적용 제품·부위 부분 일치 */
+                use?: string | null;
+                /** @description 시료의 제조사·유통사·주 벤더 부분 일치(기준정보 별칭 포함) */
+                maker?: string | null;
+                /** @description 시료 로트 번호 부분 일치 */
+                lot?: string | null;
+                /** @description 스펙 두께 하한(그 값 포함) — `thickness_unit` 으로 */
+                thickness_min?: number | null;
+                /** @description 스펙 두께 상한(그 값 포함) */
+                thickness_max?: number | null;
+                /** @description 두께 범위의 단위. 비우면 SI(m) — 화면은 `mm` 를 보낸다 */
+                thickness_unit?: string;
+                /** @description 이 종류(키)의 시험이 있는 재료 */
+                test_type?: string | null;
+                /** @description 물성 카드 — `published` 확정 카드 있음 · `any` 초안 포함 있음 · `none` 없음 */
+                card?: string | null;
+                /** @description 이날 이후 등록(그날 포함, DB 시간대) */
+                registered_from?: string | null;
+                /** @description 이날까지 등록(그날 포함) */
+                registered_to?: string | null;
             };
             header?: never;
             path?: never;
@@ -27564,6 +27910,8 @@ export interface operations {
                 standard?: string | null;
                 /** @description 규격 정확히. `__none__` 이면 규격 없는 시편 */
                 standard_exact?: string | null;
+                /** @description 재료의 기준 두께와 이 비율(0.1 = 10%) 이상 다른 시편만. 시편에 적은 두께와 시험 파일이 잰 두께를 본다 */
+                thickness_gap?: number | null;
                 /** @description 정렬할 열. 기본은 등록 일시 */
                 sort?: string | null;
                 /** @description 내림차순. 기본은 최근 등록순 */
@@ -27646,6 +27994,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SpecimenFacetsOut"];
+                };
+            };
+        };
+    };
+    relocate_api_specimens_relocate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SpecimenRelocateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RelocateOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    relocate_plan_api_specimens_relocate_plan_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SpecimenRelocateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RelocatePlanOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -28287,6 +28701,22 @@ export interface operations {
                 step?: string | null;
                 /** @description **채택된 결과**에 이 단계가 없는가 */
                 step_missing?: string | null;
+                /** @description `q` 의 방식 — `exact`(이름·파일명이 정확히) · `contains`(포함, 기본) · `similar`(오타·재료의 뜻까지 — 가까운 순으로 서고 줄마다 `matched` 가 붙는다) */
+                mode?: string;
+                /** @description 이날 이후 시험(그날 포함, DB 시간대) */
+                tested_from?: string | null;
+                /** @description 이날까지 시험(그날 포함) */
+                tested_to?: string | null;
+                /** @description 장비 이름 — 정확히. `__none__` 은 장비를 안 적은 것 */
+                instrument?: string | null;
+                /** @description 표준 조건 키 — `temperature` · `strain_rate` … (`GET /test-types/standard-conditions`). 부서마다 칸 이름이 달라도 한 키로 모인다 */
+                condition?: string | null;
+                /** @description **조건 범위의 단위(필수)** — 「degC」·「°C」·「1/s」 */
+                condition_unit?: string | null;
+                /** @description 조건 하한(그 값 포함) */
+                condition_min?: number | null;
+                /** @description 조건 상한(그 값 포함) */
+                condition_max?: number | null;
                 /** @description 정렬할 열. 기본은 등록 일시 */
                 sort?: string | null;
                 /** @description 내림차순. 기본은 최근 등록순 */

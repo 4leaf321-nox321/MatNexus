@@ -54,6 +54,8 @@ export const auditApi = {
 export const ACTION_LABELS: Record<string, string> = {
   'card.published': '물성 카드 확정',
   'card.deprecated': '물성 카드 내림',
+  'card.remarked': '물성 카드 코멘트',
+  'specimens.relocated': '시편을 다른 두께 재료로 옮김',
   'card.deleted': '물성 카드 삭제',
   'material.deleted': '재료 삭제',
   'test_run.deleted': '시험 삭제',

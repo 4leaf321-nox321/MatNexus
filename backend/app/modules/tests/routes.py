@@ -10,12 +10,12 @@ from __future__ import annotations
 
 import json
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 from fastapi import APIRouter, Depends, File, Form, Query, Response, UploadFile
 from fastapi.responses import FileResponse
-from sqlalchemy import Select, case, cast, func, or_, select, true
+from sqlalchemy import Float, Select, and_, case, cast, func, or_, select, true
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Session
 
@@ -84,7 +84,9 @@ from app.shared import (
     curvedata,
     facets,
     filestore,
+    list_search,
     permissions,
+    property_search,
     revision,
     sorting,
     specimen_size,
@@ -715,6 +717,7 @@ def _run_out(
     ctx: dict[str, dict[uuid.UUID, Any]],
     *,
     access: EditAccessOut | None = None,
+    matched: str | None = None,
 ) -> TestRunOut:
     specimen = ctx["specimens"].get(run.specimen_id)
     sample = ctx["samples"].get(specimen.sample_id) if specimen else None
@@ -771,6 +774,7 @@ def _run_out(
         adopted_result_id=run.adopted_result_id,
         created_at=run.created_at,
         access=access,
+        matched=matched,
     )
 
 
@@ -1055,6 +1059,51 @@ def _adopted_has_step(plugin: str) -> Any:
     )
 
 
+def _run_search_terms(db: Session, q: str) -> list[Any]:
+    """검색어를 낱말로 나눠 **낱말마다 조건 하나**(AND) — 재료 목록과 같은 규칙이다.
+
+    전에는 통째로 한 문자열이라 「SECC 인장」 이 0건이었다 — 이름(`record_name`)에는
+    재료명과 종류 약자가 **밑줄로 이어져** 있고, 「인장」 은 이름에 아예 없다(2026-09-29
+    지적). 이제 낱말 하나가 이름 · 원본 파일명 · **시험 종류 이름** 중 어디에든 있으면 된다.
+
+    종류는 **id 로 풀어서 건다**(값이 박힌 `IN`) — `IN (SELECT …)` 은 `OR` 가지에서 필터로
+    강등돼 나머지 trgm 색인까지 무의미하게 만든다(재료 목록 `_search_terms` 와 같은 함정).
+    """
+    conditions: list[Any] = []
+    for word in q.split():
+        like = f"%{word}%"
+        branches: list[Any] = [
+            TestRun.record_name.ilike(like),
+            TestRun.source_filename.ilike(like),
+        ]
+        kinds_hit = list(
+            db.scalars(
+                select(TestType.id).where(
+                    or_(TestType.label.ilike(like), TestType.key.ilike(like))
+                )
+            )
+        )
+        if kinds_hit:
+            branches.append(TestRun.test_type_id.in_(kinds_hit))
+        conditions.append(or_(*branches))
+    return conditions
+
+
+def _condition_value(field: Any) -> Any:
+    """조건 칸의 값을 숫자로. **숫자가 아닌 값은 NULL** — 캐스트가 안 터지게 `CASE` 로.
+
+    `WHERE` 의 조건 순서는 보장되지 않아서 「숫자인지 먼저 보고 캐스트」 를 `AND` 로 쓰면
+    플래너가 캐스트를 먼저 돌려 500 이 날 수 있다. `CASE` 는 순서를 지킨다.
+    """
+    return case(
+        (
+            func.jsonb_typeof(TestRun.conditions[field.key]) == "number",
+            cast(TestRun.conditions[field.key].astext, Float),
+        ),
+        else_=None,
+    )
+
+
 @runs_router.get("", response_model=Page[TestRunOut])
 def list_runs(
     workspace: str | None = Query(
@@ -1086,6 +1135,32 @@ def list_runs(
     step_missing: str | None = Query(
         default=None, description="**채택된 결과**에 이 단계가 없는가"
     ),
+    mode: str = Query(
+        default="contains",
+        description=(
+            "`q` 의 방식 — `exact`(이름·파일명이 정확히) · `contains`(포함, 기본) · "
+            "`similar`(오타·재료의 뜻까지 — 가까운 순으로 서고 줄마다 `matched` 가 붙는다)"
+        ),
+    ),
+    tested_from: date | None = Query(
+        default=None, description="이날 이후 시험(그날 포함, DB 시간대)"
+    ),
+    tested_to: date | None = Query(default=None, description="이날까지 시험(그날 포함)"),
+    instrument: str | None = Query(
+        default=None, description="장비 이름 — 정확히. `__none__` 은 장비를 안 적은 것"
+    ),
+    condition: str | None = Query(
+        default=None,
+        description=(
+            "표준 조건 키 — `temperature` · `strain_rate` … "
+            "(`GET /test-types/standard-conditions`). 부서마다 칸 이름이 달라도 한 키로 모인다"
+        ),
+    ),
+    condition_unit: str | None = Query(
+        default=None, description="**조건 범위의 단위(필수)** — 「degC」·「°C」·「1/s」"
+    ),
+    condition_min: float | None = Query(default=None, description="조건 하한(그 값 포함)"),
+    condition_max: float | None = Query(default=None, description="조건 상한(그 값 포함)"),
     sort: str | None = Query(default=None, description="정렬할 열. 기본은 등록 일시"),
     desc: bool = Query(default=True, description="내림차순. 기본은 최근 등록순"),
     limit: int | None = Query(default=None, le=1000),
@@ -1106,7 +1181,27 @@ def list_runs(
     `adopted=false` 는 **"올렸는데 아직 아무것도 안 한 것"** 을 세는 자리다.
     부서 홈이 "처리 대기 N건" 을 말하려면 서버가 세야 한다 — 목록을 받아 화면이
     세면 상한(`limit`)에 걸린 순간 숫자가 조용히 틀린다.
+
+    ## 이름 말고 다른 조건으로(2026-09-29)
+
+    시험일 기간 · 장비 · **시험 조건의 범위**(「80~100 °C 에서 잰 것」). 조건은 부서마다
+    칸 이름이 달라서(`temp`·`temperature`) 표준 키(`canonical_key`)로 모아 묻는다 — 값
+    검색(`/catalog/properties/search`)과 같은 규칙이고, 칸을 표준 키에 안 이은 시험 종류는
+    안 걸린다. 단위는 필수다 — 「80」 만으로는 °C 인지 K 인지 모른다.
     """
+    list_search.check_mode(mode, code="MNX-TESTS-0043")
+    window: property_search.ConditionFilter | None = None
+    if condition:
+        if not condition_unit:
+            raise AppError(
+                "MNX-TESTS-0044",
+                "조건 범위의 단위(condition_unit)를 주세요 — 「80」 만으로는 °C 인지 K 인지 "
+                "모릅니다.",
+                status=422,
+            )
+        window = property_search.condition_bounds(
+            key=condition, unit=condition_unit, minimum=condition_min, maximum=condition_max
+        )
     query = services.visible_runs(db, user)
     if workspace:
         scope = permissions.workspace_by_slug(db, workspace)
@@ -1168,18 +1263,88 @@ def list_runs(
         query = query.where(TestRun.division.is_(None))
     elif division:
         query = query.where(TestRun.division == division)
-    if q and (text := q.strip()):
-        # **이름 하나로 재료·시료·시편·회차가 다 걸린다.** `record_name` 이
-        # `{재료}__{시료}__{시편}__{종류}_{회차}` 로 조합되기 때문이다
-        # (`matcore/naming.py`). 그래서 재료명으로 찾아도, 시편 번호로 찾아도
-        # 같은 칸 하나가 답한다 — 조인을 늘리지 않는다.
-        #
-        # 파일명을 함께 보는 이유: 장비에서 받은 이름으로 찾는 일이 실제로 있다.
-        # 그 이름은 우리 이름 규칙과 아무 상관이 없어서 `record_name` 으로는
-        # 영영 안 걸린다.
-        like = f"%{text}%"
+    # **이름 하나로 재료·시료·시편·회차가 다 걸린다.** `record_name` 이
+    # `{재료}__{시료}__{시편}__{종류}_{회차}` 로 조합되기 때문이다
+    # (`matcore/naming.py`). 그래서 재료명으로 찾아도, 시편 번호로 찾아도
+    # 같은 칸 하나가 답한다 — 조인을 늘리지 않는다.
+    #
+    # 파일명을 함께 보는 이유: 장비에서 받은 이름으로 찾는 일이 실제로 있다.
+    # 그 이름은 우리 이름 규칙과 아무 상관이 없어서 `record_name` 으로는
+    # 영영 안 걸린다.
+    needle = (q or "").strip()
+    order: Any = None
+    why: Any = None
+    if needle and mode == "exact":
         query = query.where(
-            or_(TestRun.record_name.ilike(like), TestRun.source_filename.ilike(like))
+            or_(
+                list_search.exactly(TestRun.record_name, needle),
+                list_search.exactly(TestRun.source_filename, needle),
+            )
+        )
+    elif needle and mode == "similar":
+        # **「비슷」 = 포함 · 글자가 비슷 · 재료의 뜻이 가까움 중 하나**. 시험에는 사람이 쓴
+        # 글이 없어 시험 자체를 뜻으로 색인하지 않는다 — 대신 **재료**를 뜻으로 찾아 그
+        # 재료의 시험을 얹는다. 「아연도금 강판 인장」 의 뜻은 시험이 아니라 재료에 있다.
+        words_hit = and_(*_run_search_terms(db, needle))
+        text_similar = or_(
+            list_search.resembles(TestRun.record_name, needle),
+            list_search.resembles(TestRun.source_filename, needle),
+        )
+        meaning = list_search.meaning_ids(db, needle, kind="material")
+        reach: list[Any] = [words_hit, text_similar]
+        if meaning:
+            reach.append(
+                TestRun.specimen_id.in_(
+                    select(Specimen.id)
+                    .join(Sample, Sample.id == Specimen.sample_id)
+                    .where(Sample.material_id.in_(meaning))
+                )
+            )
+        query = query.where(or_(*reach))
+        material_of_run = (
+            select(Sample.material_id)
+            .join(Specimen, Specimen.sample_id == Sample.id)
+            .where(Specimen.id == TestRun.specimen_id)
+            .scalar_subquery()
+        )
+        order = list_search.closeness(
+            (TestRun.record_name, TestRun.source_filename),
+            needle,
+            words_hit=words_hit,
+            id_column=material_of_run,
+            meaning=meaning,
+        )
+        why = list_search.why(
+            words_hit=words_hit,
+            text_similar=text_similar,
+            id_column=material_of_run,
+            meaning=meaning,
+        )
+    elif needle:
+        for word_condition in _run_search_terms(db, needle):
+            query = query.where(word_condition)
+    # **날짜는 DB 시간대로 자른다**(서울). 끝날은 그날 끝까지.
+    if tested_from is not None:
+        query = query.where(TestRun.tested_at >= tested_from)
+    if tested_to is not None:
+        query = query.where(TestRun.tested_at < tested_to + timedelta(days=1))
+    if instrument == EMPTY_FILTER_KEY:
+        query = query.where(TestRun.instrument.is_(None))
+    elif instrument:
+        query = query.where(TestRun.instrument == instrument)
+    if window is not None:
+        # 이 시험 종류의 칸 가운데 **표준 키가 그 조건인 칸**의 값이 범위 안에 있나.
+        # 조인이 아니라 `EXISTS` 다 — 한 종류에 같은 표준 키 칸이 둘이면 조인은 줄을
+        # 두 번 세어 총 건수가 거짓말을 한다.
+        field = TestConditionField
+        query = query.where(
+            select(field.id)
+            .where(
+                field.test_type_id == TestRun.test_type_id,
+                field.canonical_key == window.key,
+                _condition_value(field).between(window.low, window.high),
+            )
+            .exists()
         )
     if adopted is not None:
         query = query.where(
@@ -1206,25 +1371,33 @@ def list_runs(
 
     total = db.scalar(select(func.count()).select_from(query.subquery())) or 0
     size = clamp_limit(limit)
-    runs = list(
-        db.scalars(
-            query.order_by(
-                *sorting.order_by(
-                    RUN_SORTS,
-                    sort=sort,
-                    desc=desc,
-                    default="created_at",
-                    tiebreaker=TestRun.id,
-                )
-            )
-            .limit(size)
-            .offset(offset)
-        )
+    ordering = sorting.order_by(
+        RUN_SORTS,
+        sort=sort,
+        desc=desc,
+        default="created_at",
+        tiebreaker=TestRun.id,
     )
+    if order is not None:
+        # **「비슷」 은 가까운 순이 먼저다** — 재료 목록과 같은 판단. 열 정렬은 같은 점수
+        # 안에서 먹는다.
+        ordering = [order.desc(), *ordering]
+    reasons: dict[uuid.UUID, str | None] = {}
+    if why is not None:
+        picked = db.execute(
+            query.add_columns(why).order_by(*ordering).limit(size).offset(offset)
+        ).all()
+        runs = [row[0] for row in picked]
+        reasons = {row[0].id: row[1] for row in picked}
+    else:
+        runs = list(db.scalars(query.order_by(*ordering).limit(size).offset(offset)))
     ctx = _context(db, runs)
     book = AccessBook(db, user).prime(runs)
     return Page(
-        items=[_run_out(run, ctx, access=book.of(run)) for run in runs],
+        items=[
+            _run_out(run, ctx, access=book.of(run), matched=reasons.get(run.id))
+            for run in runs
+        ],
         total=total,
         limit=size,
         offset=offset,
@@ -1337,6 +1510,11 @@ def run_facets(
         for value, count in tally(base.c.operator)
         if value
     ]
+    instruments = [
+        RunFacetOut(key=str(value), label=str(value), count=count)
+        for value, count in tally(base.c.instrument)
+        if value
+    ]
     # **조건 dict 안이라 컬럼처럼 못 센다.** `->>` 로 꺼내 묶는다.
     groups = [
         RunFacetOut(key=str(value), label=str(value), count=count)
@@ -1431,6 +1609,9 @@ def run_facets(
         ),
         operators=with_empty(
             sorted(operators, key=lambda one: one.label), tally(base.c.operator)
+        ),
+        instruments=with_empty(
+            sorted(instruments, key=lambda one: one.label), tally(base.c.instrument)
         ),
         testing_groups=with_empty(sorted(groups, key=lambda one: one.label), group_pairs),
         divisions=with_empty(

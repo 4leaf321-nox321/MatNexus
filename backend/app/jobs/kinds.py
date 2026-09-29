@@ -58,6 +58,13 @@ PIPELINES_PARSE_INBOX = "pipelines.parse_inbox"
 #: 조용히 옛 답을 준다.
 SEARCH_REINDEX = "search.reindex"
 
+#: 재료 몇 개만 다시 색인 — payload: material_ids
+#:
+#: 위의 전체 색인은 하루 한 번이라 **오늘 등록한 재료는 내일에야 뜻으로 걸렸다.** 재료 목록의
+#: 「비슷」 이 뜻까지 보게 된 뒤로(2026-09-29) 그 하루가 「방금 넣은 재료가 안 나온다」 로
+#: 보인다. 저장 요청 안에서 임베딩하지 않는 이유는 위와 같다 — 워커가 곧바로 한다.
+SEARCH_INDEX_MATERIALS = "search.index_materials"
+
 #: 기한이 다가온 측정 의뢰 — payload 없음(하루 한 번)
 #:
 #: 의뢰에 `due_on` 을 받아 두고 **아무도 안 봤다.** 기한은 지나고 나서야 문제가

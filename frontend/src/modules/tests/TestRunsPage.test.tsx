@@ -20,9 +20,11 @@ import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import TestRunsPage from '@/modules/tests/TestRunsPage'
+import { display } from '@/shared/units'
 
 const runs = vi.fn()
 const facets = vi.fn()
+const standardConditions = vi.fn()
 
 vi.mock('@/shared/auth/AuthContext', () => ({
   useAuth: () => ({ user: { id: 'u1', memberships: [] } }),
@@ -34,6 +36,7 @@ vi.mock('@/modules/tests/api', async (importOriginal) => ({
   testsApi: {
     runs: (...args: unknown[]) => runs(...args),
     runFacets: (...args: unknown[]) => facets(...args),
+    standardConditions: () => standardConditions(),
   },
 }))
 
@@ -92,6 +95,7 @@ const FACETS = {
     { key: 'curve.resample', label: '균등 격자로 재샘플', count: 1 },
   ],
   materials: MATERIALS,
+  instruments: [{ key: 'Zwick Z100', label: 'Zwick Z100', count: 1 }],
 }
 
 function show() {
@@ -111,6 +115,10 @@ beforeEach(() => {
   vi.clearAllMocks()
   runs.mockResolvedValue({ items: [RUN], total: 1, limit: 50, offset: 0 })
   facets.mockResolvedValue(FACETS)
+  standardConditions.mockResolvedValue([
+    { key: 'temperature', label: '온도', si_unit: 'K', aliases: [], help: '' },
+    { key: 'strain_rate', label: '변형률속도', si_unit: '1/s', aliases: [], help: '' },
+  ])
 })
 
 describe('처리로 필터', () => {
@@ -190,5 +198,76 @@ describe('많으면 쳐서 찾는다', () => {
     await user.click(screen.getByRole('button', { name: /처리 단계/ }))
     expect(await screen.findByText('채택된 결과가 거친 단계')).toBeTruthy()
     expect(screen.queryByPlaceholderText('검색')).toBeNull()
+  })
+})
+
+describe('찾기 — 방식과 상세 조건 (2026-09-29)', () => {
+  it('「비슷」 은 곧바로 그 방식으로 묻고, 재료의 뜻으로 걸린 줄에 이유가 선다', async () => {
+    runs.mockResolvedValue({
+      items: [{ ...RUN, matched: 'meaning' }],
+      total: 1,
+      limit: 50,
+      offset: 0,
+    })
+    const user = userEvent.setup()
+    show()
+    await screen.findByText(/SECC_1.0__01__MD_01__TEN_01/)
+
+    await user.type(screen.getByRole('textbox', { name: '시험 찾기' }), '아연도금 강판')
+    await user.click(screen.getByRole('button', { name: '찾기' }))
+    await waitFor(() => expect(asked().q).toBe('아연도금 강판'))
+
+    const modes = screen.getByRole('group', { name: '찾는 방식' })
+    await user.click(within(modes).getByRole('button', { name: '비슷' }))
+    await waitFor(() => expect(asked().mode).toBe('similar'))
+    expect(asked().q).toBe('아연도금 강판')
+    expect(await screen.findByText('재료의 뜻이 가까움')).toBeInTheDocument()
+  })
+
+  it('조건 범위는 표의 화면 단위를 함께 싣고, 찾기를 누를 때 걸린다', async () => {
+    const user = userEvent.setup()
+    show()
+    await screen.findByText(/SECC_1.0__01__MD_01__TEN_01/)
+
+    await user.click(screen.getByRole('button', { name: /상세 조건/ }))
+    // 표준 조건은 서버가 준다 — 그려진 뒤에 고른다.
+    await screen.findByRole('option', { name: '온도' })
+    await user.selectOptions(screen.getByRole('combobox', { name: '시험 조건' }), 'temperature')
+    await user.type(screen.getByRole('spinbutton', { name: '조건 하한' }), '70')
+    await user.type(screen.getByRole('spinbutton', { name: '조건 상한' }), '90')
+    await user.selectOptions(screen.getByRole('combobox', { name: '장비' }), 'Zwick Z100')
+    // 적기만 해서는 안 걸린다.
+    expect(asked().condition).toBeUndefined()
+
+    await user.click(screen.getByRole('button', { name: '이 조건으로 찾기' }))
+    await waitFor(() => expect(asked().condition).toBe('temperature'))
+    // **단위 없이 80 을 보내면 °C 인지 K 인지 모른다.** 단위는 표에서 읽는다.
+    expect(asked()).toMatchObject({
+      condition_unit: display('K').unit,
+      condition_min: '70',
+      condition_max: '90',
+      instrument: 'Zwick Z100',
+    })
+    expect(screen.getByRole('button', { name: /상세 조건 · 2/ })).toBeInTheDocument()
+
+    // 초기화는 옛 조건을 **걷어 낸다** — 남으면 지운 조건에 여전히 걸려 있다.
+    await user.click(screen.getByRole('button', { name: '초기화' }))
+    await waitFor(() => expect(asked().condition).toBeUndefined())
+    expect(asked().condition_unit).toBeUndefined()
+    expect(asked().instrument).toBeUndefined()
+  })
+
+  it('조건에 걸려 0건이면 「등록된 시험이 없습니다」 라고 하지 않는다', async () => {
+    runs.mockResolvedValue({ items: [], total: 0, limit: 50, offset: 0 })
+    const user = userEvent.setup()
+    show()
+    // 거르기 전 — 정말 없는 것이다.
+    expect(await screen.findByText(/등록된 시험이 없습니다/)).toBeInTheDocument()
+
+    await user.type(screen.getByRole('textbox', { name: '시험 찾기' }), 'zzz')
+    await user.click(screen.getByRole('button', { name: '찾기' }))
+    expect(await screen.findByText(/조건에 맞는 시험이 없습니다/)).toBeInTheDocument()
+    expect(screen.getByText(/「비슷」 으로 바꾸면/)).toBeInTheDocument()
+    expect(screen.queryByText(/등록된 시험이 없습니다/)).not.toBeInTheDocument()
   })
 })

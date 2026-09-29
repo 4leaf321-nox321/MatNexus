@@ -17,6 +17,10 @@ export type SpecimenRowPage = components['schemas']['Page_SpecimenRowOut_']
 export type SpecimenFacets = components['schemas']['SpecimenFacetsOut']
 export type SpecimenBulkField = components['schemas']['SpecimenBulkUpdateRequest']['field']
 export type SpecimenBulkResult = components['schemas']['SpecimenBulkUpdateOut']
+/** 다른 두께의 같은 재료로 옮기기(2026-09-29) — 계획과 실행이 같은 본문을 받는다. */
+export type RelocateRequest = components['schemas']['SpecimenRelocateRequest']
+export type RelocatePlan = components['schemas']['RelocatePlanOut']
+export type RelocateResult = components['schemas']['RelocateOut']
 /** 고친 시편과 **이름이 어떻게 바뀌었는지**. */
 export type SpecimenUpdated = components['schemas']['SpecimenUpdateOut']
 export type NamePreview = components['schemas']['NamePreviewOut']
@@ -115,6 +119,21 @@ export interface MaterialQuery {
   /** 그 부서가 등록한 것만. slug 를 준다. 전에는 `scope`(전역 / 부서 것)도 있었는데
    *  「전역」 을 걷으면서 함께 걷었다(ADR 0035). */
   workspace?: string
+  /** `q` 를 찾는 방식 — 일치 · 포함(기본) · 비슷. 「비슷」 이면 가까운 순으로 서고 줄마다
+   *  `matched` 가 붙는다(2026-09-29). */
+  mode?: string
+  /** **이름 말고 다른 조건**(2026-09-29). 서버가 거른다 — `materialSearch.detailQuery` 가 만든다. */
+  use?: string
+  maker?: string
+  lot?: string
+  thickness_min?: number
+  thickness_max?: number
+  /** 두께 범위의 단위. 안 보내면 서버가 SI(m)로 읽는다 — 화면은 늘 보낸다. */
+  thickness_unit?: string
+  test_type?: string
+  card?: string
+  registered_from?: string
+  registered_to?: string
   /** **서버가 정렬한다.** 화면에서 하면 이 쪽에 실린 것만 정렬된다. */
   sort?: string
   desc?: boolean
@@ -136,6 +155,9 @@ export interface SpecimenQuery {
   standard?: string
   /** 거르기 목록에서 고른 규격 — 정확히. `__none__` 은 규격 없음. */
   standard_exact?: string
+  /** 재료의 기준 두께와 이 비율(0.1 = 10%) 이상 다른 시편만 — 두께가 다른 재료에 넣은 것을
+   *  찾는다(ADR 0042). 시편에 적은 두께와 시험 파일이 잰 두께를 서버가 본다. */
+  thickness_gap?: number
   /** **서버가 정렬한다.** 화면에서 하면 이 쪽에 실린 것만 정렬된다. */
   sort?: string
   desc?: boolean
@@ -198,6 +220,15 @@ export const materialsApi = {
       field,
       value,
     }),
+
+  /**
+   * 고른 시편을 **다른 두께의 같은 재료**로 옮기면 무엇이 어디로 가나 — 쓰지 않는다(2026-09-29).
+   * 걸린 카드(확정 포함)와 그 카드를 정리할 수 있는지도 함께 온다.
+   */
+  relocatePlan: (body: RelocateRequest) =>
+    api.post<RelocatePlan>('/specimens/relocate-plan', body),
+  /** 옮긴다. 걸린 카드에는 코멘트가 반드시 붙고, `card_actions` 로 정리(사용 중지)도 고른다. */
+  relocate: (body: RelocateRequest) => api.post<RelocateResult>('/specimens/relocate', body),
 
   /**
    * 실제로 쓰이고 있는 분류 조합. **고정 목록을 화면에 박지 않는다** — 부서가
