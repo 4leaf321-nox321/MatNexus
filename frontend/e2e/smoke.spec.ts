@@ -109,8 +109,12 @@ test('로그인부터 곡선까지', async ({ page }) => {
     // **채우기만 해서는 검색되지 않는다.** 예전에 채우고 끝냈는데, 그때는 새
     // 재료가 우연히 첫 쪽 50건 안에 있어서 통과했다. 재료가 52건이 되자
     // 깨졌다 — 위 주석이 예고한 바로 그 실패다. 눌러야 좁혀진다.
-    await page.getByPlaceholder('이름 · 별칭 · Grade 로 찾기').fill(RUN_ID)
-    await page.getByRole('button', { name: '찾기' }).click()
+    //
+    // **자리표시 글자가 아니라 칸 이름으로 찾는다.** 찾는 칸이 늘어 자리표시를 바꾸자
+    // (「이름 · 별칭 · Grade」 → 용도·제조사·로트까지, 2026-09-29) 이 줄이 90초를
+    // 기다리다 죽었다 — vitest 는 칸 이름으로 찾아서 못 봤다.
+    await page.getByLabel('재료 찾기', { exact: true }).fill(RUN_ID)
+    await page.getByRole('button', { name: '찾기', exact: true }).click()
     await expect(page.getByRole('link', { name: new RegExp(RUN_ID) })).toBeVisible()
   })
 
