@@ -188,7 +188,7 @@ def frequency(frame: Frame, options: dict[str, Any]) -> StepResult:
             choice_labels={
                 "tan_delta_peak": "tan δ 피크",
                 "loss_peak": "손실 탄성률 피크",
-                "storage_onset": "저장 탄성률 온셋 (접선 교점)",
+                "storage_onset": "저장 탄성률 낙폭 지점 (최댓값 대비)",
             },
             help=(
                 "셋은 보통 몇 °C 씩 다릅니다. 어느 것으로 쟀는지를 안 적으면 "
@@ -197,12 +197,15 @@ def frequency(frame: Frame, options: dict[str, Any]) -> StepResult:
         ),
         ParamSpec(
             name="drop",
-            label="온셋 판정 낙폭",
+            label="낙폭 (최댓값 대비)",
             type="float",
             unit="1",
             default=0.5,
             when={"method": ("storage_onset",)},
-            help="저장 탄성률이 이 비율만큼 떨어지는 지점을 씁니다(0.5 = 절반).",
+            help=(
+                "저장 탄성률이 최댓값에서 이 비율만큼 떨어진 첫 온도를 씁니다(0.5 = 절반). "
+                "접선 교점 온셋(ASTM E1640)이 아닙니다 — 낙폭을 크게 잡을수록 값이 높아집니다."
+            ),
         ),
         ParamSpec(
             name="temperature", label="온도 열", type="str", role="column", default=TEMPERATURE
@@ -233,9 +236,13 @@ def glass_transition(frame: Frame, options: dict[str, Any]) -> StepResult:
     """온도 스윕에서 Tg 를 잡는다. 곡선은 안 바뀐다.
 
     **정의마다 값이 다르다.** tan δ 피크가 가장 높고 저장 탄성률 온셋이 가장
-    낮은 것이 보통이며, 그 차이는 몇 °C 에서 십수 °C 까지 간다. 하나로 박아 두면
-    다른 정의로 보고된 값과 비교가 안 되고, 조용히 바꾸면 예전 값과 어긋난다 —
-    탄성계수 단계와 같은 판단이다.
+    낮은 것이 보통이며, 그 차이는 몇 °C 에서 십수 °C 까지 간다. 여기의 셋째 정의는
+    온셋(접선 교점, ASTM E1640)이 **아니라** 최댓값에서 정한 비율만큼 떨어진 첫
+    온도다 — 기본 절반이면 전이의 한가운데라 온셋보다 높다. 라벨이 오래 「온셋 (접선
+    교점)」 이었다가 바로잡혔다(2026-09-30, 가이드를 코드와 대조하다 드러났다).
+
+    하나로 박아 두면 다른 정의로 보고된 값과 비교가 안 되고, 조용히 바꾸면 예전 값과
+    어긋난다 — 탄성계수 단계와 같은 판단이다.
 
     그리고 tan δ 피크 온도는 **모드와 주파수에 의존한다.** 규격 번호만 적힌
     보고서로는 재현이 안 된다는 것이 DMA 규격 문헌의 결론이다.

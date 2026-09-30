@@ -20,6 +20,7 @@ export type Doc = Record<string, unknown>
 
 /** 문서 종류 — **「무엇을 하려고 왔나」 의 입구.** 순서가 곧 화면 순서다. */
 export const KINDS = [
+  { key: 'platform', label: '앱 사용', hint: '이 앱에서 무엇을 어떻게 하나' },
   { key: 'specimen', label: '시편 규격', hint: '어떻게 자르나' },
   { key: 'method', label: '시험 방법', hint: '어떻게 재나' },
   { key: 'calculation', label: '물성 계산', hint: '잰 것이 어떻게 물성이 되나' },

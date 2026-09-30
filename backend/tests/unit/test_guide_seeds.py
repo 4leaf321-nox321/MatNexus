@@ -134,6 +134,154 @@ class Test기본은_안_덮는다:
         assert set(_bodies(db)) == {"00-처음", "01-다음", "02-새로"}
 
 
+def _rewritten(text: str) -> dict[str, Any]:
+    """첫 절만 저장소에서 고쳐 쓴 씨앗."""
+    changed = seed()
+    changed["sections"][0]["body"] = {
+        "type": "doc",
+        "content": [{"type": "paragraph", "content": [{"type": "text", "text": text}]}],
+    }
+    return changed
+
+
+def _section(db: Session, key: str) -> GuideSection:
+    document = db.scalar(select(GuideDocument).where(GuideDocument.key == "sample-guide"))
+    assert document is not None
+    row = db.scalar(
+        select(GuideSection).where(
+            GuideSection.document_id == document.id, GuideSection.key == key
+        )
+    )
+    assert row is not None
+    return row
+
+
+def _human_draft(db: Session, admin: Any, key: str, text: str, *, publish: bool) -> None:
+    """화면에서 내는 길 그대로 — 리비전에 쓴 사람이 남는다."""
+    from app.modules.guide import services
+
+    services.submit_revision(
+        db,
+        _section(db, key),
+        user=admin,
+        body={
+            "type": "doc",
+            "content": [{"type": "paragraph", "content": [{"type": "text", "text": text}]}],
+        },
+        note="현장",
+        publish=publish,
+    )
+    db.commit()
+
+
+class Test사람이_안_고친_절은_씨앗을_따른다:
+    """저장소에서 원문을 고쳐도 운영이 처음 판에 머물던 자리 — 실측(2026-09-30):
+    운영 가이드가 해석 프로그램 두 개 시절 판이었고, 사람이 고친 절은 하나도 없었다."""
+
+    def test_씨앗만_있던_절은_새_씨앗대로_바뀐다(self, db: Session, guides: Any) -> None:
+        guides.load(db, seed(), replace=False)
+
+        said = guides.load(db, _rewritten("저장소에서 고친 첫 절"), replace=False)
+
+        assert "씨앗대로 갱신 1" in said
+        assert _bodies(db)["00-처음"] == "저장소에서 고친 첫 절"
+        assert _section(db, "00-처음").revision_no == 2, "앞 판이 리비전에 안 남았다"
+
+    def test_사람이_승인한_절은_안_덮는다(self, db: Session, guides: Any, admin: Any) -> None:
+        guides.load(db, seed(), replace=False)
+        _human_draft(db, admin, "00-처음", "운영에서 고친 글", publish=True)
+
+        said = guides.load(db, _rewritten("저장소에서 고친 첫 절"), replace=False)
+
+        assert _bodies(db)["00-처음"] == "운영에서 고친 글", "운영 편집이 덮였다"
+        assert "사람이 고쳐 둔 절 1" in said and "00-처음" in said
+
+    def test_대기_초안이_있는_절은_안_덮는다(
+        self, db: Session, guides: Any, admin: Any
+    ) -> None:
+        """옛 본문 위에 쓴 초안이 나중에 승인되면 씨앗 갱신을 말없이 되돌린다."""
+        guides.load(db, seed(), replace=False)
+        _human_draft(db, admin, "00-처음", "검토 기다리는 글", publish=False)
+
+        guides.load(db, _rewritten("저장소에서 고친 첫 절"), replace=False)
+
+        assert _bodies(db)["00-처음"] == "첫 절"
+
+    def test_같으면_리비전을_안_쌓는다(self, db: Session, guides: Any) -> None:
+        """배포마다 도는 모드다 — 안 바뀐 절에 판이 쌓이면 이력이 소음이 된다."""
+        guides.load(db, seed(), replace=False)
+
+        said = guides.load(db, seed(), replace=False)
+
+        assert "씨앗대로 갱신 0" in said
+        assert _section(db, "00-처음").revision_no == 1
+
+    def test_replace_로_되돌린_절은_다시_씨앗을_따른다(
+        self, db: Session, guides: Any, admin: Any
+    ) -> None:
+        """사람이 `--replace` 로 씨앗을 고른 뒤라면 그 절은 다시 씨앗의 것이다."""
+        guides.load(db, seed(), replace=False)
+        _human_draft(db, admin, "00-처음", "운영에서 고친 글", publish=True)
+        guides.load(db, seed(), replace=True)
+
+        guides.load(db, _rewritten("저장소에서 고친 첫 절"), replace=False)
+
+        assert _bodies(db)["00-처음"] == "저장소에서 고친 첫 절"
+
+    def test_check_는_둘을_가른다(self, db: Session, guides: Any, admin: Any) -> None:
+        guides.load(db, seed(), replace=False)
+        _human_draft(db, admin, "01-다음", "운영에서 고친 글", publish=True)
+        changed = _rewritten("저장소에서 고친 첫 절")
+        changed["sections"][1]["body"] = _rewritten("저장소에서 고친 둘째 절")["sections"][0][
+            "body"
+        ]
+
+        said = guides.check(db, changed)
+
+        assert "씨앗대로 바뀔 절 1" in said
+        assert "사람이 고친 절 1" in said and "01-다음" in said
+
+
+class Test그림이_바뀌면_보기와_넣기가_같은_답을_낸다:
+    """전에는 `--check` 가 그림 주소를 빼고 견줬다 — 그림 파일만 바뀐 절이 「같음」 으로
+    보이는데 적재는 그 절을 바꿨다. 실측(2026-09-30): SVG 를 고친 뒤 개발 DB 의 59 절이
+    옛 그림을 가리키는데 `--check` 는 전부 「같음」 이었다."""
+
+    def _with_figure(self, folder: Path, svg: str) -> dict[str, Any]:
+        (folder / "assets").mkdir(exist_ok=True)
+        (folder / "assets" / "sample-1-1.svg").write_text(svg, encoding="utf-8")
+        figured = seed(assets=[{"name": "sample-1-1.svg", "alt": "그림"}])
+        figured["sections"][0]["body"] = {
+            "type": "doc",
+            "content": [{"type": "image", "attrs": {"src": "asset:sample-1-1.svg"}}],
+        }
+        return figured
+
+    def test_그림이_같으면_같다고_한다(
+        self, db: Session, guides: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(guides, "SEEDS", tmp_path)
+        guides.load(db, self._with_figure(tmp_path, "<svg>하나</svg>"), replace=False)
+
+        assert guides.check(db, self._with_figure(tmp_path, "<svg>하나</svg>")) == "같음"
+
+    def test_그림_파일이_바뀌면_짚고_적재가_가져간다(
+        self, db: Session, guides: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(guides, "SEEDS", tmp_path)
+        guides.load(db, self._with_figure(tmp_path, "<svg>옛 그림</svg>"), replace=False)
+        before = _section(db, "00-처음").body
+
+        changed = self._with_figure(tmp_path, "<svg>고친 그림</svg>")
+        assert "씨앗대로 바뀔 절 1" in guides.check(db, changed)
+
+        said = guides.load(db, changed, replace=False)
+
+        assert "씨앗대로 갱신 1" in said
+        assert _section(db, "00-처음").body != before, "고친 그림을 안 가져갔다"
+        assert guides.check(db, changed) == "같음"
+
+
 class Test덮기는_의식적으로만:
     def test_replace_는_덮는다(self, db: Session, guides: Any) -> None:
         guides.load(db, seed(), replace=False)

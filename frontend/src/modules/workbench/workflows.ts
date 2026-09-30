@@ -294,14 +294,15 @@ export const WORKFLOWS: Workflow[] = [
           const runs = live(items, 'test_run')
           if (runs.length === 0) return null
           const fitted = runs.filter((one) => fact(one, 'prony_fits') > 0)
-          const href = materialHref(runs, 'properties')
+          // 글로벌 피팅은 「CAE 카드」 탭에 있다(묶음 단추 → 창). 「물성」 탭은 결과를 보일 뿐이다.
+          const href = materialHref(runs, 'cards')
           return {
             ok: fitted.length > 0,
             say:
               fitted.length > 0
                 ? `${fitted.length}건에 맞춘 계수가 있습니다.`
-                : '아직 맞춘 계수가 없습니다. 재료 화면의 「물성」 탭에서 시편 여럿을 한 번에 적합합니다.',
-            go: href ? { href, label: '그 재료의 물성 탭으로' } : undefined,
+                : '아직 맞춘 계수가 없습니다. 재료 화면의 「CAE 카드」 탭에서 시편 여럿을 한 번에 적합합니다.',
+            go: href ? { href, label: '그 재료의 CAE 카드 탭으로' } : undefined,
           }
         },
       },
@@ -557,7 +558,7 @@ export const WORKFLOWS: Workflow[] = [
       {
         key: 'decide',
         title: '확정 또는 반려',
-        what: '재료 화면의 「CAE 카드」 탭에서 부서 관리자가 누릅니다 — 워크벤치가 대신 누르지 않습니다.',
+        what: '재료 화면의 「CAE 카드」 탭에서 자료 관리자가 누릅니다 — 워크벤치가 대신 누르지 않습니다.',
         judge: (items) => {
           const cards = live(items, 'card')
           if (cards.length === 0) return null

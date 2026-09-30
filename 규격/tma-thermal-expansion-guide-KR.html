@@ -239,6 +239,11 @@ a:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-of
     </div>
     <figcaption><b>여섯 단계와 그 사이를 흐르는 데이터.</b> 03까지는 시험 결과 그 자체이고, 04에서 솔버마다 다른 규약으로 번역됩니다. 검증에서 어긋나면 대개 04의 번역이 틀린 것입니다.</figcaption>
   </figure>
+
+  <div class="note">
+    <h4>이 앱에서는</h4>
+    <p>TMA 전용 시험 종류와 처리 단계가 <strong>없습니다</strong>. ΔL/L₀ 곡선에서 Tg와 구간별 CTE를 뽑는 일(위 그림의 03까지)은 장비 소프트웨어나 앱 밖에서 하고, 그 결과를 재료의 선언 물성 「선팽창계수(CTE)」로 적습니다. 앱은 그 값을 카드의 열물성 블록에 싣고 해석 프로그램마다 정해진 칸에 옮겨 적는 데까지 합니다 — <strong>04의 규약 변환(순간 ↔ 할선, 기준온도 재환산)은 하지 않습니다.</strong></p>
+  </div>
 </section>
 
 <section id="s1">
@@ -351,6 +356,15 @@ a:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-of
     <h4>왜 이게 치명적인가</h4>
     <p>솔버는 카드에 적힌 숫자가 어느 쪽인지 <strong>물어보지 않습니다.</strong> 자기 규약대로 해석하고 계산을 끝까지 마칩니다. 에러도, 경고도 없습니다. 순간 계수를 할선 칸에 넣으면 260 °C에서 열변형이 <strong>60 % 과대평가</strong>되고, 반대로 하면 <strong>45 % 과소평가</strong>됩니다(07절 그림). PCB 휨이나 솔더 조인트 수명처럼 열변형이 곧 답인 해석에서는 이 한 줄이 결론을 뒤집습니다.</p>
   </div>
+
+  <div class="note">
+    <h4>이 앱에서는</h4>
+    <ul class="tight">
+      <li>선언 물성 「선팽창계수(CTE)」에는 할선인지 순간인지 고르는 칸이 없고, 앱은 값을 <strong>할선 계수로 보고</strong> Abaqus <code>*EXPANSION</code> · ANSYS <code>ALPX</code> · Nastran · OptiStruct <code>MAT1</code>의 A에 그대로 옮깁니다. 순간 ↔ 할선 변환을 하지 않으므로 <strong>할선 값을 적으세요.</strong></li>
+      <li>재료 상세 「물성」 탭에서 항목을 고르고 「온도 추가」로 온도마다 값을 적으면 온도별 표가 됩니다(값이 여럿이면 온도가 모두 있어야 합니다). 「출처」(문헌 · 규격 · 제품 데이터시트 · 밀시트 · 추정)와 「근거 문서」가 덱 머리 주석까지 따라가므로, 근거 문서에 “secant, ref 25 °C”처럼 계수 종류와 데이터 기준온도를 함께 적어 두세요.</li>
+      <li>「문헌 물성」의 선팽창계수 문헌값을 재료에 채택해 같은 칸을 채울 수도 있습니다.</li>
+    </ul>
+  </div>
 </section>
 
 <section id="s3">
@@ -429,6 +443,11 @@ a:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-of
     <li>따라서 “이 재료 Tg가 몇 도냐”는 질문에는 <strong>장비·판정법·조건을 붙여야</strong> 답이 됩니다. 사양서에 “Tg 150 °C (DMA tan δ)”와 “Tg 135 °C (TMA)”가 동시에 적혀 있어도 모순이 아닙니다.</li>
     <li>CAE 관점에서는 어느 값이 “진짜”인지 다투는 것보다 <strong>물성 곡선 전체를 넣는 것</strong>이 항상 낫습니다. Tg는 결국 곡선을 요약한 한 개의 숫자일 뿐입니다.</li>
   </ul>
+
+  <div class="note">
+    <h4>이 앱에서는</h4>
+    <p>DMA 처리의 「유리전이온도」 단계는 정의를 「tan δ 피크」 · 「손실 탄성률 피크」 · 「저장 탄성률 낙폭 지점 (최댓값 대비)」 중에서 고르게 하고, 고른 정의를 값과 함께 남깁니다(낙폭 지점은 접선 교점 온셋이 아니라 E′가 정한 비율 — 기본 절반 — 만큼 떨어진 첫 온도입니다). TMA 접선 교점이나 DSC 중점으로 Tg를 내는 처리는 없습니다. 「문헌 물성」의 유리전이온도에도 DSC · DMA · TMA 값이 한 항목에 섞여 있으니 값마다 기법을 확인하세요.</p>
+  </div>
 </section>
 
 <section id="s5">
@@ -476,6 +495,15 @@ a:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-of
       <li><strong>LS-DYNA</strong>는 접선 계수를 쓰므로 ①이 <strong>아예 없습니다</strong>. ②는 초기 온도장(<code>*INITIAL_TEMPERATURE_…</code>)이 정합니다.</li>
     </ul>
   </div>
+
+  <div class="note">
+    <h4>이 앱에서는</h4>
+    <ul class="tight">
+      <li>선팽창계수를 <strong>온도 한 점</strong>으로 적었으면 그 온도를 기준 온도로 적습니다 — Abaqus <code>ZERO=</code> · ANSYS <code>MP,REFT</code> · Nastran · OptiStruct <code>MAT1</code>의 TREF. 값이 하나(상수 α)면 Abaqus에서는 ZERO가 결과에 안 들어가지만, ANSYS의 REFT는 위에서 본 대로 ②를 겸하므로 해석의 무응력 온도와 다르면 덱의 그 줄을 고칩니다.</li>
+      <li><strong>온도별 표</strong>로 적었거나 온도 없이 값만 적었으면 기준 온도를 알 수 없어 어느 형식에도 적지 않고, 없다는 사실을 덱 주석에 남깁니다(Abaqus는 표일 때). 그대로 쓰면 Abaqus는 <code>ZERO=0</code>, ANSYS는 <code>TREF</code> 기본값 0, Nastran · OptiStruct는 TREF 0을 씁니다 — 덱의 온도는 켈빈이므로 <strong>0 K가 기준</strong>이 됩니다. 할선 데이터의 기준온도(①)를, ANSYS라면 무응력 온도(②)까지 직접 적어 넣으세요.</li>
+      <li>무응력 온도(②)를 정하는 초기 온도 · 초기 온도장은 해석 모델의 것이라 앱이 쓰지 않고, <code>MPAMOD</code> 같은 재환산도 하지 않습니다.</li>
+    </ul>
+  </div>
 </section>
 
 <section id="s6">
@@ -505,6 +533,11 @@ a:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-of
     <li>사출품은 <strong>유동 방향이 위치마다 다릅니다</strong>. 정밀 해석이라면 사출 해석의 섬유 배향 결과를 매핑하는 것이 정석이고, 그게 과하면 대표 방향 두 개로 나누어 영역별로 물성을 주는 절충이 현실적입니다.</li>
     <li>측정 자체가 일이 됩니다. 방향별로 시편을 따로 잘라야 하고, 두께 방향은 시편이 얇아 분해능 확보가 어렵습니다. 적층판 z축은 여러 장을 겹쳐 재기도 합니다.</li>
   </ul>
+
+  <div class="note">
+    <h4>이 앱에서는</h4>
+    <p>선팽창계수는 방향이 없는 값 하나(또는 온도 표 하나)입니다. Abaqus <code>*EXPANSION, TYPE=ISO</code> · ANSYS <code>ALPX</code>만 · Nastran · OptiStruct <code>MAT1</code>의 A로 나가 <strong>등방</strong>이 됩니다. <code>TYPE=ORTHO</code> · <code>ALPY</code>/<code>ALPZ</code> · <code>LCIDY</code>/<code>LCIDZ</code> 같은 방향별 CTE와 재료 좌표계는 앱이 쓰지 않으니 해석 모델에서 직접 넣습니다.</p>
+  </div>
 </section>
 
 <section id="s7">
@@ -611,6 +644,19 @@ MPDATA,<b>ALPY</b>,1,1,  14.00E-6,14.01E-6,14.20E-6, 15.16E-6, 15.74E-6, 16.13E-
   <div class="note trap">
     <h4>세 카드는 같은 재료인데 숫자가 다릅니다</h4>
     <p>위 세 예제는 <strong>완전히 같은 TMA 데이터</strong>에서 나왔습니다. Abaqus·Ansys에는 할선 값(180 °C에서 108 ppm/K), LS-DYNA에는 순간 값(180 °C에서 249 ppm/K)이 들어갑니다. 카드를 이식할 때 숫자를 그대로 복사하면 바로 위 그림의 오차가 발생합니다. 물성 카드 주석에 <strong>“secant, ref 25 °C”</strong> 또는 <strong>“tangent”</strong>를 반드시 적어 두세요.</p>
+  </div>
+
+  <div class="note">
+    <h4>이 앱에서는</h4>
+    <p>선팽창계수는 카드의 열물성 블록에 실립니다 — 「재료 기본 정보 카드」 · 「탄소성 카드」에는 저절로, 「선형탄성구간(LVE) 카드」에는 「재료 기본 정보 함께 포함」을 켜면 따라옵니다. 해석 프로그램마다 나가는 모양은 이렇습니다.</p>
+    <ul class="tight">
+      <li><strong>Abaqus</strong> — 점도 형식을 뺀 Abaqus 형식에 <code>*EXPANSION, TYPE=ISO</code>(값 하나 또는 α · 온도 표). 할선 칸이라 이 절의 Abaqus 예제와 같은 규약입니다.</li>
+      <li><strong>ANSYS</strong> — 선형 · 탄소성 · 점탄성 등 구조 형식과 「ANSYS (열물성)」에 <code>MP,ALPX</code> 또는 <code>MPTEMP</code>/<code>MPDATA</code>의 ALPX 표. <code>CTEX</code> · <code>THSX</code>는 쓰지 않습니다.</li>
+      <li><strong>Nastran · OptiStruct</strong> — 구조 형식의 <code>MAT1</code>에 A(표면 가장 낮은 온도의 값)를 적고, 「선형」 · 「탄소성」 형식에서는 온도별 표를 <code>MATT1</code> + <code>TABLEM1</code>로 더합니다. 「열물성」 형식(<code>MAT4</code>)에는 열팽창이 없습니다.</li>
+      <li><strong>LS-DYNA</strong> — <code>*MAT_ADD_THERMAL_EXPANSION</code>을 쓰지 않습니다. 선팽창계수가 실리는 곳은 「LS-DYNA (온도 의존)」(<code>*MAT_PIECEWISE_LINEAR_PLASTIC_THERMAL</code>)의 상수 ALPHA 하나뿐이라, 이 절의 LS-DYNA 카드(순간 계수 곡선)는 앱이 만들지 않습니다.</li>
+      <li><strong>OpenRadioss</strong> — 선팽창계수를 싣지 않고, 「Radioss (열물성)」 덱에 안 실었다고 적습니다.</li>
+      <li>덱의 온도는 모두 <strong>켈빈</strong>이니 해석 모델도 K로 맞춥니다. 기본 단위계 mm · N · tonne · s · MPa에서 선팽창계수는 1/K 그대로입니다.</li>
+    </ul>
   </div>
 </section>
 

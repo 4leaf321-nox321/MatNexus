@@ -28,6 +28,7 @@ from app.modules.vocabulary.definitions import (
     ensure_builtin_axis_fields,
     ensure_builtin_vocabularies,
 )
+from matcore import cards
 
 SECC = {
     "family": "Metal",
@@ -46,6 +47,20 @@ def _axes(db: Session) -> None:
     ensure_builtin_vocabularies(db)
     ensure_builtin_axis_fields(db)
     db.commit()
+
+
+@pytest.fixture(autouse=True)
+def _clean_registry() -> Any:
+    """시험이 얹은 항목란을 남기지 않는다 — 레지스트리는 프로세스에 하나뿐이다.
+
+    DB 는 시험마다 비워지지만 레지스트리는 안 비워진다. 여기서 저장한 `probe_block`
+    (도움말 없음)이 같은 워커의 다음 시험에 물려 가 「블록마다 도움말이 있다」 는
+    `test_viscoelastic_api` 를 깼다 — 워커 배정이 맞아떨어질 때만 나는 실패다(2026-09-30).
+    `test_card_blocks` 와 같은 정리다."""
+    yield
+    cards.load_builtin()
+    for key in cards.installed():
+        cards.uninstall(key)
 
 
 def _ok(response: Any, status: int = 201) -> dict[str, Any]:

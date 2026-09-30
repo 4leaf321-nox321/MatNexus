@@ -733,11 +733,19 @@ def _thermal_lines(deck: Deck) -> list[str]:
     열팽창만 아는 재료로 열응력 해석은 돌아가고, 전도도만 아는 재료로 정상
     열해석은 돌아간다. 셋을 다 요구하면 그 재료는 영영 덱이 안 나온다.
 
-    ## `ZERO=` 를 함부로 안 붙인다
+    ## `ZERO=` 를 함부로 안 붙인다 — 대신 없다고 적는다
 
-    `*EXPANSION` 의 `ZERO` 는 **열변형이 0 이 되는 온도**다. 안 적으면 Abaqus 는
-    해석의 초기 온도를 쓴다. 카드에 기준 온도가 있을 때만 적는다 — 없는데
-    293.15 를 적어 넣으면 **덱은 멀쩡히 돌고 열응력만 통째로 어긋난다.**
+    `*EXPANSION` 의 `ZERO` 는 **할선 열팽창계수의 기준 온도(θ₀)**다. 안 적으면
+    Abaqus 는 **0** 을 쓴다(키워드 레퍼런스 「The default is ZERO=0」) — 해석의
+    초기 온도가 아니다. 전에는 여기에 「초기 온도를 쓴다」 고 적혀 있었고, 그래서
+    표로 적은 α 가 0 K 기준 할선값으로 읽히는 덱이 **아무 말 없이** 나갔다
+    (2026-09-30, 가이드를 고치다 드러났다). α 가 값 하나면 θ₀ 가 결과에 안 들어가
+    상관없고, 온도별 표면 들어간다 — 20 °C 기준 α 가 20e-6 → 30e-6 /K 로 오르면
+    100 K 올릴 때 열변형이 두 배로 나온다.
+
+    카드에 기준 온도가 있을 때만 적는다 — 없는데 293.15 를 적어 넣으면 **덱은
+    멀쩡히 돌고 열응력만 통째로 어긋난다.** 표를 낼 때 기준 온도가 없으면 그
+    사실을 덱에 적는다(ANSYS `REFT` · Nastran `TREF` 와 같다).
     """
     if not deck.has("thermal"):
         return []
@@ -746,9 +754,9 @@ def _thermal_lines(deck: Deck) -> list[str]:
     # `ZERO` 로 나가는 일이 생긴다 — `ZERO` 는 열변형이 0 이 되는 온도이고
     # 다른 물성의 측정 온도와 아무 관계가 없다.
     #
-    # 표로 적힌 열팽창에는 `ZERO` 를 안 붙인다. 표는 「이 온도에서 α 가 얼마」를
-    # 말할 뿐 **어디서 변형이 0 인지는 말하지 않는다.** 안 적으면 Abaqus 가
-    # 해석의 초기 온도를 쓴다 — 그것이 맞는 기본값이다.
+    # 표로 적힌 열팽창에 기준 온도가 없으면 `ZERO` 를 안 붙이고 **없다고 적는다.**
+    # 표는 「이 온도에서 α 가 얼마」를 말할 뿐 어느 온도 기준의 할선값인지는
+    # 말하지 않는다. Abaqus 는 그때 0 을 쓴다 — 받는 사람이 채워야 한다.
     zero = deck.number("thermal", "thermal_expansion_temperature")
     rows = deck.rows("thermal")
     for key, keyword, unit in THERMAL_KEYWORDS:
@@ -785,6 +793,11 @@ def _thermal_lines(deck: Deck) -> list[str]:
                 f"** {key}: 표 밖에서는 끝값이 유지됩니다 "
                 f"({table[0][0]:.5g}~{table[-1][0]:.5g} K 가 적힌 구간)"
             )
+            if key == "thermal_expansion" and zero is None:
+                lines.append(
+                    "** ZERO not on the card - Abaqus uses ZERO=0 (0 K). Set ZERO= to the"
+                )
+                lines.append("**   reference temperature of the secant CTE before use.")
             lines.append(head)
             lines.extend(f"{_free(one)}, {_free(temperature)}" for temperature, one in table)
         else:
@@ -945,11 +958,16 @@ _register_template_blocks()
 def render_abaqus_viscoelastic(deck: Deck) -> Rendered:
     """Abaqus `*VISCOELASTIC, TIME=PRONY` 덱. 선형 점탄성.
 
-    ## `*ELASTIC` 이 순간 탄성률이다
+    ## `*ELASTIC` 에 순간 탄성률을 적고, 그렇다고 `MODULI=` 로 말한다
 
-    Abaqus 는 `*VISCOELASTIC` 이 붙어 있으면 `*ELASTIC` 을 **순간(t=0) 탄성률**로
-    읽는다. 평형 탄성률을 넣으면 재료가 통째로 무르게 계산되는데, 덱은 멀쩡히
-    돌고 결과도 그럴듯하다.
+    카드의 탄성률은 순간(t=0) 값 E₀ 다. 그런데 Abaqus 는 `*VISCOELASTIC` 이 붙은
+    `*ELASTIC` 을 **기본으로 장기(LONG TERM) 탄성률**로 읽는다(키워드 레퍼런스
+    「MODULI=LONG TERM (default)」). 전에는 여기에 「순간으로 읽는다」 고 적혀 있었고
+    `MODULI=` 없이 E₀ 를 냈다 — Abaqus 는 E₀ 를 장기값으로 받아 순간 강성을
+    E₀/(1-Σg) 로 올린다. Σg = 0.99 면 100 배 딱딱한데 **덱은 멀쩡히 돈다**
+    (2026-09-30, 가이드를 고치다 드러났다). 다른 해석 프로그램은 제 규약대로 맞게
+    나가고 있었다(ANSYS · Nastran 은 순간값, OptiStruct 는 장기값으로 옮김,
+    LS-DYNA · Radioss 는 G∞ 를 따로 적음).
 
     ## 체적 완화를 0 으로 둔다 — 안 잰 값이다
 
@@ -988,8 +1006,8 @@ def render_abaqus_viscoelastic(deck: Deck) -> Rendered:
     notes: list[str] = []
     lines = _header(deck, "**")
     lines.append(f"** Consistent units: {deck.units.declaration}")
-    lines.append("** ELASTIC = instantaneous (t=0) moduli — Abaqus reads it that way")
-    lines.append("**          when *VISCOELASTIC is present.")
+    lines.append("** ELASTIC = instantaneous (t=0) moduli - MODULI=INSTANTANEOUS says so")
+    lines.append("**          (Abaqus default with *VISCOELASTIC is LONG TERM).")
     if reference is not None:
         celsius = reference - 273.15
         lines.append(f"** Valid at {reference:.2f} K ({celsius:.2f} C) only -")
@@ -1021,7 +1039,7 @@ def render_abaqus_viscoelastic(deck: Deck) -> Rendered:
     if density is not None:
         lines.append("*DENSITY")
         lines.append(f"{_free(density)},")
-    lines.append("*ELASTIC, TYPE=ISOTROPIC")
+    lines.append("*ELASTIC, TYPE=ISOTROPIC, MODULI=INSTANTANEOUS")
     lines.append(f"{_free(youngs)}, {_free(poisson)}")
     lines.extend(_thermal_lines(deck))
     lines.append("*VISCOELASTIC, TIME=PRONY, TYPE=ISOTROPIC")

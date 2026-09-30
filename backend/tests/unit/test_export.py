@@ -309,9 +309,9 @@ class Test열물성:
         assert "*SPECIFIC HEAT" not in text
 
     def test_기준_온도가_없으면_ZERO_를_안_붙인다(self) -> None:
-        """`ZERO` 는 열변형이 0 이 되는 온도다. 없는데 293.15 를 적어 넣으면
-        **덱은 멀쩡히 돌고 열응력만 통째로 어긋난다.** 안 적으면 Abaqus 가
-        해석의 초기 온도를 쓴다 — 그것이 맞는 기본값이다."""
+        """`ZERO` 는 할선 열팽창계수의 기준 온도다. 없는데 293.15 를 적어 넣으면
+        **덱은 멀쩡히 돌고 열응력만 통째로 어긋난다.** 안 적으면 Abaqus 는 0 을
+        쓰지만, α 가 값 하나면 기준 온도가 결과에 안 들어가 상관없다."""
         text = export.render("abaqus", thermal_deck(thermal_expansion=1.17e-05)).text
         assert "ZERO" not in text
         # **열팽창 자신의 온도에서만 온다.** 블록의 기준 온도를 쓰면 「비열을
@@ -427,6 +427,20 @@ class Test온도의존:
         body = text[text.index("*EXPANSION") :]
         assert f"{1.17e-05:.12E}, {293.15:.12E}" in body
         assert f"{1.42e-05:.12E}, {673.15:.12E}" in body
+
+    def test_열팽창_표에_기준_온도가_없으면_덱에_적는다(self) -> None:
+        """Abaqus 는 `ZERO` 가 없으면 **0** 을 쓴다 — 해석의 초기 온도가 아니다. 온도별
+        α 표면 0 K 기준 할선값으로 읽혀 열변형이 어긋나는데 덱은 멀쩡히 돈다. 지어
+        넣지는 않고(293.15 가 맞다는 보장이 없다) 받는 사람이 채우도록 적는다 —
+        ANSYS `REFT` · Nastran `TREF` 와 같다. 전에는 아무 말도 없었다(2026-09-30)."""
+        rows = [
+            {"temperature": 293.15, "thermal_expansion": 1.17e-05},
+            {"temperature": 673.15, "thermal_expansion": 1.42e-05},
+        ]
+        text = export.render("abaqus", temperature_deck(thermal_rows=rows)).text
+        head = text[: text.index("*EXPANSION")]
+        assert "ZERO not on the card - Abaqus uses ZERO=0" in head
+        assert "*EXPANSION, TYPE=ISO\n" in text, "기준 온도를 지어 넣었다"
 
     def test_표가_있으면_값을_두_번_안_낸다(self) -> None:
         """**같은 물성이 두 번 실리면 솔버가 뒤엣것으로 덮거나 거절한다.**"""

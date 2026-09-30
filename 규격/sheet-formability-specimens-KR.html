@@ -399,6 +399,18 @@ sup.fn{color:var(--hot);font-size:.72em;font-weight:600;padding-left:.15em}
     </tbody>
   </table></div>
   <p class="eqn"><b>브리핑 정정</b> — <code>*MAT_037</code>은 <code>*MAT_TRANSVERSELY_ANISOTROPIC_ELASTIC_PLASTIC</code>으로 <b>단일 r̄(수직 이방성)만</b> 받으며 <b>FLD를 담는 모델이 아닙니다</b>. FLD를 담는 짝은 <code>*MAT_039 = *MAT_FLD_TRANSVERSELY_ANISOTROPIC</code>입니다. <code>*MAT_036</code>은 Barlat–Lian 1989(3-parameter Barlat)이고, 그 FLD 짝은 <code>*MAT_FLD_3-PARAMETER_BARLAT</code>입니다.</p>
+
+  <div class="note">
+    <h4>이 앱에서는</h4>
+    <ul class="tight">
+      <li><strong>r값</strong> — 폭 채널이 있는 인장은 「처리」 탭의 「소성 변형비 r」 단계가 진변형률 구간(기본 0.08 – 0.15)에서 폭 변형률과 길이 변형률에 직선을 맞춰 r을 냅니다(두께 변형률은 부피 일정 가정으로 구함). R²가 0.95 미만이면 값을 내지 않습니다. 폭 신율계가 없는 장비면 「표로 시험 입력」으로 r값을 적고, 잰 값과 적은 값은 구별되어 남습니다.</li>
+      <li>「이방성 (세 방향 r값)」 묶음이 0° · 45° · 90°를 모아 r̄ · Δr와 Hill48 F · G · H · N을 냅니다. <strong>세 방향이 다 있어야 냅니다.</strong> 식은 G + H = 1로 맞춘 F = r₀/[r₉₀(1+r₀)], G = 1/(1+r₀), H = r₀/(1+r₀), N = (r₀+r₉₀)(1+2r₄₅)/[2r₉₀(1+r₀)]입니다. 방향별 항복응력비(σ₄₅/σ₀ · σ₉₀/σ₀)도 함께 싣지만, 응력으로 Hill48을 다시 맞추지는 않습니다.</li>
+      <li>Hill48은 다섯 해석 프로그램으로 나갑니다 — Abaqus <code>*POTENTIAL</code> · ANSYS <code>TB,HILL</code> · Nastran <code>MATEP</code>(SOL 400) · LS-DYNA <code>*MAT_036</code>(M = 2, Hill48과 같음) · OpenRadioss LAW43(뒤의 둘은 쉘 전용). 경화 곡선과 탄성은 같은 재료의 압연 방향(MD) 소성 카드를 짝으로 골라 가져옵니다.</li>
+      <li><strong>Yld2000-2d는 내지 않습니다</strong> — σ_b · r_b를 줄 벌지 · 크루시폼 시험 종류가 없습니다.</li>
+      <li><strong>n값</strong> — ISO 10275 · ASTM E646 방식으로 n을 내는 처리 단계가 없습니다. 경화식 적합에서 Swift(σ = K(ε₀ + εₚ)ⁿ)를 고르면 지수 n이 계수로 남지만, 규격의 구간 회귀 n과 같은 값은 아닙니다.</li>
+      <li><strong>FLC</strong> — 나카지마 · 마르시니악 시험 종류, 한계 변형률을 뽑는 처리, FLC를 담는 카드 블록과 해석 프로그램 형식(<code>*DAMAGE INITIATION, CRITERION=FLD</code> · <code>*DEFINE_CURVE_FLC</code> 등)이 <strong>없습니다</strong>. 위 표의 FLC 입력은 앱 밖에서 만듭니다.</li>
+    </ul>
+  </div>
 </section>
 
 <section id="s6">

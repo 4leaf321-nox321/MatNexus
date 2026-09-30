@@ -26,7 +26,16 @@ interface SecretOnceDialogProps {
   description: string
   secret: string
   subject?: string
+  /**
+   * 창 아래 한 줄. 기본은 임시 비밀번호의 말이다 — 액세스 토큰 창에도 「첫 로그인 시
+   * 비밀번호를 바꿔야 합니다」 가 뜨던 자리(2026-09-30).
+   */
+  footnote?: string
+  confirmLabel?: string
 }
+
+const PASSWORD_FOOTNOTE =
+  '이 값은 다시 표시되지 않습니다. 창을 닫기 전에 전달하세요. 받는 사람은 첫 로그인 시 비밀번호를 바꿔야 합니다.'
 
 export function SecretOnceDialog({
   open,
@@ -35,6 +44,8 @@ export function SecretOnceDialog({
   description,
   secret,
   subject,
+  footnote = PASSWORD_FOOTNOTE,
+  confirmLabel = '전달했습니다',
 }: SecretOnceDialogProps) {
   const [copied, setCopied] = useState(false)
 
@@ -74,13 +85,10 @@ export function SecretOnceDialog({
           </Button>
         </div>
 
-        <p className="text-muted-foreground text-xs">
-          이 값은 다시 표시되지 않습니다. 창을 닫기 전에 전달하세요. 받는 사람은 첫 로그인 시
-          비밀번호를 바꿔야 합니다.
-        </p>
+        <p className="text-muted-foreground text-xs">{footnote}</p>
 
         <DialogFooter>
-          <Button onClick={onClose}>전달했습니다</Button>
+          <Button onClick={onClose}>{confirmLabel}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

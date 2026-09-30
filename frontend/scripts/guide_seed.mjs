@@ -26,6 +26,8 @@ const [, , sourceDir = '../규격', outDir = '../backend/seeds/guide'] = process
 
 /** 파일 이름 → 문서 키·종류·대상. **키는 바뀌지 않는다** — 앱이 이것으로 가리킨다. */
 const CATALOG = {
+  'platform-usage-KR': { key: 'platform-usage', kind: 'platform', topic: 'platform' },
+  'platform-glossary-KR': { key: 'platform-glossary', kind: 'glossary', topic: 'platform' },
   'astm-tensile-specimens-KR': { key: 'tensile-specimens', kind: 'specimen', topic: 'tensile' },
   'dma-specimens-KR': { key: 'dma-specimens', kind: 'specimen', topic: 'dma' },
   'compression-bending-shear-KR': { key: 'compression-bending-shear-specimens', kind: 'specimen', topic: 'compression' },

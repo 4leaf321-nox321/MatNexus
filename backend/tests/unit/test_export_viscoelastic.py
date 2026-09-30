@@ -108,11 +108,13 @@ class Test카드:
 
 
 class Test적어야하는것:
-    def test_순간_탄성률임을_덱에_적는다(self) -> None:
-        """Abaqus 는 `*VISCOELASTIC` 이 있으면 `*ELASTIC` 을 순간 탄성률로 읽는다.
-        평형 탄성률을 넣으면 재료가 통째로 무르게 계산되는데 덱은 멀쩡히 돈다."""
+    def test_순간_탄성률이라고_MODULI_로_말한다(self) -> None:
+        """카드의 탄성률은 순간값인데 Abaqus 는 `*VISCOELASTIC` 이 붙은 `*ELASTIC` 을
+        **기본으로 장기(LONG TERM) 값**으로 읽는다. `MODULI=INSTANTANEOUS` 가 없으면
+        순간 강성이 E₀/(1-Σg) 가 된다 — Σg = 0.99 면 100 배 딱딱한데 덱은 멀쩡히 돈다.
+        주석에 「instantaneous」 라고만 적혀 있던 동안 실제로 그렇게 나갔다(2026-09-30)."""
         text = render("abaqus_viscoelastic", card()).text
-        assert "instantaneous" in text
+        assert "*ELASTIC, TYPE=ISOTROPIC, MODULI=INSTANTANEOUS\n" in text
 
     def test_체적을_안_쟀다고_적는다(self) -> None:
         """`k` 를 0 으로 두는 것은 **가정**이다. 가정은 덱에 남아야 한다."""

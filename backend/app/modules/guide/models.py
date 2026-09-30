@@ -48,13 +48,22 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.database import Base
 
 #: 문서의 종류. **「무엇을 하려고 왔나」 의 입구**가 된다.
+#:   platform     앱 사용 — 이 앱에서 무엇을 어떻게 하나
 #:   specimen     시편 규격 — 어떻게 자르나
 #:   method       시험 방법 — 어떻게 재나
 #:   calculation  물성 계산 — 잰 것이 어떻게 물성이 되나
 #:   coverage     측정 범위 — 무엇을 잴 수 있고 무엇이 가정인가
 #:   instrument   장비 사용
 #:   glossary     용어
-KINDS = ("specimen", "method", "calculation", "coverage", "instrument", "glossary")
+KINDS = (
+    "platform",
+    "specimen",
+    "method",
+    "calculation",
+    "coverage",
+    "instrument",
+    "glossary",
+)
 
 REVISION_STATUSES = ("pending", "approved", "rejected", "superseded")
 

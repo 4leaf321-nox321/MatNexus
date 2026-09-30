@@ -231,8 +231,8 @@ function Landing({ documents }: { documents: GuideDocument[] }) {
     <div>
       <h1 className="text-xl font-semibold">물성 핸드북</h1>
       <p className="text-muted-foreground mt-1 mb-6 text-sm">
-        시편을 어떻게 자르고, 어떻게 재고, 잰 것이 어떻게 물성이 되는지. 누구나 고칠 수
-        있고, 검토자가 승인한 것이 본문이 됩니다.
+        이 앱에서 무엇을 어떻게 하는지, 그리고 시편을 어떻게 자르고, 어떻게 재고, 잰 것이
+        어떻게 물성이 되는지. 누구나 고칠 수 있고, 검토자가 승인한 것이 본문이 됩니다.
       </p>
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {KINDS.map((kind) => {

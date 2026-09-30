@@ -405,6 +405,7 @@ a:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-of
     <li><b>계산으로 푸는 것</b>
       <p><strong>넥킹 이후 경화곡선</strong>은 새 장비가 아니라 <strong>역해석</strong>으로 좁힙니다 — 넥킹 이후 하중–변위를 FE 가 재현하도록 Swift·Voce 외삽 계수를 맞춥니다. <strong>크리프</strong>도 가속 시험 + Larson–Miller 외삽이 우회로입니다.</p>
       <p>이 두 가지는 <strong>이 저장소가 붙기 좋은 자리</strong>입니다 — 필요한 것이 장비가 아니라 계산이라서 그렇습니다.</p>
+      <p>지금 앱은 <strong>그 앞 단계까지</strong> 합니다 — 네킹 후보를 찾고, 경화식(Voce · Swift 등)으로 소성 표를 외삽하며, 외삽한 구간과 이음매 벌어짐을 카드에 적습니다. FE 역해석은 아직 없습니다. 크리프는 시험 종류 · 처리 · 카드 칸이 모두 없어서, 값을 선언 물성으로 적어 두는 데까지입니다(Larson–Miller 외삽도 없습니다).</p>
     </li>
   </ol>
 </section>
@@ -415,6 +416,7 @@ a:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-of
   <h3>금속 속도 의존 — Cowper–Symonds D · n</h3>
   <p>폼용 고속 압축기로 대신할 수 없습니다. 금속은 <strong>변형이 작고 응력이 세</strong>서, 시편이 균일하게 변형되기 전에 하중 신호가 장비 진동에 묻힙니다. 표준 장비는 <strong>SHPB</strong>(압축) · <strong>SHTB</strong>(인장)이고, 1~100 /s 구간은 <strong>고속 유압 인장기</strong>입니다.</p>
   <p><strong>우회</strong> — 파라미터가 둘뿐이라, 문헌의 강종별 값을 출발점으로 두고 <strong>실물 충돌·낙하 시험의 변형 형상과 흡수 에너지에 맞춰 역산</strong>합니다.</p>
+  <p>앱 쪽은 받을 자리가 있습니다 — 속도별 인장 곡선을 묶으면(<code>tensile.rate_family</code>) Cowper–Symonds D · p 를 맞춰 속도 의존 덱까지 냅니다. 다만 <strong>인장기가 낸 속도 범위 안의 값</strong>이라, 이 표의 ○ 는 그대로입니다.</p>
 
   <h3>체적계수 D1</h3>
   <p>구속 압축(체적 압축) 시험이 필요합니다. <strong>실무에서는 재지 않습니다</strong> — ν ≈ 0.4995 로 두는 것이 사실상 표준이고, 대부분의 해석에서 결과에 거의 영향이 없습니다.</p>
@@ -445,12 +447,16 @@ a:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-of
       <h4>물성 계산 — 잰 것이 어떻게 물성이 되나</h4>
       <p>하중–변위 한 줄에서 솔버 카드까지. <strong>「가능」 이 「해석에 쓰기 충분」 이 아닌 이유</strong>가 대부분 여기에 있습니다.</p>
     </div>
+    <div class="card">
+      <h4>앱이 다루는 물성 — 잰 값이 어디까지 가나</h4>
+      <p>이 표의 ● 는 <strong>「잴 수 있다」</strong>이지 <strong>「앱이 덱까지 낸다」</strong>가 아닙니다. 응력완화 · 복합재 E1 · E2 는 여기서 ● 지만 앱에는 그 처리나 카드 칸이 없습니다 — 「지금 이 앱이 다루는 물성」 이 그 축을 따로 봅니다.</p>
+    </div>
   </div>
 
   <div class="note">
     <h4>이 표를 언제 갱신하나</h4>
     <p><strong>장비 사양이 확인될 때</strong>(추정 셋), <strong>치구·시편이 갖춰질 때</strong>, <strong>새 물성이 해석에 들어올 때</strong>. 특히 첫 번째는 ◐ 를 한꺼번에 옮기므로, 확인하는 즉시 이 표부터 고칩니다.</p>
-    <p>고칠 것이 생기면 <strong>이 절을 편집</strong>해서 초안으로 내면 됩니다 — 검토자가 승인하면 정본이 됩니다.</p>
+    <p>고칠 것이 생기면 <strong>이 절을 편집</strong>해서 초안으로 내면 됩니다 — 검토자(자료 관리자 · 시스템 관리자)가 승인하면 정본이 됩니다.</p>
   </div>
 </section>
 

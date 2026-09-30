@@ -162,6 +162,8 @@ export function AccessTokens({
         description="이 값은 다시 볼 수 없습니다. 지금 복사해 쓰는 곳(MatPylon 마법사·AI 도구 설정)에 붙여 넣으세요."
         secret={issued?.token ?? ''}
         subject={issued?.pat.name}
+        footnote="이 값은 다시 표시되지 않습니다. 잃어버리면 이 토큰을 폐기하고 새로 발급하세요."
+        confirmLabel="복사했습니다"
       />
     </div>
   )

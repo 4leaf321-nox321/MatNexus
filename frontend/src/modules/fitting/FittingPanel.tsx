@@ -530,7 +530,7 @@ export function FittingPanel({ materialId }: Props) {
               <DialogDescription>
                 시편 여럿의 결과를 하나로 묶는 <b>글로벌 피팅</b>과 그 결과입니다. 결과마다
                 「카드」 단추가 그 묶음을 카드로 만듭니다. 묶음 결과는 물성 탭의 표에도
-                [묶음] 으로 섭니다.
+                [피팅] 으로 섭니다.
               </DialogDescription>
             </DialogHeader>
             <GroupsPanel
@@ -1572,7 +1572,7 @@ function SaveDialog({
         <DialogHeader>
           <DialogTitle>물성 카드 생성</DialogTitle>
           <DialogDescription>
-            초안으로 저장됩니다. 확정은 부서 관리자가 하고, 확정한 뒤에는 값을 바꿀 수
+            초안으로 저장됩니다. 확정은 자료 관리자가 하고, 확정한 뒤에는 값을 바꿀 수
             없습니다.
           </DialogDescription>
         </DialogHeader>

@@ -14,7 +14,7 @@
 이 스크립트가 운영 본문을 씨앗으로 뽑아 준다. 커밋하면 저장소가 다시 정본이 되고
 차이가 0 이 된다.
 
-    개발 → 운영   배포마다 import_guides.py (빠진 것만, 안 덮음)
+    개발 → 운영   배포마다 import_guides.py (빠진 절 · 사람이 안 고친 절만, 고친 절은 안 덮음)
     운영 → 개발   가끔 export_guides.py 로 뽑아 커밋
     덮어쓰기      import_guides.py --replace 를 --check 보고 의식적으로만
 

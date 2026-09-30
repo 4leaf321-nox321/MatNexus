@@ -154,10 +154,10 @@
             "text": "** Consistent units: {units}"
           },
           {
-            "text": "** ELASTIC = instantaneous (t=0) moduli — Abaqus reads it that way"
+            "text": "** ELASTIC = instantaneous (t=0) moduli - MODULI=INSTANTANEOUS says so"
           },
           {
-            "text": "**          when *VISCOELASTIC is present."
+            "text": "**          (Abaqus default with *VISCOELASTIC is LONG TERM)."
           },
           {
             "text": "** Valid at {viscoelastic.reference_temperature_k:.2f} K ({viscoelastic.reference_temperature_k - 273.15:.2f} C) only -",
@@ -202,7 +202,7 @@
             "when": "elastic.density"
           },
           {
-            "text": "*ELASTIC, TYPE=ISOTROPIC"
+            "text": "*ELASTIC, TYPE=ISOTROPIC, MODULI=INSTANTANEOUS"
           },
           {
             "fields": [

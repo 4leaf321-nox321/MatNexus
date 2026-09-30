@@ -296,12 +296,13 @@ describe('할 자리로 데려간다', () => {
     // 피팅은 재료 화면에 있는데(ADR 0020) 바구니에는 시험이 담긴다 — 서버가 준
     // `material_id` 가 없으면 사람이 재료를 이름으로 찾아 들어가야 한다.
     await openAt(run말고({ steps: { at: 'fit', done: ['pick', 'master'] } }))
-    // **탭까지 적는다.** 재료 화면은 탭이 셋이라 주소에 안 담으면 늘 첫 탭
+    // **탭까지 적는다.** 재료 화면은 탭이 넷이라 주소에 안 담으면 늘 첫 탭
     // (시료·시편)이 열리고, 사람은 안내가 말한 자리를 스스로 찾아야 한다.
-    expect(await screen.findByRole('link', { name: /그 재료의 물성 탭으로/ })).toHaveAttribute(
-      'href',
-      '/materials/m1?tab=properties'
-    )
+    // 글로벌 피팅 단추는 「CAE 카드」 탭에 있다 — 「물성」 탭으로 데려가던 동안에는
+    // 사람이 거기서 단추를 못 찾았다(2026-09-30).
+    expect(
+      await screen.findByRole('link', { name: /그 재료의 CAE 카드 탭으로/ })
+    ).toHaveAttribute('href', '/materials/m1?tab=cards')
   })
 
   it('카드 줄은 그 재료의 CAE 카드 탭으로 간다', async () => {

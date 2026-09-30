@@ -167,9 +167,9 @@ a:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-of
   <h1>지금 이 앱이<br>다루는 물성</h1>
   <p class="dek">MatNexus 가 <strong>담고 · 처리하고 · 맞추고 · 카드로 만들고 · 덱으로 내보내는</strong> 다섯 단계 각각에서, 어떤 물성이 끝까지 가고 어디서 끊기는지 적었습니다. <strong>「장비로 잴 수 있나」와는 다른 축</strong>입니다 — 잰 값이 있어도 앱이 그 자리를 아직 안 가지고 있으면 못 갑니다.</p>
   <div class="mast-meta">
-    <div><b>기준</b> 코드에 실제로 등록된 것만</div>
-    <div><b>등록 현황</b> 처리 16 · 묶음 1 · 식 8 · 카드 블록 6 · 렌더러 6</div>
-    <div><b>갱신</b> 2026-08-30</div>
+    <div><b>기준</b> 코드에 실제로 등록된 것만 (v1.262.0)</div>
+    <div><b>등록 현황</b> 처리 20 · 묶음 5 · 식 11 · 카드 블록 13 · 형식 51</div>
+    <div><b>갱신</b> 2026-09-30</div>
   </div>
   <nav class="toc">
     <a href="#s0"><span>00</span> 다섯 단계</a>
@@ -195,24 +195,28 @@ a:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-of
   <div class="tw"><table>
     <thead><tr><th>단계</th><th>무엇이 정하나</th><th>지금</th></tr></thead>
     <tbody>
-      <tr><td><b>담기</b></td><td>시험 종류 — 처리가 어느 종류에 붙는지</td><td class="k">tensile · dma_sweep</td></tr>
-      <tr><td><b>처리</b></td><td><code>@register(kind="processing")</code></td><td class="k">16개</td></tr>
-      <tr><td><b>피팅 · 묶음</b></td><td><code>register_family</code> · <code>kind="grouping"</code></td><td class="k">식 8 · 묶음 1</td></tr>
-      <tr><td><b>카드</b></td><td><code>register_block</code> — 덱에 실릴 값의 자리</td><td class="k">6개 블록</td></tr>
-      <tr><td><b>내보내기</b></td><td><code>register_renderer</code> · <strong>덱 템플릿(파일)</strong></td><td class="k">렌더러 6 + 템플릿</td></tr>
+      <tr><td><b>담기</b></td><td>시험 종류(「시험 정의」) — 처리가 어느 종류에 붙는지. 시험이 주지 않는 값은 <strong>선언 물성</strong>, 문헌 값은 <strong>문헌 물성</strong> 카탈로그로</td><td class="k">시험 종류 4 · 선언 · 문헌</td></tr>
+      <tr><td><b>처리</b></td><td><code>@register(kind="processing")</code> · 「계산식」</td><td class="k">20개</td></tr>
+      <tr><td><b>피팅 · 묶음</b></td><td><code>register_family</code> · <code>kind="grouping"</code> · 「계산식」</td><td class="k">식 11 · 묶음 5</td></tr>
+      <tr><td><b>카드</b></td><td><code>register_block</code> · 「카드 항목란」 — 덱에 실릴 값의 자리</td><td class="k">13개 블록</td></tr>
+      <tr><td><b>내보내기</b></td><td><code>register_renderer</code> · <strong>해석용 물성 정의(파일)</strong></td><td class="k">해석 프로그램 6 · 형식 51</td></tr>
     </tbody>
   </table></div>
 
+  <p>내장 시험 종류는 <strong>인장 · DMA 스윕 · 피로 · 레오미터 유동</strong> 넷이고, 부서가 「시험 정의」 에서 더 만듭니다. 시험 없이 들어오는 길이 둘 더 있습니다 — 재료 · 시료에 적어 두는 <strong>선언 물성</strong>(출처: 문헌 · 규격 · 제품 데이터시트 · 밀시트 · 추정)과, 재료에 채택하거나 곧바로 덱을 뽑는 <strong>문헌 물성</strong> 카탈로그입니다. 선언 값만으로도 카드를 만들고, 항복 · 인장 · 연신율을 적어 두면 소성 표를 <strong>합성</strong>합니다(「합성」 표시가 덱 각주까지 갑니다).</p>
+  <p>표의 개수는 코드에 든 것만 셉니다. 화면에서 더한 것 — 「계산식」 의 식, 「카드 항목란」 의 칸, 「해석용 물성 정의」 의 양식 — 은 데이터라 서버마다 다릅니다.</p>
+
   <div class="note">
     <h4>병목은 이제 솔버가 아니라 물성이다</h4>
-    <p>ADR 0023 이 들어오면서 <strong>덱을 파일 정의로 만들 수 있게</strong> 됐습니다 — 새 솔버를 붙이는 데 코드 배포가 필요 없습니다. 그래서 <strong>「LS-DYNA 를 지원하나」는 이제 중요한 질문이 아닙니다.</strong> 정말 막는 것은 <strong>카드 블록에 그 물성의 자리가 있는가</strong>입니다.</p>
-    <p>템플릿이 감당하는 것은 <strong>조판</strong>(키워드 이름·차례·칸 폭·정렬)까지입니다. 계산이 필요하면 그것은 새 솔버가 아니라 <strong>새 물성</strong>이고, <code>register_block</code>·<code>register_family</code> 로 갑니다.</p>
+    <p>ADR 0023 이 들어오면서 <strong>덱을 파일 정의로 만들 수 있게</strong> 됐습니다 — 새 솔버를 붙이는 데 코드 배포가 필요 없습니다. 기본 형식만 해도 <strong>해석 프로그램 6종 · 50형식</strong>이고, 모자라면 「해석용 물성 정의」 메뉴에서 더합니다. 그래서 <strong>「LS-DYNA 를 지원하나」는 이제 중요한 질문이 아닙니다.</strong> 정말 막는 것은 <strong>카드 블록에 그 물성의 자리가 있는가</strong>입니다.</p>
+    <p>정의가 감당하는 것은 <strong>카드에 있는 값을 적는 일</strong>입니다 — 키워드 이름·차례·칸 폭·정렬에 더해 표의 첫 점·합·개수 같은 식과 값 검사까지(ADR 0038). 카드에 없는 값을 새로 계산해야 하면 그것은 새 솔버가 아니라 <strong>새 물성</strong>이고, 식은 「계산식」 이나 <code>register_family</code>, 자리는 「카드 항목란」 이나 <code>register_block</code> 으로 갑니다.</p>
   </div>
 </section>
 
 <section id="s1">
   <h2><span class="num">01 / 표</span>물성별 대응표</h2>
   <p class="lede">가로로 넘칩니다 — 좁은 화면에서는 표 안에서 옆으로 밉니다. <strong>—</strong> 는 그 단계가 필요 없다는 뜻, <strong>없음</strong> 은 그 자리가 아직 비었다는 뜻입니다.</p>
+  <p>내보내기 칸의 <strong>6종</strong>은 Abaqus · ANSYS · LS-DYNA · Nastran · OpenRadioss · OptiStruct 입니다. 담기 칸의 <strong>선언 물성</strong>은 시험이 아니라 재료 · 시료에 적어 둔 값(손입력 · 문헌 채택)에서 출발한다는 뜻입니다.</p>
 
   <div class="tw wide mx"><table>
     <thead><tr>
@@ -221,51 +225,69 @@ a:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-of
     <tbody>
       <tr class="grp"><td colspan="7">끝까지 간다</td></tr>
       <tr><td>탄성계수 · 푸아송비 · 밀도</td>
-        <td>인장</td><td class="k">tensile.elastic_modulus</td><td>—</td>
-        <td class="k">elastic</td><td>Abaqus · OpenRadioss</td><td class="vd y">● 됨</td></tr>
+        <td>인장 (E) · 재료 · 시료 (ν · ρ)</td><td class="k">tensile.elastic_modulus</td><td>—</td>
+        <td class="k">elastic</td><td>6종 — 선형 형식, 그리고 소성 · 점탄성 형식의 탄성 줄</td><td class="vd y">● 됨</td></tr>
       <tr><td>진응력 – 진소성변형률 곡선</td>
         <td>인장</td><td class="k">engineering · toe · true_plastic</td><td>—</td>
-        <td class="k">table</td><td>Abaqus · OpenRadioss</td><td class="vd y">● 됨</td></tr>
+        <td class="k">table</td><td>6종 (탄소성)</td><td class="vd y">● 됨</td></tr>
       <tr><td>경화식 (금속)</td>
-        <td>인장</td><td class="k">true_plastic</td><td>Voce · Swift · Hockett-Sherby · <b>Ghosh</b></td>
-        <td class="k">hardening</td><td>Abaqus · OpenRadioss</td><td class="vd y">● 됨</td></tr>
+        <td>인장</td><td class="k">true_plastic</td><td>Voce · Swift · Hockett-Sherby · <b>Ghosh</b> · Johnson-Cook 준정적</td>
+        <td class="k">hardening</td><td>6종 (소성 표를 잇는 식으로) · Johnson-Cook 은 LS-DYNA · OpenRadioss 에 식 그대로</td><td class="vd y">● 됨</td></tr>
       <tr><td>네킹 이후 외삽</td>
         <td>인장</td><td class="k">necking_candidate</td><td>경화식으로 잇는다</td>
-        <td class="k">table (외삽 구간 기록)</td><td>Abaqus · OpenRadioss</td><td class="vd y">● 됨</td></tr>
-
-      <tr class="grp"><td colspan="7">일부만 간다</td></tr>
+        <td class="k">table (외삽 구간 기록)</td><td>6종 (탄소성)</td><td class="vd y">● 됨</td></tr>
+      <tr><td>속도 의존 소성</td>
+        <td>속도별 인장</td><td class="k">true_plastic</td><td class="k">tensile.rate_family</td>
+        <td class="k">rate_table</td><td>Abaqus · LS-DYNA · OpenRadioss (속도별 표) · ANSYS (Cowper-Symonds)</td><td class="vd y">● 됨</td></tr>
+      <tr><td>온도 의존 소성 (경화곡선 × 온도)</td>
+        <td>온도별 인장</td><td class="k">true_plastic</td><td class="k">tensile.temperature_family</td>
+        <td class="k">temperature_table</td><td>6종 (온도 의존)</td><td class="vd y">● 됨</td></tr>
+      <tr><td>이방성 (r값 · Hill48)</td>
+        <td>인장 (0 · 45 · 90° 세 방향)</td><td class="k">anisotropy.r_value</td><td class="k">anisotropy.r_family</td>
+        <td class="k">anisotropy (+ 소성 카드 짝)</td><td>Abaqus · ANSYS · LS-DYNA (쉘) · Nastran · OpenRadioss (쉘)</td><td class="vd y">● 됨</td></tr>
       <tr><td>초탄성 (고무)</td>
         <td>인장</td><td class="k">engineering</td><td>Neo-Hookean · Mooney-Rivlin · Yeoh · Ogden 1항</td>
-        <td class="k">hyperelastic</td><td><b>Abaqus 만</b></td><td class="vd m">◐ 솔버 하나</td></tr>
+        <td class="k">hyperelastic</td><td>6종</td><td class="vd y">● 됨</td></tr>
       <tr><td>Prony 점탄성</td>
         <td>DMA 스윕</td><td class="k">derived · frequency · to_shear · lve_modulus</td><td class="k">viscoelastic.prony_group</td>
-        <td class="k">viscoelastic</td><td><b>Abaqus 만</b></td><td class="vd m">◐ 솔버 하나</td></tr>
-      <tr><td>온도 의존 탄성</td>
-        <td>온도별 인장</td><td class="k">elastic_modulus</td><td>—</td>
-        <td class="k">elastic (온도별 표)</td><td>Abaqus</td><td class="vd m">◐ 표를 채우면</td></tr>
+        <td class="k">viscoelastic</td><td>6종</td><td class="vd y">● 됨</td></tr>
+      <tr><td>선형탄성구간 탄성률 (DMA)</td>
+        <td>DMA 스윕 (변형률 스윕)</td><td class="k">lve_modulus</td><td>—</td>
+        <td class="k">lve · elastic</td><td>6종 (선형) · Abaqus 선형탄성구간 형식</td><td class="vd y">● 됨</td></tr>
       <tr><td>열팽창 · 비열 · 열전도도</td>
-        <td><b>손입력</b> (기준정보 선언 물성)</td><td>—</td><td>—</td>
-        <td class="k">thermal</td><td>Abaqus · OpenRadioss</td><td class="vd m">◐ 시험에서 안 나옴</td></tr>
+        <td><b>선언 물성</b></td><td>—</td><td>—</td>
+        <td class="k">thermal</td><td>6종 (열물성 · 역학 형식에 곁들여)</td><td class="vd y">● 선언 값으로</td></tr>
+      <tr><td>온도 의존 탄성</td>
+        <td><b>선언 물성</b> (온도별 점)</td><td>—</td><td>—</td>
+        <td class="k">elastic (온도별 표)</td><td>Abaqus · ANSYS · Nastran · OptiStruct · LS-DYNA (온도 의존 형식) — OpenRadioss 는 한 값</td><td class="vd y">● 선언 값으로</td></tr>
+
+      <tr class="grp"><td colspan="7">일부만 간다</td></tr>
+      <tr><td>피로 S-N</td>
+        <td>피로 (표로 입력 — 시편마다 점 하나)</td><td>—</td><td class="k">fatigue.sn_curve</td>
+        <td class="k">sn_curve</td><td><b>LS-DYNA 만</b></td><td class="vd m">◐ 솔버 하나</td></tr>
+      <tr><td>점도 (유변)</td>
+        <td>레오미터 유동</td><td>—</td><td>Cross · Carreau</td>
+        <td class="k">rheology</td><td><b>Abaqus 만</b></td><td class="vd m">◐ 솔버 하나</td></tr>
       <tr><td>항복강도 · 인장강도 · 연신율</td>
-        <td>인장</td><td class="k">proof_stress · strength</td><td>—</td>
-        <td><b>없음</b> — 요약값으로만 남음</td><td>—</td><td class="vd m">◐ 값만 나옴</td></tr>
+        <td>인장 · 선언 물성</td><td class="k">proof_stress · strength · yield_ratio</td><td>—</td>
+        <td>시험 값은 <b>없음</b> — 요약값으로만 남음 · 선언 값은 합성 소성 표(<code>table</code>)로</td><td>선언 값만 — 6종 (탄소성, 「합성」 표시)</td><td class="vd m">◐ 값만 나옴</td></tr>
       <tr><td>유리전이온도 Tg</td>
         <td>DMA 스윕</td><td class="k">glass_transition</td><td>—</td>
         <td><b>없음</b></td><td>—</td><td class="vd m">◐ 값만 나옴</td></tr>
 
       <tr class="grp"><td colspan="7">아직 못 간다</td></tr>
-      <tr><td>온도 의존 소성 (경화곡선 × 온도)</td>
-        <td>온도별 인장</td><td class="k">true_plastic</td><td>—</td>
-        <td><b>표에 온도축 없음</b></td><td>—</td><td class="vd no">○ 카드가 막음</td></tr>
-      <tr><td>속도 의존 소성</td>
+      <tr><td>크리프 · 응력완화</td>
         <td><b>없음</b></td><td><b>없음</b></td><td><b>없음</b></td>
         <td><b>없음</b></td><td>—</td><td class="vd no">○ 전 단계</td></tr>
-      <tr><td>크리프</td>
+      <tr><td>파괴 인성 · 균열 진전 (Paris)</td>
         <td><b>없음</b></td><td><b>없음</b></td><td><b>없음</b></td>
         <td><b>없음</b></td><td>—</td><td class="vd no">○ 전 단계</td></tr>
+      <tr><td>열팽창 곡선 (TMA)</td>
+        <td><b>없음</b></td><td><b>없음</b></td><td>—</td>
+        <td>thermal 은 있다 — 선언 값으로만</td><td>—</td><td class="vd no">○ 담기부터</td></tr>
       <tr><td>복합재 직교이방 · 파손</td>
-        <td><b>없음</b></td><td><b>없음</b></td><td><b>없음</b></td>
-        <td><b>없음</b></td><td>—</td><td class="vd no">○ 전 단계</td></tr>
+        <td>인장 (시편 방향별)</td><td class="k">elastic_modulus · strength</td><td><b>없음</b></td>
+        <td><b>없음</b> — 카드 한 장이 방향 하나</td><td>—</td><td class="vd no">○ 카드가 막음</td></tr>
       <tr><td>폼 (압축 · 이력)</td>
         <td><b>없음</b></td><td><b>없음</b></td><td><b>없음</b></td>
         <td><b>없음</b></td><td>—</td><td class="vd no">○ 전 단계</td></tr>
@@ -278,120 +300,145 @@ a:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-of
   <div class="tw"><table>
     <thead><tr><th>판정</th><th class="n">개수</th><th>뜻</th></tr></thead>
     <tbody>
-      <tr><td class="vd y">● 됨</td><td class="n">4</td><td>담기부터 덱까지 끊기는 곳이 없습니다</td></tr>
-      <tr><td class="vd m">◐ 일부</td><td class="n">6</td><td>값은 나오는데 <strong>솔버가 하나뿐</strong>이거나 <strong>카드 자리가 없</strong>습니다</td></tr>
-      <tr><td class="vd no">○ 아직</td><td class="n">6</td><td>담기·처리 단계부터 비어 있습니다</td></tr>
+      <tr><td class="vd y">● 됨</td><td class="n">12</td><td>담기부터 덱까지 끊기는 곳이 없습니다 — 둘은 시험이 아니라 <strong>선언 물성</strong>에서 출발합니다</td></tr>
+      <tr><td class="vd m">◐ 일부</td><td class="n">4</td><td>값은 나오는데 <strong>솔버가 하나뿐</strong>이거나 <strong>카드 자리가 없</strong>습니다</td></tr>
+      <tr><td class="vd no">○ 아직</td><td class="n">6</td><td>담기 · 처리 · 카드 중 한 단계부터 비어 있습니다</td></tr>
     </tbody>
   </table></div>
 </section>
 
 <section id="s2">
   <h2><span class="num">02 / 목록</span>지금 등록된 것 전부</h2>
-  <p class="lede">코드에서 그대로 뽑은 목록입니다. <strong>이 목록에 없으면 앱 안에 없습니다.</strong></p>
+  <p class="lede">코드에서 그대로 뽑은 목록입니다(v1.262.0, 확장 폴더 포함). 화면에서 더한 식 · 칸 · 양식 · 시험 종류는 데이터라 여기 없습니다 — <strong>그 밖에는 이 목록에 없으면 앱 안에 없습니다.</strong></p>
 
-  <h3>처리 — 16개</h3>
+  <h3>처리 — 20개</h3>
   <div class="tw"><table>
     <thead><tr><th>붙는 시험</th><th class="n">개수</th><th>목록</th></tr></thead>
     <tbody>
-      <tr><td><b>인장</b></td><td class="n">7</td><td class="k">engineering · toe_compensation · elastic_modulus · proof_stress · strength · necking_candidate · true_plastic</td></tr>
+      <tr><td><b>인장</b></td><td class="n">10</td><td class="k">engineering · toe_compensation · yield_drop · elastic_modulus · proof_stress · strength · necking_candidate · yield_ratio · true_plastic · anisotropy.r_value</td></tr>
       <tr><td><b>DMA 스윕</b></td><td class="n">5</td><td class="k">derived (tan δ · 복소 탄성률) · frequency · lve_modulus · to_shear (E → G) · glass_transition</td></tr>
-      <tr><td><b>공통 (곡선)</b></td><td class="n">4</td><td class="k">sort_unique · crop · smooth · resample</td></tr>
+      <tr><td><b>공통 (곡선)</b></td><td class="n">5</td><td class="k">sort_unique · crop · smooth · resample · monotone</td></tr>
     </tbody>
   </table></div>
+  <p>여기에 「계산식」 메뉴에서 적은 식이 처리 단계로 더해집니다(ADR 0030) — 환산 열 하나 · 비율 하나 같은 닫힌 식이고, 배포가 없습니다.</p>
 
-  <h3>피팅 식 — 8개 (+ 묶음 1)</h3>
+  <h3>피팅 식 — 11개 (+ 묶음 5)</h3>
   <div class="tw"><table>
     <thead><tr><th>대상</th><th>식</th><th>비고</th></tr></thead>
     <tbody>
-      <tr><td><b>금속 경화</b></td><td class="k">Voce · Swift · Hockett-Sherby · Ghosh</td><td>Ghosh 는 <strong>확장 폴더 하나로 붙은</strong> 첫 사례입니다</td></tr>
+      <tr><td><b>금속 경화</b></td><td class="k">Voce · Swift · Hockett-Sherby · Ghosh · Johnson-Cook (준정적 항)</td><td>Ghosh 는 <strong>확장 폴더 하나로 붙은</strong> 첫 사례입니다. Johnson-Cook 은 A · B · n 만 — 속도항 C 와 온도항 m 은 묶음이 따로 냅니다</td></tr>
       <tr><td><b>초탄성</b></td><td class="k">Neo-Hookean · Mooney-Rivlin · Yeoh · Ogden (1항)</td><td>Rubber · Elastomer · Polymer 에 적용</td></tr>
+      <tr><td><b>유변</b></td><td class="k">Cross · Carreau</td><td>전단율 – 점도 곡선(레오미터 유동)에 맞춥니다</td></tr>
       <tr><td><b>묶음</b></td><td class="k">viscoelastic.prony_group</td><td>여러 온도 스윕을 <strong>한 번에</strong> 맞춥니다 (마스터커브)</td></tr>
+      <tr><td><b>묶음</b></td><td class="k">tensile.rate_family</td><td>속도별 소성 곡선 → Cowper-Symonds · Johnson-Cook C</td></tr>
+      <tr><td><b>묶음</b></td><td class="k">tensile.temperature_family</td><td>온도별 소성 곡선 → Johnson-Cook m</td></tr>
+      <tr><td><b>묶음</b></td><td class="k">fatigue.sn_curve</td><td>시편마다 (응력 진폭, 수명) 점 하나 → Basquin S-N, 런아웃 표시</td></tr>
+      <tr><td><b>묶음</b></td><td class="k">anisotropy.r_family</td><td>세 방향 r값 → r̄ · Δr · Hill48 계수</td></tr>
     </tbody>
   </table></div>
 
-  <h3>카드 블록 — 6개</h3>
+  <h3>카드 블록 — 13개</h3>
   <div class="tw"><table>
     <thead><tr><th>블록</th><th>담는 값</th></tr></thead>
     <tbody>
       <tr><td class="k">elastic</td><td>탄성계수 · 푸아송비 · 밀도 (온도별 표 가능)</td></tr>
+      <tr><td class="k">thermal</td><td>열팽창 · 비열 · 열전도도 · 기준 온도 (온도별 표 가능)</td></tr>
       <tr><td class="k">hardening</td><td>맞춘 식과 그 잔차 · 유효 변형률 구간</td></tr>
-      <tr><td class="k">table</td><td>소성 표 — 출처 · 실측 끝 · 외삽 끝 · 이음 간격</td></tr>
-      <tr><td class="k">viscoelastic</td><td>Prony — 평형/순간 탄성률 · 기준 온도 · RMSE · BIC</td></tr>
+      <tr><td class="k">table</td><td>소성 표 — 출처 · 실측 끝 · 외삽 끝 · 이음 간격 (선언 값으로 합성한 표도 여기)</td></tr>
+      <tr><td class="k">rate_table</td><td>속도별 소성 표 — 기준 속도 · Cowper-Symonds D · p · Johnson-Cook C</td></tr>
+      <tr><td class="k">temperature_table</td><td>온도별 소성 표 — 기준 온도 · 녹는점 · Johnson-Cook m</td></tr>
       <tr><td class="k">hyperelastic</td><td>초탄성 상수 · 전단탄성률 · 잔차 · 구간</td></tr>
-      <tr><td class="k">thermal</td><td>열팽창 · 비열 · 열전도도 · 기준 온도</td></tr>
+      <tr><td class="k">viscoelastic</td><td>Prony — 평형/순간 탄성률 · 기준 온도 · RMSE · BIC</td></tr>
+      <tr><td class="k">lve</td><td>선형탄성구간 탄성률 (DMA 변형률 스윕) — 변형률 한계 · 주파수 · 온도 · 변동계수</td></tr>
+      <tr><td class="k">rheology</td><td>유변 — 영전단 점도 · 박화 시작 전단율 · 잔차</td></tr>
+      <tr><td class="k">sn_curve</td><td>S-N 곡선 — Basquin a · b · 10⁵ / 10⁶ / 10⁷ 회 강도 · 런아웃 수</td></tr>
+      <tr><td class="k">anisotropy</td><td>r₀ · r₄₅ · r₉₀ · r̄ · Δr · Hill48 F · G · H · N</td></tr>
+      <tr><td class="k">model_params</td><td>문헌 모델 파라미터 벌 인용 (Anand · Prony · Ogden 처럼 한 벌이어야 뜻이 있는 값) — 해석 형식은 받지 않고 중립 JSON 에 실립니다</td></tr>
     </tbody>
   </table></div>
+  <p>「카드 항목란」 메뉴에서 시스템 관리자가 칸 묶음을 더 만듭니다(ADR 0033). 내장 블록의 키는 덮지 못합니다.</p>
 
-  <h3>내보내기 — 렌더러 6개 + 덱 템플릿</h3>
+  <h3>내보내기 — 형식 51개 + 해석용 물성 정의</h3>
+  <p>해석 프로그램 6종의 기본 형식 50개와 중립 JSON 하나입니다. 물성 모델마다 형식이 따로 있습니다(ADR 0037).</p>
   <div class="tw"><table>
-    <thead><tr><th>형식</th><th>요구하는 블록</th></tr></thead>
+    <thead><tr><th>물성 모델</th><th>해석 프로그램</th><th>요구하는 블록</th></tr></thead>
     <tbody>
-      <tr><td class="k">abaqus</td><td>elastic · thermal · table</td></tr>
-      <tr><td class="k">abaqus_hyperelastic</td><td>hyperelastic · elastic · thermal</td></tr>
-      <tr><td class="k">abaqus_viscoelastic</td><td>elastic · thermal · viscoelastic</td></tr>
-      <tr><td class="k">openradioss</td><td>elastic · table</td></tr>
-      <tr><td class="k">openradioss_thermal</td><td>elastic · thermal</td></tr>
-      <tr><td class="k">json</td><td>없음 — 중립 형식</td></tr>
-      <tr><td><b>덱 템플릿</b></td><td>파일로 정의 — <strong>배포 없이 새 솔버</strong>. 자유 형식 · 고정 8 / 10 / 20칸을 다 냅니다</td></tr>
+      <tr><td><b>선형</b></td><td>6종</td><td class="k">elastic (thermal · lve 는 형식에 따라 곁들임)</td></tr>
+      <tr><td><b>탄소성</b></td><td>6종</td><td class="k">elastic · table</td></tr>
+      <tr><td><b>속도 의존</b></td><td>Abaqus · ANSYS · LS-DYNA · OpenRadioss</td><td class="k">elastic · rate_table (ANSYS 는 table + Cowper-Symonds)</td></tr>
+      <tr><td><b>Johnson-Cook</b></td><td>LS-DYNA (단순화) · OpenRadioss — 둘 다 온도항 없음</td><td class="k">elastic · hardening (rate_table 의 C 는 있으면)</td></tr>
+      <tr><td><b>온도 의존</b></td><td>6종</td><td class="k">elastic · temperature_table</td></tr>
+      <tr><td><b>이방성 Hill48</b></td><td>Abaqus · ANSYS · LS-DYNA (쉘) · Nastran · OpenRadioss (쉘)</td><td class="k">anisotropy · elastic · table (소성 카드를 짝으로)</td></tr>
+      <tr><td><b>초탄성</b></td><td>6종</td><td class="k">hyperelastic</td></tr>
+      <tr><td><b>점탄성</b></td><td>6종</td><td class="k">elastic · viscoelastic</td></tr>
+      <tr><td><b>선형탄성구간 (DMA)</b></td><td>Abaqus</td><td class="k">elastic · lve</td></tr>
+      <tr><td><b>열물성</b></td><td>6종</td><td class="k">thermal (밀도는 elastic 에서)</td></tr>
+      <tr><td><b>점도</b></td><td>Abaqus</td><td class="k">rheology</td></tr>
+      <tr><td><b>피로 S-N</b></td><td>LS-DYNA</td><td class="k">sn_curve</td></tr>
+      <tr><td><b>중립 JSON</b></td><td>—</td><td>없음 — 카드가 가진 것을 그대로</td></tr>
+      <tr><td><b>해석용 물성 정의</b></td><td>파일로 정의</td><td>「해석용 물성 정의」 메뉴 — <strong>배포 없이 새 솔버 · 새 양식</strong>. 자유 형식과 고정 칸(LS-DYNA 10칸 · Nastran 큰칸 16칸 · Radioss 20칸)을 다 냅니다. 기본 50형식도 정의판이 있어(ADR 0038), 틀린 기본 형식은 시스템 관리자가 「사용 중단」 으로 내립니다</td></tr>
     </tbody>
   </table></div>
+  <p>숫자는 저장이 언제나 SI 이고, 나갈 때 고른 단위계로 환산합니다 — 기본은 <strong>mm · N · tonne · s · MPa</strong>(ADR 0036), SI 와 사용자 정의 단위계도 고릅니다.</p>
 </section>
 
 <section id="s3">
   <h2><span class="num">03 / 경계</span>어디서 끊기나</h2>
-  <p class="lede">◐ 여섯과 ○ 여섯은 <strong>끊기는 자리가 서로 다릅니다.</strong> 그 자리가 곧 다음에 할 일의 크기입니다.</p>
+  <p class="lede">◐ 넷과 ○ 여섯은 <strong>끊기는 자리가 서로 다릅니다.</strong> 그 자리가 곧 다음에 할 일의 크기입니다.</p>
 
-  <h3>1. 솔버가 하나뿐 — 초탄성 · 점탄성</h3>
-  <p>둘 다 <strong>담기부터 카드까지는 다 됩니다.</strong> Abaqus 렌더러만 있어서 거기서 멈춥니다. 그런데 이것은 <strong>덱 템플릿으로 풀리는 종류</strong>입니다 — 코드가 아니라 파일 하나를 더 쓰면 됩니다.</p>
+  <h3>1. 솔버가 하나뿐 — 점도 · 피로 S-N</h3>
+  <p>둘 다 <strong>담기부터 카드까지는 다 됩니다.</strong> 점도는 Abaqus(<code>*VISCOSITY</code>), 피로 S-N 은 LS-DYNA(<code>*MAT_ADD_FATIGUE</code>) 형식만 있어서 거기서 멈춥니다. 카드 자리(<code>rheology</code> · <code>sn_curve</code>)가 이미 있으니 이것은 <strong>해석용 물성 정의로 풀리는 종류</strong>입니다 — 코드가 아니라 정의 하나를 더 쓰면 됩니다.</p>
+  <p>● 안에도 빈 짝이 있습니다 — 속도 의존은 Nastran · OptiStruct, 이방성 Hill48 은 OptiStruct 형식이 없고, OpenRadioss 는 온도별 탄성을 한 값으로 냅니다. 해석 프로그램 쪽에 그 카드가 있으면 같은 방법으로 풀립니다.</p>
 
   <h3>2. 카드 자리가 없다 — 항복강도 · 인장강도 · 연신율 · Tg</h3>
   <p>처리가 값을 잘 냅니다. 다만 그 값이 <strong>덱에 실리는 자리가 없</strong>어서 요약값으로만 남습니다. 통계·비교에는 이미 쓰이지만 해석으로는 안 갑니다.</p>
   <div class="note">
-    <p>이건 <strong>빠뜨린 것이 아닐 수 있습니다.</strong> 항복강도는 소성 표가 이미 담고 있고(표의 첫 점), Tg 는 Prony 카드의 기준 온도로 들어갑니다. <strong>한 자리는 한 블록이 채운다</strong>는 규칙 때문에 일부러 안 넣은 것에 가깝습니다 — 둘이 채우면 어느 값이 덱에 실렸는지 알 수 없어집니다.</p>
+    <p>이건 <strong>빠뜨린 것이 아닐 수 있습니다.</strong> 항복강도는 소성 표가 이미 담고 있습니다(표의 첫 점). Tg 는 정의(tan δ 피크 · 손실 탄성률 피크 · 저장 탄성률 온셋)에 따라 값이 갈리는 특성값이고, Prony 카드가 담는 온도는 Tg 가 아니라 <strong>마스터커브의 기준 온도</strong>(사람이 고른 조건)입니다. <strong>한 자리는 한 블록이 채운다</strong>는 규칙 때문에 일부러 안 넣은 것에 가깝습니다 — 둘이 채우면 어느 값이 덱에 실렸는지 알 수 없어집니다.</p>
+    <p>시험 값이 아니라 <strong>선언 값</strong>(문헌 · 데이터시트 · 밀시트)으로 적은 항복 · 인장 · 연신율은 다른 길을 갑니다 — 시험 없는 재료에서 소성 표를 <strong>합성</strong>하는 재료가 됩니다. 실측이 아닌 근사 곡선이라 「합성」 표시가 덱 각주까지 따라갑니다.</p>
   </div>
 
-  <h3>3. 카드가 막는다 — 온도 의존 소성</h3>
-  <p><strong>탄성은 온도별 표가 됩니다.</strong> <code>*ELASTIC</code> 이 온도 열을 받고, 빈 칸이 있으면 덱을 안 내고 멈춥니다(이웃 값으로 메우지 않습니다). 그런데 <strong>소성 표에는 온도 축이 없습니다</strong> — (변형률, 응력) 두 열뿐입니다.</p>
-  <p>담기와 처리는 이미 됩니다. 온도별로 인장을 담아 각각 처리하면 곡선이 여럿 나옵니다. <strong>그 여럿을 한 카드에 묶는 자리가 없</strong>는 것이 전부입니다.</p>
+  <h3>3. 카드가 막는다 — 복합재 직교이방</h3>
+  <p>담기와 처리는 됩니다. 시편에 방향이 있고, 방향마다 인장해 탄성계수 · 강도를 냅니다. 그런데 <strong>카드 한 장은 방향 하나의 물성</strong>이고, 방향을 가로지르는 예외는 블록이 스스로 선언해야 합니다(ADR 0034 — 지금은 r값 · Hill48 의 <code>anisotropy</code> 뿐). E1 · E2 를 한 재료로 묶는 <strong>직교이방 블록이 없</strong>고, ±45° 인장에서 G12 를 내는 처리도 없습니다.</p>
+  <p>온도 의존 소성은 전에 이 자리에 있었습니다 — 소성 표에 온도 축이 없었습니다. 온도별 인장을 묶는 <code>tensile.temperature_family</code> 와 <code>temperature_table</code> 블록이 붙으면서 6종 모두로 갑니다.</p>
 
-  <h3>4. 시험이 없다 — 속도 · 크리프 · 복합재 · 폼</h3>
-  <p>담기 단계부터 비어 있습니다. 처리 플러그인이 <code>tensile</code> 과 <code>dma_sweep</code> 에만 붙어 있어서, 다른 종류의 곡선은 담겨도 그 위에서 할 일이 없습니다.</p>
+  <h3>4. 시험이 없다 — 크리프 · 파괴 · 폼 · TMA</h3>
+  <p>담기 단계부터 비어 있습니다. 내장 시험 종류는 인장 · DMA 스윕 · 피로 · 레오미터 유동 넷이고, 처리 단계는 인장과 DMA 스윕(그리고 곡선 공통 단계)에만 붙어 있습니다. 시험 종류는 부서가 「시험 정의」 에서 만들 수 있어 곡선을 담는 것까지는 되지만, 그 위에서 할 일 — 처리 · 카드 칸 · 양식 — 이 없습니다. 크리프 상수나 열팽창계수처럼 <strong>값만</strong> 필요하면 선언 물성으로 적어 둘 수 있고, 열팽창계수는 그렇게 <code>thermal</code> 블록을 거쳐 덱까지 갑니다.</p>
   <div class="note trap">
     <h4>이것이 「하나만 만들면 되는」 일이 아니다</h4>
-    <p>예컨대 폼 하나를 끝까지 보내려면 <strong>다섯 자리를 다 만들어야</strong> 합니다 — 압축 시험 종류 · 압축 곡선 처리 · (선택) 식 · 폼 카드 블록 · 덱 템플릿. 반대로 <strong>온도 의존 소성은 카드 하나</strong>면 열립니다. <strong>같은 ○ 라도 거리가 다릅니다.</strong></p>
+    <p>예컨대 폼 하나를 끝까지 보내려면 <strong>다섯 자리를 다 만들어야</strong> 합니다 — 압축 시험 종류 · 압축 곡선 처리 · (선택) 식 · 폼 카드 블록 · 해석 양식. 다만 이제 그중 셋은 <strong>배포 없이 화면에서</strong> 만듭니다 — 시험 종류(「시험 정의」) · 카드 칸(「카드 항목란」) · 해석 양식(「해석용 물성 정의」). 남는 것은 처리입니다: 식 한 줄이면 「계산식」, 구간 탐색 · 회귀 같은 알고리즘이면 확장 폴더. <strong>같은 ○ 라도 거리가 다릅니다.</strong></p>
   </div>
 </section>
 
 <section id="s4">
   <h2><span class="num">04 / 확장</span>늘리려면 무엇을 하나</h2>
-  <p class="lede">가까운 것부터 적었습니다. 앞의 둘은 <strong>중심 코드를 안 건드리고</strong> 됩니다.</p>
+  <p class="lede">가까운 것부터 적었습니다. 넷 다 <strong>중심 코드를 안 건드리고</strong> 됩니다 — 앞의 둘은 <strong>배포도 필요 없</strong>습니다.</p>
 
   <ol class="steps">
-    <li><b>덱 템플릿을 쓴다 — 파일 하나</b>
-      <p>초탄성·점탄성을 Abaqus 밖으로 내보내는 일, LS-DYNA·OptiStruct·Radioss 를 붙이는 일이 여기 듭니다. <strong>배포가 필요 없</strong>고, 칸 폭(8·10·20칸)까지 템플릿이 냅니다.</p>
+    <li><b>해석용 물성 정의를 쓴다 — 파일 하나</b>
+      <p>카드에 이미 자리가 있는 물성을 다른 해석 프로그램으로 내는 일이 여기 듭니다 — 점도(지금 Abaqus 만) · 피로 S-N(지금 LS-DYNA 만) · OptiStruct 의 Hill48 같은 빈 짝. 「해석용 물성 정의」 메뉴에서 쓰고 <strong>배포가 필요 없</strong>습니다. 칸 폭(10·16·20칸)에 더해 식 · 표 함수 · 값 검사까지 정의가 냅니다(ADR 0038).</p>
+    </li>
+    <li><b>식과 칸을 화면에서 만든다 — 계산식 · 카드 항목란</b>
+      <p>경화식 하나 · 비율 하나 · 환산 열 하나처럼 <strong>닫힌 식 한 줄</strong>이면 「계산식」 에서 적습니다 — 처리 단계나 적합식이 됩니다(ADR 0030). 그 값을 담을 칸이 없으면 「카드 항목란」 에서 만듭니다(ADR 0033). 둘 다 시스템 관리자의 자리입니다. 블록 하나가 무엇을 담는지 정하는 일이라 신중해야 합니다 — <strong>한 자리는 한 블록이 채웁니다.</strong></p>
     </li>
     <li><b>확장 폴더를 만든다 — 파일 두세 개</b>
-      <p>새 경화식·새 초탄성 식은 <code>extensions/&lt;이름&gt;/</code> 하나로 끝납니다. <strong>Ghosh 가 그 증거</strong>입니다 — 중심 코드를 한 줄도 안 고치고 붙었습니다.</p>
-    </li>
-    <li><b>카드 블록을 더한다 — 중심 코드</b>
-      <p>온도 의존 소성, 속도 의존 계수, 크리프 상수처럼 <strong>덱에 새 자리가 필요한</strong> 것. 블록 하나가 무엇을 담는지 정하는 일이라 신중해야 합니다 — <strong>한 자리는 한 블록이 채웁니다.</strong></p>
+      <p>식 한 줄로 안 되는 것 — 정렬 · 구간 탐색 · 회귀 같은 알고리즘 — 은 <code>extensions/&lt;이름&gt;/</code> 하나로 끝납니다. <strong>Ghosh 가 그 첫 증거</strong>였고(중심 코드를 한 줄도 안 고치고 붙었습니다), 지금은 Johnson-Cook 준정적 · 이방성 · 피로 S-N · 유변 · 온도별 소성도 확장 폴더에 삽니다. 등록 함수 넷 — <code>registry.register</code> · <code>register_block</code> · <code>register_renderer</code> · <code>register_family</code> — 이 처리 · 칸 · 양식 · 식을 다 받습니다.</p>
     </li>
     <li><b>시험 종류와 처리를 더한다 — 가장 큰 일</b>
-      <p>압축·크리프·복합재처럼 <strong>담기부터 없는</strong> 것. 장비 파일을 읽는 규칙(형식 프로필)까지 딸려 옵니다.</p>
+      <p>압축·크리프·파괴처럼 <strong>담기부터 없는</strong> 것. 시험 종류(「시험 정의」)와 장비 파일을 읽는 규칙(「장비 파일 정의」)은 데이터지만, 그 곡선을 물성으로 바꾸는 처리와 카드 칸 · 양식까지 <strong>다섯 자리를 다 채워야</strong> 끝까지 갑니다.</p>
     </li>
   </ol>
 
   <div class="note">
     <h4>다른 표와 함께 본다</h4>
     <p>이 표는 <strong>앱이 무엇을 다루나</strong>이고, 「물성 × 장비 대응표」는 <strong>장비로 무엇을 재나</strong>입니다. 둘을 겹치면 우선순위가 나옵니다 — <strong>잴 수 있는데 앱이 못 받는 것</strong>이 가장 아까운 자리입니다.</p>
-    <p>지금 그 자리에 있는 것: <strong>온도 의존 소성</strong>(온도챔버가 있으면 잴 수 있고, 카드 하나면 열립니다)과 <strong>폼 압축</strong>(고속 압축기가 있으면 잴 수 있으나 다섯 자리가 다 비었습니다).</p>
+    <p>지금 그 자리에 있는 것: <strong>응력완화</strong>(인장기로 잴 수 있는데 처리 · 카드 칸이 없습니다), <strong>복합재 E1 · E2</strong>(인장으로 나오는데 직교이방 카드가 없습니다), <strong>폼 압축</strong>(고속 압축기가 있으면 잴 수 있으나 다섯 자리가 다 비었습니다). 전에 여기 있던 <strong>온도 의존 소성</strong>은 이제 앱이 받습니다.</p>
   </div>
 </section>
 
 </main>
 
 <footer>
-  핸드북 · 측정 범위 — 앱이 다루는 물성 16항목 × 5단계 · 2026-08-30
+  핸드북 · 측정 범위 — 앱이 다루는 물성 22항목 × 5단계 · 2026-09-30
 </footer>
 
 </body></html>

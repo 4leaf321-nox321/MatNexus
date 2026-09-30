@@ -1,8 +1,8 @@
 """핸드북 씨앗을 DB 에 넣는다.
 
-    python scripts/import_guides.py             # 빠진 것만 채운다 (배포에 넣어도 된다)
+    python scripts/import_guides.py             # 빠진 절 + 사람이 안 고친 절 (배포)
     python scripts/import_guides.py --check     # 씨앗과 운영 본문의 차이만 본다
-    python scripts/import_guides.py --replace   # 덮는다 — --check 를 보고 의식적으로만
+    python scripts/import_guides.py --replace   # 고친 절까지 덮는다 — --check 보고 의식적으로
     python scripts/import_guides.py --only dma-prony
     python scripts/import_guides.py --titles-only  # 제목만 (본문·리비전 안 건드림)
 
@@ -14,9 +14,24 @@
 가이드는 **저장소에서 갱신되어 배포로 올라간다.** 그런데 운영에서도 사람이 고치고
 검토자가 승인한다 — 두 곳에서 바뀌는 것이다. 그래서 세 모드가 각각 다른 일을 한다.
 
-    기본       빠진 절만 더한다.      **아무것도 안 덮는다** → 배포에 넣어도 된다
+    기본       빠진 절을 더하고, 사람이 안 고친 절은 씨앗대로 바꾼다.
+               **사람이 고친 절은 안 덮는다** → 배포에 넣어도 된다
     --check    다른 절을 짚는다.      덮기 전에 무엇이 부딪히는지 본다
     --replace  씨앗대로 덮는다.       사람이 보고 결정할 때만
+
+## 「사람이 안 고친 절」 은 리비전이 안다
+
+절의 본문은 리비전으로만 바뀐다. 씨앗이 넣은 리비전은 쓴 사람이 비어 있고(`author_id`
+없음), 화면에서 낸 리비전은 반드시 쓴 사람이 있다. 그래서 **마지막으로 승인된 리비전이
+씨앗의 것이고 본문이 그 리비전과 같으면** 그 절은 씨앗이 주인이다 — 새 씨앗으로 바꿔도
+잃는 것이 없다. 하나라도 어긋나면(사람이 고쳐 승인했다 · 대기 중인 초안이 있다 · 삭제됐다 ·
+리비전 없이 본문이 바뀌었다) 안 덮고 이름을 적는다.
+
+전에는 기본이 **있는 절은 무엇이든 안 덮었다.** 그러면 저장소에서 원문을 고쳐도 운영
+가이드는 처음 들어간 판에 머문다 — 실측(2026-09-30): 앱이 해석 프로그램 여섯을 내보내는데
+운영 가이드 「지금 이 앱이 다루는 물성」 은 두 개 시절 판이었고, 사람이 고친 절은 하나도
+없었다. 대기 초안이 있는 절을 안 덮는 이유: 그 초안은 옛 본문 위에 쓴 것이라, 승인되는
+순간 씨앗 갱신을 말없이 되돌린다 — 검토자가 초안을 처리한 뒤 다음 배포가 가져간다.
 
 운영 편집을 저장소로 되돌리는 길은 `export_guides.py` 다. 그것이 없으면 운영 편집은
 언젠가 반드시 사라지고, 그러면 사람들이 운영에서 편집하기를 그만둔다.
@@ -35,6 +50,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import hashlib
 import io
 import json
@@ -81,12 +97,25 @@ def _rewrite_images(node: Any, urls: dict[str, str]) -> None:
 
 
 def _upload_assets(db: Session, document_id: Any, seed: dict[str, Any]) -> dict[str, str]:
+    return _asset_urls(db, seed, document_id=document_id, upload=True)
+
+
+def _asset_urls(
+    db: Session, seed: dict[str, Any], *, document_id: Any = None, upload: bool = False
+) -> dict[str, str]:
+    """그림 이름 → 이 서버의 주소. 같은 내용(해시)이면 있는 것을 쓴다.
+
+    `upload=False` 는 **보기만** 한다(`--check`) — 아직 없는 그림은 주소가 없어서
+    자리표시가 남고, 그 절은 「다름」 이 된다. 적재하면 새로 올라갈 그림이니 맞는 답이다.
+    """
     urls: dict[str, str] = {}
     for asset in seed.get("assets", []):
         path = SEEDS / "assets" / asset["name"]
         data = path.read_bytes()
         digest = hashlib.sha256(data).hexdigest()
-        existing = db.scalar(select(GuideAsset).where(GuideAsset.sha256 == digest))
+        existing = db.scalar(select(GuideAsset).where(GuideAsset.sha256 == digest).limit(1))
+        if existing is None and not upload:
+            continue
         if existing is None:
             existing = services.save_asset(
                 db,
@@ -141,51 +170,76 @@ def check(db: Session, seed: dict[str, Any]) -> str:
     }
     fresh = [key for key in seeded if key not in rows]
     only_there = [key for key in rows if key not in seeded]
-    # **그림 주소는 빼고 견준다.** 씨앗은 `asset:이름` 자리표시를 들고 DB 는 진짜
-    # 주소를 든다 — 그대로 견주면 안 고친 절이 전부 「다름」 으로 뜬다.
+    # **그림은 적재가 쓸 주소로 바꿔 견준다.** 씨앗은 `asset:이름` 자리표시를 든다.
+    # 전에는 그림 주소를 빼고 견줬는데, 그러면 그림 파일이 바뀐 절이 「같음」 으로
+    # 보이고 적재는 그 절을 바꿨다 — 보기와 넣기가 다른 답을 냈다. 실측(2026-09-30):
+    # SVG 를 고친 뒤(54fd70b) 개발 DB 의 그림만 다른 절 59 개가 옛 그림을 가리키고
+    # 있었는데 `--check` 는 전부 「같음」 이었다.
+    urls = _asset_urls(db, seed)
     differs = [
         key
         for key in seeded
-        if key in rows
-        and _without_images(rows[key].body) != _without_images(seeded[key]["body"])
+        if key in rows and rows[key].body != _resolved(seeded[key]["body"], urls)
     ]
+    # 다른 절을 둘로 가른다 — 배포가 알아서 가져갈 것과 사람이 정해야 할 것.
+    guarded = [key for key in differs if not seed_owned(db, rows[key])]
+    follows = len(differs) - len(guarded)
 
     parts = []
     if fresh:
         parts.append(
             f"새 절 {len(fresh)}({', '.join(fresh[:3])}{'…' if len(fresh) > 3 else ''})"
         )
-    if differs:
-        shown = ", ".join(differs[:3]) + ("…" if len(differs) > 3 else "")
-        parts.append(f"**다름 {len(differs)}**({shown})")
+    if follows:
+        parts.append(f"씨앗대로 바뀔 절 {follows}")
+    if guarded:
+        shown = ", ".join(guarded[:3]) + ("…" if len(guarded) > 3 else "")
+        parts.append(f"**다름 · 사람이 고친 절 {len(guarded)}**({shown})")
     if only_there:
         parts.append(f"운영에만 {len(only_there)}")
     return " · ".join(parts) if parts else "같음"
 
 
-def _without_images(body: Any) -> Any:
-    """그림 주소를 지운 사본. 견주기 전용."""
-    if isinstance(body, dict):
-        cleaned = {
-            key: _without_images(value) for key, value in body.items() if key != "attrs"
-        }
-        attrs = body.get("attrs")
-        if isinstance(attrs, dict):
-            cleaned["attrs"] = {k: v for k, v in attrs.items() if k != "src"}
-        elif attrs is not None:
-            cleaned["attrs"] = attrs
-        return cleaned
-    if isinstance(body, list):
-        return [_without_images(one) for one in body]
-    return body
+def seed_owned(db: Session, section: GuideSection) -> bool:
+    """이 절을 씨앗이 바꿔도 되는가 — **사람이 손댄 흔적이 하나도 없을 때만.**
+
+    마지막 승인 리비전이 씨앗의 것(`author_id` 없음)이고 본문이 그것과 같아야 한다.
+    대기 초안이 있으면 아니다: 옛 본문 위에 쓴 초안이 승인되면 씨앗 갱신이 말없이
+    되돌려진다.
+    """
+    if section.deleted_at is not None:
+        return False
+    pending = db.scalar(
+        select(GuideRevision.id)
+        .where(GuideRevision.section_id == section.id, GuideRevision.status == "pending")
+        .limit(1)
+    )
+    if pending is not None:
+        return False
+    last = db.scalar(
+        select(GuideRevision)
+        .where(GuideRevision.section_id == section.id, GuideRevision.status == "approved")
+        .order_by(
+            GuideRevision.reviewed_at.desc().nulls_last(), GuideRevision.created_at.desc()
+        )
+        .limit(1)
+    )
+    return last is not None and last.author_id is None and last.body == section.body
+
+
+def _resolved(body: Any, urls: dict[str, str]) -> Any:
+    """자리표시를 주소로 바꾼 사본. 견주기 전용 — 씨앗 본문은 안 건드린다."""
+    copied = copy.deepcopy(body)
+    _rewrite_images(copied, urls)
+    return copied
 
 
 def load(db: Session, seed: dict[str, Any], *, replace: bool) -> str:
     """씨앗을 넣는다.
 
-    **기본은 빠진 절만 더한다 — 아무것도 안 덮는다.** 그래서 배포에 넣어도 되고,
-    저장소에 절을 새로 써도 다음 배포에 저절로 간다. 있는 절의 본문은 `--replace`
-    로만 바뀐다.
+    **기본은 빠진 절을 더하고, 사람이 안 고친 절만 씨앗대로 바꾼다**(`seed_owned`).
+    그래서 배포에 넣어도 되고, 저장소에서 절을 새로 쓰거나 고쳐도 다음 배포에 저절로
+    간다. 사람이 고친 절의 본문은 `--replace` 로만 바뀐다.
     """
     document = db.scalar(select(GuideDocument).where(GuideDocument.key == seed["key"]))
     if document is None:
@@ -209,6 +263,8 @@ def load(db: Session, seed: dict[str, Any], *, replace: bool) -> str:
     count = 0
     added = 0
     kept = 0
+    renewed = 0
+    guarded: list[str] = []
     for item in seed["sections"]:
         body = item["body"]
         _rewrite_images(body, urls)
@@ -228,35 +284,50 @@ def load(db: Session, seed: dict[str, Any], *, replace: bool) -> str:
                 body=body,
             )
             added += 1
+        elif not replace and section.body == body:
+            kept += 1
+        elif not replace and seed_owned(db, section):
+            # 씨앗이 넣은 판 그대로다 — 새 씨앗으로 바꿔도 잃는 것이 없다.
+            _renew(db, section, body, note="씨앗에서 갱신")
+            renewed += 1
         elif not replace:
             # **안 덮는다.** 운영에서 고쳐 승인한 본문이 여기 있을 수 있고, 그것을
             # 말없이 되돌리면 다음부터 아무도 운영에서 편집하지 않는다.
-            kept += 1
+            guarded.append(item["key"])
         else:
             # 덮되 지우지 않는다 — 앞 판은 리비전에 남아 있다.
             section.deleted_at = None
             section.title = item["title"]
             section.position = int(item.get("position", 0))
-            section.body = body
-            section.body_text = services.plain_text(body)
-            section.revision_no += 1
-            db.add(
-                GuideRevision(
-                    section_id=section.id,
-                    status="approved",
-                    body=body,
-                    body_text=section.body_text,
-                    note="씨앗에서 다시 가져옴",
-                    reviewed_at=datetime.now(UTC),
-                )
-            )
+            _renew(db, section, body, note="씨앗에서 다시 가져옴")
         count += 1
     db.commit()
     if made:
         return f"만듦 — 절 {count} · 그림 {len(urls)}"
     if replace:
         return f"덮음 — 절 {count} · 그림 {len(urls)}"
-    return f"채움 — 새 절 {added} · 그대로 둔 절 {kept}"
+    said = f"채움 — 새 절 {added} · 씨앗대로 갱신 {renewed} · 같은 절 {kept}"
+    if guarded:
+        shown = ", ".join(guarded[:3]) + ("…" if len(guarded) > 3 else "")
+        said += f" · 사람이 고쳐 둔 절 {len(guarded)}({shown}) — 안 덮음, --check 로 보고 결정"
+    return said
+
+
+def _renew(db: Session, section: GuideSection, body: dict[str, Any], *, note: str) -> None:
+    """본문을 씨앗으로 바꾸고 리비전을 남긴다. 쓴 사람은 비운다 — 씨앗의 판이라는 표시다."""
+    section.body = body
+    section.body_text = services.plain_text(body)
+    section.revision_no += 1
+    db.add(
+        GuideRevision(
+            section_id=section.id,
+            status="approved",
+            body=body,
+            body_text=section.body_text,
+            note=note,
+            reviewed_at=datetime.now(UTC),
+        )
+    )
 
 
 def main() -> None:

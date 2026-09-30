@@ -244,6 +244,16 @@ a:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-of
     <li>산포는 저응력·장수명 쪽에서 더 큽니다. 피로한도 근처의 데이터는 특히 흩어집니다.</li>
     <li>파단하지 않고 종료한 시편(runout)은 그냥 버리면 안 됩니다 — 통계적으로는 <strong>중도절단(censored) 데이터</strong>로 다뤄야 합니다.</li>
   </ul>
+
+  <div class="note">
+    <h4>이 앱에서는</h4>
+    <ul class="tight">
+      <li>피로 시험은 곡선 파일 없이 「표로 시험 입력」으로 시편마다 응력 진폭 · 응력비 · 주파수와 파단 수명 · 런아웃 여부를 적습니다. 「S-N 곡선 (Basquin)」 묶음이 그 점들을 로그–로그 직선으로 잇습니다.</li>
+      <li><strong>식은 S = A · N^b이고 N은 사이클입니다(반전 2Nf가 아님).</strong> S는 응력 진폭입니다. 위 식의 σ′f로 옮기려면 σ′f = A · 2^(−b)입니다.</li>
+      <li>런아웃은 기본으로 적합에서 뺍니다. 표에는 런아웃 표시로 남지만, 중도절단 데이터로 다루는 통계 처리는 하지 않습니다. 응력비 R이 섞여 있으면 경고합니다.</li>
+      <li>곡선은 점들의 한가운데를 지나는 적합 곡선 하나입니다. 흩어짐(로그 잔차 표준편차)과 정한 수명(기본 10⁵ · 10⁶ · 10⁷ 사이클)에서의 피로 강도를 값으로 내지만, <strong>하위 신뢰 곡선(P-S-N)은 만들지 않습니다</strong> — 설계용 곡선은 이 절의 방법으로 따로 정합니다.</li>
+    </ul>
+  </div>
 </section>
 
 <section id="s3">
@@ -277,6 +287,11 @@ a:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-of
     <h4>인장시험의 소성곡선을 피로 해석에 쓰면 안 됩니다</h4>
     <p>앞선 인장 문서에서 만든 σ–ε_p 곡선은 <strong>단조(monotonic) 물성</strong>입니다. 노치부의 국부 응력·변형률을 계산할 때 이 곡선을 쓰면, 순환 경화 재료에서는 국부 응력을 과소평가하고 연화 재료에서는 과대평가합니다.</p>
     <p>간단한 예측 규칙이 있습니다 — <strong>Rm/Rp0.2 &gt; 1.4면 순환 경화, &lt; 1.2면 순환 연화</strong>가 예상됩니다. 이 문서의 예제 재료는 643/387 = <strong>1.66</strong>이므로 경화가 예상되고, 실제로 그렇게 나왔습니다. 다만 이건 방향 예측일 뿐 크기는 시험해야 압니다.</p>
+  </div>
+
+  <div class="note">
+    <h4>이 앱에서는</h4>
+    <p>변형률 제어 시험의 ε-N 적합(Coffin-Manson-Basquin)과 순환 응력-변형률 곡선을 만드는 처리 · 카드 블록이 없습니다. 「문헌 물성」에서 피로강도계수 σ′f · 지수 b, 피로연성계수 ε′f · 지수 c의 문헌값을 찾아볼 수 있습니다.</p>
   </div>
 </section>
 
@@ -458,6 +473,14 @@ da/dN = K₃ · (ΔW)^K₄          <span class="cm">균열 성장률</span>
     <li>Ansys APDL에는 <strong>피로용 <code>TB,</code> 재료 테이블이 없습니다.</strong> 피로 데이터는 Engineering Data/Fatigue Tool 쪽에 있습니다.</li>
     <li>즉 대부분의 실무에서 “피로 물성 카드”는 solver 밖 도구의 재료 파일입니다. <strong>solver 입력 데크만 인수인계하면 피로 물성은 함께 가지 않습니다.</strong></li>
   </ul>
+
+  <div class="note">
+    <h4>이 앱에서는</h4>
+    <ul class="tight">
+      <li>S-N 카드가 나가는 해석 프로그램 형식은 <strong>LS-DYNA <code>*MAT_ADD_FATIGUE</code> 하나</strong>입니다. Basquin을 식으로(LCID = −3) 싣고 진폭 기준(SNTYPE = 1)을 늘 적습니다. 구조 재료에 얹는 카드라 MID를 그 재료 번호로 맞춰야 하고, 시험의 R이 −1이 아니면 평균응력 보정이 두 번 될 수 있다고 덱에 적습니다.</li>
+      <li>OptiStruct MATFAT · MSC MATFTG는 인장강도가 필수라서, Abaqus · OpenRadioss는 재료 카드에 S-N 자리가 없어서, ANSYS는 S-N 명령(FP)이 보관 기능이라서 내지 않습니다. nCode · FEMFAT · fe-safe 재료 파일도 만들지 않으니, 카드를 중립 JSON으로 내보내 옮깁니다.</li>
+    </ul>
+  </div>
 
   <h3>검증</h3>
   <ol class="steps">
