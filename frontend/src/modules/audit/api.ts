@@ -72,6 +72,10 @@ export const ACTION_LABELS: Record<string, string> = {
   'card.created_by_client': 'AI 가 물성 카드 생성',
   'processing.run_by_client': 'AI 가 처리 실행',
   'recipe.saved_by_client': 'AI 가 레시피 저장',
+  'export_profile.saved_by_client': 'AI 가 해석용 물성 정의 저장',
+  'vocabulary.term_created_by_client': 'AI 가 기준정보 값 추가',
+  'property_link.created_by_client': 'AI 가 물성 연결',
+  'card_block.saved_by_client': 'AI 가 카드 항목란 저장',
   'format.saved_by_client': 'AI 가 형식 저장',
   // 그러고도 샜던 자리(2026-09-25) — 등록·문헌 카탈로그·의뢰. MCP 쓰기 도구마다 감사 흔적이
   // 있는지 `tests/architecture/test_mcp_writes_audited.py` 가 본다.

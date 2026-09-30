@@ -412,9 +412,59 @@ def scan(text: str, known: dict[str, float] | None = None) -> Scanned:
     return Scanned(lines=lines, notes=notes)
 
 
+def as_definition(found: Scanned) -> dict[str, Any]:
+    """초안 → **저장할 수 있는 정의**(`template` 문법). 2026-09-30.
+
+    화면은 줄 폼(`lines`)을 받아 자기가 정의로 옮긴다(`frontend/.../deckLines.ts` 의
+    `fromScan` → `toDefinitionLine`). MCP 로 부르는 AI 에게는 그 옮기는 규칙이 없어서, 초안을
+    받고도 정의를 짓다 막혔다. **규칙은 화면과 같다** — 두 벌이라 시험이 같은 경우를 문다
+    (`tests/unit/test_deck_scan_definition.py`):
+
+        키워드 줄        {"text": 그대로}
+        값 줄            {"fields": [...], prefix · join · suffix}
+        표 줄            {"rows": "", ...}      표 이름은 사람이 정한다(소성인지 Prony 인지)
+        칸              {"value": 제안 또는 "", "format": 폭이 있으면 fixed · fixed_left}
+        비운 칸(`,,`)     {"const": ""}          자리를 지킨다 — 값 칸이면 지어낸 값이 들어간다
+        구분자 ""        그대로 보낸다           안 보내면 서버가 `", "` 를 끼운다
+
+    **빈 `value` 가 곧 「여기는 네가 정해라」 다.** 짐작으로 채우지 않는다.
+    확장자(`extension`) · 설명(`describe`)은 덱만 봐서 모르므로 안 싣는다 — 부르는 쪽이
+    채운다.
+    """
+    lines: list[dict[str, Any]] = []
+    for one in found.lines:
+        if one.kind == "text":
+            lines.append({"text": one.text or ""})
+            continue
+        fmt: Any = (
+            [
+                "fixed_left" if one.align == "left" else "fixed",
+                one.width,
+                one.precision if one.precision is not None else 9,
+            ]
+            if one.width is not None
+            else "free"
+        )
+        line: dict[str, Any] = {}
+        if one.kind == "rows":
+            line["rows"] = ""
+        line["fields"] = [
+            {"const": ""} if cell.empty else {"value": cell.suggested or "", "format": fmt}
+            for cell in one.cells
+        ]
+        if one.prefix:
+            line["prefix"] = one.prefix
+        line["join"] = one.join
+        if one.suffix:
+            line["suffix"] = one.suffix
+        lines.append(line)
+    return {"lines": lines}
+
+
 def as_payload(found: Scanned) -> dict[str, Any]:
-    """응답 모양으로. 화면의 줄 폼이 그대로 받는다."""
+    """응답 모양으로. 화면의 줄 폼이 그대로 받고, **정의 초안**(`definition`)도 함께 싣는다."""
     return {
+        "definition": as_definition(found),
         "lines": [
             {
                 "kind": one.kind,

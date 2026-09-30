@@ -451,6 +451,9 @@ class DeckScanOut(BaseModel):
     lines: list[ScannedLineOut] = []
     notes: list[str] = []
     """읽으면서 짐작한 자리. **숨기지 않는다.**"""
+    definition: dict[str, Any] = {}
+    """**바로 미리보기 · 저장에 넘길 수 있는 정의 초안**(2026-09-30). 화면은 `lines` 를 폼으로
+    그리고, AI 는 이것을 쓴다. 빈 `value` 는 사람(또는 AI)이 `블록.값` 으로 채울 자리다."""
 
 
 class DeckPreviewIn(BaseModel):
@@ -534,6 +537,18 @@ class DeckCheckOut(BaseModel):
     """덱에서 실제로 읽어 낸 값 — 이름을 붙일 수 있었던 것만."""
     notes: list[str] = []
     """내보내면서 한 말(네킹·첫 점·합성). **검사 결과와 함께 읽어야 한다.**"""
+
+
+class DeckGrammarOut(BaseModel):
+    """해석용 물성 정의의 **문법** — 정본은 `matcore/export/template.py` 의 설명이다.
+
+    AI 가 정의를 지을 때 읽는다. 여기 따로 적으면 문법을 넓힐 때 한쪽만 고쳐진다 — 그래서
+    코드의 설명을 그대로 낸다.
+    """
+
+    grammar: str
+    formats: list[str]
+    """칸 형식 이름(`free` · `fixed` · `fixed_left` · `spec` …). 여기 없는 이름은 거절된다."""
 
 
 class DeckPreviewOut(BaseModel):

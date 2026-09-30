@@ -1707,6 +1707,18 @@ def add_property_link(
             created_by_id=user.id,
         )
         db.add(found)
+        db.flush()
+        # **AI 가 이은 것은 남긴다**(2026-09-30). 연결 하나가 모든 재료의 값 찾기 · 카드
+        # 채우기 · 다른 시스템의 매핑에 한꺼번에 먹는다.
+        audit.record_by_client(
+            db,
+            action=audit.PROPERTY_LINKED_BY_CLIENT,
+            actor=user,
+            target_table="property_links",
+            target_id=found.id,
+            target_label=f"{term.value} ↔ {payload.property_key}",
+            changes={"kind": payload.kind, "scale": scale},
+        )
         db.commit()
         db.refresh(found)
     return _link_out(found, term.value)

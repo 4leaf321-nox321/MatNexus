@@ -8120,6 +8120,28 @@
         "title": "DeckFormatOut",
         "type": "object"
       },
+      "DeckGrammarOut": {
+        "description": "해석용 물성 정의의 **문법** — 정본은 `matcore/export/template.py` 의 설명이다.\n\nAI 가 정의를 지을 때 읽는다. 여기 따로 적으면 문법을 넓힐 때 한쪽만 고쳐진다 — 그래서\n코드의 설명을 그대로 낸다.",
+        "properties": {
+          "formats": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Formats",
+            "type": "array"
+          },
+          "grammar": {
+            "title": "Grammar",
+            "type": "string"
+          }
+        },
+        "required": [
+          "grammar",
+          "formats"
+        ],
+        "title": "DeckGrammarOut",
+        "type": "object"
+      },
       "DeckKeyOut": {
         "description": "덱 정의가 집을 수 있는 값 하나 — `elastic.density` 처럼 **블록.값**.",
         "properties": {
@@ -8433,6 +8455,12 @@
       },
       "DeckScanOut": {
         "properties": {
+          "definition": {
+            "additionalProperties": true,
+            "default": {},
+            "title": "Definition",
+            "type": "object"
+          },
           "lines": {
             "default": [],
             "items": {
@@ -27930,7 +27958,14 @@
         "properties": {
           "attributes": {
             "additionalProperties": {
-              "type": "number"
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "string"
+                }
+              ]
             },
             "default": {},
             "title": "Attributes",
@@ -37536,6 +37571,28 @@
           }
         },
         "summary": "Create Export Profile",
+        "tags": [
+          "fitting"
+        ]
+      }
+    },
+    "/api/fitting/export-profiles/grammar": {
+      "get": {
+        "description": "해석용 물성 정의의 **문법.** 정본은 `matcore/export/template.py` 의 설명이다 — 그것을\n그대로 낸다(여기 따로 적으면 문법을 넓힐 때 한쪽만 고쳐진다). AI 가 정의를 지을 때\n읽는다.",
+        "operationId": "deck_grammar_api_fitting_export_profiles_grammar_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeckGrammarOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Deck Grammar",
         "tags": [
           "fitting"
         ]

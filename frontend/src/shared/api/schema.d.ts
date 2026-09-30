@@ -2317,6 +2317,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/fitting/export-profiles/grammar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Deck Grammar
+         * @description 해석용 물성 정의의 **문법.** 정본은 `matcore/export/template.py` 의 설명이다 — 그것을
+         *     그대로 낸다(여기 따로 적으면 문법을 넓힐 때 한쪽만 고쳐진다). AI 가 정의를 지을 때
+         *     읽는다.
+         */
+        get: operations["deck_grammar_api_fitting_export_profiles_grammar_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/fitting/export-profiles/preview": {
         parameters: {
             query?: never;
@@ -10620,6 +10642,19 @@ export interface components {
             solver: string;
         };
         /**
+         * DeckGrammarOut
+         * @description 해석용 물성 정의의 **문법** — 정본은 `matcore/export/template.py` 의 설명이다.
+         *
+         *     AI 가 정의를 지을 때 읽는다. 여기 따로 적으면 문법을 넓힐 때 한쪽만 고쳐진다 — 그래서
+         *     코드의 설명을 그대로 낸다.
+         */
+        DeckGrammarOut: {
+            /** Formats */
+            formats: string[];
+            /** Grammar */
+            grammar: string;
+        };
+        /**
          * DeckKeyOut
          * @description 덱 정의가 집을 수 있는 값 하나 — `elastic.density` 처럼 **블록.값**.
          */
@@ -10779,6 +10814,13 @@ export interface components {
         };
         /** DeckScanOut */
         DeckScanOut: {
+            /**
+             * Definition
+             * @default {}
+             */
+            definition: {
+                [key: string]: unknown;
+            };
             /**
              * Lines
              * @default []
@@ -18180,7 +18222,7 @@ export interface components {
              * @default {}
              */
             attributes: {
-                [key: string]: number;
+                [key: string]: number | string;
             };
             /** Parent Value */
             parent_value?: string | null;
@@ -23306,6 +23348,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    deck_grammar_api_fitting_export_profiles_grammar_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeckGrammarOut"];
                 };
             };
         };

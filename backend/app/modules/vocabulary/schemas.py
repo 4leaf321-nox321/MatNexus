@@ -225,8 +225,10 @@ class TermCreateRequest(BaseModel):
     value: str = Field(min_length=1, max_length=200)
     parent_value: str | None = Field(default=None, max_length=200)
     """상위 축의 값. 주면 새 값이 그 아래로 들어간다."""
-    attributes: dict[str, float] = {}
-    """치수 등 속성. SI 로 보낸다."""
+    attributes: dict[str, float | str] = {}
+    """속성. 숫자 칸(규격 치수)은 SI 로, **글자 · 선택 칸**(사내 물성 항목의 차원 · 기호 ·
+    붙는 곳)은 글자로 보낸다. 검사는 축이 선언한 칸이 한다(`services.check_attributes`) —
+    전에는 숫자만 받아서, 사내 물성 항목은 만든 뒤 관리자가 차원을 따로 붙여야 했다."""
 
 
 class TermUpdateRequest(BaseModel):

@@ -19,8 +19,10 @@ import uuid
 from typing import Any
 
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.modules.audit.models import AuditEntry
 from app.modules.fitting import renderers
 from app.modules.fitting.models import ExportProfile
 from matcore import export
@@ -307,3 +309,57 @@ class Test지우고_되살린다:
         assert restored.status_code in (200, 204), restored.text
         formats = client.get("/api/fitting/formats", headers=admin_headers).json()
         assert "optistruct" in {item["key"] for item in formats}
+
+
+class TestAI_가_짓는_길:
+    """MCP 로 AI 가 정의를 짓고 그려 보고 저장한다(2026-09-30). 전에는 초안만 됐다 — 초안은
+    화면 폼 모양이라 AI 가 정의로 옮기다 막혔고, 그려 보거나 저장할 길이 없었다."""
+
+    def test_AI_가_저장하면_변경_이력에_남고_화면_저장은_안_남는다(
+        self, client: TestClient, admin_headers: dict[str, str], db: Session
+    ) -> None:
+        # 정의는 전 부서의 해석 파일 모양이다 — 누가(무엇이) 저장했는지가 남아야 한다.
+        by_hand = client.post(
+            "/api/fitting/export-profiles",
+            json={"key": "by_hand", **VALID},
+            headers=admin_headers,
+        )
+        assert by_hand.status_code == 201, by_hand.text
+        ai = {**admin_headers, "X-Client": "mcp"}
+        made = client.post(
+            "/api/fitting/export-profiles", json={"key": "by_ai", **VALID}, headers=ai
+        )
+        assert made.status_code == 201, made.text
+        fixed = client.put(
+            "/api/fitting/export-profiles/by_ai", json={**VALID, "label": "고침"}, headers=ai
+        )
+        assert fixed.status_code == 200, fixed.text
+
+        rows = list(
+            db.scalars(
+                select(AuditEntry).where(AuditEntry.action == "export_profile.saved_by_client")
+            )
+        )
+        assert [(one.target_label, one.changes["created"]) for one in rows] == [
+            ("OptiStruct 탄성 (by_ai)", True),
+            ("고침 (by_ai)", False),
+        ]
+
+    def test_문법은_정본을_그대로_낸다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        body = client.get("/api/fitting/export-profiles/grammar", headers=admin_headers).json()
+        assert body["grammar"].startswith("## 문법")
+        assert '"fields"' in body["grammar"]
+        assert {"free", "fixed", "fixed_left", "spec"} <= set(body["formats"])
+
+    def test_예제_덱_초안에_바로_쓸_정의가_실린다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        deck = "*MAT_ELASTIC\n         1   7.85E-9  210000.0       0.3\n"
+        body = client.post(
+            "/api/fitting/export-profiles/scan", json={"text": deck}, headers=admin_headers
+        ).json()
+        lines = body["definition"]["lines"]
+        assert lines[0] == {"text": "*MAT_ELASTIC"}
+        assert all("value" in one or "const" in one for one in lines[1]["fields"])

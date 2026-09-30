@@ -288,6 +288,10 @@ export function describeAdvanced(raw: Record<string, unknown>): string {
 /**
  * 읽어 낸 초안 → 화면의 줄.
  *
+ * **서버에 쌍둥이가 있다** — `matcore/export/scan.py` 의 `as_definition` 이 같은 규칙으로 초안을
+ * 정의로 옮겨 MCP(AI)에 준다(2026-09-30). 여기를 고치면 그쪽도 고친다 — 같은 경우를 서버
+ * 시험(`tests/unit/test_deck_scan_definition.py`)이 문다.
+ *
  * **제안된 이름을 칸에 그대로 넣는다.** 제안이 없는 칸은 비워 둔다 — 그 빈칸이
  * 곧 「여기는 네가 정해라」 이고, 짐작으로 채워 두면 사람이 그대로 저장한다.
  *

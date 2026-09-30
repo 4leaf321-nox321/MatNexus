@@ -444,6 +444,78 @@ async def sweep(session: ClientSession) -> None:
         },
     )
     await call(session, "scan_deck_format", {"deck_text": "*MAT_024\n$#     mid        ro\n"})
+    # **해석용 정의를 짓는 길**(2026-09-30) — 문법 · 목록 · 카드에 그려 보기 · 저장(미리보기만).
+    await call(session, "export_definition_grammar")
+    await call(session, "list_export_profiles")
+    if card_id:
+        drafted = await call(
+            session,
+            "scan_deck_format",
+            {"deck_text": "*MAT_ELASTIC\n         1   7.85E-9  210000.0       0.3\n", "card_id": card_id},
+        )
+        definition = (
+            drafted.get("definition") if isinstance(drafted, dict) else None
+        ) or {"lines": [{"text": "*KEYWORD"}]}
+        # **초안의 빈 칸은 채울 자리다** — 사람(AI)이 하는 일을 흉내 내 탄성계수로 채운다.
+        # 안 채우고 그리면 「값이 비어 있는 칸」 으로 거절되는 것이 맞다.
+        for line in definition.get("lines") or []:
+            for cell in line.get("fields") or []:
+                if isinstance(cell, dict) and cell.get("value") == "":
+                    cell["value"] = "elastic.youngs_modulus"
+        await call(
+            session,
+            "preview_export_profile",
+            {"definition": definition, "card_id": card_id, "extension": "k"},
+        )
+        await call(
+            session,
+            "save_export_profile",
+            {"label": "점검용", "definition": definition, "extension": "k", "dry_run": True},
+        )
+    # **사내 물성 들이기**(2026-09-30) — 다섯 다 미리보기만.
+    items = await call(session, "list_property_items")
+    await call(
+        session,
+        "add_catalog_property",
+        {"name": "점검용 물성", "domain": "mechanical", "slug": "probe_only", "si_unit": "1"},
+    )
+    await call(
+        session,
+        "add_property_item",
+        {"name": "점검용 물성", "dimension": "dimensionless", "dry_run": True},
+    )
+    first_item = None
+    if isinstance(items, dict):
+        listed_items = items.get("items") or []
+        first_item = listed_items[0].get("item") if listed_items else None
+    if first_item:
+        await call(
+            session,
+            "link_property_item",
+            {"item": first_item, "property_key": "mechanical.youngs_modulus", "dry_run": True},
+        )
+    await call(
+        session,
+        "save_card_block",
+        {
+            "key": "probe_block",
+            "label": "점검용",
+            "produces": [{"key": "probe", "label": "점검", "si_unit": "1"}],
+            "dry_run": True,
+        },
+    )
+    if material_id and first_item:
+        await call(
+            session,
+            "set_declared_values",
+            {
+                "material_id": material_id,
+                "values": [
+                    {"item": first_item, "value": 1.0, "source": "estimate", "reference": "점검"}
+                ],
+                "dry_run": True,
+            },
+        )
 
     await call(session, "get_ontology")
     if material_id:
@@ -597,7 +669,14 @@ async def sweep(session: ClientSession) -> None:
     await call(
         session,
         "add_catalog_property",
-        {"name": "점검용 물성", "domain": "__probe__", "slug": "probe_only", "si_unit": "Pa"},
+        {
+            "name": "점검용 물성",
+            "domain": "__probe__",
+            "slug": "probe_only",
+            "si_unit": "Pa",
+            # 미리보기가 기본이 됐다(2026-09-30) — 서버까지 가서 거절당하는지 보려고 끈다.
+            "dry_run": False,
+        },
         expect_error=True,
     )
     await call(

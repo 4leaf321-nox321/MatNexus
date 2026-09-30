@@ -207,6 +207,14 @@ class _Scope:
                 return value
             raise expressions.MissingName(name)
         if self.row is None:
+            if not name:
+                # **빈 칸이다** — 예제 덱 초안은 무슨 값인지 모르는 칸을 비워 둔다(`scan`).
+                # 이름 없이 「… 적어야 합니다: 」 로 끝나면 무엇이 비었는지 모른다.
+                raise expressions.BadExpression(
+                    "값이 비어 있는 칸이 있습니다 — 그 칸이 무슨 값인지 '블록.값'"
+                    "(예: elastic.youngs_modulus)으로 적거나, 비워 둘 자리면 "
+                    '{"const": ""} 로 둡니다.'
+                )
             raise expressions.BadExpression(
                 f"값 줄의 식에서는 '블록.값' 으로 적어야 합니다: {name}"
             )

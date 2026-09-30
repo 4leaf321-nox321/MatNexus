@@ -607,6 +607,8 @@ def create_term(
     오류를 그려야 하는데, 실제로 일어난 일은 "이미 있는 값을 골랐다" 뿐이다.
     """
     vocabulary = services.get_vocabulary(db, slug)
+    cleaned = clean(payload.value)
+    existed = cleaned is not None and services.resolve(db, vocabulary, cleaned) is not None
     term = services.resolve_or_create(
         db,
         vocabulary,
@@ -628,6 +630,19 @@ def create_term(
     # 피커가 막힌다.
     if payload.attributes and not term.attributes:
         term.attributes = services.check_attributes(db, vocabulary, term, payload.attributes)
+    if not existed:
+        # **AI 가 만든 값은 남긴다**(2026-09-30). 사내 물성 항목 하나가 모든 재료의 피커에
+        # 서고, 물성 연결 · 카드 항목란의 한쪽 끝이 된다.
+        db.flush()
+        audit.record_by_client(
+            db,
+            action=audit.VOCABULARY_TERM_CREATED_BY_CLIENT,
+            actor=user,
+            target_table="vocabulary_terms",
+            target_id=term.id,
+            target_label=f"{vocabulary.label}: {term.value}",
+            changes={"attributes": dict(term.attributes or {})},
+        )
     db.commit()
     db.refresh(term)
     return _term_out(db, term)

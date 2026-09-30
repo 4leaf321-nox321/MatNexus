@@ -149,6 +149,58 @@ def validate(db: Session, row: CardBlock) -> None:
             status=422,
         )
     _known_tests(db, spec.from_tests)
+    _known_property_keys(db, (*spec.produces, *spec.rows))
+
+
+def _dimension_of(symbol: str) -> str | None:
+    try:
+        return units.unit_of(symbol).dimension
+    except units.UnknownUnit:
+        return None
+
+
+def _known_property_keys(db: Session, slots: tuple[Produced, ...]) -> None:
+    """칸이 가리키는 **물성 키가 실재하고, 그 단위와 칸 단위의 차원이 같은가**(2026-09-30).
+
+    칸의 물성 키는 선언 물성이 그 칸을 채우는 사슬의 한쪽 끝이다(`shared/declared_slots`).
+    없는 키면 아무것도 안 채워지고, **차원이 다르면 조용히 틀린다** — 칸은 `Pa` 인데 키가
+    `1`(무차원)이면 단위계를 바꿔 내보낼 때 환산이 어긋난 채 덱이 나간다. 전에는 칸 단위가
+    단위표에 있는지만 봤다. 사람이 만들든 AI 가 만들든 같은 검사다.
+    """
+    from app.modules.catalog.models import CatalogDefinition
+
+    wanted = {slot.property_key for slot in slots if slot.property_key}
+    if not wanted:
+        return
+    found = {
+        row.key: row.si_unit
+        for row in db.scalars(
+            select(CatalogDefinition).where(CatalogDefinition.key.in_(wanted))
+        )
+    }
+    missing = sorted(wanted - set(found))
+    if missing:
+        raise AppError(
+            "MNX-CARDBLOCK-0009",
+            f"없는 물성 키입니다: {', '.join(missing)} — 문헌 물성(물성 매핑 화면)에 먼저 "
+            "만들거나 있는 키를 고르세요.",
+            status=422,
+        )
+    for slot in slots:
+        unit = found.get(slot.property_key or "")
+        if not unit:
+            continue
+        # **모르는 단위면 견주지 않는다** — 문헌 물성의 단위 표기가 단위표 밖일 수 있고,
+        # 그때 막으면 멀쩡한 칸을 못 만든다. 차원이 **확실히 다를 때만** 막는다.
+        left, right = _dimension_of(unit), _dimension_of(slot.si_unit)
+        if left is None or right is None or units.same_dimension(left, right):
+            continue
+        raise AppError(
+            "MNX-CARDBLOCK-0010",
+            f"칸 '{slot.key}' 의 단위 '{slot.si_unit}' 와 물성 키 '{slot.property_key}' 의 "
+            f"단위 '{unit}' 가 차원이 다릅니다 — 내보낼 때 환산이 조용히 어긋납니다.",
+            status=422,
+        )
 
 
 def _known_tests(db: Session, keys: tuple[str, ...]) -> None:

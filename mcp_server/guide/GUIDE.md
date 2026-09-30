@@ -455,7 +455,7 @@ Family·Category·Grade·제조사·유통사·판매 유형·시편 규격은 *
 솔버를 붙이려고 그렇게 만들었고, 그래서 AI 가 지을 수 있다.
 
     장비 파일 정의   inspect_device_file → check_format_profile → save_format_profile
-    해석용 정의      scan_deck_format → render_card_deck 로 눈으로 확인
+    해석용 정의      scan_deck_format → preview_export_profile → save_export_profile
     시험법 정의      draft_test_type — **초안까지만.** 저장은 사람이 한다
 
 **셋의 성격이 다르다.** 앞의 둘은 **기계가 즉시 검증**할 수 있다 — 표본에 대 보고,
@@ -470,6 +470,52 @@ Family·Category·Grade·제조사·유통사·판매 유형·시편 규격은 *
 **`expect` 를 사용자에게 물어라.** 「장비 화면에 최대하중이 얼마로 떴나요」 를 묻고
 그 값을 넣으면, 지은 정의가 같은 답을 내는지 기계가 판정한다 — 「읽히기는 한다」 와
 「맞게 읽힌다」 는 다르다.
+
+### 해석용 정의 — 초안을 채우고, 실제 카드에 그려 보고, 확인받고 저장한다
+
+1. **있는지 먼저 본다** — `list_export_profiles`. 같은 해석 프로그램의 정의가 있으면 그것을
+   쓰거나 고친다(`include_definitions=True` 면 본문까지 — 문법의 본보기로도 쓴다).
+2. **예제 덱에서 시작한다** — 사용자에게 그 프로그램의 덱 파일을 받아
+   `scan_deck_format(deck_text, card_id)`. 돌려주는 **`definition`** 이 그대로 이어 쓸 초안이다
+   (`lines` 는 화면 폼용이니 옮기지 마라). 칸 폭 · 맞춤 · 빈 칸(`{"const": ""}`)은 서버가 읽은
+   그대로 둔다 — 고정폭 칸을 네가 세면 틀리고, 틀려도 덱은 나온다.
+3. **빈 자리를 채운다** — `"value": ""` 는 `블록.값`(`list_card_blocks` 의 key 와 produces),
+   `"rows": ""` 는 그릴 표. 문법은 `export_definition_grammar`. **어느 숫자가 무엇인지 모르면
+   사용자에게 묻는다** — 짐작으로 채운 칸은 다른 값을 실은 채 해석에 들어간다.
+4. **실제 카드에 그려 본다** — `preview_export_profile(definition, card_id, extension)`.
+   `missing` 은 카드가 빈 것, `error` 는 정의가 틀린 것이다. 그려진 `text` 를 **사용자가 가진
+   예제 덱과 나란히 보여 주고** 맞는지 확인받는다.
+5. **저장한다** — `save_export_profile(label, definition, extension=…, dry_run=False)`. 변경
+   이력에 「AI 경유」 로 남는다. 같은 key 가 있으면 `overwrite=True` 가 필요하다 — 남의 정의를
+   고치는 것이니 사람에게 먼저 묻는다. 그 뒤로 `render_card_deck(format=key)` 로 뽑는다.
+
+**선언 물성으로 만든 카드에 전용 항목란을 실으려면** `create_declared_card` 의 `block_keys` 로
+고른다(미리보기의 `fillable`). 안 고르면 그 값이 카드에 없고, 그 값을 쓰는 정의는 아무것도 못
+그린다. `fillable` 에 없으면 아래 사슬의 한 고리가 빠진 것이다.
+
+### 사내 물성을 새로 들일 때 — 해석 프로그램 전용 물성(예: eCAE)
+
+    물성 키          resolve_property → 없으면 add_catalog_property   `local.…`
+    사내 물성 항목     list_property_items → 없으면 add_property_item    재료에 적을 때 고르는 이름
+    물성 연결         link_property_item                                항목 ↔ 물성 키
+    카드 항목란       list_card_blocks → 없으면 save_card_block         칸마다 물성 키
+    값 적기           set_declared_values                               재료에 선언 값
+    카드 · 덱         create_declared_card(block_keys) → 해석용 정의
+
+**있는 것을 먼저 찾는다.** 같은 물성이 다른 이름으로 있으면 그것을 쓴다 — 「마찰계수」 가 있는데
+「eCAE 마찰계수」 를 또 만들면 값이 둘로 갈리고 찾기에서 반쪽만 나온다.
+
+**차원 · 단위를 짐작하지 마라.** 그 물성의 단위를 사용자에게 묻고, 항목의 `dimension` · 항목란
+칸의 `si_unit` · 물성 키의 `si_unit` 을 같은 차원으로 맞춘다(칸과 키의 차원이 다르면 서버가
+거절한다). 틀리면 단위계를 바꿔 내보낼 때 환산이 조용히 어긋난다.
+
+**연결은 같은 물성일 때만.** `link_property_item` 미리보기가 서버의 연결 후보인지
+(`server_suggested`) 알려 준다. 후보가 아니면 왜 같은 물성인지 사용자에게 설명하고 확인받는다 —
+짐작으로 이으면 비열 자리에 열전도율이 들어가고 숫자는 그럴듯하다.
+
+**넷 다 전 부서에 먹는다.** 물성 키 · 연결 · 항목란은 **시스템 관리자 토큰**이어야 되고(서버가
+막는다), 모두 미리보기가 기본이며 저장하면 변경 이력에 「AI 경유」 로 남는다. 만들 것 전체를
+한 번에 보여 주고 확인받은 뒤 차례로 저장한다.
 
 ### 시험 파일은 나르지 않는다
 

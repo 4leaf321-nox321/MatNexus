@@ -57,6 +57,7 @@ READS: dict[tuple[str, str], str] = {
     ("POST", "/processing/preview"): "처리 결과를 미리 본다 — 저장하지 않는다",
     ("POST", "/formats/check"): "형식이 파일을 읽는지 검사만 한다",
     ("POST", "/fitting/export-profiles/scan"): "덱을 읽어 형식을 알아보기만 한다",
+    ("POST", "/fitting/export-profiles/preview"): "정의를 카드에 그려 보기만 한다",
     ("POST", "/fitting/cards/{}/export/check"): "내보낼 덱을 검사만 한다",
 }
 

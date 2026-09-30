@@ -2704,6 +2704,7 @@ async def create_declared_card(
     material_id: str,
     label: str,
     synthesize_plastic: bool = False,
+    block_keys: list[str] | None = None,
     dry_run: bool = True,
 ) -> dict[str, Any]:
     """적어 둔 값만으로 **물성 카드(초안)** 를 만든다 — 시험이 없는 재료의 길.
@@ -2716,6 +2717,18 @@ async def create_declared_card(
     반드시 그렇게 전한다.
 
     **기본이 미리보기(dry_run=True)다** — 무엇이 실릴지 먼저 본다.
+
+    ## `block_keys` — 탄성 · 열물성 말고 **다른 항목란**을 함께 싣는다
+
+    탄성 · 열물성은 늘 실린다. 그 밖의 항목란(화면에서 만든 것 포함 — 예: 특정 해석
+    프로그램 전용 물성)은 **골라야** 실린다. 미리보기의 `fillable` 이 고를 수 있는 것과
+    그 칸에 닿는 값이다 — 거기 있는 `key` 를 넘긴다. **안 고르면 그 값은 카드에 없고, 그
+    값을 쓰는 해석용 정의는 아무것도 못 그린다.** 사용자가 어느 해석용 정의를 쓰려는지
+    알면 그 정의가 가리키는 항목란을 고른다.
+
+    `fillable` 에 없으면 그 항목란에 닿는 선언 값이 없는 것이다 — 선언 물성 항목이 그
+    항목란 칸의 물성 키에 이어져 있는지(물성 매핑) 사람에게 확인하게 한다. 짐작으로 잇지
+    않는다.
     """
     preview = await _get(
         ctx,
@@ -2725,9 +2738,35 @@ async def create_declared_card(
     if "error" in preview:
         return preview
     synthetic = preview.get("synthetic") or {}
+    fillable = preview.get("fillable") or []
+    choosable = {str(one.get("key")) for one in fillable}
+    unknown = [key for key in block_keys or [] if key not in choosable]
+    if unknown:
+        return {
+            "error": f"이 재료의 선언 값으로 채울 수 없는 항목란입니다: {', '.join(unknown)}",
+            "fillable": [one.get("key") for one in fillable],
+            "hint": "그 항목란 칸의 물성 키에 선언 물성 항목이 이어져 있는지 물성 매핑을 확인하게 하세요.",
+        }
     plan = {
         "material": preview.get("material_name"),
-        "blocks": preview.get("blocks"),
+        "blocks": [*(preview.get("blocks") or []), *(block_keys or [])],
+        "fillable": [
+            {
+                "key": one.get("key"),
+                "label": one.get("label"),
+                "chosen": one.get("key") in (block_keys or []),
+                "slots": [
+                    {
+                        "key": slot.get("key"),
+                        "label": slot.get("label"),
+                        "value_si": slot.get("value"),
+                        "unit": slot.get("si_unit"),
+                    }
+                    for slot in one.get("slots") or []
+                ],
+            }
+            for one in fillable
+        ],
         "values": [
             {
                 "label": one.get("label"),
@@ -2759,6 +2798,7 @@ async def create_declared_card(
             "material_id": material_id,
             "label": label,
             "synthesize_plastic": synthesize_plastic,
+            "block_keys": block_keys or [],
         },
     )
     if "error" in made:
@@ -2766,6 +2806,310 @@ async def create_declared_card(
     out = _card_summary(made)
     out["note"] = "초안으로 만들어졌다 — 확정은 사람이 화면에서 한다."
     return out
+
+# ── 사내 물성 들이기 (2026-09-30) ─────────────────────────────────────────────
+#
+# 해석 프로그램 전용 물성(예: eCAE)을 카드와 덱까지 보내는 사슬이다:
+#
+#     물성 키(문헌 물성)   add_catalog_property        `local.…` — 이미 있으면 그것을 쓴다
+#     사내 물성 항목        add_property_item           재료에 적을 때 고르는 이름 · 차원
+#     물성 연결            link_property_item          항목 ↔ 물성 키
+#     카드 항목란          save_card_block             카드가 담는 칸 — 칸마다 물성 키
+#     값 적기              set_declared_values         재료에 선언 값
+#     카드 · 덱            create_declared_card(block_keys) → save_export_profile
+#
+# 셋째 · 넷째는 **시스템 관리자 토큰**일 때만 된다(서버가 막는다). 모두 미리보기가 기본이고,
+# 저장하면 변경 이력에 「AI 경유」 로 남는다.
+
+
+@mcp.tool()
+async def list_property_items(ctx: Context, level: str | None = None) -> dict[str, Any]:
+    """**사내 물성 항목** — 재료 · 시료에 선언 값을 적을 때 고르는 이름과 그 차원 · 단위.
+
+    새 항목을 만들기 전에 **반드시 본다** — 같은 물성이 다른 이름으로 이미 있으면 그것을 쓴다
+    (「마찰계수」 가 있는데 「eCAE 마찰계수」 를 또 만들면 값이 둘로 갈린다). `level` 은
+    `재료` · `시료`.
+    """
+    got = await _get(ctx, "/materials/property-items", {"level": level} if level else None)
+    if isinstance(got, dict) and "error" in got:
+        return got
+    rows = got if isinstance(got, list) else []
+    return {"count": len(rows), "items": rows}
+
+
+@mcp.tool()
+async def add_property_item(
+    ctx: Context,
+    name: str,
+    dimension: str = "dimensionless",
+    symbol: str | None = None,
+    level: str = "재료",
+    scales: str | None = None,
+    dry_run: bool = True,
+) -> dict[str, Any]:
+    """**사내 물성 항목**을 더한다 — 재료에 선언 값을 적을 때 고르는 이름이 된다.
+
+    먼저 `list_property_items` 로 같은 물성이 있는지 본다. 이름이 이미 있으면(별칭 포함)
+    **새로 만들지 않고 그것을 돌려준다** — 그때 차원 · 기호는 안 바뀐다(바꾸는 것은 화면의
+    관리자 일이다).
+
+        dimension   차원 이름(예: `stress` · `dimensionless` · `density`). 값을 넣을 때
+                    단위가 이것으로 검사된다 — 틀리면 「비열 자리에 열전도율」 이 막히지 않는다.
+                    모르는 이름이면 서버가 고를 수 있는 것 전부를 알려 준다
+        symbol      덱과 화면에 쓰는 기호(`mu` · `E`)
+        level       `재료`(Grade 가 같으면 같은 값) · `시료`(로트마다 다른 값)
+        scales      단위가 아니라 **척도**인 물성(경도)만 — `HV, HB`. 보통 비운다
+
+    **차원을 짐작하지 마라** — 사용자에게 그 물성의 단위를 물어 차원을 정한다. 기본값
+    `dimensionless`(무차원)를 그대로 두면 단위 있는 값을 적을 때 막힌다.
+    """
+    attributes: dict[str, Any] = {"dimension": dimension, "level": level}
+    if symbol:
+        attributes["symbol"] = symbol
+    if scales:
+        attributes["scales"] = scales
+    existing = await _get(ctx, "/materials/property-items")
+    rows = existing if isinstance(existing, list) else []
+    same = next((one for one in rows if str(one.get("item")) == name.strip()), None)
+    if same is not None:
+        return {
+            "exists": True,
+            "item": same,
+            "note": "이미 있는 항목이다 — 새로 만들지 않고 이것을 쓴다. 차원 · 기호가 다르면 "
+            "사람에게 알린다(고치는 것은 화면의 관리자 일).",
+        }
+    if dry_run:
+        return {
+            "dry_run": True,
+            "will_create": {"name": name.strip(), "attributes": attributes},
+            "note": "이대로 만들려면 dry_run=False 로 다시 부르세요. 모든 재료의 피커에 선다.",
+        }
+    # 경로 인자를 변수로 둔다 — 감사 검사(`test_mcp_writes_audited`)가 백엔드 경로
+    # `/vocabularies/{slug}/terms` 와 짝지을 수 있게.
+    axis = "property_item"
+    return await _send(
+        ctx,
+        "POST",
+        f"/vocabularies/{axis}/terms",
+        {"value": name.strip(), "attributes": attributes},
+    )
+
+
+@mcp.tool()
+async def link_property_item(
+    ctx: Context,
+    item: str,
+    property_key: str,
+    scale: str | None = None,
+    note: str | None = None,
+    dry_run: bool = True,
+) -> dict[str, Any]:
+    """사내 물성 항목을 **물성 키에 잇는다** — 적어 둔 값이 카드 칸 · 값 찾기에 닿는 길.
+
+    **가장 조용히 틀리는 자리다.** 한 줄이 모든 재료에 먹고, 잘못 이으면 숫자가 그럴듯한
+    채로 다른 물성 자리에 실린다(「탄성계수」 를 전단탄성계수 키에 이으면 덱의 E 자리에 G).
+
+        잇는다    항목과 키가 **같은 물성**일 때만 — 이름 · 정의 · 단위가 맞는지 본다
+        묻는다    뜻이 조금이라도 갈리면(비슷한 이름의 다른 물성) 사용자에게 확인받는다
+
+    미리보기(`dry_run=True`)가 서버의 **연결 후보**에 이 짝이 있는지(`server_suggested`)를
+    알려 준다 — 서버는 이름 · 별칭 · 기호가 정확히 같고 차원이 맞는 것만 후보로 올린다.
+    후보에 없는 짝이면 왜 같은 물성인지 사용자에게 설명하고 확인받은 뒤 잇는다. 차원이
+    다르면 서버가 거절한다. **시스템 관리자 토큰**이어야 한다.
+    """
+    mapping = await _get(ctx, "/catalog/properties/mapping")
+    if isinstance(mapping, dict) and "error" in mapping:
+        return mapping
+    suggestions = mapping.get("suggestions") or [] if isinstance(mapping, dict) else []
+    suggested = any(
+        one.get("item") == item
+        and one.get("property_key") == property_key
+        and (one.get("scale") or None) == (scale or None)
+        for one in suggestions
+    )
+    body: dict[str, Any] = {
+        "item": item,
+        "property_key": property_key,
+        "kind": "same_as",
+        "scale": scale,
+        "note": note,
+    }
+    if dry_run:
+        return {
+            "dry_run": True,
+            "will_link": body,
+            "server_suggested": suggested,
+            "note": (
+                "서버의 연결 후보에 있는 짝이다."
+                if suggested
+                else "서버의 연결 후보에 **없는** 짝이다 — 같은 물성인 근거를 사용자에게 "
+                "설명하고 확인받은 뒤 dry_run=False 로 부르세요."
+            ),
+        }
+    return await _send(ctx, "POST", "/catalog/properties/links", body)
+
+
+@mcp.tool()
+async def save_card_block(
+    ctx: Context,
+    key: str,
+    label: str,
+    produces: list[dict[str, Any]],
+    help: str = "",
+    rows: list[dict[str, Any]] | None = None,
+    overwrite: bool = False,
+    dry_run: bool = True,
+) -> dict[str, Any]:
+    """**카드 항목란**을 만든다 — 카드가 담는 칸 묶음. 해석 프로그램 전용 물성의 자리다.
+
+    먼저 `list_card_blocks` 로 이미 맞는 항목란이 있는지 본다. **키는 한 번 카드에 값이
+    담기면 못 바꾼다**(덱 정의가 `키.칸` 으로 가리킨다) — 영소문자 · 숫자 · 밑줄, 점 없이.
+
+        produces   담는 값들 — `[{"key": "friction", "label": "마찰계수", "si_unit": "1",
+                   "property_key": "local.friction_coefficient", "help": "…"}]`
+                   `si_unit` 은 **SI 정본**(Pa · 1 · K). `property_key` 를 이어 둬야 재료의
+                   선언 값이 이 칸을 채운다 — 서버가 키가 실재하는지, 칸 단위와 차원이 같은지
+                   검사한다
+        rows       표가 있으면 그 열(같은 모양). 보통 비운다
+        overwrite  같은 키가 있을 때 **고친다** — 담는 모양이 바뀌면 판이 오른다
+
+    **시스템 관리자 토큰**이어야 한다. 전 부서의 카드 모양이 되므로 칸 이름 · 단위를 사용자에게
+    보여 주고 확인받은 뒤 저장한다.
+    """
+    listed = await _get(ctx, "/fitting/block-definitions")
+    if isinstance(listed, dict) and "error" in listed:
+        return listed
+    existing = next(
+        (one for one in (listed if isinstance(listed, list) else []) if one.get("key") == key),
+        None,
+    )
+    body: dict[str, Any] = {"label": label, "help": help, "produces": produces, "rows": rows or []}
+    if existing is not None and not overwrite:
+        return {
+            "error": f"'{key}' 항목란이 이미 있습니다({existing.get('label')}).",
+            "existing": {
+                "produces": existing.get("produces"),
+                "version": existing.get("version"),
+            },
+            "hint": "그것을 쓰거나, 고치려면 사용자에게 확인하고 overwrite=True 로 다시 부르세요.",
+        }
+    if dry_run:
+        return {
+            "dry_run": True,
+            "will": "update" if existing is not None else "create",
+            "will_save": {"key": key, **body},
+            "note": "이대로 저장하려면 dry_run=False 로 다시 부르세요. 전 부서 카드의 모양이 된다.",
+        }
+    if existing is not None:
+        return await _send(ctx, "PATCH", f"/fitting/block-definitions/{existing['id']}", body)
+    return await _send(ctx, "POST", "/fitting/block-definitions", {"key": key, **body})
+
+
+#: 선언 값의 출처 — 서버가 이 밖의 것은 거절한다(`materials/declared.SOURCES`).
+DECLARED_SOURCES = ("literature", "standard", "datasheet", "millsheet", "estimate")
+
+
+@mcp.tool()
+async def set_declared_values(
+    ctx: Context,
+    material_id: str,
+    values: list[dict[str, Any]],
+    dry_run: bool = True,
+) -> dict[str, Any]:
+    """재료에 **선언 값**(적어 두는 물성)을 적는다 — 시험이 아니라 문서 · 사내 기준에서 온 값.
+
+    문헌 카탈로그의 값이면 이것 말고 `adopt_catalog_values` 를 쓴다(출처가 함께 온다).
+
+        values   `[{"item": "마찰계수", "value": 0.15, "unit": "1", "source": "standard",
+                   "reference": "eCAE 사내 기준 v3"}]`
+                 · `item` 은 `list_property_items` 의 이름 — 없으면 먼저 `add_property_item`
+                 · `unit` 은 그 값의 단위(비우면 그 항목의 SI 정본). **네가 환산하지 마라** —
+                   사용자가 준 단위 그대로 넘기면 서버가 SI 로 바꾼다
+                 · 온도마다 값이 있으면 같은 `item` 을 여러 줄로, `temperature_k` 를 붙여서
+                 · `source` 는 literature · standard · datasheet · millsheet · estimate
+                 · `reference` 는 근거(문서 이름 · 판) — **비우지 않는다**
+
+    같은 `item` 이 이미 있으면 **덮어쓴다** — 미리보기에서 무엇이 바뀌는지 먼저 본다.
+    """
+    resolved = await _resolve_material(ctx, material_id)
+    if isinstance(resolved, dict):
+        return resolved
+    material_id = resolved
+    bad = [one for one in values if one.get("source") not in DECLARED_SOURCES]
+    if bad:
+        return {
+            "error": f"출처는 {', '.join(DECLARED_SOURCES)} 중 하나여야 합니다.",
+            "rows": bad,
+        }
+    grouped: dict[str, dict[str, Any]] = {}
+    for one in values:
+        item = str(one.get("item") or "").strip()
+        if not item or one.get("value") is None:
+            return {"error": "줄마다 item 과 value 가 있어야 합니다.", "row": one}
+        row = grouped.setdefault(
+            item,
+            {
+                "item": item,
+                "points": [],
+                "input_unit": one.get("unit"),
+                "scale": one.get("scale"),
+                "source": one.get("source"),
+                "reference": one.get("reference") or "",
+                "note": one.get("note"),
+            },
+        )
+        row["points"].append(
+            {"temperature_k": one.get("temperature_k"), "value": one.get("value")}
+        )
+    material = await _get(ctx, f"/materials/{material_id}")
+    if "error" in material:
+        return material
+    before = {row.get("item"): row for row in material.get("declared_properties") or []}
+    plan = [
+        {
+            "item": item,
+            "points": row["points"],
+            "unit": row["input_unit"],
+            "source": row["source"],
+            "reference": row["reference"],
+            "replaces": item in before,
+        }
+        for item, row in grouped.items()
+    ]
+    if dry_run:
+        return {
+            "dry_run": True,
+            "material": material.get("record_name"),
+            "will_write": plan,
+            "note": "이대로 적으려면 dry_run=False 로 다시 부르세요. `replaces` 가 참인 항목은 덮어쓴다.",
+        }
+    # **선언 물성은 통째 교체다** — 기존 줄을 되보내고 새것을 더한다(`adopt_catalog_values` 와 같다).
+    kept = [
+        {
+            "item": row["item"],
+            "points": [
+                {"temperature_k": p.get("temperature_k"), "value": p.get("value")}
+                for p in row.get("points", [])
+            ],
+            "input_unit": row.get("input_unit"),
+            "scale": row.get("scale"),
+            "source": row.get("source"),
+            "reference": row.get("reference"),
+            "note": row.get("note"),
+        }
+        for row in material.get("declared_properties", [])
+        if row.get("item") not in grouped
+    ]
+    done = await _send(
+        ctx,
+        "PATCH",
+        f"/materials/{material_id}",
+        {"declared_properties": kept + list(grouped.values())},
+    )
+    if "error" in done:
+        return done
+    return {"ok": True, "material": done.get("record_name"), "written": plan}
+
 
 # ── 보강 (점검에서 드러난 누락) ───────────────────────────────────────────────
 
@@ -2861,6 +3205,7 @@ async def add_catalog_property(
     test_standard: str | None = None,
     description: str | None = None,
     condition_axes: list[str] | None = None,
+    dry_run: bool = True,
 ) -> dict[str, Any]:
     """문헌 카탈로그에 **없는 물성을 만든다.** 키는 서버가 `local.<domain>.<slug>` 로 짓는다.
 
@@ -2877,6 +3222,9 @@ async def add_catalog_property(
 
     시스템 관리자만 만들 수 있다. 만든 뒤 `add_catalog_value` 로 값을 단다.
     사람에게는 `name` 으로 말한다 — 키는 시스템끼리 쓰는 이름표다.
+
+    **기본이 미리보기(dry_run=True)다**(2026-09-30) — 사내 물성을 들이는 다른 걸음(항목 ·
+    연결 · 항목란 · 값)과 같다. 키의 slug 는 못 바꾸므로, 지어질 키를 보여 주고 확인받는다.
     """
     body: dict[str, Any] = {
         "name": name,
@@ -2889,6 +3237,13 @@ async def add_catalog_property(
         "condition_axes": condition_axes,
         "value_type": "numeric",
     }
+    if dry_run:
+        return {
+            "dry_run": True,
+            "will_create": {**body, "key": f"local.{domain}.{slug}"},
+            "note": "이대로 만들려면 dry_run=False 로 다시 부르세요. slug 는 한 번 만들면 못 "
+            "바꿉니다 — resolve_property 로 같은 물성이 없는지 먼저 봤는지 확인하세요.",
+        }
     got = await _send(ctx, "POST", "/catalog/properties", body)
     if "error" in got:
         return got
@@ -3708,12 +4063,27 @@ async def save_format_profile(
 
 
 @mcp.tool()
-async def scan_deck_format(ctx: Context, deck_text: str) -> dict[str, Any]:
+async def scan_deck_format(
+    ctx: Context, deck_text: str, card_id: str | None = None
+) -> dict[str, Any]:
     """예제 **솔버 덱**을 읽어 내보내기 정의 초안을 만든다.
 
     덱을 붙이려는 사람에게는 대개 그 솔버의 덱 파일이 이미 있다. 구조는 서버가
     읽고 **「이 값이 무엇인가」 만 정하면 된다** — 장비 파일 정의가 같은 문제를
     이미 그렇게 풀었다.
+
+    ## 돌려주는 `definition` 을 그대로 이어 쓴다
+
+    `definition` 이 **미리보기 · 저장에 바로 넘길 수 있는 정의 초안**이다(`lines` 는 화면
+    폼용). 빈 `"value": ""` 는 네가 `블록.값`(예: `elastic.youngs_modulus`)으로 채울 자리,
+    빈 `"rows": ""` 는 어느 표를 그릴지(예: `plastic`)다. 쓸 수 있는 블록과 값 이름은
+    `list_card_blocks`, 문법은 `export_definition_grammar` 에 있다. 채웠으면
+    `preview_export_profile` 로 실제 카드에 그려 보고, 맞으면 `save_export_profile`.
+
+    ## `card_id` 를 주면 이름까지 제안한다
+
+    덱의 숫자와 그 카드의 값이 같으면 그 칸에 `블록.값` 을 넣어 준다 — **제안일 뿐이다.**
+    같은 숫자가 우연히 겹칠 수 있으니(0.3 이 푸아송비인지 다른 것인지) 사람에게 확인한다.
 
     ## 고정폭 필드를 조심해라
 
@@ -3721,9 +4091,183 @@ async def scan_deck_format(ctx: Context, deck_text: str) -> dict[str, Any]:
     솔버가 다른 값을 읽는데 오류는 안 난다 — 조용히 틀린 해석이 된다. 초안에 폭이
     잡혀 오면 그대로 두고, 바꿀 때는 사용자에게 확인해라.
     """
-    return await _send(
-        ctx, "POST", "/fitting/export-profiles/scan", {"text": deck_text}
+    body: dict[str, Any] = {"text": deck_text}
+    if card_id:
+        resolved = await _resolve_card(ctx, card_id)
+        if isinstance(resolved, dict):
+            return resolved
+        body["card_id"] = resolved
+    return await _send(ctx, "POST", "/fitting/export-profiles/scan", body)
+
+
+@mcp.tool()
+async def export_definition_grammar(ctx: Context) -> dict[str, Any]:
+    """해석용 물성 정의의 **문법** — 줄 · 칸 · 형식 · 조건 · 표를 어떻게 적나.
+
+    정본은 서버 코드의 설명이다(그대로 온다). 초안(`scan_deck_format`)을 고치거나 처음부터
+    지을 때 읽는다. `formats` 가 칸 형식 이름이고, 여기 없는 이름은 저장 때 거절된다.
+    기존 정의를 본보기로 보려면 `list_export_profiles(include_definitions=True)`.
+    """
+    return await _get(ctx, "/fitting/export-profiles/grammar")
+
+
+@mcp.tool()
+async def list_export_profiles(
+    ctx: Context, include_definitions: bool = False
+) -> dict[str, Any]:
+    """저장된 **해석용 물성 정의** — 부서들이 만든 솔버 덱 형식.
+
+    새로 짓기 전에 본다: 같은 해석 프로그램의 정의가 이미 있으면 그것을 고치거나 그대로
+    쓴다(`render_card_deck` 의 `format` 이 이 `key` 다). `include_definitions=True` 면 정의
+    본문까지 — 문법의 본보기로 쓸 수 있다. 코드로 만든 기본 형식은 여기 없고 카드의
+    `available_formats` 에 함께 뜬다.
+    """
+    got = await _get(ctx, "/fitting/export-profiles")
+    if isinstance(got, dict) and "error" in got:
+        return got
+    rows = got if isinstance(got, list) else []
+    return {
+        "count": len(rows),
+        "profiles": [
+            {
+                "key": one.get("key"),
+                "label": one.get("label"),
+                "description": one.get("description"),
+                "owner_workspace": one.get("owner_workspace_name"),
+                "is_active": one.get("is_active"),
+                "can_edit": (one.get("access") or {}).get("can_edit"),
+                **({"definition": one.get("definition")} if include_definitions else {}),
+            }
+            for one in rows
+        ],
+    }
+
+
+def _full_definition(
+    definition: dict[str, Any], extension: str | None, describe: str | None
+) -> dict[str, Any]:
+    """초안에 없는 확장자 · 설명을 채운다 — **정의에 이미 있으면 그것이 이긴다.**"""
+    out = dict(definition)
+    if extension and not out.get("extension"):
+        out["extension"] = extension.lstrip(".")
+    if not out.get("describe"):
+        out["describe"] = describe or "해석용 물성 정의"
+    return out
+
+
+@mcp.tool()
+async def preview_export_profile(
+    ctx: Context,
+    definition: dict[str, Any],
+    card_id: str,
+    extension: str | None = None,
+    label: str = "초안",
+    units: str = DEFAULT_DECK_UNITS,
+) -> dict[str, Any]:
+    """정의를 **저장하지 않고** 실제 카드로 그려 본다 — 저장 전에 반드시.
+
+    틀린 덱은 솔버가 오류로 알려 주지 않는다. 칸이 어긋나면 다른 필드로 읽히고 해석은
+    그럴듯하게 돈다. 그래서 그려 보고 **사람에게 보여 준다.**
+
+        text       그려진 덱 — 사용자가 아는 예제 덱과 나란히 견줘 보게 한다
+        missing    이 카드에 없어서 못 채운 값(`블록.값`) — 정의가 틀린 게 아니라 카드가 빈 것일 수 있다
+        error      정의가 문법에 안 맞거나 그릴 수 없는 이유 — 고쳐서 다시 부른다
+        notes      각주(합성 표 · 첫 점 경고 등) — 사람에게 옮긴다
+
+    `extension` 은 덱 파일 확장자(`k` · `inp` · `rad` …) — 초안에는 없으니 준다. `units` 는
+    `list_unit_systems` 의 key, 기본 `mm_n_tonne`(SI 아님). **네가 숫자를 환산하지 마라.**
+    """
+    resolved = await _resolve_card(ctx, card_id)
+    if isinstance(resolved, dict):
+        return resolved
+    got = await _send(
+        ctx,
+        "POST",
+        "/fitting/export-profiles/preview",
+        {
+            "definition": {**_full_definition(definition, extension, None), "label": label},
+            "card_id": resolved,
+            "units": units,
+        },
     )
+    if not isinstance(got, dict):
+        return {"error": "미리보기 응답을 읽지 못했습니다."}
+    # **그려졌으면 `error` 칸을 뺀다.** 서버는 늘 `"error": null` 을 싣는데, 이 도구들은
+    # `error` 가 있으면 실패로 읽는 관례다 — 그려진 덱을 실패로 읽게 된다(점검에서 드러났다).
+    # `spans` 는 화면이 줄을 칠하는 데 쓰는 것이라 뺀다.
+    got.pop("spans", None)
+    if got.get("error") is None:
+        got.pop("error", None)
+    return got
+
+
+@mcp.tool()
+async def save_export_profile(
+    ctx: Context,
+    label: str,
+    definition: dict[str, Any],
+    key: str | None = None,
+    extension: str | None = None,
+    description: str | None = None,
+    workspace: str | None = None,
+    overwrite: bool = False,
+    dry_run: bool = True,
+) -> dict[str, Any]:
+    """해석용 물성 정의를 **저장한다** — 그 뒤로 카드의 내보내기 메뉴에 그 형식이 선다.
+
+    **`preview_export_profile` 로 먼저 그려 보고, 사용자가 덱을 확인한 뒤에 저장해라.**
+    정의는 전 부서가 쓰는 해석 파일의 모양이다. 틀리면 값이 다른 칸에 실린 채 해석이
+    돈다. 저장하면 변경 이력에 「AI 경유」 로 남는다.
+
+    **기본이 미리보기(dry_run=True)다.**
+
+        key         비우면 서버가 짓는다(`deck_…`). 전사에서 하나다
+        overwrite   같은 key 가 이미 있을 때만 — **고치는 것이다.** 남의 정의를 덮기 전에
+                    사람에게 확인한다(고칠 권한이 없으면 서버가 막는다)
+        workspace   등록 부서(권한이 아님). 안 주면 내 소속
+
+    저장된 정의로 뽑을 때는 `render_card_deck(card_id, format=key)`, 대조는 `check_card_deck`.
+    """
+    full = _full_definition(definition, extension, description)
+    existing = None
+    if key:
+        listed = await _get(ctx, "/fitting/export-profiles")
+        if isinstance(listed, dict) and "error" in listed:
+            return listed
+        existing = next(
+            (one for one in (listed if isinstance(listed, list) else []) if one.get("key") == key),
+            None,
+        )
+        if existing is not None and not overwrite:
+            return {
+                "error": f"'{key}' 정의가 이미 있습니다({existing.get('label')}).",
+                "hint": "고치려는 것이면 사용자에게 확인하고 overwrite=True 로 다시 부르세요. "
+                "새로 만들려는 것이면 다른 key 를 쓰세요.",
+            }
+    body: dict[str, Any] = {
+        "label": label,
+        "description": description,
+        "definition": full,
+        "is_active": True,
+    }
+    if dry_run:
+        return {
+            "dry_run": True,
+            "will": "update" if existing is not None else "create",
+            "key": key,
+            "will_save": body,
+            "note": "이대로 저장하려면 dry_run=False 로 다시 부르세요. "
+            "preview_export_profile 로 그려 본 덱을 사용자가 확인했는지 먼저 보세요.",
+        }
+    if existing is not None:
+        return await _send(ctx, "PUT", f"/fitting/export-profiles/{key}", body)
+    if key:
+        body["key"] = key
+    # **안 줬으면 안 보낸다.** 서버는 「안 보낸 것」(= 내 소속)과 「비워 보낸 것」(= 부서
+    # 없이, 자료 관리자만)을 가른다 — `save_format_profile` 과 같은 규칙.
+    if workspace:
+        body["owner_workspace_slug"] = workspace
+    return await _send(ctx, "POST", "/fitting/export-profiles", body)
 
 
 @mcp.tool()

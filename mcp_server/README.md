@@ -68,7 +68,7 @@ claude mcp add --transport http matnexus http://127.0.0.1:8012/mcp `
 
 `<!--@ 이름 -->` 마커로 절을 나눈다. `get_guide("units")` 처럼 한 절만 받을 수 있다.
 
-## 5. 지금 있는 것 (도구 82개)
+## 5. 지금 있는 것 (도구 91개)
 
 **전부 한 번에 불러 보려면 `probe.py` 를 돌린다** — 진짜 MCP 클라이언트로 한 바퀴
 돈다(아래 「실측으로 잡은 것」 참조). 화면이나 curl 로는 안 보이는 층이 있다.
@@ -136,7 +136,7 @@ Family·Category·Grade·제조사·유통사·시편 규격은 **기준정보**
     measurement_gaps()                 우리가 못 재는 물성 — 능력의 빈 칸
     ★ adopt_catalog_values(...)        문헌 값 → 선언 물성 (스냅샷)
     ★ adopt_parameter_set(...)         파라미터 한 벌을 통째로
-    ★ create_declared_card(...)        적어 둔 값만으로 카드 초안
+    ★ create_declared_card(...)        적어 둔 값만으로 카드 초안 — `block_keys` 로 항목란을 골라 싣는다
 
 ### 문헌 카탈로그에 직접 넣기 — **출처 없는 값은 안 받는다**
 
@@ -184,7 +184,19 @@ Family·Category·Grade·제조사·유통사·시편 규격은 **기준정보**
 
     inspect_device_file(sample_text)   앞 몇십 줄로 구조를 읽는다
     check_format_profile(...)          지은 정의를 표본에 대고 검사 **저장 전에**
-    scan_deck_format(deck_text)        예제 덱 → 내보내기 정의 초안
+    list_export_profiles()             저장된 해석용 정의 — 짓기 전에 있는지 본다
+    scan_deck_format(deck_text, card)  예제 덱 → 바로 쓸 정의 초안(`definition`)
+    export_definition_grammar()        해석용 정의의 문법 — 정본(코드 설명) 그대로
+    preview_export_profile(def, card)  정의를 **저장 없이** 실제 카드로 그려 본다
+    ★ save_export_profile(...)         해석용 정의 저장 — 감사에 「AI 경유」 로 남는다
+
+### 사내 물성 들이기 — 전용 물성(eCAE 등)을 카드 · 덱까지
+
+    list_property_items(level?)        사내 물성 항목 — 이름 · 차원 · 단위 · 붙는 곳
+    ★ add_property_item(...)           사내 물성 항목 추가 — 차원 · 기호 · 붙는 곳까지
+    ★ link_property_item(...)          항목 ↔ 물성 키. 서버 후보인지 알려 준다 (관리자)
+    ★ save_card_block(...)             카드 항목란 — 칸의 물성 키 · 차원을 서버가 검사 (관리자)
+    ★ set_declared_values(...)         재료에 선언 값 — 입력 단위 그대로, 서버가 SI 로
     draft_test_type(key, label, ch)    시험법 **초안만** — 저장하지 않는다
     ★ save_format_profile(...)         부서가 그 장비를 읽는 방법이 된다
 
@@ -263,7 +275,8 @@ $env:MATNEXUS_PROBE_FIT_MATERIAL = '<인장 MD 채택 시험이 여럿인 재료
 $env:MATNEXUS_PROBE_PARAM_MATERIAL = '<파라미터 벌이 있는 문헌 재료 id>'     # adopt_parameter_set
 ```
 
-미리보기가 없는 쓰기(문헌 정의·재료 추가, 값 지우기, 키 폐기·이관, 빈 수신함 연결)는
+미리보기가 없는 쓰기(문헌 재료 추가, 값 지우기, 키 폐기·이관, 빈 수신함 연결 — 문헌 물성
+정의 추가는 2026-09-30 부터 미리보기가 기본이라 `dry_run=False` 로 부른다)는
 **일부러 거절당하게** 부른다 — 없는 id, 카탈로그에 없는 분류값. 서버가 쓰기 전에 거절하고,
 프로브는 그 거절을 `OK(거절)` 로 센다(뜻밖에 통과하면 문제로 센다). 실측(2026-09-25): 전에는
 이 여섯과 위 둘이 **한 번도 안 불렸다**. 고친 뒤 82개 전부가 불렸고 93건 중 문제는 하나 —

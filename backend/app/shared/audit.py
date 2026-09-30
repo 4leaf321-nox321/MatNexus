@@ -86,6 +86,15 @@ CARD_CREATED_BY_CLIENT = "card.created_by_client"
 PROCESSING_RUN_BY_CLIENT = "processing.run_by_client"
 RECIPE_SAVED_BY_CLIENT = "recipe.saved_by_client"
 FORMAT_SAVED_BY_CLIENT = "format.saved_by_client"
+#: 해석용 물성 정의(덱을 어떻게 쓰나). **전 부서의 해석 파일 모양이다** — AI 가 저장하게
+#: 열면서(2026-09-30) 남긴다. 틀린 정의는 솔버가 오류 없이 다른 칸으로 읽는다.
+EXPORT_PROFILE_SAVED_BY_CLIENT = "export_profile.saved_by_client"
+#: **사내 물성을 들이는 세 걸음**(2026-09-30) — 기준정보 값(사내 물성 항목) · 물성 연결 ·
+#: 카드 항목란. 셋 다 전 부서에 한꺼번에 먹는다: 틀린 연결은 숫자가 그럴듯한 채로 다른
+#: 물성 자리에 실린다. AI 에게 열면서 남긴다 — 화면에서 한 것은 전처럼 안 남는다.
+VOCABULARY_TERM_CREATED_BY_CLIENT = "vocabulary.term_created_by_client"
+PROPERTY_LINKED_BY_CLIENT = "property_link.created_by_client"
+CARD_BLOCK_SAVED_BY_CLIENT = "card_block.saved_by_client"
 #: **그러고도 샜던 자리**(2026-09-25). MCP 쓰기 도구를 경로마다 감사와 맞대 보니 재료·
 #: 시료·시편 등록, 문헌 카탈로그 쓰기, 측정 의뢰 작성이 아무 흔적도 안 남겼다 — AI 가
 #: 문헌 값을 지어 넣어도 사람이 넣은 값과 구별할 길이 없었다(등록자 칸은 토큰 주인이다).

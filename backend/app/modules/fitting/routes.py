@@ -56,6 +56,7 @@ from app.modules.fitting.schemas import (
     DeckCheckItemOut,
     DeckCheckOut,
     DeckCheckRequest,
+    DeckGrammarOut,
     DeckKeyOut,
     DeckKeysOut,
     DeckPreviewIn,
@@ -3099,6 +3100,24 @@ def list_export_profiles(
     return [_profile_out(db, item, book.of(item)) for item in items]
 
 
+def _audit_export_profile(db: Session, user: User, item: ExportProfile, *, made: bool) -> None:
+    """해석용 물성 정의를 **사람이 아닌 것이** 저장했으면 남긴다(장비 파일 정의와 같은 자리).
+
+    정의는 전 부서가 쓰는 해석 파일의 모양이다. 틀리면 값이 안 나가는 게 아니라 **다른 칸에
+    나가고**, 솔버는 그것을 오류로 알려 주지 않는다 — 누가 저장했는지가 남아야 한다.
+    """
+    audit.record_by_client(
+        db,
+        action=audit.EXPORT_PROFILE_SAVED_BY_CLIENT,
+        actor=user,
+        target_table="export_profiles",
+        target_id=item.id,
+        target_label=f"{item.label} ({item.key})",
+        workspace_id=item.owner_workspace_id,
+        changes={"created": made, "is_active": item.is_active},
+    )
+
+
 @router.post("/export-profiles", response_model=ExportProfileOut, status_code=201)
 def create_export_profile(
     payload: ExportProfileCreateRequest,
@@ -3143,6 +3162,8 @@ def create_export_profile(
         created_by_id=user.id,
     )
     db.add(item)
+    db.flush()
+    _audit_export_profile(db, user, item, made=True)
     db.commit()
     db.refresh(item)
     return _profile_out(db, item, access_of(db, user, item))
@@ -3169,6 +3190,7 @@ def update_export_profile(
     item.description = payload.description
     item.definition = payload.definition
     item.is_active = payload.is_active
+    _audit_export_profile(db, user, item, made=False)
     db.commit()
     db.refresh(item)
     return _profile_out(db, item, access_of(db, user, item))
@@ -3192,6 +3214,19 @@ def delete_export_profile(
     item.deleted_at = datetime.now(UTC)
     db.commit()
     return Response(status_code=204)
+
+
+@router.get("/export-profiles/grammar", response_model=DeckGrammarOut)
+def deck_grammar(user: User = Depends(current_user)) -> DeckGrammarOut:
+    """해석용 물성 정의의 **문법.** 정본은 `matcore/export/template.py` 의 설명이다 — 그것을
+    그대로 낸다(여기 따로 적으면 문법을 넓힐 때 한쪽만 고쳐진다). AI 가 정의를 지을 때
+    읽는다."""
+    doc = template.__doc__ or ""
+    start = doc.find("## 문법")
+    return DeckGrammarOut(
+        grammar=doc[start:].strip() if start >= 0 else doc.strip(),
+        formats=sorted(template.FORMATS),
+    )
 
 
 @router.post("/export-profiles/scan", response_model=DeckScanOut)
@@ -4361,6 +4396,22 @@ def list_block_definitions(
     return [_block_out(db, row) for row in rows]
 
 
+def _audit_block(db: Session, user: User, row: CardBlock, *, made: bool) -> None:
+    """카드 항목란을 **사람이 아닌 것이** 저장했으면 남긴다(2026-09-30).
+
+    항목란은 전 부서 카드의 모양이고, 한 번 값이 담기면 키를 못 바꾼다 — 누가(무엇이)
+    만들었는지가 남아야 한다."""
+    audit.record_by_client(
+        db,
+        action=audit.CARD_BLOCK_SAVED_BY_CLIENT,
+        actor=user,
+        target_table="card_blocks",
+        target_id=row.id,
+        target_label=f"{row.label} ({row.key})",
+        changes={"created": made, "version": row.version},
+    )
+
+
 @router.post("/block-definitions", response_model=CardBlockOut, status_code=201)
 def create_block_definition(
     payload: CardBlockCreate,
@@ -4373,6 +4424,7 @@ def create_block_definition(
     바로 나온다. 배포를 안 기다린다.
     """
     row = blocks.create(db, payload.model_dump(), user)
+    _audit_block(db, user, row, made=True)
     db.commit()
     db.refresh(row)
     # **저장과 얹기를 같은 요청에서 한다.** 기동 때만 얹으면 만든 사람이 재시작을
@@ -4395,6 +4447,7 @@ def update_block_definition(
     """
     row = blocks.get(db, block_id)
     blocks.update(db, row, payload.model_dump(exclude_unset=True))
+    _audit_block(db, user, row, made=False)
     db.commit()
     db.refresh(row)
     blocks.sync(db)
