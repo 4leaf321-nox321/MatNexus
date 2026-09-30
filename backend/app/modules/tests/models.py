@@ -24,6 +24,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    Sequence,
     String,
     Text,
     UniqueConstraint,
@@ -233,6 +234,10 @@ class TestConditionField(Base):
     비우면 「이 시험만의 조건」 — 저장은 되되 조건 검색에는 안 걸린다(2026-09-16)."""
 
 
+#: 시험 번호의 채번기(ADR 0043) — 재료(`MATERIAL_CODE_SEQ`)와 같은 까닭으로 maxvalue 를 둔다.
+TEST_RUN_CODE_SEQ = Sequence("test_run_code_seq", metadata=Base.metadata, maxvalue=999_999)
+
+
 class TestRun(Base):
     """시험 한 번. 시편 하나를 특정 종류로 시험한 회차."""
 
@@ -278,6 +283,14 @@ class TestRun(Base):
     )
 
     seq_no: Mapped[int] = mapped_column(Integer)
+    code: Mapped[str] = mapped_column(
+        String(20),
+        unique=True,
+        server_default=text("'T-' || lpad(nextval('test_run_code_seq')::text, 6, '0')"),
+    )
+    """**불변 고유 번호** — `T-000203`(ADR 0043). 이름은 밑줄로 엮여 길고 재료 개명 · 다른
+    두께로 옮기기에 따라 바뀐다 — 말 · 문서 · 라벨이 가리킬 손잡이는 이것이다. 지워도
+    재사용하지 않는다."""
     record_name: Mapped[str] = mapped_column(String(400), index=True)
 
     adopted_result_id: Mapped[uuid.UUID | None] = mapped_column(

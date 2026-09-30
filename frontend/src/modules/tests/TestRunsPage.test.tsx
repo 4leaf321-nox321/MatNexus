@@ -42,6 +42,7 @@ vi.mock('@/modules/tests/api', async (importOriginal) => ({
 
 const RUN = {
   id: 'r1',
+  code: 'T-000203',
   record_name: 'SECC_1.0__01__MD_01__TEN_01',
   material_name: 'SECC_1.0',
   material_id: 'm1',
@@ -119,6 +120,16 @@ beforeEach(() => {
     { key: 'temperature', label: '온도', si_unit: 'K', aliases: [], help: '' },
     { key: 'strain_rate', label: '변형률속도', si_unit: '1/s', aliases: [], help: '' },
   ])
+})
+
+describe('번호', () => {
+  it('번호가 첫 열에 서고, 그 열로 서버에 정렬을 묻는다', async () => {
+    // 이름은 옮기면 바뀌고 길어서 말로 못 전한다 — 번호가 손잡이다(ADR 0043).
+    show()
+    expect(await screen.findByText('T-000203')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: '번호 로 정렬' }))
+    await waitFor(() => expect(asked()).toMatchObject({ sort: 'code' }))
+  })
 })
 
 describe('처리로 필터', () => {

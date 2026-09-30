@@ -35,6 +35,7 @@ import { groupsApi } from '@/modules/materials/api.groups'
 import { PropertySourcesSheet } from '@/modules/materials/PropertySourcesSheet'
 import { canEdit, lockedTitle } from '@/modules/ownership/access'
 import { AccessLine } from '@/modules/ownership/AccessLine'
+import { CodeChip } from '@/shared/components/CodeChip'
 import { PageHeader } from '@/shared/components/PageHeader'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
@@ -97,10 +98,9 @@ export default function MaterialDetailPage() {
           item ? (
             <span className="inline-flex items-baseline gap-2">
               <RecordName name={item.record_name} />
-              {/* 불변 고유 번호 — 문서·라벨이 이 번호로 재료를 가리킨다. */}
-              <span className="text-muted-foreground font-mono text-sm font-normal">
-                {item.code}
-              </span>
+              {/* 불변 고유 번호 — 문서·라벨이 이 번호로 재료를 가리킨다. **흐린 글씨로만
+                  두었더니 「번호가 안 보인다」 는 말을 들었다**(2026-09-30) — 눌러 복사한다. */}
+              <CodeChip code={item.code} />
             </span>
           ) : (
             '재료'

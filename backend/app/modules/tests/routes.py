@@ -80,6 +80,7 @@ from app.modules.vocabulary import services as vocabulary_services
 from app.modules.workspaces.models import Workspace
 from app.shared import (
     audit,
+    codes,
     contention,
     curvedata,
     facets,
@@ -731,6 +732,7 @@ def _run_out(
 
     return TestRunOut(
         id=run.id,
+        code=run.code,
         record_name=run.record_name,
         seq_no=run.seq_no,
         status=run.status,
@@ -1032,6 +1034,7 @@ RUN_SORTS = {
     "instrument": TestRun.instrument,
     "division": TestRun.division,
     "status": TestRun.status,
+    "code": TestRun.code,
 }
 
 
@@ -1085,8 +1088,21 @@ def _run_search_terms(db: Session, q: str) -> list[Any]:
         )
         if kinds_hit:
             branches.append(TestRun.test_type_id.in_(kinds_hit))
+        branches += _run_code_branches(db, word)
         conditions.append(or_(*branches))
     return conditions
+
+
+def _run_code_branches(db: Session, word: str) -> list[Any]:
+    """**번호로 찾는 가지**(ADR 0043) — 시험 번호는 그 시험, 시편 · 시료 · 재료 번호는 그 아래
+    시험. 시편 id 는 먼저 풀어 **값이 박힌 `IN`** 으로 건다(`codes.specimen_ids`)."""
+    found = codes.chain(db, word)
+    if found is None:
+        return []
+    if found.test_run_id is not None:
+        return [TestRun.id == found.test_run_id]
+    ids = codes.specimen_ids(db, found)
+    return [TestRun.specimen_id.in_(ids)] if ids else []
 
 
 def _condition_value(field: Any) -> Any:
@@ -1279,6 +1295,7 @@ def list_runs(
             or_(
                 list_search.exactly(TestRun.record_name, needle),
                 list_search.exactly(TestRun.source_filename, needle),
+                *_run_code_branches(db, needle),
             )
         )
     elif needle and mode == "similar":

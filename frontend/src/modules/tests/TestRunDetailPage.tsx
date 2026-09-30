@@ -55,6 +55,7 @@ import {
 import { ConfirmDialog } from '@/shared/components/ConfirmDialog'
 import { canEdit, lockedTitle } from '@/modules/ownership/access'
 import { AccessLine } from '@/modules/ownership/AccessLine'
+import { CodeChip } from '@/shared/components/CodeChip'
 import { PageHeader } from '@/shared/components/PageHeader'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
@@ -324,7 +325,17 @@ export default function TestRunDetailPage() {
         // **이 화면은 길다.** 곡선·요약값·처리 단계·결과가 탭마다 쌓여, 아래로
         // 내려가면 어느 시험을 보고 있었는지가 화면에서 사라진다.
         sticky
-        title={item ? <RecordName name={item.record_name} /> : '시험'}
+        title={
+          item ? (
+            // **번호가 이름 곁에 선다**(ADR 0043) — 이름은 옮기면 바뀌고 길어서 말로 못 전한다.
+            <span className="inline-flex flex-wrap items-baseline gap-2">
+              <RecordName name={item.record_name} />
+              <CodeChip code={item.code} />
+            </span>
+          ) : (
+            '시험'
+          )
+        }
         description={
           item ? (
             <>

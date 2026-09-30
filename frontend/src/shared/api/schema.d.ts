@@ -16640,6 +16640,8 @@ export interface components {
             adopted_count: number;
             /** Alias */
             alias: string | null;
+            /** Code */
+            code: string;
             /**
              * Created At
              * Format: date-time
@@ -16880,6 +16882,11 @@ export interface components {
         };
         /** SearchHitOut */
         SearchHitOut: {
+            /**
+             * Code
+             * @description 고유 번호(재료 M- · 시료 S- · 시편 P- · 시험 T-, ADR 0043). 번호가 없는 종류는 비어 있다
+             */
+            code?: string | null;
             /** Id */
             id: string;
             /** Kind */
@@ -17411,6 +17418,8 @@ export interface components {
              * @default 0
              */
             adopted_count: number;
+            /** Code */
+            code: string;
             /**
              * Created At
              * Format: date-time
@@ -17511,6 +17520,8 @@ export interface components {
              * @default 0
              */
             adopted_count: number;
+            /** Code */
+            code: string;
             /**
              * Created At
              * Format: date-time
@@ -18303,6 +18314,8 @@ export interface components {
             adopted_result_id?: string | null;
             /** Channels */
             channels: string[];
+            /** Code */
+            code: string;
             commission?: components["schemas"]["RunCommissionOut"] | null;
             /** Conditions */
             conditions: {
@@ -18413,6 +18426,8 @@ export interface components {
             adopted_result_id?: string | null;
             /** Channels */
             channels: string[];
+            /** Code */
+            code: string;
             /** Conditions */
             conditions: {
                 [key: string]: unknown;

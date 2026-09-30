@@ -24,6 +24,12 @@
 `graph.visible_ids` 다. 규칙이 둘이 되면 **「검색에는 뜨는데 열면 404」** 가 생기고,
 그것은 사람에게 고장으로 보인다. 안 보이는 것은 검색 결과에서도 없는 것이다.
 
+## 번호로 친 것은 번호로 찾는다(ADR 0043)
+
+재료 `M-` · 시료 `S-` · 시편 `P-` · 시험 `T-` 번호 꼴(`T-203` · `t203`)이면 그 종류에서
+**번호가 정확히 같은 것**을 맨 위에 둔다 — 번호를 아는 사람은 그것 하나를 원한다. 결과마다
+번호를 함께 싣는다(말로 전할 때 이름보다 짧다).
+
 ## 화면이 없는 종류는 자기를 품은 것으로 데려간다
 
 시료·시편·처리결과는 제 화면이 없다 — 재료 상세와 시험 상세 안에 산다. 결과만
@@ -44,7 +50,7 @@ from app.database import Base
 from app.modules.accounts.models import User
 from app.modules.materials.models import Sample, Specimen
 from app.modules.processing.models import ProcessingResult
-from app.shared import graph, relations, semantic
+from app.shared import codes, graph, relations, semantic
 
 #: 모드 셋.
 MODES = ("exact", "contains", "similar")
@@ -85,6 +91,9 @@ class Hit:
     via: str | None = None
     """**이름이 아닌 칸으로 걸렸으면** 그 칸과 값 — 「별칭 도어 이너 강판」(2026-09-29).
     이름에 없는 말로 떴는데 이유가 없으면 엉뚱한 결과로 읽힌다."""
+
+    code: str | None = None
+    """고유 번호 — 재료 · 시료 · 시편 · 시험만 있다(ADR 0043)."""
 
 
 @dataclass
@@ -223,8 +232,14 @@ def search_kind(
         for _, column in also
         if (condition := _condition(column, needle, mode)) is not None
     ]
+    # **번호 꼴이면 번호로**(ADR 0043) — 정확 일치라 유니크 색인을 탄다. 이름보다 위다.
+    numbered = kind.slug in codes.PREFIXES
+    wanted = codes.of_kind(needle, kind.slug) if numbered else None
+    by_code = table.c["code"] == wanted if wanted is not None else None
     score: ColumnElement[float] = func.greatest(
-        _scored(name, needle), *(_scored(column, needle) * 0.9 for _, column in also)
+        _scored(name, needle),
+        *(_scored(column, needle) * 0.9 for _, column in also),
+        *([case((by_code, 1.0), else_=0.0)] if by_code is not None else []),
     )
 
     query: Select[Any] = select(
@@ -233,7 +248,9 @@ def search_kind(
         score.label("score"),
         where.label("by_name"),
         *(column.label(f"also_{at}") for at, (_, column) in enumerate(also)),
-    ).where(or_(where, *by_also))
+        *([table.c["code"].label("code")] if numbered else []),
+        *([by_code.label("by_code")] if by_code is not None else []),
+    ).where(or_(where, *by_also, *([by_code] if by_code is not None else [])))
     if kind.soft_delete:
         query = query.where(table.c["deleted_at"].is_(None))
     guard = graph.visible_ids(db, user, kind)
@@ -258,6 +275,7 @@ def search_kind(
                 parent_kind=owners.get(one.id, (None, None))[0],
                 parent_id=owners.get(one.id, (None, None))[1],
                 via=one.via,
+                code=one.code,
             )
             for one in found
         ]
@@ -267,6 +285,18 @@ def search_kind(
 def _hit(slug: str, row: Any, needle: str, also: list[str]) -> Hit:
     """한 줄 → 결과. 이름으로 안 걸렸으면 **어느 칸으로 걸렸는지**(`via`)를 단다."""
     name = row[1] or ""
+    fields = row._mapping
+    code = fields.get("code")
+    if fields.get("by_code"):
+        return Hit(
+            kind=slug,
+            id=str(row[0]),
+            name=name,
+            score=float(row[2] or 0.0),
+            matched="exact",
+            via=f"번호 {code}",
+            code=code,
+        )
     if row[3] or not also:
         return Hit(
             kind=slug,
@@ -274,6 +304,7 @@ def _hit(slug: str, row: Any, needle: str, also: list[str]) -> Hit:
             name=name,
             score=float(row[2] or 0.0),
             matched=_matched(name, needle),
+            code=code,
         )
     # 곁의 칸 가운데 **값이 가장 잘 맞는 것**을 이유로 단다 — 일치 · 앞 · 포함 · 비슷
     # 순서로 가장 가까운 것.
@@ -288,6 +319,7 @@ def _hit(slug: str, row: Any, needle: str, also: list[str]) -> Hit:
             name=name,
             score=float(row[2] or 0.0),
             matched=_matched(name, needle),
+            code=code,
         )
     label, value = min(candidates, key=lambda one: order[_matched(one[1], needle)])
     return Hit(
@@ -297,6 +329,7 @@ def _hit(slug: str, row: Any, needle: str, also: list[str]) -> Hit:
         score=float(row[2] or 0.0),
         matched=_matched(value, needle),
         via=f"{label} {value}",
+        code=code,
     )
 
 
@@ -399,6 +432,7 @@ def _fuse_meaning(
                     parent_kind=hit.parent_kind,
                     parent_id=hit.parent_id,
                     via=hit.via,
+                    code=hit.code,
                 )
                 break
         else:
@@ -416,4 +450,37 @@ def _fuse_meaning(
     for group in groups:
         group.hits.sort(key=lambda one: -one.score)
         del group.hits[PER_KIND_FOCUSED:]
+        _fill_codes(db, group)
     return groups
+
+
+def _fill_codes(db: Session, group: Group) -> None:
+    """뜻으로만 걸린 것에도 번호를 단다 — 글자로 찾은 것만 번호가 있으면 들쭉날쭉하다."""
+    if group.kind not in codes.PREFIXES:
+        return
+    missing = [_coerce(hit.id) for hit in group.hits if hit.code is None]
+    if not missing:
+        return
+    table = Base.metadata.tables[relations.KINDS[group.kind].table]
+    found = {
+        str(row[0]): row[1]
+        for row in db.execute(
+            select(table.c["id"], table.c["code"]).where(table.c["id"].in_(missing))
+        )
+    }
+    group.hits[:] = [
+        hit
+        if hit.code is not None
+        else Hit(
+            kind=hit.kind,
+            id=hit.id,
+            name=hit.name,
+            score=hit.score,
+            matched=hit.matched,
+            parent_kind=hit.parent_kind,
+            parent_id=hit.parent_id,
+            via=hit.via,
+            code=found.get(hit.id),
+        )
+        for hit in group.hits
+    ]

@@ -352,6 +352,8 @@ class TestRunOut(BaseModel):
     배치에서 무엇이 아직 안 됐는지를 하나씩 열어 봐야 아는 것은 일이 아니다."""
     adopted_result_id: uuid.UUID | None = None
     """채택된 결과. 있으면 '이 시험의 물성' 이 정해졌다는 뜻이다(ADR 0007)."""
+    code: str
+    """불변 고유 번호(ADR 0043) — 재료 `M-` · 시료 `S-` · 시편 `P-` · 시험 `T-`."""
     record_name: str
     seq_no: int
     status: str

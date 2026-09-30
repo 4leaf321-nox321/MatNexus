@@ -27,6 +27,7 @@ import { MATCH_LABELS, destinationOf } from '@/modules/search/destinations'
 import type { SearchHit } from '@/modules/search/destinations'
 import { api } from '@/shared/api/client'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
+import { CodeChip } from '@/shared/components/CodeChip'
 import { PageHeader } from '@/shared/components/PageHeader'
 import { SearchModeToggle } from '@/shared/components/SearchMode'
 import { isSearchMode } from '@/shared/searchModes'
@@ -109,7 +110,7 @@ export default function SearchPage() {
         <Input
           value={typed}
           onChange={(event) => setTyped(event.target.value)}
-          placeholder="이름·번호 (예: SECC180 · DMA · 항복강도)"
+          placeholder="이름·번호 (예: SECC180 · T-203 · 항복강도)"
           aria-label="검색어"
           className="max-w-md"
           autoFocus
@@ -182,6 +183,8 @@ export default function SearchPage() {
                       ) : (
                         <span className="font-medium">{hit.name}</span>
                       )}
+                      {/* 번호가 있는 종류(재료 · 시료 · 시편 · 시험)는 곁에 — 말로 전할 손잡이. */}
+                      <CodeChip code={hit.code} className="ml-2" />
                       <div className="text-muted-foreground text-xs">
                         {MATCH_LABELS[hit.matched] ?? hit.matched}
                         {/* **이름에 없는 말로 떴으면 어디서 걸렸는지** — 없으면 엉뚱해 보인다. */}

@@ -84,6 +84,7 @@ def search(
                         parent_kind=hit.parent_kind,
                         parent_id=hit.parent_id,
                         via=hit.via,
+                        code=hit.code,
                     )
                     for hit in one.hits
                 ],

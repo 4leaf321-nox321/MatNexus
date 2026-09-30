@@ -163,7 +163,15 @@ export default function SpecimensPage() {
     remember: 'specimens',
     // **저장된 열이 지금도 정렬 가능한지 확인한다.** 표에서 열을 빼면
     // 서버가 422 를 내고, 그러면 그 브라우저에서만 목록이 영영 안 뜬다.
-    allowed: ['created_at', 'material_name', 'lot_no', 'record_name', 'orientation', 'standard'],
+    allowed: [
+      'created_at',
+      'code',
+      'material_name',
+      'lot_no',
+      'record_name',
+      'orientation',
+      'standard',
+    ],
   })
   const [editing, setEditing] = useState(false)
   // **다른 두께로 옮기기**(2026-09-29) — 두께가 다른 재료에 잘못 넣은 시편을 바로잡는다.
@@ -335,6 +343,11 @@ export default function SpecimensPage() {
                   />
                 </div>
               </TableHead>
+              {/* **번호가 첫 열이다**(ADR 0043) — 재료 목록과 같다. 번호로 찾는 것은 「시편」
+                  칸이 한다(`P-187` 처럼 패딩 없이 쳐도 된다). */}
+              <TableHead className={`w-24 ${FILTER_HEAD}`}>
+                <ColumnLabel sort={handle('code')}>번호</ColumnLabel>
+              </TableHead>
               <TableHead className={`min-w-[10rem] ${FILTER_HEAD}`}>
                 <ColumnFilter
                   label="재료"
@@ -359,7 +372,7 @@ export default function SpecimensPage() {
                   sort={handle('record_name')}
                   value={name}
                   onChange={setName}
-                  placeholder="이름 · 규격"
+                  placeholder="이름 · 규격 · 번호"
                 />
               </TableHead>
               <TableHead className={`w-24 ${FILTER_HEAD}`}>
@@ -416,6 +429,7 @@ export default function SpecimensPage() {
                     onChange={() => {}}
                   />
                 </TableCell>
+                <TableCell className="font-mono whitespace-nowrap">{row.code}</TableCell>
                 <TableCell className="font-mono">
                   <Link
                     to={`/materials/${row.material_id}`}

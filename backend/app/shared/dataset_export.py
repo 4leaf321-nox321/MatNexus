@@ -280,6 +280,7 @@ def _write_core(
         "samples.csv",
         [
             "sample_id",
+            "code",
             "material_id",
             "seq_no",
             "record_name",
@@ -299,6 +300,7 @@ def _write_core(
         sample_sheet.write(
             [
                 sample.id,
+                sample.code,
                 sample.material_id,
                 sample.seq_no,
                 sample.record_name,
@@ -320,6 +322,7 @@ def _write_core(
         "specimens.csv",
         [
             "specimen_id",
+            "code",
             "sample_id",
             "seq_no",
             "record_name",
@@ -337,6 +340,7 @@ def _write_core(
         specimen_sheet.write(
             [
                 specimen.id,
+                specimen.code,
                 specimen.sample_id,
                 specimen.seq_no,
                 specimen.record_name,
@@ -357,6 +361,7 @@ def _write_core(
         "test_runs.csv",
         [
             "test_run_id",
+            "code",
             "specimen_id",
             "record_name",
             "test_type",
@@ -373,6 +378,7 @@ def _write_core(
         run_sheet.write(
             [
                 run.id,
+                run.code,
                 run.specimen_id,
                 run.record_name,
                 types.get(run.test_type_id),
@@ -872,6 +878,10 @@ README = """# MatNexus 물성 데이터 내보내기
                           → test_runs.specimen_id
     test_runs.test_run_id → test_summaries · processing_results · curves/index.csv
     cards.card_id         → card_values.card_id
+
+`code` 칸은 **사람이 부르는 고유 번호**입니다 — 재료 `M-` · 시료 `S-` · 시편 `P-` ·
+시험 `T-`. 이름(`record_name`)은 재료 개명이나 두께 정정에 따라 바뀌지만 번호는 안
+바뀝니다. 문서·라벨에서 가리킬 때는 번호를 쓰세요.
 
 ## 단위
 

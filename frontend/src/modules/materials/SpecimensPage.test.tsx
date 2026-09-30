@@ -67,6 +67,7 @@ vi.mock('@/modules/materials/api', async () => {
 
 const ROW = {
   id: 'sp1',
+  code: 'P-000187',
   sample_id: 'sa1',
   workspace_id: 'w1',
   material_id: 'm1',
@@ -305,6 +306,19 @@ describe('다른 두께로 옮기기', () => {
     ).toHaveTextContent('카드 1장에 코멘트를 남겼습니다')
     expect(relocate.mock.calls[0][0]).toMatchObject({ specimen_ids: ['sp1'] })
     await waitFor(() => expect(specimenRows.mock.calls.length).toBeGreaterThan(calls))
+  })
+})
+
+
+describe('번호', () => {
+  it('번호가 첫 열에 서고, 그 열로 서버에 정렬을 묻는다', async () => {
+    // 이름은 밑줄로 엮여 길고 옮기면 바뀐다 — 말로 전할 손잡이는 번호다(ADR 0043).
+    open()
+    expect(await screen.findByText('P-000187')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: '번호 로 정렬' }))
+    await waitFor(() =>
+      expect(specimenRows).toHaveBeenLastCalledWith(expect.objectContaining({ sort: 'code' }))
+    )
   })
 })
 

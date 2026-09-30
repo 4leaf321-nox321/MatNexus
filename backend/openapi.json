@@ -24169,6 +24169,10 @@
             ],
             "title": "Alias"
           },
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -24342,6 +24346,7 @@
           "workspace_id",
           "workspace_name",
           "seq_no",
+          "code",
           "record_name",
           "alias",
           "lot_no",
@@ -24874,6 +24879,18 @@
       },
       "SearchHitOut": {
         "properties": {
+          "code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "고유 번호(재료 M- · 시료 S- · 시편 P- · 시험 T-, ADR 0043). 번호가 없는 종류는 비어 있다",
+            "title": "Code"
+          },
           "id": {
             "title": "Id",
             "type": "string"
@@ -26113,6 +26130,10 @@
             "title": "Adopted Count",
             "type": "integer"
           },
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -26241,6 +26262,7 @@
           "workspace_id",
           "seq_no",
           "orientation",
+          "code",
           "record_name",
           "standard",
           "thickness",
@@ -26327,6 +26349,10 @@
             "default": 0,
             "title": "Adopted Count",
             "type": "integer"
+          },
+          "code": {
+            "title": "Code",
+            "type": "string"
           },
           "created_at": {
             "format": "date-time",
@@ -26490,6 +26516,7 @@
           "workspace_id",
           "seq_no",
           "orientation",
+          "code",
           "record_name",
           "standard",
           "thickness",
@@ -28308,6 +28335,10 @@
             "title": "Channels",
             "type": "array"
           },
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
           "commission": {
             "anyOf": [
               {
@@ -28646,6 +28677,7 @@
         },
         "required": [
           "id",
+          "code",
           "record_name",
           "seq_no",
           "status",
@@ -28707,6 +28739,10 @@
             },
             "title": "Channels",
             "type": "array"
+          },
+          "code": {
+            "title": "Code",
+            "type": "string"
           },
           "conditions": {
             "additionalProperties": true,
@@ -28988,6 +29024,7 @@
         },
         "required": [
           "id",
+          "code",
           "record_name",
           "seq_no",
           "status",

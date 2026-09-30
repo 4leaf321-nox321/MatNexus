@@ -136,6 +136,37 @@ describe('SearchPage', () => {
     expect(await screen.findByText(/앞이 일치 · 별칭 도어 이너 강판/)).toBeInTheDocument()
   })
 
+  it('번호로 찾으면 번호로 걸렸다고 말하고, 결과마다 번호를 싣는다', async () => {
+    get.mockResolvedValue({
+      query: 't203',
+      mode: 'contains',
+      total: 1,
+      groups: [
+        {
+          kind: 'test_run',
+          label: '시험',
+          module: 'tests',
+          truncated: false,
+          hits: [
+            {
+              kind: 'test_run',
+              id: 'r1',
+              name: 'SECC_1.0__01__MD_01__TEN_01',
+              score: 1,
+              matched: 'exact',
+              via: '번호 T-000203',
+              code: 'T-000203',
+            },
+          ],
+        },
+      ],
+    })
+    show('?q=t203')
+
+    expect(await screen.findByText(/정확히 일치 · 번호 T-000203/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '번호 T-000203 복사' })).toBeInTheDocument()
+  })
+
   it('못 찾으면 비슷 모드를 권한다', async () => {
     get.mockResolvedValue({ query: 'zzz', mode: 'contains', total: 0, groups: [] })
     show('?q=zzz')

@@ -58,6 +58,10 @@ ORIENTATIONS = ("MD", "TD", "DD", "NA")
 #: 그날이 오면 자릿수를 늘리는 마이그레이션 한 장이면 된다.
 MATERIAL_CODE_SEQ = Sequence("material_code_seq", metadata=Base.metadata, maxvalue=999_999)
 
+#: 시료 · 시편 번호의 채번기(ADR 0043) — 재료와 같은 까닭으로 maxvalue 를 둔다.
+SAMPLE_CODE_SEQ = Sequence("sample_code_seq", metadata=Base.metadata, maxvalue=999_999)
+SPECIMEN_CODE_SEQ = Sequence("specimen_code_seq", metadata=Base.metadata, maxvalue=999_999)
+
 
 class Material(Base):
     """재료 규격.
@@ -370,6 +374,14 @@ class Sample(Base):
     )
 
     seq_no: Mapped[int] = mapped_column(Integer)
+    code: Mapped[str] = mapped_column(
+        String(20),
+        unique=True,
+        server_default=text("'S-' || lpad(nextval('sample_code_seq')::text, 6, '0')"),
+    )
+    """**불변 고유 번호** — `S-000041`(ADR 0043). 이름은 밑줄로 엮여 길고 재료 개명 · 다른
+    두께로 옮기기에 따라 바뀐다 — 말 · 문서 · 라벨이 가리킬 손잡이는 이것이다. 지워도
+    재사용하지 않는다."""
     record_name: Mapped[str] = mapped_column(String(300), index=True)
     alias: Mapped[str | None] = mapped_column(String(200), nullable=True)
 
@@ -516,6 +528,14 @@ class Specimen(Base):
     seq_no: Mapped[int] = mapped_column(Integer)
     orientation: Mapped[str] = mapped_column(String(10), index=True)
     """MD/TD/DD/NA. 이름의 한 칸이므로 비울 수 없다 — 모르면 `NA`."""
+    code: Mapped[str] = mapped_column(
+        String(20),
+        unique=True,
+        server_default=text("'P-' || lpad(nextval('specimen_code_seq')::text, 6, '0')"),
+    )
+    """**불변 고유 번호** — `P-000187`(ADR 0043). 이름은 밑줄로 엮여 길고 재료 개명 · 다른
+    두께로 옮기기에 따라 바뀐다 — 말 · 문서 · 라벨이 가리킬 손잡이는 이것이다. 지워도
+    재사용하지 않는다."""
     record_name: Mapped[str] = mapped_column(String(300), index=True)
 
     standard: Mapped[str | None] = mapped_column(String(100), nullable=True)

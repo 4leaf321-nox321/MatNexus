@@ -9,7 +9,6 @@
 from __future__ import annotations
 
 import logging
-import re
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
@@ -101,6 +100,7 @@ from app.modules.vocabulary.models import VocabularyTerm
 from app.modules.workspaces.models import Workspace
 from app.shared import (
     audit,
+    codes,
     contention,
     coverage,
     display,
@@ -306,6 +306,7 @@ def _sample_out(
         workspace_id=sample.workspace_id,
         workspace_name=workspace_name,
         seq_no=sample.seq_no,
+        code=sample.code,
         record_name=sample.record_name,
         registered_by=registered_by,
         alias=sample.alias,
@@ -363,6 +364,7 @@ def _specimen_out(
         workspace_id=specimen.workspace_id,
         seq_no=specimen.seq_no,
         orientation=specimen.orientation,
+        code=specimen.code,
         record_name=specimen.record_name,
         registered_by=registered_by,
         standard=specimen.standard,
@@ -514,12 +516,11 @@ def _search_terms(db: Session, q: str | None) -> list[Any]:
     conditions: list[Any] = []
     for word in q.split():
         branches: list[Any] = [column.ilike(f"%{word}%") for column in _SEARCH_TEXT]
-        # **재료번호 꼴이면 번호로도 찾는다.** `M-140` 처럼 패딩 없이 쳐도
-        # `M-000140` 에 닿게 보정한다 — 정확 일치라 유니크 B-tree 를 그대로 탄다
-        # (trgm 없는 ILIKE 가지를 늘리면 전 행을 훑는 함정이 있어, 등호만 더한다).
-        code_shape = re.fullmatch(r"[Mm]-?(\d{1,6})", word)
-        if code_shape is not None:
-            branches.append(Material.code == f"M-{int(code_shape.group(1)):06d}")
+        # **번호 꼴이면 번호로도 찾는다.** `M-140` 처럼 패딩 없이 쳐도 `M-000140` 에
+        # 닿게 보정한다 — 정확 일치라 유니크 B-tree 를 그대로 탄다(trgm 없는 ILIKE 가지를
+        # 늘리면 전 행을 훑는 함정이 있어, 등호만 더한다). 시료 · 시편 · 시험 번호면 그것이
+        # 든 재료다(ADR 0043) — 사람은 손에 든 라벨의 번호를 친다.
+        branches += _code_branches(db, word)
         # **기준정보를 먼저 찾고 그 id 로 재료를 찾는다.** 상관 서브쿼리
         # (`IN (SELECT ...)`) 로 쓰면 안 된다 — 그건 인덱스 조건이 아니라 필터로
         # 강등돼서 BitmapOr 에 못 낀다. 값이 박힌 `IN (id, ...)` 만 낀다.
@@ -537,17 +538,23 @@ def _search_terms(db: Session, q: str | None) -> list[Any]:
     return conditions
 
 
-def _exact_terms(q: str) -> ColumnElement[bool]:
+def _exact_terms(db: Session, q: str) -> ColumnElement[bool]:
     """「일치」 — 이름·별칭이 **정확히** 그 말이거나(대소문자만 무시), 그 재료번호.
 
     번호·코드를 아는 사람이 쓴다. 분류·용도까지 넓히지 않는다 — 「정확히 그 이름」 이
     전체 검색의 「일치」 와 같은 뜻이다.
     """
     branches: list[Any] = [list_search.exactly(column, q) for column in _SEARCH_TEXT]
-    shape = re.fullmatch(r"[Mm]-?(\d{1,6})", q)
-    if shape is not None:
-        branches.append(Material.code == f"M-{int(shape.group(1)):06d}")
-    return or_(*branches)
+    return or_(*branches, *_code_branches(db, q))
+
+
+def _code_branches(db: Session, word: str) -> list[ColumnElement[bool]]:
+    """번호로 찾는 가지 — 재료 번호는 그 재료, 시료 · 시편 · 시험 번호는 그것이 든 재료."""
+    material = codes.of_kind(word, "material")
+    if material is not None:
+        return [Material.code == material]
+    found = codes.chain(db, word)
+    return [Material.id == found.material_id] if found is not None else []
 
 
 @dataclass(frozen=True)
@@ -913,7 +920,7 @@ def _filtered_materials(db: Session, user: User, filters: MaterialFilters) -> _F
     why: ColumnElement[str] | None = None
     needle = (filters.q or "").strip()
     if needle and filters.mode == "exact":
-        query = query.where(_exact_terms(needle))
+        query = query.where(_exact_terms(db, needle))
     elif needle and filters.mode == "similar":
         # **「비슷」 = 포함 · 글자가 비슷 · 뜻이 가까움 중 하나**(`shared/list_search`).
         # 트라이그램은 이름·별칭에만 건다 — 둘 다 trgm 색인이 있다
@@ -955,9 +962,9 @@ def _filtered_materials(db: Session, user: User, filters: MaterialFilters) -> _F
         # 이미 재 본 함정이다, `tests/architecture/test_search_index.py`).
         #
         # `M-38` 처럼 패딩 없이 쳐도 닿게 보정하고, 그 꼴이 아니면 앞 일치로 둔다.
-        shape = re.fullmatch(r"[Mm]-?(\d{1,6})", code.strip())
-        if shape is not None:
-            query = query.where(Material.code == f"M-{int(shape.group(1)):06d}")
+        exact = codes.of_kind(code, "material")
+        if exact is not None:
+            query = query.where(Material.code == exact)
         else:
             query = query.where(Material.code.ilike(f"{code.strip()}%"))
     # **없는 값으로 거르면 0건이어야 한다.** `== None` 으로 두면 그 축이 비어 있는
@@ -2355,6 +2362,7 @@ SPECIMEN_SORTS = {
     "record_name": Specimen.record_name,
     "orientation": Specimen.orientation,
     "standard": Specimen.standard,
+    "code": Specimen.code,
 }
 
 #: 시편에서 글자로 뒤지는 칸. 재료의 `_SEARCH_TEXT` 와 같은 자리다.
@@ -2501,7 +2509,20 @@ def list_all_specimens(
     query = _visible_specimen_rows(db, user)
 
     for word in (q or "").split():
-        query = query.where(or_(*[column.ilike(f"%{word}%") for column in _SPECIMEN_TEXT]))
+        branches: list[ColumnElement[bool]] = [
+            column.ilike(f"%{word}%") for column in _SPECIMEN_TEXT
+        ]
+        # **번호로도 찾는다**(ADR 0043) — 시편 번호는 그 시편, 시험 번호는 그 시험의 시편,
+        # 시료 · 재료 번호는 그 아래 시편. 사람은 손에 든 라벨의 번호를 친다.
+        found = codes.chain(db, word)
+        if found is not None:
+            if found.specimen_id is not None:
+                branches.append(Specimen.id == found.specimen_id)
+            elif found.sample_id is not None:
+                branches.append(Specimen.sample_id == found.sample_id)
+            else:
+                branches.append(Sample.material_id == found.material_id)
+        query = query.where(or_(*branches))
     if material:
         query = query.where(Material.record_name.ilike(f"%{material}%"))
     if material_id:

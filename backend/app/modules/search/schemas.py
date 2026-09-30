@@ -22,6 +22,11 @@ class SearchHitOut(BaseModel):
         default=None,
         description="이름이 아닌 칸으로 걸렸으면 그 칸과 값 — 「별칭 도어 이너 강판」",
     )
+    code: str | None = Field(
+        default=None,
+        description="고유 번호(재료 M- · 시료 S- · 시편 P- · 시험 T-, ADR 0043). "
+        "번호가 없는 종류는 비어 있다",
+    )
 
 
 class SearchGroupOut(BaseModel):

@@ -475,7 +475,12 @@ async def _resolve_run(ctx: Context, test_run_id: str) -> str | dict[str, Any]:
     return {
         "error": f"'{test_run_id}' 로 시험이 여럿입니다 — 하나를 골라 id 로 다시 부르세요.",
         "candidates": [
-            {"id": one["id"], "name": one.get("record_name"), "test_type": one.get("test_type_key")}
+            {
+                "id": one["id"],
+                "code": one.get("code"),
+                "name": one.get("record_name"),
+                "test_type": one.get("test_type_key"),
+            }
             for one in items
         ],
     }
@@ -1032,6 +1037,8 @@ async def list_test_runs(
         "runs": [
             {
                 "id": one["id"],
+                # 번호가 사람이 부르는 손잡이다(ADR 0043) — 이름은 옮기면 바뀐다.
+                "code": one.get("code"),
                 "name": one.get("record_name"),
                 "test_type": one.get("test_type_key"),
                 "status": one.get("status"),
@@ -1060,6 +1067,7 @@ def _specimen_brief(one: Any) -> dict[str, Any] | None:
         return None
     return {
         "id": one.get("id"),
+        "code": one.get("code"),
         "name": one.get("record_name"),
         "standard": one.get("standard"),
         "orientation": one.get("orientation"),
@@ -1345,6 +1353,7 @@ async def compare_material_statistics(ctx: Context, material_ids: list[str]) -> 
 def _sample_brief(one: dict[str, Any]) -> dict[str, Any]:
     return {
         "id": one.get("id"),
+        "code": one.get("code"),
         "name": one.get("record_name"),
         "alias": one.get("alias"),
         "lot_no": one.get("lot_no"),
@@ -1407,6 +1416,7 @@ async def get_sample(ctx: Context, sample_id: str) -> dict[str, Any]:
         "specimens": [
             {
                 "id": s_.get("id"),
+                "code": s_.get("code"),
                 "name": s_.get("record_name"),
                 "orientation": s_.get("orientation"),
                 "standard": s_.get("standard"),
@@ -1867,6 +1877,7 @@ async def get_test_run(ctx: Context, test_run_id: str) -> dict[str, Any]:
                 )
     return {
         "id": run["id"],
+        "code": run.get("code"),
         "name": run.get("record_name"),
         "test_type": run.get("test_type_key"),
         "status": run.get("status"),

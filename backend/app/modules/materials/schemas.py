@@ -437,6 +437,8 @@ class SampleOut(BaseModel):
     workspace_id: uuid.UUID
     workspace_name: str | None
     seq_no: int
+    code: str
+    """불변 고유 번호(ADR 0043) — 재료 `M-` · 시료 `S-` · 시편 `P-` · 시험 `T-`."""
     record_name: str
     registered_by: str | None = None
     """누가 등록했나. **이상한 값이 보일 때 물어볼 데가 여기다** —
@@ -553,6 +555,8 @@ class SpecimenOut(BaseModel):
     workspace_id: uuid.UUID
     seq_no: int
     orientation: str
+    code: str
+    """불변 고유 번호(ADR 0043) — 재료 `M-` · 시료 `S-` · 시편 `P-` · 시험 `T-`."""
     record_name: str
     registered_by: str | None = None
     """누가 등록했나. **이상한 값이 보일 때 물어볼 데가 여기다** —

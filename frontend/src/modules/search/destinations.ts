@@ -30,6 +30,8 @@ export interface SearchHit {
   parent_id?: string | null
   /** 이름이 아닌 칸으로 걸렸으면 그 칸과 값 — 「별칭 도어 이너 강판」(2026-09-29). */
   via?: string | null
+  /** 고유 번호 — 재료 `M-` · 시료 `S-` · 시편 `P-` · 시험 `T-`(ADR 0043). 없는 종류는 비어 있다. */
+  code?: string | null
 }
 
 export function destinationOf(hit: SearchHit): Destination {

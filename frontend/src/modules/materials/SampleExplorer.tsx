@@ -308,7 +308,10 @@ export function SampleExplorer({
                 sample.id === active?.id ? 'bg-muted border-foreground/20' : 'hover:bg-muted/50'
               )}
             >
+              {/* **번호를 이름 앞에**(ADR 0043) — `__01` · `__02` 로 끝나는 이름보다 말로
+                  전하기 쉽다. 이 줄이 단추라 복사 칩은 못 넣는다(단추 안의 단추). */}
               <div className="truncate pr-14 font-mono text-xs">
+                <span className="mr-1.5 font-medium">{sample.code}</span>
                 <RecordName name={sample.record_name} />
               </div>
               {/* **로트와 제조사가 시료를 가르는 것이다.** 이름만으로는 `__01`·
@@ -445,6 +448,7 @@ export function SampleExplorer({
                 <TableHeader>
                   <TableRow>
                     <TableHead className="w-8" />
+                    <TableHead className="w-24">번호</TableHead>
                     {/* **시편이 가장 넓다.** 이름·규격·치수가 여기 걸리고, 나머지는
                         짧은 값이라 자리를 덜 먹어야 한다. */}
                     <TableHead>시편</TableHead>
@@ -493,6 +497,9 @@ export function SampleExplorer({
                             ) : (
                               <ChevronRight className="text-muted-foreground size-3.5" />
                             )}
+                          </TableCell>
+                          <TableCell className="font-mono whitespace-nowrap">
+                            {specimen.code}
                           </TableCell>
                           {/* 이름이 길면 여기서 접힌다. 식별자라 잘라내지 않는다 —
                               `SECC_1.0__01_TD_02` 의 뒤가 잘리면 어느 시편인지 모른다. */}

@@ -152,7 +152,16 @@ export default function TestRunsPage() {
     remember: 'runs',
     // **저장된 열이 지금도 정렬 가능한지 확인한다.** 표에서 열을 빼면
     // 서버가 422 를 내고, 그러면 그 브라우저에서만 목록이 영영 안 뜬다.
-    allowed: ['created_at', 'record_name', 'tested_at', 'operator', 'instrument', 'division', 'status'],
+    allowed: [
+      'created_at',
+      'code',
+      'record_name',
+      'tested_at',
+      'operator',
+      'instrument',
+      'division',
+      'status',
+    ],
   })
 
   const runs = useResource(
@@ -350,7 +359,7 @@ export default function TestRunsPage() {
             <Input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="재료 · 시편 · 시험 이름 · 시험 종류 · 원본 파일명으로 찾기"
+              placeholder="재료 · 시편 · 시험 이름 · 번호 · 시험 종류 · 원본 파일명으로 찾기"
               className="pl-9"
               aria-label="시험 찾기"
             />
@@ -587,6 +596,11 @@ export default function TestRunsPage() {
                   />
                 </div>
               </TableHead>
+              {/* **번호가 첫 열이다**(ADR 0043) — 이름은 옮기면 바뀌고 길어서 말로 못 전한다.
+                  번호로 찾는 것도 표 위의 찾기 상자다(시편 번호를 쳐도 그 시편의 시험). */}
+              <TableHead className={`w-24 ${FILTER_HEAD}`}>
+                <ColumnLabel sort={handle('code')}>번호</ColumnLabel>
+              </TableHead>
               {/* 이름은 **표 위의 찾기 상자**가 맡는다 — `record_name` 하나로
                   재료·시료·시편·회차가 다 걸리므로 열 거르개와 성격이 다르다. */}
               <TableHead className={`min-w-[14rem] ${FILTER_HEAD}`}>
@@ -726,6 +740,7 @@ export default function TestRunsPage() {
                     onChange={() => {}}
                   />
                 </TableCell>
+                <TableCell className="font-mono whitespace-nowrap">{run.code}</TableCell>
                 <TableCell className="font-mono font-medium">
                   {/* **어디서 왔는지 함께 넘긴다.** 상세의 「뒤로」 가 늘 재료
                       화면으로 갔는데, 목록에서 들어온 사람은 목록으로 돌아가려
