@@ -293,6 +293,14 @@ class ExportProfile(Base):
     )
     """편집을 받은 부서(ADR 0035) — 등록자 말고 이 부서 사람도 고친다. 뜻은
     `Material.edit_workspace_id` 와 같다. 등록 부서(`owner_workspace_id`)는 권한이 아니다."""
+    seed_digest: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    """**씨앗이 마지막으로 쓴 내용의 지문**(이름 · 설명 · 정의, ADR 0047). 사람이 만든
+    정의는 `NULL` 이다.
+
+    기본 형식의 정의판은 배포가 넣고 고친다(`scripts/import_export_profiles.py`). 지금
+    내용이 이 지문과 같아야 「아무도 손대지 않았다」 — 그때만 새 씨앗으로 바꾼다. 화면이나
+    AI 가 고치면 지문과 어긋나서 배포가 더는 덮지 않는다. 표에는 「누가 마지막에
+    고쳤나」 가 없고 `updated_at` 은 켜고 끄기에도 움직여서, 이것 말고는 가를 길이 없었다."""
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

@@ -574,6 +574,33 @@ if ($SkipMigrations) {
     Pop-Location
 }
 
+# --- 기본 형식의 정의판 -------------------------------------------------------
+#
+# 코드판이 틀렸을 때 「사용 중단」 하고 대신 켜는 비상용이다(ADR 0037 · 0038 · 0047).
+# 코드판은 배포와 함께 오지만 정의판은 **행**이라 넣는 명령이 따로 있어야 한다 —
+# 전에는 개발 서버에만 손으로 넣어 두어서, 운영에서 사용 중단을 걸면 대신 쓸 것이 없었다.
+#
+# **꺼진 채로만 넣는다**(켜면 메뉴에 같은 형식이 둘 선다). 아무도 손대지 않은 것만 새
+# 씨앗을 따르고, 고쳤거나 켰거나 손으로 들여온 옛 판은 안 덮고 이름을 로그에 남긴다.
+# 실패해도 배포는 세우지 않는다 — 비상용이 비는 것은 장애가 아니다.
+if ($SkipMigrations) {
+    Write-Log '정의판 씨앗 건너뜀 (마이그레이션과 함께)'
+} else {
+    Write-Log '정의판 씨앗 적재'
+    Push-Location (Join-Path $AppPath 'backend')
+    try {
+        Invoke-Native '정의판 씨앗 적재 실패' { & $backendPython scripts\import_export_profiles.py }
+        Write-Log '정의판 씨앗 완료'
+    } catch {
+        Write-Log "정의판 씨앗 실패 (배포는 계속합니다): $_"
+        Write-Host ''
+        Write-Host '기본 형식을 사용 중단할 때 대신 켤 정의판이 없을 수 있습니다. 서버에서 직접 돌려 보세요:'
+        Write-Host "  cd '$AppPath\backend'"
+        Write-Host "  & '$backendPython' scripts\import_export_profiles.py"
+    }
+    Pop-Location
+}
+
 # --- 배포에 실려 온 안내 → 공지 초안 -------------------------------------------
 #
 # 새 기능은 코드와 함께 도착하는데, 알리는 글은 사람이 따로 써야 했다(2026-09-12).
