@@ -116,6 +116,7 @@ from app.shared import (
     litdeck,
     pagination,
     permissions,
+    tiers,
     unit_systems,
 )
 from app.shared.access import AccessBook, EditAccessOut, access_of
@@ -251,8 +252,11 @@ def _origin(source: str) -> str:
     핸드북 이름보다 먼저 알아야 할 것이다.
     """
     if source.startswith("declared:"):
-        where = declared.SOURCES.get(source.removeprefix("declared:"))
-        return f"사람이 적은 값 ({where})" if where else "사람이 적은 값"
+        code, approved = tiers.split_declared(source.removeprefix("declared:"))
+        where = declared.SOURCES.get(code)
+        # 승인은 「누가 근거를 확인했나」 라 출처 곁에 함께 적는다(ADR 0049).
+        parts = [part for part in (where, "자료 관리자 승인" if approved else None) if part]
+        return f"사람이 적은 값 ({' · '.join(parts)})" if parts else "사람이 적은 값"
     return SOURCE_NOTES.get(source, "")
 
 

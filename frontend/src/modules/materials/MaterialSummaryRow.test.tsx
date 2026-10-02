@@ -40,6 +40,8 @@ vi.mock('@/modules/materials/api', async () => {
 
 vi.mock('@/shared/auth/AuthContext', () => ({
   useAuth: () => ({ user: { is_system_admin: true, memberships: [] } }),
+  // 재료 상세가 선언 물성 승인 단추를 세울지 볼 때 쓴다(ADR 0049).
+  useMaybeAuth: () => ({ user: { is_system_admin: true, memberships: [] } }),
 }))
 
 const MATERIAL = {

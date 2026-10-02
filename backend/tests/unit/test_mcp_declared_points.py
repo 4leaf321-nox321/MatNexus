@@ -92,3 +92,16 @@ def test_온도_축이나_같은_온도면_그대로_둔다() -> None:
         "note": None,
     }
     assert declared_points.drop_mixed_temperatures(table, "temperature_k") is False
+
+
+def test_승인된_값을_덮어쓰면_미리보기가_말한다() -> None:
+    """승인은 값에 묶여 있어 덮어쓰면 풀린다(ADR 0049) — 서버는 막지 않으니 사람이
+    먼저 알아야 한다."""
+    approved = {"item": "탄성계수", "approval": {"by": "김관리", "at": "2026-10-02T01:00:00Z"}}
+
+    warning = declared_points.approval_warning(approved)
+
+    assert warning is not None
+    assert "김관리" in warning and "승인이 풀리고" in warning
+    assert declared_points.approval_warning({"item": "탄성계수", "approval": None}) is None
+    assert declared_points.approval_warning(None) is None

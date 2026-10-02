@@ -35,6 +35,7 @@ import { DistributionPanel } from '@/modules/statistics/DistributionPanel'
 import { statisticsApi } from '@/modules/statistics/api'
 import type { ScalarStats, StatisticsGroup } from '@/modules/statistics/api'
 import { CurveChart } from '@/modules/tests/CurveChart'
+import { DeclaredGrade } from '@/shared/components/DeclaredGrade'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
@@ -365,6 +366,8 @@ function PropertySummary({
     /** 통계가 아닌 값(묶음·선언)이면 적을 글자. */
     stated?: string
     kind: '통계' | '피팅' | '선언' | '문헌 묶음'
+    /** 적어 둔 값의 등급과 승인(ADR 0049) — 서버가 센 것. 선언 줄에만 있다. */
+    grade?: Pick<DeclaredProperty, 'quality_tier' | 'approval'>
   }
 
   const rows = new Map<string, Line[]>()
@@ -436,6 +439,7 @@ function PropertySummary({
       where: row.reference || row.source,
       stats: null,
       kind: '선언',
+      grade: row,
       // 무차원(`1`)은 단위를 안 적는다 — 「3.8 1」 로 읽힌다.
       stated: `${significant(Number(first.value))} ${
         row.input_unit === '1' ? '' : (row.input_unit ?? row.scale ?? '')
@@ -499,6 +503,12 @@ function PropertySummary({
                     {line.stats ? <Spread row={line.stats} /> : null}
                     {line.stats ? '·' : ''}
                     {line.where}
+                    {line.grade ? (
+                      <DeclaredGrade
+                        tier={line.grade.quality_tier ?? 4}
+                        approval={line.grade.approval}
+                      />
+                    ) : null}
                     {line.kind === '선언' && onEditDeclared && (
                       <button
                         type="button"

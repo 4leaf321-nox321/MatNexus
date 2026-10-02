@@ -11,6 +11,7 @@
 
     시험에서 온 값       표본 3 이상 1 · 1~2 는 2         (`tiers.measured_tier`)
     적어 둔 값           출처로 — 밀시트·데이터시트 1 · 규격 2 · 문헌 3 · 추정 4
+                         (자료 관리자가 승인한 값은 한 단계 위, 2 까지 — ADR 0049)
     재료에 적힌 공칭값    3  (어디서 왔는지 모르는 옮겨 적음)
     사람이 직접 넣은 값   4  (근거 없음)
     합성 곡선·외삽 구간   4
@@ -74,9 +75,8 @@ def value_tiers(card: PropertyCard) -> dict[str, int]:
                 continue
             source = str(values.get(f"{key}_source", ""))
             if source.startswith("declared:"):
-                out[f"{block_key}.{key}"] = tiers.declared_tier(
-                    source.removeprefix("declared:")
-                )
+                where, approved = tiers.split_declared(source.removeprefix("declared:"))
+                out[f"{block_key}.{key}"] = tiers.declared_tier(where, approved=approved)
             elif source in _MEASURED_SOURCES:
                 out[f"{block_key}.{key}"] = tiers.measured_tier(count)
             elif source in _SOURCE_TIERS:

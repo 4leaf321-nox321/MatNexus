@@ -43,7 +43,7 @@ from app.modules.materials.models import Material, Sample, Specimen
 from app.modules.processing.models import ProcessingResult
 from app.modules.tests.models import TestConditionField, TestRun
 from app.modules.vocabulary.models import VocabularyTerm
-from app.shared import standard_conditions, tiers
+from app.shared import declared_approval, standard_conditions, tiers
 from matcore import registry
 
 
@@ -286,7 +286,8 @@ def collect(db: Session, material_id: uuid.UUID) -> Coverage:
                 if item:
                     unmapped_items.add(item)
                 continue
-            tier = tiers.declared_tier(entry.get("source"))
+            # 승인한 값은 한 단계 위(ADR 0049) — 등급은 출처와 승인에서 센다.
+            tier = declared_approval.tier(entry)
             for point in entry.get("points") or []:
                 value = point.get("value_si")
                 if not isinstance(value, int | float) or isinstance(value, bool):

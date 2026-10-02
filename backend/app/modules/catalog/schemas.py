@@ -312,6 +312,15 @@ class CatalogPropertyMigrateOut(BaseModel):
     """단위가 달라 환산했으면 그 내역."""
 
 
+class CatalogPropertyUpdate(BaseModel):
+    """물성 정의 고치기 — 지금은 **정의문** 하나(ADR 0050).
+
+    부분 수정이다. 안 보낸 칸은 그대로, `description: null`(또는 빈 글)은 정의문을 비운다.
+    """
+
+    description: str | None = Field(default=None, max_length=2000)
+
+
 class CatalogPropertyDeprecate(BaseModel):
     """키를 폐기한다 — 지우지 않는다. 후속 키가 있으면 그것을 가리킨다."""
 
@@ -385,6 +394,9 @@ class PropertyCandidateOut(BaseModel):
     """값이 몇 건인가. 0이면 이 물성으로는 아무것도 못 찾는다."""
     internal_items: list[str]
     measured_keys: list[str] = Field(default_factory=list)
+    description: str | None = None
+    """**정의문** — 이 물성이 무엇인가(ADR 0050). 이름이 비슷한 후보를 뜻으로 가른다."""
+    test_standard: str | None = None
     deprecated: bool = False
     """폐기된 키 — 그만 쓰고 `superseded_by` 를 쓴다. 뒤로 밀려 선다."""
     superseded_by: str | None = None
@@ -499,6 +511,8 @@ class PropertyDictionaryEntryOut(BaseModel):
     si_unit: str | None
     symbol: str | None
     test_standard: str | None
+    description: str | None = None
+    """**정의문**(ADR 0050) — 받아 간 시스템이 이 키의 뜻을 자기 개념과 견줄 때 읽는다."""
     aliases: list[str]
     internal_items: list[str]
     """사내 항목 이름(눈금이 있으면 「경도 (HV)」)."""
@@ -564,6 +578,9 @@ class PropertyMappingRowOut(BaseModel):
     si_unit: str | None
     symbol: str | None
     test_standard: str | None
+    description: str | None = None
+    """**정의문**(ADR 0050) — 매핑 화면이 이 줄의 뜻을 보이고, 자료 관리자가 그 자리에서
+    고친다."""
     is_span: bool = False
     """값이 **절대값이 아니라 폭**인가(WLF C₂ 처럼). 단위는 같은데 환산이 다르다."""
     value_count: int

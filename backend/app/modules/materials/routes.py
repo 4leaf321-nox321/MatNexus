@@ -48,6 +48,8 @@ from app.modules.materials.schemas import (
     CascadeDeleteRequest,
     ClassificationOut,
     ConditionUnitOut,
+    DeclaredApprovalOut,
+    DeclaredApprovalRequest,
     DeclaredPointOut,
     DeclaredPropertyOut,
     DeletePlanOut,
@@ -104,15 +106,18 @@ from app.shared import (
     codes,
     contention,
     coverage,
+    declared_approval,
     declared_conditions,
     display,
     exports,
     facets,
     list_search,
     permissions,
+    property_names,
     semantic,
     sorting,
     specimen_size,
+    tiers,
     unit_systems,
 )
 from app.shared.access import AccessBook, EditAccessOut, access_of
@@ -254,6 +259,23 @@ def _declared_out(row: dict[str, Any]) -> DeclaredPropertyOut:
         source=str(row["source"]),
         reference=str(row["reference"]),
         note=row.get("note"),
+        # **등급은 서버가 근거에서 센다** — 화면이 출처 표를 들고 셈하면 승인 규칙이
+        # 두 곳에 산다.
+        quality_tier=declared_approval.tier(row),
+        tier_if_approved=tiers.declared_tier(row.get("source"), approved=True),
+        approval=_approval_out(row),
+    )
+
+
+def _approval_out(row: dict[str, Any]) -> DeclaredApprovalOut | None:
+    """지금 값에 유효한 승인만 — 승인 뒤 값을 고쳤으면 없다(`shared/declared_approval`)."""
+    found = declared_approval.of(row)
+    if found is None:
+        return None
+    return DeclaredApprovalOut(
+        by=str(found.get("by") or "?"),
+        at=datetime.fromisoformat(str(found["at"])),
+        note=found.get("note"),
     )
 
 
@@ -706,7 +728,10 @@ def property_items(
 
     감춘 항목은 안 나온다. **이미 넣어 둔 값은 그대로 남는다** — 감추는 것은
     "앞으로 새로 고르지 말라" 는 뜻이지 과거를 지우는 것이 아니다.
+
+    항목마다 **정의문**을 함께 준다 — 같은 물성으로 이어진 문헌 키의 것(ADR 0050).
     """
+    meanings = property_names.item_meanings(db)
     return [
         PropertyItemOut(
             item=name,
@@ -724,6 +749,8 @@ def property_items(
             # **척도를 든 항목에는 단위를 안 준다.** 둘 다 주면 화면이 어느
             # 쪽을 그릴지 스스로 판단해야 하고, 그 판단이 서버와 갈라진다.
             units=[] if spec["scales"] else units.units_for(spec["dimension"]),
+            property_key=meanings.get(name, (None, None))[0],
+            description=meanings.get(name, (None, None))[1],
         )
         for name, spec in sorted(declared.catalog(db, level=level).items())
     ]
@@ -1724,7 +1751,21 @@ def update_material(
     if "declared_properties" in data:
         # **통째로 갈아 끼운다.** 검사·단위 변환은 `declared.check` 가 한다 —
         # 차원이 안 맞으면 거기서 막힌다(비열 자리에 열전도율 같은 것).
-        material.declared_properties = declared.check(db, data["declared_properties"] or [])
+        # 승인은 받은 줄에서 오지 않는다 — 값이 그대로인 줄에만 저장돼 있던 것을
+        # 옮긴다(ADR 0049).
+        material.declared_properties, lapsed = declared_approval.carry(
+            material.declared_properties or [],
+            declared.check(db, data["declared_properties"] or []),
+        )
+        _note_lapsed(
+            db,
+            user,
+            lapsed,
+            table="materials",
+            target_id=material.id,
+            label=material.record_name,
+            workspace_id=material.owner_workspace_id,
+        )
 
     if "density" in data or "density_unit" in data:
         # **단위 없이 보낸 값은 응답과 같은 SI 로 읽는다** — 읽은 값을 그대로 되보내는 쪽이
@@ -1779,6 +1820,159 @@ def update_material(
     _audit_if_not_human(db, user, material, sorted(data))
     # 메모·별칭·용도가 바뀌면 뜻도 바뀐다 — 그 재료만 다시 색인한다.
     semantic.queue_materials(db, [material.id])
+    db.commit()
+    names = services.workspace_names(db, [material.owner_workspace_id])
+    return _material_out(
+        material,
+        sample_count=services.sample_counts(db, [material.id]).get(material.id, 0),
+        workspace_name=(
+            names.get(material.owner_workspace_id) if material.owner_workspace_id else None
+        ),
+        uses=services.uses_of(db, [material.id]).get(material.id),
+        access=access_of(db, user, material),
+    )
+
+
+def _note_lapsed(
+    db: Session,
+    user: User,
+    lapsed: list[str],
+    *,
+    table: str,
+    target_id: uuid.UUID,
+    label: str,
+    workspace_id: uuid.UUID | None,
+) -> None:
+    """승인된 값이 이 수정으로 **승인을 잃었으면** 남긴다(ADR 0049).
+
+    값을 고치는 것은 막지 않는다 — 고칠 권한은 그대로다(ADR 0035). 대신 그 값이 승인을 잃었다는
+    사실이 감사에 남아, 등급이 왜 내려갔는지를 나중에 되짚을 수 있다.
+    """
+    for item in lapsed:
+        audit.record(
+            db,
+            action=audit.DECLARED_APPROVAL_LAPSED,
+            actor=user,
+            target_table=table,
+            target_id=target_id,
+            target_label=f"{label} · {item}",
+            workspace_id=workspace_id,
+            changes={"approval": {"before": item, "after": None}},
+        )
+
+
+def _require_approver(user: User) -> None:
+    """**승인은 자료 관리자만**(ADR 0049). 카드 확정 · 핸드북 승인과 같은 「검토의 뜻이 있는
+    일」 이라 같은 판정을 쓴다(ADR 0035 D4) — 고칠 수 있는 등록자도 스스로 승인하지 못한다.
+
+    리뷰 큐는 두지 않는다 — 카드 확정(D8)과 같다. 상태만 두고, 절차는 운영이 보인 뒤에 만든다.
+    """
+    permissions.require_steward(
+        user, code="MNX-MATERIALS-0044", what="선언 물성 승인 · 승인 취소"
+    )
+
+
+def _set_approval(
+    user: User,
+    holder: Material | Sample,
+    body: DeclaredApprovalRequest,
+    *,
+    approve: bool,
+) -> str:
+    """그 줄에 승인을 붙이거나 거둔다. 바꾼 항목 이름을 돌려준다.
+
+    판정은 부르는 쪽이 먼저 한다(`_require_approver`).
+    """
+    rows = list(holder.declared_properties or [])
+    at = declared_approval.find(rows, body.item)
+    if at is None:
+        raise NotFound("MNX-MATERIALS-0045", f"'{body.item}' 은 적어 둔 값이 없습니다.")
+    row = rows[at]
+    current = declared_approval.of(row)
+    if approve and current is not None:
+        raise Conflict(
+            "MNX-MATERIALS-0046",
+            f"'{row['item']}' 은 이미 {current.get('by') or '?'} 님이 승인했습니다. "
+            "확인 내용을 바꾸려면 승인을 거두고 다시 승인하세요.",
+        )
+    if not approve and current is None:
+        raise Conflict("MNX-MATERIALS-0046", f"'{row['item']}' 은 승인된 값이 아닙니다.")
+    note = (body.note or "").strip() or None
+    rows[at] = (
+        declared_approval.stamp(
+            row, user_id=str(user.id), name=user.display_name or user.email, note=note
+        )
+        if approve
+        else declared_approval.strip(row)
+    )
+    holder.declared_properties = rows
+    return str(row["item"])
+
+
+def _declared_target(holder: Material | Sample, item: str) -> dict[str, Any]:
+    """감사 기록의 대상 칸 — 재료면 재료, 밀시트면 시료."""
+    if isinstance(holder, Material):
+        return {
+            "target_table": "materials",
+            "target_id": holder.id,
+            "target_label": f"{holder.record_name} · {item}",
+            "workspace_id": holder.owner_workspace_id,
+        }
+    return {
+        "target_table": "samples",
+        "target_id": holder.id,
+        "target_label": f"{holder.record_name} · {item}",
+        "workspace_id": holder.workspace_id,
+    }
+
+
+@router.post("/{material_id}/declared/approve", response_model=MaterialOut)
+def approve_declared(
+    material_id: uuid.UUID,
+    body: DeclaredApprovalRequest,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> MaterialOut:
+    """적어 둔 값 하나를 **승인**한다 — 근거 문서와 대조해 확인했다는 기록(ADR 0049).
+
+    승인된 값은 등급이 한 단계 오른다(문헌 3 → 2 · 추정 4 → 3, 2 위로는 안 간다). 값을
+    고치면 승인은 저절로 풀린다 — 승인은 그때의 값에 묶여 있다.
+    """
+    _require_approver(user)
+    material = services.get_material(db, user, material_id)
+    item = _set_approval(user, material, body, approve=True)
+    audit.record(
+        db,
+        action=audit.DECLARED_APPROVED,
+        actor=user,
+        changes={"approval": {"item": item, "note": body.note}},
+        **_declared_target(material, item),
+    )
+    return _saved_material(db, user, material)
+
+
+@router.post("/{material_id}/declared/unapprove", response_model=MaterialOut)
+def unapprove_declared(
+    material_id: uuid.UUID,
+    body: DeclaredApprovalRequest,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> MaterialOut:
+    """승인을 거둔다. 값은 그대로다 — 등급만 출처의 것으로 돌아간다."""
+    _require_approver(user)
+    material = services.get_material(db, user, material_id)
+    item = _set_approval(user, material, body, approve=False)
+    audit.record(
+        db,
+        action=audit.DECLARED_UNAPPROVED,
+        actor=user,
+        changes={"approval": {"item": item}},
+        **_declared_target(material, item),
+    )
+    return _saved_material(db, user, material)
+
+
+def _saved_material(db: Session, user: User, material: Material) -> MaterialOut:
     db.commit()
     names = services.workspace_names(db, [material.owner_workspace_id])
     return _material_out(
@@ -2163,8 +2357,18 @@ def update_sample(
     if "declared_properties" in data:
         # **시료 층이다.** 항목이 그 층의 것인지는 `check` 가 본다 — 탄성계수를
         # 여기 적으면 같은 값을 로트 수만큼 적게 되고, 그중 하나만 고쳐진다.
-        sample.declared_properties = declared.check(
-            db, data["declared_properties"] or [], level="시료"
+        sample.declared_properties, lapsed = declared_approval.carry(
+            sample.declared_properties or [],
+            declared.check(db, data["declared_properties"] or [], level="시료"),
+        )
+        _note_lapsed(
+            db,
+            user,
+            lapsed,
+            table="samples",
+            target_id=sample.id,
+            label=sample.record_name,
+            workspace_id=sample.workspace_id,
         )
 
     if "density" in data or "density_unit" in data:
@@ -2176,6 +2380,60 @@ def update_sample(
         sample.density_si = services.density_to_si(value, unit)
         sample.input_units = {**sample.input_units, "density": unit}
 
+    db.commit()
+    names = services.workspace_names(db, [sample.workspace_id])
+    return _sample_out(
+        sample,
+        specimen_count=services.specimen_counts(db, [sample.id]).get(sample.id, 0),
+        workspace_name=names.get(sample.workspace_id),
+        registered_by=services.registrant_names([sample], db).get(sample.registered_by_id),
+        access=access_of(db, user, sample),
+    )
+
+
+@samples_router.post("/{sample_id}/declared/approve", response_model=SampleOut)
+def approve_sample_declared(
+    sample_id: uuid.UUID,
+    body: DeclaredApprovalRequest,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> SampleOut:
+    """밀시트에 적은 값 하나를 승인한다 — 재료 쪽과 같은 규칙(ADR 0049)."""
+    _require_approver(user)
+    sample = _get_sample(db, user, sample_id)
+    item = _set_approval(user, sample, body, approve=True)
+    audit.record(
+        db,
+        action=audit.DECLARED_APPROVED,
+        actor=user,
+        changes={"approval": {"item": item, "note": body.note}},
+        **_declared_target(sample, item),
+    )
+    return _saved_sample(db, user, sample)
+
+
+@samples_router.post("/{sample_id}/declared/unapprove", response_model=SampleOut)
+def unapprove_sample_declared(
+    sample_id: uuid.UUID,
+    body: DeclaredApprovalRequest,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> SampleOut:
+    """밀시트 값의 승인을 거둔다."""
+    _require_approver(user)
+    sample = _get_sample(db, user, sample_id)
+    item = _set_approval(user, sample, body, approve=False)
+    audit.record(
+        db,
+        action=audit.DECLARED_UNAPPROVED,
+        actor=user,
+        changes={"approval": {"item": item}},
+        **_declared_target(sample, item),
+    )
+    return _saved_sample(db, user, sample)
+
+
+def _saved_sample(db: Session, user: User, sample: Sample) -> SampleOut:
     db.commit()
     names = services.workspace_names(db, [sample.workspace_id])
     return _sample_out(

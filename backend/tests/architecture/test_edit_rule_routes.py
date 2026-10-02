@@ -58,6 +58,7 @@ MARKERS = (
     "require_contributor(",
     "_require_edit(",
     "_editable_run(",
+    "_require_approver(",
 )
 
 #: 손잡이 → 그 안에 있어야 하는 판정.
@@ -67,6 +68,8 @@ HELPERS = {
     ("processing", "_require_result_removal"): "require_edit(",
     ("equipment", "_require_edit"): "require_edit(",
     ("workbench", "_editable_run"): "require_edit(",
+    # 선언 물성 승인 — 검토의 뜻이 있는 일이라 카드 확정과 같은 판정(ADR 0049).
+    ("materials", "_require_approver"): "require_steward(",
 }
 
 _만들기 = "만들기 — 누구나 한다. 만든 사람이 그 자료의 등록자다(ADR 0035)"

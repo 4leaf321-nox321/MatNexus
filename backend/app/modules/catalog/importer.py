@@ -165,7 +165,10 @@ def run(db: Session, sqlite_path: str | Path) -> Report:
                     "symbol": row["symbol"],
                     "si_unit": row["si_unit"],
                     "value_type": row["value_type"],
-                    "description": row["description"],
+                    # **원본에 정의문이 없으면 칸을 안 건드린다**(ADR 0050). 배포마다 이 이관이
+                    # 다시 도는데, 빈 값으로 덮으면 사내가 적은 정의문이 배포마다 지워진다.
+                    # 원본에 정의문이 생기면 그것이 이긴다 — 원본이 정본이다.
+                    **({"description": row["description"]} if row["description"] else {}),
                     "test_standard": row["test_standard"],
                     "condition_axes": parse_json(row["condition_axes"]),
                     "source_created_at": parse_dt(row["created_at"]),

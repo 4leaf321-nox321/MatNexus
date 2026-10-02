@@ -40,7 +40,7 @@ from app.modules.catalog.models import CatalogDefinition, CatalogMaterial, Catal
 from app.modules.materials.models import Material, Sample, Specimen
 from app.modules.processing.models import ProcessingResult
 from app.modules.tests.models import TestConditionField, TestRun
-from app.shared import standard_conditions, tiers
+from app.shared import declared_approval, standard_conditions, tiers
 from app.shared.errors import AppError
 from matcore import registry, units
 
@@ -567,7 +567,8 @@ def internal_hits(
             # **눈금이 다르면 다른 값이다.** HRC 60 은 비커스 검색에 안 낀다.
             if scale is not None and entry.get("scale") != scale:
                 continue
-            tier = tiers.declared_tier(entry.get("source"))
+            # 승인한 값은 한 단계 위(ADR 0049).
+            tier = declared_approval.tier(entry)
             if min_tier is not None and tier > min_tier:
                 continue
             for point in entry.get("points") or []:

@@ -19,7 +19,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.modules.materials.models import Material, Sample
-from app.shared import display, property_names
+from app.shared import declared_approval, display, property_names, tiers
 from matcore import cards, synth
 
 
@@ -83,7 +83,8 @@ def declared(material: Material, item: str) -> Inherited:
 
     출처를 `declared:<어디서>` 로 남긴다. `measured` 와 한 글자도 안 겹쳐야
     한다 — 덱을 받은 사람이 **잰 값인지 적은 값인지** 구별할 수 있어야 하고,
-    그 구별이 이 저장소가 카드에 근거를 박는 이유 전부다.
+    그 구별이 이 저장소가 카드에 근거를 박는 이유 전부다. 자료 관리자가 승인한
+    값이면 `+approved` 가 붙는다(ADR 0049) — 카드는 만들 때의 승인을 든다.
     """
     row = declared_row(material, item)
     if row is None:
@@ -101,7 +102,7 @@ def declared(material: Material, item: str) -> Inherited:
     )
     return Inherited(
         float(points[0]["value_si"]),
-        f"declared:{where}",
+        tiers.declared_origin(where, approved=declared_approval.of(row) is not None),
         f"사람이 적은 값입니다 — {reference or '근거 문서 없음'}.{spread}",
     )
 

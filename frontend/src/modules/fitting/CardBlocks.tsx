@@ -51,10 +51,18 @@ const DECLARED_LABELS: Record<string, string> = {
   estimate: '추정',
 }
 
+/**
+ * 자료 관리자가 승인한 선언 값의 꼬리 — `declared:literature+approved`(ADR 0049). 서버
+ * `tiers.APPROVED_MARK` 와 같은 낱말이다. 카드는 만들 때의 승인을 칸에 든다.
+ */
+const APPROVED_MARK = '+approved'
+
 function originOf(source: string): string {
   if (source.startsWith('declared:')) {
-    const where = DECLARED_LABELS[source.slice('declared:'.length)]
-    return where ? `적은 값 · ${where}` : '적은 값'
+    const token = source.slice('declared:'.length)
+    const approved = token.endsWith(APPROVED_MARK)
+    const where = DECLARED_LABELS[approved ? token.slice(0, -APPROVED_MARK.length) : token]
+    return ['적은 값', where, approved ? '승인' : null].filter(Boolean).join(' · ')
   }
   return SOURCE_LABELS[source] ?? ''
 }

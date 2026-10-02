@@ -19,6 +19,7 @@ const linkProperty = vi.fn()
 const unlinkProperty = vi.fn()
 const deprecateProperty = vi.fn()
 const migrateProperty = vi.fn()
+const updateProperty = vi.fn()
 
 vi.mock('@/modules/catalog/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/modules/catalog/api')>()),
@@ -27,6 +28,7 @@ vi.mock('@/modules/catalog/api', async (importOriginal) => ({
     unlinkProperty: (...args: unknown[]) => unlinkProperty(...args),
     deprecateProperty: (...args: unknown[]) => deprecateProperty(...args),
     migrateProperty: (...args: unknown[]) => migrateProperty(...args),
+    updateProperty: (...args: unknown[]) => updateProperty(...args),
   },
 }))
 
@@ -72,6 +74,7 @@ const MAPPING: PropertyMapping = {
       si_unit: 'Pa',
       symbol: 'σy',
       test_standard: 'ISO 6892',
+      description: '금속 인장시험에서 0.2 % 소성 변형이 생기는 응력이다(ISO 6892).',
       value_count: 486,
       links: [
         {
@@ -301,5 +304,59 @@ describe('물성 매핑', () => {
     show(false)
     expect(screen.queryByRole('button', { name: /연결$/ })).toBeNull()
     expect(screen.queryByRole('button', { name: /해제$/ })).toBeNull()
+  })
+})
+
+/**
+ * 정의문(ADR 0050) — 이 키가 무엇인가. 자료 관리자가 그 자리에서 고친다.
+ */
+describe('정의문', () => {
+  it('줄마다 정의문이 서고, 없으면 없다고 적는다', () => {
+    show(false)
+    const yieldRow = screen.getByText('mechanical.yield_strength').closest('tr') as HTMLElement
+    expect(within(yieldRow).getByText(/0.2 % 소성 변형이 생기는 응력/)).toBeInTheDocument()
+    // 같은 키가 「이을 후보」 에도 서므로, 표의 줄은 규격까지 보고 고른다.
+    const flexRow = screen
+      .getAllByRole('row')
+      .find(
+        (row) =>
+          within(row).queryByText('mechanical.flexural_strength') && within(row).queryByText('ISO 178')
+      ) as HTMLElement
+    expect(within(flexRow).getByText('정의문 없음')).toBeInTheDocument()
+  })
+
+  it('고칠 수 없으면 단추가 없다', () => {
+    show(false)
+    expect(screen.queryByRole('button', { name: /정의문 고치기/ })).not.toBeInTheDocument()
+  })
+
+  it('자료 관리자는 고쳐 저장하고, 비우면 null 로 보낸다', async () => {
+    const user = userEvent.setup()
+    updateProperty.mockResolvedValue({})
+    const onChanged = vi.fn()
+    render(<PropertyMappingPanel mapping={MAPPING} canEdit={false} canDescribe onChanged={onChanged} />)
+
+    await user.click(screen.getByRole('button', { name: '항복강도 정의문 고치기' }))
+    const box = await screen.findByLabelText('정의문')
+    expect(box).toHaveValue('금속 인장시험에서 0.2 % 소성 변형이 생기는 응력이다(ISO 6892).')
+    await user.clear(box)
+    await user.type(box, '0.2 % 오프셋 내력.')
+    await user.click(screen.getByRole('button', { name: '저장' }))
+
+    await waitFor(() =>
+      expect(updateProperty).toHaveBeenCalledWith('mechanical.yield_strength', {
+        description: '0.2 % 오프셋 내력.',
+      })
+    )
+    expect(onChanged).toHaveBeenCalled()
+
+    await user.click(screen.getByRole('button', { name: '굽힘강도 정의문 고치기' }))
+    expect(await screen.findByLabelText('정의문')).toHaveValue('')
+    await user.click(screen.getByRole('button', { name: '저장' }))
+    await waitFor(() =>
+      expect(updateProperty).toHaveBeenLastCalledWith('mechanical.flexural_strength', {
+        description: null,
+      })
+    )
   })
 })

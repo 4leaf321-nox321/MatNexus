@@ -25,6 +25,8 @@ import { FileCheck2 } from 'lucide-react'
 import { DeclaredPropertiesCard } from '@/modules/materials/DeclaredPropertiesCard'
 import { materialsApi } from '@/modules/materials/api'
 import type { Sample } from '@/modules/materials/api'
+import { useMaybeAuth } from '@/shared/auth/AuthContext'
+import { isDataSteward } from '@/shared/auth/roles'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import {
   Dialog,
@@ -47,6 +49,8 @@ export function MillSheetDialog({
   onClose: () => void
   onSaved: () => void
 }) {
+  // 밀시트 값의 승인 단추를 세울지(ADR 0049).
+  const steward = isDataSteward(useMaybeAuth()?.user)
   // 값을 고치면 대조도 다시 읽는다 — 방금 적은 값이 아래 표에 없으면 두 칸이
   // 서로 다른 이야기를 한다.
   const check = useResource(
@@ -86,6 +90,16 @@ export function MillSheetDialog({
             await materialsApi.updateSample(sample.id, { declared_properties: next })
             onSaved()
           }}
+          onApprove={
+            steward
+              ? async (item, approve, note) => {
+                  await (approve
+                    ? materialsApi.approveSampleDeclared(sample.id, item, note)
+                    : materialsApi.unapproveSampleDeclared(sample.id, item))
+                  onSaved()
+                }
+              : undefined
+          }
         />
 
         <ErrorNotice error={check.error} />

@@ -197,6 +197,12 @@ class CatalogDefinition(Base):
     value_type: Mapped[str] = mapped_column(String(20))
     """numeric·vector·categorical·boolean."""
     description: Mapped[str | None] = mapped_column(Text)
+    """**정의문** — 이 물성이 무엇인가(ADR 0050). 사내 물성 항목 · 다른 시스템 · AI 가 이 키의
+    뜻을 여기서 읽는다. 원본(MaterialTwin)에는 비어 있어 씨앗(`seeds/catalog/
+    property-descriptions.json`)이 채우고, 자료 관리자가 고친다."""
+    description_seed_digest: Mapped[str | None] = mapped_column(String(64))
+    """씨앗이 마지막으로 쓴 정의문의 sha256. 지금 정의문과 같으면 **아무도 안 고친 것**이라
+    새 씨앗을 따르고, 다르면 사람이 고친 것이라 안 덮는다(ADR 0046 · 0047 과 같은 규칙)."""
     test_standard: Mapped[str | None] = mapped_column(String(200))
     condition_axes: Mapped[list[str] | None] = mapped_column(JSONB)
     """이 물성이 조건 없이는 무의미해지는 축 — 예: temperature_k."""

@@ -84,6 +84,11 @@ class Candidate:
     #: **폐기된 키** — 그만 쓰고 `superseded_by` 를 쓴다. 후보에서 뒤로 밀린다.
     deprecated: bool = False
     superseded_by: str | None = None
+    #: **정의문** — 이 물성이 무엇인가(ADR 0050). 이름이 비슷한 다른 물성(「항복응력」 ·
+    #: 「항복강도」)을 이름이 아니라 뜻으로 가르게 한다. 비어 있을 수 있다.
+    description: str | None = None
+    #: 대표 시험 규격 — 정의문과 함께 「어떻게 잰 값인가」 를 말한다.
+    test_standard: str | None = None
     score: float = 0.0
     notes: tuple[str, ...] = field(default=())
 
@@ -244,6 +249,8 @@ def resolve(db: Session, text: str, *, limit: int = MAX_CANDIDATES) -> list[Cand
                 matched_text=text_hit,
                 deprecated=retired,
                 superseded_by=one.superseded_by if retired else None,
+                description=one.description or None,
+                test_standard=one.test_standard or None,
                 # 사내에서 쓰는 물성이면 올린다. 값 개수는 로그로 눌러 — 486건과
                 # 9건의 차이는 중요하지만 486 대 4가 50배 차이로 벌어지면 안 된다.
                 # **폐기된 키는 뒤로** — 이름이 똑같이 맞아도 후속 키가 위에 서야 한다.
@@ -320,6 +327,12 @@ def _meaning_candidates(db: Session, text: str, *, exclude: set[str]) -> list[Ca
                 matched_by="meaning",
                 matched_text=one.name,
                 deprecated=one.deprecated_at is not None,
+                # **이 길에서도 정의문을 싣는다**(ADR 0050) — 뜻으로 찾은 후보야말로
+                # 정의문으로 맞는지 봐야 한다. 빠뜨리면 이름이 정확히 안 맞은 물음에만
+                # 정의문이 비어 나간다(실측 2026-10-02: 「유전손실계수(Df)」 를 AI 가
+                # 「정의문 없음」 으로 답했다).
+                description=one.description or None,
+                test_standard=one.test_standard or None,
                 # **가장 낮은 자리다.** 부분 일치(30)보다도 아래 — 짐작이기 때문이다.
                 # 등수로 조금씩 낮춰 뜻이 더 가까운 것이 위에 선다.
                 score=20.0 - rank,
@@ -375,6 +388,8 @@ def describe(candidates: list[Candidate]) -> dict[str, Any]:
                 "matched_text": one.matched_text,
                 "deprecated": one.deprecated,
                 "superseded_by": one.superseded_by,
+                "description": one.description,
+                "test_standard": one.test_standard,
                 "notes": list(one.notes),
             }
             for one in candidates
@@ -401,6 +416,32 @@ def builtin_item(property_key: str | None) -> str | None:
     if not property_key:
         return None
     return BUILTIN_ITEM_OF_KEY.get(property_key)
+
+
+def item_meanings(db: Session) -> dict[str, tuple[str, str | None]]:
+    """사내 물성 항목 → (같은 물성으로 이어진 문헌 키, 그 **정의문**)(ADR 0050).
+
+    뜻은 허브 키 한 곳이 든다 — 항목은 자기 정의문을 따로 갖지 않고 이어진 키의 것을 낸다.
+    **같은 물성(`same_as`) 연결만 본다** — 「더 좁은」 · 「관련」 키의 정의문은 이 항목의 뜻이
+    아니다. 같은 물성 연결이 둘 이상이면(경도 HV · HB) 하나로 못 정해 뺀다. 한 번에 읽는다.
+    """
+    keys: dict[str, set[str]] = {}
+    for item, key in db.execute(
+        select(VocabularyTerm.value, PropertyLink.property_key)
+        .join(VocabularyTerm, VocabularyTerm.id == PropertyLink.term_id)
+        .where(PropertyLink.kind == "same_as")
+    ).all():
+        keys.setdefault(str(item), set()).add(str(key))
+    single = {item: next(iter(found)) for item, found in keys.items() if len(found) == 1}
+    texts: dict[str, str | None] = {
+        str(key): text
+        for key, text in db.execute(
+            select(CatalogDefinition.key, CatalogDefinition.description).where(
+                CatalogDefinition.key.in_(set(single.values()))
+            )
+        ).all()
+    }
+    return {item: (key, texts.get(key) or None) for item, key in single.items()}
 
 
 def item_terms(db: Session) -> list[VocabularyTerm]:

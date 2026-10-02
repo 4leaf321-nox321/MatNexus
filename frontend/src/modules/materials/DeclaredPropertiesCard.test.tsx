@@ -35,6 +35,8 @@ const ITEMS = [
     symbol: 'E',
     units: ['Pa', 'MPa', 'GPa'],
     scales: [],
+    property_key: 'mechanical.youngs_modulus',
+    description: '단축 인장에서 응력-변형률 곡선의 초기 직선 구간 기울기인 탄성계수이다.',
   },
   {
     item: '비열',
@@ -712,5 +714,113 @@ describe('주파수를 타는 항목', () => {
     await openFirst()
     expect(await screen.findByRole('button', { name: '주파수 추가' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '온도 추가' })).not.toBeInTheDocument()
+  })
+})
+
+/**
+ * 승인 — 자료 관리자가 근거 문서와 대조해 확인한 값(ADR 0049).
+ *
+ * 등급은 **서버가 센 것**을 보인다(`quality_tier` · `tier_if_approved`). 단추는 부모가 승인
+ * 함수를 줄 때만 선다 — 자료 관리자인지는 부모가 안다.
+ */
+describe('승인', () => {
+  const PENDING = { ...DECLARED_E, quality_tier: 3, tier_if_approved: 2, approval: null }
+  const APPROVED = {
+    ...DECLARED_E,
+    quality_tier: 2,
+    tier_if_approved: 2,
+    approval: { by: '김관리', at: '2026-10-02T01:00:00Z', note: '원문 p.120 대조' },
+  }
+
+  function approvable(rows: unknown[], onApprove = vi.fn().mockResolvedValue(undefined)) {
+    render(
+      <DeclaredPropertiesCard
+        level="재료"
+        rows={rows as never}
+        onSave={vi.fn().mockResolvedValue(undefined)}
+        onApprove={onApprove}
+      />
+    )
+    return onApprove
+  }
+
+  it('승인 전이면 오를 등급을 말하고, 확인 내용과 함께 승인을 넘긴다', async () => {
+    const onApprove = approvable([PENDING])
+    const user = await openFirst()
+    const section = await screen.findByRole('region', { name: '승인' })
+    expect(section).toHaveTextContent('등급 3')
+    expect(section).toHaveTextContent('한 단계 올라 2 등급이 됩니다')
+
+    await user.type(within(section).getByLabelText('무엇을 확인했나'), '원문 대조')
+    await user.click(within(section).getByRole('button', { name: '승인' }))
+
+    await waitFor(() => expect(onApprove).toHaveBeenCalledWith('탄성계수', true, '원문 대조'))
+  })
+
+  it('승인된 값은 누가 언제 무엇을 확인했는지 보이고 거둘 수 있다', async () => {
+    const onApprove = approvable([APPROVED])
+    const user = await openFirst()
+    const section = await screen.findByRole('region', { name: '승인' })
+    expect(section).toHaveTextContent('김관리 승인')
+    expect(section).toHaveTextContent('원문 p.120 대조')
+    expect(section).toHaveTextContent('고쳐 저장하면 승인이 풀립니다')
+
+    await user.click(within(section).getByRole('button', { name: '승인 거두기' }))
+
+    await waitFor(() => expect(onApprove).toHaveBeenCalledWith('탄성계수', false, undefined))
+  })
+
+  it('이미 1 등급이면 승인해도 그대로라고 말한다', async () => {
+    approvable([{ ...PENDING, source: 'datasheet', quality_tier: 1, tier_if_approved: 1 }])
+    await openFirst()
+    const section = await screen.findByRole('region', { name: '승인' })
+    expect(section).toHaveTextContent('승인해도 등급은 1 그대로입니다')
+  })
+
+  it('승인 함수를 안 주면 상태만 보이고 단추는 없다', async () => {
+    panel([PENDING])
+    await openFirst()
+    const section = await screen.findByRole('region', { name: '승인' })
+    expect(section).toHaveTextContent('승인 전입니다')
+    expect(within(section).queryByRole('button')).not.toBeInTheDocument()
+  })
+
+  it('고치는 중이면 승인을 잠근다 — 저장된 값을 승인한다', async () => {
+    approvable([PENDING])
+    const user = await openFirst()
+    await user.clear(await screen.findByDisplayValue('206'))
+    await user.type(screen.getByLabelText('탄성계수 값'), '210')
+    const section = screen.getByRole('region', { name: '승인' })
+    expect(within(section).getByRole('button', { name: '승인' })).toBeDisabled()
+    expect(section).toHaveTextContent('고친 것을 먼저 저장하세요')
+  })
+
+  it('값 목록에 등급과 승인이 선다', async () => {
+    panel([APPROVED])
+    const row = (await screen.findByText('탄성계수')).closest('tr') as HTMLElement
+    expect(within(row).getByText('등급 2')).toBeInTheDocument()
+    expect(within(row).getByText('승인')).toBeInTheDocument()
+  })
+})
+
+describe('정의문', () => {
+  it('편집 창이 그 항목의 정의문을 보인다 — 비슷한 이름을 잘못 골랐는지 값을 적기 전에 본다', async () => {
+    panel([DECLARED_E])
+    await openFirst()
+    expect(await screen.findByLabelText('탄성계수 정의')).toHaveTextContent('초기 직선 구간 기울기')
+  })
+
+  it('정의문이 없는 항목은 그 자리가 없다', async () => {
+    panel([
+      {
+        ...DECLARED_E,
+        item: '비열',
+        points: [{ value_si: 462, value: 462, temperature_k: null }],
+        input_unit: 'J/(kg.K)',
+      },
+    ])
+    await openFirst()
+    await screen.findByLabelText('단위')
+    expect(screen.queryByLabelText('비열 정의')).not.toBeInTheDocument()
   })
 })

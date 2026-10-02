@@ -87,3 +87,22 @@ def test_패키지가_씨앗을_걷어내지_않는다() -> None:
         "package_deploy.ps1 이 seeds 를 걷어냅니다. 그러면 핸드북·카탈로그 씨앗이 "
         "패키지에서 사라지고, 서버에서 그 화면만 빕니다."
     )
+
+
+def test_정의문_씨앗이_원본의_물성을_빠짐없이_덮는다(unpacked: sqlite3.Connection) -> None:
+    """원본에 물성이 늘면 그 정의문도 씨앗에 적는다(ADR 0050).
+
+    원본(MaterialTwin)은 정의문이 비어 있어 씨앗이 채운다. 빠진 키는 조회 도구가 정의문 없이
+    이름 · 단위만 돌려주는 옛 상태로 남는다 — 오류 없이.
+    """
+    from app.modules.catalog import descriptions
+
+    keys = {row[0] for row in unpacked.execute("select key from property_definition")}
+    written = set(descriptions.load_seed())
+    missing = sorted(keys - written)
+    assert not missing, (
+        "정의문 씨앗(seeds/catalog/property-descriptions.json)에 없는 물성: "
+        + ", ".join(missing)
+    )
+    stale = sorted(written - keys)
+    assert not stale, "원본에 없는 키의 정의문(오타이거나 폐기된 키): " + ", ".join(stale)

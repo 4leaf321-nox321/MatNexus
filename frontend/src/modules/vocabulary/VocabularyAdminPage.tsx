@@ -77,6 +77,7 @@ import {
 } from '@/shared/components/ui/table'
 import { VocabularyAxisPanel } from '@/modules/vocabulary/VocabularyAxisPanel'
 import { useAuth } from '@/shared/auth/AuthContext'
+import { isDataSteward } from '@/shared/auth/roles'
 import { useResource } from '@/shared/hooks/useResource'
 import { useRowSelection } from '@/shared/hooks/useRowSelection'
 
@@ -130,6 +131,7 @@ export default function VocabularyAdminPage() {
         <PropertyMappingPanel
           mapping={mapping.data}
           canEdit={Boolean(user?.is_system_admin)}
+          canDescribe={isDataSteward(user)}
           onChanged={() => mapping.reload()}
         />
       )}

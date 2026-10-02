@@ -72,3 +72,19 @@ def drop_mixed_temperatures(row: dict[str, Any], axis: str) -> bool:
         point["temperature_k"] = None
     row["note"] = f"{row.get('note') or ''} — 값마다 측정 온도가 달라 비웠다".strip(" —")
     return True
+
+
+def approval_warning(row: Mapping[str, Any] | None) -> str | None:
+    """덮어쓸 줄이 **자료 관리자가 승인한 값**이면 미리보기에 실을 말(ADR 0049, 2026-10-02).
+
+    승인은 그때의 값에 묶여 있어 값이 바뀌면 풀리고 등급이 한 단계 내려간다. 서버가 막지는
+    않는다(고칠 권한은 그대로다) — 그래서 덮어쓰기 전에 사람이 알게 미리보기에서 말한다.
+    """
+    approval = (row or {}).get("approval")
+    if not isinstance(approval, Mapping):
+        return None
+    who = approval.get("by") or "자료 관리자"
+    return (
+        f"{who} 님이 승인한 값이다 — 값이 바뀌면 승인이 풀리고 등급이 한 단계 내려간다. "
+        "덮어쓰기 전에 사용자에게 알려라."
+    )

@@ -238,6 +238,14 @@ export const materialsApi = {
   get: (id: string) => api.get<Material>(`/materials/${id}`),
   create: (payload: MaterialCreate) => api.post<Material>('/materials', payload),
   update: (id: string, payload: MaterialUpdate) => api.patch<Material>(`/materials/${id}`, payload),
+  /**
+   * 적어 둔 값 하나를 승인하거나 거둔다 — **자료 관리자만**(ADR 0049). 승인된 값은 등급이 한
+   * 단계 오르고, 값을 고치면 저절로 풀린다. 등급은 서버가 응답의 `quality_tier` 로 준다.
+   */
+  approveDeclared: (id: string, item: string, note?: string) =>
+    api.post<Material>(`/materials/${id}/declared/approve`, { item, note: note || null }),
+  unapproveDeclared: (id: string, item: string) =>
+    api.post<Material>(`/materials/${id}/declared/unapprove`, { item }),
   remove: (id: string) => api.delete<void>(`/materials/${id}`),
 
   /**
@@ -315,6 +323,11 @@ export const materialsApi = {
    * 시편이 달려 있으면 서버가 막는다.
    */
   updateSample: (id: string, payload: SampleUpdate) => api.patch<Sample>(`/samples/${id}`, payload),
+  /** 밀시트 값의 승인 — 재료 쪽과 같은 규칙. */
+  approveSampleDeclared: (id: string, item: string, note?: string) =>
+    api.post<Sample>(`/samples/${id}/declared/approve`, { item, note: note || null }),
+  unapproveSampleDeclared: (id: string, item: string) =>
+    api.post<Sample>(`/samples/${id}/declared/unapprove`, { item }),
   removeSample: (id: string) => api.delete<void>(`/samples/${id}`),
 
   specimens: (sampleId: string) => api.get<Specimen[]>(`/samples/${sampleId}/specimens`),

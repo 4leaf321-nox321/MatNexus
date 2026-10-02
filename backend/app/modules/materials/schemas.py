@@ -68,6 +68,24 @@ class DeclaredPointOut(BaseModel):
     보면서 그것이 저장된 값이라고 믿는다."""
 
 
+class DeclaredApprovalOut(BaseModel):
+    """선언 값 하나의 승인 — 누가 언제 근거 문서와 대조해 확인했나(ADR 0049)."""
+
+    by: str
+    """승인한 사람(그때의 이름)."""
+    at: datetime
+    note: str | None = None
+    """무엇을 확인했나 — 「ASM Handbook Vol.1 p.120 대조」 같은 것."""
+
+
+class DeclaredApprovalRequest(BaseModel):
+    """승인하거나 승인을 거둘 줄. 줄은 항목 이름으로 고른다 — 한 물성은 한 줄이다."""
+
+    item: str = Field(min_length=1, max_length=200)
+    note: str | None = Field(default=None, max_length=500)
+    """승인할 때만 쓴다. 거둘 때는 무시한다."""
+
+
 class DeclaredPropertyOut(BaseModel):
     """시험이 주지 않아 사람이 적은 물성 한 줄.
 
@@ -108,6 +126,16 @@ class DeclaredPropertyOut(BaseModel):
     reference: str
     """어느 문서인가. `'문헌'` 만으로는 어느 핸드북 몇 판인지 알 수 없다."""
     note: str | None = None
+    quality_tier: int = 4
+    """품질 등급 1~4(문헌과 같은 척도, `shared/tiers`). **서버가 출처와 승인에서 산출한다** —
+    밀시트 · 데이터시트 1 · 규격 2 · 문헌 3 · 추정 4, 자료 관리자가 승인하면 한 단계 오르되 2
+    위로는 안 간다(ADR 0049)."""
+    tier_if_approved: int = 4
+    """승인하면 될 등급. 화면이 「승인하면 등급 2」 를 미리 말할 때 쓴다 — 「한 단계, 2 까지」
+    규칙을 화면이 따로 들면 서버와 갈라진다. 이미 승인됐으면 `quality_tier` 와 같다."""
+    approval: DeclaredApprovalOut | None = None
+    """자료 관리자의 승인. **지금 값에 유효한 것만** 실린다 — 승인 뒤 값을 고쳤으면
+    비어 있다."""
 
 
 class DeclaredPointIn(BaseModel):
@@ -162,6 +190,12 @@ class PropertyItemOut(BaseModel):
     condition_units: list[ConditionUnitOut] = []
     """조건을 적을 때 고를 수 있는 단위(주파수면 Hz · kHz · MHz · GHz)와 **SI 배수**. 온도는
     비어 있다 — 화면이 온도 표시 규칙(°C)을 따로 든다."""
+    property_key: str | None = None
+    """이 항목과 **같은 물성**으로 이어진 문헌 물성 키(`same_as` 연결이 하나일 때). 경도처럼
+    척도마다 다른 키로 이어진 항목은 비어 있다."""
+    description: str | None = None
+    """**정의문** — 그 키의 정의문(ADR 0050). 뜻은 허브 키 한 곳이 든다 — 항목마다 따로 적으면
+    같은 물성의 뜻이 두 벌이 된다. 이어진 키가 없거나 하나로 정해지지 않으면 비어 있다."""
     units: list[str]
     """이 차원에서 고를 수 있는 단위.
 

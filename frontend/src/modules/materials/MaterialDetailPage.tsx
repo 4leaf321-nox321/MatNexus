@@ -35,6 +35,8 @@ import { groupsApi } from '@/modules/materials/api.groups'
 import { PropertySourcesSheet } from '@/modules/materials/PropertySourcesSheet'
 import { canEdit, lockedTitle } from '@/modules/ownership/access'
 import { AccessLine } from '@/modules/ownership/AccessLine'
+import { useMaybeAuth } from '@/shared/auth/AuthContext'
+import { isDataSteward } from '@/shared/auth/roles'
 import { CodeChip } from '@/shared/components/CodeChip'
 import { PageHeader } from '@/shared/components/PageHeader'
 import { Badge } from '@/shared/components/ui/badge'
@@ -48,6 +50,8 @@ export default function MaterialDetailPage() {
   const { id = '' } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const material = useResource(() => materialsApi.get(id), [id])
+  // 선언 물성 승인 단추를 세울지(ADR 0049). 제공자 밖(시험)에서는 안 세운다.
+  const steward = isDataSteward(useMaybeAuth()?.user)
   /** 지금 켠 탭. **안내가 눌러서 데려간다** — 「그 시험 보기」 가 말만 하고 사람이
    *  탭을 다시 찾아야 하면 그 안내는 절반만 한 것이다. */
   // **탭을 주소에 담는다.** 「그 재료의 CAE 카드로」 같은 안내가 링크로 보내는데
@@ -332,6 +336,17 @@ export default function MaterialDetailPage() {
                         await materialsApi.update(item.id, { declared_properties: rows })
                         material.reload()
                       }}
+                      // **승인은 자료 관리자만**(ADR 0049) — 단추를 미리 가린다. 판정은 서버다.
+                      onApprove={
+                        steward
+                          ? async (declaredItem, approve, note) => {
+                              await (approve
+                                ? materialsApi.approveDeclared(item.id, declaredItem, note)
+                                : materialsApi.unapproveDeclared(item.id, declaredItem))
+                              material.reload()
+                            }
+                          : undefined
+                      }
                     />
                   </>
                 )

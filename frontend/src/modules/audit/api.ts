@@ -116,6 +116,12 @@ export const ACTION_LABELS: Record<string, string> = {
   'data.edited_by_other': '남의 자료 고침',
   'export_format.held': '기본 형식 사용 중단',
   'export_format.released': '기본 형식 다시 사용',
+  // 선언 물성 승인(ADR 0049) — 승인된 값은 등급이 한 단계 오른다. 풀림은 값을 고친 사람이 남긴다.
+  'declared.approved': '선언 물성 승인',
+  'declared.unapproved': '선언 물성 승인 거둠',
+  'declared.approval_lapsed': '선언 물성 승인 풀림(값 수정)',
+  // 물성 정의문을 고친 일(ADR 0050) — 허브 키의 뜻이라 사람이 해도 남는다.
+  'catalog_property.described': '물성 정의문 고침',
   // 아래 둘은 배포(마이그레이션)가 한 번 남긴다 — 배포 뒤 확인할 목록이다.
   'workspace.restriction_removed': '부서 열람 제한 해제',
   'definition.key_renamed': '정의 키 변경(겹침 정리)',

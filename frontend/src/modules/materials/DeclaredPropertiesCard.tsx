@@ -35,7 +35,7 @@
  * 생기고, 서버와 갈라지는 날 잘못된 단위가 목록에 뜬다(막는 것은 서버다).
  */
 
-import { BookOpen, Pencil, Plus, Save, Trash2 } from 'lucide-react'
+import { BadgeCheck, BookOpen, Pencil, Plus, Save, Trash2 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 
 import { materialsApi } from '@/modules/materials/api'
@@ -44,6 +44,7 @@ import type {
   DeclaredPropertyIn,
   PropertyItem,
 } from '@/modules/materials/api'
+import { DeclaredGrade, approvalText } from '@/shared/components/DeclaredGrade'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { display, fromDisplay, significant, toDisplay } from '@/shared/units'
 import { Button } from '@/shared/components/ui/button'
@@ -240,6 +241,7 @@ export function DeclaredPropertiesCard({
   list = true,
   rows: saved,
   onSave,
+  onApprove,
   title,
   hint,
 }: {
@@ -262,6 +264,11 @@ export function DeclaredPropertiesCard({
   list?: boolean
   rows: DeclaredProperty[]
   onSave: (rows: DeclaredPropertyIn[]) => Promise<void>
+  /**
+   * 승인하거나 거둔다(ADR 0049). **주면 단추가 선다** — 자료 관리자인지는 부모가 안다.
+   * 안 주면 승인 상태만 보인다. 판정은 서버가 한다(여기는 눌러 보고 403 을 알게 하지 않는 것).
+   */
+  onApprove?: (item: string, approve: boolean, note?: string) => Promise<void>
   title?: string
   hint?: React.ReactNode
 }) {
@@ -319,6 +326,8 @@ export function DeclaredPropertiesCard({
   }, [saved, dirty, known])
 
   const used = new Set(rows.map((row) => row.item))
+  /** **저장된** 줄 — 등급 · 승인은 서버가 저장된 값에 매긴 것이다. 고치는 중인 초안에는 없다. */
+  const stored = (item: string) => saved.find((row) => row.item === item)
   const free = known.filter((item) => !used.has(item.item))
 
   function edit(at: number, patch: Partial<Draft>) {
@@ -425,7 +434,12 @@ export function DeclaredPropertiesCard({
       </SelectTrigger>
       <SelectContent>
         {free.map((item, index) => (
-          <SelectItem key={item.item} value={String(index)}>
+          <SelectItem
+            key={item.item}
+            value={String(index)}
+            // 마우스를 올리면 정의문 — 이름만으로 고르다 비슷한 다른 물성을 집지 않게.
+            title={item.description ?? undefined}
+          >
             {item.item}
             {item.symbol ? ` (${item.symbol})` : ''}
           </SelectItem>
@@ -498,6 +512,14 @@ export function DeclaredPropertiesCard({
                       <span className="text-muted-foreground ml-1 font-mono text-xs">
                         {spec.symbol}
                       </span>
+                    ) : null}
+                    {stored(row.item) ? (
+                      <div>
+                        <DeclaredGrade
+                          tier={stored(row.item)?.quality_tier ?? 4}
+                          approval={stored(row.item)?.approval}
+                        />
+                      </div>
                     ) : null}
                   </TableCell>
                   {/* **단위를 값에 붙이고 낱값을 다 적는다.** 줄여 놓으면 그 값이
@@ -602,6 +624,17 @@ export function DeclaredPropertiesCard({
                 이 항목 삭제
               </Button>
             </div>
+
+            {/* **이 항목이 무엇인가**(ADR 0050) — 같은 물성으로 이어진 문헌 키의 정의문이다. 이름이
+                비슷한 항목을 잘못 골랐는지 값을 적기 전에 본다. */}
+            {spec?.description ? (
+              <p
+                aria-label={`${row.item} 정의`}
+                className="text-muted-foreground col-span-12 rounded-md border border-dashed p-2 text-xs"
+              >
+                {spec.description}
+              </p>
+            ) : null}
 
             {/* **한 줄이 표를 든다.** 강판 탄성계수는 상온 206 GPa 가
                 400 °C 에서 170 GPa 쯤으로 떨어지고, 열간 성형·용접·화재
@@ -827,6 +860,14 @@ export function DeclaredPropertiesCard({
               </div>
             )
           })}
+          {editing !== null && stored(editing) ? (
+            <ApprovalSection
+              key={editing}
+              row={stored(editing) as DeclaredProperty}
+              changed={dirty}
+              onApprove={onApprove}
+            />
+          ) : null}
           <DialogFooter>
             {/* **닫기가 곧 버리기다.** 그러니 그렇게 적는다 — 「닫기」 만 있으면
                 고친 것이 남는지 사라지는지 눌러 보고서야 안다. */}
@@ -849,5 +890,94 @@ export function DeclaredPropertiesCard({
       </Dialog>
 
     </>
+  )
+}
+
+/**
+ * 승인 — 자료 관리자가 근거 문서와 대조해 확인했다는 기록(ADR 0049).
+ *
+ * **저장된 값을 승인한다.** 고치는 중에는 단추를 잠근다 — 창에 보이는 값과 승인되는 값이
+ * 다르면 사람은 자기가 본 값을 승인했다고 믿는다. 승인하면 될 등급은 서버가 준다
+ * (`tier_if_approved`) — 「한 단계, 2 까지」 를 여기서 셈하면 규칙이 두 곳에 산다.
+ */
+function ApprovalSection({
+  row,
+  changed,
+  onApprove,
+}: {
+  row: DeclaredProperty
+  changed: boolean
+  onApprove?: (item: string, approve: boolean, note?: string) => Promise<void>
+}) {
+  const [note, setNote] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<Error | null>(null)
+  const tier = row.quality_tier ?? 4
+  const next = row.tier_if_approved ?? tier
+
+  async function run(approve: boolean) {
+    if (!onApprove) return
+    setBusy(true)
+    setError(null)
+    try {
+      await onApprove(row.item, approve, note.trim() || undefined)
+      setNote('')
+    } catch (caught) {
+      setError(caught instanceof Error ? caught : new Error('승인하지 못했습니다.'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <section aria-label="승인" className="space-y-2 rounded-md border border-dashed p-3 text-xs">
+      <div className="flex flex-wrap items-center gap-2">
+        <DeclaredGrade tier={tier} approval={row.approval} />
+        {row.approval ? (
+          <span>{approvalText(row.approval)}</span>
+        ) : (
+          <span className="text-muted-foreground">
+            승인 전입니다.{' '}
+            {next < tier
+              ? `자료 관리자가 근거 문서와 대조해 승인하면 한 단계 올라 ${next} 등급이 됩니다.`
+              : `승인해도 등급은 ${tier} 그대로입니다 — 승인은 근거를 확인한 기록이지 실측을 만들지 않습니다.`}
+          </span>
+        )}
+      </div>
+      {row.approval ? (
+        <p className="text-muted-foreground">
+          값 · 단위 · 조건 · 출처 · 근거 문서를 고쳐 저장하면 승인이 풀립니다. 비고는 그대로 둡니다.
+        </p>
+      ) : null}
+      {onApprove ? (
+        <div className="flex flex-wrap items-center gap-2">
+          {row.approval ? (
+            <Button size="sm" variant="outline" disabled={busy || changed} onClick={() => run(false)}>
+              승인 거두기
+            </Button>
+          ) : (
+            <>
+              <Input
+                aria-label="무엇을 확인했나"
+                placeholder="무엇을 확인했나 (선택) — 예: 원문 p.120 대조"
+                value={note}
+                onChange={(event) => setNote(event.target.value)}
+                className="h-8 min-w-48 flex-1"
+              />
+              <Button size="sm" disabled={busy || changed} onClick={() => run(true)}>
+                <BadgeCheck className="size-4" />
+                승인
+              </Button>
+            </>
+          )}
+          {changed ? (
+            <span className="text-muted-foreground">
+              고친 것을 먼저 저장하세요 — 저장된 값을 승인합니다.
+            </span>
+          ) : null}
+        </div>
+      ) : null}
+      <ErrorNotice error={error} />
+    </section>
   )
 }

@@ -29,6 +29,7 @@ sys.path.insert(0, str(BACKEND_DIR))
 import app.all_models  # noqa: E402,F401
 from _console import survive_cp949  # noqa: E402
 from app.database import SessionLocal  # noqa: E402
+from app.modules.catalog.descriptions import refresh_property_descriptions  # noqa: E402
 from app.modules.catalog.links import ensure_builtin_property_links  # noqa: E402
 from app.modules.tests.definitions import (  # noqa: E402
     ensure_builtin_test_types,
@@ -52,7 +53,7 @@ survive_cp949()
 
 def run(db) -> dict[str, list[str]]:  # type: ignore[no-untyped-def]
     """순서가 있다 — 축이 있어야 칸·항목이 붙고, 시험 종류가 있어야 프로파일이 붙는다."""
-    return {
+    report = {
         "축 만듦": ensure_builtin_vocabularies(db),
         "축 칸 만듦": ensure_builtin_axis_fields(db),
         "축 칸 맞춤": refresh_builtin_axis_fields(db),
@@ -68,6 +69,12 @@ def run(db) -> dict[str, list[str]]:  # type: ignore[no-untyped-def]
         # 안 만들어진다. 배포가 카탈로그를 심은 뒤 이 스크립트를 한 번 더 부른다.
         "물성 항목 연결 만듦": ensure_builtin_property_links(db),
     }
+    # 정의문도 문헌 정의가 있어야 붙는다 — 연결과 같은 까닭으로 맨 뒤(ADR 0050). 사람이 고친
+    # 정의문은 안 덮고 이름만 적는다.
+    filled, kept = refresh_property_descriptions(db)
+    report["물성 정의문 채움"] = filled
+    report["물성 정의문 — 사람이 고쳐 안 덮음"] = kept
+    return report
 
 
 def main() -> int:

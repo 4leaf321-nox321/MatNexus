@@ -4999,6 +4999,25 @@
         "title": "CatalogPropertyMigrateOut",
         "type": "object"
       },
+      "CatalogPropertyUpdate": {
+        "description": "물성 정의 고치기 — 지금은 **정의문** 하나(ADR 0050).\n\n부분 수정이다. 안 보낸 칸은 그대로, `description: null`(또는 빈 글)은 정의문을 비운다.",
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          }
+        },
+        "title": "CatalogPropertyUpdate",
+        "type": "object"
+      },
       "CatalogSourceIn": {
         "description": "값의 출처. **제목·DOI·URL 중 하나는 있어야 한다** — 출처 없는 값은 안 받는다.",
         "properties": {
@@ -8558,6 +8577,65 @@
         "title": "DeckTableOut",
         "type": "object"
       },
+      "DeclaredApprovalOut": {
+        "description": "선언 값 하나의 승인 — 누가 언제 근거 문서와 대조해 확인했나(ADR 0049).",
+        "properties": {
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "by": {
+            "title": "By",
+            "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "required": [
+          "by",
+          "at"
+        ],
+        "title": "DeclaredApprovalOut",
+        "type": "object"
+      },
+      "DeclaredApprovalRequest": {
+        "description": "승인하거나 승인을 거둘 줄. 줄은 항목 이름으로 고른다 — 한 물성은 한 줄이다.",
+        "properties": {
+          "item": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Item",
+            "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "required": [
+          "item"
+        ],
+        "title": "DeclaredApprovalRequest",
+        "type": "object"
+      },
       "DeclaredBlockOptionOut": {
         "description": "적어 둔 값으로 채울 수 있는 항목란 하나.\n\n**값이 있다고 다 싣지 않는다.** 고르는 것은 사람이다 — 이방성 카드에 열물성이\n따라 붙으면 그 카드가 무엇의 카드인지 흐려진다.",
         "properties": {
@@ -8882,6 +8960,16 @@
       "DeclaredPropertyOut": {
         "description": "시험이 주지 않아 사람이 적은 물성 한 줄.\n\n**한 줄이 표를 든다.** 강판 탄성계수는 상온 206 GPa 가 400 °C 에서 170 GPa\n쯤으로 떨어지고, 열간 성형·용접·화재 해석은 그 곡선이 필요하다. 그렇다고\n줄을 여럿 두면 카드가 어느 것을 쓸지 못 정한다 — **항목은 하나이고 그 하나가\n온도에 따라 변할 뿐**이므로 줄 안에 점을 넣는다.",
         "properties": {
+          "approval": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DeclaredApprovalOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "input_unit": {
             "anyOf": [
               {
@@ -8915,6 +9003,11 @@
             "title": "Points",
             "type": "array"
           },
+          "quality_tier": {
+            "default": 4,
+            "title": "Quality Tier",
+            "type": "integer"
+          },
           "reference": {
             "title": "Reference",
             "type": "string"
@@ -8944,6 +9037,11 @@
           "source": {
             "title": "Source",
             "type": "string"
+          },
+          "tier_if_approved": {
+            "default": 4,
+            "title": "Tier If Approved",
+            "type": "integer"
           }
         },
         "required": [
@@ -20647,6 +20745,17 @@
             "title": "Deprecated",
             "type": "boolean"
           },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
           "domain": {
             "title": "Domain",
             "type": "string"
@@ -20733,6 +20842,17 @@
             },
             "title": "Terms",
             "type": "array"
+          },
+          "test_standard": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Test Standard"
           },
           "value_count": {
             "title": "Value Count",
@@ -21157,6 +21277,17 @@
             "title": "Deprecated",
             "type": "boolean"
           },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
           "domain": {
             "title": "Domain",
             "type": "string"
@@ -21401,6 +21532,17 @@
             "title": "Condition Units",
             "type": "array"
           },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
           "dimension": {
             "title": "Dimension",
             "type": "string"
@@ -21412,6 +21554,17 @@
           "level": {
             "title": "Level",
             "type": "string"
+          },
+          "property_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Property Key"
           },
           "scales": {
             "default": [],
@@ -21637,6 +21790,17 @@
               }
             ],
             "title": "Deprecation Note"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
           },
           "domain": {
             "title": "Domain",
@@ -34507,6 +34671,57 @@
         "tags": [
           "catalog"
         ]
+      },
+      "patch": {
+        "description": "물성의 **정의문**을 고친다(ADR 0050). **자료 관리자 · 시스템 관리자만** —\n허브 키의 뜻은 사내 항목 · 다른 시스템 · AI 가 함께 읽는다. 카드 확정과 같은 「검토의 뜻이\n있는 일」 이다(ADR 0035 D4).\n\n고친 정의문은 배포가 안 덮는다 — 씨앗이 마지막으로 쓴 글과 달라지기 때문이다\n(`catalog/descriptions.py`). 원본 이관도 빈 정의문으로 안 덮는다.",
+        "operationId": "update_property_api_catalog_properties__property_key__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "property_key",
+            "required": true,
+            "schema": {
+              "title": "Property Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CatalogPropertyUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogDefinitionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Property",
+        "tags": [
+          "catalog"
+        ]
       }
     },
     "/api/catalog/properties/{property_key}/aliases": {
@@ -41318,7 +41533,7 @@
     },
     "/api/materials/property-items": {
       "get": {
-        "description": "넣을 수 있는 물성 항목. **목록은 기준정보가 정한다**(D7).\n\n`level` 로 층을 좁힌다 — `재료` 는 Grade 가 같으면 같은 값(탄성계수·열물성),\n`시료` 는 로트마다 다른 값(항복강도·인장강도)이다. **안 주면 전부** 준다.\n\n화면이 이 응답만으로 피커와 단위 칸을 그릴 수 있어야 한다 — 항목을 코드에\n박으면 부서가 필요한 물성 하나를 넣으려고 배포를 기다려야 한다.\n\n감춘 항목은 안 나온다. **이미 넣어 둔 값은 그대로 남는다** — 감추는 것은\n\"앞으로 새로 고르지 말라\" 는 뜻이지 과거를 지우는 것이 아니다.",
+        "description": "넣을 수 있는 물성 항목. **목록은 기준정보가 정한다**(D7).\n\n`level` 로 층을 좁힌다 — `재료` 는 Grade 가 같으면 같은 값(탄성계수·열물성),\n`시료` 는 로트마다 다른 값(항복강도·인장강도)이다. **안 주면 전부** 준다.\n\n화면이 이 응답만으로 피커와 단위 칸을 그릴 수 있어야 한다 — 항목을 코드에\n박으면 부서가 필요한 물성 하나를 넣으려고 배포를 기다려야 한다.\n\n감춘 항목은 안 나온다. **이미 넣어 둔 값은 그대로 남는다** — 감추는 것은\n\"앞으로 새로 고르지 말라\" 는 뜻이지 과거를 지우는 것이 아니다.\n\n항목마다 **정의문**을 함께 준다 — 같은 물성으로 이어진 문헌 키의 것(ADR 0050).",
         "operationId": "property_items_api_materials_property_items_get",
         "parameters": [
           {
@@ -41493,6 +41708,114 @@
           }
         },
         "summary": "Update Material",
+        "tags": [
+          "materials"
+        ]
+      }
+    },
+    "/api/materials/{material_id}/declared/approve": {
+      "post": {
+        "description": "적어 둔 값 하나를 **승인**한다 — 근거 문서와 대조해 확인했다는 기록(ADR 0049).\n\n승인된 값은 등급이 한 단계 오른다(문헌 3 → 2 · 추정 4 → 3, 2 위로는 안 간다). 값을\n고치면 승인은 저절로 풀린다 — 승인은 그때의 값에 묶여 있다.",
+        "operationId": "approve_declared_api_materials__material_id__declared_approve_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "material_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Material Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeclaredApprovalRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MaterialOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Approve Declared",
+        "tags": [
+          "materials"
+        ]
+      }
+    },
+    "/api/materials/{material_id}/declared/unapprove": {
+      "post": {
+        "description": "승인을 거둔다. 값은 그대로다 — 등급만 출처의 것으로 돌아간다.",
+        "operationId": "unapprove_declared_api_materials__material_id__declared_unapprove_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "material_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Material Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeclaredApprovalRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MaterialOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Unapprove Declared",
         "tags": [
           "materials"
         ]
@@ -44642,6 +44965,114 @@
           }
         },
         "summary": "Update Sample",
+        "tags": [
+          "materials"
+        ]
+      }
+    },
+    "/api/samples/{sample_id}/declared/approve": {
+      "post": {
+        "description": "밀시트에 적은 값 하나를 승인한다 — 재료 쪽과 같은 규칙(ADR 0049).",
+        "operationId": "approve_sample_declared_api_samples__sample_id__declared_approve_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sample_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Sample Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeclaredApprovalRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SampleOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Approve Sample Declared",
+        "tags": [
+          "materials"
+        ]
+      }
+    },
+    "/api/samples/{sample_id}/declared/unapprove": {
+      "post": {
+        "description": "밀시트 값의 승인을 거둔다.",
+        "operationId": "unapprove_sample_declared_api_samples__sample_id__declared_unapprove_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sample_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Sample Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeclaredApprovalRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SampleOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Unapprove Sample Declared",
         "tags": [
           "materials"
         ]

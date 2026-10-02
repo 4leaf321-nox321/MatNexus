@@ -113,6 +113,21 @@ describe('물성 카드 내용', () => {
     expect(origin).toHaveAttribute('title', 'KS D 3512 표 3')
   })
 
+  it('자료 관리자가 승인한 값이면 그렇게 적는다', () => {
+    // 카드는 만들 때의 승인을 칸의 출처 표지로 든다(ADR 0049).
+    render(
+      <CardBlocks
+        specs={SPECS}
+        card={card({
+          imaginary: {
+            values: { strength: 2e8, strength_source: 'declared:literature+approved' },
+          },
+        })}
+      />
+    )
+    expect(screen.getByText('(적은 값 · 문헌 · 승인)')).toBeInTheDocument()
+  })
+
   it('모르는 출처 코드는 조용히 지어내지 않는다', () => {
     // 아는 척하면 그 표시가 곧 거짓말이 된다.
     render(

@@ -53,6 +53,7 @@ import {
   FilePlus2,
   Link2,
   Link2Off,
+  Pencil,
   Plus,
   Trash2,
 } from 'lucide-react'
@@ -80,6 +81,7 @@ import {
 } from '@/shared/components/ui/dialog'
 import { Input } from '@/shared/components/ui/input'
 import { Label } from '@/shared/components/ui/label'
+import { Textarea } from '@/shared/components/ui/textarea'
 import {
   Table,
   TableBody,
@@ -98,11 +100,17 @@ const KIND_LABELS: Record<string, string> = {
 export function PropertyMappingPanel({
   mapping,
   canEdit,
+  canDescribe = false,
   onChanged,
 }: {
   mapping: PropertyMapping
   /** 시스템 관리자만 잇고 푼다 — 매핑은 모든 부서의 값 검색에 걸린다. */
   canEdit: boolean
+  /**
+   * 정의문을 고칠 수 있나 — **자료 관리자 · 시스템 관리자**(ADR 0050). 잇기보다 넓다: 정의문은
+   * 「검토의 뜻이 있는 일」 이고(카드 확정과 같다), 잇기는 값 검색 전체를 바꾸는 일이다.
+   */
+  canDescribe?: boolean
   onChanged: () => void
 }) {
   const [domain, setDomain] = useState('')
@@ -116,6 +124,7 @@ export function PropertyMappingPanel({
   const [error, setError] = useState<Error | null>(null)
   const [adding, setAdding] = useState(false)
   const [retiring, setRetiring] = useState<PropertyMappingRow | null>(null)
+  const [describing, setDescribing] = useState<PropertyMappingRow | null>(null)
 
   const domains = useMemo(
     () => [...new Set(mapping.rows.map((one) => one.domain))].sort(),
@@ -477,6 +486,26 @@ export function PropertyMappingPanel({
                       )}
                   </div>
                   <div className="text-muted-foreground font-mono">{row.key}</div>
+                  {/* **정의문** — 이 키가 무엇인가(ADR 0050). 이름이 비슷한 물성(「항복응력」 ·
+                      「항복강도」)을 여기서 뜻으로 가른다. 사내 항목 · AI 가 같은 글을 읽는다. */}
+                  <div className="mt-1 flex max-w-xl items-start gap-1 whitespace-normal">
+                    {row.description ? (
+                      <p>{row.description}</p>
+                    ) : (
+                      <p className="text-muted-foreground">정의문 없음</p>
+                    )}
+                    {canDescribe && (
+                      <button
+                        type="button"
+                        aria-label={`${row.name} 정의문 고치기`}
+                        title="이 물성의 정의문을 고칩니다"
+                        className="text-muted-foreground hover:text-foreground shrink-0 rounded p-0.5"
+                        onClick={() => setDescribing(row)}
+                      >
+                        <Pencil className="size-3.5" />
+                      </button>
+                    )}
+                  </div>
                 </TableCell>
                 <TableCell>
                   <div className="flex flex-wrap items-center gap-1">
@@ -565,7 +594,83 @@ export function PropertyMappingPanel({
           onChanged()
         }}
       />
+      <DescribeDialog
+        key={describing?.key ?? ''}
+        row={describing}
+        onClose={() => setDescribing(null)}
+        onDone={() => {
+          setDescribing(null)
+          onChanged()
+        }}
+      />
     </section>
+  )
+}
+
+/**
+ * 정의문 고치기(ADR 0050). **비우면 정의문이 없어진다** — 「안 보냄」 과 「비움」 을 서버가
+ * 가른다. 고친 정의문은 배포의 씨앗이 덮지 않는다(씨앗이 쓴 글과 달라지므로).
+ */
+function DescribeDialog({
+  row,
+  onClose,
+  onDone,
+}: {
+  row: PropertyMappingRow | null
+  onClose: () => void
+  onDone: () => void
+}) {
+  // 줄마다 새로 뜬다(부모가 `key` 로 준다) — 그 줄의 지금 정의문으로 시작한다.
+  const [text, setText] = useState(row?.description ?? '')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<Error | null>(null)
+
+  async function save() {
+    if (!row) return
+    setSaving(true)
+    setError(null)
+    try {
+      await catalogApi.updateProperty(row.key, { description: text.trim() || null })
+      onDone()
+    } catch (caught) {
+      setError(caught instanceof Error ? caught : new Error('고치지 못했습니다.'))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Dialog open={row !== null} onOpenChange={(next) => !next && onClose()}>
+      <DialogContent className="sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>{row ? `'${row.name}' 정의문` : '정의문'}</DialogTitle>
+          <DialogDescription>
+            이 물성이 <b>무엇이고 어떤 기준으로 잰 값인지</b> 적습니다. 사내 물성 항목 · 다른 시스템 ·
+            AI 가 이 글로 물성의 뜻을 읽습니다. 고친 정의문은 배포가 덮지 않습니다.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-1">
+          <Label htmlFor="property-description">정의문</Label>
+          <Textarea
+            id="property-description"
+            rows={4}
+            value={text}
+            maxLength={2000}
+            placeholder="예: 금속 인장시험에서 0.2 % 소성 변형이 생기는 응력이다(ISO 6892)."
+            onChange={(event) => setText(event.target.value)}
+          />
+        </div>
+        <ErrorNotice error={error} />
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={saving}>
+            취소
+          </Button>
+          <Button onClick={save} disabled={saving}>
+            저장
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
 

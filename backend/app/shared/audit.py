@@ -140,6 +140,15 @@ OWNERSHIP_CHANGED = "ownership.changed"
 #: 다시 받아야 하나」 를 가른다.
 FORMAT_HELD = "export_format.held"
 FORMAT_RELEASED = "export_format.released"
+#: 선언 물성 승인(ADR 0049). **등급이 실린 일이다** — 승인된 값은 카드 · 찾기 · 물성 지도에서
+#: 한 단계 높게 선다. 누가 언제 무엇을 확인했는지, 언제 거뒀는지, 어느 수정으로 풀렸는지가
+#: 「이 값은 왜 등급 2 인가 / 왜 내려갔나」 의 답이다. 풀림은 값을 고친 사람이 남긴다.
+DECLARED_APPROVED = "declared.approved"
+DECLARED_UNAPPROVED = "declared.unapproved"
+DECLARED_APPROVAL_LAPSED = "declared.approval_lapsed"
+#: 물성 정의문을 고친 일(ADR 0050). 허브 키의 뜻은 사내 항목 · 다른 시스템 · AI 가 함께
+#: 읽으므로 사람이 해도 남긴다 — 씨앗이 채운 것은 배포가 한 일이라 안 남긴다.
+CATALOG_PROPERTY_DESCRIBED = "catalog_property.described"
 
 
 def diff(before: dict[str, Any], after: dict[str, Any]) -> dict[str, Any]:

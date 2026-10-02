@@ -316,6 +316,12 @@ export const catalogApi = {
     api.post<CatalogDefinition>('/catalog/properties', payload),
   deleteProperty: (key: string) =>
     api.delete<void>(`/catalog/properties/${encodeURIComponent(key)}`),
+  /**
+   * 물성의 **정의문**을 고친다 — 자료 관리자 · 시스템 관리자만(ADR 0050). 허브 키의 뜻이라
+   * 사내 항목 · 다른 시스템 · AI 가 함께 읽는다. 고친 것은 배포의 씨앗이 덮지 않는다.
+   */
+  updateProperty: (key: string, payload: CatalogPropertyUpdate) =>
+    api.patch<CatalogDefinition>(`/catalog/properties/${encodeURIComponent(key)}`, payload),
   /** 키를 폐기한다 — 지우지 않는다. 값·매핑이 걸렸거나 사전이 나간 키를 물리는 길. */
   deprecateProperty: (key: string, payload: CatalogPropertyDeprecate) =>
     api.post<CatalogDefinition>(`/catalog/properties/${encodeURIComponent(key)}/deprecate`, payload),
@@ -345,6 +351,7 @@ export const catalogApi = {
 export type CatalogPropertyCreate = components['schemas']['CatalogPropertyCreate']
 export type CatalogDefinition = components['schemas']['CatalogDefinitionOut']
 export type CatalogPropertyDeprecate = components['schemas']['CatalogPropertyDeprecate']
+export type CatalogPropertyUpdate = components['schemas']['CatalogPropertyUpdate']
 export type CatalogPropertyMigrate = components['schemas']['CatalogPropertyMigrateIn']
 export type CatalogPropertyMigrated = components['schemas']['CatalogPropertyMigrateOut']
 export type CatalogMaterialCreate = components['schemas']['CatalogMaterialCreate']

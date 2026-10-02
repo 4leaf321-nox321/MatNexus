@@ -58,6 +58,7 @@ from app.modules.catalog.schemas import (
     CatalogPropertyDeprecate,
     CatalogPropertyMigrateIn,
     CatalogPropertyMigrateOut,
+    CatalogPropertyUpdate,
     CatalogSourceOut,
     CatalogSummaryOut,
     CatalogValueCreate,
@@ -93,6 +94,7 @@ from app.shared import (
     alias_candidates,
     audit,
     exports,
+    permissions,
     property_names,
     property_search,
     representative,
@@ -947,6 +949,47 @@ def _definition_out(db: Session, one: CatalogDefinition) -> CatalogDefinitionOut
     )
 
 
+@router.patch("/properties/{property_key}", response_model=CatalogDefinitionOut)
+def update_property(
+    property_key: str,
+    payload: CatalogPropertyUpdate,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> CatalogDefinitionOut:
+    """물성의 **정의문**을 고친다(ADR 0050). **자료 관리자 · 시스템 관리자만** —
+    허브 키의 뜻은 사내 항목 · 다른 시스템 · AI 가 함께 읽는다. 카드 확정과 같은 「검토의 뜻이
+    있는 일」 이다(ADR 0035 D4).
+
+    고친 정의문은 배포가 안 덮는다 — 씨앗이 마지막으로 쓴 글과 달라지기 때문이다
+    (`catalog/descriptions.py`). 원본 이관도 빈 정의문으로 안 덮는다.
+    """
+    permissions.require_steward(user, code="MNX-CATALOG-0054", what="물성 정의문 고치기")
+    definition = db.scalar(
+        select(CatalogDefinition).where(CatalogDefinition.key == property_key)
+    )
+    if definition is None:
+        raise NotFound("MNX-CATALOG-0038", "없는 물성입니다.")
+    data = payload.model_dump(exclude_unset=True)
+    if "description" in data:
+        before = definition.description
+        after = (data["description"] or "").strip() or None
+        if after != before:
+            definition.description = after
+            # **허브 키의 뜻이 바뀐 일**이라 사람이 해도 남긴다 — 사전을 받아 간 쪽이
+            # 「언제부터 이 키의 뜻이 이렇게 적혔나」 를 물을 때 이 기록뿐이다.
+            audit.record(
+                db,
+                action=audit.CATALOG_PROPERTY_DESCRIBED,
+                actor=user,
+                target_table="catalog_definitions",
+                target_id=definition.id,
+                target_label=f"{definition.name} ({definition.key})",
+                changes={"description": {"before": before, "after": after}},
+            )
+    db.commit()
+    return _definition_out(db, definition)
+
+
 @router.post("/properties/{property_key}/deprecate", response_model=CatalogDefinitionOut)
 def deprecate_property(
     property_key: str,
@@ -1476,6 +1519,7 @@ def property_dictionary(
                 si_unit=one.si_unit,
                 symbol=one.symbol,
                 test_standard=one.test_standard,
+                description=one.description,
                 aliases=aliases.get(one.key, []),
                 internal_items=items.get(one.key, []),
                 measured_keys=sorted({scalar for _p, scalar in registry.measured_by(one.key)}),
@@ -1566,6 +1610,7 @@ def property_mapping(
             si_unit=one.si_unit,
             symbol=one.symbol,
             test_standard=one.test_standard,
+            description=one.description,
             is_span=spans.is_span(one.key),
             value_count=counts.get(one.key, 0),
             links=links_by_key.get(one.key, []),

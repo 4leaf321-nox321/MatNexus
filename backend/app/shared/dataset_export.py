@@ -87,7 +87,7 @@ from app.modules.materials.models import Material, MaterialParameterSet, Sample,
 from app.modules.processing.models import ProcessingResult
 from app.modules.tests.models import Curve, TestRun, TestSummary, TestType
 from app.modules.workspaces.models import Workspace
-from app.shared import filestore
+from app.shared import declared_approval, filestore
 from matcore import curves as curvekit
 
 #: 파일 이름에 못 쓰는 글자. 시험 이름이 그대로 파일 이름이 된다.
@@ -536,6 +536,12 @@ def _write_values(
             "source",
             "reference",
             "note",
+            # 등급과 승인(ADR 0049) — 받는 쪽이 출처 표를 들고 등급을 다시 셈하지 않게
+            # 서버가 센 것을 싣는다. 승인은 지금 값에 유효한 것만(값을 고쳤으면 빈 칸).
+            # **누가 승인했는지는 안 싣는다** — 이 묶음은 사람을 일부러 뺀다
+            # (README 「빠진 것」).
+            "quality_tier",
+            "approved_at",
         ],
     )
     owners: Iterable[tuple[str, Any, list[Any]]] = [
@@ -551,6 +557,7 @@ def _write_values(
         for row in rows:
             if not isinstance(row, dict):
                 continue
+            approval = declared_approval.of(row) or {}
             for point in row.get("points") or []:
                 declared_sheet.write(
                     [
@@ -569,6 +576,8 @@ def _write_values(
                         row.get("source"),
                         row.get("reference"),
                         row.get("note"),
+                        declared_approval.tier(row),
+                        approval.get("at"),
                     ]
                 )
 
@@ -930,6 +939,10 @@ README = """# MatNexus 물성 데이터 내보내기
 
 값의 등급(`quality_tier`)은 1(제품 문서 실측) ~ 4(계산·추정)이고, 사내 값과 같은
 척도입니다. `method` 가 `digitized` 면 그래프에서 읽은 값이라 자릿수를 믿지 마세요.
+
+사내 선언 값(`declared_properties.csv`)의 `approved_at` 은 자료 관리자가 근거 문서와
+대조해 **승인한 때**입니다. 승인된 값은 등급이 한 단계 오릅니다 — 문헌 3 → 2, 추정
+4 → 3, 2 위로는 안 갑니다. 승인 뒤 값이 바뀌었으면 비어 있습니다.
 
 ## 빠진 것 — 일부러
 

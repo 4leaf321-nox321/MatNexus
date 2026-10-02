@@ -37,6 +37,7 @@
 
 값에는 `<키>_source = declared:<출처>` 가 함께 붙는다. 등급 판정이 그 낱말을 읽어
 밀시트 1 · 규격 2 · 문헌 3 · 추정 4 로 매긴다 — 여기서 등급을 따로 계산하지 않는다.
+자료 관리자가 승인한 값이면 `declared:<출처>+approved` 다(ADR 0049, 한 단계 오른다).
 """
 
 from __future__ import annotations
@@ -47,7 +48,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from app.modules.materials.models import Material
-from app.shared import coverage
+from app.shared import coverage, declared_approval
 from matcore import cards
 
 
@@ -76,6 +77,8 @@ def _declared_by_key(db: Session, material: Material) -> dict[str, dict[str, Any
         out[key] = {
             "value": float(first["value_si"]),
             "source": str(row.get("source") or "unknown"),
+            # 카드 칸의 출처 표지 — 승인이면 `+approved`. 만들 때의 승인이 카드에 박힌다.
+            "origin": declared_approval.origin(row),
             "reference": row.get("reference"),
             # **어느 주파수 · 파장의 값인지** 함께 간다. 유전율은 1 MHz 와 10 GHz 에서 다른데,
             # 칸에 숫자만 실리면 덱만 받은 사람이 그것을 모른다.
@@ -167,7 +170,7 @@ def fill(db: Session, material: Material | None, blocks: dict[str, Any]) -> list
                 continue
             found = stated[slot.property_key]
             values[slot.key] = found["value"]
-            values[f"{slot.key}_source"] = f"declared:{found['source']}"
+            values[f"{slot.key}_source"] = found["origin"]
             if found["reference"]:
                 # **근거 문서를 카드 안에 복사한다.** 재료의 선언을 나중에 고쳐도
                 # 이미 만든 카드가 무엇을 근거로 했는지는 그대로 남아야 한다.

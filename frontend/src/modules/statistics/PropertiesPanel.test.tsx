@@ -515,6 +515,44 @@ describe('선언과 계산', () => {
     expect(await screen.findByText(/^3\.8 @ 1 MHz 외 1점$/)).toBeInTheDocument()
   })
 
+  it('적은 값의 등급과 승인이 근거 옆에 선다', async () => {
+    // 등급은 서버가 센 것(`quality_tier`)이다 — 승인한 문헌 값은 2(ADR 0049).
+    forMaterial.mockResolvedValue({ groups: [] })
+    mount(
+      <PropertiesPanel
+        materialId="m1"
+        declared={
+          [
+            {
+              item: '탄성계수',
+              input_unit: 'GPa',
+              points: [{ value: 206 }],
+              source: 'literature',
+              reference: 'ASM Handbook Vol.1',
+              quality_tier: 2,
+              approval: { by: '김관리', at: '2026-10-02T01:00:00Z', note: null },
+            },
+            {
+              item: '비열',
+              input_unit: 'J/(kg.K)',
+              points: [{ value: 460 }],
+              source: 'estimate',
+              reference: '같은 계열',
+              quality_tier: 4,
+              approval: null,
+            },
+          ] as never
+        }
+      />
+    )
+    const approved = within((await screen.findByText(/ASM Handbook Vol.1/)).closest('tr') as HTMLElement)
+    expect(approved.getByText('등급 2')).toBeInTheDocument()
+    expect(approved.getByText('승인')).toHaveAttribute('title', expect.stringContaining('김관리'))
+    const pending = within(screen.getByText(/같은 계열/).closest('tr') as HTMLElement)
+    expect(pending.getByText('등급 4')).toBeInTheDocument()
+    expect(pending.queryByText('승인')).not.toBeInTheDocument()
+  })
+
   it('적은 값만 고칠 수 있다', async () => {
     // 잰 값은 시험에서 나온 것이라 여기서 고칠 것이 아니다.
     both()

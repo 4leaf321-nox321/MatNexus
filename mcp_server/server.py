@@ -301,7 +301,13 @@ def _declared_value(row: dict[str, Any]) -> dict[str, Any]:
             }
             for one in points
         ],
-        "origin": f"declared:{source}" if source else "declared",
+        # 승인된 값이면 카드 칸과 같은 표지(`+approved`) — 출처만으로는 등급을 다시 셀 수 없다.
+        "origin": (f"declared:{source}" if source else "declared")
+        + ("+approved" if row.get("approval") else ""),
+        # **등급은 서버가 센 것** — 출처와 자료 관리자 승인에서(ADR 0049). 승인은 지금 값에
+        # 유효한 것만 온다. 승인은 사람(자료 관리자)이 화면에서 한다 — AI 도구는 없다.
+        "quality_tier": row.get("quality_tier"),
+        **({"approval": row["approval"]} if row.get("approval") else {}),
         "source_document": row.get("reference"),
         "scale": row.get("scale"),
         "note": row.get("note"),
@@ -2351,10 +2357,17 @@ async def adopt_catalog_values(
         declared_points.drop_mixed_temperatures(one, axes.get(one["item"], "temperature_k"))
 
     if dry_run:
+        stored = {row.get("item"): row for row in material.get("declared_properties") or []}
+        warnings = {
+            one["item"]: warning
+            for one in declared
+            if (warning := declared_points.approval_warning(stored.get(one["item"])))
+        }
         return {
             "dry_run": True,
             "material": material.get("record_name"),
             "will_adopt": planned,
+            **({"approval_warnings": warnings} if warnings else {}),
             "note": "이대로 담으려면 dry_run=False 로 다시 부르세요. 이미 있는 항목은 덮어씁니다.",
         }
 
@@ -2860,6 +2873,10 @@ async def list_property_items(ctx: Context, level: str | None = None) -> dict[st
     새 항목을 만들기 전에 **반드시 본다** — 같은 물성이 다른 이름으로 이미 있으면 그것을 쓴다
     (「마찰계수」 가 있는데 「eCAE 마찰계수」 를 또 만들면 값이 둘로 갈린다). `level` 은
     `재료` · `시료`.
+
+    항목마다 `description`(**정의문**)과 `property_key` 가 붙는다 — 같은 물성으로 이어진 문헌
+    물성 키와 그 키의 정의문이다. 뜻은 그 키 한 곳에 있다. 이름이 비슷한 항목을 고를 때 읽고,
+    비어 있으면(이어진 키가 없거나 경도처럼 척도마다 키가 다르면) 그렇다고 말한다.
     """
     got = await _get(ctx, "/materials/property-items", {"level": level} if level else None)
     if isinstance(got, dict) and "error" in got:
@@ -3121,6 +3138,12 @@ async def set_declared_values(
             "source": row["source"],
             "reference": row["reference"],
             "replaces": item in before,
+            # 승인된 값을 덮어쓰면 승인이 풀린다(ADR 0049) — 사람이 먼저 알아야 한다.
+            **(
+                {"approval_warning": warning}
+                if (warning := declared_points.approval_warning(before.get(item)))
+                else {}
+            ),
         }
         for item, row in grouped.items()
     ]
@@ -3689,6 +3712,13 @@ async def resolve_property(ctx: Context, name: str) -> dict[str, Any]:
 
     **사람에게는 `name` 으로 말한다.** `key`(`mechanical.yield_strength`)는 시스템끼리
     쓰는 이름표라 사람 앞에 안 꺼낸다 — 「항복강도」 라고 말한다.
+
+    ## `description` 이 그 물성의 **정의문**이다
+
+    후보를 고를 때 이름보다 이것을 읽어라 — 「항복응력」(페이스트가 흐르기 시작하는 응력)과
+    「항복강도」(금속의 0.2 % 내력)는 이름이 아니라 정의문으로 갈린다. 사람이 「그게 뭐냐」 고
+    물으면 **지어내지 말고 이 글을 옮긴다.** `test_standard` 는 대표 시험 규격이다. 비어 있으면
+    정의문이 아직 없는 것이다 — 그렇다고 말해라.
 
     **`deprecated` 가 참이면 그 키를 쓰지 않는다** — `superseded_by` 의 키로 값을 묻고
     값을 단다. 폐기된 키는 뒤로 밀려 서므로 첫 후보가 살아 있는 키다.

@@ -1103,7 +1103,16 @@ export interface paths {
         delete: operations["delete_property_api_catalog_properties__property_key__delete"];
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Update Property
+         * @description 물성의 **정의문**을 고친다(ADR 0050). **자료 관리자 · 시스템 관리자만** —
+         *     허브 키의 뜻은 사내 항목 · 다른 시스템 · AI 가 함께 읽는다. 카드 확정과 같은 「검토의 뜻이
+         *     있는 일」 이다(ADR 0035 D4).
+         *
+         *     고친 정의문은 배포가 안 덮는다 — 씨앗이 마지막으로 쓴 글과 달라지기 때문이다
+         *     (`catalog/descriptions.py`). 원본 이관도 빈 정의문으로 안 덮는다.
+         */
+        patch: operations["update_property_api_catalog_properties__property_key__patch"];
         trace?: never;
     };
     "/api/catalog/properties/{property_key}/aliases": {
@@ -3572,6 +3581,8 @@ export interface paths {
          *
          *     감춘 항목은 안 나온다. **이미 넣어 둔 값은 그대로 남는다** — 감추는 것은
          *     "앞으로 새로 고르지 말라" 는 뜻이지 과거를 지우는 것이 아니다.
+         *
+         *     항목마다 **정의문**을 함께 준다 — 같은 물성으로 이어진 문헌 키의 것(ADR 0050).
          */
         get: operations["property_items_api_materials_property_items_get"];
         put?: never;
@@ -3599,6 +3610,49 @@ export interface paths {
         head?: never;
         /** Update Material */
         patch: operations["update_material_api_materials__material_id__patch"];
+        trace?: never;
+    };
+    "/api/materials/{material_id}/declared/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve Declared
+         * @description 적어 둔 값 하나를 **승인**한다 — 근거 문서와 대조해 확인했다는 기록(ADR 0049).
+         *
+         *     승인된 값은 등급이 한 단계 오른다(문헌 3 → 2 · 추정 4 → 3, 2 위로는 안 간다). 값을
+         *     고치면 승인은 저절로 풀린다 — 승인은 그때의 값에 묶여 있다.
+         */
+        post: operations["approve_declared_api_materials__material_id__declared_approve_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/materials/{material_id}/declared/unapprove": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Unapprove Declared
+         * @description 승인을 거둔다. 값은 그대로다 — 등급만 출처의 것으로 돌아간다.
+         */
+        post: operations["unapprove_declared_api_materials__material_id__declared_unapprove_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/materials/{material_id}/delete-cascade": {
@@ -4864,6 +4918,46 @@ export interface paths {
         head?: never;
         /** Update Sample */
         patch: operations["update_sample_api_samples__sample_id__patch"];
+        trace?: never;
+    };
+    "/api/samples/{sample_id}/declared/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve Sample Declared
+         * @description 밀시트에 적은 값 하나를 승인한다 — 재료 쪽과 같은 규칙(ADR 0049).
+         */
+        post: operations["approve_sample_declared_api_samples__sample_id__declared_approve_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/samples/{sample_id}/declared/unapprove": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Unapprove Sample Declared
+         * @description 밀시트 값의 승인을 거둔다.
+         */
+        post: operations["unapprove_sample_declared_api_samples__sample_id__declared_unapprove_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/samples/{sample_id}/mill-check": {
@@ -9503,6 +9597,16 @@ export interface components {
             values_imported: number;
         };
         /**
+         * CatalogPropertyUpdate
+         * @description 물성 정의 고치기 — 지금은 **정의문** 하나(ADR 0050).
+         *
+         *     부분 수정이다. 안 보낸 칸은 그대로, `description: null`(또는 빈 글)은 정의문을 비운다.
+         */
+        CatalogPropertyUpdate: {
+            /** Description */
+            description?: string | null;
+        };
+        /**
          * CatalogSourceIn
          * @description 값의 출처. **제목·DOI·URL 중 하나는 있어야 한다** — 출처 없는 값은 안 받는다.
          */
@@ -10867,6 +10971,31 @@ export interface components {
             row_count: number;
         };
         /**
+         * DeclaredApprovalOut
+         * @description 선언 값 하나의 승인 — 누가 언제 근거 문서와 대조해 확인했나(ADR 0049).
+         */
+        DeclaredApprovalOut: {
+            /**
+             * At
+             * Format: date-time
+             */
+            at: string;
+            /** By */
+            by: string;
+            /** Note */
+            note?: string | null;
+        };
+        /**
+         * DeclaredApprovalRequest
+         * @description 승인하거나 승인을 거둘 줄. 줄은 항목 이름으로 고른다 — 한 물성은 한 줄이다.
+         */
+        DeclaredApprovalRequest: {
+            /** Item */
+            item: string;
+            /** Note */
+            note?: string | null;
+        };
+        /**
          * DeclaredBlockOptionOut
          * @description 적어 둔 값으로 채울 수 있는 항목란 하나.
          *
@@ -11014,6 +11143,7 @@ export interface components {
          *     온도에 따라 변할 뿐**이므로 줄 안에 점을 넣는다.
          */
         DeclaredPropertyOut: {
+            approval?: components["schemas"]["DeclaredApprovalOut"] | null;
             /** Input Unit */
             input_unit?: string | null;
             /** Item */
@@ -11022,6 +11152,11 @@ export interface components {
             note?: string | null;
             /** Points */
             points: components["schemas"]["DeclaredPointOut"][];
+            /**
+             * Quality Tier
+             * @default 4
+             */
+            quality_tier: number;
             /** Reference */
             reference: string;
             /** Scale */
@@ -11030,6 +11165,11 @@ export interface components {
             si_unit?: string | null;
             /** Source */
             source: string;
+            /**
+             * Tier If Approved
+             * @default 4
+             */
+            tier_if_approved: number;
         };
         /**
          * DeclaredSlotOut
@@ -15323,6 +15463,8 @@ export interface components {
              * @default false
              */
             deprecated: boolean;
+            /** Description */
+            description?: string | null;
             /** Domain */
             domain: string;
             /** Internal Items */
@@ -15355,6 +15497,8 @@ export interface components {
              * @default []
              */
             terms: string[];
+            /** Test Standard */
+            test_standard?: string | null;
             /** Value Count */
             value_count: number;
         };
@@ -15499,6 +15643,8 @@ export interface components {
              * @default false
              */
             deprecated: boolean;
+            /** Description */
+            description?: string | null;
             /** Domain */
             domain: string;
             /** Internal Items */
@@ -15603,12 +15749,16 @@ export interface components {
              * @default []
              */
             condition_units: components["schemas"]["ConditionUnitOut"][];
+            /** Description */
+            description?: string | null;
             /** Dimension */
             dimension: string;
             /** Item */
             item: string;
             /** Level */
             level: string;
+            /** Property Key */
+            property_key?: string | null;
             /**
              * Scales
              * @default []
@@ -15691,6 +15841,8 @@ export interface components {
             deprecated: boolean;
             /** Deprecation Note */
             deprecation_note?: string | null;
+            /** Description */
+            description?: string | null;
             /** Domain */
             domain: string;
             /**
@@ -21368,6 +21520,41 @@ export interface operations {
             };
         };
     };
+    update_property_api_catalog_properties__property_key__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                property_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CatalogPropertyUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CatalogDefinitionOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_property_aliases_api_catalog_properties__property_key__aliases_get: {
         parameters: {
             query?: never;
@@ -25640,6 +25827,76 @@ export interface operations {
             };
         };
     };
+    approve_declared_api_materials__material_id__declared_approve_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                material_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeclaredApprovalRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MaterialOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unapprove_declared_api_materials__material_id__declared_unapprove_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                material_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeclaredApprovalRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MaterialOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     delete_material_cascade_api_materials__material_id__delete_cascade_post: {
         parameters: {
             query?: never;
@@ -27685,6 +27942,76 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["SampleUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SampleOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    approve_sample_declared_api_samples__sample_id__declared_approve_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sample_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeclaredApprovalRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SampleOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unapprove_sample_declared_api_samples__sample_id__declared_unapprove_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sample_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeclaredApprovalRequest"];
             };
         };
         responses: {
