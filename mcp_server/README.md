@@ -196,7 +196,8 @@ Family·Category·Grade·제조사·유통사·시편 규격은 **기준정보**
     scan_deck_format(deck_text, card)  예제 덱 → 바로 쓸 정의 초안(`definition`)
     export_definition_grammar()        해석용 정의의 문법 — 정본(코드 설명) 그대로
     preview_export_profile(def, card)  정의를 **저장 없이** 실제 카드로 그려 본다
-    ★ save_export_profile(...)         해석용 정의 저장 — 감사에 「AI 경유」 로 남는다
+    ★ save_export_profile(...)         해석용 정의 저장 — 감사에 「AI 경유」 로 남는다. 있는 정의를
+                                       고칠 때 켜짐 · 꺼짐은 안 바꾼다(켜고 끄기는 사람이 화면에서)
 
 ### 사내 물성 들이기 — 전용 물성(eCAE 등)을 카드 · 덱까지
 

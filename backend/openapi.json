@@ -12260,6 +12260,20 @@
         "title": "ExportOut",
         "type": "object"
       },
+      "ExportProfileActiveRequest": {
+        "description": "켜기 · 끄기만 — 정의는 안 건드린다.",
+        "properties": {
+          "is_active": {
+            "title": "Is Active",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "is_active"
+        ],
+        "title": "ExportProfileActiveRequest",
+        "type": "object"
+      },
       "ExportProfileCreateRequest": {
         "properties": {
           "definition": {
@@ -12279,9 +12293,16 @@
             "title": "Description"
           },
           "is_active": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "default": true,
-            "title": "Is Active",
-            "type": "boolean"
+            "title": "Is Active"
           },
           "key": {
             "anyOf": [
@@ -12394,6 +12415,22 @@
             ],
             "title": "Owner Workspace Slug"
           },
+          "twin_held": {
+            "default": false,
+            "title": "Twin Held",
+            "type": "boolean"
+          },
+          "twin_of": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Twin Of"
+          },
           "updated_at": {
             "format": "date-time",
             "title": "Updated At",
@@ -12432,9 +12469,15 @@
             "title": "Description"
           },
           "is_active": {
-            "default": true,
-            "title": "Is Active",
-            "type": "boolean"
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Active"
           },
           "label": {
             "maxLength": 100,
@@ -38801,6 +38844,59 @@
           }
         },
         "summary": "Update Export Profile",
+        "tags": [
+          "fitting"
+        ]
+      }
+    },
+    "/api/fitting/export-profiles/{key}/active": {
+      "post": {
+        "description": "켜거나 끈다 — **정의는 안 건드린다.** 고칠 수 있는 사람만(ADR 0035; 정의판은 등록자가\n없어 자료 관리자 · 시스템 관리자).\n\n정의판은 코드판을 사용 중단했을 때 대신 켜는 것이다. 코드판이 살아 있는데 켜도 막지는\n않는다(같은 형식을 고쳐 견줘 보려는 일이 있다) — 대신 응답의 `twin_held` 가 그것을 말하고,\n화면이 켜기 전에 경고한다. 메뉴 전체에 걸리는 일이라 사람이 해도 남긴다.",
+        "operationId": "set_export_profile_active_api_fitting_export_profiles__key__active_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "title": "Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExportProfileActiveRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExportProfileOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Export Profile Active",
         "tags": [
           "fitting"
         ]

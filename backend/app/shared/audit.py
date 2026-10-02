@@ -149,6 +149,10 @@ DECLARED_APPROVAL_LAPSED = "declared.approval_lapsed"
 #: 물성 정의문을 고친 일(ADR 0050). 허브 키의 뜻은 사내 항목 · 다른 시스템 · AI 가 함께
 #: 읽으므로 사람이 해도 남긴다 — 씨앗이 채운 것은 배포가 한 일이라 안 남긴다.
 CATALOG_PROPERTY_DESCRIBED = "catalog_property.described"
+#: 해석용 물성 정의를 켜고 끈 일 — 전 부서의 내보내기 메뉴에 걸린다. 정의판(기본 형식의 비상용
+#: 사본)을 켜는 것은 코드판을 사용 중단한 것과 짝이라 그 기록과 나란히 읽힌다.
+EXPORT_PROFILE_ACTIVATED = "export_profile.activated"
+EXPORT_PROFILE_DEACTIVATED = "export_profile.deactivated"
 
 
 def diff(before: dict[str, Any], after: dict[str, Any]) -> dict[str, Any]:

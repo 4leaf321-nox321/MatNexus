@@ -12,7 +12,7 @@
  */
 
 import { useRef, useState } from 'react'
-import { Download, FileOutput, Pencil, Plus, Trash2, Upload } from 'lucide-react'
+import { Download, FileOutput, Pencil, Plus, Power, Trash2, Upload } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
 import { BuiltinFormatsSection } from '@/modules/fitting/BuiltinFormatsSection'
@@ -74,6 +74,29 @@ export default function ExportProfilesPage() {
       setError(
         caught instanceof ProfileFileError ? caught : new Error('파일을 읽지 못했습니다.')
       )
+    }
+  }
+
+  /**
+   * 켜고 끈다. **정의판을 켜는데 짝인 코드판이 살아 있으면 묻는다** — 켜는 순간 내보내기 메뉴에
+   * 같은 형식이 두 줄 선다. 보통은 코드판을 먼저 사용 중단하고 켠다(아래 「기본 제공 형식」).
+   */
+  async function toggle(item: ExportProfile) {
+    setError(null)
+    const turningOn = !item.is_active
+    if (turningOn && item.twin_of && !item.twin_held) {
+      const ok = window.confirm(
+        `기본 형식 '${item.twin_of}' 이(가) 아직 쓰이고 있습니다. 이 정의판을 켜면 카드의 ` +
+          `내보내기 메뉴에 같은 형식이 두 줄 섭니다.\n\n보통은 아래 「기본 제공 형식」 에서 ` +
+          `'${item.twin_of}' 를 먼저 사용 중단합니다. 그래도 켤까요?`
+      )
+      if (!ok) return
+    }
+    try {
+      await fittingApi.setExportProfileActive(item.key, turningOn)
+      profiles.reload()
+    } catch (caught) {
+      setError(caught instanceof Error ? caught : new Error('켜고 끄지 못했습니다.'))
     }
   }
 
@@ -173,7 +196,17 @@ export default function ExportProfilesPage() {
                   <span className="flex items-center gap-2">
                     <FileOutput className="text-muted-foreground size-4" />
                     {item.label}
-                    {item.is_active ? null : <Badge variant="outline">중단</Badge>}
+                    {/* **「꺼짐」 이다 — 「사용 중단」 이 아니다.** 사용 중단은 기본 형식(코드판)을
+                        내리는 말이라, 같은 말을 쓰면 둘이 섞인다. */}
+                    {item.is_active ? null : <Badge variant="outline">꺼짐</Badge>}
+                    {item.twin_of ? (
+                      <Badge
+                        variant="secondary"
+                        title={`기본 형식 ${item.twin_of} 를 정의로 옮긴 비상용 사본 — 코드판을 사용 중단하면 이것을 켜서 고쳐 씁니다`}
+                      >
+                        정의판 · {item.twin_of}
+                      </Badge>
+                    ) : null}
                   </span>
                 </TableCell>
                 <TableCell className="font-mono">
@@ -197,6 +230,22 @@ export default function ExportProfilesPage() {
                         onClick={() => save([item])}
                       >
                         <Download className="size-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label={`${item.label} ${item.is_active ? '끄기' : '켜기'}`}
+                        disabled={!canEdit(item.access)}
+                        title={
+                          lockedTitle(item.access) ??
+                          (item.is_active
+                            ? '끄기 — 내보내기 메뉴에서 뺍니다'
+                            : '켜기 — 내보내기 메뉴에 세웁니다')
+                        }
+                        className={item.is_active ? 'text-emerald-600' : 'text-muted-foreground'}
+                        onClick={() => void toggle(item)}
+                      >
+                        <Power className="size-4" />
                       </Button>
                       {/* **여는 것은 누구나** — 편집기가 읽기로 열고 누가 고치는지 말한다. */}
                       <Button
@@ -227,7 +276,12 @@ export default function ExportProfilesPage() {
       )}
 
       {/* 코드로 만든 형식 — 정의와 섞지 않고 따로. 멈춘 것도 사연과 함께 선다. */}
-      <BuiltinFormatsSection />
+      <BuiltinFormatsSection
+        twins={Object.fromEntries(
+          rows.filter((one) => one.twin_of).map((one) => [one.twin_of as string, one])
+        )}
+        onToggleTwin={toggle}
+      />
 
       {/* **단위계는 전사가 같은 것을 봐야 한다** — 만드는 것은 시스템 관리자다.
           정의(솔버 형식)와 한 화면에 두는 이유: 덱을 내려받을 때 둘을 함께 고른다. */}

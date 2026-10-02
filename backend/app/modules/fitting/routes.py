@@ -70,6 +70,7 @@ from app.modules.fitting.schemas import (
     DeclaredCardSaveRequest,
     DeclaredSlotOut,
     ExportFormatOut,
+    ExportProfileActiveRequest,
     ExportProfileCreateRequest,
     ExportProfileOut,
     ExportProfileSaveRequest,
@@ -3074,9 +3075,16 @@ def _checked(definition: dict[str, Any], key: str, label: str) -> None:
 
 
 def _profile_out(
-    db: Session, item: ExportProfile, access: EditAccessOut | None = None
+    db: Session,
+    item: ExportProfile,
+    access: EditAccessOut | None = None,
+    held: set[str] | None = None,
 ) -> ExportProfileOut:
+    """`held` 는 사용 중단된 기본 형식 key — 목록은 한 번 읽어 넘긴다(줄마다 묻지 않게)."""
     owner = db.get(Workspace, item.owner_workspace_id) if item.owner_workspace_id else None
+    twin = deckmap.twin_of(item.key)
+    if twin is not None and held is None:
+        held = set(deckmap.holds(db))
     return ExportProfileOut(
         id=item.id,
         key=item.key,
@@ -3087,6 +3095,8 @@ def _profile_out(
         access=access,
         definition=item.definition,
         is_active=item.is_active,
+        twin_of=twin,
+        twin_held=twin is not None and twin in (held or set()),
         created_at=item.created_at,
         updated_at=item.updated_at,
     )
@@ -3101,7 +3111,8 @@ def list_export_profiles(
     query = _visible_profiles(db).order_by(ExportProfile.key)
     items = list(db.scalars(query))
     book = AccessBook(db, user).prime(items)
-    return [_profile_out(db, item, book.of(item)) for item in items]
+    held = set(deckmap.holds(db))
+    return [_profile_out(db, item, book.of(item), held) for item in items]
 
 
 def _audit_export_profile(db: Session, user: User, item: ExportProfile, *, made: bool) -> None:
@@ -3193,8 +3204,58 @@ def update_export_profile(
     item.label = payload.label
     item.description = payload.description
     item.definition = payload.definition
-    item.is_active = payload.is_active
+    # **안 보냈으면 그대로.** 켜고 끄기는 `/active` 의 일이다 — 고치러 온 저장이 꺼 둔 정의판을
+    # 켜면 내보내기 메뉴에 같은 형식이 두 줄 선다.
+    if payload.is_active is not None:
+        item.is_active = payload.is_active
     _audit_export_profile(db, user, item, made=False)
+    db.commit()
+    db.refresh(item)
+    return _profile_out(db, item, access_of(db, user, item))
+
+
+@router.post("/export-profiles/{key}/active", response_model=ExportProfileOut)
+def set_export_profile_active(
+    key: str,
+    payload: ExportProfileActiveRequest,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> ExportProfileOut:
+    """켜거나 끈다 — **정의는 안 건드린다.** 고칠 수 있는 사람만(ADR 0035; 정의판은 등록자가
+    없어 자료 관리자 · 시스템 관리자).
+
+    정의판은 코드판을 사용 중단했을 때 대신 켜는 것이다. 코드판이 살아 있는데 켜도 막지는
+    않는다(같은 형식을 고쳐 견줘 보려는 일이 있다) — 대신 응답의 `twin_held` 가 그것을 말하고,
+    화면이 켜기 전에 경고한다. 메뉴 전체에 걸리는 일이라 사람이 해도 남긴다.
+    """
+    item = db.scalar(_visible_profiles(db).where(ExportProfile.key == key))
+    if item is None:
+        raise NotFound("MNX-FITTING-0025", f"해석용 물성 정의를 찾을 수 없습니다: {key}")
+    permissions.require_edit(db, user, item, code="MNX-FITTING-0027")
+    if item.is_active != payload.is_active:
+        item.is_active = payload.is_active
+        if payload.is_active:
+            audit.record(
+                db,
+                action=audit.EXPORT_PROFILE_ACTIVATED,
+                actor=user,
+                target_table="export_profiles",
+                target_id=item.id,
+                target_label=f"{item.label} ({item.key})",
+                workspace_id=item.owner_workspace_id,
+                changes={"is_active": {"before": False, "after": True}},
+            )
+        else:
+            audit.record(
+                db,
+                action=audit.EXPORT_PROFILE_DEACTIVATED,
+                actor=user,
+                target_table="export_profiles",
+                target_id=item.id,
+                target_label=f"{item.label} ({item.key})",
+                workspace_id=item.owner_workspace_id,
+                changes={"is_active": {"before": True, "after": False}},
+            )
     db.commit()
     db.refresh(item)
     return _profile_out(db, item, access_of(db, user, item))

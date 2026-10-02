@@ -66,6 +66,22 @@ def holds(db: Session) -> dict[str, ExportFormatHold]:
     return {row.key: row for row in db.scalars(select(ExportFormatHold))}
 
 
+#: 정의판의 key 꼬리 — 기본 형식 `abaqus` 의 정의판은 `abaqus_def`(ADR 0038 · 0047).
+TWIN_SUFFIX = "_def"
+
+
+def twin_of(key: str) -> str | None:
+    """이 정의가 **어느 기본 형식(코드판)의 정의판**인가. 아니면 `None`.
+
+    정의판은 코드판을 사용 중단했을 때 대신 켜는 비상용이다. 코드판이 살아 있는데 켜면 내보내기
+    메뉴에 같은 형식이 두 줄 선다 — 화면이 켜기 전에 그것을 말하려고 짝을 안다.
+    """
+    if not key.endswith(TWIN_SUFFIX):
+        return None
+    code = key.removesuffix(TWIN_SUFFIX)
+    return code if code in {one.key for one in export.list_renderers()} else None
+
+
 def held_message(row: ExportFormatHold) -> str:
     return (
         f"'{row.key}' 형식은 사용 중단됐습니다 — {row.reason} "

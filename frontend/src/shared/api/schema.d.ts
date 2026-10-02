@@ -2437,6 +2437,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/fitting/export-profiles/{key}/active": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Set Export Profile Active
+         * @description 켜거나 끈다 — **정의는 안 건드린다.** 고칠 수 있는 사람만(ADR 0035; 정의판은 등록자가
+         *     없어 자료 관리자 · 시스템 관리자).
+         *
+         *     정의판은 코드판을 사용 중단했을 때 대신 켜는 것이다. 코드판이 살아 있는데 켜도 막지는
+         *     않는다(같은 형식을 고쳐 견줘 보려는 일이 있다) — 대신 응답의 `twin_held` 가 그것을 말하고,
+         *     화면이 켜기 전에 경고한다. 메뉴 전체에 걸리는 일이라 사람이 해도 남긴다.
+         */
+        post: operations["set_export_profile_active_api_fitting_export_profiles__key__active_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/fitting/families": {
         parameters: {
             query?: never;
@@ -12242,6 +12267,14 @@ export interface components {
             /** Workspace */
             workspace: string | null;
         };
+        /**
+         * ExportProfileActiveRequest
+         * @description 켜기 · 끄기만 — 정의는 안 건드린다.
+         */
+        ExportProfileActiveRequest: {
+            /** Is Active */
+            is_active: boolean;
+        };
         /** ExportProfileCreateRequest */
         ExportProfileCreateRequest: {
             /** Definition */
@@ -12254,7 +12287,7 @@ export interface components {
              * Is Active
              * @default true
              */
-            is_active: boolean;
+            is_active: boolean | null;
             /** Key */
             key?: string | null;
             /** Label */
@@ -12295,6 +12328,13 @@ export interface components {
             /** Owner Workspace Slug */
             owner_workspace_slug?: string | null;
             /**
+             * Twin Held
+             * @default false
+             */
+            twin_held: boolean;
+            /** Twin Of */
+            twin_of?: string | null;
+            /**
              * Updated At
              * Format: date-time
              */
@@ -12312,11 +12352,8 @@ export interface components {
             };
             /** Description */
             description?: string | null;
-            /**
-             * Is Active
-             * @default true
-             */
-            is_active: boolean;
+            /** Is Active */
+            is_active?: boolean | null;
             /** Label */
             label: string;
         };
@@ -24054,6 +24091,41 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_export_profile_active_api_fitting_export_profiles__key__active_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExportProfileActiveRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExportProfileOut"];
+                };
             };
             /** @description Validation Error */
             422: {

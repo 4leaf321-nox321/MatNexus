@@ -18,6 +18,7 @@ const exportProfiles = vi.fn()
 const formats = vi.fn()
 const createExportProfile = vi.fn()
 const saveExportProfile = vi.fn()
+const setExportProfileActive = vi.fn()
 
 vi.mock('@/modules/fitting/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/modules/fitting/api')>()),
@@ -27,6 +28,7 @@ vi.mock('@/modules/fitting/api', async (importOriginal) => ({
     createExportProfile: (...args: unknown[]) => createExportProfile(...args),
     saveExportProfile: (...args: unknown[]) => saveExportProfile(...args),
     removeExportProfile: vi.fn(),
+    setExportProfileActive: (...args: unknown[]) => setExportProfileActive(...args),
     unitSystems: () =>
       Promise.resolve([
         {
@@ -247,5 +249,83 @@ describe('기본 제공 형식', () => {
     expect(within(row).getByRole('button', { name: '다시 쓰기' })).toBeInTheDocument()
     // 내려지지 않은 것에는 「사용 중단」 단추가 선다.
     expect(screen.getAllByRole('button', { name: '사용 중단' })).toHaveLength(1)
+  })
+})
+
+/**
+ * 정의판 켜기 · 끄기(2026-10-02) — 설계는 「코드판을 사용 중단하고 정의판을 켠다」 였는데 화면에
+ * 켜는 단추가 없었다.
+ */
+describe('정의판 켜기 · 끄기', () => {
+  /** 내려진 `ansys_plastic` 의 정의판 — 꺼져 있다. */
+  const HELD_TWIN = {
+    ...LSDYNA,
+    id: 'p2',
+    key: 'ansys_plastic_def',
+    label: 'ANSYS (탄소성) · 정의',
+    owner_workspace_slug: null,
+    owner_workspace_name: null,
+    is_active: false,
+    twin_of: 'ansys_plastic',
+    twin_held: true,
+  }
+  /** 살아 있는 `ansys_elastic` 의 정의판 — 꺼져 있다. */
+  const LIVE_TWIN = {
+    ...HELD_TWIN,
+    id: 'p3',
+    key: 'ansys_elastic_def',
+    label: 'ANSYS (선형) · 정의',
+    twin_of: 'ansys_elastic',
+    twin_held: false,
+  }
+
+  beforeEach(() => {
+    setExportProfileActive.mockReset()
+    setExportProfileActive.mockResolvedValue({})
+    exportProfiles.mockResolvedValue([LSDYNA, HELD_TWIN, LIVE_TWIN])
+  })
+
+  it('꺼진 정의는 「꺼짐」, 정의판은 짝인 형식과 함께 선다', async () => {
+    show()
+    const row = (await screen.findByText('ANSYS (탄소성) · 정의')).closest('tr') as HTMLElement
+    expect(within(row).getByText('꺼짐')).toBeInTheDocument()
+    expect(within(row).getByText('정의판 · ansys_plastic')).toBeInTheDocument()
+  })
+
+  it('목록의 단추로 켜고 끈다', async () => {
+    const user = userEvent.setup()
+    show()
+    await user.click(await screen.findByRole('button', { name: 'ANSYS (탄소성) · 정의 켜기' }))
+    expect(setExportProfileActive).toHaveBeenCalledWith('ansys_plastic_def', true)
+
+    await user.click(screen.getByRole('button', { name: 'LS-DYNA 끄기' }))
+    expect(setExportProfileActive).toHaveBeenLastCalledWith('lsdyna', false)
+  })
+
+  it('짝인 형식이 살아 있으면 켜기 전에 묻고, 거절하면 안 켠다', async () => {
+    const user = userEvent.setup()
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    show()
+
+    await user.click(await screen.findByRole('button', { name: 'ANSYS (선형) · 정의 켜기' }))
+
+    expect(confirm).toHaveBeenCalledWith(expect.stringContaining('두 줄'))
+    expect(setExportProfileActive).not.toHaveBeenCalled()
+    confirm.mockRestore()
+  })
+
+  it('내린 형식의 줄에서 바로 그 정의판을 켠다', async () => {
+    const user = userEvent.setup()
+    show()
+    const held = (await screen.findByText('표가 한 칸 밀렸다', { exact: false })).closest(
+      'tr'
+    ) as HTMLElement
+
+    await user.click(await within(held).findByRole('button', { name: '정의판 켜기' }))
+
+    expect(setExportProfileActive).toHaveBeenCalledWith('ansys_plastic_def', true)
+    // 살아 있는 형식의 줄에는 정의판 단추가 없다 — 평소에는 만질 일이 없다.
+    const live = screen.getByText('MP,EX').closest('tr') as HTMLElement
+    expect(within(live).queryByRole('button', { name: /정의판/ })).not.toBeInTheDocument()
   })
 })

@@ -4363,8 +4363,11 @@ async def save_export_profile(
         "label": label,
         "description": description,
         "definition": full,
-        "is_active": True,
     }
+    # **고칠 때는 켜짐을 안 보낸다** — 꺼 둔 정의판(기본 형식의 비상용 사본)을 고치러 왔다가
+    # 켜 버리면 내보내기 메뉴에 같은 형식이 두 줄 선다. 켜고 끄기는 사람이 화면에서 한다.
+    if existing is None:
+        body["is_active"] = True
     if dry_run:
         return {
             "dry_run": True,

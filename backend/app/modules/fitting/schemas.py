@@ -392,8 +392,20 @@ class ExportProfileOut(BaseModel):
     """**이 사람이** 고칠 수 있나, 못 하면 누구에게."""
     definition: dict[str, Any]
     is_active: bool
+    """켜져 있나 — 꺼진 정의는 카드의 내보내기 메뉴에 안 선다."""
+    twin_of: str | None = None
+    """**기본 형식의 정의판이면 그 형식 key**(`abaqus_def` → `abaqus`). 정의판은 코드판을 사용
+    중단했을 때 대신 켜는 비상용이다(ADR 0038 · 0047)."""
+    twin_held: bool = False
+    """짝인 코드판이 지금 사용 중단돼 있나. 아니면 켜는 순간 메뉴에 같은 형식이 두 줄 선다."""
     created_at: datetime
     updated_at: datetime
+
+
+class ExportProfileActiveRequest(BaseModel):
+    """켜기 · 끄기만 — 정의는 안 건드린다."""
+
+    is_active: bool
 
 
 class ExportProfileSaveRequest(BaseModel):
@@ -403,10 +415,14 @@ class ExportProfileSaveRequest(BaseModel):
     label: str = Field(min_length=1, max_length=100)
     description: str | None = None
     definition: dict[str, Any]
-    is_active: bool = True
+    is_active: bool | None = None
+    """**안 보내면 지금 상태 그대로**다. 전에는 안 보내면 켜짐으로 덮어써서, 꺼 둔 정의판이
+    다른 길(MCP · 파일)의 저장 한 번에 조용히 켜졌다 — 켜고 끄기는 `/active` 가 한다."""
 
 
 class ExportProfileCreateRequest(ExportProfileSaveRequest):
+    is_active: bool | None = True
+    """만들 때는 안 보내면 켜짐이다."""
     key: str | None = Field(default=None, min_length=1, max_length=50)
     """**비워 두면 서버가 짓는다**(`deck_1a2b3c4d`). key 는 전사에서 하나다(ADR 0035).
     파일로 들여올 때는 파일의 key 를 그대로 준다 — 두 번 들여오면 409 로 막히게."""

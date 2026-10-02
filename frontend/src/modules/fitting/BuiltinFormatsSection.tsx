@@ -12,12 +12,19 @@
  * 사람들은 틀린 덱을 계속 받는다. **시스템 관리자가 내린다** — 내려진 형식은 내보내기 메뉴·
  * 카드의 「낼 수 있는 형식」·내려받기에서 빠지고, 이 표에는 사연과 함께 남는다(다시 쓰려면
  * 보여야 한다). 걸고 푼 일은 변경 이력에 남는다.
+ *
+ * ## 정의판 (ADR 0038 · 0047)
+ *
+ * 형식마다 그것을 정의로 옮긴 비상용 사본(`<key>_def`)이 꺼진 채로 있다. **내린 줄에서 바로
+ * 켠다** — 위 정의 목록 50줄에서 짝을 찾게 하면 그 사이 사람들은 형식 없이 기다린다. 다시 쓸
+ * 때는 반대로 정의판을 끄라고 한다(안 끄면 메뉴에 같은 형식이 두 줄 선다).
  */
 
 import { useState } from 'react'
 
 import { fittingApi } from '@/modules/fitting/api'
-import type { BuiltinFormat } from '@/modules/fitting/api'
+import type { BuiltinFormat, ExportProfile } from '@/modules/fitting/api'
+import { canEdit } from '@/modules/ownership/access'
 import { groupBySolver } from '@/modules/fitting/formatGroups'
 import { useAuth } from '@/shared/auth/AuthContext'
 import { isSystemAdmin } from '@/shared/auth/roles'
@@ -44,7 +51,14 @@ import {
 import { Textarea } from '@/shared/components/ui/textarea'
 import { useResource } from '@/shared/hooks/useResource'
 
-export function BuiltinFormatsSection() {
+export function BuiltinFormatsSection({
+  twins = {},
+  onToggleTwin,
+}: {
+  /** 형식 key → 그 형식의 정의판. 없으면 정의판 단추를 안 세운다. */
+  twins?: Record<string, ExportProfile>
+  onToggleTwin?: (twin: ExportProfile) => Promise<void>
+} = {}) {
   const { user } = useAuth()
   const admin = isSystemAdmin(user)
   const formats = useResource(() => fittingApi.builtinFormats(), [])
@@ -55,7 +69,11 @@ export function BuiltinFormatsSection() {
 
   async function release(item: BuiltinFormat) {
     setError(null)
-    if (!window.confirm(`${item.label} 을(를) 다시 씁니다. 고친 판이 배포됐나요?`)) return
+    const twin = twins[item.key]
+    const note = twin?.is_active
+      ? `\n\n정의판 '${twin.key}' 이(가) 켜져 있습니다 — 다시 쓰면 메뉴에 같은 형식이 두 줄 서니, 이 줄의 「정의판 끄기」 로 끄세요.`
+      : ''
+    if (!window.confirm(`${item.label} 을(를) 다시 씁니다. 고친 판이 배포됐나요?${note}`)) return
     try {
       await fittingApi.releaseFormat(item.key)
       formats.reload()
@@ -115,17 +133,24 @@ export function BuiltinFormatsSection() {
                     ) : null}
                   </TableCell>
                   <TableCell className="text-right">
-                    {admin ? (
-                      item.hold ? (
-                        <Button size="sm" variant="outline" onClick={() => void release(item)}>
-                          다시 쓰기
-                        </Button>
-                      ) : (
-                        <Button size="sm" variant="ghost" onClick={() => setHolding(item)}>
-                          사용 중단
-                        </Button>
-                      )
-                    ) : null}
+                    <span className="flex flex-wrap justify-end gap-1">
+                      {admin ? (
+                        item.hold ? (
+                          <Button size="sm" variant="outline" onClick={() => void release(item)}>
+                            다시 쓰기
+                          </Button>
+                        ) : (
+                          <Button size="sm" variant="ghost" onClick={() => setHolding(item)}>
+                            사용 중단
+                          </Button>
+                        )
+                      ) : null}
+                      <TwinButton
+                        held={item.hold !== null}
+                        twin={twins[item.key]}
+                        onToggle={onToggleTwin}
+                      />
+                    </span>
                   </TableCell>
                 </TableRow>
               ))
@@ -213,5 +238,46 @@ function HoldDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  )
+}
+
+/**
+ * 그 형식의 정의판 켜기 · 끄기. **필요한 때만 선다** — 내렸는데 꺼져 있으면 「켜기」, 켜져 있으면
+ * 「끄기」(살아 있는 형식과 두 줄이 되는 것을 알린다). 내리지도 켜지도 않았으면 아무것도 없다 —
+ * 평소에는 정의판을 만질 일이 없다.
+ */
+function TwinButton({
+  held,
+  twin,
+  onToggle,
+}: {
+  held: boolean
+  twin: ExportProfile | undefined
+  onToggle?: (twin: ExportProfile) => Promise<void>
+}) {
+  if (!twin || !onToggle || !canEdit(twin.access)) return null
+  if (twin.is_active) {
+    return (
+      <Button
+        size="sm"
+        variant="ghost"
+        title={held ? '대신 쓰는 정의판을 끕니다' : '이 형식이 살아 있어 메뉴에 같은 형식이 두 줄입니다'}
+        className={held ? undefined : 'text-amber-700 dark:text-amber-500'}
+        onClick={() => void onToggle(twin)}
+      >
+        정의판 끄기
+      </Button>
+    )
+  }
+  if (!held) return null
+  return (
+    <Button
+      size="sm"
+      variant="outline"
+      title={`${twin.key} 를 켜서 대신 씁니다 — 정의 목록에서 고칠 수 있습니다`}
+      onClick={() => void onToggle(twin)}
+    >
+      정의판 켜기
+    </Button>
   )
 }

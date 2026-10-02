@@ -102,6 +102,12 @@ export const fittingApi = {
     api.put<ExportProfile>(`/fitting/export-profiles/${key}`, payload),
   removeExportProfile: (key: string) =>
     api.delete<void>(`/fitting/export-profiles/${key}`),
+  /**
+   * 켜기 · 끄기만 — 정의는 안 건드린다. 꺼진 정의는 카드의 내보내기 메뉴에 안 선다.
+   * 정의판(기본 형식의 비상용 사본)은 코드판을 사용 중단하고 켠다(ADR 0038 · 0047).
+   */
+  setExportProfileActive: (key: string, isActive: boolean) =>
+    api.post<ExportProfile>(`/fitting/export-profiles/${key}/active`, { is_active: isActive }),
 
   /**
    * 예제 덱을 읽어 **정의 초안**을 만든다.
