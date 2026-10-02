@@ -73,6 +73,7 @@ from app.modules.tests.models import (
     TestSummary,
     TestType,
 )
+from app.modules.usage.models import McpToolDaily, UsageDaily, UsageViewDaily
 from app.modules.voc.models import VocAttachment, VocEvent, VocItem
 from app.modules.workbench.models import BomAlias, WorkbenchItem, WorkbenchRun
 from app.modules.workspaces.models import Workspace, WorkspaceMember
@@ -111,6 +112,7 @@ __all__ = [
     "Material",
     "MaterialParameterSet",
     "MaterialUse",
+    "McpToolDaily",
     "Notice",
     "NoticeRead",
     "Notification",
@@ -134,6 +136,8 @@ __all__ = [
     "TestRun",
     "TestSummary",
     "TestType",
+    "UsageDaily",
+    "UsageViewDaily",
     "User",
     "VocAttachment",
     "VocEvent",

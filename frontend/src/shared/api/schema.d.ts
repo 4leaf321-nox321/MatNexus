@@ -6442,6 +6442,50 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/usage/mcp-calls": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Report Mcp Call
+         * @description MCP 서버가 도구 하나를 마칠 때 알린다 — **그 토큰의 주인 몫으로** 센다.
+         *
+         *     요청 수로는 도구 수를 못 센다(도구 하나가 여러 요청을 내고, 백엔드를 안 부르는 도구도
+         *     있다).
+         *     이 보고 자체는 요청 집계에서 뺀다(`usage_meter.SKIP_ROUTES`) — 두 번 세지 않게.
+         */
+        post: operations["report_mcp_call_api_usage_mcp_calls_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/usage/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Usage Summary
+         * @description 기간의 사용 현황 한 장 — **시스템 관리자만.** 사람마다의 사용량이 실린다.
+         */
+        get: operations["usage_summary_api_usage_summary_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/viscoelastic/master-curves/{master_curve_id}/points": {
         parameters: {
             query?: never;
@@ -7773,6 +7817,42 @@ export interface components {
             /** Active System Admins */
             active_system_admins: number;
         };
+        /**
+         * ActiveDayOut
+         * @description 그날 쓴 사람 수 — 화면 · MCP · 둘 중 하나라도.
+         */
+        ActiveDayOut: {
+            /** Any */
+            any: number;
+            /**
+             * Day
+             * Format: date
+             */
+            day: string;
+            /** Mcp */
+            mcp: number;
+            /** Web */
+            web: number;
+        };
+        /** ActivityOut */
+        ActivityOut: {
+            /** Any Users */
+            any_users: number;
+            /** Average Daily */
+            average_daily: number;
+            /** Both Users */
+            both_users: number;
+            /** By Day */
+            by_day: components["schemas"]["ActiveDayOut"][];
+            /** Login Users */
+            login_users: number;
+            /** Logins */
+            logins: number;
+            /** Mcp Users */
+            mcp_users: number;
+            /** Web Users */
+            web_users: number;
+        };
         /** AliasCandidateAccept */
         AliasCandidateAccept: {
             /** Property Key */
@@ -7929,6 +8009,21 @@ export interface components {
             role: string;
             /** Workspace Slug */
             workspace_slug?: string | null;
+        };
+        /** AreaOut */
+        AreaOut: {
+            /** Area */
+            area: string;
+            /** Errors */
+            errors: number;
+            /** Label */
+            label: string;
+            /** Mcp */
+            mcp: number;
+            /** Reads */
+            reads: number;
+            /** Writes */
+            writes: number;
         };
         /** AshbyAxisOut */
         AshbyAxisOut: {
@@ -10339,6 +10434,18 @@ export interface components {
             /** Name */
             name?: string | null;
         };
+        /**
+         * ContentOut
+         * @description 기간 안에 **만든 것** — 쓰는 것이 실제로 자료로 남았나.
+         */
+        ContentOut: {
+            /** Created */
+            created: number;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+        };
         /** CoverageCellOut */
         CoverageCellOut: {
             /** Adopted Count */
@@ -10624,6 +10731,16 @@ export interface components {
             size_bytes: number | null;
             /** Version */
             version: string;
+        };
+        /** DayCountOut */
+        DayCountOut: {
+            /** Count */
+            count: number;
+            /**
+             * Day
+             * Format: date
+             */
+            day: string;
         };
         /** DeckBuildIn */
         DeckBuildIn: {
@@ -14003,6 +14120,58 @@ export interface components {
             /** Spec Thickness Unit */
             spec_thickness_unit?: string | null;
         };
+        /**
+         * McpCallIn
+         * @description MCP 서버가 도구 하나를 마칠 때 알리는 것.
+         */
+        McpCallIn: {
+            /**
+             * Elapsed Ms
+             * @default 0
+             */
+            elapsed_ms: number;
+            /**
+             * Ok
+             * @default true
+             */
+            ok: boolean;
+            /** Tool */
+            tool: string;
+        };
+        /** McpOut */
+        McpOut: {
+            /** Average Ms */
+            average_ms: number;
+            /** By Tool */
+            by_tool: components["schemas"]["ToolOut"][];
+            /** By User */
+            by_user: components["schemas"]["McpUserOut"][];
+            /** Calls */
+            calls: number;
+            /** Failures */
+            failures: number;
+            tokens: components["schemas"]["TokensOut"];
+            /** Tools Used */
+            tools_used: number;
+            /** Users */
+            users: number;
+            /** Writes Recorded */
+            writes_recorded: number;
+        };
+        /** McpUserOut */
+        McpUserOut: {
+            /** Calls */
+            calls: number;
+            /**
+             * Last Day
+             * Format: date
+             */
+            last_day: string;
+            /** Name */
+            name: string;
+            /** Tools */
+            tools: number;
+        };
         /** MemberAddRequest */
         MemberAddRequest: {
             /** Email */
@@ -14926,6 +15095,21 @@ export interface components {
              * @default []
              */
             steps: components["schemas"]["GraphEdgeOut"][];
+        };
+        /** PeriodOut */
+        PeriodOut: {
+            /** Days */
+            days: number;
+            /**
+             * End
+             * Format: date
+             */
+            end: string;
+            /**
+             * Start
+             * Format: date
+             */
+            start: string;
         };
         /** Person */
         Person: {
@@ -16427,6 +16611,39 @@ export interface components {
             /** Profile Key */
             profile_key?: string | null;
         };
+        /** RequestDayOut */
+        RequestDayOut: {
+            /**
+             * Day
+             * Format: date
+             */
+            day: string;
+            /** Mcp */
+            mcp: number;
+            /** Mcp Tools */
+            mcp_tools: number;
+            /** Web */
+            web: number;
+        };
+        /** RequestsOut */
+        RequestsOut: {
+            /** By Area */
+            by_area: components["schemas"]["AreaOut"][];
+            /** By Client */
+            by_client: {
+                [key: string]: number;
+            };
+            /** By Day */
+            by_day: components["schemas"]["RequestDayOut"][];
+            /** Errors */
+            errors: number;
+            /** Reads */
+            reads: number;
+            /** Total */
+            total: number;
+            /** Writes */
+            writes: number;
+        };
         /**
          * ResampleMethodOut
          * @description 점을 다시 고르는 방법 하나. **뜻은 서버가 적는다** — 화면이 베껴 두면
@@ -17345,6 +17562,22 @@ export interface components {
             test_run_id: string;
             /** Typical Span */
             typical_span: number;
+        };
+        /** SignupOut */
+        SignupOut: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Email */
+            email: string;
+            /** Name */
+            name: string;
+            /** Status */
+            status: string;
+            /** Workspace */
+            workspace: string | null;
         };
         /**
          * SignupPolicyOut
@@ -18946,6 +19179,28 @@ export interface components {
             /** Value */
             value: number;
         };
+        /** TokensOut */
+        TokensOut: {
+            /** Active */
+            active: number;
+            /** Used In Period */
+            used_in_period: number;
+            /** Users */
+            users: number;
+        };
+        /** ToolOut */
+        ToolOut: {
+            /** Average Ms */
+            average_ms: number;
+            /** Calls */
+            calls: number;
+            /** Failures */
+            failures: number;
+            /** Tool */
+            tool: string;
+            /** Users */
+            users: number;
+        };
         /**
          * TrashDoneOut
          * @description 되살렸거나 영영 지운 결과.
@@ -19233,6 +19488,50 @@ export interface components {
             /** Unread */
             unread: number;
         };
+        /** UsagePersonOut */
+        UsagePersonOut: {
+            /** Active Days */
+            active_days: number;
+            /** Email */
+            email: string | null;
+            /**
+             * Last Day
+             * Format: date
+             */
+            last_day: string;
+            /** Mcp Calls */
+            mcp_calls: number;
+            /** Name */
+            name: string;
+            /**
+             * User Id
+             * Format: uuid
+             */
+            user_id: string;
+            /** Views */
+            views: number;
+            /** Web Requests */
+            web_requests: number;
+            /** Workspace */
+            workspace: string | null;
+            /** Writes */
+            writes: number;
+        };
+        /** UsageSummaryOut */
+        UsageSummaryOut: {
+            activity: components["schemas"]["ActivityOut"];
+            /** Content */
+            content: components["schemas"]["ContentOut"][];
+            mcp: components["schemas"]["McpOut"];
+            /** Measured Since */
+            measured_since: string | null;
+            /** People */
+            people: components["schemas"]["UsagePersonOut"][];
+            period: components["schemas"]["PeriodOut"];
+            requests: components["schemas"]["RequestsOut"];
+            users: components["schemas"]["UsersOut"];
+            views: components["schemas"]["ViewsOut"];
+        };
         /** UserOut */
         UserOut: {
             /** Display Name */
@@ -19259,6 +19558,19 @@ export interface components {
             must_change_password: boolean;
             /** Status */
             status: string;
+        };
+        /** UsersOut */
+        UsersOut: {
+            /** Active Accounts */
+            active_accounts: number;
+            /** Pending */
+            pending: number;
+            /** Recent Signups */
+            recent_signups: components["schemas"]["SignupOut"][];
+            /** Signups */
+            signups: number;
+            /** Signups By Day */
+            signups_by_day: components["schemas"]["DayCountOut"][];
         };
         /** ValidationError */
         ValidationError: {
@@ -19300,6 +19612,34 @@ export interface components {
             used_for: string;
             /** Value */
             value: number | null;
+        };
+        /** ViewedOut */
+        ViewedOut: {
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+            /** Mcp Views */
+            mcp_views: number;
+            /** Viewers */
+            viewers: number;
+            /** Views */
+            views: number;
+        };
+        /** ViewsOut */
+        ViewsOut: {
+            /** Cards */
+            cards: components["schemas"]["ViewedOut"][];
+            /** Catalog Materials */
+            catalog_materials: components["schemas"]["ViewedOut"][];
+            /** Guides */
+            guides: components["schemas"]["ViewedOut"][];
+            /** Materials */
+            materials: components["schemas"]["ViewedOut"][];
+            /** Test Runs */
+            test_runs: components["schemas"]["ViewedOut"][];
+            /** Total */
+            total: number;
         };
         /**
          * ViscoelasticCardSaveRequest
@@ -30111,6 +30451,69 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UnitConversionOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    report_mcp_call_api_usage_mcp_calls_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["McpCallIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    usage_summary_api_usage_summary_get: {
+        parameters: {
+            query?: {
+                /** @description 오늘까지 며칠 */
+                days?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UsageSummaryOut"];
                 };
             };
             /** @description Validation Error */

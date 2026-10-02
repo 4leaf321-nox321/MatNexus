@@ -42,6 +42,7 @@ import { realmGroups } from '@/shared/layout/navigation'
  * 늘 밟는 길에서 그 대가를 치를 이유가 없다 — 둘을 합쳐도 예산의 절반이다.
  */
 const AccountsAdminPage = lazy(() => import('@/modules/accounts/AccountsAdminPage'))
+const UsagePage = lazy(() => import('@/modules/usage/UsagePage'))
 const WorkbenchPage = lazy(() => import('@/modules/workbench/WorkbenchPage'))
 const BomDeckPage = lazy(() => import('@/modules/fitting/BomDeckPage'))
 const AuditPage = lazy(() => import('@/modules/audit/AuditPage'))
@@ -259,6 +260,7 @@ export const router = createBrowserRouter([
 
           // 관리 (전사)
           { path: 'admin/accounts', element: <AccountsAdminPage /> },
+          { path: 'admin/usage', element: <UsagePage /> },
           { path: 'admin/workspaces', element: <WorkspacesAdminPage /> },
           // **단위는 기준정보 안의 한 칸이다.** 따로 주소를 두지 않는다 —
           // 사람이 폼에서 고르는 목록이라는 점에서 같은 것이고, 문 둘을 두면

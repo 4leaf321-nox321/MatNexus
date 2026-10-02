@@ -161,6 +161,87 @@
         "title": "AccountSummaryOut",
         "type": "object"
       },
+      "ActiveDayOut": {
+        "description": "그날 쓴 사람 수 — 화면 · MCP · 둘 중 하나라도.",
+        "properties": {
+          "any": {
+            "title": "Any",
+            "type": "integer"
+          },
+          "day": {
+            "format": "date",
+            "title": "Day",
+            "type": "string"
+          },
+          "mcp": {
+            "title": "Mcp",
+            "type": "integer"
+          },
+          "web": {
+            "title": "Web",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "day",
+          "web",
+          "mcp",
+          "any"
+        ],
+        "title": "ActiveDayOut",
+        "type": "object"
+      },
+      "ActivityOut": {
+        "properties": {
+          "any_users": {
+            "title": "Any Users",
+            "type": "integer"
+          },
+          "average_daily": {
+            "title": "Average Daily",
+            "type": "number"
+          },
+          "both_users": {
+            "title": "Both Users",
+            "type": "integer"
+          },
+          "by_day": {
+            "items": {
+              "$ref": "#/components/schemas/ActiveDayOut"
+            },
+            "title": "By Day",
+            "type": "array"
+          },
+          "login_users": {
+            "title": "Login Users",
+            "type": "integer"
+          },
+          "logins": {
+            "title": "Logins",
+            "type": "integer"
+          },
+          "mcp_users": {
+            "title": "Mcp Users",
+            "type": "integer"
+          },
+          "web_users": {
+            "title": "Web Users",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "any_users",
+          "web_users",
+          "mcp_users",
+          "both_users",
+          "average_daily",
+          "by_day",
+          "logins",
+          "login_users"
+        ],
+        "title": "ActivityOut",
+        "type": "object"
+      },
       "AliasCandidateAccept": {
         "properties": {
           "property_key": {
@@ -512,6 +593,44 @@
           }
         },
         "title": "ApproveRequest",
+        "type": "object"
+      },
+      "AreaOut": {
+        "properties": {
+          "area": {
+            "title": "Area",
+            "type": "string"
+          },
+          "errors": {
+            "title": "Errors",
+            "type": "integer"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "mcp": {
+            "title": "Mcp",
+            "type": "integer"
+          },
+          "reads": {
+            "title": "Reads",
+            "type": "integer"
+          },
+          "writes": {
+            "title": "Writes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "area",
+          "label",
+          "reads",
+          "writes",
+          "mcp",
+          "errors"
+        ],
+        "title": "AreaOut",
         "type": "object"
       },
       "AshbyAxisOut": {
@@ -7198,6 +7317,30 @@
         "title": "ConnectorUpdate",
         "type": "object"
       },
+      "ContentOut": {
+        "description": "기간 안에 **만든 것** — 쓰는 것이 실제로 자료로 남았나.",
+        "properties": {
+          "created": {
+            "title": "Created",
+            "type": "integer"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "created"
+        ],
+        "title": "ContentOut",
+        "type": "object"
+      },
       "CoverageCellOut": {
         "properties": {
           "adopted_count": {
@@ -7885,6 +8028,25 @@
           "pool"
         ],
         "title": "DatabaseOut",
+        "type": "object"
+      },
+      "DayCountOut": {
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "day": {
+            "format": "date",
+            "title": "Day",
+            "type": "string"
+          }
+        },
+        "required": [
+          "day",
+          "count"
+        ],
+        "title": "DayCountOut",
         "type": "object"
       },
       "DeckBuildIn": {
@@ -17224,6 +17386,121 @@
         "title": "MaterialUpdateRequest",
         "type": "object"
       },
+      "McpCallIn": {
+        "description": "MCP 서버가 도구 하나를 마칠 때 알리는 것.",
+        "properties": {
+          "elapsed_ms": {
+            "default": 0,
+            "maximum": 3600000.0,
+            "minimum": 0.0,
+            "title": "Elapsed Ms",
+            "type": "integer"
+          },
+          "ok": {
+            "default": true,
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "tool": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Tool",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tool"
+        ],
+        "title": "McpCallIn",
+        "type": "object"
+      },
+      "McpOut": {
+        "properties": {
+          "average_ms": {
+            "title": "Average Ms",
+            "type": "number"
+          },
+          "by_tool": {
+            "items": {
+              "$ref": "#/components/schemas/ToolOut"
+            },
+            "title": "By Tool",
+            "type": "array"
+          },
+          "by_user": {
+            "items": {
+              "$ref": "#/components/schemas/McpUserOut"
+            },
+            "title": "By User",
+            "type": "array"
+          },
+          "calls": {
+            "title": "Calls",
+            "type": "integer"
+          },
+          "failures": {
+            "title": "Failures",
+            "type": "integer"
+          },
+          "tokens": {
+            "$ref": "#/components/schemas/TokensOut"
+          },
+          "tools_used": {
+            "title": "Tools Used",
+            "type": "integer"
+          },
+          "users": {
+            "title": "Users",
+            "type": "integer"
+          },
+          "writes_recorded": {
+            "title": "Writes Recorded",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "calls",
+          "failures",
+          "users",
+          "average_ms",
+          "tools_used",
+          "writes_recorded",
+          "by_tool",
+          "by_user",
+          "tokens"
+        ],
+        "title": "McpOut",
+        "type": "object"
+      },
+      "McpUserOut": {
+        "properties": {
+          "calls": {
+            "title": "Calls",
+            "type": "integer"
+          },
+          "last_day": {
+            "format": "date",
+            "title": "Last Day",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "tools": {
+            "title": "Tools",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name",
+          "calls",
+          "tools",
+          "last_day"
+        ],
+        "title": "McpUserOut",
+        "type": "object"
+      },
       "MemberAddRequest": {
         "properties": {
           "email": {
@@ -19584,6 +19861,31 @@
           "found"
         ],
         "title": "PathOut",
+        "type": "object"
+      },
+      "PeriodOut": {
+        "properties": {
+          "days": {
+            "title": "Days",
+            "type": "integer"
+          },
+          "end": {
+            "format": "date",
+            "title": "End",
+            "type": "string"
+          },
+          "start": {
+            "format": "date",
+            "title": "Start",
+            "type": "string"
+          }
+        },
+        "required": [
+          "start",
+          "end",
+          "days"
+        ],
+        "title": "PeriodOut",
         "type": "object"
       },
       "Person": {
@@ -23280,6 +23582,87 @@
         "title": "ReparseRequest",
         "type": "object"
       },
+      "RequestDayOut": {
+        "properties": {
+          "day": {
+            "format": "date",
+            "title": "Day",
+            "type": "string"
+          },
+          "mcp": {
+            "title": "Mcp",
+            "type": "integer"
+          },
+          "mcp_tools": {
+            "title": "Mcp Tools",
+            "type": "integer"
+          },
+          "web": {
+            "title": "Web",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "day",
+          "web",
+          "mcp",
+          "mcp_tools"
+        ],
+        "title": "RequestDayOut",
+        "type": "object"
+      },
+      "RequestsOut": {
+        "properties": {
+          "by_area": {
+            "items": {
+              "$ref": "#/components/schemas/AreaOut"
+            },
+            "title": "By Area",
+            "type": "array"
+          },
+          "by_client": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "By Client",
+            "type": "object"
+          },
+          "by_day": {
+            "items": {
+              "$ref": "#/components/schemas/RequestDayOut"
+            },
+            "title": "By Day",
+            "type": "array"
+          },
+          "errors": {
+            "title": "Errors",
+            "type": "integer"
+          },
+          "reads": {
+            "title": "Reads",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          },
+          "writes": {
+            "title": "Writes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total",
+          "reads",
+          "writes",
+          "errors",
+          "by_client",
+          "by_day",
+          "by_area"
+        ],
+        "title": "RequestsOut",
+        "type": "object"
+      },
       "ResampleMethodOut": {
         "description": "점을 다시 고르는 방법 하나. **뜻은 서버가 적는다** — 화면이 베껴 두면\n새 방법을 더할 때 두 곳을 고치게 된다.",
         "properties": {
@@ -25710,6 +26093,47 @@
           "typical_span"
         ],
         "title": "ShortRunOut",
+        "type": "object"
+      },
+      "SignupOut": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "workspace": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workspace"
+          }
+        },
+        "required": [
+          "name",
+          "email",
+          "workspace",
+          "status",
+          "created_at"
+        ],
+        "title": "SignupOut",
         "type": "object"
       },
       "SignupPolicyOut": {
@@ -29902,6 +30326,62 @@
         "title": "ThicknessGapOut",
         "type": "object"
       },
+      "TokensOut": {
+        "properties": {
+          "active": {
+            "title": "Active",
+            "type": "integer"
+          },
+          "used_in_period": {
+            "title": "Used In Period",
+            "type": "integer"
+          },
+          "users": {
+            "title": "Users",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "active",
+          "users",
+          "used_in_period"
+        ],
+        "title": "TokensOut",
+        "type": "object"
+      },
+      "ToolOut": {
+        "properties": {
+          "average_ms": {
+            "title": "Average Ms",
+            "type": "number"
+          },
+          "calls": {
+            "title": "Calls",
+            "type": "integer"
+          },
+          "failures": {
+            "title": "Failures",
+            "type": "integer"
+          },
+          "tool": {
+            "title": "Tool",
+            "type": "string"
+          },
+          "users": {
+            "title": "Users",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "tool",
+          "calls",
+          "failures",
+          "users",
+          "average_ms"
+        ],
+        "title": "ToolOut",
+        "type": "object"
+      },
       "TrashDoneOut": {
         "description": "되살렸거나 영영 지운 결과.",
         "properties": {
@@ -30564,6 +31044,141 @@
         "title": "UnreadCountOut",
         "type": "object"
       },
+      "UsagePersonOut": {
+        "properties": {
+          "active_days": {
+            "title": "Active Days",
+            "type": "integer"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "last_day": {
+            "format": "date",
+            "title": "Last Day",
+            "type": "string"
+          },
+          "mcp_calls": {
+            "title": "Mcp Calls",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "user_id": {
+            "format": "uuid",
+            "title": "User Id",
+            "type": "string"
+          },
+          "views": {
+            "title": "Views",
+            "type": "integer"
+          },
+          "web_requests": {
+            "title": "Web Requests",
+            "type": "integer"
+          },
+          "workspace": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workspace"
+          },
+          "writes": {
+            "title": "Writes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "user_id",
+          "name",
+          "email",
+          "workspace",
+          "last_day",
+          "active_days",
+          "web_requests",
+          "writes",
+          "mcp_calls",
+          "views"
+        ],
+        "title": "UsagePersonOut",
+        "type": "object"
+      },
+      "UsageSummaryOut": {
+        "properties": {
+          "activity": {
+            "$ref": "#/components/schemas/ActivityOut"
+          },
+          "content": {
+            "items": {
+              "$ref": "#/components/schemas/ContentOut"
+            },
+            "title": "Content",
+            "type": "array"
+          },
+          "mcp": {
+            "$ref": "#/components/schemas/McpOut"
+          },
+          "measured_since": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Measured Since"
+          },
+          "people": {
+            "items": {
+              "$ref": "#/components/schemas/UsagePersonOut"
+            },
+            "title": "People",
+            "type": "array"
+          },
+          "period": {
+            "$ref": "#/components/schemas/PeriodOut"
+          },
+          "requests": {
+            "$ref": "#/components/schemas/RequestsOut"
+          },
+          "users": {
+            "$ref": "#/components/schemas/UsersOut"
+          },
+          "views": {
+            "$ref": "#/components/schemas/ViewsOut"
+          }
+        },
+        "required": [
+          "period",
+          "measured_since",
+          "users",
+          "activity",
+          "requests",
+          "mcp",
+          "views",
+          "content",
+          "people"
+        ],
+        "title": "UsageSummaryOut",
+        "type": "object"
+      },
       "UserOut": {
         "properties": {
           "display_name": {
@@ -30626,6 +31241,45 @@
           "memberships"
         ],
         "title": "UserOut",
+        "type": "object"
+      },
+      "UsersOut": {
+        "properties": {
+          "active_accounts": {
+            "title": "Active Accounts",
+            "type": "integer"
+          },
+          "pending": {
+            "title": "Pending",
+            "type": "integer"
+          },
+          "recent_signups": {
+            "items": {
+              "$ref": "#/components/schemas/SignupOut"
+            },
+            "title": "Recent Signups",
+            "type": "array"
+          },
+          "signups": {
+            "title": "Signups",
+            "type": "integer"
+          },
+          "signups_by_day": {
+            "items": {
+              "$ref": "#/components/schemas/DayCountOut"
+            },
+            "title": "Signups By Day",
+            "type": "array"
+          }
+        },
+        "required": [
+          "active_accounts",
+          "pending",
+          "signups",
+          "signups_by_day",
+          "recent_signups"
+        ],
+        "title": "UsersOut",
         "type": "object"
       },
       "ValidationError": {
@@ -30740,6 +31394,92 @@
           "used_for"
         ],
         "title": "ValueSourceOut",
+        "type": "object"
+      },
+      "ViewedOut": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "mcp_views": {
+            "title": "Mcp Views",
+            "type": "integer"
+          },
+          "viewers": {
+            "title": "Viewers",
+            "type": "integer"
+          },
+          "views": {
+            "title": "Views",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "views",
+          "viewers",
+          "mcp_views"
+        ],
+        "title": "ViewedOut",
+        "type": "object"
+      },
+      "ViewsOut": {
+        "properties": {
+          "cards": {
+            "items": {
+              "$ref": "#/components/schemas/ViewedOut"
+            },
+            "title": "Cards",
+            "type": "array"
+          },
+          "catalog_materials": {
+            "items": {
+              "$ref": "#/components/schemas/ViewedOut"
+            },
+            "title": "Catalog Materials",
+            "type": "array"
+          },
+          "guides": {
+            "items": {
+              "$ref": "#/components/schemas/ViewedOut"
+            },
+            "title": "Guides",
+            "type": "array"
+          },
+          "materials": {
+            "items": {
+              "$ref": "#/components/schemas/ViewedOut"
+            },
+            "title": "Materials",
+            "type": "array"
+          },
+          "test_runs": {
+            "items": {
+              "$ref": "#/components/schemas/ViewedOut"
+            },
+            "title": "Test Runs",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total",
+          "materials",
+          "catalog_materials",
+          "test_runs",
+          "cards",
+          "guides"
+        ],
+        "title": "ViewsOut",
         "type": "object"
       },
       "ViscoelasticCardSaveRequest": {
@@ -48827,6 +49567,89 @@
         "summary": "Convert",
         "tags": [
           "units"
+        ]
+      }
+    },
+    "/api/usage/mcp-calls": {
+      "post": {
+        "description": "MCP 서버가 도구 하나를 마칠 때 알린다 — **그 토큰의 주인 몫으로** 센다.\n\n요청 수로는 도구 수를 못 센다(도구 하나가 여러 요청을 내고, 백엔드를 안 부르는 도구도\n있다).\n이 보고 자체는 요청 집계에서 뺀다(`usage_meter.SKIP_ROUTES`) — 두 번 세지 않게.",
+        "operationId": "report_mcp_call_api_usage_mcp_calls_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/McpCallIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Report Mcp Call",
+        "tags": [
+          "usage"
+        ]
+      }
+    },
+    "/api/usage/summary": {
+      "get": {
+        "description": "기간의 사용 현황 한 장 — **시스템 관리자만.** 사람마다의 사용량이 실린다.",
+        "operationId": "usage_summary_api_usage_summary_get",
+        "parameters": [
+          {
+            "description": "오늘까지 며칠",
+            "in": "query",
+            "name": "days",
+            "required": false,
+            "schema": {
+              "default": 30,
+              "description": "오늘까지 며칠",
+              "maximum": 366,
+              "minimum": 1,
+              "title": "Days",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsageSummaryOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Usage Summary",
+        "tags": [
+          "usage"
         ]
       }
     },

@@ -15,6 +15,7 @@ import {
   Boxes,
   BookMarked,
   Building2,
+  ChartLine,
   ClipboardCheck,
   ClipboardList,
   FileCode2,
@@ -486,6 +487,14 @@ export const NAV_GROUPS: NavGroup[] = [
     title: '관리',
     audience: 'system_admin',
     items: [
+      {
+        // **얼마나 잘 쓰고 있나**(2026-10-02) — 쓴 사람 · 기능 · AI(MCP) 도구 호출 · 가입. 사람마다의
+        // 사용량이 보이므로 시스템 관리자만 연다(서버도 같은 판정을 한다).
+        label: '사용 현황',
+        icon: ChartLine,
+        to: '/admin/usage',
+        audience: 'system_admin',
+      },
       { label: '계정', icon: UserCog, to: '/admin/accounts', audience: 'system_admin' },
       // **전사 부서 목록이다.** 위 '내 부서' 와 헷갈리지 않게 이름을 가른다 —
       // 이쪽은 부서를 만들고 고치는 자리고, 저쪽은 내 부서의 일이다.

@@ -36,6 +36,7 @@ import httpx
 import declared_points
 import retry_plan
 import term_gate
+import usage_report
 from mcp.server.mcpserver import Context, MCPServer
 from mcp.server.transport_security import TransportSecuritySettings
 
@@ -101,6 +102,45 @@ mcp = MCPServer(
         " 특히 tier 4(추정)와 synthetic(합성) 값을 실측처럼 옮기지 않는 규약이 있다."
     ),
 )
+
+
+# ── 사용 집계 ──────────────────────────────────────────────────────────────────
+
+
+async def _report_call(ctx: Context, tool: str, ok: bool, elapsed_ms: int) -> None:
+    """도구 하나가 끝났다고 백엔드에 알린다 — 「관리 → 사용 현황」 의 MCP 숫자(2026-10-02).
+
+    **그 토큰의 주인 몫으로** 센다(호출자의 Authorization 을 그대로 나른다). 실패는 삼킨다 —
+    `usage_report.counted` 가 한 번 더 감싼다.
+    """
+    headers = _headers(ctx)
+    if "Authorization" not in headers:
+        return
+    async with httpx.AsyncClient(base_url=API_BASE, timeout=3.0) as client:
+        await client.post(
+            "/usage/mcp-calls",
+            json={"tool": tool, "ok": ok, "elapsed_ms": elapsed_ms},
+            headers=headers,
+        )
+
+
+_register_tool = mcp.tool
+
+
+def _counted_tool(*args: Any, **kwargs: Any) -> Any:
+    """`@mcp.tool()` 과 같되 **도구가 끝날 때마다 센다.** 도구 91개를 하나하나 고치지 않는다 —
+    새 도구도 이 데코레이터로 등록되므로 빠지지 않는다."""
+    register = _register_tool(*args, **kwargs)
+
+    def decorate(fn: Any) -> Any:
+        return register(
+            usage_report.counted(fn, _report_call, lambda one: isinstance(one, Context))
+        )
+
+    return decorate
+
+
+mcp.tool = _counted_tool  # type: ignore[method-assign]
 
 
 # ── 백엔드 호출 ────────────────────────────────────────────────────────────────
@@ -352,7 +392,7 @@ def _card_summary(card: dict[str, Any]) -> dict[str, Any]:
 
 
 @mcp.tool()
-def get_guide(topic: str | None = None) -> str:
+async def get_guide(ctx: Context, topic: str | None = None) -> str:
     """MatNexus 사용 규약 — **먼저 읽어라.**
 
     단위(전부 SI) · 값의 무게(origin·quality_tier·caveat) · 선언 물성의 층 ·

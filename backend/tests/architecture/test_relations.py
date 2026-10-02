@@ -160,6 +160,10 @@ def test_설명은_MCP_가_실을_수_있는_모양이다() -> None:
 #: 마디도 나르개도 아닌 표와 **왜 아닌가**.
 EXCLUDED_TABLES: dict[str, str] = {
     "access_logs": 사람,
+    # 사용 집계(2026-10-02) — 「누가 얼마나 썼나」 의 수다. 접근 로그와 같은 자리.
+    "mcp_tool_daily": 사람,
+    "usage_daily": 사람,
+    "usage_views_daily": 사람,
     "audit_entries": 사람,
     "personal_access_tokens": 사람,
     "refresh_tokens": 사람,

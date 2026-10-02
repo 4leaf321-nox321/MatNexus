@@ -48,6 +48,7 @@ from app.modules.tests import formats as tests_formats
 from app.modules.tests import routes as tests_routes
 from app.modules.trash import routes as trash_routes
 from app.modules.units import routes as units_routes
+from app.modules.usage import routes as usage_routes
 from app.modules.viscoelastic import (  # noqa: F401  (파싱 훅을 등록시킨다)
     autoregister as _viscoelastic_autoregister,
 )
@@ -60,6 +61,7 @@ from app.schema_version import warn_if_behind
 from app.shared.access_log import AccessLogMiddleware
 from app.shared.errors import NotFound, register_error_handlers
 from app.shared.request_context import RequestIdMiddleware
+from app.shared.usage_meter import UsageMeterMiddleware
 from matcore import extensions
 
 # 솔버별 렌더러 — 모듈을 읽으면 등록된다(`register_renderer`).
@@ -141,6 +143,7 @@ def _api_router() -> APIRouter:
     router.include_router(pipelines_routes.router)
     router.include_router(guide_routes.router)
     router.include_router(server_routes.router)
+    router.include_router(usage_routes.router)
 
     return router
 
@@ -238,8 +241,9 @@ def create_app() -> FastAPI:
     )
 
     # 순서가 중요하다. add_middleware 는 **나중에 더한 것이 바깥**이므로 아래
-    # 두 줄은 RequestId(바깥) → AccessLog(안쪽) 이 된다. 접근 로그가 요청 id 를
-    # 읽으려면 그 id 가 먼저 설정돼 있어야 한다.
+    # 세 줄은 RequestId(바깥) → AccessLog → UsageMeter(안쪽) 이 된다. 접근 로그가 요청 id 를,
+    # 사용 계량기가 `X-Client`(화면 / MCP)를 읽으려면 그것이 먼저 설정돼 있어야 한다.
+    app.add_middleware(UsageMeterMiddleware)
     app.add_middleware(AccessLogMiddleware)
     app.add_middleware(RequestIdMiddleware)
 
