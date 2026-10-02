@@ -12,7 +12,7 @@
  * 잡을 수 있는 것도 그것이다.
  */
 
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -147,5 +147,100 @@ describe('결과 펼치기', () => {
     await waitFor(() => expect(curve).toHaveBeenCalledWith('r1', undefined))
     // 스칼라 칸과 단계 목록 둘 다 이 이름을 쓴다 — 하나만 세지 않는다.
     expect(screen.getAllByText('인장강도').length).toBeGreaterThan(0)
+  })
+
+  // 2026-10-03 운영 지적: 진응력 단계가 항복 앞을 버려, 채택 화면 곡선이 항복점에서 시작했다.
+  const CUT = {
+    points: [
+      [0.004, 3.0e8],
+      [0.05, 3.6e8],
+    ],
+    returned: 2,
+    row_count: 2,
+    columns: ['strain_engineering', 'stress_engineering', 'stress_true'],
+    units: { strain_engineering: '1', stress_engineering: 'Pa', stress_true: 'Pa' },
+    x: 'strain_engineering',
+    y: 'stress_engineering',
+    context: {
+      points: [
+        [0, 0],
+        [0.0015, 3.0e8],
+        [0.05, 3.6e8],
+      ],
+      stage_label: '5. 항복강도',
+      recomputed: false,
+      note: null,
+    },
+    context_note: null,
+    guides: [
+      {
+        kind: 'elastic',
+        modulus: 2.0e11,
+        offset: null,
+        points: [
+          [0, 0],
+          [0.0018, 3.6e8],
+        ],
+      },
+      {
+        kind: 'offset',
+        modulus: 2.0e11,
+        offset: 0.002,
+        points: [
+          [0.002, 0],
+          [0.0038, 3.6e8],
+        ],
+      },
+    ],
+    yield_point: [0.0035, 3.0e8],
+  }
+
+  it('공칭 축이면 자르기 전 곡선 · E 선 · 오프셋 선 · 항복점이 범례와 함께 선다', async () => {
+    curve.mockResolvedValue(CUT)
+    const user = userEvent.setup()
+    render(<ResultsPanel testRunId="run-1" />)
+    await user.click(await screen.findByRole('button', { name: '펼치기' }))
+
+    // 데이터로 그려진 것을 기다린다 — 범례는 서버가 앞쪽 곡선을 줬을 때만 선다.
+    const legend = within(await screen.findByRole('list', { name: '곡선 범례' }))
+    expect(legend.getByText('자르기 전 공칭 곡선 (5. 항복강도 뒤)')).toBeInTheDocument()
+    expect(legend.getByText(/^탄성 직선 E 200 GPa/)).toBeInTheDocument()
+    expect(legend.getByText(/^오프셋 .* 선$/)).toBeInTheDocument()
+    expect(legend.getByText(/^항복강도 300/)).toBeInTheDocument()
+    // 저장된 곡선이면 「참고」 라고 하지 않는다.
+    expect(screen.queryByText(/참고 곡선/)).toBeNull()
+  })
+
+  it('다시 계산한 참고 곡선이면 그렇다고 적고, 어긋나면 그 말도 선다', async () => {
+    curve.mockResolvedValue({
+      ...CUT,
+      context: { ...CUT.context, recomputed: true, note: '첫 점과 3.0% 어긋납니다' },
+    })
+    const user = userEvent.setup()
+    render(<ResultsPanel testRunId="run-1" />)
+    await user.click(await screen.findByRole('button', { name: '펼치기' }))
+
+    const legend = within(await screen.findByRole('list', { name: '곡선 범례' }))
+    expect(
+      legend.getByText('자르기 전 공칭 곡선 (다시 계산한 참고 · 5. 항복강도 뒤)')
+    ).toBeInTheDocument()
+    expect(screen.getByText(/참고 곡선/)).toBeInTheDocument()
+    expect(screen.getByText('첫 점과 3.0% 어긋납니다')).toBeInTheDocument()
+  })
+
+  it('앞쪽 곡선을 못 그렸으면 그 이유가 선다', async () => {
+    curve.mockResolvedValue({
+      ...CUT,
+      context: null,
+      context_note: '앞쪽 곡선을 다시 그리지 못했습니다 — 원본 곡선이 없습니다.',
+    })
+    const user = userEvent.setup()
+    render(<ResultsPanel testRunId="run-1" />)
+    await user.click(await screen.findByRole('button', { name: '펼치기' }))
+
+    expect(await screen.findByText(/다시 그리지 못했습니다/)).toBeInTheDocument()
+    // 보조선은 저장된 값이라 그대로 선다.
+    const legend = within(screen.getByRole('list', { name: '곡선 범례' }))
+    expect(legend.getByText(/^탄성 직선 E/)).toBeInTheDocument()
   })
 })

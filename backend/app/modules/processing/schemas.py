@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -349,6 +349,34 @@ class BatchUndoOut(BaseModel):
     items: list[BatchUndoItemOut]
 
 
+class ResultContextOut(BaseModel):
+    """**자르기 전** 공칭 응력-변형률 곡선 — 결과 곡선이 앞(탄성 구간)을 잃었을 때만.
+
+    진응력 · 진소성변형률 단계가 항복 앞의 점을 버려서, 결과 파일만으로는 E 를 확인할
+    곡선이 없다. 저장할 때 그 단계 앞의 곡선을 결과 파일에 함께 싣는다(ADR 0053).
+    """
+
+    points: list[tuple[float, float]]
+    stage_label: str
+    """어느 단계가 끝난 곡선인가 — 「2. 정렬 · 중복 제거」."""
+    recomputed: bool
+    """**저장된 것이 아니라 다시 계산한 참고 곡선**인가. 이 칸이 생기기 전에 저장한 결과는
+    파일에 앞쪽 곡선이 없어서, 그 결과의 단계를 지금 원본에 다시 돌려 그린다."""
+    note: str | None = None
+    """다시 계산한 곡선이 저장된 결과와 어긋나면 그 말."""
+
+
+class ResultGuideOut(BaseModel):
+    """채택 화면의 보조선 — 결과에 든 값으로 긋는다. SI."""
+
+    kind: Literal["elastic", "offset"]
+    """`elastic` 은 탄성 구간에 맞춘 직선(σ = Eε + 절편), `offset` 은 항복강도를 잰 오프셋 선
+    (σ = E(ε - 오프셋)) — 항복강도 단계가 쓴 바로 그 선이다."""
+    modulus: float
+    offset: float | None = None
+    points: list[tuple[float, float]]
+
+
 class ResultCurveOut(BaseModel):
     """저장된 결과의 곡선. **결과 화면이 그림을 그리려면 이것이 필요하다.**
 
@@ -365,3 +393,10 @@ class ResultCurveOut(BaseModel):
     units: dict[str, str]
     row_count: int
     points: list[tuple[float, float]]
+    context: ResultContextOut | None = None
+    """공칭 축으로 볼 때만 — 다른 축에는 앞쪽 곡선이 없다."""
+    context_note: str | None = None
+    """앞쪽 곡선을 못 그린 이유(다시 계산이 멈췄다 등). 조용히 빼지 않는다."""
+    guides: list[ResultGuideOut] = Field(default_factory=list)
+    yield_point: tuple[float, float] | None = None
+    """(항복 변형률, 항복강도) — 오프셋 선과 곡선의 교점."""

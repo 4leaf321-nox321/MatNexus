@@ -16,7 +16,7 @@ Parquet 은 필요한 열만 읽는다. 타입과 열 이름이 파일에 들어
 from __future__ import annotations
 
 import io
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 
 import pyarrow as pa
 import pyarrow.parquet as pq
@@ -29,10 +29,22 @@ from matcore.parsers import Channel
 _UNIT_PREFIX = b"unit:"
 _SOURCE_UNIT_PREFIX = b"source_unit:"
 _LABEL_PREFIX = b"label:"
+#: 열과 **길이가 다른** 부가 정보(JSON 바이트) — 처리 결과의 「자르기 전 곡선」 이 그렇다.
+#: 열로 넣으면 길이를 맞추려 빈 칸을 채워야 하고, 그러면 행 수가 거짓말을 한다.
+_EXTRA_PREFIX = b"extra:"
 
 
-def to_parquet(channels: Sequence[Channel], *, compression: str = "zstd") -> bytes:
-    """채널들을 Parquet 바이트로. 모든 채널의 길이가 같아야 한다."""
+def to_parquet(
+    channels: Sequence[Channel],
+    *,
+    compression: str = "zstd",
+    extra: Mapping[str, bytes] | None = None,
+) -> bytes:
+    """채널들을 Parquet 바이트로. 모든 채널의 길이가 같아야 한다.
+
+    `extra` 는 스키마 메타데이터에 함께 싣는다(`read_extra` 로 읽는다) — 파일이 불변이라
+    나중에 덧붙일 수 없는 것을 **처음부터** 같이 둔다.
+    """
     if not channels:
         raise ValueError("채널이 없습니다.")
     lengths = {len(channel.values) for channel in channels}
@@ -47,6 +59,8 @@ def to_parquet(channels: Sequence[Channel], *, compression: str = "zstd") -> byt
         metadata[_LABEL_PREFIX + key] = channel.label.encode()
         if channel.source_unit:
             metadata[_SOURCE_UNIT_PREFIX + key] = channel.source_unit.encode()
+    for name, value in (extra or {}).items():
+        metadata[_EXTRA_PREFIX + name.encode()] = value
 
     schema = pa.schema(
         [pa.field(channel.key, pa.float64()) for channel in channels], metadata=metadata
@@ -82,6 +96,15 @@ def read_units(data: bytes) -> dict[str, str]:
         for key, value in metadata.items()
         if key.startswith(_UNIT_PREFIX)
     }
+
+
+def read_extra(data: bytes, name: str) -> bytes | None:
+    """`to_parquet(extra=…)` 로 실은 것. **없으면 None** — 그 칸이 생기기 전에 쓴 파일이다.
+
+    「비어 있다」 와 「없다」 를 가른다: 쓴 쪽이 「해당 없음」 을 말하려면 값을 적는다.
+    """
+    schema = pq.read_schema(io.BytesIO(data))
+    return (schema.metadata or {}).get(_EXTRA_PREFIX + name.encode())
 
 
 def column_names(data: bytes) -> list[str]:

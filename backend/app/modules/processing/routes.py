@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+import json
 import uuid
 from collections.abc import Mapping
 from datetime import UTC, datetime
@@ -49,7 +50,9 @@ from app.modules.processing.schemas import (
     RecipeCreateRequest,
     RecipeOut,
     RecipeUpdateRequest,
+    ResultContextOut,
     ResultCurveOut,
+    ResultGuideOut,
     StagePointsOut,
     StepParamOut,
 )
@@ -217,7 +220,8 @@ def _store(
     result, curve = _run_pipeline(db, run, curve_key, steps)
     frame = result.frame
     data = curves.to_parquet(
-        [
+        extra={CONTEXT_KEY: _context_bytes(result.stages)},
+        channels=[
             Channel(
                 key=name,
                 label=name,
@@ -227,7 +231,7 @@ def _store(
                 ),
             )
             for name in sorted(frame.columns)
-        ]
+        ],
     )
     # **결과마다 새 파일이다.** 불변이므로 덮어쓸 일이 없고, 덮어쓰기가 없으면
     # "예전 결과를 열었더니 값이 달라졌다" 가 구조적으로 불가능하다.
@@ -901,6 +905,193 @@ RESULT_AXIS_PAIRS = (
 )
 
 
+#: 채택 화면이 앞쪽 곡선 · 보조선을 그리는 축 — 공칭 응력-변형률.
+CONTEXT_AXES = ("strain_engineering", "stress_engineering")
+
+#: 결과 파일에 싣는 「자르기 전 곡선」 의 이름(`curves.read_extra`).
+CONTEXT_KEY = "context"
+
+#: 다시 계산한 앞쪽 곡선이 저장된 결과의 첫 점과 이만큼 넘게 어긋나면 그렇다고 말한다.
+CONTEXT_MISMATCH = 0.01
+
+
+def _context_points(stage: processing.Stage) -> list[tuple[float, float]]:
+    """그 단계의 공칭 곡선을 그림용으로 줄인다. **NaN 은 결측으로** — JSON 에 못 싣는다."""
+    x_key, y_key = CONTEXT_AXES
+
+    def finite(values: np.ndarray) -> list[float | None]:
+        return [float(value) if np.isfinite(value) else None for value in values]
+
+    return curves.downsample(
+        finite(stage.frame.columns[x_key]),
+        finite(stage.frame.columns[y_key]),
+        max_points=PREVIEW_POINTS,
+    )
+
+
+def _context_bytes(stages: tuple[processing.Stage, ...]) -> bytes:
+    """결과 파일에 싣는 앞쪽 곡선. **앞을 안 잃었으면 `null`** — 「없다」 가 아니라
+    「필요 없다」 를 적어 둬야, 이 칸이 생기기 전의 파일(키가 아예 없다)과 갈린다."""
+    stage = processing.front_intact_stage(stages, *CONTEXT_AXES)
+    if stage is None or stage is stages[-1]:
+        return b"null"
+    return json.dumps(
+        {"stage": f"{stage.index + 1}. {stage.label}", "points": _context_points(stage)}
+    ).encode()
+
+
+def _first_point(data: bytes) -> tuple[float, float] | None:
+    """저장된 결과의 공칭 곡선에서 변형률이 가장 작은 점 — 앞이 어디서 잘렸나."""
+    x_key, y_key = CONTEXT_AXES
+    raw = curves.read_columns(data, list(CONTEXT_AXES))
+    pairs = [
+        (float(x), float(y))
+        for x, y in zip(raw[x_key], raw[y_key], strict=True)
+        if x is not None and y is not None and np.isfinite(x) and np.isfinite(y)
+    ]
+    return min(pairs) if pairs else None
+
+
+def _recomputed_context(
+    db: Session, run: TestRun, item: ProcessingResult, data: bytes
+) -> tuple[ResultContextOut | None, str | None]:
+    """**이 칸이 생기기 전에 저장한 결과** — 그 결과의 단계를 지금 원본에 다시 돌린다
+    (ADR 0053).
+
+    저장된 값이 아니라 참고 그림이다. 그 사이 원본 · 시편 값 · 플러그인이 바뀌었으면 그림이
+    결과와 어긋날 수 있으므로, 저장된 결과의 첫 점이 다시 계산한 곡선 위에 있는지 견주고
+    어긋나면 그렇다고 적는다.
+    """
+    try:
+        stages = _run_pipeline(db, run, item.source_curve_key, list(item.steps_snapshot))[
+            0
+        ].stages
+    except AppError as exc:
+        # **여기까지 된 것을 쓴다.** 뒤 단계가 멈춰도 앞쪽 곡선은 대개 이미 나와 있다.
+        done = getattr(exc, "done", None)
+        if done is None or not done.stages:
+            return None, f"앞쪽 곡선을 다시 그리지 못했습니다 — {exc.message}"
+        stages = done.stages
+    stage = processing.front_intact_stage(stages, *CONTEXT_AXES)
+    first = _first_point(data)
+    if stage is None or first is None:
+        return None, None
+    x_key, y_key = CONTEXT_AXES
+    xs, ys = stage.frame.columns[x_key], stage.frame.columns[y_key]
+    if float(np.nanmin(xs)) >= first[0]:
+        return None, None  # 저장된 결과가 앞을 안 잃었다 — 결과 곡선이 곧 전체다
+    order = np.argsort(xs)
+    expected = float(np.interp(first[0], xs[order], ys[order]))
+    note = None
+    if first[1] and abs(expected - first[1]) > CONTEXT_MISMATCH * abs(first[1]):
+        gap = abs(expected - first[1]) / abs(first[1]) * 100
+        note = (
+            f"다시 계산한 곡선이 저장된 결과의 첫 점과 {gap:.1f}% 어긋납니다 — 그 사이 "
+            f"원본 · 시편 값 · 처리 방식이 바뀌었을 수 있습니다."
+        )
+    context = ResultContextOut(
+        points=_context_points(stage),
+        stage_label=f"{stage.index + 1}. {stage.label}",
+        recomputed=True,
+        note=note,
+    )
+    return context, None
+
+
+def _context(
+    db: Session, run: TestRun, item: ProcessingResult, data: bytes
+) -> tuple[ResultContextOut | None, str | None]:
+    stored = curves.read_extra(data, CONTEXT_KEY)
+    if stored is None:
+        return _recomputed_context(db, run, item, data)
+    body = json.loads(stored)
+    if body is None:
+        return None, None
+    return (
+        ResultContextOut(
+            points=[(float(x), float(y)) for x, y in body["points"]],
+            stage_label=str(body["stage"]),
+            recomputed=False,
+        ),
+        None,
+    )
+
+
+def _stage_axes(stage: Mapping[str, Any]) -> tuple[str, str]:
+    options = stage.get("options") or {}
+    return (
+        str(options.get("strain") or CONTEXT_AXES[0]),
+        str(options.get("stress") or CONTEXT_AXES[1]),
+    )
+
+
+def _last_stage(item: ProcessingResult, plugin: str) -> Mapping[str, Any] | None:
+    found = [stage for stage in item.stages or [] if stage.get("plugin") == plugin]
+    return found[-1] if found else None
+
+
+def _guides(
+    item: ProcessingResult,
+) -> tuple[list[ResultGuideOut], tuple[float, float] | None]:
+    """결과에 든 값으로 긋는 보조선 — **그 값을 잰 단계가 공칭 축에서 쟀을 때만.**
+
+    탄성 직선은 탄성계수 단계가 맞춘 σ = Eε + 절편, 오프셋 선은 항복강도 단계가 교점을
+    찾은 σ = E(ε - 오프셋) 그대로다(그 단계에 들어간 E — 직접 넣었으면 그 값). 선은 항복강도의
+    1.2 배까지 — 없으면 인장강도의 0.9 배까지 — 긋는다. 곡선 전체 높이로 그으면 탄성 구간이
+    눌려 안 보인다.
+    """
+    values = {
+        str(one.get("key")): float(one["value"])
+        for one in item.scalars or []
+        if isinstance(one.get("value"), int | float)
+    }
+    proof = values.get("proof_stress")
+    strength = values.get("tensile_strength")
+    top = 1.2 * proof if proof else (0.9 * strength if strength else None)
+    if not top or top <= 0:
+        return [], None
+    guides: list[ResultGuideOut] = []
+    elastic = _last_stage(item, "tensile.elastic_modulus")
+    modulus = values.get("youngs_modulus")
+    if (
+        elastic is not None
+        and modulus
+        and modulus > 0
+        and _stage_axes(elastic) == CONTEXT_AXES
+    ):
+        intercept = values.get("elastic_intercept", 0.0)
+        guides.append(
+            ResultGuideOut(
+                kind="elastic",
+                modulus=modulus,
+                points=[(-intercept / modulus, 0.0), ((top - intercept) / modulus, top)],
+            )
+        )
+    yielded: tuple[float, float] | None = None
+    proof_stage = _last_stage(item, "tensile.proof_stress")
+    proof_strain = values.get("proof_strain")
+    if (
+        proof_stage is not None
+        and proof
+        and proof_strain is not None
+        and _stage_axes(proof_stage) == CONTEXT_AXES
+    ):
+        used = (proof_stage.get("options") or {}).get("youngs_modulus")
+        slope = float(used) if isinstance(used, int | float) and used > 0 else modulus
+        offset = values.get("proof_offset", 0.002)
+        if slope and slope > 0:
+            guides.append(
+                ResultGuideOut(
+                    kind="offset",
+                    modulus=slope,
+                    offset=offset,
+                    points=[(offset, 0.0), (offset + top / slope, top)],
+                )
+            )
+        yielded = (proof_strain, proof)
+    return guides, yielded
+
+
 def _result_axes(columns: list[str], x: str | None, y: str | None) -> tuple[str, str]:
     if x and y:
         return x, y
@@ -928,7 +1119,7 @@ def result_curve(
     item = db.get(ProcessingResult, result_id)
     if item is None:
         raise NotFound("MNX-PROCESSING-0010", "처리 결과를 찾을 수 없습니다.")
-    get_run(db, user, item.test_run_id)  # 가시성 판정
+    run = get_run(db, user, item.test_run_id)  # 가시성 판정
 
     data = filestore.read_bytes(item.storage_path)
     columns = sorted(curves.column_names(data))
@@ -938,6 +1129,14 @@ def result_curve(
     if axis_x in columns and axis_y in columns:
         raw = curves.read_columns(data, [axis_x, axis_y])
         points = curves.downsample(raw[axis_x], raw[axis_y], max_points=PREVIEW_POINTS)
+    # **앞쪽 곡선 · 보조선은 공칭 축에서만** — 진응력 축에는 탄성 구간이라는 것이 없다.
+    context: ResultContextOut | None = None
+    context_note: str | None = None
+    guides: list[ResultGuideOut] = []
+    yielded: tuple[float, float] | None = None
+    if (axis_x, axis_y) == CONTEXT_AXES and points:
+        context, context_note = _context(db, run, item, data)
+        guides, yielded = _guides(item)
     return ResultCurveOut(
         result_id=item.id,
         x=axis_x,
@@ -946,6 +1145,10 @@ def result_curve(
         units={name: units.get(name, "1") for name in columns},
         row_count=item.row_count,
         points=points,
+        context=context,
+        context_note=context_note,
+        guides=guides,
+        yield_point=yielded,
     )
 
 

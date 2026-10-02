@@ -229,6 +229,31 @@ def apply(steps: list[Step], frame: Frame, *, given: Sequence[Scalar] = ()) -> P
     return PipelineResult(tuple(stages))
 
 
+def front_intact_stage(stages: Sequence[Stage], x: str, y: str) -> Stage | None:
+    """**앞이 잘리지 않은** 마지막 단계 — `x` 의 가장 작은 값이 아직 남아 있는 것.
+
+    진응력 · 진소성변형률 단계는 항복강도 앞의 점을 **모든 열에서** 버린다(소성 곡선은
+    항복점부터다 — 2026-09-11). 그래서 저장된 결과만으로는 탄성 구간을 그릴 수 없고,
+    채택 화면이 E 를 눈으로 확인할 곡선이 없었다(2026-10-03 운영 지적). 정렬 · 중복 제거 ·
+    토우 보정처럼 앞을 안 자르는 단계는 지나가고, 앞을 자른 단계 바로 앞에서 멈춘다.
+
+    `x` · `y` 가 둘 다 있는 단계가 없으면 None.
+    """
+    having = [
+        stage
+        for stage in stages
+        if x in stage.frame.columns
+        and y in stage.frame.columns
+        and np.isfinite(stage.frame.columns[x]).any()
+    ]
+    if not having:
+        return None
+    lowest = min(float(np.nanmin(stage.frame.columns[x])) for stage in having)
+    return [stage for stage in having if float(np.nanmin(stage.frame.columns[x])) <= lowest][
+        -1
+    ]
+
+
 #: 앞 단계가 낸 값을 가리키는 표기. `{"youngs_modulus": "@youngs_modulus"}`
 REFERENCE_PREFIX = "@"
 

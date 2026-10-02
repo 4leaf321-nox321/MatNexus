@@ -16738,6 +16738,26 @@ export interface components {
             reason?: string | null;
         };
         /**
+         * ResultContextOut
+         * @description **자르기 전** 공칭 응력-변형률 곡선 — 결과 곡선이 앞(탄성 구간)을 잃었을 때만.
+         *
+         *     진응력 · 진소성변형률 단계가 항복 앞의 점을 버려서, 결과 파일만으로는 E 를 확인할
+         *     곡선이 없다. 저장할 때 그 단계 앞의 곡선을 결과 파일에 함께 싣는다(ADR 0053).
+         */
+        ResultContextOut: {
+            /** Note */
+            note?: string | null;
+            /** Points */
+            points: [
+                number,
+                number
+            ][];
+            /** Recomputed */
+            recomputed: boolean;
+            /** Stage Label */
+            stage_label: string;
+        };
+        /**
          * ResultCurveOut
          * @description 저장된 결과의 곡선. **결과 화면이 그림을 그리려면 이것이 필요하다.**
          *
@@ -16748,6 +16768,11 @@ export interface components {
         ResultCurveOut: {
             /** Columns */
             columns: string[];
+            context?: components["schemas"]["ResultContextOut"] | null;
+            /** Context Note */
+            context_note?: string | null;
+            /** Guides */
+            guides?: components["schemas"]["ResultGuideOut"][];
             /** Points */
             points: [
                 number,
@@ -16768,6 +16793,31 @@ export interface components {
             x: string;
             /** Y */
             y: string;
+            /** Yield Point */
+            yield_point?: [
+                number,
+                number
+            ] | null;
+        };
+        /**
+         * ResultGuideOut
+         * @description 채택 화면의 보조선 — 결과에 든 값으로 긋는다. SI.
+         */
+        ResultGuideOut: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "elastic" | "offset";
+            /** Modulus */
+            modulus: number;
+            /** Offset */
+            offset?: number | null;
+            /** Points */
+            points: [
+                number,
+                number
+            ][];
         };
         /** RetypeOut */
         RetypeOut: {

@@ -1498,6 +1498,144 @@ class Test저장된_결과의_곡선:
         assert body["units"]["stress_true"] == "Pa"
 
 
+#: 진응력 · 진소성변형률까지 — 항복 앞의 점을 **모든 열에서** 버린다. E 는 직접 넣는다
+#: (`Example.tra` 는 18점 발췌본이라 탄성 창이 차지 않는다 — 위 시험과 같은 판단).
+TRUE_STEPS: list[dict[str, Any]] = [
+    *STEPS,
+    {
+        "plugin": "tensile.elastic_modulus",
+        "options": {"method": "manual", "manual_modulus": 200e9},
+    },
+    {"plugin": "tensile.proof_stress", "options": {"youngs_modulus": "@youngs_modulus"}},
+    {
+        "plugin": "tensile.true_plastic",
+        "options": {"youngs_modulus": "@youngs_modulus", "proof_stress": "@proof_stress"},
+    },
+]
+
+
+class Test채택_화면의_앞쪽_곡선:
+    """**채택 화면에서 탄성 구간이 안 보였다**(2026-10-03 운영 지적).
+
+    진응력 단계가 항복 앞의 점을 모든 열에서 버려, 공칭 축으로 봐도 곡선이 항복점에서
+    시작했다 — 「E 를 제대로 잡았나」 를 채택 직전에 볼 수 없었다. 저장할 때 자르기 전
+    공칭 곡선을 결과 파일에 함께 싣고, 그 전 결과는 단계를 다시 돌려 참고로 그린다(ADR 0053).
+    """
+
+    def _store(self, client: TestClient, headers: dict[str, str], run_id: str) -> str:
+        stored = client.post(
+            "/api/processing/results",
+            json={"test_run_id": run_id, "steps": TRUE_STEPS},
+            headers=headers,
+        )
+        assert stored.status_code == 201, stored.text
+        return str(stored.json()["id"])
+
+    def _curve(self, client: TestClient, headers: dict[str, str], result_id: str) -> Any:
+        got = client.get(f"/api/processing/results/{result_id}/curve", headers=headers)
+        assert got.status_code == 200, got.text
+        return got.json()
+
+    def test_저장한_앞쪽_곡선과_E_선_오프셋_선_항복점이_온다(
+        self, client: TestClient, admin_headers: dict[str, str], run_id: str
+    ) -> None:
+        body = self._curve(client, admin_headers, self._store(client, admin_headers, run_id))
+        context = body["context"]
+        assert context is not None and context["recomputed"] is False
+        # 결과 곡선은 항복점부터, 앞쪽 곡선은 그보다 앞에서 시작한다.
+        assert min(x for x, _ in context["points"]) < min(x for x, _ in body["points"])
+        assert context["stage_label"].startswith("5.")  # 항복강도 단계가 끝난 곡선
+        kinds = {guide["kind"]: guide for guide in body["guides"]}
+        assert kinds["elastic"]["modulus"] == pytest.approx(200e9)
+        offset = kinds["offset"]
+        assert offset["offset"] == pytest.approx(0.002)
+        # 오프셋 선은 (0.002, 0) 에서 시작한다 — 항복강도 단계가 쓴 그 선이다.
+        assert offset["points"][0] == pytest.approx([0.002, 0.0])
+        strain, stress = body["yield_point"]
+        # 항복점은 오프셋 선 위에 있다.
+        assert stress == pytest.approx(200e9 * (strain - 0.002), rel=1e-6)
+
+    def test_앞을_안_잘랐으면_앞쪽_곡선이_따로_없다(
+        self, client: TestClient, admin_headers: dict[str, str], run_id: str
+    ) -> None:
+        stored = client.post(
+            "/api/processing/results",
+            json={"test_run_id": run_id, "steps": STEPS},
+            headers=admin_headers,
+        ).json()
+        body = self._curve(client, admin_headers, stored["id"])
+        assert body["context"] is None and body["context_note"] is None
+        # E 를 잰 단계가 없으면 보조선도 없다.
+        assert body["guides"] == []
+
+    def test_다른_축에는_앞쪽_곡선도_보조선도_없다(
+        self, client: TestClient, admin_headers: dict[str, str], run_id: str
+    ) -> None:
+        result_id = self._store(client, admin_headers, run_id)
+        body = client.get(
+            f"/api/processing/results/{result_id}/curve",
+            params={"x": "strain_true_plastic", "y": "stress_true"},
+            headers=admin_headers,
+        ).json()
+        assert body["context"] is None and body["guides"] == [] and body["yield_point"] is None
+
+    def test_이_칸_전에_저장한_결과는_다시_돌려_참고로_그린다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        run_id: str,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from app.modules.processing import routes
+
+        # **옛 파일을 흉내 낸다** — 앞쪽 곡선을 다른 이름으로 실으면 읽는 쪽에는 없는 것이다.
+        monkeypatch.setattr(routes, "CONTEXT_KEY", "before_2026_10_03")
+        result_id = self._store(client, admin_headers, run_id)
+        monkeypatch.setattr(routes, "CONTEXT_KEY", "context")
+
+        body = self._curve(client, admin_headers, result_id)
+        context = body["context"]
+        assert context is not None and context["recomputed"] is True
+        # 지금 원본 그대로라 저장된 결과와 어긋나지 않는다.
+        assert context["note"] is None
+        assert min(x for x, _ in context["points"]) < min(x for x, _ in body["points"])
+
+        # 저장된 결과의 첫 점이 다시 계산한 곡선 위에 없으면 그렇다고 말한다.
+        real = routes._first_point
+
+        def lifted(data: bytes) -> tuple[float, float] | None:
+            point = real(data)
+            return None if point is None else (point[0], point[1] * 1.1)
+
+        monkeypatch.setattr(routes, "_first_point", lifted)
+        shifted = self._curve(client, admin_headers, result_id)
+        assert "어긋납니다" in shifted["context"]["note"]
+
+    def test_다시_돌리지_못하면_조용히_빼지_않고_이유를_단다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        run_id: str,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from app.modules.processing import routes
+        from app.shared.errors import AppError
+
+        monkeypatch.setattr(routes, "CONTEXT_KEY", "before_2026_10_03")
+        result_id = self._store(client, admin_headers, run_id)
+        monkeypatch.setattr(routes, "CONTEXT_KEY", "context")
+
+        def broken(*_: Any, **__: Any) -> Any:
+            raise AppError("MNX-PROCESSING-0004", "원본 곡선이 없습니다.", status=422)
+
+        monkeypatch.setattr(routes, "_run_pipeline", broken)
+        body = self._curve(client, admin_headers, result_id)
+        assert body["context"] is None
+        assert "다시 그리지 못했습니다" in body["context_note"]
+        # 그래도 결과 곡선과 보조선은 그대로 선다 — 그건 저장된 값이다.
+        assert body["points"] and body["guides"]
+
+
 class Test들어오는값:
     """**화면이 값을 알아야 한다.**
 

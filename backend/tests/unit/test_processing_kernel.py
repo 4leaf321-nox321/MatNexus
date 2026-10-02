@@ -1422,3 +1422,39 @@ class Test단조_증가_보정:
         fixed = result.frame.columns["stress_engineering"]
         assert np.all(np.diff(fixed) > 0)
         assert scalar(result, "yield_drop_points") > 0
+
+
+class Test앞이_잘리기_전:
+    """채택 화면이 탄성 구간을 그리려면 **앞을 버린 단계 바로 앞**의 곡선이 있어야 한다."""
+
+    STEPS: ClassVar[list[Step]] = [
+        Step("tensile.elastic_modulus", {"minimum_strain": 0.0, "maximum_strain": 0.0015}),
+        Step("tensile.proof_stress", {"youngs_modulus": "@youngs_modulus"}),
+        Step(
+            "tensile.true_plastic",
+            {"youngs_modulus": "@youngs_modulus", "proof_stress": "@proof_stress"},
+        ),
+    ]
+
+    def test_진소성_단계가_앞을_버리면_그_앞_단계를_고른다(self) -> None:
+        result = processing.apply(self.STEPS, synthetic())
+        stage = processing.front_intact_stage(
+            result.stages, "strain_engineering", "stress_engineering"
+        )
+        assert stage is not None and stage.plugin == "tensile.proof_stress"
+        # 그 곡선은 0 에서 시작하고, 결과는 항복점에서 시작한다.
+        assert stage.frame.columns["strain_engineering"][0] == 0.0
+        assert result.frame.columns["strain_engineering"][0] > 0.0
+
+    def test_앞을_안_버렸으면_마지막_단계다(self) -> None:
+        result = processing.apply(self.STEPS[:2], synthetic())
+        stage = processing.front_intact_stage(
+            result.stages, "strain_engineering", "stress_engineering"
+        )
+        assert stage is result.stages[-1]
+
+    def test_그_축이_없으면_None(self) -> None:
+        result = processing.apply(self.STEPS[:2], synthetic())
+        assert (
+            processing.front_intact_stage(result.stages, "strain_true", "stress_true") is None
+        )

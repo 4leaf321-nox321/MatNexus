@@ -372,6 +372,12 @@ export function ResultsPanel({ testRunId, onAdoptChange }: Props) {
  * **축 목록이 곧 레시피가 한 일이다.** 진응력 축이 목록에 없다면 레시피에
  * '진응력·진소성변형률' 단계가 없는 것이다. 그래서 없을 때는 그 사실을 적는다 —
  * 빈 선택지를 보고 스스로 알아내야 하면 그건 알려 준 것이 아니다.
+ *
+ * **공칭 축에서는 탄성 구간까지 그린다**(2026-10-03 운영 지적). 진응력 단계가 항복 앞의
+ * 점을 모든 열에서 버려서 곡선이 항복점에서 시작했고, 채택 직전에 「E 를 제대로 잡았나」
+ * 를 볼 수 없었다. 서버가 자르기 전 공칭 곡선 · 탄성 직선 · 오프셋 선 · 항복점을 함께
+ * 주면 뒤에 깐다(ADR 0053). 이 기능 전에 저장한 결과는 서버가 다시 돌린 참고 곡선이라
+ * 점선으로 그리고 그렇다고 적는다.
  */
 function ResultCurve({ resultId }: { resultId: string }) {
   const [axes, setAxes] = useState<{ x: string; y: string } | null>(null)
@@ -390,6 +396,44 @@ function ResultCurve({ resultId }: { resultId: string }) {
       ]),
     [data]
   )
+
+  // 뒤에 깔 것 — 앞쪽 곡선과 보조선. 점과 **같은 단위로** 옮긴다.
+  const extras = useMemo(() => {
+    if (!data) return { background: [], marker: undefined }
+    const unitX = data.units[data.x]
+    const unitY = data.units[data.y]
+    const shown = (line: [number, number][]): [number, number][] =>
+      line.map(([x, y]) => [toDisplay(x, unitX), toDisplay(y, unitY)])
+    const background: ChartLine[] = []
+    if (data.context) {
+      background.push({
+        label: data.context.recomputed
+          ? `자르기 전 공칭 곡선 (다시 계산한 참고 · ${data.context.stage_label} 뒤)`
+          : `자르기 전 공칭 곡선 (${data.context.stage_label} 뒤)`,
+        points: shown(data.context.points),
+        ...GUIDE_TONES.context,
+        dashed: data.context.recomputed,
+      })
+    }
+    for (const guide of data.guides ?? []) {
+      background.push({
+        label:
+          guide.kind === 'elastic'
+            ? `탄성 직선 E ${formatScalar(guide.modulus, 'Pa')}`
+            : `오프셋 ${formatScalar(guide.offset ?? 0, '1', 'strain')} 선`,
+        points: shown(guide.points),
+        ...GUIDE_TONES[guide.kind],
+        dashed: true,
+      })
+    }
+    const marker = data.yield_point
+      ? {
+          x: toDisplay(data.yield_point[0], unitX),
+          label: `항복강도 ${formatScalar(data.yield_point[1], 'Pa')}`,
+        }
+      : undefined
+    return { background, marker }
+  }, [data])
 
   if (curve.error) return <ErrorNotice error={curve.error} />
   if (!data) return <p className="text-muted-foreground text-xs">곡선을 읽는 중…</p>
@@ -434,7 +478,51 @@ function ResultCurve({ resultId }: { resultId: string }) {
         // **2열로 가면서 세로가 남았다.** 곡선이 오른쪽 한 칸을 통째로 쓰는데
         // 280 은 왼쪽 목록보다 훨씬 짧아, 채택 직전에 봐야 할 모양이 작게 눌린다.
         height={420}
+        background={extras.background.length > 0 ? extras.background : undefined}
+        marker={extras.marker}
       />
+
+      {/* **선마다 무엇인지 적는다.** 색만 다르면 어느 선이 E 인지 사람이 추론해야 한다. */}
+      {(extras.background.length > 0 || extras.marker) && (
+        <ul
+          aria-label="곡선 범례"
+          className="text-muted-foreground mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs"
+        >
+          <li className="flex items-center gap-1.5">
+            <span className="bg-primary inline-block h-0.5 w-4" />이 결과의 곡선
+          </li>
+          {extras.background.map((line) => (
+            <li key={line.label} className="flex items-center gap-1.5">
+              <span
+                className={`inline-block w-4 border-t-2 ${line.dashed ? 'border-dashed' : ''} ${line.legend}`}
+              />
+              {line.label}
+            </li>
+          ))}
+          {extras.marker && (
+            <li className="flex items-center gap-1.5">
+              <span className="inline-block h-3 w-px bg-current" />
+              {extras.marker.label}
+            </li>
+          )}
+        </ul>
+      )}
+
+      {data.context?.recomputed && (
+        // **다시 계산한 그림이라는 것을 말한다.** 결과는 다시 계산하지 않는다는 것이 원칙이라
+        // (ADR 0007), 이 점선은 저장된 값이 아니다.
+        <p className="text-muted-foreground mt-2 text-xs">
+          앞쪽 점선은 이 결과의 단계를 지금 원본에 다시 돌린 <b>참고 곡선</b>입니다 — 이 결과를
+          저장할 때는 자르기 전 곡선을 함께 남기지 않았습니다. 다시 처리하면 저장된 곡선으로
+          그립니다.
+        </p>
+      )}
+      {data.context?.note && (
+        <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">{data.context.note}</p>
+      )}
+      {data.context_note && (
+        <p className="mt-2 text-xs text-amber-700 dark:text-amber-400">{data.context_note}</p>
+      )}
 
       {!hasTrue && (
         // **없는 것을 없다고 말한다.** 축 목록에 진응력이 안 보이는 이유를
@@ -448,3 +536,26 @@ function ResultCurve({ resultId }: { resultId: string }) {
     </div>
   )
 }
+
+/** 뒤에 까는 선 하나 — 그리는 색(`tone`)과 범례의 색(`legend`)을 함께 든다. */
+type ChartLine = {
+  points: [number, number][]
+  label: string
+  tone: string
+  legend: string
+  dashed?: boolean
+}
+
+/** 뒤에 까는 선의 색 — 이 결과의 곡선(primary)과 겹쳐도 갈린다. 범례는 같은 색을 테두리로
+ *  쓴다(Tailwind 가 찾도록 클래스를 통째로 적는다). */
+const GUIDE_TONES = {
+  context: { tone: 'stroke-zinc-500 dark:stroke-zinc-300', legend: 'border-zinc-500 dark:border-zinc-300' },
+  elastic: {
+    tone: 'stroke-amber-600 dark:stroke-amber-400',
+    legend: 'border-amber-600 dark:border-amber-400',
+  },
+  offset: {
+    tone: 'stroke-rose-600 dark:stroke-rose-400',
+    legend: 'border-rose-600 dark:border-rose-400',
+  },
+} as const
