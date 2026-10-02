@@ -93,11 +93,68 @@ export const SOURCE_LABEL: Record<string, string> = Object.fromEntries(
   SOURCES.map((item) => [item.value, item.label])
 )
 
-/** 온도 하나에서의 값 하나. **문자열로 든다** — 지우는 중인 칸이 0 이 되면 안 된다. */
+/** 조건 하나에서의 값 하나. **문자열로 든다** — 지우는 중인 칸이 0 이 되면 안 된다. */
 interface Point {
   value: string
-  /** 섭씨. **상온을 298 로 적는 사람은 없다** — 보낼 때 K 로 바꾼다. */
+  /** 섭씨. **상온을 298 로 적는 사람은 없다** — 보낼 때 K 로 바꾼다. 온도 축 항목에서만 쓴다. */
   temperature: string
+  /** 온도가 아닌 축(주파수 · 파장)의 값 — 줄의 `conditionUnit` 단위. */
+  condition: string
+}
+
+/**
+ * 점에서 조건을 드는 칸. **항목이 정한다**(서버의 `condition_key`) — 유전율 · 유전손실은
+ * 주파수, 굴절률은 파장, 나머지는 온도(2026-10-01).
+ */
+type ConditionKey = 'temperature_k' | 'frequency_hz' | 'wavelength_m'
+type ConditionUnit = PropertyItem['condition_units'][number]
+
+const AXIS_LABEL: Record<ConditionKey, string> = {
+  temperature_k: '온도',
+  frequency_hz: '주파수',
+  wavelength_m: '파장',
+}
+
+/** 조건 값 하나(SI). */
+function conditionOf(
+  point: DeclaredProperty['points'][number],
+  key: ConditionKey
+): number | null {
+  const value = point[key]
+  return typeof value === 'number' ? value : null
+}
+
+/** 항목의 축. 항목 목록이 아직 안 왔으면 **점이 든 칸**으로 짐작한다. */
+function keyOf(row: DeclaredProperty, spec?: PropertyItem): ConditionKey {
+  if (spec?.condition_key) return spec.condition_key as ConditionKey
+  if (row.points.some((point) => point.frequency_hz != null)) return 'frequency_hz'
+  if (row.points.some((point) => point.wavelength_m != null)) return 'wavelength_m'
+  return 'temperature_k'
+}
+
+/**
+ * 적힌 조건 값을 읽기 좋은 단위로 — **가장 작은 값이 1 이상이 되는 가장 큰 단위.**
+ * 1e9 Hz 를 `1000000000 Hz` 로 보이면 자릿수를 세게 된다. 배수는 서버가 준다(ADR 0004).
+ */
+function pickUnit(values: number[], units: ConditionUnit[]): ConditionUnit | null {
+  if (units.length === 0 || values.length === 0) return null
+  const sorted = [...units].sort((a, b) => a.to_si - b.to_si)
+  const least = Math.min(...values)
+  let best = sorted[0]
+  for (const unit of sorted) if (least / unit.to_si >= 1) best = unit
+  return best
+}
+
+/** 새 줄의 조건 단위 — 데이터시트가 적는 단위(GHz · nm)가 있으면 그것. */
+function startUnit(units: ConditionUnit[]): ConditionUnit | null {
+  return units.find((one) => one.unit === 'GHz' || one.unit === 'nm') ?? units[0] ?? null
+}
+
+/** K → 편집 상자의 섭씨 문자열. 비었으면 빈 문자열. */
+function celsius(kelvin: number | null | undefined): string {
+  return kelvin == null
+    ? ''
+    : String(Number(toDisplay(kelvin, 'K', 'temperature').toPrecision(10)))
 }
 
 /** 편집 중인 한 줄. */
@@ -120,25 +177,51 @@ interface Draft {
    * 단위」로 거절한다 — 사람은 왜인지 모른다.
    */
   isScale: boolean
+  /** 점이 드는 조건 — 온도 · 주파수 · 파장. */
+  conditionKey: ConditionKey
+  /** 온도가 아닌 축의 값을 적는 단위와 그 SI 배수(서버가 준 것). */
+  conditionUnit: string
+  conditionToSi: number
+  /**
+   * 온도가 아닌 축 항목의 **측정 온도**(℃, 선택). 점마다 같아야 해서 줄에 하나만 든다 —
+   * 「10 GHz, 23 ℃」. 점마다 다르면 서버가 거절한다(2차원 표는 안 담는다).
+   */
+  measured: string
   source: string
   reference: string
   note: string
 }
 
-function toDraft(row: DeclaredProperty): Draft {
+function toDraft(row: DeclaredProperty, spec?: PropertyItem): Draft {
   // **되돌리는 환산도 서버가 한다.** `value` 가 사람이 적은 단위의 값이다 —
   // 화면이 나눗셈을 하면 그 규칙이 서버와 갈라질 자리가 하나 더 생긴다.
+  const key = keyOf(row, spec)
+  const units = spec?.condition_units ?? []
+  const values = row.points
+    .map((point) => (key === 'temperature_k' ? null : conditionOf(point, key)))
+    .filter((value): value is number => value != null)
+  const unit = pickUnit(values, units) ?? startUnit(units)
+  const factor = unit?.to_si ?? 1
   return {
     item: row.item,
-    points: row.points.map((point) => ({
-      value: String(Number(point.value.toPrecision(12))),
-      // **환산은 표가 한다.** `- 273.15` 를 손으로 적으면 표 바깥에 정본이
-      // 하나 더 생기고, 표를 바꾼 날 이 자리만 옛 값을 낸다.
-      temperature:
-        point.temperature_k == null
-          ? ''
-          : String(Number(toDisplay(point.temperature_k, 'K', 'temperature').toPrecision(10))),
-    })),
+    points: row.points.map((point) => {
+      const at = key === 'temperature_k' ? null : conditionOf(point, key)
+      return {
+        value: String(Number(point.value.toPrecision(12))),
+        // **환산은 표가 한다.** `- 273.15` 를 손으로 적으면 표 바깥에 정본이
+        // 하나 더 생기고, 표를 바꾼 날 이 자리만 옛 값을 낸다.
+        temperature: key === 'temperature_k' ? celsius(point.temperature_k) : '',
+        condition: at == null ? '' : String(Number((at / factor).toPrecision(10))),
+      }
+    }),
+    conditionKey: key,
+    // 단위 목록이 아직 없으면 SI 그대로 보인다 — 목록이 오면 다시 그린다(아래 효과).
+    conditionUnit: unit?.unit ?? (key === 'frequency_hz' ? 'Hz' : 'm'),
+    conditionToSi: factor,
+    measured:
+      key === 'temperature_k'
+        ? ''
+        : celsius(row.points.find((point) => point.temperature_k != null)?.temperature_k),
     measure: row.scale ?? row.input_unit ?? '',
     isScale: row.scale != null,
     source: row.source,
@@ -231,8 +314,9 @@ export function DeclaredPropertiesCard({
   // 다시 읽히면 타이핑하던 것이 사라진다.
   useEffect(() => {
     if (dirty) return
-    setRows(saved.map(toDraft))
-  }, [saved, dirty])
+    // **항목 목록이 오면 다시 그린다** — 조건 단위(GHz · nm)는 항목이 들고 온다.
+    setRows(saved.map((row) => toDraft(row, known.find((item) => item.item === row.item))))
+  }, [saved, dirty, known])
 
   const used = new Set(rows.map((row) => row.item))
   const free = known.filter((item) => !used.has(item.item))
@@ -252,10 +336,15 @@ export function DeclaredPropertiesCard({
       ...current,
       {
         item: item.item,
-        points: [{ value: '', temperature: '' }],
+        points: [{ value: '', temperature: '', condition: '' }],
         // 척도를 든 항목은 **첫 척도**로 시작한다. 단위는 정본 SI 로.
         measure: item.scales.length > 0 ? item.scales[0] : item.si_unit,
         isScale: item.scales.length > 0,
+        // 조건 칸이 없는 항목(옛 응답)은 온도다.
+        conditionKey: (item.condition_key ?? 'temperature_k') as ConditionKey,
+        conditionUnit: startUnit(item.condition_units ?? [])?.unit ?? '',
+        conditionToSi: startUnit(item.condition_units ?? [])?.to_si ?? 1,
+        measured: '',
         source: 'literature',
         reference: '',
         note: '',
@@ -294,15 +383,23 @@ export function DeclaredPropertiesCard({
       await onSave(
         rows.map((row) => ({
           item: row.item,
-          points: row.points.map((point) => ({
-            value: Number(point.value),
+          points: row.points.map((point) => {
             // 화면은 ℃ 로 받고 서버에는 K 로 보낸다 — 상온을 298 로 적는
-            // 사람은 없다.
-            temperature_k:
-              point.temperature === ''
-                ? null
-                : fromDisplay(Number(point.temperature), 'K', 'temperature'),
-          })),
+            // 사람은 없다. 온도가 아닌 축의 항목이면 줄의 측정 온도가 점마다 간다.
+            const temperature = row.conditionKey === 'temperature_k' ? point.temperature : row.measured
+            return {
+              value: Number(point.value),
+              temperature_k:
+                temperature === '' ? null : fromDisplay(Number(temperature), 'K', 'temperature'),
+              // **조건은 SI 로 보낸다** — 배수는 서버가 준 것(`condition_units[].to_si`).
+              ...(row.conditionKey === 'temperature_k'
+                ? {}
+                : {
+                    [row.conditionKey]:
+                      point.condition === '' ? null : Number(point.condition) * row.conditionToSi,
+                  }),
+            }
+          }),
           // **어느 칸으로 보낼지는 줄 자신이 안다.** 항목 목록을 여기서
           // 다시 뒤지면, 목록이 도착하기 전에 저장을 누른 사람이 척도를 단위
           // 자리로 보내게 된다.
@@ -412,7 +509,7 @@ export function DeclaredPropertiesCard({
                       <div className="space-y-0.5">
                         {points.map((point, spot) => (
                           <div key={spot}>
-                            {shown(point.value)} {row.measure}
+                            {shown(point.value)} {row.measure === '1' ? '' : row.measure}
                             {point.temperature !== '' && (
                               <span className="text-muted-foreground">
                                 {' @ '}
@@ -423,8 +520,19 @@ export function DeclaredPropertiesCard({
                                 {shown(point.temperature)} {TEMPERATURE.unit}
                               </span>
                             )}
+                            {point.condition !== '' && (
+                              <span className="text-muted-foreground">
+                                {' @ '}
+                                {shown(point.condition)} {row.conditionUnit}
+                              </span>
+                            )}
                           </div>
                         ))}
+                        {row.measured !== '' && (
+                          <div className="text-muted-foreground text-xs">
+                            측정 {shown(row.measured)} {TEMPERATURE.unit}
+                          </div>
+                        )}
                       </div>
                     )}
                   </TableCell>
@@ -473,6 +581,9 @@ export function DeclaredPropertiesCard({
             if (row.item !== editing) return null
             const spec = known.find((item) => item.item === row.item)
             const choices = spec?.units.length ? spec.units : [row.measure]
+            const axis = spec?.condition ?? AXIS_LABEL[row.conditionKey]
+            const byTemperature = row.conditionKey === 'temperature_k'
+            const conditionUnits = spec?.condition_units ?? []
             return (
               <div key={row.item} className="grid grid-cols-12 items-end gap-2">
             <div className="col-span-12 flex justify-end">
@@ -526,7 +637,7 @@ export function DeclaredPropertiesCard({
 
             <div className="col-span-12">
               <Label className="text-muted-foreground mb-1 text-[11px]">
-                값 {row.points.length > 1 && `(온도 ${row.points.length}점)`}
+                값 {row.points.length > 1 && `(${axis} ${row.points.length}점)`}
               </Label>
               <div className="space-y-1">
                 {row.points.map((point, spot) => (
@@ -542,23 +653,35 @@ export function DeclaredPropertiesCard({
                         editPoint(index, spot, { value: event.target.value })
                       }
                     />
-                    <span className="text-muted-foreground text-xs">{row.measure}</span>
+                    <span className="text-muted-foreground text-xs">
+                      {row.measure === '1' ? '' : row.measure}
+                    </span>
                     <span className="text-muted-foreground text-xs">@</span>
                     <Input
                       aria-label={
                         row.points.length > 1
-                          ? `${row.item} 온도 ${spot + 1}`
-                          : `${row.item} 온도`
+                          ? `${row.item} ${axis} ${spot + 1}`
+                          : `${row.item} ${axis}`
                       }
                       className="w-28 shrink-0"
-                      value={point.temperature}
+                      value={byTemperature ? point.temperature : point.condition}
                       inputMode="decimal"
-                      placeholder={row.points.length > 1 ? '필수' : '비우면 상온'}
+                      placeholder={
+                        row.points.length > 1 ? '필수' : byTemperature ? '비우면 상온' : '비우면 미상'
+                      }
                       onChange={(event) =>
-                        editPoint(index, spot, { temperature: event.target.value })
+                        editPoint(
+                          index,
+                          spot,
+                          byTemperature
+                            ? { temperature: event.target.value }
+                            : { condition: event.target.value }
+                        )
                       }
                     />
-                    <span className="text-muted-foreground text-xs">℃</span>
+                    <span className="text-muted-foreground text-xs">
+                      {byTemperature ? TEMPERATURE.unit : row.conditionUnit}
+                    </span>
                     {row.points.length > 1 && (
                       <Button
                         size="icon"
@@ -594,24 +717,75 @@ export function DeclaredPropertiesCard({
                   setRows((current) =>
                     current.map((one, position) =>
                       position === index
-                        ? { ...one, points: [...one.points, { value: '', temperature: '' }] }
+                        ? {
+                            ...one,
+                            points: [...one.points, { value: '', temperature: '', condition: '' }],
+                          }
                         : one
                     )
                   )
                 }}
               >
                 <Plus className="size-3.5" />
-                온도 추가
+                {axis} 추가
               </Button>
               {row.points.length > 1 && (
-                // **온도 없는 점이 섞이면 서버가 거절한다.** 누르기 전에
+                // **조건 없는 점이 섞이면 서버가 거절한다.** 누르기 전에
                 // 알려 주는 편이 낫다.
                 <p className="text-muted-foreground mt-1 text-[11px]">
-                  값이 여럿이면 각각 어느 온도의 것인지 적어야 합니다. 표 밖에서는 솔버가
-                  끝값을 유지합니다.
+                  값이 여럿이면 점마다 {axis} 값을 적어야 합니다.
+                  {byTemperature && ' 표 밖에서는 솔버가 끝값을 유지합니다.'}
                 </p>
               )}
             </div>
+
+            {!byTemperature && (
+              // **온도가 아닌 축의 항목** — 조건 단위와 측정 온도를 고른다. 측정 온도는
+              // 점마다 같아야 해서 줄에 하나다(「10 GHz, 23 ℃」).
+              <>
+                <div className="col-span-6 sm:col-span-3">
+                  <Label
+                    htmlFor={`${row.item}-condition-unit`}
+                    className="text-muted-foreground mb-1 text-[11px]"
+                  >
+                    {axis} 단위
+                  </Label>
+                  <Select
+                    value={row.conditionUnit}
+                    onValueChange={(value) => {
+                      const unit = conditionUnits.find((one) => one.unit === value)
+                      if (unit) edit(index, { conditionUnit: unit.unit, conditionToSi: unit.to_si })
+                    }}
+                  >
+                    <SelectTrigger id={`${row.item}-condition-unit`} className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {conditionUnits.map((unit) => (
+                        <SelectItem key={unit.unit} value={unit.unit}>
+                          {unit.unit}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="col-span-6 sm:col-span-3">
+                  <Label
+                    htmlFor={`${row.item}-measured`}
+                    className="text-muted-foreground mb-1 text-[11px]"
+                  >
+                    측정 온도 ({TEMPERATURE.unit}, 선택)
+                  </Label>
+                  <Input
+                    id={`${row.item}-measured`}
+                    value={row.measured}
+                    inputMode="decimal"
+                    placeholder="비우면 상온"
+                    onChange={(event) => edit(index, { measured: event.target.value })}
+                  />
+                </div>
+              </>
+            )}
 
             <div className="col-span-12 sm:col-span-6">
               <Label htmlFor={`${row.item}-source`} className="text-muted-foreground mb-1 text-[11px]">

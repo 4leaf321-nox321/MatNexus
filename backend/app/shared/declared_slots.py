@@ -77,6 +77,13 @@ def _declared_by_key(db: Session, material: Material) -> dict[str, dict[str, Any
             "value": float(first["value_si"]),
             "source": str(row.get("source") or "unknown"),
             "reference": row.get("reference"),
+            # **어느 주파수 · 파장의 값인지** 함께 간다. 유전율은 1 MHz 와 10 GHz 에서 다른데,
+            # 칸에 숫자만 실리면 덱만 받은 사람이 그것을 모른다.
+            "conditions": {
+                key: float(first[key])
+                for key in ("frequency_hz", "wavelength_m")
+                if isinstance(first.get(key), int | float)
+            },
         }
     return out
 
@@ -165,5 +172,7 @@ def fill(db: Session, material: Material | None, blocks: dict[str, Any]) -> list
                 # **근거 문서를 카드 안에 복사한다.** 재료의 선언을 나중에 고쳐도
                 # 이미 만든 카드가 무엇을 근거로 했는지는 그대로 남아야 한다.
                 values[f"{slot.key}_reference"] = str(found["reference"])
+            for condition_key, at in found["conditions"].items():
+                values[f"{slot.key}_{condition_key}"] = at
             filled.append(f"{spec.label} {slot.label}")
     return filled

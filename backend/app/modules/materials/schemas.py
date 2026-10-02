@@ -48,11 +48,16 @@ MAX_BULK = 2000
 
 
 class DeclaredPointOut(BaseModel):
-    """온도 하나에서의 값 하나."""
+    """조건 하나(온도 · 주파수 · 파장)에서의 값 하나. 어느 조건인지는 항목이 정한다."""
 
     temperature_k: float | None = None
     """이 값이 유효한 온도. **점이 하나면 비어 있을 수 있다** — 그때는 온도를
-    안 타는 값이거나 상온값이라는 뜻이다."""
+    안 타는 값이거나 상온값이라는 뜻이다. 주파수 · 파장을 타는 항목에서는 **측정 온도**
+    (점마다 같다)."""
+    frequency_hz: float | None = None
+    """주파수를 타는 항목(유전율 · 유전손실)의 주파수. SI(Hz)."""
+    wavelength_m: float | None = None
+    """파장을 타는 항목(굴절률)의 파장. SI(m)."""
     value_si: float
     """**언제나 정본 SI.** 사람이 GPa 로 적어도 저장은 Pa 다."""
     value: float
@@ -106,7 +111,11 @@ class DeclaredPropertyOut(BaseModel):
 
 
 class DeclaredPointIn(BaseModel):
+    """점 하나. 조건은 **그 항목의 축만** 적는다 — 다른 축은 거절된다(측정 온도는 예외)."""
+
     temperature_k: float | None = None
+    frequency_hz: float | None = None
+    wavelength_m: float | None = None
     value: float
 
 
@@ -125,6 +134,15 @@ class DeclaredPropertyIn(BaseModel):
     note: str | None = None
 
 
+class ConditionUnitOut(BaseModel):
+    """조건 단위 하나와 그 SI 배수. **배수는 서버가 단위 표로 낸다** — 화면이 배수를 따로
+    들면 환산 규칙이 두 곳이 된다(ADR 0004)."""
+
+    unit: str
+    to_si: float
+    """이 단위의 1 이 SI 로 얼마인가 — GHz 면 1e9."""
+
+
 class PropertyItemOut(BaseModel):
     """넣을 수 있는 물성 항목. 화면이 피커를 그리는 데 쓴다."""
 
@@ -137,6 +155,13 @@ class PropertyItemOut(BaseModel):
     scales: list[str] = []
     """비어 있지 않으면 **단위 대신 척도를 고른다**(경도). 화면이 이 값으로
     단위 드롭다운을 척도 드롭다운으로 바꾼다."""
+    condition: str = "온도"
+    """값이 무엇에 따라 변하나 — `온도` · `주파수` · `파장`. 화면이 점의 조건 칸을 그린다."""
+    condition_key: str = "temperature_k"
+    """점에서 그 조건을 드는 칸 — `temperature_k` · `frequency_hz` · `wavelength_m`."""
+    condition_units: list[ConditionUnitOut] = []
+    """조건을 적을 때 고를 수 있는 단위(주파수면 Hz · kHz · MHz · GHz)와 **SI 배수**. 온도는
+    비어 있다 — 화면이 온도 표시 규칙(°C)을 따로 든다."""
     units: list[str]
     """이 차원에서 고를 수 있는 단위.
 

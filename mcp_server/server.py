@@ -33,6 +33,7 @@ from typing import Any
 import httpx
 
 # 같은 폴더 — 판단만 떼어 둔 순수 함수들(시험이 부를 수 있게).
+import declared_points
 import retry_plan
 import term_gate
 from mcp.server.mcpserver import Context, MCPServer
@@ -289,7 +290,15 @@ def _declared_value(row: dict[str, Any]) -> dict[str, Any]:
         # 넘기면 읽는 쪽이 짐작하고, 밀도에서 그것이 10¹² 배로 틀렸다(2026-09-11).
         "si_unit": row.get("si_unit"),
         "values_si": [
-            {"temperature_k": one.get("temperature_k"), "value": one.get("value_si")}
+            {
+                # 조건은 **있는 것만** — 유전율이면 주파수, 열물성이면 온도.
+                **{
+                    key: one[key]
+                    for key in declared_points.POINT_CONDITION_KEYS
+                    if one.get(key) is not None
+                },
+                "value": one.get("value_si"),
+            }
             for one in points
         ],
         "origin": f"declared:{source}" if source else "declared",
@@ -2262,6 +2271,13 @@ async def adopt_catalog_values(
              "web": "literature", "other": "literature", "standard": "standard",
              "datasheet": "datasheet"}
 
+    # 항목마다 값이 무엇에 따라 변하나 — 유전율이면 점에 주파수를 싣는다(온도를 실으면 거절).
+    listed = await _get(ctx, "/materials/property-items")
+    axes = {
+        one.get("item"): one.get("condition_key") or "temperature_k"
+        for one in (listed if isinstance(listed, list) else [])
+    }
+
     planned: list[dict[str, Any]] = []
     declared: list[dict[str, Any]] = []
     patch: dict[str, Any] = {}
@@ -2294,10 +2310,23 @@ async def adopt_catalog_values(
                 planned.append({"property": name, "skipped": "서버 제약 밖의 값(0 ≤ ν < 0.5)"})
                 continue
         else:
+            point: dict[str, Any] = {
+                "value": row["value_num"],
+                "temperature_k": declared_points.catalog_condition(row.get("conditions"), "temperature_k"),
+            }
+            axis = axes.get(name, "temperature_k")
+            if axis != "temperature_k":
+                point[axis] = declared_points.catalog_condition(row.get("conditions"), axis)
+            same = next((one for one in declared if one["item"] == name), None)
+            if same is not None:
+                # **한 항목은 한 줄이다** — 같은 물성의 값이 여럿이면(1 MHz · 1 GHz) 점으로 모은다.
+                same["points"].append(point)
+                planned.append({"property": name, "value_si": row["value_num"], "added_to": name})
+                continue
             declared.append(
                 {
                     "item": name,
-                    "points": [{"value": row["value_num"]}],
+                    "points": [point],
                     # 눈금이 붙은 매핑(경도 HV)은 그 눈금으로 — 서버가 눈금 없는 경도를 거절한다.
                     **({"scale": scale} if scale else {}),
                     "source": origin,
@@ -2316,6 +2345,11 @@ async def adopt_catalog_values(
             }
         )
 
+    # **측정 온도가 값마다 다르면 비운다** — 주파수 · 파장 축 항목에서 온도까지 다르면 2차원
+    # 표인데 서버는 그것을 안 받는다. 비운 사실은 메모에 남긴다(조용히 지우지 않는다).
+    for one in declared:
+        declared_points.drop_mixed_temperatures(one, axes.get(one["item"], "temperature_k"))
+
     if dry_run:
         return {
             "dry_run": True,
@@ -2330,10 +2364,7 @@ async def adopt_catalog_values(
         merged = [
             {
                 "item": row["item"],
-                "points": [
-                    {"temperature_k": p.get("temperature_k"), "value": p.get("value")}
-                    for p in row.get("points", [])
-                ],
+                "points": declared_points.resent_points(row.get("points", [])),
                 "input_unit": row.get("input_unit"),
                 "scale": row.get("scale"),
                 "source": row.get("source"),
@@ -2845,6 +2876,7 @@ async def add_property_item(
     symbol: str | None = None,
     level: str = "재료",
     scales: str | None = None,
+    condition: str | None = None,
     dry_run: bool = True,
 ) -> dict[str, Any]:
     """**사내 물성 항목**을 더한다 — 재료에 선언 값을 적을 때 고르는 이름이 된다.
@@ -2859,6 +2891,8 @@ async def add_property_item(
         symbol      덱과 화면에 쓰는 기호(`mu` · `E`)
         level       `재료`(Grade 가 같으면 같은 값) · `시료`(로트마다 다른 값)
         scales      단위가 아니라 **척도**인 물성(경도)만 — `HV, HB`. 보통 비운다
+        condition   값이 무엇에 따라 변하나 — `온도`(비우면) · `주파수`(유전율 · 유전손실) ·
+                    `파장`(굴절률). 고르면 값을 적을 때 그 축(`frequency_hz` · `wavelength_m`)을 받는다
 
     **차원을 짐작하지 마라** — 사용자에게 그 물성의 단위를 물어 차원을 정한다. 기본값
     `dimensionless`(무차원)를 그대로 두면 단위 있는 값을 적을 때 막힌다.
@@ -2868,6 +2902,10 @@ async def add_property_item(
         attributes["symbol"] = symbol
     if scales:
         attributes["scales"] = scales
+    if condition:
+        if condition not in ("온도", "주파수", "파장"):
+            return {"error": "condition 은 온도 · 주파수 · 파장 중 하나입니다.", "given": condition}
+        attributes["condition"] = condition
     existing = await _get(ctx, "/materials/property-items")
     rows = existing if isinstance(existing, list) else []
     same = next((one for one in rows if str(one.get("item")) == name.strip()), None)
@@ -3026,6 +3064,9 @@ async def set_declared_values(
                  · `unit` 은 그 값의 단위(비우면 그 항목의 SI 정본). **네가 환산하지 마라** —
                    사용자가 준 단위 그대로 넘기면 서버가 SI 로 바꾼다
                  · 온도마다 값이 있으면 같은 `item` 을 여러 줄로, `temperature_k` 를 붙여서
+                 · **주파수 · 파장을 타는 항목**(유전율 · 유전손실 · 굴절률 — `list_property_items`
+                   의 `condition_key`)은 `frequency_hz` · `wavelength_m`(SI)를 붙인다 — 온도를
+                   붙이면 거절된다. 측정 온도는 줄마다 같은 `temperature_k` 로 적을 수 있다
                  · `source` 는 literature · standard · datasheet · millsheet · estimate
                  · `reference` 는 근거(문서 이름 · 판) — **비우지 않는다**
 
@@ -3059,7 +3100,14 @@ async def set_declared_values(
             },
         )
         row["points"].append(
-            {"temperature_k": one.get("temperature_k"), "value": one.get("value")}
+            {
+                **{
+                    key: one.get(key)
+                    for key in declared_points.POINT_CONDITION_KEYS
+                    if one.get(key) is not None
+                },
+                "value": one.get("value"),
+            }
         )
     material = await _get(ctx, f"/materials/{material_id}")
     if "error" in material:
@@ -3087,10 +3135,7 @@ async def set_declared_values(
     kept = [
         {
             "item": row["item"],
-            "points": [
-                {"temperature_k": p.get("temperature_k"), "value": p.get("value")}
-                for p in row.get("points", [])
-            ],
+            "points": declared_points.resent_points(row.get("points", [])),
             "input_unit": row.get("input_unit"),
             "scale": row.get("scale"),
             "source": row.get("source"),

@@ -273,3 +273,100 @@ describe('병합이 정확해야 한다', () => {
     expect(uts?.source).toBe('datasheet')
   })
 })
+
+/**
+ * **주파수를 타는 항목**(2026-10-01). 선언 물성 PATCH 는 통째 교체라, 되보낼 때 조건을 하나라도
+ * 떨어뜨리면 그 조건은 담기 한 번에 조용히 사라진다 — 온도만 옮기던 코드가 그랬을 것이다.
+ */
+describe('주파수를 타는 항목', () => {
+  const WITH_DK_ITEMS = [
+    ...PROPERTY_ITEMS,
+    { item: '비유전율', level: '재료', condition_key: 'frequency_hz' },
+  ]
+  const WITH_DK_ADOPTABLE = [
+    ...ADOPTABLE,
+    { property_key: 'electrical.dielectric_constant', place: 'declared', item: '비유전율' },
+  ]
+
+  function mockWith(searchItems: unknown[]) {
+    get.mockImplementation((url: unknown) => {
+      if (String(url).startsWith('/materials/property-items')) return Promise.resolve(WITH_DK_ITEMS)
+      if (String(url).startsWith('/catalog/properties/adoptable'))
+        return Promise.resolve(WITH_DK_ADOPTABLE)
+      return Promise.resolve({ total: 1, limit: 8, offset: 0, items: searchItems })
+    })
+  }
+
+  it('기존 유전율 줄의 주파수를 되보낸다 — 다른 값을 담아도 안 빠진다', async () => {
+    const withDk = {
+      ...TARGET,
+      declared_properties: [
+        {
+          item: '비유전율',
+          points: [{ temperature_k: null, frequency_hz: 1e9, wavelength_m: null, value_si: 3.6, value: 3.6 }],
+          input_unit: '1',
+          scale: null,
+          source: 'datasheet',
+          reference: 'Isola 370HR',
+          note: null,
+        },
+      ],
+    }
+    mockWith([withDk])
+    await pickTarget()
+    await userEvent.click(await screen.findByRole('button', { name: /추가/ }))
+
+    await waitFor(() => expect(patch).toHaveBeenCalledTimes(1))
+    const rows = (patch.mock.calls[0][1] as { declared_properties: Array<Record<string, unknown>> })
+      .declared_properties
+    const dk = rows.find((row) => row.item === '비유전율') as {
+      points: Array<{ frequency_hz: number | null }>
+    }
+    expect(dk.points[0].frequency_hz).toBe(1e9)
+  })
+
+  it('문헌의 유전율은 주파수 점으로 담고, 섭씨 온도도 읽으며, 측정 온도가 다르면 비우고 적는다', async () => {
+    mockWith([TARGET])
+    const withDk = {
+      ...DETAIL,
+      values: [
+        value({
+          property_key: 'electrical.dielectric_constant',
+          domain: 'electrical',
+          unit: '1',
+          value_num: 3.6,
+          conditions: { frequency_hz: 1e9, temperature_c: 23 },
+        }),
+        value({
+          property_key: 'electrical.dielectric_constant',
+          domain: 'electrical',
+          unit: '1',
+          value_num: 3.8,
+          conditions: { frequency_hz: 1e6, temperature_c: 25 },
+          representative: false,
+          separated_by: '주파수',
+          n_candidates: 2,
+        }),
+      ],
+    } as unknown as CatalogMaterialDetail
+    render(<AdoptDialog detail={withDk} open onClose={() => {}} />)
+    await userEvent.click(await screen.findByRole('button', { name: /SGARC440/ }))
+    for (const box of screen.getAllByRole('checkbox')) {
+      if (!(box as HTMLInputElement).checked) await userEvent.click(box)
+    }
+    await userEvent.click(screen.getByRole('button', { name: /추가/ }))
+
+    await waitFor(() => expect(patch).toHaveBeenCalledTimes(1))
+    const rows = (patch.mock.calls[0][1] as { declared_properties: Array<Record<string, unknown>> })
+      .declared_properties
+    const dk = rows.find((row) => row.item === '비유전율') as {
+      points: Array<{ frequency_hz: number; temperature_k: number | null; value: number }>
+      note: string
+    }
+    // 주파수 오름차순 — 1 MHz 다음 1 GHz.
+    expect(dk.points.map((point) => point.frequency_hz)).toEqual([1e6, 1e9])
+    // 23 ℃ 와 25 ℃ — 측정 온도가 달라 비웠고, 그 사실을 메모에 남겼다.
+    expect(dk.points.every((point) => point.temperature_k === null)).toBe(true)
+    expect(dk.note).toContain('측정 온도가 달라')
+  })
+})

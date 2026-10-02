@@ -388,7 +388,8 @@ describe('선언 물성 편집', () => {
       },
     ])
     await openFirst()
-    expect(await screen.findByText(/각각 어느 온도의 것인지/)).toBeInTheDocument()
+    // 축 이름으로 말한다(2026-10-01 — 주파수 · 파장 항목도 같은 문장).
+    expect(await screen.findByText(/점마다 온도 값을 적어야/)).toBeInTheDocument()
     expect(screen.getByText(/끝값을 유지/)).toBeInTheDocument()
   })
 
@@ -631,5 +632,85 @@ describe('값 목록을 끌 수 있다', () => {
   it('기본은 켜짐이다', async () => {
     panel([DECLARED_E])
     expect(await screen.findByRole('table')).toBeInTheDocument()
+  })
+})
+
+/**
+ * **주파수를 타는 항목**(2026-10-01) — 유전율 · 유전손실은 1 MHz 와 10 GHz 에서 값이 다르다.
+ *
+ * 온도별 점만 받던 동안에는 「1 GHz 의 Dk」 를 담을 자리가 없었다. 여기서 무는 것:
+ * 조건 칸이 축 이름으로 서고, 단위 배수는 서버가 준 것으로 SI 로 보내고, 되보낼 때
+ * 주파수가 빠지지 않는다.
+ */
+describe('주파수를 타는 항목', () => {
+  const FREQUENCY_UNITS = [
+    { unit: 'Hz', to_si: 1 },
+    { unit: 'kHz', to_si: 1e3 },
+    { unit: 'MHz', to_si: 1e6 },
+    { unit: 'GHz', to_si: 1e9 },
+  ]
+  const DK_ITEM = {
+    item: '비유전율',
+    dimension: 'dimensionless',
+    si_unit: '1',
+    symbol: 'eps_r',
+    units: ['1'],
+    scales: [],
+    condition: '주파수',
+    condition_key: 'frequency_hz',
+    condition_units: FREQUENCY_UNITS,
+  }
+  const DECLARED_DK = {
+    item: '비유전율',
+    points: [
+      { value_si: 3.8, value: 3.8, temperature_k: null, frequency_hz: 1e6 },
+      { value_si: 3.6, value: 3.6, temperature_k: null, frequency_hz: 1e9 },
+    ],
+    input_unit: '1',
+    source: 'datasheet',
+    reference: 'Isola 370HR',
+    note: null,
+  }
+
+  beforeEach(() => {
+    propertyItems.mockResolvedValue([...ITEMS, DK_ITEM])
+  })
+
+  it('적힌 주파수를 읽기 좋은 단위로 보이고, 그대로 저장하면 SI 주파수가 그대로 간다', async () => {
+    const onSave = panel([DECLARED_DK])
+    await openFirst()
+    // **항목 목록이 온 뒤라야 MHz 로 고쳐 보인다** — 그 전에는 SI(Hz)다. 그려진 값을 기다린다.
+    expect(await screen.findByDisplayValue('1000')).toBeInTheDocument()
+    expect(screen.getByLabelText('비유전율 주파수 1')).toHaveValue('1')
+    await saveCard()
+    await waitFor(() => expect(onSave).toHaveBeenCalled())
+    const sent = onSave.mock.calls[0][0][0]
+    expect(sent.points.map((one: { frequency_hz: number }) => one.frequency_hz)).toEqual([1e6, 1e9])
+    expect(sent.points.every((one: { temperature_k: number | null }) => one.temperature_k === null)).toBe(
+      true
+    )
+  })
+
+  it('새 줄은 GHz 로 받고 측정 온도는 점마다 같이 간다', async () => {
+    const user = userEvent.setup()
+    const onSave = panel([])
+    await user.click(await screen.findByRole('combobox', { name: '선언 물성 추가' }))
+    await user.click(await screen.findByRole('option', { name: /비유전율/ }))
+    await user.type(await screen.findByLabelText('비유전율 값'), '3.6')
+    await user.type(screen.getByLabelText('비유전율 주파수'), '10')
+    await user.type(screen.getByLabelText(/측정 온도/), '23')
+    await user.type(screen.getByLabelText('근거 문서'), 'Isola 370HR')
+    await saveCard()
+    await waitFor(() => expect(onSave).toHaveBeenCalled())
+    const [point] = onSave.mock.calls[0][0][0].points
+    expect(point.frequency_hz).toBeCloseTo(1e10)
+    expect(point.temperature_k).toBeCloseTo(296.15)
+  })
+
+  it('조건 칸이 축 이름으로 선다 — 「온도 추가」 가 아니라 「주파수 추가」', async () => {
+    panel([DECLARED_DK])
+    await openFirst()
+    expect(await screen.findByRole('button', { name: '주파수 추가' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '온도 추가' })).not.toBeInTheDocument()
   })
 })

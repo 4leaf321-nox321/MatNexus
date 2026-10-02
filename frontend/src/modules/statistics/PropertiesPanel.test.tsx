@@ -489,6 +489,32 @@ describe('선언과 계산', () => {
     expect(stated.getByText(/ASM Handbook Vol.2/)).toBeInTheDocument()
   })
 
+  it('주파수를 타는 값은 어느 주파수의 것인지와 점 수를 함께 적는다', async () => {
+    // 유전율 「3.8」 만 서면 1 MHz 의 값인지 10 GHz 의 값인지 모른다(2026-10-01).
+    forMaterial.mockResolvedValue({ groups: [] })
+    mount(
+      <PropertiesPanel
+        materialId="m1"
+        declared={
+          [
+            {
+              item: '비유전율',
+              input_unit: '1',
+              points: [
+                { value: 3.8, frequency_hz: 1e6 },
+                { value: 3.6, frequency_hz: 1e9 },
+              ],
+              source: 'datasheet',
+              reference: 'Isola 370HR',
+            },
+          ] as never
+        }
+      />
+    )
+    // 무차원은 단위를 안 적는다 — 「3.8 1」 이 아니라 「3.8」.
+    expect(await screen.findByText(/^3\.8 @ 1 MHz 외 1점$/)).toBeInTheDocument()
+  })
+
   it('적은 값만 고칠 수 있다', async () => {
     // 잰 값은 시험에서 나온 것이라 여기서 고칠 것이 아니다.
     both()

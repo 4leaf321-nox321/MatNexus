@@ -295,6 +295,10 @@ def collect(db: Session, material_id: uuid.UUID) -> Coverage:
                 at = point.get("temperature_k")
                 if isinstance(at, int | float) and not isinstance(at, bool):
                     conditions["temperature"] = float(at)
+                # 주파수를 타는 항목(유전율)은 주파수가 조건이다 — 표준 조건 키 `frequency`.
+                hertz = point.get("frequency_hz")
+                if isinstance(hertz, int | float) and not isinstance(hertz, bool):
+                    conditions["frequency"] = float(hertz)
                 by_property[property_key].append(
                     Entry(
                         origin="internal",

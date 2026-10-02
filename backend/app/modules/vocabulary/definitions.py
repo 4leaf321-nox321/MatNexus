@@ -209,6 +209,16 @@ BUILTIN_AXIS_FIELDS: dict[str, list[dict[str, Any]]] = {
             "보통 물성처럼 '차원' 으로 단위를 검사합니다.",
         ),
         _field(
+            "condition",
+            "값이 변하는 조건",
+            kind="choice",
+            choices=["온도", "주파수", "파장"],
+            help="값이 무엇에 따라 변하나. 비우면 **온도**입니다(탄성계수 · 열물성). "
+            "유전율 · 유전손실은 **주파수**에 따라, 굴절률은 **파장**에 따라 변합니다 — "
+            "고르면 값을 적을 때 온도 대신 그 조건을 점마다 받습니다(측정 온도는 하나 "
+            "적을 수 있습니다).",
+        ),
+        _field(
             "level",
             "붙는 곳",
             kind="choice",
@@ -419,6 +429,122 @@ BUILTIN_PROPERTY_ITEMS: list[tuple[str, str, str, str, str | None, str | None, s
         None,
         "electrical.resistivity_volume",
     ),
+    # **전기 · 전자 물성**(2026-10-01) — ECAD(PCB · 회로 설계)가 쓰는 유전율 · 유전손실 ·
+    # 전도율과 절연 · 압전 · 반도체 물성. 문헌 카탈로그의 `electrical.*` 정의 19개와 1:1 이다
+    # — 문헌 값을 반영할 자리가 사내 쪽에 없으면 그 값은 카드로 못 간다.
+    (
+        "유전손실계수(Df)",
+        "dimensionless",
+        "Df",
+        "재료",
+        None,
+        None,
+        "electrical.dissipation_factor",
+    ),
+    (
+        "전기전도율",
+        "electric_conductivity",
+        "sigma_e",
+        "재료",
+        None,
+        None,
+        "electrical.conductivity",
+    ),
+    (
+        "표면저항률",
+        "resistance",
+        "rho_s",
+        "재료",
+        None,
+        None,
+        "electrical.surface_resistivity",
+    ),
+    (
+        "절연파괴강도",
+        "electric_field",
+        "Eb",
+        "재료",
+        None,
+        None,
+        "electrical.dielectric_strength",
+    ),
+    (
+        "비교트래킹지수(CTI)",
+        "voltage",
+        "CTI",
+        "재료",
+        None,
+        None,
+        "electrical.comparative_tracking_index",
+    ),
+    ("내아크성", "time", "t_arc", "재료", None, None, "electrical.arc_resistance"),
+    (
+        "저항온도계수(TCR)",
+        "inverse_temperature",
+        "TCR",
+        "재료",
+        None,
+        None,
+        "electrical.temperature_coefficient_resistance",
+    ),
+    (
+        "전자파 차폐효과",
+        "decibel",
+        "SE",
+        "재료",
+        None,
+        None,
+        "electrical.shielding_effectiveness",
+    ),
+    (
+        "압전전하상수",
+        "charge_per_force",
+        "d33",
+        "재료",
+        None,
+        None,
+        "electrical.piezoelectric_charge_coefficient",
+    ),
+    (
+        "전기기계결합계수",
+        "dimensionless",
+        "k_em",
+        "재료",
+        None,
+        None,
+        "electrical.electromechanical_coupling_factor",
+    ),
+    (
+        "기계품질계수(Qm)",
+        "dimensionless",
+        "Qm",
+        "재료",
+        None,
+        None,
+        "electrical.mechanical_quality_factor",
+    ),
+    ("밴드갭", "photon_energy", "Eg", "재료", None, None, "electrical.band_gap"),
+    ("HOMO 준위", "photon_energy", "E_HOMO", "재료", None, None, "electrical.homo_level"),
+    ("LUMO 준위", "photon_energy", "E_LUMO", "재료", None, None, "electrical.lumo_level"),
+    (
+        "캐리어 이동도",
+        "carrier_mobility",
+        "mu",
+        "재료",
+        None,
+        None,
+        "electrical.carrier_mobility",
+    ),
+    (
+        "캐리어 농도",
+        "number_density",
+        "n_c",
+        "재료",
+        None,
+        None,
+        "electrical.carrier_concentration",
+    ),
+    ("홀계수", "hall_coefficient", "R_H", "재료", None, None, "electrical.hall_coefficient"),
     ("굴절률", "dimensionless", "n", "재료", None, None, "optical.refractive_index"),
     # **접착·적층의 값이다.** 구성체(ADR 0026)가 생기면 그쪽으로 옮길 후보인데,
     # 지금은 적층 소재를 재료로 등록하므로 재료에 적는다.
@@ -428,6 +554,16 @@ BUILTIN_PROPERTY_ITEMS: list[tuple[str, str, str, str, str | None, str | None, s
 
 #: 물성 키 → 기본 항목 이름. **위 표에서 만든다** — 두 벌로 두면 한쪽만 고쳐진다.
 BUILTIN_ITEM_OF_KEY: dict[str, str] = {row[6]: row[0] for row in BUILTIN_PROPERTY_ITEMS}
+
+#: **온도가 아닌 조건을 타는** 기본 항목 — 물성 키 → 조건(`shared/declared_conditions`).
+#: 여기 없는 항목은 온도다. 문헌 카탈로그의 `condition_axes` 와 같은 축이다 —
+#: 유전율 · 유전손실은 `frequency_hz`, 굴절률은 `wavelength_nm`.
+BUILTIN_ITEM_CONDITIONS: dict[str, str] = {
+    "electrical.dielectric_constant": "주파수",
+    "electrical.dissipation_factor": "주파수",
+    "electrical.shielding_effectiveness": "주파수",
+    "optical.refractive_index": "파장",
+}
 
 
 def refresh_builtin_property_items(db: Session) -> list[str]:
@@ -461,6 +597,7 @@ def refresh_builtin_property_items(db: Session) -> list[str]:
             "level": level,
             "measured_key": measured,
             "scales": scales,
+            "condition": BUILTIN_ITEM_CONDITIONS.get(_key),
         }
         attributes = dict(term.attributes or {})
         missing = {key: one for key, one in wanted.items() if one and key not in attributes}
@@ -508,6 +645,11 @@ def ensure_builtin_property_items(db: Session) -> list[str]:
                     "level": level,
                     **({"measured_key": measured} if measured else {}),
                     **({"scales": scales} if scales else {}),
+                    **(
+                        {"condition": BUILTIN_ITEM_CONDITIONS[_key]}
+                        if _key in BUILTIN_ITEM_CONDITIONS
+                        else {}
+                    ),
                 },
             )
         )

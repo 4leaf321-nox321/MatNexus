@@ -57,7 +57,7 @@ from app.modules.catalog.models import (
 from app.modules.catalog.ontology_models import PropertyLink
 from app.modules.materials.models import Material
 from app.modules.vocabulary.models import VocabularyTerm
-from app.shared import representative
+from app.shared import declared_conditions, representative
 from matcore import cards
 
 #: 합성 곡선의 두 입력 — 모순(항복 > 인장)이면 정합한 짝으로 바꾼다.
@@ -213,6 +213,8 @@ def virtual(db: Session, material: CatalogMaterial, *, synthesize: bool = False)
     fix = _consistent([(value, source) for value, source in rows], chosen)
 
     places = targets(db)
+    # 항목마다 값이 무엇에 따라 변하나 — 유전율이면 주파수를 점에 싣는다.
+    axes = declared_conditions.of_items(db)
     slots = deck_keys()
     usable = {**slots, **(SYNTH_INPUTS if synthesize else {})}
     out = Virtual(
@@ -238,18 +240,23 @@ def virtual(db: Session, material: CatalogMaterial, *, synthesize: bool = False)
             setattr(out.material, name, number)
             label = "포아송비" if name == "poisson_ratio" else "밀도"
         else:
-            temperature = (value.conditions or {}).get("temperature_k")
+            # **조건을 항목의 축으로 옮긴다.** 온도는 `temperature_k` 와 `temperature_c` 가
+            # 둘 다 있다 — 전에는 앞엣것만 읽어 섭씨로 적힌 값의 온도가 빠졌다.
+            condition = axes.get(name, declared_conditions.DEFAULT)
+            point: dict[str, Any] = {
+                "temperature_k": declared_conditions.from_catalog(
+                    value.conditions, declared_conditions.TEMPERATURE
+                ),
+                "value_si": number,
+            }
+            if condition is not declared_conditions.TEMPERATURE:
+                point[condition.key] = declared_conditions.from_catalog(
+                    value.conditions, condition
+                )
             declared_rows.append(
                 {
                     "item": name,
-                    "points": [
-                        {
-                            "temperature_k": float(temperature)
-                            if isinstance(temperature, int | float)
-                            else None,
-                            "value_si": number,
-                        }
-                    ],
+                    "points": [point],
                     "source": source_of(value, source),
                     "reference": reference,
                     "note": "문헌 물성 카탈로그에서 — 덱에 바로 실었다(반영하지 않음)",

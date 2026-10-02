@@ -50,11 +50,40 @@ import {
   DialogTitle,
 } from '@/shared/components/ui/dialog'
 import { Input } from '@/shared/components/ui/input'
+import { fromDisplay } from '@/shared/units'
 
 type MaterialOut = components['schemas']['MaterialOut']
 type MaterialPage = components['schemas']['Page_MaterialOut_']
 type DeclaredIn = components['schemas']['DeclaredPropertyIn']
+type DeclaredPointIn = components['schemas']['DeclaredPointIn']
 type PropertyItem = components['schemas']['PropertyItemOut']
+/** 점에서 조건을 드는 칸 — 항목이 정한다(온도 · 주파수 · 파장). */
+type ConditionKey = 'temperature_k' | 'frequency_hz' | 'wavelength_m'
+
+/**
+ * 문헌 값의 조건에서 **그 축의 SI 값.** 서버의 `shared/declared_conditions.from_catalog` 와
+ * 같은 규칙이다 — 카탈로그는 온도를 `temperature_k` · `temperature_c` 둘로, 파장을
+ * `wavelength_nm` 로 든다. 전에는 `temperature_k` 만 읽어 섭씨로 적힌 값의 온도가 빠졌다.
+ */
+function catalogCondition(
+  conditions: Record<string, unknown> | null | undefined,
+  key: ConditionKey
+): number | null {
+  const number = (name: string) => {
+    const value = conditions?.[name]
+    return typeof value === 'number' ? value : null
+  }
+  if (key === 'temperature_k') {
+    const kelvin = number('temperature_k')
+    const celsius = number('temperature_c')
+    // 섭씨 → K 는 표가 한다 — 손으로 더하면 표 바깥에 정본이 하나 더 생긴다.
+    return kelvin ?? (celsius === null ? null : fromDisplay(celsius, 'K', 'temperature'))
+  }
+  if (key === 'frequency_hz') return number('frequency_hz')
+  const metre = number('wavelength_m')
+  const nano = number('wavelength_nm')
+  return metre ?? (nano === null ? null : nano * 1e-9)
+}
 
 type Slots = Record<string, AdoptableSlot>
 
@@ -77,7 +106,14 @@ function adoptable(slots: Slots, value: CatalogValue): boolean {
 function resend(row: components['schemas']['DeclaredPropertyOut']): DeclaredIn {
   return {
     item: row.item,
-    points: row.points.map((p) => ({ temperature_k: p.temperature_k, value: p.value })),
+    // **조건 칸을 다 되보낸다.** 온도만 옮기면 유전율의 주파수가 이 담기 한 번에 조용히
+    // 빠진다 — 선언 물성은 통째 교체라 되보낸 것이 곧 남는 것이다.
+    points: row.points.map((p) => ({
+      temperature_k: p.temperature_k,
+      frequency_hz: p.frequency_hz,
+      wavelength_m: p.wavelength_m,
+      value: p.value,
+    })),
     input_unit: row.input_unit,
     scale: row.scale,
     source: row.source,
@@ -114,6 +150,8 @@ export function AdoptDialog({
   const [error, setError] = useState<Error | null>(null)
   const [doneCount, setDoneCount] = useState<number | null>(null)
   const [levels, setLevels] = useState<Map<string, string> | null>(null)
+  /** 항목마다 값이 무엇에 따라 변하나 — 유전율이면 주파수를 점에 싣는다. */
+  const [axes, setAxes] = useState<Map<string, ConditionKey>>(new Map())
   // **어디에 담을 수 있는지는 서버의 매핑이 정한다.** 기준정보의 물성 매핑에서
   // 이은 것이 곧 이 목록이다 — 화면이 표를 들고 있으면 이어도 아무 일이 없다.
   const [slots, setSlots] = useState<Slots>({})
@@ -126,7 +164,10 @@ export function AdoptDialog({
     if (!open) return
     api
       .get<PropertyItem[]>('/materials/property-items')
-      .then((items) => setLevels(new Map(items.map((one) => [one.item, one.level]))))
+      .then((items) => {
+        setLevels(new Map(items.map((one) => [one.item, one.level])))
+        setAxes(new Map(items.map((one) => [one.item, one.condition_key as ConditionKey])))
+      })
       // 못 읽으면 잠그지 않는다 — 서버 검증이 최종 방어라 조용히 틀리지는 않는다.
       .catch(() => setLevels(null))
     api
@@ -261,23 +302,32 @@ export function AdoptDialog({
 
       if (byItem.size > 0) {
         const newRows: DeclaredIn[] = [...byItem.entries()].map(([item, values]) => {
+          const axis = axes.get(item) ?? 'temperature_k'
           const seen = new Set<number | null>()
-          const points = values
-            .map((value) => ({
-              temperature_k:
-                typeof value.conditions?.['temperature_k'] === 'number'
-                  ? (value.conditions['temperature_k'] as number)
-                  : null,
-              value: (pooled.has(value.id) && value.summary
-                ? (value.summary['median'] as number)
-                : value.value_num) as number,
-            }))
+          let points: DeclaredPointIn[] = values
+            .map((value) => {
+              const point: DeclaredPointIn = {
+                temperature_k: catalogCondition(value.conditions, 'temperature_k'),
+                value: (pooled.has(value.id) && value.summary
+                  ? (value.summary['median'] as number)
+                  : value.value_num) as number,
+              }
+              // 주파수 · 파장을 타는 항목이면 그 축을 싣는다 — 온도는 측정 온도로 남는다.
+              if (axis !== 'temperature_k') point[axis] = catalogCondition(value.conditions, axis)
+              return point
+            })
             .filter((point) => {
-              if (seen.has(point.temperature_k)) return false
-              seen.add(point.temperature_k)
+              const at = point[axis] ?? null
+              if (seen.has(at)) return false
+              seen.add(at)
               return true
             })
-            .sort((a, b) => (a.temperature_k ?? -1) - (b.temperature_k ?? -1))
+            .sort((a, b) => (a[axis] ?? -1) - (b[axis] ?? -1))
+          // **측정 온도가 값마다 다르면 비운다** — 주파수 × 온도의 2차원 표는 서버가 안 받는다.
+          // 비운 사실은 메모에 남긴다(조용히 지우지 않는다).
+          const temperatures = new Set(points.map((point) => point.temperature_k ?? null))
+          const dropped = axis !== 'temperature_k' && temperatures.size > 1
+          if (dropped) points = points.map((point) => ({ ...point, temperature_k: null }))
           return {
             item,
             points,
@@ -289,7 +339,9 @@ export function AdoptDialog({
                 pooled.has(value.id) ? pooledReference(value) : adoptionReference(value)
               )
               .join(' / '),
-            note: '문헌 물성 카탈로그에서 채택 (스냅샷)',
+            note: dropped
+              ? '문헌 물성 카탈로그에서 채택 (스냅샷) — 값마다 측정 온도가 달라 비웠다'
+              : '문헌 물성 카탈로그에서 채택 (스냅샷)',
           }
         })
         const kept = (target.declared_properties ?? [])

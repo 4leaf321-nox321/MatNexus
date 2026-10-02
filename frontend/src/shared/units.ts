@@ -536,6 +536,38 @@ export function significant(value: number): number {
   return Number(value.toPrecision(SIGNIFICANT_DIGITS))
 }
 
+/**
+ * 선언 물성 점의 **조건을 읽는 글**로 — `1 GHz` · `589 nm` · `23 °C`. 표시 전용(저장은 SI).
+ *
+ * 유전율은 1 MHz 와 10 GHz 에서 값이 다르다(2026-10-01). 요약에 숫자만 서면 그것이 어느
+ * 주파수의 값인지 모른다 — 접두어는 값이 1 이상이 되는 가장 큰 것을 고른다.
+ */
+export function formatCondition(point: {
+  temperature_k?: number | null
+  frequency_hz?: number | null
+  wavelength_m?: number | null
+}): string | null {
+  if (point.frequency_hz != null) {
+    const steps: [number, string][] = [
+      [1e9, 'GHz'],
+      [1e6, 'MHz'],
+      [1e3, 'kHz'],
+    ]
+    for (const [factor, unit] of steps) {
+      if (Math.abs(point.frequency_hz) >= factor) {
+        return `${significant(point.frequency_hz / factor)} ${unit}`
+      }
+    }
+    return `${significant(point.frequency_hz)} Hz`
+  }
+  if (point.wavelength_m != null) return `${significant(point.wavelength_m * 1e9)} nm`
+  if (point.temperature_k != null) {
+    const { unit } = display('K', 'temperature')
+    return `${significant(toDisplay(point.temperature_k, 'K', 'temperature'))} ${unit}`
+  }
+  return null
+}
+
 export function formatScalar(
   value: number,
   siUnit: string | null | undefined,

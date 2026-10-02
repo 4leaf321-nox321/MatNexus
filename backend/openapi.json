@@ -6956,6 +6956,25 @@
         "title": "ConditionInput",
         "type": "object"
       },
+      "ConditionUnitOut": {
+        "description": "조건 단위 하나와 그 SI 배수. **배수는 서버가 단위 표로 낸다** — 화면이 배수를 따로\n들면 환산 규칙이 두 곳이 된다(ADR 0004).",
+        "properties": {
+          "to_si": {
+            "title": "To Si",
+            "type": "number"
+          },
+          "unit": {
+            "title": "Unit",
+            "type": "string"
+          }
+        },
+        "required": [
+          "unit",
+          "to_si"
+        ],
+        "title": "ConditionUnitOut",
+        "type": "object"
+      },
       "ConnectorCreate": {
         "properties": {
           "auto_register": {
@@ -8697,7 +8716,19 @@
         "type": "object"
       },
       "DeclaredPointIn": {
+        "description": "점 하나. 조건은 **그 항목의 축만** 적는다 — 다른 축은 거절된다(측정 온도는 예외).",
         "properties": {
+          "frequency_hz": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Frequency Hz"
+          },
           "temperature_k": {
             "anyOf": [
               {
@@ -8712,6 +8743,17 @@
           "value": {
             "title": "Value",
             "type": "number"
+          },
+          "wavelength_m": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wavelength M"
           }
         },
         "required": [
@@ -8721,8 +8763,19 @@
         "type": "object"
       },
       "DeclaredPointOut": {
-        "description": "온도 하나에서의 값 하나.",
+        "description": "조건 하나(온도 · 주파수 · 파장)에서의 값 하나. 어느 조건인지는 항목이 정한다.",
         "properties": {
+          "frequency_hz": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Frequency Hz"
+          },
           "temperature_k": {
             "anyOf": [
               {
@@ -8741,6 +8794,17 @@
           "value_si": {
             "title": "Value Si",
             "type": "number"
+          },
+          "wavelength_m": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wavelength M"
           }
         },
         "required": [
@@ -21319,6 +21383,24 @@
       "PropertyItemOut": {
         "description": "넣을 수 있는 물성 항목. 화면이 피커를 그리는 데 쓴다.",
         "properties": {
+          "condition": {
+            "default": "온도",
+            "title": "Condition",
+            "type": "string"
+          },
+          "condition_key": {
+            "default": "temperature_k",
+            "title": "Condition Key",
+            "type": "string"
+          },
+          "condition_units": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ConditionUnitOut"
+            },
+            "title": "Condition Units",
+            "type": "array"
+          },
           "dimension": {
             "title": "Dimension",
             "type": "string"

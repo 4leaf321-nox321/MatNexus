@@ -528,6 +528,8 @@ def _write_values(
             "owner_id",
             "item",
             "temperature_k",
+            "frequency_hz",
+            "wavelength_m",
             "value_si",
             "si_unit",
             "scale",
@@ -556,7 +558,12 @@ def _write_values(
                         owner_id,
                         row.get("item"),
                         point.get("temperature_k"),
-                        point.get("value"),
+                        # 주파수 · 파장을 타는 항목(유전율 · 굴절률)의 조건 — 없으면 빈 칸.
+                        point.get("frequency_hz"),
+                        point.get("wavelength_m"),
+                        # **저장 키는 `value_si` 다.** 전에는 `value` 를 읽어 이 열이 늘 비어
+                        # 나갔다 — 저장된 점에는 `value` 가 없다(2026-10-01 실측, 442점 전부).
+                        point.get("value_si"),
                         row.get("si_unit"),
                         row.get("scale"),
                         row.get("source"),

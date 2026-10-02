@@ -49,7 +49,7 @@ import {
 import type { components } from '@/shared/api/schema'
 import { cn } from '@/shared/lib/utils'
 import { useResource } from '@/shared/hooks/useResource'
-import { axisLabel, formatScalar, significant, toDisplay } from '@/shared/units'
+import { axisLabel, formatCondition, formatScalar, significant, toDisplay } from '@/shared/units'
 
 /** 이 이상이면 흩어짐이 크다고 눈에 띄게 한다. **버리거나 고치지는 않는다.** */
 const NOTABLE_CV = 0.05
@@ -428,11 +428,20 @@ function PropertySummary({
   for (const row of declared) {
     const first = row.points?.[0]
     if (!first) continue
+    // **어느 조건의 값인지 붙인다** — 유전율 「3.8」 은 1 MHz 의 값인지 10 GHz 의 값인지에 따라
+    // 뜻이 다르다(2026-10-01). 점이 여럿이면 몇 점인지도 적는다 — 첫 점만 보이기 때문이다.
+    const at = formatCondition(first)
+    const more = row.points.length > 1 ? ` 외 ${row.points.length - 1}점` : ''
     push(row.item, {
       where: row.reference || row.source,
       stats: null,
       kind: '선언',
-      stated: `${significant(Number(first.value))} ${row.input_unit ?? row.scale ?? ''}`.trim(),
+      // 무차원(`1`)은 단위를 안 적는다 — 「3.8 1」 로 읽힌다.
+      stated: `${significant(Number(first.value))} ${
+        row.input_unit === '1' ? '' : (row.input_unit ?? row.scale ?? '')
+      }`
+        .trim()
+        .concat(at ? ` @ ${at}` : '', more),
     })
   }
 

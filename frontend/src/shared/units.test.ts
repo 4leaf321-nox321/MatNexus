@@ -7,7 +7,7 @@
 
 import { describe, expect, it } from 'vitest'
 
-import { DIMENSIONS, SIGNIFICANT_DIGITS, SI_BY_DIMENSION, UNITS_BY_DIMENSION, axisLabel, conditionUnits, display, formatScalar, formatValue, fromDisplay, significant, spanToDisplay, toDisplay } from '@/shared/units'
+import { DIMENSIONS, SIGNIFICANT_DIGITS, SI_BY_DIMENSION, UNITS_BY_DIMENSION, axisLabel, conditionUnits, display, formatCondition, formatScalar, formatValue, fromDisplay, significant, spanToDisplay, toDisplay } from '@/shared/units'
 
 describe('저장 단위와 표시 단위', () => {
   it('저장은 SI, 표시는 실무 단위', () => {
@@ -212,5 +212,20 @@ describe('유효숫자', () => {
     // 그때 사람은 둘 중 어느 것이 진짜인지 묻는다. 실제로 그랬다(5·4·무제한).
     expect(significant(77.748477312)).toBe(77.75)
     expect(SIGNIFICANT_DIGITS).toBe(4)
+  })
+})
+
+describe('선언 물성 점의 조건 글', () => {
+  // 유전율은 주파수, 굴절률은 파장, 나머지는 온도(2026-10-01). 표시 전용 — 저장은 SI.
+  it('주파수는 값이 1 이상이 되는 가장 큰 접두어로', () => {
+    expect(formatCondition({ frequency_hz: 1e9 })).toBe('1 GHz')
+    expect(formatCondition({ frequency_hz: 2.5e6 })).toBe('2.5 MHz')
+    expect(formatCondition({ frequency_hz: 50 })).toBe('50 Hz')
+  })
+
+  it('파장은 nm, 온도는 표의 표시 단위로', () => {
+    expect(formatCondition({ wavelength_m: 589e-9 })).toBe('589 nm')
+    expect(formatCondition({ temperature_k: 296.15 })).toBe(`23 ${display('K', 'temperature').unit}`)
+    expect(formatCondition({})).toBeNull()
   })
 })

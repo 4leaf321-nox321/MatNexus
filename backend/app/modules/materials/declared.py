@@ -33,6 +33,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.modules.vocabulary.models import Vocabulary, VocabularyTerm
+from app.shared import declared_conditions as conditions
 from app.shared.errors import AppError
 from app.shared.text import clean, compare_key
 from matcore import units
@@ -113,18 +114,42 @@ def catalog(db: Session, *, level: str | None = None) -> dict[str, dict[str, Any
             "measured_key": attributes.get("measured_key") or None,
             # **단위가 아니라 척도인 물성.** 비어 있으면 보통 물성이다.
             "scales": _scales(attributes.get("scales")),
+            # **값이 무엇에 따라 변하나** — 온도(비우면) · 주파수 · 파장.
+            "condition": conditions.of_attributes(attributes).label,
         }
     return found
 
 
-def _points(given: list[Any], *, name: str, symbol: str | None) -> list[dict[str, Any]]:
-    """온도-값 점들을 검사해 저장할 모양으로.
+def _number(value: Any) -> float | None:
+    return (
+        float(value)
+        if isinstance(value, int | float) and not isinstance(value, bool)
+        else None
+    )
+
+
+def _points(
+    given: list[Any],
+    *,
+    name: str,
+    symbol: str | None,
+    condition: conditions.Condition = conditions.TEMPERATURE,
+) -> list[dict[str, Any]]:
+    """조건-값 점들을 검사해 저장할 모양으로. 조건은 항목이 정한다(온도 · 주파수 · 파장).
 
     `symbol` 이 없으면 **환산하지 않는다** — 척도로 재는 물성(경도)이 그렇다.
 
-    **온도 오름차순으로 고정한다.** 뒤섞인 채로 솔버에 나가면 Abaqus 가 조용히
+    **조건 오름차순으로 고정한다.** 뒤섞인 채로 솔버에 나가면 Abaqus 가 조용히
     이상한 보간을 한다 — 오류를 내지 않고, 결과만 틀린다.
+
+    ## 다른 축의 값은 거절한다 (2026-10-01)
+
+    주파수를 타는 항목(유전율)에 온도별 점을 적으면 **숫자는 그럴듯한데 뜻이 다른** 값이
+    된다 — 그래서 받지 않는다. 예외 하나: 온도가 아닌 축의 항목에도 **측정 온도**는
+    적을 수 있다(「10 GHz, 23 °C」) — 점마다 같을 때만. 점마다 다르면 2차원 표이고,
+    그것은 담지 않는다(`shared/declared_conditions` 머리말).
     """
+    axis = condition.label
     made: list[dict[str, Any]] = []
     for point in given:
         if not isinstance(point, dict):
@@ -134,38 +159,67 @@ def _points(given: list[Any], *, name: str, symbol: str | None) -> list[dict[str
             raise AppError(
                 "MNX-MATERIALS-0024", f"'{name}' 의 값이 숫자가 아닙니다.", status=422
             )
-        temperature = point.get("temperature_k")
-        made.append(
-            {
-                "temperature_k": float(temperature)
-                if isinstance(temperature, (int, float))
-                else None,
-                "value_si": units.to_si(raw, symbol) if symbol else float(raw),
-            }
-        )
+        for other in conditions.CONDITIONS.values():
+            if other is condition or other is conditions.TEMPERATURE:
+                continue
+            if _number(point.get(other.key)) is not None:
+                raise AppError(
+                    "MNX-MATERIALS-0028",
+                    f"'{name}' 은 {axis}에 따라 변하는 물성인데 {other.label} 값을 "
+                    f"적었습니다. {axis} 값을 적으세요 — 축이 다른 값은 숫자가 그럴듯해도 "
+                    f"뜻이 다릅니다.",
+                    status=422,
+                )
+        at = _number(point.get(condition.key))
+        if at is not None and condition is not conditions.TEMPERATURE and at <= 0:
+            raise AppError(
+                "MNX-MATERIALS-0028",
+                f"'{name}' 의 {axis} 값은 0 보다 커야 합니다: {at:g} {condition.si_unit}",
+                status=422,
+            )
+        stored: dict[str, Any] = {
+            "temperature_k": _number(point.get("temperature_k")),
+            "value_si": units.to_si(raw, symbol) if symbol else float(raw),
+        }
+        if condition is not conditions.TEMPERATURE:
+            stored[condition.key] = at
+        made.append(stored)
+
+    if condition is not conditions.TEMPERATURE:
+        # **측정 온도는 점마다 같아야 한다.** 다르면 주파수와 온도의 2차원 표인데, 한 축만
+        # 정렬해 두면 덱이 어느 것을 표의 축으로 읽을지 모른다.
+        measured = {point["temperature_k"] for point in made}
+        if len(measured) > 1:
+            raise AppError(
+                "MNX-MATERIALS-0028",
+                f"'{name}' 의 점마다 측정 온도가 다릅니다. {axis}에 따라 변하는 항목은 "
+                f"측정 온도를 하나만 적을 수 있습니다 — 온도마다 다르면 줄을 나눠 적으세요"
+                f"(예: 항목을 온도별로).",
+                status=422,
+            )
 
     if len(made) == 1:
         return made
 
-    # **점이 둘 이상이면 온도가 전부 있어야 한다.** 하나라도 비면 그 값이 어느
-    # 온도의 것인지 알 수 없고, 그것을 상온으로 치는 것은 지어내는 일이다.
-    if any(point["temperature_k"] is None for point in made):
+    # **점이 둘 이상이면 조건이 전부 있어야 한다.** 하나라도 비면 그 값이 어느
+    # 조건의 것인지 알 수 없고, 그것을 상온 · 대표 주파수로 치는 것은 지어내는 일이다.
+    if any(point[condition.key] is None for point in made):
         raise AppError(
             "MNX-MATERIALS-0026",
-            f"'{name}' 에 온도 없는 값이 섞여 있습니다. 값이 여럿이면 각각 어느 "
-            f"온도의 것인지 적어야 합니다 — 안 그러면 그 값이 어느 온도에서 유효한지 "
+            f"'{name}' 에 {axis} 없는 값이 섞여 있습니다. 값이 여럿이면 점마다 "
+            f"{axis} 값을 적어야 합니다 — 안 그러면 그 값이 어느 {axis} 값에서 유효한지 "
             f"알 방법이 없습니다.",
             status=422,
         )
-    temperatures = [point["temperature_k"] for point in made]
-    if len(set(temperatures)) != len(temperatures):
+    keys = [point[condition.key] for point in made]
+    if len(set(keys)) != len(keys):
         raise AppError(
             "MNX-MATERIALS-0026",
-            f"'{name}' 에 같은 온도가 두 번 있습니다. 솔버는 둘 중 하나를 조용히 "
+            f"'{name}' 에 같은 {axis} 값이 두 번 있습니다. 솔버는 둘 중 하나를 조용히 "
             f"고릅니다 — 어느 쪽인지 우리가 정해 두어야 합니다.",
             status=422,
         )
-    return sorted(made, key=lambda point: point["temperature_k"])
+    return sorted(made, key=lambda point: point[condition.key])
 
 
 def check(
@@ -334,7 +388,12 @@ def check(
                 {
                     "item": name,
                     # 환산이 없으므로 적은 값이 곧 저장 값이다.
-                    "points": _points(given, name=name, symbol=None),
+                    "points": _points(
+                        given,
+                        name=name,
+                        symbol=None,
+                        condition=conditions.CONDITIONS[spec["condition"]],
+                    ),
                     "scale": scale,
                     "input_unit": None,
                     # **값 옆에 저장 단위를 적는다.** 응답이 SI 값만 주면 받는 쪽이 단위를
@@ -368,7 +427,12 @@ def check(
         out.append(
             {
                 "item": name,
-                "points": _points(given, name=name, symbol=symbol),
+                "points": _points(
+                    given,
+                    name=name,
+                    symbol=symbol,
+                    condition=conditions.CONDITIONS[spec["condition"]],
+                ),
                 "scale": None,
                 "input_unit": symbol,
                 "si_unit": spec["si_unit"],

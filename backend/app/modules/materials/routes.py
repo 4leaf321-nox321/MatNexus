@@ -47,6 +47,7 @@ from app.modules.materials.schemas import (
     CascadeDeleteOut,
     CascadeDeleteRequest,
     ClassificationOut,
+    ConditionUnitOut,
     DeclaredPointOut,
     DeclaredPropertyOut,
     DeletePlanOut,
@@ -103,6 +104,7 @@ from app.shared import (
     codes,
     contention,
     coverage,
+    declared_conditions,
     display,
     exports,
     facets,
@@ -236,6 +238,8 @@ def _declared_out(row: dict[str, Any]) -> DeclaredPropertyOut:
         points=[
             DeclaredPointOut(
                 temperature_k=point.get("temperature_k"),
+                frequency_hz=point.get("frequency_hz"),
+                wavelength_m=point.get("wavelength_m"),
                 value_si=float(point["value_si"]),
                 # **척도는 환산이 없다.** 적은 값이 곧 저장 값이다.
                 value=value,
@@ -711,6 +715,12 @@ def property_items(
             symbol=spec["symbol"],
             level=spec["level"],
             scales=spec["scales"],
+            condition=spec["condition"],
+            condition_key=declared_conditions.CONDITIONS[spec["condition"]].key,
+            condition_units=[
+                ConditionUnitOut(unit=unit, to_si=units.to_si(1.0, unit))
+                for unit in declared_conditions.CONDITIONS[spec["condition"]].units
+            ],
             # **척도를 든 항목에는 단위를 안 준다.** 둘 다 주면 화면이 어느
             # 쪽을 그릴지 스스로 판단해야 하고, 그 판단이 서버와 갈라진다.
             units=[] if spec["scales"] else units.units_for(spec["dimension"]),
@@ -892,7 +902,9 @@ def _in_units(
             unit = moved.unit or None
             points.append(
                 {
-                    "temperature_k": point.get("temperature_k"),
+                    # **조건 칸을 다 싣는다** — 온도만 실으면 유전율의 주파수가 이 응답에서
+                    # 조용히 빠진다(`shared/declared_conditions.POINT_KEYS`).
+                    **declared_conditions.point_conditions(point),
                     "value": moved.value,
                     "value_si": point["value_si"],
                 }

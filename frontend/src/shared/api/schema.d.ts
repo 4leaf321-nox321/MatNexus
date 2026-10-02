@@ -10142,6 +10142,17 @@ export interface components {
             /** Value Type */
             value_type: string;
         };
+        /**
+         * ConditionUnitOut
+         * @description 조건 단위 하나와 그 SI 배수. **배수는 서버가 단위 표로 낸다** — 화면이 배수를 따로
+         *     들면 환산 규칙이 두 곳이 된다(ADR 0004).
+         */
+        ConditionUnitOut: {
+            /** To Si */
+            to_si: number;
+            /** Unit */
+            unit: string;
+        };
         /** ConnectorCreate */
         ConnectorCreate: {
             /**
@@ -10943,24 +10954,35 @@ export interface components {
              */
             synthesize_plastic: boolean;
         };
-        /** DeclaredPointIn */
+        /**
+         * DeclaredPointIn
+         * @description 점 하나. 조건은 **그 항목의 축만** 적는다 — 다른 축은 거절된다(측정 온도는 예외).
+         */
         DeclaredPointIn: {
+            /** Frequency Hz */
+            frequency_hz?: number | null;
             /** Temperature K */
             temperature_k?: number | null;
             /** Value */
             value: number;
+            /** Wavelength M */
+            wavelength_m?: number | null;
         };
         /**
          * DeclaredPointOut
-         * @description 온도 하나에서의 값 하나.
+         * @description 조건 하나(온도 · 주파수 · 파장)에서의 값 하나. 어느 조건인지는 항목이 정한다.
          */
         DeclaredPointOut: {
+            /** Frequency Hz */
+            frequency_hz?: number | null;
             /** Temperature K */
             temperature_k?: number | null;
             /** Value */
             value: number;
             /** Value Si */
             value_si: number;
+            /** Wavelength M */
+            wavelength_m?: number | null;
         };
         /**
          * DeclaredPropertyIn
@@ -15566,6 +15588,21 @@ export interface components {
          * @description 넣을 수 있는 물성 항목. 화면이 피커를 그리는 데 쓴다.
          */
         PropertyItemOut: {
+            /**
+             * Condition
+             * @default 온도
+             */
+            condition: string;
+            /**
+             * Condition Key
+             * @default temperature_k
+             */
+            condition_key: string;
+            /**
+             * Condition Units
+             * @default []
+             */
+            condition_units: components["schemas"]["ConditionUnitOut"][];
             /** Dimension */
             dimension: string;
             /** Item */

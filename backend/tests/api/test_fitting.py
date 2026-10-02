@@ -2436,7 +2436,8 @@ class Test온도표:
             headers=admin_headers,
         )
         assert refused.status_code == 422, refused.text
-        assert "같은 온도가 두 번" in refused.json()["error"]["message"]
+        # 축 이름이 들어간다(2026-10-01 — 주파수 · 파장 항목과 같은 문장).
+        assert "같은 온도 값이 두 번" in refused.json()["error"]["message"]
 
     def test_온도순으로_고쳐_담는다(
         self, client: TestClient, admin_headers: dict[str, str], material: dict[str, Any]
