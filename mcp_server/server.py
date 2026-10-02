@@ -128,7 +128,7 @@ _register_tool = mcp.tool
 
 
 def _counted_tool(*args: Any, **kwargs: Any) -> Any:
-    """`@mcp.tool()` 과 같되 **도구가 끝날 때마다 센다.** 도구 91개를 하나하나 고치지 않는다 —
+    """`@mcp.tool()` 과 같되 **도구가 끝날 때마다 센다.** 도구를 하나하나 고치지 않는다 —
     새 도구도 이 데코레이터로 등록되므로 빠지지 않는다."""
     register = _register_tool(*args, **kwargs)
 
@@ -5018,6 +5018,150 @@ async def list_recipes(ctx: Context, test_type: str | None = None) -> dict[str, 
     return _listed(await _get(ctx, "/processing/recipes", {"test_type": test_type}), "recipes")
 
 
+def _thin(points: list[Any], limit: int) -> list[Any]:
+    """점을 `limit` 개 안으로 솎는다 — 첫 점과 끝 점은 남긴다. 서버가 이미 모양을 지켜(LTTB)
+    600점으로 줄인 것이라 고르게 솎아도 꺾이는 자리가 크게 안 사라진다."""
+    if limit < 2 or len(points) <= limit:
+        return points
+    step = (len(points) - 1) / (limit - 1)
+    return [points[round(index * step)] for index in range(limit)]
+
+
+def _thin_front(points: list[Any], cut: float | None, limit: int) -> list[Any]:
+    """앞(변형률 `cut` 까지)에 점 예산의 **절반**을 쓰고 나머지를 뒤에 쓴다.
+
+    탄성 구간은 곡선 전체의 1% 남짓이라 고르게 솎으면 서너 점만 남는다 — E 를 보라는 도구가
+    정작 탄성 구간을 성기게 줬다(2026-10-03 AI 점검: 80점 중 탄성 구간 3점이라 AI 가 600점으로
+    다시 불러야 했다).
+    """
+    if cut is None or len(points) <= limit:
+        return _thin(points, limit)
+    front = [one for one in points if one[0] <= cut]
+    back = [one for one in points if one[0] > cut]
+    half = max(2, limit // 2)
+    return _thin(front, half) + _thin(back, max(2, limit - half))
+
+
+@mcp.tool()
+async def list_processing_results(ctx: Context, test_run_id: str) -> dict[str, Any]:
+    """시험 하나의 **처리 결과 전부** — 채택된 것과 아직 채택 안 된 시도까지(화면의 「결과」 탭).
+
+    `get_test_run` 은 채택된 결과의 값만 준다. 채택 전에 시도들을 견주거나 어느 결과의 곡선을
+    볼지 고르려면 여기서 `id` 를 얻어 `get_result_curve` 로 간다. 값은 SI 다(`unit`).
+
+    `stale` 이 참이면 그 결과를 만든 뒤 원본 · 시편 값이 바뀌었다 — 다시 처리할 후보다.
+    `has_true_stress` 가 거짓이면 진응력 · 진소성변형률 단계가 없어 그 결과로는 카드를 못 짓는다.
+    **채택은 사람이 화면에서 한다** — 어느 결과를 공식으로 삼을지는 AI 가 정하지 않는다(ADR 0007).
+    """
+    resolved = await _resolve_run(ctx, test_run_id)
+    if isinstance(resolved, dict):
+        return resolved
+    results = await _get(ctx, "/processing/results", {"test_run_id": resolved})
+    if isinstance(results, dict):
+        return results  # 오류 봉투
+    rows = [
+        {
+            "id": one.get("id"),
+            "adopted": bool(one.get("is_adopted")),
+            "stale": bool(one.get("stale")),
+            "created_at": one.get("created_at"),
+            "recipe": one.get("recipe_label"),
+            "steps": [stage.get("label") for stage in one.get("stages") or []],
+            "row_count": one.get("row_count"),
+            "has_true_stress": "stress_true" in (one.get("columns") or []),
+            "values": [
+                {
+                    "key": value.get("key"),
+                    "label": value.get("label"),
+                    "value": value.get("value"),
+                    "unit": value.get("si_unit"),
+                }
+                for value in one.get("scalars") or []
+            ],
+        }
+        for one in results or []
+    ]
+    return {
+        "test_run_id": resolved,
+        "count": len(rows),
+        "results": rows,
+        "note": "곡선은 get_result_curve(result_id) 로 본다. 채택은 사람이 화면에서 한다.",
+    }
+
+
+@mcp.tool()
+async def get_result_curve(
+    ctx: Context,
+    result_id: str,
+    x: str | None = None,
+    y: str | None = None,
+    max_points: int = 80,
+) -> dict[str, Any]:
+    """저장된 처리 결과의 곡선 — **채택하기 전에 「E 를 제대로 잡았나」 를 보는 자리**(ADR 0053).
+
+    기본 축은 공칭 응력-변형률이다. 그 축이면 결과 곡선 곁에 셋이 함께 온다.
+
+        context       자르기 전 공칭 곡선 — 탄성 구간부터. 진응력 단계가 항복 앞의 점을 모든
+                      열에서 버려, 결과 곡선(points)은 항복점부터 시작한다
+        guides        탄성 직선(elastic, σ = Eε + 절편)과 오프셋 선(offset, σ = E(ε - 오프셋)) —
+                      그 값을 잰 단계가 쓴 선 그대로
+        yield_point   오프셋 선과 곡선의 교점 — 항복강도
+
+    **전부 SI 다** — 변형률은 1(0.002 가 0.2%), 응력은 Pa. 사람에게 말할 때는 MPa · % 로 옮긴다.
+
+    ## 읽는 법
+
+    - 탄성 직선이 앞쪽 곡선의 첫 직선 구간에 겹치지 않으면 E 가 의심스럽다 — 고치지 말고 사람에게
+      말한다(처리 탭에서 탄성 구간을 다시 고르는 것은 사람의 판단이다).
+    - `context.recomputed` 가 참이면 그 앞쪽 곡선은 저장된 것이 아니라, 이 기능 전에 저장한 결과라
+      단계를 **지금 원본에 다시 돌린 참고**다. `context.note` 가 있으면 저장된 결과와 어긋난다 —
+      그 사이 원본 · 시편 값 · 처리 방식이 바뀌었다.
+    - `context_note` 는 앞쪽 곡선을 못 그린 이유다. `context` 가 없고 이유도 없으면 결과가 앞을
+      잃지 않은 것이다 — `points` 가 곧 전체다.
+
+    `x` · `y` 를 함께 주면 그 축으로 그린다(축 이름은 `columns`). 그 밖의 축에는 앞쪽 곡선 ·
+    보조선이 없다. 점은 `max_points` 개 안으로 줄여 온다 — 앞쪽 곡선은 그 절반을 탄성 구간
+    (항복 변형률의 1.5 배까지)에 쓴다.
+    """
+    if not _looks_like_uuid(result_id):
+        return {
+            "error": f"결과 id 가 아닙니다: {result_id}",
+            "hint": "`list_processing_results(test_run_id)` 로 결과 id 를 먼저 얻으세요.",
+        }
+    params = {"x": x, "y": y} if x and y else None
+    body = await _get(ctx, f"/processing/results/{result_id}/curve", params)
+    if not isinstance(body, dict) or "error" in body:
+        return body if isinstance(body, dict) else {"error": "곡선을 읽지 못했습니다."}
+    limit = max(2, min(int(max_points), 600))
+    units = body.get("units") or {}
+    point = body.get("yield_point")
+    elastic = next((one for one in body.get("guides") or [] if one.get("kind") == "elastic"), None)
+    # 탄성 구간의 끝 — 항복 변형률의 1.5 배, 없으면 탄성 직선이 끝나는 곳.
+    cut = 1.5 * point[0] if point else (elastic["points"][-1][0] if elastic else None)
+    out: dict[str, Any] = {
+        "result_id": body.get("result_id"),
+        "x": body.get("x"),
+        "y": body.get("y"),
+        "units": {"x": units.get(body.get("x")), "y": units.get(body.get("y"))},
+        "columns": body.get("columns"),
+        "row_count": body.get("row_count"),
+        "points": _thin(body.get("points") or [], limit),
+    }
+    context = body.get("context")
+    if context:
+        out["context"] = {
+            **context,
+            "points": _thin_front(context.get("points") or [], cut, limit),
+        }
+    if body.get("context_note"):
+        out["context_note"] = body["context_note"]
+    if body.get("guides"):
+        out["guides"] = body["guides"]
+    if point:
+        out["yield_point"] = {"strain": point[0], "stress": point[1]}
+    return out
+
+
 @mcp.tool()
 async def run_processing(
     ctx: Context,
@@ -5170,6 +5314,83 @@ async def save_recipe(
             "note": "이대로 만들려면 dry_run=False 로 다시 부르세요.",
         }
     return await _send(ctx, "POST", "/processing/recipes", body)
+
+
+@mcp.tool()
+async def update_recipe(
+    ctx: Context,
+    key: str,
+    label: str | None = None,
+    description: str | None = None,
+    dry_run: bool = True,
+) -> dict[str, Any]:
+    """레시피의 **이름 · 설명만** 고친다 — 단계 · 시험 종류 · 켜짐은 그대로다(화면의 연필 단추와 같다).
+
+    `key` 는 레시피 키(`rcp_…`)이고, 이름을 줘도 하나로 정해지면 받아 준다. **안 준 칸은 그대로**
+    둔다 — `label=None` 이면 이름을 안 바꾸고, `description=None` 이면 설명을 안 바꾼다. 설명을
+    지우려면 `description=""` 를 준다(안 보낸 것과 비운 것을 가른다).
+
+    **단계는 여기서 못 바꾼다.** 레시피는 부서의 합의라, 단계를 바꾸려면 사람이 처리 탭에서 곡선을
+    보며 맞춘 뒤 새로 저장한다(`save_recipe`). 이미 이 레시피로 만든 결과는 그때의 이름을 그대로
+    갖는다.
+
+    고칠 수 있는 사람은 등록자 · 편집을 받은 부서 · 자료 관리자다 — 아니면 미리보기에서 막히고
+    누구에게 물을지 온다. **기본이 미리보기(dry_run=True)다.**
+    """
+    if label is None and description is None:
+        return {"error": "바꿀 것이 없습니다 — label 이나 description 을 주세요."}
+    recipes = await _get(ctx, "/processing/recipes")
+    if isinstance(recipes, dict):
+        return recipes  # 오류 봉투
+    rows = recipes or []
+    found = next((one for one in rows if one.get("key") == key), None)
+    if found is None:
+        named = [one for one in rows if str(one.get("label", "")).strip() == key.strip()]
+        if len(named) != 1:
+            return {
+                "error": f"'{key}' 레시피를 하나로 정하지 못했습니다.",
+                "candidates": [
+                    {"key": one.get("key"), "label": one.get("label")}
+                    for one in (named or rows)[:10]
+                ],
+                "hint": "`list_recipes` 의 key 로 다시 부르세요.",
+            }
+        found = named[0]
+    access = found.get("access") or {}
+    if access.get("can_edit") is False:
+        return {
+            "error": "이 레시피를 고칠 수 없습니다.",
+            "reason": access.get("reason"),
+            "registrant": access.get("registrant"),
+            "edit_workspace": access.get("edit_workspace"),
+        }
+    new_label = found.get("label") if label is None else label.strip()
+    if not new_label:
+        return {"error": "이름을 비울 수 없습니다."}
+    new_description = (
+        found.get("description") if description is None else (description.strip() or None)
+    )
+    before = {"label": found.get("label"), "description": found.get("description")}
+    after = {"label": new_label, "description": new_description}
+    if before == after:
+        return {"error": "지금과 같습니다 — 바뀐 것이 없습니다.", "recipe": before}
+    body = {
+        **after,
+        "test_type_key": found.get("test_type_key"),
+        "steps": found.get("steps") or [],
+        "is_active": found.get("is_active", True),
+        # 열었을 때의 판 — 그사이 남이 고쳤으면 서버가 409 로 막는다(ADR 0015).
+        "expected_revision": found.get("revision"),
+    }
+    if dry_run:
+        return {
+            "dry_run": True,
+            "key": found.get("key"),
+            "before": before,
+            "after": after,
+            "note": "단계는 그대로입니다. 이대로 고치려면 dry_run=False 로 다시 부르세요.",
+        }
+    return await _send(ctx, "PUT", f"/processing/recipes/{found.get('key')}", body)
 
 
 @mcp.tool()

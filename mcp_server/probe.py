@@ -350,6 +350,12 @@ async def sweep(session: ClientSession) -> None:
     if run_id:
         detail = await call(session, "get_test_run", {"test_run_id": run_id})
         await call(session, "list_processing_inputs", {"test_run_id": run_id})
+        # ── 처리 결과 — 채택 화면과 같은 목록, 그리고 결과 하나의 곡선(앞쪽 곡선 · E 선) ───
+        listed_results = await call(session, "list_processing_results", {"test_run_id": run_id})
+        rows_ = (listed_results or {}).get("results", []) if isinstance(listed_results, dict) else []
+        pick = next((one for one in rows_ if one.get("adopted")), rows_[0] if rows_ else None)
+        if pick:
+            await call(session, "get_result_curve", {"result_id": pick["id"], "max_points": 40})
         # ── 계산식 — 읽고, 어휘를 보고, 채택 결과 하나에 **저장 없이** 돌려 본다 ───
         await call(session, "list_formulas")
         await call(session, "formula_vocabulary")
@@ -420,6 +426,21 @@ async def sweep(session: ClientSession) -> None:
     recipes = await call(session, "list_recipes")
     rows = recipes.get("recipes") if isinstance(recipes, dict) else recipes
     recipe_key = rows[0].get("key") if isinstance(rows, list) and rows else None
+    # 이름 고치기는 **미리보기로만** — 고칠 수 있는 레시피를 고른다(못 고치면 막히는 게 맞다).
+    editable = next(
+        (
+            one
+            for one in (rows if isinstance(rows, list) else [])
+            if (one.get("access") or {}).get("can_edit") is not False
+        ),
+        None,
+    )
+    if editable:
+        await call(
+            session,
+            "update_recipe",
+            {"key": editable["key"], "label": f"{editable.get('label')} (점검)", "dry_run": True},
+        )
     inbox = await call(session, "list_inbox", {"limit": 3})
     item_id = _first(inbox, "id", "item_id")
 
