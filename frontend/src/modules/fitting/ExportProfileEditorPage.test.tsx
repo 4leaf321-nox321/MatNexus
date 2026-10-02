@@ -408,4 +408,45 @@ describe('있는 정의를 고친다 — 저장 한 번에 달라지지 않는�
     void _format
     expect(saved).toEqual(DEFINITION)
   })
+
+  it('칸에 드는 만큼 적는 형식(fit)은 폭만 묻고 그대로 저장한다', async () => {
+    // LS-DYNA 정의판의 칸이 이 형식이다 — 자릿수 칸을 그리면 저장할 때 셋째 값이 붙어
+    // 백엔드가 모르는 모양이 된다.
+    const fitted = {
+      extension: 'k',
+      lines: [{ fields: [{ value: 'elastic.density', format: ['fit', 10] }], join: '' }],
+    }
+    exportProfiles.mockResolvedValue([
+      {
+        id: 'p2',
+        key: 'dyna_elastic_def',
+        label: 'LS-DYNA (선형) · 정의',
+        description: null,
+        owner_workspace_slug: null,
+        owner_workspace_name: null,
+        access: { can_edit: true },
+        definition: fitted,
+        is_active: false,
+        created_at: '2026-10-03T00:00:00Z',
+        updated_at: '2026-10-03T00:00:00Z',
+      },
+    ])
+    render(
+      <MemoryRouter initialEntries={['/settings/export-profiles/dyna_elastic_def']}>
+        <Routes>
+          <Route path="/settings/export-profiles/:key" element={<ExportProfileEditorPage />} />
+        </Routes>
+      </MemoryRouter>
+    )
+    // 데이터로 그려진 것을 기다린다 — 칸의 폭 입력이 서야 정의가 폼에 들어온 것이다.
+    expect(await screen.findByLabelText('1번 줄 1번 칸 폭')).toHaveValue('10')
+    expect(screen.queryByLabelText('1번 줄 1번 칸 자릿수')).toBeNull()
+    await userEvent.click(screen.getByRole('button', { name: '저장' }))
+    await waitFor(() => expect(saveExportProfile).toHaveBeenCalled())
+    const [, body] = saveExportProfile.mock.calls[0] as [
+      string,
+      { definition: Record<string, unknown> },
+    ]
+    expect(body.definition.lines).toEqual(fitted.lines)
+  })
 })

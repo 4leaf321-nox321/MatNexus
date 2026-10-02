@@ -27,6 +27,9 @@ BACKEND = Path(__file__).resolve().parent.parent.parent
 REAL = json.loads(
     (BACKEND / "seeds" / "export-profiles" / "기본-형식-정의.json").read_text(encoding="utf-8")
 )
+#: 씨앗의 정의판 수 — 코드판마다 하나(중립 JSON · Zemax AGF 빼고). 2026-10-02 ECAE · 광학
+#: 여섯을 더해 50 → 56. 코드판을 더하면 정의판도 더하고 여기를 고친다.
+SEEDED = 56
 
 
 @pytest.fixture
@@ -83,10 +86,10 @@ def _put(
 
 
 class Test없는_것은_꺼진_채_넣는다:
-    def test_50벌이_꺼진_채_들어가고_메뉴는_그대로다(self, db: Session, importer: Any) -> None:
+    def test_전부_꺼진_채_들어가고_메뉴는_그대로다(self, db: Session, importer: Any) -> None:
         said = importer.load(db, REAL)
 
-        assert len(said["new"]) == len(REAL["profiles"]) == 50
+        assert len(said["new"]) == len(REAL["profiles"]) == SEEDED
         rows = list(db.scalars(select(ExportProfile)))
         assert all(not one.is_active for one in rows), (
             "켜진 채 들어갔다 — 메뉴에 같은 형식이 둘 선다"
@@ -101,7 +104,7 @@ class Test없는_것은_꺼진_채_넣는다:
 
         said = importer.load(db, REAL)
 
-        assert not said["new"] and not said["renew"] and len(said["same"]) == 50
+        assert not said["new"] and not said["renew"] and len(said["same"]) == SEEDED
         after = {one.key: one.updated_at for one in db.scalars(select(ExportProfile))}
         assert after == before
 
@@ -217,5 +220,5 @@ class Test보기는_쓰지_않는다:
     def test_check_는_판정만_한다(self, db: Session, importer: Any) -> None:
         said = importer.plan(db, REAL["profiles"])
 
-        assert len(said["new"]) == 50
+        assert len(said["new"]) == SEEDED
         assert db.scalar(select(ExportProfile.id)) is None, "check 가 넣었다"

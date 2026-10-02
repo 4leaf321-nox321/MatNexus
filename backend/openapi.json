@@ -12151,6 +12151,17 @@
             "title": "Extension",
             "type": "string"
           },
+          "fixed_units": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fixed Units"
+          },
           "key": {
             "title": "Key",
             "type": "string"

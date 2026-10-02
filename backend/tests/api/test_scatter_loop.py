@@ -642,7 +642,7 @@ class Test내보내기:
         text = deck.text
         assert "*PLASTIC" in text
         # 첫 소성 점이 항복점이다. 참 sigma_0 근처여야 한다.
-        first = text.split("EXTRAPOLATION=CONSTANT\n")[1].splitlines()[0]
+        first = text.split("*PLASTIC, HARDENING=ISOTROPIC\n")[1].splitlines()[0]
         stress, strain = (float(value) for value in first.split(","))
         assert strain == 0.0
         assert stress == pytest.approx(TRUE_SIGMA0, rel=0.06)

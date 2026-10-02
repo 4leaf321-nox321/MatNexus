@@ -29,7 +29,8 @@
 
 정의는 `lines`(줄 목록)와 `tables`(표 정의, 선택)다.
 
-    {"text": "*MATERIAL, NAME={name}"}          글자 — 자리표 {name} {units} {id} {식:형식}
+    {"text": "*MATERIAL, NAME={name}"}          글자 — 자리표 {name} {name_alnum} {units} {id}
+                                                {식:형식}
     {"fields": [...], "prefix": "MP,EX,{id},"}   값 여럿을 한 줄에(join·suffix)
     {"rows": "curve", "fields": [...]}          표를 줄마다 — 열 이름·_index·_count
     {"each": "curves", "as": "curve",           묶음마다 줄 여럿 — _key·_index·_size
@@ -43,8 +44,13 @@
     "when": "has(a.b) and c.d < 0.5"            그 밖에는 식 — 빠진 값은 거짓
 
 칸: `{"value": "블록.값" | "열"}` · `{"expr": 식}` · `{"const": 글자}`, 형식은 `"free"` ·
-`["fixed", 폭, 자릿수]` · `["fixed_left", 폭, 자릿수]` · `["spec", ">10d"]`(파이썬 형식).
+`["fixed", 폭, 자릿수]` · `["fixed_left", 폭, 자릿수]` · `["fit", 폭]`(폭에 드는 만큼 정밀하게,
+`fit`) · `["spec", ">10d"]`(파이썬 형식).
 칸에도 `when` 을 달고 `default` 로 대신 적을 글자를 준다 — 큰칸의 빈 필드가 그렇다.
+
+**단위가 정해진 형식**은 `"units": "si"` 를 적는다 — 고른 계와 상관없이 그 계의 덱을
+받는다(`Renderer.fixed_units`, 2026-10-02). AEDT · CST · FloXML 처럼 파일 형식이 단위를 정해
+둔 것이 그렇다.
 
 표 정의(`tables`): `{"of": 표, "where": 조건, "sort": 열, "x": 열, "y": 열, "by": 열}`.
 `x`·`y` 를 주면 점 표로 정리하고(`prepare`), `by` 를 주면 그 열의 값마다 묶는다(속도별·
@@ -53,6 +59,7 @@
 
 from __future__ import annotations
 
+import math
 import re
 import string
 from collections.abc import Callable, Mapping, Sequence
@@ -72,6 +79,46 @@ def _fail(message: str) -> NoReturn:
     from matcore.export import ExportError
 
     raise ExportError(message)
+
+
+def fit(value: float, width: int) -> str:
+    """`width` 칸에 드는 **가장 정밀한** 숫자 — 오른쪽 맞춤.
+
+    되읽으면 같은 값이 되는 가장 짧은 글자(`repr`)가 들어가면 그것을 쓰고, 안 들어가면
+    칸에 드는 것 가운데 값에 가장 가까운 것을 쓴다. 지수는 앞의 0 을 뗀다(`E-09` →
+    `E-9`) — 그 한 칸이 유효숫자 하나다.
+
+    **고정 자릿수(`1.930E+05`)로는 모자랐다.** 10칸 LS-DYNA 에서 유효숫자 4자리면 고무의
+    푸아송비 0.49925 가 0.4993 이 되고, 체적 탄성률 K ∝ 1/(1-2ν) 가 7% 커진다 — 0.49999 는
+    0.5000 이 되어 K 가 발산한다. 공개 덱에 둘 다 있다(2026-10-03 실측: LS-DYNA 참조 카드
+    60장을 우리 렌더러로 다시 그려 PyDyna 로 견주었다).
+    """
+    number = float(value)
+    if not math.isfinite(number):
+        _fail(f"{value!r} 는 덱에 적을 수 있는 숫자가 아닙니다.")
+    shortest = repr(number)
+    if "e" not in shortest and len(shortest) <= width:
+        return shortest.rjust(width)
+    found: list[str] = []
+    for digits in range(1, 17):
+        mantissa, exponent = f"{number:.{digits}E}".split("E")
+        text = f"{mantissa}E{int(exponent):+d}"
+        if len(text) > width:
+            break
+        found = [text]
+        if float(text) == number:
+            break
+    for decimals in range(width, 0, -1):
+        text = f"{number:.{decimals}f}"
+        if len(text) <= width:
+            if float(text) != 0.0:
+                found.append(text)
+            break
+    if not found:
+        _fail(f"{number!r} 는 {width}칸에 들어가지 않습니다.")
+    # 가까운 것 — 같으면 짧은 것(먼저 넣은 지수 표기가 이긴다).
+    best = min(found, key=lambda text: (abs(float(text) - number), len(text)))
+    return best.rjust(width)
 
 
 #: 파이썬 형식 문자열 가운데 **허용하는 모양**. 폭은 세 자리까지 — 끝없는 폭으로 메모리를
@@ -116,6 +163,8 @@ FORMATS: dict[str, Callable[[Any, Sequence[Any]], str]] = {
     # `MAT1    1       210000. .3      `. 오른쪽 맞춤만 두면 그 솔버의 덱을
     # 낼 수 없고, 칸이 밀린 덱은 솔버가 오류로 알려 주지 않는다.
     "fixed_left": lambda value, args: f"{value:<{int(args[0])}.{int(args[1])}E}",
+    # 고정폭 · **칸에 드는 만큼 정밀하게** — `["fit", 10]`. LS-DYNA 10칸이 쓴다(`fit`).
+    "fit": lambda value, args: fit(value, int(args[0])),
     # 파이썬 형식 그대로 — 정수 칸(`>10d`)·주석의 유효숫자(`.6g`). 모양은 `_SPEC` 이 막는다.
     "spec": lambda value, args: _spec(value, str(args[0])),
 }
@@ -134,7 +183,7 @@ def register_block(name: str, make: Callable[..., list[str]]) -> None:
 
 
 def _format(value: Any, spec: Any) -> str:
-    """`"free"` · `["fixed", 20, 9]` · `["spec", ">10d"]`."""
+    """`"free"` · `["fixed", 20, 9]` · `["fit", 10]` · `["spec", ">10d"]`."""
     name, args = (spec, ()) if isinstance(spec, str) else (spec[0], spec[1:])
     make = FORMATS.get(str(name))
     if make is None:
@@ -410,6 +459,10 @@ class _Render:
     def _placeholder(self, name: str, template: str, scope: _Scope) -> Any:
         if name == "name":
             return self.deck.name
+        if name == "name_alnum":
+            # **영숫자만** — CODE V 는 유리 이름의 `_` 를 「이름_카탈로그」 로 읽는다
+            # (2026-10-03).
+            return alnum_name(self.deck.name)
         if name == "units":
             return self.deck.units.declaration
         if name == "id":
@@ -607,6 +660,15 @@ class _Render:
             out.append(text.rstrip() if strip else text)
 
 
+def alnum_name(name: str) -> str:
+    """재료 이름에서 영숫자만 — 밑줄 · 붙임표를 다른 뜻으로 읽는 솔버를 위한 이름.
+
+    CODE V 는 유리 이름 `N-BK7_SCHOTT` 을 「SCHOTT 카탈로그의 N-BK7」 로 읽는다. 사설 유리
+    이름에 `_` 가 있으면 그 유리를 못 찾는다(ray-optics 의 CODE V 리더로 확인, 2026-10-03).
+    """
+    return re.sub(r"[^A-Za-z0-9]", "", name)
+
+
 def _is_spec(fmt: Any) -> bool:
     return isinstance(fmt, (list, tuple)) and bool(fmt) and fmt[0] == "spec"
 
@@ -770,7 +832,7 @@ def _check_text(template: str, where: str) -> None:
             _fail(
                 f"{where}: 빈 자리표 {{}} 는 못 씁니다 — 중괄호 자체는 {{{{ }}}} 로 적습니다."
             )
-        if name.strip() not in ("name", "units", "id"):
+        if name.strip() not in ("name", "name_alnum", "units", "id"):
             _check_expr(name, where)
         if spec and _SPEC.fullmatch(spec) is None:
             _fail(f"{where}: 읽을 수 없는 형식입니다: {spec!r}")
@@ -860,7 +922,7 @@ def renderer_from_definition(definition: Mapping[str, Any]) -> Any:
     됐는데 내려받을 때 터지는」 정의가 안 생긴다 — 식·자리표·형식·조건을 다 읽어 본다.
     값이 있는지는 카드마다 달라 내려받을 때 본다.
     """
-    from matcore.export import Need, Renderer
+    from matcore.export import Need, Renderer, systems
 
     missing = [key for key in REQUIRED if not definition.get(key)]
     if missing:
@@ -888,6 +950,15 @@ def renderer_from_definition(definition: Mapping[str, Any]) -> Any:
             )
         )
 
+    fixed = definition.get("units")
+    fixed_units = None
+    if fixed:
+        try:
+            fixed_units = systems.get(str(fixed))
+        except KeyError:
+            known = ", ".join(one.key for one in systems.SYSTEMS)
+            _fail(f"`units` 는 붙박이 단위계 key 입니다 — {known}. 받은 것: {fixed!r}")
+
     spec = {"lines": lines, "tables": definition.get("tables") or {}}
     return Renderer(
         key=str(definition["key"]),
@@ -900,4 +971,5 @@ def renderer_from_definition(definition: Mapping[str, Any]) -> Any:
         needs=tuple(needs),
         media_type=str(definition.get("media_type", "text/plain; charset=utf-8")),
         solver=str(definition.get("solver", "") or ""),
+        fixed_units=fixed_units,
     )

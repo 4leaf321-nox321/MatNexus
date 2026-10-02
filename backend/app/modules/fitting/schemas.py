@@ -325,6 +325,10 @@ class ExportFormatOut(BaseModel):
     requires: list[str]
     """이 형식에 반드시 있어야 하는 값. **화면이 미리 알려 줄 수 있어야 한다** —
     내려받기를 누른 뒤에 "푸아송비가 없습니다" 를 보는 것은 늦다."""
+    fixed_units: str | None = None
+    """**형식이 단위를 정해 두었으면** 그 단위계 key(`si`). 고른 계와 상관없이 이 계로 나가고
+    파일 이름도 이 계를 말한다 — AEDT · CST · FloXML · Zemax 처럼 읽는 쪽이 단위를 정해 둔
+    형식이다. 화면이 그 사실을 고르기 전에 말한다."""
 
 
 class PairedFormatsOut(BaseModel):

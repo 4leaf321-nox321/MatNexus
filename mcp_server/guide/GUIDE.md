@@ -81,6 +81,14 @@ GPa·mm)로 바꿔 보여 주지만 그것은 표시일 뿐이다.
 모델에 그대로 넣으면 오류 없이 돌면서 답만 1000배 틀렸다. 받는 쪽 모델의 계를
 사용자에게 확인하고, 어느 계로 뽑았는지 반드시 말한다.
 
+**단위가 정해진 형식은 예외다**(2026-10-02) — 전자 · 광학 해석의 재료 파일, AEDT
+(`aedt`, HFSS · Maxwell · Icepak) · CST(`cst`) · Flotherm(`flotherm`) · ANSYS 전기
+(`ansys_electric`) · Zemax(`zemax_agf`) · CODE V(`codev_prv`) · n·k 표(`nk_table`)는 파일
+형식이 SI(파장 µm · nm)를 정해 두어 **`units` 를 무엇으로 주든 그 계로
+나간다.** 그 형식에서 mm 숫자를 원하면 그렇게는 안 된다고 말한다 — 읽는 프로그램이 SI 로
+읽는다. `render_card_deck` 이 돌려주는 `units` 가 실제로 쓰인 계이고, 고른 계와 다르면
+`units_note` 가 그렇게 적는다. 사람에게는 그 계를 말한다.
+
 <!--@ properties -->
 
 ## 물성 이름 — **값을 묻기 전에 `resolve_property` 를 부른다**

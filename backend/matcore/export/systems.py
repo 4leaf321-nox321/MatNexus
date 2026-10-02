@@ -60,7 +60,21 @@ from matcore import units
 #: 적는다** — `tests/unit/test_export_units.py` 가 블록 선언과 대조한다. 실측(2026-09-05):
 #: 속도 의존(`1/s`)·선형탄성구간(`Hz`) 카드가 기본 계(mm·N·tonne)로 내려받기가 전부
 #: 422 였다. 기본 계를 SI 에서 바꾼 날 드러났다.
-DECLARED = ("1", "Pa", "K", "s", "kg/m3", "1/K", "J/(kg.K)", "W/(m.K)", "1/s", "Hz", "Pa.s")
+#: 길이(`m`)는 광학 블록의 파장 열이 든다(2026-10-02) — 전에는 나가는 파일만 들었다.
+DECLARED = (
+    "1",
+    "Pa",
+    "K",
+    "s",
+    "kg/m3",
+    "1/K",
+    "J/(kg.K)",
+    "W/(m.K)",
+    "1/s",
+    "Hz",
+    "Pa.s",
+    "m",
+)
 
 #: **나가는 파일이 드는 역학 물리량**(ADR 0036, 2026-09-24). 카드 블록은 안 들지만 재료·문헌
 #: 내보내기가 기본 계로 나가면서 옮기게 됐다. 기준은 하나다 — **질량·길이·시간(과 온도)으로
@@ -68,7 +82,6 @@ DECLARED = ("1", "Pa", "K", "s", "kg/m3", "1/K", "J/(kg.K)", "W/(m.K)", "1/s", "
 #: 든다)·물질량(mol)·로그(dB)·눈금(HV·Shore)은 계가 정하지 않아 여기 없다 — 내보내기가 받은
 #: 그대로 두고 파일 머리에 적는다(`app/shared/unit_systems`).
 EXCHANGED = (
-    "m",
     "m2",
     "kg",
     "N",
@@ -102,6 +115,14 @@ EXCHANGED = (
 #: 계가 기호를 아는 SI 단위 전부 — 붙박이 계도, 유도한 계도 이 전부에 기호를 든다.
 KNOWN = DECLARED + EXCHANGED
 
+#: **계가 정하지 않는데 카드 블록이 드는 단위**(2026-10-02, 전기 물성 블록). 전류가 들어
+#: 질량·길이·시간 셋으로는 인수가 안 정해진다 — mm·N·tonne 에서 저항률이 Ω·mm 인지 mΩ·mm
+#: 인지는 전류를 A 로 두느냐 mA 로 두느냐에 달렸다. 그래서 **어느 계에서나 SI 값과 SI 기호
+#: 그대로**다(`symbol` · `convert`). 이 값을 싣는 형식은 두 갈래뿐이다 — 값마다 단위를 적는
+#: 형식(중립 JSON)이거나, 단위가 정해진 형식(`Renderer.fixed_units` — AEDT · CST 는 SI 를
+#: 받는다). 계의 기호표(`symbols`)에는 안 넣는다: 넣으면 「이 계가 옮겼다」 로 읽힌다.
+UNSCALED = ("S/m", "ohm.m")
+
 
 @dataclass(frozen=True)
 class UnitSystem:
@@ -126,6 +147,8 @@ class UnitSystem:
 
     def symbol(self, si_unit: str) -> str:
         """이 계에서 그 물리량을 무엇으로 쓰나. 모르면 멈춘다."""
+        if si_unit in UNSCALED:
+            return si_unit
         found = self.symbols.get(si_unit)
         if found is None:
             raise KeyError(si_unit)
@@ -134,6 +157,8 @@ class UnitSystem:
     def convert(self, value: float, si_unit: str) -> float:
         """SI 값을 이 계의 숫자로. **인수는 `matcore.units` 가 만든다** — 유도한 계는
         기본 단위의 인수를 표에서 읽어 차원식으로 곱한 것이다."""
+        if si_unit in UNSCALED:
+            return value
         if self.factors is not None:
             factor = self.factors.get(si_unit)
             if factor is None:

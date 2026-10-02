@@ -68,6 +68,8 @@ from matcore import extensions
 from matcore.export import ansys as _ansys  # noqa: F401  (ANSYS)
 from matcore.export import bulk as _bulk  # noqa: F401  (Nastran · OptiStruct)
 from matcore.export import dyna as _dyna  # noqa: F401  (LS-DYNA)
+from matcore.export import electronics as _electronics  # noqa: F401  (AEDT · CST · Flotherm)
+from matcore.export import optics as _optics  # noqa: F401  (Zemax · CODE V · n·k 표)
 from matcore.export import radioss as _radioss  # noqa: F401  (Radioss)
 
 logger = logging.getLogger(__name__)

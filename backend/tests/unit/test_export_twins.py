@@ -22,7 +22,15 @@ from typing import Any
 import pytest
 
 from matcore import cards, export, extensions
-from matcore.export import ansys, bulk, dyna, radioss, template  # noqa: F401  (렌더러 등록)
+from matcore.export import (  # noqa: F401  (렌더러 등록)
+    ansys,
+    bulk,
+    dyna,
+    electronics,
+    optics,
+    radioss,
+    template,
+)
 
 BACKEND = pathlib.Path(__file__).resolve().parents[2]
 extensions.load(BACKEND / "extensions")
@@ -33,8 +41,10 @@ CARDS: dict[str, dict[str, Any]] = json.loads(
     (BACKEND / "tests" / "fixtures" / "export_twin_cards.json").read_text(encoding="utf-8")
 )["cards"]
 
-#: 정의로 옮기지 않는 코드판 — 카드의 블록을 **구조째** 적는 형식이라 줄 문법이 아니다.
-CODE_ONLY = {"json"}
+#: 정의로 옮기지 않는 코드판. JSON 은 카드의 블록을 **구조째** 적는 형식이라 줄 문법이
+#: 아니고, Zemax AGF 는 잰 점에서 분산식의 계수를 **맞춰** 적는다(`matcore.dispersion`) —
+#: ADR 0023 의 「계산이 필요하면 코드로」 자리다(2026-10-02).
+CODE_ONLY = {"json", "zemax_agf"}
 
 
 def _seed() -> dict[str, Any]:
@@ -82,6 +92,9 @@ def test_코드판마다_정의판이_있고_같은_자리를_쓴다() -> None:
             source.keywords,
         ), key
         assert made.needs == source.needs, key
+        # **단위를 형식이 정했으면 정의판도 같은 계를 받아야 한다** — 아니면 mm 계에서 정의판만
+        # 밀도를 tonne/mm3 로 적는다(`Renderer.fixed_units`).
+        assert made.fixed_units == source.fixed_units, key
 
 
 @pytest.mark.parametrize("key", sorted(TWINS))

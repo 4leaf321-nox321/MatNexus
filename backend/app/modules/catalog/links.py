@@ -103,6 +103,11 @@ BUILTIN_LINKS: list[tuple[str, str, str | None]] = [
     ("electrical.carrier_concentration", "electrical.carrier_concentration", None),
     ("electrical.hall_coefficient", "electrical.hall_coefficient", None),
     ("optical.refractive_index", "optical.refractive_index", None),
+    # ECAE · 광학 형식(2026-10-02) — 카드의 전기 · 광학 블록 칸이 드는 키.
+    ("magnetic.relative_permeability", "magnetic.relative_permeability", None),
+    ("optical.extinction_coefficient", "optical.extinction_coefficient", None),
+    ("optical.abbe_number", "optical.abbe_number", None),
+    ("optical.emissivity_total", "optical.emissivity_total", None),
     ("interface.peel_strength", "interface.peel_strength", None),
     ("rheological.viscosity", "rheological.viscosity", None),
 ]

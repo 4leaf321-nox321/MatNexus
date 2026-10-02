@@ -33,10 +33,11 @@ def _all_units() -> dict[str, set[str]]:
 
 
 def test_블록이_드는_단위는_전부_선언돼_있다() -> None:
+    """`DECLARED`(계가 옮기는 것) 아니면 `UNSCALED`(계가 정하지 않아 SI 그대로 두는 것 —
+    전류가 든 전기 단위, 2026-10-02). 둘 다 아니면 mm 계 내려받기가 422 다."""
+    known = set(systems.DECLARED) | set(systems.UNSCALED)
     missing = {
-        key: sorted(units - set(systems.DECLARED))
-        for key, units in _all_units().items()
-        if units - set(systems.DECLARED)
+        key: sorted(units - known) for key, units in _all_units().items() if units - known
     }
     assert not missing, (
         "블록이 단위계 표가 모르는 단위를 듭니다 — `matcore/export/systems.py` 의 DECLARED "

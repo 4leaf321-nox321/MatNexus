@@ -12236,6 +12236,8 @@ export interface components {
             describe: string;
             /** Extension */
             extension: string;
+            /** Fixed Units */
+            fixed_units?: string | null;
             /** Key */
             key: string;
             /** Label */

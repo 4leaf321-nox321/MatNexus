@@ -213,7 +213,50 @@ def test_붙박이_계는_블록의_단위를_전부_안다() -> None:
         if produced.si_unit
     }
     for system in export.SYSTEMS:
-        lacking = sorted(unit for unit in used if unit not in system.symbols)
+        # 계가 정하지 않는 단위(전류가 든 전기 단위)는 기호표에 없고 SI 그대로 간다.
+        lacking = sorted(
+            unit
+            for unit in used
+            if unit not in system.symbols and unit not in export.systems.UNSCALED
+        )
         assert not lacking, f"{system.key} 에 기호가 없는 단위: {lacking}"
         for unit in used:
             system.convert(1.0, unit)  # 표에 없는 기호면 여기서 난다
+
+
+def test_계가_정하지_않는_단위는_어느_계에서나_SI_그대로다() -> None:
+    """전기전도율 · 저항률은 전류가 들어 mm·N·tonne 이 값을 정하지 않는다(A 냐 mA 냐에 따라
+    Ω·mm 와 mΩ·mm 로 갈린다). **값도 기호도 SI 그대로** — 옮긴 척하면 1000 배 틀린다."""
+    deck = export.Deck(
+        name="CU",
+        solver_id=1,
+        blocks={"electrical": {"values": {"conductivity": 5.8e7, "resistivity": 1.7e-8}}},
+    )
+    moved = export.to_system(deck, MM_N_TONNE)
+    assert moved.values("electrical") == {"conductivity": 5.8e7, "resistivity": 1.7e-8}
+    assert MM_N_TONNE.symbol("S/m") == "S/m" and MM_N_TONNE.symbol("ohm.m") == "ohm.m"
+    # 「그대로 둔 값」 이라고 덱 머리에 적지 않는다 — 뜻(단위)을 아는 값이다.
+    assert "_units" not in moved.blocks
+
+
+def test_이름이_단위를_말하는_조건은_옮기지_않는다() -> None:
+    """`<칸>_wavelength_m` 을 mm 로 옮기면 이름은 m 인데 숫자는 mm 가 된다 — 받는 쪽은 이름을
+    믿는다. 「SI 로 남긴 값」 에도 안 적는다(2026-10-02)."""
+    deck = export.Deck(
+        name="PMMA",
+        solver_id=1,
+        blocks={
+            "optical": {
+                "values": {
+                    "refractive_index": 1.49,
+                    "refractive_index_wavelength_m": 5.876e-7,
+                },
+                "rows": [{"wavelength": 5.876e-7, "refractive_index": 1.49}],
+            }
+        },
+    )
+    moved = export.to_system(deck, MM_N_TONNE)
+    assert moved.values("optical")["refractive_index_wavelength_m"] == 5.876e-7
+    # 표의 파장 열은 선언된 단위(m)라 그 계로 옮긴다 — 중립 JSON 이 열마다 단위를 적는다.
+    assert moved.rows("optical")[0]["wavelength"] == pytest.approx(5.876e-4)
+    assert "_units" not in moved.blocks

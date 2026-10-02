@@ -91,6 +91,10 @@ function formatOf(name: string, was?: Format): Format {
     // 형식 문자열 — 정수 칸 `>10d` · 유효숫자 `.6g`. 전에 적은 것이 있으면 지킨다.
     return ['spec', Array.isArray(was) && was[0] === 'spec' ? String(was[1]) : '.6g']
   }
+  if (name === 'fit') {
+    // 폭만 — 자릿수는 칸이 정한다.
+    return ['fit', Array.isArray(was) && typeof was[1] === 'number' ? was[1] : 10]
+  }
   if (!name.startsWith('fixed')) return name
   const numbers = Array.isArray(was) && typeof was[1] === 'number' ? was : null
   return [name, numbers ? numbers[1] : 20, numbers ? Number(numbers[2]) : 9] as Format
@@ -1202,7 +1206,17 @@ function LineEditor({
                       aria-label={`${lineNo}번 줄 ${at + 1}번 칸 형식 문자열`}
                     />
                   )}
-                  {Array.isArray(field.format) && field.format[0] !== 'spec' && (
+                  {Array.isArray(field.format) && field.format[0] === 'fit' && (
+                    <Input
+                      className="h-7 w-16 font-mono text-xs"
+                      value={field.format[1]}
+                      onChange={(event) =>
+                        onField(at, { format: ['fit', Number(event.target.value) || 0] })
+                      }
+                      aria-label={`${lineNo}번 줄 ${at + 1}번 칸 폭`}
+                    />
+                  )}
+                  {Array.isArray(field.format) && field.format[0].startsWith('fixed') && (
                     <>
                       <Input
                         className="h-7 w-16 font-mono text-xs"

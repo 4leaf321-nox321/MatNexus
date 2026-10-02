@@ -58,7 +58,11 @@ class Test형식:
         """**Abaqus 와 OpenRadioss 가 서로 반대다.** 바꿔 적으면 변형률 250000000
         인 재료가 되는데, 솔버는 그것을 오류로 보지 않는다."""
         text = export.render("abaqus", CARD).text
-        assert "*PLASTIC, HARDENING=ISOTROPIC, EXTRAPOLATION=CONSTANT" in text
+        # **`EXTRAPOLATION=` 을 안 붙인다** — 2022 에 생긴 매개변수라 2021 이전 Abaqus 가
+        # 모른다.
+        # 기본(표 밖 응력 일정)과 같은 값이라 적을 까닭도 없다(2026-10-03 대조).
+        assert "*PLASTIC, HARDENING=ISOTROPIC\n" in text
+        assert "EXTRAPOLATION" not in text
         assert "2.500000000000E+08, 0.000000000000E+00" in text
 
     def test_openradioss_는_소성변형률이_먼저다(self) -> None:

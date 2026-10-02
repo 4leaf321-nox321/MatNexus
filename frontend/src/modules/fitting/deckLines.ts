@@ -16,8 +16,8 @@
  */
 export type LineKind = 'text' | 'plain' | 'block' | 'fields' | 'rows' | 'advanced'
 
-/** 칸 형식 — `"free"` · `["fixed", 폭, 자릿수]` · `["spec", ">10d"]`(파이썬 형식). */
-export type Format = string | [string, number, number] | [string, string]
+/** 칸 형식 — `"free"` · `["fixed", 폭, 자릿수]` · `["fit", 폭]` · `["spec", ">10d"]`(파이썬 형식). */
+export type Format = string | [string, number, number] | [string, number] | [string, string]
 
 export type FieldSpec = {
   /** `블록.값` 또는 표의 열 이름. `const` 가 있으면 안 쓴다. */
@@ -127,6 +127,8 @@ export const BLOCKS = [
   { key: 'elastic', label: '탄성 (Abaqus, 온도별 표까지)' },
   { key: 'thermal', label: '열물성 (Abaqus)' },
   { key: 'radioss_unit', label: 'Radioss /UNIT (단위계 선언)' },
+  { key: 'header_lines', label: '근거 줄 (주석 기호 없이 — CST 설명 칸)' },
+  { key: 'notes_line', label: '근거 한 줄 (prefix·suffix 사이 — quote 로 aedt·xml 글자 규칙)' },
 ]
 
 export const FORMATS = [
@@ -135,6 +137,9 @@ export const FORMATS = [
   // **왼쪽 맞춤이 따로 필요하다.** Nastran·OptiStruct 벌크가 그쪽이고, 폭만 맞고
   // 값이 반대쪽에 붙으면 이웃 필드와 붙어 솔버가 둘을 한 값으로 읽는다.
   { key: 'fixed_left', label: '고정폭 · 왼쪽 맞춤 (Nastran·OptiStruct 8)' },
+  // **자릿수를 정하지 않는다** — 칸에 드는 만큼 싣는다. 4자리로 적던 LS-DYNA 10칸에서 고무의
+  // 푸아송비 0.49925 가 0.4993 이 되어 체적 탄성률이 7% 달라졌다(백엔드 `template.fit`).
+  { key: 'fit', label: '고정폭 · 칸에 드는 만큼 정밀하게 (LS-DYNA 10)' },
   // 정수 칸(재료 번호 `>10d`)·주석의 유효숫자(`.6g`) — 파이썬 형식 문자열 그대로.
   { key: 'spec', label: '형식 문자열 (>10d · .6g · <16)' },
 ]
@@ -190,7 +195,13 @@ export function toDefinitionLine(line: DeckLine): Record<string, unknown> {
     out.text = line.text ?? ''
     out.plain = true
   }
-  if (line.kind === 'block') put('block', line.block)
+  if (line.kind === 'block') {
+    put('block', line.block)
+    // **묶음도 앞뒤 글자를 받는다** — 근거 한 줄(`notes_line`)이 AEDT 의 `Notes='…'` · FloXML 의
+    // `<notes>…</notes>` 사이에 선다(2026-10-02). 빠뜨리면 저장 한 번에 따옴표가 사라진다.
+    put('prefix', line.prefix)
+    put('suffix', line.suffix)
+  }
   if (line.kind === 'rows') {
     put('rows', line.rows)
     put('x', line.x)

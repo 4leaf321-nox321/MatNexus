@@ -191,14 +191,14 @@ class TestANSYS:
         neo = mm(
             "ansys_hyperelastic", elastic=RUBBER, hyperelastic=hyper("neo_hookean", c10=0.6e6)
         )
-        assert "TBDATA,1,1.200000000000E+00,0.0" in neo
+        assert "TBDATA,1,1.200000000000E+00," in neo
         ogden = mm(
             "ansys_hyperelastic",
             elastic=RUBBER,
             hyperelastic=hyper("ogden_1", mu=1.5e6, alpha=3.0),
         )
         assert "TB,HYPER,MNX_MAT,1,1,OGDEN" in ogden
-        assert "TBDATA,1,1.000000000000E+00,3.000000000000E+00,0.0" in ogden
+        assert "TBDATA,1,1.000000000000E+00,3.000000000000E+00," in ogden
 
     def test_열팽창은_ALPX_고_기준온도를_지어내지_않는다(self) -> None:
         """ALPX 는 할선 계수(카드의 값과 같은 뜻), CTEX 는 순간 계수다."""
@@ -352,6 +352,59 @@ class TestNastran계열:
         assert large(lines[start + 2])[1:3] == ["1.50000000E+00", "3.00000000E+00"]
         with pytest.raises(ExportError, match="Ogden"):
             mm("nastran_hyperelastic", elastic=RUBBER, hyperelastic=rubber)
+
+
+def _bulk_from_deck(key: str, text: str) -> float:
+    """덱이 말하는 초기 체적 탄성률 K — 솔버마다 칸과 뜻이 다르다."""
+    lines = text.splitlines()
+    if key == "abaqus_hyperelastic":
+        at = next(i for i, line in enumerate(lines) if line.startswith("*HYPERELASTIC"))
+        return 2.0 / float(lines[at + 1].split(",")[-1])  # D1 = 2/K
+    if key == "ansys_hyperelastic":
+        tbdata = next(line for line in lines if line.startswith("TBDATA"))
+        return 2.0 / float(tbdata.split(",")[-1])  # d = 2/K
+    mathp = large(next(line for line in lines if line.startswith("MATHP*")))
+    return 2.0 * float(mathp[4])  # MSC D1 = K/2
+
+
+class Test초탄성_체적:
+    """**같은 카드는 솔버가 달라도 같은 체적 거동이다.** 전에는 Abaqus · ANSYS 만 ν 를 버리고
+    늘 D = 0(완전 비압축)이라, 같은 고무가 한쪽에서는 하이브리드 요소를 요구하고 다른 쪽에서는
+    ν = 0.4995 의 고무였다(2026-10-03 공개 덱 대조 — 공개 Abaqus 고무 덱이 모두 D1 을
+    적었다)."""
+
+    MR: ClassVar[dict[str, Any]] = hyper("mooney_rivlin", c10=0.6e6, c01=0.15e6)
+
+    def test_Abaqus_ANSYS_Nastran_이_같은_K_를_적는다(self) -> None:
+        shear = 2.0 * (0.6 + 0.15)  # MPa — mm·N·tonne
+        bulk = 2.0 * shear * 1.4995 / (3.0 * (1.0 - 2.0 * 0.4995))
+        for key in ("abaqus_hyperelastic", "ansys_hyperelastic", "nastran_hyperelastic"):
+            text = mm(key, elastic=RUBBER, hyperelastic=self.MR)
+            assert _bulk_from_deck(key, text) == pytest.approx(bulk, rel=1e-9), key
+
+    @pytest.mark.parametrize("key", ["abaqus_hyperelastic", "ansys_hyperelastic"])
+    def test_Ogden_의_K_는_카드의_μ_에서(self, key: str) -> None:
+        """ANSYS 는 μ₁ 을 2μ/α 로 옮겨 적지만 K 는 카드의 μ(= 초기 전단탄성률)에서 나온다."""
+        rubber = hyper("ogden_1", mu=1.5e6, alpha=3.0)
+        bulk = 2.0 * 1.5 * 1.4995 / (3.0 * (1.0 - 2.0 * 0.4995))
+        text = mm(key, elastic=RUBBER, hyperelastic=rubber)
+        assert _bulk_from_deck(key, text) == pytest.approx(bulk, rel=1e-9)
+
+    @pytest.mark.parametrize("key", ["abaqus_hyperelastic", "ansys_hyperelastic"])
+    def test_ν_가_없거나_0_5_면_완전_비압축이고_그렇다고_말한다(self, key: str) -> None:
+        for elastic in ({"values": {"density": 1100.0}}, {"values": {"poisson_ratio": 0.5}}):
+            made = render(key, deck(elastic=elastic, hyperelastic=self.MR), MM_N_TONNE)
+            assert "fully incompressible" in made.text
+            assert any("0 으로 두었습니다" in note for note in made.notes)
+
+    @pytest.mark.parametrize("key", ["abaqus_hyperelastic", "ansys_hyperelastic"])
+    def test_ν_가_범위_밖이면_거절하고_낮으면_말한다(self, key: str) -> None:
+        with pytest.raises(ExportError, match=r"0\.5 이하"):
+            mm(key, elastic={"values": {"poisson_ratio": 0.6}}, hyperelastic=self.MR)
+        low = render(
+            key, deck(elastic={"values": {"poisson_ratio": 0.3}}, hyperelastic=self.MR)
+        )
+        assert any("고무치고 낮습니다" in note for note in low.notes)
 
 
 class TestRadioss:

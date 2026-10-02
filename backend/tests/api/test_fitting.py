@@ -1363,7 +1363,8 @@ class Test초탄성:
         assert "*HYPERELASTIC, OGDEN, N=1" in deck.text
         # **단축 하나로 맞췄다는 사실이 덱까지 따라가야 한다.**
         assert "단축 인장 하나로 맞춘 계수" in deck.text
-        # **D=0 은 요소 종류를 강제한다.** 모르면 "덱이 안 돌아간다" 로만 보인다.
+        # **D=0 은 요소 종류를 강제한다.** 모르면 "덱이 안 돌아간다" 로만 보인다. 이 고무
+        # 재료에는 푸아송비가 없어 D 를 만들 수 없다(있으면 D1 = 2/K — `hyperelastic_bulk`).
         assert "hybrid elements" in deck.text
 
     def test_금속_식을_고무에_대면_그_사실을_말한다(

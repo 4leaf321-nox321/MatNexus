@@ -103,8 +103,8 @@ class Test혼합_한_파일:
         # 부품-재료 연결이 조용히 틀린다. 고정 10칸 mid+ro 자리를 직접 문다.
         from matcore import export
 
-        assert f"{1:>10d}{7850.0:>10.3E}" in text  # 카드 부품 — MID 1
-        assert f"{2:>10d}{7930.0:>10.3E}" in text  # 문헌 부품 — MID 2
+        assert f"{1:>10d}{'7850.0':>10}" in text  # 카드 부품 — MID 1
+        assert f"{2:>10d}{'7930.0':>10}" in text  # 문헌 부품 — MID 2
         assert str(export.solver_id_from(str(card.id))) not in text
         # 문헌값 출처 각주가 파일에 있다 — 덱만 받은 사람의 근거.
         assert "문헌 카탈로그: SUS304" in text
@@ -456,7 +456,7 @@ class Test솔버를_고른다:
             headers=admin_headers,
         )
         assert got.status_code == 200, got.text
-        assert f"{42:>10d}{7850.0:>10.3E}" in got.text
+        assert f"{42:>10d}{'7850.0':>10}" in got.text
         from matcore import export
 
         assert f"{export.solver_id_from(str(card.id)):>10d}" not in got.text

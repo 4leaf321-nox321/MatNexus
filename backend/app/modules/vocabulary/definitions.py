@@ -546,6 +546,20 @@ BUILTIN_PROPERTY_ITEMS: list[tuple[str, str, str, str, str | None, str | None, s
     ),
     ("홀계수", "hall_coefficient", "R_H", "재료", None, None, "electrical.hall_coefficient"),
     ("굴절률", "dimensionless", "n", "재료", None, None, "optical.refractive_index"),
+    # **ECAE · 광학 형식이 묻는 것**(2026-10-02, ADR 0052) — 카드의 전기 · 광학 블록 칸이
+    # 이 키들을 든다. 문헌 카탈로그의 같은 키와 1:1 이다(값을 반영할 자리).
+    (
+        "비투자율",
+        "dimensionless",
+        "mu_r",
+        "재료",
+        None,
+        None,
+        "magnetic.relative_permeability",
+    ),
+    ("소광계수", "dimensionless", "k", "재료", None, None, "optical.extinction_coefficient"),
+    ("아베수", "dimensionless", "nu_d", "재료", None, None, "optical.abbe_number"),
+    ("방사율", "dimensionless", "eps", "재료", None, None, "optical.emissivity_total"),
     # **접착·적층의 값이다.** 구성체(ADR 0026)가 생기면 그쪽으로 옮길 후보인데,
     # 지금은 적층 소재를 재료로 등록하므로 재료에 적는다.
     ("박리강도", "line_force", "P", "재료", None, None, "interface.peel_strength"),
@@ -563,6 +577,7 @@ BUILTIN_ITEM_CONDITIONS: dict[str, str] = {
     "electrical.dissipation_factor": "주파수",
     "electrical.shielding_effectiveness": "주파수",
     "optical.refractive_index": "파장",
+    "optical.extinction_coefficient": "파장",
 }
 
 

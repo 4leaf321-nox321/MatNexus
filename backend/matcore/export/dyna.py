@@ -42,6 +42,7 @@ from matcore.export import (
     rate_curves,
     register_renderer,
 )
+from matcore.export.template import fit
 
 #: *MAT_GENERAL_VISCOELASTIC 이 받는 항 카드 수. **장기 탄성률도 한 장을 쓴다**
 #: (β=0 항) — Prony 는 그만큼 덜 받는다.
@@ -52,8 +53,12 @@ DEFAULT_LCINT = 100
 
 
 def _f10(value: float) -> str:
-    """고정 10칸 숫자. 유효숫자 4자리 — 칸이 어긋나면 다른 필드다."""
-    return f"{value:>10.3E}"
+    """고정 10칸 숫자 — 칸에 드는 만큼 정밀하게(`template.fit`). 칸이 어긋나면 다른 필드다.
+
+    전에는 유효숫자 4자리(`4.993E-01`)였다 — 고무의 푸아송비 0.49925 가 0.4993 이 되어
+    체적 탄성률이 7% 달라졌다(2026-10-03, 공개 덱 대조).
+    """
+    return fit(value, 10)
 
 
 def _i10(value: int) -> str:

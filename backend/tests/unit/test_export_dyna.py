@@ -52,7 +52,7 @@ class Test탄소성_024:
         assert "*DEFINE_CURVE" in made.text
         # **줄 전체를 못 박는다.** 필드가 자리를 바꿔도(ro↔e) 부분 문자열 검사는
         # 통과한다 — 고정 10칸에서 자리 바뀜은 오류 없이 엉뚱한 재료다.
-        assert "       101 7.850E+03 2.000E+11 3.000E-01 3.500E+08" in made.text
+        assert "       101    7850.0   2.0E+11       0.3    3.5E+8" in made.text
         # 출처가 $ 주석으로 들어간다 — 덱만 받은 사람이 되짚는 유일한 표시.
         assert "$ 시험 3건: T-0001" in made.text
         assert "Consistent units: kg, m, s, Pa" in made.text
@@ -62,13 +62,12 @@ class Test탄소성_024:
         그 계여야 한다 — 하나라도 SI 로 남으면 이 시험이 문다."""
         made = render("dyna", deck(), MM_N_TONNE)
         assert "Consistent units: tonne, mm, s, MPa" in made.text
-        assert "2.000E+05" in made.text  # E: 200 GPa → 2e5 MPa
-        assert "7.850E-09" in made.text  # 밀도: 7850 kg/m3 → 7.85e-9 tonne/mm3
-        assert "3.500E+02" in made.text  # 항복강도: 350 MPa
+        # 밀도 7850 kg/m3 → 7.85e-9 tonne/mm3 · E 200 GPa → 2e5 MPa · 항복강도 350 MPa
+        assert "       101   7.85E-9  200000.0       0.3     350.0" in made.text
         # 곡선 점(20칸)도 그 계다.
         assert "4.200000000E+02" in made.text
         # SI 숫자가 남아 있으면 안 된다.
-        assert "2.000E+11" not in made.text
+        assert "2.0E+11" not in made.text
 
     def test_푸아송비가_없으면_거부한다(self) -> None:
         bare = deck(elastic={"values": {"youngs_modulus": 200e9, "density": 7850.0}})
@@ -96,9 +95,8 @@ class Test점탄성_076:
         )
         assert "*MAT_GENERAL_VISCOELASTIC" in made.text
         # G0 = 2.8e9/2.8 = 1e9 → Gi = 0.3e9. K = 2.8e9/0.6 ≈ 4.667e9. β = 0.1.
-        assert "3.000E+08" in made.text
-        assert "4.667E+09" in made.text
-        assert "1.000E-01" in made.text
+        assert "    3.0E+8       0.1" in made.text
+        assert "4.66667E+9" in made.text
         assert "G0 = E/(2(1+nu))" in made.text
         assert "Valid at 296.15 K" in made.text
 
@@ -122,8 +120,7 @@ class Test열물성:
             deck(thermal={"values": {"specific_heat": 460.0, "thermal_conductivity": 45.0}}),
         )
         assert "*MAT_THERMAL_ISOTROPIC" in made.text
-        assert "4.600E+02" in made.text
-        assert "4.500E+01" in made.text
+        assert "     460.0      45.0" in made.text
 
     def test_밀도가_없으면_비우고_말한다(self) -> None:
         bare = Deck(
@@ -172,8 +169,8 @@ class Test빠진_카드:
         body = _between(made.text, "*MAT_GENERAL_VISCOELASTIC", "*END")
         assert body[1] == f"{0:>10}" * 8
         # G0 = 1e9 · G∞ = 0.7e9 (β=0) · G1 = 0.3e9 (β=0.1)
-        assert body[2] == f"{0.7e9:>10.3E}{0.0:>10.3E}"
-        assert body[3] == f"{0.3e9:>10.3E}{0.1:>10.3E}"
+        assert body[2] == "    7.0E+8       0.0"
+        assert body[3] == "    3.0E+8       0.1"
 
 
 def _rate_deck(*ends: float) -> Deck:
@@ -239,10 +236,7 @@ class Test초탄성:
             "dyna_hyperelastic", self.hyper("mooney_rivlin", c10=0.6e6, c01=0.15e6), MM_N_TONNE
         ).text
         body = _between(text, "*MAT_MOONEY-RIVLIN_RUBBER", "*END")
-        assert (
-            body[0]
-            == f"{7:>10}{1.1e-9:>10.3E}{0.4995:>10.3E}{0.6:>10.3E}{0.15:>10.3E}{0.0:>10.3E}"
-        )
+        assert body[0] == f"{7:>10}    1.1E-9    0.4995       0.6      0.15       0.0"
         assert body[1] == f"{0:>10}" * 4
 
     def test_Ogden_은_2μ_나누기_α_로_옮긴다(self) -> None:
@@ -251,7 +245,7 @@ class Test초탄성:
             "dyna_hyperelastic", self.hyper("ogden_1", mu=1.5e6, alpha=3.0), MM_N_TONNE
         ).text
         body = _between(text, "*MAT_OGDEN_RUBBER", "*END")
-        assert body[1] == f"{1.0:>10.3E}" and body[2] == f"{3.0:>10.3E}"
+        assert body[1] == "       1.0" and body[2] == "       3.0"
 
     def test_푸아송비_없이는_안_낸다(self) -> None:
         bare = Deck(
@@ -267,3 +261,16 @@ class Test초탄성:
         )
         with pytest.raises(ExportError, match="푸아송비"):
             render("dyna_hyperelastic", bare)
+
+    @pytest.mark.parametrize("poisson", [0.49925, 0.49999])
+    def test_푸아송비가_칸에서_반올림되지_않는다(self, poisson: float) -> None:
+        """고무는 K ∝ 1/(1-2ν) 라 ν 의 넷째 자리가 체적 탄성률을 가른다. 유효숫자 4자리로
+        적던 때는 0.49925 가 0.4993(K 7% 큼), 0.49999 가 0.5000(K 발산)이 됐다 — 둘 다 공개
+        덱에 있는 값이다(2026-10-03 대조)."""
+        made = self.hyper("mooney_rivlin", c10=0.6e6, c01=0.15e6)
+        elastic = {"values": {"poisson_ratio": poisson, "density": 1100.0}}
+        rubber = Deck(name=made.name, solver_id=7, blocks={**made.blocks, "elastic": elastic})
+        body = _between(
+            render("dyna_hyperelastic", rubber).text, "*MAT_MOONEY-RIVLIN_RUBBER", "*END"
+        )
+        assert float(body[0][20:30]) == poisson

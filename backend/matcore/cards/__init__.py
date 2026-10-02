@@ -222,9 +222,11 @@ def load_builtin() -> None:
     블록이 없다" 는 어긋남이 생기지 않는다.
     """
     from matcore.cards import (  # noqa: F401
+        electrical,
         hyperelastic,
         mechanical,
         model_params,
+        optical,
         thermal,
         viscoelastic,
     )

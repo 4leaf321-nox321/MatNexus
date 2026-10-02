@@ -194,3 +194,30 @@ describe('짝 카드와 합쳐 낸다', () => {
     expect(call[4]).toBe('c-md')
   })
 })
+
+describe('단위가 정해진 형식', () => {
+  it('고른 계와 상관없이 그 계로 나간다고 형식 줄에 말한다', async () => {
+    // AEDT · CST · Zemax 는 파일 형식이 단위를 정해 두었다 — 위에서 mm·N·tonne 을 골랐는데
+    // SI 파일이 오면 사람은 서버가 틀렸다고 읽는다. **고르기 전에** 그 사실이 보여야 한다.
+    const formats = [
+      {
+        key: 'aedt',
+        label: 'Ansys Electronics Desktop (전자기 재료)',
+        extension: 'amat',
+        describe: 'HFSS · Maxwell 재료 라이브러리',
+        requires: [],
+        fixed_units: 'si',
+      },
+      ...FORMATS,
+    ] as ExportFormat[]
+    const card = { ...CARD, available_formats: ['aedt', 'abaqus'] } as unknown as PropertyCard
+    render(<ExportMenu card={card} formats={formats} onError={() => {}} />)
+    await userEvent.click(screen.getByRole('button', { name: /내보내기/ }))
+    await screen.findByText('덱의 단위계')
+
+    const aedt = screen.getByRole('menuitem', { name: /Ansys Electronics Desktop/ })
+    expect(aedt).toHaveTextContent('고른 계와 상관없이 SI로 나갑니다')
+    const abaqus = screen.getByRole('menuitem', { name: /Abaqus/ })
+    expect(abaqus).not.toHaveTextContent('고른 계와 상관없이')
+  })
+})

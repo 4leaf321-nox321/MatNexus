@@ -38,6 +38,14 @@
 값에는 `<키>_source = declared:<출처>` 가 함께 붙는다. 등급 판정이 그 낱말을 읽어
 밀시트 1 · 규격 2 · 문헌 3 · 추정 4 로 매긴다 — 여기서 등급을 따로 계산하지 않는다.
 자료 관리자가 승인한 값이면 `declared:<출처>+approved` 다(ADR 0049, 한 단계 오른다).
+
+## 주파수 · 파장 표 (2026-10-02, ADR 0052)
+
+블록의 표에 `frequency` · `wavelength` 열이 있으면 **그 축의 표**다(전기 · 광학 블록). 그 축을
+타는 항목이 점을 여럿 들면 `values` 의 한 값에 더해 **표로도 편다** — Dk 를 1 MHz · 1 GHz ·
+10 GHz 에서 적었는데 1 MHz 의 값 하나만 실리면, 고속 신호 해석이 보는 분산이 통째로 빠진다.
+표가 이미 있는 블록은 건드리지 않는다(규칙 ①과 같다). 온도 축은 여기서 안 편다 — 열 · 탄성
+표는 선언 카드의 조립기가 짓는다(`shared/declared_card`).
 """
 
 from __future__ import annotations
@@ -50,6 +58,9 @@ from sqlalchemy.orm import Session
 from app.modules.materials.models import Material
 from app.shared import coverage, declared_approval
 from matcore import cards
+
+#: 블록 표의 축 열 → 선언 물성 점의 조건 칸(`shared/declared_conditions`).
+ROW_AXES = {"frequency": "frequency_hz", "wavelength": "wavelength_m"}
 
 
 def _declared_by_key(db: Session, material: Material) -> dict[str, dict[str, Any]]:
@@ -81,11 +92,25 @@ def _declared_by_key(db: Session, material: Material) -> dict[str, dict[str, Any
             "origin": declared_approval.origin(row),
             "reference": row.get("reference"),
             # **어느 주파수 · 파장의 값인지** 함께 간다. 유전율은 1 MHz 와 10 GHz 에서 다른데,
-            # 칸에 숫자만 실리면 덱만 받은 사람이 그것을 모른다.
+            # 칸에 숫자만 실리면 덱만 받은 사람이 그것을 모른다. 잰 온도도 — 저항률의
+            # 온도 계수는 그 온도를 기준으로 읽힌다.
             "conditions": {
                 key: float(first[key])
-                for key in ("frequency_hz", "wavelength_m")
+                for key in ("frequency_hz", "wavelength_m", "temperature_k")
                 if isinstance(first.get(key), int | float)
+            },
+            # 주파수 · 파장 축의 점 전부 — 표로 펴는 재료(`fill`). 저장이 축 오름차순이고
+            # 점이 둘 이상이면 축 값이 다 있고 서로 다르다(`materials/declared.py`).
+            "series": {
+                axis: [(float(point[axis]), float(point["value_si"])) for point in points]
+                for axis in ROW_AXES.values()
+                if len(points) > 1
+                and all(
+                    isinstance(point, dict)
+                    and isinstance(point.get(axis), int | float)
+                    and isinstance(point.get("value_si"), int | float)
+                    for point in points
+                )
             },
         }
     return out
@@ -161,6 +186,9 @@ def fill(db: Session, material: Material | None, blocks: dict[str, Any]) -> list
         values = payload.setdefault("values", {})
         if not isinstance(values, dict):
             continue
+        columns = {column.key for column in spec.rows}
+        axis = next((column for column in ROW_AXES if column in columns), None)
+        spread: dict[str, list[tuple[float, float]]] = {}
         for slot in spec.produces:
             if not slot.property_key or slot.property_key not in stated:
                 continue
@@ -178,4 +206,24 @@ def fill(db: Session, material: Material | None, blocks: dict[str, Any]) -> list
             for condition_key, at in found["conditions"].items():
                 values[f"{slot.key}_{condition_key}"] = at
             filled.append(f"{spec.label} {slot.label}")
+            if axis is not None and slot.key in columns:
+                series = found["series"].get(ROW_AXES[axis])
+                if series:
+                    spread[slot.key] = series
+        if spread and not payload.get("rows"):
+            payload["rows"] = _table(axis or "", spread)
     return filled
+
+
+def _table(axis: str, spread: dict[str, list[tuple[float, float]]]) -> list[dict[str, float]]:
+    """칸마다의 점을 **한 축의 표로** — 축 값을 합집합으로 모으고 없는 칸은 비운다.
+
+    0 으로 채우면 손실 0 인 재료가 되고, 빼 버리면 그 주파수가 통째로 사라진다
+    (`declared_card.declared_table` 과 같은 규칙). 한 점짜리 칸은 표에 안 넣는다 — 모든
+    줄에 같은 값을 넣으면 「주파수와 상관없다」 를 우리가 정하는 셈이다.
+    """
+    by_axis: dict[float, dict[str, float]] = {}
+    for column, series in spread.items():
+        for at, value in series:
+            by_axis.setdefault(at, {})[column] = value
+    return [{axis: at, **by_axis[at]} for at in sorted(by_axis)]

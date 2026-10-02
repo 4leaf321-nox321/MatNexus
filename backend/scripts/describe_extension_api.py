@@ -46,6 +46,8 @@ def _load() -> None:
     from matcore.export import ansys as _ansys  # noqa: F401
     from matcore.export import bulk as _bulk  # noqa: F401
     from matcore.export import dyna as _dyna  # noqa: F401
+    from matcore.export import electronics as _electronics  # noqa: F401
+    from matcore.export import optics as _optics  # noqa: F401
     from matcore.export import radioss as _radioss  # noqa: F401
     from matcore.groups import prony as _prony  # noqa: F401
     from matcore.groups import rate as _rate  # noqa: F401
@@ -215,6 +217,11 @@ def build() -> str:
         )
     lines += _table(["블록", "이름", "값", "표 열", "종류 우선순위"], rows)
     lines += ["", "선언 단위(`DECLARED`): " + ", ".join(f"`{u}`" for u in systems.DECLARED)]
+    lines += [
+        "",
+        "계가 정하지 않는 단위(`UNSCALED` — 어느 계에서나 SI 값 · SI 기호 그대로): "
+        + ", ".join(f"`{u}`" for u in systems.UNSCALED),
+    ]
 
     # ── 렌더러 ───────────────────────────────────────────────────────────
     lines += [
@@ -222,6 +229,8 @@ def build() -> str:
         "## 솔버 렌더러 — `Renderer`",
         "",
         "`needs` 가 먹는 블록과 값을 말한다. 없으면 그 솔버로는 못 내고, 화면이 그 이유를 말한다.",
+        "파일 형식이 단위를 정해 둔 솔버(AEDT · CST · FloXML …)는 `fixed_units` 를 준다 — 고른 "
+        "단위계와 상관없이 그 계의 덱을 받고, 파일 이름도 그 계를 말한다.",
         "",
     ]
     rows = []
@@ -232,10 +241,17 @@ def build() -> str:
             + (" (선택)" if need.optional else "")
             for need in renderer.needs
         )
+        fixed = f"`{renderer.fixed_units.key}`" if renderer.fixed_units else "—"
         rows.append(
-            [f"`{renderer.key}`", renderer.label, f".{renderer.extension}", needs or "—"]
+            [
+                f"`{renderer.key}`",
+                renderer.label,
+                f".{renderer.extension}",
+                needs or "—",
+                fixed,
+            ]
         )
-    lines += _table(["렌더러", "이름", "확장자", "먹는 블록"], rows)
+    lines += _table(["렌더러", "이름", "확장자", "먹는 블록", "단위 고정"], rows)
 
     # ── 확장 폴더 ────────────────────────────────────────────────────────
     lines += ["", "## 지금 붙어 있는 확장 (`backend/extensions/`)", ""]

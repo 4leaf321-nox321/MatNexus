@@ -392,7 +392,7 @@ class Test덱_만들기:
         body = built.json()
         assert "*MAT_ELASTIC" in body["text"]
         # 대표값(tier1, 193e9)이 실리고 — tier4 가정값이 아니다.
-        assert "1.930E+11" in body["text"]
+        assert "  1.93E+11" in body["text"]
         # 값마다 출처 각주: 논문 제목·doi·등급까지 덱 주석으로.
         assert "어느 논문" in body["text"]
         assert "doi:10.1000/x" in body["text"]
@@ -422,8 +422,8 @@ class Test덱_만들기:
         assert built.status_code == 200, built.text
         text = built.json()["text"]
         assert "Consistent units: tonne, mm, s, MPa" in text
-        assert "1.930E+05" in text  # 193 GPa → MPa
-        assert "7.930E-09" in text  # 7930 kg/m3 → tonne/mm3
+        assert "  193000.0" in text  # 193 GPa → MPa
+        assert "   7.93E-9" in text  # 7930 kg/m3 → tonne/mm3
 
     def test_MID_중복과_모르는_형식은_거절한다(
         self, client: TestClient, db: Session, admin_headers: dict[str, str], tmp_path: Path

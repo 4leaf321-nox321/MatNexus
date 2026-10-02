@@ -20,6 +20,10 @@
  * 고르다가 단위계를 잘못 고르는」 실수를 만든다 — 두 줄이 나란히 있고 이름이
  * 거의 같기 때문이다. 단위계를 **먼저 한 번** 고르고, 그 아래에서 형식을
  * 고른다. 고른 계는 항상 화면에 떠 있다.
+ *
+ * **단위가 정해진 형식**(AEDT · CST · Flotherm · Zemax — `fixed_units`)은 고른 계와 상관없이
+ * 그 계로 나간다. 형식 줄에 그 사실을 적는다 — 위에서 mm·N·tonne 을 골랐는데 SI 파일이 오면
+ * 사람은 서버가 틀렸다고 읽는다.
  */
 
 import { useState } from 'react'
@@ -258,6 +262,12 @@ function FormatItem({
             ? `${format.requires.join('·')} 가 있어야 냅니다. 카드에 아직 없습니다.`
             : format.describe}
         </p>
+        {format.fixed_units && !blocked ? (
+          <p className="text-muted-foreground text-xs">
+            단위는 형식이 정합니다 — 고른 계와 상관없이 <b>{format.fixed_units.toUpperCase()}</b>
+            로 나갑니다.
+          </p>
+        ) : null}
       </div>
     </DropdownMenuItem>
   )

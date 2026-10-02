@@ -261,6 +261,22 @@ def _origin(source: str) -> str:
     return SOURCE_NOTES.get(source, "")
 
 
+def _condition_text(values: dict[str, Any], slot: str) -> str:
+    """칸에 붙은 조건 — ` @ 1 GHz` · ` @ 587.6 nm`. 표가 있으면 표가 말하므로 첫 값의
+    조건만."""
+    frequency = values.get(f"{slot}_frequency_hz")
+    if isinstance(frequency, int | float):
+        for symbol in ("GHz", "MHz", "kHz"):
+            shown = units.from_si(float(frequency), symbol)
+            if shown >= 1:
+                return f" @ {shown:.6g} {symbol}"
+        return f" @ {float(frequency):.6g} Hz"
+    wavelength = values.get(f"{slot}_wavelength_m")
+    if isinstance(wavelength, int | float):
+        return f" @ {units.from_si(float(wavelength), 'nm'):.6g} nm"
+    return ""
+
+
 def _declared_blocks(
     db: Session,
     material: Material,
@@ -3039,6 +3055,7 @@ def list_formats(
             extension=item.extension,
             describe=item.describe,
             requires=list(export.requires_labels(item)),
+            fixed_units=item.fixed_units.key if item.fixed_units else None,
         )
         for item in renderers.all_renderers(db)
     ]
@@ -3442,6 +3459,19 @@ def _deck_for_card(
         # 판인지 알 수 없고, 값이 의심스러울 때 확인할 길이 없다.
         reference = values.get(f"{key}_reference")
         provenance.append(f"{label}: {origin}{f' — {reference}' if reference else ''}")
+    # 전기 · 광학 블록(ADR 0052) — 칸 이름은 블록 선언에서 읽는다. **어느 주파수 · 파장의
+    # 값인지**도 함께 — 1 MHz 의 Dk 를 10 GHz 해석에 쓰는지 덱만 보고 알 수 있어야 한다.
+    for block_key in ("electrical", "optical"):
+        found = cards.values_of(item.blocks.get(block_key))
+        for slot in cards.block(block_key).produces:
+            origin = _origin(str(found.get(f"{slot.key}_source", "")))
+            if found.get(slot.key) is None or not origin:
+                continue
+            reference = found.get(f"{slot.key}_reference")
+            at = _condition_text(found, slot.key)
+            provenance.append(
+                f"{slot.label}: {origin}{at}{f' — {reference}' if reference else ''}"
+            )
 
     if table.get("source") == "외삽":
         # **덱만 받은 사람이 알아야 한다.** 어디까지가 시험이고 어디부터가 식인지
@@ -3667,6 +3697,8 @@ def export_card(
     system = _unit_system(db, units)
     try:
         target = renderers.renderer_for(db, format)
+        # **형식이 단위를 정했으면 그 계다** — 파일 이름이 내용과 같은 계를 말해야 한다.
+        system = export.effective_system(target, system)
         rendered = export.render(target, deck, system)
     except export.ExportError as exc:
         raise AppError("MNX-FITTING-0009", str(exc), status=422) from exc
@@ -3773,6 +3805,9 @@ def check_card_deck(
     system = _unit_system(db, payload.units)
     try:
         target = renderers.renderer_for(db, payload.format)
+        # 값 대조(`to_system` 아래)도 덱과 같은 계로 해야 한다 — SI 로 나간 덱을 mm 숫자로
+        # 찾으면 하나도 못 찾는다.
+        system = export.effective_system(target, system)
         rendered = export.render(target, deck, system)
     except export.ExportError as exc:
         # **못 나온 것도 검사 결과다.** 예외로 끝내면 무엇을 보려 했는지가 사라지고,
@@ -4223,6 +4258,9 @@ def build_bom_deck(
             raise AppError("MNX-FITTING-0038", str(exc), status=422) from exc
     family = litdeck.solver_of(card_targets[0])
     extension = card_targets[0].extension
+    # **한 파일은 한 계다.** 형식이 단위를 정해 두었으면(AEDT · ANSYS 전기 …) 그 계로 —
+    # 파일 이름도 그 계를 말한다.
+    system = export.effective_system(card_targets[0], system)
 
     # 문헌 줄의 형식 — 주면 그것(문헌이 채울 수 있고 같은 솔버), 안 주면 이 솔버의 기본.
     # 문헌 값은 사내 물성 매핑을 거쳐 실린다(`shared/literature_material`).
@@ -4259,6 +4297,21 @@ def build_bom_deck(
                 override = renderers.renderer_for(db, row.format)
             except export.ExportError as refused:
                 skipped.append(BomDeckSkippedOut(mid=row.mid, name=row.name, why=str(refused)))
+                continue
+            fixed = export.effective_system(override, system)
+            if fixed.key != system.key:
+                # 같은 솔버라도 단위가 정해진 형식(ANSYS 전기 — SI)을 다른 계의 파일에 섞으면
+                # 한 파일 안에서 숫자의 계가 갈린다. 솔버는 그것을 오류로 알려 주지 않는다.
+                skipped.append(
+                    BomDeckSkippedOut(
+                        mid=row.mid,
+                        name=row.name,
+                        why=(
+                            f"{override.label} 은 단위가 {fixed.label} 로 정해진 형식이라 "
+                            f"이 파일의 계({system.label})와 섞을 수 없습니다."
+                        ),
+                    )
+                )
                 continue
             if litdeck.solver_of(override) != family:
                 skipped.append(

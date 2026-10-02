@@ -86,7 +86,7 @@
             "block": "thermal"
           },
           {
-            "text": "*PLASTIC, HARDENING=ISOTROPIC, EXTRAPOLATION=CONSTANT"
+            "text": "*PLASTIC, HARDENING=ISOTROPIC"
           },
           {
             "rows": "curve",
@@ -258,7 +258,7 @@
       "definition": {
         "extension": "inp",
         "suffix": "_hyperelastic",
-        "describe": "*HYPERELASTIC — 고무 초탄성. 공칭 응력 기준이고 D=0(완전 비압축)이라 하이브리드 요소가 필요하다.",
+        "describe": "*HYPERELASTIC — 고무 초탄성, 공칭 응력 기준. D1 은 카드의 푸아송비로 만들고(D1 = 2/K), 없으면 D=0(완전 비압축)이라 하이브리드 요소가 필요하다.",
         "keywords": [
           "*MATERIAL",
           "*HYPERELASTIC"
@@ -271,6 +271,7 @@
           {
             "block": "elastic",
             "values": [
+              "poisson_ratio",
               "density"
             ],
             "optional": true
@@ -306,6 +307,10 @@
             "when": "hyperelastic.family == \"ogden_1\" and (not (count(hyperelastic, name == \"mu\" and has(value)) > 0) or not (count(hyperelastic, name == \"alpha\" and has(value)) > 0))"
           },
           {
+            "fail": "푸아송비가 {elastic.poisson_ratio:g} 입니다 — 0 보다 크고 0.5 이하여야 합니다(0.5 는 완전 비압축).",
+            "when": "has(elastic.poisson_ratio) and not (0 < elastic.poisson_ratio <= 0.5)"
+          },
+          {
             "block": "header"
           },
           {
@@ -316,7 +321,16 @@
           },
           {
             "text": "** D = 0 : fully incompressible — requires hybrid elements (e.g. C3D8H).",
-            "note": "비압축 계수 D 를 0 으로 두었습니다(재지 않은 값입니다) — 완전 비압축이라는 뜻이고, Abaqus 는 그때 하이브리드 요소를 요구합니다."
+            "note": "비압축 계수 D 를 0 으로 두었습니다(카드에 푸아송비가 없거나 0.5 입니다) — 완전 비압축이라는 뜻이고, Abaqus 는 그때 하이브리드 요소를 요구합니다.",
+            "when": "not (has(elastic.poisson_ratio) and elastic.poisson_ratio < 0.5)"
+          },
+          {
+            "text": "** D1 = 2/K from the card nu={elastic.poisson_ratio:g}: mu0 = {(last(hyperelastic, value, name == \"mu\") if hyperelastic.family == \"ogden_1\" else (2 * (last(hyperelastic, value, name == \"c10\") + last(hyperelastic, value, name == \"c01\")) if hyperelastic.family == \"mooney_rivlin\" else 2 * last(hyperelastic, value, name == \"c10\"))):.6g}, K = {(2 * (last(hyperelastic, value, name == \"mu\") if hyperelastic.family == \"ogden_1\" else (2 * (last(hyperelastic, value, name == \"c10\") + last(hyperelastic, value, name == \"c01\")) if hyperelastic.family == \"mooney_rivlin\" else 2 * last(hyperelastic, value, name == \"c10\"))) * (1 + elastic.poisson_ratio) / (3 * (1 - 2 * elastic.poisson_ratio))):.6g}.",
+            "when": "has(elastic.poisson_ratio) and elastic.poisson_ratio < 0.5"
+          },
+          {
+            "note": "푸아송비가 {elastic.poisson_ratio:g} 로 고무치고 낮습니다 — 체적이 쉽게 변하는 재료로 계산됩니다. 보통 0.495~0.4995 입니다.",
+            "when": "has(elastic.poisson_ratio) and elastic.poisson_ratio < 0.49"
           },
           {
             "text": "*MATERIAL, NAME={name}"
@@ -354,7 +368,7 @@
                 "format": "free"
               },
               {
-                "expr": "0",
+                "expr": "(2 / (2 * (last(hyperelastic, value, name == \"mu\") if hyperelastic.family == \"ogden_1\" else (2 * (last(hyperelastic, value, name == \"c10\") + last(hyperelastic, value, name == \"c01\")) if hyperelastic.family == \"mooney_rivlin\" else 2 * last(hyperelastic, value, name == \"c10\"))) * (1 + elastic.poisson_ratio) / (3 * (1 - 2 * elastic.poisson_ratio))) if has(elastic.poisson_ratio) and elastic.poisson_ratio < 0.5 else 0)",
                 "format": "free"
               }
             ],
@@ -376,7 +390,7 @@
                 "format": "free"
               },
               {
-                "expr": "0",
+                "expr": "(2 / (2 * (last(hyperelastic, value, name == \"mu\") if hyperelastic.family == \"ogden_1\" else (2 * (last(hyperelastic, value, name == \"c10\") + last(hyperelastic, value, name == \"c01\")) if hyperelastic.family == \"mooney_rivlin\" else 2 * last(hyperelastic, value, name == \"c10\"))) * (1 + elastic.poisson_ratio) / (3 * (1 - 2 * elastic.poisson_ratio))) if has(elastic.poisson_ratio) and elastic.poisson_ratio < 0.5 else 0)",
                 "format": "free"
               }
             ],
@@ -402,7 +416,7 @@
                 "format": "free"
               },
               {
-                "expr": "0",
+                "expr": "(2 / (2 * (last(hyperelastic, value, name == \"mu\") if hyperelastic.family == \"ogden_1\" else (2 * (last(hyperelastic, value, name == \"c10\") + last(hyperelastic, value, name == \"c01\")) if hyperelastic.family == \"mooney_rivlin\" else 2 * last(hyperelastic, value, name == \"c10\"))) * (1 + elastic.poisson_ratio) / (3 * (1 - 2 * elastic.poisson_ratio))) if has(elastic.poisson_ratio) and elastic.poisson_ratio < 0.5 else 0)",
                 "format": "free"
               }
             ],
@@ -424,7 +438,7 @@
                 "format": "free"
               },
               {
-                "expr": "0",
+                "expr": "(2 / (2 * (last(hyperelastic, value, name == \"mu\") if hyperelastic.family == \"ogden_1\" else (2 * (last(hyperelastic, value, name == \"c10\") + last(hyperelastic, value, name == \"c01\")) if hyperelastic.family == \"mooney_rivlin\" else 2 * last(hyperelastic, value, name == \"c10\"))) * (1 + elastic.poisson_ratio) / (3 * (1 - 2 * elastic.poisson_ratio))) if has(elastic.poisson_ratio) and elastic.poisson_ratio < 0.5 else 0)",
                 "format": "free"
               }
             ],
@@ -857,7 +871,7 @@
             "each": "curves",
             "lines": [
               {
-                "text": "*PLASTIC, HARDENING=ISOTROPIC, EXTRAPOLATION=CONSTANT, RATE={_key:.12E}"
+                "text": "*PLASTIC, HARDENING=ISOTROPIC, RATE={_key:.12E}"
               },
               {
                 "rows": "curve",
@@ -1244,25 +1258,22 @@
               {
                 "value": "elastic.density",
                 "format": [
-                  "fixed",
-                  10,
-                  3
+                  "fit",
+                  10
                 ]
               },
               {
                 "value": "elastic.youngs_modulus",
                 "format": [
-                  "fixed",
-                  10,
-                  3
+                  "fit",
+                  10
                 ]
               },
               {
                 "value": "elastic.poisson_ratio",
                 "format": [
-                  "fixed",
-                  10,
-                  3
+                  "fit",
+                  10
                 ]
               }
             ],
@@ -1342,33 +1353,29 @@
               {
                 "value": "elastic.density",
                 "format": [
-                  "fixed",
-                  10,
-                  3
+                  "fit",
+                  10
                 ]
               },
               {
                 "value": "elastic.youngs_modulus",
                 "format": [
-                  "fixed",
-                  10,
-                  3
+                  "fit",
+                  10
                 ]
               },
               {
                 "value": "elastic.poisson_ratio",
                 "format": [
-                  "fixed",
-                  10,
-                  3
+                  "fit",
+                  10
                 ]
               },
               {
                 "expr": "first(curve, true_stress)",
                 "format": [
-                  "fixed",
-                  10,
-                  3
+                  "fit",
+                  10
                 ]
               }
             ],
@@ -1565,33 +1572,29 @@
               {
                 "value": "elastic.density",
                 "format": [
-                  "fixed",
-                  10,
-                  3
+                  "fit",
+                  10
                 ]
               },
               {
                 "value": "elastic.youngs_modulus",
                 "format": [
-                  "fixed",
-                  10,
-                  3
+                  "fit",
+                  10
                 ]
               },
               {
                 "value": "elastic.poisson_ratio",
                 "format": [
-                  "fixed",
-                  10,
-                  3
+                  "fit",
+                  10
                 ]
               },
               {
                 "expr": "first(curves, _first_y)",
                 "format": [
-                  "fixed",
-                  10,
-                  3
+                  "fit",
+                  10
                 ]
               }
             ],
@@ -1843,17 +1846,15 @@
               {
                 "value": "elastic.density",
                 "format": [
-                  "fixed",
-                  10,
-                  3
+                  "fit",
+                  10
                 ]
               },
               {
                 "expr": "(elastic.youngs_modulus / (3 * (1 - 2 * elastic.poisson_ratio)))",
                 "format": [
-                  "fixed",
-                  10,
-                  3
+                  "fit",
+                  10
                 ]
               }
             ],
@@ -1873,17 +1874,15 @@
               {
                 "expr": "((1 - sum(prony, relative_modulus)) * (elastic.youngs_modulus / (2 * (1 + elastic.poisson_ratio))))",
                 "format": [
-                  "fixed",
-                  10,
-                  3
+                  "fit",
+                  10
                 ]
               },
               {
                 "expr": "0",
                 "format": [
-                  "fixed",
-                  10,
-                  3
+                  "fit",
+                  10
                 ]
               }
             ],
@@ -1895,17 +1894,15 @@
               {
                 "expr": "relative_modulus * (elastic.youngs_modulus / (2 * (1 + elastic.poisson_ratio)))",
                 "format": [
-                  "fixed",
-                  10,
-                  3
+                  "fit",
+                  10
                 ]
               },
               {
                 "expr": "1 / relaxation_time_s",
                 "format": [
-                  "fixed",
-                  10,
-                  3
+                  "fit",
+                  10
                 ]
               }
             ],
@@ -2024,41 +2021,36 @@
               {
                 "value": "elastic.density",
                 "format": [
-                  "fixed",
-                  10,
-                  3
+                  "fit",
+                  10
                 ]
               },
               {
                 "value": "elastic.poisson_ratio",
                 "format": [
-                  "fixed",
-                  10,
-                  3
+                  "fit",
+                  10
                 ]
               },
               {
                 "expr": "last(hyperelastic, value, name == \"c10\")",
                 "format": [
-                  "fixed",
-                  10,
-                  3
+                  "fit",
+                  10
                 ]
               },
               {
                 "expr": "(last(hyperelastic, value, name == \"c01\") if count(hyperelastic, name == \"c01\" and has(value)) > 0 else 0)",
                 "format": [
-                  "fixed",
-                  10,
-                  3
+                  "fit",
+                  10
                 ]
               },
               {
                 "expr": "0",
                 "format": [
-                  "fixed",
-                  10,
-                  3
+                  "fit",
+                  10
                 ]
               }
             ],
@@ -2097,17 +2089,15 @@
               {
                 "value": "elastic.density",
                 "format": [
-                  "fixed",
-                  10,
-                  3
+                  "fit",
+                  10
                 ]
               },
               {
                 "value": "elastic.poisson_ratio",
                 "format": [
-                  "fixed",
-                  10,
-                  3
+                  "fit",
+                  10
                 ]
               },
               {
@@ -2126,49 +2116,43 @@
               {
                 "expr": "last(hyperelastic, value, name == \"c10\")",
                 "format": [
-                  "fixed",
-                  10,
-                  3
+                  "fit",
+                  10
                 ]
               },
               {
                 "expr": "0",
                 "format": [
-                  "fixed",
-                  10,
-                  3
+                  "fit",
+                  10
                 ]
               },
               {
                 "expr": "0",
                 "format": [
-                  "fixed",
-                  10,
-                  3
+                  "fit",
+                  10
                 ]
               },
               {
                 "expr": "last(hyperelastic, value, name == \"c20\")",
                 "format": [
-                  "fixed",
-                  10,
-                  3
+                  "fit",
+                  10
                 ]
               },
               {
                 "expr": "0",
                 "format": [
-                  "fixed",
-                  10,
-                  3
+                  "fit",
+                  10
                 ]
               },
               {
                 "expr": "last(hyperelastic, value, name == \"c30\")",
                 "format": [
-                  "fixed",
-                  10,
-                  3
+                  "fit",
+                  10
                 ]
               },
               {
@@ -2203,17 +2187,15 @@
               {
                 "value": "elastic.density",
                 "format": [
-                  "fixed",
-                  10,
-                  3
+                  "fit",
+                  10
                 ]
               },
               {
                 "value": "elastic.poisson_ratio",
                 "format": [
-                  "fixed",
-                  10,
-                  3
+                  "fit",
+                  10
                 ]
               },
               {
@@ -2232,9 +2214,8 @@
               {
                 "expr": "2 * last(hyperelastic, value, name == \"mu\") / last(hyperelastic, value, name == \"alpha\")",
                 "format": [
-                  "fixed",
-                  10,
-                  3
+                  "fit",
+                  10
                 ]
               }
             ],
@@ -2250,9 +2231,8 @@
               {
                 "expr": "last(hyperelastic, value, name == \"alpha\")",
                 "format": [
-                  "fixed",
-                  10,
-                  3
+                  "fit",
+                  10
                 ]
               }
             ],
@@ -2335,9 +2315,8 @@
               {
                 "value": "elastic.density",
                 "format": [
-                  "fixed",
-                  10,
-                  3
+                  "fit",
+                  10
                 ],
                 "default": ""
               }
@@ -2352,17 +2331,15 @@
               {
                 "value": "thermal.specific_heat",
                 "format": [
-                  "fixed",
-                  10,
-                  3
+                  "fit",
+                  10
                 ]
               },
               {
                 "value": "thermal.thermal_conductivity",
                 "format": [
-                  "fixed",
-                  10,
-                  3
+                  "fit",
+                  10
                 ]
               }
             ],
@@ -4287,7 +4264,7 @@
       "definition": {
         "extension": "mac",
         "suffix": "_hyperelastic",
-        "describe": "TB,HYPER — NEO·MOONEY·YEOH·OGDEN. d=0(완전 비압축)이라 혼합 u-P 요소(SOLID185/186 KEYOPT(6)=1)가 필요하다.",
+        "describe": "TB,HYPER — NEO·MOONEY·YEOH·OGDEN. d 는 카드의 푸아송비로 만들고(d = 2/K), 없으면 d=0(완전 비압축)이라 혼합 u-P 요소(SOLID185/186 KEYOPT(6)=1)가 필요하다.",
         "keywords": [
           "TB,HYPER",
           "TBDATA"
@@ -4300,6 +4277,7 @@
           {
             "block": "elastic",
             "values": [
+              "poisson_ratio",
               "density"
             ],
             "optional": true
@@ -4331,7 +4309,16 @@
             "when": "hyperelastic.family == \"ogden_1\" and (not (count(hyperelastic, name == \"mu\" and has(value)) > 0) or not (count(hyperelastic, name == \"alpha\" and has(value)) > 0))"
           },
           {
-            "note": "비압축 계수 d 를 0 으로 두었습니다(재지 않은 값입니다) — 완전 비압축이라는 뜻이고, ANSYS 는 그때 혼합 u-P 요소(KEYOPT(6)=1)를 요구합니다."
+            "fail": "푸아송비가 {elastic.poisson_ratio:g} 입니다 — 0 보다 크고 0.5 이하여야 합니다(0.5 는 완전 비압축).",
+            "when": "has(elastic.poisson_ratio) and not (0 < elastic.poisson_ratio <= 0.5)"
+          },
+          {
+            "note": "비압축 계수 d 를 0 으로 두었습니다(카드에 푸아송비가 없거나 0.5 입니다) — 완전 비압축이라는 뜻이고, ANSYS 는 그때 혼합 u-P 요소(KEYOPT(6)=1)를 요구합니다.",
+            "when": "not (has(elastic.poisson_ratio) and elastic.poisson_ratio < 0.5)"
+          },
+          {
+            "note": "푸아송비가 {elastic.poisson_ratio:g} 로 고무치고 낮습니다 — 체적이 쉽게 변하는 재료로 계산됩니다. 보통 0.495~0.4995 입니다.",
+            "when": "has(elastic.poisson_ratio) and elastic.poisson_ratio < 0.49"
           },
           {
             "block": "header",
@@ -4359,7 +4346,12 @@
             "text": "! Nominal (engineering) stress fit - uniaxial data only."
           },
           {
-            "text": "! d = 0 : fully incompressible - needs mixed u-P (SOLID185/186 KEYOPT(6)=1)."
+            "text": "! d = 0 : fully incompressible - needs mixed u-P (SOLID185/186 KEYOPT(6)=1).",
+            "when": "not (has(elastic.poisson_ratio) and elastic.poisson_ratio < 0.5)"
+          },
+          {
+            "text": "! d = 2/K from the card nu={elastic.poisson_ratio:g}: mu = {(last(hyperelastic, value, name == \"mu\") if hyperelastic.family == \"ogden_1\" else (2 * (last(hyperelastic, value, name == \"c10\") + last(hyperelastic, value, name == \"c01\")) if hyperelastic.family == \"mooney_rivlin\" else 2 * last(hyperelastic, value, name == \"c10\"))):.6g}, K = {(2 * (last(hyperelastic, value, name == \"mu\") if hyperelastic.family == \"ogden_1\" else (2 * (last(hyperelastic, value, name == \"c10\") + last(hyperelastic, value, name == \"c01\")) if hyperelastic.family == \"mooney_rivlin\" else 2 * last(hyperelastic, value, name == \"c10\"))) * (1 + elastic.poisson_ratio) / (3 * (1 - 2 * elastic.poisson_ratio))):.6g}.",
+            "when": "has(elastic.poisson_ratio) and elastic.poisson_ratio < 0.5"
           },
           {
             "fields": [
@@ -4389,11 +4381,16 @@
               {
                 "expr": "2 * last(hyperelastic, value, name == \"c10\")",
                 "format": "free"
+              },
+              {
+                "expr": "2 / (2 * (last(hyperelastic, value, name == \"mu\") if hyperelastic.family == \"ogden_1\" else (2 * (last(hyperelastic, value, name == \"c10\") + last(hyperelastic, value, name == \"c01\")) if hyperelastic.family == \"mooney_rivlin\" else 2 * last(hyperelastic, value, name == \"c10\"))) * (1 + elastic.poisson_ratio) / (3 * (1 - 2 * elastic.poisson_ratio)))",
+                "format": "free",
+                "when": "has(elastic.poisson_ratio) and elastic.poisson_ratio < 0.5",
+                "default": "0.0"
               }
             ],
-            "join": "",
+            "join": ",",
             "prefix": "TBDATA,1,",
-            "suffix": ",0.0",
             "when": "hyperelastic.family == \"neo_hookean\""
           },
           {
@@ -4409,11 +4406,16 @@
               {
                 "expr": "last(hyperelastic, value, name == \"c01\")",
                 "format": "free"
+              },
+              {
+                "expr": "2 / (2 * (last(hyperelastic, value, name == \"mu\") if hyperelastic.family == \"ogden_1\" else (2 * (last(hyperelastic, value, name == \"c10\") + last(hyperelastic, value, name == \"c01\")) if hyperelastic.family == \"mooney_rivlin\" else 2 * last(hyperelastic, value, name == \"c10\"))) * (1 + elastic.poisson_ratio) / (3 * (1 - 2 * elastic.poisson_ratio)))",
+                "format": "free",
+                "when": "has(elastic.poisson_ratio) and elastic.poisson_ratio < 0.5",
+                "default": "0.0"
               }
             ],
             "join": ",",
             "prefix": "TBDATA,1,",
-            "suffix": ",0.0",
             "when": "hyperelastic.family == \"mooney_rivlin\""
           },
           {
@@ -4433,11 +4435,17 @@
               {
                 "expr": "last(hyperelastic, value, name == \"c30\")",
                 "format": "free"
+              },
+              {
+                "expr": "2 / (2 * (last(hyperelastic, value, name == \"mu\") if hyperelastic.family == \"ogden_1\" else (2 * (last(hyperelastic, value, name == \"c10\") + last(hyperelastic, value, name == \"c01\")) if hyperelastic.family == \"mooney_rivlin\" else 2 * last(hyperelastic, value, name == \"c10\"))) * (1 + elastic.poisson_ratio) / (3 * (1 - 2 * elastic.poisson_ratio)))",
+                "format": "free",
+                "when": "has(elastic.poisson_ratio) and elastic.poisson_ratio < 0.5",
+                "default": "0.0"
               }
             ],
             "join": ",",
             "prefix": "TBDATA,1,",
-            "suffix": ",0.0,0.0,0.0",
+            "suffix": ",0.0,0.0",
             "when": "hyperelastic.family == \"yeoh\""
           },
           {
@@ -4457,11 +4465,16 @@
               {
                 "expr": "last(hyperelastic, value, name == \"alpha\")",
                 "format": "free"
+              },
+              {
+                "expr": "2 / (2 * (last(hyperelastic, value, name == \"mu\") if hyperelastic.family == \"ogden_1\" else (2 * (last(hyperelastic, value, name == \"c10\") + last(hyperelastic, value, name == \"c01\")) if hyperelastic.family == \"mooney_rivlin\" else 2 * last(hyperelastic, value, name == \"c10\"))) * (1 + elastic.poisson_ratio) / (3 * (1 - 2 * elastic.poisson_ratio)))",
+                "format": "free",
+                "when": "has(elastic.poisson_ratio) and elastic.poisson_ratio < 0.5",
+                "default": "0.0"
               }
             ],
             "join": ",",
             "prefix": "TBDATA,1,",
-            "suffix": ",0.0",
             "when": "hyperelastic.family == \"ogden_1\"",
             "note": "Ogden μ 를 ANSYS 규약으로 옮겼습니다 — μ₁ = 2μ/α = {2 * last(hyperelastic, value, name == \"mu\") / last(hyperelastic, value, name == \"alpha\"):.6g}. 초기 전단탄성률 {last(hyperelastic, value, name == \"mu\"):.6g} 는 그대로입니다."
           }
@@ -10201,33 +10214,29 @@
               {
                 "value": "elastic.density",
                 "format": [
-                  "fixed",
-                  10,
-                  3
+                  "fit",
+                  10
                 ]
               },
               {
                 "value": "elastic.youngs_modulus",
                 "format": [
-                  "fixed",
-                  10,
-                  3
+                  "fit",
+                  10
                 ]
               },
               {
                 "value": "elastic.poisson_ratio",
                 "format": [
-                  "fixed",
-                  10,
-                  3
+                  "fit",
+                  10
                 ]
               },
               {
                 "expr": "3",
                 "format": [
-                  "fixed",
-                  10,
-                  3
+                  "fit",
+                  10
                 ]
               }
             ],
@@ -10241,33 +10250,29 @@
               {
                 "expr": "2",
                 "format": [
-                  "fixed",
-                  10,
-                  3
+                  "fit",
+                  10
                 ]
               },
               {
                 "value": "anisotropy.r_0",
                 "format": [
-                  "fixed",
-                  10,
-                  3
+                  "fit",
+                  10
                 ]
               },
               {
                 "value": "anisotropy.r_45",
                 "format": [
-                  "fixed",
-                  10,
-                  3
+                  "fit",
+                  10
                 ]
               },
               {
                 "value": "anisotropy.r_90",
                 "format": [
-                  "fixed",
-                  10,
-                  3
+                  "fit",
+                  10
                 ]
               },
               {
@@ -12335,25 +12340,22 @@
               {
                 "value": "elastic.density",
                 "format": [
-                  "fixed",
-                  10,
-                  3
+                  "fit",
+                  10
                 ]
               },
               {
                 "expr": "-(_id * 100 + 90) if count(etab) >= 2 else elastic.youngs_modulus",
                 "format": [
-                  "fixed",
-                  10,
-                  3
+                  "fit",
+                  10
                 ]
               },
               {
                 "expr": "-(_id * 100 + 91) if count(etab) >= 2 else elastic.poisson_ratio",
                 "format": [
-                  "fixed",
-                  10,
-                  3
+                  "fit",
+                  10
                 ]
               }
             ],
@@ -12389,9 +12391,8 @@
               {
                 "expr": "thermal.thermal_expansion if has(thermal.thermal_expansion) else 0",
                 "format": [
-                  "fixed",
-                  10,
-                  3
+                  "fit",
+                  10
                 ]
               }
             ],
@@ -14177,6 +14178,1271 @@
           },
           {
             "text": "/END"
+          }
+        ]
+      }
+    },
+    {
+      "key": "aedt_def",
+      "label": "Ansys Electronics Desktop (전자기 재료) · 정의",
+      "description": "기본 제공 형식 aedt 를 정의로 옮긴 것. 코드판과 글자까지 같다 — 알림·거절까지(2026-10-02, 시험용 카드 · SI · mm-N-tonne). 코드판을 사용 중단하면 이것을 켜서 고친다.",
+      "is_active": false,
+      "definition": {
+        "extension": "amat",
+        "describe": "HFSS · Maxwell · Q3D · Icepak 가 읽는 재료 라이브러리(.amat) — 비유전율 · 유전손실 · 비투자율 · 전기전도율(주파수 표는 pwl 데이터셋)과 열 · 구조 물성. 단위는 SI 고정.",
+        "keywords": [
+          "$begin 'MaterialDef'"
+        ],
+        "needs": [
+          {
+            "block": "electrical"
+          },
+          {
+            "block": "thermal",
+            "optional": true
+          },
+          {
+            "block": "elastic",
+            "optional": true
+          }
+        ],
+        "units": "si",
+        "tables": {
+          "eps": {
+            "of": "electrical",
+            "where": "has(frequency) and has(relative_permittivity)",
+            "sort": [
+              "frequency",
+              "relative_permittivity"
+            ]
+          },
+          "tan": {
+            "of": "electrical",
+            "where": "has(frequency) and has(loss_tangent)",
+            "sort": [
+              "frequency",
+              "loss_tangent"
+            ]
+          },
+          "mu": {
+            "of": "electrical",
+            "where": "has(frequency) and has(relative_permeability)",
+            "sort": [
+              "frequency",
+              "relative_permeability"
+            ]
+          }
+        },
+        "lines": [
+          {
+            "fail": "AEDT 재료 로 낼 전자기 값이 카드에 없습니다 — 비유전율 · 유전손실 · 비투자율 · 전기전도율(또는 체적저항률) 가운데 하나는 있어야 합니다.",
+            "when": "not (has(electrical.relative_permittivity) or has(electrical.loss_tangent) or has(electrical.relative_permeability) or has(electrical.conductivity) or has(electrical.resistivity))"
+          },
+          {
+            "fail": "전기 · 전자기 물성의 주파수 표에 같은 주파수가 두 번 있습니다 — 표는 주파수가 늘기만 해야 합니다.",
+            "when": "distinct(eps, frequency) < count(eps) or distinct(tan, frequency) < count(tan) or distinct(mu, frequency) < count(mu)"
+          },
+          {
+            "text": "$begin '{name}'"
+          },
+          {
+            "text": "\t$begin 'MaterialDef'"
+          },
+          {
+            "text": "\t\t$begin '{name}'"
+          },
+          {
+            "text": "\t\t\tCoordinateSystemType='Cartesian'"
+          },
+          {
+            "text": "\t\t\tBulkOrSurfaceType=1"
+          },
+          {
+            "text": "\t\t\t$begin 'PhysicsTypes'"
+          },
+          {
+            "fields": [
+              {
+                "const": "'Electromagnetic'"
+              },
+              {
+                "const": "'Thermal'",
+                "when": "has(thermal.thermal_conductivity) or has(thermal.specific_heat)"
+              },
+              {
+                "const": "'Structural'",
+                "when": "elastic.youngs_modulus"
+              }
+            ],
+            "join": ", ",
+            "prefix": "\t\t\t\tset(",
+            "suffix": ")"
+          },
+          {
+            "text": "\t\t\t$end 'PhysicsTypes'"
+          },
+          {
+            "text": "\t\t\t$begin 'AttachedData'"
+          },
+          {
+            "text": "\t\t\t\t$begin 'MatNotesData'"
+          },
+          {
+            "text": "\t\t\t\t\tproperty_data='notes_data'"
+          },
+          {
+            "block": "notes_line",
+            "prefix": "\t\t\t\t\tNotes='",
+            "suffix": "'",
+            "quote": "aedt"
+          },
+          {
+            "text": "\t\t\t\t$end 'MatNotesData'"
+          },
+          {
+            "text": "\t\t\t$end 'AttachedData'"
+          },
+          {
+            "text": "\t\t\tpermittivity='pwl($MNX{id}_permittivity,Freq)'",
+            "when": "count(eps) >= 2"
+          },
+          {
+            "fields": [
+              {
+                "value": "electrical.relative_permittivity",
+                "format": [
+                  "spec",
+                  ".10g"
+                ]
+              }
+            ],
+            "join": "",
+            "prefix": "\t\t\tpermittivity='",
+            "suffix": "'",
+            "when": "count(eps) < 2 and has(electrical.relative_permittivity)"
+          },
+          {
+            "note": "비유전율은 {electrical.relative_permittivity_frequency_hz:.6g} Hz 의 값 하나로 실었습니다 — AEDT 는 모든 주파수에서 이 값을 씁니다.",
+            "when": "count(eps) < 2 and has(electrical.relative_permittivity) and has(electrical.relative_permittivity_frequency_hz)"
+          },
+          {
+            "text": "\t\t\tdielectric_loss_tangent='pwl($MNX{id}_dielectric_loss_tangent,Freq)'",
+            "when": "count(tan) >= 2"
+          },
+          {
+            "fields": [
+              {
+                "value": "electrical.loss_tangent",
+                "format": [
+                  "spec",
+                  ".10g"
+                ]
+              }
+            ],
+            "join": "",
+            "prefix": "\t\t\tdielectric_loss_tangent='",
+            "suffix": "'",
+            "when": "count(tan) < 2 and has(electrical.loss_tangent)"
+          },
+          {
+            "note": "유전손실은 {electrical.loss_tangent_frequency_hz:.6g} Hz 의 값 하나로 실었습니다 — AEDT 는 모든 주파수에서 이 값을 씁니다.",
+            "when": "count(tan) < 2 and has(electrical.loss_tangent) and has(electrical.loss_tangent_frequency_hz)"
+          },
+          {
+            "text": "\t\t\tpermeability='pwl($MNX{id}_permeability,Freq)'",
+            "when": "count(mu) >= 2"
+          },
+          {
+            "fields": [
+              {
+                "value": "electrical.relative_permeability",
+                "format": [
+                  "spec",
+                  ".10g"
+                ]
+              }
+            ],
+            "join": "",
+            "prefix": "\t\t\tpermeability='",
+            "suffix": "'",
+            "when": "count(mu) < 2 and has(electrical.relative_permeability)"
+          },
+          {
+            "note": "비투자율은 {electrical.relative_permeability_frequency_hz:.6g} Hz 의 값 하나로 실었습니다 — AEDT 는 모든 주파수에서 이 값을 씁니다.",
+            "when": "count(mu) < 2 and has(electrical.relative_permeability) and has(electrical.relative_permeability_frequency_hz)"
+          },
+          {
+            "fields": [
+              {
+                "expr": "(electrical.conductivity if has(electrical.conductivity) else 1 / electrical.resistivity)",
+                "format": [
+                  "spec",
+                  ".10g"
+                ]
+              }
+            ],
+            "join": "",
+            "prefix": "\t\t\tconductivity='",
+            "suffix": "'",
+            "when": "has(electrical.conductivity) or (has(electrical.resistivity) and electrical.resistivity > 0)"
+          },
+          {
+            "note": "전기전도율이 카드에 없어 체적저항률에서 σ = 1/ρ 로 옮겼습니다.",
+            "when": "not has(electrical.conductivity) and has(electrical.resistivity) and electrical.resistivity > 0"
+          },
+          {
+            "fields": [
+              {
+                "value": "thermal.thermal_conductivity",
+                "format": [
+                  "spec",
+                  ".10g"
+                ]
+              }
+            ],
+            "join": "",
+            "prefix": "\t\t\tthermal_conductivity='",
+            "suffix": "'",
+            "when": "thermal.thermal_conductivity"
+          },
+          {
+            "fields": [
+              {
+                "value": "elastic.density",
+                "format": [
+                  "spec",
+                  ".10g"
+                ]
+              }
+            ],
+            "join": "",
+            "prefix": "\t\t\tmass_density='",
+            "suffix": "'",
+            "when": "elastic.density"
+          },
+          {
+            "fields": [
+              {
+                "value": "thermal.specific_heat",
+                "format": [
+                  "spec",
+                  ".10g"
+                ]
+              }
+            ],
+            "join": "",
+            "prefix": "\t\t\tspecific_heat='",
+            "suffix": "'",
+            "when": "thermal.specific_heat"
+          },
+          {
+            "fields": [
+              {
+                "value": "thermal.thermal_expansion",
+                "format": [
+                  "spec",
+                  ".10g"
+                ]
+              }
+            ],
+            "join": "",
+            "prefix": "\t\t\tthermal_expansion_coefficient='",
+            "suffix": "'",
+            "when": "thermal.thermal_expansion"
+          },
+          {
+            "fields": [
+              {
+                "value": "elastic.youngs_modulus",
+                "format": [
+                  "spec",
+                  ".10g"
+                ]
+              }
+            ],
+            "join": "",
+            "prefix": "\t\t\tyoungs_modulus='",
+            "suffix": "'",
+            "when": "elastic.youngs_modulus"
+          },
+          {
+            "fields": [
+              {
+                "value": "elastic.poisson_ratio",
+                "format": [
+                  "spec",
+                  ".10g"
+                ]
+              }
+            ],
+            "join": "",
+            "prefix": "\t\t\tpoissons_ratio='",
+            "suffix": "'",
+            "when": "elastic.poisson_ratio"
+          },
+          {
+            "note": "열물성 · 탄성의 온도 표는 싣지 않았습니다 — 기준 값(첫 줄) 하나씩입니다. 온도 의존이 필요하면 솔버에서 따로 답니다.",
+            "when": "count(thermal) > 1 or count(elastic) > 1"
+          },
+          {
+            "text": "\t\t$end '{name}'"
+          },
+          {
+            "text": "\t$end 'MaterialDef'"
+          },
+          {
+            "text": "\t$begin 'RefDatasets'",
+            "when": "count(eps) >= 2 or count(tan) >= 2 or count(mu) >= 2"
+          },
+          {
+            "text": "\t\t$begin '$MNX{id}_permittivity'",
+            "when": "count(eps) >= 2"
+          },
+          {
+            "text": "\t\t\tDimUnits[2: 'Hz', '']",
+            "when": "count(eps) >= 2"
+          },
+          {
+            "text": "\t\t\tX({joined(eps, \"'\" + fmt(frequency, '.10g') + \"'\", ', ')})",
+            "when": "count(eps) >= 2"
+          },
+          {
+            "text": "\t\t\tY({joined(eps, \"'\" + fmt(relative_permittivity, '.10g') + \"'\", ', ')})",
+            "when": "count(eps) >= 2"
+          },
+          {
+            "text": "\t\t$end '$MNX{id}_permittivity'",
+            "when": "count(eps) >= 2"
+          },
+          {
+            "text": "\t\t$begin '$MNX{id}_dielectric_loss_tangent'",
+            "when": "count(tan) >= 2"
+          },
+          {
+            "text": "\t\t\tDimUnits[2: 'Hz', '']",
+            "when": "count(tan) >= 2"
+          },
+          {
+            "text": "\t\t\tX({joined(tan, \"'\" + fmt(frequency, '.10g') + \"'\", ', ')})",
+            "when": "count(tan) >= 2"
+          },
+          {
+            "text": "\t\t\tY({joined(tan, \"'\" + fmt(loss_tangent, '.10g') + \"'\", ', ')})",
+            "when": "count(tan) >= 2"
+          },
+          {
+            "text": "\t\t$end '$MNX{id}_dielectric_loss_tangent'",
+            "when": "count(tan) >= 2"
+          },
+          {
+            "text": "\t\t$begin '$MNX{id}_permeability'",
+            "when": "count(mu) >= 2"
+          },
+          {
+            "text": "\t\t\tDimUnits[2: 'Hz', '']",
+            "when": "count(mu) >= 2"
+          },
+          {
+            "text": "\t\t\tX({joined(mu, \"'\" + fmt(frequency, '.10g') + \"'\", ', ')})",
+            "when": "count(mu) >= 2"
+          },
+          {
+            "text": "\t\t\tY({joined(mu, \"'\" + fmt(relative_permeability, '.10g') + \"'\", ', ')})",
+            "when": "count(mu) >= 2"
+          },
+          {
+            "text": "\t\t$end '$MNX{id}_permeability'",
+            "when": "count(mu) >= 2"
+          },
+          {
+            "text": "\t$end 'RefDatasets'",
+            "when": "count(eps) >= 2 or count(tan) >= 2 or count(mu) >= 2"
+          },
+          {
+            "text": "$end '{name}'"
+          }
+        ]
+      }
+    },
+    {
+      "key": "cst_def",
+      "label": "CST Studio Suite (전자기 재료) · 정의",
+      "description": "기본 제공 형식 cst 를 정의로 옮긴 것. 코드판과 글자까지 같다 — 알림·거절까지(2026-10-02, 시험용 카드 · SI · mm-N-tonne). 코드판을 사용 중단하면 이것을 켜서 고친다.",
+      "is_active": false,
+      "definition": {
+        "extension": "mtd",
+        "describe": "CST 재료 라이브러리(.mtd) — 비유전율 · 유전손실(주파수 표는 분산 맞춤 점으로) · 비투자율 · 전기전도율과 밀도 · 열 · 구조 물성. 단위는 파일에 SI 로 선언한다.",
+        "keywords": [
+          "[Definition]",
+          ".Create"
+        ],
+        "needs": [
+          {
+            "block": "electrical"
+          },
+          {
+            "block": "thermal",
+            "optional": true
+          },
+          {
+            "block": "elastic",
+            "optional": true
+          }
+        ],
+        "units": "si",
+        "tables": {
+          "eps": {
+            "of": "electrical",
+            "where": "has(frequency) and has(relative_permittivity)",
+            "sort": [
+              "frequency",
+              "relative_permittivity"
+            ]
+          },
+          "tan": {
+            "of": "electrical",
+            "where": "has(frequency) and has(loss_tangent)",
+            "sort": [
+              "frequency",
+              "loss_tangent"
+            ]
+          },
+          "mu": {
+            "of": "electrical",
+            "where": "has(frequency) and has(relative_permeability)",
+            "sort": [
+              "frequency",
+              "relative_permeability"
+            ]
+          },
+          "disp": {
+            "of": "electrical",
+            "where": "has(frequency) and has(relative_permittivity) and has(loss_tangent)",
+            "sort": [
+              "frequency",
+              "relative_permittivity",
+              "loss_tangent"
+            ]
+          }
+        },
+        "lines": [
+          {
+            "fail": "CST 재료 로 낼 전자기 값이 카드에 없습니다 — 비유전율 · 유전손실 · 비투자율 · 전기전도율(또는 체적저항률) 가운데 하나는 있어야 합니다.",
+            "when": "not (has(electrical.relative_permittivity) or has(electrical.loss_tangent) or has(electrical.relative_permeability) or has(electrical.conductivity) or has(electrical.resistivity))"
+          },
+          {
+            "fail": "전기 · 전자기 물성의 주파수 표에 같은 주파수가 두 번 있습니다 — 표는 주파수가 늘기만 해야 합니다.",
+            "when": "distinct(eps, frequency) < count(eps) or distinct(tan, frequency) < count(tan) or distinct(mu, frequency) < count(mu) or distinct(disp, frequency) < count(disp)"
+          },
+          {
+            "text": "[Definition]"
+          },
+          {
+            "text": "     .FrqType \"all\""
+          },
+          {
+            "text": "     .Type \"Normal\""
+          },
+          {
+            "text": "     .MaterialUnit \"Frequency\", \"Hz\""
+          },
+          {
+            "text": "     .MaterialUnit \"Geometry\", \"m\""
+          },
+          {
+            "text": "     .MaterialUnit \"Time\", \"s\""
+          },
+          {
+            "text": "     .MaterialUnit \"Temperature\", \"Kelvin\""
+          },
+          {
+            "fields": [
+              {
+                "value": "electrical.relative_permittivity",
+                "format": [
+                  "spec",
+                  ".10g"
+                ]
+              }
+            ],
+            "join": "",
+            "prefix": "     .Epsilon \"",
+            "suffix": "\"",
+            "when": "electrical.relative_permittivity"
+          },
+          {
+            "fields": [
+              {
+                "value": "electrical.relative_permeability",
+                "format": [
+                  "spec",
+                  ".10g"
+                ]
+              }
+            ],
+            "join": "",
+            "prefix": "     .Mu \"",
+            "suffix": "\"",
+            "when": "electrical.relative_permeability"
+          },
+          {
+            "fields": [
+              {
+                "expr": "(electrical.conductivity if has(electrical.conductivity) else 1 / electrical.resistivity)",
+                "format": [
+                  "spec",
+                  ".10g"
+                ]
+              }
+            ],
+            "join": "",
+            "prefix": "     .Sigma \"",
+            "suffix": "\"",
+            "when": "has(electrical.conductivity) or (has(electrical.resistivity) and electrical.resistivity > 0)"
+          },
+          {
+            "note": "전기전도율이 카드에 없어 체적저항률에서 σ = 1/ρ 로 옮겼습니다.",
+            "when": "not has(electrical.conductivity) and has(electrical.resistivity) and electrical.resistivity > 0"
+          },
+          {
+            "fields": [
+              {
+                "value": "electrical.loss_tangent",
+                "format": [
+                  "spec",
+                  ".10g"
+                ]
+              }
+            ],
+            "join": "",
+            "prefix": "     .TanD \"",
+            "suffix": "\"",
+            "when": "has(electrical.loss_tangent) and count(disp) < 2"
+          },
+          {
+            "fields": [
+              {
+                "value": "electrical.loss_tangent_frequency_hz",
+                "format": [
+                  "spec",
+                  ".10g"
+                ]
+              }
+            ],
+            "join": "",
+            "prefix": "     .TanDFreq \"",
+            "suffix": "\"",
+            "when": "has(electrical.loss_tangent) and count(disp) < 2 and has(electrical.loss_tangent_frequency_hz)"
+          },
+          {
+            "text": "     .TanDGiven \"True\"",
+            "when": "has(electrical.loss_tangent) and count(disp) < 2"
+          },
+          {
+            "text": "     .TanDModel \"ConstTanD\"",
+            "when": "has(electrical.loss_tangent) and count(disp) < 2"
+          },
+          {
+            "note": "유전손실을 잰 주파수가 카드에 없어 .TanDFreq 를 안 적었습니다 — CST 는 그 손실을 어느 주파수에 맞출지 모르고 기본값을 씁니다.",
+            "when": "has(electrical.loss_tangent) and count(disp) < 2 and not has(electrical.loss_tangent_frequency_hz)"
+          },
+          {
+            "text": "     .DispModelEps \"None\""
+          },
+          {
+            "text": "     .DispersiveFittingSchemeEps \"Nth Order\"",
+            "when": "count(disp) >= 2"
+          },
+          {
+            "text": "     .MaximalOrderNthModelFitEps \"10\"",
+            "when": "count(disp) >= 2"
+          },
+          {
+            "text": "     .ErrorLimitNthModelFitEps \"0.1\"",
+            "when": "count(disp) >= 2"
+          },
+          {
+            "text": "     .UseOnlyDataInSimFreqRangeNthModelEps \"False\"",
+            "when": "count(disp) >= 2"
+          },
+          {
+            "text": "     .DispersiveFittingFormatEps \"Real_Tand\"",
+            "when": "count(disp) >= 2"
+          },
+          {
+            "rows": "disp",
+            "fields": [
+              {
+                "value": "frequency",
+                "format": [
+                  "spec",
+                  ".10g"
+                ]
+              },
+              {
+                "value": "relative_permittivity",
+                "format": [
+                  "spec",
+                  ".10g"
+                ]
+              },
+              {
+                "value": "loss_tangent",
+                "format": [
+                  "spec",
+                  ".10g"
+                ]
+              }
+            ],
+            "join": "\", \"",
+            "prefix": "     .AddDispersionFittingValueEps \"",
+            "suffix": "\", \"1.0\"",
+            "when": "count(disp) >= 2"
+          },
+          {
+            "text": "     .UseGeneralDispersionEps \"True\"",
+            "when": "count(disp) >= 2",
+            "note": "주파수 {count(disp)}점의 비유전율 · 유전손실을 CST 의 분산 맞춤(Nth Order)으로 넘겼습니다 — 맞춘 식이 점을 따르는지는 CST 의 맞춤 결과 창에서 봅니다."
+          },
+          {
+            "note": "비유전율 · 유전손실이 같은 주파수에 함께 있는 점이 둘이 안 돼 분산 맞춤을 안 적었습니다 — 값 하나씩입니다.",
+            "when": "count(disp) < 2 and (count(eps) >= 2 or count(tan) >= 2)"
+          },
+          {
+            "note": "비투자율의 주파수 표는 싣지 않았습니다 — 값 하나(가장 낮은 주파수)입니다.",
+            "when": "count(mu) >= 2"
+          },
+          {
+            "fields": [
+              {
+                "value": "elastic.density",
+                "format": [
+                  "spec",
+                  ".10g"
+                ]
+              }
+            ],
+            "join": "",
+            "prefix": "     .Rho \"",
+            "suffix": "\"",
+            "when": "elastic.density"
+          },
+          {
+            "text": "     .ThermalType \"Normal\"",
+            "when": "has(thermal.thermal_conductivity) or has(thermal.specific_heat)"
+          },
+          {
+            "fields": [
+              {
+                "value": "thermal.thermal_conductivity",
+                "format": [
+                  "spec",
+                  ".10g"
+                ]
+              }
+            ],
+            "join": "",
+            "prefix": "     .ThermalConductivity \"",
+            "suffix": "\"",
+            "when": "thermal.thermal_conductivity"
+          },
+          {
+            "fields": [
+              {
+                "value": "thermal.specific_heat",
+                "format": [
+                  "spec",
+                  ".10g"
+                ]
+              }
+            ],
+            "join": "",
+            "prefix": "     .SpecificHeat \"",
+            "suffix": "\", \"J/K/kg\"",
+            "when": "thermal.specific_heat"
+          },
+          {
+            "text": "     .MechanicsType \"Isotropic\"",
+            "when": "has(elastic.youngs_modulus) and has(elastic.poisson_ratio)"
+          },
+          {
+            "text": "     .YoungsModulus \"{elastic.youngs_modulus / 1e9:.10g}\"",
+            "when": "has(elastic.youngs_modulus) and has(elastic.poisson_ratio)"
+          },
+          {
+            "text": "     .PoissonsRatio \"{elastic.poisson_ratio:.10g}\"",
+            "when": "has(elastic.youngs_modulus) and has(elastic.poisson_ratio)"
+          },
+          {
+            "text": "     .ThermalExpansionRate \"{thermal.thermal_expansion * 1e6:.10g}\"",
+            "when": "thermal.thermal_expansion"
+          },
+          {
+            "note": "열물성 · 탄성의 온도 표는 싣지 않았습니다 — 기준 값(첫 줄) 하나씩입니다. 온도 의존이 필요하면 솔버에서 따로 답니다.",
+            "when": "count(thermal) > 1 or count(elastic) > 1"
+          },
+          {
+            "text": "     .Colour \"0.5\", \"0.5\", \"0.5\""
+          },
+          {
+            "text": "     .Wireframe \"False\""
+          },
+          {
+            "text": "     .Transparency \"0\""
+          },
+          {
+            "text": "     .Create"
+          },
+          {
+            "text": ""
+          },
+          {
+            "text": "[Type]"
+          },
+          {
+            "text": "FrqType: all"
+          },
+          {
+            "text": "Normal"
+          },
+          {
+            "text": ""
+          },
+          {
+            "text": "[Description]"
+          },
+          {
+            "block": "header_lines"
+          }
+        ]
+      }
+    },
+    {
+      "key": "flotherm_def",
+      "label": "Simcenter Flotherm (전자 냉각 재료) · 정의",
+      "description": "기본 제공 형식 flotherm 를 정의로 옮긴 것. 코드판과 글자까지 같다 — 알림·거절까지(2026-10-02, 시험용 카드 · SI · mm-N-tonne). 코드판을 사용 중단하면 이것을 켜서 고친다.",
+      "is_active": false,
+      "definition": {
+        "extension": "xml",
+        "describe": "FloXML 재료 · 표면 — 밀도 · 비열 · 열전도율 · 전기 저항률(줄 발열) · 방사율, 값 하나씩. 프로젝트로 읽어 재료를 라이브러리에 저장한다. SI.",
+        "keywords": [
+          "<isotropic_material_att>",
+          "</xml_case>"
+        ],
+        "needs": [
+          {
+            "block": "thermal",
+            "values": [
+              "thermal_conductivity",
+              "specific_heat"
+            ]
+          },
+          {
+            "block": "elastic",
+            "values": [
+              "density"
+            ]
+          },
+          {
+            "block": "electrical",
+            "optional": true
+          },
+          {
+            "block": "optical",
+            "optional": true
+          }
+        ],
+        "media_type": "application/xml; charset=utf-8",
+        "units": "si",
+        "tables": {
+          "kcurve": {
+            "of": "thermal",
+            "where": "has(temperature) and has(thermal_conductivity)",
+            "sort": [
+              "temperature",
+              "thermal_conductivity"
+            ]
+          }
+        },
+        "lines": [
+          {
+            "text": "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\" ?>"
+          },
+          {
+            "text": "<xml_case>"
+          },
+          {
+            "text": "   <name>{name}</name>"
+          },
+          {
+            "text": "   <attributes>"
+          },
+          {
+            "text": "      <materials>"
+          },
+          {
+            "text": "         <isotropic_material_att>"
+          },
+          {
+            "text": "            <name>{name}</name>"
+          },
+          {
+            "fields": [
+              {
+                "value": "elastic.density",
+                "format": [
+                  "spec",
+                  ".10g"
+                ]
+              }
+            ],
+            "join": "",
+            "prefix": "            <density>",
+            "suffix": "</density>",
+            "when": "elastic.density"
+          },
+          {
+            "fields": [
+              {
+                "value": "thermal.specific_heat",
+                "format": [
+                  "spec",
+                  ".10g"
+                ]
+              }
+            ],
+            "join": "",
+            "prefix": "            <specific_heat>",
+            "suffix": "</specific_heat>",
+            "when": "thermal.specific_heat"
+          },
+          {
+            "text": "            <input_method>single_value</input_method>"
+          },
+          {
+            "fields": [
+              {
+                "value": "thermal.thermal_conductivity",
+                "format": [
+                  "spec",
+                  ".10g"
+                ]
+              }
+            ],
+            "join": "",
+            "prefix": "            <conductivity>",
+            "suffix": "</conductivity>",
+            "when": "thermal.thermal_conductivity"
+          },
+          {
+            "note": "열전도율의 온도 표는 싣지 않았습니다 — FloXML 곡선의 온도 단위(°C · K)를 공개 자료로 확인하지 못했습니다. 기준 값(첫 줄) 하나를 적었습니다. 온도 의존이 필요하면 Flotherm 화면에서 표로 넣으세요.",
+            "when": "count(kcurve) >= 2"
+          },
+          {
+            "note": "체적저항률이 카드에 없어 전기전도율에서 ρ = 1/σ 로 옮겼습니다.",
+            "when": "not has(electrical.resistivity) and has(electrical.conductivity) and electrical.conductivity > 0"
+          },
+          {
+            "text": "            <electrical_resistivity>",
+            "when": "has(electrical.resistivity) or (has(electrical.conductivity) and electrical.conductivity > 0)"
+          },
+          {
+            "text": "               <type>constant</type>",
+            "when": "has(electrical.resistivity) or (has(electrical.conductivity) and electrical.conductivity > 0)"
+          },
+          {
+            "text": "               <resistivity_value>{(electrical.resistivity if has(electrical.resistivity) else 1 / electrical.conductivity):.10g}</resistivity_value>",
+            "when": "has(electrical.resistivity) or (has(electrical.conductivity) and electrical.conductivity > 0)"
+          },
+          {
+            "text": "            </electrical_resistivity>",
+            "when": "has(electrical.resistivity) or (has(electrical.conductivity) and electrical.conductivity > 0)"
+          },
+          {
+            "note": "저항온도계수는 싣지 않았습니다 — FloXML 저항률 계수가 상대값(1/K)인지 절대값(Ω·m/K)인지, 기준 온도의 단위가 무엇인지 공개 자료로 확인하지 못했습니다. 저항률은 상수로 적었습니다.",
+            "when": "electrical.resistivity_temperature_coefficient"
+          },
+          {
+            "fail": "방사율이 0~1 밖입니다({optical.emissivity:g}) — 값이나 단위(%)를 확인하세요.",
+            "when": "has(optical.emissivity) and (optical.emissivity < 0 or optical.emissivity > 1)"
+          },
+          {
+            "text": "            <surface>{name}_surface</surface>",
+            "when": "optical.emissivity"
+          },
+          {
+            "block": "notes_line",
+            "prefix": "            <notes>",
+            "suffix": "</notes>",
+            "quote": "xml"
+          },
+          {
+            "text": "         </isotropic_material_att>"
+          },
+          {
+            "text": "      </materials>"
+          },
+          {
+            "text": "      <surfaces>",
+            "when": "optical.emissivity"
+          },
+          {
+            "text": "         <surface_att>",
+            "when": "optical.emissivity"
+          },
+          {
+            "text": "            <name>{name}_surface</name>",
+            "when": "optical.emissivity"
+          },
+          {
+            "fields": [
+              {
+                "value": "optical.emissivity",
+                "format": [
+                  "spec",
+                  ".10g"
+                ]
+              }
+            ],
+            "join": "",
+            "prefix": "            <emissivity>",
+            "suffix": "</emissivity>",
+            "when": "optical.emissivity"
+          },
+          {
+            "text": "         </surface_att>",
+            "when": "optical.emissivity"
+          },
+          {
+            "text": "      </surfaces>",
+            "when": "optical.emissivity"
+          },
+          {
+            "text": "   </attributes>"
+          },
+          {
+            "text": "   <geometry />"
+          },
+          {
+            "text": "</xml_case>"
+          }
+        ]
+      }
+    },
+    {
+      "key": "ansys_electric_def",
+      "label": "ANSYS (전기) · 정의",
+      "description": "기본 제공 형식 ansys_electric 를 정의로 옮긴 것. 코드판과 글자까지 같다 — 알림·거절까지(2026-10-02, 시험용 카드 · SI · mm-N-tonne). 코드판을 사용 중단하면 이것을 켜서 고친다.",
+      "is_active": false,
+      "definition": {
+        "extension": "mac",
+        "suffix": "_electric",
+        "describe": "MP,RSVX · PERX · LSST · MURX(· EMIS) — 열-전기(줄 발열) · 정전기 해석용. 저항률은 SI(Ω·m) 고정 — 활성 단위계가 SI 여야 한다.",
+        "keywords": [
+          "MNX_MAT ="
+        ],
+        "needs": [
+          {
+            "block": "electrical"
+          },
+          {
+            "block": "optical",
+            "optional": true
+          }
+        ],
+        "units": "si",
+        "tables": {
+          "eps": {
+            "of": "electrical",
+            "where": "has(frequency) and has(relative_permittivity)",
+            "sort": [
+              "frequency",
+              "relative_permittivity"
+            ]
+          },
+          "tan": {
+            "of": "electrical",
+            "where": "has(frequency) and has(loss_tangent)",
+            "sort": [
+              "frequency",
+              "loss_tangent"
+            ]
+          }
+        },
+        "lines": [
+          {
+            "fail": "ANSYS 전기 스니펫으로 낼 값이 카드에 없습니다 — 체적저항률(또는 전기전도율) · 비유전율 · 유전손실 · 비투자율 가운데 하나는 있어야 합니다.",
+            "when": "not (has(electrical.resistivity) or (has(electrical.conductivity) and electrical.conductivity > 0) or has(electrical.relative_permittivity) or has(electrical.loss_tangent) or has(electrical.relative_permeability))"
+          },
+          {
+            "fail": "전기 · 전자기 물성의 주파수 표에 같은 주파수가 두 번 있습니다 — 표는 주파수가 늘기만 해야 합니다.",
+            "when": "distinct(eps, frequency) < count(eps) or distinct(tan, frequency) < count(tan)"
+          },
+          {
+            "block": "header",
+            "comment": "!"
+          },
+          {
+            "text": "! Consistent units: {units}"
+          },
+          {
+            "text": "!   Snippet numbers are NOT converted - the active unit system must match."
+          },
+          {
+            "text": "! Read inside /PREP7 (Command Snippet or /INPUT)."
+          },
+          {
+            "text": "! In a Mechanical Command Snippet under a body write:  MNX_MAT = matid"
+          },
+          {
+            "text": "MNX_MAT = {id}"
+          },
+          {
+            "text": "! Electrical values are SI (ohm*m; permittivity and permeability are relative)."
+          },
+          {
+            "fields": [
+              {
+                "expr": "(electrical.resistivity if has(electrical.resistivity) else 1 / electrical.conductivity)",
+                "format": "free"
+              }
+            ],
+            "join": "",
+            "prefix": "MP,RSVX,MNX_MAT,",
+            "when": "has(electrical.resistivity) or (has(electrical.conductivity) and electrical.conductivity > 0)"
+          },
+          {
+            "note": "체적저항률이 카드에 없어 전기전도율에서 ρ = 1/σ 로 옮겼습니다.",
+            "when": "not has(electrical.resistivity) and has(electrical.conductivity) and electrical.conductivity > 0"
+          },
+          {
+            "fields": [
+              {
+                "value": "electrical.relative_permittivity",
+                "format": "free"
+              }
+            ],
+            "join": "",
+            "prefix": "MP,PERX,MNX_MAT,",
+            "when": "electrical.relative_permittivity"
+          },
+          {
+            "fields": [
+              {
+                "value": "electrical.loss_tangent",
+                "format": "free"
+              }
+            ],
+            "join": "",
+            "prefix": "MP,LSST,MNX_MAT,",
+            "when": "electrical.loss_tangent"
+          },
+          {
+            "fields": [
+              {
+                "value": "electrical.relative_permeability",
+                "format": "free"
+              }
+            ],
+            "join": "",
+            "prefix": "MP,MURX,MNX_MAT,",
+            "when": "electrical.relative_permeability"
+          },
+          {
+            "fields": [
+              {
+                "value": "optical.emissivity",
+                "format": "free"
+              }
+            ],
+            "join": "",
+            "prefix": "MP,EMIS,MNX_MAT,",
+            "when": "optical.emissivity"
+          },
+          {
+            "note": "저항온도계수는 싣지 않았습니다 — MP,RSVX 는 값 하나입니다. 온도 의존은 MPTEMP · MPDATA 로 따로 적습니다.",
+            "when": "electrical.resistivity_temperature_coefficient"
+          },
+          {
+            "note": "유전 물성의 주파수 표는 싣지 않았습니다 — PERX · LSST 는 값 하나(가장 낮은 주파수)입니다.",
+            "when": "count(eps) >= 2 or count(tan) >= 2"
+          }
+        ]
+      }
+    },
+    {
+      "key": "codev_prv_def",
+      "label": "CODE V (사설 유리) · 정의",
+      "description": "기본 제공 형식 codev_prv 를 정의로 옮긴 것. 코드판과 글자까지 같다 — 알림·거절까지(2026-10-02, 시험용 카드 · SI · mm-N-tonne). 코드판을 사용 중단하면 이것을 켜서 고친다.",
+      "is_active": false,
+      "definition": {
+        "extension": "seq",
+        "describe": "PRV · PWL · END — 파장별 굴절률을 그대로 사설 카탈로그로(식으로 맞추지 않는다). 파장은 nm. 명령 창에 붙여 넣거나 시퀀스 파일로 읽는다.",
+        "keywords": [
+          "PRV",
+          "PWL",
+          "END"
+        ],
+        "needs": [
+          {
+            "block": "optical",
+            "values": [
+              "refractive_index"
+            ]
+          }
+        ],
+        "units": "si",
+        "tables": {
+          "n": {
+            "of": "optical",
+            "where": "has(wavelength) and has(refractive_index)",
+            "sort": [
+              "wavelength"
+            ]
+          }
+        },
+        "lines": [
+          {
+            "fail": "광학 물성의 파장 표에 같은 파장이 두 번 있습니다 — 하나만 남기세요.",
+            "when": "distinct(n, wavelength) < count(n)"
+          },
+          {
+            "fail": "굴절률을 잰 파장이 카드에 없습니다 — CODE V 는 파장마다 굴절률을 받습니다. 재료의 선언 물성에서 굴절률에 파장을 적어 주세요(d선이면 587.6 nm).",
+            "when": "count(n) == 0 and not (has(optical.refractive_index) and has(optical.refractive_index_wavelength_m))"
+          },
+          {
+            "note": "유리 이름은 {name_alnum} 입니다 — CODE V 는 이름의 '_' 를 「유리_카탈로그」 로 읽어 영숫자만 남겼습니다. 면에는 이 이름을 적습니다."
+          },
+          {
+            "note": "굴절률이 파장 하나뿐이라 분산이 없는 재료로 읽힙니다 — 색수차를 보려면 파장별 굴절률을 더 적어 주세요.",
+            "when": "count(n) <= 1"
+          },
+          {
+            "text": "! MatNexus property card: {name} (provenance: see the card in MatNexus)"
+          },
+          {
+            "text": "PRV"
+          },
+          {
+            "text": "PWL {joined(n, fmt(wavelength * 1e9, '.10g'), ' ')}",
+            "when": "count(n) > 0"
+          },
+          {
+            "text": "PWL {optical.refractive_index_wavelength_m * 1e9:.10g}",
+            "when": "count(n) == 0"
+          },
+          {
+            "text": "'{name_alnum}' {joined(n, fmt(refractive_index, '.6f'), ' ')}",
+            "when": "count(n) > 0"
+          },
+          {
+            "text": "'{name_alnum}' {optical.refractive_index:.6f}",
+            "when": "count(n) == 0"
+          },
+          {
+            "text": "END"
+          }
+        ]
+      }
+    },
+    {
+      "key": "nk_table_def",
+      "label": "광학 n·k 표 (Lumerical · COMSOL) · 정의",
+      "description": "기본 제공 형식 nk_table 를 정의로 옮긴 것. 코드판과 글자까지 같다 — 알림·거절까지(2026-10-02, 시험용 카드 · SI · mm-N-tonne). 코드판을 사용 중단하면 이것을 켜서 고친다.",
+      "is_active": false,
+      "definition": {
+        "extension": "txt",
+        "suffix": "_nk",
+        "describe": "파장(µm) · n · k 세 열, 머리줄 없음 — Lumerical 재료 데이터베이스의 Import data(sampled data)와 COMSOL 보간 함수가 읽는다. 읽을 때 파장 단위를 µm 로 고른다.",
+        "needs": [
+          {
+            "block": "optical",
+            "values": [
+              "refractive_index"
+            ]
+          }
+        ],
+        "units": "si",
+        "tables": {
+          "n": {
+            "of": "optical",
+            "where": "has(wavelength) and has(refractive_index)",
+            "sort": [
+              "wavelength"
+            ]
+          }
+        },
+        "lines": [
+          {
+            "fail": "광학 물성의 파장 표에 같은 파장이 두 번 있습니다 — 하나만 남기세요.",
+            "when": "distinct(n, wavelength) < count(n)"
+          },
+          {
+            "fail": "굴절률을 잰 파장이 카드에 없습니다 — n·k 표 는 파장마다 굴절률을 받습니다. 재료의 선언 물성에서 굴절률에 파장을 적어 주세요(d선이면 587.6 nm).",
+            "when": "count(n) == 0 and not (has(optical.refractive_index) and has(optical.refractive_index_wavelength_m))"
+          },
+          {
+            "note": "소광계수가 없는 파장 {count(n, not has(extinction_coefficient))}개는 k = 0(흡수 없음)으로 적었습니다 — 이 표는 세 열을 요구합니다.",
+            "when": "count(n, not has(extinction_coefficient)) > 0"
+          },
+          {
+            "note": "소광계수가 없는 파장 1개는 k = 0(흡수 없음)으로 적었습니다 — 이 표는 세 열을 요구합니다.",
+            "when": "count(n) == 0 and not (has(optical.extinction_coefficient) and has(optical.extinction_coefficient_wavelength_m) and optical.extinction_coefficient_wavelength_m == optical.refractive_index_wavelength_m)"
+          },
+          {
+            "rows": "n",
+            "fields": [
+              {
+                "expr": "wavelength * 1e6",
+                "format": [
+                  "spec",
+                  ".10g"
+                ]
+              },
+              {
+                "value": "refractive_index",
+                "format": [
+                  "spec",
+                  ".10g"
+                ]
+              },
+              {
+                "expr": "extinction_coefficient if has(extinction_coefficient) else 0",
+                "format": [
+                  "spec",
+                  ".10g"
+                ]
+              }
+            ],
+            "join": "\t",
+            "when": "count(n) > 0"
+          },
+          {
+            "fields": [
+              {
+                "expr": "optical.refractive_index_wavelength_m * 1e6",
+                "format": [
+                  "spec",
+                  ".10g"
+                ]
+              },
+              {
+                "value": "optical.refractive_index",
+                "format": [
+                  "spec",
+                  ".10g"
+                ]
+              },
+              {
+                "expr": "optical.extinction_coefficient if has(optical.extinction_coefficient) and has(optical.extinction_coefficient_wavelength_m) and optical.extinction_coefficient_wavelength_m == optical.refractive_index_wavelength_m else 0",
+                "format": [
+                  "spec",
+                  ".10g"
+                ]
+              }
+            ],
+            "join": "\t",
+            "when": "count(n) == 0"
           }
         ]
       }

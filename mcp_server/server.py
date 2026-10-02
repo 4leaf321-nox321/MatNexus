@@ -4421,6 +4421,11 @@ async def render_card_deck(
     어긋나도 솔버는 다른 값을 조용히 읽는다. 단위계는 여기서 넘겨 서버가 만들게
     한다.
 
+    **단위가 정해진 형식은 `units` 를 안 쓴다**(2026-10-02) — AEDT · CST · Flotherm ·
+    Zemax · CODE V · n·k 표 · ANSYS(전기)는 파일 형식이 SI(파장 µm · nm)를 정해 두어
+    서버가 늘 그 계로 낸다. 돌려주는 `units` 가 **실제로 쓰인 계**다 — 사람에게는 그것을
+    말해라(고른 계와 다르면 `units_note` 가 그렇다고 적는다).
+
     ## MID(재료 번호)를 사람에게 말해라
 
     `mid` 를 안 줬으면 덱 안의 재료 번호는 **그 파일 안에서만 뜻이 있는 수**다 —
@@ -4441,7 +4446,21 @@ async def render_card_deck(
     deck = await _get_text(ctx, f"/fitting/cards/{card_id}/export", params)
     if isinstance(deck, dict):
         return deck  # 오류 봉투
-    return {"format": format, "units": units, "mid": mid, "deck": deck}
+    # **실제로 쓰인 계를 돌려준다.** 고른 계를 그대로 돌려주면 SI 로 나간 AEDT 덱을 AI 가
+    # 「mm·N·tonne 덱」 이라고 건넨다 — 받는 사람은 그 말을 믿는다.
+    formats = await _get(ctx, "/fitting/formats")
+    fixed = (
+        next((one.get("fixed_units") for one in formats if one.get("key") == format), None)
+        if isinstance(formats, list)
+        else None
+    )
+    out: dict[str, Any] = {"format": format, "units": fixed or units, "mid": mid, "deck": deck}
+    if fixed and fixed != units:
+        out["units_note"] = (
+            f"이 형식은 단위를 파일 형식이 정합니다 — 고른 계({units})가 아니라 {fixed} 로 "
+            "나왔습니다. 사람에게 그렇게 말하세요."
+        )
+    return out
 
 
 @mcp.tool()

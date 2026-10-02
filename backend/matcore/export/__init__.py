@@ -403,7 +403,9 @@ def requires_labels(format_key: str | Renderer) -> tuple[str, ...]:
         if need.optional:
             continue
         out.extend(_label(need.block, key) for key in need.values)
-        if need.rows_min and not need.values:
+        # **블록만 요구하면 블록 이름이다** — 값도 표도 안 적은 요구(`Need("electrical")`)가
+        # 빈 목록이 되면 화면이 「 가 있어야 냅니다」 로 앞이 빈 말을 한다(2026-10-02).
+        if not need.values:
             out.append(_label(need.block))
     return tuple(dict.fromkeys(out))
 
@@ -451,6 +453,15 @@ class Renderer:
     비면 key 앞부분(`dyna_elastic` → `dyna`)이나 확장자로 짐작한다(`shared/litdeck`).
     화면에서 만든 정의는 key 가 `deck_1a2b3c4d` 라 앞부분이 솔버가 아니다 — 그래서
     정의가 이 칸을 적을 수 있다."""
+    fixed_units: UnitSystem | None = None
+    """**단위를 형식이 정한다** — 고른 계와 상관없이 이 계로 받는다(2026-10-02).
+
+    Abaqus · ANSYS 는 단위가 없는 솔버라 고른 계로 옮겨 적는다. AEDT(`.amat`) · CST(`.mtd`) ·
+    FloXML · Zemax 는 그렇지 않다 — 파일 형식이 단위를 정해 두었고(SI, 파장은 µm), 읽는
+    쪽이 그 단위로 읽는다. 여기에 mm·N·tonne 숫자를 적으면 밀도가 10¹² 배 틀린 재료가
+    **오류 없이** 들어간다. 그래서 이 형식은 늘 이 계의 덱을 받고(`render` 가 바꾼다), 파일
+    이름도 이 계를 말한다(`effective_system`). 형식 고유의 단위(µm · GPa)로는 렌더러가
+    `matcore.units` 로 옮긴다."""
 
 
 _RENDERERS: dict[str, Renderer] = {}
@@ -466,6 +477,7 @@ def register_renderer(
     keywords: tuple[str, ...] = (),
     needs: tuple[Need, ...] = (),
     media_type: str = "text/plain; charset=utf-8",
+    fixed_units: UnitSystem | None = None,
 ) -> Callable[[Callable[[Deck], Rendered]], Callable[[Deck], Rendered]]:
     """솔버 하나를 등록한다. **등록하면 API·화면·내려받기가 따라온다.**
 
@@ -485,11 +497,21 @@ def register_renderer(
                 keywords=keywords,
                 needs=needs,
                 media_type=media_type,
+                fixed_units=fixed_units,
             )
         )
         return fn
 
     return decorator
+
+
+def effective_system(target: Renderer, system: UnitSystem) -> UnitSystem:
+    """이 형식으로 낼 때 **실제로 쓰이는 계** — 형식이 단위를 정했으면 그것(`fixed_units`).
+
+    덱을 그리는 `render` 와 파일 이름 · 검사 결과를 적는 자리가 **같은 답을 봐야 한다.**
+    내용은 SI 인데 이름이 `_mm_n_tonne` 이면 받는 사람은 이름을 믿는다.
+    """
+    return target.fixed_units or system
 
 
 def add_renderer(item: Renderer) -> Renderer:
@@ -531,17 +553,23 @@ def _fixed(value: float) -> str:
     return f"{value:>20.9E}"
 
 
+def header_lines(deck: Deck) -> list[str]:
+    """근거 줄 — 주석 기호 없이. 주석이 없는 형식(AEDT 의 Notes · FloXML 의 notes · CST 의
+    설명 칸)은 이 줄들을 자기 자리에 적는다."""
+    # **안 바꾼 값이 있으면 여기서 말한다.** `to_system` 이 남긴 것이고,
+    # 조용히 남는 것과 적혀서 남는 것은 다르다.
+    said = deck.blocks.get("_units")
+    left = list(said.get("notes", [])) if isinstance(said, Mapping) else []
+    return ["MatNexus 물성 카드", *deck.provenance, *left]
+
+
 def _header(deck: Deck, comment: str) -> list[str]:
     """근거를 카드 안에 적는다.
 
     **덱만 받은 사람이 되짚을 수 있어야 한다.** 파일이 메일로 돌아다니는 동안
     이 주석이 유일한 출처 표시다.
     """
-    # **안 바꾼 값이 있으면 여기서 말한다.** `to_system` 이 남긴 것이고,
-    # 조용히 남는 것과 적혀서 남는 것은 다르다.
-    said = deck.blocks.get("_units")
-    left = list(said.get("notes", [])) if isinstance(said, Mapping) else []
-    return [f"{comment} {line}" for line in ("MatNexus 물성 카드", *deck.provenance, *left)]
+    return [f"{comment} {line}" for line in header_lines(deck)]
 
 
 #: `*EXPANSION` 등이 받는 값 ↔ 블록 키. 값이 하나인 키워드들이라 표가 아니다.
@@ -852,11 +880,12 @@ def render_abaqus(deck: Deck) -> Rendered:
         lines.append("*DENSITY")
         lines.append(f"{_free(density)},")
     lines.extend(_elastic_lines(deck, youngs, poisson))
-    # EXTRAPOLATION=CONSTANT — 표 밖에서 응력을 일정하게 둔다. 기본값(오류 중단)
-    # 보다 낫다고 볼 수도 있지만, 여기서는 **적합 구간 밖을 외삽하지 않는다** 는
-    # 이 프로젝트의 태도와 같은 말이다: 모르는 구간에서 값을 지어내지 않는다.
+    # **`EXTRAPOLATION=` 을 안 붙인다**(2026-10-03, 공개 자료 대조). 표 밖에서 응력을 일정하게
+    # 두는 것이 Abaqus 의 기본이고, 그 매개변수는 2022 에 생겼다 — 2017 키워드 참조서의
+    # `*PLASTIC` 에 없다. 기본값을 굳이 적으면 2021 이전 판이 모르는 매개변수로 멈추고, 2022
+    # 이후에는 아무것도 바뀌지 않는다. 전에는 「기본값이 오류 중단」 이라고 잘못 알고 적었다.
     lines.extend(_thermal_lines(deck))
-    lines.append("*PLASTIC, HARDENING=ISOTROPIC, EXTRAPOLATION=CONSTANT")
+    lines.append("*PLASTIC, HARDENING=ISOTROPIC")
     # **응력이 먼저, 소성변형률이 나중이다.** OpenRadioss 와 순서가 반대다.
     lines.extend(f"{_free(stress)}, {_free(strain)}" for strain, stress in points)
     return Rendered(text="\n".join(lines) + "\n", notes=tuple(notes))
@@ -890,7 +919,7 @@ ABAQUS_TEMPLATE: dict[str, Any] = {
         },
         {"block": "elastic"},
         {"block": "thermal"},
-        {"text": "*PLASTIC, HARDENING=ISOTROPIC, EXTRAPOLATION=CONSTANT"},
+        {"text": "*PLASTIC, HARDENING=ISOTROPIC"},
         {
             # **응력이 먼저, 소성변형률이 나중이다.** OpenRadioss 와 반대이고,
             # 템플릿이 표현해야 하는 것이 정확히 이런 차이다.
@@ -1070,12 +1099,61 @@ HYPERELASTIC_KEYWORDS: dict[str, tuple[str, tuple[str, ...]]] = {
     "ogden_1": ("OGDEN, N=1", ("mu", "alpha")),
 }
 
-#: 비압축 계수 D. **재지 않은 값이라 0 으로 둔다.**
+#: 비압축 계수 D — **카드에 푸아송비가 없거나 0.5 일 때**의 값(`hyperelastic_bulk`).
 #:
 #: Abaqus 에서 `D=0` 은 완전 비압축이고 **하이브리드 요소(C3D8H 등)를 요구한다.**
 #: 일반 요소로 돌리면 오류로 멈춘다 — 조용히 틀리는 것보다 낫지만, 그 사실을
 #: 모르면 "덱이 안 돌아간다" 로만 보인다. 그래서 덱 주석에 적는다.
 INCOMPRESSIBLE_D = 0.0
+
+#: 고무치고 낮은 푸아송비. 이보다 낮으면 체적이 쉽게 변하는 재료로 계산된다고 알린다
+#: (LS-DYNA 초탄성과 같은 문턱).
+RUBBER_POISSON_FLOOR = 0.49
+
+
+def initial_shear(family: str, values: Mapping[str, float]) -> float:
+    """초기 전단탄성률 μ0. 다항식 꼴은 2(C10 + C01) — Neo-Hookean · Yeoh 는 2·C10 —
+    Ogden 은 카드의 μ 그대로다(우리 μ 는 Abaqus 규약, G = μ)."""
+    if family == "ogden_1":
+        return values["mu"]
+    if family == "mooney_rivlin":
+        return 2.0 * (values["c10"] + values["c01"])
+    return 2.0 * values["c10"]
+
+
+def hyperelastic_bulk(
+    deck: Deck, family: str, values: Mapping[str, float]
+) -> tuple[float, float, float] | None:
+    """카드의 푸아송비로 `(ν, μ0, K)` — 비압축 계수는 D = 2/K 다(Abaqus D1 · ANSYS d 둘 다).
+
+    K = 2μ0(1+ν) / (3(1-2ν)) 는 E = 2μ0(1+ν) 와 K = E/(3(1-2ν)) 를 이은 것이다.
+    **ν 가 없거나 0.5 면 None** — 완전 비압축(`INCOMPRESSIBLE_D`)이다.
+
+    전에는 ν 가 있어도 Abaqus · ANSYS 만 늘 D = 0 이었다. Nastran · OptiStruct · LS-DYNA ·
+    Radioss 는 같은 카드의 ν 로 체적 강성을 만들어서, **같은 카드가 솔버마다 다른 체적 거동**이
+    됐다 — 한쪽은 하이브리드 요소를 요구하는 완전 비압축, 다른 쪽은 ν = 0.4995 의 고무
+    (2026-10-03 공개 덱 대조: 공개 Abaqus 고무 덱 10벌이 모두 D1 을 적었다).
+    """
+    poisson = deck.number("elastic", "poisson_ratio")
+    if poisson is None or poisson == 0.5:
+        return None
+    if not 0.0 < poisson < 0.5:
+        raise ExportError(
+            f"푸아송비가 {poisson:g} 입니다 — 0 보다 크고 0.5 이하여야 합니다"
+            f"(0.5 는 완전 비압축)."
+        )
+    shear = initial_shear(family, values)
+    return poisson, shear, 2.0 * shear * (1.0 + poisson) / (3.0 * (1.0 - 2.0 * poisson))
+
+
+def low_rubber_poisson(poisson: float) -> str | None:
+    """고무치고 낮은 ν 를 짚는 말 — 없으면 None."""
+    if poisson >= RUBBER_POISSON_FLOOR:
+        return None
+    return (
+        f"푸아송비가 {poisson:g} 로 고무치고 낮습니다 — 체적이 쉽게 변하는 재료로 "
+        f"계산됩니다. 보통 0.495~0.4995 입니다."
+    )
 
 
 @register_renderer(
@@ -1084,15 +1162,15 @@ INCOMPRESSIBLE_D = 0.0
     extension="inp",
     suffix="_hyperelastic",
     describe=(
-        "*HYPERELASTIC — 고무 초탄성. 공칭 응력 기준이고 D=0(완전 비압축)이라 "
-        "하이브리드 요소가 필요하다."
+        "*HYPERELASTIC — 고무 초탄성, 공칭 응력 기준. D1 은 카드의 푸아송비로 만들고"
+        "(D1 = 2/K), 없으면 D=0(완전 비압축)이라 하이브리드 요소가 필요하다."
     ),
     keywords=("*MATERIAL", "*HYPERELASTIC"),
     needs=(
         # `family` 를 `values` 로 요구하지 않는다 — 그건 내부 key 라 화면에
         # "초탄성 family 가 필요합니다" 로 뜬다. 없으면 아래에서 짚는다.
         Need("hyperelastic", rows_min=1),
-        Need("elastic", values=("density",), optional=True),
+        Need("elastic", values=("poisson_ratio", "density"), optional=True),
         # 열물성은 셋 다 선택이다. 있으면 싣고 없으면 그 키워드가 안 나간다.
         Need("thermal", optional=True),
     ),
@@ -1106,10 +1184,12 @@ def render_abaqus_hyperelastic(deck: Deck) -> Rendered:
     그 길을 안 쓴다 — **어느 식을 어느 구간에 맞췄는지가 우리 쪽에 남아야** 카드가
     자기 근거를 들 수 있고, 솔버마다 다른 적합기가 다른 답을 내는 것도 막는다.
 
-    ## D = 0 은 하이브리드 요소를 요구한다
+    ## D1 은 카드의 푸아송비에서 — 없으면 D = 0
 
-    비압축 계수를 재지 않았으므로 0 으로 둔다. **완전 비압축**이라는 뜻이고,
-    Abaqus 는 그때 하이브리드 요소를 요구한다. 지어내지 않고 그 사실을 적는다.
+    비압축 계수는 재지 않는다(구속 압축 시험이 따로 든다). 카드의 ν 로 D1 = 2/K 를
+    만든다 — 다른 솔버 형식이 같은 ν 로 체적 강성을 만드는 것과 같게(`hyperelastic_bulk`).
+    ν 가 없거나 0.5 면 D = 0, **완전 비압축**이고 Abaqus 는 그때 하이브리드 요소를
+    요구한다. 지어내지 않고 그 사실을 적는다.
     """
     family = deck.values("hyperelastic").get("family")
     density = deck.number("elastic", "density")
@@ -1133,16 +1213,30 @@ def render_abaqus_hyperelastic(deck: Deck) -> Rendered:
             f"카드가 다른 식으로 맞춰졌을 수 있습니다."
         )
 
+    compressible = hyperelastic_bulk(deck, str(family), values)
     notes: list[str] = []
     lines = _header(deck, "**")
     lines.append(f"** Consistent units: {deck.units.declaration}")
     lines.append("** Nominal (engineering) stress-strain basis — not true stress.")
-    # **D=0 은 요소 종류를 강제한다.** 모르면 "덱이 안 돌아간다" 로만 보인다.
-    lines.append("** D = 0 : fully incompressible — requires hybrid elements (e.g. C3D8H).")
-    notes.append(
-        "비압축 계수 D 를 0 으로 두었습니다(재지 않은 값입니다) — 완전 비압축이라는 "
-        "뜻이고, Abaqus 는 그때 하이브리드 요소를 요구합니다."
-    )
+    if compressible is None:
+        compressibility = INCOMPRESSIBLE_D
+        # **D=0 은 요소 종류를 강제한다.** 모르면 "덱이 안 돌아간다" 로만 보인다.
+        lines.append(
+            "** D = 0 : fully incompressible — requires hybrid elements (e.g. C3D8H)."
+        )
+        notes.append(
+            "비압축 계수 D 를 0 으로 두었습니다(카드에 푸아송비가 없거나 0.5 입니다) — 완전 "
+            "비압축이라는 뜻이고, Abaqus 는 그때 하이브리드 요소를 요구합니다."
+        )
+    else:
+        poisson, shear, bulk = compressible
+        compressibility = 2.0 / bulk
+        lines.append(
+            f"** D1 = 2/K from the card nu={poisson:g}: mu0 = {shear:.6g}, K = {bulk:.6g}."
+        )
+        said = low_rubber_poisson(poisson)
+        if said:
+            notes.append(said)
     lines.append(f"*MATERIAL, NAME={deck.name}")
     if density is not None:
         lines.append("*DENSITY")
@@ -1152,9 +1246,7 @@ def render_abaqus_hyperelastic(deck: Deck) -> Rendered:
 
     lines.extend(_thermal_lines(deck))
     lines.append(f"*HYPERELASTIC, {keyword}")
-    lines.append(
-        ", ".join([*(_free(values[name]) for name in order), _free(INCOMPRESSIBLE_D)])
-    )
+    lines.append(", ".join([*(_free(values[name]) for name in order), _free(compressibility)]))
     return Rendered(text="\n".join(lines) + "\n", notes=tuple(notes))
 
 
@@ -1442,7 +1534,7 @@ def render_abaqus_rate(deck: Deck) -> Rendered:
     Abaqus 는 `*PLASTIC` 을 속도별로 반복해 주면 그 사이를 보간한다. 식(Cowper-
     Symonds·Johnson-Cook)으로도 줄 수 있지만(`*RATE DEPENDENT`), **표가 잰 것이고
     식은 요약**이다 — 표를 싣고 식은 주석으로 적는다. 표 밖 속도는 Abaqus 가
-    가장자리 값을 쓴다(`EXTRAPOLATION=CONSTANT` 와 같은 태도).
+    가장자리 값을 쓴다(Abaqus 의 기본 — `EXTRAPOLATION=` 은 2022 에 생겨 안 적는다).
 
     행은 `rate_table` 을 속도로 나눈다. **속도가 하나뿐이면 거부한다** — 그 덱은
     `abaqus` 가 낼 것이고, 여기서 내면 속도 의존이 있는 척이 된다.
@@ -1486,9 +1578,7 @@ def render_abaqus_rate(deck: Deck) -> Rendered:
     lines.extend(_thermal_lines(deck))
     notes.extend(curve_notes)
     for rate, points in curves:
-        lines.append(
-            f"*PLASTIC, HARDENING=ISOTROPIC, EXTRAPOLATION=CONSTANT, RATE={_free(rate)}"
-        )
+        lines.append(f"*PLASTIC, HARDENING=ISOTROPIC, RATE={_free(rate)}")
         lines.extend(f"{_free(stress)}, {_free(strain)}" for strain, stress in points)
     return Rendered(text="\n".join(lines) + "\n", notes=tuple(notes))
 
@@ -1822,6 +1912,13 @@ def _unit_of(spec: Any, key: str, row: Mapping[str, Any] | None) -> str | None:
     return None
 
 
+#: **이름이 단위를 말하는 값** — 선언 물성이 칸에 붙여 두는 조건(`<칸>_frequency_hz` ·
+#: `_wavelength_m` · `_temperature_k`, `shared/declared_slots`). 계를 바꿔도 옮기지 않는다:
+#: 이름이 Hz · m · K 라고 말하는데 숫자만 mm 가 되면 받는 쪽은 이름을 믿는다. 뜻을 아는
+#: 값이라 「단위가 선언돼 있지 않아 SI 로 남긴 값」 에도 안 적는다(2026-10-02).
+SELF_DESCRIBED = ("_frequency_hz", "_wavelength_m", "_temperature_k")
+
+
 def to_system(deck: Deck, system: UnitSystem) -> Deck:
     """덱의 숫자를 그 단위계로 옮긴다. **렌더러는 이 일을 모른다.**
 
@@ -1851,6 +1948,8 @@ def to_system(deck: Deck, system: UnitSystem) -> Deck:
 
     def moved(value: Any, si_unit: str | None, where: str) -> Any:
         if not isinstance(value, int | float) or isinstance(value, bool):
+            return value
+        if si_unit is None and where.endswith(SELF_DESCRIBED):
             return value
         if si_unit is None:
             # 뜻을 모르는 숫자다. 바꾸지 않고 **이름을 남긴다.**
@@ -1926,7 +2025,8 @@ def render(format_key: str | Renderer, deck: Deck, system: UnitSystem = SI) -> R
             f"기본값으로 채워 내보내면 그것이 측정값인지 덱만 봐서는 알 수 없습니다."
         )
 
-    result = target.render(to_system(deck, system))
+    # **형식이 단위를 정했으면 그 계로** — 고른 계가 무엇이든(`Renderer.fixed_units`).
+    result = target.render(to_system(deck, effective_system(target, system)))
     absent = [word for word in target.keywords if word not in result.text]
     if absent:
         raise ExportError(

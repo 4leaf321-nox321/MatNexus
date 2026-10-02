@@ -105,6 +105,10 @@ def convert(system: UnitSystem, value: float, unit: str | None) -> Converted:
     symbol = found.symbol
     if found.factor != 1 or found.offset != 0:
         return Converted(value, symbol, False)
+    if symbol in export.systems.UNSCALED:
+        # 계가 값을 SI 그대로 돌려주지만(카드 블록용) **옮긴 것이 아니다** — 파일 머리의
+        # 「그대로 둔 단위」 에 그대로 들어가야 한다.
+        return Converted(value, symbol, False)
     try:
         return Converted(system.convert(value, symbol), system.symbol(symbol), True)
     except KeyError:

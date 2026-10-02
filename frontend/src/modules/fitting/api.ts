@@ -328,7 +328,9 @@ export const fittingApi = {
     downloadFile(
       `/fitting/cards/${id}/export?format=${format.key}&units=${system.key}` +
         (withCard ? `&with_card=${withCard}` : ''),
-      `${filename(label)}_${system.key}.${format.extension}`
+      // **형식이 단위를 정해 두었으면 그 계다**(AEDT · CST · Zemax — SI). 서버가 그 계로 내는데
+      // 이름이 고른 계를 말하면, 받은 사람은 이름을 믿는다.
+      `${filename(label)}_${format.fixed_units ?? system.key}.${format.extension}`
     ),
 
   /**
@@ -350,7 +352,7 @@ export const fittingApi = {
       '/fitting/cards/bundle',
       { card_ids: ids, format: format.key, units: system.key },
       // 서버도 같은 이름을 붙인다. 낱장 내보내기와 같은 규약이라 여기서도 적는다.
-      `matnexus_cards_${format.key}_${system.key}.zip`
+      `matnexus_cards_${format.key}_${format.fixed_units ?? system.key}.zip`
     ),
 }
 

@@ -38,11 +38,15 @@ from matcore.export import (
     _free,
     _header,
     elastic_by_temperature,
+    hyperelastic_bulk,
     hyperelastic_terms,
+    low_rubber_poisson,
     prepare,
     prony_terms,
     register_renderer,
 )
+from matcore.export.electronics import frequency_series, resistivity
+from matcore.export.systems import SI
 
 #: 재료 번호를 담는 APDL 매개변수. 스니펫에서는 `= matid` 로 바꾼다.
 MATERIAL = "MNX_MAT"
@@ -355,13 +359,13 @@ def render_ansys_viscoelastic(deck: Deck) -> Rendered:
     extension="mac",
     suffix="_hyperelastic",
     describe=(
-        "TB,HYPER — NEO·MOONEY·YEOH·OGDEN. d=0(완전 비압축)이라 혼합 u-P 요소"
-        "(SOLID185/186 KEYOPT(6)=1)가 필요하다."
+        "TB,HYPER — NEO·MOONEY·YEOH·OGDEN. d 는 카드의 푸아송비로 만들고(d = 2/K), 없으면 "
+        "d=0(완전 비압축)이라 혼합 u-P 요소(SOLID185/186 KEYOPT(6)=1)가 필요하다."
     ),
     keywords=("TB,HYPER", "TBDATA"),
     needs=(
         Need("hyperelastic", rows_min=1),
-        Need("elastic", values=("density",), optional=True),
+        Need("elastic", values=("poisson_ratio", "density"), optional=True),
     ),
 )
 def render_ansys_hyperelastic(deck: Deck) -> Rendered:
@@ -371,19 +375,36 @@ def render_ansys_hyperelastic(deck: Deck) -> Rendered:
     MOONEY   (C10, C01, d)      NPTS=2 를 적는다(문서 안에서 기본값이 2 와 3 으로 갈린다)
     YEOH     (C10, C20, C30, d1, d2, d3)
     OGDEN    (μ₁, α₁, d₁)       μ₁ = 2μ/α — ANSYS 는 G = Σμα/2
+
+    d 는 카드의 푸아송비에서 d = 2/K(네 식 모두 초기 체적 탄성률이 K = 2/d 다). ν 가 없거나
+    0.5 면 d = 0 — 완전 비압축이고 혼합 u-P 요소가 필요하다(`hyperelastic_bulk`).
     """
     family, values = hyperelastic_terms(deck)
     density = deck.number("elastic", "density")
-    notes: list[str] = [
-        "비압축 계수 d 를 0 으로 두었습니다(재지 않은 값입니다) — 완전 비압축이라는 뜻이고, "
-        "ANSYS 는 그때 혼합 u-P 요소(KEYOPT(6)=1)를 요구합니다."
-    ]
+    compressible = hyperelastic_bulk(deck, family, values)
+    notes: list[str] = []
     lines = _head(deck)
     lines.append(f"TBDELE,ALL,{MATERIAL}")
     lines.append("! Nominal (engineering) stress fit - uniaxial data only.")
-    lines.append(
-        "! d = 0 : fully incompressible - needs mixed u-P (SOLID185/186 KEYOPT(6)=1)."
-    )
+    if compressible is None:
+        # 0 은 전처럼 `0.0` 으로 적는다 — 비압축 계수를 안 만들었다는 것이 한눈에 보인다.
+        d = "0.0"
+        notes.append(
+            "비압축 계수 d 를 0 으로 두었습니다(카드에 푸아송비가 없거나 0.5 입니다) — 완전 "
+            "비압축이라는 뜻이고, ANSYS 는 그때 혼합 u-P 요소(KEYOPT(6)=1)를 요구합니다."
+        )
+        lines.append(
+            "! d = 0 : fully incompressible - needs mixed u-P (SOLID185/186 KEYOPT(6)=1)."
+        )
+    else:
+        poisson, shear, bulk = compressible
+        d = _free(2.0 / bulk)
+        said = low_rubber_poisson(poisson)
+        if said:
+            notes.append(said)
+        lines.append(
+            f"! d = 2/K from the card nu={poisson:g}: mu = {shear:.6g}, K = {bulk:.6g}."
+        )
     if density is not None:
         lines.append(f"MP,DENS,{MATERIAL},{_free(density)}")
     else:
@@ -391,15 +412,15 @@ def render_ansys_hyperelastic(deck: Deck) -> Rendered:
     if family == "neo_hookean":
         lines.append("! mu = 2*C10 (NEO: W = mu/2 (I1bar-3))")
         lines.append(f"TB,HYPER,{MATERIAL},1,2,NEO")
-        lines.append(f"TBDATA,1,{_free(2.0 * values['c10'])},0.0")
+        lines.append(f"TBDATA,1,{_free(2.0 * values['c10'])},{d}")
     elif family == "mooney_rivlin":
         lines.append(f"TB,HYPER,{MATERIAL},1,2,MOONEY")
-        lines.append(f"TBDATA,1,{_free(values['c10'])},{_free(values['c01'])},0.0")
+        lines.append(f"TBDATA,1,{_free(values['c10'])},{_free(values['c01'])},{d}")
     elif family == "yeoh":
         lines.append(f"TB,HYPER,{MATERIAL},1,3,YEOH")
         lines.append(
             f"TBDATA,1,{_free(values['c10'])},{_free(values['c20'])},{_free(values['c30'])},"
-            f"0.0,0.0,0.0"
+            f"{d},0.0,0.0"
         )
     else:
         mu, alpha = values["mu"], values["alpha"]
@@ -409,7 +430,7 @@ def render_ansys_hyperelastic(deck: Deck) -> Rendered:
             f"G = mu = {mu:.6g}); ANSYS: G = sum(mu*alpha)/2"
         )
         lines.append(f"TB,HYPER,{MATERIAL},1,1,OGDEN")
-        lines.append(f"TBDATA,1,{_free(converted)},{_free(alpha)},0.0")
+        lines.append(f"TBDATA,1,{_free(converted)},{_free(alpha)},{d}")
         notes.append(
             f"Ogden μ 를 ANSYS 규약으로 옮겼습니다 — μ₁ = 2μ/α = {converted:.6g}. "
             f"초기 전단탄성률 {mu:.6g} 는 그대로입니다."
@@ -444,4 +465,70 @@ def render_ansys_thermal(deck: Deck) -> Rendered:
         )
         lines.append("! DENS: not on the card - transient heat capacity needs it.")
     lines.extend(_thermal_mp(deck))
+    return Rendered(text="\n".join(lines) + "\n", notes=tuple(notes))
+
+
+#: 카드 칸 → APDL `MP` 이름. 전부 무차원이라 계와 상관없다(비유전율 · 손실 · 비투자율 ·
+#: 방사율).
+_ELECTRIC_MP = (
+    ("electrical", "relative_permittivity", "PERX"),
+    ("electrical", "loss_tangent", "LSST"),
+    ("electrical", "relative_permeability", "MURX"),
+    ("optical", "emissivity", "EMIS"),
+)
+
+
+@register_renderer(
+    key="ansys_electric",
+    label="ANSYS (전기)",
+    extension="mac",
+    suffix="_electric",
+    describe=(
+        "MP,RSVX · PERX · LSST · MURX(· EMIS) — 열-전기(줄 발열) · 정전기 해석용. 저항률은 "
+        "SI(Ω·m) 고정 — 활성 단위계가 SI 여야 한다."
+    ),
+    keywords=(f"{MATERIAL} =",),
+    needs=(Need("electrical"), Need("optical", optional=True)),
+    fixed_units=SI,
+)
+def render_ansys_electric(deck: Deck) -> Rendered:
+    """전기 물성 스니펫. **저항률만 계를 탄다** — 나머지(비유전율 · 손실 · 비투자율 · 방사율)는
+    무차원이다. mm 계 모델에서 RSVX 는 전류를 A 로 두느냐 mA 로 두느냐에 따라 값이 갈려서
+    (`matcore/export/systems.py` 의 `UNSCALED`) 우리가 옮기지 않는다 — SI 로 적고 머리에
+    말한다.
+
+    저항온도계수 · 주파수 표는 싣지 않는다 — `MP` 는 값 하나이고, 표로 펴면 우리가 고른 온도 ·
+    주파수 점이 잰 값처럼 보인다. 싣지 않았다고 적는다.
+    """
+    rho, said = resistivity(deck)
+    found = [(label, deck.number(block, key)) for block, key, label in _ELECTRIC_MP]
+    # 표는 먼저 읽는다 — 겹친 주파수는 쓰기 전에 멈춘다(싣지 않는 표라도 카드가 틀린 것이다).
+    tables = [frequency_series(deck, key) for key in ("relative_permittivity", "loss_tangent")]
+    if rho is None and all(value is None for label, value in found if label != "EMIS"):
+        raise ExportError(
+            "ANSYS 전기 스니펫으로 낼 값이 카드에 없습니다 — 체적저항률(또는 전기전도율) · "
+            "비유전율 · 유전손실 · 비투자율 가운데 하나는 있어야 합니다."
+        )
+    notes: list[str] = []
+    lines = _head(deck)
+    lines.append(
+        "! Electrical values are SI (ohm*m; permittivity and permeability are relative)."
+    )
+    if rho is not None:
+        lines.append(f"MP,RSVX,{MATERIAL},{_free(rho)}")
+        if said:
+            notes.append(said)
+    for label, value in found:
+        if value is not None:
+            lines.append(f"MP,{label},{MATERIAL},{_free(value)}")
+    if deck.number("electrical", "resistivity_temperature_coefficient") is not None:
+        notes.append(
+            "저항온도계수는 싣지 않았습니다 — MP,RSVX 는 값 하나입니다. 온도 의존은 MPTEMP · "
+            "MPDATA 로 따로 적습니다."
+        )
+    if any(len(table) >= 2 for table in tables):
+        notes.append(
+            "유전 물성의 주파수 표는 싣지 않았습니다 — PERX · LSST 는 값 하나(가장 낮은 "
+            "주파수)입니다."
+        )
     return Rendered(text="\n".join(lines) + "\n", notes=tuple(notes))

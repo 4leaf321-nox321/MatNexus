@@ -1176,6 +1176,89 @@
     ]
    }
   },
+  "초탄성_푸아송낮음": {
+   "elastic": {
+    "values": {
+     "poisson_ratio": 0.3,
+     "density": 1100.0
+    }
+   },
+   "hyperelastic": {
+    "values": {
+     "family": "yeoh",
+     "label": "yeoh"
+    },
+    "rows": [
+     {
+      "name": "c10",
+      "value": 400000.0,
+      "si_unit": "Pa"
+     },
+     {
+      "name": "c20",
+      "value": -8000.0,
+      "si_unit": "Pa"
+     },
+     {
+      "name": "c30",
+      "value": 600.0,
+      "si_unit": "Pa"
+     }
+    ]
+   }
+  },
+  "초탄성_푸아송05": {
+   "elastic": {
+    "values": {
+     "poisson_ratio": 0.5,
+     "density": 1100.0
+    }
+   },
+   "hyperelastic": {
+    "values": {
+     "family": "ogden_1",
+     "label": "ogden_1"
+    },
+    "rows": [
+     {
+      "name": "mu",
+      "value": 600000.0,
+      "si_unit": "Pa"
+     },
+     {
+      "name": "alpha",
+      "value": 2.3,
+      "si_unit": "1"
+     }
+    ]
+   }
+  },
+  "거절_초탄성_푸아송넘침": {
+   "elastic": {
+    "values": {
+     "poisson_ratio": 0.6,
+     "density": 1100.0
+    }
+   },
+   "hyperelastic": {
+    "values": {
+     "family": "mooney_rivlin",
+     "label": "mooney_rivlin"
+    },
+    "rows": [
+     {
+      "name": "c10",
+      "value": 300000.0,
+      "si_unit": "Pa"
+     },
+     {
+      "name": "c01",
+      "value": 80000.0,
+      "si_unit": "Pa"
+     }
+    ]
+   }
+  },
   "점도_cross": {
    "elastic": {
     "values": {
@@ -1876,6 +1959,306 @@
       "true_stress": 297500000.0
      }
     ]
+   }
+  },
+  "전기_유전표": {
+   "electrical": {
+    "values": {
+     "relative_permittivity": 4.2,
+     "relative_permittivity_frequency_hz": 1000000.0,
+     "relative_permittivity_source": "declared:datasheet",
+     "loss_tangent": 0.015,
+     "loss_tangent_frequency_hz": 1000000.0,
+     "resistivity": 100000000000000.0,
+     "resistivity_temperature_k": 296.15
+    },
+    "rows": [
+     {
+      "frequency": 1000000.0,
+      "relative_permittivity": 4.2,
+      "loss_tangent": 0.015
+     },
+     {
+      "frequency": 1000000000.0,
+      "relative_permittivity": 4.0,
+      "loss_tangent": 0.018
+     },
+     {
+      "frequency": 10000000000.0,
+      "relative_permittivity": 3.9,
+      "loss_tangent": 0.02
+     }
+    ]
+   },
+   "thermal": {
+    "values": {
+     "thermal_conductivity": 0.3,
+     "specific_heat": 1100.0,
+     "thermal_expansion": 1.4e-05
+    }
+   },
+   "elastic": {
+    "values": {
+     "density": 1850.0,
+     "youngs_modulus": 22000000000.0,
+     "poisson_ratio": 0.15
+    }
+   },
+   "optical": {
+    "values": {
+     "emissivity": 0.9
+    }
+   }
+  },
+  "전기_값하나": {
+   "electrical": {
+    "values": {
+     "relative_permittivity": 3.48,
+     "relative_permittivity_frequency_hz": 10000000000.0,
+     "loss_tangent": 0.0037,
+     "loss_tangent_frequency_hz": 10000000000.0,
+     "relative_permeability": 1.0,
+     "conductivity": 58000000.0
+    }
+   },
+   "thermal": {
+    "values": {
+     "thermal_conductivity": 0.69,
+     "specific_heat": 900.0
+    },
+    "rows": [
+     {
+      "temperature": 293.15,
+      "thermal_conductivity": 0.69
+     },
+     {
+      "temperature": 373.15,
+      "thermal_conductivity": 0.72
+     }
+    ]
+   },
+   "elastic": {
+    "values": {
+     "density": 1860.0
+    }
+   }
+  },
+  "전기_전도율_TCR": {
+   "electrical": {
+    "values": {
+     "conductivity": 59600000.0,
+     "conductivity_temperature_k": 293.15,
+     "resistivity_temperature_coefficient": 0.00393
+    }
+   },
+   "thermal": {
+    "values": {
+     "thermal_conductivity": 401.0,
+     "specific_heat": 385.0
+    }
+   },
+   "elastic": {
+    "values": {
+     "density": 8960.0
+    }
+   }
+  },
+  "전기_저항률_TCR_온도없음": {
+   "electrical": {
+    "values": {
+     "resistivity": 2.65e-08,
+     "resistivity_temperature_coefficient": 0.00429
+    }
+   },
+   "thermal": {
+    "values": {
+     "thermal_conductivity": 237.0,
+     "specific_heat": 897.0
+    },
+    "rows": [
+     {
+      "temperature": 300.0,
+      "thermal_conductivity": 237.0
+     },
+     {
+      "temperature": 400.0,
+      "thermal_conductivity": 240.0
+     },
+     {
+      "temperature": 500.0,
+      "thermal_conductivity": 236.0
+     }
+    ]
+   },
+   "elastic": {
+    "values": {
+     "density": 2700.0
+    }
+   },
+   "optical": {
+    "values": {
+     "emissivity": 0.09
+    }
+   }
+  },
+  "전기_한쪽표": {
+   "electrical": {
+    "values": {
+     "relative_permittivity": 2.1,
+     "relative_permittivity_frequency_hz": 1000000.0,
+     "loss_tangent": 0.0002,
+     "relative_permeability": 120.0
+    },
+    "rows": [
+     {
+      "frequency": 1000000.0,
+      "relative_permittivity": 2.1,
+      "relative_permeability": 120.0
+     },
+     {
+      "frequency": 100000000.0,
+      "relative_permittivity": 2.05,
+      "relative_permeability": 80.0
+     }
+    ]
+   },
+   "thermal": {
+    "values": {
+     "thermal_conductivity": 0.25
+    }
+   }
+  },
+  "거절_전기값없음": {
+   "electrical": {
+    "values": {
+     "resistivity_temperature_coefficient": 0.004
+    }
+   },
+   "thermal": {
+    "values": {
+     "thermal_conductivity": 1.0,
+     "specific_heat": 800.0
+    }
+   },
+   "elastic": {
+    "values": {
+     "density": 2000.0
+    }
+   }
+  },
+  "거절_주파수겹침": {
+   "electrical": {
+    "values": {
+     "relative_permittivity": 4.0,
+     "loss_tangent": 0.01
+    },
+    "rows": [
+     {
+      "frequency": 1000000000.0,
+      "relative_permittivity": 4.0,
+      "loss_tangent": 0.01
+     },
+     {
+      "frequency": 1000000000.0,
+      "relative_permittivity": 4.1,
+      "loss_tangent": 0.012
+     }
+    ]
+   }
+  },
+  "광학_표": {
+   "optical": {
+    "values": {
+     "refractive_index": 1.50126,
+     "refractive_index_wavelength_m": 4.358e-07,
+     "abbe_number": 57.5,
+     "emissivity": 0.86
+    },
+    "rows": [
+     {
+      "wavelength": 4.358e-07,
+      "refractive_index": 1.50126
+     },
+     {
+      "wavelength": 4.861e-07,
+      "refractive_index": 1.49654,
+      "extinction_coefficient": 2e-08
+     },
+     {
+      "wavelength": 5.876e-07,
+      "refractive_index": 1.49059,
+      "extinction_coefficient": 1e-08
+     },
+     {
+      "wavelength": 6.563e-07,
+      "refractive_index": 1.48808
+     },
+     {
+      "wavelength": 8.521e-07,
+      "refractive_index": 1.48393
+     },
+     {
+      "wavelength": 1.2e-06,
+      "extinction_coefficient": 3e-07
+     }
+    ]
+   },
+   "thermal": {
+    "values": {
+     "thermal_conductivity": 0.19,
+     "specific_heat": 1420.0,
+     "thermal_expansion": 7e-05
+    }
+   },
+   "elastic": {
+    "values": {
+     "density": 1190.0
+    }
+   }
+  },
+  "광학_값하나": {
+   "optical": {
+    "values": {
+     "refractive_index": 1.5168,
+     "refractive_index_wavelength_m": 5.876e-07,
+     "extinction_coefficient": 1.2e-08,
+     "extinction_coefficient_wavelength_m": 5.876e-07
+    }
+   }
+  },
+  "광학_값하나_k다른파장": {
+   "optical": {
+    "values": {
+     "refractive_index": 1.5168,
+     "refractive_index_wavelength_m": 5.876e-07,
+     "extinction_coefficient": 3e-07,
+     "extinction_coefficient_wavelength_m": 1.2e-06
+    }
+   }
+  },
+  "거절_광학파장없음": {
+   "optical": {
+    "values": {
+     "refractive_index": 1.49
+    }
+   }
+  },
+  "거절_방사율범위": {
+   "thermal": {
+    "values": {
+     "thermal_conductivity": 15.0,
+     "specific_heat": 500.0
+    }
+   },
+   "elastic": {
+    "values": {
+     "density": 8000.0
+    }
+   },
+   "optical": {
+    "values": {
+     "emissivity": 85.0
+    }
    }
   }
  }

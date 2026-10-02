@@ -107,6 +107,8 @@ def build(
     taken: set[str] = set()
     notes: list[str] = []
 
+    # 형식이 단위를 정했으면 그 계 — 파일 이름 · manifest 가 내용과 같은 계를 말한다.
+    system = export.effective_system(target, system)
     for card in ordered:
         rendered = export.render(target, card.deck, system)
         name = _unique(

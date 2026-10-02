@@ -117,6 +117,30 @@ class Test칸_폭:
         assert len(line) == 40, f"20칸 둘이어야 하는데 {len(line)}칸입니다: {line!r}"
         assert line == f"{200e9:>20.9E}{0.3:>20.9E}"
 
+    def test_fit_은_칸을_늘_채우고_칸에_드는_만큼_정확하다(self) -> None:
+        """LS-DYNA 10칸. 폭이 하나라도 넘치면 뒤 칸이 밀리고, 자릿수가 모자라면 고무의 ν 가
+        반올림되어 체적 탄성률이 달라진다(`template.fit` 주석)."""
+        values = [
+            0.49925, 0.49999, 193050.0, 7.9164e-9, 1 / 3, -1.2345678e-5, 0.0, -12.9,
+            2.8e9 / 0.6, 123456789012.0, 1e20,
+        ]  # fmt: skip
+        for value in values:
+            text = template.fit(value, 10)
+            assert len(text) == 10, (value, text)
+            assert abs(float(text) - value) <= 5e-5 * abs(value), (value, text)
+        # 지수가 세 자리인 음수도 칸을 넘지 않는다 — 자릿수를 덜 싣는다.
+        assert len(template.fit(-1.23456789e-100, 10)) == 10
+        # 되읽으면 같은 값이 되는 짧은 표기가 들어가면 그것이다.
+        assert template.fit(0.49925, 10) == "   0.49925"
+        assert template.fit(7.9164e-9, 10) == " 7.9164E-9"
+        assert template.fit(200e9, 10) == "   2.0E+11"
+        spec: dict[str, Any] = {
+            "lines": [{"fields": [{"value": "elastic.density", "format": ["fit", 10]}]}]
+        }
+        assert template.render(spec, deck()).text == "    7850.0\n"
+        with pytest.raises(export.ExportError, match="숫자가 아닙니다"):
+            template.fit(float("nan"), 10)
+
     def test_모르는_형식은_거절한다(self) -> None:
         """**조용히 자유 형식으로 떨어지면 안 된다** — 고정폭 솔버가 말없이 틀린
         덱을 받는다."""

@@ -259,7 +259,7 @@ class Test카드가_되고_덱이_된다:
         )
         assert deck.status_code == 200, deck.text
         text = deck.text
-        assert text.count("*PLASTIC, HARDENING=ISOTROPIC, EXTRAPOLATION=CONSTANT, RATE=") == 3
+        assert text.count("*PLASTIC, HARDENING=ISOTROPIC, RATE=") == 3
         assert "Johnson-Cook summary" in text
 
     def test_다른_묶음으로는_못_만든다(
