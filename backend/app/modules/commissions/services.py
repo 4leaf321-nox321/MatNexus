@@ -7,11 +7,11 @@
 from __future__ import annotations
 
 import uuid
-from collections import defaultdict
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime
 from typing import Any
 
 from sqlalchemy import Select, and_, func, or_, select
+from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import Session
 
 from app.jobs import kinds, queue
@@ -30,10 +30,12 @@ from app.modules.commissions.models import (
     CommissionItem,
 )
 from app.modules.commissions.schemas import CommissionItemIn
+from app.modules.fitting.models import PropertyCard
 from app.modules.materials.models import Material, Sample, Specimen
 from app.modules.tests.models import TestRun, TestType
 from app.modules.workspaces.models import Workspace, WorkspaceMember
 from app.shared import conditions, permissions
+from app.shared.commission_due import due_soon
 from app.shared.errors import AppError, Forbidden, NotFound
 from matcore import cards
 
@@ -169,6 +171,38 @@ def linked_runs(db: Session, item_ids: list[uuid.UUID]) -> dict[uuid.UUID, list[
         assert run.commission_item_id is not None
         out[run.commission_item_id].append(run)
     return out
+
+
+def item_cards(
+    db: Session, linked: dict[uuid.UUID, list[TestRun]]
+) -> dict[uuid.UUID, list[PropertyCard]]:
+    """항목 → **그 항목에 붙은 시험으로 만든 카드**(최근 것부터).
+
+    카드는 쓴 시험을 근거로 든다(`source.test_run_ids`). 같은 재료의 카드라도 이 항목의 시험을
+    안 쓴 것은 이 의뢰의 결과가 아니다 — 재료로만 고르면 의뢰 전에 있던 카드가 「받았다」 로
+    읽힌다.
+    """
+    wanted = sorted({str(run.id) for runs in linked.values() for run in runs})
+    if not wanted:
+        return {}
+    cards = list(
+        db.scalars(
+            select(PropertyCard)
+            .where(PropertyCard.source["test_run_ids"].has_any(postgresql.array(wanted)))
+            .order_by(PropertyCard.created_at.desc())
+        )
+    )
+    made: dict[uuid.UUID, list[PropertyCard]] = {}
+    for item_id, runs in linked.items():
+        mine = {str(run.id) for run in runs}
+        hits = [
+            card
+            for card in cards
+            if mine & {str(one) for one in (card.source or {}).get("test_run_ids") or []}
+        ]
+        if hits:
+            made[item_id] = hits
+    return made
 
 
 def candidate_runs(
@@ -498,66 +532,8 @@ def notify_changed(
     )
 
 
-#: 기한을 며칠 앞두고 말하는가. 하루면 이미 늦고(시료를 받아 시험을 거는 데 하루로는
-#: 모자란다), 일주일이면 매일 오는 잔소리가 되어 사람이 알림 자체를 끈다.
-DUE_SOON_DAYS = 3
-
-#: 기한이 뜻을 잃은 상태. 아직 안 낸 것(`draft`)·끝난 것·반려된 것에 기한을 말하면
-#: **알림이 틀린 말을 하는 것**이고, 한 번 그러면 다음 알림도 안 읽힌다.
-DUE_QUIET_STATUSES = frozenset({"draft", "delivered", "closed", "rejected"})
-
-
-def due_soon(db: Session, *, today: date) -> dict[uuid.UUID, list[Commission]]:
-    """기한이 다가왔거나 지난 의뢰 → **말할 사람별로.**
-
-    받을 사람은 **받는 쪽**이다. 담당자가 정해졌으면 그 사람, 아직이면 받는 부서
-    관리자 전원 — 담당자가 없다는 것은 아무도 안 맡았다는 뜻이고, 그때야말로 기한이
-    조용히 지나간다.
-
-    낸 사람에게는 안 보낸다. 낸 사람이 할 수 있는 일이 없기 때문이다 — 재촉은
-    알림이 아니라 말로 하는 것이고, 그 화면에는 이미 기한이 보인다.
-    """
-    rows = list(
-        db.scalars(
-            select(Commission).where(
-                Commission.due_on.is_not(None),
-                Commission.due_on <= today + timedelta(days=DUE_SOON_DAYS),
-                Commission.status.not_in(tuple(DUE_QUIET_STATUSES)),
-            )
-        )
-    )
-    if not rows:
-        return {}
-
-    # 담당자 없는 건의 받는 부서 관리자 — **한 번에 읽는다**(건마다 물으면 N+1).
-    unassigned = {one.lab_workspace_id for one in rows if one.assignee_id is None}
-    managers: dict[uuid.UUID, list[uuid.UUID]] = defaultdict(list)
-    if unassigned:
-        found = db.execute(
-            select(WorkspaceMember.workspace_id, WorkspaceMember.user_id).where(
-                WorkspaceMember.workspace_id.in_(unassigned),
-                WorkspaceMember.role == "manager",
-            )
-        ).all()
-        for workspace_id, user_id in found:
-            managers[workspace_id].append(user_id)
-
-    made: dict[uuid.UUID, list[Commission]] = defaultdict(list)
-    for one in rows:
-        targets = (
-            [one.assignee_id]
-            if one.assignee_id is not None
-            else managers.get(one.lab_workspace_id, [])
-        )
-        for user_id in targets:
-            made[user_id].append(one)
-    return {user_id: sorted(items, key=_due_key) for user_id, items in made.items()}
-
-
-def _due_key(item: Commission) -> tuple[date, int]:
-    """급한 것부터 — 같은 날이면 번호 순."""
-    assert item.due_on is not None
-    return (item.due_on, item.seq)
+# 「기한이 다가온 의뢰를 누가 봐야 하나」 는 공용 규칙이다(`shared/commission_due`) — 알림
+# (`notify_due_soon`)과 홈의 「기한 임박」 이 같은 줄을 센다(2026-10-03).
 
 
 def due_phrase(item: Commission, *, today: date) -> str:

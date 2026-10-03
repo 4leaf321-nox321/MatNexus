@@ -334,6 +334,9 @@ export function AdoptDialog({
             // input_unit 비움 = 정본 SI — 카탈로그 값이 이미 SI 라 변환이 없다.
             scale: scaleOf.get(item) ?? null,
             source: adoptionSource(values[0]),
+            // **어느 문헌 값에서 왔는지** — 서버가 그 값들과 숫자를 대 보고 그 등급을 근거로 붙인다
+            // (2026-10-03). 안 보내면 출처만으로 등급이 정해져 1등급 논문 값도 3이 됐다.
+            catalog_value_ids: values.map((value) => value.id),
             reference: values
               .map((value) =>
                 pooled.has(value.id) ? pooledReference(value) : adoptionReference(value)

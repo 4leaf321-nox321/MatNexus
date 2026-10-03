@@ -19,14 +19,19 @@ from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.database import get_db
 from app.modules.accounts.models import User
-from app.modules.auth import services
+from app.modules.auth import gateway_token, services
 from app.modules.auth.schemas import (
     ChangePasswordRequest,
+    GatewayRevokeOut,
+    GatewayTokenData,
+    GatewayTokenOut,
     LoginRequest,
     LoginResponse,
+    McpConnectionOut,
     PatCreateRequest,
     PatCreateResponse,
     PatOut,
+    PortalConnectionOut,
     ProfileUpdateRequest,
     UserOut,
 )
@@ -132,6 +137,57 @@ def change_password(
     services.change_password(db, user, payload.current_password, payload.new_password)
     # 모든 세션을 끊었으므로 이 브라우저의 쿠키도 함께 버린다.
     _clear_refresh_cookie(response)
+
+
+# --- HWAX 포털 게이트웨이의 사람별 위임 (ADR 0056) -----------------------------
+#
+# 셋 다 **인증 의존성을 안 지난다** — 자격은 공유 비밀(`X-Heax-Gateway-Secret`)이고, 그 판정은
+# `gateway_token.gate` 가 한다. 왜 SSO 가 아닌지 · 왜 계정을 안 만드는지 · 왜 읽기 전용인지는
+# 그 모듈 머리에 있다.
+
+
+@router.post("/sso", response_model=GatewayTokenOut)
+def gateway_issue(request: Request, db: Session = Depends(get_db)) -> GatewayTokenOut:
+    """HWAX 게이트웨이가 **그 사람의 읽기 전용 토큰**을 받아 간다. 꺼져 있으면 404, 비밀이
+    틀리면 401, 그 사람을 들여보낼 수 없으면 403 — 404 는 「창구 꺼짐」 전용이다."""
+    gateway_token.gate(request)
+    return GatewayTokenOut(data=GatewayTokenData(**gateway_token.issue(db, request)))
+
+
+@router.post("/sso/verify", status_code=204)
+def gateway_verify(request: Request) -> None:
+    """비밀만 확인한다(204 / 401) — 설정이 맞는지 볼 때. 아무것도 만들지 않는다."""
+    gateway_token.gate(request)
+
+
+@router.post("/sso/revoke", response_model=GatewayRevokeOut)
+def gateway_revoke(request: Request, db: Session = Depends(get_db)) -> GatewayRevokeOut:
+    """그 사람 · 그 client 의 위임 토큰을 폐기한다. 폐기할 것이 없어도 200 이다."""
+    gateway_token.gate(request)
+    return GatewayRevokeOut(revoked=gateway_token.revoke(db, request))
+
+
+@router.get("/mcp-connection", response_model=McpConnectionOut)
+def mcp_connection(_user: User = Depends(current_user)) -> McpConnectionOut:
+    """사람에게 줄 MCP 연결 주소 — **서버가 준다**(RA `/api/me/mcp-connection` 과 같은 판단).
+
+    화면이 「지금 보는 호스트:8012」 로 짐작하면, 서버를 옮기거나 앞에 프록시를 둔 날 그 짐작이
+    틀린 주소를 준다 — RA 는 포털 아래로 옮긴 뒤 그 주소로 등록한 사람들의 MCP 가 끊겼다.
+    설정이 없으면 모른다고 답한다(화면이 그때만 짐작하고, 짐작이라고 말한다).
+    """
+    settings = get_settings()
+    direct = settings.mcp_public_url.strip() or None
+    portal_base = settings.hwax_portal_url.strip().rstrip("/")
+    portal = (
+        PortalConnectionOut(
+            gateway_url=f"{portal_base}/mcp-gw/mcp",
+            tokens_url=f"{portal_base}/tokens",
+            auto_token=gateway_token.enabled(),
+        )
+        if portal_base
+        else None
+    )
+    return McpConnectionOut(direct_url=direct, portal=portal)
 
 
 # --- PAT — 장비 파이프라인·스크립트용 자격 증명 (구조결정 9) --------------------

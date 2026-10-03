@@ -159,6 +159,10 @@ PROPERTY_TAXONOMY_IMPORTED = "property_taxonomy.imported"
 #: 사본)을 켜는 것은 코드판을 사용 중단한 것과 짝이라 그 기록과 나란히 읽힌다.
 EXPORT_PROFILE_ACTIVATED = "export_profile.activated"
 EXPORT_PROFILE_DEACTIVATED = "export_profile.deactivated"
+#: HWAX 포털 게이트웨이가 공유 비밀로 **그 사람의 읽기 전용 토큰**을 받아 갔다(ADR 0056).
+#: 사람이 화면에서 발급한 것과 갈라야 한다 — 「이 토큰 누가 만들었어」 에 「포털이, 이 IP
+#: 에서, 이 사람 명의로」 가 답이어야 하고, 직전 토큰을 몇 개 폐기했는지도 여기 남는다.
+PAT_ISSUED_FOR_GATEWAY = "pat.issued_for_gateway"
 
 
 def diff(before: dict[str, Any], after: dict[str, Any]) -> dict[str, Any]:

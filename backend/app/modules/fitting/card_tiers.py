@@ -75,8 +75,11 @@ def value_tiers(card: PropertyCard) -> dict[str, int]:
                 continue
             source = str(values.get(f"{key}_source", ""))
             if source.startswith("declared:"):
-                where, approved = tiers.split_declared(source.removeprefix("declared:"))
-                out[f"{block_key}.{key}"] = tiers.declared_tier(where, approved=approved)
+                mark = source.removeprefix("declared:")
+                where, approved = tiers.split_declared(mark)
+                out[f"{block_key}.{key}"] = tiers.declared_tier(
+                    where, approved=approved, catalog_tier=tiers.catalog_tier_in(mark)
+                )
             elif source in _MEASURED_SOURCES:
                 out[f"{block_key}.{key}"] = tiers.measured_tier(count)
             elif source in _SOURCE_TIERS:

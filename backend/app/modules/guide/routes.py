@@ -33,7 +33,7 @@ from app.modules.guide.schemas import (
     SectionOut,
     SectionUpdate,
 )
-from app.shared import filestore
+from app.shared import filestore, semantic
 from app.shared.auth import current_user
 from app.shared.errors import AppError
 
@@ -210,6 +210,10 @@ def delete_document(
     services.require_reviewer(db, user)
     row = services.get_document(db, key)
     row.deleted_at = services._now()
+    # 문서를 지우면 그 절들도 검색에서 빠져야 한다 — 남은 조각을 걷는다.
+    semantic.queue_guide_sections(
+        db, db.scalars(select(GuideSection.id).where(GuideSection.document_id == row.id))
+    )
     db.commit()
     return Response(status_code=204)
 
@@ -235,6 +239,9 @@ def create_section(
         position=body.position,
         body=body.body,
     )
+    # **뜻으로 찾히게 곧바로**(2026-10-03) — 하루 한 번의 전체 색인을 기다리지 않는다.
+    db.flush()
+    semantic.queue_guide_sections(db, [row.id])
     db.commit()
     return _section_out(db, row)
 
@@ -257,6 +264,7 @@ def update_section(
     row = services.get_section(db, section_id)
     for field, value in body.model_dump(exclude_unset=True).items():
         setattr(row, field, value)
+    semantic.queue_guide_sections(db, [row.id])
     db.commit()
     return _section_out(db, row)
 
@@ -268,6 +276,8 @@ def delete_section(
     services.require_reviewer(db, user)
     row = services.get_section(db, section_id)
     row.deleted_at = services._now()
+    # 지운 절의 조각을 걷는다 — 남으면 「없는 절」 이 뜻으로 걸린다.
+    semantic.queue_guide_sections(db, [row.id])
     db.commit()
     return Response(status_code=204)
 
@@ -287,6 +297,9 @@ def submit_revision(
     row = services.submit_revision(
         db, section, user=user, body=body.body, note=body.note, publish=body.publish
     )
+    if body.publish:
+        # 검토자가 바로 승인했으면 절 본문이 바뀌었다.
+        semantic.queue_guide_sections(db, [section.id])
     db.commit()
     return _revision_out(db, [row])[0]
 
@@ -334,6 +347,7 @@ def approve_revision(
 ) -> RevisionOut:
     row = services.get_revision(db, revision_id)
     services.approve(db, row, user=user, note=body.note)
+    semantic.queue_guide_sections(db, [row.section_id])
     db.commit()
     return _revision_out(db, [row])[0]
 

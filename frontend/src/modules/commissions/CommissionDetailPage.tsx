@@ -11,7 +11,7 @@
  */
 
 import { useState } from 'react'
-import { ArrowLeft, Link2, Pencil, Trash2, Unlink, Upload } from 'lucide-react'
+import { ArrowLeft, Files, Link2, List, Pencil, Plus, Trash2, Unlink, Upload } from 'lucide-react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 
 import { Progress, StatusBadge } from '@/modules/commissions/CommissionsPage'
@@ -25,9 +25,11 @@ import {
 import type { ItemDraft } from '@/modules/commissions/ItemsEditor'
 import { DeleteBody } from '@/modules/commissions/DeleteBody'
 import { SamplePicker } from '@/modules/commissions/SamplePicker'
+import { SpecimensForItemDialog } from '@/modules/commissions/SpecimensForItemDialog'
+import { presetConditions } from '@/modules/commissions/itemConditions'
 import { STATUS_TONES, commissionsApi } from '@/modules/commissions/api'
 import type { CommissionDetail, CommissionEvent, CommissionItem } from '@/modules/commissions/api'
-import { fittingApi } from '@/modules/fitting/api'
+import { STATUS_LABELS as CARD_STATUS_LABELS, fittingApi } from '@/modules/fitting/api'
 import type { BlockSpec } from '@/modules/fitting/api'
 import type { Sample } from '@/modules/materials/api'
 import { UploadDialog } from '@/modules/tests/UploadDialog'
@@ -125,6 +127,16 @@ export default function CommissionDetailPage() {
               {detail.created_by ?? '알 수 없음'} · <Stamp at={detail.created_at} /> ·{' '}
               {detail.requester_workspace.name} → {detail.lab_workspace.name}
               {detail.due_on && <> · 기한 {detail.due_on}</>}
+              {/* **이 의뢰의 시험을 목록에서**(2026-10-03) — 거르기 · 일괄 처리는 시험 목록에서
+                  된다. 항목 표는 항목마다 시험을 보이지만 거기서는 한꺼번에 못 다룬다. */}
+              {detail.items.some((one) => one.runs.length > 0) && (
+                <>
+                  {' · '}
+                  <Link to={`/tests?commission=${detail.id}`} className="inline-flex items-center gap-1 hover:underline">
+                    <List className="size-3.5" />이 의뢰의 시험 목록
+                  </Link>
+                </>
+              )}
             </p>
           </header>
 
@@ -287,23 +299,6 @@ export default function CommissionDetailPage() {
 }
 
 /** 조건을 사람 단위로 — 입력 단위(`input_units`)가 있으면 그것으로, 없으면 정의의 표시 단위로. */
-/** 항목의 조건(SI)을 등록 창의 칸(표시 단위 글자)으로. 단위 없는 칸은 그대로. */
-function presetConditions(
-  item: CommissionItem,
-  testType: TestType | undefined
-): Record<string, string> {
-  const out: Record<string, string> = {}
-  for (const field of testType?.conditions ?? []) {
-    const raw = item.conditions[field.key]
-    if (raw === undefined || raw === null || raw === '') continue
-    out[field.key] =
-      typeof raw === 'number' && field.si_unit
-        ? String(Number(toDisplay(raw, field.si_unit, field.dimension).toPrecision(6)))
-        : String(raw)
-  }
-  return out
-}
-
 function conditionText(item: CommissionItem, testType: TestType | undefined): string {
   const parts: string[] = []
   for (const field of testType?.conditions ?? []) {
@@ -350,7 +345,14 @@ function ItemCard({
   const [picked, setPicked] = useState('')
   const [pickedType, setPickedType] = useState('')
   const [uploading, setUploading] = useState(false)
+  const [making, setMaking] = useState(false)
+  /** 방금 만든 시편 수 — 등록 창에서 고르면 된다고 말한다. */
+  const [made, setMade] = useState<number | null>(null)
   const candidates = item.candidates ?? []
+  // 받을 것이 카드 블록인데 그 블록이 든 카드가 아직 없다 — 채택만 보고는 모른다.
+  const wantsCard = Boolean(item.deliverable) && item.deliverable !== 'curves'
+  const cards = item.cards ?? []
+  const cardReady = cards.some((one) => one.has_deliverable)
   const conditions = conditionText(item, testType)
   const done = item.done >= item.count
 
@@ -440,6 +442,29 @@ function ItemCard({
               ))}
             </ul>
           )}
+          {/* **카드가 만들어졌나**(2026-10-03, 2단계의 「카드 링크」). 받을 것이 카드 블록이면
+              채택만으로는 끝이 아니다 — 이 항목의 시험으로 만든 카드를 잇고, 받을 블록이 든
+              카드가 아직이면 그렇다고 말한다. */}
+          {cards.length > 0 && (
+            <ul className="mt-1 space-y-1 text-sm" aria-label={`${item.position + 1}번 항목의 카드`}>
+              {cards.map((card) => (
+                <li key={card.id} className="flex flex-wrap items-center gap-2">
+                  <Link to={`/materials/${card.material_id}?tab=cards`} className="hover:underline">
+                    카드 {card.label}
+                  </Link>
+                  <Badge variant="outline">{CARD_STATUS_LABELS[card.status] ?? card.status}</Badge>
+                  {wantsCard && !card.has_deliverable && (
+                    <span className="text-muted-foreground text-xs">받을 블록은 이 카드에 없음</span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+          {wantsCard && item.done > 0 && !cardReady && (
+            <p className="text-muted-foreground mt-1 text-xs">
+              받을 카드가 아직 없습니다 — 채택한 결과로 카드를 만들면 여기 잇힙니다.
+            </p>
+          )}
           {detail.can_link && item.test_type_key && detail.sample && (
             <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
               <select
@@ -483,6 +508,29 @@ function ItemCard({
                 onDone={() => setUploading(false)}
                 onUploaded={(run) => onLink(run.id)}
               />
+              {/* **방향 · 수량대로 한꺼번에**(2026-10-03) — 전에는 등록 창의 「새 시편」 으로
+                  하나씩 만들었다. */}
+              <Button size="sm" variant="outline" disabled={busy} onClick={() => setMaking(true)}>
+                <Plus className="size-3.5" />
+                시편 만들기
+              </Button>
+              <SpecimensForItemDialog
+                open={making}
+                sampleId={detail.sample.id}
+                item={item}
+                onClose={() => setMaking(false)}
+                onMade={setMade}
+              />
+              {/* **파일이 여럿이면 일괄 등록으로** — 시료 · 종류 · 조건이 채워진 채 열리고, 올린
+                  시험은 이 항목에 붙는다. */}
+              <Button size="sm" variant="outline" asChild>
+                <Link
+                  to={`/tests/upload?material=${detail.sample.material_id}&sample=${detail.sample.id}&commission=${detail.id}&item=${item.id}`}
+                >
+                  <Files className="size-3.5" />
+                  여러 파일 한꺼번에
+                </Link>
+              </Button>
               {detail.sample && (
                 <Link
                   to={`/materials/${detail.sample.material_id}`}
@@ -492,6 +540,11 @@ function ItemCard({
                 </Link>
               )}
             </div>
+          )}
+          {made !== null && (
+            <p className="mt-1 text-sm" role="status">
+              시편 {made}개를 만들었습니다 — 「시험 등록」 에서 고르세요.
+            </p>
           )}
         </div>
       )}

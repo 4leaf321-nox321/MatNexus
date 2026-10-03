@@ -57,12 +57,27 @@ const DECLARED_LABELS: Record<string, string> = {
  */
 const APPROVED_MARK = '+approved'
 
+/**
+ * 문헌 카탈로그에서 받아 온 선언 값의 그 문헌 등급 — `declared:literature+catalog1`(2026-10-03).
+ * 서버 `tiers.CATALOG_MARK` 와 같은 낱말이고, 승인 꼬리는 그 뒤에 붙는다.
+ */
+const CATALOG_MARK = /\+catalog([1-4])$/
+
 function originOf(source: string): string {
   if (source.startsWith('declared:')) {
-    const token = source.slice('declared:'.length)
+    let token = source.slice('declared:'.length)
     const approved = token.endsWith(APPROVED_MARK)
-    const where = DECLARED_LABELS[approved ? token.slice(0, -APPROVED_MARK.length) : token]
-    return ['적은 값', where, approved ? '승인' : null].filter(Boolean).join(' · ')
+    if (approved) token = token.slice(0, -APPROVED_MARK.length)
+    const fetched = CATALOG_MARK.exec(token)
+    if (fetched) token = token.slice(0, fetched.index)
+    return [
+      '적은 값',
+      DECLARED_LABELS[token],
+      fetched ? `문헌 ${fetched[1]}등급` : null,
+      approved ? '승인' : null,
+    ]
+      .filter(Boolean)
+      .join(' · ')
   }
   return SOURCE_LABELS[source] ?? ''
 }

@@ -92,6 +92,8 @@ export function OverviewPanel({ data, loading }: { data: Overview | null; loadin
         data.card_draft > 0 ||
         data.inbox_waiting > 0 ||
         data.commissions_received_waiting > 0 ||
+        data.commissions_received_testing > 0 ||
+        data.commissions_due_soon > 0 ||
         data.commissions_mine_open > 0) && (
         <div className="flex flex-wrap items-center gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm dark:border-amber-900 dark:bg-amber-950/40">
           <AlertTriangle className="size-4 shrink-0 text-amber-600 dark:text-amber-500" />
@@ -116,6 +118,18 @@ export function OverviewPanel({ data, loading }: { data: Overview | null; loadin
           {data.commissions_received_waiting > 0 && (
             <Pending to="/commissions?scope=received&status=submitted">
               받은 의뢰 접수 대기 {data.commissions_received_waiting}
+            </Pending>
+          )}
+          {/* **받는 쪽의 「시험 중 · 기한 임박」**(2026-10-03). 기한 임박은 하루 한 번 오는
+              알림과 같은 규칙으로 센다 — 내가 담당이거나, 담당이 없으면 받는 부서 관리자. */}
+          {data.commissions_received_testing > 0 && (
+            <Pending to="/commissions?scope=received&status=in_progress">
+              받은 의뢰 시험 중 {data.commissions_received_testing}
+            </Pending>
+          )}
+          {data.commissions_due_soon > 0 && (
+            <Pending to="/commissions?scope=received">
+              의뢰 기한 임박 {data.commissions_due_soon}
             </Pending>
           )}
           {data.commissions_mine_open > 0 && (

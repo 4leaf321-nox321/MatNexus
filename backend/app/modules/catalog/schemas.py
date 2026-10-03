@@ -17,7 +17,21 @@ class CatalogSummaryOut(BaseModel):
     subsystems: dict[str, int]
     categories: dict[str, int]
     domains: dict[str, int]
+    """분야마다 **값** 수."""
+    materials_by_domain: dict[str, int] = Field(default_factory=dict)
+    """분야마다 그 분야의 값이 있는 **재료** 수 — 목록의 분야 거르개가 이것을 센다."""
+    manufacturers: dict[str, int] = Field(default_factory=dict)
+    """제조사마다 재료 수. 대소문자만 다른 표기는 하나로 센다."""
     tiers: dict[int, int]
+
+
+class CatalogMatchedOut(BaseModel):
+    """값 범위에 걸린 값 — 몇 건이고 어디서 어디까지인가. 물은 단위로 싣는다."""
+
+    count: int
+    low: float
+    high: float
+    unit: str
 
 
 class CatalogMaterialOut(BaseModel):
@@ -33,6 +47,38 @@ class CatalogMaterialOut(BaseModel):
     material_class: str | None
     grade: str | None
     value_count: int = 0
+    matched: CatalogMatchedOut | None = None
+    """값 범위로 걸렀을 때만 — 이 재료에서 걸린 값들."""
+
+
+class SyntheticInputOut(BaseModel):
+    item: str
+    """사내 물성 항목 이름 — 덱 각주와 같은 이름."""
+    value_si: float
+    reference: str
+    si_unit: str = ""
+    """그 물성 정의의 단위 — 강도는 Pa, 연신율은 1(변형률)."""
+
+
+class SyntheticCurvePreviewOut(BaseModel):
+    """문헌 재료의 **합성** σ-ε 곡선 — 실측이 아니다. 덱의 「곡선 합성」 과 같은 계산이다."""
+
+    ok: bool
+    why: str | None = None
+    """못 지었으면 그 이유 — 덱이 하는 말과 같다."""
+    model: str | None = None
+    note: str | None = None
+    """어떤 근사이고 무엇을 과대 · 과소평가하는지."""
+    inconsistent: bool = False
+    youngs_modulus: float | None = None
+    strain: list[float] = Field(default_factory=list)
+    """공칭 변형률."""
+    stress: list[float] = Field(default_factory=list)
+    """공칭 응력(Pa)."""
+    table_points: int = 0
+    """덱에 실릴 소성 표의 점 수 — 0 이면 소성 표가 안 나오는 재료다(취성)."""
+    inputs: list[SyntheticInputOut] = Field(default_factory=list)
+    notes: list[str] = Field(default_factory=list)
 
 
 class CatalogMaterialPage(BaseModel):

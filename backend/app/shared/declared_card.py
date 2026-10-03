@@ -102,7 +102,11 @@ def declared(material: Material, item: str) -> Inherited:
     )
     return Inherited(
         float(points[0]["value_si"]),
-        tiers.declared_origin(where, approved=declared_approval.of(row) is not None),
+        tiers.declared_origin(
+            where,
+            approved=declared_approval.of(row) is not None,
+            catalog_tier=declared_approval.catalog_tier(row),
+        ),
         f"사람이 적은 값입니다 — {reference or '근거 문서 없음'}.{spread}",
     )
 
@@ -349,10 +353,14 @@ def synth_items() -> list[str]:
     return [property_names.builtin_item(key) or "" for key in SYNTH_KEYS]
 
 
-def synthetic_plastic(
+def synthetic_curve(
     material: Material, elastic: dict[str, Any]
-) -> tuple[list[dict[str, Any]], list[str]] | str:
-    """선언 스칼라로 소성 표를 짓는다 — 못 지으면 **이유 문자열**을 돌려준다.
+) -> tuple[synth.SyntheticCurve, dict[str, Inherited]] | str:
+    """선언 스칼라로 합성 곡선을 짓는다 — 못 지으면 **이유 문자열**을 돌려준다.
+
+    소성 표(`synthetic_plastic`)와 문헌 상세의 곡선 미리보기(`litdeck.synthetic_preview`)가
+    이것 하나를 부른다 — 미리 본 곡선과 덱에 실린 표가 다른 계산에서 나오면 미리보기가
+    거짓말을 한다(2026-10-03).
 
     E 는 elastic 블록에 이미 선 값(선언 탄성계수)을 그대로 쓴다 — 합성이 다른
     E 를 쓰면 카드 안에서 탄성과 소성이 서로 다른 재료가 된다.
@@ -371,6 +379,17 @@ def synthetic_plastic(
     )
     if curve is None:
         return "항복강도(또는 인장강도)가 없습니다 — 지어낼 근거가 없습니다."
+    return curve, scalars
+
+
+def synthetic_plastic(
+    material: Material, elastic: dict[str, Any]
+) -> tuple[list[dict[str, Any]], list[str]] | str:
+    """선언 스칼라로 소성 표를 짓는다 — 못 지으면 **이유 문자열**을 돌려준다."""
+    made = synthetic_curve(material, elastic)
+    if isinstance(made, str):
+        return made
+    curve, scalars = made
     if not curve.table_rows:
         return f"소성 표가 안 나오는 재료입니다({curve.model})."
     # 첫 줄에 모델, 둘째 줄에 주의 — 둘 다 "합성" 으로 시작해야 덱 각주까지
@@ -379,8 +398,7 @@ def synthetic_plastic(
         f"합성 소성 표 — 실측이 아니다. 모델: {curve.model}",
         f"합성 주의 — {curve.note}",
     ]
-    for item in items:
-        one = scalars[item]
+    for item, one in scalars.items():
         if one.value is None:
             continue
         row = declared_row(material, item) or {}

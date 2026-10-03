@@ -253,10 +253,21 @@ def _origin(source: str) -> str:
     핸드북 이름보다 먼저 알아야 할 것이다.
     """
     if source.startswith("declared:"):
-        code, approved = tiers.split_declared(source.removeprefix("declared:"))
+        mark = source.removeprefix("declared:")
+        code, approved = tiers.split_declared(mark)
         where = declared.SOURCES.get(code)
-        # 승인은 「누가 근거를 확인했나」 라 출처 곁에 함께 적는다(ADR 0049).
-        parts = [part for part in (where, "자료 관리자 승인" if approved else None) if part]
+        fetched = tiers.catalog_tier_in(mark)
+        # 승인은 「누가 근거를 확인했나」 라 출처 곁에 함께 적는다(ADR 0049). 문헌 카탈로그에서
+        # 받아 온 값이면 그 문헌 값의 등급도 — 덱만 받은 사람이 숫자의 무게를 되짚는 자리다.
+        parts = [
+            part
+            for part in (
+                where,
+                f"문헌 카탈로그 {fetched}등급 값" if fetched else None,
+                "자료 관리자 승인" if approved else None,
+            )
+            if part
+        ]
         return f"사람이 적은 값 ({' · '.join(parts)})" if parts else "사람이 적은 값"
     return SOURCE_NOTES.get(source, "")
 

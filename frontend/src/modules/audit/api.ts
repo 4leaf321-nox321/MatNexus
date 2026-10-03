@@ -108,6 +108,7 @@ export const ACTION_LABELS: Record<string, string> = {
   'pipelines.inbox.discard': '수신함 파일 버림',
   'workspace.merged': '부서 병합',
   'auth.login_throttled': '로그인 지연(연속 실패)',
+  'pat.issued_for_gateway': 'HWAX 포털이 토큰을 받아 감',
   // ADR 0035 — 보기는 모두에게, 고치기는 사람에게.
   'account.data_manager_changed': '자료 관리자 권한 변경',
   'ownership.changed': '등록자·편집 부서 변경',

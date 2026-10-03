@@ -41,11 +41,13 @@ import {
   isReference,
   isUsed,
   processingApi,
+  referenceFor,
   referenceLabel,
   referencesFor,
 } from '@/modules/processing/api'
 import type {
   ProcessingPreview,
+  ProcessingResult,
   ProcessingScalar,
   ProcessingStep,
   RecipeStep,
@@ -205,7 +207,14 @@ export function ProcessingPanel({
   const [result, setResult] = useState<ProcessingPreview | null>(null)
   const [error, setError] = useState<Error | null>(null)
   const [busy, setBusy] = useState(false)
-  const [saved, setSaved] = useState<string | null>(null)
+  /** 방금 저장한 결과. 있으면 단추가 「저장됨」 으로 잠긴다 — 고치거나 다시 돌리면 풀린다. */
+  const [saved, setSaved] = useState<ProcessingResult | null>(null)
+  /**
+   * **불러온 레시피**(2026-10-03, 이슈 #2). 저장할 때 그 키를 보낸다 — 전에는 안 보내서
+   * 결과가 어느 레시피로 나왔는지가 비었다. 단계를 고쳤는지는 서버가 견준다: 그대로면
+   * 그 레시피의 결과로 잇고, 고쳤으면 이름에 「(단계 고침)」 만 남긴다.
+   */
+  const [fromRecipe, setFromRecipe] = useState<{ key: string; label: string } | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [axes, setAxes] = useState<{ x: string; y: string }>({
     x: 'strain_engineering',
@@ -320,6 +329,7 @@ export function ProcessingPanel({
     )
     setResult(null)
     setSaved(null)
+    setFromRecipe(null)
   }, [testTypeKey, curveKey, available.length, byId])
 
   /**
@@ -383,8 +393,12 @@ export function ProcessingPanel({
         test_run_id: testRunId,
         source_curve_key: curveKey,
         steps,
+        recipe_key: fromRecipe?.key ?? null,
       })
-      setSaved(stored.id)
+      setSaved(stored)
+      // **저장 확인이 가려지지 않게** — 「불러왔습니다」 같은 앞 안내가 남아 있으면 그것이
+      // 저장 확인 자리를 차지해, 저장이 됐는지 몰라 한 번 더 눌렀다(이슈 #2, 같은 결과 둘).
+      setNotice(null)
     } catch (caught) {
       setError(caught instanceof Error ? caught : new Error('저장하지 못했습니다.'))
     } finally {
@@ -455,6 +469,30 @@ export function ProcessingPanel({
    * 자리였다. 이제 계산이 선언한 `makes_columns` 를 접어서 계산한다.
    */
   const columnsFor = (index: number) => columnsAt(steps, index, sourceColumns, byId)
+
+  /**
+   * 이 단계 **앞의 단계들이 내는 값** — 숫자 칸에 「자동 연결」 로 잇는다(2026-10-03, 이슈 #2).
+   *
+   * 서버는 `@proof_strain` 같은 표기를 어느 칸에서든 앞 단계의 값으로 바꾼다. 그런데 화면은
+   * 시편 치수만 후보로 내서, 「구간 자르기 시작을 항복 변형률로」 를 화면에서 고를 길이 없었다 —
+   * `@proof_strain` 을 손으로 치면 숫자 칸이라 이전 숫자로 되돌아갔다. 지금 값은 돌려 본
+   * 결과에서 읽는다(돌려 보기 전에는 모른다).
+   */
+  const madeBefore = (index: number): LinkCandidate[] =>
+    steps.slice(0, index).flatMap((one) => {
+      const plugin = byId.get(one.plugin)
+      return (plugin?.makes_values ?? []).map((item) => {
+        const now = result?.scalars.find((scalar) => scalar.key === item.key)
+        return {
+          key: item.key,
+          label: item.label,
+          si_unit: item.si_unit,
+          dimension: now?.dimension ?? null,
+          value: now ? now.value : null,
+          madeBy: plugin?.label ?? one.plugin,
+        }
+      })
+    })
 
   /** 지금 구성에서 못 도는 단계와 그 이유. **막지 않고 말한다.** */
   const stepBlockers = useMemo(
@@ -597,6 +635,7 @@ export function ProcessingPanel({
               ariaLabel="레시피 불러오기"
               onSelect={(recipe) => {
                 setSteps((recipe.steps as unknown as RecipeStep[]).map((s) => ({ ...s })))
+                setFromRecipe({ key: recipe.key, label: recipe.label })
                 setResult(null)
                 setSaved(null)
                 setNotice(`'${recipe.label}' 을 불러왔습니다. 돌려 보고 저장하세요.`)
@@ -614,11 +653,19 @@ export function ProcessingPanel({
           <Button
             size="sm"
             onClick={save}
-            disabled={busy || !result || Boolean(result.problem)}
-            title={result?.problem ? '멈춘 자리를 고친 뒤 저장할 수 있습니다.' : undefined}
+            // **저장했으면 잠근다** — 같은 단계로 한 번 더 누르면 같은 결과가 둘 생긴다(이슈 #2).
+            // 단계를 고치거나 다시 돌리면 풀린다.
+            disabled={busy || !result || Boolean(result.problem) || saved !== null}
+            title={
+              result?.problem
+                ? '멈춘 자리를 고친 뒤 저장할 수 있습니다.'
+                : saved
+                  ? '이 단계의 결과는 저장했습니다 — 단계를 고치거나 다시 돌리면 다시 저장할 수 있습니다.'
+                  : undefined
+            }
           >
             <Save className="size-3.5" />
-            결과 저장
+            {saved ? '저장됨' : '결과 저장'}
           </Button>
           {/* **레시피가 없으면 배치를 걸 수 없다.** 한 건으로 단계를 맞춘 뒤
               나머지 20건에 같은 것을 거는 것이 실제 작업 흐름인데, 그 '같은 것'
@@ -823,13 +870,26 @@ export function ProcessingPanel({
       )}
 
       {(saved || notice) && (
-        <div className="mb-3 rounded-md border border-emerald-500/40 bg-emerald-500/5 p-3 text-sm">
-          {notice ?? (
+        <div
+          className="mb-3 rounded-md border border-emerald-500/40 bg-emerald-500/5 p-3 text-sm"
+          role="status"
+        >
+          {/* **저장 확인이 먼저다.** 앞 안내가 이 자리를 차지하면 저장이 됐는지 몰라 한 번
+              더 누른다(이슈 #2 — 같은 결과가 둘 생겼다). */}
+          {saved ? (
             <>
-              결과를 저장했습니다. <b>저장된 결과는 바뀌지 않습니다</b> — 단계를 고쳐
-              다시 저장하면 새 결과가 생기고, 예전 결과는 그때의 단계를 그대로 갖고
-              있습니다. <b>결과</b> 탭에서 채택하면 이 시험의 물성이 됩니다.
+              결과를 저장했습니다
+              {saved.recipe_key
+                ? ` — 레시피 「${saved.recipe_label}」 그대로입니다`
+                : saved.recipe_label
+                  ? ` — 「${saved.recipe_label}」: 불러온 레시피에서 단계를 고쳐, 그 레시피의 결과로는 세지 않습니다`
+                  : ''}
+              . <b>저장된 결과는 바뀌지 않습니다</b> — 단계를 고쳐 다시 저장하면 새 결과가
+              생기고, 예전 결과는 그때의 단계를 그대로 갖고 있습니다. <b>결과</b> 탭에서
+              채택하면 이 시험의 물성이 됩니다.
             </>
+          ) : (
+            notice
           )}
         </div>
       )}
@@ -1075,6 +1135,7 @@ export function ProcessingPanel({
                           columns={columnsFor(index)}
                           columnInfo={columnInfo}
                           inputs={inputs}
+                          made={madeBefore(index)}
                           catalog={byId}
                           options={step.options}
                           /* **안 쓰는 칸은 잠근다.** 탄성계수를 구간으로 재는데
@@ -1524,12 +1585,26 @@ function StepCarry({ io }: { io: StepIO }) {
   )
 }
 
+/** 숫자 칸에 이을 수 있는 값 하나 — 시편이 주는 것이거나 앞 단계가 내는 것. */
+interface LinkCandidate {
+  key: string
+  label: string
+  si_unit: string
+  dimension?: string | null
+  /** 지금 값. 앞 단계가 내는 것은 돌려 보기 전에는 모른다. */
+  value: number | null
+  source?: string | null
+  /** 앞 단계가 내는 값이면 그 단계 이름. */
+  madeBy?: string
+}
+
 function ParamField({
   param,
   value,
   columns,
   columnInfo,
   inputs,
+  made = [],
   catalog,
   options,
   disabled = false,
@@ -1551,6 +1626,8 @@ function ParamField({
    * 그것이 몇인지 못 보여 주고, 몇인지 모르면 고칠지 말지를 못 정한다.
    */
   inputs: Map<string, ProcessingScalar>
+  /** 이 단계 앞의 단계들이 내는 값 — 단위가 맞으면 「자동 연결」 후보에 든다. */
+  made?: LinkCandidate[]
   disabled?: boolean
   onChange: (value: unknown) => void
 }) {
@@ -1689,11 +1766,32 @@ function ParamField({
    * 하나뿐이면 단추 하나, 여럿이면 목록을 낸다 — 고를 것이 없는데 목록을 내면
    * 누르는 수만 는다.
    */
-  const candidates = referencesFor(param, inputs)
+  const best = referenceFor(param, inputs)
+  const fromInputs: LinkCandidate[] = referencesFor(param, inputs)
+  /**
+   * 앞 단계가 내는 값은 **단위가 맞을 때만** 후보다. 단위가 칸에 적혀 있지 않으면(구간 자르기의
+   * 시작 · 끝) 그 칸이 따르는 열의 단위로 견준다 — 변형률 열이면 무차원 값만 든다.
+   */
+  const unitHere = param.unit
+    ? param.unit
+    : param.unit_from
+      ? columnInfo.get(String(options[param.unit_from] ?? ''))?.si_unit
+      : undefined
+  const fromSteps =
+    unitHere === undefined
+      ? []
+      : made.filter(
+          (one) => one.si_unit === unitHere && !fromInputs.some((item) => item.key === one.key)
+        )
+  const candidates: LinkCandidate[] = [...fromInputs, ...fromSteps]
 
   /** 이어 붙인 값이 지금 얼마인가. **몇인지 모르면 고칠지 말지를 못 정한다.** */
-  const linked = referenced ? (inputs.get(String(value).slice(1)) ?? null) : null
-  const linkedShown = linked
+  const linkedName = referenced ? String(value).slice(1) : ''
+  const linked: LinkCandidate | null = referenced
+    ? (inputs.get(linkedName) ?? made.find((one) => one.key === linkedName) ?? null)
+    : null
+  const linkedShown =
+    linked && linked.value !== null
     ? `${Number(toDisplay(linked.value, linked.si_unit, linked.dimension).toPrecision(6))}${
         display(linked.si_unit, linked.dimension).unit
           ? ` ${display(linked.si_unit, linked.dimension).unit}`
@@ -1743,7 +1841,9 @@ function ParamField({
               variant="outline"
               className="ml-auto h-7 shrink-0 text-xs"
               title="지금 값을 그대로 옮겨 담고 자동 연결을 끊습니다. 그 뒤로는 곡선을 다시 처리해도 이 숫자가 그대로 남습니다."
-              onClick={() => onChange(linked ? linked.value : (param.default ?? null))}
+              onClick={() =>
+                onChange(linked && linked.value !== null ? linked.value : (param.default ?? null))
+              }
             >
               숫자로 고정
             </Button>
@@ -1775,7 +1875,11 @@ function ParamField({
                 size="sm"
                 variant="ghost"
                 className="h-7 shrink-0 text-xs"
-                title={`${candidates[0].label} 을 돌릴 때마다 다시 가져옵니다. 손으로 옮겨 적으면 원본이 바뀌었을 때 어긋납니다.`}
+                title={
+                  candidates[0].madeBy
+                    ? `앞 단계 「${candidates[0].madeBy}」 가 내는 ${candidates[0].label} 을 돌릴 때마다 가져옵니다.`
+                    : `${candidates[0].label} 을 돌릴 때마다 다시 가져옵니다. 손으로 옮겨 적으면 원본이 바뀌었을 때 어긋납니다.`
+                }
                 onClick={() => onChange(`@${candidates[0].key}`)}
               >
                 {/* **자동이라는 것이 이름에 있어야 한다.** 「쓰기」만으로는
@@ -1794,21 +1898,29 @@ function ParamField({
                   <SelectValue placeholder="자동 연결" />
                 </SelectTrigger>
                 <SelectContent>
-                  {candidates.map((one, at) => (
+                  {candidates.map((one) => (
                     <SelectItem key={one.key} value={one.key}>
                       <span className="flex items-center gap-2">
                         {one.label}
                         <span className="text-muted-foreground text-xs">
-                          {Number(
-                            toDisplay(one.value, one.si_unit, one.dimension).toPrecision(6)
-                          )}
-                          {display(one.si_unit, one.dimension).unit
-                            ? ` ${display(one.si_unit, one.dimension).unit}`
-                            : ''}
+                          {one.value === null
+                            ? '돌려 보면 정해짐'
+                            : `${Number(
+                                toDisplay(one.value, one.si_unit, one.dimension).toPrecision(6)
+                              )}${
+                                display(one.si_unit, one.dimension).unit
+                                  ? ` ${display(one.si_unit, one.dimension).unit}`
+                                  : ''
+                              }`}
                         </span>
                         {/* **무엇이 권장인지 순서만으로는 안 보인다.** */}
-                        {at === 0 && (
+                        {one.key === best?.key && (
                           <span className="text-muted-foreground text-xs">· 이름이 맞음</span>
+                        )}
+                        {one.madeBy && (
+                          <span className="text-muted-foreground text-xs">
+                            · 「{one.madeBy}」 이 냄
+                          </span>
                         )}
                       </span>
                     </SelectItem>

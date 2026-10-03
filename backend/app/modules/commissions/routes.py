@@ -35,6 +35,7 @@ from app.modules.commissions.schemas import (
     CommissionOut,
     CommissionStatusOut,
     CommissionUpdateRequest,
+    ItemCardOut,
     LinkedRunOut,
     LinkRunRequest,
     NamedOut,
@@ -165,6 +166,7 @@ def _detail(db: Session, item: Commission, viewer: User) -> CommissionDetailOut:
         else {}
     )
     linked = services.linked_runs(db, [one.id for one in rows])
+    cards = services.item_cards(db, linked)
     lab_side = services.is_lab_side(side, viewer)
     candidates = services.candidate_runs(db, item, rows) if lab_side else {}
     every_run = [run for runs in linked.values() for run in runs] + [
@@ -213,6 +215,18 @@ def _detail(db: Session, item: Commission, viewer: User) -> CommissionDetailOut:
                 ),
                 candidates=[
                     _run_out(run, specimen_names) for run in candidates.get(one.id, [])
+                ],
+                cards=[
+                    ItemCardOut(
+                        id=card.id,
+                        label=card.label,
+                        status=card.status,
+                        material_id=card.material_id,
+                        has_deliverable=bool(
+                            one.deliverable and one.deliverable in (card.blocks or {})
+                        ),
+                    )
+                    for card in cards.get(one.id, [])
                 ],
             )
             for one in rows

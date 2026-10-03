@@ -342,7 +342,9 @@ def _declared_value(row: dict[str, Any]) -> dict[str, Any]:
             for one in points
         ],
         # 승인된 값이면 카드 칸과 같은 표지(`+approved`) — 출처만으로는 등급을 다시 셀 수 없다.
+        # 문헌 카탈로그에서 받아 온 값이면 그 등급(`+catalog1`)도 — 카드 칸의 표지와 같다.
         "origin": (f"declared:{source}" if source else "declared")
+        + (f"+catalog{row['catalog']['tier']}" if row.get("catalog") else "")
         + ("+approved" if row.get("approval") else ""),
         # **등급은 서버가 센 것** — 출처와 자료 관리자 승인에서(ADR 0049). 승인은 지금 값에
         # 유효한 것만 온다. 승인은 사람(자료 관리자)이 화면에서 한다 — AI 도구는 없다.
@@ -2266,8 +2268,8 @@ async def adopt_catalog_values(
 ) -> dict[str, Any]:
     """문헌 값을 **사내 재료의 선언 물성으로 담는다**(스냅샷).
 
-    담은 값은 복사본이라 카탈로그를 다시 이관해도 조용히 안 바뀌고, 출처·등급이
-    참고문헌 문자열로 따라간다.
+    담은 값은 복사본이라 카탈로그를 다시 이관해도 조용히 안 바뀐다. 출처는 참고문헌
+    문자열로, 등급은 **그 문헌 값의 등급**으로 따라간다(서버가 숫자를 대 본다).
 
     **기본이 미리보기(dry_run=True)다** — 무엇이 담길지 먼저 보이고, 사람이
     확인한 뒤에 `dry_run=False` 로 다시 부른다. 이미 있는 항목은 **덮어쓴다**.
@@ -2367,6 +2369,7 @@ async def adopt_catalog_values(
             if same is not None:
                 # **한 항목은 한 줄이다** — 같은 물성의 값이 여럿이면(1 MHz · 1 GHz) 점으로 모은다.
                 same["points"].append(point)
+                same["catalog_value_ids"].append(row["id"])
                 planned.append({"property": name, "value_si": row["value_num"], "added_to": name})
                 continue
             declared.append(
@@ -2378,6 +2381,9 @@ async def adopt_catalog_values(
                     "source": origin,
                     "reference": reference,
                     "note": "문헌 물성 카탈로그에서 채택 (스냅샷)",
+                    # **어느 문헌 값에서 왔는지** — 서버가 대 보고 그 등급을 잇는다(2026-10-03).
+                    # 안 주면 출처로만 등급이 정해져 1등급 논문 값도 3 이 된다.
+                    "catalog_value_ids": [row["id"]],
                 }
             )
         planned.append(

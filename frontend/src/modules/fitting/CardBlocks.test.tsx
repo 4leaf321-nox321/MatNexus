@@ -128,6 +128,21 @@ describe('물성 카드 내용', () => {
     expect(screen.getByText('(적은 값 · 문헌 · 승인)')).toBeInTheDocument()
   })
 
+  it('문헌 카탈로그에서 받아 온 값이면 그 문헌 등급을 적는다', () => {
+    // `+catalog1` 이 출처 이름에 붙어 「모르는 출처」 로 읽히면 안 된다(2026-10-03).
+    render(
+      <CardBlocks
+        specs={SPECS}
+        card={card({
+          imaginary: {
+            values: { strength: 2e8, strength_source: 'declared:literature+catalog1+approved' },
+          },
+        })}
+      />
+    )
+    expect(screen.getByText('(적은 값 · 문헌 · 문헌 1등급 · 승인)')).toBeInTheDocument()
+  })
+
   it('모르는 출처 코드는 조용히 지어내지 않는다', () => {
     // 아는 척하면 그 표시가 곧 거짓말이 된다.
     render(

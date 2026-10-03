@@ -65,6 +65,12 @@ SEARCH_REINDEX = "search.reindex"
 #: 보인다. 저장 요청 안에서 임베딩하지 않는 이유는 위와 같다 — 워커가 곧바로 한다.
 SEARCH_INDEX_MATERIALS = "search.index_materials"
 
+#: 핸드북 절 몇 개만 다시 색인 — payload: section_ids
+#:
+#: 재료와 같은 까닭(2026-10-03). 절을 고치거나 승인한 날은 밤의 전체 색인 전까지 뜻으로 찾으면
+#: 옛 글이 걸렸다. 지운 절의 조각도 이 작업이 걷는다.
+SEARCH_INDEX_GUIDE = "search.index_guide"
+
 #: 기한이 다가온 측정 의뢰 — payload 없음(하루 한 번)
 #:
 #: 의뢰에 `due_on` 을 받아 두고 **아무도 안 봤다.** 기한은 지나고 나서야 문제가

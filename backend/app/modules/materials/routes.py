@@ -50,6 +50,7 @@ from app.modules.materials.schemas import (
     ConditionUnitOut,
     DeclaredApprovalOut,
     DeclaredApprovalRequest,
+    DeclaredCatalogOut,
     DeclaredPointOut,
     DeclaredPropertyOut,
     DeletePlanOut,
@@ -107,6 +108,7 @@ from app.shared import (
     contention,
     coverage,
     declared_approval,
+    declared_catalog,
     declared_conditions,
     display,
     exports,
@@ -117,7 +119,6 @@ from app.shared import (
     semantic,
     sorting,
     specimen_size,
-    tiers,
     unit_systems,
 )
 from app.shared.access import AccessBook, EditAccessOut, access_of
@@ -262,8 +263,20 @@ def _declared_out(row: dict[str, Any]) -> DeclaredPropertyOut:
         # **등급은 서버가 근거에서 센다** — 화면이 출처 표를 들고 셈하면 승인 규칙이
         # 두 곳에 산다.
         quality_tier=declared_approval.tier(row),
-        tier_if_approved=tiers.declared_tier(row.get("source"), approved=True),
+        tier_if_approved=declared_approval.tier_if_approved(row),
         approval=_approval_out(row),
+        catalog=_catalog_out(row),
+    )
+
+
+def _catalog_out(row: dict[str, Any]) -> DeclaredCatalogOut | None:
+    """받아 온 문헌 값의 근거 — 지금 값에 유효한 것만(`shared/declared_catalog`)."""
+    tier = declared_approval.catalog_tier(row)
+    if tier is None:
+        return None
+    found = row[declared_approval.CATALOG_KEY]
+    return DeclaredCatalogOut(
+        tier=tier, value_ids=[str(one) for one in found.get("value_ids", [])]
     )
 
 
@@ -1753,9 +1766,13 @@ def update_material(
         # 차원이 안 맞으면 거기서 막힌다(비열 자리에 열전도율 같은 것).
         # 승인은 받은 줄에서 오지 않는다 — 값이 그대로인 줄에만 저장돼 있던 것을
         # 옮긴다(ADR 0049).
+        # 받아 온 문헌 값의 근거도 같은 식이다 — 값이 그대로인 줄에만 옮긴다(2026-10-03).
         material.declared_properties, lapsed = declared_approval.carry(
             material.declared_properties or [],
-            declared.check(db, data["declared_properties"] or []),
+            declared_catalog.carry(
+                material.declared_properties or [],
+                declared.check(db, data["declared_properties"] or []),
+            ),
         )
         _note_lapsed(
             db,
@@ -2359,7 +2376,10 @@ def update_sample(
         # 여기 적으면 같은 값을 로트 수만큼 적게 되고, 그중 하나만 고쳐진다.
         sample.declared_properties, lapsed = declared_approval.carry(
             sample.declared_properties or [],
-            declared.check(db, data["declared_properties"] or [], level="시료"),
+            declared_catalog.carry(
+                sample.declared_properties or [],
+                declared.check(db, data["declared_properties"] or [], level="시료"),
+            ),
         )
         _note_lapsed(
             db,

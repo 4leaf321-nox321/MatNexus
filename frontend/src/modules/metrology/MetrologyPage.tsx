@@ -3,7 +3,9 @@
  *
  * 좌측 피커는 **잴 수 있는 물성(보유 장비 있음/카탈로그만)과 장비 없는 물성**을
  * 갈라 보여 준다 — 빈 칸을 숨기면 찾다가 없어서 알게 된다. `?key=` 딥링크로
- * 카탈로그 상세의 물성 행에서 바로 온다.
+ * 카탈로그 상세의 물성 행에서 바로 온다. 핸드북 절에서도 온다(절에 이름이 나온 물성).
+ *
+ * 상세 아래에는 그 물성 · 규격을 다룬 **핸드북 절**이 선다(`HandbookSections`, 2026-10-03).
  */
 
 import { useSearchParams } from 'react-router-dom'
@@ -16,6 +18,7 @@ import {
   metrologyApi,
 } from '@/modules/metrology/api'
 import type { MetrologyCoverageRow, MetrologyProperty } from '@/modules/metrology/api'
+import { HandbookSections } from '@/modules/metrology/HandbookSections'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { PageHeader } from '@/shared/components/PageHeader'
 import { useResource } from '@/shared/hooks/useResource'
@@ -267,6 +270,8 @@ function PropertyDetail({ detail }: { detail: MetrologyProperty }) {
           </div>
         </div>
       ))}
+
+      <HandbookSections detail={detail} />
     </div>
   )
 }

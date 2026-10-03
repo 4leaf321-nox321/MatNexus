@@ -17,18 +17,30 @@
  * 3. **헤더 값에 공백이 있다**(`Bearer mnx_pat_…`). 그대로 args 에 적으면 도구에
  *    따라 잘린다 — env 로 넣고 `${AUTH}` 로 참조한다(치환은 mcp-remote 가 한다).
  *
- * ## 주소는 짐작한다
+ * ## 주소는 서버가 준다 — 모를 때만 짐작한다 (2026-10-03)
  *
- * MCP 서버는 웹과 같은 기계에서 8012 로 도는 것이 기본이다(`mcp_server/README`).
- * 화면이 그것을 확인할 길은 없으므로 **지금 보고 있는 주소**에서 만들고, 다르면
- * 고치라고 말한다. 틀린 주소를 조용히 주는 것보다 낫다.
+ * 서버 설정(`MCP_PUBLIC_URL`)이 있으면 그 주소를 쓴다(`/auth/mcp-connection`). 없으면
+ * MCP 서버가 웹과 같은 기계에서 8012 로 도는 기본을 믿고 **지금 보고 있는 주소**로
+ * 짐작하되, 짐작이라고 말한다. RA 는 포털 아래로 옮긴 뒤 이 짐작이 옛 서버를 가리켜
+ * 그 주소로 등록한 사람들의 MCP 가 끊겼다 — 그래서 서버가 주는 길을 먼저 둔다.
+ *
+ * ## HWAX 포털에서 쓰는 사람 (ADR 0056)
+ *
+ * 포털이 설정돼 있으면(`HWAX_PORTAL_URL`) 포털 게이트웨이로 붙는 길을 함께 보인다. 포털의
+ * Claude 는 포털 토큰으로 게이트웨이 하나에 붙고, 게이트웨이가 이 계정 명의의 **읽기
+ * 전용** 토큰을 받아 MatNexus 를 부른다 — 여기서 토큰을 발급해 옮길 일이 없다.
  */
 
 import { useState } from 'react'
 
+import type { components } from '@/shared/api/schema'
+import { api } from '@/shared/api/client'
 import { Button } from '@/shared/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/shared/components/ui/tabs'
+import { useResource } from '@/shared/hooks/useResource'
 import { copyText } from '@/shared/lib/clipboard'
+
+type McpConnection = components['schemas']['McpConnectionOut']
 
 /** 토큰을 아직 안 받았을 때 명령에 끼워 두는 자리. */
 export const TOKEN_PLACEHOLDER = '‹발급받은_토큰›'
@@ -36,7 +48,8 @@ export const TOKEN_PLACEHOLDER = '‹발급받은_토큰›'
 /** MCP 서버 기본 포트(`MATNEXUS_MCP_PORT`). */
 const MCP_PORT = 8012
 
-function mcpUrl(): string {
+/** 서버가 주소를 모를 때의 짐작 — 지금 보고 있는 호스트의 8012. */
+function guessedUrl(): string {
   const host = typeof window === 'undefined' ? 'localhost' : window.location.hostname
   return `http://${host}:${MCP_PORT}/mcp`
 }
@@ -71,7 +84,14 @@ function CopyBlock({ text, label }: { text: string; label: string }) {
  * @param token 방금 발급된 평문. 없으면 자리표시자로 형식만 보여 준다.
  */
 export function McpSetup({ token }: { token?: string | null }) {
-  const url = mcpUrl()
+  // **못 받아도 안내는 선다** — 짐작한 주소로 그리고 그렇다고 말한다.
+  const connection = useResource(
+    () => api.get<McpConnection>('/auth/mcp-connection').catch(() => null),
+    []
+  )
+  const told = connection.data?.direct_url ?? null
+  const portal = connection.data?.portal ?? null
+  const url = told ?? guessedUrl()
   const key = token || TOKEN_PLACEHOLDER
 
   // Claude Code — HTTP 를 직접 받는다. 브리지가 없으니 Node.js 도 필요 없다.
@@ -159,10 +179,49 @@ NODE_OPTIONS = "--use-system-ca"`
       </Tabs>
 
       <p className="text-muted-foreground text-xs">
-        주소는 지금 보고 있는 서버(<code className="font-mono">{url}</code>)로 짐작한 것입니다 — MCP
-        서버가 다른 기계나 포트에서 돌면 그 부분을 고치세요. Claude Code 를 뺀 셋은{' '}
-        <strong>Node.js</strong> 가 있어야 합니다(<code className="font-mono">npx</code> 를 씁니다).
+        {told ? (
+          <>
+            주소(<code className="font-mono">{url}</code>)는 서버 설정에서 왔습니다.
+          </>
+        ) : (
+          <>
+            주소는 지금 보고 있는 서버(<code className="font-mono">{url}</code>)로 짐작한
+            것입니다 — MCP 서버가 다른 기계나 포트에서 돌면 그 부분을 고치세요. 관리자가 서버
+            설정에 <code className="font-mono">MCP_PUBLIC_URL</code> 을 적으면 정확한 주소가 여기
+            섭니다.
+          </>
+        )}{' '}
+        Claude Code 를 뺀 셋은 <strong>Node.js</strong> 가 있어야 합니다(
+        <code className="font-mono">npx</code> 를 씁니다).
       </p>
+
+      {portal && (
+        <section className="space-y-1 rounded-md border p-3 text-xs" aria-label="HWAX 포털에서 쓰기">
+          <p className="font-medium">HWAX 포털에서 쓰기</p>
+          {portal.auto_token ? (
+            <p>
+              포털의 Claude 에서는 <strong>MatNexus 토큰을 등록하지 않습니다.</strong> 포털 공용
+              게이트웨이(<code className="font-mono">{portal.gateway_url}</code>)에 포털 토큰으로 한
+              번 등록하면 MatNexus 도구가 함께 보이고, 포털이 이 계정 명의의{' '}
+              <strong>읽기 전용</strong> 토큰을 자동으로 받습니다. 쓰기 도구는 미리보기까지만
+              됩니다 — 실제로 담으려면 위의 직접 연결을 쓰세요.
+            </p>
+          ) : (
+            <p>
+              포털 게이트웨이(<code className="font-mono">{portal.gateway_url}</code>)와의 사람별
+              연결이 아직 켜지지 않았습니다 — 관리자 설정이 끝나면 포털 토큰만으로 붙습니다. 그때까지는
+              위의 직접 연결을 쓰세요.
+            </p>
+          )}
+          <p>
+            포털 토큰은{' '}
+            <a className="underline" href={portal.tokens_url} target="_blank" rel="noreferrer">
+              포털의 토큰 화면
+            </a>
+            에서 받습니다.
+          </p>
+        </section>
+      )}
     </div>
   )
 }

@@ -33,6 +33,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.modules.vocabulary.models import Vocabulary, VocabularyTerm
+from app.shared import declared_catalog
 from app.shared import declared_conditions as conditions
 from app.shared.errors import AppError
 from app.shared.text import clean, compare_key
@@ -278,6 +279,8 @@ def check(
 
     seen: set[str] = set()
     out: list[dict[str, Any]] = []
+    #: 문헌 카탈로그에서 받아 왔다는 줄 — 항목 비교키 → 그 문헌 값 id 들(아래 끝에서 대 본다).
+    fetched: dict[str, list[Any]] = {}
     for row in rows:
         name = clean(str(row.get("item") or ""))
         if name is None:
@@ -341,6 +344,8 @@ def check(
                 status=422,
             )
         seen.add(key)
+        if row.get("catalog_value_ids"):
+            fetched[key] = list(row["catalog_value_ids"])
 
         source = str(row.get("source") or "")
         if source not in SOURCES:
@@ -441,6 +446,14 @@ def check(
                 "note": clean(str(row.get("note") or "")),
             }
         )
+    # **받아 온 문헌 값이면 그 등급이 근거다**(2026-10-03, `shared/declared_catalog`).
+    # 서버가 그 값들과 숫자를 대 보고 붙인다 — 화면 · MCP 는 id 만 주고 등급은 안 준다.
+    out = [
+        declared_catalog.stamp(db, built, ids)
+        if (ids := fetched.get(compare_key(built["item"])))
+        else built
+        for built in out
+    ]
     # 저장 순서를 항목 이름으로 고정한다. 넣은 순서대로 두면 같은 내용의 재료가
     # 서로 다른 순서를 갖고, 비교·감사에서 바뀐 것처럼 보인다.
     return sorted(out, key=lambda item: item["item"])

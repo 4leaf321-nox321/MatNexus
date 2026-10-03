@@ -17,7 +17,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.modules.catalog import importer
+from app.modules.catalog import importer, parameters
 from app.modules.catalog.links import ensure_builtin_property_links
 from app.modules.catalog.models import CatalogMaterial, CatalogValue
 from app.modules.vocabulary.definitions import ensure_builtin_property_items
@@ -262,6 +262,106 @@ class Test읽기_API:
         )
         assert gone.status_code == 404
         assert gone.json()["error"]["code"] == "MNX-CATALOG-0001"
+
+
+class Test목록_거르개:
+    """목록의 제조사 · 분야 · 값 범위(2026-10-03). 내보내기도 같은 규칙으로 거른다.
+
+    값 범위는 **조용히 틀리는 자리**다 — 단위를 잘못 풀면 8 Pa 짜리가 걸리고, 변수 달린 값
+    (식의 상수)이 섞이면 그 물성이 아닌 값이 걸린다. 둘 다 결과만 봐서는 안 드러난다.
+    """
+
+    def _loaded(self, db: Session, tmp_path: Path) -> None:
+        importer.run(db, make_snapshot(tmp_path))
+        # 대소문자 · 공백만 다른 제조사 — 같은 회사다.
+        spcc = CatalogMaterial(name="SPCC", category="metal", manufacturer="posco ")
+        db.add(spcc)
+        db.flush()
+        # 영률 키에 섞인 **식의 상수** — 범위 안의 값이지만 영률이 아니다.
+        db.add(
+            CatalogValue(
+                material_id=spcc.id,
+                property_key="mechanical.youngs_modulus",
+                value_num=195e9,
+                unit="Pa",
+                conditions={"term": "E0"},
+                quality_tier=2,
+            )
+        )
+        db.commit()
+        parameters.forget()
+
+    def _names(self, client: TestClient, headers: dict[str, str], query: str) -> set[str]:
+        got = client.get(f"/api/catalog/materials?{query}", headers=headers)
+        assert got.status_code == 200, got.text
+        return {one["name"] for one in got.json()["items"]}
+
+    def test_제조사는_대소문자를_안_가리고_요약도_하나로_센다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str], tmp_path: Path
+    ) -> None:
+        self._loaded(db, tmp_path)
+        assert self._names(client, admin_headers, "manufacturer=POSCO") == {"SUS304", "SPCC"}
+        summary = client.get("/api/catalog/summary", headers=admin_headers).json()
+        assert list(summary["manufacturers"].values()) == [2]
+        # 분야는 재료를 센다 — 값 수(영률 셋 · 포아송비)가 아니다.
+        assert summary["materials_by_domain"]["mechanical"] == 2
+        assert summary["domains"]["mechanical"] == 4
+
+    def test_분야는_그_분야의_값이_있는_재료만(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str], tmp_path: Path
+    ) -> None:
+        self._loaded(db, tmp_path)
+        assert self._names(client, admin_headers, "domain=thermal") == {"FR-4 generic"}
+        assert self._names(client, admin_headers, "domain=physical") == {"SUS304"}
+
+    def test_값_범위는_물은_단위로_풀고_걸린_값을_그_단위로_싣는다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str], tmp_path: Path
+    ) -> None:
+        self._loaded(db, tmp_path)
+        asked = (
+            "value_key=mechanical.youngs_modulus&value_unit=GPa&value_min=190&value_max=210"
+        )
+        got = client.get(f"/api/catalog/materials?{asked}", headers=admin_headers)
+        assert got.status_code == 200, got.text
+        items = got.json()["items"]
+        # SPCC 의 195 GPa 는 식의 상수(E0)라 안 걸린다.
+        assert [one["name"] for one in items] == ["SUS304"]
+        assert items[0]["matched"] == {"count": 2, "low": 193.0, "high": 200.0, "unit": "GPa"}
+        # 범위를 안 걸면 걸린 값도 없다.
+        plain = client.get("/api/catalog/materials?q=SUS", headers=admin_headers).json()
+        assert plain["items"][0]["matched"] is None
+
+        # 내보내기도 같은 규칙 — 화면에서 본 것과 받아 간 파일이 갈리지 않는다.
+        exported = client.get(f"/api/catalog/export?{asked}", headers=admin_headers)
+        assert exported.status_code == 200, exported.text
+        assert [one["name"] for one in exported.json()["materials"]] == ["SUS304"]
+        assert (
+            self._names(
+                client,
+                admin_headers,
+                "value_key=mechanical.youngs_modulus&value_unit=GPa&value_min=300",
+            )
+            == set()
+        )
+
+    def test_단위가_없거나_안_맞으면_거절한다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str], tmp_path: Path
+    ) -> None:
+        self._loaded(db, tmp_path)
+
+        def code(query: str) -> str:
+            got = client.get(f"/api/catalog/materials?{query}", headers=admin_headers)
+            assert got.status_code in (404, 422), got.text
+            return str(got.json()["error"]["code"])
+
+        key = "value_key=mechanical.youngs_modulus"
+        # 「200」 만으로는 Pa 인지 GPa 인지 모른다 — 짐작하면 조용히 틀린다.
+        assert code(f"{key}&value_min=190") == "MNX-CATALOG-0067"
+        assert code("value_unit=GPa&value_min=190") == "MNX-CATALOG-0067"
+        assert code(f"{key}&value_unit=degC&value_min=190") == "MNX-CATALOG-0032"
+        assert (
+            code("value_key=mechanical.nope&value_unit=GPa&value_min=1") == "MNX-CATALOG-0066"
+        )
 
 
 class Test활용_화면_API:

@@ -2,8 +2,8 @@
  * 커버리지 격자 — **이 카탈로그가 어디에 두껍고 어디가 비었나.**
  *
  * 계통(스마트폰 부품) × 물성 도메인의 값 수. 진하게 칠해진 곳이 두꺼운 곳이고,
- * 빈 칸은 빈 칸으로 보인다 — 찾다가 없어서 아는 것보다 낫다. 칸을 누르면 그
- * 계통의 재료 목록으로 간다.
+ * 빈 칸은 빈 칸으로 보인다 — 찾다가 없어서 아는 것보다 낫다. 계통 이름을 누르면 그
+ * 계통의 재료 목록으로, 칸을 누르면 그 계통에서 그 분야의 값이 있는 재료로 간다.
  */
 
 import { Link } from 'react-router-dom'
@@ -69,7 +69,18 @@ export default function CatalogCoveragePage() {
                             : undefined,
                         }}
                       >
-                        {count ?? <span className="text-muted-foreground">—</span>}
+                        {count ? (
+                          // 칸은 **그 계통 · 그 분야의 값이 있는 재료**로 간다(2026-10-03). 전에는
+                          // 계통 이름만 눌렸고, 「이 칸의 재료」 는 목록에서 다시 찾아야 했다.
+                          <Link
+                            className="hover:underline"
+                            to={`/catalog?subsystem=${encodeURIComponent(subsystem)}&domain=${encodeURIComponent(domain)}`}
+                          >
+                            {count}
+                          </Link>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
                       </td>
                     )
                   })}

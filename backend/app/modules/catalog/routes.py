@@ -9,11 +9,12 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query, Response
-from sqlalchemy import ColumnElement, Row, func, select
+from sqlalchemy import ColumnElement, Row, exists, func, or_, select
 from sqlalchemy.orm import Session
 
 from app import version
@@ -48,6 +49,7 @@ from app.modules.catalog.schemas import (
     CatalogDefinitionOut,
     CatalogLinkIn,
     CatalogLinkOut,
+    CatalogMatchedOut,
     CatalogMaterialCreate,
     CatalogMaterialDetailOut,
     CatalogMaterialOut,
@@ -87,6 +89,8 @@ from app.modules.catalog.schemas import (
     PropertySearchOut,
     PropertySuggestionOut,
     PropertyUnlinkedItemOut,
+    SyntheticCurvePreviewOut,
+    SyntheticInputOut,
 )
 from app.modules.materials.models import Material
 from app.modules.vocabulary.models import VocabularyTerm
@@ -132,6 +136,29 @@ def summary(
             .group_by(CatalogDefinition.domain)
         )
     }
+    # 목록의 「분야」 거르개는 **재료**를 센다 — 위의 값 수로 적으면 「열 7,859」 를 누르고
+    # 재료 1,528종을 받는다.
+    materials_by_domain: dict[str, int] = {
+        domain: count
+        for domain, count in db.execute(
+            select(
+                CatalogDefinition.domain, func.count(func.distinct(CatalogValue.material_id))
+            )
+            .join(CatalogValue, CatalogValue.property_key == CatalogDefinition.key)
+            .group_by(CatalogDefinition.domain)
+        )
+    }
+    # 제조사는 자유 문장이라 같은 회사가 대소문자만 달리 적혀 있다(「ZEON CORPORATION」 ·
+    # 「ZEON Corporation」) — 하나로 센다. 거르기도 같은 규칙이다(`_catalog_filters`).
+    manufacturers: dict[str, int] = {
+        name: count
+        for name, count in db.execute(
+            select(func.min(CatalogMaterial.manufacturer), func.count())
+            .where(CatalogMaterial.manufacturer.is_not(None))
+            .group_by(func.lower(func.trim(CatalogMaterial.manufacturer)))
+        )
+        if name and name.strip()
+    }
     return CatalogSummaryOut(
         materials=db.scalar(select(func.count()).select_from(CatalogMaterial)) or 0,
         values=db.scalar(select(func.count()).select_from(CatalogValue)) or 0,
@@ -140,6 +167,8 @@ def summary(
         subsystems=counted(CatalogMaterial.subsystem),
         categories=counted(CatalogMaterial.category),
         domains=domains,
+        materials_by_domain=materials_by_domain,
+        manufacturers=manufacturers,
         tiers=counted(CatalogValue.quality_tier),
     )
 
@@ -153,6 +182,12 @@ def export_catalog(
     q: str | None = Query(default=None),
     subsystem: str | None = Query(default=None),
     category: str | None = Query(default=None),
+    manufacturer: str | None = Query(default=None),
+    domain: str | None = Query(default=None),
+    value_key: str | None = Query(default=None),
+    value_unit: str | None = Query(default=None),
+    value_min: float | None = Query(default=None),
+    value_max: float | None = Query(default=None),
     units: str | None = Query(
         default=None,
         description="값의 단위계. 비우면 mm·N·tonne(ADR 0036) — SI 는 `si`.",
@@ -177,7 +212,7 @@ def export_catalog(
 
     전부 담으면 값 4만여 건에 20MB 안팎이다. 나눠 받게 하지 않는다 — 이어 붙이는
     일을 사람에게 시키면 그 자리에서 빠뜨린다. 좁혀 받고 싶으면 목록과 같은
-    조건(`q`·`category`·`subsystem`)을 준다.
+    조건(`q`·`category`·`subsystem`·`manufacturer`·`domain`·`value_*`)을 준다.
 
     ## 값은 고른 단위계로 — 기본 mm·N·tonne (ADR 0036)
 
@@ -187,7 +222,14 @@ def export_catalog(
     """
     system = unit_systems.resolve(db, units, code="MNX-CATALOG-0053")
     kept: set[str] = set()
-    conditions = _catalog_filters(q, subsystem, category)
+    conditions = _catalog_filters(
+        q,
+        subsystem,
+        category,
+        manufacturer=manufacturer,
+        domain=domain,
+        value_range=_value_range(db, value_key, value_unit, value_min, value_max),
+    )
     materials = list(
         db.scalars(select(CatalogMaterial).where(*conditions).order_by(CatalogMaterial.name))
     )
@@ -310,8 +352,113 @@ def _value_in_units(
     return said
 
 
+@dataclass(frozen=True)
+class ValueRange:
+    """목록을 **값의 범위**로 거른다 — 「항복강도 200~300 MPa 인 재료」(2026-10-03).
+
+    `low`·`high` 는 저장된 값과 같은 눈금이다(대개 SI). `unit` 은 물은 단위라 걸린 값을 그
+    단위로 되돌려 보여 준다. `raw` 면 환산표가 모르는 눈금(HV·ShoreA)이라 그대로 견준다.
+    """
+
+    key: str
+    low: float
+    high: float
+    unit: str
+    raw: bool
+
+    def clauses(self) -> list[ColumnElement[bool]]:
+        return [
+            CatalogValue.property_key == self.key,
+            CatalogValue.value_num.is_not(None),
+            CatalogValue.value_num >= self.low,
+            CatalogValue.value_num <= self.high,
+            # 변수 달린 값(Prony 의 E0 …)은 그 물성의 스칼라가 아니다 — 값 검색과 같은 규칙
+            # (`property_search.catalog_hits`). 섞으면 범위에 엉뚱한 식의 상수가 걸린다.
+            or_(
+                CatalogValue.conditions.is_(None),
+                ~CatalogValue.conditions.has_key(parameters.TERM),
+            ),
+        ]
+
+    def shown(self, value: float) -> float:
+        return value if self.raw else units.from_si(value, self.unit)
+
+
+def _value_range(
+    db: Session,
+    key: str | None,
+    unit: str | None,
+    minimum: float | None,
+    maximum: float | None,
+) -> ValueRange | None:
+    """값 범위 인자를 푼다. **단위가 없거나 안 맞으면 거절한다** — 짐작하면 조용히 틀린다.
+
+    값은 SI 로 저장돼 있어 200 MPa 는 `200,000,000` 이다. 단위 없이 「200」 을 그대로 걸면
+    8 Pa 짜리가 나온다(`shared/property_search` 머리말 — 같은 이유, 같은 환산).
+    """
+    if key is None:
+        if unit or minimum is not None or maximum is not None:
+            raise AppError(
+                "MNX-CATALOG-0067",
+                "값 범위는 물성(`value_key`)과 함께 주세요 — 어느 물성의 값인지 모르면 "
+                "못 겁니다.",
+                status=422,
+            )
+        return None
+    definition = db.scalar(select(CatalogDefinition).where(CatalogDefinition.key == key))
+    if definition is None:
+        raise NotFound("MNX-CATALOG-0066", f"없는 물성입니다: {key}")
+    if not unit:
+        raise AppError(
+            "MNX-CATALOG-0067",
+            f"값의 단위(`value_unit`)를 주세요 — 이 물성은 '{definition.si_unit}' 로 저장돼 "
+            "있습니다.",
+            status=422,
+        )
+    if parameters.is_parameterized(db, key):
+        raise AppError(
+            "MNX-CATALOG-0068",
+            f"'{definition.name}' 은 변수 여러 개를 담고 있어 목록에서 범위로 거를 수 "
+            "없습니다 — 값 검색에서 변수(`term`)를 정해 찾으세요.",
+            status=422,
+        )
+    si_unit = definition.si_unit or ""
+    known = units.canonical(si_unit) is not None
+    raw = not known and property_search.same_symbol(unit, si_unit)
+    if not known and not raw:
+        # 환산표가 모르는 눈금에 다른 단위로 물으면 차원 검사도 못 한다 — 그대로 환산하면
+        # 「HV 200」 을 200 MPa 로 바꿔 견주는 꼴이 된다.
+        raise AppError(
+            "MNX-CATALOG-0069",
+            f"'{definition.name}' 의 단위 '{si_unit}' 는 환산표에 없어 그 단위로만 거를 수 "
+            "있습니다.",
+            status=422,
+        )
+    low, high = property_search.bounds(
+        unit=unit,
+        si_unit=si_unit,
+        minimum=minimum,
+        maximum=maximum,
+        near=None,
+        convert=not raw,
+    )
+    return ValueRange(
+        key=key,
+        low=low,
+        high=high,
+        unit=unit if raw else (units.canonical(unit) or unit),
+        raw=raw,
+    )
+
+
 def _catalog_filters(
-    q: str | None, subsystem: str | None, category: str | None
+    q: str | None,
+    subsystem: str | None,
+    category: str | None,
+    *,
+    manufacturer: str | None = None,
+    domain: str | None = None,
+    value_range: ValueRange | None = None,
 ) -> list[ColumnElement[bool]]:
     """목록이 거르는 규칙. **내보내기와 한 벌로 쓴다.**
 
@@ -330,6 +477,26 @@ def _catalog_filters(
         )
     if category:
         conditions.append(CatalogMaterial.category == category)
+    if manufacturer and manufacturer.strip():
+        # 대소문자 · 앞뒤 공백만 다른 것은 같은 회사다 — 요약의 제조사 수와 같은 규칙.
+        conditions.append(
+            func.lower(func.trim(CatalogMaterial.manufacturer)) == manufacturer.strip().lower()
+        )
+    if domain:
+        # **그 분야의 값이 하나라도 있는 재료.** 재료에는 분야가 없다 — 물성이 분야를 갖는다.
+        conditions.append(
+            exists().where(
+                CatalogValue.material_id == CatalogMaterial.id,
+                CatalogValue.property_key == CatalogDefinition.key,
+                CatalogDefinition.domain == domain,
+            )
+        )
+    if value_range is not None:
+        conditions.append(
+            exists().where(
+                CatalogValue.material_id == CatalogMaterial.id, *value_range.clauses()
+            )
+        )
     return conditions
 
 
@@ -338,13 +505,31 @@ def list_materials(
     q: str | None = Query(default=None),
     subsystem: str | None = Query(default=None),
     category: str | None = Query(default=None),
+    manufacturer: str | None = Query(default=None, description="대소문자는 안 가린다"),
+    domain: str | None = Query(default=None, description="이 분야의 값이 있는 재료만"),
+    value_key: str | None = Query(default=None, description="값 범위로 거를 물성 키"),
+    value_unit: str | None = Query(default=None, description="범위의 단위 — 필수"),
+    value_min: float | None = Query(default=None),
+    value_max: float | None = Query(default=None),
     limit: int | None = Query(default=None),
     offset: int = Query(default=0, ge=0),
     _user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> CatalogMaterialPage:
-    """카탈로그 재료 목록. 물성 많은 순 — 쓸 것이 많은 재료가 먼저다."""
-    conditions = _catalog_filters(q, subsystem, category)
+    """카탈로그 재료 목록. 물성 많은 순 — 쓸 것이 많은 재료가 먼저다.
+
+    값 범위로 걸렀으면 재료마다 **걸린 값**(몇 건 · 최소~최대, 물은 단위로)을 함께 싣는다 —
+    안 실으면 사람은 왜 이 재료가 섰는지 상세를 하나씩 열어 본다.
+    """
+    value_range = _value_range(db, value_key, value_unit, value_min, value_max)
+    conditions = _catalog_filters(
+        q,
+        subsystem,
+        category,
+        manufacturer=manufacturer,
+        domain=domain,
+        value_range=value_range,
+    )
 
     value_count = (
         select(func.count())
@@ -360,13 +545,40 @@ def list_materials(
     rows = db.execute(
         base.order_by(value_count.desc(), CatalogMaterial.name).limit(limit).offset(offset)
     ).all()
+    matched: dict[uuid.UUID, CatalogMatchedOut] = {}
+    if value_range is not None and rows:
+        # 한 번에 묻는다 — 재료마다 물으면 한 쪽에 50번이다.
+        for material_id, low, high, count in db.execute(
+            select(
+                CatalogValue.material_id,
+                func.min(CatalogValue.value_num),
+                func.max(CatalogValue.value_num),
+                func.count(),
+            )
+            .where(
+                CatalogValue.material_id.in_([one.id for one, _ in rows]),
+                *value_range.clauses(),
+            )
+            .group_by(CatalogValue.material_id)
+        ):
+            matched[material_id] = CatalogMatchedOut(
+                count=count,
+                low=value_range.shown(low),
+                high=value_range.shown(high),
+                unit=value_range.unit,
+            )
     return CatalogMaterialPage(
         total=total,
         limit=limit,
         offset=offset,
         items=[
             CatalogMaterialOut.model_validate(
-                {**one.__dict__, "value_count": count, "origin": contribute.origin_of(one)},
+                {
+                    **one.__dict__,
+                    "value_count": count,
+                    "origin": contribute.origin_of(one),
+                    "matched": matched.get(one.id),
+                },
                 from_attributes=False,
             )
             for one, count in rows
@@ -2072,6 +2284,44 @@ def search_by_property(
             for one in hits[:limit]
         ],
         notes=notes,
+    )
+
+
+@router.get(
+    "/materials/{material_id}/synthetic-curve", response_model=SyntheticCurvePreviewOut
+)
+def synthetic_curve_preview(
+    material_id: uuid.UUID,
+    _user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> SyntheticCurvePreviewOut:
+    """문헌 스칼라로 지은 σ-ε 곡선 — **덱의 「곡선 합성」 과 같은 계산**(2026-10-03).
+
+    문헌에는 곡선이 없다. 덱은 스칼라(E · 항복 · 인장 · 연신율)로 곡선을 지어 *MAT_024 에
+    싣는데, 덱 파일을 열기 전에는 어떤 곡선인지 볼 길이 없었다. 지어 보고 못 지으면 그
+    이유를 200 으로 돌려준다 — 못 짓는 것은 오류가 아니라 이 재료의 사실이다.
+    """
+    material = db.get(CatalogMaterial, material_id)
+    if material is None:
+        raise NotFound("MNX-CATALOG-0001", "카탈로그에 없는 재료입니다.")
+    made = deck_builder.synthetic_preview(db, material)
+    if isinstance(made, str):
+        return SyntheticCurvePreviewOut(ok=False, why=made)
+    curve = made.curve
+    return SyntheticCurvePreviewOut(
+        ok=True,
+        model=curve.model,
+        note=curve.note,
+        inconsistent=curve.inconsistent,
+        youngs_modulus=made.youngs_modulus,
+        strain=list(curve.strain),
+        stress=list(curve.stress_pa),
+        table_points=len(curve.table_rows),
+        inputs=[
+            SyntheticInputOut(item=item, value_si=value, reference=reference, si_unit=unit)
+            for item, value, reference, unit in made.inputs
+        ],
+        notes=made.notes,
     )
 
 

@@ -14,6 +14,14 @@
     3  계열 대표값·2차 인용           ← 사내: 문헌에서 옮겨 적음(어느 문헌인지 등급을 모른다)
     4  계산·추정·가정                 ← 사내: 추정 · 계산식 · 합성 곡선
 
+## 문헌 카탈로그에서 받아 온 값은 그 값의 등급이다 (2026-10-03)
+
+문헌이 3 인 까닭은 「어느 문헌인지 · 그 문헌의 등급을 모른다」 다. **카탈로그에서 받아 온 값은
+안다** — 카탈로그가 값마다 등급을 든다. 그 근거를 버리고 3 으로 적었더니 논문에서 잰 1등급
+값이 「옮겨 적음」 이 됐다(사용자 보고). 이제 받아 온 줄은 그 문헌 값의 등급을 잇는다
+(`catalog_tier` — 서버가 그 값과 숫자를 대 보고 붙인 근거, `shared/declared_catalog`). 근거는
+값에 묶여 있어 값을 고치면 풀리고 출처의 등급으로 돌아간다. 승인과 같은 규칙이다.
+
 ## 승인은 근거다 — 등급을 매기는 것이 아니다 (ADR 0049)
 
 자료 관리자가 선언 값을 근거 문서와 대조해 **승인**하면 한 단계 오른다 — 문헌 3 → 2,
@@ -64,28 +72,64 @@ APPROVED_CEILING = 2
 #: 카드는 만들 때의 근거를 든 스냅샷이라(ADR 0012), 승인 여부도 그때의 것을 칸이 든다.
 APPROVED_MARK = "+approved"
 
+#: 카드 칸의 `<키>_source` 에서 **문헌 카탈로그에서 받아 온** 선언 값의 그 문헌 등급 —
+#: `declared:literature+catalog1`. 승인 꼬리는 그 뒤다(`…+catalog3+approved`). 카드는 받아 온
+#: 근거도 만들 때의 것을 든다 — 출처만 남기면 카드에서 등급을 다시 셀 때 3 으로 돌아간다.
+CATALOG_MARK = "+catalog"
 
-def declared_tier(source: str | None, *, approved: bool = False) -> int:
+
+def declared_tier(
+    source: str | None, *, approved: bool = False, catalog_tier: int | None = None
+) -> int:
     """사람이 적어 넣은 값. 모르는 출처는 **가장 낮게** — 좋게 봐 주면 등급이 뜻을 잃는다.
 
-    `approved` 면 한 단계 오르되 `APPROVED_CEILING` 위로는 안 간다.
+    `catalog_tier` 는 문헌 카탈로그에서 받아 온 값의 그 문헌 등급이다(위 「받아 온 값」) —
+    있으면 출처 대신 그것이 근거다. `approved` 면 한 단계 오르되 `APPROVED_CEILING` 위로는
+    안 간다.
     """
-    tier = DECLARED_TIERS.get((source or "").strip().lower(), 4)
+    if catalog_tier is not None and catalog_tier in TIER_LABELS:
+        tier = catalog_tier
+    else:
+        tier = DECLARED_TIERS.get((source or "").strip().lower(), 4)
     if approved and tier > APPROVED_CEILING:
         return tier - 1
     return tier
 
 
-def declared_origin(source: str | None, *, approved: bool) -> str:
-    """카드 칸에 적는 출처 표지 — `declared:<출처>` 에 승인이면 `+approved`."""
-    return f"declared:{source or 'unknown'}{APPROVED_MARK if approved else ''}"
+def declared_origin(
+    source: str | None, *, approved: bool, catalog_tier: int | None = None
+) -> str:
+    """카드 칸에 적는 출처 표지 — `declared:<출처>`, 받아 온 문헌 등급이면 `+catalog<N>`,
+    승인이면 끝에 `+approved`."""
+    mark = (
+        f"{CATALOG_MARK}{catalog_tier}"
+        if catalog_tier is not None and catalog_tier in TIER_LABELS
+        else ""
+    )
+    return f"declared:{source or 'unknown'}{mark}{APPROVED_MARK if approved else ''}"
 
 
 def split_declared(where: str) -> tuple[str, bool]:
-    """`declared:` 뒤의 낱말 → (출처, 승인됐나). 꼬리가 없으면 승인 전이다."""
-    if where.endswith(APPROVED_MARK):
-        return where.removesuffix(APPROVED_MARK), True
-    return where, False
+    """`declared:` 뒤의 낱말 → (출처, 승인됐나). 꼬리가 없으면 승인 전이다.
+
+    받아 온 문헌 등급(`+catalog<N>`)은 떼고 출처만 돌려준다 — 그 등급은 `catalog_tier_in` 이
+    읽는다. 안 떼면 출처가 `literature+catalog1` 이 되어 모르는 출처(4)로 읽힌다.
+    """
+    approved = where.endswith(APPROVED_MARK)
+    if approved:
+        where = where.removesuffix(APPROVED_MARK)
+    if catalog_tier_in(where) is not None:
+        where = where[: where.rindex(CATALOG_MARK)]
+    return where, approved
+
+
+def catalog_tier_in(where: str) -> int | None:
+    """출처 표지에 든 받아 온 문헌 등급 — 없으면 None. `declared:` 는 있어도 없어도 된다."""
+    where = where.removesuffix(APPROVED_MARK)
+    head, mark, tail = where.rpartition(CATALOG_MARK)
+    if not mark or not head or not tail.isdigit() or int(tail) not in TIER_LABELS:
+        return None
+    return int(tail)
 
 
 def computed_tier() -> int:

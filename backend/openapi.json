@@ -4424,6 +4424,35 @@
         "title": "CatalogLinkOut",
         "type": "object"
       },
+      "CatalogMatchedOut": {
+        "description": "값 범위에 걸린 값 — 몇 건이고 어디서 어디까지인가. 물은 단위로 싣는다.",
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "high": {
+            "title": "High",
+            "type": "number"
+          },
+          "low": {
+            "title": "Low",
+            "type": "number"
+          },
+          "unit": {
+            "title": "Unit",
+            "type": "string"
+          }
+        },
+        "required": [
+          "count",
+          "low",
+          "high",
+          "unit"
+        ],
+        "title": "CatalogMatchedOut",
+        "type": "object"
+      },
       "CatalogMaterialCreate": {
         "properties": {
           "category": {
@@ -4691,6 +4720,16 @@
               }
             ],
             "title": "Manufacturer"
+          },
+          "matched": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CatalogMatchedOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "material_class": {
             "anyOf": [
@@ -5334,9 +5373,23 @@
             "title": "Domains",
             "type": "object"
           },
+          "manufacturers": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Manufacturers",
+            "type": "object"
+          },
           "materials": {
             "title": "Materials",
             "type": "integer"
+          },
+          "materials_by_domain": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Materials By Domain",
+            "type": "object"
           },
           "sources": {
             "title": "Sources",
@@ -6467,6 +6520,13 @@
               "$ref": "#/components/schemas/LinkedRunOut"
             },
             "title": "Candidates",
+            "type": "array"
+          },
+          "cards": {
+            "items": {
+              "$ref": "#/components/schemas/ItemCardOut"
+            },
+            "title": "Cards",
             "type": "array"
           },
           "conditions": {
@@ -8955,6 +9015,28 @@
         "title": "DeclaredCardSaveRequest",
         "type": "object"
       },
+      "DeclaredCatalogOut": {
+        "description": "문헌 카탈로그에서 받아 온 값 — **등급의 근거**(2026-10-03, `shared/declared_catalog`).\n\n서버가 그 문헌 값들과 숫자를 대 보고 붙였다. 값을 고치면 풀린다(승인과 같다).",
+        "properties": {
+          "tier": {
+            "title": "Tier",
+            "type": "integer"
+          },
+          "value_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Value Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "tier",
+          "value_ids"
+        ],
+        "title": "DeclaredCatalogOut",
+        "type": "object"
+      },
       "DeclaredPointIn": {
         "description": "점 하나. 조건은 **그 항목의 축만** 적는다 — 다른 축은 거절된다(측정 온도는 예외).",
         "properties": {
@@ -9057,6 +9139,22 @@
       "DeclaredPropertyIn": {
         "description": "넣을 때. 값은 `input_unit` 단위이고 서버가 SI 로 바꾼다.",
         "properties": {
+          "catalog_value_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "maxItems": 200,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Catalog Value Ids"
+          },
           "input_unit": {
             "anyOf": [
               {
@@ -9126,6 +9224,16 @@
             "anyOf": [
               {
                 "$ref": "#/components/schemas/DeclaredApprovalOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "catalog": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DeclaredCatalogOut"
               },
               {
                 "type": "null"
@@ -14459,6 +14567,70 @@
         "title": "FormulaVocabularyOut",
         "type": "object"
       },
+      "GatewayRevokeOut": {
+        "properties": {
+          "ok": {
+            "default": true,
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "revoked": {
+            "title": "Revoked",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "revoked"
+        ],
+        "title": "GatewayRevokeOut",
+        "type": "object"
+      },
+      "GatewayTokenData": {
+        "description": "HWAX 위임 창구가 내주는 토큰 — 포털 요청서(`ra-request.md`)의 봉투 그대로.",
+        "properties": {
+          "access_token": {
+            "title": "Access Token",
+            "type": "string"
+          },
+          "expires_in": {
+            "title": "Expires In",
+            "type": "integer"
+          },
+          "needs_workspace": {
+            "title": "Needs Workspace",
+            "type": "boolean"
+          },
+          "token_type": {
+            "default": "bearer",
+            "title": "Token Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "access_token",
+          "expires_in",
+          "needs_workspace"
+        ],
+        "title": "GatewayTokenData",
+        "type": "object"
+      },
+      "GatewayTokenOut": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/GatewayTokenData"
+          },
+          "success": {
+            "default": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "title": "GatewayTokenOut",
+        "type": "object"
+      },
       "GraphEdgeOut": {
         "properties": {
           "dst_id": {
@@ -16311,6 +16483,42 @@
         "title": "ItemAddRequest",
         "type": "object"
       },
+      "ItemCardOut": {
+        "description": "이 항목에 붙은 시험으로 만든 물성 카드 하나(2026-10-03).",
+        "properties": {
+          "has_deliverable": {
+            "title": "Has Deliverable",
+            "type": "boolean"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "material_id": {
+            "format": "uuid",
+            "title": "Material Id",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "status",
+          "material_id",
+          "has_deliverable"
+        ],
+        "title": "ItemCardOut",
+        "type": "object"
+      },
       "ItemOut": {
         "properties": {
           "added_at": {
@@ -18082,6 +18290,34 @@
         "title": "McpCallIn",
         "type": "object"
       },
+      "McpConnectionOut": {
+        "description": "사람에게 줄 MCP 연결 주소 — **서버가 준다.** 화면이 짐작하면 옮긴 날 틀린다.",
+        "properties": {
+          "direct_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Direct Url"
+          },
+          "portal": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PortalConnectionOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "title": "McpConnectionOut",
+        "type": "object"
+      },
       "McpOut": {
         "properties": {
           "average_ms": {
@@ -19518,9 +19754,19 @@
             "title": "Card Total",
             "type": "integer"
           },
+          "commissions_due_soon": {
+            "default": 0,
+            "title": "Commissions Due Soon",
+            "type": "integer"
+          },
           "commissions_mine_open": {
             "default": 0,
             "title": "Commissions Mine Open",
+            "type": "integer"
+          },
+          "commissions_received_testing": {
+            "default": 0,
+            "title": "Commissions Received Testing",
             "type": "integer"
           },
           "commissions_received_waiting": {
@@ -20615,6 +20861,30 @@
           "workspace"
         ],
         "title": "PersonOut",
+        "type": "object"
+      },
+      "PortalConnectionOut": {
+        "description": "HWAX 포털 게이트웨이로 붙는 길 — 포털의 모든 앱이 같은 주소로 붙는다.",
+        "properties": {
+          "auto_token": {
+            "title": "Auto Token",
+            "type": "boolean"
+          },
+          "gateway_url": {
+            "title": "Gateway Url",
+            "type": "string"
+          },
+          "tokens_url": {
+            "title": "Tokens Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "gateway_url",
+          "tokens_url",
+          "auto_token"
+        ],
+        "title": "PortalConnectionOut",
         "type": "object"
       },
       "ProcessOut": {
@@ -29517,6 +29787,130 @@
         "title": "SweepOut",
         "type": "object"
       },
+      "SyntheticCurvePreviewOut": {
+        "description": "문헌 재료의 **합성** σ-ε 곡선 — 실측이 아니다. 덱의 「곡선 합성」 과 같은 계산이다.",
+        "properties": {
+          "inconsistent": {
+            "default": false,
+            "title": "Inconsistent",
+            "type": "boolean"
+          },
+          "inputs": {
+            "items": {
+              "$ref": "#/components/schemas/SyntheticInputOut"
+            },
+            "title": "Inputs",
+            "type": "array"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "notes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Notes",
+            "type": "array"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "strain": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Strain",
+            "type": "array"
+          },
+          "stress": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Stress",
+            "type": "array"
+          },
+          "table_points": {
+            "default": 0,
+            "title": "Table Points",
+            "type": "integer"
+          },
+          "why": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Why"
+          },
+          "youngs_modulus": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Youngs Modulus"
+          }
+        },
+        "required": [
+          "ok"
+        ],
+        "title": "SyntheticCurvePreviewOut",
+        "type": "object"
+      },
+      "SyntheticInputOut": {
+        "properties": {
+          "item": {
+            "title": "Item",
+            "type": "string"
+          },
+          "reference": {
+            "title": "Reference",
+            "type": "string"
+          },
+          "si_unit": {
+            "default": "",
+            "title": "Si Unit",
+            "type": "string"
+          },
+          "value_si": {
+            "title": "Value Si",
+            "type": "number"
+          }
+        },
+        "required": [
+          "item",
+          "value_si",
+          "reference"
+        ],
+        "title": "SyntheticInputOut",
+        "type": "object"
+      },
       "SyntheticPlasticOut": {
         "description": "합성 소성 표의 미리보기 — 켜기 전에 무엇이 지어지는지 안다.",
         "properties": {
@@ -35078,6 +35472,28 @@
         ]
       }
     },
+    "/api/auth/mcp-connection": {
+      "get": {
+        "description": "사람에게 줄 MCP 연결 주소 — **서버가 준다**(RA `/api/me/mcp-connection` 과 같은 판단).\n\n화면이 「지금 보는 호스트:8012」 로 짐작하면, 서버를 옮기거나 앞에 프록시를 둔 날 그 짐작이\n틀린 주소를 준다 — RA 는 포털 아래로 옮긴 뒤 그 주소로 등록한 사람들의 MCP 가 끊겼다.\n설정이 없으면 모른다고 답한다(화면이 그때만 짐작하고, 짐작이라고 말한다).",
+        "operationId": "mcp_connection_api_auth_mcp_connection_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/McpConnectionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Mcp Connection",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
     "/api/auth/me": {
       "get": {
         "operationId": "me_api_auth_me_get",
@@ -35155,6 +35571,65 @@
           }
         },
         "summary": "Refresh",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/auth/sso": {
+      "post": {
+        "description": "HWAX 게이트웨이가 **그 사람의 읽기 전용 토큰**을 받아 간다. 꺼져 있으면 404, 비밀이\n틀리면 401, 그 사람을 들여보낼 수 없으면 403 — 404 는 「창구 꺼짐」 전용이다.",
+        "operationId": "gateway_issue_api_auth_sso_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GatewayTokenOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Gateway Issue",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/auth/sso/revoke": {
+      "post": {
+        "description": "그 사람 · 그 client 의 위임 토큰을 폐기한다. 폐기할 것이 없어도 200 이다.",
+        "operationId": "gateway_revoke_api_auth_sso_revoke_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GatewayRevokeOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Gateway Revoke",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/auth/sso/verify": {
+      "post": {
+        "description": "비밀만 확인한다(204 / 401) — 설정이 맞는지 볼 때. 아무것도 만들지 않는다.",
+        "operationId": "gateway_verify_api_auth_sso_verify_post",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Gateway Verify",
         "tags": [
           "auth"
         ]
@@ -35532,7 +36007,7 @@
     },
     "/api/catalog/export": {
       "get": {
-        "description": "문헌 물성을 **JSON 파일로** 내려준다 — 재료·값·출처를 함께.\n\n## 거르는 규칙은 목록과 한 벌이다\n\n`_catalog_filters` 를 함께 쓴다. 두 곳에 적으면 「화면에서 본 것」 과 「받아 간\n파일」 이 달라지고, 받아 간 쪽이 틀렸다는 것을 알아챌 방법이 없다.\n\n## 대표 표시를 붙여 낸다\n\n같은 물성에 값이 여럿인 것이 이 카탈로그의 성질이다. 대표 표시 없이 값만\n내보내면 받은 사람은 **아무거나 고르게 된다** — `representative` 를 두는\n이유가 바로 그것을 막는 것이라, 상세 화면과 같은 함수로 붙인다.\n\n## 크기\n\n전부 담으면 값 4만여 건에 20MB 안팎이다. 나눠 받게 하지 않는다 — 이어 붙이는\n일을 사람에게 시키면 그 자리에서 빠뜨린다. 좁혀 받고 싶으면 목록과 같은\n조건(`q`·`category`·`subsystem`)을 준다.\n\n## 값은 고른 단위계로 — 기본 mm·N·tonne (ADR 0036)\n\n`value_num`·`unit` 이 그 계이고, 저장된 값은 `value_si`·`si_unit` 으로 곁에 둔다. 문헌에는\n그 계가 기호를 정해 두지 않은 물리량(저항률·에너지·경도 …)이 많다 — 그것은 받은 그대로\n두고 `kept_units` 에 적는다.",
+        "description": "문헌 물성을 **JSON 파일로** 내려준다 — 재료·값·출처를 함께.\n\n## 거르는 규칙은 목록과 한 벌이다\n\n`_catalog_filters` 를 함께 쓴다. 두 곳에 적으면 「화면에서 본 것」 과 「받아 간\n파일」 이 달라지고, 받아 간 쪽이 틀렸다는 것을 알아챌 방법이 없다.\n\n## 대표 표시를 붙여 낸다\n\n같은 물성에 값이 여럿인 것이 이 카탈로그의 성질이다. 대표 표시 없이 값만\n내보내면 받은 사람은 **아무거나 고르게 된다** — `representative` 를 두는\n이유가 바로 그것을 막는 것이라, 상세 화면과 같은 함수로 붙인다.\n\n## 크기\n\n전부 담으면 값 4만여 건에 20MB 안팎이다. 나눠 받게 하지 않는다 — 이어 붙이는\n일을 사람에게 시키면 그 자리에서 빠뜨린다. 좁혀 받고 싶으면 목록과 같은\n조건(`q`·`category`·`subsystem`·`manufacturer`·`domain`·`value_*`)을 준다.\n\n## 값은 고른 단위계로 — 기본 mm·N·tonne (ADR 0036)\n\n`value_num`·`unit` 이 그 계이고, 저장된 값은 `value_si`·`si_unit` 으로 곁에 둔다. 문헌에는\n그 계가 기호를 정해 두지 않은 물리량(저항률·에너지·경도 …)이 많다 — 그것은 받은 그대로\n두고 `kept_units` 에 적는다.",
         "operationId": "export_catalog_api_catalog_export_get",
         "parameters": [
           {
@@ -35581,6 +36056,102 @@
                 }
               ],
               "title": "Category"
+            }
+          },
+          {
+            "in": "query",
+            "name": "manufacturer",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Manufacturer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "domain",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Domain"
+            }
+          },
+          {
+            "in": "query",
+            "name": "value_key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Value Key"
+            }
+          },
+          {
+            "in": "query",
+            "name": "value_unit",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Value Unit"
+            }
+          },
+          {
+            "in": "query",
+            "name": "value_min",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Value Min"
+            }
+          },
+          {
+            "in": "query",
+            "name": "value_max",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Value Max"
             }
           },
           {
@@ -35928,7 +36499,7 @@
     },
     "/api/catalog/materials": {
       "get": {
-        "description": "카탈로그 재료 목록. 물성 많은 순 — 쓸 것이 많은 재료가 먼저다.",
+        "description": "카탈로그 재료 목록. 물성 많은 순 — 쓸 것이 많은 재료가 먼저다.\n\n값 범위로 걸렀으면 재료마다 **걸린 값**(몇 건 · 최소~최대, 물은 단위로)을 함께 싣는다 —\n안 실으면 사람은 왜 이 재료가 섰는지 상세를 하나씩 열어 본다.",
         "operationId": "list_materials_api_catalog_materials_get",
         "parameters": [
           {
@@ -35977,6 +36548,110 @@
                 }
               ],
               "title": "Category"
+            }
+          },
+          {
+            "description": "대소문자는 안 가린다",
+            "in": "query",
+            "name": "manufacturer",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "대소문자는 안 가린다",
+              "title": "Manufacturer"
+            }
+          },
+          {
+            "description": "이 분야의 값이 있는 재료만",
+            "in": "query",
+            "name": "domain",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "이 분야의 값이 있는 재료만",
+              "title": "Domain"
+            }
+          },
+          {
+            "description": "값 범위로 거를 물성 키",
+            "in": "query",
+            "name": "value_key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "값 범위로 거를 물성 키",
+              "title": "Value Key"
+            }
+          },
+          {
+            "description": "범위의 단위 — 필수",
+            "in": "query",
+            "name": "value_unit",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "범위의 단위 — 필수",
+              "title": "Value Unit"
+            }
+          },
+          {
+            "in": "query",
+            "name": "value_min",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Value Min"
+            }
+          },
+          {
+            "in": "query",
+            "name": "value_max",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Value Max"
             }
           },
           {
@@ -36197,6 +36872,50 @@
           }
         },
         "summary": "Catalog Parameter Sets",
+        "tags": [
+          "catalog"
+        ]
+      }
+    },
+    "/api/catalog/materials/{material_id}/synthetic-curve": {
+      "get": {
+        "description": "문헌 스칼라로 지은 σ-ε 곡선 — **덱의 「곡선 합성」 과 같은 계산**(2026-10-03).\n\n문헌에는 곡선이 없다. 덱은 스칼라(E · 항복 · 인장 · 연신율)로 곡선을 지어 *MAT_024 에\n싣는데, 덱 파일을 열기 전에는 어떤 곡선인지 볼 길이 없었다. 지어 보고 못 지으면 그\n이유를 200 으로 돌려준다 — 못 짓는 것은 오류가 아니라 이 재료의 사실이다.",
+        "operationId": "synthetic_curve_preview_api_catalog_materials__material_id__synthetic_curve_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "material_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Material Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SyntheticCurvePreviewOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Synthetic Curve Preview",
         "tags": [
           "catalog"
         ]
@@ -49708,6 +50427,25 @@
                 }
               ],
               "title": "Material Id"
+            }
+          },
+          {
+            "description": "측정 의뢰 id — 그 의뢰의 항목에 붙은 시험만",
+            "in": "query",
+            "name": "commission",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "측정 의뢰 id — 그 의뢰의 항목에 붙은 시험만",
+              "title": "Commission"
             }
           },
           {

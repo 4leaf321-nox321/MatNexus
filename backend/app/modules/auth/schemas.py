@@ -113,3 +113,49 @@ class PatCreateResponse(BaseModel):
     token: str
     """평문은 이 응답에서 한 번만 나온다. 다시 볼 수 없다."""
     pat: PatOut
+
+
+# --- HWAX 포털 게이트웨이 · MCP 연결 (2026-10-03, ADR 0056) ----------------------------------
+
+
+class GatewayTokenData(BaseModel):
+    """HWAX 위임 창구가 내주는 토큰 — 포털 요청서(`ra-request.md`)의 봉투 그대로."""
+
+    access_token: str
+    """`mnx_pat_…` 평문(읽기 전용). 게이트웨이가 12시간 캐시한다 — 다시 볼 수 없다."""
+    token_type: str = "bearer"
+    expires_in: int
+    """초. 게이트웨이는 이보다 일찍 버리고 다시 받는다."""
+    needs_workspace: bool
+    """아직 소속 부서가 없는 사람. 참고용 — 지금 소비자는 안 읽는다."""
+
+
+class GatewayTokenOut(BaseModel):
+    success: bool = True
+    data: GatewayTokenData
+
+
+class GatewayRevokeOut(BaseModel):
+    ok: bool = True
+    revoked: int
+    """폐기한 수. 사람이 없거나 토큰이 없어도 0 — 폐기할 것이 없을 뿐이다."""
+
+
+class PortalConnectionOut(BaseModel):
+    """HWAX 포털 게이트웨이로 붙는 길 — 포털의 모든 앱이 같은 주소로 붙는다."""
+
+    gateway_url: str
+    """포털 공용 MCP 게이트웨이 — `<포털>/mcp-gw/mcp`. 포털 토큰으로 한 번 등록한다."""
+    tokens_url: str
+    """포털 토큰을 받는 화면."""
+    auto_token: bool
+    """위임 창구가 켜져 있다 — 포털 사용자는 MatNexus 토큰을 따로 등록하지 않는다."""
+
+
+class McpConnectionOut(BaseModel):
+    """사람에게 줄 MCP 연결 주소 — **서버가 준다.** 화면이 짐작하면 옮긴 날 틀린다."""
+
+    direct_url: str | None = None
+    """MatNexus MCP 서버에 직접 붙는 주소(`MCP_PUBLIC_URL`). 비면 서버도 모른다."""
+    portal: PortalConnectionOut | None = None
+    """HWAX 포털 게이트웨이(`HWAX_PORTAL_URL`). 비면 포털로 붙는 길이 없다."""

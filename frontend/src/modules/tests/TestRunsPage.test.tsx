@@ -99,9 +99,9 @@ const FACETS = {
   instruments: [{ key: 'Zwick Z100', label: 'Zwick Z100', count: 1 }],
 }
 
-function show() {
+function show(at = '/tests') {
   render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={[at]}>
       <TestRunsPage />
     </MemoryRouter>
   )
@@ -280,5 +280,22 @@ describe('찾기 — 방식과 상세 조건 (2026-09-29)', () => {
     expect(await screen.findByText(/조건에 맞는 시험이 없습니다/)).toBeInTheDocument()
     expect(screen.getByText(/「비슷」 으로 바꾸면/)).toBeInTheDocument()
     expect(screen.queryByText(/등록된 시험이 없습니다/)).not.toBeInTheDocument()
+  })
+})
+
+describe('측정 의뢰에서 왔다 (2026-10-03)', () => {
+  it('`?commission=` 을 서버에 그대로 묻고, 무엇으로 걸렀는지 말하고, 풀 수 있다', async () => {
+    show('/tests?commission=c-1')
+    expect(await screen.findByText('T-000203')).toBeInTheDocument()
+    expect(asked()).toMatchObject({ commission: 'c-1' })
+    const banner = screen.getByText('측정 의뢰의 시험만 보는 중입니다.')
+    expect(within(banner).getByRole('link', { name: '의뢰로' })).toHaveAttribute(
+      'href',
+      '/commissions/c-1'
+    )
+
+    await userEvent.click(within(banner).getByRole('button', { name: '풀기' }))
+    await waitFor(() => expect(asked().commission).toBeUndefined())
+    expect(screen.queryByText('측정 의뢰의 시험만 보는 중입니다.')).not.toBeInTheDocument()
   })
 })

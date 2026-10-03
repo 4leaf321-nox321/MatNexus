@@ -122,6 +122,20 @@ describe('보안 컨텍스트일 때', () => {
 })
 
 describe('뒤처리', () => {
+  it('사람이 잡아 둔 선택을 돌려준다', async () => {
+    secure(false)
+    document.body.innerHTML = '<p id="picked">골라 둔 글</p>'
+    const range = document.createRange()
+    range.selectNodeContents(document.getElementById('picked')!)
+    // 앞 시험이 남긴 선택이 있으면 `addRange` 는 무시된다(표준 동작) — 비우고 고른다.
+    document.getSelection()!.removeAllRanges()
+    document.getSelection()!.addRange(range)
+    Object.defineProperty(document, 'execCommand', { value: stubExecCommand(), configurable: true })
+
+    expect(await copyText('가')).toBe(true)
+    expect(document.getSelection()!.toString()).toBe('골라 둔 글')
+  })
+
   it('숨은 칸을 남기지 않는다', async () => {
     // 남으면 다음 복사가 그것을 찾고, 화면에도 쌓인다.
     vi.stubGlobal('navigator', { ...navigator, clipboard: undefined })

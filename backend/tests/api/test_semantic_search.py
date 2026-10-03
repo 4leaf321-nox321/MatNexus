@@ -29,8 +29,11 @@ from sqlalchemy.orm import Session
 from test_voc import member_headers
 
 from app.config import get_settings
+from app.jobs import kinds
+from app.jobs.models import Job
 from app.modules.catalog.models import CatalogDefinition
 from app.modules.guide.models import GuideDocument, GuideSection
+from app.modules.search.jobs import index_guide_sections
 from app.modules.workspaces.models import Workspace
 from app.shared import semantic
 
@@ -206,6 +209,70 @@ class TestMeaning:
         made = semantic.reindex(db)
         assert made["removed"] >= 1
         assert all(one.entity_id != str(section.id) for one in semantic.search(db, BODY))
+
+
+#: 고친 뒤의 본문 — 위 `BODY` 와 낱말이 안 겹친다.
+EDITED = (
+    "고무 시편은 아령형으로 따내고 표선 사이 길이를 영상 신율계로 잰다. 늘어남이 커서 "
+    "물림부를 감싸는 공기압 물림을 쓰고, 시험 속도는 분당 오백 밀리미터로 둔다. 상온에서 "
+    "하루 이상 묵힌 뒤 시험하며 같은 판에서 다섯 개 이상을 따낸다."
+)
+
+
+def _doc(text_body: str) -> dict[str, object]:
+    return {
+        "type": "doc",
+        "content": [{"type": "paragraph", "content": [{"type": "text", "text": text_body}]}],
+    }
+
+
+@pytest.mark.usefixtures("semantic_ready")
+class TestGuideAfterEdit:
+    """핸드북 절을 고치면 **그 절만 곧바로** 다시 색인한다(2026-10-03).
+
+    전에는 하루 한 번의 전체 색인과 수동 단추뿐이라, 절을 고치거나 승인한 날은 뜻으로 찾으면
+    옛 글이 걸렸다. 재료(9/29)와 같은 길 — 저장이 작업을 넣고 워커가 그 절만 심는다.
+    """
+
+    def _job(self, db: Session) -> Job:
+        job = db.scalars(
+            select(Job)
+            .where(Job.kind == kinds.SEARCH_INDEX_GUIDE)
+            .order_by(Job.created_at.desc())
+        ).first()
+        assert job is not None, "절을 고쳤는데 색인 작업이 안 들어갔다"
+        return job
+
+    def test_승인하면_새_글로_걸리고_지우면_사라진다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str]
+    ) -> None:
+        section = _handbook(db, title="시편 준비", body=BODY)
+        semantic.reindex(db)
+        assert any(one.entity_id == str(section.id) for one in semantic.search(db, BODY))
+
+        published = client.post(
+            f"/api/guide/sections/{section.id}/revisions",
+            json={"body": _doc(EDITED), "note": "고무로 바꿈", "publish": True},
+            headers=admin_headers,
+        )
+        assert published.status_code == 201, published.text
+        job = self._job(db)
+        assert job.payload == {"section_ids": [str(section.id)]}
+
+        index_guide_sections(db, job.payload)
+        assert semantic.search(db, EDITED)[0].entity_id == str(section.id)
+        # **옛 글은 걷혔다** — 남으면 고친 절이 옛 말로도 걸린다.
+        assert all(
+            one.entity_id != str(section.id) or one.score < 0.99
+            for one in semantic.search(db, BODY)
+        )
+
+        removed = client.delete(f"/api/guide/sections/{section.id}", headers=admin_headers)
+        assert removed.status_code == 204, removed.text
+        again = self._job(db)
+        assert again.id != job.id
+        index_guide_sections(db, again.payload)
+        assert all(one.entity_id != str(section.id) for one in semantic.search(db, EDITED))
 
 
 #: 재료 메모 — 이름(등급 코드)에는 없는 말. 「뜻으로만 걸리는」 상황을 만든다.

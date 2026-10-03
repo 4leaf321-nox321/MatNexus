@@ -289,6 +289,15 @@ export const catalogApi = {
     q?: string
     subsystem?: string
     category?: string
+    /** 이 분야의 값이 있는 재료만. */
+    domain?: string
+    /** 대소문자는 안 가린다. */
+    manufacturer?: string
+    /** 값 범위 — 물성 키 · **단위(필수)** · 끝. 화면은 SI 단위와 SI 값으로 보낸다. */
+    value_key?: string
+    value_unit?: string
+    value_min?: number
+    value_max?: number
     limit?: number
     offset?: number
   }) => {
@@ -300,6 +309,9 @@ export const catalogApi = {
     return api.get<CatalogMaterialPage>(`/catalog/materials${suffix ? `?${suffix}` : ''}`)
   },
   material: (id: string) => api.get<CatalogMaterialDetail>(`/catalog/materials/${id}`),
+  /** 덱의 「곡선 합성」 이 지을 곡선 — 못 지으면 `ok: false` 와 이유(200). */
+  syntheticCurve: (id: string) =>
+    api.get<SyntheticCurvePreview>(`/catalog/materials/${id}/synthetic-curve`),
 
   /** 물성 매핑 — 문헌 키 · 사내 항목 · 잰 값이 한 줄에. 매핑 화면이 이것만으로 그린다. */
   propertyMapping: () => api.get<PropertyMapping>('/catalog/properties/mapping'),
@@ -349,6 +361,7 @@ export const catalogApi = {
 }
 
 export type CatalogPropertyCreate = components['schemas']['CatalogPropertyCreate']
+export type SyntheticCurvePreview = components['schemas']['SyntheticCurvePreviewOut']
 export type CatalogDefinition = components['schemas']['CatalogDefinitionOut']
 export type CatalogPropertyDeprecate = components['schemas']['CatalogPropertyDeprecate']
 export type CatalogPropertyUpdate = components['schemas']['CatalogPropertyUpdate']

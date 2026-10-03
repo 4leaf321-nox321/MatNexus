@@ -14,6 +14,12 @@ const section = vi.fn()
 const submit = vi.fn()
 const search = vi.fn()
 const history = vi.fn()
+const coverage = vi.fn()
+
+vi.mock('@/modules/metrology/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/modules/metrology/api')>()),
+  metrologyApi: { coverage: (...a: unknown[]) => coverage(...a) },
+}))
 
 vi.mock('@/modules/guide/api', async () => {
   const actual = await vi.importActual<typeof import('@/modules/guide/api')>('@/modules/guide/api')
@@ -93,6 +99,20 @@ const DOC = {
   ],
 }
 
+/** 측정법이 아는 물성 — 하나는 잴 장비가 있고 하나는 없다. */
+const STORAGE = {
+  property_key: 'rheological.storage_modulus',
+  name: '저장 탄성률',
+  domain: 'rheological',
+  symbol: "E'",
+  si_unit: 'Pa',
+  technique_count: 1,
+  instrument_count: 2,
+  owned_instrument_count: 1,
+  value_count: 40,
+}
+const LOSS_TANGENT = { ...STORAGE, property_key: 'rheological.tan_delta', name: '손실 탄젠트', instrument_count: 0 }
+
 function mount(path = '/guide') {
   return render(
     <MemoryRouter initialEntries={[path]}>
@@ -114,6 +134,7 @@ beforeEach(() => {
   submit.mockResolvedValue({ id: 'r1', status: 'pending' })
   search.mockResolvedValue([])
   history.mockResolvedValue([])
+  coverage.mockResolvedValue({ covered: [STORAGE], gaps: [LOSS_TANGENT] })
 })
 
 describe('첫 화면', () => {
@@ -186,4 +207,51 @@ describe('찾기', () => {
 
 it('절 안 목차는 제목만 뽑는다', () => {
   expect(headingsOf(BODY)).toEqual([{ level: 2, text: '시간-온도 중첩' }])
+})
+
+describe('측정법과 잇는다 (2026-10-03)', () => {
+  const MENTIONS = {
+    type: 'doc',
+    content: [
+      { type: 'paragraph', content: [{ type: 'text', text: '손실 탄젠트 봉우리와 저장 탄성률을 함께 본다.' }] },
+    ],
+  }
+
+  it('절에 나온 물성을 나온 차례로 세우고, 측정법으로 보낸다 — 장비가 없으면 그렇다고', async () => {
+    section.mockResolvedValue({ ...SECTION, body: MENTIONS })
+    mount('/guide/dma-prony/master-curve')
+    const storage = await screen.findByRole('link', { name: '저장 탄성률' })
+    expect(storage).toHaveAttribute('href', '/metrology?key=rheological.storage_modulus')
+    const loss = screen.getByRole('link', { name: '손실 탄젠트' })
+    // 처음 나온 것이 위 — 절이 다루는 순서다.
+    expect(loss.compareDocumentPosition(storage) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(loss.closest('li')).toHaveTextContent('장비 없음')
+  })
+
+  it('앱 사용 문서에는 세우지 않는다 — 거기 나온 물성 이름은 재는 법이 아니다', async () => {
+    documents.mockResolvedValue([{ ...DOC, kind: 'platform' }])
+    section.mockResolvedValue({ ...SECTION, body: MENTIONS })
+    mount('/guide/dma-prony/master-curve')
+    expect(await screen.findByRole('heading', { name: '마스터커브' })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: '저장 탄성률' })).not.toBeInTheDocument()
+  })
+
+  it('측정법이 `?q=` 로 보내면 그 말로 찾은 채 열린다', async () => {
+    search.mockResolvedValue([
+      {
+        section_id: 's1',
+        document_key: 'dma-prony',
+        document_title: 'DMA 에서 Prony 카드까지',
+        kind: 'calculation',
+        topic: 'dma',
+        section_key: 'master-curve',
+        section_title: '마스터커브',
+        snippet: '… ISO 6721 …',
+      },
+    ])
+    mount('/guide?q=ISO%206721')
+    expect(screen.getByRole('textbox', { name: '핸드북에서 찾기' })).toHaveValue('ISO 6721')
+    expect(await screen.findByText('… ISO 6721 …')).toBeInTheDocument()
+    expect(search).toHaveBeenCalledWith('ISO 6721')
+  })
 })

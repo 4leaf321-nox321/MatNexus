@@ -171,6 +171,12 @@ class ProcessingResult(Base):
     **즉석 처리를 막지 않는다.** 레시피로 만들기 전에 한 번 돌려 보는 것이 정상
     작업 흐름이고, 그것을 막으면 사람이 레시피를 함부로 만들어 목록이 쓰레기가 된다."""
     recipe_label: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    recipe_key: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    """**그 레시피 그대로 돌렸으면** 그때의 레시피 키(2026-10-03, 이슈 #2). 이름은 바뀌고
+    `recipe_id` 는 레시피를 지우면 끊기는데, 「이 결과가 어느 레시피로 나왔나」 는 키로 묻는다
+    — 전에는 결과가 키를 안 남겨 늘 빈 값이었다. 불러온 레시피의 단계를 고쳐서 저장했으면
+    비우고 이름에 「(단계 고침)」 을 붙인다(`routes._recipe_link`): 고친 단계를 그 레시피의
+    결과라고 적으면 「이 레시피로 낸 결과」 를 셀 때 섞인다."""
     steps_snapshot: Mapped[list[dict[str, Any]]] = mapped_column(
         JSONB, default=list, server_default="[]"
     )

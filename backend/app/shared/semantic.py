@@ -31,7 +31,7 @@ from __future__ import annotations
 
 import logging
 import uuid
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from typing import Any
 
@@ -247,31 +247,7 @@ def collect(db: Session) -> list[Chunk]:
     (`_material_chunks`). 「아연도금 강판」 으로 SECC 를 찾는 것은 이름으로는 안 된다.
     물성 정의도 예외다(`_property_chunks`) — 이름 해소가 뜻을 쓸 수 있어야 사전에 없는
     말이 별칭 후보로 이어진다."""
-    made: list[Chunk] = []
-
-    rows = db.execute(
-        text("""
-        SELECT s.id::text, s.title, s.body_text, d.title
-        FROM guide_sections s
-        JOIN guide_documents d ON d.id = s.document_id
-        WHERE s.deleted_at IS NULL AND d.deleted_at IS NULL
-          AND s.body_text IS NOT NULL AND length(s.body_text) > 40
-        """)
-    ).all()
-    for section_id, section_title, body, document_title in rows:
-        # 문서 제목을 조각마다 붙인다 — 「인장」 이 문서 제목에만 있고 절 본문에는
-        # 없는 경우가 흔하고, 그때 그 조각은 문맥을 잃는다.
-        label = f"{document_title} · {section_title}"
-        for seq, piece in enumerate(split(body)):
-            made.append(
-                Chunk(
-                    kind="guide_section",
-                    entity_id=section_id,
-                    seq=seq,
-                    title=label,
-                    body=piece,
-                )
-            )
+    made: list[Chunk] = _guide_chunks(db)
 
     rows = db.execute(
         text("""
@@ -293,6 +269,39 @@ def collect(db: Session) -> list[Chunk]:
 
     made.extend(_material_chunks(db))
     made.extend(_property_chunks(db))
+    return made
+
+
+def _guide_chunks(db: Session, *, ids: Iterable[str] | None = None) -> list[Chunk]:
+    """핸드북 절. `ids` 를 주면 그 절만 — 고친 뒤 그 절만 다시 색인할 때
+    (`reindex_guide_sections`)."""
+    only = sorted(set(ids)) if ids is not None else None
+    rows = db.execute(
+        text(f"""
+        SELECT s.id::text, s.title, s.body_text, d.title
+        FROM guide_sections s
+        JOIN guide_documents d ON d.id = s.document_id
+        WHERE s.deleted_at IS NULL AND d.deleted_at IS NULL
+          AND s.body_text IS NOT NULL AND length(s.body_text) > 40
+          {"AND s.id::text = ANY(:ids)" if only is not None else ""}
+        """),
+        {"ids": only} if only is not None else {},
+    ).all()
+    made: list[Chunk] = []
+    for section_id, section_title, body, document_title in rows:
+        # 문서 제목을 조각마다 붙인다 — 「인장」 이 문서 제목에만 있고 절 본문에는
+        # 없는 경우가 흔하고, 그때 그 조각은 문맥을 잃는다.
+        label = f"{document_title} · {section_title}"
+        for seq, piece in enumerate(split(body)):
+            made.append(
+                Chunk(
+                    kind="guide_section",
+                    entity_id=section_id,
+                    seq=seq,
+                    title=label,
+                    body=piece,
+                )
+            )
     return made
 
 
@@ -385,27 +394,42 @@ def reindex_materials(db: Session, ids: Iterable[str]) -> dict[str, int]:
     뜻으로 걸렸다. 지운 재료·줄어든 메모의 조각은 여기서 걷는다 — 남으면 「없는 재료」 가
     뜻으로 걸린다.
     """
+    return _reindex_some(db, "material", ids, _material_chunks)
+
+
+def reindex_guide_sections(db: Session, ids: Iterable[str]) -> dict[str, int]:
+    """핸드북 절 **몇 개만** 다시 색인한다 — 고친 뒤 곧바로 뜻으로 걸리게(2026-10-03).
+
+    전에는 하루 한 번의 전체 색인과 관리 화면의 수동 단추뿐이라, 절을 고치거나 승인한 날은
+    뜻으로 찾으면 옛 글이 걸렸다 — 재료가 같은 문제를 9/29 에 먼저 고쳤다. 지운 절의 조각도
+    여기서 걷는다.
+    """
+    return _reindex_some(db, "guide_section", ids, _guide_chunks)
+
+
+def _reindex_some(
+    db: Session,
+    kind: str,
+    ids: Iterable[str],
+    chunks_of: Callable[..., list[Chunk]],
+) -> dict[str, int]:
+    """`kind` 의 `ids` 만 다시 심고, 그 id 들의 남은 옛 조각(지웠거나 줄어든 것)을 걷는다."""
     wanted = sorted({str(one) for one in ids})
     if not wanted or not embeddings.enabled() or not ensure_schema(db):
         return {"chunks": 0, "skipped": 1}
-    chunks = _material_chunks(db, ids=wanted)
+    chunks = chunks_of(db, ids=wanted)
     seen = _store(db, chunks)
     removed = 0
     rows = db.execute(
-        text(
-            f"SELECT entity_id, seq FROM {TABLE} "
-            "WHERE kind = 'material' AND entity_id = ANY(:ids)"
-        ),
-        {"ids": wanted},
+        text(f"SELECT entity_id, seq FROM {TABLE} WHERE kind = :k AND entity_id = ANY(:ids)"),
+        {"k": kind, "ids": wanted},
     ).all()
     for entity_id, seq in rows:
-        if ("material", entity_id, seq) in seen:
+        if (kind, entity_id, seq) in seen:
             continue
         db.execute(
-            text(
-                f"DELETE FROM {TABLE} WHERE kind = 'material' AND entity_id = :e AND seq = :s"
-            ),
-            {"e": entity_id, "s": seq},
+            text(f"DELETE FROM {TABLE} WHERE kind = :k AND entity_id = :e AND seq = :s"),
+            {"k": kind, "e": entity_id, "s": seq},
         )
         removed += 1
     db.commit()
@@ -425,6 +449,22 @@ def queue_materials(db: Session, ids: Iterable[uuid.UUID | str]) -> None:
         db,
         kind=job_kinds.SEARCH_INDEX_MATERIALS,
         payload={"material_ids": wanted},
+        max_attempts=1,
+    )
+
+
+def queue_guide_sections(db: Session, ids: Iterable[uuid.UUID | str]) -> None:
+    """핸드북 절이 바뀌었다 — **그 절만** 뒤에서 다시 색인하게 넣는다. 커밋은 부르는 쪽이 한다.
+
+    재료(`queue_materials`)와 같은 규칙이다 — 엔진이 꺼져 있으면 안 넣고, 재시도하지 않는다.
+    """
+    wanted = sorted({str(one) for one in ids})
+    if not wanted or not embeddings.enabled():
+        return
+    queue.enqueue(
+        db,
+        kind=job_kinds.SEARCH_INDEX_GUIDE,
+        payload={"section_ids": wanted},
         max_attempts=1,
     )
 

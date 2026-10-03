@@ -24,7 +24,7 @@ import { Check, Copy, Plus, Trash2 } from 'lucide-react'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
 import { Input } from '@/shared/components/ui/input'
-import { copyText } from '@/shared/clipboard'
+import { copyText } from '@/shared/lib/clipboard'
 
 /** 표의 한 열. `header` 가 곧 서버로 가는 글자다. */
 export interface Column {

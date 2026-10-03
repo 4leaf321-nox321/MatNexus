@@ -9,9 +9,21 @@
 
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { McpSetup, TOKEN_PLACEHOLDER } from '@/shared/components/McpSetup'
+
+const connection = vi.fn()
+
+vi.mock('@/shared/api/client', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/shared/api/client')>()
+  return { ...actual, api: { ...actual.api, get: (...args: unknown[]) => connection(...args) } }
+})
+
+beforeEach(() => {
+  connection.mockReset()
+  connection.mockResolvedValue({ direct_url: null, portal: null })
+})
 
 describe('McpSetup', () => {
   it('토큰이 없으면 자리표시자를 넣은 형식을 보여 준다', () => {
@@ -48,5 +60,37 @@ describe('McpSetup', () => {
 
     const entry = await screen.findByText(/\[mcp_servers\.matnexus\]/)
     expect(entry.textContent).toContain('AUTH = "Bearer mnx_pat_abc123"')
+  })
+})
+
+describe('주소는 서버가 준다 · HWAX 포털 (2026-10-03)', () => {
+  it('서버가 준 주소를 쓰고, 짐작이 아니라고 말한다', async () => {
+    connection.mockResolvedValue({ direct_url: 'http://10.0.0.5:8012/mcp', portal: null })
+    render(<McpSetup token="mnx_pat_abc123" />)
+    expect(await screen.findByText(/서버 설정에서 왔습니다/)).toBeInTheDocument()
+    expect(screen.getByText(/claude mcp add/).textContent).toContain('http://10.0.0.5:8012/mcp')
+    expect(connection).toHaveBeenCalledWith('/auth/mcp-connection')
+  })
+
+  it('서버가 모르면 짐작하고 그렇다고 말한다', async () => {
+    render(<McpSetup />)
+    expect(await screen.findByText(/MCP_PUBLIC_URL/)).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'HWAX 포털에서 쓰기' })).not.toBeInTheDocument()
+  })
+
+  it('포털 위임이 켜져 있으면 토큰을 등록하지 않는다고 말한다', async () => {
+    connection.mockResolvedValue({
+      direct_url: null,
+      portal: {
+        gateway_url: 'https://hwax.sec.samsung.net/mcp-gw/mcp',
+        tokens_url: 'https://hwax.sec.samsung.net/tokens',
+        auto_token: true,
+      },
+    })
+    render(<McpSetup />)
+    const portal = await screen.findByRole('region', { name: 'HWAX 포털에서 쓰기' })
+    expect(portal).toHaveTextContent('MatNexus 토큰을 등록하지 않습니다')
+    expect(portal).toHaveTextContent('https://hwax.sec.samsung.net/mcp-gw/mcp')
+    expect(portal).toHaveTextContent('읽기 전용')
   })
 })

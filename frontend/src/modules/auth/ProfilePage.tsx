@@ -102,7 +102,7 @@ export default function ProfilePage() {
           커넥터 화면에서 본다. */}
       <section className="mt-8 border-t pt-4">
         <h2 className="mb-2 text-sm font-semibold">액세스 토큰</h2>
-        <AccessTokens onIssued={setIssued} />
+        <AccessTokens defaultExpiryDays={90} onIssued={setIssued} />
       </section>
 
       {/* 토큰을 받고도 「어디에 넣나」 에서 막힌다 — 도구별로 완성된 설정을 준다. */}

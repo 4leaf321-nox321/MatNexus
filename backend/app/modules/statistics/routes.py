@@ -13,6 +13,7 @@ from __future__ import annotations
 import uuid
 from collections.abc import Sequence
 from dataclasses import asdict
+from datetime import UTC, datetime
 from statistics import fmean, stdev
 from typing import Any
 
@@ -69,7 +70,14 @@ from app.modules.statistics.schemas import (
 )
 from app.modules.tests.models import TestRun, TestType
 from app.modules.workspaces.models import WorkspaceMember
-from app.shared import alias_candidates, curvedata, ops, pagination, permissions
+from app.shared import (
+    alias_candidates,
+    commission_due,
+    curvedata,
+    ops,
+    pagination,
+    permissions,
+)
 from app.shared import divisions as divisions_order
 from app.shared.auth import current_user
 from app.shared.errors import AppError, NotFound
@@ -949,6 +957,24 @@ def overview(
                 if not user.is_system_admin
                 else true(),
             )
+        ),
+        commissions_received_testing=count(
+            select(Commission.id).where(
+                Commission.id.in_(
+                    permissions.visible_commissions(db, user).with_only_columns(Commission.id)
+                ),
+                Commission.status == "in_progress",
+                Commission.lab_workspace_id.in_(
+                    select(WorkspaceMember.workspace_id).where(
+                        WorkspaceMember.user_id == user.id
+                    )
+                )
+                if not user.is_system_admin
+                else true(),
+            )
+        ),
+        commissions_due_soon=len(
+            commission_due.due_soon(db, today=datetime.now(UTC).date()).get(user.id, [])
         ),
         commissions_mine_open=count(
             select(Commission.id).where(

@@ -394,6 +394,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/auth/mcp-connection": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Mcp Connection
+         * @description 사람에게 줄 MCP 연결 주소 — **서버가 준다**(RA `/api/me/mcp-connection` 과 같은 판단).
+         *
+         *     화면이 「지금 보는 호스트:8012」 로 짐작하면, 서버를 옮기거나 앞에 프록시를 둔 날 그 짐작이
+         *     틀린 주소를 준다 — RA 는 포털 아래로 옮긴 뒤 그 주소로 등록한 사람들의 MCP 가 끊겼다.
+         *     설정이 없으면 모른다고 답한다(화면이 그때만 짐작하고, 짐작이라고 말한다).
+         */
+        get: operations["mcp_connection_api_auth_mcp_connection_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/auth/me": {
         parameters: {
             query?: never;
@@ -429,6 +453,67 @@ export interface paths {
         put?: never;
         /** Refresh */
         post: operations["refresh_api_auth_refresh_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/sso": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Gateway Issue
+         * @description HWAX 게이트웨이가 **그 사람의 읽기 전용 토큰**을 받아 간다. 꺼져 있으면 404, 비밀이
+         *     틀리면 401, 그 사람을 들여보낼 수 없으면 403 — 404 는 「창구 꺼짐」 전용이다.
+         */
+        post: operations["gateway_issue_api_auth_sso_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/sso/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Gateway Revoke
+         * @description 그 사람 · 그 client 의 위임 토큰을 폐기한다. 폐기할 것이 없어도 200 이다.
+         */
+        post: operations["gateway_revoke_api_auth_sso_revoke_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/sso/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Gateway Verify
+         * @description 비밀만 확인한다(204 / 401) — 설정이 맞는지 볼 때. 아무것도 만들지 않는다.
+         */
+        post: operations["gateway_verify_api_auth_sso_verify_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -647,7 +732,7 @@ export interface paths {
          *
          *     전부 담으면 값 4만여 건에 20MB 안팎이다. 나눠 받게 하지 않는다 — 이어 붙이는
          *     일을 사람에게 시키면 그 자리에서 빠뜨린다. 좁혀 받고 싶으면 목록과 같은
-         *     조건(`q`·`category`·`subsystem`)을 준다.
+         *     조건(`q`·`category`·`subsystem`·`manufacturer`·`domain`·`value_*`)을 준다.
          *
          *     ## 값은 고른 단위계로 — 기본 mm·N·tonne (ADR 0036)
          *
@@ -765,6 +850,9 @@ export interface paths {
         /**
          * List Materials
          * @description 카탈로그 재료 목록. 물성 많은 순 — 쓸 것이 많은 재료가 먼저다.
+         *
+         *     값 범위로 걸렀으면 재료마다 **걸린 값**(몇 건 · 최소~최대, 물은 단위로)을 함께 싣는다 —
+         *     안 실으면 사람은 왜 이 재료가 섰는지 상세를 하나씩 열어 본다.
          */
         get: operations["list_materials_api_catalog_materials_get"];
         put?: never;
@@ -823,6 +911,30 @@ export interface paths {
          *     묶어서 준다 — 사내 재료로 받아 갈 때도 이 한 벌이 단위다.
          */
         get: operations["catalog_parameter_sets_api_catalog_materials__material_id__parameter_sets_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/catalog/materials/{material_id}/synthetic-curve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Synthetic Curve Preview
+         * @description 문헌 스칼라로 지은 σ-ε 곡선 — **덱의 「곡선 합성」 과 같은 계산**(2026-10-03).
+         *
+         *     문헌에는 곡선이 없다. 덱은 스칼라(E · 항복 · 인장 · 연신율)로 곡선을 지어 *MAT_024 에
+         *     싣는데, 덱 파일을 열기 전에는 어떤 곡선인지 볼 길이 없었다. 지어 보고 못 지으면 그
+         *     이유를 200 으로 돌려준다 — 못 짓는 것은 오류가 아니라 이 재료의 사실이다.
+         */
+        get: operations["synthetic_curve_preview_api_catalog_materials__material_id__synthetic_curve_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -9686,6 +9798,20 @@ export interface components {
              */
             value_count: number;
         };
+        /**
+         * CatalogMatchedOut
+         * @description 값 범위에 걸린 값 — 몇 건이고 어디서 어디까지인가. 물은 단위로 싣는다.
+         */
+        CatalogMatchedOut: {
+            /** Count */
+            count: number;
+            /** High */
+            high: number;
+            /** Low */
+            low: number;
+            /** Unit */
+            unit: string;
+        };
         /** CatalogMaterialCreate */
         CatalogMaterialCreate: {
             /** Category */
@@ -9757,6 +9883,7 @@ export interface components {
             id: string;
             /** Manufacturer */
             manufacturer: string | null;
+            matched?: components["schemas"]["CatalogMatchedOut"] | null;
             /** Material Class */
             material_class: string | null;
             /** Material Code */
@@ -9978,8 +10105,16 @@ export interface components {
             domains: {
                 [key: string]: number;
             };
+            /** Manufacturers */
+            manufacturers?: {
+                [key: string]: number;
+            };
             /** Materials */
             materials: number;
+            /** Materials By Domain */
+            materials_by_domain?: {
+                [key: string]: number;
+            };
             /** Sources */
             sources: number;
             /** Subsystems */
@@ -10370,6 +10505,8 @@ export interface components {
         CommissionItemOut: {
             /** Candidates */
             candidates?: components["schemas"]["LinkedRunOut"][];
+            /** Cards */
+            cards?: components["schemas"]["ItemCardOut"][];
             /** Conditions */
             conditions: {
                 [key: string]: unknown;
@@ -11424,6 +11561,18 @@ export interface components {
             synthesize_plastic: boolean;
         };
         /**
+         * DeclaredCatalogOut
+         * @description 문헌 카탈로그에서 받아 온 값 — **등급의 근거**(2026-10-03, `shared/declared_catalog`).
+         *
+         *     서버가 그 문헌 값들과 숫자를 대 보고 붙였다. 값을 고치면 풀린다(승인과 같다).
+         */
+        DeclaredCatalogOut: {
+            /** Tier */
+            tier: number;
+            /** Value Ids */
+            value_ids: string[];
+        };
+        /**
          * DeclaredPointIn
          * @description 점 하나. 조건은 **그 항목의 축만** 적는다 — 다른 축은 거절된다(측정 온도는 예외).
          */
@@ -11458,6 +11607,8 @@ export interface components {
          * @description 넣을 때. 값은 `input_unit` 단위이고 서버가 SI 로 바꾼다.
          */
         DeclaredPropertyIn: {
+            /** Catalog Value Ids */
+            catalog_value_ids?: string[] | null;
             /** Input Unit */
             input_unit?: string | null;
             /** Item */
@@ -11484,6 +11635,7 @@ export interface components {
          */
         DeclaredPropertyOut: {
             approval?: components["schemas"]["DeclaredApprovalOut"] | null;
+            catalog?: components["schemas"]["DeclaredCatalogOut"] | null;
             /** Input Unit */
             input_unit?: string | null;
             /** Item */
@@ -13271,6 +13423,42 @@ export interface components {
                 [key: string]: string;
             }[];
         };
+        /** GatewayRevokeOut */
+        GatewayRevokeOut: {
+            /**
+             * Ok
+             * @default true
+             */
+            ok: boolean;
+            /** Revoked */
+            revoked: number;
+        };
+        /**
+         * GatewayTokenData
+         * @description HWAX 위임 창구가 내주는 토큰 — 포털 요청서(`ra-request.md`)의 봉투 그대로.
+         */
+        GatewayTokenData: {
+            /** Access Token */
+            access_token: string;
+            /** Expires In */
+            expires_in: number;
+            /** Needs Workspace */
+            needs_workspace: boolean;
+            /**
+             * Token Type
+             * @default bearer
+             */
+            token_type: string;
+        };
+        /** GatewayTokenOut */
+        GatewayTokenOut: {
+            data: components["schemas"]["GatewayTokenData"];
+            /**
+             * Success
+             * @default true
+             */
+            success: boolean;
+        };
         /** GraphEdgeOut */
         GraphEdgeOut: {
             /** Dst Id */
@@ -13938,6 +14126,28 @@ export interface components {
             /** Target Ids */
             target_ids: string[];
         };
+        /**
+         * ItemCardOut
+         * @description 이 항목에 붙은 시험으로 만든 물성 카드 하나(2026-10-03).
+         */
+        ItemCardOut: {
+            /** Has Deliverable */
+            has_deliverable: boolean;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Label */
+            label: string;
+            /**
+             * Material Id
+             * Format: uuid
+             */
+            material_id: string;
+            /** Status */
+            status: string;
+        };
         /** ItemOut */
         ItemOut: {
             /**
@@ -14587,6 +14797,15 @@ export interface components {
             /** Tool */
             tool: string;
         };
+        /**
+         * McpConnectionOut
+         * @description 사람에게 줄 MCP 연결 주소 — **서버가 준다.** 화면이 짐작하면 옮긴 날 틀린다.
+         */
+        McpConnectionOut: {
+            /** Direct Url */
+            direct_url?: string | null;
+            portal?: components["schemas"]["PortalConnectionOut"] | null;
+        };
         /** McpOut */
         McpOut: {
             /** Average Ms */
@@ -15139,10 +15358,20 @@ export interface components {
             /** Card Total */
             card_total: number;
             /**
+             * Commissions Due Soon
+             * @default 0
+             */
+            commissions_due_soon: number;
+            /**
              * Commissions Mine Open
              * @default 0
              */
             commissions_mine_open: number;
+            /**
+             * Commissions Received Testing
+             * @default 0
+             */
+            commissions_received_testing: number;
             /**
              * Commissions Received Waiting
              * @default 0
@@ -15594,6 +15823,18 @@ export interface components {
             id: string;
             /** Workspace */
             workspace: string | null;
+        };
+        /**
+         * PortalConnectionOut
+         * @description HWAX 포털 게이트웨이로 붙는 길 — 포털의 모든 앱이 같은 주소로 붙는다.
+         */
+        PortalConnectionOut: {
+            /** Auto Token */
+            auto_token: boolean;
+            /** Gateway Url */
+            gateway_url: string;
+            /** Tokens Url */
+            tokens_url: string;
         };
         /** ProcessOut */
         ProcessOut: {
@@ -19132,6 +19373,54 @@ export interface components {
             temperature_k: number;
         };
         /**
+         * SyntheticCurvePreviewOut
+         * @description 문헌 재료의 **합성** σ-ε 곡선 — 실측이 아니다. 덱의 「곡선 합성」 과 같은 계산이다.
+         */
+        SyntheticCurvePreviewOut: {
+            /**
+             * Inconsistent
+             * @default false
+             */
+            inconsistent: boolean;
+            /** Inputs */
+            inputs?: components["schemas"]["SyntheticInputOut"][];
+            /** Model */
+            model?: string | null;
+            /** Note */
+            note?: string | null;
+            /** Notes */
+            notes?: string[];
+            /** Ok */
+            ok: boolean;
+            /** Strain */
+            strain?: number[];
+            /** Stress */
+            stress?: number[];
+            /**
+             * Table Points
+             * @default 0
+             */
+            table_points: number;
+            /** Why */
+            why?: string | null;
+            /** Youngs Modulus */
+            youngs_modulus?: number | null;
+        };
+        /** SyntheticInputOut */
+        SyntheticInputOut: {
+            /** Item */
+            item: string;
+            /** Reference */
+            reference: string;
+            /**
+             * Si Unit
+             * @default
+             */
+            si_unit: string;
+            /** Value Si */
+            value_si: number;
+        };
+        /**
          * SyntheticPlasticOut
          * @description 합성 소성 표의 미리보기 — 켜기 전에 무엇이 지어지는지 안다.
          */
@@ -21468,6 +21757,26 @@ export interface operations {
             };
         };
     };
+    mcp_connection_api_auth_mcp_connection_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["McpConnectionOut"];
+                };
+            };
+        };
+    };
     me_api_auth_me_get: {
         parameters: {
             query?: never;
@@ -21538,6 +21847,64 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["LoginResponse"];
                 };
+            };
+        };
+    };
+    gateway_issue_api_auth_sso_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GatewayTokenOut"];
+                };
+            };
+        };
+    };
+    gateway_revoke_api_auth_sso_revoke_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GatewayRevokeOut"];
+                };
+            };
+        };
+    };
+    gateway_verify_api_auth_sso_verify_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
@@ -21820,6 +22187,12 @@ export interface operations {
                 q?: string | null;
                 subsystem?: string | null;
                 category?: string | null;
+                manufacturer?: string | null;
+                domain?: string | null;
+                value_key?: string | null;
+                value_unit?: string | null;
+                value_min?: number | null;
+                value_max?: number | null;
                 /** @description 값의 단위계. 비우면 mm·N·tonne(ADR 0036) — SI 는 `si`. */
                 units?: string | null;
             };
@@ -22046,6 +22419,16 @@ export interface operations {
                 q?: string | null;
                 subsystem?: string | null;
                 category?: string | null;
+                /** @description 대소문자는 안 가린다 */
+                manufacturer?: string | null;
+                /** @description 이 분야의 값이 있는 재료만 */
+                domain?: string | null;
+                /** @description 값 범위로 거를 물성 키 */
+                value_key?: string | null;
+                /** @description 범위의 단위 — 필수 */
+                value_unit?: string | null;
+                value_min?: number | null;
+                value_max?: number | null;
                 limit?: number | null;
                 offset?: number;
             };
@@ -22186,6 +22569,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CatalogParameterSetOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    synthetic_curve_preview_api_catalog_materials__material_id__synthetic_curve_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                material_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SyntheticCurvePreviewOut"];
                 };
             };
             /** @description Validation Error */
@@ -30518,6 +30932,8 @@ export interface operations {
                 workspace?: string | null;
                 specimen_id?: string | null;
                 material_id?: string | null;
+                /** @description 측정 의뢰 id — 그 의뢰의 항목에 붙은 시험만 */
+                commission?: string | null;
                 status?: string | null;
                 test_type_key?: string | null;
                 orientation?: string | null;

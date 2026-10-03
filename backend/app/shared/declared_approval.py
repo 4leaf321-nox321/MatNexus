@@ -38,6 +38,11 @@ from app.shared.text import compare_key
 #: 줄에서 승인이 드는 칸.
 KEY = "approval"
 
+#: 줄에서 **문헌 근거**가 드는 칸 — 문헌 카탈로그에서 받아 온 값이면 그 값의 등급과
+#: 지문(`shared/declared_catalog` 가 짓는다). 여기는 지금 값에 유효한지만 본다 — 대 보는
+#: 일은 그쪽이 카탈로그를 읽어 한다(이 모듈은 DB 를 모른다).
+CATALOG_KEY = "catalog"
+
 #: 지문에서 숫자를 견주는 유효숫자. 위 「승인은 값에 묶인다」.
 DIGITS = 9
 
@@ -78,14 +83,35 @@ def of(row: dict[str, Any]) -> dict[str, Any] | None:
     return found
 
 
+def catalog_tier(row: dict[str, Any]) -> int | None:
+    """**지금 값에 유효한** 받아 온 문헌 등급. 값이 바뀌어 지문이 갈렸으면 없다 — 그때 등급은
+    출처로 돌아간다(문헌 3). 승인과 같은 규칙이다(위 「승인은 값에 묶인다」)."""
+    found = row.get(CATALOG_KEY)
+    if not isinstance(found, dict) or found.get("digest") != digest(row):
+        return None
+    value = found.get("tier")
+    return value if isinstance(value, int) and value in tiers.TIER_LABELS else None
+
+
 def tier(row: dict[str, Any]) -> int:
-    """이 줄의 등급 — 출처와 승인에서."""
-    return tiers.declared_tier(row.get("source"), approved=of(row) is not None)
+    """이 줄의 등급 — 받아 온 문헌 등급(있으면) 또는 출처, 그리고 승인에서."""
+    return tiers.declared_tier(
+        row.get("source"), approved=of(row) is not None, catalog_tier=catalog_tier(row)
+    )
+
+
+def tier_if_approved(row: dict[str, Any]) -> int:
+    """승인하면 될 등급 — 화면이 「승인하면 등급 2」 를 미리 말한다."""
+    return tiers.declared_tier(
+        row.get("source"), approved=True, catalog_tier=catalog_tier(row)
+    )
 
 
 def origin(row: dict[str, Any]) -> str:
-    """카드 칸에 적는 출처 표지(`declared:literature+approved`)."""
-    return tiers.declared_origin(row.get("source"), approved=of(row) is not None)
+    """카드 칸에 적는 출처 표지(`declared:literature+catalog1+approved`)."""
+    return tiers.declared_origin(
+        row.get("source"), approved=of(row) is not None, catalog_tier=catalog_tier(row)
+    )
 
 
 def stamp(row: dict[str, Any], *, user_id: str, name: str, note: str | None) -> dict[str, Any]:

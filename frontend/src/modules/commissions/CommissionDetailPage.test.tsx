@@ -84,6 +84,17 @@ vi.mock('@/modules/fitting/api', async (importOriginal) => ({
   },
 }))
 
+const specimens = vi.fn()
+const createSpecimen = vi.fn()
+
+vi.mock('@/modules/materials/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/modules/materials/api')>()),
+  materialsApi: {
+    specimens: (...args: unknown[]) => specimens(...args),
+    createSpecimen: (...args: unknown[]) => createSpecimen(...args),
+  },
+}))
+
 vi.mock('@/modules/workspaces/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/modules/workspaces/api')>()),
   workspacesApi: { options: () => Promise.resolve([]) },
@@ -327,5 +338,82 @@ describe('측정 의뢰 상세', () => {
     expect(screen.queryByLabelText('댓글 등록')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '말만 남기기' })).not.toBeInTheDocument()
     expect(screen.getByText(/읽기만 됩니다/)).toBeInTheDocument()
+  })
+})
+
+describe('2단계 마무리 (2026-10-03)', () => {
+  beforeEach(() => {
+    get.mockReset()
+    specimens.mockReset()
+    createSpecimen.mockReset()
+    specimens.mockResolvedValue([])
+    createSpecimen.mockImplementation((_sample: string, body: { orientation: string }) =>
+      Promise.resolve({ id: `sp-${body.orientation}`, orientation: body.orientation })
+    )
+  })
+
+  it('항목의 시험으로 만든 카드가 잇힌다 — 받을 블록이 든 것과 아닌 것을 가른다', async () => {
+    await show(
+      detail({
+        items: [
+          item({
+            cards: [
+              { id: 'k-1', label: 'SECC 탄소성', status: 'draft', material_id: 'm-1', has_deliverable: true },
+              { id: 'k-2', label: 'SECC 탄성만', status: 'published', material_id: 'm-1', has_deliverable: false },
+            ],
+          }),
+        ],
+      })
+    )
+    const cards = screen.getByRole('list', { name: '1번 항목의 카드' })
+    expect(within(cards).getByRole('link', { name: '카드 SECC 탄소성' })).toHaveAttribute(
+      'href',
+      '/materials/m-1?tab=cards'
+    )
+    expect(within(cards).getByText('초안')).toBeInTheDocument()
+    expect(within(cards).getByText('받을 블록은 이 카드에 없음')).toBeInTheDocument()
+    expect(screen.queryByText(/받을 카드가 아직 없습니다/)).not.toBeInTheDocument()
+  })
+
+  it('채택은 됐는데 받을 카드가 아직이면 그렇다고 말한다', async () => {
+    await show(detail({ items: [item({ cards: [] })] }))
+    expect(screen.getByText(/받을 카드가 아직 없습니다/)).toBeInTheDocument()
+  })
+
+  it('시편 만들기 — 수량을 방향에 나눈 안을 고쳐서 하나씩 만든다', async () => {
+    const user = userEvent.setup()
+    specimens.mockResolvedValue([{ id: 'old', orientation: 'MD' }])
+    await show(detail())
+    await user.click(screen.getByRole('button', { name: /시편 만들기/ }))
+    const dialog = await screen.findByRole('dialog')
+    // 수량 3 을 MD · TD 에 — 나머지는 앞 방향부터.
+    expect(within(dialog).getByLabelText('MD 시편 수')).toHaveValue(2)
+    expect(within(dialog).getByLabelText('TD 시편 수')).toHaveValue(1)
+    expect(await within(dialog).findByText('이 시료에 이미 1개')).toBeInTheDocument()
+
+    await user.clear(within(dialog).getByLabelText('TD 시편 수'))
+    await user.type(within(dialog).getByLabelText('TD 시편 수'), '2')
+    await user.click(within(dialog).getByRole('button', { name: '시편 4개 만들기' }))
+
+    await waitFor(() => expect(createSpecimen).toHaveBeenCalledTimes(4))
+    expect(createSpecimen.mock.calls.map((call) => (call[1] as { orientation: string }).orientation)).toEqual([
+      'MD',
+      'MD',
+      'TD',
+      'TD',
+    ])
+    expect(await screen.findByText(/시편 4개를 만들었습니다/)).toBeInTheDocument()
+  })
+
+  it('여러 파일은 일괄 등록으로 — 시료 · 의뢰 · 항목을 실어 보내고, 의뢰의 시험 목록으로도 간다', async () => {
+    await show(detail())
+    expect(screen.getByRole('link', { name: /여러 파일 한꺼번에/ })).toHaveAttribute(
+      'href',
+      '/tests/upload?material=m-1&sample=s-1&commission=c-1&item=i-1'
+    )
+    expect(screen.getByRole('link', { name: /이 의뢰의 시험 목록/ })).toHaveAttribute(
+      'href',
+      '/tests?commission=c-1'
+    )
   })
 })

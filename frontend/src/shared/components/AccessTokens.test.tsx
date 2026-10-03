@@ -77,6 +77,30 @@ describe('AccessTokens', () => {
     )
   })
 
+  it('만료를 고르면 그 일수를 싣고, 기본은 쓰는 자리가 정한다', async () => {
+    const user = userEvent.setup()
+    render(<AccessTokens defaultExpiryDays={90} />)
+    await screen.findByText('인장기-1')
+    expect(screen.getByLabelText('토큰 만료')).toHaveValue('90')
+
+    await user.type(screen.getByLabelText('토큰 이름'), '노트북 AI')
+    await user.selectOptions(screen.getByLabelText('토큰 만료'), '30')
+    await user.click(screen.getByRole('button', { name: '발급' }))
+    await waitFor(() =>
+      expect(post).toHaveBeenCalledWith('/auth/tokens', { name: '노트북 AI', expires_in_days: 30 })
+    )
+  })
+
+  it('만료 없음이면 그 칸을 안 싣는다 — 장비 커넥터의 기본', async () => {
+    const user = userEvent.setup()
+    render(<AccessTokens />)
+    await screen.findByText('인장기-1')
+    expect(screen.getByLabelText('토큰 만료')).toHaveValue('')
+    await user.type(screen.getByLabelText('토큰 이름'), '장비')
+    await user.click(screen.getByRole('button', { name: '발급' }))
+    await waitFor(() => expect(post).toHaveBeenCalledWith('/auth/tokens', { name: '장비' }))
+  })
+
   it('이름이 비면 발급 단추가 꺼져 있다', async () => {
     render(<AccessTokens />)
     await screen.findByText('인장기-1')

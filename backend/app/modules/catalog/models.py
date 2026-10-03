@@ -238,7 +238,13 @@ class CatalogValue(Base):
     """
 
     __tablename__ = "catalog_values"
-    __table_args__ = (Index("ix_catalog_values_material_key", "material_id", "property_key"),)
+    __table_args__ = (
+        Index("ix_catalog_values_material_key", "material_id", "property_key"),
+        # **값으로 찾는 자리**(`shared/property_search` — 「항복강도 200 MPa 근처」). 물성 키로
+        # 좁힌 뒤 값의 범위를 훑는다 — 키 하나짜리 색인만 있으면 그 키의 값을 전부 읽고
+        # 거른다(2026-10-03, [계획] 온톨로지 에 적혀 있던 남은 것).
+        Index("ix_catalog_values_key_value", "property_key", "value_num"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         PgUUID(as_uuid=True), primary_key=True, default=uuid.uuid4

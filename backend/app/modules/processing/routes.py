@@ -201,6 +201,37 @@ def _recipe_or_none(db: Session, key: str | None) -> ProcessingRecipe | None:
     return recipe
 
 
+def _comparable(steps: list[dict[str, Any]] | None) -> list[tuple[str, dict[str, Any]]]:
+    """단계를 견줄 모양으로 — **빈 옵션은 없는 것과 같다**(화면이 비운 칸을 null 로 보낸다)."""
+    return [
+        (
+            str(step.get("plugin", "")),
+            {
+                key: value
+                for key, value in dict(step.get("options") or {}).items()
+                if value is not None
+            },
+        )
+        for step in steps or []
+    ]
+
+
+def _recipe_link(
+    recipe: ProcessingRecipe | None, steps: list[dict[str, Any]]
+) -> tuple[ProcessingRecipe | None, str | None]:
+    """`(이을 레시피, 결과에 남길 이름)`. **단계가 그 레시피와 같을 때만 잇는다.**
+
+    화면은 레시피를 불러온 뒤 단계를 고칠 수 있다. 고친 것을 그 레시피의 결과라고 적으면
+    「이 레시피로 낸 결과」(그래프의 `ran_with`)에 다른 단계의 결과가 섞인다 — 그래서 고쳤으면
+    잇지 않고 이름에만 어디서 시작했는지 남긴다. 단계 자체는 늘 스냅숏으로 남는다.
+    """
+    if recipe is None:
+        return None, None
+    if _comparable(steps) == _comparable(recipe.steps):
+        return recipe, recipe.label
+    return None, f"{recipe.label} (단계 고침)"[:120]
+
+
 def _store(
     db: Session,
     run: TestRun,
@@ -238,11 +269,13 @@ def _store(
     stored = filestore.write_bytes(
         data, relative_dir=f"processing/{run.id}", filename=f"{uuid.uuid4().hex}.parquet"
     )
+    linked, label = _recipe_link(recipe, steps)
     item = ProcessingResult(
         test_run_id=run.id,
         source_curve_key=curve.key,
-        recipe_id=recipe.id if recipe else None,
-        recipe_label=recipe.label if recipe else None,
+        recipe_id=linked.id if linked else None,
+        recipe_key=linked.key if linked else None,
+        recipe_label=label,
         steps_snapshot=steps,
         stages=[
             {
@@ -565,7 +598,7 @@ def _result_out(
         stale=stale,
         test_run_id=item.test_run_id,
         source_curve_key=item.source_curve_key,
-        recipe_key=None,
+        recipe_key=item.recipe_key,
         recipe_label=item.recipe_label,
         steps=item.steps_snapshot,
         stages=[

@@ -190,6 +190,15 @@ describe('병합이 정확해야 한다', () => {
     expect(cte.input_unit).toBeUndefined()
     expect(cte.reference).toContain('어느 논문')
     expect(cte.reference).toContain('실측')
+    // **어느 문헌 값에서 왔는지** 함께 간다 — 서버가 대 보고 그 등급을 잇는다(2026-10-03).
+    // 안 보내면 출처(문헌)만으로 등급이 정해져 1등급 값도 3 이 됐다.
+    expect((cte as unknown as { catalog_value_ids: string[] }).catalog_value_ids).toEqual(
+      DETAIL.values
+        .filter((one) => one.property_key === 'thermal.expansion_linear')
+        .map((one) => one.id)
+    )
+    // 되보내는 기존 줄에는 안 싣는다 — 값이 그대로면 서버가 저장돼 있던 근거를 이어받는다.
+    expect(rows.find((row) => row.item === '비열')).not.toHaveProperty('catalog_value_ids')
     // 밀도는 기본 칸으로, SI 단위 명시.
     expect(body.density).toBe(7930)
     expect(body.density_unit).toBe('kg/m3')

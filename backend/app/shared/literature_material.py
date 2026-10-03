@@ -73,6 +73,8 @@ class Virtual:
     """값마다 한 줄 — 사내 이름 · 값 · 출처 · 등급. 덱 머리에 그대로 실린다."""
     unmapped: list[str] = field(default_factory=list)
     """덱에 쓰일 수 있는데 사내 항목과 안 이어져 못 옮긴 문헌 물성(이름)."""
+    adjusted: str | None = None
+    """항복 > 인장이라 짝을 바꿨으면 그 말(`_consistent`). 곡선 미리보기가 그대로 보여 준다."""
 
 
 def targets(db: Session) -> dict[str, tuple[str, str]]:
@@ -277,6 +279,7 @@ def virtual(db: Session, material: CatalogMaterial, *, synthesize: bool = False)
             line += f" (후보 {marks[value.id].n_candidates}개 중 대표값)"
         out.provenance.append(line)
     out.material.declared_properties = declared_rows
+    out.adjusted = fix if synthesize else None
     if fix and synthesize:
         # 항복·인장은 합성 곡선에만 쓰인다 — 탄성 덱 머리에 이 말이 서면 무엇을 바꿨는지
         # 모른다.

@@ -40,6 +40,8 @@ const REAL: Overview = {
   parse_failed: 0,
   inbox_waiting: 0,
   commissions_received_waiting: 0,
+  commissions_received_testing: 0,
+  commissions_due_soon: 0,
   commissions_mine_open: 0,
   ops: null,
 }
@@ -222,9 +224,22 @@ describe('측정 의뢰 줄', () => {
     )
   })
 
+  it('받는 쪽에는 시험 중과 기한 임박을 함께 세운다', () => {
+    panel({ commissions_received_testing: 3, commissions_due_soon: 1 })
+    expect(screen.getByRole('link', { name: /받은 의뢰 시험 중 3/ })).toHaveAttribute(
+      'href',
+      '/commissions?scope=received&status=in_progress'
+    )
+    expect(screen.getByRole('link', { name: /의뢰 기한 임박 1/ })).toHaveAttribute(
+      'href',
+      '/commissions?scope=received'
+    )
+  })
+
   it('0 이면 줄이 없다', () => {
     panel({ commissions_received_waiting: 0, commissions_mine_open: 0 })
     expect(screen.queryByText(/받은 의뢰/)).toBeNull()
+    expect(screen.queryByText(/기한 임박/)).toBeNull()
   })
 })
 

@@ -20,6 +20,7 @@ import { Link, useParams } from 'react-router-dom'
 import { AddValueDialog } from '@/modules/catalog/AddValueDialog'
 import { AdoptDialog } from '@/modules/catalog/AdoptDialog'
 import { ParameterSetsSection } from '@/modules/catalog/ParameterSetsSection'
+import { SyntheticCurveSection } from '@/modules/catalog/SyntheticCurveSection'
 import { CreateMaterialDialog } from '@/modules/catalog/CreateMaterialDialog'
 
 import {
@@ -48,6 +49,9 @@ import {
   TableRow,
 } from '@/shared/components/ui/table'
 import { useResource } from '@/shared/hooks/useResource'
+
+/** 합성 곡선의 강도 입력 — 서버 `declared_card.SYNTH_KEYS` 의 앞 둘. */
+const SYNTH_STRENGTHS = new Set(['mechanical.yield_strength', 'mechanical.tensile_strength'])
 
 /** tier 배지 — 낮을수록 신뢰가 실린 표기. 4는 가정 표지가 있으면 「가정」. */
 function TierBadge({ value }: { value: CatalogValue }) {
@@ -348,6 +352,12 @@ export default function CatalogMaterialPage() {
       {/* **묶음은 표 아래에 따로 선다.** 값 표에 낱개로 섞어 두면 같은 이름이
           아홉 번 서고, 무엇이 한 벌인지 안 보인다(ADR 0029). */}
       {id && <ParameterSetsSection materialId={id} />}
+
+      {/* 항복이나 인장강도가 있어야 곡선을 지을 수 있다 — 없으면 단추를 세우지 않는다
+          (누르고 「모자랍니다」 만 보게 하지 않는다). 정확한 판정은 서버가 한다. */}
+      {id && item?.values.some((value) => SYNTH_STRENGTHS.has(value.property_key)) && (
+        <SyntheticCurveSection materialId={id} />
+      )}
 
       {item && <AdoptDialog detail={item} open={adopting} onClose={() => setAdopting(false)} />}
       {item && (

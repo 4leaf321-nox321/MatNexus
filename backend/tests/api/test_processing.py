@@ -660,6 +660,94 @@ class Test미리보기:
         assert "12.12 mm²" in body.json()["notes"][0]
 
 
+class Test레시피_계보:
+    """결과가 **어느 레시피로** 나왔나(2026-10-03, 이슈 #2).
+
+    전에는 결과의 `recipe_key` 가 늘 비어 있었다 — 화면이 키를 안 보냈고, 서버도 결과를
+    돌려줄 때 비워 줬다. 이제 레시피 그대로면 키 · 이름을 남기고, 불러와서 단계를 고쳤으면
+    잇지 않고 이름에 「(단계 고침)」 을 붙인다 — 고친 결과가 그 레시피의 결과로 세어지면
+    안 된다.
+    """
+
+    @pytest.fixture
+    def recipe(self, client: TestClient, admin_headers: dict[str, str], run_id: str) -> Any:
+        response = client.post(
+            "/api/processing/recipes",
+            json={
+                "key": "proc_line",
+                "label": "계보 확인",
+                "description": None,
+                "test_type_key": "tensile",
+                "steps": STEPS,
+                "is_active": True,
+            },
+            headers=admin_headers,
+        )
+        assert response.status_code == 201, response.text
+        return response.json()
+
+    def _save(
+        self,
+        client: TestClient,
+        headers: dict[str, str],
+        run_id: str,
+        steps: list[dict[str, Any]],
+    ) -> Any:
+        response = client.post(
+            "/api/processing/results",
+            json={"test_run_id": run_id, "steps": steps, "recipe_key": "proc_line"},
+            headers=headers,
+        )
+        assert response.status_code == 201, response.text
+        return response.json()
+
+    def test_레시피_그대로면_키와_이름을_남기고_목록도_그렇게_준다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        run_id: str,
+        recipe: Any,
+        db: Session,
+    ) -> None:
+        saved = self._save(client, admin_headers, run_id, STEPS)
+        assert saved["recipe_key"] == "proc_line"
+        assert saved["recipe_label"] == "계보 확인"
+
+        listed = client.get(
+            "/api/processing/results", params={"test_run_id": run_id}, headers=admin_headers
+        ).json()
+        assert [one["recipe_key"] for one in listed] == ["proc_line"]
+        row = db.get(ProcessingResult, uuid.UUID(saved["id"]))
+        assert row is not None and row.recipe_id is not None
+
+    def test_빈_옵션은_고친_것이_아니다(
+        self, client: TestClient, admin_headers: dict[str, str], run_id: str, recipe: Any
+    ) -> None:
+        """화면은 비운 칸을 `null` 로 보낸다 — 안 적은 것과 같다."""
+        steps = [{**step, "options": {**step["options"], "unused": None}} for step in STEPS]
+        assert self._save(client, admin_headers, run_id, steps)["recipe_key"] == "proc_line"
+
+    def test_불러와서_단계를_고쳤으면_잇지_않고_이름에_남긴다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        run_id: str,
+        recipe: Any,
+        db: Session,
+    ) -> None:
+        changed = [
+            {**STEPS[0], "options": {**STEPS[0]["options"], "gauge_length": 0.06}},
+            *STEPS[1:],
+        ]
+        saved = self._save(client, admin_headers, run_id, changed)
+        assert saved["recipe_key"] is None
+        assert saved["recipe_label"] == "계보 확인 (단계 고침)"
+        row = db.get(ProcessingResult, uuid.UUID(saved["id"]))
+        # **「이 레시피로 낸 결과」 에 섞이지 않는다** — 그래프의 `ran_with` 가 이 칸을 걷는다.
+        assert row is not None and row.recipe_id is None
+        assert row.steps_snapshot[0]["options"]["gauge_length"] == 0.06
+
+
 class Test결과는불변:
     def _save(self, client: TestClient, headers: dict[str, str], run_id: str) -> Any:
         response = client.post(

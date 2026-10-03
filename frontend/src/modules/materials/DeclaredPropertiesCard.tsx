@@ -518,6 +518,7 @@ export function DeclaredPropertiesCard({
                         <DeclaredGrade
                           tier={stored(row.item)?.quality_tier ?? 4}
                           approval={stored(row.item)?.approval}
+                          catalog={stored(row.item)?.catalog}
                         />
                       </div>
                     ) : null}
@@ -932,7 +933,7 @@ function ApprovalSection({
   return (
     <section aria-label="승인" className="space-y-2 rounded-md border border-dashed p-3 text-xs">
       <div className="flex flex-wrap items-center gap-2">
-        <DeclaredGrade tier={tier} approval={row.approval} />
+        <DeclaredGrade tier={tier} approval={row.approval} catalog={row.catalog} />
         {row.approval ? (
           <span>{approvalText(row.approval)}</span>
         ) : (

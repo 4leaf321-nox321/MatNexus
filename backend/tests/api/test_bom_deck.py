@@ -250,6 +250,61 @@ class Test합성_곡선:
         whys = {row["mid"]: row["why"] for row in body["skipped"]}
         assert "합성할 스칼라가 모자랍니다" in whys[2]
 
+    def test_상세의_미리보기는_덱이_지을_곡선과_같다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        tmp_path: Path,
+    ) -> None:
+        """덱 파일을 열기 전에 곡선을 본다(2026-10-03) — **덱과 같은 계산**이어야 한다.
+
+        미리 본 곡선과 덱의 표가 다른 길에서 나오면 사람은 미리 본 것을 믿고 덱을 낸다.
+        """
+        from app.shared import litdeck
+
+        ids = catalog_ids(db, tmp_path)
+        self.add_yield(db, ids["sus"])
+        got = client.get(
+            f"/api/catalog/materials/{ids['sus']}/synthetic-curve", headers=admin_headers
+        )
+        assert got.status_code == 200, got.text
+        body = got.json()
+        assert body["ok"], body
+        # E 는 대표값(tier 1 의 193 GPa) — 탄성 블록에 선 값 그대로다.
+        assert body["youngs_modulus"] == 193e9
+        # E 와 항복뿐이라 완전소성 — 원점에서 시작해 항복에서 평탄하다.
+        assert body["strain"][0] == 0 and body["stress"][0] == 0
+        assert max(body["stress"]) == 215e6
+        assert [one["value_si"] for one in body["inputs"]] == [215e6]
+        # 단위는 정의에서 온다 — 화면이 이름으로 짐작하지 않는다.
+        assert [one["si_unit"] for one in body["inputs"]] == ["Pa"]
+        assert "실측" not in body["model"] and body["note"]
+
+        sus = db.get(CatalogMaterial, ids["sus"])
+        assert sus is not None
+        made = litdeck.assemble(db, sus, synthesize=True)
+        assert not isinstance(made, str)
+        assert body["table_points"] == len(made.blocks[litdeck.SYNTHETIC_BLOCK]["rows"])
+
+    def test_못_지으면_덱과_같은_이유를_200_으로_준다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        tmp_path: Path,
+    ) -> None:
+        ids = catalog_ids(db, tmp_path)
+        body = client.get(
+            f"/api/catalog/materials/{ids['fr4']}/synthetic-curve", headers=admin_headers
+        ).json()
+        assert body["ok"] is False and "합성할 스칼라가 모자랍니다" in body["why"]
+        gone = client.get(
+            "/api/catalog/materials/00000000-0000-0000-0000-000000000000/synthetic-curve",
+            headers=admin_headers,
+        )
+        assert gone.status_code == 404
+
 
 class Test매칭_기억:
     def test_넣은_대로_돌아오고_비우면_지워진다(

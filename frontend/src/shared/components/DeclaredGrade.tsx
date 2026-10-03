@@ -14,6 +14,7 @@ import { Badge } from '@/shared/components/ui/badge'
 import { stamp } from '@/shared/lib/datetime'
 
 type Approval = components['schemas']['DeclaredApprovalOut']
+type Catalog = components['schemas']['DeclaredCatalogOut']
 
 /** 승인을 한 줄로 — 툴팁과 편집 창이 같은 말을 쓴다. */
 export function approvalText(approval: Approval): string {
@@ -23,16 +24,23 @@ export function approvalText(approval: Approval): string {
 export function DeclaredGrade({
   tier,
   approval,
+  catalog,
 }: {
   tier: number
   approval?: Approval | null
+  /** 문헌 카탈로그에서 받아 온 값이면 그 근거 — 등급이 그 문헌 값의 것이다(2026-10-03). */
+  catalog?: Catalog | null
 }) {
   return (
     <span className="inline-flex items-center gap-1">
       <Badge
         variant="outline"
         className="px-1 py-0 text-[10px] font-normal"
-        title="값의 등급 1~4 — 1 제품 문서 실측 · 2 규격 · 공인 DB · 3 옮겨 적은 값 · 4 추정"
+        title={
+          catalog
+            ? `문헌 카탈로그에서 받아 온 값 — 그 문헌 값의 등급(${catalog.tier})을 잇습니다. 값을 고치면 출처의 등급으로 돌아갑니다.`
+            : '값의 등급 1~4 — 1 제품 문서 실측 · 2 규격 · 공인 DB · 3 옮겨 적은 값 · 4 추정'
+        }
       >
         등급 {tier}
       </Badge>

@@ -119,7 +119,12 @@ describe('OptionPicker', () => {
       const user = userEvent.setup()
       // **서버가 별칭으로 찾아 준 것을 브라우저가 또 거르면 안 된다.**
       // '포스코주' 로 쳤는데 서버가 '포스코' 를 돌려주면 그걸 보여야 한다.
-      const search = vi.fn().mockResolvedValue([{ value: '포스코', count: 12 }])
+      // **친 말에만 답한다.** 아무 말에나 같은 것을 돌려주면, 열자마자 묻는 빈 검색의 답을
+      // 보고 넘어가 「포스코주」 로 묻기 전에 확인이 끝난다 — 부하가 걸린 전체 실행에서
+      // 그렇게 흔들렸다(2026-10-03, 혼자 돌리면 통과).
+      const search = vi.fn((query: string) =>
+        Promise.resolve(query === '포스코주' ? [{ value: '포스코', count: 12 }] : [])
+      )
       render(
         <OptionPicker
           label="제조사"

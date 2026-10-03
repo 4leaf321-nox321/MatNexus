@@ -109,8 +109,11 @@ export default function TestRunsPage() {
     const asked: Record<string, string | undefined> = {}
     const status = askedIn.get('status')
     const material = askedIn.get('material')
+    // 의뢰 상세의 「이 의뢰의 시험」 이 `?commission=` 으로 보낸다(2026-10-03).
+    const commission = askedIn.get('commission')
     if (status) asked.status = status
     if (material) asked.material_id = material
+    if (commission) asked.commission = commission
     return asked
   })
   /**
@@ -339,6 +342,23 @@ export default function TestRunsPage() {
           </>
         }
       />
+
+      {/* **어느 의뢰의 시험을 보고 있는지 말한다.** 안 말하면 「시험이 왜 이것뿐이지」 가
+          된다 — 거르기가 주소에서 왔기 때문이다. */}
+      {filters.commission && (
+        <div
+          className="mb-3 flex flex-wrap items-center gap-2 rounded-md border px-3 py-2 text-sm"
+          role="status"
+        >
+          측정 의뢰의 시험만 보는 중입니다.
+          <Link className="underline" to={`/commissions/${filters.commission}`}>
+            의뢰로
+          </Link>
+          <Button size="sm" variant="ghost" onClick={() => narrow('commission', undefined)}>
+            풀기
+          </Button>
+        </div>
+      )}
 
       {/* **이름 하나로 재료·시료·시편·회차가 다 걸린다.** `record_name` 이
           그 넷을 조합해 만들어지기 때문이다(`matcore/naming.py`). 그래서 열

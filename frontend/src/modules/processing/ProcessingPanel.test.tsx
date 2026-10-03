@@ -47,6 +47,7 @@ const steps = vi.fn()
 const recipes = vi.fn()
 const preview = vi.fn()
 const dimensions = vi.fn()
+const save = vi.fn()
 
 vi.mock('@/modules/processing/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/modules/processing/api')>()),
@@ -55,6 +56,7 @@ vi.mock('@/modules/processing/api', async (importOriginal) => ({
     recipes: () => recipes(),
     preview: (...args: unknown[]) => preview(...args),
     inputs: () => inputs(),
+    save: (...args: unknown[]) => save(...args),
   },
 }))
 
@@ -850,5 +852,156 @@ describe('시편 값 이어 연결', () => {
 
     // 잇기 전 기본값(빈 칸)이 아니라 **이어 붙었던 값**이 남는다.
     expect(await screen.findByLabelText<HTMLInputElement>('게이지 길이')).toHaveValue('50')
+  })
+})
+
+/** 돌려 보기의 가장 작은 답 — 저장 단추가 풀릴 만큼만. */
+const EMPTY_PREVIEW = {
+  source_curve_key: 'curve-1',
+  source_row_count: 100,
+  row_count: 100,
+  columns: [],
+  units: {},
+  stages: [],
+  scalars: [],
+  notes: [],
+  points: [],
+}
+
+describe('결과 저장 — 어느 레시피로 나왔나 (이슈 #2)', () => {
+  const RECIPE = {
+    id: 'r1',
+    key: 'rcp_bend',
+    label: '굽힘 표준',
+    description: null,
+    owner_workspace_slug: 'metal',
+    owner_workspace_name: '금속재료팀',
+    access: { can_edit: true, reason: null, registrant: '홍길동', edit_workspace: null },
+    test_type_key: 'flexural',
+    test_type_label: '굽힘',
+    steps: [
+      {
+        plugin: 'tensile.engineering',
+        options: { gauge_length: 0.05, displacement: 'displacement', force: 'force' },
+      },
+    ],
+    is_active: true,
+    created_at: '2026-10-01T00:00:00Z',
+    updated_at: '2026-10-01T00:00:00Z',
+    revision: 1,
+  }
+
+  beforeEach(() => {
+    steps.mockResolvedValue(CATALOG)
+    recipes.mockResolvedValue([RECIPE])
+    dimensions.mockResolvedValue({ items: [] })
+    preview.mockReset()
+    preview.mockResolvedValue(EMPTY_PREVIEW)
+    save.mockReset()
+  })
+
+  it('불러온 레시피의 키를 보내고, 저장 확인이 앞 안내에 안 가리고, 단추가 잠긴다', async () => {
+    const user = userEvent.setup()
+    save.mockResolvedValue({ id: 'res-1', recipe_key: 'rcp_bend', recipe_label: '굽힘 표준' })
+    show()
+    await user.click(await screen.findByRole('button', { name: '레시피 불러오기' }))
+    await user.click(await screen.findByRole('button', { name: /굽힘 표준/ }))
+    expect(await screen.findByText(/'굽힘 표준' 을 불러왔습니다/)).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /미리보기/ }))
+    const store = await screen.findByRole('button', { name: /결과 저장/ })
+    await waitFor(() => expect(store).not.toBeDisabled())
+    await user.click(store)
+
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1))
+    expect(save.mock.calls[0][0]).toMatchObject({ recipe_key: 'rcp_bend' })
+    expect(await screen.findByText(/레시피 「굽힘 표준」 그대로입니다/)).toBeInTheDocument()
+    expect(screen.queryByText(/을 불러왔습니다/)).toBeNull()
+    // **한 번 더 눌러 같은 결과가 둘 생기지 않는다.**
+    expect(screen.getByRole('button', { name: /저장됨/ })).toBeDisabled()
+  })
+
+  it('레시피 없이 짠 단계는 키를 안 보낸다', async () => {
+    const user = userEvent.setup()
+    recipes.mockResolvedValue([])
+    save.mockResolvedValue({ id: 'res-2', recipe_key: null, recipe_label: null })
+    show()
+    await clickStep(user, '공칭 응력-변형률')
+    await user.click(screen.getByRole('button', { name: /미리보기/ }))
+    const store = await screen.findByRole('button', { name: /결과 저장/ })
+    await waitFor(() => expect(store).not.toBeDisabled())
+    await user.click(store)
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1))
+    expect(save.mock.calls[0][0]).toMatchObject({ recipe_key: null })
+  })
+})
+
+describe('앞 단계가 낸 값에 잇기 (이슈 #2 — @proof_strain)', () => {
+  /** 항복 단계가 항복 변형률을 내고, 그 뒤의 구간 자르기가 그것을 시작으로 쓴다. */
+  const LINK_CATALOG = [
+    CATALOG[0],
+    {
+      id: 'tensile.yield',
+      label: '항복강도',
+      version: '1',
+      applies_to: ['tensile'],
+      params: [
+        column('strain', '변형률 열', 'strain_engineering'),
+        column('stress', '응력 열', 'stress_engineering'),
+      ],
+      makes_columns: [],
+      makes_values: [made('proof_strain', '항복 변형률', '1')],
+      order: 60,
+    },
+    {
+      id: 'curve.crop',
+      label: '구간 자르기',
+      version: '1',
+      applies_to: ['tensile'],
+      params: [
+        column('x', '기준 열', 'strain_engineering'),
+        // 단위가 칸에 없고 기준 열을 따른다 — 변형률 열이면 무차원 값만 후보다.
+        { ...number('start', '시작'), unit: null, unit_from: 'x' },
+      ],
+      makes_columns: [],
+      makes_values: [],
+      order: 80,
+    },
+  ] as unknown as ProcessingStep[]
+
+  beforeEach(() => {
+    steps.mockResolvedValue(LINK_CATALOG)
+    recipes.mockResolvedValue([])
+    dimensions.mockResolvedValue({ items: [] })
+    preview.mockReset()
+    preview.mockResolvedValue(EMPTY_PREVIEW)
+  })
+
+  it('구간 자르기 시작을 항복 변형률에 이으면 돌릴 때 @proof_strain 으로 간다', async () => {
+    const user = userEvent.setup()
+    show()
+    await clickStep(user, '공칭 응력-변형률')
+    await clickStep(user, '항복강도')
+    await clickStep(user, '구간 자르기')
+    await clickStep(user, '구간 자르기')
+
+    await user.click(await screen.findByRole('button', { name: /자동 연결 · 항복 변형률/ }))
+    expect(await screen.findByText(/를 자동으로 가져옵니다/)).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /미리보기/ }))
+    await waitFor(() => expect(preview).toHaveBeenCalled())
+    const sent = (preview.mock.calls.at(-1) as [{ steps: { plugin: string; options: Record<string, unknown> }[] }])[0]
+      .steps
+    expect(sent.find((one) => one.plugin === 'curve.crop')?.options.start).toBe('@proof_strain')
+  })
+
+  it('앞에 그 값을 내는 단계가 없으면 후보에 안 든다', async () => {
+    const user = userEvent.setup()
+    show()
+    await clickStep(user, '공칭 응력-변형률')
+    await clickStep(user, '구간 자르기')
+    await clickStep(user, '구간 자르기')
+    await screen.findByLabelText('시작')
+    expect(screen.queryByRole('button', { name: /자동 연결/ })).toBeNull()
   })
 })

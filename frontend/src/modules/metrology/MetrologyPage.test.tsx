@@ -7,7 +7,7 @@
  *   빈 칸은 — 로 보인다
  */
 
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -17,6 +17,12 @@ import MetrologyPage from '@/modules/metrology/MetrologyPage'
 const summary = vi.fn()
 const coverage = vi.fn()
 const byProperty = vi.fn()
+const guideSearch = vi.fn()
+
+vi.mock('@/modules/guide/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/modules/guide/api')>()),
+  guideApi: { search: (...args: unknown[]) => guideSearch(...args) },
+}))
 
 vi.mock('@/modules/metrology/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/modules/metrology/api')>()),
@@ -61,6 +67,7 @@ beforeEach(() => {
     categories: { mechanical: 40 },
   })
   coverage.mockResolvedValue({ covered: [YOUNG], gaps: [DENSITY] })
+  guideSearch.mockResolvedValue([])
 })
 
 describe('측정법', () => {
@@ -164,5 +171,72 @@ describe('측정법', () => {
     expect(
       await screen.findByText('이 물성을 잴 수 있는 장비가 카탈로그에 없습니다.')
     ).toBeInTheDocument()
+  })
+})
+
+describe('핸드북과 잇는다 (2026-10-03)', () => {
+  const hit = (id: string, title: string) => ({
+    section_id: id,
+    document_key: 'tensile',
+    document_title: '인장 시험',
+    kind: 'method',
+    topic: null,
+    section_key: id,
+    section_title: title,
+    snippet: '',
+  })
+
+  it('규격으로 찾은 절이 먼저, 이름으로 찾은 절이 뒤 — 겹치면 한 번만', async () => {
+    byProperty.mockResolvedValue({
+      property_key: 'mechanical.youngs_modulus',
+      name: '탄성계수',
+      domain: 'mechanical',
+      symbol: 'E',
+      si_unit: 'Pa',
+      test_standard: null,
+      techniques: [
+        {
+          technique: 'tensile',
+          capabilities: [
+            {
+              id: 'c1',
+              instrument: { id: 'i1', vendor: 'Instron', model: '5982', category: 'mechanical', owned: true, owned_note: null, owner_name: null },
+              standard: 'ISO 6892-1',
+              range_min: null,
+              range_max: null,
+              range_unit: null,
+              resolution: null,
+              accuracy: null,
+              temperature_min_k: null,
+              temperature_max_k: null,
+              specimen: null,
+              mapping_confidence: 'high',
+              source_detail: null,
+              notes: null,
+            },
+          ],
+        },
+      ],
+    })
+    guideSearch.mockImplementation((term: string) =>
+      Promise.resolve(
+        term === 'ISO 6892'
+          ? [hit('gauge', '표점 거리')]
+          : [hit('modulus', '탄성계수 구하기'), hit('gauge', '표점 거리')]
+      )
+    )
+    render(
+      <MemoryRouter initialEntries={['/metrology?key=mechanical.youngs_modulus']}>
+        <MetrologyPage />
+      </MemoryRouter>
+    )
+    const box = await screen.findByRole('region', { name: '핸드북의 관련 절' })
+    // 데이터로 그려진 것을 기다린다 — 틀만 선 빈 칸을 보면 틀린 이유로 통과한다.
+    const links = await within(box).findAllByRole('link')
+    expect(links.map((one) => one.textContent)).toEqual(['표점 거리', '탄성계수 구하기'])
+    expect(links[0]).toHaveAttribute('href', '/guide/tensile/gauge')
+    expect(within(box).getByText(/「ISO 6892」/)).toBeInTheDocument()
+    expect(guideSearch).toHaveBeenCalledWith('ISO 6892')
+    expect(guideSearch).toHaveBeenCalledWith('탄성계수')
   })
 })

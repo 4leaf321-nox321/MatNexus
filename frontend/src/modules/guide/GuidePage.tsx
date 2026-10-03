@@ -12,15 +12,24 @@
  * 저장하면 **초안**이 되어 검토자에게 간다. 검토자는 자기 것을 바로 낸다. 검토
  * 없이 본문이 바뀌는 길은 없다 — 화면이 그것을 숨기지 않고 말한다(「초안으로
  * 보냈습니다」).
+ *
+ * ## 측정법과 잇는다 (2026-10-03)
+ *
+ * 절 옆에 **그 절에 나오는 물성의 측정법**이 선다(`mentions`) — 「이 물성은 어느 장비 ·
+ * 규격으로 재나」. 반대로 측정법 화면은 물성 · 규격을 다룬 절을 세우고, 더 찾을 때는
+ * `?q=` 로 이리 보낸다 — 그래서 찾기 상자는 주소의 `q` 로 시작한다.
  */
 
 import { ChevronRight, FileCode2, Pencil, Search, Sparkles } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 
 import { EMPTY_DOC, KINDS, guideApi } from '@/modules/guide/api'
 import type { Doc, GuideDocument, Revision, SearchHit, Section } from '@/modules/guide/api'
 import { GuideEditor } from '@/modules/guide/GuideEditor'
+import { mentionedProperties, textOf } from '@/modules/guide/mentions'
+import { metrologyApi } from '@/modules/metrology/api'
+import type { MetrologyCoverageRow } from '@/modules/metrology/api'
 import { useAuth } from '@/shared/auth/AuthContext'
 import { isDataSteward } from '@/shared/auth/roles'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
@@ -48,7 +57,18 @@ export default function GuidePage() {
   const navigate = useNavigate()
   const { user } = useAuth()
   const docs = useResource(() => guideApi.documents(), [])
-  const [query, setQuery] = useState('')
+  const [asked] = useSearchParams()
+  const [query, setQuery] = useState(() => asked.get('q') ?? '')
+  // 측정법이 아는 물성 — 절에 나온 이름을 측정법으로 잇는 데만 쓴다. **못 받아도 절은 읽힌다**
+  // — 길잡이 하나 때문에 핸드북에 오류를 띄우지 않는다.
+  const measurable = useResource(
+    () =>
+      metrologyApi
+        .coverage()
+        .then((got) => [...got.covered, ...got.gaps])
+        .catch(() => [] as MetrologyCoverageRow[]),
+    []
+  )
   const [hits, setHits] = useState<SearchHit[] | null>(null)
 
   // 검색 — 두 글자부터, 타이핑이 멎으면.
@@ -118,6 +138,7 @@ export default function GuidePage() {
             document={current.document}
             sectionId={current.section.id}
             isReviewer={isReviewer}
+            measurable={measurable.data ?? NONE}
             onSaved={() => docs.reload()}
             onMove={(key) => navigate(`/guide/${current.document?.key}/${key}`)}
           />
@@ -270,16 +291,22 @@ function Landing({ documents }: { documents: GuideDocument[] }) {
 
 // --- 절 ---------------------------------------------------------------------------
 
+/** 측정법 목록을 아직 못 받았을 때 — 매 렌더 새 배열이면 아래 `useMemo` 가 매번 돈다. */
+const NONE: MetrologyCoverageRow[] = []
+
 function SectionView({
   document,
   sectionId,
   isReviewer,
+  measurable,
   onSaved,
   onMove,
 }: {
   document: GuideDocument
   sectionId: string
   isReviewer: boolean
+  /** 측정법이 아는 물성 — 이 절에 이름이 나온 것을 옆에 세운다. */
+  measurable: MetrologyCoverageRow[]
   onSaved: () => void
   onMove: (sectionKey: string) => void
 }) {
@@ -327,6 +354,16 @@ function SectionView({
   const next = index >= 0 && index < document.sections.length - 1 ? document.sections[index + 1] : null
   const body = section.data?.body as Doc | undefined
   const headings = body ? headingsOf(body) : []
+  // **앱 사용 문서는 뺀다.** 「카드 만들기」 절에 「항복강도」 가 나와도 그 절은 재는 법이
+  // 아니다 — 거기서 측정법을 세우면 길잡이가 아니라 소음이다.
+  const title = section.data?.title ?? ''
+  const mentioned = useMemo(
+    () =>
+      body && document.kind !== 'platform'
+        ? mentionedProperties(`${title}\n${textOf(body)}`, measurable)
+        : [],
+    [body, title, document.kind, measurable]
+  )
 
   return (
     <div className="flex flex-col gap-4 xl:flex-row xl:items-start">
@@ -441,6 +478,28 @@ function SectionView({
                   className={`text-muted-foreground truncate ${heading.level > 2 ? 'pl-3' : ''}`}
                 >
                   {heading.text}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {mentioned.length > 0 && !editing && (
+          <div className="mb-4">
+            <div className="text-muted-foreground mb-1 text-xs font-semibold">
+              이 절의 물성 — 측정법
+            </div>
+            <ul className="space-y-0.5">
+              {mentioned.map((row) => (
+                <li key={row.property_key} className="truncate">
+                  <Link
+                    className="hover:underline"
+                    to={`/metrology?key=${encodeURIComponent(row.property_key)}`}
+                  >
+                    {row.name}
+                  </Link>
+                  {row.instrument_count === 0 && (
+                    <span className="text-muted-foreground"> · 장비 없음</span>
+                  )}
                 </li>
               ))}
             </ul>

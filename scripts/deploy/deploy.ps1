@@ -540,6 +540,14 @@ if ($SkipMigrations) {
     } catch {
         Write-Log "씨앗 맞추기 실패 (배포는 계속합니다): $_"
     }
+    # **받아 온 문헌 값의 등급을 되살린다**(2026-10-03). 전에 받아 온 줄은 출처로만 등급이
+    # 매겨져 1등급 논문 값이 3 이었다 — 숫자 · 출처 제목이 그 문헌 값과 맞는 줄에만 근거를
+    # 붙인다. 이미 붙은 줄은 건너뛰어 몇 번 돌아도 같다(scripts\backfill_declared_catalog.py).
+    try {
+        Invoke-Native '받아 온 문헌 등급 되살리기 실패' { & $backendPython scripts\backfill_declared_catalog.py --apply }
+    } catch {
+        Write-Log "받아 온 문헌 등급 되살리기 실패 (배포는 계속합니다): $_"
+    }
     Pop-Location
 }
 

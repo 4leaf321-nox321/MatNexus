@@ -86,6 +86,17 @@ class DeclaredApprovalRequest(BaseModel):
     """승인할 때만 쓴다. 거둘 때는 무시한다."""
 
 
+class DeclaredCatalogOut(BaseModel):
+    """문헌 카탈로그에서 받아 온 값 — **등급의 근거**(2026-10-03, `shared/declared_catalog`).
+
+    서버가 그 문헌 값들과 숫자를 대 보고 붙였다. 값을 고치면 풀린다(승인과 같다)."""
+
+    tier: int
+    """받아 온 문헌 값의 등급 — 여러 값이면 가장 낮은 것."""
+    value_ids: list[str]
+    """받아 온 문헌 값(`catalog_values.id`)."""
+
+
 class DeclaredPropertyOut(BaseModel):
     """시험이 주지 않아 사람이 적은 물성 한 줄.
 
@@ -129,7 +140,10 @@ class DeclaredPropertyOut(BaseModel):
     quality_tier: int = 4
     """품질 등급 1~4(문헌과 같은 척도, `shared/tiers`). **서버가 출처와 승인에서 산출한다** —
     밀시트 · 데이터시트 1 · 규격 2 · 문헌 3 · 추정 4, 자료 관리자가 승인하면 한 단계 오르되 2
-    위로는 안 간다(ADR 0049)."""
+    위로는 안 간다(ADR 0049). 문헌 카탈로그에서 받아 온 값이면 출처 대신 **그 문헌 값의
+    등급**이다(`catalog`)."""
+    catalog: DeclaredCatalogOut | None = None
+    """문헌 카탈로그에서 받아 온 값이면 그 근거 — **지금 값에 유효한 것만** 실린다."""
     tier_if_approved: int = 4
     """승인하면 될 등급. 화면이 「승인하면 등급 2」 를 미리 말할 때 쓴다 — 「한 단계, 2 까지」
     규칙을 화면이 따로 들면 서버와 갈라진다. 이미 승인됐으면 `quality_tier` 와 같다."""
@@ -160,6 +174,11 @@ class DeclaredPropertyIn(BaseModel):
     source: str
     reference: str
     note: str | None = None
+    catalog_value_ids: list[uuid.UUID] | None = Field(default=None, max_length=200)
+    """**문헌 카탈로그에서 받아 온 값이면** 그 문헌 값들(`catalog_values.id`). 서버가 그 값들과
+    숫자를 대 보고 그 등급을 근거로 붙인다 — 등급은 받지 않는다(사람이 매기지 않는다). 숫자가
+    다르면 거절한다. 값을 다시 보낼 때(통째 교체) 안 실어도 된다 — 값이 그대로면 서버가 저장돼
+    있던 근거를 이어받는다."""
 
 
 class ConditionUnitOut(BaseModel):

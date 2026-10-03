@@ -38,6 +38,14 @@ function container(): HTMLElement {
 
 /** 숨은 칸으로 복사한다. **동기다** — 사용자 몸짓과 같은 작업 안에서 끝내야 한다. */
 function copyByTextarea(text: string): boolean {
+  // **사람이 잡아 둔 선택과 초점을 돌려준다.** 표에서 뭔가 골라 둔 채로 복사를 누르면 그
+  // 선택이 풀리고, 초점이 숨은 칸으로 갔다가 사라진다(옛 `shared/clipboard` 가 지키던 것 —
+  // 2026-10-03 에 둘을 하나로 합쳤다).
+  const selection = document.getSelection()
+  // **복제해 둔다** — 선택의 범위는 살아 있는 객체라, 숨은 칸을 고르는 순간 같이 바뀐다.
+  const before =
+    selection && selection.rangeCount > 0 ? selection.getRangeAt(0).cloneRange() : null
+  const focused = document.activeElement instanceof HTMLElement ? document.activeElement : null
   const host = container()
   const box = document.createElement('textarea')
   box.value = text
@@ -58,6 +66,12 @@ function copyByTextarea(text: string): boolean {
     return false
   } finally {
     host.removeChild(box)
+    // 초점이 먼저다 — 초점을 옮기면 선택이 풀리는 브라우저가 있어, 선택은 마지막에 둔다.
+    if (focused && focused !== document.body) focused.focus()
+    if (before && selection) {
+      selection.removeAllRanges()
+      selection.addRange(before)
+    }
   }
 }
 

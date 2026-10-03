@@ -13,9 +13,9 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
-import { copyText } from '@/shared/clipboard'
+import { copyText } from '@/shared/lib/clipboard'
 
-vi.mock('@/shared/clipboard', () => ({ copyText: vi.fn(() => Promise.resolve(true)) }))
+vi.mock('@/shared/lib/clipboard', () => ({ copyText: vi.fn(() => Promise.resolve(true)) }))
 
 import { PasteTable, columnsOf, headerOf, toLines } from '@/modules/vocabulary/PasteTable'
 import type { SpecimenField } from '@/modules/vocabulary/api'

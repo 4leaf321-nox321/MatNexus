@@ -85,6 +85,18 @@ class LinkedRunOut(BaseModel):
     tested_at: datetime | None
 
 
+class ItemCardOut(BaseModel):
+    """이 항목에 붙은 시험으로 만든 물성 카드 하나(2026-10-03)."""
+
+    id: uuid.UUID
+    label: str
+    status: str
+    """`draft` · `published` · `deprecated`."""
+    material_id: uuid.UUID
+    has_deliverable: bool
+    """항목이 받기로 한 블록(`deliverable`)이 이 카드에 들어 있나."""
+
+
 class CommissionItemOut(BaseModel):
     id: uuid.UUID
     position: int
@@ -104,6 +116,11 @@ class CommissionItemOut(BaseModel):
     candidates: list[LinkedRunOut] = Field(default_factory=list)
     """이 항목에 붙일 수 있는 시험 — 같은 시료, 같은 시험 종류, 아직 어느 항목에도
     안 붙은 것. **받는 쪽에만** 준다."""
+    cards: list[ItemCardOut] = Field(default_factory=list)
+    """**이 항목에 붙은 시험으로 만든 카드**(2026-10-03, [계획] 측정 의뢰 2단계의 「카드
+    링크」). 받을 것이 카드 블록이면 「채택은 됐는데 카드가 아직」 인지가 여기서 보인다 —
+    전에는 의뢰 화면이 채택만 보고 카드는 몰라서, 낸 사람이 재료 화면을 뒤져야 했다. 카드의
+    근거(`source.test_run_ids`)로 잇는다."""
 
 
 class CommissionEventOut(BaseModel):

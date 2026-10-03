@@ -18,6 +18,7 @@ CI 가 그 파일을 최신으로 강제하므로(스키마를 바꾸면 다시 
 
     반환 표기가 dict 인데 배열 경로를 그대로 돌려주는 도구가 없다
     도구에는 설명이 있다 (AI 가 고르는 근거가 설명뿐이다)
+    설명은 예산 안에 있다 (대화마다 실리는 상주 비용이다 — 2026-10-03)
     지도에 적은 들머리·길잡이가 **실재하는 이름만** 쓴다
 
 경로를 **그대로 돌려주는** 것만 본다. 안에서 받아 쓰고 자기 모양으로 감싸는 것은
@@ -38,6 +39,12 @@ from app.shared import relations
 ROOT = Path(__file__).resolve().parents[3]
 SERVER = ROOT / "mcp_server" / "server.py"
 OPENAPI = ROOT / "backend" / "openapi.json"
+
+#: 도구 하나의 설명 상한(글자). 실측 최대는 `find_by_property` 1,975자(2026-10-03).
+DESCRIPTION_MAX = 2_000
+#: 설명 전체의 예산(글자). 실측 96개 49,457자(2026-10-03) — 보통 도구 다섯 개쯤의 여유.
+#: **올릴 때는 이유를 여기 적는다.** 말없이 올리면 예산이 아니라 기록이 된다.
+DESCRIPTIONS_BUDGET = 52_000
 
 
 def _placeholders(path: str) -> str:
@@ -154,6 +161,31 @@ class TestMcp도구:
         """AI 가 도구를 고르는 근거는 설명뿐이다 — 없으면 안 불리거나 잘못 불린다."""
         empty = [tool.name for tool in _tools() if not ast.get_docstring(tool)]
         assert not empty, f"설명 없는 도구: {empty}"
+
+    def test_설명은_예산_안에_있다(self) -> None:
+        """도구 설명은 **매 요청 상주 비용**이다([계획] MCP 서버 — 위험과 주의).
+
+        클라이언트는 대화마다 도구 목록 전체를 싣는다. 실측(2026-10-03): 96개의 목록이
+        104,331자 — 설명 49,552 · 인자 스키마 36,794 · 반환 스키마 8,498
+        (`mcp_server/tool_budget.py` 가 잰다). 설명은 사람이 쓰는 부분이라 여기서 건다.
+
+        넘으면 설명을 줄이거나(예시 · 배경은 `get_guide` 로 — 안내는 부를 때만 실린다),
+        안 쓰는 도구를 뺀다(`usage_report.py` 가 부른 횟수를 센다).
+        """
+        sizes = {tool.name: len(ast.get_docstring(tool) or "") for tool in _tools()}
+        assert len(sizes) >= 50, f"도구를 {len(sizes)}개만 찾았다 — 재는 방법이 틀렸다"
+        too_long = {name: size for name, size in sizes.items() if size > DESCRIPTION_MAX}
+        assert not too_long, (
+            f"설명이 {DESCRIPTION_MAX:,}자를 넘는 도구 — 예시 · 배경은 안내(get_guide)로 "
+            f"옮겨라: {too_long}"
+        )
+        total = sum(sizes.values())
+        biggest = sorted(sizes.items(), key=lambda one: -one[1])[:5]
+        assert total <= DESCRIPTIONS_BUDGET, (
+            f"도구 설명이 모두 {total:,}자로 예산 {DESCRIPTIONS_BUDGET:,}자를 넘었다 — "
+            f"줄이거나 안 쓰는 도구를 빼라(가장 긴 것: {biggest}). 올려야 하면 이유를 "
+            "DESCRIPTIONS_BUDGET 옆에 적는다."
+        )
 
     def test_덱_도구의_단위계_기본은_SI_가_아니다(self) -> None:
         """**안 고르면 SI 로 나가면 안 된다**(2026-09-12 결정).

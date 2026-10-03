@@ -58,3 +58,22 @@ def index_materials(db: Session, payload: dict[str, Any]) -> None:
         counted.get("chunks"),
         counted.get("removed"),
     )
+
+
+@handlers.handler(kinds.SEARCH_INDEX_GUIDE)
+def index_guide_sections(db: Session, payload: dict[str, Any]) -> None:
+    """핸드북 절 몇 개만 다시 색인한다 — 고친 뒤 곧바로 뜻으로 걸리게(2026-10-03).
+
+    재료와 같은 규칙: 꺼져 있으면 넘어가고, 실패는 던진다(못 채운 것은 밤의 전체 색인이
+    채운다).
+    """
+    if not embeddings.enabled():
+        return
+    ids = [str(one) for one in payload.get("section_ids") or []]
+    counted = semantic.reindex_guide_sections(db, ids)
+    logger.info(
+        "핸드북 절 색인: %s건 · 조각 %s개 · 정리 %s개",
+        len(ids),
+        counted.get("chunks"),
+        counted.get("removed"),
+    )

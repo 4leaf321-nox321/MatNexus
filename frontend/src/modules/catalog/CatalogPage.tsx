@@ -5,15 +5,27 @@
  * 한다 — 값은 이관 스크립트로만 들어온다(ADR 0027).
  *
  * 정렬은 물성 많은 순 — 쓸 것이 많은 재료가 먼저다.
+ *
+ * ## 거르는 축 (2026-10-03 — 분야 · 제조사 · 값 범위를 더했다)
+ *
+ *     계통 · 분류      재료에 붙은 칸
+ *     분야            그 분야(열 · 기계 …)의 값이 있는 재료 — 커버리지 격자의 칸이 이리로 온다
+ *     제조사          대소문자만 다른 표기는 하나로 본다(「ZEON CORPORATION」 · 「ZEON Corporation」)
+ *     값 범위         「항복강도 200~300 MPa」 — 걸린 값이 열로 선다(`ValueRangeFilter`)
+ *
+ * 내보내기는 **지금 거른 그대로** 받는다 — 축을 더하면 거기에도 싣는다.
  */
 
 import { FileCode2, GitCompare, Grid3X3, ScatterChart } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 
-import { CATEGORY_LABELS, catalogApi } from '@/modules/catalog/api'
+import { CATEGORY_LABELS, DOMAIN_LABELS, catalogApi } from '@/modules/catalog/api'
+import { ValueRangeFilter, shownNumber } from '@/modules/catalog/ValueRangeFilter'
+import type { ValueRange } from '@/modules/catalog/ValueRangeFilter'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { ExportJsonMenu } from '@/shared/components/ExportJsonMenu'
+import { OptionPicker } from '@/shared/components/OptionPicker'
 import { PageHeader } from '@/shared/components/PageHeader'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
@@ -29,6 +41,7 @@ import {
 import { downloadFile } from '@/shared/api/client'
 import type { UnitSystem } from '@/shared/api/unitSystems'
 import { useResource } from '@/shared/hooks/useResource'
+import { axisLabel } from '@/shared/units'
 
 const STEP = 50
 const MAX = 200
@@ -44,6 +57,10 @@ export default function CatalogPage() {
     params.get('subsystem') ?? undefined
   )
   const [category, setCategory] = useState<string | undefined>()
+  // 커버리지 격자의 칸이 분야를 함께 들고 온다.
+  const [domain, setDomain] = useState<string | undefined>(params.get('domain') ?? undefined)
+  const [manufacturer, setManufacturer] = useState(params.get('manufacturer') ?? '')
+  const [range, setRange] = useState<ValueRange | null>(null)
   const [limit, setLimit] = useState(STEP)
 
   // 입력 250ms 뒤에 검색 — 한 글자마다 서버를 부르지 않는다.
@@ -56,9 +73,22 @@ export default function CatalogPage() {
   }, [typed])
 
   const summary = useResource(() => catalogApi.summary(), [])
+  /** 목록과 내보내기가 **같은 조건**을 쓴다 — 둘을 따로 적으면 한쪽만 고쳐진다. */
+  const filters = {
+    q: q || undefined,
+    subsystem,
+    category,
+    domain,
+    manufacturer: manufacturer || undefined,
+    value_key: range?.key,
+    value_unit: range?.siUnit,
+    value_min: range?.min,
+    value_max: range?.max,
+  }
   const page = useResource(
-    () => catalogApi.materials({ q: q || undefined, subsystem, category, limit }),
-    [q, subsystem, category, limit]
+    () => catalogApi.materials({ ...filters, limit }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [q, subsystem, category, domain, manufacturer, range, limit]
   )
   const [exporting, setExporting] = useState(false)
 
@@ -75,9 +105,9 @@ export default function CatalogPage() {
     setExporting(true)
     try {
       const query = new URLSearchParams({ units: system.key })
-      if (q) query.set('q', q)
-      if (subsystem !== undefined) query.set('subsystem', subsystem)
-      if (category) query.set('category', category)
+      for (const [key, value] of Object.entries(filters)) {
+        if (value !== undefined) query.set(key, String(value))
+      }
       await downloadFile(`/catalog/export?${query}`, filename)
     } finally {
       setExporting(false)
@@ -185,7 +215,50 @@ export default function CatalogPage() {
             </option>
           ))}
         </select>
+        <select
+          aria-label="물성 분야로 필터"
+          className="border-input bg-background h-9 rounded-md border px-2 text-sm"
+          value={domain ?? '전체'}
+          onChange={(event) => {
+            const next = event.target.value
+            setDomain(next === '전체' ? undefined : next)
+            setLimit(STEP)
+          }}
+        >
+          <option value="전체">분야 전체</option>
+          {/* 재료 수로 센다 — 값 수로 적으면 누른 뒤 받는 수와 다르다. */}
+          {Object.entries(summary.data?.materials_by_domain ?? {})
+            .sort((a, b) => b[1] - a[1])
+            .map(([key, count]) => (
+              <option key={key} value={key}>
+                {DOMAIN_LABELS[key] ?? key} ({count})
+              </option>
+            ))}
+          {/* 주소로 온 분야가 요약에 없어도 고른 것은 보인다 — 안 그러면 「전체」 로 보인다. */}
+          {domain && !(domain in (summary.data?.materials_by_domain ?? {})) && (
+            <option value={domain}>{DOMAIN_LABELS[domain] ?? domain}</option>
+          )}
+        </select>
+        <OptionPicker
+          label="제조사"
+          value={manufacturer}
+          options={Object.entries(summary.data?.manufacturers ?? {})
+            .sort((a, b) => b[1] - a[1])
+            .map(([value, count]) => ({ value, count }))}
+          onChange={(next) => {
+            setManufacturer(next)
+            setLimit(STEP)
+          }}
+        />
       </div>
+
+      <ValueRangeFilter
+        applied={range}
+        onApply={(next) => {
+          setRange(next)
+          setLimit(STEP)
+        }}
+      />
 
       {!page.loading && rows.length === 0 && (
         <div className="text-muted-foreground rounded-md border py-12 text-center text-sm">
@@ -202,6 +275,9 @@ export default function CatalogPage() {
                 <TableHead>분류</TableHead>
                 <TableHead>계통</TableHead>
                 <TableHead>제조사</TableHead>
+                {range && (
+                  <TableHead className="text-right">{axisLabel(range.name, range.siUnit)}</TableHead>
+                )}
                 <TableHead className="text-right">물성값</TableHead>
               </TableRow>
             </TableHeader>
@@ -222,6 +298,20 @@ export default function CatalogPage() {
                   <TableCell className="max-w-64 truncate">
                     {one.manufacturer ?? '—'}
                   </TableCell>
+                  {range && (
+                    <TableCell className="text-right tabular-nums">
+                      {one.matched ? (
+                        <>
+                          {shownNumber(one.matched.low, range.siUnit)}
+                          {one.matched.high !== one.matched.low &&
+                            ` ~ ${shownNumber(one.matched.high, range.siUnit)}`}
+                          {one.matched.count > 1 && ` (${one.matched.count}건)`}
+                        </>
+                      ) : (
+                        '—'
+                      )}
+                    </TableCell>
+                  )}
                   <TableCell className="text-right tabular-nums">
                     {one.value_count}
                   </TableCell>

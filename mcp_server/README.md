@@ -60,6 +60,32 @@ claude mcp add --transport http matnexus http://127.0.0.1:8012/mcp `
 주는 설정에 이미 들어 있다. 헤더 값에 공백이 있어(`Bearer mnx_pat_…`) args 에
 그대로 적으면 도구에 따라 잘리므로, env 로 넣고 `${AUTH}` 로 참조한다.
 
+**주소는 서버가 준다**(2026-10-03). 화면은 백엔드 `.env` 의 `MCP_PUBLIC_URL` 을 쓰고, 없을 때만
+지금 보는 호스트의 8012 로 짐작하며 그렇다고 말한다(`GET /api/auth/mcp-connection`).
+
+### HWAX 포털에서 붙는 사람은 토큰을 안 만든다 (ADR 0056)
+
+포털의 Claude 는 포털 공용 게이트웨이(`<포털>/mcp-gw/mcp`)에 포털 토큰으로 한 번 붙고, 게이트웨이가
+공유 비밀로 그 사람의 **읽기 전용** MatNexus 토큰을 받아 간다(`POST /api/auth/sso`, 백엔드
+`HEAX_SSO_SECRET`). SSO 가 아니고 계정도 안 만든다. 포털 경유 쓰기는 미리보기까지다. 켜는 순서 ·
+포털 쪽에 더할 것은 [연동-HWAX-포털.md](../docs/연동-HWAX-포털.md).
+
+게이트웨이로 붙으면 도구 이름이 `mcp__hwax__<도구>` 이고, 다른 앱과 겹치면 `mcp__hwax__matnexus_<도구>`
+다. 그래서 안내(`GUIDE.md`)에는 어느 쪽 이름도 박지 않는다(`tests/architecture/test_mcp_skill.py`).
+
+### (선택) 스킬
+
+`skill/matnexus/SKILL.md` 는 **스텁**이다 — 안내 본문은 없고(서버가 `get_guide` 로 준다), 두 연결의 도구
+이름을 모두 자동 허용해 도구마다 허용 확인을 받지 않게 한다. 안 깔아도 동작한다.
+
+```powershell
+New-Item -ItemType Directory -Force "$HOME\.claude\skills" | Out-Null
+Copy-Item -Recurse skill\matnexus "$HOME\.claude\skills\matnexus"   # 한 번만
+```
+
+도구를 더했으면 그 파일의 `allowed-tools` 에 게이트웨이 이름 둘을 더한다 — 빠지면
+`tests/architecture/test_mcp_skill.py` 가 잡는다.
+
 ## 4. 안내는 서버가 들고 있다
 
 `guide/GUIDE.md` 를 **매 호출 다시 읽는다.** 고치면 재시작 없이 반영되고, 쓰는
@@ -270,6 +296,19 @@ AI 가 결정할 것이 아니다. 상태를 옮기는 도구도 없다.
 **① 정적** — `backend/tests/architecture/test_mcp_tools.py`. `openapi.json` 과
 대조해 「배열을 주는 경로를 그대로 돌려주는데 반환 표기가 `dict`」 인 도구를
 잡는다. 전체 스위트에 들어 있으니 따로 부를 일은 드물다.
+
+같은 파일이 **설명의 예산**도 건다(2026-10-03) — 도구 하나 2,000자, 전부 52,000자.
+도구 목록은 클라이언트가 대화마다 싣는 상주 비용이라, 도구를 더하거나 설명을 늘렸으면
+크기를 잰다:
+
+```powershell
+cd mcp_server
+.\.venv\Scripts\python.exe tool_budget.py        # 큰 것부터 20개와 합계(--all 이면 전부)
+```
+
+실측(2026-10-03): 96개의 목록이 104,331자 — 설명 49,552 · 인자 스키마 36,794 · 반환
+스키마 8,498. 예산에 걸리면 설명의 예시 · 배경을 `get_guide` 로 옮기거나(안내는 부를
+때만 실린다) 안 쓰는 도구를 뺀다 — 부른 횟수는 `usage_report.py` 가 센다.
 
 **② 프로브** — 도구 전부를 진짜 MCP 클라이언트로 한 번씩 부른다. 쓰기는 전부
 `dry_run` 이라 아무것도 안 바꾼다.

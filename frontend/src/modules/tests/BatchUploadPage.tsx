@@ -36,6 +36,8 @@ import {
 } from 'lucide-react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 
+import { commissionsApi } from '@/modules/commissions/api'
+import { presetConditions } from '@/modules/commissions/itemConditions'
 import { LENGTH_UNIT, materialsApi } from '@/modules/materials/api'
 import type { Material, Sample, Specimen } from '@/modules/materials/api'
 import { MaterialPicker } from '@/modules/materials/MaterialPicker'
@@ -159,8 +161,18 @@ export default function BatchUploadPage() {
   const [asked] = useSearchParams()
   const askedMaterial = asked.get('material')
   const askedSample = asked.get('sample')
+  // **의뢰 항목에서 왔나**(2026-10-03) — 의뢰 상세의 「여러 파일 한꺼번에」 가 `?commission=&item=`
+  // 으로 보낸다. 종류 · 조건을 항목에서 채우고, 올린 시험을 그 항목에 붙인다. 전에는 여기서
+  // 올리고 의뢰 화면으로 돌아가 한 건씩 「붙이기」 를 눌렀다.
+  const askedCommission = asked.get('commission')
+  const askedItem = asked.get('item')
   const navigate = useNavigate()
   const types = useResource(() => testsApi.types(), [])
+  const commission = useResource(
+    () => (askedCommission ? commissionsApi.get(askedCommission) : Promise.resolve(null)),
+    [askedCommission]
+  )
+  const commissionItem = commission.data?.items.find((one) => one.id === askedItem) ?? null
 
   const [rows, setRows] = useState<Row[]>([])
 
@@ -187,6 +199,18 @@ export default function BatchUploadPage() {
 
   // `?? []` 를 그대로 두면 매 렌더마다 새 배열이라 아래 훅들이 계속 돈다.
   const availableTypes = useMemo(() => types.data ?? [], [types.data])
+
+  // 의뢰 항목의 조건을 그 종류의 기본 조건으로 — 이미 적은 것이 있으면 안 덮는다.
+  useEffect(() => {
+    if (!commissionItem?.test_type_key) return
+    const definition = availableTypes.find((one) => one.key === commissionItem.test_type_key)
+    if (!definition) return
+    const preset = presetConditions(commissionItem, definition)
+    if (Object.keys(preset).length === 0) return
+    setConditions((current) =>
+      current[definition.key] ? current : { ...current, [definition.key]: preset }
+    )
+  }, [commissionItem, availableTypes])
 
   /** 확장자만 보고 종류가 정해지는 것 — 파서가 선언한 것들. */
   const byExtension = useMemo(
@@ -232,8 +256,13 @@ export default function BatchUploadPage() {
       selected: true,
       // 확장자로 먼저 채워 둔다 — 서버 응답을 기다리는 동안 빈칸으로 두면
       // 사용자는 인식이 안 된 줄 안다.
-      typeKey: guessType(file, availableTypes),
-      typeSource: (guessType(file, availableTypes) ? 'extension' : null) as TypeSource,
+      // 의뢰 항목이 종류를 정했으면 그것 — 서버 추정이 덮지 않게 「사람이 정함」 으로 둔다.
+      typeKey: commissionItem?.test_type_key ?? guessType(file, availableTypes),
+      typeSource: (commissionItem?.test_type_key
+        ? 'manual'
+        : guessType(file, availableTypes)
+          ? 'extension'
+          : null) as TypeSource,
       // **어디서 왔는지 이어받는다.** 재료 화면에서 「파일 여러 개 올리기」 로
       // 오면 그 재료·시료가 정해져 있다 — 줄마다 다시 고르게 하면 열 줄부터 일이
       // 되고, 그것이 이 화면을 만든 이유다.
@@ -441,7 +470,18 @@ export default function BatchUploadPage() {
           conditionUnits: conditionUnits(definition?.conditions ?? []),
           division: row.division || undefined,
         })
-        patch(row.key, { status: 'done', selected: false, runId: created.id })
+        // **의뢰 항목에 붙인다.** 붙이기가 막혀도 올린 것은 남는다 — 무엇이 안 됐는지 그 줄에 적는다.
+        let linkNote: string | undefined
+        if (askedCommission && commissionItem) {
+          try {
+            await commissionsApi.linkRun(askedCommission, commissionItem.id, created.id)
+          } catch (caught) {
+            linkNote = `올렸지만 의뢰에 못 붙였습니다 — ${
+              caught instanceof Error ? caught.message : '이유를 모릅니다'
+            }`
+          }
+        }
+        patch(row.key, { status: 'done', selected: false, runId: created.id, message: linkNote })
       } catch (caught) {
         patch(row.key, {
           status: 'error',
@@ -512,7 +552,21 @@ export default function BatchUploadPage() {
         }
       />
 
-      <ErrorNotice error={types.error} className="mb-4" />
+      <ErrorNotice error={types.error ?? commission.error} className="mb-4" />
+
+      {commission.data && (
+        <div className="mb-4 rounded-md border px-3 py-2 text-sm" role="status">
+          {commissionItem ? (
+            <>
+              측정 의뢰 #{commission.data.seq} · {commissionItem.position + 1}번 항목(
+              {commissionItem.test_type_label ?? '종류 미정'} × {commissionItem.count}) — 올린
+              시험을 이 항목에 붙입니다. 종류 · 조건은 항목에서 채웠습니다.
+            </>
+          ) : (
+            <>측정 의뢰 #{commission.data.seq} 에 그 항목이 없습니다 — 붙이지 않고 올리기만 합니다.</>
+          )}
+        </div>
+      )}
 
       <div
         onDragOver={(event) => {
@@ -1187,9 +1241,13 @@ export default function BatchUploadPage() {
 function RowStatusCell({ row }: { row: Row }) {
   if (row.status === 'done') {
     return (
-      <span className="flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-500">
-        <CheckCircle2 className="size-3.5" />
-        올림
+      <span className="flex flex-col gap-0.5 text-xs">
+        <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-500">
+          <CheckCircle2 className="size-3.5" />
+          올림
+        </span>
+        {/* 올렸지만 뒤따른 일(의뢰에 붙이기)이 막혔으면 그렇다고 말한다. */}
+        {row.message && <span className="text-destructive line-clamp-2">{row.message}</span>}
       </span>
     )
   }

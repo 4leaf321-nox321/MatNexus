@@ -29,6 +29,12 @@ _UNAUTHENTICATED = "로그인이 필요합니다."
 #: 읽기 전용 토큰이 쓸 수 있는 메서드.
 _READ_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 
+#: 읽기 전용 토큰이 **쓰기 메서드로도** 부를 수 있는 길 — 자료를 바꾸지 않는 것만.
+#: MCP 서버는 도구가 끝날 때마다 그 사람 토큰으로 호출 수를 보탠다(사용 현황, ADR 0051).
+#: HWAX 포털이 받아 가는 위임 토큰은 읽기 전용이라(ADR 0056), 여기 없으면 포털 경유 호출이
+#: 사용 현황에서 조용히 빠진다.
+_READ_ONLY_WRITES = frozenset({"/api/usage/mcp-calls"})
+
 
 def _bearer(request: Request) -> str | None:
     header = request.headers.get("authorization")
@@ -50,7 +56,11 @@ def current_user(request: Request, db: Session = Depends(get_db)) -> User:
         holder, pat = found
         # **읽기 전용 토큰은 읽기만 한다**(ADR 0054). 판정을 라우트마다 두면 새 쓰기 길이
         # 생길 때 빠진다 — 모든 요청이 지나는 여기서 메서드로 가른다.
-        if pat.read_only and request.method not in _READ_METHODS:
+        if (
+            pat.read_only
+            and request.method not in _READ_METHODS
+            and request.url.path not in _READ_ONLY_WRITES
+        ):
             raise Forbidden(
                 "MNX-AUTH-0104", "읽기 전용 토큰입니다 — 이 토큰으로는 바꿀 수 없습니다."
             )

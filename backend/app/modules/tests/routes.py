@@ -1127,6 +1127,9 @@ def list_runs(
     ),
     specimen_id: uuid.UUID | None = None,
     material_id: uuid.UUID | None = None,
+    commission: uuid.UUID | None = Query(
+        default=None, description="측정 의뢰 id — 그 의뢰의 항목에 붙은 시험만"
+    ),
     status: str | None = Query(
         default=None, pattern="^(uploaded|parsing|parsed|failed|imported)$"
     ),
@@ -1230,6 +1233,15 @@ def list_runs(
                 select(Specimen.id)
                 .join(Sample, Sample.id == Specimen.sample_id)
                 .where(Sample.material_id == material_id)
+            )
+        )
+    if commission:
+        # **그 의뢰의 항목에 붙은 시험만**(2026-10-03) — 의뢰 상세의 「이 의뢰의 시험」 이
+        # 연다. 의뢰 화면의 항목 표는 항목마다 시험을 보이지만, 시험 목록의 거르기 · 일괄
+        # 처리는 이 자리에서만 된다.
+        query = query.where(
+            TestRun.commission_item_id.in_(
+                select(CommissionItem.id).where(CommissionItem.commission_id == commission)
             )
         )
     if status:

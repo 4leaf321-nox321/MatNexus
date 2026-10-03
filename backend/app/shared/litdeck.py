@@ -34,7 +34,7 @@ from typing import Any
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.modules.catalog.models import CatalogMaterial, CatalogValue
+from app.modules.catalog.models import CatalogDefinition, CatalogMaterial, CatalogValue
 from app.shared import (
     deckmap,
     declared_card,
@@ -42,7 +42,7 @@ from app.shared import (
     literature_material,
     unit_systems,
 )
-from matcore import cards, export
+from matcore import cards, export, synth
 
 #: 한 번에 받는 줄 수 상한. BOM 은 수십 줄이지 수천 줄이 아니다.
 MAX_LINES = 200
@@ -272,14 +272,81 @@ def assemble(
             if made.startswith("소성 표가"):
                 return made
             # 선언 카드의 말(「선언 물성에 적으세요」)은 문헌 재료에 안 맞는다.
-            return (
-                "곡선을 합성할 스칼라가 모자랍니다 — 탄성계수와 항복강도(또는 인장강도)가 "
-                "있어야 합니다. 문헌 값은 사내 물성 항목과 이어져 있어야 실립니다."
-            )
+            return SYNTH_MISSING
         rows, notes = made
         blocks[SYNTHETIC_BLOCK] = {"rows": rows}
         provenance.extend(notes)
     return Assembled(blocks=blocks, provenance=provenance)
+
+
+#: 합성할 스칼라가 모자랄 때 — 덱과 미리보기가 같은 말을 한다.
+SYNTH_MISSING = (
+    "곡선을 합성할 스칼라가 모자랍니다 — 탄성계수와 항복강도(또는 인장강도)가 있어야 "
+    "합니다. 문헌 값은 사내 물성 항목과 이어져 있어야 실립니다."
+)
+
+
+@dataclass(frozen=True)
+class SyntheticPreview:
+    """문헌 재료의 합성 곡선 — **덱이 지을 것과 같은 곡선**을 그림으로 보려고."""
+
+    curve: synth.SyntheticCurve
+    youngs_modulus: float
+    inputs: list[tuple[str, float, str, str]]
+    """곡선을 지은 스칼라 — (사내 항목 이름, SI 값, 출처 한 줄, SI 단위)."""
+    notes: list[str]
+    """정합 조정(항복 > 인장) · 안 이어져 못 쓴 값 — 곡선이 왜 이 모양인지."""
+
+
+def synthetic_preview(db: Session, material: CatalogMaterial) -> SyntheticPreview | str:
+    """「곡선 합성」 을 켜고 덱을 지을 때와 **같은 길**로 곡선을 짓는다. 못 지으면 이유 글자.
+
+    가상 사내 재료 → 탄성 블록의 E → `declared_card.synthetic_curve` — `assemble` 과 같다.
+    다른 길로 지으면 미리 본 곡선과 덱의 표가 갈리고, 사람은 미리 본 것을 믿는다.
+    """
+    cards.load_builtin()
+    virtual = literature_material.virtual(db, material, synthesize=True)
+    stand_in = virtual.material
+    elastic, _, _ = declared_card.declared_blocks(db, stand_in, None, None)
+    made = declared_card.synthetic_curve(stand_in, elastic)
+    if isinstance(made, str):
+        return SYNTH_MISSING
+    curve, scalars = made
+    # 단위는 정의에서 읽는다 — 화면이 이름(「연신율」)으로 짐작하지 않게.
+    keys = dict(zip(declared_card.synth_items(), declared_card.SYNTH_KEYS, strict=True))
+    si_units: dict[str, str | None] = {
+        key: unit
+        for key, unit in db.execute(
+            select(CatalogDefinition.key, CatalogDefinition.si_unit).where(
+                CatalogDefinition.key.in_(declared_card.SYNTH_KEYS)
+            )
+        )
+    }
+    inputs: list[tuple[str, float, str, str]] = []
+    for item, one in scalars.items():
+        if one.value is None:
+            continue
+        row = declared_card.declared_row(stand_in, item) or {}
+        inputs.append(
+            (
+                item,
+                float(one.value),
+                str(row.get("reference") or one.source),
+                si_units.get(keys.get(item, "")) or "",
+            )
+        )
+    notes = [virtual.adjusted] if virtual.adjusted else []
+    if virtual.unmapped:
+        notes.append(
+            "사내 물성 항목과 이어지지 않아 못 쓴 문헌 값: "
+            + ", ".join(sorted(set(virtual.unmapped)))
+        )
+    return SyntheticPreview(
+        curve=curve,
+        youngs_modulus=float(elastic["youngs_modulus"]),
+        inputs=inputs,
+        notes=notes,
+    )
 
 
 def literature_deck(

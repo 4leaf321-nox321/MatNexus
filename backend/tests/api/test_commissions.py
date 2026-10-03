@@ -11,7 +11,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 import pytest
@@ -21,6 +21,7 @@ from sqlalchemy.orm import Session
 from app.modules.accounts.models import User
 from app.modules.auth import security
 from app.modules.commissions import services as commission_services
+from app.modules.fitting.models import PropertyCard
 from app.modules.tests.definitions import ensure_builtin_test_types
 from app.modules.tests.models import TestRun
 from app.modules.workspaces.models import Workspace, WorkspaceMember
@@ -1011,3 +1012,107 @@ class Test시험과_홈:
             client.get(f"/api/test-runs/{other['id']}", headers=lee).json()["commission"]
             is None
         )
+
+
+class Test의뢰_마무리:
+    """2단계에 남았던 넷(2026-10-03) — 시험 목록의 의뢰 거르기 · 홈의 「시험 중 · 기한
+    임박」 · 항목의 카드 링크. 시편 일괄 생성과 일괄 등록의 항목 잇기는 화면이 기존 API 로
+    한다(프론트 시험)."""
+
+    def _accepted_with_run(
+        self, client: TestClient, world: dict[str, Any], **over: Any
+    ) -> tuple[dict[str, Any], str, dict[str, Any]]:
+        kim, lee = world["kim"], world["lee"]
+        made = _create(client, kim, world["sample"]["id"], **over)
+        accepted = _move(client, lee, made["id"], "accepted", "다음 주").json()
+        item_id = str(accepted["items"][0]["id"])
+        run = _run(client, lee, world["sample"]["id"])
+        linked = client.post(
+            f"/api/commissions/{made['id']}/items/{item_id}/runs",
+            json={"run_id": run["id"]},
+            headers=lee,
+        )
+        assert linked.status_code == 200, linked.text
+        return made, item_id, run
+
+    def test_시험_목록을_그_의뢰의_시험으로_거른다(
+        self, client: TestClient, world: dict[str, Any]
+    ) -> None:
+        lee = world["lee"]
+        made, _, run = self._accepted_with_run(client, world)
+        _run(client, lee, world["sample"]["id"], orientation="TD")  # 안 붙인 시험
+
+        got = client.get("/api/test-runs", params={"commission": made["id"]}, headers=lee)
+        assert got.status_code == 200, got.text
+        assert [one["id"] for one in got.json()["items"]] == [run["id"]]
+
+        another = _create(client, world["kim"], world["sample"]["id"], title="다른 의뢰")
+        empty = client.get("/api/test-runs", params={"commission": another["id"]}, headers=lee)
+        assert empty.json()["total"] == 0
+
+    def test_홈에_받은_의뢰의_시험_중과_기한_임박이_선다(
+        self, client: TestClient, world: dict[str, Any]
+    ) -> None:
+        """기한 임박은 **알림과 같은 규칙**이다 — 담당자가 없으면 받는 부서 관리자(lee)
+        에게만."""
+        kim, lee, park = world["kim"], world["lee"], world["park"]
+
+        def home(headers: dict[str, str]) -> dict[str, Any]:
+            got = client.get("/api/statistics/overview", headers=headers)
+            assert got.status_code == 200, got.text
+            body: dict[str, Any] = got.json()
+            return body
+
+        soon = (datetime.now(UTC).date() + timedelta(days=1)).isoformat()
+        self._accepted_with_run(client, world, due_on=soon)
+
+        assert home(lee)["commissions_received_testing"] == 1  # 시험을 붙이면 시험 중
+        assert home(lee)["commissions_due_soon"] == 1
+        assert home(park)["commissions_due_soon"] == 0  # 멤버는 알림도 홈도 아니다
+        assert home(kim)["commissions_due_soon"] == 0  # 낸 사람은 할 일이 없다
+        assert home(kim)["commissions_received_testing"] == 0
+
+        far = (datetime.now(UTC).date() + timedelta(days=30)).isoformat()
+        _create(client, kim, world["sample"]["id"], title="아직 멀다", due_on=far)
+        assert home(lee)["commissions_due_soon"] == 1
+
+    def test_항목에_그_시험으로_만든_카드가_잇힌다(
+        self, client: TestClient, db: Session, world: dict[str, Any]
+    ) -> None:
+        """재료로만 고르면 의뢰 전부터 있던 카드가 「받았다」 로 읽힌다 — 근거의 시험으로
+        잇는다."""
+        made, _, run = self._accepted_with_run(client, world)
+        other = _run(client, world["lee"], world["sample"]["id"], orientation="TD")
+        material_id = world["material"]["id"]
+        db.add_all(
+            [
+                PropertyCard(
+                    material_id=material_id,
+                    label="SECC 탄소성",
+                    blocks={"hardening": {"values": {}}},
+                    source={"test_run_ids": [run["id"]]},
+                ),
+                PropertyCard(
+                    material_id=material_id,
+                    label="SECC 탄성만",
+                    blocks={"elastic": {"values": {}}},
+                    source={"test_run_ids": [run["id"]]},
+                ),
+                # 같은 재료지만 이 항목의 시험을 안 쓴 카드 — 이 의뢰의 결과가 아니다.
+                PropertyCard(
+                    material_id=material_id,
+                    label="옛 카드",
+                    blocks={"hardening": {"values": {}}},
+                    source={"test_run_ids": [other["id"]]},
+                ),
+            ]
+        )
+        db.commit()
+
+        detail = client.get(f"/api/commissions/{made['id']}", headers=world["kim"]).json()
+        cards = {one["label"]: one for one in detail["items"][0]["cards"]}
+        assert set(cards) == {"SECC 탄소성", "SECC 탄성만"}
+        # 받을 것이 hardening 이다 — 그 블록이 든 카드만 「받았다」.
+        assert cards["SECC 탄소성"]["has_deliverable"] is True
+        assert cards["SECC 탄성만"]["has_deliverable"] is False
+        assert cards["SECC 탄소성"]["status"] == "draft"
