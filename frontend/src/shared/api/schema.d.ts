@@ -10181,6 +10181,11 @@ export interface components {
             /** Domain */
             domain: string;
             /**
+             * Formula Term
+             * @default false
+             */
+            formula_term: boolean;
+            /**
              * Id
              * Format: uuid
              */

@@ -274,3 +274,18 @@ class Test야코비안:
         assert values["sigma_0"] == pytest.approx(SIGMA_0, rel=1e-4)
         assert values["q"] == pytest.approx(Q, rel=1e-4)
         assert values["b"] == pytest.approx(B, rel=1e-4)
+
+
+class Test상대RMSE의_바닥:
+    def test_값의_크기와_상관없다(self) -> None:
+        """1 Pa·s 아래 점도를 맞추면 상대 RMSE 가 수십 배 작게 나왔다(2026-10-04).
+
+        바닥값 1.0 이 Pa 단위 응력을 전제했다. 모양이 같으면 크기가 달라도 같은 값이어야
+        한다 — 그래야 「5% 초과」 경고가 잉크 · 슬러리에서도 뜬다.
+        """
+        strain, stress = voce_curve()
+        wobble = np.where(np.arange(strain.size) % 2 == 0, 1.08, 0.92)
+        big = fitting.fit("voce", strain, stress * wobble)
+        small = fitting.fit("voce", strain, stress * wobble * 1e-10)
+        assert big.relative_rmse > 0.05
+        assert small.relative_rmse == pytest.approx(big.relative_rmse, rel=1e-3)

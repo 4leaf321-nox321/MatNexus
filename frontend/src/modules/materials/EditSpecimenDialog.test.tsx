@@ -229,3 +229,39 @@ describe('방향 변경', () => {
     expect(body.orientation).toBe('TD')
   })
 })
+
+/**
+ * 서버는 잰 치수를 **통째로 갈아 끼운다** — 읽지 못한 채 `{}` 를 보내면 잰 치수가 전부
+ * 지워졌다(2026-10-04). 치수를 못 읽었으면 치수는 안 보내고, 규격 · 메모 · 방향만 저장한다.
+ */
+describe('치수를 못 읽었을 때', () => {
+  function showSaving() {
+    const onSaved = vi.fn()
+    render(<EditSpecimenDialog specimen={SPECIMEN} open onClose={() => {}} onSaved={onSaved} />)
+    return onSaved
+  }
+
+  it('읽기에 실패하면 치수는 안 보낸다', async () => {
+    const user = userEvent.setup()
+    dimensions.mockRejectedValue(new Error('network'))
+    const onSaved = showSaving()
+    expect(await screen.findByText(/치수를 못 읽었습니다/)).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '저장' }))
+
+    // **저장이 끝난 뒤에 본다** — 치수는 규격 다음에 가므로, 규격만 보고 「안 갔다」 하면 이르다.
+    await waitFor(() => expect(onSaved).toHaveBeenCalled())
+    expect(updateSpecimen).toHaveBeenCalled()
+    expect(saveDimensions).not.toHaveBeenCalled()
+  })
+
+  it('읽기 전에 저장해도 치수는 안 보낸다', async () => {
+    const user = userEvent.setup()
+    dimensions.mockReturnValue(new Promise(() => {})) // 영영 안 온다
+    const onSaved = showSaving()
+    expect(await screen.findByText(/치수를 읽는 중/)).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '저장' }))
+
+    await waitFor(() => expect(onSaved).toHaveBeenCalled())
+    expect(saveDimensions).not.toHaveBeenCalled()
+  })
+})

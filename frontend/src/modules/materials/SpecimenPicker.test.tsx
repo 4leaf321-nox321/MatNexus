@@ -174,4 +174,24 @@ describe('시편 선택', () => {
     expect(await screen.findByText(/이 재료에 시료가 없습니다/)).toBeInTheDocument()
     expect(screen.queryByText(/재료 상세에서/)).not.toBeInTheDocument()
   })
+
+  it('늦게 온 앞 재료의 시료는 버린다 — 그 시료가 골라지지 않는다', async () => {
+    // 재료를 빨리 바꾸면 앞 재료의 답이 나중에 와서 그 시료가 골라졌다(2026-10-04).
+    let late: (rows: unknown[]) => void = () => {}
+    samples.mockImplementation((id: string) =>
+      id === 'm1'
+        ? new Promise((resolve) => (late = resolve))
+        : Promise.resolve([{ id: 's-new', seq_no: 1, lot_no: null, material_id: 'm9' }])
+    )
+    render(<SpecimenPicker onChange={vi.fn()} />)
+    await pickMaterial()
+    await userEvent.click(screen.getByRole('button', { name: /\+ 새 재료/ }))
+    await userEvent.click(await screen.findByRole('button', { name: '재료 생성' }))
+    await waitFor(() => expect(specimens).toHaveBeenCalledWith('s-new'))
+
+    late([{ id: 's-old', seq_no: 1, lot_no: null, material_id: 'm1' }])
+    // 늦은 답이 처리될 틈을 준 뒤 본다.
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(specimens).not.toHaveBeenCalledWith('s-old')
+  })
 })

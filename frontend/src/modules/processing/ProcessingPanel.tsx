@@ -1641,6 +1641,19 @@ function ParamField({
    * 환산표는 `modules/tests/units` 하나뿐이다 — 곡선 축도 같은 것을 쓴다.
    */
   const shown = display(param.unit, param.dimension)
+  /**
+   * 칸에 단위가 없고 **열이 정하는 칸**(`unit_from` — 구간 자르기 · 재샘플의 시작 · 끝)이면 그 열.
+   *
+   * **배지와 환산이 같은 단위를 읽는다.** 전에는 배지만 열의 표시 단위(°C · mm · MPa)를 적고
+   * 환산은 칸의 단위(없음)로 해서, 25 °C 라고 친 값이 25 K 로, 10 mm 가 10 m 로 나갔다
+   * (2026-10-04). 열 선언에는 차원이 없어 단위만으로 읽는다 — 배지도 그렇게 읽는다.
+   */
+  const byColumn =
+    !param.unit && param.unit_from
+      ? columnInfo.get(String(options[param.unit_from] ?? ''))
+      : undefined
+  const siUnit = byColumn ? byColumn.si_unit : param.unit
+  const siDimension = byColumn ? null : param.dimension
   const numeric = param.type === 'float' || param.type === 'int'
   /**
    * 칸 이름 옆에 붙일 **단위 또는 물리량 이름.**
@@ -1663,13 +1676,12 @@ function ParamField({
   const badge = (() => {
     if (shown.unit) return shown.unit
     if (param.unit_from) {
-      const column = options[param.unit_from]
-      const info = column ? columnInfo.get(String(column)) : undefined
-      if (info) {
-        const byColumn = display(info.si_unit, null)
-        if (byColumn.unit) return byColumn.unit
+      if (byColumn) {
+        // 환산(`toSi` · `fromSi`)과 같은 단위다.
+        const columnUnit = display(siUnit, siDimension)
+        if (columnUnit.unit) return columnUnit.unit
         // 열도 무차원이면 열 이름을 적는다 — 「시작 (공칭 변형률)」.
-        return info.label
+        return byColumn.label
       }
       return undefined
     }
@@ -1683,8 +1695,8 @@ function ParamField({
   }`
   // **나누기만 하면 안 된다.** 섭씨는 원점이 달라서 25 °C 를 25 K 로 보내면
   // -248 °C 가 된다. 환산은 `units` 의 짝 함수를 쓴다.
-  const toSi = (value: number) => fromDisplay(value, param.unit, param.dimension)
-  const fromSi = (value: number) => toDisplay(value, param.unit, param.dimension)
+  const toSi = (value: number) => fromDisplay(value, siUnit, siDimension)
+  const fromSi = (value: number) => toDisplay(value, siUnit, siDimension)
 
   /** 타이핑 중인 글자. 확정된 값과 나눠 두지 않으면 소수점이 지워진다. */
   const [draft, setDraft] = useState<string | null>(null)

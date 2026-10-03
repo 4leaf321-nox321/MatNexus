@@ -217,18 +217,12 @@ def preview(
         x, y = columns[spec.x_column], columns[spec.y_column]
         if family.prepare is not None:
             x, y, _notes = family.prepare(x, y)
-        # 레지스트리를 안 건드리고 맞춘다 — 미리보기는 저장이 아니다.
-        saved = fitting.FAMILIES.get(family.key)
-        fitting.FAMILIES[family.key] = family
+        # 레지스트리를 안 건드리고 맞춘다 — 미리보기는 저장이 아니다. 전역 표에 잠깐
+        # 넣었다 빼면 그 사이 다른 요청이 이 초안으로 적합한다(`fit_with`).
         try:
-            got = fitting.fit(family.key, x, y)
+            got = fitting.fit_with(family, x, y)
         except fitting.FittingError as exc:
             return FormulaPreviewOut(kind=spec.kind, ok=False, message=str(exc))
-        finally:
-            if saved is None:
-                fitting.FAMILIES.pop(family.key, None)
-            else:
-                fitting.FAMILIES[family.key] = saved
         return FormulaPreviewOut(
             kind=spec.kind,
             ok=True,

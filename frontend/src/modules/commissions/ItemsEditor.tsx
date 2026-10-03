@@ -38,6 +38,14 @@ export interface ItemDraft {
   count: number
   deliverable: string
   note: string
+  /**
+   * 시험 종류 정의를 못 읽은 채 받아 온 조건(**저장된 SI 그대로**). 정의가 오면 화면 단위
+   * 글자로 바뀌고 사라진다(`settle`) — 그 전에 저장하면 이것을 그대로 돌려보낸다.
+   *
+   * 전에는 정의가 없으면 조건을 버렸다. 항목은 통째로 갈아 끼우므로, 시험 종류를 못 읽은
+   * 채 제목만 고쳐도 모든 항목의 조건이 지워졌다(2026-10-04).
+   */
+  raw?: Record<string, unknown>
 }
 
 export function emptyItem(testTypeKey = ''): ItemDraft {
@@ -66,9 +74,28 @@ export function draftFromItem(
   },
   testType: TestType | undefined
 ): ItemDraft {
+  // 종류가 정해졌는데 그 정의를 못 읽었으면 조건을 버리지 않고 그대로 든다.
+  const unread = item.test_type_key && !testType && Object.keys(item.conditions).length > 0
+  return {
+    test_type_key: item.test_type_key ?? '',
+    property_hint: item.property_hint ?? '',
+    conditions: shownConditions(item.conditions, testType),
+    orientations: [...item.orientations],
+    count: item.count,
+    deliverable: item.deliverable ?? '',
+    note: item.note ?? '',
+    ...(unread ? { raw: { ...item.conditions } } : {}),
+  }
+}
+
+/** 저장된 조건(SI) → 화면 단위 글자. 정의에 있는 칸만. */
+function shownConditions(
+  stored: Record<string, unknown>,
+  testType: TestType | undefined
+): Record<string, string> {
   const conditions: Record<string, string> = {}
   for (const field of testType?.conditions ?? []) {
-    const raw = item.conditions[field.key]
+    const raw = stored[field.key]
     if (raw === undefined || raw === null) continue
     if (field.value_type === 'number' && field.si_unit && typeof raw === 'number') {
       conditions[field.key] = String(toDisplay(raw, field.si_unit, field.dimension))
@@ -76,19 +103,36 @@ export function draftFromItem(
       conditions[field.key] = String(raw)
     }
   }
-  return {
-    test_type_key: item.test_type_key ?? '',
-    property_hint: item.property_hint ?? '',
-    conditions,
-    orientations: [...item.orientations],
-    count: item.count,
-    deliverable: item.deliverable ?? '',
-    note: item.note ?? '',
-  }
+  return conditions
+}
+
+/**
+ * 정의가 늦게 왔으면 **든 조건을 화면 단위 글자로 옮긴다.** 정의가 없는 동안에는 조건 칸이
+ * 안 보여 사람이 고칠 수 없었으므로, 덮어도 잃는 것이 없다.
+ */
+export function settle(draft: ItemDraft, testType: TestType | undefined): ItemDraft {
+  if (!draft.raw || !testType) return draft
+  const { raw, ...rest } = draft
+  return { ...rest, conditions: shownConditions(raw, testType) }
 }
 
 /** 보낼 형태 — 숫자 칸은 숫자로, 단위는 정의의 표시 단위로. */
-export function toPayload(draft: ItemDraft, testType: TestType | undefined) {
+export function toPayload(given: ItemDraft, testType: TestType | undefined) {
+  const draft = settle(given, testType)
+  if (draft.raw && draft.test_type_key) {
+    // **정의를 못 읽은 항목은 받아 온 조건을 그대로 돌려보낸다**(2026-10-04). 단위를 안
+    // 붙이면 서버는 정의의 SI 로 읽는다 — 저장된 값이 SI 이므로 값이 그대로 남는다.
+    return {
+      test_type_key: draft.test_type_key,
+      property_hint: draft.property_hint.trim() || null,
+      conditions: draft.raw,
+      condition_units: {},
+      orientations: draft.orientations,
+      count: draft.count,
+      deliverable: draft.deliverable || null,
+      note: draft.note || null,
+    }
+  }
   const fields = testType?.conditions ?? []
   const conditions = Object.fromEntries(
     Object.entries(draft.conditions)
@@ -173,11 +217,16 @@ export function ItemsEditor({
                 className="border-input bg-background h-9 rounded-md border px-2 text-sm"
                 value={item.test_type_key}
                 onChange={(event) =>
-                  // 종류가 바뀌면 조건 칸이 달라진다 — 옛 조건은 비운다.
-                  update(index, { test_type_key: event.target.value, conditions: {} })
+                  // 종류가 바뀌면 조건 칸이 달라진다 — 옛 조건은 비운다(못 읽어 든 것도).
+                  update(index, { test_type_key: event.target.value, conditions: {}, raw: undefined })
                 }
               >
                 <option value="">— 미정 (물성 이름으로) —</option>
+                {/* 목록에 없는 종류(못 읽었거나 쉰 종류)도 고른 그대로 보인다 — 안 그러면
+                    「미정」 처럼 보여, 정해진 종류를 모른 채 바꾼다. */}
+                {item.test_type_key && !testType && (
+                  <option value={item.test_type_key}>{item.test_type_key}</option>
+                )}
                 {testTypes.map((one) => (
                   <option key={one.key} value={one.key}>
                     {one.label}
@@ -255,6 +304,13 @@ export function ItemsEditor({
               ))}
               <span className="text-muted-foreground">(비우면 방향 무관)</span>
             </div>
+
+            {item.raw && !testType && (
+              <p className="text-muted-foreground mb-2 text-xs">
+                이 시험 종류의 조건 정의를 못 읽어 조건 칸을 보이지 않습니다 — 적어 둔 조건은
+                그대로 둡니다.
+              </p>
+            )}
 
             {testType && testType.conditions.length > 0 && (
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">

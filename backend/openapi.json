@@ -5595,6 +5595,11 @@
             "title": "Domain",
             "type": "string"
           },
+          "formula_term": {
+            "default": false,
+            "title": "Formula Term",
+            "type": "boolean"
+          },
           "id": {
             "format": "uuid",
             "title": "Id",

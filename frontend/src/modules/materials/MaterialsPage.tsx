@@ -228,6 +228,7 @@ export default function MaterialsPage() {
    */
   async function exportJson(system: UnitSystem, filename: string) {
     setExporting(true)
+    setFailure(null)
     try {
       const query = new URLSearchParams({ units: system.key })
       // **목록의 조건을 그대로 싣는다** — 하나씩 옮겨 적었더니 새 조건(방식·상세)이 생길 때
@@ -237,6 +238,10 @@ export default function MaterialsPage() {
         if (value !== undefined && value !== '') query.set(key, String(value))
       }
       await downloadFile(`/materials/export?${query}`, filename)
+    } catch (caught) {
+      // **받기 실패를 말한다**(2026-10-04). 전에는 잡지 않아 422 · 500 이 나도 화면에 아무것도
+      // 안 떴다 — 사람은 파일이 왔는지 몰라 다시 누르거나, 옛 파일로 일한다.
+      setFailure(caught instanceof Error ? caught : new Error('파일을 받지 못했습니다.'))
     } finally {
       setExporting(false)
     }

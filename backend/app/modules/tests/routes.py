@@ -1968,9 +1968,13 @@ def replace_source(
     assert definition is not None
     now = _now()
 
+    # **판마다 따로 둔다**(2026-10-04). 전에는 옛 원본과 같은 `source/` 에 저장해서,
+    # 이름이 같은 파일(고친 `Example.tra`)로 바꾸면 옛 원본이 덮어써졌다 — 이력의
+    # 해시는 남은 채 다른 내용을 가리켰고, 「옛 파일은 지우지 않는다」 가 깨졌다.
+    version = len(run.source_history or []) + 2
     stored = filestore.save_stream(
         file.file,
-        relative_dir=f"{filestore.run_dir(run.id, run.created_at)}/source",
+        relative_dir=f"{filestore.run_dir(run.id, run.created_at)}/source/v{version}",
         filename=file.filename or "upload.dat",
         max_bytes=services.upload_limit(definition),
     )

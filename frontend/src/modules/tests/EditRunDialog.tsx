@@ -15,7 +15,7 @@
  */
 
 import { Loader2, Upload } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 import { testsApi } from '@/modules/tests/api'
 import type { TestRunDetail, TestType } from '@/modules/tests/api'
@@ -77,6 +77,21 @@ export function EditRunDialog({ run, testType, onClose, onDone }: Props) {
   const [conditions, setConditions] = useState<Record<string, string>>(() =>
     shownConditions(run, testType)
   )
+  /** 조건 칸을 사람이 고쳤나. 안 고쳤으면 정의가 늦게 와도 저장된 값으로 다시 채운다. */
+  const [touched, setTouched] = useState(false)
+
+  // **정의가 늦게 오면 그때 채운다**(2026-10-04). 전에는 연 순간 한 번만 채워서, 시험종류를
+  // 아직 못 읽었으면 조건 칸이 빈 채로 섰고 — 그대로 저장하면 `conditions: {}` 가 가서
+  // 이 시험의 조건이 전부 지워졌다(서버는 정의에 있는 키를 갈아 끼운다).
+  useEffect(() => {
+    if (touched) return
+    setConditions(shownConditions(run, testType))
+  }, [run, testType, touched])
+
+  function setCondition(key: string, value: string) {
+    setTouched(true)
+    setConditions((current) => ({ ...current, [key]: value }))
+  }
   const [file, setFile] = useState<File | null>(null)
   const [busy, setBusy] = useState<'save' | 'replace' | null>(null)
   const [error, setError] = useState<Error | null>(null)
@@ -152,9 +167,7 @@ export function EditRunDialog({ run, testType, onClose, onDone }: Props) {
                       id={`edit-${field.key}`}
                       className="border-input bg-background h-9 w-full rounded-md border px-2 text-sm"
                       value={conditions[field.key] ?? ''}
-                      onChange={(event) =>
-                        setConditions((current) => ({ ...current, [field.key]: event.target.value }))
-                      }
+                      onChange={(event) => setCondition(field.key, event.target.value)}
                     >
                       <option value="">—</option>
                       {(field.choices ?? []).map((one) => (
@@ -169,9 +182,7 @@ export function EditRunDialog({ run, testType, onClose, onDone }: Props) {
                       type={field.value_type === 'number' ? 'number' : 'text'}
                       step="any"
                       value={conditions[field.key] ?? ''}
-                      onChange={(event) =>
-                        setConditions((current) => ({ ...current, [field.key]: event.target.value }))
-                      }
+                      onChange={(event) => setCondition(field.key, event.target.value)}
                     />
                   )}
                 </div>

@@ -362,6 +362,15 @@ describe('작업 안에서', () => {
     expect((body as { steps: { done: string[] } }).steps.done).toContain('scope')
   })
 
+  it('진행 적기가 실패하면 연 작업 안에서 말한다', async () => {
+    // 전에는 오류 표시가 목록 쪽에만 있어, 목록으로 돌아가기 전에는 아무것도 안 떴다(2026-10-04).
+    patch.mockRejectedValueOnce(new Error('진행을 적을 권한이 없습니다'))
+    await open()
+    await userEvent.click(screen.getByRole('button', { name: /다음: 무엇이 있나/ }))
+    expect(await screen.findByText('진행을 적을 권한이 없습니다')).toBeInTheDocument()
+    expect(screen.getByLabelText('단계')).toBeInTheDocument()
+  })
+
   it('사라진 것도 줄을 지킨다', async () => {
     run.mockResolvedValue({
       ...DETAIL,

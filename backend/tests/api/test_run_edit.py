@@ -153,6 +153,45 @@ class TestUpdate:
 
 
 class TestReplaceSource:
+    def test_같은_이름으로_바꿔도_옛_원본은_그대로다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        run: dict[str, Any],
+    ) -> None:
+        """고친 파일은 대개 **같은 이름**이다(2026-10-04). 같은 폴더에 두면 옛 원본이
+        덮였다."""
+        from app.shared import filestore
+
+        for extra in (b"\r\n", b"\r\n\r\n"):
+            replaced = client.post(
+                f"/api/test-runs/{run['id']}/source",
+                files={"file": ("Example.tra", TRA.read_bytes() + extra)},
+                headers=admin_headers,
+            )
+            assert replaced.status_code == 202, replaced.text
+        stored = db.get(TestRun, uuid.UUID(run["id"]))
+        assert stored is not None
+        db.refresh(stored)
+        paths = [one["path"] for one in stored.source_history] + [stored.source_path]
+        assert len(set(paths)) == 3, paths
+        # 처음 원본이 내용 그대로 남아 있다 — 이력의 해시와 맞는다.
+        assert filestore.read_bytes(stored.source_history[0]["path"]) == TRA.read_bytes()
+        assert stored.source_path is not None
+        assert filestore.read_bytes(stored.source_path) == TRA.read_bytes() + b"\r\n\r\n"
+
+        # 배포 뒤 점검 스크립트 — 지금은 덮인 것이 없고, 이력의 해시와 내용이 어긋나면 잡는다.
+        from sqlalchemy.orm.attributes import flag_modified
+        from test_check_fixes_script import check_script
+
+        script = check_script()
+        assert script.overwritten_sources(db) == []
+        stored.source_history[0]["sha256"] = "0" * 64
+        flag_modified(stored, "source_history")
+        db.commit()
+        assert len(script.overwritten_sources(db)) == 1
+
     def test_원본을_바꾸면_옛_파일이_남고_옛_결과는_옛_원본의_것으로_보인다(
         self,
         client: TestClient,

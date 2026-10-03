@@ -76,7 +76,10 @@ export function MillSheetDialog({
           </DialogDescription>
         </DialogHeader>
 
+        {/* **시료가 바뀌면 새로 선다**(2026-10-04) — 앞 시료의 초안을 새 시료에 통째로
+            저장하지 않게. 서버는 선언 물성을 갈아 끼운다. */}
         <DeclaredPropertiesCard
+          key={sample.id}
           level="시료"
           title="밀시트가 준 값"
           hint={

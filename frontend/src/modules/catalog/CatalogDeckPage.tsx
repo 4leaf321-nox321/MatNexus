@@ -24,6 +24,7 @@ import { Button } from '@/shared/components/ui/button'
 import { Input } from '@/shared/components/ui/input'
 import { Textarea } from '@/shared/components/ui/textarea'
 import { useResource } from '@/shared/hooks/useResource'
+import { copyText } from '@/shared/lib/clipboard'
 
 interface Row {
   query: string
@@ -51,7 +52,8 @@ export default function CatalogDeckPage() {
   const [built, setBuilt] = useState<DeckBuilt | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<Error | null>(null)
-  const [copied, setCopied] = useState(false)
+  /** 복사 결과. **막혔으면 그렇다고 말한다** — 「복사됨」 만 뜨면 빈 칸을 붙여 넣는다. */
+  const [copied, setCopied] = useState<'yes' | 'no' | null>(null)
 
   async function match() {
     setBusy(true)
@@ -106,11 +108,14 @@ export default function CatalogDeckPage() {
   function download() {
     if (!built) return
     const blob = new Blob([built.text], { type: 'text/plain;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
     const anchor = document.createElement('a')
-    anchor.href = URL.createObjectURL(blob)
+    anchor.href = url
     anchor.download = built.filename
     anchor.click()
-    URL.revokeObjectURL(anchor.href)
+    // **곧바로 풀지 않는다**(2026-10-04) — 저장이 시작되기 전에 주소가 사라지는 브라우저가
+    // 있다. `downloadFile`(shared/api/client) 과 같은 규칙이다.
+    setTimeout(() => URL.revokeObjectURL(url), 10_000)
   }
 
   const unmatched = (rows ?? []).filter((row) => !row.choice)
@@ -260,19 +265,26 @@ export default function CatalogDeckPage() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => {
-                void navigator.clipboard.writeText(built.text)
-                setCopied(true)
-                setTimeout(() => setCopied(false), 1600)
+              onClick={async () => {
+                // **`navigator.clipboard` 를 바로 부르지 않는다**(2026-10-04). 사내 http 주소에서는
+                // 그 객체가 없어 TypeError 가 났고, 거절돼도 「복사됨」 이 떴다.
+                const ok = await copyText(built.text)
+                setCopied(ok ? 'yes' : 'no')
+                if (ok) setTimeout(() => setCopied(null), 1600)
               }}
             >
-              {copied ? <Check className="size-4" /> : <Copy className="size-4" />}
-              {copied ? '복사됨' : '복사'}
+              {copied === 'yes' ? <Check className="size-4" /> : <Copy className="size-4" />}
+              {copied === 'yes' ? '복사됨' : '복사'}
             </Button>
             <Button variant="outline" size="sm" onClick={download}>
               <Download className="size-4" />
               다운로드
             </Button>
+            {copied === 'no' && (
+              <span role="status" className="text-destructive self-center text-xs">
+                브라우저가 복사를 막았습니다 — 아래 글을 직접 골라 복사하거나 다운로드하세요.
+              </span>
+            )}
           </div>
           <pre className="bg-muted/40 max-h-[480px] overflow-auto rounded-md border p-3 text-xs">
             {built.text}

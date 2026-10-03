@@ -60,11 +60,29 @@ def publish(
     )
 
 
+#: `notifications.title` 의 폭.
+TITLE_MAX = 200
+
+
+def _fit(title: str, body: str | None) -> tuple[str, str | None]:
+    """제목이 칸을 넘으면 줄이고 **온전한 제목은 본문 머리에 남긴다.**
+
+    제목에는 사람이 적은 이름(의뢰 · 재료 · 공지 제목)이 든다. 넘치면 INSERT 가 실패해
+    그 사건의 알림이 **아무에게도** 안 갔고, 잡은 재시도 끝에 실패로 남았다(2026-10-04).
+    """
+    if len(title) <= TITLE_MAX:
+        return title, body
+    return title[: TITLE_MAX - 1] + "…", title + ("\n\n" + body if body else "")
+
+
 def deliver(db: Session, payload: dict[str, object]) -> int:
     """워커가 부른다. 규칙을 찾아 알림을 만든다. 만든 개수를 돌려준다."""
     event_kind = str(payload["event_kind"])
     key = str(payload["key"])
     to_user_id = payload.get("to_user_id")
+    title, body = _fit(
+        str(payload["title"]), str(payload["body"]) if payload.get("body") else None
+    )
 
     query = select(NotificationRule).where(
         NotificationRule.event_kind == event_kind, NotificationRule.enabled.is_(True)
@@ -90,8 +108,8 @@ def deliver(db: Session, payload: dict[str, object]) -> int:
                 user_id=rule.user_id,
                 rule_id=rule.id,
                 event_kind=event_kind,
-                title=str(payload["title"]),
-                body=payload.get("body") and str(payload["body"]),
+                title=title,
+                body=body,
                 link=payload.get("link") and str(payload["link"]),
             )
         )

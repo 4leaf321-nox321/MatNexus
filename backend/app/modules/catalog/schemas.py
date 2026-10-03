@@ -114,6 +114,9 @@ class CatalogValueOut(BaseModel):
     term_unit: str | None = None
     """그 변수의 진짜 단위. 정의가 말하는 단위가 아니다 — 대개 정의는 `1` 이라고
     적혀 있고 실제로는 `MPa`·`1/s`·`K` 다."""
+    formula_term: bool = False
+    """**식의 변수 값인가**(`representative.is_term`) — 그 물성 자리에 담을 값이 아니다.
+    `term` 이 있어도 「단기 · 장기」 같은 구분이면 거짓이다. 화면이 따로 가르지 않는다."""
     uncertainty: float | None
     conditions: dict[str, Any] | None
     method: str | None

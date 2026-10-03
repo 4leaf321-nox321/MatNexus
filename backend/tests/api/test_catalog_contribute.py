@@ -234,6 +234,16 @@ class Test값:
         origins = {one["origin"] for one in detail["values"]}
         assert origins == {"catalog", "local"}
 
+    def test_불확도도_같은_배율로_옮긴다(
+        self, client: TestClient, admin_headers: dict[str, str], imported: CatalogMaterial
+    ) -> None:
+        """전에는 `9.4 ± 0.2 GPa` 가 `9.4e9 ± 0.2 Pa` 로 저장됐다(2026-10-04)."""
+        made = make_value(
+            client, admin_headers, str(imported.id), value_num=9.4, unit="GPa", uncertainty=0.2
+        )
+        assert made.status_code == 201, made.text
+        assert made.json()["value"]["uncertainty"] == pytest.approx(0.2e9)
+
     def test_차원이_다르면_거절(
         self, client: TestClient, admin_headers: dict[str, str], imported: CatalogMaterial
     ) -> None:
@@ -560,8 +570,10 @@ class Test옮기기:
             property_key=old,
             value_num=210,
             unit="GPa",
+            uncertainty=5,
         ).json()["value"]
         assert made["unit"] == "MPa" and made["value_num"] == pytest.approx(210_000)
+        assert made["uncertainty"] == pytest.approx(5_000)
         client.post(
             f"/api/catalog/properties/{old}/aliases",
             json={"alias": "E_old"},
@@ -610,6 +622,7 @@ class Test옮기기:
         assert moved is not None
         assert moved.property_key == new
         assert moved.unit == "Pa" and moved.value_num == pytest.approx(210e9)
+        assert moved.uncertainty == pytest.approx(5e9), "불확도도 같은 배율로 옮긴다"
         alias = db.scalar(select(PropertyAlias).where(PropertyAlias.alias == "E_old"))
         assert alias is not None and alias.property_key == new
 

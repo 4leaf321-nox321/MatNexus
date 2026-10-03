@@ -6,8 +6,10 @@
 
 from __future__ import annotations
 
-import time
+import asyncio
+import inspect
 import uuid
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
@@ -50,7 +52,28 @@ def ensure_can_sign_in(user: User) -> None:
 
 
 #: 시험이 갈아 끼운다 — 실제로 자면 시험이 30초씩 선다.
-_sleep = time.sleep
+_sleep: Callable[[float], object] = asyncio.sleep
+
+
+class LoginDelayed(Exception):
+    """틀린 비밀번호 — **늦춘 뒤** `error` 로 거절한다. 늦추기는 부르는 쪽이 한다.
+
+    전에는 여기서 `time.sleep` 으로 잤다(2026-10-04). 로그인 라우트는 스레드 풀에서 돌므로
+    최대 30초 동안 한 칸을 붙잡았고, 틀린 로그인 40건이면 풀이 차서 서버 전체가 섰다.
+    늦추기는 이벤트 루프에서 `await` 로 한다(`wait`) — 아무것도 붙잡지 않는다.
+    """
+
+    def __init__(self, delay: float) -> None:
+        super().__init__(_INVALID_LOGIN)
+        self.delay = delay
+        self.error = AppError("MNX-AUTH-0001", _INVALID_LOGIN, status=401)
+
+
+async def wait(seconds: float) -> None:
+    """늦춘다 — 스레드를 붙잡지 않고. 시험이 `_sleep` 을 동기 함수로 갈아 끼워도 된다."""
+    slept = _sleep(seconds)
+    if inspect.isawaitable(slept):
+        await slept
 
 
 def login_delay_seconds(failures: int) -> float:
@@ -131,10 +154,11 @@ def authenticate(db: Session, email: str, password: str) -> User:
         raise AppError("MNX-AUTH-0001", _INVALID_LOGIN, status=401)
 
     if not security.verify_password(password, user.password_hash):
-        # **늦추고 나서 거절한다.** 거절부터 하면 다음 시도가 바로 온다.
+        # **늦추고 나서 거절한다.** 거절부터 하면 다음 시도가 바로 온다. 늦추기는
+        # 라우트가 `wait` 로 한다 — 여기서 자면 스레드를 붙잡는다(`LoginDelayed`).
         delay = _note_failure(db, user)
         if delay > 0:
-            _sleep(delay)
+            raise LoginDelayed(delay)
         raise AppError("MNX-AUTH-0001", _INVALID_LOGIN, status=401)
 
     ensure_can_sign_in(user)

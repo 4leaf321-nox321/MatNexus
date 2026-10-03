@@ -231,6 +231,19 @@ function toDraft(row: DeclaredProperty, spec?: PropertyItem): Draft {
   }
 }
 
+/** 서버 값 전부를 초안으로. 항목 목록이 오면 조건 단위(GHz · nm)를 다시 고른다. */
+function draftsOf(saved: DeclaredProperty[], known: PropertyItem[]): Draft[] {
+  return saved.map((row) => toDraft(row, known.find((item) => item.item === row.item)))
+}
+
+/**
+ * 값 칸이 숫자인가. **빈 칸은 숫자가 아니다** — `Number('')` 는 0 이라, 그대로 보내면
+ * 「탄성계수 0」 이 저장됐다(2026-10-04).
+ */
+function isNumber(text: string): boolean {
+  return text.trim() !== '' && Number.isFinite(Number(text))
+}
+
 /** 온도 표시 단위 — **값 환산과 같은 표에서 읽는다.** */
 const TEMPERATURE = display('K', 'temperature')
 
@@ -294,26 +307,27 @@ export function DeclaredPropertiesCard({
    * 단추가 이 창을 연다(2026-08-30). 상태를 여기 두면 요약이 그것을 못 건드린다.
    */
   const [own, setOwn] = useState<string | null>(null)
-  /**
-   * 창을 열 때의 값. **취소가 되돌릴 곳이다.**
-   *
-   * 창에서 고치고 저장까지 하는 흐름(A안)이면 「닫기」 가 곧 「버리기」 여야 한다 —
-   * 되돌릴 데가 없으면 잘못 고친 것을 손으로 다시 적어야 한다.
-   */
-  const [snapshot, setSnapshot] = useState<Draft[] | null>(null)
   const editing = openItem !== undefined ? openItem : own
   const setEditing = onOpenChange ?? setOwn
 
-  /** 창을 연다 — 그때의 값을 함께 담아 둔다. */
+  /** 창을 연다. */
   function open(item: string) {
-    setSnapshot(rows)
+    setError(null)
     setEditing(item)
   }
 
-  /** 고친 것을 버리고 닫는다. */
+  /**
+   * 고친 것을 버리고 닫는다 — **되돌릴 곳은 서버 값이다.**
+   *
+   * 창에서 고치고 저장까지 하는 흐름(A안)이면 「닫기」 가 곧 「버리기」 여야 한다.
+   * 전에는 연 때의 사본으로 되돌리면서 `dirty` 를 그대로 두었다. 그러면 서버 값을 초안으로
+   * 옮기는 아래 효과가 다시는 안 돌아, 다른 재료로 넘어가 저장하면 **앞 재료의 줄이 새
+   * 재료에 통째로 들어갔다**(2026-10-04). 창 밖에서는 고칠 길이 없으니 닫으면 늘 깨끗하다.
+   */
   function cancel() {
-    if (snapshot) setRows(snapshot)
-    setSnapshot(null)
+    setRows(draftsOf(saved, known))
+    setDirty(false)
+    setError(null)
     setEditing(null)
   }
 
@@ -322,7 +336,7 @@ export function DeclaredPropertiesCard({
   useEffect(() => {
     if (dirty) return
     // **항목 목록이 오면 다시 그린다** — 조건 단위(GHz · nm)는 항목이 들고 온다.
-    setRows(saved.map((row) => toDraft(row, known.find((item) => item.item === row.item))))
+    setRows(draftsOf(saved, known))
   }, [saved, dirty, known])
 
   const used = new Set(rows.map((row) => row.item))
@@ -337,9 +351,9 @@ export function DeclaredPropertiesCard({
 
   function add(item: PropertyItem) {
     setDirty(true)
+    setError(null)
     // **더하자마자 편다.** 값을 적으려고 더한 것이므로, 접힌 줄을 다시 눌러
     // 열게 하면 한 걸음이 헛돈다.
-    setSnapshot(rows)
     setEditing(item.item)
     setRows((current) => [
       ...current,
@@ -385,12 +399,29 @@ export function DeclaredPropertiesCard({
     return Number.isFinite(value) ? String(significant(value)) : text
   }
 
-  async function save() {
+  /**
+   * 줄 전부를 보낸다 — 서버는 선언 물성을 **통째로 갈아 끼운다.**
+   *
+   * **성공했는지를 돌려준다.** 전에는 오류를 삼키고 창이 닫혀, 저장이 안 됐는데 고친
+   * 것만 사라졌다(2026-10-04).
+   */
+  async function save(next: Draft[] = rows): Promise<boolean> {
+    // **빈 값 칸은 막는다.** `Number('')` 가 0 이라 「탄성계수 0」 이 저장됐다(2026-10-04).
+    // 0 을 뜻한 사람은 0 을 적는다.
+    const blank = next.find((row) => row.points.some((point) => !isNumber(point.value)))
+    if (blank) {
+      setError(
+        new Error(
+          `「${blank.item}」 값 칸이 비었거나 숫자가 아닙니다. 값을 적거나 그 점을 지운 뒤 저장하세요.`
+        )
+      )
+      return false
+    }
     setSaving(true)
     setError(null)
     try {
       await onSave(
-        rows.map((row) => ({
+        next.map((row) => ({
           item: row.item,
           points: row.points.map((point) => {
             // 화면은 ℃ 로 받고 서버에는 K 로 보낸다 — 상온을 298 로 적는
@@ -419,11 +450,26 @@ export function DeclaredPropertiesCard({
         }))
       )
       setDirty(false)
+      return true
     } catch (caught) {
       setError(caught instanceof Error ? caught : new Error('저장하지 못했습니다.'))
+      return false
     } finally {
       setSaving(false)
     }
+  }
+
+  /**
+   * 항목을 지운다 — **누르면 곧바로 서버에 남긴다**(2026-10-04).
+   *
+   * 전에는 초안에서만 빼고 창을 닫았다. 저장된 것이 없으니 표에는 그대로 보이고, 다른
+   * 항목을 저장하는 날 함께 지워졌다 — 지운 사람도, 지워진 날도 모른다.
+   */
+  async function remove(item: string) {
+    // 아직 저장 안 한 줄이면 서버에 보낼 것이 없다 — 버리기와 같다.
+    if (!stored(item)) return cancel()
+    // **다른 줄은 서버 값 그대로 보낸다.** 이 창에서 고친 것은 이 항목뿐이고, 지우니 버린다.
+    if (await save(draftsOf(saved, known).filter((row) => row.item !== item))) setEditing(null)
   }
 
   const picker = free.length > 0 && (
@@ -476,7 +522,8 @@ export function DeclaredPropertiesCard({
             )}
           </p>
 
-          <ErrorNotice error={items.error ?? error} className="mb-3" />
+          {/* 저장 오류는 창 안에 선다 — 저장은 창에서만 한다. */}
+          <ErrorNotice error={items.error} className="mb-3" />
 
           {known.length === 0 && !items.loading && (
             <p className="text-muted-foreground rounded-md border border-dashed p-3 text-xs">
@@ -580,7 +627,7 @@ export function DeclaredPropertiesCard({
       ) : (
         <>
           {picker}
-          <ErrorNotice error={items.error ?? error} />
+          <ErrorNotice error={items.error} />
         </>
       )}
 
@@ -615,11 +662,8 @@ export function DeclaredPropertiesCard({
                 variant="ghost"
                 className="text-destructive"
                 title={`${row.item} 줄을 지웁니다`}
-                onClick={() => {
-                  setDirty(true)
-                  setEditing(null)
-                  setRows((current) => current.filter((_, at) => at !== index))
-                }}
+                disabled={saving}
+                onClick={() => void remove(row.item)}
               >
                 <Trash2 className="size-4" />
                 이 항목 삭제
@@ -869,6 +913,8 @@ export function DeclaredPropertiesCard({
               onApprove={onApprove}
             />
           ) : null}
+          {/* **저장 오류는 창 안에 보인다** — 창이 열려 있는 동안 바깥은 가려져 있다. */}
+          <ErrorNotice error={error} />
           <DialogFooter>
             {/* **닫기가 곧 버리기다.** 그러니 그렇게 적는다 — 「닫기」 만 있으면
                 고친 것이 남는지 사라지는지 눌러 보고서야 안다. */}
@@ -877,9 +923,8 @@ export function DeclaredPropertiesCard({
             </Button>
             <Button
               onClick={async () => {
-                await save()
-                setSnapshot(null)
-                setEditing(null)
+                // **실패하면 창을 그대로 둔다** — 닫히면 고친 것이 사라진 줄도 모른다(2026-10-04).
+                if (await save()) setEditing(null)
               }}
               disabled={saving}
             >

@@ -1005,3 +1005,98 @@ describe('앞 단계가 낸 값에 잇기 (이슈 #2 — @proof_strain)', () => 
     expect(screen.queryByRole('button', { name: /자동 연결/ })).toBeNull()
   })
 })
+
+/**
+ * 열이 단위를 정하는 칸(`unit_from`) — **배지가 적은 단위로 받고 그 단위에서 SI 로 보낸다**(2026-10-04).
+ *
+ * 구간 자르기의 시작 · 끝은 칸에 단위가 없고 기준 열을 따른다. 전에는 배지만 열의 표시
+ * 단위(mm · °C)를 적고 환산은 칸의 단위(없음)로 해서, 10 mm 가 10 m 로, 25 °C 가 25 K 로 나갔다.
+ */
+describe('열이 단위를 정하는 칸', () => {
+  const crop = (x: string) =>
+    [
+      {
+        id: 'curve.crop',
+        label: '구간 자르기',
+        version: '1',
+        applies_to: ['flexural'],
+        params: [
+          column('x', '기준 열', x),
+          { ...number('start', '시작'), unit: null, unit_from: 'x' },
+          // 저장된 값(SI)이 표시 단위로 되돌아 보이는지 — 기본값으로 깔아 둔다.
+          { ...number('end', '끝'), unit: null, unit_from: 'x', default: x === 'temperature' ? 373.15 : 0.002 },
+        ],
+        makes_columns: [],
+        makes_values: [],
+        order: 40,
+      },
+    ] as unknown as ProcessingStep[]
+
+  function showWith() {
+    return render(
+      <RightPanelProvider>
+        <RightPanelHost />
+        <ProcessingPanel
+          testRunId="run-1"
+          testTypeKey="flexural"
+          curveKey="curve-1"
+          sourceColumns={['displacement', 'force', 'temperature']}
+          sourceChannels={[
+            { key: 'displacement', label: '변위', si_unit: 'm' },
+            { key: 'force', label: '하중', si_unit: 'N' },
+            { key: 'temperature', label: '온도', si_unit: 'K' },
+          ]}
+        />
+      </RightPanelProvider>
+    )
+  }
+
+  beforeEach(() => {
+    recipes.mockResolvedValue([])
+    dimensions.mockResolvedValue({ items: [] })
+    inputs.mockResolvedValue([])
+    preview.mockReset()
+    preview.mockResolvedValue(EMPTY_PREVIEW)
+  })
+
+  const sentCrop = () =>
+    (preview.mock.calls.at(-1) as [{ steps: { plugin: string; options: Record<string, unknown> }[] }])[0].steps.find(
+      (one) => one.plugin === 'curve.crop'
+    )?.options
+
+  it('변위 열이면 mm 로 받아 m 로 보낸다', async () => {
+    steps.mockResolvedValue(crop('displacement'))
+    const user = userEvent.setup()
+    showWith()
+    await clickStep(user, '구간 자르기')
+    await clickStep(user, '구간 자르기')
+
+    const start = await screen.findByLabelText('시작')
+    expect(start.closest('div.grid')).toHaveTextContent('(mm)')
+    // 저장된 0.002 m 는 2 mm 로 보인다.
+    expect(screen.getByLabelText('끝')).toHaveValue('2')
+
+    await user.type(start, '10')
+    await user.click(screen.getByRole('button', { name: /미리보기/ }))
+    await waitFor(() => expect(preview).toHaveBeenCalled())
+    expect(sentCrop()?.start).toBeCloseTo(0.01)
+    expect(sentCrop()?.end).toBeCloseTo(0.002)
+  })
+
+  it('온도 열이면 °C 로 받아 K 로 보낸다 — 나누기만 하면 원점이 틀린다', async () => {
+    steps.mockResolvedValue(crop('temperature'))
+    const user = userEvent.setup()
+    showWith()
+    await clickStep(user, '구간 자르기')
+    await clickStep(user, '구간 자르기')
+
+    const start = await screen.findByLabelText('시작')
+    expect(start.closest('div.grid')).toHaveTextContent('(°C)')
+    expect(screen.getByLabelText('끝')).toHaveValue('100')
+
+    await user.type(start, '25')
+    await user.click(screen.getByRole('button', { name: /미리보기/ }))
+    await waitFor(() => expect(preview).toHaveBeenCalled())
+    expect(sentCrop()?.start).toBeCloseTo(298.15)
+  })
+})

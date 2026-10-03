@@ -826,6 +826,62 @@ class Test대표_마스터커브:
         assert made["is_primary"] is True
 
 
+class Test각주파수만_있는_표:
+    def test_각주파수는_2π_로_나눠_Hz_로_담는다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        dma_run_plain: dict[str, Any],
+        monkeypatch: pytest.MonkeyPatch,
+        db: Session,
+    ) -> None:
+        """주파수 열 없이 각주파수(rad/s)만 있는 표가 실제로 있다(2026-10-04). 전에는 그
+        숫자를 그대로 Hz 로 담아 Prony 완화시간이 2π 배 짧게 나왔다."""
+        from app.shared import curvedata
+
+        original = curvedata.load_frame
+        seen: dict[str, float] = {}
+
+        def angular_only(*args: Any, **kwargs: Any) -> Any:
+            frame, curve = original(*args, **kwargs)
+            for key in ("frequency", "frequency_hz"):
+                hz = frame.columns.pop(key, None)
+                if hz is not None:
+                    seen["min"] = float(np.nanmin(hz))
+                    frame.columns["angular_frequency"] = hz * 2.0 * np.pi
+            return frame, curve
+
+        monkeypatch.setattr(curvedata, "load_frame", angular_only)
+        listed = client.get(
+            f"/api/viscoelastic/runs/{dma_run_plain['id']}/importable-curves",
+            headers=admin_headers,
+        ).json()
+        usable = next(one for one in listed if one["usable"])
+        made = client.post(
+            f"/api/viscoelastic/runs/{dma_run_plain['id']}/master-curves/import",
+            json={"curve_key": usable["curve_key"], "reference_temperature_k": 293.15},
+            headers=admin_headers,
+        )
+        assert made.status_code in (200, 201), made.text
+        assert "min" in seen, "시험 파일의 표에 주파수 열이 없어 바꿔 넣지 못했다"
+        assert made.json()["minimum_frequency_hz"] == pytest.approx(seen["min"], rel=1e-9)
+
+        # 배포 뒤 점검 스크립트 — 고친 뒤 가져온 것은 안 잡고, 옛 방식(각주파수 값 그대로)은
+        # 잡는다.
+        from test_check_fixes_script import check_script
+
+        from app.modules.viscoelastic.models import MasterCurve
+
+        script = check_script()
+        assert script.angular_master_curves(db) == []
+        row = db.get(MasterCurve, uuid.UUID(made.json()["id"]))
+        assert row is not None
+        row.minimum_frequency_hz = seen["min"] * 2.0 * np.pi
+        row.maximum_frequency_hz = row.maximum_frequency_hz * 2.0 * np.pi
+        db.commit()
+        assert len(script.angular_master_curves(db)) == 1
+
+
 class Test가져올_수_있는_표를_보여_준다:
     """**고르기 전에 무엇이 있는지 보인다.**
 

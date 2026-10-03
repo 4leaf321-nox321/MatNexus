@@ -59,11 +59,12 @@ from sqlalchemy import delete, false, func, select, update
 from sqlalchemy.orm import Session
 
 from app.modules.accounts.models import User
+from app.modules.commissions.models import Commission
 from app.modules.fitting.models import ExportProfile, PropertyCard
 from app.modules.grouping.models import GroupResult
 from app.modules.guide.models import GuideAsset, GuideDocument, GuideRevision, GuideSection
 from app.modules.materials.models import Material, Sample, Specimen
-from app.modules.pipelines.models import PipelineConnector
+from app.modules.pipelines.models import PipelineConnector, PipelineInboxItem
 from app.modules.processing.models import ProcessingRecipe, ProcessingResult
 from app.modules.statistics.models import EnsembleResult
 from app.modules.tests.models import Curve, FormatProfile, TestRun, TestSummary, TestType
@@ -563,6 +564,28 @@ def _purge_row(
     「이미 이 나무에 딸려 사라진 것」 을 알아야 같은 행을 두 번 지우지 않는다."""
     item_id = row.id
     tree = _tree(db, kind, row)
+    # **측정 의뢰가 가리키는 시료는 못 지운다**(2026-10-04). `commissions.sample_id` 는
+    # RESTRICT 라 지우는 순간 500 이었다. 의뢰는 부서 사이의 기록이라 시료가 사라져도
+    # 남아야 한다 — 그래서 시료 쪽을 막고 어느 의뢰인지 말한다.
+    held = (
+        [
+            seq
+            for seq in db.scalars(
+                select(Commission.seq).where(
+                    Commission.sample_id.in_([one.id for one in tree["sample"]])
+                )
+            )
+        ]
+        if tree["sample"]
+        else []
+    )
+    if held:
+        raise Conflict(
+            "MNX-TRASH-0007",
+            "측정 의뢰가 이 시료를 가리키고 있어 영구 삭제할 수 없습니다 — 의뢰 "
+            + ", ".join(f"#{seq}" for seq in sorted(held))
+            + ". 의뢰는 기록으로 남아야 해서 시료를 지우지 않습니다.",
+        )
     counts = {_MODELS[one][1]: len(tree[one]) for one in KINDS if tree[one]}
     # **재료에서 나온 것들도 함께 간다.** 카드·대표 곡선·글로벌 피팅 결과는 재료를
     # FK 로 가리키는데 나무(재료-시료-시편-시험)에는 없어서, 재료를 지우는 순간 FK 가
@@ -595,6 +618,19 @@ def _purge_row(
                 .where(ProcessingResult.recipe_id == row.id)
                 .values(recipe_id=None)
             )
+        if kind == "connector":
+            # **수집함 항목도 함께 간다**(2026-10-04). 커넥터를 지워도(소프트) 수집함은
+            # 남기지만, 영구 삭제는 `connector_id` 가 커넥터를 가리켜 500 이었다.
+            for inbox in list(
+                db.scalars(
+                    select(PipelineInboxItem).where(PipelineInboxItem.connector_id == row.id)
+                )
+            ):
+                if inbox.source_path:
+                    with contextlib.suppress(OSError):
+                        filestore.delete_dir(str(inbox.source_path).rsplit("/", 1)[0])
+                db.delete(inbox)
+            db.flush()
         if kind == "guide_document":
             # 절 → 리비전 → 그림. FK 에 ondelete 가 없으니 아래부터 손으로.
             sections = list(
@@ -725,6 +761,13 @@ def _purge_run(db: Session, run: Any) -> None:
     """
     db.execute(delete(Curve).where(Curve.test_run_id == run.id))
     db.execute(delete(TestSummary).where(TestSummary.test_run_id == run.id))
+    # 커넥터로 들어온 시험이면 수집함 항목이 이 시험을 가리킨다(ondelete 없음) — 끊지 않으면
+    # 500 이었다(2026-10-04). 항목은 「버림」 으로 남긴다: 그 파일이 들어왔었다는 기록이다.
+    db.execute(
+        update(PipelineInboxItem)
+        .where(PipelineInboxItem.test_run_id == run.id)
+        .values(test_run_id=None, status="discarded")
+    )
     db.execute(delete(ProcessingResult).where(ProcessingResult.test_run_id == run.id))
     # **파일 실패로 멈추지 않는다.** 이미 사라진 파일이 흔하다(정리 잡이 먼저
     # 치웠을 수 있다). 행은 지워야 하고, 남은 파일은 저장소 정리가 다시 잡는다.
@@ -732,6 +775,9 @@ def _purge_run(db: Session, run: Any) -> None:
     if source:
         with contextlib.suppress(OSError):
             filestore.delete_dir(str(source).rsplit("/", 1)[0])
+    # 원본을 바꾼 시험은 판마다 `source/v2/…` 에 둔다 — 위는 지금 판의 폴더만 지운다.
+    with contextlib.suppress(OSError):
+        filestore.delete_dir(f"{filestore.run_dir(run.id, run.created_at)}/source")
     for kind in filestore.SIDE_DIRS:
         with contextlib.suppress(OSError):
             filestore.delete_dir(filestore.side_dir(kind, run.id))

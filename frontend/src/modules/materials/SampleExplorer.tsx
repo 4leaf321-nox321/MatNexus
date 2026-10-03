@@ -355,6 +355,7 @@ export function SampleExplorer({
                 disabled={!canEdit(sample.access)}
                 onClick={() => {
                   setSampleId(sample.id)
+                  setFailure(null)
                   setRemovingSample(true)
                 }}
               >
@@ -543,7 +544,10 @@ export function SampleExplorer({
                               className="size-7"
                               title={lockedTitle(specimen.access) ?? '시편 삭제'}
                               disabled={!canEdit(specimen.access)}
-                              onClick={() => setRemovingSpecimen(specimen)}
+                              onClick={() => {
+                                setFailure(null)
+                                setRemovingSpecimen(specimen)
+                              }}
                             >
                               <Trash2 className="size-3.5" />
                             </Button>
@@ -621,7 +625,10 @@ export function SampleExplorer({
           </p>
         )}
 
-        {failure && <p className="text-destructive mt-2 text-xs">{failure.message}</p>}
+        {/* 지우기 창이 열려 있으면 그 안에 선다 — 여기는 창 뒤에 가려진다. */}
+        {failure && !removingSample && !removingSpecimen && (
+          <p className="text-destructive mt-2 text-xs">{failure.message}</p>
+        )}
       </div>
 
       {active && (
@@ -658,6 +665,7 @@ export function SampleExplorer({
                     먼저 지우세요.
                   </p>
                 )}
+                {failure && <p className="text-destructive mt-2 text-xs">{failure.message}</p>}
               </>
             }
             onConfirm={() =>
@@ -669,7 +677,10 @@ export function SampleExplorer({
                 }
               )
             }
-            onClose={() => setRemovingSample(false)}
+            onClose={() => {
+              setRemovingSample(false)
+              setFailure(null)
+            }}
           />
           <NewSpecimenDialog
             sampleId={active.id}
@@ -715,14 +726,21 @@ export function SampleExplorer({
         busy={busy}
         title="이 시편을 지웁니다"
         body={
-          <p>
-            <b className="font-mono">{removingSpecimen?.record_name}</b> 이 사라집니다.
+          <>
+            <p>
+              <b className="font-mono">{removingSpecimen?.record_name}</b> 이 사라집니다.
+            </p>
+            {/* **서버가 하는 일을 그대로 말한다**(2026-10-04). 전에는 「시험이 함께 가려집니다」
+                라고 했는데, 서버는 시험이 남은 시편을 지우지 않는다(409). 사람은 함께 지워질
+                줄 알고 눌렀다가, 창 뒤에 가려진 오류만 받았다. */}
             {(removingSpecimen?.test_run_count ?? 0) > 0 && (
-              <span className="text-destructive block text-xs">
-                시험 {removingSpecimen?.test_run_count}건이 함께 가려집니다.
-              </span>
+              <p className="text-destructive mt-2 text-xs">
+                시험 {removingSpecimen?.test_run_count}건이 남아 있어 지울 수 없습니다. 시험을
+                먼저 지우세요.
+              </p>
             )}
-          </p>
+            {failure && <p className="text-destructive mt-2 text-xs">{failure.message}</p>}
+          </>
         }
         onConfirm={() =>
           removingSpecimen &&
@@ -731,7 +749,10 @@ export function SampleExplorer({
             () => setRemovingSpecimen(null)
           )
         }
-        onClose={() => setRemovingSpecimen(null)}
+        onClose={() => {
+          setRemovingSpecimen(null)
+          setFailure(null)
+        }}
       />
     </div>
   )

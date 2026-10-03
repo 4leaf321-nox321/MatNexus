@@ -78,6 +78,24 @@ def _pair(frame: Frame, options: dict[str, Any]) -> tuple[np.ndarray, np.ndarray
     return strain, stress, strain_key, stress_key
 
 
+def _peak_index(stress: np.ndarray) -> int:
+    """최대응력 점. **빠진 칸(NaN)을 건너뛴다.**
+
+    `np.argmax` 는 NaN 을 최대로 친다 — 응력 열에 빈 칸 하나만 있어도 그 자리가 「최대
+    하중점」 이 되어 인장강도가 NaN 으로 나갔다(2026-10-04).
+    """
+    finite = np.isfinite(stress)
+    if not finite.any():
+        raise ProcessingError("응력 값이 모두 비어 있습니다(NaN) — 최대점을 찾을 수 없습니다.")
+    return int(np.argmax(np.where(finite, stress, -np.inf)))
+
+
+def _last_finite(values: np.ndarray) -> float:
+    """끝에서부터 처음 만나는 유한한 값 — 기록이 빈 칸으로 끝나도 「관측의 끝」 을 낸다."""
+    finite = values[np.isfinite(values)]
+    return float(finite[-1]) if finite.size else float("nan")
+
+
 def _require_dimensionless_strain(frame: Frame, key: str) -> None:
     unit = frame.units.get(key)
     if unit not in (None, "1"):
@@ -1172,7 +1190,7 @@ def strength(frame: Frame, options: dict[str, Any]) -> StepResult:
     if len(stress) < 2:
         raise ProcessingError("2점 미만입니다.")
 
-    peak = int(np.argmax(stress))
+    peak = _peak_index(stress)
     return StepResult(
         frame,
         notes=(
@@ -1186,7 +1204,7 @@ def strength(frame: Frame, options: dict[str, Any]) -> StepResult:
                 "strain_at_strength", "최대하중 변형률", float(strain[peak]), "1", "strain"
             ),
             Scalar(
-                "elongation_observed", "관측 최대 변형률", float(strain[-1]), "1", "strain"
+                "elongation_observed", "관측 최대 변형률", _last_finite(strain), "1", "strain"
             ),
         ),
     )
@@ -1226,7 +1244,7 @@ def necking_candidate(frame: Frame, options: dict[str, Any]) -> StepResult:
     사실이 화면 어디에도 안 남고, 그 뒤 계산은 전부 그 가정 위에 선다.
     """
     strain, stress, _, _ = _pair(frame, options)
-    index = int(np.argmax(stress))
+    index = _peak_index(stress)
     if not 1 <= index < len(stress):
         raise ProcessingError(
             f"최대응력이 {index}번째 점이라 네킹 후보로 쓸 수 없습니다 — "

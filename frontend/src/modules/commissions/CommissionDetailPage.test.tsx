@@ -20,6 +20,8 @@ const linkRun = vi.fn()
 const unlinkRun = vi.fn()
 const attachSample = vi.fn()
 const resolveItem = vi.fn()
+const update = vi.fn()
+const types = vi.fn()
 
 vi.mock('@/modules/commissions/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/modules/commissions/api')>()),
@@ -29,7 +31,7 @@ vi.mock('@/modules/commissions/api', async (importOriginal) => ({
     linkRun: (...args: unknown[]) => linkRun(...args),
     unlinkRun: (...args: unknown[]) => unlinkRun(...args),
     assign: vi.fn(),
-    update: vi.fn(),
+    update: (...args: unknown[]) => update(...args),
     remove: vi.fn(),
     attachSample: (...args: unknown[]) => attachSample(...args),
     resolveItem: (...args: unknown[]) => resolveItem(...args),
@@ -38,40 +40,45 @@ vi.mock('@/modules/commissions/api', async (importOriginal) => ({
 
 vi.mock('@/modules/tests/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/modules/tests/api')>()),
-  testsApi: {
-    types: () =>
-      Promise.resolve([
-        {
-          key: 'tensile',
-          label: '인장시험',
-          abbr: 'TEN',
-          conditions: [
-            {
-              key: 'temperature',
-              label: '온도',
-              value_type: 'number',
-              dimension: 'temperature',
-              si_unit: 'K',
-              choices: null,
-              is_required: false,
-              sort_order: 0,
-            },
-            {
-              key: 'speed_elastic',
-              label: '탄성 구간 속도',
-              value_type: 'number',
-              dimension: 'velocity',
-              si_unit: 'm/s',
-              choices: null,
-              is_required: false,
-              sort_order: 1,
-            },
-          ],
-          channels: [],
-        },
-      ]),
-  },
+  testsApi: { types: () => types() },
 }))
+
+/** 시험 종류 정의 — 조건 칸이 여기서 온다. 늦게 오거나 못 오는 경우를 시험마다 바꾼다. */
+const TYPES = [
+  {
+    key: 'tensile',
+    label: '인장시험',
+    abbr: 'TEN',
+    conditions: [
+      {
+        key: 'temperature',
+        label: '온도',
+        value_type: 'number',
+        dimension: 'temperature',
+        si_unit: 'K',
+        choices: null,
+        is_required: false,
+        sort_order: 0,
+      },
+      {
+        key: 'speed_elastic',
+        label: '탄성 구간 속도',
+        value_type: 'number',
+        dimension: 'velocity',
+        si_unit: 'm/s',
+        choices: null,
+        is_required: false,
+        sort_order: 1,
+      },
+    ],
+    channels: [],
+  },
+]
+
+beforeEach(() => {
+  types.mockReset()
+  types.mockResolvedValue(TYPES)
+})
 
 vi.mock('@/modules/fitting/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/modules/fitting/api')>()),
@@ -415,5 +422,63 @@ describe('2단계 마무리 (2026-10-03)', () => {
       'href',
       '/tests?commission=c-1'
     )
+  })
+})
+
+/**
+ * 의뢰 편집 — 항목은 **통째로 갈아 끼운다.** 시험 종류 정의를 못 읽은 채 열면 조건 칸을 그릴
+ * 수 없어, 전에는 조건을 버린 항목이 그대로 저장됐다 — 제목만 고쳐도 모든 항목의 조건이
+ * 지워졌다(2026-10-04).
+ */
+describe('의뢰 편집 — 시험 종류를 못 읽었을 때', () => {
+  beforeEach(() => {
+    get.mockReset()
+    update.mockReset()
+    update.mockResolvedValue(detail())
+  })
+
+  async function openEdit() {
+    const user = userEvent.setup()
+    await show(detail({ can_edit: true }))
+    await user.click(screen.getByRole('button', { name: '편집' }))
+    const dialog = await screen.findByRole('dialog')
+    return { user, dialog }
+  }
+
+  it('못 읽어도 제목만 고치면 항목 조건은 저장된 값 그대로 간다', async () => {
+    types.mockRejectedValue(new Error('시험 종류를 못 읽었습니다'))
+    const { user, dialog } = await openEdit()
+    expect(await within(dialog).findByText(/조건 정의를 못 읽어/)).toBeInTheDocument()
+    await user.type(within(dialog).getByLabelText('제목'), ' (수정)')
+    await user.click(within(dialog).getByRole('button', { name: '저장' }))
+
+    await waitFor(() => expect(update).toHaveBeenCalled())
+    const [, body] = update.mock.calls[0] as [string, { items: Record<string, unknown>[] }]
+    // 저장된 SI 를 단위 없이 — 서버는 정의의 SI 로 읽으므로 값이 그대로 남는다.
+    expect(body.items[0]).toMatchObject({
+      test_type_key: 'tensile',
+      conditions: { temperature: 298.15, speed_elastic: 10 / 60000 },
+      condition_units: {},
+    })
+  })
+
+  it('늦게 오면 그때 조건 칸을 채우고, 화면 단위로 보낸다', async () => {
+    let arrive: (value: unknown) => void = () => {}
+    types.mockReturnValue(new Promise((resolve) => (arrive = resolve)))
+    const { user, dialog } = await openEdit()
+    arrive(TYPES)
+
+    const temperature = await within(dialog).findByLabelText(/온도/)
+    await waitFor(() => expect(Number((temperature as HTMLInputElement).value)).toBeCloseTo(25))
+    await user.click(within(dialog).getByRole('button', { name: '저장' }))
+
+    await waitFor(() => expect(update).toHaveBeenCalled())
+    const [, body] = update.mock.calls[0] as [
+      string,
+      { items: { conditions: Record<string, number>; condition_units: Record<string, string> }[] },
+    ]
+    expect(body.items[0].conditions.temperature).toBeCloseTo(25)
+    expect(body.items[0].conditions.speed_elastic).toBeCloseTo(10)
+    expect(body.items[0].condition_units).toMatchObject({ speed_elastic: 'mm/min' })
   })
 })

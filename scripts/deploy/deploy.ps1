@@ -512,7 +512,10 @@ if ($SkipMigrations) {
         Write-Log '마이그레이션 완료'
     } catch {
         Pop-Location
-        Write-Error "마이그레이션 실패: $_"
+        # **Write-Error 를 쓰지 않는다**(2026-10-04). 이 스크립트는 $ErrorActionPreference='Stop' 이라
+        # Write-Error 가 그 자리에서 종료성 오류가 된다 — 아래 복구 안내와 `exit 10` 이 한 줄도 안
+        # 돌았다. 사람은 「마이그레이션 실패」 만 보고, 서비스가 멈춘 채라는 것도 롤백 명령도 못 봤다.
+        Write-Host "마이그레이션 실패: $_" -ForegroundColor Red
         Write-Host ''
         Write-Host '새 코드는 배치됐지만 데이터베이스가 일부만 적용됐을 수 있습니다.'
         if ($runningServices.Count -gt 0) {
@@ -547,6 +550,18 @@ if ($SkipMigrations) {
         Invoke-Native '받아 온 문헌 등급 되살리기 실패' { & $backendPython scripts\backfill_declared_catalog.py --apply }
     } catch {
         Write-Log "받아 온 문헌 등급 되살리기 실패 (배포는 계속합니다): $_"
+    }
+    # **알림 규칙을 활성 계정 전부에 맞춘다**(2026-10-04). 규칙은 승인 · 부서 이동 · 알림 설정
+    # 화면을 열 때만 만들어져서, 새 사건 종류(측정 의뢰 `commission.*`)가 코드에 들어와도 그 전에
+    # 승인된 사람은 그 화면을 열기 전까지 알림을 못 받았다 — 오류도 없이. 스크립트는 계정마다
+    # `ensure_rules` 를 부르는 멱등 보정이다(있는 규칙은 안 건드리므로 사람이 끈 것은 꺼진 채다).
+    # 계정마다 찍는 줄은 이메일 목록이라 배포 로그에는 요약 한 줄만 남긴다.
+    try {
+        Invoke-Native '알림 규칙 맞추기 실패' {
+            & $backendPython scripts\ensure_notification_rules.py | Where-Object { $_ -notmatch '^\s' }
+        }
+    } catch {
+        Write-Log "알림 규칙 맞추기 실패 (배포는 계속합니다): $_"
     }
     Pop-Location
 }

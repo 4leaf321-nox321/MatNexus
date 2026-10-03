@@ -84,6 +84,8 @@ export default function WorkbenchPage() {
   async function reload(id: string) {
     try {
       setOpen(await basketApi.run(id))
+      // 다시 읽혔으면 앞의 실패는 지난 일이다.
+      setError(null)
       running.reload()
     } catch (caught) {
       setError(caught instanceof Error ? caught : new Error('작업을 읽지 못했습니다.'))
@@ -92,15 +94,21 @@ export default function WorkbenchPage() {
 
   if (open) {
     return (
-      <RunView
-        run={open}
-        onBack={() => {
-          setOpen(null)
-          running.reload()
-        }}
-        onChanged={() => void reload(open.id)}
-        onError={setError}
-      />
+      <>
+        {/* **연 작업 안에서도 오류가 보인다**(2026-10-04). 전에는 오류 표시가 목록 쪽에만 있어,
+            진행 적기 · 끝내기가 실패해도 목록으로 돌아가기 전에는 아무것도 안 떴다. */}
+        <ErrorNotice error={error} className="mb-4" />
+        <RunView
+          run={open}
+          onBack={() => {
+            setOpen(null)
+            setError(null)
+            running.reload()
+          }}
+          onChanged={() => void reload(open.id)}
+          onError={setError}
+        />
+      </>
     )
   }
 

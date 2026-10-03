@@ -80,6 +80,8 @@ export function EditSpecimenDialog({ specimen, open, onClose, onSaved }: Props) 
   /** 방향. **바꾸면 이름과 번호가 다시 매겨진다** — 저장 전에 그렇게 말한다. */
   const [orientation, setOrientation] = useState(specimen.orientation)
   const [sizes, setSizes] = useState<SpecimenSizes | null>(null)
+  /** 치수를 못 읽었다 — 그러면 치수는 저장하지 않는다. */
+  const [unread, setUnread] = useState(false)
   /** 잰 값만 들고 있다. 문자열인 이유는 `Number('0.')` 이 소수점을 지우기 때문. */
   const [measured, setMeasured] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState(false)
@@ -91,6 +93,11 @@ export function EditSpecimenDialog({ specimen, open, onClose, onSaved }: Props) 
     setNote(specimen.note ?? '')
     setOrientation(specimen.orientation)
     setFailure(null)
+    // **앞에 연 시편의 칸을 들고 있지 않는다**(2026-10-04) — 새 값이 오기 전에 저장하면
+    // 앞 시편의 잰 값이 이 시편에 통째로 들어간다.
+    setSizes(null)
+    setMeasured({})
+    setUnread(false)
     let alive = true
     materialsApi
       .dimensions(specimen.id)
@@ -104,7 +111,9 @@ export function EditSpecimenDialog({ specimen, open, onClose, onSaved }: Props) 
         )
       })
       .catch((error: unknown) => {
-        if (alive) setFailure(error instanceof ApiError ? error.message : '치수를 읽지 못했습니다.')
+        if (!alive) return
+        setUnread(true)
+        setFailure(error instanceof ApiError ? error.message : '치수를 읽지 못했습니다.')
       })
     return () => {
       alive = false
@@ -124,14 +133,19 @@ export function EditSpecimenDialog({ specimen, open, onClose, onSaved }: Props) 
         orientation,
       })
 
-      const values: Record<string, number> = {}
-      for (const field of sizes?.fields ?? []) {
-        const text = (measured[field.key] ?? '').trim()
-        if (text === '') continue // 빈 칸은 "안 쟀다" — 규격의 공칭이 쓰인다
-        const value = fromDisplay(Number(text), field.si_unit, field.dimension)
-        if (Number.isFinite(value)) values[field.key] = value
+      // **치수를 못 읽었으면 치수는 안 보낸다**(2026-10-04). 서버는 잰 값을 통째로 갈아
+      // 끼운다 — 읽기 전이나 읽기에 실패한 채 `{}` 를 보내면 그 시편의 잰 치수가 전부
+      // 지워졌다. 규격 · 메모 · 방향은 그대로 저장된다.
+      if (sizes) {
+        const values: Record<string, number> = {}
+        for (const field of sizes.fields) {
+          const text = (measured[field.key] ?? '').trim()
+          if (text === '') continue // 빈 칸은 "안 쟀다" — 규격의 공칭이 쓰인다
+          const value = fromDisplay(Number(text), field.si_unit, field.dimension)
+          if (Number.isFinite(value)) values[field.key] = value
+        }
+        await materialsApi.saveDimensions(specimen.id, values)
       }
-      await materialsApi.saveDimensions(specimen.id, values)
       onSaved()
     } catch (error) {
       setFailure(error instanceof ApiError ? error.message : '저장하지 못했습니다.')
@@ -197,7 +211,12 @@ export function EditSpecimenDialog({ specimen, open, onClose, onSaved }: Props) 
             </p>
           )}
 
-          {fields.length === 0 ? (
+          {sizes === null ? (
+            // 읽기 전 · 읽기 실패. 「칸이 없다」 고 말하면 거짓이다 — 저장해도 치수는 그대로 둔다.
+            <p className="text-muted-foreground rounded-md border p-3 text-xs">
+              {unread ? '치수를 못 읽었습니다. 저장해도 잰 치수는 그대로 둡니다.' : '치수를 읽는 중입니다…'}
+            </p>
+          ) : fields.length === 0 ? (
             <p className="text-muted-foreground rounded-md border p-3 text-xs">
               이 시편에는 치수 칸이 없습니다. <b>규격이 칸을 정합니다</b> — 규격을 고르거나,
               온톨로지 편집 &gt; 시편 규격에서 그 규격의 치수 칸을 먼저 만드세요.

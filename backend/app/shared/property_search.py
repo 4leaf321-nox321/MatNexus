@@ -26,13 +26,14 @@
 
 from __future__ import annotations
 
+import math
 import uuid
 from dataclasses import dataclass
 from typing import Any
 
-from sqlalchemy import Float, Select, cast, func, or_, select, true
+from sqlalchemy import Float, Select, cast, func, literal, or_, select, true
 from sqlalchemy import null as sa_null
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import JSONB, JSONPATH
 from sqlalchemy.orm import Session
 
 from app.modules.catalog import parameters
@@ -509,6 +510,39 @@ def _method_of(scalar_key: str, stages: list[dict[str, Any]] | None) -> str:
     return plugin.label + (" · " + ", ".join(parts) if parts else "")
 
 
+def _declared_path(
+    item: str,
+    low: float,
+    high: float,
+    *,
+    scale: str | None,
+    condition: ConditionFilter | None,
+) -> tuple[str, dict[str, Any]]:
+    """선언 물성 JSON 에서 **범위 안의 점이 있는가** 를 묻는 jsonpath 와 그 변수.
+
+    끝이 열린 범위(±inf)는 JSON 에 못 싣는다 — 그 쪽 비교를 빼는 것으로 연다.
+    """
+    named: dict[str, Any] = {"item": item}
+    entry = "@.item == $item"
+    if scale is not None:
+        entry += " && @.scale == $scale"
+        named["scale"] = scale
+    checks = ['@.value_si.type() == "number"']
+    for name, bound, op in (("low", low, ">="), ("high", high, "<=")):
+        if math.isfinite(bound):
+            checks.append(f"@.value_si {op} ${name}")
+            named[name] = bound
+    if condition is not None and condition.key == "temperature":
+        for name, bound, op in (
+            ("t_low", condition.low, ">="),
+            ("t_high", condition.high, "<="),
+        ):
+            if math.isfinite(bound):
+                checks.append(f"@.temperature_k {op} ${name}")
+                named[name] = bound
+    return f"$[*] ? ({entry}).points[*] ? ({' && '.join(checks)})", named
+
+
 def internal_hits(
     db: Session,
     *,
@@ -549,6 +583,24 @@ def internal_hits(
             Sample.deleted_at.is_(None),
             Material.deleted_at.is_(None),
             Sample.declared_properties.op("@>")(wanted),
+        )
+    )
+    # **값 범위도 SQL 에서 거른다**(2026-10-04). 상한(MAX_ROWS)을 「그 항목을 든 재료」 에
+    # 걸고 범위는 파이썬에서 보니, 그 항목을 가진 재료가 상한보다 많으면 범위 안의 재료가
+    # 임의로 빠졌다 — 검색이 「없다」 고 틀리게 답한다. 아래 파이썬 검사는 그대로 둔다.
+    path, named = _declared_path(item, low, high, scale=scale, condition=condition)
+    query = query.where(
+        func.jsonb_path_exists(
+            Material.declared_properties,
+            cast(literal(path), JSONPATH),
+            cast(literal(named, JSONB), JSONB),
+        )
+    )
+    sample_query = sample_query.where(
+        func.jsonb_path_exists(
+            Sample.declared_properties,
+            cast(literal(path), JSONPATH),
+            cast(literal(named, JSONB), JSONB),
         )
     )
     if visible is not None:

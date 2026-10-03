@@ -5,16 +5,39 @@
 그 곡선의 실제 내용이 있다(D10). 시점이 어긋나면 "DB에는 있는데 파일이 없는" 행이
 생긴다. 그래서 한 스크립트가 같은 시각에 둘 다 받는다.
 
-## 배치 (2026-09-05, 세대 정책)
+## 배치 (2026-09-05, 세대 정책 · 2026-10-04 지운 파일 보관)
 
     <BackupRoot>\db\db-<yyyyMMdd-HHmmss>.dump   pg_dump 커스텀 포맷 — 일 7벌 + 일요일분 4벌
     <BackupRoot>\filestore\                     시험 원본·Parquet·처리 결과 — robocopy 미러 1벌
+    <BackupRoot>\filestore_deleted\<yyyyMMdd-HHmmss>\
+                                                원본에서 지워진 파일 — 가장 오래된 덤프만큼 둔다
     <BackupRoot>\env\.env                       접속 정보·JWT 비밀키 — 최신 1벌
     <BackupRoot>\LAST_BACKUP.txt                무엇을 언제 받았는지
 
 전에는 실행마다 `<타임스탬프>\` 폴더에 파일스토어를 통째로 복사했다. 파일스토어는
 **불변 파일**(원본·Parquet 는 한 번 쓰고 안 바뀐다)이라 세대가 필요 없고, 통째로
 복사하면 디스크를 세대 수만큼 먹는다 — 미러 한 벌이면 된다. DB 덤프만 세대를 둔다.
+**지운 파일만은 예외다**(아래).
+
+## 지운 파일은 미러에서 지우지 않고 옮겨 둔다 (2026-10-04)
+
+**미러는 「지운 것」 도 따라 한다.** `/MIR` 는 원본에 없는 파일을 백업에서 지우는데, 휴지통
+비우기는 파일을 그 자리에서 지운다 — 다음 03:00 에 백업에서도 사라졌다. 덤프는 일 7벌 +
+일요일분 4벌인데 파일은 오늘 것 한 벌뿐이라, 어제 덤프로 되돌리면 **DB 는 그 곡선을 가리키는데
+파일이 없었다.** 「불변이라 세대가 필요 없다」 는 바뀌는 것만 본 말이었고 지우는 것은 못 봤다.
+
+그래서 미러 직전에 **원본에 없고 미러에만 있는 파일**을 `filestore_deleted\<이번 시각>\` 아래
+같은 상대 경로로 옮긴다(같은 드라이브라 이름 바꾸기다 — 디스크를 더 먹지 않는다). 그 뒤의
+`/MIR` 는 지울 것이 없다. 보관분은 **남아 있는 가장 오래된 덤프보다 앞선 폴더만** 지운다 — 덤프
+D 로 되돌릴 때 필요한 것은 D 이후에 지워진 파일, 곧 시각이 D 이상인 폴더뿐이다. 날짜 수로
+자르지 않는 이유: -KeepDaily · -KeepWeekly 를 바꾸면 덤프 기간이 바뀌는데 보관 기간이 따로
+놀면 어느 한쪽이 모자란다.
+
+지운 파일을 되찾는 길:
+  · 덤프째 되돌릴 때 — `restore.ps1 -BackupRoot` 가 고른 덤프 시각 이후의 보관분을 미러와
+    함께 되돌린다. 따로 할 것이 없다.
+  · 파일 하나만 — `filestore_deleted\` 아래에서 같은 상대 경로를 찾아(폴더 이름이 그 파일이
+    백업에서 빠진 날의 시각이다) 파일스토어의 같은 자리에 복사한다.
 
 ## 작업 스케줄러 (사람이 한 번 등록한다)
 
@@ -111,6 +134,34 @@ function Get-FilestoreDir([string]$appEnv, [string]$appPath) {
     return $value
 }
 
+<#
+**원본에 없고 미러에만 있는 파일**을 보관 폴더로 옮긴다(2026-10-04, 위 「지운 파일」).
+
+같은 상대 경로를 지켜 옮겨야 되돌릴 때 그대로 겹쳐 넣을 수 있다. 미러 쪽 목록은 **먼저 다
+받아 둔다** — 옮기면서 같은 폴더를 훑으면 열거가 흔들린다. 경로 비교는 대소문자를 가리지
+않는다(NTFS 와 robocopy 가 그렇게 본다 — 대소문자만 바뀐 파일을 지운 것으로 읽으면 안 된다).
+robocopy /L 의 출력을 읽지 않는 이유: 콘솔 코드 페이지로 찍혀 한글 파일 이름이 깨진다.
+#>
+function Move-VanishedFiles([string]$source, [string]$mirror, [string]$holdDir) {
+    $sourceRoot = [System.IO.Path]::GetFullPath($source).TrimEnd('\') + '\'
+    $mirrorRoot = [System.IO.Path]::GetFullPath($mirror).TrimEnd('\') + '\'
+    $present = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)
+    foreach ($path in [System.IO.Directory]::EnumerateFiles($sourceRoot, '*', [System.IO.SearchOption]::AllDirectories)) {
+        [void]$present.Add($path.Substring($sourceRoot.Length))
+    }
+    $mirrored = @([System.IO.Directory]::EnumerateFiles($mirrorRoot, '*', [System.IO.SearchOption]::AllDirectories))
+    $moved = 0
+    foreach ($path in $mirrored) {
+        $relative = $path.Substring($mirrorRoot.Length)
+        if ($present.Contains($relative)) { continue }
+        $destination = Join-Path $holdDir $relative
+        [void][System.IO.Directory]::CreateDirectory([System.IO.Path]::GetDirectoryName($destination))
+        [System.IO.File]::Move($path, $destination)
+        $moved++
+    }
+    return [pscustomobject]@{ Moved = $moved; SourceCount = $present.Count }
+}
+
 $envFile = Join-Path $AppPath 'backend\.env'
 if (-not (Test-Path $envFile)) { throw "backend\.env 를 찾을 수 없습니다: $envFile" }
 
@@ -161,11 +212,37 @@ Move-Item -Force $partPath $dumpPath
 # --- 운영 데이터: 미러 ------------------------------------------------------------
 # robocopy 종료 코드는 비트 플래그다 — 0~7 이 성공(1 = 복사함, 2 = 여분 있음, 4 = 불일치),
 # 8 이상이 실패. 5.1 이 stderr 를 오류로 바꾸는 것과 별개로 코드로 판정한다.
+#
+# **미러 전에 지워진 파일을 보관함으로 옮긴다**(2026-10-04). 가려내지 못하면 이번에는 `/MIR`
+# 대신 `/E` 로 받는다 — 무엇이 지워졌는지 모르는 채 `/MIR` 를 돌리면 그 파일이 백업에서도
+# 사라진다. 새 파일은 그래도 받고, 미러에 남은 여분은 다음 실행이 다시 판정한다.
 $storeSource = Get-FilestoreDir $envFile $AppPath
+$deletedRoot = Join-Path $BackupRoot 'filestore_deleted'
 $fileCount = 0
+$heldNow = 0
+$heldProblem = $null
 if (Test-Path $storeSource) {
-    Write-Log "파일스토어 미러: $storeSource → $storeTarget"
-    Invoke-Native 'robocopy.exe' @($storeSource, $storeTarget, '/MIR', '/R:2', '/W:5', '/NFL', '/NDL', '/NJH', '/NP') `
+    $copyMode = '/MIR'
+    if (Test-Path $storeTarget) {
+        try {
+            $held = Move-VanishedFiles $storeSource $storeTarget (Join-Path $deletedRoot $stamp)
+            $heldNow = $held.Moved
+            if ($heldNow -gt 0) {
+                Write-Log "원본에서 지워진 파일 $heldNow 개를 보관함으로 옮김: $(Join-Path $deletedRoot $stamp)"
+                # 원본이 통째로 비었으면 지운 것이 아니라 **자리를 잘못 본 것**일 가능성이 크다
+                # (FILESTORE_DIR 을 고치다 빈 폴더를 가리킴). 보관함에 있으니 잃지는 않지만 사람이 봐야 한다.
+                if ($held.SourceCount -eq 0) {
+                    Write-Warning "원본 $storeSource 에 파일이 하나도 없습니다 — backend\.env 의 FILESTORE_DIR 이 맞는지 보세요. 백업에 있던 $heldNow 개는 보관함에 있습니다."
+                }
+            }
+        } catch {
+            $copyMode = '/E'
+            $heldProblem = "$_"
+            Write-Warning "지운 파일을 가려내지 못했습니다: $_ — 이번에는 /MIR 대신 /E 로 받습니다(백업에서 아무것도 안 지움)."
+        }
+    }
+    Write-Log "파일스토어 $(if ($copyMode -eq '/MIR') { '미러' } else { '복사(/E)' }): $storeSource → $storeTarget"
+    Invoke-Native 'robocopy.exe' @($storeSource, $storeTarget, $copyMode, '/R:2', '/W:5', '/NFL', '/NDL', '/NJH', '/NP') `
         'robocopy' @(0, 1, 2, 3, 4, 5, 6, 7) | Out-Null
     $fileCount = (Get-ChildItem $storeTarget -Recurse -File -ErrorAction SilentlyContinue | Measure-Object).Count
 } else {
@@ -194,6 +271,27 @@ foreach ($dump in $dumps) {
 }
 Get-ChildItem $dbDir -Filter '*.part' -ErrorAction SilentlyContinue | Remove-Item -Force
 
+# --- 지운 파일 보관함 정리: 남은 가장 오래된 덤프보다 앞선 폴더만 --------------------------
+# 덤프 D 로 되돌릴 때 쓰는 보관분은 시각이 D 이상인 폴더뿐이다(restore.ps1 이 그렇게 고른다).
+# 그보다 앞선 폴더는 어느 덤프도 안 쓴다. 덤프가 하나도 안 읽히면 아무것도 안 지운다.
+# 이름이 시각 모양이 아닌 폴더는 사람이 둔 것이라 안 건드린다.
+$oldestKept = @($dumps | Where-Object { $keep -contains $_.File.FullName } | Sort-Object At | Select-Object -First 1)
+$heldDirCount = 0
+$heldFileCount = 0
+if (Test-Path $deletedRoot) {
+    foreach ($dir in Get-ChildItem $deletedRoot -Directory) {
+        if ($dir.Name -notmatch '^\d{8}-\d{6}$') { continue }
+        $heldAt = [datetime]::ParseExact($dir.Name, 'yyyyMMdd-HHmmss', $null)
+        if ($oldestKept.Count -gt 0 -and $heldAt -lt $oldestKept[0].At) {
+            Write-Log "오래된 지운 파일 보관분 삭제: $($dir.Name)"
+            Remove-Item -Recurse -Force -LiteralPath $dir.FullName
+        } else {
+            $heldDirCount++
+            $heldFileCount += (Get-ChildItem -LiteralPath $dir.FullName -Recurse -File -ErrorAction SilentlyContinue | Measure-Object).Count
+        }
+    }
+}
+
 # --- 기록 --------------------------------------------------------------------
 $dumpMb = [math]::Round((Get-Item $dumpPath).Length / 1MB, 1)
 @(
@@ -201,15 +299,21 @@ $dumpMb = [math]::Round((Get-Item $dumpPath).Length / 1MB, 1)
     "앱 경로     : $AppPath",
     "데이터베이스: $dbName @ ${dbHost}:${dbPort}  ($(Split-Path $dumpPath -Leaf), ${dumpMb}MB)",
     "파일스토어  : $fileCount 개 파일 (원본: $storeSource → 미러: $storeTarget)",
-    "보관        : 일 ${KeepDaily}벌 + 일요일분 ${KeepWeekly}벌 (덤프 $($keep.Count)개 남음)",
+    "지운 파일   : 이번에 $heldNow 개 옮김 · 보관함 $deletedRoot 에 $heldDirCount 벌 $heldFileCount 개$(if ($heldProblem) { "  !! 가려내지 못해 /E 로 받음: $heldProblem" })",
+    "보관        : 일 ${KeepDaily}벌 + 일요일분 ${KeepWeekly}벌 (덤프 $($keep.Count)개 남음) · 지운 파일은 가장 오래된 덤프까지",
     '',
     '복구 방법:',
     "  .\restore.ps1 -BackupRoot '$BackupRoot' -DbName matnexus_restore_check          # 확인만",
     "  .\restore.ps1 -BackupRoot '$BackupRoot' -DbName $dbName -AppPath '$AppPath' -Force  # 실제 복구",
     '',
-    '주의: DB 와 파일스토어는 같은 시점의 것이어야 한다. 파일스토어는 미러 한 벌이라',
+    '주의: DB 와 파일스토어는 같은 시점의 것이어야 한다. 파일스토어는 미러 한 벌이고,',
+    '      원본에서 지워진 파일은 미러에서 지우지 않고 filestore_deleted\<그날 시각>\ 로 옮겨',
+    '      남은 가장 오래된 덤프만큼 둔다. 옛 덤프로 되돌리면 restore.ps1 이 그 덤프 시각',
+    '      이후의 보관분을 미러와 함께 되돌린다 — 따로 할 것이 없다.',
+    '      파일 하나만 찾을 때는 filestore_deleted\ 아래에서 같은 상대 경로를 찾아',
+    '      파일스토어의 같은 자리에 복사한다.',
     '      옛 덤프로 되돌리면 그 뒤에 올린 파일이 「DB 에는 없는데 파일은 있는」 상태가',
-    '      된다 — 그것은 무해하다(저장소 정리가 오펀으로 잡는다). 반대는 없다.'
+    '      된다 — 그것은 무해하다(저장소 정리가 오펀으로 잡는다).'
 ) | Set-Content -Path (Join-Path $BackupRoot 'LAST_BACKUP.txt') -Encoding utf8
 
 Write-Log "백업 완료: $dumpPath (DB ${dumpMb}MB, 파일 $fileCount 개)"

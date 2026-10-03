@@ -90,15 +90,27 @@ def reclaim_stalled(db: Session, *, older_than_seconds: int = 300) -> int:
 
     이 함수가 없으면 워커가 강제 종료될 때마다 그 작업이 영원히 running 으로
     남는다 — 콘솔 실행(D9)이라 창을 닫는 일이 실제로 일어난다.
+
+    **시도 한도를 넘었으면 되살리지 않고 실패로 둔다**(2026-10-04). 전에는 늘 되살려서,
+    워커를 죽이는 작업(메모리를 다 먹는 큰 파일 하나)이 되살아날 때마다 워커를 다시
+    죽였다 — 그 뒤의 작업은 전부 멈춘다. 시도는 `claim_next` 가 센다.
     """
     cutoff = _now() - timedelta(seconds=older_than_seconds)
     stalled = list(
         db.scalars(select(Job).where(Job.status == "running", Job.locked_at < cutoff))
     )
     for job in stalled:
-        job.status = "queued"
         job.locked_at = None
         job.locked_by = None
+        if job.attempts >= job.max_attempts:
+            job.status = "failed"
+            job.finished_at = _now()
+            job.last_error = (
+                f"워커가 이 작업을 하다 멈췄습니다({job.attempts}번째). 다시 시도하지 않습니다"
+                f"(워커를 죽이는 작업일 수 있습니다). 직전 오류: {job.last_error or '없음'}"
+            )[:2000]
+            continue
+        job.status = "queued"
     if stalled:
         db.commit()
     return len(stalled)

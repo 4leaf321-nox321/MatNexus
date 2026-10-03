@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import re
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
@@ -361,7 +362,12 @@ def migrate_property(db: Session, key: str, *, to: str | None, dry_run: bool) ->
 
     for value in local_values:
         if factor_note and value.value_num is not None and src_c and dst_c:
-            value.value_num = units.from_si(units.to_si(value.value_num, src_c), dst_c)
+
+            def move(one: float, src: str = src_c, dst: str = dst_c) -> float:
+                return units.from_si(units.to_si(one, src), dst)
+
+            value.uncertainty = _spread(move, value.value_num, value.uncertainty)
+            value.value_num = move(value.value_num)
             value.unit = dst_c
         value.property_key = target.key
     taken_links = {
@@ -573,6 +579,21 @@ def _to_definition_unit(
     return converted, target_c, f"{value} {given} → {converted:g} {target_c}"
 
 
+def _spread(
+    convert: Callable[[float], float], value: float | None, spread: float | None
+) -> float | None:
+    """곁값(불확도)을 값과 **같은 배율로** 옮긴다 — 차이라서 오프셋은 안 받는다.
+
+    (값 + 불확도) 와 값의 환산 차이를 낸다. 배율만 있는 단위(MPa→Pa)에서는 곱하기와 같고,
+    오프셋 단위(℃→K)에서는 오프셋이 빠진다. 전에는 불확도를 그대로 둬서(2026-10-04)
+    `200 ± 5 GPa` 가 `2e11 ± 5 Pa` 로 저장됐다.
+    """
+    if spread is None:
+        return None
+    base = value if value is not None else 0.0
+    return convert(base + spread) - convert(base)
+
+
 def create_value(
     db: Session, material_id: uuid.UUID, payload: CatalogValueCreate, user: User
 ) -> tuple[CatalogValue, str | None]:
@@ -618,11 +639,17 @@ def create_value(
     value_text = clean(payload.value_text or "") or None
     unit: str | None = None
     note: str | None = None
+    uncertainty = payload.uncertainty
     if definition.value_type == "numeric":
         if value_num is None:
             raise AppError(
                 "MNX-CATALOG-0045", "수치 물성입니다 — value_num 이 필요합니다.", status=422
             )
+        uncertainty = _spread(
+            lambda one: _to_definition_unit(one, payload.unit, definition)[0],
+            value_num,
+            uncertainty,
+        )
         value_num, unit, note = _to_definition_unit(value_num, payload.unit, definition)
     elif value_text is None:
         raise AppError(
@@ -642,7 +669,7 @@ def create_value(
         value_num=value_num,
         value_text=value_text,
         unit=unit,
-        uncertainty=payload.uncertainty,
+        uncertainty=uncertainty,
         conditions=conditions or None,
         method=method,
         quality_tier=tier,

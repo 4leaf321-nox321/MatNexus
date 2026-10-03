@@ -91,6 +91,8 @@ export default function CatalogPage() {
     [q, subsystem, category, domain, manufacturer, range, limit]
   )
   const [exporting, setExporting] = useState(false)
+  /** 파일 받기가 실패한 까닭. **안 잡으면 422 · 500 이 나도 화면에 아무것도 안 뜬다**(2026-10-04). */
+  const [exportError, setExportError] = useState<Error | null>(null)
 
   /**
    * 지금 화면의 조건 그대로 파일을 받는다.
@@ -103,12 +105,15 @@ export default function CatalogPage() {
    */
   async function exportJson(system: UnitSystem, filename: string) {
     setExporting(true)
+    setExportError(null)
     try {
       const query = new URLSearchParams({ units: system.key })
       for (const [key, value] of Object.entries(filters)) {
         if (value !== undefined) query.set(key, String(value))
       }
       await downloadFile(`/catalog/export?${query}`, filename)
+    } catch (caught) {
+      setExportError(caught instanceof Error ? caught : new Error('파일을 받지 못했습니다.'))
     } finally {
       setExporting(false)
     }
@@ -161,6 +166,7 @@ export default function CatalogPage() {
 
       <ErrorNotice error={summary.error} />
       <ErrorNotice error={page.error} />
+      <ErrorNotice error={exportError} />
 
       {summary.data && (
         <p className="text-muted-foreground text-sm">

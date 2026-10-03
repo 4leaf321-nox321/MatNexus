@@ -34,7 +34,7 @@ from app.modules.fitting.models import PropertyCard
 from app.modules.materials.models import Material, Sample, Specimen
 from app.modules.tests.models import TestRun, TestType
 from app.modules.workspaces.models import Workspace, WorkspaceMember
-from app.shared import conditions, permissions
+from app.shared import commission_due, conditions, permissions
 from app.shared.commission_due import due_soon
 from app.shared.errors import AppError, Forbidden, NotFound
 from matcore import cards
@@ -556,7 +556,7 @@ def notify_due_soon(db: Session, *, today: date | None = None) -> int:
 
     **커밋은 부르는 쪽이 한다** — 다른 알림과 같은 규칙이다.
     """
-    day = today or datetime.now(UTC).date()
+    day = today or commission_due.today()
     found = due_soon(db, today=day)
     for user_id, items in found.items():
         first = items[0]

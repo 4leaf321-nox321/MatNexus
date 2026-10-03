@@ -77,7 +77,13 @@ def candidates(db: Session, values: list[CatalogValue]) -> list[tuple[float, int
             mark = marks.get(one.id)
             if one.material_id != material_id or mark is None or not mark.summary:
                 continue
-            worst = max(int(member.quality_tier) for member in numbered)
+            # 중앙값을 낸 그 무리만 — 변수 값은 스칼라와 따로 묶인다(`representative.group`).
+            pooled = [
+                member
+                for member in numbered
+                if representative.group(member) == representative.group(one)
+            ]
+            worst = max(int(member.quality_tier) for member in pooled)
             out.append((float(mark.summary["median"]), worst, one.id))
     return out
 

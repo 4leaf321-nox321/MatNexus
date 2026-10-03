@@ -1990,3 +1990,83 @@ class Test엑셀붙여넣기:
             headers=admin_headers,
         )
         assert found.json()["items"] == []
+
+
+class Test있는_값은_관리자만_꾸민다:
+    """별칭 · 칸 · 속성을 고치는 길은 시스템 관리자 전용이다 — 붙여넣기가 뒷문이 되면 안 된다.
+
+    실측(2026-10-04): 일반 사용자가 붙여넣기 한 줄로 남의 값에 별칭을 달았다.
+    """
+
+    @staticmethod
+    def member(client: TestClient, db: Session, workspace: Any) -> dict[str, str]:
+        from app.modules.accounts.models import User
+        from app.modules.auth import security
+
+        db.add(
+            User(
+                email="vocab-member",
+                password_hash=security.hash_password("member-password-1"),
+                display_name="일반",
+                status="active",
+                home_workspace_id=workspace.id,
+            )
+        )
+        db.commit()
+        token = client.post(
+            "/api/auth/login",
+            json={"email": "vocab-member", "password": "member-password-1"},
+        ).json()["access_token"]
+        return {"Authorization": f"Bearer {token}"}
+
+    def test_있는_값에_별칭을_못_단다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        workspace: Any,
+    ) -> None:
+        client.post(
+            "/api/vocabularies/instrument_maker/terms/bulk",
+            json={"values": ["남의제철"]},
+            headers=admin_headers,
+        )
+        headers = self.member(client, db, workspace)
+        row = {"values": ["남의제철	NAMUI"]}
+
+        preview = client.post(
+            "/api/vocabularies/instrument_maker/terms/bulk/preview", json=row, headers=headers
+        )
+        (planned,) = preview.json()["items"]
+        assert planned["aliases"] == [] and planned["warnings"], "미리보기도 같은 말을 한다"
+
+        made = client.post(
+            "/api/vocabularies/instrument_maker/terms/bulk", json=row, headers=headers
+        )
+        assert made.status_code == 200, made.text
+        (item,) = made.json()["items"]
+        assert item["status"] == "existing" and item["aliases"] == []
+        assert any("시스템 관리자" in one for one in item["warnings"])
+        # 별칭이 안 붙었다 — 그 표기로 넣으면 새 값이 생긴다.
+        again = client.post(
+            "/api/vocabularies/instrument_maker/terms/bulk",
+            json={"values": ["NAMUI"]},
+            headers=admin_headers,
+        )
+        assert again.json()["items"][0]["status"] == "created"
+
+    def test_새로_만든_값에는_별칭을_단다(
+        self,
+        client: TestClient,
+        db: Session,
+        workspace: Any,
+    ) -> None:
+        headers = self.member(client, db, workspace)
+        made = client.post(
+            "/api/vocabularies/instrument_maker/terms/bulk",
+            json={"values": ["새제철	SAE;새제철(주)"]},
+            headers=headers,
+        )
+        (item,) = made.json()["items"]
+        assert item["status"] == "created"
+        assert set(item["aliases"]) == {"SAE", "새제철(주)"}

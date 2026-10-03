@@ -538,6 +538,74 @@ class Test눈금_매핑:
         internal = [one for one in got.json()["hits"] if one["world"] == "internal"]
         assert [one["value"] for one in internal] == [60.0]
 
+    def test_상한은_범위_안의_것에_건다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        hardness: None,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """그 항목을 든 시료가 상한보다 많아도 범위 안의 것은 온다(2026-10-04).
+
+        전에는 상한을 「그 항목을 든 시료」 에 걸고 범위는 나중에 봐서, 범위 밖 시료가 상한을
+        채우면 범위 안의 것이 빠졌다 — 검색이 「없다」 고 틀리게 답했다.
+        """
+        from app.shared import property_search
+
+        made = client.post(
+            "/api/catalog/properties/links",
+            json={
+                "property_key": "mechanical.hardness_vickers",
+                "item": "경도",
+                "scale": "HV",
+            },
+            headers=admin_headers,
+        )
+        assert made.status_code == 201, made.text
+        material = client.post(
+            "/api/materials",
+            json={
+                "family": "Metal",
+                "category": "Steel",
+                "grade": "CAP",
+                "spec_thickness": 1.0,
+            },
+            headers=admin_headers,
+        ).json()
+        # 범위 밖(900)을 먼저 넣는다 — 상한 1 이면 그것이 자리를 채운다.
+        for lot, value in (("C-1", 900), ("C-2", 200)):
+            sample = client.post(
+                f"/api/materials/{material['id']}/samples",
+                json={"lot_no": lot},
+                headers=admin_headers,
+            ).json()
+            saved = client.patch(
+                f"/api/samples/{sample['id']}",
+                json={
+                    "declared_properties": [
+                        {
+                            "item": "경도",
+                            "points": [{"value": value}],
+                            "scale": "HV",
+                            "source": "datasheet",
+                            "reference": "MTC-CAP",
+                        }
+                    ]
+                },
+                headers=admin_headers,
+            )
+            assert saved.status_code == 200, saved.text
+
+        monkeypatch.setattr(property_search, "MAX_ROWS", 1)
+        got = client.get(
+            SEARCH,
+            params={"q": "mechanical.hardness_vickers", "unit": "HV", "min": 20, "max": 300},
+            headers=admin_headers,
+        )
+        assert got.status_code == 200, got.text
+        internal = [one for one in got.json()["hits"] if one["world"] == "internal"]
+        assert [one["value"] for one in internal] == [200.0]
+
 
 class Test값으로_찾기:
     """**「항복응력이 200MPa 근처인 재료」** — 이름 해소 + 단위 환산 + 범위."""

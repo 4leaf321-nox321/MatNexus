@@ -178,14 +178,55 @@ def _summary(members: list[Any], varying: dict[Any, dict[str, Any]]) -> dict[str
     }
 
 
+#: 식의 한 벌을 가리키는 표지 — 이 중 하나가 `term` 과 함께 있어야 식의 변수다.
+_FORMULA_MARKS = ("model", "set_id", "unit_of_term")
+
+
+def is_term(value: Any) -> bool:
+    """식의 **변수** 값인가 — Prony 의 E0, Anand 의 A ….
+
+    그 값은 그 물성의 스칼라가 아니라 「그 식의 그 항」 이고, 항의 단위(`unit_of_term`)가
+    따로 있으면 `value_num` 도 SI 가 아니다(`catalog.parameters`).
+
+    **`term` 만으로 가르지 않는다**(2026-10-04 실측). `term` 이 식의 항이 아니라 **구분**으로
+    쓰인 값이 있다 — 최고 사용온도의 `short` · `long`(48건), 여기 상태 수명의 `prompt` ·
+    `delayed`(57건). 그것은 그 물성의 값이다. `term` 만으로 가르면 그런 재료 43곳이 비교 ·
+    덱 · 받아 오기에서 빠졌다. 식의 변수는 한 벌의 표지(`model` · `set_id` ·
+    `unit_of_term`)를 함께 단다 — 개발 DB 의 변수 값은 모두 그랬다.
+    """
+    conditions = value.conditions
+    return (
+        isinstance(conditions, dict)
+        and "term" in conditions
+        and any(mark in conditions for mark in _FORMULA_MARKS)
+    )
+
+
+def group(value: Any) -> tuple[str, str | None, str | None]:
+    """겨루는 무리 — 스칼라는 물성 하나로, 변수 값은 (물성, 항, 항의 단위) 로."""
+    if not is_term(value):
+        return (value.property_key, None, None)
+    conditions = value.conditions
+    return (
+        value.property_key,
+        str(conditions.get("term")),
+        str(conditions.get("unit_of_term") or ""),
+    )
+
+
 def annotate(values: list[Any]) -> dict[Any, Annotation]:
     """(같은 재료의) 값 목록 → id 별 대표/대안 주석.
 
     property_key 로 무리 짓고, 무리마다 순위 최상을 대표로 삼는다.
+
+    **변수 값은 항마다 따로 무리 짓는다**(2026-10-04). 전에는 property_key 하나로 묶어
+    영률의 스칼라 값과 Prony 의 E0(유리 상태, 항의 원래 단위)가 겨뤘고, E0 가 등급에서
+    이기면 덱 · 비교 · Ashby 의 탄성계수로 섰다(개발 DB 14곳). Anand 9항처럼 다른 조건이
+    같은 벌은 `_summary` 가 a · A · h0 의 중앙값을 냈다. 같은 항 · 같은 단위끼리만 겨룬다.
     """
-    groups: dict[str, list[Any]] = {}
+    groups: dict[tuple[str, str | None, str | None], list[Any]] = {}
     for one in values:
-        groups.setdefault(one.property_key, []).append(one)
+        groups.setdefault(group(one), []).append(one)
 
     out: dict[Any, Annotation] = {}
     for members in groups.values():

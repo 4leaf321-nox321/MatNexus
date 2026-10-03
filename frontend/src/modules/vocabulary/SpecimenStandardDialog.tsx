@@ -118,6 +118,8 @@ export function SpecimenStandardDialog({ slug, term, onClose, onSaved }: Props) 
    * 만들면 된다.
    */
   async function choose(shape: CrossSection) {
+    // 칸을 못 읽은 채 보내면 이 규격의 칸이 새 칸만 남는다 — 단추도 잠겨 있다(2026-10-04).
+    if (!fields.data) return
     const missing = shape.needs.filter((need) => !rows.some((field) => field.key === need.key))
     if (missing.length === 0) {
       setCrossSection(shape.key)
@@ -157,11 +159,16 @@ export function SpecimenStandardDialog({ slug, term, onClose, onSaved }: Props) 
   }
 
   async function save() {
+    // **칸을 못 읽었으면 저장하지 않는다**(2026-10-04). 서버는 치수를 통째로 갈아 끼운다 —
+    // 칸이 오기 전이나 못 읽은 채 `attributes: {}` 를 보내면 이 규격의 공칭 치수가 전부
+    // 지워졌다. 단추도 잠겨 있다.
+    const loaded = fields.data
+    if (!loaded) return
     setBusy(true)
     setError(null)
     try {
       const attributes: Record<string, number | string> = {}
-      for (const field of fields.data ?? []) {
+      for (const field of loaded) {
         if (!isNumber(field)) {
           const text = (draft[field.key] ?? '').trim()
           if (text) attributes[field.key] = text
@@ -201,6 +208,8 @@ export function SpecimenStandardDialog({ slug, term, onClose, onSaved }: Props) 
   }
 
   const rows = fields.data ?? []
+  /** 칸을 읽었나. **못 읽었으면 저장 · 식 고르기를 잠근다** — 둘 다 통째로 갈아 끼운다. */
+  const ready = fields.data !== null
   /** 비를 잴 수 있는 칸은 숫자 칸뿐이다. */
   const numbers = rows.filter(isNumber)
 
@@ -314,7 +323,7 @@ export function SpecimenStandardDialog({ slug, term, onClose, onSaved }: Props) 
                 size="sm"
                 variant={crossSection === shape.key ? 'default' : 'outline'}
                 className="h-7 text-xs"
-                disabled={busy}
+                disabled={busy || !ready}
                 title={shape.help ?? undefined}
                 onClick={() => void choose(shape)}
               >
@@ -460,7 +469,11 @@ export function SpecimenStandardDialog({ slug, term, onClose, onSaved }: Props) 
           <Button variant="outline" onClick={onClose}>
             닫기
           </Button>
-          <Button onClick={() => void save()} disabled={busy}>
+          <Button
+            onClick={() => void save()}
+            disabled={busy || !ready}
+            title={ready ? undefined : '칸을 읽은 뒤에 저장할 수 있습니다 — 못 읽은 채 저장하면 치수가 지워집니다.'}
+          >
             저장
           </Button>
         </DialogFooter>

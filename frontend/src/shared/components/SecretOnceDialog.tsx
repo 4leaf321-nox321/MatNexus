@@ -18,6 +18,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/shared/components/ui/dialog'
+import { copyText } from '@/shared/lib/clipboard'
 
 interface SecretOnceDialogProps {
   open: boolean
@@ -47,16 +48,15 @@ export function SecretOnceDialog({
   footnote = PASSWORD_FOOTNOTE,
   confirmLabel = '전달했습니다',
 }: SecretOnceDialogProps) {
-  const [copied, setCopied] = useState(false)
+  /** 복사 결과. **막혔으면 그렇다고 말한다** — 값은 화면에 보이므로 손으로 옮기면 된다. */
+  const [copied, setCopied] = useState<'yes' | 'no' | null>(null)
 
   async function copy() {
-    try {
-      await navigator.clipboard.writeText(secret)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    } catch {
-      // 클립보드 권한이 없을 수 있다. 값은 화면에 보이므로 손으로 옮기면 된다.
-    }
+    // **`navigator.clipboard` 를 바로 부르지 않는다**(2026-10-04). 사내 http 주소에서는 그 객체가
+    // 없어 TypeError 로 끝났다 — 되돌아 갈 길을 가진 `copyText` 를 쓴다.
+    const ok = await copyText(secret)
+    setCopied(ok ? 'yes' : 'no')
+    if (ok) setTimeout(() => setCopied(null), 2000)
   }
 
   return (
@@ -81,9 +81,14 @@ export function SecretOnceDialog({
             {secret}
           </code>
           <Button variant="outline" size="icon" onClick={copy} aria-label="복사">
-            {copied ? <Check className="size-4" /> : <Copy className="size-4" />}
+            {copied === 'yes' ? <Check className="size-4" /> : <Copy className="size-4" />}
           </Button>
         </div>
+        {copied === 'no' && (
+          <p role="status" className="text-destructive text-xs">
+            브라우저가 복사를 막았습니다 — 위 값을 직접 골라 옮기세요.
+          </p>
+        )}
 
         <p className="text-muted-foreground text-xs">{footnote}</p>
 

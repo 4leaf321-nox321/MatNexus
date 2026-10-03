@@ -237,11 +237,14 @@ export default function BomDeckPage() {
   const download = () => {
     if (!built) return
     const blob = new Blob([built.text], { type: 'text/plain;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
     const anchor = document.createElement('a')
-    anchor.href = URL.createObjectURL(blob)
+    anchor.href = url
     anchor.download = built.filename
     anchor.click()
-    URL.revokeObjectURL(anchor.href)
+    // **곧바로 풀지 않는다**(2026-10-04) — 저장이 시작되기 전에 주소가 사라지는 브라우저가
+    // 있다. `downloadFile`(shared/api/client) 과 같은 규칙이다.
+    setTimeout(() => URL.revokeObjectURL(url), 10_000)
   }
 
   return (

@@ -13,7 +13,6 @@ from __future__ import annotations
 import uuid
 from collections.abc import Sequence
 from dataclasses import asdict
-from datetime import UTC, datetime
 from statistics import fmean, stdev
 from typing import Any
 
@@ -974,7 +973,7 @@ def overview(
             )
         ),
         commissions_due_soon=len(
-            commission_due.due_soon(db, today=datetime.now(UTC).date()).get(user.id, [])
+            commission_due.due_soon(db, today=commission_due.today()).get(user.id, [])
         ),
         commissions_mine_open=count(
             select(Commission.id).where(

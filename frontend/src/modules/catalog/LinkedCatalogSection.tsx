@@ -7,7 +7,7 @@
  */
 
 import { BookMarked, Link2, Link2Off, PackagePlus } from 'lucide-react'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import { AdoptDialog } from '@/modules/catalog/AdoptDialog'
@@ -38,17 +38,34 @@ export function LinkedCatalogSection({
   const [adopting, setAdopting] = useState(false)
 
   const materialId = String(material.id)
-
-  const refresh = useCallback(() => {
-    catalogApi
-      .link(materialId)
-      .then(setLink)
-      .catch((caught) =>
-        setError(caught instanceof Error ? caught : new Error('연결을 읽지 못했습니다.'))
-      )
+  /**
+   * 지금 보고 있는 재료. **늦게 온 앞 재료의 답은 버린다**(2026-10-04) — 재료를 빨리 넘기면
+   * 앞 재료의 연결이 나중에 도착해 이 재료의 연결처럼 섰고, 그 연결로 「채우기」 를 열 수 있었다.
+   */
+  const shown = useRef(materialId)
+  useEffect(() => {
+    shown.current = materialId
   }, [materialId])
 
-  useEffect(() => refresh(), [refresh])
+  const refresh = useCallback(() => {
+    const asked = materialId
+    catalogApi
+      .link(asked)
+      .then((next) => {
+        if (shown.current === asked) setLink(next)
+      })
+      .catch((caught) => {
+        if (shown.current !== asked) return
+        setError(caught instanceof Error ? caught : new Error('연결을 읽지 못했습니다.'))
+      })
+  }, [materialId])
+
+  useEffect(() => {
+    // 앞 재료의 연결을 들고 서 있지 않는다.
+    setLink(null)
+    setError(null)
+    refresh()
+  }, [refresh])
 
   // 문헌 재료 검색 — 연결할 때만.
   useEffect(() => {
@@ -74,14 +91,21 @@ export function LinkedCatalogSection({
 
   // 연결돼 있으면 채우기용 상세를 미리 받아 둔다.
   useEffect(() => {
-    if (!link?.catalog_material_id) {
-      setDetail(null)
-      return
-    }
+    setDetail(null)
+    if (!link?.catalog_material_id) return
+    // 연결이 바뀌면 앞 연결의 상세는 버린다 — 위와 같은 까닭.
+    let alive = true
     catalogApi
       .material(String(link.catalog_material_id))
-      .then(setDetail)
-      .catch(() => setDetail(null))
+      .then((next) => {
+        if (alive) setDetail(next)
+      })
+      .catch(() => {
+        if (alive) setDetail(null)
+      })
+    return () => {
+      alive = false
+    }
   }, [link?.catalog_material_id])
 
   async function connect(catalogMaterialId: string) {

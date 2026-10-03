@@ -210,7 +210,12 @@ def virtual(db: Session, material: CatalogMaterial, *, synthesize: bool = False)
     marks = representative.annotate([value for value, _ in rows])
     chosen: dict[str, tuple[CatalogValue, CatalogSource | None]] = {}
     for value, source in rows:
-        if marks[value.id].representative and value.property_key not in chosen:
+        # 변수 값(Prony 의 E0 …)은 그 물성의 대표가 아니다 — 항마다 따로 대표가 선다.
+        if (
+            marks[value.id].representative
+            and not representative.is_term(value)
+            and value.property_key not in chosen
+        ):
             chosen[value.property_key] = (value, source)
     fix = _consistent([(value, source) for value, source in rows], chosen)
 

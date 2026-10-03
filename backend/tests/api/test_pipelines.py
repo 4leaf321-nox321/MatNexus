@@ -1116,3 +1116,62 @@ def test_후보_조회는_파일이_힌트를_이긴다(
         hints={"material_code": "NOPE"},
     )
     assert found and found[0]["specimen_name"] == specimen["record_name"]
+
+
+class Test영구_삭제:
+    """커넥터가 남긴 참조가 영구 삭제를 막지 않는다(2026-10-04 — 둘 다 500 이었다).
+
+    `pipeline_inbox_items` 의 `test_run_id` · `connector_id` 에 ondelete 가 없다.
+    """
+
+    def test_커넥터로_들어온_시험을_영구_삭제한다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        pat: dict[str, str],
+        connector: dict[str, Any],
+        specimen: dict[str, Any],
+        tensile: None,
+    ) -> None:
+        received = _send(client, pat, connector["id"]).json()
+        _run_worker(db, kinds.PIPELINES_PARSE_INBOX)
+        done = client.post(
+            f"/api/pipelines/inbox/{received['id']}/approve", headers=admin_headers
+        )
+        assert done.status_code == 200, done.text
+        run = db.scalar(select(TestRun).order_by(TestRun.created_at.desc()))
+        assert run is not None
+        run_id = run.id
+        assert (
+            client.delete(f"/api/test-runs/{run_id}", headers=admin_headers).status_code == 204
+        )
+
+        gone = client.delete(
+            f"/api/trash/test_run/{run_id}?confirm=true", headers=admin_headers
+        )
+        assert gone.status_code == 200, gone.text
+        db.expire_all()
+        assert db.get(TestRun, run_id) is None
+        item = db.get(PipelineInboxItem, uuid.UUID(received["id"]))
+        assert item is not None and item.test_run_id is None and item.status == "discarded"
+
+    def test_수집함이_있는_커넥터를_영구_삭제한다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        pat: dict[str, str],
+        connector: dict[str, Any],
+    ) -> None:
+        received = _send(client, pat, connector["id"]).json()
+        off = client.delete(
+            f"/api/pipelines/connectors/{connector['id']}", headers=admin_headers
+        )
+        assert off.status_code == 204, off.text
+        gone = client.delete(
+            f"/api/trash/connector/{connector['id']}?confirm=true", headers=admin_headers
+        )
+        assert gone.status_code == 200, gone.text
+        db.expire_all()
+        assert db.get(PipelineInboxItem, uuid.UUID(received["id"])) is None

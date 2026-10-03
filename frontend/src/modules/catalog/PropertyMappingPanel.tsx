@@ -236,6 +236,19 @@ export function PropertyMappingPanel({
     }
   }
 
+  /**
+   * 사전을 받는다. **실패를 말한다**(2026-10-04) — 전에는 잡지 않아 422 · 500 이 나도 화면에
+   * 아무것도 안 떴다.
+   */
+  async function downloadDictionary() {
+    setError(null)
+    try {
+      await downloadFile('/catalog/properties/dictionary', 'matnexus_property_dictionary.json')
+    } catch (caught) {
+      setError(caught instanceof Error ? caught : new Error('사전을 받지 못했습니다.'))
+    }
+  }
+
   const { summary } = mapping
   // 서버가 안 준 판(옛 번들)에서도 화면이 서야 한다 — 목록이 없으면 블록이 안 뜬다.
   const suggestions = mapping.suggestions ?? []
@@ -259,9 +272,7 @@ export function PropertyMappingPanel({
         <Button
           size="sm"
           variant="outline"
-          onClick={() =>
-            downloadFile('/catalog/properties/dictionary', 'matnexus_property_dictionary.json')
-          }
+          onClick={() => void downloadDictionary()}
         >
           <Download className="size-4" />
           사전 다운로드

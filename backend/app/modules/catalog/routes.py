@@ -14,7 +14,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query, Response
-from sqlalchemy import ColumnElement, Row, exists, func, or_, select
+from sqlalchemy import ColumnElement, Row, and_, exists, func, or_, select
 from sqlalchemy.orm import Session
 
 from app import version
@@ -692,7 +692,8 @@ def _representative_values(
     for material_id, values in by_material.items():
         marks = representative.annotate(values)
         for value in values:
-            if marks[value.id].representative:
+            # 변수 값은 항마다 따로 대표가 선다 — 「그 물성의 값」 자리에는 스칼라만.
+            if marks[value.id].representative and not representative.is_term(value):
                 out[(material_id, value.property_key)] = value
     return out
 
@@ -706,7 +707,22 @@ def _candidate_counts(
             CatalogValue.property_key,
             func.count(),
         )
-        .where(CatalogValue.material_id.in_(material_ids))
+        .where(
+            CatalogValue.material_id.in_(material_ids),
+            # 대표값과 같은 무리만 센다 — 식의 변수 값은 그 칸의 후보가 아니다
+            # (`representative.is_term` 과 같은 기준: `term` 과 한 벌의 표지가 함께 있을 때).
+            or_(
+                CatalogValue.conditions.is_(None),
+                ~and_(
+                    CatalogValue.conditions.has_key(parameters.TERM),
+                    or_(
+                        CatalogValue.conditions.has_key(parameters.MODEL),
+                        CatalogValue.conditions.has_key(parameters.SET_ID),
+                        CatalogValue.conditions.has_key(parameters.UNIT_OF_TERM),
+                    ),
+                ),
+            ),
+        )
         .group_by(CatalogValue.material_id, CatalogValue.property_key)
     )
     return {(material_id, key): count for material_id, key, count in rows}
@@ -1062,6 +1078,7 @@ def _values_out(
             unit=value.unit,
             term=_term_name((value.conditions or {}).get(parameters.TERM)),
             term_unit=(value.conditions or {}).get(parameters.UNIT_OF_TERM),
+            formula_term=representative.is_term(value),
             uncertainty=value.uncertainty,
             conditions=value.conditions,
             method=value.method,

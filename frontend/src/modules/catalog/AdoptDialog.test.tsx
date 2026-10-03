@@ -379,3 +379,33 @@ describe('주파수를 타는 항목', () => {
     expect(dk.note).toContain('측정 온도가 달라')
   })
 })
+
+describe('식의 변수 값', () => {
+  it('식의 변수(formula_term)는 목록에 없고, 구분으로 쓴 term 은 담는다', async () => {
+    // 2026-10-04: `term` 만 보고 빼면 최고 사용온도의 「장기」 같은 구분 값까지 빠졌다.
+    // 가르는 것은 서버다(`formula_term`).
+    const detail = {
+      ...DETAIL,
+      values: [
+        value({ property_key: 'mechanical.youngs_modulus', value_num: 3e9, formula_term: false }),
+        // Prony 의 유리 상태 E0 — 영률 칸에 담으면 조용히 틀린다.
+        value({
+          property_key: 'mechanical.youngs_modulus',
+          value_num: 3.2e10,
+          term: 'E0',
+          formula_term: true,
+        }),
+        // 구분으로 쓴 term — 그 물성의 값이다.
+        value({
+          property_key: 'mechanical.shear_modulus',
+          value_num: 1.1e9,
+          term: 'long',
+          formula_term: false,
+        }),
+      ],
+    } as unknown as CatalogMaterialDetail
+    render(<AdoptDialog detail={detail} open onClose={() => {}} />)
+    await userEvent.click(await screen.findByRole('button', { name: /SGARC440/ }))
+    await waitFor(() => expect(screen.getAllByRole('checkbox')).toHaveLength(2))
+  })
+})

@@ -23,6 +23,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { SampleExplorer } from '@/modules/materials/SampleExplorer'
 
 const specimens = vi.fn()
+const removeSpecimen = vi.fn()
 
 vi.mock('@/modules/materials/api', async () => {
   const actual = await vi.importActual<typeof import('@/modules/materials/api')>(
@@ -33,6 +34,7 @@ vi.mock('@/modules/materials/api', async () => {
     materialsApi: {
       ...actual.materialsApi,
       specimens: (...a: unknown[]) => specimens(...a),
+      removeSpecimen: (...a: unknown[]) => removeSpecimen(...a),
     },
   }
 })
@@ -205,6 +207,24 @@ describe('아코디언에 있던 일', () => {
     await screen.findByText('MD_01')
     expect(screen.getAllByTitle('시편 편집')).toHaveLength(2)
     expect(screen.getAllByTitle('시편 삭제')).toHaveLength(2)
+  })
+
+  it('시험이 남은 시편은 못 지운다고 말하고, 거절은 창 안에 보인다', async () => {
+    // **서버는 시험이 남은 시편을 지우지 않는다**(409). 전에는 「시험이 함께 가려집니다」 라고
+    // 해서 사람은 함께 지워질 줄 알고 눌렀고, 오류는 창 뒤에 가려졌다(2026-10-04).
+    removeSpecimen.mockRejectedValue(new Error('서버가 지우기를 거절했습니다'))
+    const user = userEvent.setup()
+    show()
+    await screen.findByText('MD_01')
+    const row = screen.getByText('MD_01').closest('tr') as HTMLElement
+    await user.click(within(row).getByTitle('시편 삭제'))
+
+    const dialog = await screen.findByRole('dialog')
+    expect(dialog).toHaveTextContent('시험 2건이 남아 있어 지울 수 없습니다')
+    expect(dialog).not.toHaveTextContent('함께 가려집니다')
+
+    await user.click(within(dialog).getByRole('button', { name: '삭제' }))
+    expect(await within(dialog).findByText('서버가 지우기를 거절했습니다')).toBeInTheDocument()
   })
 })
 

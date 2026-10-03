@@ -430,7 +430,7 @@ async def search_materials(
     `query` 는 낱말마다 나눠 AND 로 찾는다(`SECC 1.0` 처럼 순서와 무관). 재료
     번호는 `M-000123` 도 `M-123` 도 닿는다.
 
-    돌려주는 것은 목록이라 값은 안 실린다 — 물성은 `get_material(id)` 로 본다.
+    돌려주는 것은 목록이라 값은 안 실린다 — 물성은 `get_material(material_id)` 로 본다.
     """
     got = await _get(
         ctx,
@@ -834,7 +834,7 @@ async def search_catalog(
     사내 재료(`search_materials`)와 **다른 세계**다 — 여기는 실물 없이 문헌·
     데이터시트에서 채굴한 값이고, 사내 재료와는 연결·채택으로 만난다.
 
-    값은 안 실린다(재료마다 수십 건이다) — `get_catalog_material(id)` 로 본다.
+    값은 안 실린다(재료마다 수십 건이다) — `get_catalog_material(catalog_material_id)` 로 본다.
     """
     got = await _get(
         ctx,
@@ -3056,7 +3056,7 @@ async def save_card_block(
     key: str,
     label: str,
     produces: list[dict[str, Any]],
-    help: str = "",
+    help: str | None = None,
     rows: list[dict[str, Any]] | None = None,
     overwrite: bool = False,
     dry_run: bool = True,
@@ -3072,7 +3072,8 @@ async def save_card_block(
                    선언 값이 이 칸을 채운다 — 서버가 키가 실재하는지, 칸 단위와 차원이 같은지
                    검사한다
         rows       표가 있으면 그 열(같은 모양). 보통 비운다
-        overwrite  같은 키가 있을 때 **고친다** — 담는 모양이 바뀌면 판이 오른다
+        overwrite  같은 키가 있을 때 **고친다** — 담는 모양이 바뀌면 판이 오른다.
+                   `help` · `rows` 를 안 주면 있던 것을 둔다(지우려면 "" · [])
 
     **시스템 관리자 토큰**이어야 한다. 전 부서의 카드 모양이 되므로 칸 이름 · 단위를 사용자에게
     보여 주고 확인받은 뒤 저장한다.
@@ -3084,7 +3085,14 @@ async def save_card_block(
         (one for one in (listed if isinstance(listed, list) else []) if one.get("key") == key),
         None,
     )
-    body: dict[str, Any] = {"label": label, "help": help, "produces": produces, "rows": rows or []}
+    # **안 준 것은 안 보낸다**(2026-10-04). 고칠 때(PATCH) 서버는 안 보낸 칸만 그대로 두고 빈 글 ·
+    # 빈 목록은 값으로 받는다(`fitting/blocks.update`) — 전에는 안 준 `help` 를 "" 로, `rows` 를 [] 로
+    # 보내서 overwrite=True 한 번에 그 항목란의 설명과 표 열이 지워졌다. 만들 때는 서버 기본이 같다.
+    body: dict[str, Any] = {"label": label, "produces": produces}
+    if help is not None:
+        body["help"] = help
+    if rows is not None:
+        body["rows"] = rows
     if existing is not None and not overwrite:
         return {
             "error": f"'{key}' 항목란이 이미 있습니다({existing.get('label')}).",
@@ -3099,6 +3107,11 @@ async def save_card_block(
             "dry_run": True,
             "will": "update" if existing is not None else "create",
             "will_save": {"key": key, **body},
+            **(
+                {"keeps": [name for name in ("help", "rows") if name not in body]}
+                if existing is not None
+                else {}
+            ),
             "note": "이대로 저장하려면 dry_run=False 로 다시 부르세요. 전 부서 카드의 모양이 된다.",
         }
     if existing is not None:
@@ -3108,6 +3121,14 @@ async def save_card_block(
 
 #: 선언 값의 출처 — 서버가 이 밖의 것은 거절한다(`materials/declared.SOURCES`).
 DECLARED_SOURCES = ("literature", "standard", "datasheet", "millsheet", "estimate")
+#: 항목 한 줄에 **하나만** 실리는 칸 — (도구가 받는 이름, 서버로 보내는 이름). 점마다 다를 수
+#: 없으므로 같은 항목의 줄끼리 달라서는 안 된다(`set_declared_values`).
+DECLARED_ROW_FIELDS = (
+    ("unit", "input_unit"),
+    ("scale", "scale"),
+    ("source", "source"),
+    ("reference", "reference"),
+)
 
 
 @mcp.tool()
@@ -3126,7 +3147,8 @@ async def set_declared_values(
                  · `item` 은 `list_property_items` 의 이름 — 없으면 먼저 `add_property_item`
                  · `unit` 은 그 값의 단위(비우면 그 항목의 SI 정본). **네가 환산하지 마라** —
                    사용자가 준 단위 그대로 넘기면 서버가 SI 로 바꾼다
-                 · 온도마다 값이 있으면 같은 `item` 을 여러 줄로, `temperature_k` 를 붙여서
+                 · 온도마다 값이 있으면 같은 `item` 을 여러 줄로, `temperature_k` 를 붙여서 —
+                   그 줄들의 `unit` · `scale` · `source` · `reference` 는 같아야 한다
                  · **주파수 · 파장을 타는 항목**(유전율 · 유전손실 · 굴절률 — `list_property_items`
                    의 `condition_key`)은 `frequency_hz` · `wavelength_m`(SI)를 붙인다 — 온도를
                    붙이면 거절된다. 측정 온도는 줄마다 같은 `temperature_k` 로 적을 수 있다
@@ -3150,6 +3172,27 @@ async def set_declared_values(
         item = str(one.get("item") or "").strip()
         if not item or one.get("value") is None:
             return {"error": "줄마다 item 과 value 가 있어야 합니다.", "row": one}
+        first = grouped.get(item)
+        if first is not None:
+            # **한 항목의 줄은 단위 · 척도 · 출처 · 근거가 같아야 한다**(2026-10-04). 서버에는
+            # 항목마다 한 줄(`input_unit` 하나)로 가서, 전에는 첫 줄 것만 남고 뒷줄의 단위가 말없이
+            # 버려졌다 — 206 GPa 다음 줄의 170000 MPa 가 170000 GPa 로 저장됐다. 섞여 오면 고르지
+            # 않고 돌려보낸다.
+            mixed = [
+                name
+                for name, field in DECLARED_ROW_FIELDS
+                if str(one.get(name) or "").strip() != str(first[field] or "").strip()
+            ]
+            if mixed:
+                return {
+                    "error": f"'{item}' 의 줄끼리 {' · '.join(mixed)} 이(가) 다릅니다 — 한 항목의 "
+                    "값은 한 단위 · 척도 · 출처 · 근거로 적습니다.",
+                    "first": {name: first[field] for name, field in DECLARED_ROW_FIELDS},
+                    "row": one,
+                    "hint": "단위가 섞였으면 `convert_unit` 으로 한 단위에 맞추거나(네가 계산하지 "
+                    "않는다) 사용자에게 어느 단위로 적을지 묻는다. 출처 · 근거가 정말 다르면 "
+                    "같은 항목에 섞지 않는다.",
+                }
         row = grouped.setdefault(
             item,
             {
@@ -3383,7 +3426,7 @@ async def add_catalog_material(
 ) -> dict[str, Any]:
     """문헌 카탈로그에 **재료를 만든다** — 문헌상의 등급·제품이지 사내 lot 이 아니다.
 
-    **먼저 `search_catalog(name)` 로 이미 있는지 본다.** 같은 이름이 있으면 서버가 그
+    **먼저 `search_catalog(query=이름)` 로 이미 있는지 본다.** 같은 이름이 있으면 서버가 그
     id 를 알려 주며 거절한다(409) — 그 재료에 값을 더한다.
 
     - `category`: metal · polymer · ceramic · composite · foam · rubber · molecular
@@ -4498,10 +4541,10 @@ async def save_export_profile(
         overwrite   같은 key 가 이미 있을 때만 — **고치는 것이다.** 남의 정의를 덮기 전에
                     사람에게 확인한다(고칠 권한이 없으면 서버가 막는다)
         workspace   등록 부서(권한이 아님). 안 주면 내 소속
+        description 고칠 때 안 주면 있던 설명을 둔다(`extension` 도)
 
     저장된 정의로 뽑을 때는 `render_card_deck(card_id, format=key)`, 대조는 `check_card_deck`.
     """
-    full = _full_definition(definition, extension, description)
     existing = None
     if key:
         listed = await _get(ctx, "/fitting/export-profiles")
@@ -4517,6 +4560,17 @@ async def save_export_profile(
                 "hint": "고치려는 것이면 사용자에게 확인하고 overwrite=True 로 다시 부르세요. "
                 "새로 만들려는 것이면 다른 key 를 쓰세요.",
             }
+    # **고칠 때 안 준 것은 있던 것을 둔다**(2026-10-04). PUT 은 설명을 통째로 바꾸므로
+    # (`fitting/routes.update_export_profile`) 안 준 설명을 null 로 보내면 저장된 설명이 지워졌다.
+    # 정의 안의 `describe` · `extension` 도 같은 자리에서 기본값으로 바뀌거나 빠졌다.
+    stored = (existing or {}).get("definition") or {}
+    full = _full_definition(
+        definition,
+        extension or stored.get("extension"),
+        description or stored.get("describe") or (existing or {}).get("description"),
+    )
+    if existing is not None and description is None:
+        description = existing.get("description")
     body: dict[str, Any] = {
         "label": label,
         "description": description,
@@ -5752,13 +5806,17 @@ async def search_all(
 #:
 #: 이름이 썩지 않는지는 `tests/architecture/test_mcp_tools.py` 가 검사한다 —
 #: 여기 적힌 종류가 온톨로지에 실제로 있는지 맞대 본다.
+#:
+#: **인자 · 출력 이름은 그 도구의 것 그대로 적는다**(2026-10-04). 전에는 `search_materials(q=…)
+#: → items[].id` 였는데 인자는 `query`, 출력은 `materials` 다. mcp 2.x 는 모르는 인자를 말없이
+#: 버리므로 AI 는 거르지 않은 목록을 받고 「찾았다」 고 여겼다. 위 검사는 도구 이름만 본다.
 _ENTRY: dict[str, str] = {
-    "material": "search_materials(q=…) → items[].id",
-    "catalog_material": "search_catalog(query=…) → items[].id",
-    "property": "resolve_property(name=…) → key. **UUID 가 아니라 이 문자열이다**",
-    "property_card": "list_cards(material_id=…) → items[].id. `blocks` 에 담긴 갈래가 보인다",
-    "test_run": "list_test_runs(material_id=…) → items[].id",
-    "recipe": "list_recipes() → items[].id · 그 마디에서 `ran_with` 역방향이 「이 레시피로 돌린 결과」",
+    "material": "search_materials(query=…) → materials[].id",
+    "catalog_material": "search_catalog(query=…) → materials[].id",
+    "property": "resolve_property(name=…) → candidates[].key. **UUID 가 아니라 이 문자열이다**",
+    "property_card": "list_cards(material_id=…) → cards[].id. `blocks` 에 담긴 갈래가 보인다",
+    "test_run": "list_test_runs(material_id=…) → runs[].id",
+    "recipe": "list_recipes() → recipes[].id · 그 마디에서 `ran_with` 역방향이 「이 레시피로 돌린 결과」",
     "commission": 'search_all(q=제목, kind="commission") → 그 마디에서 `item_of` 역방향 → 항목 → '
     "`requested_by` 역방향 → 시험",
     "formula": 'search_all(q=식 이름, kind="formula") → 그 마디에서 `computed_by` 역방향이 '
@@ -5783,8 +5841,9 @@ _RECIPES: list[dict[str, str]] = [
     },
     {
         "question": "이 재료로 이 솔버 형식(MAT_024·Abaqus…)이 나오나 / 안 나오면 왜 · 어디서 채우나",
-        "steps": "deck_readiness(material_id) → ready 면 build_deck(rows=[{mid, material_id}], "
-        "format=…) · 아니면 missing[].tests / .catalog / .declarable_values 를 사람에게",
+        "steps": "deck_readiness(material_id) → formats[].ready 면 build_deck(rows=[{mid, "
+        "material_id}], format=…) · 아니면 formats[].missing[].tests / .catalog / "
+        ".declarable_values 를 사람에게",
         "note": "카드를 열어 available_formats 를 보지 마라 — 준비도가 형식마다 한 번에 답한다. "
         "지도의 deck_requirements 가 그 규칙(형식→블록, 블록→시험·문헌)이다.",
     },
@@ -5833,7 +5892,7 @@ _RECIPES: list[dict[str, str]] = [
     },
     {
         "question": "새 재료(또는 로트·시편)를 등록해 달라",
-        "steps": "search_materials(q=…) 로 없는 것을 확인 → create_material(dry_run) → "
+        "steps": "search_materials(query=…) 로 없는 것을 확인 → create_material(dry_run) → "
         "create_sample(dry_run) → create_specimen(dry_run) → 사람이 보고 나서 dry_run=False",
         "note": "미리보기의 `similar`·`same_lot` 을 사람에게 그대로 보여라 — 같은 실물이 두 줄 "
         "되는 것이 이 층의 사고다. 기준정보에 없는 Grade·업체·규격은 도구가 막고 후보를 준다: "

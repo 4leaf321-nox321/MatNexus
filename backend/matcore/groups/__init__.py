@@ -33,7 +33,7 @@ from typing import Any
 
 import numpy as np
 
-from matcore.registry import Plugin, get, list_plugins
+from matcore.registry import ParamSpec, Plugin, get, list_plugins
 
 
 class GroupError(Exception):
@@ -95,6 +95,35 @@ def groupings(
     return list_plugins(kind="grouping", applies_to=applies_to, channels=channels)
 
 
+_NO = frozenset({"false", "0", "no", "off", "n", "아니오", "아니요"})
+_YES = frozenset({"true", "1", "yes", "on", "y", "예"})
+
+
+def typed_options(params: Sequence[ParamSpec], options: Mapping[str, Any]) -> dict[str, Any]:
+    """**예/아니오 칸이 글자로 오면 뜻대로 읽는다**(2026-10-04).
+
+    묶음 화면은 칸을 글자 입력으로 그려 `"false"` 를 그대로 보낸다. 그대로 넘기면
+    `bool("false")` 가 참이라, 런아웃 빼기 · Hill48 끄기 같은 「끄는」 설정이 화면에서는
+    한 번도 먹지 않았다. 못 읽는 글자는 추측하지 않고 막는다.
+    """
+    out = dict(options)
+    for spec in params:
+        raw = out.get(spec.name)
+        if spec.type != "bool" or not isinstance(raw, str):
+            continue
+        word = raw.strip().lower()
+        if word in _NO:
+            out[spec.name] = False
+        elif word in _YES:
+            out[spec.name] = True
+        else:
+            raise GroupError(
+                f"'{spec.label}' 는 예/아니오 칸입니다 — '{raw}' 를 읽을 수 없습니다"
+                f"(true · false 로 적으세요)."
+            )
+    return out
+
+
 def run_group(
     plugin_id: str, members: Sequence[Member], options: Mapping[str, Any] | None = None
 ) -> GroupOutcome:
@@ -118,7 +147,7 @@ def run_group(
             f"묶으려면 둘 이상이 필요합니다(지금 {len(members)}개). "
             f"하나뿐이면 그 시험의 결과를 그대로 쓰세요."
         )
-    outcome = plugin.fn(list(members), **dict(options or {}))
+    outcome = plugin.fn(list(members), **typed_options(plugin.params, options or {}))
     if not isinstance(outcome, GroupOutcome):
         raise GroupError(f"{plugin_id} 가 GroupOutcome 을 안 돌려줬습니다.")
     return outcome

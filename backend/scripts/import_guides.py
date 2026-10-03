@@ -36,6 +36,14 @@
 운영 편집을 저장소로 되돌리는 길은 `export_guides.py` 다. 그것이 없으면 운영 편집은
 언젠가 반드시 사라지고, 그러면 사람들이 운영에서 편집하기를 그만둔다.
 
+## 지운 것은 되살리지 않는다 (2026-10-04)
+
+기본 모드가 문서를 찾으면 무조건 `deleted_at = None` 을 했다 — 검토자가 휴지통으로 보낸
+문서가 **배포마다** 되살아났다. 지운 사람은 다음 배포 뒤 그 문서가 다시 선 것을 보고, 지워도
+소용없다고 배운다. 이제 기본 모드는 지운 문서·절을 건너뛰고 이름만 적는다
+(`import_export_profiles.py` 가 지운 정의판을 대하는 것과 같다). 되살리는 것은 사람이
+의식적으로 부르는 `--replace` 뿐이다.
+
 ## 왜 기본이 「문서 건너뛰기」 가 아닌가
 
 전에는 문서 key 가 있으면 **통째로** 건너뛰었다. 그러면 저장소에 절을 새로 써도
@@ -158,6 +166,8 @@ def check(db: Session, seed: dict[str, Any]) -> str:
     document = db.scalar(select(GuideDocument).where(GuideDocument.key == seed["key"]))
     if document is None:
         return f"운영에 없음 — 절 {len(seed['sections'])} 개가 새로 들어간다"
+    if document.deleted_at is not None:
+        return "운영에서 지운 문서 — 기본 적재는 안 되살린다(--replace 로만)"
 
     seeded = {item["key"]: item for item in seed["sections"]}
     rows = {
@@ -168,7 +178,17 @@ def check(db: Session, seed: dict[str, Any]) -> str:
             )
         )
     }
-    fresh = [key for key in seeded if key not in rows]
+    # 지운 절은 `rows` 에 없지만 **새로 들어가지도 않는다** — 적재가 건너뛴다(보기와 넣기가
+    # 같은 답을 내게).
+    removed = set(
+        db.scalars(
+            select(GuideSection.key).where(
+                GuideSection.document_id == document.id, GuideSection.deleted_at.is_not(None)
+            )
+        )
+    ) - set(rows)
+    fresh = [key for key in seeded if key not in rows and key not in removed]
+    gone = [key for key in seeded if key in removed]
     only_there = [key for key in rows if key not in seeded]
     # **그림은 적재가 쓸 주소로 바꿔 견준다.** 씨앗은 `asset:이름` 자리표시를 든다.
     # 전에는 그림 주소를 빼고 견줬는데, 그러면 그림 파일이 바뀐 절이 「같음」 으로
@@ -197,6 +217,8 @@ def check(db: Session, seed: dict[str, Any]) -> str:
         parts.append(f"**다름 · 사람이 고친 절 {len(guarded)}**({shown})")
     if only_there:
         parts.append(f"운영에만 {len(only_there)}")
+    if gone:
+        parts.append(f"지운 절 {len(gone)} — 안 되살림(--replace 로만)")
     return " · ".join(parts) if parts else "같음"
 
 
@@ -255,8 +277,12 @@ def load(db: Session, seed: dict[str, Any], *, replace: bool) -> str:
             source_filename=seed.get("source_filename"),
         )
         made = True
+    elif document.deleted_at is not None and not replace:
+        # **지운 문서는 되살리지 않는다**(2026-10-04, 위 「지운 것은 되살리지 않는다」). 전에는
+        # 여기서 무조건 `deleted_at = None` 이라 검토자가 지운 문서가 배포마다 돌아왔다.
+        return "운영에서 지운 문서 — 안 되살림(되살리려면 휴지통에서, 또는 --replace)"
     else:
-        document.deleted_at = None
+        document.deleted_at = None  # --replace 만 여기 온다 — 사람이 의식적으로 되살린다
         made = False
 
     urls = _upload_assets(db, document.id, seed)
@@ -265,6 +291,7 @@ def load(db: Session, seed: dict[str, Any], *, replace: bool) -> str:
     kept = 0
     renewed = 0
     guarded: list[str] = []
+    removed: list[str] = []
     for item in seed["sections"]:
         body = item["body"]
         _rewrite_images(body, urls)
@@ -284,6 +311,10 @@ def load(db: Session, seed: dict[str, Any], *, replace: bool) -> str:
                 body=body,
             )
             added += 1
+        elif not replace and section.deleted_at is not None:
+            # 사람이 지운 절도 그대로 둔다. 전에도 되살리지는 않았지만 「같은 절」 이나
+            # 「사람이 고쳐 둔 절」 로 세어서, --check 로 보라는 안내가 엉뚱한 데를 가리켰다.
+            removed.append(item["key"])
         elif not replace and section.body == body:
             kept += 1
         elif not replace and seed_owned(db, section):
@@ -310,6 +341,9 @@ def load(db: Session, seed: dict[str, Any], *, replace: bool) -> str:
     if guarded:
         shown = ", ".join(guarded[:3]) + ("…" if len(guarded) > 3 else "")
         said += f" · 사람이 고쳐 둔 절 {len(guarded)}({shown}) — 안 덮음, --check 로 보고 결정"
+    if removed:
+        shown = ", ".join(removed[:3]) + ("…" if len(removed) > 3 else "")
+        said += f" · 지운 절 {len(removed)}({shown}) — 안 되살림"
     return said
 
 

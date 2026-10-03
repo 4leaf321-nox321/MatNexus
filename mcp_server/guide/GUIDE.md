@@ -651,7 +651,7 @@ Family·Category·Grade·제조사·유통사·판매 유형·시편 규격은 *
     2. 없으면 적합을 견준다     preview_card_fit  ← 저장 안 함
     3. 사람이 식을 고른다       **네가 고르지 마라**
     4. 초안을 만든다           create_card_from_tests (dry_run 기본 · 소성 표는 곡률 50점으로 굳힘)
-    5. 덱을 뽑는다             render_card_deck(card, format, **units**, mid=받는 쪽 번호)
+    5. 덱을 뽑는다             render_card_deck(card_id, format, **units**, mid=받는 쪽 번호)
     6. 되읽어 대조한다          check_card_deck(...)  ← 건네기 전에
 
 **3번이 이 길에서 가장 중요하다.** 상대 RMSE 가 가장 낮은 식을 자동으로 고르지
@@ -700,12 +700,12 @@ Family·Category·Grade·제조사·유통사·판매 유형·시편 규격은 *
 
 ### 카드의 갈래 — 어디서 나오나
 
-    인장 경화식(표+식)      create_card_from_tests(material, test_type, orientation)
-    선언 값만              create_declared_card(material)
+    인장 경화식(표+식)      create_card_from_tests(material_id, test_type, orientation)
+    선언 값만              create_declared_card(material_id)
     속도 의존 소성          list_groups → create_card_from_group(plugin_id=tensile.rate_family)
     점탄성(Prony 하나)      get_prony_fits → create_viscoelastic_card(prony_fit_id)
     점탄성(Prony 여럿)      list_groups → create_card_from_group(plugin_id=viscoelastic.prony_group)
-    DMA 선형 탄성률         create_lve_card(material, test_type, orientation)
+    DMA 선형 탄성률         create_lve_card(material_id, test_type, orientation)
     확장이 선언한 묶음      list_groups → create_card_from_group
 
 전부 미리보기가 기본이고, **푸아송비·밀도는 지어 넣지 마라** — 시험이 주지 않는 값이라
@@ -719,9 +719,9 @@ Family·Category·Grade·제조사·유통사·판매 유형·시편 규격은 *
 <!--@ statistics -->
 ## 흩어짐 — 평균 하나로 말하지 마라
 
-    얼마나 흩어지나            get_statistics(material, test_type, orientation) — 평균·SD·CV·이상치
+    얼마나 흩어지나            get_statistics(material_id, test_type, orientation) — 평균·SD·CV·이상치
     최소 보증값·하위 1 %      get_distribution(…, scalar_key) — 정규·로그정규·와이블 나란히
-    선언 vs 잰 값             spec_gap(material?) — 차이가 큰 것이 위로
+    선언 vs 잰 값             spec_gap(material_id?) — 차이가 큰 것이 위로
     분류마다 어떻게 흩어지나   spread_by_group(scalars, group_by)
 
 **묶음은 시험종류 + 방향이다.** MD 와 TD 를 한 통계로 묶으면 CV 가 크게 나오는데 그것은
@@ -736,14 +736,14 @@ Family·Category·Grade·제조사·유통사·판매 유형·시편 규격은 *
 <!--@ workflow -->
 ## 전형적인 흐름
 
-1. **재료 찾기** — `search_materials(q=...)` → `get_material(id)`
+1. **재료 찾기** — `search_materials(query=...)` → `get_material(material_id)`
    재료 번호(`M-000123`)는 안 바뀌는 손잡이다. 이름(`record_name`)은 기준정보
    개명을 따라 바뀔 수 있으니, 문서에 적을 때는 번호를 함께 적는다.
    **이름·번호를 그대로 넣어도 된다**(2026-09-18) — `get_material`·`property_coverage`·
    `deck_readiness`·`get_card` 는 uuid 가 아니면 이름으로 찾아 **딱 하나면 그것으로 보고,
    여럿이면 후보를 돌려준다.** 그러니 「이름을 못 쓴다」 고 미리 검색하지 말고 한 번에 불러라.
    물음이 「뭐가 있나 · 어떤 조건에 · 믿을 만한가」 면 `get_material` 대신
-   `property_coverage(id)` 로 간다 — 시험·선언·문헌을 물성마다 등급과 함께 한 장으로 준다.
+   `property_coverage(material_id)` 로 간다 — 시험·선언·문헌을 물성마다 등급과 함께 한 장으로 준다.
 2. **값이 비었으면 문헌으로** — 문헌 카탈로그에서 같은 등급을 찾아 채운다.
 3. **해석용 덱** — 카드가 있으면 카드로, 없으면 문헌 스칼라로.
 
@@ -757,9 +757,9 @@ Family·Category·Grade·제조사·유통사·판매 유형·시편 규격은 *
 
 **① 시험에서 나온 물성 — 확정된 카드만**
 
-    list_cards(status="published")   확정 카드 목록 — 사람이 검토해 올린 것
-    get_card(id)                     블록·값·근거(쓴 시험·표본 수·적합 구간)
-    render_card_deck(id, format)     솔버 덱. 형식은 카드의 available_formats 에서
+    list_cards(status="published")     확정 카드 목록 — 사람이 검토해 올린 것
+    get_card(card_id)                  블록·값·근거(쓴 시험·표본 수·적합 구간)
+    render_card_deck(card_id, format)  솔버 덱. 형식은 카드의 available_formats 에서
 
 초안(`draft`)은 넘기지 않는다 — 만들어 본 것이지 결론이 아니다. 필요한 카드가 초안뿐이면
 **그 사실을 사람에게 말해라.** 확정은 화면에서 사람이 한다.
@@ -772,7 +772,7 @@ REST 로 받는 쪽은 `GET /api/fitting/cards?status=published` 와
 사내 재료와 연결되지 않은 문헌 값도 **그대로 가져갈 수 있다.** 재료를 거쳐 체계화되지
 않은 값이 필요한 경우가 흔하다(아직 안 재 본 재료, 후보 비교).
 
-    search_catalog(query) → get_catalog_material(id)
+    search_catalog(query) → get_catalog_material(catalog_material_id)
     REST: GET /api/catalog/export   전부 한 파일(재료·값·출처, 대표 표시 포함)
 
 **`quality_tier` 를 함께 넘긴다.** 4 는 계산·추정·가정이다 — 받는 쪽이 그것을 실측처럼

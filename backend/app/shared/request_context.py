@@ -16,6 +16,7 @@ sync 엔드포인트도 anyio가 contextvars를 복사해 스레드풀로 넘긴
 
 from __future__ import annotations
 
+import re
 import uuid
 from contextvars import ContextVar
 from typing import Any
@@ -51,6 +52,25 @@ _CLIENT_BYTES = CLIENT_HEADER.lower().encode()
 KNOWN_CLIENTS = ("mcp", "pylon", "script")
 
 
+#: 들고 온 id 를 이어 쓸 때의 폭 — 감사 표의 `request_id` 칸(String(40))과 같다.
+REQUEST_ID_MAX = 40
+_NOT_ID = re.compile(r"[^A-Za-z0-9._:-]")
+
+
+def accept_request_id(raw: bytes | None) -> str:
+    """들고 온 id 를 **칸에 맞게** 받는다. 쓸 글자가 없으면 새로 만든다.
+
+    전에는 그대로 이어 써서(2026-10-04) 40자가 넘는 id(추적 헤더를 통째로 넘기는 프록시가
+    있다)로 들어온 쓰기 요청이 감사 INSERT 에서 500 이 났고, UTF-8 이 아닌 바이트면
+    미들웨어에서 터졌다. 로그 한 줄에 박히는 값이라 줄바꿈 같은 글자도 뺀다.
+    """
+    if raw:
+        cleaned = _NOT_ID.sub("", raw.decode("ascii", errors="ignore"))[:REQUEST_ID_MAX]
+        if cleaned:
+            return cleaned
+    return uuid.uuid4().hex[:12]
+
+
 def get_request_id() -> str:
     return _request_id.get()
 
@@ -75,8 +95,7 @@ class RequestIdMiddleware:
             return
 
         # 역방향 프록시나 클라이언트가 id를 들고 오면 그대로 이어 쓴다.
-        incoming = dict(scope.get("headers") or {}).get(_HEADER_BYTES)
-        rid = incoming.decode() if incoming else uuid.uuid4().hex[:12]
+        rid = accept_request_id(dict(scope.get("headers") or {}).get(_HEADER_BYTES))
         token = _request_id.set(rid)
 
         raw = dict(scope.get("headers") or {}).get(_CLIENT_BYTES)

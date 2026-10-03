@@ -91,6 +91,10 @@ type Slots = Record<string, AdoptableSlot>
 function adoptable(slots: Slots, value: CatalogValue): boolean {
   const target = slots[value.property_key]
   if (!target || value.value_num === null || value.value_num === undefined) return false
+  // **식의 변수 값은 그 물성이 아니다.** 영률 키의 Prony E0 는 「유리 상태 E0」 다 — 영률 칸에
+  // 담으면 조용히 틀린다(2026-10-04). 「단기 · 장기」 같은 구분(`term`)은 그 물성의 값이라
+  // 담는다 — 가르는 것은 서버다(`formula_term`).
+  if (value.formula_term) return false
   // 포아송비의 서버 제약(0 ≤ ν < 0.5). 카탈로그에는 음의 포아송비(열분해흑연)가
   // 실재한다 — 그런 값은 기본 칸에 못 담으므로 목록에서 뺀다.
   if (target.place === 'column' && target.field === 'poisson_ratio') {

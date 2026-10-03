@@ -14,6 +14,7 @@ from __future__ import annotations
 import uuid
 
 from fastapi import APIRouter, Depends, Request, Response
+from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
@@ -61,21 +62,30 @@ def _clear_refresh_cookie(response: Response) -> None:
 
 
 @router.post("/login", response_model=LoginResponse)
-def login(
+async def login(
     payload: LoginRequest,
     request: Request,
     response: Response,
     db: Session = Depends(get_db),
 ) -> LoginResponse:
-    user = services.authenticate(db, str(payload.email), payload.password)
-    access, expires_in, refresh_raw = services.issue_session(
-        db, user, request.headers.get("user-agent")
+    # **비동기다** — 틀린 비밀번호를 늦출 때 스레드를 붙잡지 않으려고(`LoginDelayed`). DB 를
+    # 만지는 일은 전처럼 스레드 풀에서 하고, 기다리는 것만 이벤트 루프에서 한다.
+    try:
+        user = await run_in_threadpool(
+            services.authenticate, db, str(payload.email), payload.password
+        )
+    except services.LoginDelayed as delayed:
+        await services.wait(delayed.delay)
+        raise delayed.error from None
+    access, expires_in, refresh_raw = await run_in_threadpool(
+        services.issue_session, db, user, request.headers.get("user-agent")
     )
     _set_refresh_cookie(response, refresh_raw)
+    shown = await run_in_threadpool(services.user_out, db, user)
     return LoginResponse(
         access_token=access,
         expires_in=expires_in,
-        user=services.user_out(db, user),
+        user=shown,
         notice=services.login_notice(str(payload.email), user),
     )
 

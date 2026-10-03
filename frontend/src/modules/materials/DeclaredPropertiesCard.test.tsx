@@ -824,3 +824,113 @@ describe('정의문', () => {
     expect(screen.queryByLabelText('비열 정의')).not.toBeInTheDocument()
   })
 })
+
+/**
+ * 저장 · 취소 · 지우기가 **서버 값과 어긋나지 않는다**(2026-10-04).
+ *
+ * 서버는 선언 물성을 통째로 갈아 끼운다. 그래서 카드가 서버 값과 다른 초안을 들고 있으면
+ * 그 초안이 다음 저장에 그대로 실린다 — 취소한 뒤 다른 재료로 넘어가 저장하면 앞 재료의
+ * 줄이 새 재료에 들어갔고, 지운 항목은 다른 항목을 저장하는 날 함께 지워졌다.
+ */
+describe('서버 값과 어긋나지 않는다', () => {
+  const HEAT = {
+    ...DECLARED_E,
+    item: '비열',
+    points: [{ value_si: 462, value: 462, temperature_k: null }],
+    input_unit: 'J/(kg.K)',
+    reference: '핸드북',
+  }
+
+  it('취소한 뒤 다른 재료의 줄이 오면 그것을 보이고, 저장하면 그 줄만 간다', async () => {
+    // 재료 상세는 다른 재료로 넘어가도 카드를 다시 마운트하지 않는다 — 같은 카드에 새 줄이 온다.
+    const user = userEvent.setup()
+    const onSave = vi.fn().mockResolvedValue(undefined)
+    const { rerender } = render(
+      <DeclaredPropertiesCard level="재료" rows={[DECLARED_E] as never} onSave={onSave} />
+    )
+    await openFirst()
+    await user.clear(await screen.findByDisplayValue('206'))
+    await user.type(screen.getByLabelText('탄성계수 값'), '999')
+    await user.click(screen.getByRole('button', { name: '취소' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+
+    rerender(<DeclaredPropertiesCard level="재료" rows={[HEAT] as never} onSave={onSave} />)
+    const row = (await screen.findByText('비열')).closest('tr') as HTMLElement
+    expect(within(row).getByText(/462/)).toBeInTheDocument()
+    expect(screen.queryByText('탄성계수')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '비열 편집' }))
+    await screen.findByDisplayValue('462')
+    await saveCard()
+    await waitFor(() => expect(onSave).toHaveBeenCalled())
+    expect(onSave.mock.calls[0][0].map((one: { item: string }) => one.item)).toEqual(['비열'])
+  })
+
+  it('저장이 실패하면 창이 닫히지 않고 창 안에 오류를 보인다', async () => {
+    // 오류를 삼키고 닫히면 저장이 안 됐는데 고친 것만 사라진다.
+    panel([DECLARED_E], vi.fn().mockRejectedValue(new Error('서버가 거절했습니다')))
+    const user = await openFirst()
+    await user.clear(await screen.findByDisplayValue('206'))
+    await user.type(screen.getByLabelText('탄성계수 값'), '210')
+    await saveCard()
+
+    const dialog = screen.getByRole('dialog')
+    expect(await within(dialog).findByText('서버가 거절했습니다')).toBeInTheDocument()
+    expect(within(dialog).getByDisplayValue('210')).toBeInTheDocument()
+  })
+
+  it('항목을 지우면 곧바로 저장한다 — 남은 줄만 보낸다', async () => {
+    const onSave = panel([DECLARED_E, HEAT])
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: '탄성계수 편집' }))
+    await user.click(await screen.findByRole('button', { name: /이 항목 삭제/ }))
+
+    await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1))
+    expect(onSave.mock.calls[0][0].map((one: { item: string }) => one.item)).toEqual(['비열'])
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+  })
+
+  it('지우기가 실패하면 창이 남고 창 안에 오류를 보인다', async () => {
+    panel([DECLARED_E], vi.fn().mockRejectedValue(new Error('지우지 못했습니다')))
+    const user = await openFirst()
+    await user.click(await screen.findByRole('button', { name: /이 항목 삭제/ }))
+    const dialog = screen.getByRole('dialog')
+    expect(await within(dialog).findByText('지우지 못했습니다')).toBeInTheDocument()
+  })
+
+  it('저장 안 한 새 항목을 지우면 서버에 보내지 않는다', async () => {
+    const onSave = panel([DECLARED_E])
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('combobox', { name: '선언 물성 추가' }))
+    await user.click(await screen.findByRole('option', { name: /비열/ }))
+    await user.click(await screen.findByRole('button', { name: /이 항목 삭제/ }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(onSave).not.toHaveBeenCalled()
+    expect(screen.queryByText('비열')).not.toBeInTheDocument()
+  })
+
+  it('빈 값 칸은 0 으로 보내지 않는다 — 막고 까닭을 말한다', async () => {
+    // `Number('')` 는 0 이다. 지우다 만 칸이 「탄성계수 0」 으로 저장됐다.
+    const onSave = panel([DECLARED_E])
+    const user = await openFirst()
+    await user.clear(await screen.findByDisplayValue('206'))
+    await saveCard()
+
+    const dialog = screen.getByRole('dialog')
+    expect(await within(dialog).findByText(/값 칸이 비었거나 숫자가 아닙니다/)).toBeInTheDocument()
+    expect(onSave).not.toHaveBeenCalled()
+  })
+
+  it('새 항목을 값 없이 저장하지 않는다', async () => {
+    const onSave = panel([])
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('combobox', { name: '선언 물성 추가' }))
+    await user.click(await screen.findByRole('option', { name: /비열/ }))
+    await screen.findByLabelText('비열 값')
+    await saveCard()
+
+    const dialog = screen.getByRole('dialog')
+    expect(await within(dialog).findByText(/「비열」 값 칸이 비었거나/)).toBeInTheDocument()
+    expect(onSave).not.toHaveBeenCalled()
+  })
+})

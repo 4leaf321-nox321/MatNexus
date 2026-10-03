@@ -10,7 +10,7 @@
  * 시험 — 서버가 골라 준다. 붙으면 「접수」 는 저절로 「시험 중」 이 된다.
  */
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { ArrowLeft, Files, Link2, List, Pencil, Plus, Trash2, Unlink, Upload } from 'lucide-react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 
@@ -20,6 +20,7 @@ import {
   deliverableLabel,
   draftFromItem,
   missingInItems,
+  settle,
   toPayload,
 } from '@/modules/commissions/ItemsEditor'
 import type { ItemDraft } from '@/modules/commissions/ItemsEditor'
@@ -679,6 +680,18 @@ function EditDialog({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<Error | null>(null)
   const labs = useResource(() => workspacesApi.options(), [])
+
+  // **시험 종류가 늦게 오면 그때 조건을 채운다**(2026-10-04). 연 순간 정의가 없던 항목은
+  // 조건을 버리지 않고 그대로 들고 있다가(`raw`), 정의가 오면 화면 단위 글자로 옮긴다.
+  useEffect(() => {
+    setItems((current) => {
+      const next = current.map((one) =>
+        settle(one, testTypes.find((type) => type.key === one.test_type_key))
+      )
+      return next.some((one, at) => one !== current[at]) ? next : current
+    })
+  }, [testTypes])
+
   const missing: string[] = []
   if (!title.trim()) missing.push('제목')
   if (!purpose.trim()) missing.push('목적')

@@ -468,3 +468,132 @@ class Test소수의_변수값:
         assert body["total"] == 8, body["hits"]
         assert all(abs(one["value"] - 215.0) > 1e-6 for one in body["hits"])
         parameters.forget()
+
+
+class Test변수_값은_대표가_아니다:
+    """비교 · Ashby 의 「그 물성의 값」 자리에 식의 변수 값이 서지 않는다(2026-10-04).
+
+    개발 DB 14곳에서 영률 대표가 Prony 의 E0(유리 상태, MPa)였다.
+    """
+
+    def test_비교는_등급이_나빠도_스칼라를_세운다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str]
+    ) -> None:
+        parameters.forget()
+        key = "mechanical.test_youngs_rep"
+        db.add(
+            CatalogDefinition(
+                mt_id=990501,
+                key=key,
+                name="시험용 영률(대표)",
+                domain="mechanical",
+                si_unit="Pa",
+                value_type="number",
+            )
+        )
+        epoxy = CatalogMaterial(mt_id=990502, name="시험용 에폭시", category="polymer")
+        other = CatalogMaterial(mt_id=990503, name="시험용 비교 상대", category="polymer")
+        db.add_all([epoxy, other])
+        db.flush()
+        db.add_all(
+            [
+                CatalogValue(
+                    mt_id=990601,
+                    material_id=epoxy.id,
+                    property_key=key,
+                    value_num=3.0e9,
+                    unit="Pa",
+                    quality_tier=3,
+                    conditions={},
+                ),
+                # 등급은 더 좋지만 「영률」 이 아니라 「Prony 의 E0」 다 — 숫자도 MPa 다.
+                CatalogValue(
+                    mt_id=990602,
+                    material_id=epoxy.id,
+                    property_key=key,
+                    value_num=32000.0,
+                    unit="Pa",
+                    quality_tier=1,
+                    conditions={"term": "E0 (glassy)", "unit_of_term": "MPa"},
+                ),
+                CatalogValue(
+                    mt_id=990603,
+                    material_id=other.id,
+                    property_key=key,
+                    value_num=2.5e9,
+                    unit="Pa",
+                    quality_tier=2,
+                    conditions={},
+                ),
+            ]
+        )
+        db.commit()
+        got = client.get(
+            f"/api/catalog/compare?ids={epoxy.id},{other.id}", headers=admin_headers
+        )
+        assert got.status_code == 200, got.text
+        row = next(one for one in got.json()["rows"] if one["property_key"] == key)
+        assert row["cells"][0]["value_num"] == 3.0e9
+        assert row["cells"][0]["n_candidates"] == 1, "변수 값은 그 칸의 후보가 아니다"
+        # 화면이 따로 가르지 않는다 — 받아 오기가 이 표지로 변수 값을 뺀다.
+        detail = client.get(f"/api/catalog/materials/{epoxy.id}", headers=admin_headers).json()
+        flags = {one["value_num"]: one["formula_term"] for one in detail["values"]}
+        assert flags == {3.0e9: False, 32000.0: True}
+        parameters.forget()
+
+    def test_구분으로_쓴_term_은_비교에_선다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str]
+    ) -> None:
+        """최고 사용온도의 `long` 은 식의 항이 아니라 구분이다 — 그 물성의 값이다(2026-10-04).
+
+        `term` 만으로 가르면 스칼라가 없는 재료(개발 DB 15곳)에서 비교 칸이 비었다.
+        """
+        parameters.forget()
+        key = "thermal.test_max_service"
+        db.add(
+            CatalogDefinition(
+                mt_id=990701,
+                key=key,
+                name="시험용 최고 사용온도",
+                domain="thermal",
+                si_unit="K",
+                value_type="number",
+            )
+        )
+        tape = CatalogMaterial(mt_id=990702, name="시험용 테이프", category="polymer")
+        other = CatalogMaterial(mt_id=990703, name="시험용 테이프 2", category="polymer")
+        db.add_all([tape, other])
+        db.flush()
+        db.add_all(
+            [
+                CatalogValue(
+                    mt_id=990801,
+                    material_id=tape.id,
+                    property_key=key,
+                    value_num=366.15,
+                    unit="K",
+                    quality_tier=2,
+                    conditions={"term": "long"},
+                ),
+                CatalogValue(
+                    mt_id=990802,
+                    material_id=other.id,
+                    property_key=key,
+                    value_num=394.15,
+                    unit="K",
+                    quality_tier=2,
+                    conditions={},
+                ),
+            ]
+        )
+        db.commit()
+        got = client.get(
+            f"/api/catalog/compare?ids={tape.id},{other.id}", headers=admin_headers
+        )
+        assert got.status_code == 200, got.text
+        row = next(one for one in got.json()["rows"] if one["property_key"] == key)
+        assert row["cells"][0]["value_num"] == 366.15
+        assert row["cells"][0]["n_candidates"] == 1
+        detail = client.get(f"/api/catalog/materials/{tape.id}", headers=admin_headers).json()
+        assert [one["formula_term"] for one in detail["values"]] == [False]
+        parameters.forget()

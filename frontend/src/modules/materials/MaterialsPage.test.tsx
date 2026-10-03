@@ -261,6 +261,20 @@ describe('일괄 삭제', () => {
     expect(sent.searchParams.get('units')).toBe('mm_n_tonne')
     expect(filename).toBe('matnexus_materials_mm_n_tonne.json')
   })
+
+  it('내보내기가 실패하면 그렇다고 말한다', async () => {
+    // **안 잡으면 422 · 500 이 나도 화면에 아무것도 안 뜬다**(2026-10-04).
+    download.mockRejectedValueOnce(new Error('너무 많아 한 번에 못 담습니다'))
+    const user = userEvent.setup()
+    show()
+    await screen.findByRole('link', { name: 'SPCC_-_1.2' })
+
+    await user.click(screen.getByRole('button', { name: /JSON 내보내기/ }))
+    await user.click(
+      await screen.findByRole('menuitem', { name: /matnexus_materials_mm_n_tonne\.json/ })
+    )
+    expect(await screen.findByText('너무 많아 한 번에 못 담습니다')).toBeInTheDocument()
+  })
 })
 
 describe('찾기 — 방식과 상세 조건 (2026-09-29)', () => {

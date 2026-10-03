@@ -214,6 +214,24 @@ def test_failed_job_is_retried_then_marked_failed(db: Session) -> None:
     handlers._HANDLERS.pop("test.always_fails")
 
 
+def test_워커를_죽이는_작업은_한도에서_실패로_둔다(db: Session) -> None:
+    """멈춘 작업을 늘 되살리면 워커를 죽이는 작업이 되살아날 때마다 또 죽인다(2026-10-04)."""
+    from datetime import UTC, datetime, timedelta
+
+    job = queue.enqueue(db, kind="notifications.deliver", payload={}, max_attempts=2)
+    db.commit()
+    long_ago = datetime.now(UTC) - timedelta(hours=1)
+    for expected in ("queued", "failed"):
+        claimed = queue.claim_next(db, worker_id="dies")
+        assert claimed is not None and claimed.id == job.id
+        claimed.locked_at = long_ago  # 워커가 죽어 running 으로 남았다
+        db.commit()
+        assert queue.reclaim_stalled(db) == 1
+        db.refresh(job)
+        assert job.status == expected
+    assert "다시 시도하지 않습니다" in (job.last_error or "")
+
+
 def test_flush_failure_does_not_kill_the_worker(db: Session) -> None:
     """**flush 에서 죽은 핸들러도 워커를 못 죽인다.**
 
@@ -290,3 +308,33 @@ def test_rules_can_be_turned_off_and_stay_off(
         "/api/notifications/rules/made.up", json={"enabled": True}, headers=admin_headers
     )
     assert nope.status_code == 404
+
+
+def test_긴_제목은_줄이고_본문에_온전히_남긴다(
+    client: TestClient, db: Session, admin: User, admin_headers: dict[str, str]
+) -> None:
+    """제목 칸(200자)을 넘으면 INSERT 가 실패해 아무도 못 받았다(2026-10-04)."""
+    queue.enqueue(db, kind="notifications.ensure_rules", payload={"user_id": str(admin.id)})
+    db.commit()
+    drain(db)
+
+    long_title = "새 가입 신청 — " + "가" * 300
+    queue.enqueue(
+        db,
+        kind="notifications.deliver",
+        payload={
+            "event_kind": "account.signup",
+            "key": str(uuid.uuid4()),
+            "title": long_title,
+            "body": "본문",
+            "link": "/admin/accounts",
+            "to_user_id": None,
+        },
+    )
+    db.commit()
+    drain(db)
+
+    inbox = client.get("/api/notifications", headers=admin_headers).json()
+    assert len(inbox) == 1, inbox
+    assert len(inbox[0]["title"]) == 200 and inbox[0]["title"].endswith("…")
+    assert inbox[0]["body"] == long_title + "\n\n본문"

@@ -230,4 +230,26 @@ describe('시편 규격 치수', () => {
     await screen.findByLabelText('게이지 길이')
     expect(screen.getByText(/어겨도 저장은 됩니다/)).toBeInTheDocument()
   })
+
+  /**
+   * **칸을 못 읽으면 저장하지 않는다**(2026-10-04). 서버는 치수를 통째로 갈아 끼운다 —
+   * 못 읽은 채 `attributes: {}` 를 보내면 이 규격의 공칭 치수가 전부 지워졌고, 식을 고르면
+   * 이 규격의 칸이 새 칸만 남았다.
+   */
+  it('칸을 못 읽으면 저장과 식 고르기가 잠긴다', async () => {
+    termFields.mockRejectedValue(new Error('칸 목록을 못 받았습니다'))
+    show()
+    expect(await screen.findByText('칸 목록을 못 받았습니다')).toBeInTheDocument()
+    // 식 단추는 따로 온다 — 그려진 뒤에 잠겼는지 본다.
+    expect(await screen.findByRole('button', { name: /환봉/ })).toBeDisabled()
+    expect(screen.getByRole('button', { name: '저장' })).toBeDisabled()
+    expect(update).not.toHaveBeenCalled()
+  })
+
+  it('칸이 오기 전에는 저장이 잠긴다', async () => {
+    termFields.mockReturnValue(new Promise(() => {})) // 영영 안 온다
+    show()
+    expect(await screen.findByRole('button', { name: /환봉/ })).toBeDisabled()
+    expect(screen.getByRole('button', { name: '저장' })).toBeDisabled()
+  })
 })

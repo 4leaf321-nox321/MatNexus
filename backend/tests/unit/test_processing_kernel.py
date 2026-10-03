@@ -976,6 +976,39 @@ class Test네킹:
         assert any("아무것도 자르지 않았습니다" in note for note in result.notes)
 
 
+class Test빠진_칸:
+    """응력 열의 빈 칸(NaN)이 최대점이 되지 않는다(2026-10-04).
+
+    `np.argmax` 는 NaN 을 최대로 친다 — 빈 칸 하나에 인장강도가 NaN 이었다.
+    """
+
+    @staticmethod
+    def holed() -> Frame:
+        frame = synthetic()
+        stress = frame.columns["stress_engineering"].copy()
+        stress[10] = np.nan
+        frame.columns["stress_engineering"] = stress
+        return frame
+
+    def test_인장강도는_빈_칸을_건너뛴다(self) -> None:
+        clean = scalar(
+            processing.apply([Step("tensile.strength", {})], synthetic()), "tensile_strength"
+        )
+        result = processing.apply([Step("tensile.strength", {})], self.holed())
+        assert scalar(result, "tensile_strength") == pytest.approx(clean)
+
+    def test_네킹_후보도_빈_칸을_건너뛴다(self) -> None:
+        result = processing.apply([Step("tensile.necking_candidate", {})], self.holed())
+        assert np.isfinite(scalar(result, "necking_candidate_stress"))
+        assert scalar(result, "necking_candidate_index") != 10
+
+    def test_모두_비면_이유를_말한다(self) -> None:
+        frame = synthetic()
+        frame.columns["stress_engineering"] = np.full(frame.length(), np.nan)
+        with pytest.raises(ProcessingError, match="모두 비어"):
+            processing.apply([Step("tensile.strength", {})], frame)
+
+
 class Test정렬:
     def test_정렬되지_않은_입력을_계산이_거절한다(self) -> None:
         # **np.interp 는 정렬을 검사하지 않는다.** 오류 없이 엉뚱한 값을 낸다.

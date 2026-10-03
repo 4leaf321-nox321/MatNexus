@@ -318,7 +318,11 @@ def measured_curves(db: Session, run_id: uuid.UUID) -> list[Curve]:
 
 
 #: 장비가 겹쳐 준 곡선에서 찾을 열. **이름을 넓게 본다** — 장비마다 다르게 적는다.
-IMPORT_FREQUENCY = ("frequency", "frequency_hz", "angular_frequency", "omega")
+IMPORT_FREQUENCY = ("frequency", "frequency_hz")
+#: 각주파수(rad/s) 열 — **Hz 가 아니다.** 주파수 열이 없을 때만 쓰고 2π 로 나눈다(2026-10-04).
+#: 전에는 위 목록에 섞여 있어 그대로 Hz 로 저장됐고, Prony 완화시간이 2π 배 짧게 나왔다
+#: (측정 스윕 쪽 `sweeps_of` 는 이미 나누고 있었다).
+IMPORT_ANGULAR = ("angular_frequency", "omega")
 IMPORT_STORAGE = ("storage_modulus", "storage_pa", "e_prime", "g_prime")
 #: 손실 탄성률. **없어도 받지만, 있으면 반드시 함께 담는다.**
 #:
@@ -389,7 +393,10 @@ def importable_curves(db: Session, run_id: uuid.UUID) -> list[dict[str, object]]
         channels = list(curve.channels or [])
         missing = [
             label
-            for label, names in (("주파수", IMPORT_FREQUENCY), ("저장 탄성률", IMPORT_STORAGE))
+            for label, names in (
+                ("주파수", IMPORT_FREQUENCY + IMPORT_ANGULAR),
+                ("저장 탄성률", IMPORT_STORAGE),
+            )
             if not any(name in channels for name in names)
         ]
         present = ", ".join(channels) or "없음"
@@ -439,6 +446,9 @@ def import_master_curve(
     """
     frame, curve = curvedata.load_frame(db, run, curve_key)
     frequency = _first_column(frame, IMPORT_FREQUENCY)
+    if frequency is None:
+        angular = _first_column(frame, IMPORT_ANGULAR)
+        frequency = angular / (2.0 * np.pi) if angular is not None else None
     storage = _first_column(frame, IMPORT_STORAGE)
     loss = _first_column(frame, IMPORT_LOSS)
     if frequency is None or storage is None:

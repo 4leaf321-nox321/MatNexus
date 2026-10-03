@@ -151,6 +151,10 @@ export function SpecimenFieldsDialog({
   }
 
   async function save() {
+    // **칸을 못 읽었으면 저장하지 않는다**(2026-10-04). 서버는 칸 목록을 통째로 갈아
+    // 끼운다 — 읽기 전이나 못 읽은 채 보내면 `extra_fields: []`(또는 방금 더한 칸 하나)가
+    // 가서 있던 칸 정의가 전부 지워졌다. 단추도 잠겨 있다.
+    if (!ready) return
     setBusy(true)
     setError(null)
     try {
@@ -172,6 +176,8 @@ export function SpecimenFieldsDialog({
    * 고칠 수 있다). 규격에서 열면 분류가 준 칸이 `true` 로 온다.
    */
   const inherited = (loaded.data ?? []).filter((field) => field.inherited)
+  /** 서버의 칸을 읽었나. **못 읽었으면 더하기 · 저장을 잠근다** — 저장은 통째로 갈아 끼운다. */
+  const ready = loaded.data !== null
   const before = (loaded.data ?? []).filter((field) => !field.inherited)
   const dropped = before.filter((field) => !rows.some((row) => row.key === field.key))
 
@@ -359,6 +365,8 @@ export function SpecimenFieldsDialog({
               size="sm"
               variant="outline"
               className="h-8 text-xs"
+              // 읽기 전에 더한 칸은 읽기가 끝나는 순간 덮인다 — 읽은 뒤에 연다.
+              disabled={!ready}
               onClick={() =>
                 setRows((current) => [
                   ...current,
@@ -391,7 +399,7 @@ export function SpecimenFieldsDialog({
                   size="sm"
                   variant="ghost"
                   className="h-8 text-xs"
-                  disabled={taken}
+                  disabled={taken || !ready}
                   title={
                     taken
                       ? `${known.label} 칸은 이미 있습니다`
@@ -450,7 +458,7 @@ export function SpecimenFieldsDialog({
           </Button>
           <Button
             onClick={() => void save()}
-            disabled={busy || rows.some((row) => !row.key || !row.label)}
+            disabled={busy || !ready || rows.some((row) => !row.key || !row.label)}
           >
             저장
           </Button>

@@ -299,4 +299,25 @@ describe('치수 칸 정의', () => {
     await waitFor(() => expect(update).toHaveBeenCalled())
     expect(update.mock.calls[0][2].extra_fields[0].symbol).toBe('D')
   })
+
+  /**
+   * **칸을 못 읽으면 저장하지 않는다**(2026-10-04). 서버는 칸 목록을 통째로 갈아 끼운다 —
+   * 못 읽은 채 `extra_fields: []`(또는 방금 더한 칸 하나)를 보내면 있던 칸 정의가 전부 지워졌다.
+   */
+  it('칸을 못 읽으면 더하기와 저장이 잠긴다', async () => {
+    termFields.mockRejectedValue(new Error('칸 목록을 못 받았습니다'))
+    show(STANDARD)
+    expect(await screen.findByText('칸 목록을 못 받았습니다')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '저장' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /칸 추가/ })).toBeDisabled()
+    expect(screen.getByRole('button', { name: '+ 직경' })).toBeDisabled()
+    expect(update).not.toHaveBeenCalled()
+  })
+
+  it('칸이 오기 전에는 저장이 잠긴다', async () => {
+    termFields.mockReturnValue(new Promise(() => {})) // 영영 안 온다
+    show(STANDARD)
+    expect(await screen.findByRole('button', { name: '저장' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /칸 추가/ })).toBeDisabled()
+  })
 })

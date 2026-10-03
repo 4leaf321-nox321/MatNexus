@@ -813,12 +813,21 @@ def fit(family_key: str, plastic_strain: np.ndarray, true_stress: np.ndarray) ->
     **경계를 두고 푼다.** 물리적으로 음수일 수 없는 파라미터에 음수가 나오면
     곡선은 그려지는데 뜻이 없다. 경계와 초기값은 결과에 남겨 재현할 수 있게 한다.
     """
-    from scipy.optimize import least_squares
-
     family = FAMILIES.get(family_key)
     if family is None:
         known = ", ".join(sorted(FAMILIES))
         raise FittingError(f"모르는 경화식입니다: {family_key}. 있는 것: {known}")
+    return fit_with(family, plastic_strain, true_stress)
+
+
+def fit_with(family: Family, plastic_strain: np.ndarray, true_stress: np.ndarray) -> FitResult:
+    """**등록하지 않은** 식으로 적합한다 — 사람이 정의한 식의 미리보기가 이 길을 쓴다.
+
+    전에는 미리보기가 전역 `FAMILIES` 에 잠깐 넣었다 빼며 `fit` 을 불렀다(2026-10-04).
+    그 사이 같은 키로 도는 다른 요청이 남의 초안 식으로 적합했고, 빼는 순서가 엇갈리면
+    초안이 레지스트리에 남았다.
+    """
+    from scipy.optimize import least_squares
 
     strain = np.asarray(plastic_strain, dtype=np.float64)
     stress = np.asarray(true_stress, dtype=np.float64)
@@ -845,7 +854,11 @@ def fit(family_key: str, plastic_strain: np.ndarray, true_stress: np.ndarray) ->
 
     # 잔차를 응력 크기로 정규화한다. 안 하면 큰 응력 구간이 적합을 지배해서
     # 초기 구간(항복 근처)이 크게 어긋나도 RMSE 가 작게 나온다.
-    scale = max(float(np.mean(np.abs(stress))), 1.0)
+    #
+    # **바닥값 1.0 을 두지 않는다**(2026-10-04). Pa 단위 응력을 전제한 바닥이라, 1 Pa·s 아래
+    # 점도(잉크 · 슬러리)를 맞추면 상대 RMSE 가 40배쯤 작게 나오고 「5% 초과」 경고도 안
+    # 떴다. 0 으로 나누는 것만 막는다.
+    scale = float(np.mean(np.abs(stress))) or 1.0
 
     log_scale = family.residual == "log"
     log_stress = np.log(stress) if log_scale else stress

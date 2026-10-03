@@ -155,3 +155,33 @@ class Test막는_것:
         fast = out.detail["rates"][1]
         assert fast["ratios"][1] is None
         assert any("0.1" in said and "응력비를 뺐습니다" in said for said in out.warnings)
+
+
+class Test탄성_자국:
+    def test_소성변형률_0_이_여럿이면_마지막_항복점을_남긴다(self) -> None:
+        """`clip_zero` 자국(ε_p=0 이 여럿)에서 첫 점을 남기면 기준 곡선의 항복이 탄성 구간의
+        가장 낮은 응력(5 MPa)이 됐다(2026-10-04). `plastic_branch` 처럼 마지막을 남긴다."""
+        strain = np.concatenate([np.zeros(4), np.linspace(0.002, 0.2, 86)])
+        stress = np.concatenate([[5e6, 100e6, 200e6, 300e6], 300e6 + 400e6 * strain[4:]])
+        slow = groups.Member(
+            label="slow",
+            columns={PLASTIC_STRAIN: strain, TRUE_STRESS: stress},
+            values={RATE: 0.001},
+        )
+        out = run([slow, member("fast", 10.0)])
+        assert out.columns[PLASTIC_STRAIN][0] == 0.0
+        assert out.columns[TRUE_STRESS][0] == pytest.approx(300e6)
+
+
+class Test예_아니오_칸:
+    def test_글자로_온_false_는_거짓이다(self) -> None:
+        """묶음 화면은 칸을 글자로 보낸다 — `bool("false")` 는 참이다(2026-10-04)."""
+        from matcore.registry import ParamSpec
+
+        params = (ParamSpec(name="flag", label="런아웃 빼기", type="bool"),)
+        assert groups.typed_options(params, {"flag": "false"}) == {"flag": False}
+        assert groups.typed_options(params, {"flag": " True "}) == {"flag": True}
+        assert groups.typed_options(params, {"flag": "0"}) == {"flag": False}
+        assert groups.typed_options(params, {"flag": True}) == {"flag": True}
+        with pytest.raises(groups.GroupError, match="예/아니오"):
+            groups.typed_options(params, {"flag": "아마도"})

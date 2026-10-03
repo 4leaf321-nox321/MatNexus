@@ -27,10 +27,20 @@
 `backup.ps1` 이 세대 정책으로 바뀌면서 배치가 달라졌다:
 
     새 배치  <BackupRoot>\db\db-<시각>.dump + <BackupRoot>\filestore\ (미러) + <BackupRoot>\env\.env
+             + <BackupRoot>\filestore_deleted\<시각>\ (미러에서 빠진 지운 파일, 2026-10-04)
     옛 배치  <BackupPath>\db.dump + <BackupPath>\filestore\ + <BackupPath>\.env
 
 `-BackupRoot` 를 주면 가장 최근 덤프(또는 `-DumpFile` 로 고른 것)를, `-BackupPath` 를
 주면 옛 배치 폴더 하나를 쓴다.
+
+## 지운 파일도 함께 되돌린다 (2026-10-04)
+
+미러는 오늘 것 한 벌이라, 휴지통 비우기로 그 사이에 지운 파일은 미러에 없다 — 전에는
+어제 덤프로 되돌리면 그 파일이 없어 아래 검사가 「시점이 어긋났다」 로 멈췄고, 되찾을 데도
+없었다. 이제 `backup.ps1` 이 그것을 `filestore_deleted\<그날 시각>\` 로 옮겨 둔다. 고른 덤프
+시각 **이상**인 폴더가 「그 덤프는 가리키는데 미러에는 없는」 파일이므로 미러 다음에 그것을
+넣는다 — 새 폴더부터 넣어 덤프에 가장 가까운 판이 마지막에 남는다. 리허설(-AppPath 없음)은
+아무 데도 안 넣고, 「가리키는 파일이 있나」 를 셀 때 보관분까지 본다.
 
 사용:
   # 백업을 새 DB 로 되돌려 본다 (리허설) — 가장 최근 덤프
@@ -130,6 +140,7 @@ function Get-FilestoreDir([string]$appEnv, [string]$appPath) {
 if (-not $BackupRoot -and -not $BackupPath) {
     throw '-BackupRoot(새 배치) 또는 -BackupPath(옛 배치) 중 하나를 주세요.'
 }
+$heldDirs = @()   # 지운 파일 보관분 — 새 배치에만 있다
 if ($BackupRoot) {
     if (-not (Test-Path $BackupRoot)) { throw "백업 폴더를 찾을 수 없습니다: $BackupRoot" }
     if ($DumpFile) {
@@ -143,6 +154,21 @@ if ($BackupRoot) {
     }
     $envFile = Join-Path $BackupRoot 'env\.env'
     $storeSource = Join-Path $BackupRoot 'filestore'
+    # **이 덤프 시각 이상인 보관분만**(backup.ps1 의 「지운 파일」). 그보다 앞선 폴더는 덤프 전에
+    # 지운 것이라 이 덤프가 안 가리킨다. 이름에서 시각을 못 읽으면(손으로 바꾼 이름) 전부 본다 —
+    # 덤프가 안 가리키는 파일이 더 들어가는 것은 무해하다(저장소 정리가 오펀으로 잡는다).
+    # 문자열 비교는 서수로 한다 — 문화권 비교는 '-' 를 건너뛰기도 한다.
+    $dumpStamp = if ((Split-Path $dumpPath -Leaf) -match '^db-(\d{8}-\d{6})\.dump$') { $Matches[1] } else { $null }
+    $heldRoot = Join-Path $BackupRoot 'filestore_deleted'
+    if (Test-Path $heldRoot) {
+        $heldDirs = @(Get-ChildItem $heldRoot -Directory |
+            Where-Object { $_.Name -match '^\d{8}-\d{6}$' -and (-not $dumpStamp -or [string]::CompareOrdinal($_.Name, $dumpStamp) -ge 0) } |
+            Sort-Object Name -Descending | ForEach-Object { $_.FullName })
+    }
+    if ($heldDirs.Count -gt 0) {
+        $since = if ($dumpStamp) { "$dumpStamp 이후" } else { '덤프 이름에서 시각을 못 읽어 전부' }
+        Write-Log "지운 파일 보관분 $($heldDirs.Count) 벌을 함께 봅니다($since): $heldRoot"
+    }
 } else {
     if (-not (Test-Path $BackupPath)) { throw "백업 폴더를 찾을 수 없습니다: $BackupPath" }
     $dumpPath = Join-Path $BackupPath 'db.dump'
@@ -262,6 +288,13 @@ try {
             # robocopy 종료 코드는 비트 플래그다 — 0~7 이 성공, 8 이상이 실패.
             Invoke-Native 'robocopy.exe' @($storeSource, $storeTarget, '/E', '/R:2', '/W:5',
                 '/NFL', '/NDL', '/NJH', '/NP') 'robocopy' @(0, 1, 2, 3, 4, 5, 6, 7) | Out-Null
+            # 그 덤프 뒤에 지워진 파일(위 「지운 파일도 함께 되돌린다」). 새 폴더부터 — 같은 경로가
+            # 여러 번 지워졌으면 덤프에 가장 가까운 판이 마지막에 덮는다.
+            foreach ($held in $heldDirs) {
+                Write-Log "지운 파일 되돌리기: $held → $storeTarget"
+                Invoke-Native 'robocopy.exe' @($held, $storeTarget, '/E', '/R:2', '/W:5',
+                    '/NFL', '/NDL', '/NJH', '/NP') 'robocopy' @(0, 1, 2, 3, 4, 5, 6, 7) | Out-Null
+            }
         } else {
             Write-Warning '백업에 파일스토어가 없습니다. DB 만 되돌렸습니다.'
         }
@@ -278,8 +311,13 @@ try {
                  elseif (Test-Path $storeSource) { $storeSource }
                  else { $null }
 
+    # 리허설은 미러만 본 것이라 지운 파일 보관분도 함께 본다 — 실제 복구는 위에서 이미 넣었다.
+    # (if 식의 값으로 받지 않는다 — 출력으로 풀려서 빈 배열은 $null, 한 벌은 문자열 하나가 된다.)
+    $alsoIn = @()
+    if ($checkRoot -and $checkRoot -eq $storeSource) { $alsoIn = $heldDirs }
     $missing = 0
     $checked = 0
+    $fromHeld = 0
     if ($checkRoot) {
         Write-Log '가리키는 파일이 있는지 확인'
         # **파일을 가리키는 컬럼을 여기 적지 않는다.** 적어 두면 새 표가
@@ -308,7 +346,12 @@ order by 1
             $trimmed = $relative.Trim()
             if (-not $trimmed) { continue }
             $checked++
-            if (-not (Test-Path (Join-Path $checkRoot $trimmed))) { $missing++ }
+            if (Test-Path (Join-Path $checkRoot $trimmed)) { continue }
+            $inHeld = $false
+            foreach ($held in $alsoIn) {
+                if (Test-Path -LiteralPath (Join-Path $held $trimmed)) { $inHeld = $true; break }
+            }
+            if ($inHeld) { $fromHeld++ } else { $missing++ }
         }
     }
 
@@ -328,9 +371,16 @@ DB 가 가리키는 파일 $missing 개가 없습니다 (확인한 것 $checked 
 **DB 와 파일스토어의 시점이 어긋났습니다.** 이 상태로 앱을 띄우면 화면은
 멀쩡하고 그 곡선을 열 때만 터집니다. 같은 백업 폴더의 filestore\ 를 함께
 되돌리세요.
+
+지운 파일 보관함(filestore_deleted\ 의 덤프 시각 이후 폴더 $($heldDirs.Count) 벌)까지 봤습니다.
+거기에도 없으면 보관함이 생기기 전(2026-10-04 전 backup.ps1)에 미러에서 지워졌거나, 그
+파일이 한 번도 백업되지 않은 채 지워진 것입니다.
 "@
     } else {
         Write-Log "가리키는 파일 $checked 개가 전부 있습니다."
+        if ($fromHeld -gt 0) {
+            Write-Log "  그중 $fromHeld 개는 지운 파일 보관함(filestore_deleted)에 있습니다 — -AppPath 로 복구하면 함께 넣습니다."
+        }
     }
 
     Write-Host ''

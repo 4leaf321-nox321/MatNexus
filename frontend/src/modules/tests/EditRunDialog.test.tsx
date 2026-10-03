@@ -106,4 +106,33 @@ describe('EditRunDialog', () => {
     expect(screen.getByText(/처리 결과 2건은 옛 원본의 것이 됩니다/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /원본 교체 후 다시 읽기/ })).toBeDisabled()
   })
+
+  it('시험종류가 늦게 와도 저장된 조건으로 채운다 — 빈 조건을 보내 지우지 않는다', async () => {
+    // 전에는 연 순간 한 번만 채워서, 정의가 늦게 오면 조건 칸이 빈 채로 섰고 그대로 저장하면
+    // `conditions: {}` 가 가서 이 시험의 조건이 전부 지워졌다(2026-10-04).
+    const user = userEvent.setup()
+    const { rerender } = render(
+      <EditRunDialog run={RUN} testType={null} onClose={vi.fn()} onDone={vi.fn()} />
+    )
+    rerender(<EditRunDialog run={RUN} testType={TYPE} onClose={vi.fn()} onDone={vi.fn()} />)
+
+    const speed = await screen.findByLabelText(/탄성 구간 속도 \(mm\/min\)/)
+    await waitFor(() => expect(speed).toHaveValue(10))
+    await user.click(screen.getByRole('button', { name: '저장' }))
+
+    await waitFor(() => expect(update).toHaveBeenCalled())
+    const [, payload] = update.mock.calls[0] as [string, Record<string, unknown>]
+    expect(payload.conditions).toEqual({ speed_elastic: 10 })
+  })
+
+  it('시험종류를 못 읽었으면 조건은 안 보낸다 — 안 보낸 것은 그대로다', async () => {
+    const user = userEvent.setup()
+    render(<EditRunDialog run={RUN} testType={null} onClose={vi.fn()} onDone={vi.fn()} />)
+    await user.type(screen.getByLabelText('시험자'), '2')
+    await user.click(screen.getByRole('button', { name: '저장' }))
+
+    await waitFor(() => expect(update).toHaveBeenCalled())
+    const [, payload] = update.mock.calls[0] as [string, Record<string, unknown>]
+    expect(payload.conditions).toBeNull()
+  })
 })

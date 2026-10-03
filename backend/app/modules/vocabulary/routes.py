@@ -628,7 +628,9 @@ def create_term(
     # 규격 치수를 지운다. 그리고 **안 보낸 것을 검사하면 안 된다** — 치수를
     # 모른 채 규격 이름부터 적는 일이 실제로 있고, 그때 필수 칸을 요구하면
     # 피커가 막힌다.
-    if payload.attributes and not term.attributes:
+    # **있는 값의 속성은 시스템 관리자만 채운다**(2026-10-04). 고치는 길(PATCH)이 관리자
+    # 전용인데, 속성이 빈 값이면 여기로 누구나 채울 수 있었다.
+    if payload.attributes and not term.attributes and (not existed or user.is_system_admin):
         term.attributes = services.check_attributes(db, vocabulary, term, payload.attributes)
     if not existed:
         # **AI 가 만든 값은 남긴다**(2026-09-30). 사내 물성 항목 하나가 모든 재료의 피커에
@@ -877,6 +879,15 @@ def dismiss_pair(
     services.dismiss(db, first, second, dismissed_by_id=user.id)
     db.commit()
     return Response(status_code=204)
+
+
+#: 있는 값을 꾸미려던 줄에 다는 말.
+_HELD = "이미 있는 값의 별칭 · 칸 · 속성은 시스템 관리자만 바꿉니다 — 값만 확인했습니다."
+
+
+def _shapes(row: _Planned, payload: BulkTermCreateRequest) -> bool:
+    """이 줄이 값을 **꾸미려 하는가** — 별칭 · 속성 · 새 칸."""
+    return bool(row.aliases or row.attributes or payload.columns)
 
 
 def _add_aliases(db: Session, term: VocabularyTerm, aliases: list[str]) -> list[str]:
@@ -1184,15 +1195,17 @@ def preview_terms_bulk(
 
         found = services.resolve(db, vocabulary, row.cleaned)
         key = compare_key(row.cleaned)
+        # 보내기와 같은 규칙 — 이 표가 새로 만드는 값(`coming`)은 만든 사람이 꾸민다.
+        held = found is not None and not user.is_system_admin
         items.append(
             BulkTermItemOut(
                 input=row.raw,
                 status="existing" if found or key in coming else "new",
                 value=found.value if found else row.cleaned,
                 parent_value=row.parent_label,
-                aliases=row.aliases,
-                attributes=row.attributes,
-                warnings=row.warnings,
+                aliases=[] if held else row.aliases,
+                attributes={} if held else row.attributes,
+                warnings=row.warnings + ([_HELD] if held and _shapes(row, payload) else []),
             )
         )
         coming.add(key)
@@ -1240,6 +1253,8 @@ def create_terms_bulk(
     """
     vocabulary = services.get_vocabulary(db, slug)
     items: list[BulkTermItemOut] = []
+    # 이 요청이 만든 값 — 만든 사람이 별칭 · 칸 · 속성까지 꾸민다.
+    made: set[uuid.UUID] = set()
 
     for row in _plan_bulk(
         db,
@@ -1269,6 +1284,25 @@ def create_terms_bulk(
         term = found or services.resolve_or_create(
             db, vocabulary, row.cleaned, created_by_id=user.id, parent=row.parent
         )
+        if term is not None and found is None:
+            made.add(term.id)
+        warnings = list(row.warnings)
+        if term is not None and term.id not in made and not user.is_system_admin:
+            # **있는 값은 시스템 관리자만 꾸민다**(2026-10-04). 별칭 · 칸 · 속성을 고치는 길이
+            # 전부 관리자 전용인데, 붙여넣기로는 누구나 남의 규격에 별칭과 칸을 달았다.
+            # 값을 확인한 것으로 두고 무엇을 안 했는지 말한다.
+            if _shapes(row, payload):
+                warnings.append(_HELD)
+            items.append(
+                BulkTermItemOut(
+                    input=row.raw,
+                    status="existing",
+                    value=term.value,
+                    parent_value=row.parent_label,
+                    warnings=warnings,
+                )
+            )
+            continue
         if term is not None and payload.columns:
             # **값이 들어가려면 칸이 있어야 한다.** 이미 있는 칸은 안 건드린다 —
             # 사람이 고쳐 둔 이름·단위가 붙여넣기 한 번에 되돌아가면 안 된다.
@@ -1295,7 +1329,7 @@ def create_terms_bulk(
                 parent_value=row.parent_label,
                 aliases=_add_aliases(db, term, row.aliases) if term else [],
                 attributes=stored,
-                warnings=row.warnings,
+                warnings=warnings,
             )
         )
 

@@ -52,6 +52,18 @@ def test_request_id_is_returned() -> None:
     assert response.headers.get("X-Request-ID")
 
 
+def test_들고_온_요청_id_는_칸에_맞게_받는다() -> None:
+    """감사 표의 칸은 40자다 — 넘는 id 로 온 쓰기가 감사 INSERT 에서 500 이었다(2026-10-04)."""
+    from app.shared.request_context import REQUEST_ID_MAX, accept_request_id
+
+    echoed = client.get("/api/health", headers={"X-Request-ID": "trace-" + "a" * 100})
+    assert echoed.headers["X-Request-ID"] == ("trace-" + "a" * 100)[:REQUEST_ID_MAX]
+    assert accept_request_id(b"ab\r\ncd 12") == "abcd12"
+    # 쓸 글자가 없으면 새로 만든다 — UTF-8 이 아닌 바이트에도 터지지 않는다.
+    assert len(accept_request_id(b"\xff\xfe")) == 12
+    assert accept_request_id("한글".encode()) != ""
+
+
 def test_unknown_api_path_is_json_404() -> None:
     """없는 엔드포인트가 HTML을 돌려주면 프론트에서 원인이 흐려진다."""
     response = client.get("/api/nope")

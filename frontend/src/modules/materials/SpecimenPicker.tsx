@@ -59,32 +59,40 @@ export function SpecimenPicker({ onChange }: Props) {
 
   useEffect(() => {
     setSampleId('')
+    setSamples([])
     setSpecimens([])
     onChange(null)
-    if (!materialId) {
-      setSamples([])
-      return
-    }
+    if (!materialId) return
+    // **늦게 온 앞 재료의 답은 버린다**(2026-10-04). 재료를 빨리 바꾸면 앞 재료의 시료 목록이
+    // 나중에 도착해 그 시료가 골라졌다 — 그 시편에 시험이 붙으면 되돌릴 수 없다.
+    let alive = true
     materialsApi
       .samples(materialId)
       .then((rows) => {
+        if (!alive) return
         setSamples(rows)
         if (rows.length === 1) setSampleId(rows[0].id)
       })
-      .catch(() => setSamples([]))
+      .catch(() => {
+        if (alive) setSamples([])
+      })
+    return () => {
+      alive = false
+    }
     // onChange 는 호출부에서 매번 새로 만들 수 있어 의존성에 넣지 않는다.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [materialId])
 
   useEffect(() => {
     onChange(null)
-    if (!sampleId) {
-      setSpecimens([])
-      return
-    }
+    setSpecimens([])
+    if (!sampleId) return
+    // 늦게 온 앞 시료의 시편 목록도 버린다 — 위와 같은 까닭.
+    let alive = true
     materialsApi
       .specimens(sampleId)
       .then((rows) => {
+        if (!alive) return
         setSpecimens(rows)
         // **말없이 고르지 않는다.** 시편이 하나뿐이면 그것을 골라 주고 있었는데,
         // 그래서 **둘째 파일이 자동으로 첫 시편에 붙었다** — 실사용에서 나왔다
@@ -94,7 +102,12 @@ export function SpecimenPicker({ onChange }: Props) {
         // 흔한 일은 「같은 시료, 새 시편」 이다 — 판 하나에서 시편을 여러 장 뜬다.
         // 그래서 고르는 것을 사람이 하게 두고, 새로 만들기를 목록 안에 둔다.
       })
-      .catch(() => setSpecimens([]))
+      .catch(() => {
+        if (alive) setSpecimens([])
+      })
+    return () => {
+      alive = false
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sampleId])
 

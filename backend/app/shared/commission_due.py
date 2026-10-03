@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import uuid
 from collections import defaultdict
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -24,6 +24,16 @@ DUE_SOON_DAYS = 3
 #: 기한이 뜻을 잃은 상태. 아직 안 낸 것(`draft`)·끝난 것·반려된 것에 기한을 말하면
 #: **알림이 틀린 말을 하는 것**이고, 한 번 그러면 다음 알림도 안 읽힌다.
 DUE_QUIET_STATUSES = frozenset({"draft", "delivered", "closed", "rejected"})
+
+
+def today() -> date:
+    """기한을 견줄 「오늘」 — 이 서버의 **현지** 날짜.
+
+    `due_on` 은 사람이 현지 달력에서 고른 날이다. 전에는 UTC 날짜로 견줘, 한국에서는 아침
+    9시 전까지 어제였다 — 그 사이 「오늘까지」 가 「내일까지」 로, 지난 기한이 안 지난
+    것으로 보였다(2026-10-04).
+    """
+    return datetime.now().astimezone().date()
 
 
 def due_soon(db: Session, *, today: date) -> dict[uuid.UUID, list[Commission]]:

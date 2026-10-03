@@ -326,7 +326,11 @@ export default function MaterialDetailPage() {
                       material={item}
                       onChanged={() => material.reload()}
                     />
+                    {/* **재료가 바뀌면 새로 선다**(2026-10-04). 이 화면은 다른 재료로 넘어가도
+                        다시 마운트되지 않아, 카드가 앞 재료의 초안을 들고 있다가 새 재료에
+                        통째로 저장한 일이 있다 — 서버는 선언 물성을 갈아 끼운다. */}
                     <DeclaredPropertiesCard
+                      key={item.id}
                       level="재료"
                       list={false}
                       openItem={editingDeclared}

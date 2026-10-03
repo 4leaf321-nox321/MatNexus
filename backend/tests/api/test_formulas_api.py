@@ -327,6 +327,32 @@ def test_적합식이_목록에_뜨고_미리보기가_실제_곡선에_맞춘�
     )
 
 
+def test_미리보기는_전역_레지스트리를_안_건드린다(
+    client: TestClient,
+    db: Session,
+    admin_headers: dict[str, str],
+    sample: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """잠깐 넣었다 빼면 그 사이 다른 요청이 남의 초안 식으로 적합한다(2026-10-04)."""
+    from matcore import fitting
+
+    result = _run(client, db, admin_headers, sample["id"], STEPS)
+
+    class Frozen(dict[str, Any]):
+        def __setitem__(self, key: str, value: Any) -> None:
+            raise AssertionError(f"미리보기가 전역 레지스트리에 {key} 를 넣었다")
+
+    monkeypatch.setattr(fitting, "FAMILIES", Frozen(fitting.FAMILIES))
+    preview = client.post(
+        "/api/formulas/preview",
+        json={"spec": SWIFT, "result_id": result["id"]},
+        headers=admin_headers,
+    )
+    assert preview.status_code == 200, preview.text
+    assert preview.json()["ok"] is True, preview.json()["message"]
+
+
 def test_열_단계와_값_단계_미리보기(
     client: TestClient, db: Session, admin_headers: dict[str, str], sample: dict[str, Any]
 ) -> None:

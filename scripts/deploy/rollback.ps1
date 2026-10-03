@@ -85,8 +85,12 @@ try {
     [System.IO.Directory]::Move($prevPath, $AppPath)
 } catch {
     # 되돌린다 — 운영 경로가 비어 있는 상태로 끝나지 않게.
+    $failure = $_
     [System.IO.Directory]::Move($tempPath, $AppPath)
-    throw "직전 버전을 옮기지 못했습니다: $_"
+    # **서비스도 되살린다**(2026-10-04). 위에서 멈춰 놓고 여기서 그냥 throw 하면 폴더는 제자리인데
+    # 서버가 내려간 채로 끝난다 — 바로 위 「옮길 수 없다」 자리는 되살리는데 이 자리만 빠져 있었다.
+    Start-KnownServices $runningServices
+    throw "직전 버전을 옮기지 못했습니다: $failure (현재 버전은 제자리이고, 돌던 서비스는 다시 띄웠습니다)"
 }
 [System.IO.Directory]::Move($tempPath, $prevPath)
 

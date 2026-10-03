@@ -12,6 +12,7 @@
 import { useEffect, useState } from 'react'
 import { Check, Copy } from 'lucide-react'
 
+import { copyText } from '@/shared/lib/clipboard'
 import { cn } from '@/shared/lib/utils'
 
 export function CodeChip({ code, className }: { code: string | null | undefined; className?: string }) {
@@ -40,12 +41,12 @@ export function CodeChip({ code, className }: { code: string | null | undefined;
         // 링크 · 펼침 줄 안에 설 수 있다 — 누른 것이 그쪽으로 새지 않게.
         event.preventDefault()
         event.stopPropagation()
-        void navigator.clipboard
-          ?.writeText(code)
-          .then(() => setCopied(true))
-          .catch(() => {
-            /* 복사를 막은 브라우저 — 번호는 화면에 그대로 있다 */
-          })
+        // **`navigator.clipboard` 를 바로 부르지 않는다**(2026-10-04). 사내 http 주소에서는 그
+        // 객체가 없어 아무 일도 안 일어났다 — 되돌아 갈 길을 가진 `copyText` 를 쓴다. 막혔으면
+        // 「복사했습니다」 를 안 띄운다(번호는 화면에 그대로 있다).
+        void copyText(code).then((ok) => {
+          if (ok) setCopied(true)
+        })
       }}
     >
       {code}

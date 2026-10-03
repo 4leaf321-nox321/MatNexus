@@ -14,7 +14,7 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any
 
-from app.shared.representative import annotate, semantic_conditions
+from app.shared.representative import annotate, is_term, semantic_conditions
 
 
 @dataclass
@@ -83,3 +83,61 @@ class Test관리_표지:
         # 관리 표지만 있는 쪽이 조건 0개라 「조건 수」 에서 이긴다.
         assert marks[corrected.id].representative
         assert marks[plain.id].separated_by == "조건 수"
+
+
+class Test변수_값:
+    """식의 변수 값(`conditions.term`)은 그 물성의 스칼라와 겨루지 않는다(2026-10-04).
+
+    전에는 property_key 하나로 묶어, 영률 키에 섞인 Prony E0(유리 상태)가 등급에서
+    이기면 탄성계수 대표로 섰다 — 덱 · 비교 · Ashby 로 갔다.
+    """
+
+    def test_스칼라와_변수_값은_따로_대표가_선다(self) -> None:
+        scalar = Value("E", 3, value_num=200e9, mt_id=1)
+        glassy = Value(
+            "E", 1, value_num=32000.0, conditions={"term": "E0", "unit_of_term": "MPa"}
+        )
+        marks = annotate([glassy, scalar])
+        assert marks[scalar.id].representative, "등급이 나빠도 스칼라 자리는 스칼라의 것"
+        assert marks[scalar.id].n_candidates == 1
+        assert marks[glassy.id].representative and marks[glassy.id].n_candidates == 1
+
+    def test_다른_항은_종합하지_않는다(self) -> None:
+        """Anand 의 a 와 A 는 조건이 같아도 다른 수다 — 그 둘의 중앙값은 아무것도 아니다."""
+        same = {"model": "anand", "set_id": "s1"}
+        a = Value(
+            "anand", 2, value_num=1.72, conditions={**same, "term": "a", "unit_of_term": "1"}
+        )
+        big_a = Value(
+            "anand",
+            2,
+            value_num=2800.0,
+            conditions={**same, "term": "A", "unit_of_term": "1/s"},
+        )
+        marks = annotate([a, big_a])
+        assert marks[a.id].summary is None and marks[big_a.id].summary is None
+        assert marks[a.id].representative and marks[big_a.id].representative
+
+    def test_구분으로_쓴_term_은_그_물성의_값이다(self) -> None:
+        """최고 사용온도의 `short` · `long` 은 식의 항이 아니다 — 한 벌의 표지가 없다.
+
+        `term` 만으로 가르면 그런 재료 43곳이 비교 · 덱 · 받아 오기에서 빠졌다(2026-10-04
+        실측). 전처럼 한 무리에서 겨룬다.
+        """
+        short = Value("tmax", 2, value_num=422.15, conditions={"term": "short"}, mt_id=1)
+        long = Value("tmax", 2, value_num=366.15, conditions={"term": "long"}, mt_id=2)
+        marks = annotate([short, long])
+        assert not is_term(short) and not is_term(long)
+        assert marks[short.id].n_candidates == 2
+        assert [marks[one.id].representative for one in (short, long)].count(True) == 1
+
+    def test_같은_항끼리는_겨룬다(self) -> None:
+        better = Value(
+            "anand", 1, value_num=2800.0, conditions={"term": "A", "unit_of_term": "1/s"}
+        )
+        worse = Value(
+            "anand", 3, value_num=3100.0, conditions={"term": "A", "unit_of_term": "1/s"}
+        )
+        marks = annotate([worse, better])
+        assert marks[better.id].representative
+        assert marks[worse.id].separated_by == "등급"

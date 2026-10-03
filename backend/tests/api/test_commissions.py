@@ -1116,3 +1116,23 @@ class Test의뢰_마무리:
         assert cards["SECC 탄소성"]["has_deliverable"] is True
         assert cards["SECC 탄성만"]["has_deliverable"] is False
         assert cards["SECC 탄소성"]["status"] == "draft"
+
+
+def test_의뢰가_가리키는_시료는_영구_삭제를_막고_이유를_말한다(
+    client: TestClient, admin_headers: dict[str, str], world: dict[str, Any]
+) -> None:
+    """`commissions.sample_id` 는 RESTRICT — 전에는 영구 삭제가 500 이었다(2026-10-04)."""
+    made = _create(client, world["kim"], world["sample"]["id"])
+    material_id = world["material"]["id"]
+    deleted = client.post(
+        f"/api/materials/{material_id}/delete-cascade",
+        json={"include_test_runs": True},
+        headers=admin_headers,
+    )
+    assert deleted.status_code in (200, 204), deleted.text
+    refused = client.delete(
+        f"/api/trash/material/{material_id}?confirm=true", headers=admin_headers
+    )
+    assert refused.status_code == 409, refused.text
+    assert refused.json()["error"]["code"] == "MNX-TRASH-0007"
+    assert f"#{made['seq']}" in refused.json()["error"]["message"]
