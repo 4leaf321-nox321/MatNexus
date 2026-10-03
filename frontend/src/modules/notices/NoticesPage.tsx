@@ -15,12 +15,16 @@
  *
  * **「모두 읽음」 이 있다.** 처음 들어온 사람에게는 그동안 쌓인 공지가 전부 새 글이다 —
  * 하나씩 열어 끄라고 하면 사이드바의 수를 안 보게 된다.
+ *
+ * **「내용 전체 복사」 가 있다**(2026-10-03). 다른 문서 · 메신저 · AI 에 붙이려면 공지를 하나씩
+ * 열어 복사해야 했다. 지금 거른 것 그대로 전부 모아 글 하나로 준다(`NoticeCopyDialog`).
  */
 
 import { useState } from 'react'
-import { CheckCheck, Megaphone, Plus, Search } from 'lucide-react'
+import { CheckCheck, Copy, Megaphone, Plus, Search } from 'lucide-react'
 import { Link, useNavigate } from 'react-router-dom'
 
+import { NoticeCopyDialog } from '@/modules/notices/NoticeCopyDialog'
 import { NoticeDialog } from '@/modules/notices/NoticeDialog'
 import { noticesApi, writerOf } from '@/modules/notices/api'
 import { useAuth } from '@/shared/auth/AuthContext'
@@ -53,6 +57,7 @@ export default function NoticesPage() {
   const [unread, setUnread] = useState(false)
   const [offset, setOffset] = useState(0)
   const [writing, setWriting] = useState(false)
+  const [copying, setCopying] = useState(false)
 
   const page = useResource(
     () => noticesApi.list({ q: q || undefined, unread, limit: PAGE, offset }),
@@ -124,6 +129,13 @@ export default function NoticesPage() {
           <Button size="sm" variant="outline" disabled={marking} onClick={readAll}>
             <CheckCheck className="size-4" />
             모두 읽음 ({unreadTotal})
+          </Button>
+        )}
+        {total > 0 && (
+          <Button size="sm" variant="outline" onClick={() => setCopying(true)}>
+            <Copy className="size-4" />
+            {/* 걸렀으면 「전체」 가 아니다 — 무엇을 복사하는지 단추가 말한다. */}
+            {q || unread ? `찾은 ${total}건 복사` : '내용 전체 복사'}
           </Button>
         )}
         <form
@@ -234,6 +246,8 @@ export default function NoticesPage() {
           </div>
         </div>
       )}
+
+      <NoticeCopyDialog open={copying} q={q} unread={unread} onClose={() => setCopying(false)} />
 
       <NoticeDialog
         open={writing}
