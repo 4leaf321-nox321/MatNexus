@@ -160,6 +160,19 @@ async def sweep(session: ClientSession) -> None:
     await call(session, "search_all", {"q": "강", "mode": "contains", "limit": 5})
     await call(session, "search_all", {"q": "강판", "mode": "similar", "limit": 3})
     await call(session, "resolve_property", {"name": "항복강도"})
+    await call(session, "get_property_classification")
+    await call(session, "get_property_classification", {"field": "mechanical"})
+    # 미리보기(기본) — 아무것도 안 넣는다. 「항복응력」 은 유변학 물성이라 cross_domain 에 선다.
+    await call(
+        session,
+        "classify_properties",
+        {
+            "rows": [
+                {"field": "기계", "group": "강도", "property": "mechanical.yield_strength"},
+                {"field": "기계", "group": "강도", "property": "항복응력"},
+            ]
+        },
+    )
     await call(
         session, "find_by_property", {"property": "yield_strength", "unit": "MPa", "min": 100}
     )

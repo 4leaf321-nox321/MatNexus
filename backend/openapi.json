@@ -12715,6 +12715,450 @@
         "title": "FamilyOut",
         "type": "object"
       },
+      "FeedFieldOut": {
+        "properties": {
+          "deleted": {
+            "title": "Deleted",
+            "type": "boolean"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "group_count": {
+            "title": "Group Count",
+            "type": "integer"
+          },
+          "is_active": {
+            "title": "Is Active",
+            "type": "boolean"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "property_count": {
+            "title": "Property Count",
+            "type": "integer"
+          },
+          "sort_order": {
+            "title": "Sort Order",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "deprecated"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "name",
+          "description",
+          "sort_order",
+          "group_count",
+          "property_count",
+          "status",
+          "is_active",
+          "deleted",
+          "updated_at"
+        ],
+        "title": "FeedFieldOut",
+        "type": "object"
+      },
+      "FeedFieldPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/FeedFieldOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "page": {
+            "title": "Page",
+            "type": "integer"
+          },
+          "page_size": {
+            "title": "Page Size",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "page",
+          "page_size"
+        ],
+        "title": "FeedFieldPage",
+        "type": "object"
+      },
+      "FeedGroupOut": {
+        "properties": {
+          "deleted": {
+            "title": "Deleted",
+            "type": "boolean"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "field_key": {
+            "title": "Field Key",
+            "type": "string"
+          },
+          "field_name": {
+            "title": "Field Name",
+            "type": "string"
+          },
+          "is_active": {
+            "title": "Is Active",
+            "type": "boolean"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "property_count": {
+            "title": "Property Count",
+            "type": "integer"
+          },
+          "sort_order": {
+            "title": "Sort Order",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "deprecated"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "name",
+          "description",
+          "field_key",
+          "field_name",
+          "sort_order",
+          "property_count",
+          "status",
+          "is_active",
+          "deleted",
+          "updated_at"
+        ],
+        "title": "FeedGroupOut",
+        "type": "object"
+      },
+      "FeedGroupPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/FeedGroupOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "page": {
+            "title": "Page",
+            "type": "integer"
+          },
+          "page_size": {
+            "title": "Page Size",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "page",
+          "page_size"
+        ],
+        "title": "FeedGroupPage",
+        "type": "object"
+      },
+      "FeedPropertyOut": {
+        "properties": {
+          "aliases": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Aliases"
+          },
+          "condition_axes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Condition Axes"
+          },
+          "deleted": {
+            "title": "Deleted",
+            "type": "boolean"
+          },
+          "deprecation_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deprecation Note"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "domain": {
+            "title": "Domain",
+            "type": "string"
+          },
+          "field_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Field Key"
+          },
+          "field_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Field Name"
+          },
+          "group_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group Key"
+          },
+          "group_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group Name"
+          },
+          "is_active": {
+            "title": "Is Active",
+            "type": "boolean"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "origin": {
+            "enum": [
+              "literature",
+              "local"
+            ],
+            "title": "Origin",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "deprecated"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "superseded_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Superseded By"
+          },
+          "symbol": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Symbol"
+          },
+          "test_standard": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Test Standard"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "value_type": {
+            "title": "Value Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "name",
+          "symbol",
+          "unit",
+          "value_type",
+          "description",
+          "test_standard",
+          "condition_axes",
+          "origin",
+          "domain",
+          "group_key",
+          "group_name",
+          "field_key",
+          "field_name",
+          "aliases",
+          "status",
+          "superseded_by",
+          "deprecation_note",
+          "is_active",
+          "deleted",
+          "updated_at"
+        ],
+        "title": "FeedPropertyOut",
+        "type": "object"
+      },
+      "FeedPropertyPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/FeedPropertyOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "page": {
+            "title": "Page",
+            "type": "integer"
+          },
+          "page_size": {
+            "title": "Page Size",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "page",
+          "page_size"
+        ],
+        "title": "FeedPropertyPage",
+        "type": "object"
+      },
       "FitOut": {
         "properties": {
           "block": {
@@ -14967,6 +15411,176 @@
           "uptime_seconds"
         ],
         "title": "HostOut",
+        "type": "object"
+      },
+      "ImportErrorOut": {
+        "properties": {
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "row": {
+            "title": "Row",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "row",
+          "message"
+        ],
+        "title": "ImportErrorOut",
+        "type": "object"
+      },
+      "ImportFieldOut": {
+        "properties": {
+          "action": {
+            "enum": [
+              "create",
+              "update",
+              "move",
+              "restore",
+              "unchanged"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "before_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Before Name"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "name",
+          "action"
+        ],
+        "title": "ImportFieldOut",
+        "type": "object"
+      },
+      "ImportGroupOut": {
+        "properties": {
+          "action": {
+            "enum": [
+              "create",
+              "update",
+              "move",
+              "restore",
+              "unchanged"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "before_field_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Before Field Key"
+          },
+          "before_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Before Name"
+          },
+          "field_key": {
+            "title": "Field Key",
+            "type": "string"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "name",
+          "field_key",
+          "action"
+        ],
+        "title": "ImportGroupOut",
+        "type": "object"
+      },
+      "ImportMemberOut": {
+        "properties": {
+          "action": {
+            "enum": [
+              "assign",
+              "move",
+              "unchanged"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "before_group_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Before Group Key"
+          },
+          "cross_domain": {
+            "default": false,
+            "title": "Cross Domain",
+            "type": "boolean"
+          },
+          "domain": {
+            "default": "",
+            "title": "Domain",
+            "type": "string"
+          },
+          "group_key": {
+            "title": "Group Key",
+            "type": "string"
+          },
+          "property_key": {
+            "title": "Property Key",
+            "type": "string"
+          },
+          "property_name": {
+            "title": "Property Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "property_key",
+          "property_name",
+          "group_key",
+          "action"
+        ],
+        "title": "ImportMemberOut",
         "type": "object"
       },
       "ImportResultOut": {
@@ -19782,6 +20396,11 @@
             "minLength": 1,
             "title": "Name",
             "type": "string"
+          },
+          "read_only": {
+            "default": false,
+            "title": "Read Only",
+            "type": "boolean"
           }
         },
         "required": [
@@ -19850,6 +20469,11 @@
           "prefix": {
             "title": "Prefix",
             "type": "string"
+          },
+          "read_only": {
+            "default": false,
+            "title": "Read Only",
+            "type": "boolean"
           },
           "revoked_at": {
             "anyOf": [
@@ -21765,6 +22389,312 @@
           "properties"
         ],
         "title": "PropertyDictionaryOut",
+        "type": "object"
+      },
+      "PropertyFieldCreate": {
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "key": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Key"
+          },
+          "name": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "PropertyFieldCreate",
+        "type": "object"
+      },
+      "PropertyFieldOut": {
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "group_count": {
+            "title": "Group Count",
+            "type": "integer"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "property_count": {
+            "title": "Property Count",
+            "type": "integer"
+          },
+          "retired": {
+            "title": "Retired",
+            "type": "boolean"
+          },
+          "sort_order": {
+            "title": "Sort Order",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "key",
+          "name",
+          "description",
+          "sort_order",
+          "retired",
+          "group_count",
+          "property_count"
+        ],
+        "title": "PropertyFieldOut",
+        "type": "object"
+      },
+      "PropertyFieldUpdate": {
+        "description": "부분 수정 — 안 보낸 칸은 그대로. `description: null` 은 설명을 비운다.\n\n`retired` 는 폐기(true) · 되살리기(false). 키는 못 바꾼다(바깥이 키로 잇는다).",
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "retired": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retired"
+          },
+          "sort_order": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sort Order"
+          }
+        },
+        "title": "PropertyFieldUpdate",
+        "type": "object"
+      },
+      "PropertyGroupCreate": {
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "field_key": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Field Key",
+            "type": "string"
+          },
+          "key": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Key"
+          },
+          "name": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "field_key",
+          "name"
+        ],
+        "title": "PropertyGroupCreate",
+        "type": "object"
+      },
+      "PropertyGroupOut": {
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "field_key": {
+            "title": "Field Key",
+            "type": "string"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "property_count": {
+            "title": "Property Count",
+            "type": "integer"
+          },
+          "retired": {
+            "title": "Retired",
+            "type": "boolean"
+          },
+          "sort_order": {
+            "title": "Sort Order",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "key",
+          "field_key",
+          "name",
+          "description",
+          "sort_order",
+          "retired",
+          "property_count"
+        ],
+        "title": "PropertyGroupOut",
+        "type": "object"
+      },
+      "PropertyGroupUpdate": {
+        "description": "부분 수정. `field_key` 를 보내면 다른 분야로 옮긴다(든 물성은 함께 간다).",
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "field_key": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Field Key"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "retired": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retired"
+          },
+          "sort_order": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sort Order"
+          }
+        },
+        "title": "PropertyGroupUpdate",
         "type": "object"
       },
       "PropertyHitOut": {
@@ -28774,6 +29704,344 @@
         "title": "TallyOut",
         "type": "object"
       },
+      "TaxonomyAssignIn": {
+        "description": "물성 여럿을 한 물성군에 넣는다. `group_key: null` 이면 군에서 뺀다(미분류).",
+        "properties": {
+          "group_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group Key"
+          },
+          "property_keys": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 500,
+            "minItems": 1,
+            "title": "Property Keys",
+            "type": "array"
+          }
+        },
+        "required": [
+          "group_key",
+          "property_keys"
+        ],
+        "title": "TaxonomyAssignIn",
+        "type": "object"
+      },
+      "TaxonomyAssignOut": {
+        "properties": {
+          "changed": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Changed",
+            "type": "array"
+          },
+          "group_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group Key"
+          },
+          "unchanged": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Unchanged",
+            "type": "array"
+          }
+        },
+        "required": [
+          "group_key",
+          "changed",
+          "unchanged"
+        ],
+        "title": "TaxonomyAssignOut",
+        "type": "object"
+      },
+      "TaxonomyImportIn": {
+        "properties": {
+          "dry_run": {
+            "default": true,
+            "title": "Dry Run",
+            "type": "boolean"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/TaxonomyImportRow"
+            },
+            "maxItems": 3000,
+            "minItems": 1,
+            "title": "Rows",
+            "type": "array"
+          }
+        },
+        "required": [
+          "rows"
+        ],
+        "title": "TaxonomyImportIn",
+        "type": "object"
+      },
+      "TaxonomyImportOut": {
+        "properties": {
+          "applied": {
+            "title": "Applied",
+            "type": "boolean"
+          },
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/ImportErrorOut"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "fields": {
+            "items": {
+              "$ref": "#/components/schemas/ImportFieldOut"
+            },
+            "title": "Fields",
+            "type": "array"
+          },
+          "groups": {
+            "items": {
+              "$ref": "#/components/schemas/ImportGroupOut"
+            },
+            "title": "Groups",
+            "type": "array"
+          },
+          "members": {
+            "items": {
+              "$ref": "#/components/schemas/ImportMemberOut"
+            },
+            "title": "Members",
+            "type": "array"
+          }
+        },
+        "required": [
+          "applied",
+          "fields",
+          "groups",
+          "members",
+          "errors"
+        ],
+        "title": "TaxonomyImportOut",
+        "type": "object"
+      },
+      "TaxonomyImportRow": {
+        "description": "한 줄 = 분야 > 물성군 > 물성 한 갈래.\n\n물성 칸이 비면 그 줄은 분야 · 물성군만 만든다(빈 군). 각 칸은 **이름이나 키** 어느 것을\n적어도 된다 — 키 칸을 따로 주면 그 키로 찾고, 없으면 그 키로 만든다(SP 의 키를 그대로\n가져오면 두 시스템의 키가 같아진다. SP 는 첫 연동에서 **이름**으로 잇는다).",
+        "properties": {
+          "field": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Field"
+          },
+          "field_description": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Field Description"
+          },
+          "field_key": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Field Key"
+          },
+          "group": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group"
+          },
+          "group_description": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group Description"
+          },
+          "group_key": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group Key"
+          },
+          "property": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Property"
+          }
+        },
+        "title": "TaxonomyImportRow",
+        "type": "object"
+      },
+      "TaxonomyOut": {
+        "properties": {
+          "fields": {
+            "items": {
+              "$ref": "#/components/schemas/PropertyFieldOut"
+            },
+            "title": "Fields",
+            "type": "array"
+          },
+          "groups": {
+            "items": {
+              "$ref": "#/components/schemas/PropertyGroupOut"
+            },
+            "title": "Groups",
+            "type": "array"
+          },
+          "properties": {
+            "items": {
+              "$ref": "#/components/schemas/TaxonomyPropertyOut"
+            },
+            "title": "Properties",
+            "type": "array"
+          },
+          "truncated": {
+            "default": false,
+            "title": "Truncated",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "fields",
+          "groups",
+          "properties"
+        ],
+        "title": "TaxonomyOut",
+        "type": "object"
+      },
+      "TaxonomyPropertyOut": {
+        "description": "분류 화면의 물성 한 줄 — 고르고 옮기는 데 필요한 것만.",
+        "properties": {
+          "deprecated": {
+            "title": "Deprecated",
+            "type": "boolean"
+          },
+          "domain": {
+            "title": "Domain",
+            "type": "string"
+          },
+          "group_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group Key"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "local": {
+            "title": "Local",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "si_unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Si Unit"
+          },
+          "symbol": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Symbol"
+          },
+          "value_count": {
+            "title": "Value Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "key",
+          "name",
+          "symbol",
+          "si_unit",
+          "domain",
+          "local",
+          "deprecated",
+          "group_key",
+          "value_count"
+        ],
+        "title": "TaxonomyPropertyOut",
+        "type": "object"
+      },
       "TemporaryPasswordResponse": {
         "description": "임시 비밀번호는 이 응답에서 한 번만 나온다.\n\nSMTP 가 없어 메일로 보낼 수 없으므로, 관리자가 화면에서 읽어 구두·메신저로\n전달한다. 받는 사람은 첫 로그인 때 변경이 강제된다.",
         "properties": {
@@ -34360,6 +35628,174 @@
         ]
       }
     },
+    "/api/catalog/feed/fields": {
+      "get": {
+        "description": "물성 분야 전부.",
+        "operationId": "feed_fields_api_catalog_feed_fields_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 500,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeedFieldPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Feed Fields",
+        "tags": [
+          "catalog"
+        ]
+      }
+    },
+    "/api/catalog/feed/groups": {
+      "get": {
+        "description": "물성군 전부 — 행마다 든 분야(`field_key`).",
+        "operationId": "feed_groups_api_catalog_feed_groups_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 500,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeedGroupPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Feed Groups",
+        "tags": [
+          "catalog"
+        ]
+      }
+    },
+    "/api/catalog/feed/properties": {
+      "get": {
+        "description": "물성(허브 키) 전부 — 문헌 + 사내, 폐기한 것까지. 행마다 물성군 · 분야 · 별칭.",
+        "operationId": "feed_properties_api_catalog_feed_properties_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 500,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeedPropertyPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Feed Properties",
+        "tags": [
+          "catalog"
+        ]
+      }
+    },
     "/api/catalog/links/{material_id}": {
       "delete": {
         "operationId": "delete_link_api_catalog_links__material_id__delete",
@@ -35928,6 +37364,300 @@
           }
         },
         "summary": "Summary",
+        "tags": [
+          "catalog"
+        ]
+      }
+    },
+    "/api/catalog/taxonomy": {
+      "get": {
+        "description": "분야 · 물성군 · 물성 전부. 화면이 트리로 엮는다 — 미분류 물성은 `group_key` 가\n비었다.",
+        "operationId": "get_taxonomy_api_catalog_taxonomy_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaxonomyOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Taxonomy",
+        "tags": [
+          "catalog"
+        ]
+      }
+    },
+    "/api/catalog/taxonomy/fields": {
+      "post": {
+        "operationId": "create_field_api_catalog_taxonomy_fields_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PropertyFieldCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PropertyFieldOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Field",
+        "tags": [
+          "catalog"
+        ]
+      }
+    },
+    "/api/catalog/taxonomy/fields/{key}": {
+      "patch": {
+        "description": "부분 수정. 키는 못 바꾼다 — 바깥이 키로 잇는다. `retired: true` 는 폐기(지우지\n않는다).",
+        "operationId": "update_field_api_catalog_taxonomy_fields__key__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "title": "Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PropertyFieldUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PropertyFieldOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Field",
+        "tags": [
+          "catalog"
+        ]
+      }
+    },
+    "/api/catalog/taxonomy/groups": {
+      "post": {
+        "operationId": "create_group_api_catalog_taxonomy_groups_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PropertyGroupCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PropertyGroupOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Group",
+        "tags": [
+          "catalog"
+        ]
+      }
+    },
+    "/api/catalog/taxonomy/groups/{key}": {
+      "patch": {
+        "description": "부분 수정. `field_key` 를 보내면 다른 분야로 옮긴다 — 든 물성이 함께 가고 키는\n그대로다.",
+        "operationId": "update_group_api_catalog_taxonomy_groups__key__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "title": "Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PropertyGroupUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PropertyGroupOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Group",
+        "tags": [
+          "catalog"
+        ]
+      }
+    },
+    "/api/catalog/taxonomy/import": {
+      "post": {
+        "description": "표로 붙여넣은 분류를 밀어 넣는다. **기본이 미리 보기다** — `dry_run: false` 일 때만\n넣고, 오류가 한 줄이라도 있으면 아무것도 안 넣는다(422).",
+        "operationId": "import_taxonomy_api_catalog_taxonomy_import_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaxonomyImportIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaxonomyImportOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Import Taxonomy",
+        "tags": [
+          "catalog"
+        ]
+      }
+    },
+    "/api/catalog/taxonomy/members": {
+      "put": {
+        "description": "물성 여럿을 한 물성군에. 다른 군에 있던 것은 옮겨진다(물성은 한 군에만 든다).",
+        "operationId": "assign_members_api_catalog_taxonomy_members_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaxonomyAssignIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaxonomyAssignOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Assign Members",
         "tags": [
           "catalog"
         ]

@@ -24,6 +24,7 @@ from app.modules.accounts import routes as accounts_routes
 from app.modules.audit import routes as audit_routes
 from app.modules.auth import routes as auth_routes
 from app.modules.catalog import routes as catalog_routes
+from app.modules.catalog import taxonomy_routes as catalog_taxonomy_routes
 from app.modules.commissions import routes as commissions_routes
 from app.modules.equipment import routes as equipment_routes
 from app.modules.fitting import blocks as fitting_blocks
@@ -118,6 +119,8 @@ def _api_router() -> APIRouter:
     router.include_router(voc_routes.router)
     router.include_router(commissions_routes.router)
     router.include_router(catalog_routes.router)
+    router.include_router(catalog_taxonomy_routes.router)
+    router.include_router(catalog_taxonomy_routes.feed_router)
     router.include_router(metrology_routes.router)
     router.include_router(materials_routes.router)
     router.include_router(materials_routes.samples_router)

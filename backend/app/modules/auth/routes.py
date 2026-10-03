@@ -143,7 +143,9 @@ def create_token(
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> PatCreateResponse:
-    raw, pat = services.create_pat(db, user, payload.name, payload.expires_in_days)
+    raw, pat = services.create_pat(
+        db, user, payload.name, payload.expires_in_days, read_only=payload.read_only
+    )
     return PatCreateResponse(token=raw, pat=pat)
 
 

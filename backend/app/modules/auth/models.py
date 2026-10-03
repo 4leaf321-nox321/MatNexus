@@ -15,7 +15,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, String, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, String, false, func
 from sqlalchemy.dialects.postgresql import UUID as PgUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -81,3 +81,8 @@ class PersonalAccessToken(Base):
         DateTime(timezone=True), nullable=True
     )
     """마지막 사용 시각. 안 쓰는 토큰을 찾아 지우는 근거가 된다."""
+    read_only: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    """**읽기만 하는 토큰**(2026-10-03, ADR 0054). 바깥 시스템(Standard Platform)이 물성
+    목록을 밤마다 읽어 가는데, 그쪽 연동 지침이 「토큰은 읽기 전용으로 준다」 를 요구한다.
+    전에는 토큰이 만든 사람의 권한 그대로라, 읽으라고 준 토큰으로 자료를 고치고 새 토큰까지
+    만들 수 있었다. GET · HEAD 밖의 요청은 인증 자리(`shared/auth.current_user`)가 막는다."""

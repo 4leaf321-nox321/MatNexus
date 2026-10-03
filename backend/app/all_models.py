@@ -22,6 +22,11 @@ from app.modules.catalog.models import (
     CatalogValue,
 )
 from app.modules.catalog.ontology_models import AliasCandidate, PropertyAlias, PropertyLink
+from app.modules.catalog.taxonomy_models import (
+    PropertyField,
+    PropertyGroup,
+    PropertyGroupMember,
+)
 from app.modules.commissions.models import Commission, CommissionEvent, CommissionItem
 from app.modules.equipment.models import (
     EquipmentCalibration,
@@ -127,6 +132,9 @@ __all__ = [
     "PropertyAlias",
     "PropertyCard",
     "PropertyCardRemark",
+    "PropertyField",
+    "PropertyGroup",
+    "PropertyGroupMember",
     "PropertyLink",
     "RefreshToken",
     "Sample",

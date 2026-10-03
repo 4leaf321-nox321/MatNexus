@@ -14,6 +14,12 @@
  * 서버가 해시만 저장하므로 토큰 평문은 발급 응답에서 **딱 한 번** 보인다.
  * `SecretOnceDialog` 가 그것을 말한다. 잃어버리면 새로 발급한다.
  *
+ * ## 읽기 전용 (2026-10-03, ADR 0054)
+ *
+ * 바깥 시스템(Standard Platform)이 물성 목록을 밤마다 읽어 간다. 그쪽에 주는 토큰은 읽기
+ * 전용이어야 한다 — 보통 토큰은 내 권한 그대로라, 읽으라고 준 토큰으로 자료를 고치고 새 토큰까지
+ * 만들 수 있다. 읽기 전용 토큰은 서버의 인증 자리가 GET 밖을 막는다.
+ *
  * ## 왜 shared 에 있나
  *
  * 내 프로필(껍데기)과 장비 커넥터 화면(모듈) 둘이 쓴다. 모듈끼리 직접 부르지
@@ -27,6 +33,7 @@ import { ApiError, api } from '@/shared/api/client'
 import type { components } from '@/shared/api/schema'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { SecretOnceDialog } from '@/shared/components/SecretOnceDialog'
+import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
 import { Input } from '@/shared/components/ui/input'
 import { useResource } from '@/shared/hooks/useResource'
@@ -37,7 +44,9 @@ type PatCreated = components['schemas']['PatCreateResponse']
 
 export const tokensApi = {
   list: () => api.get<Pat[]>('/auth/tokens'),
-  create: (name: string) => api.post<PatCreated>('/auth/tokens', { name }),
+  /** 읽기 전용일 때만 그 칸을 싣는다 — 보통 토큰의 요청은 전과 같다. */
+  create: (name: string, readOnly = false) =>
+    api.post<PatCreated>('/auth/tokens', { name, ...(readOnly ? { read_only: true } : {}) }),
   revoke: (id: string) => api.delete<void>(`/auth/tokens/${id}`),
 }
 
@@ -51,6 +60,7 @@ export function AccessTokens({
 }) {
   const { data, error, loading, reload } = useResource(() => tokensApi.list(), [])
   const [name, setName] = useState('')
+  const [readOnly, setReadOnly] = useState(false)
   const [busy, setBusy] = useState(false)
   const [failed, setFailed] = useState<ApiError | Error | null>(null)
   const [issued, setIssued] = useState<PatCreated | null>(null)
@@ -61,10 +71,11 @@ export function AccessTokens({
     setBusy(true)
     setFailed(null)
     try {
-      const made = await tokensApi.create(label)
+      const made = await tokensApi.create(label, readOnly)
       setIssued(made)
       onIssued?.(made.token)
       setName('')
+      setReadOnly(false)
       reload()
     } catch (caught) {
       setFailed(caught instanceof Error ? caught : new Error('알 수 없는 오류'))
@@ -115,6 +126,14 @@ export function AccessTokens({
           발급
         </Button>
       </div>
+      <label className="flex items-center gap-1.5 text-sm">
+        <input
+          type="checkbox"
+          checked={readOnly}
+          onChange={(event) => setReadOnly(event.target.checked)}
+        />
+        읽기 전용 — 바깥 시스템이 목록을 읽어 갈 때. 이 토큰으로는 아무것도 바꿀 수 없습니다
+      </label>
       {!compact && (
         <p className="text-muted-foreground text-xs">
           장비(MatPylon)·AI 도구(MCP)·스크립트가 <strong>같은 토큰</strong>을 씁니다 — 용도별로
@@ -134,7 +153,14 @@ export function AccessTokens({
           {rows.map((row) => (
             <li key={row.id} className="flex items-center justify-between gap-2 px-3 py-2">
               <div className="min-w-0">
-                <div className="font-medium">{row.name}</div>
+                <div className="font-medium">
+                  {row.name}
+                  {row.read_only && (
+                    <Badge variant="outline" className="ml-1.5">
+                      읽기 전용
+                    </Badge>
+                  )}
+                </div>
                 <div className="text-muted-foreground text-xs">
                   <code className="font-mono">{row.prefix}…</code> · 발급 {stamp(row.created_at)}
                   {row.last_used_at ? ` · 마지막 사용 ${stamp(row.last_used_at)}` : ' · 아직 안 씀'}

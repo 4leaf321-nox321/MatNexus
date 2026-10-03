@@ -62,6 +62,21 @@ describe('AccessTokens', () => {
     expect(await screen.findByText('mnx_pat_PLAINTEXT')).toBeInTheDocument()
   })
 
+  it('읽기 전용으로 발급하면 그 칸을 싣고, 목록에 표시가 붙는다', async () => {
+    const user = userEvent.setup()
+    get.mockResolvedValue([ALIVE, { ...ALIVE, id: 't3', name: 'SP 물성 목록', read_only: true }])
+    render(<AccessTokens />)
+    expect(await screen.findByText('SP 물성 목록')).toBeInTheDocument()
+    expect(screen.getAllByText('읽기 전용')).toHaveLength(1)
+
+    await user.type(screen.getByLabelText('토큰 이름'), '읽기')
+    await user.click(screen.getByLabelText(/읽기 전용 — 바깥 시스템/))
+    await user.click(screen.getByRole('button', { name: '발급' }))
+    await waitFor(() =>
+      expect(post).toHaveBeenCalledWith('/auth/tokens', { name: '읽기', read_only: true })
+    )
+  })
+
   it('이름이 비면 발급 단추가 꺼져 있다', async () => {
     render(<AccessTokens />)
     await screen.findByText('인장기-1')

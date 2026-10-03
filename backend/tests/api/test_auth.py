@@ -307,6 +307,41 @@ def test_pat_authenticates_and_can_be_revoked(client: TestClient, db: Session) -
     assert client.get("/api/auth/me", headers=pat_auth).status_code == 401
 
 
+def test_읽기_전용_토큰은_읽기만_한다(client: TestClient, db: Session) -> None:
+    """바깥 시스템(SP)에 물성 목록을 읽으라고 주는 토큰(ADR 0054). 그쪽 연동 지침이 읽기 전용을
+    요구한다 — 전에는 토큰이 사람의 권한 그대로라, 그 토큰으로 자료를 고치고 **새 토큰까지
+    만들 수 있었다.** 무는 자리는 셋이다: 읽기는 되고, 쓰기는 막히고, 막힌 토큰으로 권한을 다시
+    얻을 길(새 토큰)이 없다."""
+    make_user(db)
+    auth = {"Authorization": f"Bearer {login(client).json()['access_token']}"}
+    created = client.post(
+        "/api/auth/tokens", json={"name": "SP 물성 목록", "read_only": True}, headers=auth
+    )
+    assert created.status_code == 201
+    assert created.json()["pat"]["read_only"] is True
+    reader = {"Authorization": f"Bearer {created.json()['token']}"}
+
+    assert client.get("/api/auth/me", headers=reader).status_code == 200
+    assert client.get("/api/catalog/feed/properties", headers=reader).status_code == 200
+
+    for method, path in (
+        ("post", "/api/auth/tokens"),
+        ("patch", "/api/auth/me"),
+        ("post", "/api/catalog/taxonomy/fields"),
+    ):
+        got = client.request(method, path, headers=reader, json={"name": "x"})
+        assert got.status_code == 403, (path, got.text)
+        assert got.json()["error"]["code"] == "MNX-AUTH-0104"
+
+    # 보통 토큰은 전과 같다.
+    plain = client.post("/api/auth/tokens", json={"name": "장비"}, headers=auth).json()
+    assert plain["pat"]["read_only"] is False
+    writer = {"Authorization": f"Bearer {plain['token']}"}
+    assert (
+        client.post("/api/auth/tokens", json={"name": "y"}, headers=writer).status_code == 201
+    )
+
+
 def test_짧은_비밀번호도_받는다(client: TestClient, db: Session) -> None:
     """길이 하한을 두지 않는다.
 

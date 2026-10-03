@@ -324,7 +324,12 @@ def user_out(db: Session, user: User) -> UserOut:
 
 
 def create_pat(
-    db: Session, user: User, name: str, expires_in_days: int | None
+    db: Session,
+    user: User,
+    name: str,
+    expires_in_days: int | None,
+    *,
+    read_only: bool = False,
 ) -> tuple[str, PatOut]:
     raw, prefix, token_hash = security.new_pat()
     pat = PersonalAccessToken(
@@ -333,6 +338,7 @@ def create_pat(
         prefix=prefix,
         token_hash=token_hash,
         expires_at=_now() + timedelta(days=expires_in_days) if expires_in_days else None,
+        read_only=read_only,
     )
     db.add(pat)
     db.commit()
@@ -358,8 +364,10 @@ def revoke_pat(db: Session, user: User, pat_id: uuid.UUID) -> None:
         db.commit()
 
 
-def resolve_pat(db: Session, raw: str) -> User | None:
-    """PAT 평문으로 사용자를 찾는다. 유효하지 않으면 None."""
+def resolve_pat(db: Session, raw: str) -> tuple[User, PersonalAccessToken] | None:
+    """PAT 평문으로 사용자와 그 토큰을 찾는다. 유효하지 않으면 None.
+
+    토큰을 함께 돌려주는 까닭: 읽기 전용인지는 사람이 아니라 **토큰**에 붙은 성질이다."""
     pat = db.scalar(
         select(PersonalAccessToken).where(
             PersonalAccessToken.token_hash == security.hash_token(raw)
@@ -376,4 +384,4 @@ def resolve_pat(db: Session, raw: str) -> User | None:
 
     pat.last_used_at = _now()
     db.commit()
-    return user
+    return user, pat

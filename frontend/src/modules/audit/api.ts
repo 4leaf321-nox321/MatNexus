@@ -122,6 +122,10 @@ export const ACTION_LABELS: Record<string, string> = {
   'declared.approval_lapsed': '선언 물성 승인 풀림(값 수정)',
   // 물성 정의문을 고친 일(ADR 0050) — 허브 키의 뜻이라 사람이 해도 남는다.
   'catalog_property.described': '물성 정의문 고침',
+  // 물성 분류(분야 ⊃ 물성군 ⊃ 물성, ADR 0054) — 바깥(SP)이 그대로 읽어 가서 사람이 해도 남는다.
+  'property_taxonomy.changed': '물성 분류 고침(분야 · 물성군)',
+  'property_taxonomy.assigned': '물성을 물성군에 넣음 · 뺌',
+  'property_taxonomy.imported': '물성 분류 밀어 넣기',
   // 해석용 물성 정의 켜기 · 끄기 — 전 부서의 내보내기 메뉴에 걸린다(정의판은 사용 중단과 짝).
   'export_profile.activated': '해석용 물성 정의 켬',
   'export_profile.deactivated': '해석용 물성 정의 끔',

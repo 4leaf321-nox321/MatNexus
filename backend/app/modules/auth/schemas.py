@@ -92,6 +92,8 @@ class ChangePasswordRequest(BaseModel):
 class PatCreateRequest(BaseModel):
     name: str = Field(min_length=1, max_length=100)
     expires_in_days: int | None = Field(default=None, ge=1, le=3650)
+    read_only: bool = False
+    """읽기만 하는 토큰 — 바깥 시스템에 목록을 읽게 줄 때. GET 밖의 요청은 막힌다."""
 
 
 class PatOut(BaseModel):
@@ -104,6 +106,7 @@ class PatOut(BaseModel):
     expires_at: datetime | None
     last_used_at: datetime | None
     revoked_at: datetime | None
+    read_only: bool = False
 
 
 class PatCreateResponse(BaseModel):

@@ -76,7 +76,7 @@ ms)를 알린다 — 「관리 → 사용 현황」 의 MCP 숫자가 여기서 
 도구의 답은 그대로 나간다. 도구 하나가 백엔드를 여러 번 부르므로 API 요청 수(`X-Client: mcp`)와
 도구 수는 다르다 — 둘 다 그 화면에 있다.
 
-## 5. 지금 있는 것 (도구 94개)
+## 5. 지금 있는 것 (도구 96개)
 
 **전부 한 번에 불러 보려면 `probe.py` 를 돌린다** — 진짜 MCP 클라이언트로 한 바퀴
 돈다(아래 「실측으로 잡은 것」 참조). 화면이나 curl 로는 안 보이는 층이 있다.
@@ -104,6 +104,8 @@ ms)를 알린다 — 「관리 → 사용 현황」 의 MCP 숫자가 여기서 
     resolve_property(name)             물성 이름 → 물성 키 **값을 묻기 전에**
     find_by_property(property, unit,   값으로 재료를 찾는다
                      near|min|max)
+    get_property_classification(       물성 분류 — 분야 › 물성군 › 물성(ADR 0054).
+                     field?)           분야를 주면 군 안의 물성까지
 
 ### 사내 재료
 
@@ -212,6 +214,8 @@ Family·Category·Grade·제조사·유통사·시편 규격은 **기준정보**
     ★ set_declared_values(...)         재료에 선언 값 — 입력 단위 그대로, 서버가 SI 로
     draft_test_type(key, label, ch)    시험법 **초안만** — 저장하지 않는다
     ★ save_format_profile(...)         부서가 그 장비를 읽는 방법이 된다
+    ★ classify_properties(rows)        물성 분류 밀어 넣기 — 줄마다 분야 › 군 › 물성(키).
+                                       미리보기에 오류가 하나라도 있으면 안 들어간다 (관리자)
 
 ### 덱
 

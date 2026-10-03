@@ -176,6 +176,14 @@ EXCLUDED_TABLES: dict[str, str] = {
     "notifications": 알림,
     "bom_aliases": 기준정보,
     "property_aliases": 기준정보,
+    # 물성 분류(ADR 0054). **분류는 물성의 칸이다** — 기준정보 축을 재료의 칸으로 둔 것과
+    # 같은 판단이다(`축`). 마디로 두면 물성마다 군 · 분야 갈래가 뻗어 그래프가 분류로
+    # 뒤덮인다. 「이 물성은 어느 군인가」 는 `GET /api/catalog/taxonomy` 와 바깥 목록
+    # (`/api/catalog/feed/*`)이 답한다.
+    "property_fields": 기준정보 + " — 물성 분류의 분야. 분류는 물성의 칸이다(ADR 0054)",
+    "property_groups": 기준정보 + " — 물성 분류의 물성군. 분류는 물성의 칸이다(ADR 0054)",
+    "property_group_members": 기준정보
+    + " — 물성 → 물성군 소속. 분류는 물성의 칸이다(ADR 0054)",
     "alias_candidates": 기준정보 + " — 못 푼 이름의 큐. 사전이 되기 전 단계라 마디가 아니다",
     "voc_attachments": 제보,
     "voc_events": 제보,

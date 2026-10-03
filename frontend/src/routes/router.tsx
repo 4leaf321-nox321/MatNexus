@@ -55,6 +55,7 @@ const CatalogDeckPage = lazy(() => import('@/modules/catalog/CatalogDeckPage'))
 const CatalogComparePage = lazy(() => import('@/modules/catalog/CatalogComparePage'))
 const CatalogAshbyPage = lazy(() => import('@/modules/catalog/CatalogAshbyPage'))
 const CatalogCoveragePage = lazy(() => import('@/modules/catalog/CatalogCoveragePage'))
+const CatalogTaxonomyPage = lazy(() => import('@/modules/catalog/CatalogTaxonomyPage'))
 const EquipmentPage = lazy(() => import('@/modules/equipment/EquipmentPage'))
 const EquipmentDetailPage = lazy(() => import('@/modules/equipment/EquipmentDetailPage'))
 const MetrologyPage = lazy(() => import('@/modules/metrology/MetrologyPage'))
@@ -200,6 +201,7 @@ export const router = createBrowserRouter([
           { path: 'catalog/compare', element: <CatalogComparePage /> },
           { path: 'catalog/ashby', element: <CatalogAshbyPage /> },
           { path: 'catalog/coverage', element: <CatalogCoveragePage /> },
+          { path: 'catalog/taxonomy', element: <CatalogTaxonomyPage /> },
           { path: 'catalog/:id', element: <CatalogMaterialPage /> },
           // 측정법 — 「그 물성은 무엇으로 재는가」 (MaterialTwin 이식 4단계).
           { path: 'metrology', element: <MetrologyPage /> },

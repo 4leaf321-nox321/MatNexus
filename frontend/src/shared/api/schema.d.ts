@@ -664,6 +664,66 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/catalog/feed/fields": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Feed Fields
+         * @description 물성 분야 전부.
+         */
+        get: operations["feed_fields_api_catalog_feed_fields_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/catalog/feed/groups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Feed Groups
+         * @description 물성군 전부 — 행마다 든 분야(`field_key`).
+         */
+        get: operations["feed_groups_api_catalog_feed_groups_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/catalog/feed/properties": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Feed Properties
+         * @description 물성(허브 키) 전부 — 문헌 + 사내, 폐기한 것까지. 행마다 물성군 · 분야 · 별칭.
+         */
+        get: operations["feed_properties_api_catalog_feed_properties_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/catalog/links/{material_id}": {
         parameters: {
             query?: never;
@@ -1204,6 +1264,144 @@ export interface paths {
          */
         get: operations["summary_api_catalog_summary_get"];
         put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/catalog/taxonomy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Taxonomy
+         * @description 분야 · 물성군 · 물성 전부. 화면이 트리로 엮는다 — 미분류 물성은 `group_key` 가
+         *     비었다.
+         */
+        get: operations["get_taxonomy_api_catalog_taxonomy_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/catalog/taxonomy/fields": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Field */
+        post: operations["create_field_api_catalog_taxonomy_fields_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/catalog/taxonomy/fields/{key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update Field
+         * @description 부분 수정. 키는 못 바꾼다 — 바깥이 키로 잇는다. `retired: true` 는 폐기(지우지
+         *     않는다).
+         */
+        patch: operations["update_field_api_catalog_taxonomy_fields__key__patch"];
+        trace?: never;
+    };
+    "/api/catalog/taxonomy/groups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Group */
+        post: operations["create_group_api_catalog_taxonomy_groups_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/catalog/taxonomy/groups/{key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update Group
+         * @description 부분 수정. `field_key` 를 보내면 다른 분야로 옮긴다 — 든 물성이 함께 가고 키는
+         *     그대로다.
+         */
+        patch: operations["update_group_api_catalog_taxonomy_groups__key__patch"];
+        trace?: never;
+    };
+    "/api/catalog/taxonomy/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Import Taxonomy
+         * @description 표로 붙여넣은 분류를 밀어 넣는다. **기본이 미리 보기다** — `dry_run: false` 일 때만
+         *     넣고, 오류가 한 줄이라도 있으면 아무것도 안 넣는다(422).
+         */
+        post: operations["import_taxonomy_api_catalog_taxonomy_import_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/catalog/taxonomy/members": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Assign Members
+         * @description 물성 여럿을 한 물성군에. 다른 군에 있던 것은 옮겨진다(물성은 한 군에만 든다).
+         */
+        put: operations["assign_members_api_catalog_taxonomy_members_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -12461,6 +12659,153 @@ export interface components {
              */
             y_label: string;
         };
+        /** FeedFieldOut */
+        FeedFieldOut: {
+            /** Deleted */
+            deleted: boolean;
+            /** Description */
+            description: string | null;
+            /** Group Count */
+            group_count: number;
+            /** Is Active */
+            is_active: boolean;
+            /** Key */
+            key: string;
+            /** Name */
+            name: string;
+            /** Property Count */
+            property_count: number;
+            /** Sort Order */
+            sort_order: number;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "active" | "deprecated";
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** FeedFieldPage */
+        FeedFieldPage: {
+            /** Items */
+            items: components["schemas"]["FeedFieldOut"][];
+            /** Page */
+            page: number;
+            /** Page Size */
+            page_size: number;
+            /** Total */
+            total: number;
+        };
+        /** FeedGroupOut */
+        FeedGroupOut: {
+            /** Deleted */
+            deleted: boolean;
+            /** Description */
+            description: string | null;
+            /** Field Key */
+            field_key: string;
+            /** Field Name */
+            field_name: string;
+            /** Is Active */
+            is_active: boolean;
+            /** Key */
+            key: string;
+            /** Name */
+            name: string;
+            /** Property Count */
+            property_count: number;
+            /** Sort Order */
+            sort_order: number;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "active" | "deprecated";
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** FeedGroupPage */
+        FeedGroupPage: {
+            /** Items */
+            items: components["schemas"]["FeedGroupOut"][];
+            /** Page */
+            page: number;
+            /** Page Size */
+            page_size: number;
+            /** Total */
+            total: number;
+        };
+        /** FeedPropertyOut */
+        FeedPropertyOut: {
+            /** Aliases */
+            aliases: string | null;
+            /** Condition Axes */
+            condition_axes: string | null;
+            /** Deleted */
+            deleted: boolean;
+            /** Deprecation Note */
+            deprecation_note: string | null;
+            /** Description */
+            description: string | null;
+            /** Domain */
+            domain: string;
+            /** Field Key */
+            field_key: string | null;
+            /** Field Name */
+            field_name: string | null;
+            /** Group Key */
+            group_key: string | null;
+            /** Group Name */
+            group_name: string | null;
+            /** Is Active */
+            is_active: boolean;
+            /** Key */
+            key: string;
+            /** Name */
+            name: string;
+            /**
+             * Origin
+             * @enum {string}
+             */
+            origin: "literature" | "local";
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "active" | "deprecated";
+            /** Superseded By */
+            superseded_by: string | null;
+            /** Symbol */
+            symbol: string | null;
+            /** Test Standard */
+            test_standard: string | null;
+            /** Unit */
+            unit: string | null;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Value Type */
+            value_type: string;
+        };
+        /** FeedPropertyPage */
+        FeedPropertyPage: {
+            /** Items */
+            items: components["schemas"]["FeedPropertyOut"][];
+            /** Page */
+            page: number;
+            /** Page Size */
+            page_size: number;
+            /** Total */
+            total: number;
+        };
         /** FitOut */
         FitOut: {
             /**
@@ -13265,6 +13610,71 @@ export interface components {
             os: string;
             /** Uptime Seconds */
             uptime_seconds: number | null;
+        };
+        /** ImportErrorOut */
+        ImportErrorOut: {
+            /** Message */
+            message: string;
+            /** Row */
+            row: number;
+        };
+        /** ImportFieldOut */
+        ImportFieldOut: {
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "create" | "update" | "move" | "restore" | "unchanged";
+            /** Before Name */
+            before_name?: string | null;
+            /** Key */
+            key: string;
+            /** Name */
+            name: string;
+        };
+        /** ImportGroupOut */
+        ImportGroupOut: {
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "create" | "update" | "move" | "restore" | "unchanged";
+            /** Before Field Key */
+            before_field_key?: string | null;
+            /** Before Name */
+            before_name?: string | null;
+            /** Field Key */
+            field_key: string;
+            /** Key */
+            key: string;
+            /** Name */
+            name: string;
+        };
+        /** ImportMemberOut */
+        ImportMemberOut: {
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "assign" | "move" | "unchanged";
+            /** Before Group Key */
+            before_group_key?: string | null;
+            /**
+             * Cross Domain
+             * @default false
+             */
+            cross_domain: boolean;
+            /**
+             * Domain
+             * @default
+             */
+            domain: string;
+            /** Group Key */
+            group_key: string;
+            /** Property Key */
+            property_key: string;
+            /** Property Name */
+            property_name: string;
         };
         /** ImportResultOut */
         ImportResultOut: {
@@ -15085,6 +15495,11 @@ export interface components {
             expires_in_days?: number | null;
             /** Name */
             name: string;
+            /**
+             * Read Only
+             * @default false
+             */
+            read_only: boolean;
         };
         /** PatCreateResponse */
         PatCreateResponse: {
@@ -15112,6 +15527,11 @@ export interface components {
             name: string;
             /** Prefix */
             prefix: string;
+            /**
+             * Read Only
+             * @default false
+             */
+            read_only: boolean;
             /** Revoked At */
             revoked_at: string | null;
         };
@@ -15915,6 +16335,92 @@ export interface components {
             properties: components["schemas"]["PropertyDictionaryEntryOut"][];
             /** Version */
             version: string;
+        };
+        /** PropertyFieldCreate */
+        PropertyFieldCreate: {
+            /** Description */
+            description?: string | null;
+            /** Key */
+            key?: string | null;
+            /** Name */
+            name: string;
+        };
+        /** PropertyFieldOut */
+        PropertyFieldOut: {
+            /** Description */
+            description: string | null;
+            /** Group Count */
+            group_count: number;
+            /** Key */
+            key: string;
+            /** Name */
+            name: string;
+            /** Property Count */
+            property_count: number;
+            /** Retired */
+            retired: boolean;
+            /** Sort Order */
+            sort_order: number;
+        };
+        /**
+         * PropertyFieldUpdate
+         * @description 부분 수정 — 안 보낸 칸은 그대로. `description: null` 은 설명을 비운다.
+         *
+         *     `retired` 는 폐기(true) · 되살리기(false). 키는 못 바꾼다(바깥이 키로 잇는다).
+         */
+        PropertyFieldUpdate: {
+            /** Description */
+            description?: string | null;
+            /** Name */
+            name?: string | null;
+            /** Retired */
+            retired?: boolean | null;
+            /** Sort Order */
+            sort_order?: number | null;
+        };
+        /** PropertyGroupCreate */
+        PropertyGroupCreate: {
+            /** Description */
+            description?: string | null;
+            /** Field Key */
+            field_key: string;
+            /** Key */
+            key?: string | null;
+            /** Name */
+            name: string;
+        };
+        /** PropertyGroupOut */
+        PropertyGroupOut: {
+            /** Description */
+            description: string | null;
+            /** Field Key */
+            field_key: string;
+            /** Key */
+            key: string;
+            /** Name */
+            name: string;
+            /** Property Count */
+            property_count: number;
+            /** Retired */
+            retired: boolean;
+            /** Sort Order */
+            sort_order: number;
+        };
+        /**
+         * PropertyGroupUpdate
+         * @description 부분 수정. `field_key` 를 보내면 다른 분야로 옮긴다(든 물성은 함께 간다).
+         */
+        PropertyGroupUpdate: {
+            /** Description */
+            description?: string | null;
+            /** Field Key */
+            field_key?: string | null;
+            /** Name */
+            name?: string | null;
+            /** Retired */
+            retired?: boolean | null;
+            /** Sort Order */
+            sort_order?: number | null;
         };
         /**
          * PropertyHitOut
@@ -18693,6 +19199,110 @@ export interface components {
             label: string;
         };
         /**
+         * TaxonomyAssignIn
+         * @description 물성 여럿을 한 물성군에 넣는다. `group_key: null` 이면 군에서 뺀다(미분류).
+         */
+        TaxonomyAssignIn: {
+            /** Group Key */
+            group_key: string | null;
+            /** Property Keys */
+            property_keys: string[];
+        };
+        /** TaxonomyAssignOut */
+        TaxonomyAssignOut: {
+            /** Changed */
+            changed: string[];
+            /** Group Key */
+            group_key: string | null;
+            /** Unchanged */
+            unchanged: string[];
+        };
+        /** TaxonomyImportIn */
+        TaxonomyImportIn: {
+            /**
+             * Dry Run
+             * @default true
+             */
+            dry_run: boolean;
+            /** Rows */
+            rows: components["schemas"]["TaxonomyImportRow"][];
+        };
+        /** TaxonomyImportOut */
+        TaxonomyImportOut: {
+            /** Applied */
+            applied: boolean;
+            /** Errors */
+            errors: components["schemas"]["ImportErrorOut"][];
+            /** Fields */
+            fields: components["schemas"]["ImportFieldOut"][];
+            /** Groups */
+            groups: components["schemas"]["ImportGroupOut"][];
+            /** Members */
+            members: components["schemas"]["ImportMemberOut"][];
+        };
+        /**
+         * TaxonomyImportRow
+         * @description 한 줄 = 분야 > 물성군 > 물성 한 갈래.
+         *
+         *     물성 칸이 비면 그 줄은 분야 · 물성군만 만든다(빈 군). 각 칸은 **이름이나 키** 어느 것을
+         *     적어도 된다 — 키 칸을 따로 주면 그 키로 찾고, 없으면 그 키로 만든다(SP 의 키를 그대로
+         *     가져오면 두 시스템의 키가 같아진다. SP 는 첫 연동에서 **이름**으로 잇는다).
+         */
+        TaxonomyImportRow: {
+            /** Field */
+            field?: string | null;
+            /** Field Description */
+            field_description?: string | null;
+            /** Field Key */
+            field_key?: string | null;
+            /** Group */
+            group?: string | null;
+            /** Group Description */
+            group_description?: string | null;
+            /** Group Key */
+            group_key?: string | null;
+            /** Property */
+            property?: string | null;
+        };
+        /** TaxonomyOut */
+        TaxonomyOut: {
+            /** Fields */
+            fields: components["schemas"]["PropertyFieldOut"][];
+            /** Groups */
+            groups: components["schemas"]["PropertyGroupOut"][];
+            /** Properties */
+            properties: components["schemas"]["TaxonomyPropertyOut"][];
+            /**
+             * Truncated
+             * @default false
+             */
+            truncated: boolean;
+        };
+        /**
+         * TaxonomyPropertyOut
+         * @description 분류 화면의 물성 한 줄 — 고르고 옮기는 데 필요한 것만.
+         */
+        TaxonomyPropertyOut: {
+            /** Deprecated */
+            deprecated: boolean;
+            /** Domain */
+            domain: string;
+            /** Group Key */
+            group_key: string | null;
+            /** Key */
+            key: string;
+            /** Local */
+            local: boolean;
+            /** Name */
+            name: string;
+            /** Si Unit */
+            si_unit: string | null;
+            /** Symbol */
+            symbol: string | null;
+            /** Value Count */
+            value_count: number;
+        };
+        /**
          * TemporaryPasswordResponse
          * @description 임시 비밀번호는 이 응답에서 한 번만 나온다.
          *
@@ -21239,6 +21849,102 @@ export interface operations {
             };
         };
     };
+    feed_fields_api_catalog_feed_fields_get: {
+        parameters: {
+            query?: {
+                page?: number;
+                page_size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeedFieldPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    feed_groups_api_catalog_feed_groups_get: {
+        parameters: {
+            query?: {
+                page?: number;
+                page_size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeedGroupPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    feed_properties_api_catalog_feed_properties_get: {
+        parameters: {
+            query?: {
+                page?: number;
+                page_size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeedPropertyPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_link_api_catalog_links__material_id__get: {
         parameters: {
             query?: never;
@@ -22167,6 +22873,228 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CatalogSummaryOut"];
+                };
+            };
+        };
+    };
+    get_taxonomy_api_catalog_taxonomy_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaxonomyOut"];
+                };
+            };
+        };
+    };
+    create_field_api_catalog_taxonomy_fields_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PropertyFieldCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PropertyFieldOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_field_api_catalog_taxonomy_fields__key__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PropertyFieldUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PropertyFieldOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_group_api_catalog_taxonomy_groups_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PropertyGroupCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PropertyGroupOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_group_api_catalog_taxonomy_groups__key__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PropertyGroupUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PropertyGroupOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    import_taxonomy_api_catalog_taxonomy_import_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaxonomyImportIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaxonomyImportOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    assign_members_api_catalog_taxonomy_members_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaxonomyAssignIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaxonomyAssignOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

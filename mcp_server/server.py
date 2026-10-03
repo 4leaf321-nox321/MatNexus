@@ -3788,6 +3788,158 @@ async def resolve_property(ctx: Context, name: str) -> dict[str, Any]:
 
 
 @mcp.tool()
+async def get_property_classification(ctx: Context, field: str | None = None) -> dict[str, Any]:
+    """**물성 분류 — 분야 › 물성군 › 물성**(ADR 0054). 「강도 계열 물성이 뭐가 있나」 에 답한다.
+
+    물성(허브 키)은 문헌 + 사내(`local.`) 전부다. 물성 하나는 물성군 하나에, 물성군 하나는
+    분야 하나에 든다. 바깥 시스템(Standard Platform)도 이 분류 그대로 물성 목록을 받는다.
+
+    `field` 를 주면 그 분야의 군과 군 안의 물성까지(이름이나 키 — 「기계」 · `mechanical`).
+    비우면 분야마다 군 이름과 물성 수만 준다 — 271종을 한 번에 펴면 길다.
+
+    **분류는 키 앞머리와 다를 수 있다** — `mechanical.` 은 식별자의 일부일 뿐이다. 사람에게는
+    분야 · 군의 이름으로 말한다. `unclassified` 는 아직 군에 안 든 물성 수다 — 분류를 고치는
+    것은 `classify_properties` 다.
+    """
+    got = await _get(ctx, "/catalog/taxonomy")
+    if "error" in got:
+        return got
+    fields = [one for one in got.get("fields", []) if not one.get("retired")]
+    groups = [one for one in got.get("groups", []) if not one.get("retired")]
+    properties = got.get("properties", [])
+    inside: dict[str, list[dict[str, Any]]] = {}
+    for one in properties:
+        if one.get("group_key"):
+            inside.setdefault(one["group_key"], []).append(one)
+    if field:
+        wanted = field.strip().casefold()
+        hit = next(
+            (
+                one
+                for one in fields
+                if wanted in (one["key"].casefold(), one["name"].casefold())
+            ),
+            None,
+        )
+        if hit is None:
+            return {
+                "error": f"'{field}' 분야가 없습니다 — 아래 이름이나 키로 다시 부르세요.",
+                "fields": [{"key": one["key"], "name": one["name"]} for one in fields],
+            }
+        return {
+            "field": {"key": hit["key"], "name": hit["name"], "description": hit["description"]},
+            "groups": [
+                {
+                    "key": group["key"],
+                    "name": group["name"],
+                    "description": group["description"],
+                    "properties": [
+                        {
+                            "key": one["key"],
+                            "name": one["name"],
+                            "unit": one["si_unit"],
+                            "deprecated": one["deprecated"],
+                        }
+                        for one in inside.get(group["key"], [])
+                    ],
+                }
+                for group in groups
+                if group["field_key"] == hit["key"]
+            ],
+        }
+    return {
+        "fields": [
+            {
+                "key": one["key"],
+                "name": one["name"],
+                "property_count": one["property_count"],
+                "groups": [
+                    {
+                        "key": group["key"],
+                        "name": group["name"],
+                        "property_count": group["property_count"],
+                    }
+                    for group in groups
+                    if group["field_key"] == one["key"]
+                ],
+            }
+            for one in fields
+        ],
+        "total": len(properties),
+        "unclassified": sum(1 for one in properties if not one.get("group_key")),
+        "note": "군 안의 물성까지 보려면 field 를 주고 다시 부르세요.",
+    }
+
+
+#: 밀어 넣기 미리보기에서 종류마다 싣는 줄 수 — 271종을 다 실으면 대화가 그것으로 찬다.
+_PLAN_ITEMS = 60
+
+
+@mcp.tool()
+async def classify_properties(
+    ctx: Context, rows: list[dict[str, str]], dry_run: bool = True
+) -> dict[str, Any]:
+    """★ 물성 분류를 밀어 넣는다 — 줄마다 분야 › 물성군 › 물성. **기본이 미리보기다.**
+
+        rows = [{"field": "기계", "group": "강도", "property": "mechanical.yield_strength"}, …]
+
+        field · group   이름이나 키. 없는 분야 · 군은 만든다(키는 서버가 지어 준다)
+        property        **키를 적어라.** 이름도 받지만 정확히 하나에 맞아야 하고, 이름이 같은
+                        다른 물성이 있다 — 「항복응력」 은 유변학 물성이다. `resolve_property`
+                        로 키를 먼저 찾는다. 비우면 그 줄은 분야 · 군만 만든다
+        field_key · group_key · field_description · group_description   (선택)
+
+    미리보기의 `errors` 가 하나라도 있으면 **하나도 안 들어간다.** `cross_domain` 에 실린
+    물성은 키 앞머리와 다른 분야로 가는 것 — 사람에게 맞는지 묻는다. 다른 군에 있던 물성은
+    옮겨진다(물성은 한 군에만 든다). 사람이 「그대로」 라고 하면 `dry_run=False` 로 다시 부른다.
+    **자료 관리자의 토큰이어야** 한다 — 아니면 서버가 거절한다.
+    """
+    if not rows:
+        return {"error": "rows 가 비었습니다 — 줄마다 field · group · property 를 적으세요."}
+    got = await _send(
+        ctx, "POST", "/catalog/taxonomy/import", {"rows": rows, "dry_run": dry_run}
+    )
+    if not isinstance(got, dict) or "error" in got:
+        return got
+
+    def changed(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        return [one for one in items if one.get("action") != "unchanged"]
+
+    members = got.get("members", [])
+    out: dict[str, Any] = {
+        "applied": got.get("applied"),
+        "errors": got.get("errors", []),
+        "counts": {
+            kind: {
+                action: sum(1 for one in got.get(kind, []) if one.get("action") == action)
+                for action in ("create", "update", "move", "restore", "assign", "unchanged")
+                if any(one.get("action") == action for one in got.get(kind, []))
+            }
+            for kind in ("fields", "groups", "members")
+        },
+        "fields": changed(got.get("fields", []))[:_PLAN_ITEMS],
+        "groups": changed(got.get("groups", []))[:_PLAN_ITEMS],
+        "members": changed(members)[:_PLAN_ITEMS],
+        "cross_domain": [
+            {
+                "property_key": one["property_key"],
+                "property_name": one["property_name"],
+                "domain": one.get("domain"),
+                "group_key": one["group_key"],
+            }
+            for one in changed(members)
+            if one.get("cross_domain")
+        ],
+    }
+    if dry_run:
+        out["note"] = (
+            "미리보기다 — 아무것도 안 바뀌었다. 새로 생기는 분야 · 군과 cross_domain 을 사람에게"
+            " 보이고, 「그대로」 라고 하면 dry_run=False 로 다시 부른다. errors 가 있으면 안 들어간다."
+        )
+    return out
+
+
+@mcp.tool()
 async def find_by_property(
     ctx: Context,
     property: str,

@@ -38,6 +38,8 @@ FILES = {
     "grouping": APP / "grouping" / "routes.py",
     "viscoelastic": APP / "viscoelastic" / "routes.py",
     "catalog": APP / "catalog" / "routes.py",
+    # 물성 분류(ADR 0054) — 분류 고치기는 정의문과 같은 자료 관리자 판정이다.
+    "catalog_taxonomy": APP / "catalog" / "taxonomy_routes.py",
     "ownership": APP / "ownership" / "routes.py",
     "equipment": APP / "equipment" / "routes.py",
     "workbench": APP / "workbench" / "routes.py",

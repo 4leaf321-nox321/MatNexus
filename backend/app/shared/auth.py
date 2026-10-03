@@ -26,6 +26,9 @@ logger = logging.getLogger(__name__)
 
 _UNAUTHENTICATED = "로그인이 필요합니다."
 
+#: 읽기 전용 토큰이 쓸 수 있는 메서드.
+_READ_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
+
 
 def _bearer(request: Request) -> str | None:
     header = request.headers.get("authorization")
@@ -40,14 +43,21 @@ def current_user(request: Request, db: Session = Depends(get_db)) -> User:
         raise AppError("MNX-AUTH-0100", _UNAUTHENTICATED, status=401)
 
     if token.startswith(security.PAT_PREFIX):
-        user = services.resolve_pat(db, token)
-        if user is None:
+        found = services.resolve_pat(db, token)
+        if found is None:
             logger.warning("PAT 인증 실패 (prefix=%s)", token[: len(security.PAT_PREFIX) + 6])
             raise AppError("MNX-AUTH-0101", "토큰이 유효하지 않습니다.", status=401)
+        holder, pat = found
+        # **읽기 전용 토큰은 읽기만 한다**(ADR 0054). 판정을 라우트마다 두면 새 쓰기 길이
+        # 생길 때 빠진다 — 모든 요청이 지나는 여기서 메서드로 가른다.
+        if pat.read_only and request.method not in _READ_METHODS:
+            raise Forbidden(
+                "MNX-AUTH-0104", "읽기 전용 토큰입니다 — 이 토큰으로는 바꿀 수 없습니다."
+            )
         # 접근 로그 미들웨어가 "누가" 를 알 수 있게 scope 에 남긴다. 미들웨어는
         # 인증보다 바깥에 있어서 스스로는 사용자를 알 수 없다.
-        request.scope["mnx_user_id"] = user.id
-        return user
+        request.scope["mnx_user_id"] = holder.id
+        return holder
 
     payload = security.decode_access_token(token)
     if payload is None:

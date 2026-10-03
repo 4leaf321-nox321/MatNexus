@@ -210,6 +210,12 @@ class CatalogDefinition(Base):
     imported_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+    """이 정의가 마지막으로 바뀐 때 — 바깥(SP)이 물성 목록을 읽을 때 행마다 싣는다(ADR 0054).
+    이관은 값이 같으면 UPDATE 를 안 내므로 배포마다 바뀌지 않는다. 분류 소속이 바뀌어도 찍는다
+    (소속은 옆 표에 살지만 목록의 행에는 물성군이 실린다)."""
 
     # **키는 지우지 않고 폐기한다**(2026-09-12). 값·매핑이 걸린 키는 못 지우고, 사전을
     # 받아 간 다른 시스템이 그 키로 잇고 있다 — 지우면 그쪽이 같은 날 깨진다. 폐기는
