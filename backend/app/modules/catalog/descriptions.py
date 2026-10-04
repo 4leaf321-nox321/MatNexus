@@ -62,6 +62,10 @@ def refresh_property_descriptions(
         .order_by(CatalogDefinition.key)
     ):
         text = texts[one.key]
+        # **원본에 정의문이 있으면 원본이 정본이다**(ADR 0050 결정 4) — 씨앗이 그것을 덮으면
+        # 배포마다 이관(원본 글)과 씨앗(사내 글)이 번갈아 쓴다.
+        if (one.source_description or "").strip():
+            continue
         current = (one.description or "").strip()
         if current == text:
             if one.description_seed_digest != digest(text):

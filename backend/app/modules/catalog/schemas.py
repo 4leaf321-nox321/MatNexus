@@ -47,6 +47,9 @@ class CatalogMaterialOut(BaseModel):
     material_class: str | None
     grade: str | None
     value_count: int = 0
+    source_missing_at: datetime | None = None
+    """원본 스냅샷에서 빠진 것을 본 때 — 비어 있으면 원본에 있다. 이관은 지우지 않고
+    표시만 하며, 빠진 값은 대표값 · 값 검색 · 커버리지에서 빠진다(2026-10-04)."""
     matched: CatalogMatchedOut | None = None
     """값 범위로 걸렀을 때만 — 이 재료에서 걸린 값들."""
 
@@ -139,6 +142,9 @@ class CatalogValueOut(BaseModel):
     representative: bool = False
     origin: str = "catalog"
     """`catalog`(이관) · `local`(직접 넣음). local 은 지울 수 있고 원본 검산에 안 든다."""
+    source_missing_at: datetime | None = None
+    """원본 스냅샷에서 빠진 것을 본 때 — 비어 있으면 원본에 있다. 이관은 지우지 않고
+    표시만 하며, 빠진 값은 대표값 · 값 검색 · 커버리지에서 빠진다(2026-10-04)."""
     created_by: str | None = None
     """직접 넣은 값이면 넣은 사람."""
     """같은 물성의 후보 중 대표로 뽑힌 값인가. **진 후보도 함께 온다** — 화면이
@@ -292,6 +298,9 @@ class CatalogMaterialDetailOut(BaseModel):
     grade: str | None
     attributes: dict[str, Any] | None
     origin: str = "catalog"
+    source_missing_at: datetime | None = None
+    """원본 스냅샷에서 빠진 것을 본 때 — 비어 있으면 원본에 있다. 이관은 지우지 않고
+    표시만 하며, 빠진 값은 대표값 · 값 검색 · 커버리지에서 빠진다(2026-10-04)."""
     created_by: str | None = None
     values: list[CatalogValueOut]
 

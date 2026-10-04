@@ -137,18 +137,24 @@ class Test씨앗:
         assert "유변학" in texts[YIELD] and "항복강도" in texts[PASTE]
 
 
-def _snapshot(path: Path) -> Path:
-    """원본 모양의 빈 이관 파일 하나 — 정의문이 **비어 있는** 정의 한 줄."""
+def _snapshot(path: Path, description: str | None = None) -> Path:
+    """원본 모양의 이관 파일 하나 — 정의 한 줄. 정의문은 기본으로 **비어 있다**(지금 원본).
+
+    같은 자리에 다시 부르면 정의문만 바꾼다 — 원본의 다음 판을 흉내 낸다.
+    """
     db = path / "mt.db"
+    fresh = not db.exists()
     con = sqlite3.connect(db)
-    for table, columns in importer.EXPECTED_COLUMNS.items():
-        con.execute(f"create table {table} ({', '.join(sorted(columns))})")
-    con.execute(
-        "insert into property_definition (id, key, domain, name, symbol, si_unit, value_type, "
-        "description, test_standard, condition_axes, created_at) values "
-        f"(1, '{YIELD}', 'mechanical', '항복강도', 'Rp0.2', 'Pa', 'numeric', null, "
-        "'ISO 6892', null, '2026-07-01 00:00:00')"
-    )
+    if fresh:
+        for table, columns in importer.EXPECTED_COLUMNS.items():
+            con.execute(f"create table {table} ({', '.join(sorted(columns))})")
+        con.execute(
+            "insert into property_definition (id, key, domain, name, symbol, si_unit, "
+            "value_type, description, test_standard, condition_axes, created_at) values "
+            f"(1, '{YIELD}', 'mechanical', '항복강도', 'Rp0.2', 'Pa', 'numeric', null, "
+            "'ISO 6892', null, '2026-07-01 00:00:00')"
+        )
+    con.execute("update property_definition set description = ? where id = 1", (description,))
     con.commit()
     con.close()
     return db
@@ -171,6 +177,76 @@ class Test이관:
         db.flush()
 
         assert one.description == "사내가 적은 정의문."
+
+
+class Test원본에_정의문이_생기면:
+    """지금 원본의 정의문은 271종 전부 비었다 — **생기는 날** 무엇이 일어나나(2026-10-04).
+
+    ADR 0050 결정 4 는 「원본이 정본이다」 였고, 이관은 원본 글로 정의문 칸을 덮게 되어 있었다.
+    그러면 자료 관리자가 고친 글이 배포마다 원본 글로 되돌아간다 — 고치기 경로는 「배포가
+    안 덮는다」 고 약속하는데. 이제 원본 글은 **사람이 안 고친 동안만** 이긴다.
+    """
+
+    ORIGINAL = "원본이 적은 항복강도의 정의."
+
+    def test_빈_정의문을_원본_글로_채운다(self, db: Session, tmp_path: Path) -> None:
+        importer.run(db, _snapshot(tmp_path, self.ORIGINAL))
+        db.flush()
+        one = db.scalar(select(CatalogDefinition).where(CatalogDefinition.key == YIELD))
+        assert one is not None
+        assert one.description == self.ORIGINAL
+        assert one.source_description == self.ORIGINAL
+
+    def test_씨앗이_쓴_글은_원본_글로_바뀌고_씨앗이_되돌리지_않는다(
+        self, db: Session, tmp_path: Path
+    ) -> None:
+        """**배포마다 둘이 번갈아 쓰지 않는다** — 원본 글이 있으면 씨앗은 그 키를 안 채운다."""
+        snapshot = _snapshot(tmp_path)
+        importer.run(db, snapshot)
+        db.flush()
+        descriptions.refresh_property_descriptions(db, {YIELD: SEED[YIELD]})
+        db.flush()
+        one = db.scalar(select(CatalogDefinition).where(CatalogDefinition.key == YIELD))
+        assert one is not None and one.description == SEED[YIELD]
+
+        # 다음 판 원본에 정의문이 생겼다 — 아무도 안 고친 씨앗 글은 원본 글로 바뀐다.
+        importer.run(db, _snapshot(tmp_path, self.ORIGINAL))
+        db.flush()
+        assert one.description == self.ORIGINAL
+        # 배포는 이관 뒤에 씨앗을 한 번 더 맞춘다 — 원본 글을 씨앗 글로 되돌리면 안 된다.
+        filled, _ = descriptions.refresh_property_descriptions(db, {YIELD: SEED[YIELD]})
+        assert filled == []
+        assert one.description == self.ORIGINAL
+        # 다음 배포도 같다.
+        again = importer.run(db, _snapshot(tmp_path, self.ORIGINAL))
+        assert again.tables["정의"].updated == 0
+        assert one.description == self.ORIGINAL
+
+    def test_자료_관리자가_고친_글은_원본도_안_덮는다(
+        self, db: Session, tmp_path: Path
+    ) -> None:
+        importer.run(db, _snapshot(tmp_path, self.ORIGINAL))
+        db.flush()
+        one = db.scalar(select(CatalogDefinition).where(CatalogDefinition.key == YIELD))
+        assert one is not None
+        one.description = "자료 관리자가 다듬은 정의."
+        db.flush()
+
+        importer.run(db, _snapshot(tmp_path, "원본의 다음 판 정의."))
+        db.flush()
+        assert one.description == "자료 관리자가 다듬은 정의."
+        # 원본 글은 따로 든다 — 무엇이 달라졌는지 볼 수 있게.
+        assert one.source_description == "원본의 다음 판 정의."
+
+    def test_아무도_안_고쳤으면_원본의_다음_판을_따른다(
+        self, db: Session, tmp_path: Path
+    ) -> None:
+        importer.run(db, _snapshot(tmp_path, self.ORIGINAL))
+        db.flush()
+        importer.run(db, _snapshot(tmp_path, "원본의 다음 판 정의."))
+        db.flush()
+        one = db.scalar(select(CatalogDefinition).where(CatalogDefinition.key == YIELD))
+        assert one is not None and one.description == "원본의 다음 판 정의."
 
 
 class Test조회:

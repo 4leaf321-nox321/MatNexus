@@ -20,12 +20,14 @@
 from __future__ import annotations
 
 import sqlite3
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.modules.catalog import descriptions
 from app.modules.catalog.models import (
     QUALITY_TIERS,
     CatalogDefinition,
@@ -45,6 +47,7 @@ from app.shared.mt_import import (
 from app.shared.mt_import import (
     check_schema,
     existing,
+    mark_missing,
     parse_dt,
     parse_json,
     upsert,
@@ -136,6 +139,29 @@ def _check_schema(con: sqlite3.Connection) -> None:
         )
 
 
+def _fill_description(item: CatalogDefinition, text: str | None) -> None:
+    """원본 정의문을 정의문 칸에 — **사람이 안 고친 동안만**(ADR 0050 결정 4, 2026-10-04).
+
+    - 원본이 비었으면 아무것도 안 한다. 빈 값으로 덮으면 사내 정의문이 배포마다 지워진다.
+    - 정의문이 비었거나 **기계가 마지막으로 쓴 글 그대로**(씨앗이든 원본이든, 지문이
+      같다)면 원본 글로 바꾼다 — 원본이 정본이다.
+    - 사람이 고친 글(지문이 다르다)은 안 덮는다. 전에는 원본에 정의문이 생기는 순간 자료
+      관리자가 고친 글이 배포마다 원본 글로 되돌아갔을 것이다 — 정의문 고치기 경로는
+      「배포가 안 덮는다」 고 약속한다.
+    """
+    raw = (text or "").strip()
+    if not raw:
+        return
+    current = (item.description or "").strip()
+    if current == raw:
+        if item.description_seed_digest != descriptions.digest(raw):
+            item.description_seed_digest = descriptions.digest(raw)
+        return
+    if not current or item.description_seed_digest == descriptions.digest(current):
+        item.description = raw
+        item.description_seed_digest = descriptions.digest(raw)
+
+
 def run(db: Session, sqlite_path: str | Path) -> Report:
     """이관 본체. **커밋하지 않는다** — 드라이런/적용은 부르는 쪽이 정한다.
 
@@ -150,10 +176,15 @@ def run(db: Session, sqlite_path: str | Path) -> Report:
         _check_schema(con)
         report = Report()
 
+        # 한 번의 이관은 한 시각이다 — 「언제 사라졌나」 를 줄마다 다르게 적지 않는다.
+        now = datetime.now(UTC)
+
         defs = report.tables.setdefault("정의", TableReport())
         def_cache = existing(db, CatalogDefinition)
+        seen: set[int] = set()
         for row in con.execute("select * from property_definition"):
-            upsert(
+            seen.add(row["id"])
+            item = upsert(
                 db,
                 def_cache,
                 CatalogDefinition,
@@ -165,16 +196,16 @@ def run(db: Session, sqlite_path: str | Path) -> Report:
                     "symbol": row["symbol"],
                     "si_unit": row["si_unit"],
                     "value_type": row["value_type"],
-                    # **원본에 정의문이 없으면 칸을 안 건드린다**(ADR 0050). 배포마다 이 이관이
-                    # 다시 도는데, 빈 값으로 덮으면 사내가 적은 정의문이 배포마다 지워진다.
-                    # 원본에 정의문이 생기면 그것이 이긴다 — 원본이 정본이다.
-                    **({"description": row["description"]} if row["description"] else {}),
+                    # 원본 정의문은 **따로 든다** — 정의문 칸은 `_fill_description` 이 정한다.
+                    "source_description": (row["description"] or "").strip() or None,
                     "test_standard": row["test_standard"],
                     "condition_axes": parse_json(row["condition_axes"]),
                     "source_created_at": parse_dt(row["created_at"]),
                 },
                 defs,
             )
+            _fill_description(item, row["description"])
+        mark_missing(def_cache, seen, defs, "정의", now)
         db.flush()
 
         sources = report.tables.setdefault("출처", TableReport())
@@ -204,6 +235,7 @@ def run(db: Session, sqlite_path: str | Path) -> Report:
                 sources,
             )
             source_ids[row["id"]] = item
+        mark_missing(source_cache, set(source_ids), sources, "출처", now)
         db.flush()
 
         materials = report.tables.setdefault("재료", TableReport())
@@ -230,6 +262,7 @@ def run(db: Session, sqlite_path: str | Path) -> Report:
                 materials,
             )
             material_ids[row["id"]] = item
+        mark_missing(material_cache, set(material_ids), materials, "재료", now)
         db.flush()
 
         values = report.tables.setdefault("값", TableReport())
@@ -271,6 +304,13 @@ def run(db: Session, sqlite_path: str | Path) -> Report:
                 },
                 values,
             )
+        mark_missing(
+            value_cache,
+            {one[0] for one in con.execute("select id from property_value")},
+            values,
+            "값",
+            now,
+        )
         db.flush()
 
         report.problems = verify(db, con)
@@ -289,10 +329,15 @@ def verify(db: Session, con: sqlite3.Connection) -> list[str]:
         ("material", CatalogMaterial.mt_id, "재료"),
         ("property_value", CatalogValue.mt_id, "값"),
     ]
-    # 여기서 직접 넣은 줄(`mt_id IS NULL`)은 원본에 없다 — 세면 늘 불일치다.
+    # 여기서 직접 넣은 줄(`mt_id IS NULL`)은 원본에 없다 — 세면 늘 불일치다. **원본에서
+    # 빠져 표시만 해 둔 줄도 안 센다**(2026-10-04) — 세면 원본이 한 줄이라도 지우는 순간
+    # 행 수가 어긋나 적재가 통째로 거부되고, 배포는 계속되므로 그 뒤로 문헌 데이터가 조용히
+    # 영영 안 바뀐다.
     for src_table, mt_id, label in counts:
         src = con.execute(f"select count(*) from {src_table}").fetchone()[0]
-        dst = db.scalar(select(func.count(mt_id)))
+        dst = db.scalar(
+            select(func.count(mt_id)).where(mt_id.class_.source_missing_at.is_(None))
+        )
         if src != dst:
             problems.append(f"{label} 행수 불일치 — 원본 {src} vs 이관 {dst}")
 
@@ -303,7 +348,11 @@ def verify(db: Session, con: sqlite3.Connection) -> list[str]:
     dst_null = db.scalar(
         select(func.count())
         .select_from(CatalogValue)
-        .where(CatalogValue.source_id.is_(None), CatalogValue.mt_id.is_not(None))
+        .where(
+            CatalogValue.source_id.is_(None),
+            CatalogValue.mt_id.is_not(None),
+            CatalogValue.source_missing_at.is_(None),
+        )
     )
     if src_null != dst_null:
         problems.append(f"출처 없는 값 불일치 — 원본 {src_null} vs 이관 {dst_null}")
@@ -315,7 +364,11 @@ def verify(db: Session, con: sqlite3.Connection) -> list[str]:
     dst_t4 = db.scalar(
         select(func.count())
         .select_from(CatalogValue)
-        .where(CatalogValue.quality_tier == 4, CatalogValue.mt_id.is_not(None))
+        .where(
+            CatalogValue.quality_tier == 4,
+            CatalogValue.mt_id.is_not(None),
+            CatalogValue.source_missing_at.is_(None),
+        )
     )
     if src_t4 != dst_t4:
         problems.append(f"tier4 개수 불일치 — 원본 {src_t4} vs 이관 {dst_t4}")

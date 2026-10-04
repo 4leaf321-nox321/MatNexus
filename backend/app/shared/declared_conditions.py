@@ -32,6 +32,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.modules.vocabulary.models import Vocabulary, VocabularyTerm
+from app.shared import standard_conditions
 
 
 @dataclass(frozen=True)
@@ -86,38 +87,30 @@ def of_items(db: Session) -> dict[str, Condition]:
     }
 
 
+#: 축 → 문헌 조건을 읽는 양의 이름(`standard_conditions.catalog_keys`).
+_QUANTITY = {
+    TEMPERATURE.key: "temperature",
+    FREQUENCY.key: "frequency",
+    WAVELENGTH.key: "wavelength",
+}
+
+#: 표준 조건(값 검색 · 커버리지의 조건) → 점이 그 값을 드는 칸. 파장은 아직 표준 조건이 아니다.
+POINT_KEY_OF_STANDARD: dict[str, str] = {
+    "temperature": TEMPERATURE.key,
+    "frequency": FREQUENCY.key,
+}
+
+
 def from_catalog(conditions: dict[str, Any] | None, condition: Condition) -> float | None:
     """문헌 값의 조건에서 **이 축의 SI 값**을 꺼낸다. 없으면 `None`.
 
     카탈로그의 조건 낱말은 이관 차수마다 달랐다 — 온도는 `temperature_k` 와
     `temperature_c` 가 둘 다 있다(개발 DB 8,458 · 9,597건). 전에는 반영이 `temperature_k`
-    만 읽어서 **섭씨로 적힌 문헌 값은 반영하면 온도가 빠졌다**(2026-10-01 실측).
+    만 읽어서 **섭씨로 적힌 문헌 값은 반영하면 온도가 빠졌다**(2026-10-01 실측). 주파수도
+    `frequency_hz` 만 읽어 `frequency_MHz` 같은 이름의 값은 빠졌다(2026-10-04) — 이제
+    값 검색 · 커버리지와 같은 표(`standard_conditions.UNIT_KEYS`)를 읽는다.
     """
-    found = conditions or {}
-
-    def number(key: str) -> float | None:
-        value = found.get(key)
-        return (
-            float(value)
-            if isinstance(value, int | float) and not isinstance(value, bool)
-            else None
-        )
-
-    if condition is TEMPERATURE:
-        kelvin = number("temperature_k")
-        if kelvin is not None:
-            return kelvin
-        celsius = number("temperature_c")
-        return celsius + 273.15 if celsius is not None else None
-    if condition is FREQUENCY:
-        return number("frequency_hz")
-    if condition is WAVELENGTH:
-        metre = number("wavelength_m")
-        if metre is not None:
-            return metre
-        nano = number("wavelength_nm")
-        return nano * 1e-9 if nano is not None else None
-    return None
+    return standard_conditions.read_catalog(conditions, _QUANTITY[condition.key])
 
 
 def point_conditions(point: dict[str, Any]) -> dict[str, float | None]:

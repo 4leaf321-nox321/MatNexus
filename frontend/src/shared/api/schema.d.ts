@@ -10049,6 +10049,8 @@ export interface components {
             origin: string;
             /** Role */
             role: string | null;
+            /** Source Missing At */
+            source_missing_at?: string | null;
             /** Subsystem */
             subsystem: string | null;
             /** Values */
@@ -10081,6 +10083,8 @@ export interface components {
             origin: string;
             /** Role */
             role: string | null;
+            /** Source Missing At */
+            source_missing_at?: string | null;
             /** Subsystem */
             subsystem: string | null;
             /**
@@ -10404,6 +10408,8 @@ export interface components {
             source: components["schemas"]["CatalogSourceOut"] | null;
             /** Source Detail */
             source_detail: string | null;
+            /** Source Missing At */
+            source_missing_at?: string | null;
             /** Summary */
             summary?: {
                 [key: string]: unknown;

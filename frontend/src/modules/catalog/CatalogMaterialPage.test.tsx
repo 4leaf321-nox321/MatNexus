@@ -8,7 +8,7 @@
  *   직접 넣은 값은 그렇게 보인다     「직접 넣음 · 누구」, 넣은 사람만 지우기 단추
  */
 
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -201,6 +201,58 @@ describe('진 후보를 숨기지 않는다', () => {
     show()
     await screen.findByText(/T 296\.15 K/)
     expect(screen.queryByText(/corrected_by/)).toBeNull()
+  })
+})
+
+describe('값 표의 열 (2026-10-04)', () => {
+  it('열은 물성 · 값 · 등급 · 조건 · 출처 차례다', async () => {
+    show()
+    await screen.findByText(/T 296\.15 K/)
+    const [first] = screen.getAllByRole('table')
+    const heads = within(first).getAllByRole('columnheader').map((one) => one.textContent)
+    expect(heads).toEqual(['물성', '값', '등급', '조건', '출처'])
+    // 칸도 같은 차례다 — 머리만 바꾸고 칸을 안 옮기면 등급 밑에 조건이 선다.
+    const cells = within(within(first).getAllByRole('row')[1]).getAllByRole('cell')
+    expect(cells[2]).toHaveTextContent('실측')
+    expect(cells[3]).toHaveTextContent(/T 296\.15 K/)
+    expect(cells[4]).toHaveTextContent('어느 논문')
+  })
+
+  it('칸이 전부 접힌다 — 폭을 박은 표에서 안 접히면 옆 칸 위로 넘친다', async () => {
+    // 표 칸의 기본값이 whitespace-nowrap 이다. jsdom 은 배치를 안 하므로 접기를
+    // 켰는지만 본다 — 지적(2026-10-04)은 긴 조건·출처가 옆 칸 글자와 겹친 것이었다.
+    show()
+    await screen.findByText(/T 296\.15 K/)
+    for (const cell of screen.getAllByRole('cell')) {
+      expect(cell).toHaveClass('whitespace-normal')
+    }
+  })
+})
+
+describe('원본에서 빠진 것 (2026-10-04)', () => {
+  it('빠진 값은 「대안」 이 아니라 「원본에서 빠짐」 으로 서고, 줄은 지킨다', async () => {
+    // 이관은 지우지 않고 표시만 한다 — 대표 후보에서 빠졌다는 것을 그 자리에서 말한다.
+    material.mockResolvedValue({
+      ...DETAIL,
+      values: DETAIL.values.map((one, index) =>
+        index === 1
+          ? { ...one, source_missing_at: '2026-10-04T00:00:00Z', separated_by: '원본에서 빠짐' }
+          : one
+      ),
+    })
+    show()
+    const badge = await screen.findByText('원본에서 빠짐')
+    expect(badge).toHaveAttribute('title', expect.stringContaining('대표값 · 값 검색 · 덱에는 쓰지 않습니다'))
+    expect(screen.queryByText(/대안 · /)).not.toBeInTheDocument()
+  })
+
+  it('재료가 빠졌으면 머리에 선다', async () => {
+    material.mockResolvedValue({ ...DETAIL, source_missing_at: '2026-10-04T00:00:00Z' })
+    show()
+    expect(await screen.findByText('원본에서 빠짐')).toHaveAttribute(
+      'title',
+      expect.stringContaining('빠진 재료')
+    )
   })
 })
 

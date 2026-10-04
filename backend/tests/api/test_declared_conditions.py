@@ -84,6 +84,22 @@ class Test문헌_조건_옮기기:
         ) == pytest.approx(587.6e-9)
         assert declared_conditions.from_catalog({}, declared_conditions.FREQUENCY) is None
 
+    def test_주파수_이름이_달라도_읽는다(self) -> None:
+        """`frequency_hz` 만 읽어서 `frequency_MHz` 194건 · `frequency_ghz` 68건 …은 반영하면
+        주파수가 빠졌다(2026-10-04). 값 검색 · 커버리지와 같은 표를 읽는다."""
+        frequency = declared_conditions.FREQUENCY
+        assert declared_conditions.from_catalog(
+            {"frequency_MHz": 100}, frequency
+        ) == pytest.approx(1e8)
+        assert declared_conditions.from_catalog({"frequency_ghz": 10}, frequency) == (
+            pytest.approx(1e10)
+        )
+        assert declared_conditions.from_catalog(
+            {"wavelength_um": 2.5}, declared_conditions.WAVELENGTH
+        ) == pytest.approx(2.5e-6)
+        # 글은 읽지 않는다 — 「1 MHz」 를 숫자로 풀면 짐작이 섞인다.
+        assert declared_conditions.from_catalog({"frequency": "1 MHz"}, frequency) is None
+
 
 class Test기본_항목:
     def test_문헌의_전기_물성_19개가_전부_사내_항목이다(self) -> None:
@@ -295,6 +311,56 @@ class TestAPI:
         assert resent.status_code == 200, resent.text
         again = resent.json()["declared_properties"][0]["points"]
         assert [point["frequency_hz"] for point in again] == [1e6, 1e9]
+
+    def test_주파수로_물으면_그_주파수의_값이_걸린다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        material: Material,
+    ) -> None:
+        """선언값 검색이 온도만 봐서 **10 GHz 에 적은 Dk 가 주파수 검색에 안 걸렸다**
+        (2026-10-04).
+
+        점이 주파수를 드는데 검색은 그것을 모르고 「그 조건에서 잰 값이 아니다」 로 뺐다.
+        """
+        db.add(
+            CatalogDefinition(
+                key="electrical.dielectric_constant",
+                domain="electrical",
+                name="유전율",
+                value_type="numeric",
+                si_unit="1",
+            )
+        )
+        db.flush()
+        ensure_builtin_property_links(db)
+        material.declared_properties = declared.check(
+            db,
+            [dk([{"value": 3.8, "frequency_hz": 1e6}, {"value": 3.6, "frequency_hz": 1e10}])],
+        )
+        db.commit()
+
+        def found(**condition: Any) -> list[float]:
+            got = client.get(
+                "/api/catalog/properties/search",
+                params={
+                    "q": "electrical.dielectric_constant",
+                    "unit": "1",
+                    "min": 3,
+                    "max": 4,
+                    "origins": "internal",
+                    **condition,
+                },
+                headers=admin_headers,
+            )
+            assert got.status_code == 200, got.text
+            return [one["value"] for one in got.json()["hits"]]
+
+        assert found(condition="frequency", condition_unit="GHz", condition_near=10) == [3.6]
+        assert found(condition="frequency", condition_unit="MHz", condition_near=1) == [3.8]
+        # 점이 안 드는 조건(변형률속도)으로 물으면 선언값은 안 걸린다 — 있는 척하지 않는다.
+        assert found(condition="strain_rate", condition_unit="1/s", condition_near=0.001) == []
 
     def test_항목_목록이_조건과_단위_배수를_준다(
         self, client: TestClient, admin_headers: dict[str, str], material: Material

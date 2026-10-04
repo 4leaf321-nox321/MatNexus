@@ -597,3 +597,58 @@ class Test변수_값은_대표가_아니다:
         detail = client.get(f"/api/catalog/materials/{tape.id}", headers=admin_headers).json()
         assert [one["formula_term"] for one in detail["values"]] == [False]
         parameters.forget()
+
+    def test_구분으로_쓴_term_은_값_검색에도_걸린다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str]
+    ) -> None:
+        """대표값만 고치고 검색은 `term` 만 보고 빼서, short · long 값이 검색에서 계속 빠졌다.
+
+        개발 DB(2026-10-04): 최고 사용온도 48건 · 여기 상태 수명 57건. 구분 `term` 만 든 키를
+        「변수 묶음」 으로 세면 검색이 `term` 을 내라고 되묻는다 — 그것도 같은 규칙으로 센다.
+        """
+        parameters.forget()
+        key = "thermal.test_max_service_search"
+        db.add(
+            CatalogDefinition(
+                mt_id=990901,
+                key=key,
+                name="시험용 최고 사용온도(검색)",
+                domain="thermal",
+                si_unit="K",
+                value_type="number",
+            )
+        )
+        tape = CatalogMaterial(mt_id=990902, name="시험용 검색 테이프", category="polymer")
+        db.add(tape)
+        db.flush()
+        for at, (value, conditions) in enumerate(
+            (
+                (366.15, {"term": "long"}),
+                (423.15, {"term": "short"}),
+                # 식의 변수 — 한 벌의 표지가 함께 있다. 범위 안이어도 안 걸린다.
+                (400.0, {"term": "T_ref", "model": "wlf"}),
+            )
+        ):
+            db.add(
+                CatalogValue(
+                    mt_id=991000 + at,
+                    material_id=tape.id,
+                    property_key=key,
+                    value_num=value,
+                    unit="K",
+                    quality_tier=2,
+                    conditions=conditions,
+                )
+            )
+        db.commit()
+        parameters.forget()
+
+        assert not parameters.is_parameterized(db, key), "구분 term 은 변수가 아니다"
+        got = client.get(
+            "/api/catalog/properties/search",
+            params={"q": key, "unit": "K", "min": 350, "max": 450},
+            headers=admin_headers,
+        )
+        assert got.status_code == 200, got.text
+        assert sorted(one["value"] for one in got.json()["hits"]) == [366.15, 423.15]
+        parameters.forget()

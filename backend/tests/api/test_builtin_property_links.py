@@ -64,7 +64,7 @@ def test_항목과_정의가_있으면_잇는다(db: Session) -> None:
 
     assert any(ITEM in line for line in made)
     # **카드가 읽는 다리가 그대로 선다** — 이 지도가 선언 물성을 칸에 앉힌다.
-    assert coverage.item_property_map(db)[ITEM] == KEY
+    assert coverage.item_links(db).key_of(ITEM) == KEY
 
 
 def test_두_번_돌려도_하나다(db: Session) -> None:

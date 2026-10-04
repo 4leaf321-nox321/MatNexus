@@ -35,6 +35,7 @@ from sqlalchemy import (
     ColumnElement,
     Float,
     Select,
+    case,
     cast,
     false,
     func,
@@ -55,7 +56,13 @@ from app.modules.materials.models import Material, Sample, Specimen
 from app.modules.processing.models import ProcessingResult
 from app.modules.tests.models import TestConditionField, TestRun
 from app.modules.vocabulary.models import VocabularyTerm
-from app.shared import declared_approval, standard_conditions, tiers
+from app.shared import (
+    declared_approval,
+    declared_conditions,
+    representative,
+    standard_conditions,
+    tiers,
+)
 from app.shared.errors import AppError, NotFound
 from matcore import registry, units
 
@@ -71,8 +78,8 @@ class ConditionFilter:
     """「어떤 조건에서」 — 표준 조건 하나의 SI 범위(2026-09-16).
 
     조건은 값의 **한정자**라 값처럼 범위로 건다. 어느 키가 그 조건인지는 세계마다
-    다르게 풀린다: 시험은 조건 칸의 `canonical_key`, 문헌은 `conditions` 의 별칭
-    (`temperature_k` · `temperature_c`), 선언은 점의 `temperature_k`.
+    다르게 풀린다: 시험은 조건 칸의 `canonical_key`, 문헌은 `conditions` 의 키
+    (`standard_conditions.catalog_keys`), 선언은 점의 `temperature_k` · `frequency_hz`.
     """
 
     key: str
@@ -295,6 +302,8 @@ def catalog_hits(
         .where(
             CatalogValue.property_key == property_key,
             CatalogValue.value_num.is_not(None),
+            # 원본 스냅샷에서 빠진 값은 찾아 주지 않는다(`mt_import.mark_missing`).
+            CatalogValue.source_missing_at.is_(None),
             CatalogValue.value_num >= low,
             CatalogValue.value_num <= high,
         )
@@ -315,10 +324,12 @@ def catalog_hits(
     else:
         # **변수 달린 값은 스칼라가 아니다.** 영률 키에 Prony 급수의 E0 가 몇 건 섞여 있다 —
         # 그 값은 「영률」 이 아니라 「그 식의 E0」 다. 같은 범위에 넣으면 조용히 섞인다.
+        # 무엇이 변수인지는 대표값과 같은 규칙이다(`representative.term_clause`) — `term` 이
+        # 구분으로만 쓰인 값(최고 사용온도 short · long)은 그 물성의 값이라 걸린다.
         query = query.where(
             or_(
                 CatalogValue.conditions.is_(None),
-                ~CatalogValue.conditions.has_key(parameters.TERM),
+                ~representative.term_clause(CatalogValue.conditions),
             )
         )
     if min_tier is not None:
@@ -347,16 +358,32 @@ def catalog_hits(
     return made
 
 
+def _json_number(element: Any) -> Any:
+    """JSON 값을 숫자로 — **숫자가 아니면 NULL.** 캐스트가 안 터지게 `CASE` 로.
+
+    문헌의 `temperature` 2,177건이 「room temperature」 같은 글이라, 그대로 캐스트하면 온도로
+    거른 값 검색이 통째로 500 이었다(2026-10-04 개발 DB 에서 재현). 「숫자인지 먼저 보고」 를
+    `AND` 로 쓰면 안 된다 — `WHERE` 의 순서는 플래너 마음이고, `CASE` 는 순서를 지킨다
+    (시험 목록의 `_condition_value` 와 같은 판단).
+    """
+    return case(
+        (func.jsonb_typeof(element) == "number", cast(element.astext, Float)), else_=None
+    )
+
+
 def _catalog_condition_si(key: str) -> Any:
-    """문헌 `conditions` 에서 표준 조건 값을 SI 로 읽는 SQL 식. 없으면 NULL(= 안 걸림)."""
-    standard = standard_conditions.STANDARD[key]
+    """문헌 `conditions` 에서 표준 조건 값을 SI 로 읽는 SQL 식. 없으면 NULL(= 안 걸림).
+
+    어느 키를 어떤 환산으로 읽는지는 `standard_conditions.catalog_keys` 가 정한다 — 커버리지 ·
+    문헌 반영이 파이썬으로 읽는 것과 같은 표다.
+    """
     pieces: list[Any] = []
-    for alias in (key, *standard.aliases):
-        if not alias.isascii():
-            continue
-        raw: Any = cast(CatalogValue.conditions[alias].astext, Float)
-        if key == "temperature" and alias == "temperature_c":
-            raw = raw + 273.15
+    for name, factor, offset in standard_conditions.catalog_keys(key):
+        raw: Any = _json_number(CatalogValue.conditions[name])
+        if factor != 1.0:
+            raw = raw * factor
+        if offset:
+            raw = raw + offset
         pieces.append(raw)
     return func.coalesce(*pieces)
 
@@ -431,9 +458,8 @@ def measured_hits(
             (field.test_type_id == TestRun.test_type_id)
             & (field.canonical_key == condition.key),
         ).where(
-            cast(TestRun.conditions[field.key].astext, Float).between(
-                condition.low, condition.high
-            )
+            # 조건 칸에 글(「RT」)이 적힌 시험도 있다 — 숫자가 아니면 안 걸릴 뿐 터지지 않는다.
+            _json_number(TestRun.conditions[field.key]).between(condition.low, condition.high)
         )
 
     # **재료·방법별로 묶는다.** 시편 3장이면 값이 셋인데 그것을 3줄로 내면 사람은
@@ -546,13 +572,16 @@ def _declared_path(
         if math.isfinite(bound):
             checks.append(f"@.value_si {op} ${name}")
             named[name] = bound
-    if condition is not None and condition.key == "temperature":
+    if condition is not None:
+        # 점이 안 드는 조건은 부르는 쪽(`internal_hits`)이 먼저 걸러 여기 안 온다.
+        point_key = declared_conditions.POINT_KEY_OF_STANDARD[condition.key]
+        checks.append(f'@.{point_key}.type() == "number"')
         for name, bound, op in (
-            ("t_low", condition.low, ">="),
-            ("t_high", condition.high, "<="),
+            ("c_low", condition.low, ">="),
+            ("c_high", condition.high, "<="),
         ):
             if math.isfinite(bound):
-                checks.append(f"@.temperature_k {op} ${name}")
+                checks.append(f"@.{point_key} {op} ${name}")
                 named[name] = bound
     return f"$[*] ? ({entry}).points[*] ? ({' && '.join(checks)})", named
 
@@ -579,6 +608,13 @@ def internal_hits(
 
     **권한은 부르는 쪽이 준다**(`visible`). 이 모듈은 값만 안다.
     """
+    if (
+        condition is not None
+        and condition.key not in declared_conditions.POINT_KEY_OF_STANDARD
+    ):
+        # 점이 안 드는 조건(변형률속도 · 압력 …)을 물었다 — 선언값은 그 조건에서 잰 것이
+        # 아니라 안 걸린다. 없는 것을 있는 척하지 않는다.
+        return []
     wanted = cast([{"item": item}], JSONB)
     # **재료와 시료 둘 다 본다.** 문헌·규격값은 재료에, 밀시트값(경도·강도)은 시료에
     # 붙는다(ADR 0016) — 재료만 보면 시료 층 항목은 영영 안 잡힌다.
@@ -642,10 +678,10 @@ def internal_hits(
                 if not isinstance(value, int | float):
                     continue
                 if condition is not None:
-                    # 선언 점이 아는 조건은 온도(`temperature_k`)뿐이다. 다른 조건을 물으면
-                    # 선언값은 **그 조건에서 잰 것이 아니라** 안 걸린다 — 없는 것을 있는 척하지
-                    # 않는다.
-                    at = point.get("temperature_k") if condition.key == "temperature" else None
+                    # 선언 점이 드는 조건은 온도 · 주파수다(ADR 0048 — 유전율은 주파수를
+                    # 탄다). 2026-10-04 까지는 온도만 봐서, 10 GHz 에 적은 Dk 가 주파수 검색에
+                    # 안 걸렸다.
+                    at = point.get(declared_conditions.POINT_KEY_OF_STANDARD[condition.key])
                     if not isinstance(at, int | float) or not (
                         condition.low <= float(at) <= condition.high
                     ):
@@ -702,11 +738,13 @@ class ValueRange:
             CatalogValue.value_num.is_not(None),
             CatalogValue.value_num >= self.low,
             CatalogValue.value_num <= self.high,
+            # 원본 스냅샷에서 빠진 값은 걸지 않는다(`mt_import.mark_missing`).
+            CatalogValue.source_missing_at.is_(None),
             # 변수 달린 값(Prony 의 E0 …)은 그 물성의 스칼라가 아니다 — 값 검색과 같은 규칙
-            # (`property_search.catalog_hits`). 섞으면 범위에 엉뚱한 식의 상수가 걸린다.
+            # (`representative.term_clause`). 섞으면 범위에 엉뚱한 식의 상수가 걸린다.
             or_(
                 CatalogValue.conditions.is_(None),
-                ~CatalogValue.conditions.has_key(parameters.TERM),
+                ~representative.term_clause(CatalogValue.conditions),
             ),
         ]
 

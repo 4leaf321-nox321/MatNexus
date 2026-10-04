@@ -216,6 +216,168 @@ class Test모르면_멈춘다:
             raise AssertionError("owner_id 가 채워졌는데 통과했다")
 
 
+def _drop(snapshot: Path, *statements: str) -> None:
+    """원본이 줄을 지운 다음 스냅샷을 흉내 낸다."""
+    con = sqlite3.connect(snapshot)
+    for statement in statements:
+        con.execute(statement)
+    con.commit()
+    con.close()
+
+
+class Test원본에서_빠진_줄:
+    """**원본이 줄을 지워도 MatNexus 는 지우지 않고 표시한다**(2026-10-04).
+
+    이관은 배포마다 돌고 지우지 않는다 — 선언 물성 · 카드 · 덱 근거가 그 줄을 쥐고 있을 수
+    있어서다. 전에는 빠진 줄이 조용히 남았고, 더 나쁘게는 검산이 행 수를 견줘 **적재가 통째로
+    거부**되었다(배포는 계속되므로 그 뒤로 문헌 데이터가 영영 안 바뀐다).
+    """
+
+    def test_빠진_줄은_지우지_않고_표시하고_검산은_통과한다(
+        self, db: Session, tmp_path: Path
+    ) -> None:
+        snapshot = make_snapshot(tmp_path)
+        importer.run(db, snapshot)
+        db.flush()
+        # 원본이 재료 2(FR-4)와 그 값, SUS304 의 가정값 하나를 지웠다.
+        _drop(
+            snapshot,
+            "delete from property_value where id in (2, 3)",
+            "delete from material where id = 2",
+        )
+        again = importer.run(db, snapshot)
+        db.flush()
+
+        assert again.problems == [], again.problems
+        assert (again.tables["값"].missing, again.tables["값"].newly_missing) == (2, 2)
+        assert again.tables["재료"].missing == 1
+        assert "원본에서 빠짐 2(이번에 새로 2)" in again.line()
+        for mt_id in (2, 3):
+            row = db.scalar(select(CatalogValue).where(CatalogValue.mt_id == mt_id))
+            assert row is not None, "원본에서 빠진 줄을 지웠다"
+            assert row.source_missing_at is not None
+        kept = db.scalar(select(CatalogValue).where(CatalogValue.mt_id == 1))
+        assert kept is not None and kept.source_missing_at is None
+        gone = db.scalar(select(CatalogMaterial).where(CatalogMaterial.mt_id == 2))
+        assert gone is not None and gone.source_missing_at is not None
+
+        # 한 번 더 돌려도 새로 빠진 것은 없다 — 처음 본 때를 지킨다.
+        stamp = gone.source_missing_at
+        third = importer.run(db, snapshot)
+        assert third.tables["값"].newly_missing == 0 and third.tables["값"].missing == 2
+        assert gone.source_missing_at == stamp
+
+    def test_원본에_다시_나타나면_표시를_거둔다(self, db: Session, tmp_path: Path) -> None:
+        snapshot = make_snapshot(tmp_path)
+        importer.run(db, snapshot)
+        db.flush()
+        _drop(snapshot, "delete from property_value where id = 2")
+        importer.run(db, snapshot)
+        db.flush()
+
+        fresh = tmp_path / "again"
+        fresh.mkdir()
+        back = importer.run(db, make_snapshot(fresh))
+        assert back.tables["값"].revived == 1
+        row = db.scalar(select(CatalogValue).where(CatalogValue.mt_id == 2))
+        assert row is not None and row.source_missing_at is None
+
+    def test_직접_넣은_줄은_건드리지_않는다(self, db: Session, tmp_path: Path) -> None:
+        """MatNexus 에서 넣은 줄(`mt_id` 없음)은 원본에 원래 없다 — 「빠짐」 이 아니다."""
+        snapshot = make_snapshot(tmp_path)
+        importer.run(db, snapshot)
+        db.flush()
+        sus = db.scalar(select(CatalogMaterial).where(CatalogMaterial.mt_id == 1))
+        assert sus is not None
+        local = CatalogValue(
+            material_id=sus.id,
+            property_key="physical.density",
+            value_num=7900,
+            unit="kg/m^3",
+            quality_tier=3,
+        )
+        db.add(local)
+        db.flush()
+        _drop(snapshot, "delete from property_value where id = 5")
+        report = importer.run(db, snapshot)
+        assert report.tables["값"].missing == 1
+        assert local.source_missing_at is None
+
+    def test_한꺼번에_많이_빠지면_원본이_다른_파일로_보고_거부한다(
+        self, db: Session, tmp_path: Path, monkeypatch: object
+    ) -> None:
+        """잘못 고른 스냅샷 · id 를 새로 매긴 원본을 받으면 수만 줄이 「빠짐」 으로 바뀐다."""
+        from app.shared import mt_import
+
+        snapshot = make_snapshot(tmp_path)
+        importer.run(db, snapshot)
+        db.flush()
+        # 시험 표는 작아서 바닥(50)을 낮춘다 — 값 다섯 중 셋이 빠지면 한도(10%)를 넘는다.
+        monkeypatch.setattr(mt_import, "MASS_MISSING_FLOOR", 1)  # type: ignore[attr-defined]
+        _drop(snapshot, "delete from property_value where id in (1, 2, 5)")
+        try:
+            importer.run(db, snapshot)
+        except importer.ImportRefused as refused:
+            assert "한꺼번에 사라졌습니다" in str(refused)
+        else:
+            raise AssertionError("값 다섯 중 셋이 사라졌는데 그대로 적재했다")
+
+    def test_빠진_값은_대표가_못_되고_상세가_표시를_싣는다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str], tmp_path: Path
+    ) -> None:
+        """대표값은 덱 · 비교 · Ashby 가 쓰는 값이다 — 원본이 버린 값을 계속 내면 안 된다."""
+        snapshot = make_snapshot(tmp_path)
+        importer.run(db, snapshot)
+        db.flush()
+        # SUS304 의 영률 둘 중 대표(193 GPa, 1등급)를 원본이 지웠다.
+        _drop(snapshot, "delete from property_value where id = 1")
+        importer.run(db, snapshot)
+        db.commit()
+        sus = db.scalar(select(CatalogMaterial).where(CatalogMaterial.mt_id == 1))
+        assert sus is not None
+
+        detail = client.get(f"/api/catalog/materials/{sus.id}", headers=admin_headers)
+        assert detail.status_code == 200, detail.text
+        modulus = {
+            one["value_num"]: one
+            for one in detail.json()["values"]
+            if one["property_key"] == "mechanical.youngs_modulus"
+        }
+        assert modulus[193e9]["source_missing_at"] is not None
+        assert modulus[193e9]["representative"] is False
+        assert modulus[193e9]["separated_by"] == "원본에서 빠짐"
+        assert modulus[200e9]["representative"] is True
+
+        # 그 물성의 값이 **전부** 빠지면 대표가 없다 — 남은 것이 빠진 값뿐이어도 내지 않는다.
+        _drop(snapshot, "delete from property_value where id = 2")
+        importer.run(db, snapshot)
+        db.commit()
+        detail = client.get(f"/api/catalog/materials/{sus.id}", headers=admin_headers)
+        both = [
+            one
+            for one in detail.json()["values"]
+            if one["property_key"] == "mechanical.youngs_modulus"
+        ]
+        assert len(both) == 2, "빠진 값도 줄은 지킨다"
+        assert all(one["representative"] is False for one in both)
+
+    def test_값_범위_검색은_빠진_값을_찾지_않는다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str], tmp_path: Path
+    ) -> None:
+        snapshot = make_snapshot(tmp_path)
+        importer.run(db, snapshot)
+        db.flush()
+        _drop(snapshot, "delete from property_value where id in (1, 2)")
+        importer.run(db, snapshot)
+        db.commit()
+        asked = (
+            "value_key=mechanical.youngs_modulus&value_unit=GPa&value_min=190&value_max=210"
+        )
+        got = client.get(f"/api/catalog/materials?{asked}", headers=admin_headers)
+        assert got.status_code == 200, got.text
+        assert got.json()["items"] == []
+
+
 class Test읽기_API:
     def test_목록과_상세가_값·등급·출처를_준다(
         self, client: TestClient, db: Session, admin_headers: dict[str, str], tmp_path: Path
@@ -277,14 +439,16 @@ class Test목록_거르개:
         spcc = CatalogMaterial(name="SPCC", category="metal", manufacturer="posco ")
         db.add(spcc)
         db.flush()
-        # 영률 키에 섞인 **식의 상수** — 범위 안의 값이지만 영률이 아니다.
+        # 영률 키에 섞인 **식의 상수** — 범위 안의 값이지만 영률이 아니다. 식의 변수는 한 벌의
+        # 표지(`model` …)를 함께 단다 — `term` 만 있으면 구분이라 그 물성의 값이다
+        # (`representative.is_term`, 원본의 변수 값은 모두 표지를 단다).
         db.add(
             CatalogValue(
                 material_id=spcc.id,
                 property_key="mechanical.youngs_modulus",
                 value_num=195e9,
                 unit="Pa",
-                conditions={"term": "E0"},
+                conditions={"term": "E0", "model": "prony"},
                 quality_tier=2,
             )
         )

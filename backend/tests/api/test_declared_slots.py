@@ -73,7 +73,9 @@ def linked(db: Session) -> str:
     term = vocabulary_services.resolve_or_create(db, axis, ITEM, created_by_id=None)
     assert term is not None
     term.attributes = {"dimension": "dimensionless"}
-    db.add(PropertyLink(property_key=KEY, term_id=term.id, kind="exact"))
+    # 카드에 싣는 다리는 **같은 물성** 연결뿐이다(`coverage.ItemLinks`). 전에는 종류를 안 봐서
+    # 목록에 없는 종류(`exact`)로 심어도 통과했다.
+    db.add(PropertyLink(property_key=KEY, term_id=term.id, kind="same_as"))
     db.commit()
     return ITEM
 

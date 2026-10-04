@@ -103,6 +103,13 @@ class CatalogMaterial(Base):
     imported_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+    source_missing_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    """**원본 스냅샷에서 사라진 것을 본 때**(2026-10-04). 이관은 지우지 않는다 — 선언
+    물성 · 카드가 이 줄을 근거로 쥐고 있을 수 있다. 대신 표시해 두고 대표값 · 값 검색 ·
+    커버리지가 고르지 않게 한다(`mt_import.mark_missing`). 원본에 다시 나타나면 비운다.
+    직접 넣은 줄(`mt_id` 없음)은 늘 비어 있다."""
 
 
 class CatalogLink(Base):
@@ -166,6 +173,13 @@ class CatalogSource(Base):
     imported_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+    source_missing_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    """**원본 스냅샷에서 사라진 것을 본 때**(2026-10-04). 이관은 지우지 않는다 — 선언
+    물성 · 카드가 이 줄을 근거로 쥐고 있을 수 있다. 대신 표시해 두고 대표값 · 값 검색 ·
+    커버리지가 고르지 않게 한다(`mt_import.mark_missing`). 원본에 다시 나타나면 비운다.
+    직접 넣은 줄(`mt_id` 없음)은 늘 비어 있다."""
 
 
 class CatalogDefinition(Base):
@@ -200,6 +214,10 @@ class CatalogDefinition(Base):
     """**정의문** — 이 물성이 무엇인가(ADR 0050). 사내 물성 항목 · 다른 시스템 · AI 가 이 키의
     뜻을 여기서 읽는다. 원본(MaterialTwin)에는 비어 있어 씨앗(`seeds/catalog/
     property-descriptions.json`)이 채우고, 자료 관리자가 고친다."""
+    source_description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    """**원본(MaterialTwin)의 정의문 그대로** — 이관이 매번 다시 적는다(2026-10-04). 지금
+    원본은 271종 전부 비어 있다. 이것이 차면 사내 씨앗은 그 키를 안 채운다 — 원본이
+    정본이다(ADR 0050 결정 4). 사람이 고친 정의문은 원본도 씨앗도 안 덮는다."""
     description_seed_digest: Mapped[str | None] = mapped_column(String(64))
     """씨앗이 마지막으로 쓴 정의문의 sha256. 지금 정의문과 같으면 **아무도 안 고친 것**이라
     새 씨앗을 따르고, 다르면 사람이 고친 것이라 안 덮는다(ADR 0046 · 0047 과 같은 규칙)."""
@@ -210,6 +228,13 @@ class CatalogDefinition(Base):
     imported_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+    source_missing_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    """**원본 스냅샷에서 사라진 것을 본 때**(2026-10-04). 이관은 지우지 않는다 — 선언
+    물성 · 카드가 이 줄을 근거로 쥐고 있을 수 있다. 대신 표시해 두고 대표값 · 값 검색 ·
+    커버리지가 고르지 않게 한다(`mt_import.mark_missing`). 원본에 다시 나타나면 비운다.
+    직접 넣은 줄(`mt_id` 없음)은 늘 비어 있다."""
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
@@ -285,3 +310,10 @@ class CatalogValue(Base):
     imported_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+    source_missing_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    """**원본 스냅샷에서 사라진 것을 본 때**(2026-10-04). 이관은 지우지 않는다 — 선언
+    물성 · 카드가 이 줄을 근거로 쥐고 있을 수 있다. 대신 표시해 두고 대표값 · 값 검색 ·
+    커버리지가 고르지 않게 한다(`mt_import.mark_missing`). 원본에 다시 나타나면 비운다.
+    직접 넣은 줄(`mt_id` 없음)은 늘 비어 있다."""

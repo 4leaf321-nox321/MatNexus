@@ -70,12 +70,14 @@ def _declared_by_key(db: Session, material: Material) -> dict[str, dict[str, Any
     온도의 값이고, 이것은 카드 `values` 의 규약과 같다(표가 있어도 `values` 는 첫
     줄을 든다). 표로 펴는 것은 블록마다 온도 열 이름이 달라 여기서 안 한다.
     """
-    links = coverage.item_property_map(db)
+    links = coverage.item_links(db)
     out: dict[str, dict[str, Any]] = {}
     for row in material.declared_properties or []:
         if not isinstance(row, dict):
             continue
-        key = links.get(str(row.get("item") or ""))
+        # **눈금으로 고른다** — 「경도」 는 HV · HB · HRC 가 다른 키다. HRC 로 적은 값이
+        # 비커스 칸에 실리면 숫자는 그럴듯하고 아무도 모른다(`coverage.ItemLinks`).
+        key = links.key_of(str(row.get("item") or ""), row.get("scale"))
         points = row.get("points") or []
         if not key or key in out or not points:
             continue

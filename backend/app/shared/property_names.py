@@ -410,7 +410,7 @@ def builtin_item(property_key: str | None) -> str | None:
     표를 읽기만 한다.
 
     **부서가 만든 항목은 여기 없다.** 그쪽은 `property_links`(사내 항목 연결)가
-    잇고, 그 다리는 `shared/coverage.item_property_map` 이 읽는다 — 두 길이 같은
+    잇고, 그 다리는 `shared/coverage.item_links` 가 읽는다 — 두 길이 같은
     물음("이 키가 우리 항목으로 무엇인가")에 답하지만, 이쪽은 **DB 없이** 답한다.
     """
     if not property_key:

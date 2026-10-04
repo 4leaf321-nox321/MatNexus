@@ -4797,6 +4797,18 @@
             ],
             "title": "Role"
           },
+          "source_missing_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Missing At"
+          },
           "subsystem": {
             "anyOf": [
               {
@@ -4917,6 +4929,18 @@
               }
             ],
             "title": "Role"
+          },
+          "source_missing_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Missing At"
           },
           "subsystem": {
             "anyOf": [
@@ -5830,6 +5854,18 @@
               }
             ],
             "title": "Source Detail"
+          },
+          "source_missing_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Missing At"
           },
           "summary": {
             "anyOf": [

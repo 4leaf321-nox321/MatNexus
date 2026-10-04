@@ -606,6 +606,108 @@ class Test눈금_매핑:
         internal = [one for one in got.json()["hits"] if one["world"] == "internal"]
         assert [one["value"] for one in internal] == [200.0]
 
+    def test_물성_지도와_카드도_눈금으로_고른다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str], hardness: None
+    ) -> None:
+        """검색은 눈금을 가렸는데 **물성 지도 · 카드 채우기는 안 가렸다**(2026-10-04).
+
+        항목 → 키를 사전에 접어 넣어서, 연결이 여럿인 「경도」 는 DB 가 마지막에 준 줄의 키
+        하나로 갔다 — HV 200 과 HRC 60 이 한 키 아래 섰다. 「관련」 연결도 같은 물성으로
+        읽었다.
+        """
+        import uuid
+
+        from app.shared import coverage
+
+        for key, scale in (
+            ("mechanical.hardness_vickers", "HV"),
+            ("mechanical.hardness_rockwell", "HRC"),
+        ):
+            made = client.post(
+                "/api/catalog/properties/links",
+                json={"property_key": key, "item": "경도", "scale": scale},
+                headers=admin_headers,
+            )
+            assert made.status_code == 201, made.text
+        # 「관련」 연결은 같은 물성이 아니다 — 이것까지 읽으면 HRC 가 두 키로 갈려 못 잇는다.
+        term = db.scalar(select(VocabularyTerm).where(VocabularyTerm.value == "경도"))
+        assert term is not None
+        db.add(
+            PropertyLink(
+                property_key="mechanical.hardness_vickers",
+                term_id=term.id,
+                kind="related",
+                scale="HRC",
+            )
+        )
+        db.commit()
+        material = client.post(
+            "/api/materials",
+            json={
+                "family": "Metal",
+                "category": "Steel",
+                "grade": "MAP",
+                "spec_thickness": 1.0,
+            },
+            headers=admin_headers,
+        ).json()
+        for lot, scale, value in (("M-1", "HV", 200), ("M-2", "HRC", 60)):
+            sample = client.post(
+                f"/api/materials/{material['id']}/samples",
+                json={"lot_no": lot},
+                headers=admin_headers,
+            ).json()
+            saved = client.patch(
+                f"/api/samples/{sample['id']}",
+                json={
+                    "declared_properties": [
+                        {
+                            "item": "경도",
+                            "points": [{"value": value}],
+                            "scale": scale,
+                            "source": "datasheet",
+                            "reference": "MTC-MAP",
+                        }
+                    ]
+                },
+                headers=admin_headers,
+            )
+            assert saved.status_code == 200, saved.text
+
+        found = coverage.collect(db, uuid.UUID(material["id"]))
+        by_key = {
+            row.key: sorted(one.value_si for one in row.entries if one.origin == "internal")
+            for row in found.properties
+        }
+        assert by_key.get("mechanical.hardness_vickers") == [200.0], by_key
+        assert by_key.get("mechanical.hardness_rockwell") == [60.0], by_key
+
+        links = coverage.item_links(db)
+        assert links.key_of("경도", "HRC") == "mechanical.hardness_rockwell"
+        # 눈금을 모르면 넷 중 하나를 짐작하지 않는다.
+        assert links.key_of("경도") is None
+
+    def test_같은_물성_연결이_둘이면_잇지_않는다(self) -> None:
+        """눈금 없는 항목이 같은 물성으로 두 키에 이어졌으면(사람의 실수다) 하나를 짐작하지
+        않는다.
+
+        짐작하면 밀도 자리에 겉보기 밀도가 실리고 숫자는 그럴듯하다 — 안 실리고 「안 이어진
+        것」 에 서야 사람이 연결 화면을 본다.
+        """
+        from app.shared.coverage import ItemLinks
+
+        links = ItemLinks(
+            {
+                "밀도": {None: frozenset({"physical.density", "physical.bulk_density"})},
+                "비열": {None: frozenset({"thermal.specific_heat"})},
+            }
+        )
+        assert links.key_of("밀도") is None
+        assert links.keys_of("밀도") == {"physical.density", "physical.bulk_density"}
+        # 눈금 없이 이은 연결은 어느 눈금의 값이든 받는다.
+        assert links.key_of("비열", "HV") == "thermal.specific_heat"
+        assert links.key_of("없는 항목") is None
+
 
 class Test값으로_찾기:
     """**「항복응력이 200MPa 근처인 재료」** — 이름 해소 + 단위 환산 + 범위."""

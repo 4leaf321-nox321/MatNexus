@@ -1,5 +1,5 @@
 /**
- * 문헌 재료 상세 — **값·조건·등급·출처가 한 줄이고, 진 후보를 숨기지 않는다.**
+ * 문헌 재료 상세 — **물성·값·등급·조건·출처가 한 줄이고, 진 후보를 숨기지 않는다.**
  *
  * 같은 물성에 값이 여럿이면 서버가 대표를 골라 먼저 세우되(고체상→등급→기준온도
  * 근접), 밀린 후보도 **밀린 자리와 함께** 그대로 보여 준다 — 「선택기가 N개 중
@@ -50,6 +50,13 @@ import {
 } from '@/shared/components/ui/table'
 import { useResource } from '@/shared/hooks/useResource'
 
+/**
+ * 값 표의 칸 — **접는다.** 표 칸의 기본값은 `whitespace-nowrap` 인데, 이 표는 열
+ * 폭을 박아 두어(`table-fixed`) 안 접힌 글이 옆 칸 위로 넘친다. 띄어 쓰지 않은
+ * 긴 토막(DOI · 식 · 단위)도 칸 안에서 끊는다.
+ */
+const CELL = 'align-top whitespace-normal wrap-anywhere'
+
 /** 합성 곡선의 강도 입력 — 서버 `declared_card.SYNTH_KEYS` 의 앞 둘. */
 const SYNTH_STRENGTHS = new Set(['mechanical.yield_strength', 'mechanical.tensile_strength'])
 
@@ -73,7 +80,7 @@ function SourceCell({ value }: { value: CatalogValue }) {
   const href = source.doi ? `https://doi.org/${source.doi}` : (source.url ?? undefined)
   const label = source.title ?? source.publisher ?? source.kind
   return (
-    <div className="max-w-72 text-xs">
+    <div className="text-xs">
       {href ? (
         <a className="hover:underline" href={href} target="_blank" rel="noreferrer">
           {label}
@@ -179,6 +186,7 @@ export default function CatalogMaterialPage() {
           </Button>
           <Badge variant="outline">{CATEGORY_LABELS[item.category] ?? item.category}</Badge>
           <Badge variant="outline">{item.subsystem ?? '미분류'}</Badge>
+          {item.source_missing_at && <MissingBadge at={item.source_missing_at} what="재료" />}
           {item.origin === 'local' && (
             <Badge variant="outline" title="MatNexus 에서 직접 넣은 재료">
               직접 넣음{item.created_by ? ` · ${item.created_by}` : ''}
@@ -218,76 +226,88 @@ export default function CatalogMaterialPage() {
           {/* **폭을 열마다 못 박는다.** 안 박으면 값 열이 남는 폭을 다 먹고
               조건·등급·출처가 서로 겹친다 — 표가 자동으로 나누는 폭은 가장 긴
               한 줄을 따라가는데, 여기서 가장 긴 것이 대개 값이기 때문이다.
-              값은 숫자와 단위라 넓을 이유가 없고, 조건이 길다. */}
+              값은 숫자와 단위라 넓을 이유가 없고, 조건이 길다.
+
+              **폭을 박았으면 접기도 켠다**(`CELL`). 표 칸의 기본값이
+              `whitespace-nowrap` 이라, 폭만 박아 두었을 때는 긴 조건·출처가 안
+              접히고 옆 칸 위로 넘쳐 글자가 겹쳤다(2026-10-04 지적, 모든 열).
+              좁은 창에서는 칸을 짓누르지 않고 가로로 넘긴다(`min-w`).
+
+              등급은 배지 하나라 **비율이 아니라 고정 폭**이다 — 「2차 인용」 이
+              칸 여백까지 77px. 비율로 주면 넓은 화면에서 200px 넘게 벌어졌다.
+              조건은 폭을 안 적어 남는 폭을 다 받는다. */}
           <div className="overflow-x-auto rounded-md border">
-            <Table className="table-fixed">
+            <Table className="min-w-[50rem] table-fixed">
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-[26%]">물성</TableHead>
-                  <TableHead className="w-[16%]">값</TableHead>
-                  <TableHead className="w-[34%]">조건</TableHead>
-                  <TableHead className="w-[8%]">등급</TableHead>
-                  <TableHead className="w-[16%]">출처</TableHead>
+                  <TableHead className="w-[24%]">물성</TableHead>
+                  <TableHead className="w-[14%]">값</TableHead>
+                  <TableHead className="w-20">등급</TableHead>
+                  <TableHead>조건</TableHead>
+                  <TableHead className="w-[22%]">출처</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {values.map((value) => (
                   <TableRow key={value.id} className={value.representative ? '' : 'opacity-80'}>
-                    <TableCell className="align-top break-words">
-                      {value.property_name}
-                      {/* **한 이름에 변수가 여럿인 물성이 있다**(ADR 0029). Anand
-                          하나에 9개 상수가 들어 있어서, 이름만 적으면 표에 같은
-                          줄이 아홉 번 서고 무엇이 무엇인지 알 수 없다. */}
-                      {value.term && (
-                        <span className="ml-1 font-medium">· {value.term}</span>
-                      )}
-                      {value.symbol && !value.term && (
-                        <span className="text-muted-foreground ml-1 text-xs">{value.symbol}</span>
-                      )}
-                      {value.n_candidates > 1 && value.representative && (
-                        <Badge variant="secondary" className="ml-2">
-                          대표값 · 후보 {value.n_candidates}
-                        </Badge>
-                      )}
-                      {/* **범위의 한쪽이라는 것을 말한다.** 경쟁하는 두 측정이
-                          아니라 한 범위의 양끝인데, 지금까지는 대표값 규칙이 둘 중
-                          하나를 이기게 해 놓고 그 사실을 안 알렸다. */}
-                      {boundLabel(value) && (
-                        <Badge variant="outline" className="ml-2">
-                          {boundLabel(value)}
-                        </Badge>
-                      )}
-                      {!value.representative && (
-                        <Badge variant="outline" className="text-muted-foreground ml-2">
-                          대안 · {value.separated_by}
-                        </Badge>
-                      )}
-                      {value.origin === 'local' && (
-                        <Badge variant="outline" className="ml-2" title="MatNexus 에서 직접 넣은 값">
-                          직접 넣음{value.created_by ? ` · ${value.created_by}` : ''}
-                        </Badge>
-                      )}
-                      {canRemove(value) && (
-                        <button
-                          type="button"
-                          aria-label={`${value.property_name} 값 삭제`}
-                          className="text-muted-foreground hover:text-destructive ml-1 rounded p-0.5 align-middle"
-                          onClick={() => remove(value)}
-                        >
-                          <Trash2 className="inline size-3.5" />
-                        </button>
-                      )}
-                      {value.representative && (
-                        <Link
-                          to={`/metrology?key=${encodeURIComponent(value.property_key)}`}
-                          className="text-muted-foreground hover:text-foreground ml-2 text-xs underline"
-                          title="이 물성을 재는 기법과 장비"
-                        >
-                          측정법
-                        </Link>
-                      )}
+                    <TableCell className={CELL}>
+                      {/* 이름 뒤 배지는 **한 덩이로 줄을 바꾼다** — 글 사이에 섞어
+                          흘리면 배지가 줄 끝에서 잘리거나 옆 칸으로 넘친다. */}
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                        <span>
+                          {value.property_name}
+                          {/* **한 이름에 변수가 여럿인 물성이 있다**(ADR 0029). Anand
+                              하나에 9개 상수가 들어 있어서, 이름만 적으면 표에 같은
+                              줄이 아홉 번 서고 무엇이 무엇인지 알 수 없다. */}
+                          {value.term && <span className="ml-1 font-medium">· {value.term}</span>}
+                          {value.symbol && !value.term && (
+                            <span className="text-muted-foreground ml-1 text-xs">{value.symbol}</span>
+                          )}
+                        </span>
+                        {value.n_candidates > 1 && value.representative && (
+                          <Badge variant="secondary">대표값 · 후보 {value.n_candidates}</Badge>
+                        )}
+                        {/* **범위의 한쪽이라는 것을 말한다.** 경쟁하는 두 측정이
+                            아니라 한 범위의 양끝인데, 지금까지는 대표값 규칙이 둘 중
+                            하나를 이기게 해 놓고 그 사실을 안 알렸다. */}
+                        {boundLabel(value) && <Badge variant="outline">{boundLabel(value)}</Badge>}
+                        {/* 원본에서 빠진 값은 「대안」 이 아니다 — 대표 후보에서 아예 빠졌다. */}
+                        {value.source_missing_at ? (
+                          <MissingBadge at={value.source_missing_at} what="값" />
+                        ) : (
+                          !value.representative && (
+                            <Badge variant="outline" className="text-muted-foreground">
+                              대안 · {value.separated_by}
+                            </Badge>
+                          )
+                        )}
+                        {value.origin === 'local' && (
+                          <Badge variant="outline" title="MatNexus 에서 직접 넣은 값">
+                            직접 넣음{value.created_by ? ` · ${value.created_by}` : ''}
+                          </Badge>
+                        )}
+                        {canRemove(value) && (
+                          <button
+                            type="button"
+                            aria-label={`${value.property_name} 값 삭제`}
+                            className="text-muted-foreground hover:text-destructive rounded p-0.5"
+                            onClick={() => remove(value)}
+                          >
+                            <Trash2 className="size-3.5" />
+                          </button>
+                        )}
+                        {value.representative && (
+                          <Link
+                            to={`/metrology?key=${encodeURIComponent(value.property_key)}`}
+                            className="text-muted-foreground hover:text-foreground text-xs underline"
+                            title="이 물성을 재는 기법과 장비"
+                          >
+                            측정법
+                          </Link>
+                        )}
+                      </div>
                     </TableCell>
-                    <TableCell className="align-top break-words tabular-nums">
+                    <TableCell className={`${CELL} tabular-nums`}>
                       {/* **변수마다 단위가 다르다.** 정의는 대개 `1`(무차원)이라고
                           적혀 있는데 실제로는 `MPa`·`1/s`·`K` 다. 그 값은 SI 로
                           저장돼 있지도 않아서 환산하지 않고 그대로 보여 준다 —
@@ -305,10 +325,13 @@ export default function CatalogMaterialPage() {
                         fmtValueAs(units, value.value_num, value.unit)
                       )}
                     </TableCell>
+                    <TableCell className={CELL}>
+                      <TierBadge value={value} />
+                    </TableCell>
                     {/* **갈리는 조건이 먼저, 굵게.** 후보가 넷이면 사람이 넷을
                         눈으로 대조해서 무엇이 다른지 찾아야 했다 — 서버가 그 대조를
                         대신하고(`distinguishing`), 겹치는 조건은 뒤로 흐린다. */}
-                    <TableCell className="align-top break-words">
+                    <TableCell className={CELL}>
                       {(() => {
                         const varying = fmtDistinguishing(
                           value.distinguishing as Record<string, unknown> | null
@@ -335,10 +358,7 @@ export default function CatalogMaterialPage() {
                         )
                       })()}
                     </TableCell>
-                    <TableCell className="align-top">
-                      <TierBadge value={value} />
-                    </TableCell>
-                    <TableCell className="align-top break-words">
+                    <TableCell className={CELL}>
                       <SourceCell value={value} />
                     </TableCell>
                   </TableRow>
@@ -376,5 +396,22 @@ export default function CatalogMaterialPage() {
         <CreateMaterialDialog detail={item} open={creating} onClose={() => setCreating(false)} />
       )}
     </div>
+  )
+}
+
+/**
+ * **원본에서 빠진 것**(2026-10-04) — 원본(MaterialTwin) 스냅샷이 이 줄을 지웠다. 이관은 지우지 않고
+ * 표시만 한다(선언 물성 · 카드가 근거로 쥐고 있을 수 있다). 대표값 · 값 검색 · 덱에는 쓰이지 않는다.
+ */
+function MissingBadge({ at, what, className = '' }: { at: string; what: string; className?: string }) {
+  const when = new Date(at).toLocaleDateString('ko-KR')
+  return (
+    <Badge
+      variant="outline"
+      className={`border-amber-500/60 text-amber-700 dark:text-amber-400 ${className}`}
+      title={`원본(MaterialTwin) 스냅샷에서 ${when} 에 빠진 ${what}입니다. 지우지 않고 남겨 두었고, 대표값 · 값 검색 · 덱에는 쓰지 않습니다.`}
+    >
+      원본에서 빠짐
+    </Badge>
   )
 }

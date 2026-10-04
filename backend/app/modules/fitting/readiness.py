@@ -167,6 +167,8 @@ def _ways(
             .where(CatalogValue.property_key.in_(keys))
             .where(CatalogValue.quality_tier < 4)
             .where(CatalogValue.value_num.is_not(None))
+            # 원본에서 빠진 값은 세지 않는다(`mt_import.mark_missing`).
+            .where(CatalogValue.source_missing_at.is_(None))
         )
         catalog = CatalogWay(property_keys=keys, values_available=int(available or 0))
 

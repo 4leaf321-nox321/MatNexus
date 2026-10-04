@@ -5,6 +5,8 @@
 
     무손실     원본 표에 모르는 컬럼이 있으면(빠져 있어도) 거부한다
     멱등       원본 id(`mt_id`)로 대응행을 찾아 갱신하고, **지우지 않는다**
+    사라짐     원본에서 빠진 줄은 지우지 않고 표시한다(`mark_missing`) — 한꺼번에 많이
+              빠지면 원본이 통째로 다른 파일로 보고 거부한다
     수치 비교   PG JSONB 가 `1e+23` 을 정확한 정수로 정규화해 파이썬 float 와
               `==` 가 어긋난다 — 그 차이를 「갱신」 으로 읽으면 재실행마다 같은
               행을 다시 쓴다(실측: springer2020 Prony 의 tau_s)
@@ -31,6 +33,11 @@ class TableReport:
     added: int = 0
     updated: int = 0
     unchanged: int = 0
+    missing: int = 0
+    """원본에서 빠져 있는 줄(표시만 하고 지우지 않는다) — 이번에 새로 빠진 것 포함."""
+    newly_missing: int = 0
+    revived: int = 0
+    """전에 빠졌다가 원본에 다시 나타난 줄."""
 
     @property
     def total(self) -> int:
@@ -44,8 +51,59 @@ class Report:
 
     def line(self) -> str:
         return "\n".join(
-            f"{name}: 추가 {t.added} · 갱신 {t.updated} · 동일 {t.unchanged}"
+            f"{name}: 추가 {t.added} · 갱신 {t.updated} · 동일 {t.unchanged}" + _gone(t)
             for name, t in self.tables.items()
+        )
+
+
+def _gone(table: TableReport) -> str:
+    """사라진 줄 — **있을 때만** 적는다. 배포 로그에서 눈에 띄어야 한다."""
+    parts = []
+    if table.missing:
+        parts.append(f"원본에서 빠짐 {table.missing}(이번에 새로 {table.newly_missing})")
+    if table.revived:
+        parts.append(f"다시 나타남 {table.revived}")
+    return "".join(f" · {one}" for one in parts)
+
+
+#: 한 번에 이보다 많이 사라지면 **원본이 통째로 다른 파일**로 본다 — 표의 10% 이고, 작은
+#: 표에서 몇 줄 정리한 것으로 걸리지 않게 바닥을 둔다. 잘못 고른 스냅샷 · id 를 새로 매긴
+#: 원본을 그대로 받으면 수만 줄이 「사라짐」 으로 바뀌고 같은 내용이 새 줄로 겹쳐 들어온다.
+MASS_MISSING_SHARE = 0.1
+MASS_MISSING_FLOOR = 50
+
+
+def mark_missing(
+    cache: dict[int, Any],
+    seen: set[int],
+    report: TableReport,
+    label: str,
+    now: datetime,
+) -> None:
+    """원본에 없는 줄을 표시하고, 다시 나타난 줄은 표시를 거둔다. **지우지 않는다.**
+
+    지우지 않는 이유: 선언 물성 · 카드 · 덱 근거가 그 줄을 쥐고 있을 수 있다. 원본이 왜 뺐는지
+    (중복 정리 · 오류 삭제 · 재료 통합)도 여기서는 모른다. 표시해 두면 대표값 · 값 검색 ·
+    커버리지가 그 줄을 고르지 않고, 화면은 「원본에서 사라짐」 으로 보인다.
+    """
+    newly = 0
+    for mt_id, row in cache.items():
+        if mt_id in seen:
+            if row.source_missing_at is not None:
+                row.source_missing_at = None
+                report.revived += 1
+            continue
+        report.missing += 1
+        if row.source_missing_at is None:
+            row.source_missing_at = now
+            newly += 1
+    report.newly_missing = newly
+    limit = max(MASS_MISSING_FLOOR, int(len(cache) * MASS_MISSING_SHARE))
+    if newly > limit:
+        raise ImportRefused(
+            f"{label}: 원본에서 {newly}건이 한꺼번에 사라졌습니다"
+            f"(전체 {len(cache)}, 한도 {limit}). 원본이 통째로 다른 파일이거나 "
+            "id 를 새로 매긴 것 같습니다 — 확인 전에는 나르지 않습니다."
         )
 
 

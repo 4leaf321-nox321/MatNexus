@@ -42,7 +42,7 @@ from app.modules.processing.models import ProcessingResult
 from app.modules.tests.models import TestRun, TestType
 from app.shared import declared_slots, permissions
 from app.shared import divisions as divisions_order
-from app.shared.coverage import item_property_map
+from app.shared.coverage import item_links
 from app.shared.errors import NotFound
 from matcore import cards
 
@@ -495,14 +495,21 @@ def _declared_items(db: Session, material_ids: Select[Any]) -> dict[uuid.UUID, s
 
 
 def _item_blocks(db: Session, specs: dict[str, cards.BlockSpec]) -> dict[str, set[str]]:
-    """선언 항목 이름 → 그 값이 갈 항목란들. 이름 → 물성 키(`property_links`) → 그 키를
-    든 칸 — `declared_slots.fillable` 이 걷는 사슬 그대로다."""
+    """선언 항목 이름 → 그 값이 갈 수 있는 항목란들. 이름 → 물성 키(`property_links`) → 그
+    키를 든 칸 — `declared_slots.fillable` 이 걷는 사슬 그대로다. 눈금마다 키가 다른 항목
+    (경도)은 그 키들의 칸을 다 센다 — 여기는 값의 눈금을 안 읽는다."""
     by_key: dict[str, set[str]] = {}
     for spec in specs.values():
         for slot in spec.produces:
             if slot.property_key:
                 by_key.setdefault(slot.property_key, set()).add(spec.key)
-    return {item: by_key[key] for item, key in item_property_map(db).items() if key in by_key}
+    links = item_links(db)
+    made: dict[str, set[str]] = {}
+    for item in links.by_item:
+        blocks = set().union(*(by_key.get(key, set()) for key in links.keys_of(item)))
+        if blocks:
+            made[item] = blocks
+    return made
 
 
 def _adopted_by_material(

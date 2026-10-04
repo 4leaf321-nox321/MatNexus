@@ -16,8 +16,8 @@
 않은 스칼라·항목은 **빠지지 않고 `unmapped` 에 센다** — 지도에서 사라지면 없는 줄 안다.
 
 조건은 표준 조건 키(`standard_conditions`)로만 적는다. 시험은 조건 칸의 `canonical_key`,
-선언은 점의 `temperature_k`, 문헌은 `temperature_c/k` 별칭. 표준에 안 이어진 조건은
-지도에 안 나온다 — 그것은 「이 시험만의 조건」 이다.
+선언은 점의 `temperature_k` · `frequency_hz`, 문헌은 `standard_conditions.catalog_keys`(값
+검색과 같은 표). 표준에 안 이어진 조건은 지도에 안 나온다 — 그것은 「이 시험만의 조건」 이다.
 
 **권한은 부르는 쪽이 판정한다**(`visible_materials`). 여기는 값만 안다.
 """
@@ -43,7 +43,7 @@ from app.modules.materials.models import Material, Sample, Specimen
 from app.modules.processing.models import ProcessingResult
 from app.modules.tests.models import TestConditionField, TestRun
 from app.modules.vocabulary.models import VocabularyTerm
-from app.shared import declared_approval, standard_conditions, tiers
+from app.shared import declared_approval, declared_conditions, standard_conditions, tiers
 from matcore import registry
 
 
@@ -133,37 +133,67 @@ def _scalar_property_map() -> dict[str, str]:
     return found
 
 
-def item_property_map(db: Session) -> dict[str, str]:
-    """사내 물성 항목 이름 → 문헌 물성 키(`property_links`).
+@dataclass(frozen=True)
+class ItemLinks:
+    """사내 물성 항목 → **같은 물성(`same_as`)으로** 이어진 문헌 키, 눈금별(`property_links`).
 
     **이 다리를 두 곳에 두지 않는다.** 커버리지가 「잰 값과 문헌값이 같은 물성인가」
     를 묻는 데 쓰고, 카드 채우기(`declared_slots`)가 「적어 둔 값이 어느 칸에 가나」
     를 묻는 데 쓴다 — 둘이 갈라지면 화면이 이었다고 한 것이 카드에는 안 실린다.
+
+    **아무거나 하나를 고르지 않는다**(2026-10-04). 전에는 항목 → 키를 사전에 접어 넣어서,
+    연결이 넷인 「경도」(HV · HB · HRC · HRB)가 그중 **DB 가 마지막에 준 줄**의 키 하나로
+    갔다 — HRC 로 적은 경도가 비커스 자리로 갈 수 있었다. 연결 종류도 안 봐서 「더 좁은」 ·
+    「관련」 연결도 같은 물성으로 읽었다(`property_names.item_meanings` 는 진작 같은 물성만
+    본다). 이제 같은 물성 연결만, **값의 눈금으로** 고르고, 하나로 안 정해지면 잇지 않는다.
     """
-    rows = db.execute(
-        select(VocabularyTerm.value, PropertyLink.property_key).join(
-            VocabularyTerm, VocabularyTerm.id == PropertyLink.term_id
-        )
-    ).all()
-    return {str(value): str(key) for value, key in rows}
+
+    by_item: dict[str, dict[str | None, frozenset[str]]]
+
+    def key_of(self, item: str, scale: str | None = None) -> str | None:
+        """이 항목 · 눈금의 값이 어느 키인가. **하나로 안 정해지면 `None`** — 짐작으로
+        잇지 않는다. 눈금이 같은 연결이 먼저, 없으면 눈금을 안 가리는 연결(`scale` 빈칸)이다.
+        """
+        scales = self.by_item.get(item) or {}
+        for wanted in (scale, None) if scale else (None,):
+            found = scales.get(wanted)
+            if found:
+                return next(iter(found)) if len(found) == 1 else None
+        return None
+
+    def keys_of(self, item: str) -> frozenset[str]:
+        """이 항목이 같은 물성으로 이어진 키 전부 — 눈금을 안 가리고."""
+        return frozenset().union(*(self.by_item.get(item) or {}).values())
+
+
+def item_links(db: Session) -> ItemLinks:
+    """사내 물성 항목 → 문헌 키 다리를 한 번에 읽는다."""
+    found: dict[str, dict[str | None, set[str]]] = {}
+    for item, key, scale in db.execute(
+        select(VocabularyTerm.value, PropertyLink.property_key, PropertyLink.scale)
+        .join(VocabularyTerm, VocabularyTerm.id == PropertyLink.term_id)
+        .where(PropertyLink.kind == "same_as")
+    ).all():
+        found.setdefault(str(item), {}).setdefault(scale or None, set()).add(str(key))
+    return ItemLinks(
+        {
+            item: {scale: frozenset(keys) for scale, keys in scales.items()}
+            for item, scales in found.items()
+        }
+    )
 
 
 def _catalog_condition(conditions: dict[str, Any] | None) -> dict[str, float]:
-    """문헌 `conditions` 에서 표준 조건만 SI 로."""
-    if not conditions:
-        return {}
+    """문헌 `conditions` 에서 표준 조건만 SI 로 — 값 검색과 같은 표를 읽는다.
+
+    전에는 키를 소문자로 접어 별칭만 봤다 — 값 검색(대소문자를 가린다)과 답이 갈렸고,
+    `frequency_MHz` 같은 이름은 어느 쪽도 못 읽었다(2026-10-04).
+    """
     out: dict[str, float] = {}
-    for raw_key, raw in conditions.items():
-        if not isinstance(raw, int | float) or isinstance(raw, bool):
-            continue
-        key = str(raw_key).lower()
-        canonical = standard_conditions.resolve(key)
-        if canonical is None or canonical in out:
-            continue
-        value = float(raw)
-        if canonical == "temperature" and key == "temperature_c":
-            value += 273.15
-        out[canonical] = value
+    for key in standard_conditions.STANDARD:
+        value = standard_conditions.read_catalog(conditions, key)
+        if value is not None:
+            out[key] = value
     return out
 
 
@@ -259,7 +289,7 @@ def collect(db: Session, material_id: uuid.UUID) -> Coverage:
         unmapped["scalars"] = unmapped_scalars
 
     # ── 선언 물성 (재료 층 + 시료 층)
-    item_map = item_property_map(db)
+    links = item_links(db)
     unmapped_items: set[str] = set()
     material = db.get(Material, material_id)
     holders: list[tuple[str, str, str, list[dict[str, Any]]]] = []
@@ -281,7 +311,7 @@ def collect(db: Session, material_id: uuid.UUID) -> Coverage:
     for ref_kind, ref_id, ref_label, declared in holders:
         for entry in declared:
             item = str(entry.get("item") or "")
-            property_key = item_map.get(item)
+            property_key = links.key_of(item, entry.get("scale"))
             if property_key is None:
                 if item:
                     unmapped_items.add(item)
@@ -292,14 +322,13 @@ def collect(db: Session, material_id: uuid.UUID) -> Coverage:
                 value = point.get("value_si")
                 if not isinstance(value, int | float) or isinstance(value, bool):
                     continue
+                # 주파수를 타는 항목(유전율)은 주파수가 조건이다 — 값 검색과 같은 짝
+                # (`declared_conditions.POINT_KEY_OF_STANDARD`).
                 conditions: dict[str, float] = {}
-                at = point.get("temperature_k")
-                if isinstance(at, int | float) and not isinstance(at, bool):
-                    conditions["temperature"] = float(at)
-                # 주파수를 타는 항목(유전율)은 주파수가 조건이다 — 표준 조건 키 `frequency`.
-                hertz = point.get("frequency_hz")
-                if isinstance(hertz, int | float) and not isinstance(hertz, bool):
-                    conditions["frequency"] = float(hertz)
+                for standard, point_key in declared_conditions.POINT_KEY_OF_STANDARD.items():
+                    at = point.get(point_key)
+                    if isinstance(at, int | float) and not isinstance(at, bool):
+                        conditions[standard] = float(at)
                 by_property[property_key].append(
                     Entry(
                         origin="internal",
@@ -332,7 +361,12 @@ def collect(db: Session, material_id: uuid.UUID) -> Coverage:
     for value, catalog_material in db.execute(
         select(CatalogValue, CatalogMaterial)
         .join(CatalogMaterial, CatalogMaterial.id == CatalogValue.material_id)
-        .where(CatalogValue.material_id.in_(linked), CatalogValue.value_num.is_not(None))
+        .where(
+            CatalogValue.material_id.in_(linked),
+            CatalogValue.value_num.is_not(None),
+            # 원본에서 빠진 값은 「문헌이 채운다」 의 근거가 아니다(`mt_import.mark_missing`).
+            CatalogValue.source_missing_at.is_(None),
+        )
     ).all():
         by_property[value.property_key].append(
             Entry(

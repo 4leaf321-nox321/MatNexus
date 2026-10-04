@@ -497,7 +497,7 @@ class Test카드_항목:
             )
             assert term is not None
             term.attributes = {"dimension": "dimensionless"}
-            db.add(PropertyLink(property_key=key, term_id=term.id, kind="exact"))
+            db.add(PropertyLink(property_key=key, term_id=term.id, kind="same_as"))
             db.commit()
 
             material = _material(client, admin_headers, "PROBE")

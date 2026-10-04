@@ -37,6 +37,7 @@ from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from app.modules.catalog.models import CatalogDefinition, CatalogValue
+from app.shared import representative
 
 #: `conditions` 에서 변수를 가리키는 칸.
 TERM = "term"
@@ -120,11 +121,14 @@ def _load(db: Session) -> dict[str, list[str]]:
     global _cache
     if _cache is not None:
         return _cache
+    # **변수인 값만 센다** — `term` 이 구분으로만 쓰인 값(최고 사용온도 short · long)은 그
+    # 물성의 값이다. 대표값 · 값 검색과 같은 규칙(`representative.term_clause`).
+    marked = " OR ".join(f"conditions ? '{mark}'" for mark in representative.FORMULA_MARKS)
     rows = db.execute(
         text(f"""
         SELECT property_key, conditions->>'{TERM}' AS term, count(*)
         FROM catalog_values
-        WHERE conditions ? '{TERM}' AND conditions->>'{TERM}' IS NOT NULL
+        WHERE conditions ? '{TERM}' AND conditions->>'{TERM}' IS NOT NULL AND ({marked})
         GROUP BY 1, 2
         """)
     ).all()
@@ -342,7 +346,10 @@ def sets(
             func.coalesce(CatalogValue.conditions[MODEL].astext, ""),
             func.coalesce(CatalogValue.conditions[SET_ID].astext, ""),
         )
-        .where(CatalogValue.property_key == key, CatalogValue.conditions.has_key(TERM))
+        .where(
+            CatalogValue.property_key == key,
+            representative.term_clause(CatalogValue.conditions),
+        )
         .group_by(CatalogValue.material_id, text("2"), text("3"))
         .limit(limit)
     )

@@ -7,6 +7,8 @@
 
 순위(앞이 이긴다):
 
+    ⓪ 원본에 있는 것    원본 스냅샷에서 빠진 값(`source_missing_at`)은 **대표가 못 된다** —
+                       무리가 전부 빠진 값이면 그 물성의 대표가 없다(2026-10-04)
     ① 고체상 먼저      용융·액체 상태 값은 뒤로 (solder 용융 물성이 대표가 되면 안 된다)
     ② 등급(tier) 낮은 것   실측 > 핸드북 > 2차 인용 > 추정
     ③ 수치 있는 것
@@ -20,6 +22,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any
+
+from sqlalchemy import or_
 
 #: 조건이 아니라 관리 기록인 키 — 순위·조건 수에 안 센다 (원본 `_NOT_A_CONDITION`).
 _BOOKKEEPING_KEYS = frozenset(
@@ -42,7 +46,7 @@ _REFERENCE_K = 296.15
 _UNKNOWN_TEMPERATURE_PENALTY = 5.0
 
 #: 순위 자리 이름 — `separated_by` 가 이 말로 밀린 이유를 말한다.
-_SLOTS = ("상태", "등급", "수치", "온도", "조건 수", "입력 순서")
+_SLOTS = ("원본에서 빠짐", "상태", "등급", "수치", "온도", "조건 수", "입력 순서")
 
 
 def is_bookkeeping(key: str) -> bool:
@@ -139,10 +143,16 @@ def _distinguishing(members: list[Any]) -> dict[Any, dict[str, Any]]:
     }
 
 
+def is_missing(value: Any) -> bool:
+    """원본 스냅샷에서 빠진 값인가 — 이관은 지우지 않고 표시한다(`mt_import.mark_missing`)."""
+    return getattr(value, "source_missing_at", None) is not None
+
+
 def _rank(value: Any) -> tuple[float, ...]:
     conditions = semantic_conditions(value.conditions)
     state = str(conditions.get("state", "")).lower()
     return (
+        1.0 if is_missing(value) else 0.0,
         1.0 if any(word in state for word in _NOT_SOLID) else 0.0,
         float(value.quality_tier),
         0.0 if value.value_num is not None else 1.0,
@@ -179,7 +189,7 @@ def _summary(members: list[Any], varying: dict[Any, dict[str, Any]]) -> dict[str
 
 
 #: 식의 한 벌을 가리키는 표지 — 이 중 하나가 `term` 과 함께 있어야 식의 변수다.
-_FORMULA_MARKS = ("model", "set_id", "unit_of_term")
+FORMULA_MARKS = ("model", "set_id", "unit_of_term")
 
 
 def is_term(value: Any) -> bool:
@@ -198,7 +208,19 @@ def is_term(value: Any) -> bool:
     return (
         isinstance(conditions, dict)
         and "term" in conditions
-        and any(mark in conditions for mark in _FORMULA_MARKS)
+        and any(mark in conditions for mark in FORMULA_MARKS)
+    )
+
+
+def term_clause(conditions: Any) -> Any:
+    """`is_term` 의 SQL — **같은 규칙을 DB 에서 건다**(값 검색 · 값 범위 · 변수 목록 · 비교).
+
+    둘이 갈라지면 대표값에는 서는 값이 검색에서는 안 보인다. 2026-10-04 에 대표값만
+    고쳐서, 최고 사용온도의 short · long 48건과 여기 상태 수명의 prompt · delayed 57건이
+    값 검색에서 계속 빠졌다(검색은 `term` 만 보고 뺐다). `conditions` 는 JSONB 칸이다.
+    """
+    return conditions.has_key("term") & or_(
+        *(conditions.has_key(mark) for mark in FORMULA_MARKS)
     )
 
 
@@ -234,9 +256,21 @@ def annotate(values: list[Any]) -> dict[Any, Annotation]:
         winner = ranked[0]
         winner_rank = _rank(winner)
         varying = _distinguishing(members)
+        if is_missing(winner):
+            # **무리가 전부 원본에서 빠졌다** — 대표를 세우지 않는다. 남겨 둔 것은 근거를 쥔
+            # 자리를 위해서지, 덱 · 비교 · Ashby 에 그 값을 계속 내려고가 아니다.
+            for one in ranked:
+                out[one.id] = Annotation(
+                    representative=False,
+                    n_candidates=len(members),
+                    separated_by=_SLOTS[0],
+                    distinguishing=varying.get(one.id, {}),
+                )
+            continue
         # **대표 줄에만 싣는다.** 줄마다 같은 종합을 되풀이하면 「값이 여럿이다」 가
         # 아니라 「종합이 여럿이다」 로 읽힌다.
-        summary = _summary(members, varying)
+        # 종합도 원본에 있는 값끼리만 — 빠진 값이 중앙값을 끌면 안 된다.
+        summary = _summary([one for one in members if not is_missing(one)], varying)
         out[winner.id] = Annotation(
             representative=True,
             n_candidates=len(members),

@@ -13,7 +13,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query, Response
-from sqlalchemy import ColumnElement, Row, and_, exists, func, or_, select
+from sqlalchemy import ColumnElement, Row, exists, func, or_, select
 from sqlalchemy.orm import Session
 
 from app import version
@@ -612,17 +612,10 @@ def _candidate_counts(
         .where(
             CatalogValue.material_id.in_(material_ids),
             # 대표값과 같은 무리만 센다 — 식의 변수 값은 그 칸의 후보가 아니다
-            # (`representative.is_term` 과 같은 기준: `term` 과 한 벌의 표지가 함께 있을 때).
+            # (`representative.is_term` 의 SQL: `term` 과 한 벌의 표지가 함께 있을 때).
             or_(
                 CatalogValue.conditions.is_(None),
-                ~and_(
-                    CatalogValue.conditions.has_key(parameters.TERM),
-                    or_(
-                        CatalogValue.conditions.has_key(parameters.MODEL),
-                        CatalogValue.conditions.has_key(parameters.SET_ID),
-                        CatalogValue.conditions.has_key(parameters.UNIT_OF_TERM),
-                    ),
-                ),
+                ~representative.term_clause(CatalogValue.conditions),
             ),
         )
         .group_by(CatalogValue.material_id, CatalogValue.property_key)
@@ -998,6 +991,7 @@ def _values_out(
             distinguishing=marks[value.id].distinguishing,
             summary=marks[value.id].summary,
             origin=contribute.origin_of(value),
+            source_missing_at=value.source_missing_at,
             created_by=(creators or {}).get(value.created_by_id)
             if value.created_by_id
             else None,
@@ -1049,6 +1043,7 @@ def get_material(
         grade=item.grade,
         attributes=item.attributes,
         origin=contribute.origin_of(item),
+        source_missing_at=item.source_missing_at,
         created_by=creators.get(item.created_by_id) if item.created_by_id else None,
         values=values,
     )

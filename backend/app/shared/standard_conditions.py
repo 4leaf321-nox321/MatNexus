@@ -22,7 +22,9 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -129,6 +131,66 @@ def resolve(key: str | None, *, si_unit: str | None = None) -> str | None:
         if unit_given and si_unit.strip() != one.si_unit and not celsius:  # type: ignore[union-attr]
             return None
         return one.key
+    return None
+
+
+# --- 문헌의 조건 키 ------------------------------------------------------------
+
+#: 문헌(MaterialTwin) `conditions` 에서 **단위가 키 이름에 박힌** 키 → (양, 배수, 더할 값).
+#: SI = 값 * 배수 + 더할 값. 파장은 표준 조건이 아니지만 문헌 반영이 읽는다.
+#:
+#: **세 길이 따로 읽었다**(2026-10-04 실측). 값 검색은 별칭만, 커버리지는 소문자로 접은
+#: 별칭만, 문헌 반영은 `frequency_hz` 하나만 — 같은 값의 조건이 화면마다 있다가 없었다.
+#: 주파수는 일곱 가지로 적혀 있어서(`frequency_MHz` 194 · `frequency_ghz` 68 ·
+#: `frequency_Hz` 18 …) 반영하면 그 값들의 주파수가 빠졌다. 이제 셋 다 이 표를 읽는다.
+#:
+#: **글은 읽지 않는다** — 「5 Hz」 · 「room temperature」 를 숫자로 풀면 짐작이 섞인다.
+#: 키는 대소문자를 가린다 — SQL 의 JSON 키가 그렇고, 두 길(SQL · 파이썬)은 같은 답을 내야 한다.
+UNIT_KEYS: dict[str, tuple[str, float, float]] = {
+    "temperature_k": ("temperature", 1.0, 0.0),
+    "temperature_c": ("temperature", 1.0, 273.15),
+    "temperature_f": ("temperature", 5 / 9, 459.67 * 5 / 9),
+    "frequency_hz": ("frequency", 1.0, 0.0),
+    "frequency_Hz": ("frequency", 1.0, 0.0),
+    "freq_Hz": ("frequency", 1.0, 0.0),
+    "frequency_MHz": ("frequency", 1e6, 0.0),
+    "frequency_ghz": ("frequency", 1e9, 0.0),
+    "frequency_GHz": ("frequency", 1e9, 0.0),
+    # 각주파수(rad/s)와 분당 사이클 — Hz 는 초당 사이클이다.
+    "frequency_rad_per_s": ("frequency", 1 / (2 * math.pi), 0.0),
+    "frequency_rad_s": ("frequency", 1 / (2 * math.pi), 0.0),
+    "frequency_cpm": ("frequency", 1 / 60, 0.0),
+    "wavelength_m": ("wavelength", 1.0, 0.0),
+    "wavelength_um": ("wavelength", 1e-6, 0.0),
+    "wavelength_nm": ("wavelength", 1e-9, 0.0),
+}
+
+
+def catalog_keys(quantity: str) -> tuple[tuple[str, float, float], ...]:
+    """문헌 `conditions` 에서 이 양을 읽는 키와 환산 `(키, 배수, 더할 값)` — **앞이 이긴다.**
+
+    단위가 이름에 박힌 키가 먼저, 그다음 표준 조건의 이름 · 별칭이다(SI 로 적었다고 본다).
+    """
+    named = [
+        (key, factor, offset)
+        for key, (of, factor, offset) in UNIT_KEYS.items()
+        if of == quantity
+    ]
+    standard = STANDARD.get(quantity)
+    plain = [
+        (alias, 1.0, 0.0)
+        for alias in ((standard.key, *standard.aliases) if standard else ())
+        if alias.isascii() and alias not in UNIT_KEYS
+    ]
+    return tuple(named + plain)
+
+
+def read_catalog(conditions: dict[str, Any] | None, quantity: str) -> float | None:
+    """문헌 값의 조건에서 이 양을 SI 로. **숫자로 적힌 것만** — 없으면 `None`."""
+    for key, factor, offset in catalog_keys(quantity):
+        raw = (conditions or {}).get(key)
+        if isinstance(raw, int | float) and not isinstance(raw, bool):
+            return float(raw) * factor + offset
     return None
 
 

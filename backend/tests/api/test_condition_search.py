@@ -48,7 +48,12 @@ def yield_def(db: Session) -> CatalogDefinition:
 
 
 def _measured(
-    db: Session, workspace: Workspace, *, name: str, temperature_k: float, values: list[float]
+    db: Session,
+    workspace: Workspace,
+    *,
+    name: str,
+    temperature_k: float | str,
+    values: list[float],
 ) -> Material:
     """시험으로 잰 항복강도 — 시편마다 채택된 처리 결과 하나. 조건은 시험의 온도 칸에."""
     ensure_builtin_test_types(db)
@@ -220,6 +225,139 @@ class Test조건:
         assert (
             unknown.status_code == 422 and "temperature" in unknown.json()["error"]["message"]
         )
+
+
+class Test글로_적힌_조건:
+    """조건 칸에 숫자 대신 글이 적혀 있어도 **검색이 터지지 않는다**(2026-10-04).
+
+    문헌의 `temperature` 2,177건이 「room temperature」 다. 그것을 그대로 숫자로 바꾸려다
+    온도로 거른 값 검색이 통째로 500 이었다 — MCP 의 물성 검색도 같은 길이다(개발 DB 에서
+    영률을 250~350 K 로 걸어 재현). 시험의 조건 칸에도 「RT」 가 적힐 수 있다.
+    """
+
+    def test_글은_안_걸리고_숫자는_걸린다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        workspace: Workspace,
+        yield_def: CatalogDefinition,
+    ) -> None:
+        _catalog(
+            db,
+            name="LIT_TEXT",
+            value=500e6,
+            conditions={"temperature": "room temperature"},
+            tier=2,
+        )
+        _catalog(db, name="LIT_K", value=520e6, conditions={"temperature_k": 296.15}, tier=2)
+        _measured(db, workspace, name="RUN_TEXT", temperature_k="RT", values=[300e6])
+        _measured(db, workspace, name="RUN_K", temperature_k=296.15, values=[310e6])
+
+        names = set(
+            _by_name(
+                _search(
+                    client,
+                    admin_headers,
+                    condition="temperature",
+                    condition_unit="K",
+                    condition_near=296.15,
+                )
+            )
+        )
+        assert names == {"LIT_K", "RUN_K"}, names
+
+
+class Test단위가_이름에_박힌_조건:
+    """문헌의 주파수는 일곱 가지 이름으로 적혀 있다 — **어느 이름이든 같은 조건이다**
+    (2026-10-04).
+
+    값 검색은 `frequency_hz` · `freq` 만, 커버리지는 소문자로 접은 별칭만, 문헌 반영은
+    `frequency_hz` 하나만 읽었다 — `frequency_MHz` 194건은 어디서도 주파수가 없었다.
+    """
+
+    def test_MHz_로_적힌_값도_주파수로_걸린다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        yield_def: CatalogDefinition,
+    ) -> None:
+        _catalog(db, name="HZ", value=500e6, conditions={"frequency_hz": 1e6}, tier=2)
+        _catalog(db, name="MHZ", value=510e6, conditions={"frequency_MHz": 1}, tier=2)
+        _catalog(db, name="GHZ", value=520e6, conditions={"frequency_ghz": 1}, tier=2)
+        _catalog(db, name="TEXT", value=530e6, conditions={"frequency": "1 MHz"}, tier=2)
+
+        names = set(
+            _by_name(
+                _search(
+                    client,
+                    admin_headers,
+                    condition="frequency",
+                    condition_unit="MHz",
+                    condition_near=1,
+                )
+            )
+        )
+        # 글(「1 MHz」)은 읽지 않는다 — 숫자로 풀면 짐작이 섞인다.
+        assert names == {"HZ", "MHZ"}, names
+
+    def test_SQL_과_파이썬이_같은_답을_낸다(
+        self, db: Session, yield_def: CatalogDefinition
+    ) -> None:
+        """값 검색(SQL)과 커버리지 · 문헌 반영(파이썬)이 **같은 표**를 읽는다.
+
+        둘이 갈라지면 한 화면은 「80 °C 의 값」 이라 하고 다른 화면은 「조건 없음」 이라 한다.
+        """
+        from app.shared import property_search, standard_conditions
+
+        cases: list[dict[str, Any]] = [
+            {"temperature_c": 80},
+            {"temperature_k": 300, "temperature_c": 25},
+            {"temperature_f": 212},
+            {"temperature": "room temperature"},
+            {"frequency_MHz": 100},
+            {"frequency_ghz": 10},
+            {"frequency_Hz": 50},
+            {"frequency_rad_per_s": 2 * 3.141592653589793},
+            {"frequency_cpm": 60},
+            {"frequency_hz": "미상"},
+            {"frequency": "5 Hz"},
+            {},
+        ]
+        for index, conditions in enumerate(cases):
+            _catalog(db, name=f"C{index}", value=1.0, conditions=conditions, tier=2)
+        rows = db.execute(
+            select(
+                CatalogMaterial.name,
+                property_search._catalog_condition_si("temperature"),
+                property_search._catalog_condition_si("frequency"),
+            ).join(CatalogValue, CatalogValue.material_id == CatalogMaterial.id)
+        ).all()
+        assert len(rows) == len(cases)
+
+        def same(sql: float | None, python: float | None) -> bool:
+            if sql is None or python is None:
+                return sql is None and python is None
+            return sql == pytest.approx(python)
+
+        for name, kelvin, hertz in rows:
+            conditions = cases[int(name[1:])]
+            assert same(kelvin, standard_conditions.read_catalog(conditions, "temperature")), (
+                name
+            )
+            assert same(hertz, standard_conditions.read_catalog(conditions, "frequency")), name
+
+        read = standard_conditions.read_catalog
+        assert read({"temperature_f": 212}, "temperature") == pytest.approx(373.15)
+        # 단위를 적은 키가 이긴다 — 둘 다 있으면 켈빈이다(전과 같다).
+        assert read({"temperature_k": 300, "temperature_c": 25}, "temperature") == 300
+        assert read({"frequency_MHz": 100}, "frequency") == pytest.approx(1e8)
+        assert read({"frequency_rad_per_s": 2 * 3.141592653589793}, "frequency") == (
+            pytest.approx(1.0)
+        )
+        assert read({"frequency_cpm": 60}, "frequency") == pytest.approx(1.0)
+        assert read({"frequency": "5 Hz"}, "frequency") is None
 
 
 class Test등급:
