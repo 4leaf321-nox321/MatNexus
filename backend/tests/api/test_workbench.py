@@ -22,7 +22,7 @@ from sqlalchemy.orm import Session
 
 from app.modules.accounts.models import User
 from app.modules.auth import security
-from app.modules.fitting.models import PropertyCard
+from app.modules.fitting.models import PropertyCard, PropertyCardRemark
 from app.modules.processing.models import ProcessingResult
 from app.modules.tests import models as test_models
 from app.modules.tests import services as test_services
@@ -201,6 +201,14 @@ class Test담긴_것이_무엇을_갖췄는지_센다:
         db.commit()
         detail = client.get(f"/api/workbench/runs/{run['id']}", headers=admin_headers).json()
         assert detail["items"][0]["facts"]["parsed"] == 0
+        assert detail["items"][0]["detail"] == "실패"
+
+        # **표로 입력한 시험은 읽을 파일이 없다** — 「안 읽힘」 이 아니라 따로 온다.
+        row.status = "imported"
+        db.commit()
+        detail = client.get(f"/api/workbench/runs/{run['id']}", headers=admin_headers).json()
+        assert detail["items"][0]["facts"]["imported"] == 1
+        assert detail["items"][0]["facts"]["parsed"] == 0
 
     def test_열이_채널로_잡혔는지_달고_온다(
         self,
@@ -250,14 +258,27 @@ class Test담긴_것이_무엇을_갖췄는지_센다:
         material: dict[str, Any],
     ) -> None:
         """확정 전에 보는 것 — **표본 수와 경고.** 표본 하나로 만든 카드는 만들
-        수는 있어도 그대로 확정하면 안 된다."""
+        수는 있어도 그대로 확정하면 안 된다.
+
+        **경고만 센다**(2026-10-04). 각주를 전부 세던 동안 출처 설명(「재료에 적힌 값입니다」)
+        까지 경고로 서서, 개발 DB 의 카드 42장이 전부 경고 카드였다.
+        """
         card = PropertyCard(
             material_id=uuid.UUID(material["id"]),
             label="인장 TD",
             status="draft",
-            source={"sample_count": 1, "notes": ["표본이 하나입니다", "구간이 짧습니다"]},
+            source={
+                "sample_count": 1,
+                "notes": [
+                    "푸아송비: 재료에 적힌 값입니다.",
+                    "밀도: 재료에도 시료에도 밀도가 없습니다.",
+                    "시편 3건을 'pooled' 방법으로 묶어 만들었습니다.",
+                ],
+            },
         )
         db.add(card)
+        db.commit()
+        db.add(PropertyCardRemark(card_id=card.id, kind="relocated", message="옮겨졌습니다"))
         db.commit()
 
         [item] = client.post(
@@ -266,8 +287,38 @@ class Test담긴_것이_무엇을_갖췄는지_센다:
             headers=admin_headers,
         ).json()
         assert item["facts"]["samples"] == 1
-        assert item["facts"]["notes"] == 2
+        assert item["facts"]["warnings"] == 1
+        assert item["facts"]["remarks"] == 1
         assert item["facts"]["published"] == 0
+        assert item["facts"]["deprecated"] == 0
+        assert item["detail"].endswith("초안")
+
+    def test_사용_중지는_초안과_따로_온다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        run: dict[str, Any],
+        material: dict[str, Any],
+    ) -> None:
+        """**사용 중지는 확정할 것이 아니다.** 「초안」 으로 세면 판정이 쓰지 말라는 카드를
+        확정하라고 재촉한다."""
+        card = PropertyCard(
+            material_id=uuid.UUID(material["id"]),
+            label="옛 카드",
+            status="deprecated",
+            source={},
+        )
+        db.add(card)
+        db.commit()
+        [item] = client.post(
+            f"/api/workbench/runs/{run['id']}/items",
+            json={"kind": "card", "target_ids": [str(card.id)]},
+            headers=admin_headers,
+        ).json()
+        assert item["facts"]["deprecated"] == 1
+        assert item["facts"]["published"] == 0
+        assert item["detail"].endswith("사용 중지")
 
     def test_시험은_어느_재료의_것인지_달고_온다(
         self,
@@ -293,6 +344,11 @@ class Test담긴_것이_무엇을_갖췄는지_센다:
             f"/api/samples/{specimen['sample_id']}", headers=admin_headers
         ).json()
         assert item["material_id"] == sample["material_id"]
+        # **이름도 온다** — 「담은 시험의 재료로 카드 만들기」 가 이름으로 권한다(ADR 0058).
+        material = client.get(
+            f"/api/materials/{sample['material_id']}", headers=admin_headers
+        ).json()
+        assert item["material_label"] == material["record_name"]
 
     def test_그_시험에서_나온_카드를_센다(
         self,

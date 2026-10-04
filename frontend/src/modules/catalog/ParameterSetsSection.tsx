@@ -206,7 +206,7 @@ function AdoptParameterSetDialog({
 
   return (
     <Dialog open={set !== null} onOpenChange={(next) => !next && onClose()}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>사내 재료에 추가</DialogTitle>
           <DialogDescription>

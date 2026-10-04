@@ -139,7 +139,7 @@ def test_장비_폼이_서버_칸을_다_그린다() -> None:
 def test_시험_상태_라벨이_서버와_같다() -> None:
     """배지(화면 라벨)와 거르개(서버 라벨)가 같은 말을 해야 한다. 「표로 입력」 이 화면에
     없어 `imported` 가 영문 그대로 떴다(2026-09-13)."""
-    from app.modules.tests.routes import RUN_STATUS_LABELS
+    from app.shared.run_status import RUN_STATUS_LABELS
 
     api = EDITOR.parent / "api.ts"
     text = api.read_text(encoding="utf-8")

@@ -328,7 +328,7 @@ function MaterialPickerDialog({
 
   return (
     <Dialog open onOpenChange={(next) => !next && onClose()}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>재료 선택</DialogTitle>
           <DialogDescription>

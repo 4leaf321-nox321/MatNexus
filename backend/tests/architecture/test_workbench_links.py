@@ -48,6 +48,27 @@ def test_워크플로가_가리키는_화면이_있다() -> None:
     )
 
 
+def test_화면이_읽는_사실의_이름이_서버와_같다() -> None:
+    """**판정의 입력 이름은 한 벌이다**(`FACT_KEYS` ↔ `FACTS_READ`).
+
+    어긋나면 화면은 없는 키를 읽어 0을 얻고, 0은 「아직 안 했다」 로 읽힌다 — 영원히 안
+    끝나는 단계가 되는데 양쪽 시험은 다 통과한다. 2026-10-04 에 카드의 `notes` 를
+    `warnings` 로 바꾸면서 두 쪽을 함께 고쳐야 했다 — 한쪽만 고쳤으면 아무도 몰랐다.
+    화면 쪽은 `workflows.test.ts` 가 판정이 이 표 밖의 이름을 안 읽는지 본다.
+    """
+    from app.modules.workbench.services import FACT_KEYS
+
+    text = WORKFLOWS.read_text(encoding="utf-8")
+    block = re.search(
+        r"FACTS_READ: Record<ItemKind, string\[\]> = \{(.*?)\n\}", text, re.DOTALL
+    )
+    assert block, "FACTS_READ 를 못 찾았다 — 이름이 바뀌었나"
+    found: dict[str, set[str]] = {}
+    for kind, names in re.findall(r"(\w+): \[([^\]]*)\]", block.group(1)):
+        found[kind] = set(re.findall(r"'([a-z_]+)'", names))
+    assert found == FACT_KEYS
+
+
 def test_담으러_보내는_길에_표시가_붙어_있다() -> None:
     """**그 표시가 담기 창을 띄운다.**
 

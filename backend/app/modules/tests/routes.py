@@ -98,6 +98,7 @@ from app.shared.access import AccessBook, EditAccessOut, access_of
 from app.shared.auth import current_user, require_system_admin
 from app.shared.errors import AppError, Conflict, NotFound
 from app.shared.pagination import Page, clamp_limit
+from app.shared.run_status import RUN_STATUS_LABELS
 from matcore import naming, parsers, processing, readers, registry
 from matcore.groups import prony as _prony_group  # noqa: F401  (등록시킨다)
 from matcore.readers import profile as profiles
@@ -1010,16 +1011,6 @@ def upload_test_run(
 
 # --- 조회 -------------------------------------------------------------------
 
-
-#: 시험 상태 → 사람이 읽는 말. 화면의 `RUN_STATUS_LABEL` 과 같아야 한다 — 거르개(서버
-#: 라벨)와 배지(화면 라벨)가 다른 말을 하면 같은 상태가 둘로 보인다.
-RUN_STATUS_LABELS: dict[str, str] = {
-    "uploaded": "대기",
-    "parsing": "읽는 중",
-    "parsed": "완료",
-    "failed": "실패",
-    "imported": "표로 입력",
-}
 
 #: 시험 목록에서 정렬할 수 있는 열. **화면이 목록을 정하지 않는다.**
 #:

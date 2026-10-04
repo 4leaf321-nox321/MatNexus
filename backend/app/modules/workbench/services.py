@@ -25,13 +25,15 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.modules.accounts.models import User
-from app.modules.fitting.models import PropertyCard
+from app.modules.fitting.models import PropertyCard, PropertyCardRemark
 from app.modules.materials.models import Material, Sample, Specimen
 from app.modules.processing.models import ProcessingResult
 from app.modules.tests.models import Curve, TestRun
 from app.modules.viscoelastic.models import MasterCurve, PronyFit
 from app.modules.workbench.models import WorkbenchItem
 from app.modules.workbench.schemas import ItemOut
+from app.shared.card_notes import cautions
+from app.shared.run_status import RUN_STATUS_LABELS
 
 
 @dataclass(frozen=True)
@@ -47,6 +49,7 @@ class Resolved:
     detail: str = ""
     facts: dict[str, int] = field(default_factory=dict)
     material_id: uuid.UUID | None = None
+    material_label: str | None = None
 
 
 def _count_by_run(
@@ -97,22 +100,29 @@ def _cards_by_run(
     return counts
 
 
-def _material_by_run(db: Session, runs: list[TestRun]) -> dict[uuid.UUID, uuid.UUID]:
+def _material_by_run(
+    db: Session, runs: list[TestRun]
+) -> dict[uuid.UUID, tuple[uuid.UUID, str]]:
     """시험이 어느 재료의 것인가 — **시편 → 시료 → 재료**.
 
     화면이 「이 시험의 재료로 가기」 를 그릴 수 있어야 한다. 글로벌 피팅은 재료 화면에
     있는데(ADR 0020), 바구니에는 시험만 담기기 때문이다. **주소가 아니라 id 를 준다** —
     화면의 주소 체계를 서버가 알면 라우팅을 고칠 때마다 서버도 고쳐야 한다.
+
+    **이름도 함께 준다**(2026-10-04) — 「물성 카드 하나 만들기」 가 「담은 시험의 재료:
+    EPDM-70 으로」 를 권하려면 이름이 있어야 하고, 그것을 화면이 재료 API 로 따로 묻는 것은
+    남의 도메인을 아는 일이다.
     """
     if not runs:
         return {}
     rows = db.execute(
-        select(TestRun.id, Sample.material_id)
+        select(TestRun.id, Material.id, Material.record_name)
         .join(Specimen, Specimen.id == TestRun.specimen_id)
         .join(Sample, Sample.id == Specimen.sample_id)
+        .join(Material, Material.id == Sample.material_id)
         .where(TestRun.id.in_([one.id for one in runs]))
     )
-    return {run_id: material_id for run_id, material_id in rows}
+    return {run_id: (material_id, name) for run_id, material_id, name in rows}
 
 
 def _channels_by_run(db: Session, runs: list[TestRun]) -> dict[uuid.UUID, int]:
@@ -169,13 +179,20 @@ FACT_KEYS = {
         "cards",
         "adopted",
         "parsed",
+        "imported",
         "results",
         "channels",
         "temperature_steps",
     },
     "material": {"cards", "published_cards"},
-    "card": {"published", "samples", "notes"},
+    # `notes` 가 있었다 — 출처 설명까지 세어 카드마다 「경고」 가 섰다(2026-10-04). 이제
+    # 경고만 센다(`warnings`), 사용 중지와 코멘트는 따로 센다.
+    "card": {"published", "deprecated", "samples", "warnings", "remarks"},
 }
+
+#: 카드 상태를 **사람의 말로.** 영어 상태값을 그대로 보이면 「published」 를 읽고 무엇이
+#: 끝났는지 다시 물어야 한다. 시험 상태는 시험 목록과 한 벌이다(`shared/run_status`).
+CARD_STATUS = {"draft": "초안", "published": "확정", "deprecated": "사용 중지"}
 
 
 def _test_runs(db: Session, ids: set[uuid.UUID]) -> dict[uuid.UUID, Resolved]:
@@ -187,15 +204,18 @@ def _test_runs(db: Session, ids: set[uuid.UUID]) -> dict[uuid.UUID, Resolved]:
     curves = _count_by_run(db, MasterCurve.test_run_id, MasterCurve, live)
     fits = _prony_by_run(db, live)
     owners = _material_by_run(db, live)
-    made = _cards_by_run(db, live, owners)
+    made = _cards_by_run(db, live, {run_id: one[0] for run_id, one in owners.items()})
     processed = _results_by_run(db, live)
     channels = _channels_by_run(db, live)
     return {
         row.id: Resolved(
             label=row.record_name,
             # **상태가 곧 다음 할 일이다** — 읽기 실패인지, 채택까지 끝났는지.
-            detail="채택됨" if row.adopted_result_id else row.status,
-            material_id=owners.get(row.id),
+            detail="채택됨"
+            if row.adopted_result_id
+            else RUN_STATUS_LABELS.get(row.status, row.status),
+            material_id=owners[row.id][0] if row.id in owners else None,
+            material_label=owners[row.id][1] if row.id in owners else None,
             # **판정의 재료는 서버가 준다.** 화면이 도메인 API 를 따로 부르면
             # 워크벤치가 남의 도메인을 알게 되고, 그 방향은 되돌리기 어렵다.
             facts={
@@ -205,6 +225,9 @@ def _test_runs(db: Session, ids: set[uuid.UUID]) -> dict[uuid.UUID, Resolved]:
                 "adopted": 1 if row.adopted_result_id else 0,
                 # 오늘 들어온 것을 미는 데 필요한 둘 — 읽혔나, 처리됐나.
                 "parsed": 1 if row.status == "parsed" else 0,
+                # **표로 입력한 시험은 읽을 파일이 없다** — 값만 있고 곡선이 없다. 「안 읽힘」
+                # 으로 세면 할 수 없는 일(읽기 · 처리)을 재촉한다.
+                "imported": 1 if row.status == "imported" else 0,
                 "results": processed.get(row.id, 0),
                 # 새 장비 파일을 붙일 때 보는 것 — 열이 채널로 잡혔나.
                 "channels": channels.get(row.id, 0),
@@ -254,6 +277,7 @@ def _materials(db: Session, ids: set[uuid.UUID]) -> dict[uuid.UUID, Resolved]:
             label=row.record_name,
             detail=row.category or "",
             material_id=row.id,
+            material_label=row.record_name,
             # 해석 덱을 갖출 때 묻는 것은 둘이다 — 카드가 있나, 확정됐나.
             facts={
                 "cards": cards.get(row.id, (0, 0))[0],
@@ -275,6 +299,19 @@ def _cards(db: Session, ids: set[uuid.UUID]) -> dict[uuid.UUID, Resolved]:
             select(Material).where(Material.id.in_({row.material_id for row in rows}))
         )
     }
+    # 코멘트도 한 번에 센다 — 근거 시험이 다른 재료로 옮겨졌다는 말이 여기 붙는다.
+    remarks: dict[uuid.UUID, int] = (
+        {
+            card_id: int(count)
+            for card_id, count in db.execute(
+                select(PropertyCardRemark.card_id, func.count())
+                .where(PropertyCardRemark.card_id.in_([row.id for row in rows]))
+                .group_by(PropertyCardRemark.card_id)
+            )
+        }
+        if rows
+        else {}
+    )
     # **카드는 소프트 삭제가 없다** — 지우면 행이 사라진다(내리는 것은
     # `deprecated` 상태다). 그래서 여기서 거를 것도 없고, 지워진 카드는 조회에서
     # 안 나와 자연히 「사라졌습니다」 가 된다.
@@ -284,16 +321,22 @@ def _cards(db: Session, ids: set[uuid.UUID]) -> dict[uuid.UUID, Resolved]:
         name = material.record_name if material else "?"
         found[row.id] = Resolved(
             label=row.label,
-            detail=f"{name} · {row.status}",
+            detail=f"{name} · {CARD_STATUS.get(row.status, row.status)}",
             # 확정 여부는 「내보내도 되나」 를 가르는 사실이라 숫자로도 준다.
             facts={
                 "published": 1 if row.status == "published" else 0,
+                # **사용 중지는 초안이 아니다** — 확정할 것이 아니라 쓰지 말 것이다. 따로 안
+                # 세면 「아직 초안입니다」 가 사용 중지 카드를 확정하라고 재촉한다.
+                "deprecated": 1 if row.status == "deprecated" else 0,
                 # 확정 전에 보는 것 — **근거가 얼마나 두꺼운가.** 표본 하나로 만든
                 # 카드는 만들 수는 있어도 그대로 확정하면 안 된다.
                 "samples": int(row.source.get("sample_count") or 0),
-                "notes": len(row.source.get("notes") or []),
+                # 각주 중 **경고만**(`shared/card_notes`) — 출처 설명은 세지 않는다.
+                "warnings": len(cautions(row.source.get("notes"))),
+                "remarks": remarks.get(row.id, 0),
             },
             material_id=row.material_id,
+            material_label=material.record_name if material else None,
         )
     return found
 
@@ -329,6 +372,7 @@ def resolve(db: Session, items: Sequence[WorkbenchItem]) -> list[ItemOut]:
                 detail=hit.detail if hit else None,
                 facts=dict(hit.facts) if hit else {},
                 material_id=hit.material_id if hit else None,
+                material_label=hit.material_label if hit else None,
                 missing=hit is None,
                 note=item.note,
                 added_at=item.added_at,

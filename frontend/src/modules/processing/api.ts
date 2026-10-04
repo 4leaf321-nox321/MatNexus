@@ -28,6 +28,12 @@ export type Recipe = components['schemas']['RecipeOut']
 export type BatchOut = components['schemas']['BatchOut']
 export type BatchItem = components['schemas']['BatchItemOut']
 export type BatchUndoOut = components['schemas']['BatchUndoOut']
+/** 채택 검토대(ADR 0058) — 시험 하나와 그 결과들 · 결과 하나(곡선 없이) · 겹쳐 그릴 선 · 채택 결과. */
+export type RunOverview = components['schemas']['RunOverviewOut']
+export type ResultBrief = components['schemas']['ResultBriefOut']
+export type ResultLine = components['schemas']['ResultLineOut']
+export type AdoptManyOut = components['schemas']['AdoptManyOut']
+export type AdoptManyItem = components['schemas']['AdoptManyItemOut']
 type RecipeUpdate = components['schemas']['RecipeUpdateRequest']
 type RecipeCreate = components['schemas']['RecipeCreateRequest']
 
@@ -259,6 +265,24 @@ export const processingApi = {
    */
   undoBatch: (items: { result_id: string; restore_adopted_id?: string | null }[]) =>
     api.post<BatchUndoOut>('/processing/batch/undo', { items }),
+
+  /**
+   * 여러 시험의 결과 · 지금 채택 · 고칠 수 있나를 **한 번에**(차례 그대로). 못 보는 시험도
+   * 줄을 지킨다(`found=false`). 시험마다 `results` 를 부르면 스무 건이 스무 번이다.
+   */
+  overview: (testRunIds: string[]) =>
+    api.post<RunOverview[]>('/processing/overview', { test_run_ids: testRunIds }),
+
+  /** 겹쳐 그릴 곡선들 — **한 번에**. 축은 서버가 고른다(공칭이 먼저). 보조선은 안 싣는다. */
+  lines: (resultIds: string[]) =>
+    api.post<ResultLine[]>('/processing/results/curves', { result_ids: resultIds }),
+
+  /**
+   * 시험마다 고른 결과를 채택한다. **건별로 커밋하고 건별로 말한다.** `result_id: null` 은
+   * 채택을 거둔다 — 되돌리기는 응답의 `previous_adopted_id` 를 그대로 돌려보낸다.
+   */
+  adoptMany: (items: { test_run_id: string; result_id: string | null }[]) =>
+    api.post<AdoptManyOut>('/processing/adopt-many', { items }),
 
   recipes: (testType?: string) =>
     api.get<Recipe[]>(`/processing/recipes${search({ test_type: testType })}`),

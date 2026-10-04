@@ -808,7 +808,7 @@ function CellDialog({
   const cell = detail.data
   return (
     <Dialog open onOpenChange={(next) => !next && onClose()}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>
             {materialName} · {column.label}

@@ -188,7 +188,7 @@ export function AddValueDialog({
         }
       }}
     >
-      <DialogContent className="max-w-xl">
+      <DialogContent className="sm:max-w-xl">
         <DialogHeader>
           <DialogTitle>문헌 값 입력 — {detail.name}</DialogTitle>
           <DialogDescription>

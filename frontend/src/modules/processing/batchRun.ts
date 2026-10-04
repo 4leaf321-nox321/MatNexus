@@ -111,8 +111,8 @@ export interface Change {
   ratio: number | null
 }
 
-/** 사람이 먼저 보는 값. 앞의 것이 표의 앞에 온다. */
-const HEADLINE = ['youngs_modulus', 'proof_stress', 'tensile_strength']
+/** 사람이 먼저 보는 값. 앞의 것이 표의 앞에 온다 — 채택 검토대도 이 차례로 견준다. */
+export const HEADLINE = ['youngs_modulus', 'proof_stress', 'tensile_strength']
 
 /**
  * 전/후를 항목별로 맞춘다.
@@ -121,8 +121,16 @@ const HEADLINE = ['youngs_modulus', 'proof_stress', 'tensile_strength']
  * 견주게 되고, 그 표는 그럴듯해 보인다.
  */
 export function changesOf(item: BatchItem): Change[] {
-  const before = new Map(item.previous.map((one) => [one.key, one]))
-  const after = new Map(item.scalars.map((one) => [one.key, one]))
+  return changesBetween(item.previous, item.scalars)
+}
+
+/** 두 값 묶음을 항목별로 — 배치의 전/후, 채택 검토대의 「지금 채택 → 고른 것」 이 같이 쓴다. */
+export function changesBetween(
+  previous: BatchItem['previous'],
+  scalars: BatchItem['scalars']
+): Change[] {
+  const before = new Map(previous.map((one) => [one.key, one]))
+  const after = new Map(scalars.map((one) => [one.key, one]))
   const keys = [...new Set([...before.keys(), ...after.keys()])]
   const rows = keys.map((key) => {
     const left = before.get(key)

@@ -252,8 +252,13 @@ export const materialsApi = {
    * 적어 둔 값 하나를 승인하거나 거둔다 — **자료 관리자만**(ADR 0049). 승인된 값은 등급이 한
    * 단계 오르고, 값을 고치면 저절로 풀린다. 등급은 서버가 응답의 `quality_tier` 로 준다.
    */
-  approveDeclared: (id: string, item: string, note?: string) =>
-    api.post<Material>(`/materials/${id}/declared/approve`, { item, note: note || null }),
+  approveDeclared: (id: string, item: string, note?: string, digest?: string) =>
+    api.post<Material>(`/materials/${id}/declared/approve`, {
+      item,
+      note: note || null,
+      // 승인 대기 목록에서 바로 승인할 때 — 보고 있던 값인지 서버가 대 본다.
+      digest: digest ?? null,
+    }),
   unapproveDeclared: (id: string, item: string) =>
     api.post<Material>(`/materials/${id}/declared/unapprove`, { item }),
   remove: (id: string) => api.delete<void>(`/materials/${id}`),
@@ -334,8 +339,12 @@ export const materialsApi = {
    */
   updateSample: (id: string, payload: SampleUpdate) => api.patch<Sample>(`/samples/${id}`, payload),
   /** 밀시트 값의 승인 — 재료 쪽과 같은 규칙. */
-  approveSampleDeclared: (id: string, item: string, note?: string) =>
-    api.post<Sample>(`/samples/${id}/declared/approve`, { item, note: note || null }),
+  approveSampleDeclared: (id: string, item: string, note?: string, digest?: string) =>
+    api.post<Sample>(`/samples/${id}/declared/approve`, {
+      item,
+      note: note || null,
+      digest: digest ?? null,
+    }),
   unapproveSampleDeclared: (id: string, item: string) =>
     api.post<Sample>(`/samples/${id}/declared/unapprove`, { item }),
   removeSample: (id: string) => api.delete<void>(`/samples/${id}`),

@@ -280,7 +280,13 @@ def record_edit_by_other(
     # **트랜잭션 객체를 열쇠에 둔다**(`id()` 가 아니라) — 커밋·롤백 뒤 파이썬이 같은 id 를
     # 다시 쓰면, 롤백으로 버려진 기록을 계속 고쳐 새 기록이 사라진다. 객체를 쥐고 있으면
     # 그 id 는 다시 안 쓰인다.
-    key = (registrant_id, table, basis, db.get_transaction())
+    #
+    # **트랜잭션이 아직 안 열렸으면 연다.** 커밋 직후에는 세션이 아무것도 안 읽어 트랜잭션이
+    # 비어 있다가(`expire_on_commit=False`) 첫 기록을 더하는 순간 열린다 — 그러면 첫 줄만
+    # `None` 열쇠를 갖고 나머지가 새 줄로 갈라졌다(2026-10-04 채택 검토대: 셋을 채택했는데
+    # 두 줄). 배치는 끝에서 결과를 다시 읽어(`refresh`) 우연히 안 걸렸다.
+    transaction = db.get_transaction() or db.begin()
+    key = (registrant_id, table, basis, transaction)
     groups: dict[Any, dict[str, Any]] = scratch.setdefault("edited_by_other", {})
     group = groups.get(key)
     if group is None:

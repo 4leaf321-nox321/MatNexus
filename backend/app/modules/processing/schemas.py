@@ -400,3 +400,102 @@ class ResultCurveOut(BaseModel):
     guides: list[ResultGuideOut] = Field(default_factory=list)
     yield_point: tuple[float, float] | None = None
     """(항복 변형률, 항복강도) — 오프셋 선과 곡선의 교점."""
+
+
+# --- 채택 검토대 (ADR 0058) --------------------------------------------------
+#
+# 여러 시험의 결과를 **한 화면에서 견주어** 한 번에 채택한다. 전에는 시험마다 결과 탭을
+# 열어야 했고, 스무 건이면 스무 번 열고 닫았다 — 그사이 튀는 한 건을 놓친다.
+
+#: 한 번에 견주는 시험 수. 서버가 상한을 강제한다(AGENTS.md). 사람이 한 화면에서 훑을
+#: 수 있는 수를 넘으면 견주는 뜻이 없다 — 나눠서 한다.
+OVERVIEW_MAX = 200
+
+#: 겹쳐 그리는 곡선 수. 한 판에 이보다 많으면 선이 아니라 면이 된다.
+CURVES_MAX = 60
+
+
+class OverviewRequest(BaseModel):
+    test_run_ids: list[uuid.UUID] = Field(min_length=1, max_length=OVERVIEW_MAX)
+
+
+class ResultBriefOut(BaseModel):
+    """결과 하나 — **곡선 없이** 견줄 것만. 곡선은 고른 것만 따로 읽는다."""
+
+    id: uuid.UUID
+    created_at: datetime
+    recipe_key: str | None
+    recipe_label: str | None
+    step_count: int
+    row_count: int
+    has_true_stress: bool
+    """진응력 열이 있나 — 없으면 이 결과로는 CAE 카드를 못 만든다(결과 탭과 같은 말)."""
+    stale: bool
+    """원본을 바꾸기 전의 결과인가."""
+    is_adopted: bool
+    scalars: list[ProcessingScalarOut]
+
+
+class RunOverviewOut(BaseModel):
+    """시험 하나와 그 결과들. **요청 차례 그대로** 온다."""
+
+    test_run_id: uuid.UUID
+    found: bool
+    """못 보거나 지워진 시험이면 `False` — 줄은 지킨다(빠지면 「스물이 왜 열아홉이지」)."""
+    code: str | None = None
+    record_name: str = "?"
+    status: str | None = None
+    test_type_key: str | None = None
+    test_type_label: str | None = None
+    material_id: uuid.UUID | None = None
+    material_name: str | None = None
+    specimen_name: str | None = None
+    orientation: str | None = None
+    adopted_result_id: uuid.UUID | None = None
+    access: EditAccessOut | None = None
+    """이 사람이 채택을 바꿀 수 있나 — 못 하면 누구에게 물을지."""
+    results: list[ResultBriefOut]
+    """최근 것이 앞에. 기본값을 안 둔다 — 두면 화면 타입이 「없을 수도 있다」 로 나온다."""
+
+
+class CurvesRequest(BaseModel):
+    result_ids: list[uuid.UUID] = Field(min_length=1, max_length=CURVES_MAX)
+
+
+class ResultLineOut(BaseModel):
+    """겹쳐 그릴 선 하나. 축은 서버가 고른다(공칭이 먼저) — 결과 탭이 처음 여는 축과 같다."""
+
+    result_id: uuid.UUID
+    test_run_id: uuid.UUID
+    x: str
+    y: str
+    units: dict[str, str]
+    points: list[tuple[float, float]]
+
+
+class AdoptManyItem(BaseModel):
+    test_run_id: uuid.UUID
+    result_id: uuid.UUID | None
+    """`null` 이면 채택을 거둔다 — **되돌리기가 이 길이다**(이전 채택이 없던 시험)."""
+
+
+class AdoptManyRequest(BaseModel):
+    items: list[AdoptManyItem] = Field(min_length=1, max_length=OVERVIEW_MAX)
+
+
+class AdoptManyItemOut(BaseModel):
+    test_run_id: uuid.UUID
+    record_name: str
+    status: Literal["ok", "unchanged", "failed"]
+    previous_adopted_id: uuid.UUID | None = None
+    """바꾸기 전의 채택. **되돌리기는 이것을 그대로 돌려보낸다.**"""
+    adopted_result_id: uuid.UUID | None = None
+    error: str | None = None
+
+
+class AdoptManyOut(BaseModel):
+    requested: int
+    changed: int
+    unchanged: int
+    failed: int
+    items: list[AdoptManyItemOut]

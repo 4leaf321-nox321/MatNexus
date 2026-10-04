@@ -113,7 +113,7 @@ export function SummaryImportDialog({
 
   return (
     <Dialog open onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl gap-3">
+      <DialogContent className="gap-3 sm:max-w-4xl">
         <DialogHeader>
           <DialogTitle>표로 {testTypeLabel} 입력</DialogTitle>
           <DialogDescription>

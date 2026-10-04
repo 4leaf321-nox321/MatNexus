@@ -60,10 +60,21 @@ const ALLOWED: Record<string, { to: string; why: string }[]> = {
       why: '**조직이 곧 부서다.** 기준정보에 조직 축을 두려다 걷어냈다(2026-09-08) — 부서가 이미 본부→팀 트리라(`Workspace.parent_id`) 축을 하나 더 두면 같은 조직이 두 목록에 쌓이고 합칠 방법이 없다. 그러면 부서를 고르는 부품도 그쪽 것을 써야 한다(`WorkspacePicker`·`WorkspaceTreeDialog`). 여기서 다시 만들면 경로 표시와 트리 펴기가 두 벌로 갈린다.',
     },
   ],
+  // **업무가 전용 화면을 가진다**(ADR 0058, 2026-10-04). 화면은 도메인 모듈에 살고 워크벤치는
+  // 끼우기만 한다(`workbench/views.tsx`) — 도메인 화면은 시험 id · 재료 id 를 받을 뿐 워크벤치를
+  // 모른다. 아래 셋 밖의 모듈을 부르게 되면 그 업무의 화면이 어느 모듈의 것인지부터 다시 본다.
   workbench: [
     {
       to: 'fitting',
-      why: '워크벤치는 조립만 한다(AGENTS.md). 「묶음 내보내기」 단계는 카드 목록의 그 띠(BundleBar)를 그대로 세운다 — 내보내는 일은 fitting 의 것이고, 여기서 다시 만들면 형식·단위계·manifest 안내가 두 벌로 갈린다. 바구니에 담아 둔 카드를 목록 화면에서 **다시 고르게 하지 않으려고** 이 예외를 둔다.',
+      why: '워크벤치는 조립만 한다(AGENTS.md). 「묶음 내보내기」 는 카드 목록의 그 띠(BundleBar)를, 「물성 카드 하나 만들기」 는 재료 화면의 CAE 카드 패널 · 준비도 표를, 「부품표로 한 덱에」 는 BOM 혼합 덱 본문을 그대로 세운다 — 여기서 다시 만들면 형식·단위계·카드 만들기가 두 벌로 갈린다. 바구니에 담아 둔 것을 목록 화면에서 **다시 고르게 하지 않으려고** 이 예외를 둔다.',
+    },
+    {
+      to: 'processing',
+      why: '「시험 데이터 한번에 처리하기 · 채택하기」 는 처리 모듈의 일괄 처리 본문(BatchPanel)과 채택 검토대(AdoptionBoard)를 세운다(ADR 0058). 미리보기 · 되돌리기 · 채택 규칙은 처리의 것이라, 여기서 다시 만들면 시험 목록의 일괄 처리 창과 규칙이 두 벌로 갈린다.',
+    },
+    {
+      to: 'tests',
+      why: '시험을 담는 단계는 시험 모듈의 골라 담기(RunCollector)를 세운다 — 거르기(재료 · 종류 · 처리 상태)와 상태 이름은 시험 목록의 것이다. 전에는 시험 목록 화면으로 갔다 와야 했고, 오가는 사이 거르기가 풀렸다(2026-10-04).',
     },
   ],
   vocabulary: [
@@ -267,7 +278,9 @@ function walk(dir: string): string[] {
 function moduleImports(file: string): string[] {
   const source = readFileSync(file, 'utf-8')
   const found = new Set<string>()
-  for (const match of source.matchAll(/from\s+'@\/modules\/([^/']+)/g)) {
+  // **늦게 읽는 것도 센다**(`lazy(() => import('@/modules/…'))`, 2026-10-04). `from` 만 보면
+  // 동적 import 로 바꾸는 순간 경계 검사를 조용히 빠져나간다.
+  for (const match of source.matchAll(/(?:from\s+|import\(\s*)'@\/modules\/([^/']+)/g)) {
     found.add(match[1])
   }
   return [...found]
@@ -404,6 +417,28 @@ describe('본문 폭', () => {
       }
     }
     expect(offenders, '폭은 부모가 정합니다 — 화면이 뷰포트를 직접 잡지 않습니다.').toEqual([])
+  })
+
+  it('창 폭은 `sm:` 를 붙여 적는다', () => {
+    // 공용 창(`ui/dialog`)이 `sm:max-w-lg` 를 기본으로 둔다. `max-w-3xl` 만 적으면 `sm` 이상에서
+    // 그 기본에 덮여 **좁게 뜬다** — 선언 물성 편집 창이 그래서 좁았고, 입력칸이 길게 늘어져
+    // 아래의 승인 칸이 스크롤 밖에 숨었다(2026-10-04 「승인 칸이 안 생긴다」). 같은 꼴이 열두
+    // 곳 있었고, 적은 사람은 넓힌 줄 알고 넘어갔다. 옆 패널(`SheetContent`)도 같은 기본을 둔다.
+    const offenders: string[] = []
+    for (const file of walk(MODULES)) {
+      const source = readFileSync(file, 'utf-8')
+      for (const match of source.matchAll(
+        /<(?:DialogContent|SheetContent)\b[^>]*?className="([^"]*)"/g
+      )) {
+        if (/(?:^|\s)max-w-/.test(match[1])) {
+          offenders.push(`${path.relative(MODULES, file)}: ${match[1]}`)
+        }
+      }
+    }
+    expect(
+      offenders,
+      '창 폭을 `sm:` 없이 적었습니다 — 공용 창의 `sm:max-w-lg` 에 덮여 좁게 뜹니다. `sm:max-w-…` 로 적으세요.'
+    ).toEqual([])
   })
 })
 

@@ -101,7 +101,7 @@ export function CreateMaterialDialog({
 
   return (
     <Dialog open={open} onOpenChange={(next) => !next && !busy && onClose()}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>사내 재료로 등록</DialogTitle>
           <DialogDescription>

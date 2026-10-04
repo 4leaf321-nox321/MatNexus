@@ -84,6 +84,11 @@ class DeclaredApprovalRequest(BaseModel):
     item: str = Field(min_length=1, max_length=200)
     note: str | None = Field(default=None, max_length=500)
     """승인할 때만 쓴다. 거둘 때는 무시한다."""
+    digest: str | None = Field(default=None, max_length=64)
+    """**보고 있던 값의 지문**(승인 대기 목록의 `digest`). 주면 지금 값과 대 보고, 그 사이 값이
+    바뀌었으면 승인하지 않는다(`MNX-MATERIALS-0050`). 목록은 오래 열어 둘 수 있어서, 안 대 보면
+    화면에 보인 값이 아니라 누가 그 사이 고친 값을 승인하게 된다. 편집 창은 저장된 값을 막 읽어
+    보이므로 안 보낸다 — 안 보내면 전과 같다."""
 
 
 class DeclaredCatalogOut(BaseModel):
@@ -392,6 +397,8 @@ class DeclaredReviewOut(BaseModel):
     point_count: int
     quality_tier: int
     tier_if_approved: int
+    digest: str
+    """이 값의 지문 — 이 목록에서 바로 승인할 때 되보낸다(`DeclaredApprovalRequest.digest`)."""
 
 
 class ClassificationOut(BaseModel):

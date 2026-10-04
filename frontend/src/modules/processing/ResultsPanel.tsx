@@ -378,8 +378,10 @@ export function ResultsPanel({ testRunId, onAdoptChange }: Props) {
  * 를 볼 수 없었다. 서버가 자르기 전 공칭 곡선 · 탄성 직선 · 오프셋 선 · 항복점을 함께
  * 주면 뒤에 깐다(ADR 0053). 이 기능 전에 저장한 결과는 서버가 다시 돌린 참고 곡선이라
  * 점선으로 그리고 그렇다고 적는다.
+ *
+ * **채택 검토대도 이 그림을 그대로 쓴다**(ADR 0058) — 한 건을 자세히 볼 때 같은 선 · 같은 범례.
  */
-function ResultCurve({ resultId }: { resultId: string }) {
+export function ResultCurve({ resultId }: { resultId: string }) {
   const [axes, setAxes] = useState<{ x: string; y: string } | null>(null)
   const curve = useResource(
     () => processingApi.curve(resultId, axes ?? undefined),

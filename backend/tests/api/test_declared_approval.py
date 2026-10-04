@@ -607,6 +607,48 @@ class Test승인_대기_목록:
         assert _approve(client, steward, material).status_code == 200
         assert listed() == [("시료", "인장강도", 4, 3)]
 
+    def test_목록에서_바로_승인하면_보던_값인지_대_본다(
+        self,
+        client: TestClient,
+        material: Material,
+        steward: dict[str, str],
+    ) -> None:
+        """**화면에 보인 값을 승인한다**(2026-10-04 — 목록에 승인 단추를 달며). 목록을
+        띄운 사이 누가 값을 고쳤으면, 지문을 대 보지 않는 한 사람은 못 본 값을 승인한다."""
+        [row] = client.get("/api/materials/declared-review", headers=steward).json()["items"]
+        seen = row["digest"]
+        assert seen
+
+        # 그 사이 누가 값을 고친다.
+        changed = client.get(f"/api/materials/{material.id}", headers=steward).json()
+        rows = changed["declared_properties"]
+        rows[0]["points"][0]["value"] = float(rows[0]["points"][0]["value"]) * 1.1
+        patched = client.patch(
+            f"/api/materials/{material.id}",
+            json={"declared_properties": rows},
+            headers=steward,
+        )
+        assert patched.status_code == 200, patched.text
+
+        stale = _approve(client, steward, material, digest=seen)
+        assert stale.status_code == 409, stale.text
+        assert "MNX-MATERIALS-0050" in stale.text
+        # 승인되지 않았다 — 목록에 그대로 선다.
+        [still] = client.get("/api/materials/declared-review", headers=steward).json()["items"]
+        assert still["digest"] != seen
+
+        # 다시 읽은 지문이면 된다.
+        assert _approve(client, steward, material, digest=still["digest"]).status_code == 200
+        assert (
+            client.get("/api/materials/declared-review", headers=steward).json()["items"] == []
+        )
+
+    def test_지문을_안_보내면_전과_같다(
+        self, client: TestClient, material: Material, steward: dict[str, str]
+    ) -> None:
+        """편집 창은 저장된 값을 막 읽어 보이므로 지문을 안 보낸다 — 그 길은 그대로다."""
+        assert _approve(client, steward, material).status_code == 200
+
     def test_보기는_누구나다(
         self,
         client: TestClient,

@@ -656,13 +656,27 @@ export function DeclaredPropertiesCard({
       <Dialog open={editing !== null} onOpenChange={(next) => !next && cancel()}>
         {/* **좁으면 겹친다.** 값·단위·온도 상자가 한 줄에 오고, 단위 목록은
             `J/(kg.K)` 처럼 긴 이름을 담는다 — 42rem 으로는 모자랐다. */}
-        <DialogContent className="max-w-3xl">
+        {/* **`sm:` 를 붙여야 넓어진다**(2026-10-04) — 공용 창이 `sm:max-w-lg` 를 기본으로 두어
+            `max-w-3xl` 만 적으면 그것에 덮였다. 좁은 창에서 칸이 길게 늘어져 아래의 승인 칸이
+            스크롤 밖으로 숨었다(「승인 칸이 안 생긴다」 는 지적). */}
+        <DialogContent className="sm:max-w-3xl">
           <DialogHeader>
             <DialogTitle>{editing}</DialogTitle>
             <DialogDescription>
               <b>저장</b> 을 눌러야 서버에 남습니다. 닫으면 고친 것이 사라집니다.
             </DialogDescription>
           </DialogHeader>
+          {/* **승인 칸은 위에 둔다** — 입력칸 아래에 두었더니 값 점이 많은 항목에서 스크롤 밖으로
+              밀려 「승인 칸이 안 생긴다」 로 읽혔다(2026-10-04). 등급 · 승인 여부는 창을 열자마자
+              봐야 하는 것이기도 하다. */}
+          {editing !== null && stored(editing) ? (
+            <ApprovalSection
+              key={editing}
+              row={stored(editing) as DeclaredProperty}
+              changed={dirty}
+              onApprove={onApprove}
+            />
+          ) : null}
           {rows.map((row, index) => {
             if (row.item !== editing) return null
             const spec = known.find((item) => item.item === row.item)
@@ -945,14 +959,6 @@ export function DeclaredPropertiesCard({
               </div>
             )
           })}
-          {editing !== null && stored(editing) ? (
-            <ApprovalSection
-              key={editing}
-              row={stored(editing) as DeclaredProperty}
-              changed={dirty}
-              onApprove={onApprove}
-            />
-          ) : null}
           {/* **저장 오류는 창 안에 보인다** — 창이 열려 있는 동안 바깥은 가려져 있다. */}
           <ErrorNotice error={error} />
           <DialogFooter>

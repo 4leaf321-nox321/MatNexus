@@ -75,13 +75,17 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/shared/components/ui
 import { useResource } from '@/shared/hooks/useResource'
 import { RecordName } from '@/shared/components/RecordName'
 
+/** 주소로 열 수 있는 탭(`?tab=`). 모르는 값이면 원본 탭이다. */
+const DETAIL_TABS = ['source', 'process', 'viscoelastic', 'results']
+
 export default function TestRunDetailPage() {
   const { id = '' } = useParams<{ id: string }>()
   const navigate = useNavigate()
   // **목록이 넘겨 준 「왔던 자리」.** 없으면(주소를 직접 쳤거나 재료에서 왔다)
   // 아래에서 재료로 돌린다. 화면이 스스로 추측하지 않는다 — 시험 목록의 주소는
   // 부서 슬러그를 알아야 만들 수 있는데, 여기는 그것을 모른다.
-  const from = (useLocation().state as { from?: BackTarget } | null)?.from
+  const location = useLocation()
+  const from = (location.state as { from?: BackTarget } | null)?.from
   const run = useResource(() => testsApi.run(id), [id])
   const types = useResource(() => testsApi.types(), [])
   const [axes, setAxes] = useState<{ x: string; y: string } | null>(null)
@@ -130,8 +134,14 @@ export default function TestRunDetailPage() {
   }, [pending, run])
 
   /** 지금 켠 탭. **진행 띠가 눌러서 데려간다** — 「채택하러 가기」 가 말만 하고
-   *  사람이 탭을 다시 찾아야 하면 그 안내는 절반만 한 것이다. */
-  const [tab, setTab] = useState('source')
+   *  사람이 탭을 다시 찾아야 하면 그 안내는 절반만 한 것이다.
+   *
+   *  **주소로도 연다**(`?tab=results`, 2026-10-04). 채택 검토대의 「이 시험 열기」 가 결과
+   *  탭으로 데려가야 하는데, 주소에 탭이 없으면 늘 원본 탭에 떨어져 사람이 다시 찾았다. */
+  const [tab, setTab] = useState(() => {
+    const asked = new URLSearchParams(location.search).get('tab')
+    return asked && DETAIL_TABS.includes(asked) ? asked : 'source'
+  })
   // **전체 화면.** 곡선과 표를 나란히 보는 화면이라 폭이 곧 읽히는 양이다 —
   // 사이드바·머리말이 덮는 자리를 잠시 걷는다. 탭은 그대로 두고 자리만 넓히므로
   // 들어가고 나올 때 보던 것을 잃지 않는다.

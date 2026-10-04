@@ -105,3 +105,31 @@ describe('전체 화면', () => {
     expect(await screen.findByRole('button', { name: '전체 화면' })).toBeInTheDocument()
   })
 })
+
+describe('주소로 탭을 연다', () => {
+  it('?tab=results 면 처리 결과 탭이 열린다 (2026-10-04)', async () => {
+    // 채택 검토대의 「이 시험 열기」 가 결과 탭으로 데려간다 — 주소에 탭이 없으면 늘 원본
+    // 탭에 떨어져 사람이 다시 찾았다.
+    render(
+      <MemoryRouter initialEntries={['/test-runs/r1?tab=results']}>
+        <TestRunDetailPage />
+      </MemoryRouter>
+    )
+    expect(await screen.findByRole('tab', { name: /결과/ })).toHaveAttribute(
+      'aria-selected',
+      'true'
+    )
+  })
+
+  it('모르는 탭이면 원본 탭이다', async () => {
+    render(
+      <MemoryRouter initialEntries={['/test-runs/r1?tab=없는탭']}>
+        <TestRunDetailPage />
+      </MemoryRouter>
+    )
+    expect(await screen.findByRole('tab', { name: '원본' })).toHaveAttribute(
+      'aria-selected',
+      'true'
+    )
+  })
+})

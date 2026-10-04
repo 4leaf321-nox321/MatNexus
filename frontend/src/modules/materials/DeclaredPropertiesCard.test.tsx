@@ -823,6 +823,18 @@ describe('승인', () => {
     await waitFor(() => expect(onApprove).toHaveBeenCalledWith('탄성계수', true, '원문 대조'))
   })
 
+  it('승인 칸은 입력칸보다 위에 선다 — 스크롤 밖으로 숨지 않게 (2026-10-04)', async () => {
+    // 입력칸 아래에 두었더니 점이 많은 항목에서 창 가운데 스크롤 밖으로 밀려 「승인 칸이 안
+    // 생긴다」 로 읽혔다.
+    approvable([PENDING])
+    await openFirst()
+    const section = await screen.findByRole('region', { name: '승인' })
+    const reference = screen.getByLabelText('근거 문서')
+    expect(
+      section.compareDocumentPosition(reference) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy()
+  })
+
   it('승인된 값은 누가 언제 무엇을 확인했는지 보이고 거둘 수 있다', async () => {
     const onApprove = approvable([APPROVED])
     const user = await openFirst()

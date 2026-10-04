@@ -4968,6 +4968,37 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/processing/adopt-many": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Adopt Many
+         * @description 시험마다 고른 결과를 채택한다 — **건별로 커밋하고 건별로 말한다.**
+         *
+         *     한 건과 같은 규칙이다: 고칠 수 있는 사람만(ADR 0035), 이름이 긴 값을 든 옛 결과는
+         *     못 하고, 요약값 표를 통째로 다시 만든다(`_project_summaries`). `result_id` 가 `null`
+         *     이면 채택을 거둔다 — **되돌리기가 그 길이다**: 응답의 `previous_adopted_id` 를 그대로
+         *     돌려보내면 채택 전으로 돌아간다(채택은 결과를 지우지 않으므로 되돌릴 수 있다).
+         *
+         *     **고른 결과가 그 시험의 것인지 본다.** 안 보면 남의 시험 결과를 채택하는 길이 된다 —
+         *     배치 되돌리기가 같은 자리를 막는다(`MNX-PROCESSING-0016`).
+         *
+         *     하나가 막혔다고 앞의 채택을 취소하지 않는다. 무엇이 됐고 무엇이 왜 막혔는지가 줄마다
+         *     온다 — 그래야 막힌 것만 다시 한다.
+         */
+        post: operations["adopt_many_api_processing_adopt_many_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/processing/batch": {
         parameters: {
             query?: never;
@@ -5057,6 +5088,29 @@ export interface paths {
         get: operations["list_inputs_api_processing_inputs_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/processing/overview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Overview
+         * @description 시험마다 결과 목록 · 지금 채택 · 고칠 수 있나 — **요청 차례 그대로, 한 번에.**
+         *
+         *     못 보는 시험도 줄을 지킨다(`found=False`). 바구니에 담아 둔 시험이 그사이 지워졌거나
+         *     권한이 바뀌었을 수 있고, 줄이 조용히 빠지면 사람은 그 한 건을 찾으러 다닌다.
+         */
+        post: operations["overview_api_processing_overview_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -5169,6 +5223,33 @@ export interface paths {
          *     들어가 있다.
          */
         post: operations["create_result_api_processing_results_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/processing/results/curves": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Result Curves
+         * @description 고른 결과들의 곡선 — **겹쳐 그리기용, 한 번에.**
+         *
+         *     축은 결과 탭이 처음 여는 축과 같다(공칭이 먼저). 앞쪽 곡선 · 보조선은 싣지 않는다 —
+         *     그것은 한 건을 자세히 볼 때(`/results/{id}/curve`)의 일이고, 옛 결과는 그때마다 다시
+         *     돌려 그리므로(ADR 0053) 수십 건에 붙이면 겹쳐 보기가 느려진다.
+         *
+         *     못 보는 결과 · 지워진 결과는 **빼고** 준다 — 화면은 받은 것만 그리고, 무엇이 빠졌는지는
+         *     목록(`overview`)이 이미 말한다.
+         */
+        post: operations["result_curves_api_processing_results_curves_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -8242,6 +8323,55 @@ export interface components {
             /** Web Users */
             web_users: number;
         };
+        /** AdoptManyItem */
+        AdoptManyItem: {
+            /** Result Id */
+            result_id: string | null;
+            /**
+             * Test Run Id
+             * Format: uuid
+             */
+            test_run_id: string;
+        };
+        /** AdoptManyItemOut */
+        AdoptManyItemOut: {
+            /** Adopted Result Id */
+            adopted_result_id?: string | null;
+            /** Error */
+            error?: string | null;
+            /** Previous Adopted Id */
+            previous_adopted_id?: string | null;
+            /** Record Name */
+            record_name: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "unchanged" | "failed";
+            /**
+             * Test Run Id
+             * Format: uuid
+             */
+            test_run_id: string;
+        };
+        /** AdoptManyOut */
+        AdoptManyOut: {
+            /** Changed */
+            changed: number;
+            /** Failed */
+            failed: number;
+            /** Items */
+            items: components["schemas"]["AdoptManyItemOut"][];
+            /** Requested */
+            requested: number;
+            /** Unchanged */
+            unchanged: number;
+        };
+        /** AdoptManyRequest */
+        AdoptManyRequest: {
+            /** Items */
+            items: components["schemas"]["AdoptManyItem"][];
+        };
         /** AliasCandidateAccept */
         AliasCandidateAccept: {
             /** Property Key */
@@ -11132,6 +11262,11 @@ export interface components {
             /** Y */
             y: string;
         };
+        /** CurvesRequest */
+        CurvesRequest: {
+            /** Result Ids */
+            result_ids: string[];
+        };
         /**
          * DataManagerRequest
          * @description 자료 관리자를 주거나 뺀다 — 시스템 관리자 권한과 같은 모양(참·거짓 한 칸).
@@ -11642,6 +11777,8 @@ export interface components {
          * @description 승인하거나 승인을 거둘 줄. 줄은 항목 이름으로 고른다 — 한 물성은 한 줄이다.
          */
         DeclaredApprovalRequest: {
+            /** Digest */
+            digest?: string | null;
             /** Item */
             item: string;
             /** Note */
@@ -11850,6 +11987,8 @@ export interface components {
          *     목록은 큐가 아니다(ADR 0049 결정 5: 상태만 두고 절차는 운영이 보인 뒤에).
          */
         DeclaredReviewOut: {
+            /** Digest */
+            digest: string;
             /** First Value Si */
             first_value_si?: number | null;
             /** Item */
@@ -14394,6 +14533,8 @@ export interface components {
             label: string;
             /** Material Id */
             material_id?: string | null;
+            /** Material Label */
+            material_label?: string | null;
             /**
              * Missing
              * @default false
@@ -15617,6 +15758,11 @@ export interface components {
             test_types: components["schemas"]["TallyOut"][];
             /** Waiting To Process */
             waiting_to_process: number;
+        };
+        /** OverviewRequest */
+        OverviewRequest: {
+            /** Test Run Ids */
+            test_run_ids: string[];
         };
         /** OwnershipChangeOut */
         OwnershipChangeOut: {
@@ -17715,6 +17861,38 @@ export interface components {
             reason?: string | null;
         };
         /**
+         * ResultBriefOut
+         * @description 결과 하나 — **곡선 없이** 견줄 것만. 곡선은 고른 것만 따로 읽는다.
+         */
+        ResultBriefOut: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Has True Stress */
+            has_true_stress: boolean;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Is Adopted */
+            is_adopted: boolean;
+            /** Recipe Key */
+            recipe_key: string | null;
+            /** Recipe Label */
+            recipe_label: string | null;
+            /** Row Count */
+            row_count: number;
+            /** Scalars */
+            scalars: components["schemas"]["ProcessingScalarOut"][];
+            /** Stale */
+            stale: boolean;
+            /** Step Count */
+            step_count: number;
+        };
+        /**
          * ResultContextOut
          * @description **자르기 전** 공칭 응력-변형률 곡선 — 결과 곡선이 앞(탄성 구간)을 잃었을 때만.
          *
@@ -17795,6 +17973,35 @@ export interface components {
                 number,
                 number
             ][];
+        };
+        /**
+         * ResultLineOut
+         * @description 겹쳐 그릴 선 하나. 축은 서버가 고른다(공칭이 먼저) — 결과 탭이 처음 여는 축과 같다.
+         */
+        ResultLineOut: {
+            /** Points */
+            points: [
+                number,
+                number
+            ][];
+            /**
+             * Result Id
+             * Format: uuid
+             */
+            result_id: string;
+            /**
+             * Test Run Id
+             * Format: uuid
+             */
+            test_run_id: string;
+            /** Units */
+            units: {
+                [key: string]: string;
+            };
+            /** X */
+            x: string;
+            /** Y */
+            y: string;
         };
         /** RetypeOut */
         RetypeOut: {
@@ -18098,6 +18305,45 @@ export interface components {
              * Format: uuid
              */
             workspace_id: string;
+        };
+        /**
+         * RunOverviewOut
+         * @description 시험 하나와 그 결과들. **요청 차례 그대로** 온다.
+         */
+        RunOverviewOut: {
+            access?: components["schemas"]["EditAccessOut"] | null;
+            /** Adopted Result Id */
+            adopted_result_id?: string | null;
+            /** Code */
+            code?: string | null;
+            /** Found */
+            found: boolean;
+            /** Material Id */
+            material_id?: string | null;
+            /** Material Name */
+            material_name?: string | null;
+            /** Orientation */
+            orientation?: string | null;
+            /**
+             * Record Name
+             * @default ?
+             */
+            record_name: string;
+            /** Results */
+            results: components["schemas"]["ResultBriefOut"][];
+            /** Specimen Name */
+            specimen_name?: string | null;
+            /** Status */
+            status?: string | null;
+            /**
+             * Test Run Id
+             * Format: uuid
+             */
+            test_run_id: string;
+            /** Test Type Key */
+            test_type_key?: string | null;
+            /** Test Type Label */
+            test_type_label?: string | null;
         };
         /**
          * RunPatchRequest
@@ -29530,6 +29776,39 @@ export interface operations {
             };
         };
     };
+    adopt_many_api_processing_adopt_many_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdoptManyRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdoptManyOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     run_batch_api_processing_batch_post: {
         parameters: {
             query?: never;
@@ -29614,6 +29893,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProcessingScalarOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    overview_api_processing_overview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OverviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunOverviewOut"][];
                 };
             };
             /** @description Validation Error */
@@ -29844,6 +30156,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProcessingResultOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    result_curves_api_processing_results_curves_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CurvesRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResultLineOut"][];
                 };
             };
             /** @description Validation Error */

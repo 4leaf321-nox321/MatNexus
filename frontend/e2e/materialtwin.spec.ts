@@ -10,7 +10,7 @@
  *   채우기         물성 탭의 문헌 채우기 → 「담았습니다」 (공칭 강도 포함 경로)
  *   측정법        물성 → 기법·장비 표
  *   혼합 덱       BOM 붙여넣기 → 매칭 → 덱 파일
- *   워크벤치      bom_deck 워크플로가 목록에 선다
+ *   워크벤치      bom_deck 업무가 목록에 선다
  *
  * 준비물은 smoke.spec 과 같다 — 백엔드(MNX_BASE_URL, 기본 8010) + 계정.
  * 워커는 필요 없다(파일 파싱이 없는 줄기다).
@@ -129,6 +129,7 @@ test('문헌 물성부터 혼합 덱까지', async ({ page, request }) => {
   await test.step('워크벤치 — 입구가 서 있다', async () => {
     // 워크벤치는 부서 아래 산다 — 사이드바 링크를 그대로 밟는다.
     await page.getByRole('link', { name: '워크벤치' }).click()
-    await expect(page.getByText('BOM 혼합 덱').first()).toBeVisible()
+    // 업무 단위로 고친 뒤(ADR 0058) 업무 이름은 「부품표(BOM)로 여러 카드를 한 덱에」 다.
+    await expect(page.getByText('부품표(BOM)로 여러 카드를 한 덱에').first()).toBeVisible()
   })
 })

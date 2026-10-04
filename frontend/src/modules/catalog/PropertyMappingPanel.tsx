@@ -749,7 +749,7 @@ function DeprecateDialog({
 
   return (
     <Dialog open={row !== null} onOpenChange={(next) => !next && onClose()}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>{row ? `'${row.name}' 폐기` : '폐기'}</DialogTitle>
           <DialogDescription>
@@ -884,7 +884,7 @@ function AddPropertyDialog({
 
   return (
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>문헌 물성 추가</DialogTitle>
           <DialogDescription>

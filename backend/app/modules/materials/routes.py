@@ -851,6 +851,7 @@ def declared_review(
             point_count=len(points),
             quality_tier=declared_approval.tier(row),
             tier_if_approved=declared_approval.tier_if_approved(row),
+            digest=declared_approval.digest(row),
         )
 
     found = [
@@ -2031,6 +2032,14 @@ def _set_approval(
         )
     if not approve and current is None:
         raise Conflict("MNX-MATERIALS-0046", f"'{row['item']}' 은 승인된 값이 아닙니다.")
+    # **보고 있던 값인가**(승인 대기 목록에서 바로 승인할 때). 목록을 띄운 사이 누가 값을
+    # 고쳤으면 화면에 보인 값과 승인되는 값이 다르다 — 사람은 자기가 본 값을 승인했다고 믿는다.
+    if approve and body.digest is not None and body.digest != declared_approval.digest(row):
+        raise Conflict(
+            "MNX-MATERIALS-0050",
+            f"'{row['item']}' 의 값이 목록을 연 뒤에 바뀌었습니다. 목록을 다시 읽고, "
+            "바뀐 값을 근거 문서와 대조한 뒤 승인하세요.",
+        )
     note = (body.note or "").strip() or None
     rows[at] = (
         declared_approval.stamp(

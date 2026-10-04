@@ -92,6 +92,22 @@ function parseRows(cells: string[][], midCol: number | null, nameCol: number): R
 }
 
 export default function BomDeckPage() {
+  return (
+    <div className="space-y-4">
+      <PageHeader
+        title="BOM 혼합 덱"
+        description="부품표를 붙여넣으면 부품마다 사내 확정 카드(실측)를 먼저 찾고, 없는 부품은 문헌 물성으로 메꿔 해석 덱 한 파일을 만듭니다. 값마다 출처가 각주로 남습니다."
+      />
+      <BomDeck />
+    </div>
+  )
+}
+
+/**
+ * 본문 — **워크벤치의 「부품표(BOM)로 여러 카드를 한 덱에」 가 그대로 세운다**(ADR 0058).
+ * 화면을 둘로 만들면 매칭 기억 · 단위계 · 솔버 고르기가 두 벌로 갈린다.
+ */
+export function BomDeck() {
   const [pasted, setPasted] = useState('')
   const [midCol, setMidCol] = useState<number | null>(0)
   const [nameCol, setNameCol] = useState(1)
@@ -249,10 +265,6 @@ export default function BomDeckPage() {
 
   return (
     <div className="space-y-4">
-      <PageHeader
-        title="BOM 혼합 덱"
-        description="부품표를 붙여넣으면 부품마다 사내 확정 카드(실측)를 먼저 찾고, 없는 부품은 문헌 물성으로 메꿔 해석 덱 한 파일을 만듭니다. 값마다 출처가 각주로 남습니다."
-      />
       <ErrorNotice error={error} />
 
       <div className="space-y-2 rounded-md border p-3">

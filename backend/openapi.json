@@ -242,6 +242,151 @@
         "title": "ActivityOut",
         "type": "object"
       },
+      "AdoptManyItem": {
+        "properties": {
+          "result_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Result Id"
+          },
+          "test_run_id": {
+            "format": "uuid",
+            "title": "Test Run Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "test_run_id",
+          "result_id"
+        ],
+        "title": "AdoptManyItem",
+        "type": "object"
+      },
+      "AdoptManyItemOut": {
+        "properties": {
+          "adopted_result_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Adopted Result Id"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "previous_adopted_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous Adopted Id"
+          },
+          "record_name": {
+            "title": "Record Name",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "unchanged",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "test_run_id": {
+            "format": "uuid",
+            "title": "Test Run Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "test_run_id",
+          "record_name",
+          "status"
+        ],
+        "title": "AdoptManyItemOut",
+        "type": "object"
+      },
+      "AdoptManyOut": {
+        "properties": {
+          "changed": {
+            "title": "Changed",
+            "type": "integer"
+          },
+          "failed": {
+            "title": "Failed",
+            "type": "integer"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AdoptManyItemOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "requested": {
+            "title": "Requested",
+            "type": "integer"
+          },
+          "unchanged": {
+            "title": "Unchanged",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "requested",
+          "changed",
+          "unchanged",
+          "failed",
+          "items"
+        ],
+        "title": "AdoptManyOut",
+        "type": "object"
+      },
+      "AdoptManyRequest": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AdoptManyItem"
+            },
+            "maxItems": 200,
+            "minItems": 1,
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "AdoptManyRequest",
+        "type": "object"
+      },
       "AliasCandidateAccept": {
         "properties": {
           "property_key": {
@@ -8048,6 +8193,25 @@
         "title": "CurveStatsOut",
         "type": "object"
       },
+      "CurvesRequest": {
+        "properties": {
+          "result_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 60,
+            "minItems": 1,
+            "title": "Result Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "result_ids"
+        ],
+        "title": "CurvesRequest",
+        "type": "object"
+      },
       "DataManagerRequest": {
         "description": "자료 관리자를 주거나 뺀다 — 시스템 관리자 권한과 같은 모양(참·거짓 한 칸).",
         "properties": {
@@ -9072,6 +9236,18 @@
       "DeclaredApprovalRequest": {
         "description": "승인하거나 승인을 거둘 줄. 줄은 항목 이름으로 고른다 — 한 물성은 한 줄이다.",
         "properties": {
+          "digest": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Digest"
+          },
           "item": {
             "maxLength": 200,
             "minLength": 1,
@@ -9587,6 +9763,10 @@
       "DeclaredReviewOut": {
         "description": "**승인하면 등급이 오를** 선언 값 한 줄(2026-10-04, ADR 0049 의 열린 것).\n\n재료마다 열어 봐야 알던 것을 한 목록으로. 승인 자체는 재료 · 시료 화면에서 한다 — 이\n목록은 큐가 아니다(ADR 0049 결정 5: 상태만 두고 절차는 운영이 보인 뒤에).",
         "properties": {
+          "digest": {
+            "title": "Digest",
+            "type": "string"
+          },
           "first_value_si": {
             "anyOf": [
               {
@@ -9702,7 +9882,8 @@
           "item",
           "point_count",
           "quality_tier",
-          "tier_if_approved"
+          "tier_if_approved",
+          "digest"
         ],
         "title": "DeclaredReviewOut",
         "type": "object"
@@ -16954,6 +17135,17 @@
             ],
             "title": "Material Id"
           },
+          "material_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Material Label"
+          },
           "missing": {
             "default": false,
             "title": "Missing",
@@ -20232,6 +20424,25 @@
           "inbox_waiting"
         ],
         "title": "OverviewOut",
+        "type": "object"
+      },
+      "OverviewRequest": {
+        "properties": {
+          "test_run_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 200,
+            "minItems": 1,
+            "title": "Test Run Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "test_run_ids"
+        ],
+        "title": "OverviewRequest",
         "type": "object"
       },
       "OwnershipChangeOut": {
@@ -25464,6 +25675,84 @@
         "title": "ResolveResult",
         "type": "object"
       },
+      "ResultBriefOut": {
+        "description": "결과 하나 — **곡선 없이** 견줄 것만. 곡선은 고른 것만 따로 읽는다.",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "has_true_stress": {
+            "title": "Has True Stress",
+            "type": "boolean"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_adopted": {
+            "title": "Is Adopted",
+            "type": "boolean"
+          },
+          "recipe_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recipe Key"
+          },
+          "recipe_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recipe Label"
+          },
+          "row_count": {
+            "title": "Row Count",
+            "type": "integer"
+          },
+          "scalars": {
+            "items": {
+              "$ref": "#/components/schemas/ProcessingScalarOut"
+            },
+            "title": "Scalars",
+            "type": "array"
+          },
+          "stale": {
+            "title": "Stale",
+            "type": "boolean"
+          },
+          "step_count": {
+            "title": "Step Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "created_at",
+          "recipe_key",
+          "recipe_label",
+          "step_count",
+          "row_count",
+          "has_true_stress",
+          "stale",
+          "is_adopted",
+          "scalars"
+        ],
+        "title": "ResultBriefOut",
+        "type": "object"
+      },
       "ResultContextOut": {
         "description": "**자르기 전** 공칭 응력-변형률 곡선 — 결과 곡선이 앞(탄성 구간)을 잃었을 때만.\n\n진응력 · 진소성변형률 단계가 항복 앞의 점을 버려서, 결과 파일만으로는 E 를 확인할\n곡선이 없다. 저장할 때 그 단계 앞의 곡선을 결과 파일에 함께 싣는다(ADR 0053).",
         "properties": {
@@ -25675,6 +25964,63 @@
           "points"
         ],
         "title": "ResultGuideOut",
+        "type": "object"
+      },
+      "ResultLineOut": {
+        "description": "겹쳐 그릴 선 하나. 축은 서버가 고른다(공칭이 먼저) — 결과 탭이 처음 여는 축과 같다.",
+        "properties": {
+          "points": {
+            "items": {
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "type": "array"
+            },
+            "title": "Points",
+            "type": "array"
+          },
+          "result_id": {
+            "format": "uuid",
+            "title": "Result Id",
+            "type": "string"
+          },
+          "test_run_id": {
+            "format": "uuid",
+            "title": "Test Run Id",
+            "type": "string"
+          },
+          "units": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Units",
+            "type": "object"
+          },
+          "x": {
+            "title": "X",
+            "type": "string"
+          },
+          "y": {
+            "title": "Y",
+            "type": "string"
+          }
+        },
+        "required": [
+          "result_id",
+          "test_run_id",
+          "x",
+          "y",
+          "units",
+          "points"
+        ],
+        "title": "ResultLineOut",
         "type": "object"
       },
       "RetypeOut": {
@@ -26430,6 +26776,150 @@
           "finished_at"
         ],
         "title": "RunOut",
+        "type": "object"
+      },
+      "RunOverviewOut": {
+        "description": "시험 하나와 그 결과들. **요청 차례 그대로** 온다.",
+        "properties": {
+          "access": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EditAccessOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "adopted_result_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Adopted Result Id"
+          },
+          "code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Code"
+          },
+          "found": {
+            "title": "Found",
+            "type": "boolean"
+          },
+          "material_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Material Id"
+          },
+          "material_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Material Name"
+          },
+          "orientation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Orientation"
+          },
+          "record_name": {
+            "default": "?",
+            "title": "Record Name",
+            "type": "string"
+          },
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/ResultBriefOut"
+            },
+            "title": "Results",
+            "type": "array"
+          },
+          "specimen_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Specimen Name"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "test_run_id": {
+            "format": "uuid",
+            "title": "Test Run Id",
+            "type": "string"
+          },
+          "test_type_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Test Type Key"
+          },
+          "test_type_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Test Type Label"
+          }
+        },
+        "required": [
+          "test_run_id",
+          "found",
+          "results"
+        ],
+        "title": "RunOverviewOut",
         "type": "object"
       },
       "RunPatchRequest": {
@@ -48293,6 +48783,48 @@
         ]
       }
     },
+    "/api/processing/adopt-many": {
+      "post": {
+        "description": "시험마다 고른 결과를 채택한다 — **건별로 커밋하고 건별로 말한다.**\n\n한 건과 같은 규칙이다: 고칠 수 있는 사람만(ADR 0035), 이름이 긴 값을 든 옛 결과는\n못 하고, 요약값 표를 통째로 다시 만든다(`_project_summaries`). `result_id` 가 `null`\n이면 채택을 거둔다 — **되돌리기가 그 길이다**: 응답의 `previous_adopted_id` 를 그대로\n돌려보내면 채택 전으로 돌아간다(채택은 결과를 지우지 않으므로 되돌릴 수 있다).\n\n**고른 결과가 그 시험의 것인지 본다.** 안 보면 남의 시험 결과를 채택하는 길이 된다 —\n배치 되돌리기가 같은 자리를 막는다(`MNX-PROCESSING-0016`).\n\n하나가 막혔다고 앞의 채택을 취소하지 않는다. 무엇이 됐고 무엇이 왜 막혔는지가 줄마다\n온다 — 그래야 막힌 것만 다시 한다.",
+        "operationId": "adopt_many_api_processing_adopt_many_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdoptManyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdoptManyOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Adopt Many",
+        "tags": [
+          "processing"
+        ]
+      }
+    },
     "/api/processing/batch": {
       "post": {
         "description": "여러 시험에 같은 단계를 건다.\n\n**부분 실패는 실패가 아니다.** 20건 중 하나가 시편 치수 때문에 막혔다고\n전체를 되돌리면 19건을 다시 해야 하고, 조용히 건너뛰면 사람은 다 된 줄 안다.\n그래서 건별 결과를 그대로 돌려주고, 성공한 것은 그 자리에서 커밋한다.\n\n실패 이유는 건마다 다르다 — 시편 치수가 없는 것, 탄성 구간에 점이 없는 것,\n채널 이름이 다른 것이 한 배치에 섞여 온다. 하나로 뭉뚱그리면 무엇을 고쳐야\n하는지 알 수 없다.",
@@ -48420,6 +48952,52 @@
           }
         },
         "summary": "List Inputs",
+        "tags": [
+          "processing"
+        ]
+      }
+    },
+    "/api/processing/overview": {
+      "post": {
+        "description": "시험마다 결과 목록 · 지금 채택 · 고칠 수 있나 — **요청 차례 그대로, 한 번에.**\n\n못 보는 시험도 줄을 지킨다(`found=False`). 바구니에 담아 둔 시험이 그사이 지워졌거나\n권한이 바뀌었을 수 있고, 줄이 조용히 빠지면 사람은 그 한 건을 찾으러 다닌다.",
+        "operationId": "overview_api_processing_overview_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OverviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/RunOverviewOut"
+                  },
+                  "title": "Response Overview Api Processing Overview Post",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Overview",
         "tags": [
           "processing"
         ]
@@ -48781,6 +49359,52 @@
           }
         },
         "summary": "Create Result",
+        "tags": [
+          "processing"
+        ]
+      }
+    },
+    "/api/processing/results/curves": {
+      "post": {
+        "description": "고른 결과들의 곡선 — **겹쳐 그리기용, 한 번에.**\n\n축은 결과 탭이 처음 여는 축과 같다(공칭이 먼저). 앞쪽 곡선 · 보조선은 싣지 않는다 —\n그것은 한 건을 자세히 볼 때(`/results/{id}/curve`)의 일이고, 옛 결과는 그때마다 다시\n돌려 그리므로(ADR 0053) 수십 건에 붙이면 겹쳐 보기가 느려진다.\n\n못 보는 결과 · 지워진 결과는 **빼고** 준다 — 화면은 받은 것만 그리고, 무엇이 빠졌는지는\n목록(`overview`)이 이미 말한다.",
+        "operationId": "result_curves_api_processing_results_curves_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CurvesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ResultLineOut"
+                  },
+                  "title": "Response Result Curves Api Processing Results Curves Post",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Result Curves",
         "tags": [
           "processing"
         ]

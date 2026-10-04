@@ -130,7 +130,7 @@ export function OwnershipDialog({
 
   return (
     <Dialog open onOpenChange={(next) => !next && onClose()}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>누가 고치나 — {info?.name ?? KIND_LABELS[kind]}</DialogTitle>
           <DialogDescription>

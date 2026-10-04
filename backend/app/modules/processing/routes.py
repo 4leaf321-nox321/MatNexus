@@ -28,18 +28,24 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.modules.accounts.models import User
 from app.modules.formulas.models import Formula
+from app.modules.materials.models import Material, Sample, Specimen
 from app.modules.processing.models import (
     ProcessingRecipe,
     ProcessingResult,
     ProcessingResultFormula,
 )
 from app.modules.processing.schemas import (
+    AdoptManyItemOut,
+    AdoptManyOut,
+    AdoptManyRequest,
     BatchItemOut,
     BatchOut,
     BatchRequest,
     BatchUndoItemOut,
     BatchUndoOut,
     BatchUndoRequest,
+    CurvesRequest,
+    OverviewRequest,
     ProcessingPreviewOut,
     ProcessingResultOut,
     ProcessingRunRequest,
@@ -50,9 +56,12 @@ from app.modules.processing.schemas import (
     RecipeCreateRequest,
     RecipeOut,
     RecipeUpdateRequest,
+    ResultBriefOut,
     ResultContextOut,
     ResultCurveOut,
     ResultGuideOut,
+    ResultLineOut,
+    RunOverviewOut,
     StagePointsOut,
     StepParamOut,
 )
@@ -71,7 +80,7 @@ from app.shared import (
 from app.shared.access import AccessBook, EditAccessOut, access_of
 from app.shared.auth import current_user
 from app.shared.errors import AppError, Conflict, NotFound
-from app.shared.permissions import get_run
+from app.shared.permissions import get_run, visible_runs
 from matcore import curves, processing, registry, runtime
 from matcore.parsers import Channel
 from matcore.processing import SCALAR_KEY_MAX
@@ -902,6 +911,26 @@ def _project_summaries(db: Session, run: TestRun, result: ProcessingResult | Non
         )
 
 
+def _require_adoptable(item: ProcessingResult) -> None:
+    """채택할 수 있는 결과인가 — 한 건 · 여러 건이 같은 규칙으로 막는다.
+
+    이 검사가 생기기 전(2026-10-04)에 저장된 결과는 긴 이름을 들고 있을 수 있다 —
+    요약값 칸에 안 들어가 500 이었다. 결과는 불변이라 고칠 수 없고, 다시 돌리는 것이 답이다.
+    """
+    too_long = [
+        str(s.get("key", ""))
+        for s in item.scalars
+        if len(str(s.get("key", ""))) > SCALAR_KEY_MAX
+    ]
+    if too_long:
+        raise Conflict(
+            "MNX-PROCESSING-0018",
+            f"이 결과는 이름이 {SCALAR_KEY_MAX}자를 넘는 값을 들고 있어 채택할 수 없습니다: "
+            f"{', '.join(too_long)}. 그 계산이 이름을 줄인 뒤 같은 레시피로 다시 돌려 "
+            f"저장한 결과를 채택하세요.",
+        )
+
+
 @router.post("/results/{result_id}/adopt", response_model=ProcessingResultOut)
 def adopt(
     result_id: uuid.UUID,
@@ -920,20 +949,7 @@ def adopt(
     # **채택은 시험을 고치는 일이다**(ADR 0035) — 「이 시험의 물성은 이것」 이라는
     # 선언이라 통계·카드가 그것을 읽는다. 해석하는 사람이 다르면 그 부서에 편집을 준다.
     permissions.require_edit(db, user, run, code="MNX-PROCESSING-0017")
-    # 이 검사가 생기기 전(2026-10-04)에 저장된 결과는 긴 이름을 들고 있을 수 있다 —
-    # 요약값 칸에 안 들어가 500 이었다. 결과는 불변이라 고칠 수 없고, 다시 돌리는 것이 답이다.
-    too_long = [
-        str(s.get("key", ""))
-        for s in item.scalars
-        if len(str(s.get("key", ""))) > SCALAR_KEY_MAX
-    ]
-    if too_long:
-        raise Conflict(
-            "MNX-PROCESSING-0018",
-            f"이 결과는 이름이 {SCALAR_KEY_MAX}자를 넘는 값을 들고 있어 채택할 수 없습니다: "
-            f"{', '.join(too_long)}. 그 계산이 이름을 줄인 뒤 같은 레시피로 다시 돌려 "
-            f"저장한 결과를 채택하세요.",
-        )
+    _require_adoptable(item)
     run.adopted_result_id = item.id
     _project_summaries(db, run, item)
     db.commit()
@@ -1580,4 +1596,257 @@ def run_batch(
         failed=len(items) - succeeded,
         dry_run=payload.dry_run,
         items=items,
+    )
+
+
+# --- 채택 검토대 (ADR 0058) --------------------------------------------------
+#
+# **여러 시험의 결과를 한 화면에서 견주어 한 번에 채택한다.** 시험마다 결과 탭을 열고
+# 닫던 것을 셋으로 바꾼다 — 결과를 한 번에(`overview`), 겹쳐 그릴 곡선을 한 번에
+# (`results/curves`), 채택을 건별로(`adopt-many`). 셋 다 한 요청이다: 시험 스무 건을
+# 스무 번 부르는 것이 화면 쪽의 N+1 이다.
+
+
+def _brief(item: ProcessingResult, run: TestRun) -> ResultBriefOut:
+    return ResultBriefOut(
+        id=item.id,
+        created_at=item.created_at,
+        recipe_key=item.recipe_key,
+        recipe_label=item.recipe_label,
+        step_count=len(item.steps_snapshot or []),
+        row_count=item.row_count,
+        has_true_stress="stress_true" in (item.columns or []),
+        stale=_stale(item, run),
+        is_adopted=item.id == run.adopted_result_id,
+        scalars=_batch_scalars(item.scalars),
+    )
+
+
+@router.post("/overview", response_model=list[RunOverviewOut])
+def overview(
+    payload: OverviewRequest,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> list[RunOverviewOut]:
+    """시험마다 결과 목록 · 지금 채택 · 고칠 수 있나 — **요청 차례 그대로, 한 번에.**
+
+    못 보는 시험도 줄을 지킨다(`found=False`). 바구니에 담아 둔 시험이 그사이 지워졌거나
+    권한이 바뀌었을 수 있고, 줄이 조용히 빠지면 사람은 그 한 건을 찾으러 다닌다.
+    """
+    asked = list(dict.fromkeys(payload.test_run_ids))
+    runs = {
+        run.id: run for run in db.scalars(visible_runs(db, user).where(TestRun.id.in_(asked)))
+    }
+    # **이름은 한 번에 잇는다** — 시편 → 시료 → 재료, 시험 종류.
+    names = (
+        {
+            run_id: (specimen, material, test_type)
+            for run_id, specimen, material, test_type in db.execute(
+                select(TestRun.id, Specimen, Material, TestType)
+                .join(Specimen, Specimen.id == TestRun.specimen_id)
+                .join(Sample, Sample.id == Specimen.sample_id)
+                .join(Material, Material.id == Sample.material_id)
+                .join(TestType, TestType.id == TestRun.test_type_id)
+                .where(TestRun.id.in_(list(runs)))
+            )
+        }
+        if runs
+        else {}
+    )
+    results: dict[uuid.UUID, list[ProcessingResult]] = {}
+    if runs:
+        for item in db.scalars(
+            select(ProcessingResult)
+            .where(ProcessingResult.test_run_id.in_(list(runs)))
+            .order_by(ProcessingResult.created_at.desc())
+        ):
+            results.setdefault(item.test_run_id, []).append(item)
+    book = AccessBook(db, user).prime(runs.values())
+
+    out: list[RunOverviewOut] = []
+    for run_id in asked:
+        run = runs.get(run_id)
+        if run is None:
+            out.append(RunOverviewOut(test_run_id=run_id, found=False, results=[]))
+            continue
+        specimen, material, test_type = names.get(run.id, (None, None, None))
+        out.append(
+            RunOverviewOut(
+                test_run_id=run.id,
+                found=True,
+                code=run.code,
+                record_name=run.record_name,
+                status=run.status,
+                test_type_key=test_type.key if test_type else None,
+                test_type_label=test_type.label if test_type else None,
+                material_id=material.id if material else None,
+                material_name=material.record_name if material else None,
+                specimen_name=specimen.record_name if specimen else None,
+                orientation=specimen.orientation if specimen else None,
+                adopted_result_id=run.adopted_result_id,
+                access=book.of(run),
+                results=[_brief(item, run) for item in results.get(run.id, [])],
+            )
+        )
+    return out
+
+
+#: 겹쳐 그릴 때 선 하나의 점 수. 결과 탭(600)보다 적다 — 한 판에 수십 개가 겹치면 점이
+#: 더 많아도 눈에 안 보이고 응답만 커진다.
+LINE_POINTS = 200
+
+
+@router.post("/results/curves", response_model=list[ResultLineOut])
+def result_curves(
+    payload: CurvesRequest,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> list[ResultLineOut]:
+    """고른 결과들의 곡선 — **겹쳐 그리기용, 한 번에.**
+
+    축은 결과 탭이 처음 여는 축과 같다(공칭이 먼저). 앞쪽 곡선 · 보조선은 싣지 않는다 —
+    그것은 한 건을 자세히 볼 때(`/results/{id}/curve`)의 일이고, 옛 결과는 그때마다 다시
+    돌려 그리므로(ADR 0053) 수십 건에 붙이면 겹쳐 보기가 느려진다.
+
+    못 보는 결과 · 지워진 결과는 **빼고** 준다 — 화면은 받은 것만 그리고, 무엇이 빠졌는지는
+    목록(`overview`)이 이미 말한다.
+    """
+    asked = list(dict.fromkeys(payload.result_ids))
+    items = list(db.scalars(select(ProcessingResult).where(ProcessingResult.id.in_(asked))))
+    visible = set(
+        db.scalars(
+            visible_runs(db, user)
+            .with_only_columns(TestRun.id)
+            .where(TestRun.id.in_({item.test_run_id for item in items}))
+        )
+    )
+    by_id = {item.id: item for item in items if item.test_run_id in visible}
+    out: list[ResultLineOut] = []
+    for result_id in asked:
+        item = by_id.get(result_id)
+        if item is None:
+            continue
+        data = filestore.read_bytes(item.storage_path)
+        columns = sorted(curves.column_names(data))
+        axis_x, axis_y = _result_axes(columns, None, None)
+        units = curves.read_units(data)
+        points: list[tuple[float, float]] = []
+        if axis_x in columns and axis_y in columns:
+            raw = curves.read_columns(data, [axis_x, axis_y])
+            points = curves.downsample(raw[axis_x], raw[axis_y], max_points=LINE_POINTS)
+        out.append(
+            ResultLineOut(
+                result_id=item.id,
+                test_run_id=item.test_run_id,
+                x=axis_x,
+                y=axis_y,
+                units={axis_x: units.get(axis_x, "1"), axis_y: units.get(axis_y, "1")},
+                points=points,
+            )
+        )
+    return out
+
+
+@router.post("/adopt-many", response_model=AdoptManyOut)
+def adopt_many(
+    payload: AdoptManyRequest,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> AdoptManyOut:
+    """시험마다 고른 결과를 채택한다 — **건별로 커밋하고 건별로 말한다.**
+
+    한 건과 같은 규칙이다: 고칠 수 있는 사람만(ADR 0035), 이름이 긴 값을 든 옛 결과는
+    못 하고, 요약값 표를 통째로 다시 만든다(`_project_summaries`). `result_id` 가 `null`
+    이면 채택을 거둔다 — **되돌리기가 그 길이다**: 응답의 `previous_adopted_id` 를 그대로
+    돌려보내면 채택 전으로 돌아간다(채택은 결과를 지우지 않으므로 되돌릴 수 있다).
+
+    **고른 결과가 그 시험의 것인지 본다.** 안 보면 남의 시험 결과를 채택하는 길이 된다 —
+    배치 되돌리기가 같은 자리를 막는다(`MNX-PROCESSING-0016`).
+
+    하나가 막혔다고 앞의 채택을 취소하지 않는다. 무엇이 됐고 무엇이 왜 막혔는지가 줄마다
+    온다 — 그래야 막힌 것만 다시 한다.
+    """
+    editor = permissions.editor(db, user)
+    rows: list[AdoptManyItemOut] = []
+    #: 실제로 채택을 바꾼 시험 — 남의 것이면 끝에서 한 번에 적는다(배치와 같다).
+    took: list[TestRun] = []
+    for asked in payload.items:
+        try:
+            run = get_run(db, user, asked.test_run_id)
+        except AppError as exc:
+            rows.append(
+                AdoptManyItemOut(
+                    test_run_id=asked.test_run_id,
+                    record_name="?",
+                    status="failed",
+                    error=exc.message,
+                )
+            )
+            continue
+        was = run.adopted_result_id
+        if asked.result_id == was:
+            # 이미 그렇다 — 고친 것이 없으니 「남의 자료를 고쳤다」 도 남기지 않는다.
+            rows.append(
+                AdoptManyItemOut(
+                    test_run_id=run.id,
+                    record_name=run.record_name,
+                    status="unchanged",
+                    previous_adopted_id=was,
+                    adopted_result_id=was,
+                )
+            )
+            continue
+        try:
+            if not editor.allows(run):
+                raise permissions.locked(db, run, code="MNX-PROCESSING-0017")
+            target: ProcessingResult | None = None
+            if asked.result_id is not None:
+                target = db.get(ProcessingResult, asked.result_id)
+                if target is None or target.test_run_id != run.id:
+                    raise Conflict(
+                        "MNX-PROCESSING-0019",
+                        "고른 결과가 이 시험의 것이 아닙니다 — 목록을 다시 읽어 고르세요.",
+                    )
+                _require_adoptable(target)
+            run.adopted_result_id = target.id if target else None
+            _project_summaries(db, run, target)
+            db.commit()
+            took.append(run)
+            rows.append(
+                AdoptManyItemOut(
+                    test_run_id=run.id,
+                    record_name=run.record_name,
+                    status="ok",
+                    previous_adopted_id=was,
+                    adopted_result_id=run.adopted_result_id,
+                )
+            )
+        except AppError as exc:
+            db.rollback()
+            rows.append(
+                AdoptManyItemOut(
+                    test_run_id=asked.test_run_id,
+                    record_name=run.record_name,
+                    status="failed",
+                    previous_adopted_id=was,
+                    adopted_result_id=was,
+                    error=exc.message,
+                )
+            )
+
+    # **남의 시험을 채택했으면 등록자마다 한 줄로 적는다**(`note_edit`). 시험마다 커밋해서
+    # (하나가 막혀도 나머지는 남게) 돌면서 적으면 시험 수만큼 줄이 생긴다 — 실제로 바꾼 것만
+    # 끝의 한 트랜잭션에 모은다. 배치(`run_batch`)와 같은 판단이다.
+    if took:
+        for one in took:
+            permissions.note_edit(db, user, one)
+        db.commit()
+    changed = sum(1 for one in rows if one.status == "ok")
+    unchanged = sum(1 for one in rows if one.status == "unchanged")
+    return AdoptManyOut(
+        requested=len(rows),
+        changed=changed,
+        unchanged=unchanged,
+        failed=len(rows) - changed - unchanged,
+        items=rows,
     )

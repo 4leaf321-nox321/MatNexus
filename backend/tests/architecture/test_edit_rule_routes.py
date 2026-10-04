@@ -97,6 +97,9 @@ EXEMPT: dict[tuple[str, str], str] = {
     ("tests", "import_summaries"): _만들기 + " — 고른 시료 아래에 시편·시험을 붙인다",
     ("tests", "upload_test_run"): _만들기,
     ("processing", "preview"): _읽기,
+    # 채택 검토대(ADR 0058) — 여러 시험의 결과 · 곡선을 한 번에 **읽는다**. 몸이 커서 POST 다.
+    ("processing", "overview"): _읽기 + " — 시험 여럿의 결과를 한 번에(몸이 길어 POST)",
+    ("processing", "result_curves"): _읽기 + " — 겹쳐 그릴 곡선을 한 번에(몸이 길어 POST)",
     ("processing", "create_result"): _만들기 + " — 결과는 불변이다. 채택은 따로 막는다",
     ("processing", "create_recipe"): _정의,
     ("fitting", "preview"): _읽기,

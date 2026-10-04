@@ -37,6 +37,7 @@ export function ConfirmDialog({
   title,
   body,
   confirmLabel = '삭제',
+  undoable,
   busy = false,
   onConfirm,
   onClose,
@@ -46,6 +47,12 @@ export function ConfirmDialog({
   /** 무엇이 사라지는지. **이름과 수를 여기 적는다.** */
   body: ReactNode
   confirmLabel?: string
+  /**
+   * **되돌릴 수 있는 일이면 어떻게 되돌리는지.** 주면 「되돌릴 수 없습니다」 대신 이 말을 쓰고
+   * 확인 단추를 빨갛게 칠하지 않는다(2026-10-04). 채택 · 승인처럼 되돌릴 수 있는 일에 삭제의
+   * 경고를 달면 틀린 말이고, 늘 켜진 경고는 진짜 삭제 앞에서도 안 읽힌다.
+   */
+  undoable?: string
   busy?: boolean
   onConfirm: () => void
   onClose: () => void
@@ -63,7 +70,7 @@ export function ConfirmDialog({
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
-          <DialogDescription>되돌릴 수 없습니다.</DialogDescription>
+          <DialogDescription>{undoable ?? '되돌릴 수 없습니다.'}</DialogDescription>
         </DialogHeader>
 
         <div className="text-sm">{body}</div>
@@ -72,8 +79,12 @@ export function ConfirmDialog({
           <Button ref={cancel} variant="ghost" onClick={onClose} disabled={busy}>
             취소
           </Button>
-          <Button variant="destructive" onClick={onConfirm} disabled={busy}>
-            {busy ? '지우는 중…' : confirmLabel}
+          <Button
+            variant={undoable ? 'default' : 'destructive'}
+            onClick={onConfirm}
+            disabled={busy}
+          >
+            {busy ? (undoable ? `${confirmLabel} 중…` : '지우는 중…') : confirmLabel}
           </Button>
         </DialogFooter>
       </DialogContent>
