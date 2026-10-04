@@ -137,9 +137,19 @@ async function open(card: PropertyCard = CARD, formats: ExportFormat[] = FORMATS
   return dialog
 }
 
+/** 솔버 카드 열 — 형식 단추는 여기서 찾는다. 툴 열에도 같은 이름(「Abaqus」)의 단추가 있다. */
+function cards() {
+  return within(screen.getByRole('navigation', { name: '솔버 카드' }))
+}
+
+/** 툴 열. */
+function tools() {
+  return within(screen.getByRole('navigation', { name: '툴' }))
+}
+
 /** 형식을 고르고, 배치가 그려진 뒤 「내려받기」 를 누른다. */
 async function pickAndDownload(name: RegExp) {
-  await userEvent.click(screen.getByRole('button', { name }))
+  await userEvent.click(cards().getByRole('button', { name }))
   const button = await screen.findByRole('button', { name: /내려받기/ })
   await waitFor(() => expect(button).toBeEnabled())
   await userEvent.click(button)
@@ -168,7 +178,7 @@ describe('단위계를 고른다', () => {
   it('계를 바꾸면 그 계로 배치를 다시 묻는다', async () => {
     // 앞 계의 배치가 남아 있으면 「이 칸에 이 값」 이 다른 덱을 가리킨다.
     await open()
-    await userEvent.click(screen.getByRole('button', { name: /Abaqus/ }))
+    await userEvent.click(cards().getByRole('button', { name: /Abaqus/ }))
     await screen.findByRole('table', { name: '칸 배치' })
     await userEvent.click(screen.getByRole('button', { name: /mm · N · tonne/ }))
     await waitFor(() => expect(layout.mock.calls.at(-1)?.[2]).toMatchObject({ key: 'mm_n_tonne' }))
@@ -196,7 +206,7 @@ describe('칸 배치와 미리보기', () => {
     await open()
     // 고르기 전에는 묻지 않는다 — 형식마다 덱을 그려야 하는 일이다.
     expect(layout).not.toHaveBeenCalled()
-    await userEvent.click(screen.getByRole('button', { name: /Abaqus/ }))
+    await userEvent.click(cards().getByRole('button', { name: /Abaqus/ }))
 
     const table = await screen.findByRole('table', { name: '칸 배치' })
     const row = within(table).getByRole('row', { name: /^탄성 · 탄성계수/ })
@@ -218,7 +228,7 @@ describe('칸 배치와 미리보기', () => {
 
   it('줄을 누르면 그 값의 자리를 짙게 칠한다', async () => {
     await open()
-    await userEvent.click(screen.getByRole('button', { name: /Abaqus/ }))
+    await userEvent.click(cards().getByRole('button', { name: /Abaqus/ }))
     const table = await screen.findByRole('table', { name: '칸 배치' })
     await userEvent.click(within(table).getByRole('row', { name: /^탄성 · 푸아송비/ }))
 
@@ -235,7 +245,7 @@ describe('칸 배치와 미리보기', () => {
       error: 'Abaqus 덱에 푸아송비 가 필요한데 카드에 없습니다.',
     })
     await open()
-    await userEvent.click(screen.getByRole('button', { name: /Abaqus/ }))
+    await userEvent.click(cards().getByRole('button', { name: /Abaqus/ }))
     expect(await screen.findByRole('alert')).toHaveTextContent('푸아송비 가 필요한데')
     expect(screen.getByRole('button', { name: /내려받기/ })).toBeDisabled()
   })
@@ -246,10 +256,11 @@ describe('낼 수 없는 형식', () => {
     // 내려받기를 누른 뒤에 "밀도가 없습니다" 를 보는 것은 늦다. **없애지 않는다** — 왜 못
     // 내는지가 그 자리에 있다.
     await open()
-    expect(screen.queryByText('OpenRadioss')).not.toBeInTheDocument()
+    // 툴 열에는 늘 선다 — 접히는 것은 솔버 카드 열의 그 형식이다.
+    expect(cards().queryByText('OpenRadioss')).not.toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: /못 내는 형식 1개/ }))
     expect(screen.getByText(/밀도 가 있어야 냅니다/)).toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: /OpenRadioss/ }))
+    await userEvent.click(cards().getByRole('button', { name: /OpenRadioss/ }))
     expect(screen.getByRole('alert')).toHaveTextContent('이 카드로는 못 냅니다')
     expect(screen.queryByRole('button', { name: /내려받기/ })).not.toBeInTheDocument()
     expect(layout).not.toHaveBeenCalled()
@@ -269,11 +280,48 @@ describe('솔버로 묶는다', () => {
       available_formats: models.map((one) => one.key),
     } as unknown as PropertyCard
     await open(card, models)
-    const nav = screen.getByRole('navigation', { name: '형식' })
+    const nav = screen.getByRole('navigation', { name: '솔버 카드' })
     expect(within(nav).getAllByText('ANSYS')).toHaveLength(1)
     expect(within(nav).getByText('LS-DYNA')).toBeInTheDocument()
     await pickAndDownload(/ANSYS \(탄소성\)/)
     expect(download.mock.calls[0][1]).toMatchObject({ key: 'ansys_plastic' })
+  })
+
+  it('툴 열에서 툴을 고르면 그 툴의 카드만, 「전체」 면 전부 선다 (2026-10-04)', async () => {
+    // 솔버 × 물성 모델로 형식이 쉰 개가 넘는다 — 툴을 먼저 고른다. 못 내는 형식뿐인 툴도 선다.
+    const models = [
+      { key: 'ansys_elastic', label: 'ANSYS (선형)', extension: 'mac', describe: 'MP', requires: [] },
+      { key: 'ansys_plastic', label: 'ANSYS (탄소성)', extension: 'mac', describe: 'TB', requires: [] },
+      { key: 'dyna', label: 'LS-DYNA (탄소성)', extension: 'k', describe: '024', requires: [] },
+      { key: 'openradioss', label: 'OpenRadioss', extension: 'rad', describe: 'LAW36', requires: ['밀도'] },
+    ] as ExportFormat[]
+    const card = {
+      ...CARD,
+      available_formats: ['ansys_elastic', 'ansys_plastic', 'dyna'],
+    } as unknown as PropertyCard
+    await open(card, models)
+
+    // 「전체」 가 기본이고, 툴마다 낼 수 있는 수 / 전체 수.
+    expect(tools().getByRole('button', { name: /전체/ })).toHaveAttribute('aria-pressed', 'true')
+    expect(tools().getByRole('button', { name: /전체/ })).toHaveTextContent('3/4')
+    expect(tools().getByRole('button', { name: /ANSYS/ })).toHaveTextContent('2/2')
+    expect(tools().getByRole('button', { name: /OpenRadioss/ })).toHaveTextContent('0/1')
+    expect(cards().getByRole('button', { name: /LS-DYNA \(탄소성\)/ })).toBeInTheDocument()
+
+    await userEvent.click(tools().getByRole('button', { name: /ANSYS/ }))
+    expect(cards().getByRole('button', { name: /ANSYS \(선형\)/ })).toBeInTheDocument()
+    expect(cards().getByRole('button', { name: /ANSYS \(탄소성\)/ })).toBeInTheDocument()
+    expect(cards().queryByRole('button', { name: /LS-DYNA/ })).not.toBeInTheDocument()
+
+    // 못 내는 것뿐인 툴 — 까닭과 함께 접혀 있다.
+    await userEvent.click(tools().getByRole('button', { name: /OpenRadioss/ }))
+    expect(cards().getByText(/OpenRadioss 에 낼 수 있는 형식이 없습니다/)).toBeInTheDocument()
+    await userEvent.click(cards().getByRole('button', { name: /못 내는 형식 1개/ }))
+    expect(cards().getByText(/밀도 가 있어야 냅니다/)).toBeInTheDocument()
+
+    await userEvent.click(tools().getByRole('button', { name: /전체/ }))
+    expect(cards().getByRole('button', { name: /LS-DYNA \(탄소성\)/ })).toBeInTheDocument()
+    expect(cards().getByRole('button', { name: /ANSYS \(선형\)/ })).toBeInTheDocument()
   })
 })
 
@@ -307,7 +355,7 @@ describe('짝 카드와 합쳐 낸다', () => {
     await userEvent.click(screen.getByRole('button', { name: /인장 MD · MD/ }))
     expect(pairedFormats).toHaveBeenCalledWith('a1', 'c-md')
 
-    const nav = screen.getByRole('navigation', { name: '형식' })
+    const nav = screen.getByRole('navigation', { name: '솔버 카드' })
     await userEvent.click(await within(nav).findByRole('button', { name: /LS-DYNA \(이방성/ }))
     await waitFor(() => expect(layout).toHaveBeenCalled())
     expect(layout.mock.calls[0][3]).toBe('c-md')
@@ -338,9 +386,9 @@ describe('단위가 정해진 형식', () => {
     const card = { ...CARD, available_formats: ['aedt', 'abaqus'] } as unknown as PropertyCard
     await open(card, formats)
 
-    const aedt = screen.getByRole('button', { name: /Ansys Electronics Desktop/ })
+    const aedt = cards().getByRole('button', { name: /Ansys Electronics Desktop/ })
     expect(aedt).toHaveTextContent('고른 계와 상관없이 SI로 나갑니다')
-    const abaqus = screen.getByRole('button', { name: /Abaqus/ })
+    const abaqus = cards().getByRole('button', { name: /Abaqus/ })
     expect(abaqus).not.toHaveTextContent('고른 계와 상관없이')
   })
 })

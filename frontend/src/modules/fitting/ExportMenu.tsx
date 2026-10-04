@@ -12,9 +12,10 @@
  * 어떻게 나오는지」. 고정폭 칸이 하나 밀리면 솔버는 다른 값을 **조용히** 읽는다 — 받기 전에
  * 「탄성계수가 저 칸으로 간다」 를 볼 자리가 있어야 한다.
  *
- *     위      덱의 단위계 — 형식보다 먼저 한 번 고른다
- *     왼쪽    솔버로 묶은 형식 목록 · 짝 카드 · 못 내는 형식(까닭과 함께)
- *     오른쪽  칸 배치(값 → 줄 · 칸) · 덱 미리보기(그 자리를 칠한다) · 내려받기
+ *     위        덱의 단위계 — 형식보다 먼저 한 번 고른다
+ *     툴 열     「전체」 · 솔버마다(낼 수 있는 수 / 전체 수) — 2026-10-04 둘째 지적으로 갈랐다
+ *     카드 열   고른 툴의 솔버 카드(형식) · 짝 카드 · 못 내는 형식(까닭과 함께). 「전체」 면 전부
+ *     오른쪽    칸 배치(값 → 줄 · 칸) · 덱 미리보기(그 자리를 칠한다) · 내려받기
  *
  * 배치는 서버가 **실제로 내려받을 덱**을 그대로 짚는다(`GET …/export/layout` — 값을 하나씩
  * 흔들어 바뀐 자리를 찾는다). 여러 값에서 셈한 칸(G = E/2(1+ν))은 그 값들이 함께 짚는다.
@@ -36,7 +37,7 @@ import { useState } from 'react'
 import { ChevronDown, ChevronRight, Download, FileDown } from 'lucide-react'
 
 import { fittingApi } from '@/modules/fitting/api'
-import { groupBySolver } from '@/modules/fitting/formatGroups'
+import { groupBySolver, solverOf } from '@/modules/fitting/formatGroups'
 import type {
   DeckLayout,
   DeckLayoutValue,
@@ -62,6 +63,9 @@ import {
   TableRow,
 } from '@/shared/components/ui/table'
 import { useResource } from '@/shared/hooks/useResource'
+
+/** 툴 열의 「전체」 — 솔버 이름과 겹치지 않는 값. */
+const ALL = '__all__'
 
 /** 고른 형식 — 짝 카드와 합쳐 내는 것이면 그 짝의 id 가 함께 든다. */
 interface Choice {
@@ -123,6 +127,9 @@ function ExportDialog({
   const [choice, setChoice] = useState<Choice | null>(null)
   const [showBlocked, setShowBlocked] = useState(false)
   const [pair, setPair] = useState<{ card: PropertyCard; keys: string[] } | null>(null)
+  // **툴을 먼저 고른다**(2026-10-04 둘째 지적) — 솔버 × 물성 모델로 형식이 쉰 개 넘게 한 열에
+  // 서 있으면 찾는 데 시간이 든다. 「전체」 면 지금처럼 전부.
+  const [tool, setTool] = useState<string>(ALL)
   const systemList = systems.data ?? []
   // 고르기 전에는 서버가 기본이라고 말한 것. **화면이 'si' 를 적어 두지 않는다.**
   const system =
@@ -131,11 +138,19 @@ function ExportDialog({
     systemList[0] ??
     null
 
-  const available = formats.filter((one) => card.available_formats.includes(one.key))
-  const blocked = formats.filter((one) => !card.available_formats.includes(one.key))
+  const opens = (one: ExportFormat) => card.available_formats.includes(one.key)
+  const inTool = (one: ExportFormat) => tool === ALL || solverOf(one.label) === tool
+  const available = formats.filter((one) => opens(one) && inTool(one))
+  const blocked = formats.filter((one) => !opens(one) && inTool(one))
   const partners = siblings.filter(
     (one) => one.id !== card.id && one.material_id === card.material_id
   )
+  // 툴 열 — **못 내는 형식뿐인 툴도 선다.** 빼면 「이 툴은 없나」 로 읽힌다.
+  const tools = groupBySolver(formats).map((group) => ({
+    solver: group.solver,
+    total: group.items.length,
+    open: group.items.filter(opens).length,
+  }))
 
   function selected(format: ExportFormat, withCard?: string): boolean {
     return choice?.format.key === format.key && choice.withCard === withCard
@@ -143,12 +158,13 @@ function ExportDialog({
 
   return (
     <Dialog open onOpenChange={(next) => (next ? null : onClose())}>
-      <DialogContent className="flex h-[85vh] max-h-[85vh] flex-col sm:max-w-6xl">
+      {/* **가로로 넓게** — 열 셋에 덱 미리보기까지 서야 한다. 고정폭 덱은 한 줄이 80칸이다. */}
+      <DialogContent className="flex h-[88vh] max-h-[88vh] flex-col sm:max-w-[min(96vw,1800px)]">
         <DialogHeader>
           <DialogTitle>내보내기 — {card.label}</DialogTitle>
           <DialogDescription>
-            형식을 고르면 덱의 어느 자리에 카드의 어느 값이 가는지와 덱 미리보기가 섭니다.
-            확인한 뒤 내려받으세요.
+            툴과 솔버 카드를 고르면 덱의 어느 자리에 카드의 어느 값이 가는지와 덱 미리보기가
+            섭니다. 확인한 뒤 내려받으세요.
           </DialogDescription>
         </DialogHeader>
 
@@ -180,16 +196,39 @@ function ExportDialog({
           </p>
         </section>
 
-        <div className="grid min-h-0 flex-1 grid-cols-[17rem_1fr] gap-4">
-          <nav aria-label="형식" className="min-h-0 overflow-y-auto border-r pr-2">
-            {/* **낼 수 있는 것을 솔버로 묶어 먼저.** 솔버 × 물성 모델로 형식이 쉰 개 가까이라
-                한 줄로 늘어놓으면 찾는 데 시간이 든다. 못 내는 것은 접어 둔다 — 없애지 않는다:
-                「왜 못 내나」 가 그 자리에 있다. */}
+        <div className="grid min-h-0 flex-1 grid-cols-[10rem_19rem_minmax(0,1fr)] gap-4">
+          <nav aria-label="툴" className="min-h-0 overflow-y-auto border-r pr-2">
+            <p className="text-muted-foreground px-2 pb-1 text-xs font-medium">툴</p>
+            <ToolButton
+              label="전체"
+              open={formats.filter(opens).length}
+              total={formats.length}
+              active={tool === ALL}
+              onPick={() => setTool(ALL)}
+            />
+            {tools.map((one) => (
+              <ToolButton
+                key={one.solver}
+                label={one.solver}
+                open={one.open}
+                total={one.total}
+                active={tool === one.solver}
+                onPick={() => setTool(one.solver)}
+              />
+            ))}
+          </nav>
+
+          <nav aria-label="솔버 카드" className="min-h-0 overflow-y-auto border-r pr-2">
+            <p className="text-muted-foreground px-2 pb-1 text-xs font-medium">솔버 카드</p>
+            {/* **낼 수 있는 것을 먼저.** 「전체」 면 솔버 제목 아래 묶는다. 못 내는 것은 접어
+                둔다 — 없애지 않는다: 「왜 못 내나」 가 그 자리에 있다. */}
             {groupBySolver(available).map((group) => (
               <div key={group.solver} className="mb-2">
-                <p className="text-muted-foreground px-2 pt-1 text-xs font-medium">
-                  {group.solver}
-                </p>
+                {tool === ALL ? (
+                  <p className="text-muted-foreground px-2 pt-1 text-xs font-medium">
+                    {group.solver}
+                  </p>
+                ) : null}
                 {group.items.map((format) => (
                   <FormatButton
                     key={format.key}
@@ -203,7 +242,9 @@ function ExportDialog({
             ))}
             {available.length === 0 ? (
               <p className="text-muted-foreground px-2 py-1.5 text-xs">
-                이 카드로 낼 수 있는 형식이 아직 없습니다.
+                {tool === ALL
+                  ? '이 카드로 낼 수 있는 형식이 아직 없습니다.'
+                  : `이 카드로 ${tool} 에 낼 수 있는 형식이 없습니다.`}
               </p>
             ) : null}
 
@@ -248,7 +289,7 @@ function ExportDialog({
                 ) : null}
                 {pair
                   ? formats
-                      .filter((one) => pair.keys.includes(one.key))
+                      .filter((one) => pair.keys.includes(one.key) && inTool(one))
                       .map((format) => (
                         <FormatButton
                           key={`pair-${format.key}`}
@@ -296,7 +337,7 @@ function ExportDialog({
           <div className="min-h-0 overflow-y-auto">
             {choice === null ? (
               <p className="text-muted-foreground p-6 text-sm">
-                왼쪽에서 형식을 고르세요 — 덱의 어느 자리에 무엇이 가는지 여기 섭니다.
+                왼쪽에서 툴과 솔버 카드를 고르세요 — 덱의 어느 자리에 무엇이 가는지 여기 섭니다.
               </p>
             ) : choice.blocked ? (
               <BlockedPanel format={choice.format} />
@@ -317,6 +358,37 @@ function ExportDialog({
         </div>
       </DialogContent>
     </Dialog>
+  )
+}
+
+function ToolButton({
+  label,
+  open,
+  total,
+  active,
+  onPick,
+}: {
+  label: string
+  open: number
+  total: number
+  active: boolean
+  onPick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={active}
+      className={`flex w-full items-baseline gap-2 rounded-md px-2 py-1.5 text-left text-sm ${
+        active ? 'bg-accent' : 'hover:bg-muted'
+      } ${open === 0 ? 'opacity-70' : ''}`}
+      onClick={onPick}
+    >
+      <span className="min-w-0 flex-1 truncate">{label}</span>
+      {/* 낼 수 있는 수 / 전체 수 — 고르기 전에 「이 툴로 몇 개나 나오나」. */}
+      <span className="text-muted-foreground shrink-0 text-xs" title="이 카드로 낼 수 있는 형식 / 전체">
+        {open}/{total}
+      </span>
+    </button>
   )
 }
 
