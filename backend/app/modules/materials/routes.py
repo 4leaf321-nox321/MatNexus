@@ -262,6 +262,7 @@ def _declared_out(row: dict[str, Any]) -> DeclaredPropertyOut:
         source=str(row["source"]),
         reference=str(row["reference"]),
         note=row.get("note"),
+        secant_reference_k=row.get("secant_reference_k"),
         # **등급은 서버가 근거에서 센다** — 화면이 출처 표를 들고 셈하면 승인 규칙이
         # 두 곳에 산다.
         quality_tier=declared_approval.tier(row),

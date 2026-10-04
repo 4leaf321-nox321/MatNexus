@@ -188,10 +188,19 @@ interface Draft {
    * 「10 GHz, 23 ℃」. 점마다 다르면 서버가 거절한다(2차원 표는 안 담는다).
    */
   measured: string
+  /**
+   * 선팽창계수 표의 **할선 기준 온도 θ₀**(℃ 글자, 선택 — 2026-10-04). 덱의 Abaqus `ZERO` · ANSYS
+   * `REFT` · Nastran `TREF` 가 된다. 표의 측정 온도와 다른 것이다 — 할선 α 는 「θ₀ 에서 그 온도까지의
+   * 평균 기울기」 라 θ₀ 를 모르면 열변형을 셀 수 없다.
+   */
+  secant: string
   source: string
   reference: string
   note: string
 }
+
+/** 할선 기준 온도를 받는 물성 — 서버(`materials/declared.SECANT_PROPERTY`)와 같은 키. */
+const SECANT_PROPERTY = 'thermal.expansion_linear'
 
 function toDraft(row: DeclaredProperty, spec?: PropertyItem): Draft {
   // **되돌리는 환산도 서버가 한다.** `value` 가 사람이 적은 단위의 값이다 —
@@ -225,6 +234,7 @@ function toDraft(row: DeclaredProperty, spec?: PropertyItem): Draft {
         : celsius(row.points.find((point) => point.temperature_k != null)?.temperature_k),
     measure: row.scale ?? row.input_unit ?? '',
     isScale: row.scale != null,
+    secant: celsius(row.secant_reference_k),
     source: row.source,
     reference: row.reference,
     note: row.note ?? '',
@@ -368,6 +378,7 @@ export function DeclaredPropertiesCard({
         conditionUnit: startUnit(item.condition_units ?? [])?.unit ?? '',
         conditionToSi: startUnit(item.condition_units ?? [])?.to_si ?? 1,
         measured: '',
+        secant: '',
         source: 'literature',
         reference: '',
         note: '',
@@ -444,6 +455,11 @@ export function DeclaredPropertiesCard({
           // 다시 뒤지면, 목록이 도착하기 전에 저장을 누른 사람이 척도를 단위
           // 자리로 보내게 된다.
           ...(row.isScale ? { scale: row.measure } : { input_unit: row.measure }),
+          // **통째 교체라 있던 θ₀ 도 되보낸다** — 안 보내면 지워지고 승인이 풀린다. 비운 칸이면
+          // 안 보낸다(= 없다). 화면은 ℃ 로 받고 서버에는 K 로.
+          ...(row.secant.trim() === ''
+            ? {}
+            : { secant_reference_k: fromDisplay(Number(row.secant), 'K', 'temperature') }),
           source: row.source,
           reference: row.reference,
           note: row.note || null,
@@ -864,6 +880,30 @@ export function DeclaredPropertiesCard({
                 </div>
               </>
             )}
+
+            {spec?.property_key === SECANT_PROPERTY ? (
+              <div className="col-span-12">
+                <Label
+                  htmlFor={`${row.item}-secant`}
+                  className="text-muted-foreground mb-1 text-[11px]"
+                >
+                  할선 기준 온도 θ₀ ({TEMPERATURE.unit}, 선택)
+                </Label>
+                <Input
+                  id={`${row.item}-secant`}
+                  value={row.secant}
+                  inputMode="decimal"
+                  placeholder="예: 20 — 표가 몇 도 기준의 평균 α 인지"
+                  onChange={(event) => edit(index, { secant: event.target.value })}
+                />
+                {/* **덱의 ZERO · REFT · TREF 가 된다.** 비우면 덱이 지어 넣지 않고 「없다」 고
+                    적는다 — 20 °C 기준 표를 0 K 기준으로 읽으면 열변형이 통째로 어긋난다. */}
+                <p className="text-muted-foreground mt-1 text-[11px]">
+                  할선 α 표는 θ₀ 에서 그 온도까지의 평균 기울기입니다. 적으면 덱의 Abaqus ZERO ·
+                  ANSYS REFT · Nastran TREF 가 되고, 비우면 덱에 「기준 온도 없음」 이 적힙니다.
+                </p>
+              </div>
+            ) : null}
 
             <div className="col-span-12 sm:col-span-6">
               <Label htmlFor={`${row.item}-source`} className="text-muted-foreground mb-1 text-[11px]">

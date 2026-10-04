@@ -9442,6 +9442,17 @@
             ],
             "title": "Scale"
           },
+          "secant_reference_k": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Secant Reference K"
+          },
           "source": {
             "title": "Source",
             "type": "string"
@@ -9531,6 +9542,17 @@
               }
             ],
             "title": "Scale"
+          },
+          "secant_reference_k": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Secant Reference K"
           },
           "si_unit": {
             "anyOf": [

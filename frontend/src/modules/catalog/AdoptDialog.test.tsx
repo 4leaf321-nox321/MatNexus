@@ -334,6 +334,32 @@ describe('주파수를 타는 항목', () => {
     expect(dk.points[0].frequency_hz).toBe(1e9)
   })
 
+  it('기존 선팽창계수 줄의 할선 기준 온도도 되보낸다 — 안 보내면 지워지고 승인이 풀린다', async () => {
+    const withCte = {
+      ...TARGET,
+      declared_properties: [
+        {
+          item: '선팽창계수(CTE)',
+          points: [{ temperature_k: 293.15, frequency_hz: null, wavelength_m: null, value_si: 1.2e-5, value: 1.2e-5 }],
+          input_unit: '1/K',
+          scale: null,
+          source: 'literature',
+          reference: 'ASM',
+          note: null,
+          secant_reference_k: 293.15,
+        },
+      ],
+    }
+    mockWith([withCte])
+    await pickTarget()
+    await userEvent.click(await screen.findByRole('button', { name: /추가/ }))
+
+    await waitFor(() => expect(patch).toHaveBeenCalledTimes(1))
+    const rows = (patch.mock.calls[0][1] as { declared_properties: Array<Record<string, unknown>> })
+      .declared_properties
+    expect(rows.find((row) => row.item === '선팽창계수(CTE)')?.secant_reference_k).toBe(293.15)
+  })
+
   it('문헌의 유전율은 주파수 점으로 담고, 섭씨 온도도 읽으며, 측정 온도가 다르면 비우고 적는다', async () => {
     mockWith([TARGET])
     const withDk = {

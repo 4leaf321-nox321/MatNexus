@@ -54,6 +54,16 @@ const ITEMS = [
     units: ['W/(m.K)'],
     scales: [],
   },
+  // 선팽창계수 — **할선 기준 온도 θ₀ 칸**이 이 항목에만 선다(2026-10-04).
+  {
+    item: '선팽창계수(CTE)',
+    dimension: 'inverse_temperature',
+    si_unit: '1/K',
+    symbol: 'alpha',
+    units: ['1/K'],
+    scales: [],
+    property_key: 'thermal.expansion_linear',
+  },
   // **척도로 재는 물성.** 단위 자리에 척도 목록이 뜨고 환산이 없다.
   {
     item: '경도',
@@ -205,6 +215,62 @@ describe('선언 물성 편집', () => {
     expect(onSave).not.toHaveBeenCalled()
     await openFirst()
     expect(screen.getByDisplayValue('206')).toBeInTheDocument()
+  })
+
+  it('할선 기준 온도는 선팽창계수에만 서고, ℃ 로 받아 K 로 보낸다 (2026-10-04)', async () => {
+    // θ₀ 는 덱의 Abaqus ZERO · ANSYS REFT · Nastran TREF 가 된다 — 표의 측정 온도와 다른 것이다.
+    const cte = {
+      item: '선팽창계수(CTE)',
+      points: [
+        { value_si: 1.2e-5, value: 1.2e-5, temperature_k: 293.15 },
+        { value_si: 1.4e-5, value: 1.4e-5, temperature_k: 573.15 },
+      ],
+      input_unit: '1/K',
+      source: 'literature',
+      reference: 'ASM',
+      note: null,
+      secant_reference_k: null,
+    }
+    const onSave = panel([DECLARED_E, cte])
+    const user = userEvent.setup()
+    const rows = await screen.findAllByRole('button', { name: /편집$/ })
+    // 탄성계수에는 θ₀ 칸이 없다.
+    await user.click(rows[0])
+    await screen.findByLabelText('탄성계수 값')
+    expect(screen.queryByLabelText(/할선 기준 온도/)).not.toBeInTheDocument()
+    await closeDialog(user)
+
+    await user.click((await screen.findAllByRole('button', { name: /편집$/ }))[1])
+    const field = await screen.findByLabelText(/할선 기준 온도/)
+    await user.type(field, '20')
+    await saveCard()
+    await waitFor(() => expect(onSave).toHaveBeenCalled())
+    const sent = onSave.mock.calls[0][0] as Record<string, unknown>[]
+    const row = sent.find((one) => one.item === '선팽창계수(CTE)')
+    expect(row?.secant_reference_k as number).toBeCloseTo(293.15, 6)
+    // 탄성계수 줄에는 안 실린다 — 서버가 거절한다.
+    expect(sent.find((one) => one.item === '탄성계수')).not.toHaveProperty('secant_reference_k')
+  })
+
+  it('있던 θ₀ 는 다른 칸을 고쳐 저장해도 되보낸다 — 통째 교체라 안 보내면 지워진다', async () => {
+    const cte = {
+      item: '선팽창계수(CTE)',
+      points: [{ value_si: 1.2e-5, value: 1.2e-5, temperature_k: 293.15 }],
+      input_unit: '1/K',
+      source: 'literature',
+      reference: 'ASM',
+      note: null,
+      secant_reference_k: 293.15,
+    }
+    const onSave = panel([cte])
+    const user = await openFirst()
+    expect(await screen.findByLabelText(/할선 기준 온도/)).toHaveValue('20')
+    await user.clear(screen.getByLabelText('근거 문서'))
+    await user.type(screen.getByLabelText('근거 문서'), 'ASM Handbook Vol.1')
+    await saveCard()
+    await waitFor(() => expect(onSave).toHaveBeenCalled())
+    const row = (onSave.mock.calls[0][0] as Record<string, unknown>[])[0]
+    expect(row.secant_reference_k as number).toBeCloseTo(293.15, 6)
   })
 
   it('저장하면 창이 닫힌다', async () => {

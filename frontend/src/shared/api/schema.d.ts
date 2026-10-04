@@ -11796,6 +11796,8 @@ export interface components {
             reference: string;
             /** Scale */
             scale?: string | null;
+            /** Secant Reference K */
+            secant_reference_k?: number | null;
             /** Source */
             source: string;
         };
@@ -11828,6 +11830,8 @@ export interface components {
             reference: string;
             /** Scale */
             scale?: string | null;
+            /** Secant Reference K */
+            secant_reference_k?: number | null;
             /** Si Unit */
             si_unit?: string | null;
             /** Source */

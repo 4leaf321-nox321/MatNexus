@@ -215,6 +215,12 @@ def thermal_block(material: Material) -> dict[str, Any]:
             # 표인 물성은 온도를 하나로 말할 수 없다. **그것을 셈에 넣지 않으면**
             # 나머지 둘이 우연히 같을 때 「전부 그 온도」로 읽힌다.
             temperatures.add(None)
+        # **선팽창계수의 할선 기준 온도 θ₀ 가 적혀 있으면 그것이 덱의 기준이다**(2026-10-04) —
+        # 표의 측정 온도와 다른 것이다. 렌더러는 이 칸을 Abaqus `ZERO` · ANSYS `REFT` · Nastran
+        # `TREF` 로 적는다. 없으면 지어 넣지 않는다(덱이 없다고 적는다).
+        secant = row.get("secant_reference_k")
+        if key == "thermal_expansion" and isinstance(secant, (int, float)):
+            values["thermal_expansion_temperature"] = float(secant)
 
     # 블록 전체의 기준 온도. **전부 한 점이고 그 온도가 같을 때만** 뜻이 있다.
     if values and len(temperatures) == 1 and None not in temperatures:

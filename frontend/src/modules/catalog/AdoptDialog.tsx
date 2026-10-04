@@ -123,6 +123,8 @@ function resend(row: components['schemas']['DeclaredPropertyOut']): DeclaredIn {
     source: row.source,
     reference: row.reference,
     note: row.note,
+    // 선팽창계수의 할선 기준 온도 θ₀ — 안 되보내면 지워지고 그 줄의 승인이 풀린다.
+    secant_reference_k: row.secant_reference_k ?? null,
   }
 }
 

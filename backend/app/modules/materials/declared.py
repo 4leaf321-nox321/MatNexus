@@ -33,7 +33,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.modules.vocabulary.models import Vocabulary, VocabularyTerm
-from app.shared import declared_catalog
+from app.shared import declared_catalog, property_names
 from app.shared import declared_conditions as conditions
 from app.shared.errors import AppError
 from app.shared.text import clean, compare_key
@@ -221,6 +221,39 @@ def _points(
             status=422,
         )
     return sorted(made, key=lambda point: point[condition.key])
+
+
+#: 할선 기준 온도를 받는 물성 — 선팽창계수(CTE). 열물성 블록이 같은 길로 항목을 찾는다
+#: (`shared/declared_card.declared_items`).
+SECANT_PROPERTY = "thermal.expansion_linear"
+
+
+def _secant_reference(row: dict[str, Any], name: str) -> float | None:
+    """선팽창계수 표의 **할선 기준 온도 θ₀**(K) — 있으면 덱의 Abaqus `ZERO` · ANSYS `REFT` ·
+    Nastran `TREF` 가 된다(2026-10-04).
+
+    할선 α 표는 「θ₀ 에서 그 온도까지의 평균 기울기」 라 θ₀ 를 모르면 열변형을 셀 수 없다 —
+    20 °C 기준 표를 0 K 기준으로 읽으면 열변형이 통째로 어긋나는데 덱은 멀쩡히 돈다. 그래서
+    덱은 θ₀ 가 없으면 지어 넣지 않고 없다고 적는다. 그것을 적을 자리가 이 칸이다.
+    """
+    raw = row.get("secant_reference_k")
+    if raw is None:
+        return None
+    value = _number(raw)
+    target = property_names.builtin_item(SECANT_PROPERTY)
+    if target is None or compare_key(name) != compare_key(target):
+        raise AppError(
+            "MNX-MATERIALS-0049",
+            f"할선 기준 온도는 선팽창계수에만 적습니다 — '{name}' 에는 뜻이 없습니다.",
+            status=422,
+        )
+    if value is None or value <= 0:
+        raise AppError(
+            "MNX-MATERIALS-0049",
+            f"'{name}' 의 할선 기준 온도가 절대온도(K)로 0 보다 커야 합니다: {raw!r}",
+            status=422,
+        )
+    return value
 
 
 def check(
@@ -429,6 +462,7 @@ def check(
                 status=422,
             )
 
+        secant = _secant_reference(row, name)
         out.append(
             {
                 "item": name,
@@ -444,6 +478,8 @@ def check(
                 "source": source,
                 "reference": reference,
                 "note": clean(str(row.get("note") or "")),
+                # **있을 때만 칸을 둔다** — 승인 지문이 그 칸을 있을 때만 세는 것과 같은 까닭.
+                **({"secant_reference_k": secant} if secant is not None else {}),
             }
         )
     # **받아 온 문헌 값이면 그 등급이 근거다**(2026-10-03, `shared/declared_catalog`).

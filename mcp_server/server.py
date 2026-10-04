@@ -350,6 +350,12 @@ def _declared_value(row: dict[str, Any]) -> dict[str, Any]:
         # 유효한 것만 온다. 승인은 사람(자료 관리자)이 화면에서 한다 — AI 도구는 없다.
         "quality_tier": row.get("quality_tier"),
         **({"approval": row["approval"]} if row.get("approval") else {}),
+        # 선팽창계수 표의 할선 기준 온도 θ₀(K) — 있으면 덱의 ZERO · REFT · TREF 가 된다.
+        **(
+            {"secant_reference_k": row["secant_reference_k"]}
+            if row.get("secant_reference_k") is not None
+            else {}
+        ),
         "source_document": row.get("reference"),
         "scale": row.get("scale"),
         "note": row.get("note"),
@@ -2429,6 +2435,8 @@ async def adopt_catalog_values(
                 "source": row.get("source"),
                 "reference": row.get("reference"),
                 "note": row.get("note"),
+                # **되보낼 때 빠뜨리면 θ₀ 가 지워지고 승인이 풀린다** — 통째 교체다.
+                "secant_reference_k": row.get("secant_reference_k"),
             }
             for row in material.get("declared_properties", [])
             if row.get("item") not in keep
@@ -3321,6 +3329,8 @@ async def set_declared_values(
             "source": row.get("source"),
             "reference": row.get("reference"),
             "note": row.get("note"),
+            # **되보낼 때 빠뜨리면 θ₀ 가 지워지고 승인이 풀린다** — 통째 교체다.
+            "secant_reference_k": row.get("secant_reference_k"),
         }
         for row in material.get("declared_properties", [])
         if row.get("item") not in grouped

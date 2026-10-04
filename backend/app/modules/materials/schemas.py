@@ -137,6 +137,8 @@ class DeclaredPropertyOut(BaseModel):
     reference: str
     """어느 문서인가. `'문헌'` 만으로는 어느 핸드북 몇 판인지 알 수 없다."""
     note: str | None = None
+    secant_reference_k: float | None = None
+    """선팽창계수 표의 할선 기준 온도 θ₀(K). 있으면 덱의 `ZERO` · `REFT` · `TREF` 로 간다."""
     quality_tier: int = 4
     """품질 등급 1~4(문헌과 같은 척도, `shared/tiers`). **서버가 출처와 승인에서 산출한다** —
     밀시트 · 데이터시트 1 · 규격 2 · 문헌 3 · 추정 4, 자료 관리자가 승인하면 한 단계 오르되 2
@@ -174,6 +176,9 @@ class DeclaredPropertyIn(BaseModel):
     source: str
     reference: str
     note: str | None = None
+    secant_reference_k: float | None = None
+    """선팽창계수 표의 **할선 기준 온도 θ₀**(K) — 덱의 `ZERO` · `REFT` · `TREF` 가 된다.
+    선팽창계수에만 받는다. 안 보내면 없는 것이다(통째 교체 — 화면은 있던 값을 되보낸다)."""
     catalog_value_ids: list[uuid.UUID] | None = Field(default=None, max_length=200)
     """**문헌 카탈로그에서 받아 온 값이면** 그 문헌 값들(`catalog_values.id`). 서버가 그 값들과
     숫자를 대 보고 그 등급을 근거로 붙인다 — 등급은 받지 않는다(사람이 매기지 않는다). 숫자가

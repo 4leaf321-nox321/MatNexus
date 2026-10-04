@@ -35,7 +35,9 @@ from app.modules.materials import declared
 from app.modules.materials.models import Material
 from app.modules.vocabulary.definitions import ensure_builtin_property_items
 from app.modules.workspaces.models import Workspace, WorkspaceMember
-from app.shared import audit, dataset_export, declared_approval, tiers
+from app.shared import audit, dataset_export, declared_approval, declared_card, tiers
+from matcore import export
+from matcore.export.systems import SI
 
 PASSWORD = "Passw0rd!approve"
 E = "탄성계수"
@@ -408,6 +410,142 @@ class Test시료:
         row = approved.json()["declared_properties"][0]
         assert row["approval"] is not None
         assert row["quality_tier"] == 1
+
+
+class Test할선_기준_온도:
+    """선팽창계수 표의 θ₀(2026-10-04) — 덱의 Abaqus ZERO · ANSYS REFT · Nastran TREF 가 된다.
+
+    **승인 지문에는 있을 때만 든다**(사용자 결정). 늘 넣으면 θ₀ 가 없는 옛 줄도 지문이 바뀌어
+    배포하는 순간 승인이 전부 풀린다.
+    """
+
+    CTE = "선팽창계수(CTE)"
+
+    def _table(self, **extra: Any) -> dict[str, Any]:
+        return {
+            "item": self.CTE,
+            "points": [
+                {"value": 1.2e-5, "temperature_k": 293.15},
+                {"value": 1.4e-5, "temperature_k": 573.15},
+            ],
+            "input_unit": "1/K",
+            "source": "literature",
+            "reference": "ASM Handbook Vol.1 p.120",
+            **extra,
+        }
+
+    def test_θ0_가_없는_옛_줄의_지문은_그대로다(self) -> None:
+        """이 값은 θ₀ 를 들이기 전 판(4f1a865)의 지문 함수로 셈한 것이다 — 바뀌면 운영의 승인이
+        배포와 함께 전부 풀린다."""
+        row = {
+            "item": self.CTE,
+            "points": [
+                {"value_si": 1.2e-5, "temperature_k": 293.15},
+                {"value_si": 1.4e-5, "temperature_k": 573.15},
+            ],
+            "si_unit": "1/K",
+            "scale": None,
+            "source": "literature",
+            "reference": "ASM Handbook Vol.1 p.120",
+            "input_unit": "1/K",
+            "note": None,
+        }
+        assert declared_approval.digest(row) == "364c3db6a58b847e72b7"
+        assert declared_approval.digest({**row, "secant_reference_k": None}) == (
+            "364c3db6a58b847e72b7"
+        )
+        # θ₀ 가 있으면 다른 값이다.
+        assert declared_approval.digest({**row, "secant_reference_k": 293.15}) != (
+            "364c3db6a58b847e72b7"
+        )
+
+    def test_선팽창계수에만_받고_θ0_를_고치면_승인이_풀린다(
+        self, client: TestClient, steward: dict[str, str], material: Material
+    ) -> None:
+        def save(*rows: dict[str, Any]) -> Any:
+            return client.patch(
+                f"/api/materials/{material.id}",
+                json={"declared_properties": [modulus(), *rows]},
+                headers=steward,
+            )
+
+        saved = save(self._table(secant_reference_k=293.15))
+        assert saved.status_code == 200, saved.text
+        rows = {one["item"]: one for one in saved.json()["declared_properties"]}
+        assert rows[self.CTE]["secant_reference_k"] == pytest.approx(293.15)
+        assert rows[E]["secant_reference_k"] is None
+
+        approved = client.post(
+            f"/api/materials/{material.id}/declared/approve",
+            json={"item": self.CTE},
+            headers=steward,
+        )
+        assert approved.status_code == 200, approved.text
+        # 같은 θ₀ 로 되보내면 승인은 그대로 — 화면이 저장할 때마다 되보낸다.
+        again = {
+            one["item"]: one
+            for one in save(self._table(secant_reference_k=293.15)).json()[
+                "declared_properties"
+            ]
+        }
+        assert again[self.CTE]["approval"] is not None
+        # θ₀ 가 바뀌면 다른 값이다.
+        moved = {
+            one["item"]: one
+            for one in save(self._table(secant_reference_k=300.0)).json()[
+                "declared_properties"
+            ]
+        }
+        assert moved[self.CTE]["approval"] is None
+
+        # MCP 는 θ₀ 가 없는 줄에도 `null` 을 실어 되보낸다 — 없는 것과 같다.
+        plain = client.patch(
+            f"/api/materials/{material.id}",
+            json={"declared_properties": [modulus(secant_reference_k=None)]},
+            headers=steward,
+        )
+        assert plain.status_code == 200, plain.text
+        assert plain.json()["declared_properties"][0]["secant_reference_k"] is None
+
+        wrong = client.patch(
+            f"/api/materials/{material.id}",
+            json={"declared_properties": [modulus(secant_reference_k=293.15)]},
+            headers=steward,
+        )
+        assert wrong.status_code == 422, wrong.text
+        assert wrong.json()["error"]["code"] == "MNX-MATERIALS-0049"
+
+    def test_θ0_가_덱의_ZERO_가_된다(
+        self, client: TestClient, steward: dict[str, str], db: Session, material: Material
+    ) -> None:
+        saved = client.patch(
+            f"/api/materials/{material.id}",
+            json={
+                "declared_properties": [
+                    self._table(secant_reference_k=293.15),
+                ]
+            },
+            headers=steward,
+        )
+        assert saved.status_code == 200, saved.text
+        db.refresh(material)
+
+        values = declared_card.thermal_block(material)
+        assert values["thermal_expansion_temperature"] == pytest.approx(293.15)
+
+        rows = declared_card.declared_table(material, declared_card.declared_items("thermal"))
+        # 열팽창은 구조 덱에 실린다(열전달 덱 `abaqus_thermal` 은 안 싣는다).
+        deck = export.Deck(
+            name="SECC",
+            solver_id=1,
+            blocks={
+                "elastic": {"values": {"youngs_modulus": 2.05e11, "poisson_ratio": 0.3}},
+                "thermal": {"values": values, "rows": rows},
+            },
+        )
+        text = export.render("abaqus_elastic", deck, SI).text
+        assert "ZERO=2.931500000000E+02" in text  # *EXPANSION, TYPE=ISO, ZERO=θ₀
+        assert "ZERO not on the card" not in text
 
 
 class Test승인_대기_목록:

@@ -50,6 +50,12 @@ DIGITS = 9
 #: (`input_unit`)는 뺀다.
 _EVIDENCE = ("si_unit", "scale", "source", "reference")
 
+#: **있을 때만** 지문에 드는 칸 — 나중에 더한 것들이다. 늘 넣으면 그 칸이 없는 옛 줄도 몸통에
+#: `null` 이 생겨 지문이 바뀌고, 배포하는 순간 승인이 전부 풀린다(2026-10-04 사용자 결정).
+#:
+#:     secant_reference_k   선팽창계수 표의 할선 기준 온도 θ₀ — θ₀ 가 다르면 다른 값이다
+_EVIDENCE_IF_PRESENT = ("secant_reference_k",)
+
 
 def _number(value: Any) -> float | None:
     if isinstance(value, bool) or not isinstance(value, int | float):
@@ -70,6 +76,11 @@ def digest(row: dict[str, Any]) -> str:
             if isinstance(point, dict)
         ],
         **{key: row.get(key) for key in _EVIDENCE},
+        **{
+            key: _number(row.get(key))
+            for key in _EVIDENCE_IF_PRESENT
+            if row.get(key) is not None
+        },
     }
     text = json.dumps(body, ensure_ascii=False, sort_keys=True)
     return hashlib.sha256(text.encode("utf-8")).hexdigest()[:20]
