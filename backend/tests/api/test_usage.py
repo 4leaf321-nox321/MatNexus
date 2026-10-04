@@ -207,10 +207,73 @@ class Test요약:
         self, client: TestClient, db: Session, workspace: Workspace
     ) -> None:
         _user(db, workspace, "member@example.com")
+        member = _headers(client, "member@example.com")
 
-        got = client.get("/api/usage/summary", headers=_headers(client, "member@example.com"))
+        got = client.get("/api/usage/summary", headers=member)
 
         assert got.status_code == 403
+        # 사람마다의 사용량이 실린 파일도 같다.
+        assert client.get("/api/usage/people.csv", headers=member).status_code == 403
+
+    def test_부서별로_묶고_사람별_전부를_CSV_로_낸다(
+        self, client: TestClient, db: Session, workspace: Workspace
+    ) -> None:
+        """부서별 묶음 · CSV 내려받기(2026-10-04, ADR 0051 의 열린 것).
+
+        묶음은 **사람의 지금 대표 부서로** 한다 — 쓸 때의 소속은 집계에 안 남는다. CSV 는
+        화면(앞 30명)과 달리 전부다.
+        """
+        other = Workspace(slug="usage-other", name="고분자팀")
+        db.add(other)
+        db.flush()
+        users = [
+            _user(db, workspace, "one@example.com"),
+            _user(db, workspace, "two@example.com"),
+            _user(db, other, "three@example.com"),
+        ]
+        stray = User(email="stray@example.com", password_hash="x", display_name="떠돌이")
+        db.add(stray)
+        db.commit()
+        today = usage_meter.today()
+        for user in [*users, stray]:
+            usage_meter.record_request(
+                db,
+                user_id=user.id,
+                client="web",
+                method="GET",
+                route="/materials",
+                failed=False,
+                day=today,
+            )
+        usage_meter.record_tool(
+            db, user_id=users[2].id, tool="get_material", ok=True, elapsed_ms=5
+        )
+        db.commit()
+
+        got = services.summary(db, days=7)
+
+        groups = {one.workspace: one for one in got.workspaces}
+        assert groups[workspace.name].people == 2
+        assert groups[workspace.name].web_requests == 2
+        assert groups["고분자팀"].people == 1 and groups["고분자팀"].mcp_calls == 1
+        assert groups[services.NO_WORKSPACE].people == 1
+        # 쓴 사람이 많은 부서부터.
+        assert got.workspaces[0].workspace == workspace.name
+
+        _user(db, workspace, "boss@example.com").is_system_admin = True
+        db.commit()
+        csv_got = client.get(
+            "/api/usage/people.csv",
+            params={"days": 7},
+            headers=_headers(client, "boss@example.com"),
+        )
+        assert csv_got.status_code == 200, csv_got.text
+        assert csv_got.headers["content-type"].startswith("text/csv")
+        text = csv_got.content.decode("utf-8")
+        assert text.startswith("﻿이름,이메일,대표 부서")  # Excel 이 한글을 안 깨게 BOM
+        lines = text.strip().splitlines()[1:]
+        assert len(lines) == 4
+        assert any(line.startswith("떠돌이,stray@example.com,소속 없음,1,") for line in lines)
 
     def test_계량기가_쌓기_전_날짜는_measured_since_로_가른다(self, db: Session) -> None:
         """집계를 들인 날 전은 0 으로 보인다 — 안 쓴 것이 아니라 안 셌던 것이다."""

@@ -1128,6 +1128,16 @@ def proof_stress(frame: Frame, options: dict[str, Any]) -> StepResult:
     fraction = 0.0 if span == 0 else float(difference[index] / span)
     proof_strain = float(domain_x[index] + fraction * (domain_x[index + 1] - domain_x[index]))
     value = float(domain_y[index] + fraction * (domain_y[index + 1] - domain_y[index]))
+    # 하중이 안 실린 채 변형률만 오프셋을 넘긴 교점은 처짐(토우)·음수 하중이다. 다음
+    # 교점으로 넘어가지 않는다 — 토우만큼 밀린 채 만나는 점이라 그럴듯하게 낮은 값이
+    # 조용히 나온다(이슈 #2, M06DPMMA 의 Rp = -0.25 MPa).
+    if value <= 0:
+        raise ProcessingError(
+            f"{offset * 100:.3g}% 오프셋 선이 처음 만나는 점의 응력이 {value / 1e6:.4g} MPa "
+            f"(변형률 {proof_strain:.6g}) 입니다 — 항복이 아니라 시작부의 처짐(토우)이나 "
+            f"음수 하중입니다. 토우 보정 단계를 앞에 두세요. "
+            f"**0 이하의 항복강도는 내지 않습니다.**"
+        )
 
     return StepResult(
         frame,

@@ -16,10 +16,14 @@ import UsagePage from '@/modules/usage/UsagePage'
 import type { UsageSummary } from '@/modules/usage/api'
 
 const summary = vi.fn()
+const downloadPeople = vi.fn()
 
 vi.mock('@/modules/usage/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/modules/usage/api')>()),
-  usageApi: { summary: (...args: unknown[]) => summary(...args) },
+  usageApi: {
+    summary: (...args: unknown[]) => summary(...args),
+    downloadPeople: (...args: unknown[]) => downloadPeople(...args),
+  },
 }))
 
 // 그래프는 recharts 의 일이다 — 여기서는 자리만 본다.
@@ -107,6 +111,17 @@ const DATA: UsageSummary = {
       views: 90,
     },
   ],
+  workspaces: [
+    {
+      workspace: '금속재료팀',
+      people: 4,
+      person_days: 41,
+      web_requests: 1200,
+      writes: 80,
+      mcp_calls: 260,
+      views: 150,
+    },
+  ],
 }
 
 function show() {
@@ -170,5 +185,29 @@ describe('사용 현황', () => {
     await user.click(screen.getByRole('button', { name: '7일' }))
 
     expect(summary).toHaveBeenLastCalledWith(7)
+  })
+
+  it('부서별로 묶어 보이고, 사람별 전부는 고른 기간의 CSV 로 받는다 (2026-10-04)', async () => {
+    const user = userEvent.setup()
+    downloadPeople.mockResolvedValue(undefined)
+    show()
+
+    const table = await screen.findByRole('table', { name: '부서별' })
+    const row = within(table).getByRole('row', { name: /금속재료팀/ })
+    expect(row).toHaveTextContent('41')
+    expect(row).toHaveTextContent('1,200')
+
+    await user.click(screen.getByRole('button', { name: '7일' }))
+    await user.click(await screen.findByRole('button', { name: '사람별 전부 CSV' }))
+    expect(downloadPeople).toHaveBeenCalledWith(7)
+  })
+
+  it('CSV 를 못 받으면 그렇다고 말한다', async () => {
+    const user = userEvent.setup()
+    downloadPeople.mockRejectedValue(new Error('서버가 응답하지 않습니다'))
+    show()
+
+    await user.click(await screen.findByRole('button', { name: '사람별 전부 CSV' }))
+    expect(await screen.findByText(/서버가 응답하지 않습니다/)).toBeInTheDocument()
   })
 })

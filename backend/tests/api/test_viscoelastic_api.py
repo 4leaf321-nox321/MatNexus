@@ -36,7 +36,12 @@ FREQ_TEMP = FIXTURES / "dma_freq_temp.csv"
 
 
 def _dma_run(
-    client: TestClient, db: Session, admin_headers: dict[str, str], *, grade: str = "VE01"
+    client: TestClient,
+    db: Session,
+    admin_headers: dict[str, str],
+    *,
+    grade: str = "VE01",
+    conditions: str = "{}",
 ) -> dict[str, Any]:
     """DMA 파일을 올려 읽힌 시험 하나. **프로파일을 바꿔 가며 여러 번 만든다.**
 
@@ -62,7 +67,11 @@ def _dma_run(
     ).json()
     created = client.post(
         "/api/test-runs",
-        data={"specimen_id": specimen["id"], "test_type": "dma_sweep", "conditions": "{}"},
+        data={
+            "specimen_id": specimen["id"],
+            "test_type": "dma_sweep",
+            "conditions": conditions,
+        },
         files={"file": ("Example FreqTemp2.csv", FREQ_TEMP.read_bytes())},
         headers=admin_headers,
     ).json()
@@ -358,6 +367,41 @@ class Test점탄성카드:
             elastic["youngs_modulus"]
             > card["blocks"]["viscoelastic"]["values"]["equilibrium_pa"]
         )
+
+    def test_전단_모드로_잰_계수는_E_로_옮기고_g_는_그대로다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str]
+    ) -> None:
+        """전단으로 잰 G′ 를 E 로 읽으면 덱이 2(1+ν) 로 한 번 더 나눠 약 3 배 무르게
+        나갔다. 탄성률만 옮기고 gᵢ · τᵢ 는 안 바뀐다(ν 일정)."""
+        run = _dma_run(
+            client,
+            db,
+            admin_headers,
+            grade="SHEAR",
+            conditions='{"deformation_mode": "전단 샌드위치"}',
+        )
+        fit = self._fit(client, admin_headers, run)
+        made = client.post(
+            "/api/fitting/cards/viscoelastic",
+            json={"prony_fit_id": fit["id"], "label": "전단", "poisson_ratio": 0.45},
+            headers=admin_headers,
+        )
+        assert made.status_code == 201, made.text
+        card = made.json()
+        factor = 2 * (1 + 0.45)
+        elastic = card["blocks"]["elastic"]["values"]
+        assert elastic["youngs_modulus"] == pytest.approx(fit["instantaneous_pa"] * factor)
+        block = card["blocks"]["viscoelastic"]
+        assert block["values"]["equilibrium_pa"] == pytest.approx(
+            fit["equilibrium_pa"] * factor
+        )
+        assert [row["relative_modulus"] for row in block["rows"]] == pytest.approx(
+            [term["modulus_pa"] / fit["instantaneous_pa"] for term in fit["terms"]]
+        )
+        assert [row["relaxation_time_s"] for row in block["rows"]] == pytest.approx(
+            [term["relaxation_time_s"] for term in fit["terms"]]
+        )
+        assert any("전단 모드" in line for line in card["source"]["notes"])
 
     def test_점탄성_형식이_열린다(
         self, client: TestClient, admin_headers: dict[str, str], dma_run: dict[str, Any]

@@ -410,6 +410,81 @@ class Test시료:
         assert row["quality_tier"] == 1
 
 
+class Test승인_대기_목록:
+    """재료마다 열어 봐야 알던 「승인하면 오를 값」 을 한 목록으로(2026-10-04, ADR 0049).
+
+    큐가 아니다 — 승인은 그 값이 사는 화면에서 한다(결정 5).
+    """
+
+    def test_오를_값만_서고_승인하면_빠진다(
+        self, client: TestClient, steward: dict[str, str], material: Material
+    ) -> None:
+        made = client.post(f"/api/materials/{material.id}/samples", json={}, headers=steward)
+        assert made.status_code == 201, made.text
+        sample_id = made.json()["id"]
+        saved = client.patch(
+            f"/api/samples/{sample_id}",
+            json={
+                "declared_properties": [
+                    # 밀시트는 1 이라 승인해도 안 오른다 — 목록에 안 선다.
+                    {
+                        "item": "항복강도",
+                        "points": [{"value": 310}],
+                        "input_unit": "MPa",
+                        "source": "millsheet",
+                        "reference": "성적서 24-0815",
+                    },
+                    # 추정 4 → 3 — 선다.
+                    {
+                        "item": "인장강도",
+                        "points": [
+                            {"value": 420, "temperature_k": 296.15},
+                            {"value": 400, "temperature_k": 373.15},
+                        ],
+                        "input_unit": "MPa",
+                        "source": "estimate",
+                        "reference": "사내 추정",
+                    },
+                ]
+            },
+            headers=steward,
+        )
+        assert saved.status_code == 200, saved.text
+
+        def listed() -> list[tuple[str, str, int, int]]:
+            got = client.get("/api/materials/declared-review", headers=steward)
+            assert got.status_code == 200, got.text
+            return [
+                (one["level"], one["item"], one["quality_tier"], one["tier_if_approved"])
+                for one in got.json()["items"]
+            ]
+
+        assert listed() == [("시료", "인장강도", 4, 3), ("재료", E, 3, 2)]
+        got = client.get("/api/materials/declared-review", headers=steward).json()
+        estimate = next(one for one in got["items"] if one["item"] == "인장강도")
+        assert estimate["point_count"] == 2
+        assert estimate["first_value_si"] == pytest.approx(420e6)
+        assert estimate["sample_id"] == sample_id
+
+        assert _approve(client, steward, material).status_code == 200
+        assert listed() == [("시료", "인장강도", 4, 3)]
+
+    def test_보기는_누구나다(
+        self,
+        client: TestClient,
+        db: Session,
+        workspace: Workspace,
+        material: Material,
+    ) -> None:
+        """적은 사람도 「내 값이 아직 확인 전」 임을 안다(ADR 0035 — 보기는 모두에게)."""
+        _user(db, workspace, "plain@example.com")
+        got = client.get(
+            "/api/materials/declared-review", headers=_headers(client, "plain@example.com")
+        )
+        assert got.status_code == 200, got.text
+        assert [one["item"] for one in got.json()["items"]] == [E]
+
+
 class Test퍼짐:
     def test_카드_칸과_덱_각주가_승인을_안다(self, db: Session, material: Material) -> None:
         """카드는 만들 때의 승인을 칸의 출처 표지로 든다 — 덱 각주는 그것으로 등급을 센다."""

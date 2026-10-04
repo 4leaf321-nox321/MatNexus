@@ -17,6 +17,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.modules.vocabulary.models import Vocabulary
+from matcore import viscoelastic
 from matcore.units import SI_UNITS
 
 #: 물성 항목이 고를 수 있는 차원. `units` 가 아는 것만 — 모르는 차원을 적으면
@@ -277,16 +278,8 @@ BUILTIN_SPECIMEN_CATEGORIES: list[tuple[str, list[dict[str, Any]]]] = [
                 "mode",
                 "변형 모드",
                 kind="choice",
-                choices=[
-                    "이중 캔틸레버",
-                    "단일 캔틸레버",
-                    "3점 굽힘",
-                    "인장",
-                    "압축",
-                    "전단 샌드위치",
-                    "비틀림",
-                    "평행판",
-                ],
+                # 시험의 「변형 모드」 조건과 같은 목록 — 한 곳(`matcore.viscoelastic`)에서.
+                choices=list(viscoelastic.DMA_MODES),
                 help="모드가 곧 시편 형상입니다. 보고서에는 규격 번호만이 아니라 "
                 "모드·스팬·시편 치수를 함께 적어야 재현이 됩니다.",
             ),

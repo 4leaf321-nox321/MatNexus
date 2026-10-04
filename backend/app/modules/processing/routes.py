@@ -74,6 +74,7 @@ from app.shared.errors import AppError, Conflict, NotFound
 from app.shared.permissions import get_run
 from matcore import curves, processing, registry, runtime
 from matcore.parsers import Channel
+from matcore.processing import SCALAR_KEY_MAX
 
 router = APIRouter(prefix="/processing", tags=["processing"])
 
@@ -919,6 +920,20 @@ def adopt(
     # **채택은 시험을 고치는 일이다**(ADR 0035) — 「이 시험의 물성은 이것」 이라는
     # 선언이라 통계·카드가 그것을 읽는다. 해석하는 사람이 다르면 그 부서에 편집을 준다.
     permissions.require_edit(db, user, run, code="MNX-PROCESSING-0017")
+    # 이 검사가 생기기 전(2026-10-04)에 저장된 결과는 긴 이름을 들고 있을 수 있다 —
+    # 요약값 칸에 안 들어가 500 이었다. 결과는 불변이라 고칠 수 없고, 다시 돌리는 것이 답이다.
+    too_long = [
+        str(s.get("key", ""))
+        for s in item.scalars
+        if len(str(s.get("key", ""))) > SCALAR_KEY_MAX
+    ]
+    if too_long:
+        raise Conflict(
+            "MNX-PROCESSING-0018",
+            f"이 결과는 이름이 {SCALAR_KEY_MAX}자를 넘는 값을 들고 있어 채택할 수 없습니다: "
+            f"{', '.join(too_long)}. 그 계산이 이름을 줄인 뒤 같은 레시피로 다시 돌려 "
+            f"저장한 결과를 채택하세요.",
+        )
     run.adopted_result_id = item.id
     _project_summaries(db, run, item)
     db.commit()

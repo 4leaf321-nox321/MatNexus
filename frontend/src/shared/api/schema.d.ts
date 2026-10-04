@@ -2500,6 +2500,33 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/fitting/cards/{card_id}/export/layout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Card Deck Layout
+         * @description 덱을 **내려받기 전에** 보인다 — 어느 줄 몇째 칸에 카드의 어느 값이 가나(2026-10-04).
+         *
+         *     「내보내기」 가 누르자마자 파일을 받던 것을, 형식을 고르면 이 배치와 덱 미리보기가 서고
+         *     그 뒤에 받게 바꿨다. 고정폭 칸이 하나 밀리면 솔버는 다른 값을 **조용히** 읽는다 — 사람이
+         *     받기 전에 「탄성계수가 저 칸으로 가는구나」 를 볼 수 있어야 한다.
+         *
+         *     자리는 값을 하나씩 흔들어 다시 그려서 짚는다(`matcore.export.layout`) — 코드판이든
+         *     정의판이든 **실제로 내려받을 덱 그대로**다. 덱 · 그리기는 내려받기(`export_card`)와 한 벌.
+         */
+        get: operations["card_deck_layout_api_fitting_cards__card_id__export_layout_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/fitting/cards/{card_id}/paired-formats": {
         parameters: {
             query?: never;
@@ -3773,6 +3800,33 @@ export interface paths {
          *     결과가 늘 0건이다.
          */
         get: operations["list_classifications_api_materials_classifications_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/materials/declared-review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Declared Review
+         * @description **승인하면 등급이 오를 선언 값** — 보이는 재료 · 시료 전부에서(ADR 0049 의 열린 것).
+         *
+         *     전에는 재료마다 열어 봐야 알았다. 자료 관리자가 「무엇을 확인하면 되나」 를 한 번에 본다.
+         *     승인은 여기서 안 한다 — 근거 문서를 펴 보는 일이라 그 값이 사는 화면에서 한다. 보기는
+         *     누구나다(ADR 0035): 적은 사람도 「내 값이 아직 확인 전」 임을 안다.
+         *
+         *     이미 승인된 줄 · 승인해도 안 오르는 줄(규격 2 · 데이터시트 · 밀시트 1 · 받아 온 문헌
+         *     1~2)은 안 싣는다. 선언 물성이 JSON 한 칸이라 파이썬에서 거르고, 상한은 서버가 건다.
+         */
+        get: operations["declared_review_api_materials_declared_review_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -11291,6 +11345,122 @@ export interface components {
             /** Values */
             values: components["schemas"]["DeckKeyOut"][];
         };
+        /**
+         * DeckLayoutOut
+         * @description 덱 미리보기와 **칸 배치** — 내려받기 전에 어느 자리에 무엇이 가는지(2026-10-04).
+         *
+         *     **못 내는 형식도 200 이다** — `ok=False` 와 `error` 가 그 까닭을 든다. 고르는 화면이
+         *     이유를 그 자리에 보여야 한다(`DeckPreviewOut` 과 같은 판단).
+         */
+        DeckLayoutOut: {
+            /** Error */
+            error?: string | null;
+            /**
+             * Failed
+             * @default []
+             */
+            failed: components["schemas"]["DeckLayoutSkippedOut"][];
+            /**
+             * Filename
+             * @default
+             */
+            filename: string;
+            /** Format */
+            format: string;
+            /**
+             * Line Count
+             * @default 0
+             */
+            line_count: number;
+            /**
+             * Notes
+             * @default []
+             */
+            notes: string[];
+            /** Ok */
+            ok: boolean;
+            /**
+             * Text
+             * @default
+             */
+            text: string;
+            /**
+             * Truncated
+             * @default false
+             */
+            truncated: boolean;
+            /** Units */
+            units: string;
+            /**
+             * Unused
+             * @default []
+             */
+            unused: components["schemas"]["DeckLayoutSkippedOut"][];
+            /**
+             * Values
+             * @default []
+             */
+            values: components["schemas"]["DeckLayoutValueOut"][];
+        };
+        /** DeckLayoutSkippedOut */
+        DeckLayoutSkippedOut: {
+            /** Block Label */
+            block_label: string;
+            /** Column */
+            column: boolean;
+            /** Label */
+            label: string;
+            /** Name */
+            name: string;
+            /** Reason */
+            reason?: string | null;
+        };
+        /**
+         * DeckLayoutSpanOut
+         * @description 덱의 한 자리 — 줄은 0 부터, 칸은 `[start, end)`.
+         */
+        DeckLayoutSpanOut: {
+            /** End */
+            end: number;
+            /** Line */
+            line: number;
+            /**
+             * Shared With
+             * @default []
+             */
+            shared_with: string[];
+            /** Start */
+            start: number;
+        };
+        /**
+         * DeckLayoutValueOut
+         * @description 카드 값 하나가 덱의 어디로 가나.
+         */
+        DeckLayoutValueOut: {
+            /** Block */
+            block: string;
+            /** Block Label */
+            block_label: string;
+            /** Column */
+            column: boolean;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Name */
+            name: string;
+            /**
+             * Rows
+             * @default 0
+             */
+            rows: number;
+            /** Spans */
+            spans: components["schemas"]["DeckLayoutSpanOut"][];
+            /** Unit */
+            unit: string | null;
+            /** Value */
+            value: number | null;
+        };
         /** DeckMatchIn */
         DeckMatchIn: {
             /** Text */
@@ -11666,6 +11836,46 @@ export interface components {
              * Tier If Approved
              * @default 4
              */
+            tier_if_approved: number;
+        };
+        /**
+         * DeclaredReviewOut
+         * @description **승인하면 등급이 오를** 선언 값 한 줄(2026-10-04, ADR 0049 의 열린 것).
+         *
+         *     재료마다 열어 봐야 알던 것을 한 목록으로. 승인 자체는 재료 · 시료 화면에서 한다 — 이
+         *     목록은 큐가 아니다(ADR 0049 결정 5: 상태만 두고 절차는 운영이 보인 뒤에).
+         */
+        DeclaredReviewOut: {
+            /** First Value Si */
+            first_value_si?: number | null;
+            /** Item */
+            item: string;
+            /** Level */
+            level: string;
+            /** Lot No */
+            lot_no?: string | null;
+            /**
+             * Material Id
+             * Format: uuid
+             */
+            material_id: string;
+            /** Material Name */
+            material_name: string;
+            /** Point Count */
+            point_count: number;
+            /** Quality Tier */
+            quality_tier: number;
+            /** Reference */
+            reference?: string | null;
+            /** Sample Id */
+            sample_id?: string | null;
+            /** Sample Name */
+            sample_name?: string | null;
+            /** Si Unit */
+            si_unit?: string | null;
+            /** Source */
+            source?: string | null;
+            /** Tier If Approved */
             tier_if_approved: number;
         };
         /**
@@ -15495,6 +15705,17 @@ export interface components {
         Page_CommissionOut_: {
             /** Items */
             items: components["schemas"]["CommissionOut"][];
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+            /** Total */
+            total: number;
+        };
+        /** Page[DeclaredReviewOut] */
+        Page_DeclaredReviewOut_: {
+            /** Items */
+            items: components["schemas"]["DeclaredReviewOut"][];
             /** Limit */
             limit: number;
             /** Offset */
@@ -20524,6 +20745,32 @@ export interface components {
             requests: components["schemas"]["RequestsOut"];
             users: components["schemas"]["UsersOut"];
             views: components["schemas"]["ViewsOut"];
+            /**
+             * Workspaces
+             * @default []
+             */
+            workspaces: components["schemas"]["UsageWorkspaceOut"][];
+        };
+        /**
+         * UsageWorkspaceOut
+         * @description 부서 하나의 몫(2026-10-04). **사람의 지금 대표 부서로** 묶는다 — 쓸 때의 소속은 집계에
+         *     안 남는다(표가 사람 · 라우트만 센다). 옮긴 사람의 지난 사용은 새 부서로 간다.
+         */
+        UsageWorkspaceOut: {
+            /** Mcp Calls */
+            mcp_calls: number;
+            /** People */
+            people: number;
+            /** Person Days */
+            person_days: number;
+            /** Views */
+            views: number;
+            /** Web Requests */
+            web_requests: number;
+            /** Workspace */
+            workspace: string;
+            /** Writes */
+            writes: number;
         };
         /** UserOut */
         UserOut: {
@@ -25170,6 +25417,41 @@ export interface operations {
             };
         };
     };
+    card_deck_layout_api_fitting_cards__card_id__export_layout_get: {
+        parameters: {
+            query: {
+                format: string;
+                units?: string;
+                with_card?: string | null;
+            };
+            header?: never;
+            path: {
+                card_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeckLayoutOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     paired_formats_api_fitting_cards__card_id__paired_formats_get: {
         parameters: {
             query: {
@@ -27233,6 +27515,12 @@ export interface operations {
                 registered_from?: string | null;
                 /** @description 이날까지 등록(그날 포함) */
                 registered_to?: string | null;
+                /** @description 이 물성(허브 키)의 값이 범위 안인 재료 — 시험으로 잰 값(채택 결과)이나 선언 물성. 문헌 카탈로그 목록의 값 범위와 같은 규칙 */
+                value_key?: string | null;
+                /** @description 범위의 단위 — 필수 */
+                value_unit?: string | null;
+                value_min?: number | null;
+                value_max?: number | null;
             };
             header?: never;
             path?: never;
@@ -27346,6 +27634,38 @@ export interface operations {
             };
         };
     };
+    declared_review_api_materials_declared_review_get: {
+        parameters: {
+            query?: {
+                limit?: number | null;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_DeclaredReviewOut_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     delete_materials_api_materials_delete_post: {
         parameters: {
             query?: never;
@@ -27450,6 +27770,12 @@ export interface operations {
                 registered_from?: string | null;
                 /** @description 이날까지 등록(그날 포함) */
                 registered_to?: string | null;
+                /** @description 이 물성(허브 키)의 값이 범위 안인 재료 — 시험으로 잰 값(채택 결과)이나 선언 물성. 문헌 카탈로그 목록의 값 범위와 같은 규칙 */
+                value_key?: string | null;
+                /** @description 범위의 단위 — 필수 */
+                value_unit?: string | null;
+                value_min?: number | null;
+                value_max?: number | null;
             };
             header?: never;
             path?: never;

@@ -68,6 +68,40 @@ MIN_TEMPERATURES = 3
 LEVEL_GAP_K = 1.0
 
 
+#: DMA 변형 모드 — **클램프가 무엇을 재는지 정한다.** 캔틸레버 · 굽힘 · 인장 · 압축은
+#: 영률 계열(E′ · E″)을, 전단 샌드위치 · 비틀림 · 평행판은 전단 탄성률(G′ · G″)을 낸다.
+#: 장비 파일의 열 이름은 둘 다 「저장 탄성률」 이라 곡선만 봐서는 못 가른다.
+DMA_MODES = (
+    "이중 캔틸레버",
+    "단일 캔틸레버",
+    "3점 굽힘",
+    "인장",
+    "압축",
+    "전단 샌드위치",
+    "비틀림",
+    "평행판",
+)
+SHEAR_MODES = frozenset({"전단 샌드위치", "비틀림", "평행판"})
+
+
+def measures_shear(mode: object) -> bool | None:
+    """그 모드가 전단 탄성률을 재는가. **모르는 모드는 `None`** — 짐작하지 않는다."""
+    if not isinstance(mode, str) or mode not in DMA_MODES:
+        return None
+    return mode in SHEAR_MODES
+
+
+def youngs_from_shear(poisson_ratio: float) -> float:
+    """E = 2(1+ν)G 의 배수. 등방 · 선형 탄성을 가정한다(`dma.to_shear` 의 거꾸로).
+
+    덱은 카드의 E 와 같은 ν 로 G = E/2(1+ν) 를 다시 만드므로, 전단으로 잰 값은 이
+    배수를 거쳐도 **잰 G 그대로** 덱에 실린다.
+    """
+    if not -1.0 < poisson_ratio <= 0.5:
+        raise ViscoelasticError(f"포아송비는 -1 과 0.5 사이여야 합니다: {poisson_ratio}")
+    return 2.0 * (1.0 + poisson_ratio)
+
+
 def count_temperature_levels(temperatures: Iterable[float]) -> int:
     """**겹칠 수 있는 온도 단이 몇인가.** 곡선마다의 대표 온도를 받는다.
 

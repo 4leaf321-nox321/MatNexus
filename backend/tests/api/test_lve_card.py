@@ -28,14 +28,22 @@ TRUE_STRAIN_PLATEAU_PA = 1.20e9
 
 
 def _adopted_sweep(
-    client: TestClient, db: Session, headers: dict[str, str], sample_id: str
+    client: TestClient,
+    db: Session,
+    headers: dict[str, str],
+    sample_id: str,
+    conditions: str = "{}",
 ) -> str:
     specimen = client.post(
         f"/api/samples/{sample_id}/specimens", json={"orientation": "NA"}, headers=headers
     ).json()
     created = client.post(
         "/api/test-runs",
-        data={"specimen_id": specimen["id"], "test_type": "dma_sweep", "conditions": "{}"},
+        data={
+            "specimen_id": specimen["id"],
+            "test_type": "dma_sweep",
+            "conditions": conditions,
+        },
         files={"file": (STRAIN_SWEEP.name, STRAIN_SWEEP.read_bytes())},
         headers=headers,
     ).json()
@@ -151,6 +159,100 @@ class Test카드가_선다:
         assert body["blocks"]["lve"]["values"]["sample_count"] == 1
         assert "coefficient_of_variation" not in body["blocks"]["lve"]["values"]
         assert any("한 건의 값" in line for line in body["source"]["notes"])
+        # 변형 모드를 안 적었으면 E′ 로 봤다고 말한다 — 전단이었다면 3 배 무른 카드다.
+        assert any("변형 모드가 안 적힌" in line for line in body["source"]["notes"])
+
+    def test_전단_모드로_잰_G_는_E_로_옮겨_담는다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        sample: dict[str, Any],
+    ) -> None:
+        """덱은 카드의 E 와 ν 로 G = E/2(1+ν) 를 만든다. 전단으로 잰 G′ 를 그대로 E 칸에
+        두면 2(1+ν) 로 한 번 더 나뉘어 고무가 약 3 배 무르게 나갔다."""
+        _adopted_sweep(
+            client, db, admin_headers, sample["id"], '{"deformation_mode": "전단 샌드위치"}'
+        )
+        made = client.post(
+            "/api/fitting/cards/lve",
+            json={
+                "material_id": sample["material_id"],
+                "test_type_key": "dma_sweep",
+                "orientation": "NA",
+            },
+            headers=admin_headers,
+        )
+        assert made.status_code == 201, made.text
+        body = made.json()
+        expected = TRUE_STRAIN_PLATEAU_PA * 2 * (1 + 0.49)
+        assert body["blocks"]["lve"]["values"]["youngs_modulus"] == pytest.approx(
+            expected, rel=0.02
+        )
+        elastic = body["blocks"]["elastic"]["values"]
+        assert elastic["youngs_modulus"] == pytest.approx(expected, rel=0.02)
+        # 덱이 다시 만드는 G 가 잰 값이다.
+        shear = elastic["youngs_modulus"] / (2 * (1 + elastic["poisson_ratio"]))
+        assert shear == pytest.approx(TRUE_STRAIN_PLATEAU_PA, rel=0.02)
+        assert any("전단 모드(전단 샌드위치)" in line for line in body["source"]["notes"])
+
+    def test_전단과_다른_모드가_섞이면_막는다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        sample: dict[str, Any],
+    ) -> None:
+        _adopted_sweep(
+            client, db, admin_headers, sample["id"], '{"deformation_mode": "비틀림"}'
+        )
+        _adopted_sweep(client, db, admin_headers, sample["id"], '{"deformation_mode": "인장"}')
+        made = client.post(
+            "/api/fitting/cards/lve",
+            json={
+                "material_id": sample["material_id"],
+                "test_type_key": "dma_sweep",
+                "orientation": "NA",
+            },
+            headers=admin_headers,
+        )
+        assert made.status_code == 422, made.text
+        assert made.json()["error"]["code"] == "MNX-FITTING-0013"
+
+    def test_전단_모드인데_푸아송비가_없으면_막는다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        sample: dict[str, Any],
+    ) -> None:
+        cleared = client.patch(
+            f"/api/materials/{sample['material_id']}",
+            json={"poisson_ratio": None},
+            headers=admin_headers,
+        )
+        assert cleared.status_code == 200, cleared.text
+        _adopted_sweep(
+            client, db, admin_headers, sample["id"], '{"deformation_mode": "평행판"}'
+        )
+        body = {
+            "material_id": sample["material_id"],
+            "test_type_key": "dma_sweep",
+            "orientation": "NA",
+        }
+        made = client.post("/api/fitting/cards/lve", json=body, headers=admin_headers)
+        assert made.status_code == 422, made.text
+        assert made.json()["error"]["code"] == "MNX-FITTING-0045"
+        # 카드를 만들 때 넣으면 된다.
+        made = client.post(
+            "/api/fitting/cards/lve",
+            json={**body, "poisson_ratio": 0.45},
+            headers=admin_headers,
+        )
+        assert made.status_code == 201, made.text
+        assert made.json()["blocks"]["lve"]["values"]["youngs_modulus"] == pytest.approx(
+            TRUE_STRAIN_PLATEAU_PA * 2.9, rel=0.02
+        )
 
     def test_선형_구간을_안_낸_묶음이면_막는다(
         self,

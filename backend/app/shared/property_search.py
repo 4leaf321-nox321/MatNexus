@@ -31,18 +31,32 @@ import uuid
 from dataclasses import dataclass
 from typing import Any
 
-from sqlalchemy import Float, Select, cast, func, literal, or_, select, true
+from sqlalchemy import (
+    ColumnElement,
+    Float,
+    Select,
+    cast,
+    false,
+    func,
+    literal,
+    or_,
+    select,
+    true,
+    union,
+)
 from sqlalchemy import null as sa_null
 from sqlalchemy.dialects.postgresql import JSONB, JSONPATH
 from sqlalchemy.orm import Session
 
 from app.modules.catalog import parameters
 from app.modules.catalog.models import CatalogDefinition, CatalogMaterial, CatalogValue
+from app.modules.catalog.ontology_models import PropertyLink
 from app.modules.materials.models import Material, Sample, Specimen
 from app.modules.processing.models import ProcessingResult
 from app.modules.tests.models import TestConditionField, TestRun
+from app.modules.vocabulary.models import VocabularyTerm
 from app.shared import declared_approval, standard_conditions, tiers
-from app.shared.errors import AppError
+from app.shared.errors import AppError, NotFound
 from matcore import registry, units
 
 #: 「근처」 를 물었을 때의 기본 폭. ±10% — 물성 문헌값이 그 정도로 흩어진다.
@@ -666,3 +680,160 @@ def si_unit_of(db: Session, property_key: str) -> str:
         select(CatalogDefinition).where(CatalogDefinition.key == property_key)
     )
     return (definition.si_unit or "") if definition else ""
+
+
+@dataclass(frozen=True)
+class ValueRange:
+    """목록을 **값의 범위**로 거른다 — 「항복강도 200~300 MPa 인 재료」(2026-10-03).
+
+    `low`·`high` 는 저장된 값과 같은 눈금이다(대개 SI). `unit` 은 물은 단위라 걸린 값을 그
+    단위로 되돌려 보여 준다. `raw` 면 환산표가 모르는 눈금(HV·ShoreA)이라 그대로 견준다.
+    """
+
+    key: str
+    low: float
+    high: float
+    unit: str
+    raw: bool
+
+    def clauses(self) -> list[ColumnElement[bool]]:
+        return [
+            CatalogValue.property_key == self.key,
+            CatalogValue.value_num.is_not(None),
+            CatalogValue.value_num >= self.low,
+            CatalogValue.value_num <= self.high,
+            # 변수 달린 값(Prony 의 E0 …)은 그 물성의 스칼라가 아니다 — 값 검색과 같은 규칙
+            # (`property_search.catalog_hits`). 섞으면 범위에 엉뚱한 식의 상수가 걸린다.
+            or_(
+                CatalogValue.conditions.is_(None),
+                ~CatalogValue.conditions.has_key(parameters.TERM),
+            ),
+        ]
+
+    def shown(self, value: float) -> float:
+        return value if self.raw else units.from_si(value, self.unit)
+
+
+def value_range(
+    db: Session,
+    key: str | None,
+    unit: str | None,
+    minimum: float | None,
+    maximum: float | None,
+) -> ValueRange | None:
+    """값 범위 인자를 푼다. **단위가 없거나 안 맞으면 거절한다** — 짐작하면 조용히 틀린다.
+
+    값은 SI 로 저장돼 있어 200 MPa 는 `200,000,000` 이다. 단위 없이 「200」 을 그대로 걸면
+    8 Pa 짜리가 나온다(`shared/property_search` 머리말 — 같은 이유, 같은 환산).
+    """
+    if key is None:
+        if unit or minimum is not None or maximum is not None:
+            raise AppError(
+                "MNX-CATALOG-0067",
+                "값 범위는 물성(`value_key`)과 함께 주세요 — 어느 물성의 값인지 모르면 "
+                "못 겁니다.",
+                status=422,
+            )
+        return None
+    definition = db.scalar(select(CatalogDefinition).where(CatalogDefinition.key == key))
+    if definition is None:
+        raise NotFound("MNX-CATALOG-0066", f"없는 물성입니다: {key}")
+    if not unit:
+        raise AppError(
+            "MNX-CATALOG-0067",
+            f"값의 단위(`value_unit`)를 주세요 — 이 물성은 '{definition.si_unit}' 로 저장돼 "
+            "있습니다.",
+            status=422,
+        )
+    if parameters.is_parameterized(db, key):
+        raise AppError(
+            "MNX-CATALOG-0068",
+            f"'{definition.name}' 은 변수 여러 개를 담고 있어 목록에서 범위로 거를 수 "
+            "없습니다 — 값 검색에서 변수(`term`)를 정해 찾으세요.",
+            status=422,
+        )
+    si_unit = definition.si_unit or ""
+    known = units.canonical(si_unit) is not None
+    raw = not known and same_symbol(unit, si_unit)
+    if not known and not raw:
+        # 환산표가 모르는 눈금에 다른 단위로 물으면 차원 검사도 못 한다 — 그대로 환산하면
+        # 「HV 200」 을 200 MPa 로 바꿔 견주는 꼴이 된다.
+        raise AppError(
+            "MNX-CATALOG-0069",
+            f"'{definition.name}' 의 단위 '{si_unit}' 는 환산표에 없어 그 단위로만 거를 수 "
+            "있습니다.",
+            status=422,
+        )
+    low, high = bounds(
+        unit=unit,
+        si_unit=si_unit,
+        minimum=minimum,
+        maximum=maximum,
+        near=None,
+        convert=not raw,
+    )
+    return ValueRange(
+        key=key,
+        low=low,
+        high=high,
+        unit=unit if raw else (units.canonical(unit) or unit),
+        raw=raw,
+    )
+
+
+def material_ids_in(db: Session, window: ValueRange) -> Select[tuple[uuid.UUID]]:
+    """**그 범위의 값을 든 사내 재료** — 시험으로 잰 값 또는 선언 물성(재료 · 시료).
+
+    재료 목록의 「물성 값」 거르기가 쓴다(2026-10-04). 값 검색(`measured_hits` ·
+    `internal_hits`)과 같은 규칙이지만 **자르지 않는다** — 목록을 거르는 데 상한을 걸면
+    상한 밖의 재료가 「없는」 것이 된다. 값을 꺼내지 않고 id 만 묻는다.
+
+    권한은 부르는 쪽이 건다(이 모듈의 머리말).
+    """
+    parts: list[Select[Any]] = []
+    measured = tuple(sorted({scalar for _plugin, scalar in registry.measured_by(window.key)}))
+    if measured:
+        element = func.jsonb_array_elements(ProcessingResult.scalars).table_valued("value")
+        scalar_key = cast(element.c.value, JSONB)["key"].astext
+        scalar_value = cast(cast(element.c.value, JSONB)["value"].astext, Float)
+        parts.append(
+            select(Sample.material_id)
+            .select_from(ProcessingResult)
+            .join(TestRun, TestRun.adopted_result_id == ProcessingResult.id)
+            .join(Specimen, Specimen.id == TestRun.specimen_id)
+            .join(Sample, Sample.id == Specimen.sample_id)
+            .join(element, true())
+            .where(
+                TestRun.deleted_at.is_(None),
+                scalar_key.in_(measured),
+                scalar_value >= window.low,
+                scalar_value <= window.high,
+            )
+        )
+    links = select(VocabularyTerm.value, PropertyLink.scale).join(
+        VocabularyTerm, VocabularyTerm.id == PropertyLink.term_id
+    )
+    for item, scale in db.execute(links.where(PropertyLink.property_key == window.key)).all():
+        path, named = _declared_path(
+            item, window.low, window.high, scale=scale, condition=None
+        )
+        wanted = cast([{"item": item}], JSONB)
+        for owner, column, alive in (
+            (Material.id, Material.declared_properties, Material.deleted_at.is_(None)),
+            (Sample.material_id, Sample.declared_properties, Sample.deleted_at.is_(None)),
+        ):
+            parts.append(
+                select(owner).where(
+                    alive,
+                    # GIN 색인을 타는 `@>` 로 먼저 좁힌다(`internal_hits` 와 같다).
+                    column.op("@>")(wanted),
+                    func.jsonb_path_exists(
+                        column,
+                        cast(literal(path), JSONPATH),
+                        cast(literal(named, JSONB), JSONB),
+                    ),
+                )
+            )
+    if not parts:
+        return select(Material.id).where(false())
+    return select(union(*parts).subquery().c[0])

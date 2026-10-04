@@ -10,6 +10,7 @@
  */
 
 import {
+  BadgeCheck,
   Bell,
   BookOpen,
   Boxes,
@@ -161,6 +162,9 @@ export const NAV_GROUPS: NavGroup[] = [
       // 재료의 것만 보므로, "그 카드가 어느 재료였더라" 에 답할 데가 없었다.
       { label: '물성 카드', icon: FileDown, to: '/cards' },
       { label: '물성 분석', icon: GitCompare, to: '/compare' },
+      // **승인하면 등급이 오르는 선언 값**(2026-10-04, ADR 0049 의 열린 것). 재료마다 열어 봐야
+      // 알던 것을 한 목록으로 — 승인은 그 값의 화면에서 한다. 보기는 누구나다(ADR 0035).
+      { label: '승인 대기 값', icon: BadgeCheck, to: '/materials/declared-review' },
       // **사슬(재료→시편→시험→카드) 뒤, 사슬 밖의 절차.** 「이 시료의 이 물성을 재 달라」
       // 를 낸 부서와 받는 부서가 번호로 부르며 접수 → 시험 중 → 결과 전달 → 완료 로
       // 옮긴다. 항목에 시험이 붙고 결과가 채택되면 진행률이 저절로 오른다 — 사슬의

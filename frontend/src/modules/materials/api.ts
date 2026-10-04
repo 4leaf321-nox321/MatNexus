@@ -134,6 +134,12 @@ export interface MaterialQuery {
   card?: string
   registered_from?: string
   registered_to?: string
+  /** 물성 값 범위(2026-10-04) — 「항복강도 250 MPa 이상」. 범위는 **SI** 이고 단위를 함께
+   *  보낸다(`value_unit`). 채택된 시험 결과와 선언 물성을 본다. */
+  value_key?: string
+  value_unit?: string
+  value_min?: number
+  value_max?: number
   /** **서버가 정렬한다.** 화면에서 하면 이 쪽에 실린 것만 정렬된다. */
   sort?: string
   desc?: boolean
@@ -178,6 +184,7 @@ function search(query: MaterialQuery | SpecimenQuery): string {
  *  고를 값을 만들려면 이름이 필요하고, 그 목록은 부서 모듈의 것이 아니라 서버의
  *  것이다(모듈끼리 직접 부르지 않는다). */
 export type WorkspaceChoice = components['schemas']['WorkspaceOut']
+export type DeclaredReviewPage = components['schemas']['Page_DeclaredReviewOut_']
 
 export const materialsApi = {
   /** 물성 지도 — 어떤 물성이 어떤 조건에 어떤 등급으로 있나(시험·선언·문헌 한 장). */
@@ -188,6 +195,9 @@ export const materialsApi = {
   /** 소속 거르기의 선택지. 내가 볼 수 있는 부서. */
   workspaces: () => api.get<WorkspaceChoice[]>('/workspaces'),
   list: (query: MaterialQuery = {}) => api.get<MaterialPage>(`/materials${search(query)}`),
+  /** 승인하면 등급이 오르는 선언 값 — 보이는 재료 · 시료 전부(ADR 0049 의 열린 것). */
+  declaredReview: (limit: number, offset: number) =>
+    api.get<DeclaredReviewPage>(`/materials/declared-review?limit=${limit}&offset=${offset}`),
 
   /**
    * 계층 요약. **목록과 따로 부른다** — 재료 목록이 재료마다 이것을 물으면 한

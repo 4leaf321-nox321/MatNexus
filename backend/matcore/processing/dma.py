@@ -7,7 +7,7 @@ DMA 는 인장과 사정이 정반대다. 인장은 하중·변위라는 날것�
     파생 열     tan δ · |E*| · 위상각. 파일이 주면 그대로 쓰고, 안 주면 만든다
     주파수      ω = 2πf. 파일마다 한쪽만 있다
     Tg          정의마다 값이 다르다 — 무엇으로 쟀는지가 값과 함께 남아야 한다
-    E → G       Prony 카드가 전단 기준이라, 인장·굽힘으로 쟀으면 바꿔야 한다
+    E → G       보여 주기만 한다 — 카드는 E 로 담고 덱이 카드의 ν 로 G 를 만든다
 
 ## 왜 파일이 주는 값을 다시 계산하는가
 
@@ -174,6 +174,88 @@ def frequency(frame: Frame, options: dict[str, Any]) -> StepResult:
     )
 
 
+#: 유리전이온도의 정의들. 화면의 선택지와 계산이 같은 목록을 본다.
+GLASS_METHODS = ("tan_delta_peak", "loss_peak", "storage_onset", "storage_tangent_onset")
+
+#: 자동 기준선 — 이보다 완만한 구간(가장 가파른 기울기 대비)을 유리 영역으로 본다.
+BASELINE_SLOPE_RATIO = 0.1
+
+
+def _tangent_onset(
+    temperature: np.ndarray, storage: np.ndarray, options: dict[str, Any]
+) -> tuple[float, float, tuple[str, ...]]:
+    """ASTM E1640 의 저장 탄성률 온셋 — log E′ 의 **두 접선이 만나는 온도.**
+
+    하나는 유리 영역(전이 앞 평탄부)에 맞춘 기준선, 하나는 전이에서 가장 가파른 점
+    (변곡점)의 접선이다. 로그로 보는 것은 규격의 그림이 그렇기 때문이다 — E′ 가 몇 자릿수
+    떨어지는 곡선을 선형으로 보면 평탄부가 0 에 붙어 접선이 뜻을 잃는다.
+
+    **기준선 구간을 못 잡으면 짐작하지 않는다.** 스윕이 전이 한가운데서 시작하면 「평탄부」
+    가 없고, 그때 첫 두 점에 선을 그으면 그럴듯한 온도가 나온다.
+    """
+    if np.any(storage <= 0):
+        raise ProcessingError("저장 탄성률에 0 이하가 있어 로그로 볼 수 없습니다.")
+    order = np.argsort(temperature, kind="stable")
+    t = np.asarray(temperature, dtype=float)[order]
+    y = np.log10(np.asarray(storage, dtype=float)[order])
+    if np.any(np.diff(t) <= 0):
+        raise ProcessingError(
+            "같은 온도의 점이 여럿입니다 — 온도 스윕 하나(한 주파수)만 남기고 보세요."
+        )
+    slope = np.gradient(y, t)
+    steepest = int(np.argmin(slope))
+    if slope[steepest] >= 0:
+        raise ProcessingError("저장 탄성률이 온도에 따라 떨어지는 구간이 없습니다.")
+    if steepest in (0, len(t) - 1):
+        raise ProcessingError(
+            "가장 가파른 점이 스윕의 끝에 있습니다 — 전이가 구간 밖에 걸쳐 있습니다. "
+            "온도 범위를 넓혀 다시 재세요."
+        )
+
+    start_raw = options.get("baseline_start")
+    end_raw = options.get("baseline_end")
+    if start_raw is None and end_raw is None:
+        flat = np.abs(slope[:steepest]) <= BASELINE_SLOPE_RATIO * abs(slope[steepest])
+        # 처음부터 이어진 평탄 구간만 — 중간에 잠깐 평평한 점을 기준선에 섞지 않는다.
+        stop = int(np.argmin(flat)) if not flat.all() else steepest
+        mask = np.zeros_like(t, dtype=bool)
+        mask[:stop] = True
+        how = "자동"
+    else:
+        low = option_float(options, "baseline_start", float(t[0]))
+        high = option_float(options, "baseline_end", float(t[steepest]))
+        if low >= high:
+            raise ProcessingError(f"유리 영역 시작({low:g} K)이 끝({high:g} K) 이상입니다.")
+        mask = (t >= low) & (t <= high) & (np.arange(len(t)) < steepest)
+        how = "지정"
+    if int(mask.sum()) < 3:
+        raise ProcessingError(
+            f"유리 영역(기준선)으로 쓸 점이 {int(mask.sum())}개뿐입니다 — 3개 이상이어야 "
+            f"접선이 뜻을 갖습니다. 「유리 영역 시작 · 끝」 을 직접 주거나, 전이 앞을 더 "
+            f"낮은 온도부터 재세요."
+        )
+
+    base_slope, base_intercept = np.polyfit(t[mask], y[mask], 1)
+    tangent_slope = float(slope[steepest])
+    tangent_intercept = float(y[steepest] - tangent_slope * t[steepest])
+    if not tangent_slope < base_slope:
+        raise ProcessingError(
+            "변곡점의 접선이 기준선보다 가파르지 않습니다 — 전이가 아닙니다."
+        )
+    onset = float((tangent_intercept - base_intercept) / (base_slope - tangent_slope))
+    if not t[0] <= onset <= t[steepest]:
+        raise ProcessingError(
+            f"두 접선이 관측 구간 앞에서 만납니다({onset:.4g} K) — 외삽한 온셋은 내지 "
+            f"않습니다. 기준선 구간을 확인하세요."
+        )
+    modulus = float(10 ** (base_slope * onset + base_intercept))
+    notes = (
+        f"기준선({how}): {t[mask][0]:.5g}~{t[mask][-1]:.5g} K 의 {int(mask.sum())}점. "
+        f"변곡점: {t[steepest]:.5g} K. 두 접선(log E′)이 {onset:.5g} K 에서 만납니다.",
+    )
+    return onset, modulus, notes
+
+
 @register(
     id="dma.glass_transition",
     kind="processing",
@@ -184,11 +266,12 @@ def frequency(frame: Frame, options: dict[str, Any]) -> StepResult:
             label="정의",
             type="choice",
             default="tan_delta_peak",
-            choices=("tan_delta_peak", "loss_peak", "storage_onset"),
+            choices=GLASS_METHODS,
             choice_labels={
                 "tan_delta_peak": "tan δ 피크",
                 "loss_peak": "손실 탄성률 피크",
                 "storage_onset": "저장 탄성률 낙폭 지점 (최댓값 대비)",
+                "storage_tangent_onset": "저장 탄성률 온셋 (접선 교점, ASTM E1640)",
             },
             help=(
                 "셋은 보통 몇 °C 씩 다릅니다. 어느 것으로 쟀는지를 안 적으면 "
@@ -206,6 +289,27 @@ def frequency(frame: Frame, options: dict[str, Any]) -> StepResult:
                 "저장 탄성률이 최댓값에서 이 비율만큼 떨어진 첫 온도를 씁니다(0.5 = 절반). "
                 "접선 교점 온셋(ASTM E1640)이 아닙니다 — 낙폭을 크게 잡을수록 값이 높아집니다."
             ),
+        ),
+        ParamSpec(
+            name="baseline_start",
+            label="유리 영역 시작",
+            type="float",
+            unit="K",
+            dimension="temperature",
+            when={"method": ("storage_tangent_onset",)},
+            help=(
+                "기준선 접선을 그을 유리 영역(전이 앞의 평탄부). 비우면 스윕 처음부터 "
+                "log E′ 기울기가 가장 가파른 곳의 10% 안쪽인 구간을 씁니다."
+            ),
+        ),
+        ParamSpec(
+            name="baseline_end",
+            label="유리 영역 끝",
+            type="float",
+            unit="K",
+            dimension="temperature",
+            when={"method": ("storage_tangent_onset",)},
+            help="전이가 시작되기 전까지. 시작과 함께 비우면 자동으로 잡습니다.",
         ),
         ParamSpec(
             name="temperature", label="온도 열", type="str", role="column", default=TEMPERATURE
@@ -239,7 +343,8 @@ def glass_transition(frame: Frame, options: dict[str, Any]) -> StepResult:
     낮은 것이 보통이며, 그 차이는 몇 °C 에서 십수 °C 까지 간다. 여기의 셋째 정의는
     온셋(접선 교점, ASTM E1640)이 **아니라** 최댓값에서 정한 비율만큼 떨어진 첫
     온도다 — 기본 절반이면 전이의 한가운데라 온셋보다 높다. 라벨이 오래 「온셋 (접선
-    교점)」 이었다가 바로잡혔다(2026-09-30, 가이드를 코드와 대조하다 드러났다).
+    교점)」 이었다가 바로잡혔다(2026-09-30, 가이드를 코드와 대조하다 드러났다). 그
+    온셋은 넷째 정의(`storage_tangent_onset`)로 따로 둔다(2026-10-04).
 
     하나로 박아 두면 다른 정의로 보고된 값과 비교가 안 되고, 조용히 바꾸면 예전 값과
     어긋난다 — 탄성계수 단계와 같은 판단이다.
@@ -247,7 +352,7 @@ def glass_transition(frame: Frame, options: dict[str, Any]) -> StepResult:
     그리고 tan δ 피크 온도는 **모드와 주파수에 의존한다.** 규격 번호만 적힌
     보고서로는 재현이 안 된다는 것이 DMA 규격 문헌의 결론이다.
     """
-    method = option_text(options, "method", ("tan_delta_peak", "loss_peak", "storage_onset"))
+    method = option_text(options, "method", GLASS_METHODS)
     temperature_key = str(options.get("temperature") or TEMPERATURE)
     temperature = frame.require(temperature_key, what="온도")
     if len(temperature) < 3:
@@ -261,6 +366,27 @@ def glass_transition(frame: Frame, options: dict[str, Any]) -> StepResult:
         series = frame.require(STORAGE, what="저장 탄성률")
 
     notes: list[str] = []
+    if method == "storage_tangent_onset":
+        onset, modulus, said = _tangent_onset(temperature, series, options)
+        return StepResult(
+            frame,
+            notes=said,
+            scalars=(
+                Scalar(
+                    key="glass_transition",
+                    label="유리전이온도",
+                    value=onset,
+                    si_unit="K",
+                    dimension="temperature",
+                ),
+                Scalar(
+                    key="glass_transition_peak",
+                    label="피크에서의 값",
+                    value=modulus,
+                    si_unit="Pa",
+                ),
+            ),
+        )
     if method == "storage_onset":
         drop = option_float(options, "drop", 0.5)
         if not 0 < drop < 1:
@@ -337,7 +463,10 @@ def glass_transition(frame: Frame, options: dict[str, Any]) -> StepResult:
             key="storage_modulus_shear",
             label="전단 저장 탄성률",
             si_unit="Pa",
-            help="G′ = E′ / 2(1+ν). Prony 카드가 이 값을 씁니다.",
+            help=(
+                "G′ = E′ / 2(1+ν). 곡선에 더해 보여 줄 뿐 — 마스터커브 · Prony 는 이 열을 "
+                "안 쓴다(카드는 E 로 담고 덱이 G 를 만든다)."
+            ),
         ),
         Produced(
             key="loss_modulus_shear",
@@ -350,10 +479,11 @@ def glass_transition(frame: Frame, options: dict[str, Any]) -> StepResult:
     version="1",
 )
 def to_shear(frame: Frame, options: dict[str, Any]) -> StepResult:
-    """인장·굽힘으로 잰 E 를 전단 G 로 바꾼다.
+    """인장·굽힘으로 잰 E 를 전단 G 로 바꿔 **보여 준다.**
 
-    **Prony 카드는 전단 기준이다.** 고무를 전단 샌드위치로 쟀다면 변환 없이 바로
-    이어지지만, 인장이나 굽힘으로 쟀다면 여기를 거쳐야 한다.
+    카드로 가는 길은 이 열을 안 쓴다 — 마스터커브 · Prony 는 저장 · 손실 탄성률 채널을
+    E 로 담고, 덱이 카드의 ν 로 G 를 만든다. 전단 모드로 잰 시험은 카드를 만들 때
+    시험 조건 「변형 모드」 를 보고 E 로 옮긴다(`fitting` 의 `_modulus_basis`).
 
     **등방·선형 탄성을 가정한 변환이다.** 이방성 재료(복합재)나 큰 변형에서는
     성립하지 않는다. 그리고 ν 는 온도에 따라 변하는데 여기서는 상수로 둔다 —

@@ -21,6 +21,8 @@ import {
 import { Link, useSearchParams } from 'react-router-dom'
 
 import { CatalogHits } from '@/modules/catalog/CatalogHits'
+import { ValueRangeFilter } from '@/modules/catalog/ValueRangeFilter'
+import type { ValueRange } from '@/modules/catalog/ValueRangeFilter'
 import { materialsApi } from '@/modules/materials/api'
 import type { BulkDeletePlan } from '@/modules/materials/api'
 import { categoriesOf, familiesOf } from '@/modules/materials/classification'
@@ -92,6 +94,8 @@ export default function MaterialsPage() {
   const [detailOpen, setDetailOpen] = useState(false)
   const [draft, setDraft] = useState<MaterialDetail>(EMPTY_DETAIL)
   const [detail, setDetail] = useState<MaterialDetail>(EMPTY_DETAIL)
+  // **물성 값 범위**(2026-10-04) — 문헌 목록과 같은 칸. 「걸기」 를 누를 때 걸린다.
+  const [valueRange, setValueRange] = useState<ValueRange | null>(null)
   const [registering, setRegistering] = useState(false)
   const [bulk, setBulk] = useState(false)
   const [size, setSize] = useState<PageSize>(PAGE_SIZES[0])
@@ -156,10 +160,14 @@ export default function MaterialsPage() {
     // 재료는 만들 길이 없고, 그 말을 다른 시스템이 「공식」 으로 읽었다.
     workspace: scope || undefined,
     ...detailQuery(detail),
+    value_key: valueRange?.key,
+    value_unit: valueRange?.siUnit,
+    value_min: valueRange?.min,
+    value_max: valueRange?.max,
     sort: sort.key,
     desc: sort.descending,
   }
-  const detailOn = detailCount(detail)
+  const detailOn = detailCount(detail) + (valueRange ? 1 : 0)
   // 시험 종류는 **상세 조건을 열 때만** 읽는다 — 목록을 볼 때마다 부를 까닭이 없다.
   const testTypes = useResource(
     () => (detailOpen ? testsApi.types() : Promise.resolve([])),
@@ -174,7 +182,22 @@ export default function MaterialsPage() {
       all
         ? fetchAll((limit, from) => materialsApi.list({ ...filters, limit, offset: from }))
         : materialsApi.list({ ...filters, limit: size, offset }),
-    [applied, mode, detail, name, alias, code, family, category, scope, sort, size, offset, all]
+    [
+      applied,
+      mode,
+      detail,
+      valueRange,
+      name,
+      alias,
+      code,
+      family,
+      category,
+      scope,
+      sort,
+      size,
+      offset,
+      all,
+    ]
   )
 
   async function removePicked() {
@@ -339,6 +362,16 @@ export default function MaterialsPage() {
               // 것처럼 보인다.
               setDraft(EMPTY_DETAIL)
               setDetail(EMPTY_DETAIL)
+              setOffset(0)
+            }}
+          />
+        )}
+        {detailOpen && (
+          <ValueRangeFilter
+            world="internal"
+            applied={valueRange}
+            onApply={(next) => {
+              setValueRange(next)
               setOffset(0)
             }}
           />

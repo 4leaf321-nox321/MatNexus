@@ -364,6 +364,31 @@ class MaterialCreateRequest(BaseModel):
     고치는 사람은 등록자 · 편집을 받은 부서 · 자료 관리자다(ADR 0035)."""
 
 
+class DeclaredReviewOut(BaseModel):
+    """**승인하면 등급이 오를** 선언 값 한 줄(2026-10-04, ADR 0049 의 열린 것).
+
+    재료마다 열어 봐야 알던 것을 한 목록으로. 승인 자체는 재료 · 시료 화면에서 한다 — 이
+    목록은 큐가 아니다(ADR 0049 결정 5: 상태만 두고 절차는 운영이 보인 뒤에).
+    """
+
+    level: str
+    """`재료` · `시료` — 어느 층에 적힌 값인가."""
+    material_id: uuid.UUID
+    material_name: str
+    sample_id: uuid.UUID | None = None
+    sample_name: str | None = None
+    lot_no: str | None = None
+    item: str
+    source: str | None = None
+    reference: str | None = None
+    si_unit: str | None = None
+    first_value_si: float | None = None
+    """첫 점의 값(SI). 점이 여럿이면 `point_count` 가 말한다."""
+    point_count: int
+    quality_tier: int
+    tier_if_approved: int
+
+
 class ClassificationOut(BaseModel):
     """실제로 쓰이고 있는 분류 한 쌍.
 

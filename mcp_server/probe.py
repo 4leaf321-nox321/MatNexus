@@ -276,7 +276,17 @@ async def sweep(session: ClientSession) -> None:
         )
     await call(session, "list_card_blocks")
     await call(session, "list_processing_steps", {"test_type": "tensile"})
-    await call(session, "list_specimens", {"limit": 2})
+    specimens = await call(session, "list_specimens", {"limit": 2})
+    specimen_id = None
+    if isinstance(specimens, dict) and specimens.get("specimens"):
+        specimen_id = specimens["specimens"][0].get("id")
+    if specimen_id:
+        # 다른 두께로 옮기기 — **미리보기만**(계획을 받는다, 쓰지 않는다).
+        await call(
+            session,
+            "relocate_specimens",
+            {"specimen_ids": [specimen_id], "spec_thickness": 9.87, "dry_run": True},
+        )
     cards = await call(session, "list_cards", {"limit": 3})
     card_id = _first(cards, "id", "card_id")
     if card_id:
@@ -340,6 +350,19 @@ async def sweep(session: ClientSession) -> None:
             session,
             "preview_card_fit",
             {"material_id": fit_material, "test_type": "tensile", "orientation": "MD"},
+        )
+        # 대표 곡선 기준(ADR 0041) — 하한 · 평균 − 2σ.
+        await call(
+            session,
+            "preview_card_fit",
+            {
+                "material_id": fit_material,
+                "test_type": "tensile",
+                "orientation": "MD",
+                "basis": "lower",
+                "basis_method": "sd",
+                "basis_k": 2,
+            },
         )
         await call(
             session,

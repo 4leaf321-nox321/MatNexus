@@ -10,6 +10,12 @@
  * ## 거는 것은 「걸기」 를 누를 때
  *
  * 칠 때마다 걸면 「2」 · 「20」 · 「200」 이 차례로 서버에 가고 목록이 세 번 바뀐다.
+ *
+ * ## 두 목록이 쓴다 (2026-10-04)
+ *
+ * 문헌 카탈로그(`world="catalog"`)와 사내 재료 목록(`world="internal"`). 고를 수 있는 물성이
+ * 다르다 — 문헌 값이 있는 물성과, 시험으로 재거나 선언 항목으로 이어진 물성. 값이 없는 물성을
+ * 고르게 두면 늘 0건이다.
  */
 
 import { useEffect, useState } from 'react'
@@ -44,12 +50,37 @@ export function describeRange(range: ValueRange): string {
   return `${range.name} ${span}${unit ? ` ${unit}` : ''}`
 }
 
+/** 이 목록에서 고를 수 있는 물성인가 — 값이 하나도 없을 물성은 후보에서 뺀다. */
+function usable(one: PropertyCandidate, world: 'catalog' | 'internal'): boolean {
+  if (one.deprecated) return false
+  if (world === 'catalog') return one.value_count > 0
+  // 식의 변수 묶음(Prony …)은 서버가 범위로 안 거른다 — 고르면 422 다.
+  return !one.parameterized && ((one.measured_keys?.length ?? 0) > 0 || one.internal_items.length > 0)
+}
+
+/** 후보 줄 오른쪽 — 그 목록에서 무엇으로 걸리는지. */
+function hint(one: PropertyCandidate, world: 'catalog' | 'internal'): string {
+  const unit = display(one.si_unit || '1').unit
+  const where =
+    world === 'catalog'
+      ? `값 ${one.value_count.toLocaleString('ko-KR')}건`
+      : [
+          (one.measured_keys?.length ?? 0) > 0 ? '시험 값' : '',
+          one.internal_items.length > 0 ? `항목 ${one.internal_items.join(' · ')}` : '',
+        ]
+          .filter(Boolean)
+          .join(' · ')
+  return [unit, where].filter(Boolean).join(' · ')
+}
+
 export function ValueRangeFilter({
   applied,
   onApply,
+  world = 'catalog',
 }: {
   applied: ValueRange | null
   onApply: (next: ValueRange | null) => void
+  world?: 'catalog' | 'internal'
 }) {
   const [query, setQuery] = useState('')
   const [candidates, setCandidates] = useState<PropertyCandidate[]>([])
@@ -71,8 +102,7 @@ export function ValueRangeFilter({
         .resolveProperty(needle)
         .then((got) => {
           // 값이 없는 물성으로는 아무것도 못 거른다 — 고르게 두면 늘 0건이다.
-          if (alive)
-            setCandidates(got.candidates.filter((one) => !one.deprecated && one.value_count > 0))
+          if (alive) setCandidates(got.candidates.filter((one) => usable(one, world)))
         })
         .catch(() => {
           if (alive) setCandidates([])
@@ -82,7 +112,7 @@ export function ValueRangeFilter({
       alive = false
       clearTimeout(timer)
     }
-  }, [query, picked])
+  }, [query, picked, world])
 
   const siUnit = picked ? picked.si_unit || '1' : ''
   const unit = picked ? display(siUnit).unit : ''
@@ -169,11 +199,12 @@ export function ValueRangeFilter({
           onChange={(event) => setHigh(event.target.value)}
         />
         {unit && <span className="text-sm">{unit}</span>}
-        <Button size="sm" disabled={!picked} onClick={apply}>
+        {/* 폼 안에 놓일 수 있다(재료 목록의 상세 조건) — 누르면 그 폼을 내지 않게. */}
+        <Button type="button" size="sm" disabled={!picked} onClick={apply}>
           걸기
         </Button>
         {applied && (
-          <Button size="sm" variant="ghost" onClick={clear}>
+          <Button type="button" size="sm" variant="ghost" onClick={clear}>
             풀기
           </Button>
         )}
@@ -193,14 +224,7 @@ export function ValueRangeFilter({
               >
                 <span className="font-medium">{one.name}</span>
                 <span className="text-muted-foreground font-mono">{one.key}</span>
-                <span className="text-muted-foreground ml-auto">
-                  {[
-                    display(one.si_unit || '1').unit,
-                    `값 ${one.value_count.toLocaleString('ko-KR')}건`,
-                  ]
-                    .filter(Boolean)
-                    .join(' · ')}
-                </span>
+                <span className="text-muted-foreground ml-auto">{hint(one, world)}</span>
               </button>
             </li>
           ))}
@@ -214,8 +238,9 @@ export function ValueRangeFilter({
       )}
       {applied && (
         <p className="text-sm" role="status">
-          {describeRange(applied)} 인 값이 있는 재료만 보는 중입니다 — 식의 변수(Prony 의 E0
-          같은)는 그 물성의 값으로 치지 않습니다.
+          {world === 'catalog'
+            ? `${describeRange(applied)} 인 값이 있는 재료만 보는 중입니다 — 식의 변수(Prony 의 E0 같은)는 그 물성의 값으로 치지 않습니다.`
+            : `${describeRange(applied)} 인 값(채택된 시험 결과 · 선언 물성)이 있는 재료만 보는 중입니다.`}
         </p>
       )}
     </div>

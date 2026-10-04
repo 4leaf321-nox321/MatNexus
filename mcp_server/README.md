@@ -102,7 +102,7 @@ ms)를 알린다 — 「관리 → 사용 현황」 의 MCP 숫자가 여기서 
 도구의 답은 그대로 나간다. 도구 하나가 백엔드를 여러 번 부르므로 API 요청 수(`X-Client: mcp`)와
 도구 수는 다르다 — 둘 다 그 화면에 있다.
 
-## 5. 지금 있는 것 (도구 96개)
+## 5. 지금 있는 것 (도구 97개)
 
 **전부 한 번에 불러 보려면 `probe.py` 를 돌린다** — 진짜 MCP 클라이언트로 한 바퀴
 돈다(아래 「실측으로 잡은 것」 참조). 화면이나 curl 로는 안 보이는 층이 있다.
@@ -187,6 +187,7 @@ Family·Category·Grade·제조사·유통사·시편 규격은 **기준정보**
 
     preview_card_fit(...)              경화식들을 견준다 — **RMSE 로 고르지 마라**
     ★ create_card_from_tests(...)      시험에서 나온 값으로 카드 초안
+                                       (둘 다 `basis` — 대표 곡선 평균 · 중앙값 · 상한 · 하한, ADR 0041)
     ★ create_card_from_group(...)      묶음에서 — 속도 의존·점탄성·확장 묶음을 한 길로
     ★ create_viscoelastic_card(...)    Prony 적합 하나에서 점탄성 카드 초안
     ★ create_lve_card(...)             DMA 변형률 스윕의 선형 탄성률 카드 초안
@@ -203,6 +204,7 @@ Family·Category·Grade·제조사·유통사·시편 규격은 **기준정보**
     list_test_runs(material_id?, ...)  시험 목록
     get_test_run(test_run_id)          조건·시편·채택된 처리 결과
     list_specimens(material?, q?, ...) 시편을 재료를 거치지 않고 — 규격·방향으로
+    ★ relocate_specimens(ids, 두께)    다른 두께의 같은 재료로 — 걸린 카드는 미리보기가 보인다(ADR 0042)
     get_specimen(specimen_id)          치수와 **그것이 어디서 온 값인지**
     list_processing_steps(test_type?)  돌릴 수 있는 단계와 **인장 표준 순서**
     list_processing_inputs(run_id)     `@` 로 꽂을 수 있는 값 (시편 치수·단면적)

@@ -28,7 +28,7 @@
 
 - 주소 `http://<MatNexus 서버>:8012/mcp`(streamable HTTP). 받은 `Authorization: Bearer <토큰>` 을 백엔드로
   나르기만 한다 — 만능 토큰이 없다.
-- 도구 96개. 이름이 다른 앱과 겹치면 게이트웨이가 `matnexus_` 를 붙이는 것을 전제로 스킬
+- 도구 97개. 이름이 다른 앱과 겹치면 게이트웨이가 `matnexus_` 를 붙이는 것을 전제로 스킬
   (`mcp_server/skill/matnexus/SKILL.md`)이 두 이름을 다 허용한다.
 
 ## 2. 포털 · 게이트웨이에 필요한 것 — MatNexus 를 서비스로 더하기

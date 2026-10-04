@@ -8489,6 +8489,240 @@
         "title": "DeckKeysOut",
         "type": "object"
       },
+      "DeckLayoutOut": {
+        "description": "덱 미리보기와 **칸 배치** — 내려받기 전에 어느 자리에 무엇이 가는지(2026-10-04).\n\n**못 내는 형식도 200 이다** — `ok=False` 와 `error` 가 그 까닭을 든다. 고르는 화면이\n이유를 그 자리에 보여야 한다(`DeckPreviewOut` 과 같은 판단).",
+        "properties": {
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "failed": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/DeckLayoutSkippedOut"
+            },
+            "title": "Failed",
+            "type": "array"
+          },
+          "filename": {
+            "default": "",
+            "title": "Filename",
+            "type": "string"
+          },
+          "format": {
+            "title": "Format",
+            "type": "string"
+          },
+          "line_count": {
+            "default": 0,
+            "title": "Line Count",
+            "type": "integer"
+          },
+          "notes": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Notes",
+            "type": "array"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "text": {
+            "default": "",
+            "title": "Text",
+            "type": "string"
+          },
+          "truncated": {
+            "default": false,
+            "title": "Truncated",
+            "type": "boolean"
+          },
+          "units": {
+            "title": "Units",
+            "type": "string"
+          },
+          "unused": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/DeckLayoutSkippedOut"
+            },
+            "title": "Unused",
+            "type": "array"
+          },
+          "values": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/DeckLayoutValueOut"
+            },
+            "title": "Values",
+            "type": "array"
+          }
+        },
+        "required": [
+          "ok",
+          "format",
+          "units"
+        ],
+        "title": "DeckLayoutOut",
+        "type": "object"
+      },
+      "DeckLayoutSkippedOut": {
+        "properties": {
+          "block_label": {
+            "title": "Block Label",
+            "type": "string"
+          },
+          "column": {
+            "title": "Column",
+            "type": "boolean"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "required": [
+          "name",
+          "block_label",
+          "label",
+          "column"
+        ],
+        "title": "DeckLayoutSkippedOut",
+        "type": "object"
+      },
+      "DeckLayoutSpanOut": {
+        "description": "덱의 한 자리 — 줄은 0 부터, 칸은 `[start, end)`.",
+        "properties": {
+          "end": {
+            "title": "End",
+            "type": "integer"
+          },
+          "line": {
+            "title": "Line",
+            "type": "integer"
+          },
+          "shared_with": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Shared With",
+            "type": "array"
+          },
+          "start": {
+            "title": "Start",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "line",
+          "start",
+          "end"
+        ],
+        "title": "DeckLayoutSpanOut",
+        "type": "object"
+      },
+      "DeckLayoutValueOut": {
+        "description": "카드 값 하나가 덱의 어디로 가나.",
+        "properties": {
+          "block": {
+            "title": "Block",
+            "type": "string"
+          },
+          "block_label": {
+            "title": "Block Label",
+            "type": "string"
+          },
+          "column": {
+            "title": "Column",
+            "type": "boolean"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "rows": {
+            "default": 0,
+            "title": "Rows",
+            "type": "integer"
+          },
+          "spans": {
+            "items": {
+              "$ref": "#/components/schemas/DeckLayoutSpanOut"
+            },
+            "title": "Spans",
+            "type": "array"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "required": [
+          "name",
+          "block",
+          "key",
+          "block_label",
+          "label",
+          "column",
+          "unit",
+          "value",
+          "spans"
+        ],
+        "title": "DeckLayoutValueOut",
+        "type": "object"
+      },
       "DeckMatchIn": {
         "properties": {
           "text": {
@@ -9326,6 +9560,129 @@
           "reference"
         ],
         "title": "DeclaredPropertyOut",
+        "type": "object"
+      },
+      "DeclaredReviewOut": {
+        "description": "**승인하면 등급이 오를** 선언 값 한 줄(2026-10-04, ADR 0049 의 열린 것).\n\n재료마다 열어 봐야 알던 것을 한 목록으로. 승인 자체는 재료 · 시료 화면에서 한다 — 이\n목록은 큐가 아니다(ADR 0049 결정 5: 상태만 두고 절차는 운영이 보인 뒤에).",
+        "properties": {
+          "first_value_si": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Value Si"
+          },
+          "item": {
+            "title": "Item",
+            "type": "string"
+          },
+          "level": {
+            "title": "Level",
+            "type": "string"
+          },
+          "lot_no": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lot No"
+          },
+          "material_id": {
+            "format": "uuid",
+            "title": "Material Id",
+            "type": "string"
+          },
+          "material_name": {
+            "title": "Material Name",
+            "type": "string"
+          },
+          "point_count": {
+            "title": "Point Count",
+            "type": "integer"
+          },
+          "quality_tier": {
+            "title": "Quality Tier",
+            "type": "integer"
+          },
+          "reference": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reference"
+          },
+          "sample_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sample Id"
+          },
+          "sample_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sample Name"
+          },
+          "si_unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Si Unit"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "tier_if_approved": {
+            "title": "Tier If Approved",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "level",
+          "material_id",
+          "material_name",
+          "item",
+          "point_count",
+          "quality_tier",
+          "tier_if_approved"
+        ],
+        "title": "DeclaredReviewOut",
         "type": "object"
       },
       "DeclaredSlotOut": {
@@ -14319,7 +14676,7 @@
       "FormulaResultIn": {
         "properties": {
           "key": {
-            "maxLength": 60,
+            "maxLength": 50,
             "minLength": 1,
             "title": "Key",
             "type": "string"
@@ -20102,6 +20459,37 @@
           "offset"
         ],
         "title": "Page[CommissionOut]",
+        "type": "object"
+      },
+      "Page_DeclaredReviewOut_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/DeclaredReviewOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "Page[DeclaredReviewOut]",
         "type": "object"
       },
       "Page_EquipmentUnitOut_": {
@@ -33033,6 +33421,14 @@
           },
           "views": {
             "$ref": "#/components/schemas/ViewsOut"
+          },
+          "workspaces": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/UsageWorkspaceOut"
+            },
+            "title": "Workspaces",
+            "type": "array"
           }
         },
         "required": [
@@ -33047,6 +33443,50 @@
           "people"
         ],
         "title": "UsageSummaryOut",
+        "type": "object"
+      },
+      "UsageWorkspaceOut": {
+        "description": "부서 하나의 몫(2026-10-04). **사람의 지금 대표 부서로** 묶는다 — 쓸 때의 소속은 집계에\n안 남는다(표가 사람 · 라우트만 센다). 옮긴 사람의 지난 사용은 새 부서로 간다.",
+        "properties": {
+          "mcp_calls": {
+            "title": "Mcp Calls",
+            "type": "integer"
+          },
+          "people": {
+            "title": "People",
+            "type": "integer"
+          },
+          "person_days": {
+            "title": "Person Days",
+            "type": "integer"
+          },
+          "views": {
+            "title": "Views",
+            "type": "integer"
+          },
+          "web_requests": {
+            "title": "Web Requests",
+            "type": "integer"
+          },
+          "workspace": {
+            "title": "Workspace",
+            "type": "string"
+          },
+          "writes": {
+            "title": "Writes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "workspace",
+          "people",
+          "person_days",
+          "web_requests",
+          "writes",
+          "mcp_calls",
+          "views"
+        ],
+        "title": "UsageWorkspaceOut",
         "type": "object"
       },
       "UserOut": {
@@ -41018,6 +41458,86 @@
         ]
       }
     },
+    "/api/fitting/cards/{card_id}/export/layout": {
+      "get": {
+        "description": "덱을 **내려받기 전에** 보인다 — 어느 줄 몇째 칸에 카드의 어느 값이 가나(2026-10-04).\n\n「내보내기」 가 누르자마자 파일을 받던 것을, 형식을 고르면 이 배치와 덱 미리보기가 서고\n그 뒤에 받게 바꿨다. 고정폭 칸이 하나 밀리면 솔버는 다른 값을 **조용히** 읽는다 — 사람이\n받기 전에 「탄성계수가 저 칸으로 가는구나」 를 볼 수 있어야 한다.\n\n자리는 값을 하나씩 흔들어 다시 그려서 짚는다(`matcore.export.layout`) — 코드판이든\n정의판이든 **실제로 내려받을 덱 그대로**다. 덱 · 그리기는 내려받기(`export_card`)와 한 벌.",
+        "operationId": "card_deck_layout_api_fitting_cards__card_id__export_layout_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "card_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Card Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "format",
+            "required": true,
+            "schema": {
+              "title": "Format",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "units",
+            "required": false,
+            "schema": {
+              "default": "mm_n_tonne",
+              "title": "Units",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "with_card",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "With Card"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeckLayoutOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Card Deck Layout",
+        "tags": [
+          "fitting"
+        ]
+      }
+    },
     "/api/fitting/cards/{card_id}/paired-formats": {
       "get": {
         "description": "짝 카드와 합치면 **새로 낼 수 있게 되는 형식** — 내려받기를 누르기 전에 말한다.\n\n카드 목록의 `available_formats` 는 카드 혼자의 판정이다. 이방성 카드는 혼자서는 Hill\n형식을 못 내므로, 짝을 고른 뒤의 판정을 따로 준다 — 판정은 렌더와 같은 규칙\n(`missing_for`)이다.",
@@ -44341,6 +44861,74 @@
               "description": "이날까지 등록(그날 포함)",
               "title": "Registered To"
             }
+          },
+          {
+            "description": "이 물성(허브 키)의 값이 범위 안인 재료 — 시험으로 잰 값(채택 결과)이나 선언 물성. 문헌 카탈로그 목록의 값 범위와 같은 규칙",
+            "in": "query",
+            "name": "value_key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "이 물성(허브 키)의 값이 범위 안인 재료 — 시험으로 잰 값(채택 결과)이나 선언 물성. 문헌 카탈로그 목록의 값 범위와 같은 규칙",
+              "title": "Value Key"
+            }
+          },
+          {
+            "description": "범위의 단위 — 필수",
+            "in": "query",
+            "name": "value_unit",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "범위의 단위 — 필수",
+              "title": "Value Unit"
+            }
+          },
+          {
+            "in": "query",
+            "name": "value_min",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Value Min"
+            }
+          },
+          {
+            "in": "query",
+            "name": "value_max",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Value Max"
+            }
           }
         ],
         "responses": {
@@ -44473,6 +45061,68 @@
           }
         },
         "summary": "List Classifications",
+        "tags": [
+          "materials"
+        ]
+      }
+    },
+    "/api/materials/declared-review": {
+      "get": {
+        "description": "**승인하면 등급이 오를 선언 값** — 보이는 재료 · 시료 전부에서(ADR 0049 의 열린 것).\n\n전에는 재료마다 열어 봐야 알았다. 자료 관리자가 「무엇을 확인하면 되나」 를 한 번에 본다.\n승인은 여기서 안 한다 — 근거 문서를 펴 보는 일이라 그 값이 사는 화면에서 한다. 보기는\n누구나다(ADR 0035): 적은 사람도 「내 값이 아직 확인 전」 임을 안다.\n\n이미 승인된 줄 · 승인해도 안 오르는 줄(규격 2 · 데이터시트 · 밀시트 1 · 받아 온 문헌\n1~2)은 안 싣는다. 선언 물성이 JSON 한 칸이라 파이썬에서 거르고, 상한은 서버가 건다.",
+        "operationId": "declared_review_api_materials_declared_review_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 200,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Limit"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_DeclaredReviewOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Declared Review",
         "tags": [
           "materials"
         ]
@@ -44892,6 +45542,74 @@
               ],
               "description": "이날까지 등록(그날 포함)",
               "title": "Registered To"
+            }
+          },
+          {
+            "description": "이 물성(허브 키)의 값이 범위 안인 재료 — 시험으로 잰 값(채택 결과)이나 선언 물성. 문헌 카탈로그 목록의 값 범위와 같은 규칙",
+            "in": "query",
+            "name": "value_key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "이 물성(허브 키)의 값이 범위 안인 재료 — 시험으로 잰 값(채택 결과)이나 선언 물성. 문헌 카탈로그 목록의 값 범위와 같은 규칙",
+              "title": "Value Key"
+            }
+          },
+          {
+            "description": "범위의 단위 — 필수",
+            "in": "query",
+            "name": "value_unit",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "범위의 단위 — 필수",
+              "title": "Value Unit"
+            }
+          },
+          {
+            "in": "query",
+            "name": "value_min",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Value Min"
+            }
+          },
+          {
+            "in": "query",
+            "name": "value_max",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Value Max"
             }
           }
         ],

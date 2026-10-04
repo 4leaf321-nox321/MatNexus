@@ -25,11 +25,15 @@ from test_semantic_search import semantic_off, semantic_ready  # noqa: F401  (�
 
 from app.jobs import kinds
 from app.jobs.models import Job
+from app.modules.catalog.links import ensure_builtin_property_links
+from app.modules.catalog.models import CatalogDefinition
 from app.modules.fitting.models import PropertyCard
 from app.modules.materials.models import Material, Sample, Specimen
+from app.modules.processing.models import ProcessingResult
 from app.modules.search.jobs import index_materials
 from app.modules.tests.definitions import ensure_builtin_test_types
 from app.modules.tests.models import TestRun, TestType
+from app.modules.vocabulary.definitions import ensure_builtin_property_items
 from app.modules.workspaces.models import Workspace
 from app.shared import semantic
 
@@ -329,6 +333,89 @@ class Test재료_조건_칸:
         ]
         bad = client.get("/api/materials", params={"card": "some"}, headers=admin_headers)
         assert bad.status_code == 422
+
+    def test_물성_값_범위로_잰_값과_선언_값을_거른다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        db: Session,
+        workspace: Workspace,
+    ) -> None:
+        """「항복강도 250 MPa 이상인 재료」(2026-10-04). 시험으로 잰 값은 **채택된 것만**,
+        선언 값은 기본 항목 「항복강도」 로 이어진 것을 본다. 단위가 없으면 거절한다."""
+        key = "mechanical.yield_strength"
+        if db.scalar(select(CatalogDefinition).where(CatalogDefinition.key == key)) is None:
+            db.add(
+                CatalogDefinition(
+                    mt_id=990_001,
+                    key=key,
+                    name="항복강도",
+                    domain="mechanical",
+                    si_unit="Pa",
+                    value_type="number",
+                )
+            )
+        ensure_builtin_property_items(db)
+        db.commit()
+        ensure_builtin_property_links(db)
+        db.commit()
+
+        def result(run: TestRun, value: float) -> ProcessingResult:
+            made = ProcessingResult(
+                test_run_id=run.id,
+                source_curve_key="raw",
+                scalars=[{"key": "proof_stress", "label": "항복강도", "value": value}],
+                storage_path="none",
+                row_count=0,
+                sha256="0" * 64,
+                byte_size=0,
+            )
+            db.add(made)
+            db.flush()
+            return made
+
+        measured = _run(db, workspace, name="MEASURED")
+        measured.adopted_result_id = result(measured, 300e6).id
+        loose = _run(db, workspace, name="LOOSE")
+        result(loose, 300e6)  # 돌려만 보고 채택 안 한 값은 그 시험의 물성이 아니다
+        db.commit()
+        declared = _material(client, admin_headers, grade="DECLARED", details=None)
+        saved = client.patch(
+            f"/api/materials/{declared['id']}",
+            json={
+                "declared_properties": [
+                    {
+                        "item": "항복강도",
+                        "points": [{"value": 260}],
+                        "input_unit": "MPa",
+                        "source": "literature",
+                        "reference": "핸드북",
+                    }
+                ]
+            },
+            headers=admin_headers,
+        )
+        assert saved.status_code == 200, saved.text
+
+        def names(**params: Any) -> list[str]:
+            return sorted(_names(_materials(client, admin_headers, value_key=key, **params)))
+
+        both = ["DECLARED_-_1.0", "MEASURED"]
+        assert names(value_unit="MPa", value_min=250) == both
+        assert names(value_unit="MPa", value_min=270) == ["MEASURED"]
+        assert names(value_unit="MPa", value_max=270) == ["DECLARED_-_1.0"]
+        # 같은 범위를 SI 로 물어도 같다 — 단위는 환산된다.
+        assert names(value_unit="Pa", value_min=250e6) == both
+        assert names(value_unit="MPa", value_min=400) == []
+
+        # **단위 없이 「250」 은 거절한다** — 그대로 걸면 250 Pa 이상이 다 걸린다.
+        bare = client.get(
+            "/api/materials",
+            params={"value_key": key, "value_min": 250},
+            headers=admin_headers,
+        )
+        assert bare.status_code == 422, bare.text
+        assert bare.json()["error"]["code"] == "MNX-CATALOG-0067"
 
     def test_등록일로_거르고_끝날은_그날_끝까지(
         self, client: TestClient, admin_headers: dict[str, str], db: Session

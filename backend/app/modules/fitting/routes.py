@@ -59,6 +59,10 @@ from app.modules.fitting.schemas import (
     DeckGrammarOut,
     DeckKeyOut,
     DeckKeysOut,
+    DeckLayoutOut,
+    DeckLayoutSkippedOut,
+    DeckLayoutSpanOut,
+    DeckLayoutValueOut,
     DeckPreviewIn,
     DeckPreviewOut,
     DeckReadinessOut,
@@ -124,6 +128,7 @@ from app.shared.access import AccessBook, EditAccessOut, access_of
 from app.shared.auth import current_user, require_system_admin
 from app.shared.declared_card import (
     INHERITED_UNITS,
+    Inherited,
 )
 from app.shared.declared_card import constants as _constants
 from app.shared.declared_card import declared as _declared
@@ -149,7 +154,9 @@ from matcore import (
     runtime,
     statistics,
     units,
+    viscoelastic,
 )
+from matcore.export import layout as export_layout
 from matcore.export import scan, template
 from matcore.export.systems import UnitSystem
 from matcore.fitting import hyperelastic
@@ -1813,6 +1820,66 @@ def create_declared_card(
     return _save_card(db, user, item)
 
 
+#: DMA 시험의 변형 모드 조건(`tests/definitions.py` 의 dma_sweep).
+DEFORMATION_MODE = "deformation_mode"
+
+
+@dataclass(frozen=True)
+class _ModulusBasis:
+    """잰 탄성률이 E 인가 G 인가 — 카드에 담기 전에 곱할 배수와 카드에 남길 말."""
+
+    factor: float
+    note: str
+
+
+def _modulus_basis(runs: Sequence[TestRun], poisson: Inherited) -> _ModulusBasis:
+    """**카드는 E 로 담는다** — 덱이 카드의 E 와 같은 ν 로 G = E/2(1+ν) 를 만든다.
+
+    전단 모드로 잰 G′ 는 여기서 E = 2(1+ν)G 로 옮긴다. 안 옮기면 덱이 G′ 를 E 로 읽어
+    2(1+ν) 로 한 번 더 나눠, 고무가 약 3 배 무르게 나갔다(2026-09-30 가이드 대조).
+
+    모드가 안 적힌 시험은 지금까지처럼 E 로 보되 **그렇게 봤다고 적는다.** 전단과 다른
+    것이 섞이면 막는다 — E 와 G 의 평균은 어느 쪽도 아니다.
+    """
+    modes = sorted({str((run.conditions or {}).get(DEFORMATION_MODE) or "") for run in runs})
+    shear = {viscoelastic.measures_shear(mode or None) for mode in modes}
+    named = ", ".join(mode for mode in modes if mode) or "없음"
+    if True in shear and len(shear) > 1:
+        raise AppError(
+            "MNX-FITTING-0013",
+            f"변형 모드가 섞여 있습니다({named}, 안 적힌 것 포함). 전단으로 잰 G′ 와 "
+            f"인장 · 굽힘으로 잰 E′ 를 한 카드에 담을 수 없습니다 — 시험 조건의 "
+            f"「변형 모드」 를 확인하세요.",
+            status=422,
+        )
+    if shear == {True}:
+        if poisson.value is None:
+            raise AppError(
+                "MNX-FITTING-0045",
+                f"전단 모드({named})로 잰 G′ 를 카드의 E 로 옮기려면 푸아송비가 필요합니다 — "
+                f"재료에 적거나 카드를 만들 때 넣으세요.",
+                status=422,
+            )
+        try:
+            factor = viscoelastic.youngs_from_shear(poisson.value)
+        except viscoelastic.ViscoelasticError as exc:
+            raise AppError("MNX-FITTING-0045", str(exc), status=422) from exc
+        return _ModulusBasis(
+            factor,
+            f"전단 모드({named})로 잰 G′ 입니다 — E = 2(1+ν)G, ν = {poisson.value:g} 로 "
+            f"옮겨 담았습니다. 덱이 같은 ν 로 G 를 다시 만들므로 전단 탄성률은 잰 값 "
+            f"그대로 실립니다.",
+        )
+    if None in shear:
+        return _ModulusBasis(
+            1.0,
+            "변형 모드가 안 적힌 시험이 있어 인장 · 굽힘으로 잰 E′ 로 봤습니다 — 전단으로 "
+            "잰 G′ 였다면 이 카드는 2(1+ν) 배(고무면 약 3 배) 무릅니다. 시험 조건의 "
+            "「변형 모드」 를 적고 다시 만드세요.",
+        )
+    return _ModulusBasis(1.0, "")
+
+
 @dataclass(frozen=True)
 class _ViscoelasticSource:
     """점탄성 카드의 근거 — **시편 하나든 묶음이든 같은 모양으로.**
@@ -1823,6 +1890,8 @@ class _ViscoelasticSource:
     series: prony.PronySeries
     material: Material
     samples: list[Sample]
+    runs: list[TestRun]
+    """쓴 시험들. 변형 모드(E 인가 G 인가)를 여기서 읽는다."""
     test_type_id: uuid.UUID
     orientation: str
     reference_temperature_k: float
@@ -1863,6 +1932,7 @@ def _from_prony_fit(db: Session, user: User, fit_id: uuid.UUID) -> _Viscoelastic
         ),
         material=material,
         samples=[sample],
+        runs=[run],
         test_type_id=run.test_type_id,
         orientation=specimen.orientation,
         reference_temperature_k=curve.reference_temperature_k,
@@ -1953,6 +2023,7 @@ def _from_group(db: Session, user: User, group_id: uuid.UUID) -> _ViscoelasticSo
         ),
         material=material,
         samples=samples,
+        runs=runs,
         test_type_id=next(iter(types)),
         orientation=next(iter(orientations)),
         reference_temperature_k=float(row.values["reference_temperature_k"]),
@@ -2002,18 +2073,21 @@ def create_viscoelastic_card(
     else:
         assert payload.group_result_id is not None
         source = _from_group(db, user, payload.group_result_id)
-    series = source.series
+    poisson = _inherit_poisson(source.material, payload.poisson_ratio)
+    basis = _modulus_basis(source.runs, poisson)
+    # gᵢ · τᵢ 는 그대로고 탄성률만 옮긴다(ν 일정).
+    series = source.series.scaled(basis.factor)
     try:
         relative = series.relative_moduli
     except prony.PronyError as exc:
         raise AppError("MNX-FITTING-0012", str(exc), status=422) from exc
 
-    poisson = _inherit_poisson(source.material, payload.poisson_ratio)
     density = _inherit_density(source.material, source.samples, payload.density)
     notes = [
         # **표본 수가 덱까지 따라가야 한다.** 솔버 결과를 놓고 "이 물성 어디서
         # 났나" 를 묻는 자리에서 그 오해가 제일 비싸다.
         *source.notes,
+        basis.note,
         f"푸아송비: {poisson.detail}" if poisson.detail else "",
         f"밀도: {density.detail}" if density.detail else "",
     ]
@@ -2498,7 +2572,10 @@ def create_lve_card(
         for label, e, g in zip(labels, moduli, limits, strict=True)
         if e is None or g is None
     ]
-    modulus_values = [e for _, e, _ in kept]
+    material = group.material
+    poisson = _inherit_poisson(material, payload.poisson_ratio)
+    basis = _modulus_basis([member.run for member in group.members], poisson)
+    modulus_values = [e * basis.factor for _, e, _ in kept]
     limit_values = [g for _, _, g in kept]
     modulus = float(np.mean(modulus_values))
     limit = float(np.mean(limit_values))
@@ -2520,14 +2597,12 @@ def create_lve_card(
         if "temperature" in raw:
             temperatures.extend(float(v) for v in raw["temperature"] if v is not None)
 
-    material = group.material
     samples = list({one.specimen.sample_id: one for one in group.members}.values())
     sample_rows = [
         one
         for one in (db.get(Sample, m.specimen.sample_id) for m in samples)
         if one is not None
     ]
-    poisson = _inherit_poisson(material, payload.poisson_ratio)
     density = _inherit_density(material, sample_rows, payload.density)
     notes = [
         (
@@ -2535,6 +2610,7 @@ def create_lve_card(
             if len(kept) > 1
             else f"시편 {kept[0][0]} 한 건의 값입니다 — 평균이 아니라 그 시편의 값입니다."
         ),
+        basis.note,
         f"{', '.join(skipped)} 은 선형 구간을 못 내 뺐습니다." if skipped else "",
         f"푸아송비: {poisson.detail}" if poisson.detail else "",
         f"밀도: {density.detail}" if density.detail else "",
@@ -3778,6 +3854,124 @@ def _deck_known(moved: export.Deck) -> dict[str, float]:
             if isinstance(value, int | float) and not isinstance(value, bool):
                 known[f"{block}.{name}"] = float(value)
     return known
+
+
+#: 칸 배치 미리보기에 싣는 덱의 줄 수 — 속도별 · 온도별 표가 수천 줄이 될 수 있다.
+LAYOUT_LINES = 1500
+
+
+@router.get("/cards/{card_id}/export/layout", response_model=DeckLayoutOut)
+def card_deck_layout(
+    card_id: uuid.UUID,
+    format: str = Query(),
+    units: str = Query(default=unit_systems.DEFAULT),
+    with_card: uuid.UUID | None = Query(default=None),
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> DeckLayoutOut:
+    """덱을 **내려받기 전에** 보인다 — 어느 줄 몇째 칸에 카드의 어느 값이 가나(2026-10-04).
+
+    「내보내기」 가 누르자마자 파일을 받던 것을, 형식을 고르면 이 배치와 덱 미리보기가 서고
+    그 뒤에 받게 바꿨다. 고정폭 칸이 하나 밀리면 솔버는 다른 값을 **조용히** 읽는다 — 사람이
+    받기 전에 「탄성계수가 저 칸으로 가는구나」 를 볼 수 있어야 한다.
+
+    자리는 값을 하나씩 흔들어 다시 그려서 짚는다(`matcore.export.layout`) — 코드판이든
+    정의판이든 **실제로 내려받을 덱 그대로**다. 덱 · 그리기는 내려받기(`export_card`)와 한 벌.
+    """
+    deck = _deck_for_card(db, user, card_id, with_card)
+    system = _unit_system(db, units)
+    try:
+        target = renderers.renderer_for(db, format)
+        system = export.effective_system(target, system)
+        base = export.render(target, deck, system)
+        located = export_layout.locate(lambda one: export.render(target, one, system), deck)
+    except export.ExportError as exc:
+        return DeckLayoutOut(ok=False, format=format, units=system.key, error=str(exc))
+
+    lines = base.text.splitlines()
+    shown = lines[:LAYOUT_LINES]
+    moved = export.to_system(deck, system)
+
+    by_line: dict[int, list[tuple[int, int, str]]] = {}
+    for one in located.placed:
+        for span in one.spans:
+            by_line.setdefault(span.line, []).append(
+                (span.start, span.end, f"{one.block}.{one.key}")
+            )
+
+    def label_of(block: str, key: str, column: bool) -> tuple[str, str, str | None]:
+        rows = moved.rows(block)
+        return export_layout.describe(block, key, rows[0] if column and rows else None)
+
+    values: list[DeckLayoutValueOut] = []
+    for one in located.placed:
+        name = f"{one.block}.{one.key}"
+        block_label, label, si_unit = label_of(one.block, one.key, one.column)
+        unit: str | None = None
+        if si_unit:
+            try:
+                unit = system.symbol(si_unit)
+            except KeyError:
+                unit = si_unit
+        rows = moved.rows(one.block) if one.column else []
+        raw = (
+            next((row.get(one.key) for row in rows if row.get(one.key) is not None), None)
+            if one.column
+            else moved.values(one.block).get(one.key)
+        )
+        values.append(
+            DeckLayoutValueOut(
+                name=name,
+                block=one.block,
+                key=one.key,
+                block_label=block_label,
+                label=label,
+                column=one.column,
+                unit=unit,
+                value=float(raw) if isinstance(raw, int | float) else None,
+                rows=len(rows),
+                spans=[
+                    DeckLayoutSpanOut(
+                        line=span.line,
+                        start=span.start,
+                        end=span.end,
+                        shared_with=sorted(
+                            {
+                                other
+                                for start, end, other in by_line.get(span.line, [])
+                                if other != name and start < span.end and span.start < end
+                            }
+                        ),
+                    )
+                    for span in one.spans
+                    if span.line < LAYOUT_LINES
+                ],
+            )
+        )
+
+    def skipped(block: str, key: str, column: bool, reason: str | None = None) -> Any:
+        block_label, label, _ = label_of(block, key, column)
+        return DeckLayoutSkippedOut(
+            name=f"{block}.{key}",
+            block_label=block_label,
+            label=label,
+            column=column,
+            reason=reason,
+        )
+
+    return DeckLayoutOut(
+        ok=True,
+        format=format,
+        units=system.key,
+        filename=f"{deck.name}{target.suffix}_{system.key}.{target.extension}",
+        text="\n".join(shown),
+        line_count=len(lines),
+        truncated=len(lines) > LAYOUT_LINES,
+        values=values,
+        unused=[skipped(*one) for one in located.unused],
+        failed=[skipped(*one) for one in located.failed],
+        notes=list(base.notes),
+    )
 
 
 @router.post("/cards/{card_id}/export/check", response_model=DeckCheckOut)

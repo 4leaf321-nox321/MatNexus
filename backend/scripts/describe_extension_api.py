@@ -125,6 +125,7 @@ def build() -> str:
         "- `StepResult(frame, scalars, notes)`: 곡선을 바꾸지 않아도 된다. **값을 못 내면 실패하지 않고 `notes` 에 이유를 남긴다** — 뒤 단계가 그 값을 가리키면 그 이유가 오류 문구에 실린다.",
         '- 앞 단계가 낸 스칼라는 옵션에 `"@키"` 로 받는다(`{"proof_stress": "@proof_stress"}`). 레시피는 JSON 으로 저장되므로 참조가 보인다.',
         "- `Scalar(key, label, value, si_unit, dimension=None)`. `Produced.property_key` 를 적으면 문헌 물성 키에 이어진다(값으로 찾기가 잰 값을 찾는다).",
+        f"- **`Scalar.key` 는 {processing.SCALAR_KEY_MAX}자 안이다.** 채택하면 요약값 표로 가는데 그 칸 폭이다. 넘으면 그 단계가 실패한다 — 저장한 뒤 채택에서 막히면 그 결과는 불변이라 영영 채택이 안 된다(이슈 #2).",
         "",
         "### 내장·확장 단계가 만드는 것 (이 이름으로 뒤 단계가 받는다)",
         "",

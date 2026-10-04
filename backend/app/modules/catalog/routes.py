@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Sequence
-from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
@@ -109,6 +108,8 @@ from app.shared.auth import current_user, require_system_admin
 from app.shared.errors import AppError, NotFound
 from app.shared.pagination import clamp_limit
 from app.shared.permissions import require_edit, visible_material_ids, visible_materials
+from app.shared.property_search import ValueRange
+from app.shared.property_search import value_range as _value_range
 from app.shared.text import clean, compare_key
 from matcore import export, registry, units
 from matcore.export.systems import UnitSystem
@@ -350,105 +351,6 @@ def _value_in_units(
             for key, number in summary.items()
         }
     return said
-
-
-@dataclass(frozen=True)
-class ValueRange:
-    """목록을 **값의 범위**로 거른다 — 「항복강도 200~300 MPa 인 재료」(2026-10-03).
-
-    `low`·`high` 는 저장된 값과 같은 눈금이다(대개 SI). `unit` 은 물은 단위라 걸린 값을 그
-    단위로 되돌려 보여 준다. `raw` 면 환산표가 모르는 눈금(HV·ShoreA)이라 그대로 견준다.
-    """
-
-    key: str
-    low: float
-    high: float
-    unit: str
-    raw: bool
-
-    def clauses(self) -> list[ColumnElement[bool]]:
-        return [
-            CatalogValue.property_key == self.key,
-            CatalogValue.value_num.is_not(None),
-            CatalogValue.value_num >= self.low,
-            CatalogValue.value_num <= self.high,
-            # 변수 달린 값(Prony 의 E0 …)은 그 물성의 스칼라가 아니다 — 값 검색과 같은 규칙
-            # (`property_search.catalog_hits`). 섞으면 범위에 엉뚱한 식의 상수가 걸린다.
-            or_(
-                CatalogValue.conditions.is_(None),
-                ~CatalogValue.conditions.has_key(parameters.TERM),
-            ),
-        ]
-
-    def shown(self, value: float) -> float:
-        return value if self.raw else units.from_si(value, self.unit)
-
-
-def _value_range(
-    db: Session,
-    key: str | None,
-    unit: str | None,
-    minimum: float | None,
-    maximum: float | None,
-) -> ValueRange | None:
-    """값 범위 인자를 푼다. **단위가 없거나 안 맞으면 거절한다** — 짐작하면 조용히 틀린다.
-
-    값은 SI 로 저장돼 있어 200 MPa 는 `200,000,000` 이다. 단위 없이 「200」 을 그대로 걸면
-    8 Pa 짜리가 나온다(`shared/property_search` 머리말 — 같은 이유, 같은 환산).
-    """
-    if key is None:
-        if unit or minimum is not None or maximum is not None:
-            raise AppError(
-                "MNX-CATALOG-0067",
-                "값 범위는 물성(`value_key`)과 함께 주세요 — 어느 물성의 값인지 모르면 "
-                "못 겁니다.",
-                status=422,
-            )
-        return None
-    definition = db.scalar(select(CatalogDefinition).where(CatalogDefinition.key == key))
-    if definition is None:
-        raise NotFound("MNX-CATALOG-0066", f"없는 물성입니다: {key}")
-    if not unit:
-        raise AppError(
-            "MNX-CATALOG-0067",
-            f"값의 단위(`value_unit`)를 주세요 — 이 물성은 '{definition.si_unit}' 로 저장돼 "
-            "있습니다.",
-            status=422,
-        )
-    if parameters.is_parameterized(db, key):
-        raise AppError(
-            "MNX-CATALOG-0068",
-            f"'{definition.name}' 은 변수 여러 개를 담고 있어 목록에서 범위로 거를 수 "
-            "없습니다 — 값 검색에서 변수(`term`)를 정해 찾으세요.",
-            status=422,
-        )
-    si_unit = definition.si_unit or ""
-    known = units.canonical(si_unit) is not None
-    raw = not known and property_search.same_symbol(unit, si_unit)
-    if not known and not raw:
-        # 환산표가 모르는 눈금에 다른 단위로 물으면 차원 검사도 못 한다 — 그대로 환산하면
-        # 「HV 200」 을 200 MPa 로 바꿔 견주는 꼴이 된다.
-        raise AppError(
-            "MNX-CATALOG-0069",
-            f"'{definition.name}' 의 단위 '{si_unit}' 는 환산표에 없어 그 단위로만 거를 수 "
-            "있습니다.",
-            status=422,
-        )
-    low, high = property_search.bounds(
-        unit=unit,
-        si_unit=si_unit,
-        minimum=minimum,
-        maximum=maximum,
-        near=None,
-        convert=not raw,
-    )
-    return ValueRange(
-        key=key,
-        low=low,
-        high=high,
-        unit=unit if raw else (units.canonical(unit) or unit),
-        raw=raw,
-    )
 
 
 def _catalog_filters(

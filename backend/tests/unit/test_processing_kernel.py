@@ -14,14 +14,14 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import ClassVar
+from typing import Any, ClassVar
 
 import numpy as np
 import pytest
 
-from matcore import parsers, processing
+from matcore import parsers, processing, registry
 from matcore.parsers import zwick_tra
-from matcore.processing import Frame, ProcessingError, Step
+from matcore.processing import Frame, ProcessingError, Scalar, Step, StepResult
 
 TRA = Path(__file__).resolve().parents[1] / "fixtures" / "Example.tra"
 
@@ -603,6 +603,28 @@ class Test탄성계수:
             )
 
 
+class Test값_이름_폭:
+    """값의 이름은 요약값 표의 칸에 들어가야 한다 — `SCALAR_KEY_MAX`."""
+
+    def test_요약값_칸을_넘는_이름의_값은_단계에서_막는다(self) -> None:
+        """저장 · 미리보기를 다 지나 채택에서 500 이던 것(이슈 #2) — 값을 낸 자리에서."""
+        plugin_id = "test.long_scalar_key"
+        long_key = "k" * (processing.SCALAR_KEY_MAX + 1)
+
+        def step(frame: Frame, options: dict[str, Any]) -> StepResult:
+            return StepResult(frame, scalars=(Scalar(long_key, "긴 이름", 1.0, "1"),))
+
+        registry.register(id=plugin_id, kind="processing", label="긴 이름")(step)
+        try:
+            with pytest.raises(
+                ProcessingError, match=f"{processing.SCALAR_KEY_MAX}자를"
+            ) as caught:
+                processing.apply([Step(plugin_id)], synthetic())
+            assert long_key in str(caught.value)
+        finally:
+            registry._REGISTRY.pop(plugin_id, None)
+
+
 class Test항복강도:
     def test_0_2퍼센트_오프셋이_아는_답을_준다(self) -> None:
         result = processing.apply(
@@ -654,6 +676,31 @@ class Test항복강도:
         with pytest.raises(ProcessingError, match="외삽해서 값을 만들지 않습니다"):
             processing.apply(
                 [Step("tensile.proof_stress", {"youngs_modulus": E_TRUE})], elastic_only
+            )
+
+    def test_응력_0_이하에서_만나면_항복이라고_하지_않는다(self) -> None:
+        """실측(이슈 #2, M06DPMMA): 시작부 음수 하중에서 오프셋 선과 처음 만나
+        Rp = -0.25 MPa 가 항복강도로 나갔다.
+
+        하중이 안 실린 채 변형률만 0.2% 를 넘긴 것은 처짐(토우)이지 소성이 아니다.
+        **다음 교점을 집지도 않는다** — 토우만큼 밀린 채 만나는 점이라 그럴듯한
+        숫자가 조용히 나온다.
+        """
+        modulus = 3e9  # PMMA 규모 — 오프셋 선이 원점에서 -6 MPa 라 음수 하중이 걸린다
+        slack = np.linspace(0.0, 0.0025, 30)
+        elastic = np.linspace(0.0026, 0.02, 60)
+        frame = Frame(
+            {
+                "strain_engineering": np.concatenate([slack, elastic]),
+                "stress_engineering": np.concatenate(
+                    [np.full_like(slack, -0.5e6), modulus * (elastic - 0.0025) - 0.5e6]
+                ),
+            },
+            {"strain_engineering": "1", "stress_engineering": "Pa"},
+        )
+        with pytest.raises(ProcessingError, match="0 이하의 항복강도는 내지 않습니다"):
+            processing.apply(
+                [Step("tensile.proof_stress", {"youngs_modulus": modulus})], frame
             )
 
 

@@ -103,6 +103,19 @@ class Frame:
         return len(next(iter(self.columns.values()))) if self.columns else 0
 
 
+SCALAR_KEY_MAX = 50
+"""스칼라 키의 최대 길이.
+
+채택하면 값이 요약값 표(`TestSummary.key`)로 투영되는데 그 칸이 이 폭이다. 이
+패키지는 DB 를 모르므로 숫자만 여기 두고, 둘이 같은지는 `tests/architecture` 가 본다.
+
+## 왜 (이슈 #2, 2026-09-27)
+
+확장이 낸 51자짜리 진단 키가 미리보기 · 저장을 다 지나 **채택에서 500** 이 났다. 결과는
+불변이라 그 뒤로 그 결과는 영영 채택이 안 된다. 그래서 저장되기 전, 단계가 값을 낸
+자리에서 막는다."""
+
+
 @dataclass(frozen=True)
 class Scalar:
     """단계가 낸 값 하나 — 탄성계수·항복강도처럼 곡선이 아닌 결과.
@@ -211,6 +224,14 @@ def apply(steps: list[Step], frame: Frame, *, given: Sequence[Scalar] = ()) -> P
             raise ProcessingError(
                 f"{index + 1}단계 '{plugin.label}': {exc}", done=PipelineResult(tuple(stages))
             ) from exc
+        too_long = [s.key for s in result.scalars if len(s.key) > SCALAR_KEY_MAX]
+        if too_long:
+            raise ProcessingError(
+                f"{index + 1}단계 '{plugin.label}' 가 낸 값의 이름이 {SCALAR_KEY_MAX}자를 "
+                f"넘습니다: {', '.join(too_long)}. 저장해도 채택할 수 없으므로 여기서 "
+                f"멈춥니다 — 그 계산을 만든 사람에게 이름을 줄여 달라고 하세요.",
+                done=PipelineResult(tuple(stages)),
+            )
         stages.append(
             Stage(
                 index=index,

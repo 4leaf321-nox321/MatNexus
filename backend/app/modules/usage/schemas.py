@@ -177,6 +177,22 @@ class UsagePersonOut(BaseModel):
     views: int
 
 
+class UsageWorkspaceOut(BaseModel):
+    """부서 하나의 몫(2026-10-04). **사람의 지금 대표 부서로** 묶는다 — 쓸 때의 소속은 집계에
+    안 남는다(표가 사람 · 라우트만 센다). 옮긴 사람의 지난 사용은 새 부서로 간다."""
+
+    workspace: str
+    """부서 이름. 대표 부서가 없거나 지운 계정이면 `소속 없음`."""
+    people: int
+    """그 기간에 한 번이라도 쓴 사람."""
+    person_days: int
+    """사람마다 쓴 날을 더한 것 — 「몇 명이 며칠씩」 을 한 숫자로."""
+    web_requests: int
+    writes: int
+    mcp_calls: int
+    views: int
+
+
 class UsageSummaryOut(BaseModel):
     period: PeriodOut
     measured_since: date | None
@@ -189,3 +205,5 @@ class UsageSummaryOut(BaseModel):
     views: ViewsOut
     content: list[ContentOut]
     people: list[UsagePersonOut]
+    workspaces: list[UsageWorkspaceOut] = []
+    """부서별 — 쓴 사람이 많은 부서부터."""

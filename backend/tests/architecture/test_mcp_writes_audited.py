@@ -59,6 +59,7 @@ READS: dict[tuple[str, str], str] = {
     ("POST", "/fitting/export-profiles/scan"): "덱을 읽어 형식을 알아보기만 한다",
     ("POST", "/fitting/export-profiles/preview"): "정의를 카드에 그려 보기만 한다",
     ("POST", "/fitting/cards/{}/export/check"): "내보낼 덱을 검사만 한다",
+    ("POST", "/specimens/relocate-plan"): "옮기면 무엇이 어디로 가는지 보기만 한다",
 }
 
 _PARAM = re.compile(r"\{[^}]*\}")

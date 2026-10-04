@@ -1,35 +1,30 @@
 /**
- * 내보내기 메뉴 — **덱을 실제로 어떻게 뽑는가.**
+ * 내보내기 창 — **고르고, 보고, 받는다.**
  *
- * 단위계를 고르게 만들어 놓고 이 화면은 시험이 없었다. 백엔드는 두 계로 덱을
- * 내는 것을 실측까지 했는데, **사람이 그 계를 고를 수 있는지는 아무도 안 봤다.**
- * 스모크(playwright)에도 CAE 카드 경로가 없다.
+ * 전에는 메뉴에서 형식을 누르자마자 받았다(2026-10-04 바꿈). 이 파일이 보는 것:
  *
- * 이 파일이 보는 것 셋:
- *
- *   1. 고른 계가 **요청과 파일 이름에** 실리는가
+ *   1. 고른 계가 **배치 요청 · 내려받기 · 파일 이름에** 실리는가
  *   2. 목록을 **서버에서 받는가** — 화면이 적어 두면 계가 늘 때 뒤처진다
- *   3. 낼 수 없는 형식을 **미리** 막는가
+ *   3. 낼 수 없는 형식을 **미리** 막고 까닭을 말하는가
+ *   4. 형식을 고르면 칸 배치와 덱 미리보기가 서고, 그 자리를 칠하는가
  *
  * ## 여기서 못 보는 것
  *
- * 「계를 고를 때 메뉴가 안 닫히는가」 를 여기 적었다가 지웠다. jsdom 에서는
- * **실패할 수가 없어서** — 사보타주를 걸어도 통과했다. 못 물리는 시험은 없느니만
- * 못하다: 초록을 보고 확인했다고 믿게 된다.
- *
- * 그 성질은 진짜 브라우저가 봐야 한다. `e2e/smoke.spec.ts` 로 옮겼다.
+ * 「계를 고를 때 창이 안 닫히는가」 · 실제로 파일이 받아지는가는 진짜 브라우저가 본다
+ * (`e2e/smoke.spec.ts`). jsdom 에서는 실패할 수가 없는 시험은 두지 않는다.
  */
 
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ExportMenu } from '@/modules/fitting/ExportMenu'
-import type { ExportFormat, PropertyCard } from '@/modules/fitting/api'
+import type { DeckLayout, ExportFormat, PropertyCard } from '@/modules/fitting/api'
 
 const download = vi.fn((..._args: unknown[]) => Promise.resolve())
 const unitSystems = vi.fn()
 const pairedFormats = vi.fn()
+const layout = vi.fn()
 
 vi.mock('@/modules/fitting/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/modules/fitting/api')>()),
@@ -37,6 +32,7 @@ vi.mock('@/modules/fitting/api', async (importOriginal) => ({
     download: (...args: unknown[]) => download(...args),
     unitSystems: () => unitSystems(),
     pairedFormats: (...args: unknown[]) => pairedFormats(...args),
+    layout: (...args: unknown[]) => layout(...args),
   },
 }))
 
@@ -75,35 +71,107 @@ const CARD = {
   available_formats: ['abaqus'],
 } as unknown as PropertyCard
 
+//: 덱 두 줄 — 7번째 칸부터 E, 그 뒤에 ν. 둘째 줄의 G 는 E 와 ν 에서 셈한다.
+const LAYOUT: DeckLayout = {
+  ok: true,
+  format: 'abaqus',
+  units: 'si',
+  filename: 'SECC_MD_si.inp',
+  text: '*ELASTIC\n205000, 0.3\n** G 78846',
+  line_count: 3,
+  truncated: false,
+  values: [
+    {
+      name: 'elastic.youngs_modulus',
+      block: 'elastic',
+      key: 'youngs_modulus',
+      block_label: '탄성',
+      label: '탄성계수',
+      column: false,
+      unit: 'MPa',
+      value: 205000,
+      rows: 0,
+      spans: [
+        { line: 1, start: 0, end: 6, shared_with: [] },
+        { line: 2, start: 5, end: 10, shared_with: ['elastic.poisson_ratio'] },
+      ],
+    },
+    {
+      name: 'elastic.poisson_ratio',
+      block: 'elastic',
+      key: 'poisson_ratio',
+      block_label: '탄성',
+      label: '푸아송비',
+      column: false,
+      unit: null,
+      value: 0.3,
+      rows: 0,
+      spans: [
+        { line: 1, start: 8, end: 11, shared_with: [] },
+        { line: 2, start: 5, end: 10, shared_with: ['elastic.youngs_modulus'] },
+      ],
+    },
+  ],
+  unused: [
+    { name: 'thermal.specific_heat', block_label: '열물성', label: '비열', column: false },
+  ],
+  failed: [],
+  notes: ['밀도가 카드에 없어 *DENSITY 를 뺐습니다.'],
+  error: null,
+}
+
 beforeEach(() => {
   download.mockClear()
+  layout.mockReset()
+  layout.mockResolvedValue(LAYOUT)
   unitSystems.mockReset()
   unitSystems.mockResolvedValue(SYSTEMS)
 })
 
-async function open() {
-  render(<ExportMenu card={CARD} formats={FORMATS} onError={() => {}} />)
+async function open(card: PropertyCard = CARD, formats: ExportFormat[] = FORMATS) {
+  render(<ExportMenu card={card} formats={formats} onError={() => {}} />)
   await userEvent.click(screen.getByRole('button', { name: /내보내기/ }))
-  return screen.findByText('덱의 단위계')
+  const dialog = await screen.findByRole('dialog')
+  // 계 목록이 **서버에서 와서 그려진 뒤**를 기다린다 — 틀만 선 화면을 보지 않는다.
+  await within(dialog).findByRole('button', { name: /SI \(kg/ })
+  return dialog
+}
+
+/** 형식을 고르고, 배치가 그려진 뒤 「내려받기」 를 누른다. */
+async function pickAndDownload(name: RegExp) {
+  await userEvent.click(screen.getByRole('button', { name }))
+  const button = await screen.findByRole('button', { name: /내려받기/ })
+  await waitFor(() => expect(button).toBeEnabled())
+  await userEvent.click(button)
+  await waitFor(() => expect(download).toHaveBeenCalled())
 }
 
 describe('단위계를 고른다', () => {
-  it('안 고르면 서버가 기본이라 한 것으로 낸다', async () => {
+  it('안 고르면 서버가 기본이라 한 것으로 보이고 낸다', async () => {
     // **화면이 `si` 를 적어 두지 않는다.** 기본이 무엇인지는 서버가 안다.
     await open()
-    await userEvent.click(screen.getByRole('menuitem', { name: /Abaqus/ }))
-    await waitFor(() => expect(download).toHaveBeenCalled())
+    await pickAndDownload(/Abaqus/)
+    expect(layout.mock.calls[0][2]).toMatchObject({ key: 'si' })
     const [, , , picked] = download.mock.calls[0] as unknown as unknown[]
     expect(picked).toMatchObject({ key: 'si' })
   })
 
-  it('고른 계가 실린다', async () => {
+  it('고른 계가 배치와 내려받기에 함께 실린다', async () => {
     await open()
     await userEvent.click(screen.getByRole('button', { name: /mm · N · tonne/ }))
-    await userEvent.click(screen.getByRole('menuitem', { name: /Abaqus/ }))
-    await waitFor(() => expect(download).toHaveBeenCalled())
+    await pickAndDownload(/Abaqus/)
+    expect(layout.mock.calls.at(-1)?.[2]).toMatchObject({ key: 'mm_n_tonne' })
     const [, , , picked] = download.mock.calls[0] as unknown as unknown[]
     expect(picked).toMatchObject({ key: 'mm_n_tonne' })
+  })
+
+  it('계를 바꾸면 그 계로 배치를 다시 묻는다', async () => {
+    // 앞 계의 배치가 남아 있으면 「이 칸에 이 값」 이 다른 덱을 가리킨다.
+    await open()
+    await userEvent.click(screen.getByRole('button', { name: /Abaqus/ }))
+    await screen.findByRole('table', { name: '칸 배치' })
+    await userEvent.click(screen.getByRole('button', { name: /mm · N · tonne/ }))
+    await waitFor(() => expect(layout.mock.calls.at(-1)?.[2]).toMatchObject({ key: 'mm_n_tonne' }))
   })
 
   it('덱에 적힐 줄을 그대로 보인다', async () => {
@@ -115,8 +183,6 @@ describe('단위계를 고른다', () => {
   })
 
   it('목록을 서버에서 받는다', async () => {
-    // 화면이 적어 두면 계가 늘 때 뒤처지고, 그때 사람은 그 계로 못 낸다는 것을
-    // **목록에 없다는 사실로만** 안다 — 오류가 아니라 부재라서 원인을 못 찾는다.
     await open()
     expect(unitSystems).toHaveBeenCalled()
     for (const system of SYSTEMS) {
@@ -125,15 +191,68 @@ describe('단위계를 고른다', () => {
   })
 })
 
+describe('칸 배치와 미리보기', () => {
+  it('값마다 덱에 적히는 값 · 자리 · 함께 셈한 칸이 서고, 덱을 그대로 보인다', async () => {
+    await open()
+    // 고르기 전에는 묻지 않는다 — 형식마다 덱을 그려야 하는 일이다.
+    expect(layout).not.toHaveBeenCalled()
+    await userEvent.click(screen.getByRole('button', { name: /Abaqus/ }))
+
+    const table = await screen.findByRole('table', { name: '칸 배치' })
+    const row = within(table).getByRole('row', { name: /^탄성 · 탄성계수/ })
+    expect(row).toHaveTextContent('205000 MPa')
+    // 줄 · 칸은 1 부터 — 덱을 연 편집기의 줄 번호와 같게.
+    expect(row).toHaveTextContent('2줄 1–6칸 외 1곳')
+    expect(row).toHaveTextContent('함께 셈한 칸: 푸아송비')
+    expect(screen.getByText(/이 형식이 안 쓰는 값: 열물성 · 비열/)).toBeInTheDocument()
+    expect(screen.getByText('밀도가 카드에 없어 *DENSITY 를 뺐습니다.')).toBeInTheDocument()
+    expect(screen.getByText('SECC_MD_si.inp')).toBeInTheDocument()
+
+    const deck = screen.getByLabelText('덱 본문')
+    expect(deck).toHaveTextContent('*ELASTIC')
+    const marked = deck.querySelectorAll('mark')
+    expect([...marked].map((one) => one.textContent)).toEqual(['205000', '0.3', '78846'])
+    // 여럿에서 셈한 칸은 그 값들을 함께 말한다.
+    expect(marked[2]).toHaveAttribute('title', '탄성 · 탄성계수 · 탄성 · 푸아송비')
+  })
+
+  it('줄을 누르면 그 값의 자리를 짙게 칠한다', async () => {
+    await open()
+    await userEvent.click(screen.getByRole('button', { name: /Abaqus/ }))
+    const table = await screen.findByRole('table', { name: '칸 배치' })
+    await userEvent.click(within(table).getByRole('row', { name: /^탄성 · 푸아송비/ }))
+
+    const marks = [...screen.getByLabelText('덱 본문').querySelectorAll('mark')]
+    const strong = marks.filter((one) => one.className.includes('ring-1'))
+    expect(strong.map((one) => one.textContent)).toEqual(['0.3', '78846'])
+  })
+
+  it('서버가 못 낸다고 하면 까닭을 말하고 내려받기를 잠근다', async () => {
+    layout.mockResolvedValue({
+      ok: false,
+      format: 'abaqus',
+      units: 'si',
+      error: 'Abaqus 덱에 푸아송비 가 필요한데 카드에 없습니다.',
+    })
+    await open()
+    await userEvent.click(screen.getByRole('button', { name: /Abaqus/ }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('푸아송비 가 필요한데')
+    expect(screen.getByRole('button', { name: /내려받기/ })).toBeDisabled()
+  })
+})
+
 describe('낼 수 없는 형식', () => {
-  it('접혀 있다가 펼치면 이유를 말하고 못 누르게 한다', async () => {
-    // 내려받기를 누른 뒤에 "밀도가 없습니다" 를 보는 것은 늦다. 형식이 서른 개 가까이라
-    // 못 내는 것은 접어 두지만, **없애지 않는다** — 왜 못 내는지가 그 자리에 있다.
+  it('접혀 있다가 펼치면 이유를 말하고, 골라도 받지 않는다', async () => {
+    // 내려받기를 누른 뒤에 "밀도가 없습니다" 를 보는 것은 늦다. **없애지 않는다** — 왜 못
+    // 내는지가 그 자리에 있다.
     await open()
     expect(screen.queryByText('OpenRadioss')).not.toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: /못 내는 형식 1개/ }))
     expect(screen.getByText(/밀도 가 있어야 냅니다/)).toBeInTheDocument()
-    await userEvent.click(screen.getByText('OpenRadioss'))
+    await userEvent.click(screen.getByRole('button', { name: /OpenRadioss/ }))
+    expect(screen.getByRole('alert')).toHaveTextContent('이 카드로는 못 냅니다')
+    expect(screen.queryByRole('button', { name: /내려받기/ })).not.toBeInTheDocument()
+    expect(layout).not.toHaveBeenCalled()
     expect(download).not.toHaveBeenCalled()
   })
 })
@@ -149,18 +268,17 @@ describe('솔버로 묶는다', () => {
       ...CARD,
       available_formats: models.map((one) => one.key),
     } as unknown as PropertyCard
-    render(<ExportMenu card={card} formats={models} onError={() => {}} />)
-    await userEvent.click(screen.getByRole('button', { name: /내보내기/ }))
-    expect(await screen.findAllByText('ANSYS')).toHaveLength(1)
-    expect(screen.getByText('LS-DYNA')).toBeInTheDocument()
-    await userEvent.click(screen.getByText('ANSYS (탄소성)'))
-    await waitFor(() => expect(download).toHaveBeenCalled())
+    await open(card, models)
+    const nav = screen.getByRole('navigation', { name: '형식' })
+    expect(within(nav).getAllByText('ANSYS')).toHaveLength(1)
+    expect(within(nav).getByText('LS-DYNA')).toBeInTheDocument()
+    await pickAndDownload(/ANSYS \(탄소성\)/)
     expect(download.mock.calls[0][1]).toMatchObject({ key: 'ansys_plastic' })
   })
 })
 
 describe('짝 카드와 합쳐 낸다', () => {
-  it('짝을 고르면 새로 낼 수 있는 형식이 서고, 그 짝을 실어 내려받는다', async () => {
+  it('짝을 고르면 새로 낼 수 있는 형식이 서고, 그 짝을 실어 보고 받는다', async () => {
     // 이방성(r값) 카드는 혼자서는 Hill 형식을 못 낸다 — 경화 곡선·탄성이 MD 카드에 있다.
     const hill = [
       { key: 'dyna_hill', label: 'LS-DYNA (이방성 Hill48 · 쉘)', extension: 'k', describe: '036', requires: ['탄성계수'] },
@@ -188,7 +306,14 @@ describe('짝 카드와 합쳐 낸다', () => {
     expect(screen.queryByRole('button', { name: /다른 재료/ })).not.toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: /인장 MD · MD/ }))
     expect(pairedFormats).toHaveBeenCalledWith('a1', 'c-md')
-    await userEvent.click(await screen.findByRole('menuitem', { name: /LS-DYNA \(이방성/ }))
+
+    const nav = screen.getByRole('navigation', { name: '형식' })
+    await userEvent.click(await within(nav).findByRole('button', { name: /LS-DYNA \(이방성/ }))
+    await waitFor(() => expect(layout).toHaveBeenCalled())
+    expect(layout.mock.calls[0][3]).toBe('c-md')
+    const button = await screen.findByRole('button', { name: /내려받기/ })
+    await waitFor(() => expect(button).toBeEnabled())
+    await userEvent.click(button)
     await waitFor(() => expect(download).toHaveBeenCalled())
     const call = download.mock.calls[0] as unknown as unknown[]
     expect(call[4]).toBe('c-md')
@@ -211,13 +336,11 @@ describe('단위가 정해진 형식', () => {
       ...FORMATS,
     ] as ExportFormat[]
     const card = { ...CARD, available_formats: ['aedt', 'abaqus'] } as unknown as PropertyCard
-    render(<ExportMenu card={card} formats={formats} onError={() => {}} />)
-    await userEvent.click(screen.getByRole('button', { name: /내보내기/ }))
-    await screen.findByText('덱의 단위계')
+    await open(card, formats)
 
-    const aedt = screen.getByRole('menuitem', { name: /Ansys Electronics Desktop/ })
+    const aedt = screen.getByRole('button', { name: /Ansys Electronics Desktop/ })
     expect(aedt).toHaveTextContent('고른 계와 상관없이 SI로 나갑니다')
-    const abaqus = screen.getByRole('menuitem', { name: /Abaqus/ })
+    const abaqus = screen.getByRole('button', { name: /Abaqus/ })
     expect(abaqus).not.toHaveTextContent('고른 계와 상관없이')
   })
 })

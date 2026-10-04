@@ -74,6 +74,20 @@ class PronySeries:
         """ω→∞ 에서의 탄성률. 유리 상태의 값이다."""
         return self.equilibrium_pa + sum(term.modulus_pa for term in self.terms)
 
+    def scaled(self, factor: float) -> PronySeries:
+        """탄성률만 `factor` 배 한 같은 계수. 완화시간과 `gᵢ` 는 그대로다 — 전단으로
+        잰 계수를 E 로 옮길 때(ν 일정) 쓴다."""
+        return PronySeries(
+            equilibrium_pa=self.equilibrium_pa * factor,
+            terms=tuple(
+                PronyTerm(term.modulus_pa * factor, term.relaxation_time_s)
+                for term in self.terms
+            ),
+            normalized_rmse=self.normalized_rmse,
+            bic=self.bic,
+            at_bound=self.at_bound,
+        )
+
     @property
     def relative_moduli(self) -> tuple[float, ...]:
         """`gᵢ = Eᵢ / E₀`. **Abaqus `*VISCOELASTIC` 이 이 형태를 먹는다.**

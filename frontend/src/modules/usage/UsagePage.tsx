@@ -86,12 +86,28 @@ export default function UsagePage() {
       />
 
       <ErrorNotice error={summary.error} className="mb-4" />
-      {data ? <Summary data={data} /> : null}
+      {data ? <Summary data={data} days={days} /> : null}
     </div>
   )
 }
 
-function Summary({ data }: { data: UsageSummary }) {
+function Summary({ data, days }: { data: UsageSummary; days: number }) {
+  const [downloading, setDownloading] = useState(false)
+  const [downloadError, setDownloadError] = useState<Error | null>(null)
+
+  async function download() {
+    setDownloading(true)
+    setDownloadError(null)
+    try {
+      await usageApi.downloadPeople(days)
+    } catch (caught) {
+      // **받기가 실패하면 그렇다고 말한다** — 단추만 눌리고 아무 일도 없으면 받은 줄 안다.
+      setDownloadError(caught instanceof Error ? caught : new Error('내려받지 못했습니다.'))
+    } finally {
+      setDownloading(false)
+    }
+  }
+
   const { activity, mcp, requests, users, views } = data
   // **집계가 쌓이기 전 날짜는 0 으로 보인다.** 안 쓴 것이 아니라 안 센 것이다 — 그렇다고 말한다.
   const partial = data.measured_since === null || data.measured_since > data.period.start
@@ -242,7 +258,53 @@ function Summary({ data }: { data: UsageSummary }) {
         </Table>
       </Block>
 
-      <Block title="사람별 활동" empty={data.people.length === 0} emptyText="기간 안에 쓴 사람이 없습니다.">
+      {/* **부서별**(2026-10-04) — 사람의 지금 대표 부서로 묶는다. 쓸 때의 소속은 집계에 안
+          남아, 부서를 옮긴 사람의 지난 사용은 새 부서로 간다. */}
+      <Block
+        title="부서별"
+        empty={data.workspaces.length === 0}
+        emptyText="기간 안에 쓴 사람이 없습니다."
+      >
+        <Table aria-label="부서별">
+          <TableHeader>
+            <TableRow>
+              <TableHead>부서</TableHead>
+              <TableHead className="text-right">쓴 사람</TableHead>
+              <TableHead className="text-right">사람 · 날</TableHead>
+              <TableHead className="text-right">화면 요청</TableHead>
+              <TableHead className="text-right">쓰기</TableHead>
+              <TableHead className="text-right">MCP 호출</TableHead>
+              <TableHead className="text-right">상세 조회</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {data.workspaces.map((one) => (
+              <TableRow key={one.workspace}>
+                <TableCell>{one.workspace}</TableCell>
+                <TableCell className="text-right">{n(one.people)}</TableCell>
+                <TableCell className="text-right">{n(one.person_days)}</TableCell>
+                <TableCell className="text-right">{n(one.web_requests)}</TableCell>
+                <TableCell className="text-right">{n(one.writes)}</TableCell>
+                <TableCell className="text-right">{n(one.mcp_calls)}</TableCell>
+                <TableCell className="text-right">{n(one.views)}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </Block>
+
+      <Block
+        title="사람별 활동"
+        empty={data.people.length === 0}
+        emptyText="기간 안에 쓴 사람이 없습니다."
+        actions={
+          <Button size="sm" variant="outline" disabled={downloading} onClick={download}>
+            {/* 화면은 앞 30명만 — 전부는 파일로. */}
+            사람별 전부 CSV
+          </Button>
+        }
+      >
+        <ErrorNotice error={downloadError} className="m-3" />
         <Table aria-label="사람별 활동">
           <TableHeader>
             <TableRow>

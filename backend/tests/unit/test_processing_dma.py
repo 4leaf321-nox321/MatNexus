@@ -161,6 +161,74 @@ class TestGlassTransition:
         assert "떨어지는 지점이 없습니다" in str(caught.value)
 
 
+def _log_sweep(corner: float = 300.0) -> Frame:
+    """log E′ 가 꺾인 직선 셋 — **답을 안다.** 유리 영역 기울기 -0.002/K, `corner` 부터
+    -0.05/K 로 40 K, 그 뒤 고무 영역. 두 접선(유리 기준선과 가장 가파른 직선)은 정확히
+    `corner` 에서 만난다."""
+    t = np.arange(200.0, 401.0, 5.0)
+    glassy = 9.5 - 0.002 * (t - 200.0)
+    at_corner = 9.5 - 0.002 * (corner - 200.0)
+    steep = at_corner - 0.05 * (t - corner)
+    rubbery = at_corner - 0.05 * 40.0 - 0.001 * (t - corner - 40.0)
+    y = np.where(t <= corner, glassy, np.where(t <= corner + 40.0, steep, rubbery))
+    storage = 10.0**y
+    return Frame(
+        {
+            "temperature": t,
+            "storage_modulus": storage,
+            "loss_modulus": storage * 0.1,
+            "tan_delta": np.full_like(t, 0.1),
+        },
+        {"temperature": "K", "storage_modulus": "Pa", "loss_modulus": "Pa", "tan_delta": "1"},
+    )
+
+
+class Test접선_교점_온셋:
+    """ASTM E1640 — log E′ 의 유리 기준선과 변곡점 접선이 만나는 온도.
+
+    전에는 「온셋」 이라는 라벨 아래 낙폭 절반 지점(전이의 한가운데)을 냈다(2026-09-30
+    바로잡음). 온셋으로 보고된 Tg 와 견주려면 이 정의가 따로 있어야 한다.
+    """
+
+    def test_두_접선이_만나는_온도를_낸다(self) -> None:
+        result = run("dma.glass_transition", _log_sweep(), method="storage_tangent_onset")
+        values = {s.key: s.value for s in result.scalars}
+        assert values["glass_transition"] == pytest.approx(300.0, abs=1e-6)
+        # 그 온도의 기준선 위 E′ — 10^(9.5 - 0.2)
+        assert values["glass_transition_peak"] == pytest.approx(10**9.3, rel=1e-9)
+        assert any("기준선(자동)" in note for note in result.notes)
+
+    def test_낙폭_절반_지점보다_낮다(self) -> None:
+        """온셋은 전이의 시작이다 — 낙폭 절반(한가운데)보다 늘 낮게 나와야 한다."""
+        sweep = _log_sweep()
+        onset = run("dma.glass_transition", sweep, method="storage_tangent_onset")
+        middle = run("dma.glass_transition", sweep, method="storage_onset", drop=0.5)
+
+        def tg(result: processing.PipelineResult) -> float:
+            return next(s.value for s in result.scalars if s.key == "glass_transition")
+
+        assert tg(onset) < tg(middle)
+
+    def test_기준선_구간을_직접_줄_수_있다(self) -> None:
+        result = run(
+            "dma.glass_transition",
+            _log_sweep(),
+            method="storage_tangent_onset",
+            baseline_start=220.0,
+            baseline_end=280.0,
+        )
+        assert next(s.value for s in result.scalars if s.key == "glass_transition") == (
+            pytest.approx(300.0, abs=1e-6)
+        )
+        assert any("기준선(지정): 220~280 K" in note for note in result.notes)
+
+    def test_전이_한가운데서_시작한_스윕은_짐작하지_않는다(self) -> None:
+        """평탄부가 없으면 첫 두 점에 그은 「기준선」 이 그럴듯한 온도를 낸다."""
+        sweep = _log_sweep(corner=205.0)
+        with pytest.raises(ProcessingError, match="유리 영역"):
+            run("dma.glass_transition", sweep, method="storage_tangent_onset")
+
+
 class TestToShear:
     def test_등방_변환으로_전단을_낸다(self) -> None:
         """**Prony 카드는 전단 기준이다.** 인장으로 쟀으면 여기를 거쳐야 한다."""

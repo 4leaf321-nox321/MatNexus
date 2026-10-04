@@ -8,6 +8,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from matcore.processing import SCALAR_KEY_MAX
+
 
 class FormulaVariableIn(BaseModel):
     name: str = Field(min_length=1, max_length=60)
@@ -24,7 +26,8 @@ class FormulaParameterIn(BaseModel):
 
 
 class FormulaResultIn(BaseModel):
-    key: str = Field(min_length=1, max_length=60)
+    key: str = Field(min_length=1, max_length=SCALAR_KEY_MAX)
+    """값 단계의 이 이름은 채택되면 요약값 표로 간다 — 그 칸 폭을 넘으면 채택이 500 이었다."""
     label: str = Field(min_length=1, max_length=120)
     si_unit: str = "1"
 

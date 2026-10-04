@@ -22,6 +22,19 @@ const workspaces = vi.fn()
 
 const download = vi.fn()
 const testTypes = vi.fn()
+const resolveProperty = vi.fn()
+
+// 상세 조건의 「물성 값 범위」 — 이름을 치면 서버가 물성 후보를 준다.
+vi.mock('@/modules/catalog/api', async (importOriginal) => {
+  const original = await importOriginal<typeof import('@/modules/catalog/api')>()
+  return {
+    ...original,
+    catalogApi: {
+      ...original.catalogApi,
+      resolveProperty: (...args: unknown[]) => resolveProperty(...args),
+    },
+  }
+})
 
 // 상세 조건의 「이 시험이 있는 재료」 선택지. 상세 조건을 열 때만 부른다.
 vi.mock('@/modules/tests/api', async (importOriginal) => ({
@@ -349,6 +362,60 @@ describe('찾기 — 방식과 상세 조건 (2026-09-29)', () => {
     await user.click(screen.getByRole('button', { name: '초기화' }))
     await waitFor(() => expect(lastQuery().use).toBeUndefined())
     expect(lastQuery().thickness_unit).toBeUndefined()
+  })
+
+  it('물성 값 범위는 잰 값 · 선언 항목이 있는 물성만 고르게 하고 SI 로 싣는다 (2026-10-04)', async () => {
+    const candidate = {
+      domain: 'mechanical',
+      si_unit: 'Pa',
+      symbol: null,
+      deprecated: false,
+      parameterized: false,
+      matched_by: 'name',
+      matched_text: null,
+      notes: [],
+    }
+    resolveProperty.mockResolvedValue({
+      query: '항복',
+      ambiguous: false,
+      candidates: [
+        {
+          ...candidate,
+          key: 'mechanical.yield_strength',
+          name: '항복강도',
+          value_count: 0,
+          internal_items: ['항복강도'],
+          measured_keys: ['proof_stress'],
+        },
+        // 문헌 값만 있는 물성 — 사내 재료 목록에서는 늘 0건이라 후보에서 뺀다.
+        {
+          ...candidate,
+          key: 'mechanical.yield_point_elongation',
+          name: '항복점 연신',
+          value_count: 30,
+          internal_items: [],
+          measured_keys: [],
+        },
+      ],
+    })
+    const user = userEvent.setup()
+    show()
+    await screen.findByRole('link', { name: 'SPCC_-_1.2' })
+
+    await user.click(screen.getByRole('button', { name: /상세 조건/ }))
+    await user.type(screen.getByLabelText('값으로 거를 물성'), '항복')
+    await user.click(await screen.findByRole('button', { name: /항복강도/ }))
+    expect(screen.queryByRole('button', { name: /항복점 연신/ })).not.toBeInTheDocument()
+    await user.type(screen.getByLabelText('최솟값'), '250')
+    await user.click(screen.getByRole('button', { name: '걸기' }))
+
+    await waitFor(() => expect(lastQuery().value_key).toBe('mechanical.yield_strength'))
+    // **SI 단위와 SI 값으로** — 「250」 을 그대로 보내면 서버는 250 Pa 로 읽는다.
+    expect(lastQuery().value_unit).toBe('Pa')
+    expect(lastQuery().value_min as number).toBeCloseTo(2.5e8, -1)
+    expect(lastQuery().value_max).toBeUndefined()
+    expect(screen.getByRole('button', { name: /상세 조건 · 1/ })).toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent('채택된 시험 결과 · 선언 물성')
   })
 
   it('내보내기에 방식과 상세 조건이 그대로 실린다 — 정렬은 빼고', async () => {

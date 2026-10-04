@@ -2691,6 +2691,80 @@ class Test되짚어_찾은_것:
         assert "_thermal_mm_n_tonne.rad" in names["openradioss_thermal"]
 
 
+class Test칸_배치를_내려받기_전에_보인다:
+    """내보내기 창 — 형식을 고르면 **어느 줄 몇째 칸에 카드의 어느 값이 가나**와 덱 미리보기가
+    서고, 그 뒤에 받는다(2026-10-04). 덱 · 그리기는 내려받기와 한 벌이어야 한다."""
+
+    def _card(
+        self, client: TestClient, headers: dict[str, str], material_id: str, **extra: Any
+    ) -> Any:
+        made = client.post(
+            "/api/fitting/cards",
+            json={
+                "material_id": material_id,
+                "test_type_key": "tensile",
+                "orientation": "MD",
+                "label": "칸 배치",
+                **extra,
+            },
+            headers=headers,
+        )
+        assert made.status_code == 201, made.text
+        return made.json()
+
+    def test_값마다_덱의_자리와_덱의_계로_옮긴_값을_준다(
+        self, client: TestClient, admin_headers: dict[str, str], ready: dict[str, Any]
+    ) -> None:
+        card = self._card(
+            client, admin_headers, ready["id"], poisson_ratio=0.3, density=7850.0
+        )
+
+        got = client.get(
+            f"/api/fitting/cards/{card['id']}/export/layout",
+            params={"format": "dyna", "units": "mm_n_tonne"},
+            headers=admin_headers,
+        )
+
+        assert got.status_code == 200, got.text
+        body = got.json()
+        assert body["ok"] is True
+        # **미리보기가 곧 내려받을 덱이다.**
+        exported = client.get(
+            f"/api/fitting/cards/{card['id']}/export",
+            params={"format": "dyna", "units": "mm_n_tonne"},
+            headers=admin_headers,
+        )
+        assert body["text"].splitlines() == exported.text.splitlines()
+        assert body["filename"].endswith("_mm_n_tonne.k")
+        lines = body["text"].splitlines()
+        values = {one["name"]: one for one in body["values"]}
+        density = values["elastic.density"]
+        assert density["unit"] == "tonne/mm3"
+        assert density["value"] == pytest.approx(7.85e-9)
+        span = density["spans"][0]
+        # 짚은 자리의 글자를 숫자로 읽으면 그 값이다.
+        text = lines[span["line"]][span["start"] : span["end"]]
+        assert float(text) == pytest.approx(7.85e-9)
+        stress = values["table.true_stress"]
+        assert stress["column"] is True and stress["rows"] > 1
+        assert len(stress["spans"]) >= stress["rows"] - 1
+
+    def test_못_내는_형식은_200_으로_까닭을_든다(
+        self, client: TestClient, admin_headers: dict[str, str], ready: dict[str, Any]
+    ) -> None:
+        card = self._card(client, admin_headers, ready["id"])
+
+        got = client.get(
+            f"/api/fitting/cards/{card['id']}/export/layout",
+            params={"format": "dyna", "units": "si"},
+            headers=admin_headers,
+        )
+
+        assert got.status_code == 200, got.text
+        assert got.json()["ok"] is False
+        assert "푸아송비" in got.json()["error"]
+
+
 class Test뽑은_덱을_되읽어_대조한다:
     """**「돌아는 갔다」 와 「맞게 나왔다」 는 다르다.**
 

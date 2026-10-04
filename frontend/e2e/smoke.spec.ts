@@ -295,19 +295,22 @@ test('덱을 뽑는 길이 열려 있다', async ({ page }) => {
   await expect(page.getByText('kg, m, s, Pa')).toBeVisible()
 
   await page.getByRole('button', { name: /mm · N · tonne/ }).click()
-  // **고르고 나서도 메뉴가 열려 있어야 한다** — 여기가 jsdom 이 못 보던 자리다.
+  // **고르고 나서도 창이 열려 있어야 한다** — 여기가 jsdom 이 못 보던 자리다.
   await expect(page.getByText('덱의 단위계')).toBeVisible()
   await expect(page.getByText('tonne, mm, s, MPa')).toBeVisible()
 
   // 고른 계로 실제로 받아진다. 파일 이름에 계가 들어간다.
   //
   // **형식을 못 박지 않는다.** 목록 첫 카드가 무엇을 낼 수 있는지는 데이터가
-  // 정한다 — Abaqus 로 못 내는 카드가 첫 자리에 오자 disabled 항목을 눌러
+  // 정한다 — Abaqus 로 못 내는 카드가 첫 자리에 오자 막힌 항목을 눌러
   // 다운로드가 영영 안 왔다(실측 2026-09-06, 형식이 늘며 드러남). 여기서 보는
-  // 것은 단위계이므로 **낼 수 있는 형식 아무거나**면 된다.
+  // 것은 단위계이므로 **낼 수 있는 형식 아무거나**면 된다. 형식을 고르면 칸 배치가
+  // 서고(2026-10-04 — 고르고, 보고, 받는다), 그 뒤에 「내려받기」 가 열린다.
+  await page.locator('[data-format-available="true"]').first().click()
+  await expect(page.getByRole('table', { name: '칸 배치' })).toBeVisible()
   const [download] = await Promise.all([
     page.waitForEvent('download'),
-    page.getByRole('menuitem', { disabled: false }).first().click(),
+    page.getByRole('button', { name: /내려받기/ }).click(),
   ])
   expect(download.suggestedFilename()).toContain('mm_n_tonne')
 })

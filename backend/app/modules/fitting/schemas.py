@@ -559,6 +559,70 @@ class DeckCheckOut(BaseModel):
     """내보내면서 한 말(네킹·첫 점·합성). **검사 결과와 함께 읽어야 한다.**"""
 
 
+class DeckLayoutSpanOut(BaseModel):
+    """덱의 한 자리 — 줄은 0 부터, 칸은 `[start, end)`."""
+
+    line: int
+    start: int
+    end: int
+    shared_with: list[str] = []
+    """이 자리를 **함께 바꾼** 다른 값(`블록.키`). 있으면 여러 값에서 셈한 칸이다 —
+    G = E/2(1+ν) 의 G 칸은 E 를 흔들어도 ν 를 흔들어도 바뀐다."""
+
+
+class DeckLayoutValueOut(BaseModel):
+    """카드 값 하나가 덱의 어디로 가나."""
+
+    name: str
+    """`블록.키` — 「같은 자리를 함께 바꾼 값」 이 이 이름을 가리킨다."""
+    block: str
+    key: str
+    block_label: str
+    label: str
+    column: bool
+    """표의 열이면 참 — 행마다 한 자리씩."""
+    unit: str | None
+    """**덱의 계**로 쓴 단위. 단위를 모르는 값(식의 변수 · 개수)은 비어 있다."""
+    value: float | None
+    """덱의 계로 옮긴 값 — 열이면 첫 행의 값."""
+    rows: int = 0
+    """열이면 그 표의 행 수."""
+    spans: list[DeckLayoutSpanOut]
+
+
+class DeckLayoutSkippedOut(BaseModel):
+    name: str
+    block_label: str
+    label: str
+    column: bool
+    reason: str | None = None
+
+
+class DeckLayoutOut(BaseModel):
+    """덱 미리보기와 **칸 배치** — 내려받기 전에 어느 자리에 무엇이 가는지(2026-10-04).
+
+    **못 내는 형식도 200 이다** — `ok=False` 와 `error` 가 그 까닭을 든다. 고르는 화면이
+    이유를 그 자리에 보여야 한다(`DeckPreviewOut` 과 같은 판단).
+    """
+
+    ok: bool
+    format: str
+    units: str
+    filename: str = ""
+    text: str = ""
+    line_count: int = 0
+    truncated: bool = False
+    """덱이 길어 앞의 `LAYOUT_LINES` 줄만 실었다 — 자리도 그 안의 것만."""
+    values: list[DeckLayoutValueOut] = []
+    unused: list[DeckLayoutSkippedOut] = []
+    """카드에 있는데 이 형식이 안 쓰는 값."""
+    failed: list[DeckLayoutSkippedOut] = []
+    """흔들어 보니 덱이 안 나와 자리를 못 짚은 값(범위 검사)."""
+    notes: list[str] = []
+    """내보내면서 한 말 — 내려받은 덱의 각주와 같다."""
+    error: str | None = None
+
+
 class DeckGrammarOut(BaseModel):
     """해석용 물성 정의의 **문법** — 정본은 `matcore/export/template.py` 의 설명이다.
 

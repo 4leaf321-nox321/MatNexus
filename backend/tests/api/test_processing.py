@@ -1236,6 +1236,33 @@ class Test채택:
         # 장비 값은 그대로 남는다 — 지우면 비교가 성립하지 않는다.
         assert [s for s in detail["summary"] if s["source"] == "instrument"]
 
+    def test_요약값_칸을_넘는_이름을_든_옛_결과는_500_이_아니라_이유를_말한다(
+        self, client: TestClient, admin_headers: dict[str, str], run_id: str, db: Session
+    ) -> None:
+        """실측(이슈 #2): 확장이 낸 51자 진단 키를 든 결과가 채택에서 500 이었다.
+
+        지금은 처리 단계가 막지만, 그 전에 저장된 결과는 불변이라 그대로 남는다.
+        """
+        saved = self._save(client, admin_headers, run_id)
+        row = db.get(ProcessingResult, uuid.UUID(saved["id"]))
+        assert row is not None
+        long_key = "diagnostic_" + "x" * 45
+        row.scalars = [*row.scalars, {"key": long_key, "label": "진단", "value": 1.0}]
+        db.commit()
+
+        response = client.post(
+            f"/api/processing/results/{saved['id']}/adopt", headers=admin_headers
+        )
+        assert response.status_code == 409, response.text
+        assert response.json()["error"]["code"] == "MNX-PROCESSING-0018"
+        assert long_key in response.json()["error"]["message"]
+        assert (
+            client.get(f"/api/test-runs/{run_id}", headers=admin_headers).json()[
+                "adopted_result_id"
+            ]
+            is None
+        )
+
     def test_다른_것을_채택하면_앞의_값이_남지_않는다(
         self, client: TestClient, admin_headers: dict[str, str], run_id: str
     ) -> None:

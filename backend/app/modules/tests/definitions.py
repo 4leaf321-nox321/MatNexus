@@ -23,6 +23,7 @@ from sqlalchemy.orm import Session
 
 from app.modules.tests.models import TestChannel, TestConditionField, TestType
 from app.shared import standard_conditions
+from matcore import viscoelastic
 
 #: 시험 종류 → 채널 · 조건 항목.
 #:
@@ -91,6 +92,18 @@ BUILTIN_TEST_TYPES: list[dict[str, Any]] = [
             ("reference_temperature", "기준 온도", "number", "temperature", "K", None, False),
             ("preload", "예하중", "number", "force", "N", None, False),
             ("clamp", "지그", "text", None, None, None, False),
+            # **모드가 E 인지 G 인지를 정한다.** 열 이름은 둘 다 「저장 탄성률」 이라
+            # 곡선만으로는 못 가른다. 전단으로 잰 G′ 를 E′ 로 읽으면 덱이 2(1+ν) 로
+            # 한 번 더 나눠 고무가 약 3 배 무르게 나갔다(2026-09-30 가이드 대조에서 드러남).
+            (
+                "deformation_mode",
+                "변형 모드",
+                "choice",
+                None,
+                None,
+                list(viscoelastic.DMA_MODES),
+                False,
+            ),
         ],
     },
     {

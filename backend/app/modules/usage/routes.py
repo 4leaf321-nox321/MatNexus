@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import csv
+import io
+from urllib.parse import quote
+
 from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy.orm import Session
 
@@ -23,6 +27,62 @@ def usage_summary(
 ) -> UsageSummaryOut:
     """기간의 사용 현황 한 장 — **시스템 관리자만.** 사람마다의 사용량이 실린다."""
     return services.summary(db, days=days)
+
+
+#: 사람별 CSV 의 머리줄. 요약 화면 「사람별」 표와 같은 칸이다.
+PEOPLE_HEADER = (
+    "이름",
+    "이메일",
+    "대표 부서",
+    "쓴 날",
+    "마지막",
+    "화면 요청",
+    "쓰기",
+    "MCP 도구 호출",
+    "상세 조회",
+)
+
+
+@router.get("/people.csv", include_in_schema=False)
+def usage_people_csv(
+    days: int = Query(default=30, ge=1, le=366, description="오늘까지 며칠"),
+    _admin: User = Depends(require_system_admin),
+    db: Session = Depends(get_db),
+) -> Response:
+    """사람별 활동 **전부**를 CSV 로(2026-10-04) — 화면은 앞 30명만 보인다. 시스템 관리자만.
+
+    BOM 을 붙인다(Excel 이 한글을 깬다) · 스키마에 안 싣는다(파일을 내려받는 자리다) —
+    부서 정보 CSV 와 같은 규약이다.
+    """
+    period, people = services.people_rows(db, days=days)
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow(PEOPLE_HEADER)
+    writer.writerows(
+        (
+            one.name,
+            one.email or "",
+            one.workspace or services.NO_WORKSPACE,
+            one.active_days,
+            one.last_day.isoformat(),
+            one.web_requests,
+            one.writes,
+            one.mcp_calls,
+            one.views,
+        )
+        for one in people
+    )
+    span = period.start.isoformat() + "_" + period.end.isoformat()
+    # 파일 이름은 둘로 — ASCII 는 옛 브라우저용, UTF-8 은 한글 이름용(부서 정보 CSV 와 같다).
+    disposition = (
+        'attachment; filename="usage-people-' + span + '.csv"; '
+        "filename*=UTF-8''" + quote("사용현황-사람별-" + span + ".csv")
+    )
+    return Response(
+        content="\ufeff" + buffer.getvalue(),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": disposition},
+    )
 
 
 @router.post("/mcp-calls", status_code=204)

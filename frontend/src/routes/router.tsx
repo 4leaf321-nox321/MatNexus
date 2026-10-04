@@ -15,6 +15,7 @@ import ForcePasswordChangePage from '@/modules/auth/ForcePasswordChangePage'
 import LoginPage from '@/modules/auth/LoginPage'
 import MaterialDetailPage from '@/modules/materials/MaterialDetailPage'
 import MaterialsPage from '@/modules/materials/MaterialsPage'
+import DeclaredReviewPage from '@/modules/materials/DeclaredReviewPage'
 import SpecimenEntry from '@/modules/materials/SpecimenEntry'
 import SpecimensPage from '@/modules/materials/SpecimensPage'
 import NotificationsPage from '@/modules/notifications/NotificationsPage'
@@ -168,6 +169,7 @@ export const router = createBrowserRouter([
           // 걷는 지도(`shared/relations`)를 사람이 보는 자리. 「전부」 를 그리는 단추는 없다.
           { path: 'graph', element: <GraphPage /> },
           { path: 'materials', element: <MaterialsPage /> },
+          { path: 'materials/declared-review', element: <DeclaredReviewPage /> },
           // **재료를 거치지 않고 시편을 찾는다.** `/cards` 가 있는 이유와 같다.
           { path: 'specimens', element: <SpecimensPage /> },
           // 시편 하나를 가리키는 주소. 제 화면은 없고 재료 상세의 그 자리로

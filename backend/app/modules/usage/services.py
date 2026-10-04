@@ -50,6 +50,7 @@ from app.modules.usage.schemas import (
     ToolOut,
     UsagePersonOut,
     UsageSummaryOut,
+    UsageWorkspaceOut,
     UsersOut,
     ViewedOut,
     ViewsOut,
@@ -178,6 +179,7 @@ def summary(db: Session, *, days: int) -> UsageSummaryOut:
     ).all()
 
     activity = _activity(db, calendar, requests_rows, tool_rows, since)
+    people = _people(db, requests_rows, tool_rows, view_rows)
     return UsageSummaryOut(
         period=PeriodOut(start=start, end=end, days=days),
         measured_since=measured_since,
@@ -187,7 +189,65 @@ def summary(db: Session, *, days: int) -> UsageSummaryOut:
         mcp=_mcp(db, tool_rows, since),
         views=_views(db, view_rows),
         content=_content(db, since),
-        people=_people(db, requests_rows, tool_rows, view_rows),
+        people=people[:PEOPLE],
+        workspaces=_workspaces(people),
+    )
+
+
+def people_rows(db: Session, *, days: int) -> tuple[PeriodOut, list[UsagePersonOut]]:
+    """사람별 활동 **전부** — CSV 가 쓴다. 요약 화면은 앞 30명만 싣는다."""
+    end = usage_meter.today()
+    start = end - timedelta(days=days - 1)
+    requests_rows = db.execute(
+        select(
+            UsageDaily.day,
+            UsageDaily.user_id,
+            UsageDaily.client,
+            UsageDaily.method,
+            UsageDaily.requests,
+        ).where(UsageDaily.day >= start, UsageDaily.day <= end)
+    ).all()
+    tool_rows = db.execute(
+        select(McpToolDaily.day, McpToolDaily.user_id, McpToolDaily.calls).where(
+            McpToolDaily.day >= start, McpToolDaily.day <= end
+        )
+    ).all()
+    view_rows = db.execute(
+        select(UsageViewDaily.user_id, UsageViewDaily.views).where(
+            UsageViewDaily.day >= start, UsageViewDaily.day <= end
+        )
+    ).all()
+    period = PeriodOut(start=start, end=end, days=days)
+    return period, _people(db, requests_rows, tool_rows, view_rows)
+
+
+#: 대표 부서가 없거나 지운 계정의 몫.
+NO_WORKSPACE = "소속 없음"
+
+
+def _workspaces(people: list[UsagePersonOut]) -> list[UsageWorkspaceOut]:
+    """사람별 몫을 **지금 대표 부서로** 더한다(`UsageWorkspaceOut` 의 머리말)."""
+    groups: dict[str, dict[str, int]] = defaultdict(
+        lambda: {
+            "people": 0,
+            "person_days": 0,
+            "web_requests": 0,
+            "writes": 0,
+            "mcp_calls": 0,
+            "views": 0,
+        }
+    )
+    for one in people:
+        group = groups[one.workspace or NO_WORKSPACE]
+        group["people"] += 1
+        group["person_days"] += one.active_days
+        group["web_requests"] += one.web_requests
+        group["writes"] += one.writes
+        group["mcp_calls"] += one.mcp_calls
+        group["views"] += one.views
+    return sorted(
+        (UsageWorkspaceOut(workspace=name, **counts) for name, counts in groups.items()),
+        key=lambda one: (-one.people, -one.person_days, one.workspace),
     )
 
 
@@ -531,11 +591,13 @@ def _people(
         one["days"].add(row.day)
         one["mcp"] += row.calls
     for row in view_rows:
+        # 조회만 있고 요청 · 도구가 없는 사람은 없다(조회도 요청이다) — 쓴 날은 위가 정한다.
         people[row.user_id]["views"] += row.views
+    # 자르지 않는다 — 요약은 앞 `PEOPLE` 명만 싣고, 부서별 묶음과 CSV 는 전부를 본다.
     ranked = sorted(
         (pair for pair in people.items() if pair[1]["days"]),
         key=lambda pair: (-len(pair[1]["days"]), -(pair[1]["web"] + pair[1]["mcp"])),
-    )[:PEOPLE]
+    )
     names = _names(db, (user_id for user_id, _ in ranked))
     return [
         UsagePersonOut(

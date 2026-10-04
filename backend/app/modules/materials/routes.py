@@ -53,6 +53,7 @@ from app.modules.materials.schemas import (
     DeclaredCatalogOut,
     DeclaredPointOut,
     DeclaredPropertyOut,
+    DeclaredReviewOut,
     DeletePlanOut,
     MaterialBlockedOut,
     MaterialCreateRequest,
@@ -116,6 +117,7 @@ from app.shared import (
     list_search,
     permissions,
     property_names,
+    property_search,
     semantic,
     sorting,
     specimen_size,
@@ -623,6 +625,10 @@ class MaterialFilters:
     card: str | None = None
     registered_from: date | None = None
     registered_to: date | None = None
+    value_key: str | None = None
+    value_unit: str | None = None
+    value_min: float | None = None
+    value_max: float | None = None
 
     def given(self) -> dict[str, Any]:
         """걸린 조건만 — 내보낸 파일의 `filters` 에 적는다. 기본값(「포함」·단위)은 뺀다."""
@@ -689,6 +695,16 @@ def material_filters(
         default=None, description="이날 이후 등록(그날 포함, DB 시간대)"
     ),
     registered_to: date | None = Query(default=None, description="이날까지 등록(그날 포함)"),
+    value_key: str | None = Query(
+        default=None,
+        description=(
+            "이 물성(허브 키)의 값이 범위 안인 재료 — 시험으로 잰 값(채택 결과)이나 "
+            "선언 물성. 문헌 카탈로그 목록의 값 범위와 같은 규칙"
+        ),
+    ),
+    value_unit: str | None = Query(default=None, description="범위의 단위 — 필수"),
+    value_min: float | None = Query(default=None),
+    value_max: float | None = Query(default=None),
 ) -> MaterialFilters:
     list_search.check_mode(mode, code="MNX-MATERIALS-0039")
     return MaterialFilters(
@@ -710,6 +726,10 @@ def material_filters(
         card=card,
         registered_from=registered_from,
         registered_to=registered_to,
+        value_key=value_key,
+        value_unit=value_unit,
+        value_min=value_min,
+        value_max=value_max,
     )
 
 
@@ -767,6 +787,95 @@ def property_items(
         )
         for name, spec in sorted(declared.catalog(db, level=level).items())
     ]
+
+
+@router.get("/declared-review", response_model=Page[DeclaredReviewOut])
+def declared_review(
+    limit: int | None = Query(default=None, le=200),
+    offset: int = Query(default=0, ge=0),
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> Page[DeclaredReviewOut]:
+    """**승인하면 등급이 오를 선언 값** — 보이는 재료 · 시료 전부에서(ADR 0049 의 열린 것).
+
+    전에는 재료마다 열어 봐야 알았다. 자료 관리자가 「무엇을 확인하면 되나」 를 한 번에 본다.
+    승인은 여기서 안 한다 — 근거 문서를 펴 보는 일이라 그 값이 사는 화면에서 한다. 보기는
+    누구나다(ADR 0035): 적은 사람도 「내 값이 아직 확인 전」 임을 안다.
+
+    이미 승인된 줄 · 승인해도 안 오르는 줄(규격 2 · 데이터시트 · 밀시트 1 · 받아 온 문헌
+    1~2)은 안 싣는다. 선언 물성이 JSON 한 칸이라 파이썬에서 거르고, 상한은 서버가 건다.
+    """
+    visible = permissions.visible_materials(db, user).subquery()
+    has_rows = func.jsonb_array_length(Material.declared_properties) > 0
+    materials = db.execute(
+        select(Material.id, Material.record_name, Material.declared_properties)
+        .where(Material.id.in_(select(visible.c.id)), has_rows)
+        .order_by(Material.record_name)
+    ).all()
+    samples = db.execute(
+        select(
+            Material.id,
+            Material.record_name,
+            Sample.id,
+            Sample.record_name,
+            Sample.lot_no,
+            Sample.declared_properties,
+        )
+        .join(Material, Material.id == Sample.material_id)
+        .where(
+            Material.id.in_(select(visible.c.id)),
+            Sample.deleted_at.is_(None),
+            func.jsonb_array_length(Sample.declared_properties) > 0,
+        )
+        .order_by(Material.record_name, Sample.record_name)
+    ).all()
+
+    def waiting(row: Any) -> bool:
+        return (
+            isinstance(row, dict)
+            and declared_approval.of(row) is None
+            and declared_approval.tier_if_approved(row) < declared_approval.tier(row)
+        )
+
+    def made(row: dict[str, Any], **where: Any) -> DeclaredReviewOut:
+        points = [one for one in row.get("points") or [] if isinstance(one, dict)]
+        first = points[0].get("value_si") if points else None
+        return DeclaredReviewOut(
+            **where,
+            item=str(row.get("item") or ""),
+            source=row.get("source"),
+            reference=row.get("reference"),
+            si_unit=row.get("si_unit"),
+            first_value_si=float(first) if isinstance(first, int | float) else None,
+            point_count=len(points),
+            quality_tier=declared_approval.tier(row),
+            tier_if_approved=declared_approval.tier_if_approved(row),
+        )
+
+    found = [
+        made(row, level="재료", material_id=mid, material_name=name)
+        for mid, name, rows in materials
+        for row in rows or []
+        if waiting(row)
+    ] + [
+        made(
+            row,
+            level="시료",
+            material_id=mid,
+            material_name=name,
+            sample_id=sid,
+            sample_name=sample_name,
+            lot_no=lot,
+        )
+        for mid, name, sid, sample_name, lot, rows in samples
+        for row in rows or []
+        if waiting(row)
+    ]
+    found.sort(key=lambda one: (one.material_name, one.level, one.sample_name or "", one.item))
+    size = clamp_limit(limit)
+    return Page(
+        items=found[offset : offset + size], total=len(found), limit=size, offset=offset
+    )
 
 
 @router.get("/classifications", response_model=list[ClassificationOut])
@@ -1134,6 +1243,13 @@ def _narrowed(
         query = query.where(Material.created_at >= filters.registered_from)
     if filters.registered_to is not None:
         query = query.where(Material.created_at < filters.registered_to + timedelta(days=1))
+    # **물성 값 범위**(2026-10-04) — 「항복강도 300 MPa 이상인 재료」. 값 검색과 같은 규칙으로
+    # 풀되(단위 필수 · 식의 변수는 안 걸림) 상한 없이 id 로 거른다.
+    window = property_search.value_range(
+        db, filters.value_key, filters.value_unit, filters.value_min, filters.value_max
+    )
+    if window is not None:
+        query = query.where(Material.id.in_(property_search.material_ids_in(db, window)))
     return query
 
 

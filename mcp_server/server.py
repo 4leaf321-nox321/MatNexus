@@ -2446,6 +2446,56 @@ async def adopt_catalog_values(
     }
 
 
+def _curve_basis(
+    kind: str | None, method: str | None, k: float | None
+) -> dict[str, Any] | None:
+    """대표 곡선 기준(ADR 0041) — 비우면 평균(서버 기본)."""
+    if kind is None and method is None and k is None:
+        return None
+    return {"kind": kind or "mean", "method": method, "k": k}
+
+
+@mcp.tool()
+async def relocate_specimens(
+    ctx: Context,
+    specimen_ids: list[str],
+    spec_thickness: float,
+    spec_thickness_unit: str = "mm",
+    card_actions: dict[str, str] | None = None,
+    comment: str | None = None,
+    dry_run: bool = True,
+) -> dict[str, Any]:
+    """두께가 다른 재료에 잘못 넣은 시편을 **같은 재료의 그 두께로 옮긴다**(ADR 0042).
+
+    고른 시편만 간다 — 그 두께의 같은 재료가 있으면 합치고, 없으면 복사해 만든다. 시료가
+    통째면 시료째, 일부면 같은 로트의 새 시료로. 이름은 시험까지 바뀐다(번호 S·P·T 는 그대로).
+
+    **기본이 미리보기(dry_run=True)** — 무엇이 어디로 가는지와 **걸린 카드**를 돌려준다.
+    걸린 카드에는 옮기면 코멘트가 반드시 붙는다. `card_actions` 로 카드마다 `note`(기본) ·
+    `deprecate`(사용 중지)를 고르는데 **사람에게 물어 정하라** — 확정 카드를 내리는 일이다.
+
+    시편 id 는 `list_specimens` 가 준다. 두께 범위로 잘못 든 것을 찾으려면 그 도구의
+    거르기를 쓴다.
+    """
+    body: dict[str, Any] = {
+        "specimen_ids": specimen_ids,
+        "spec_thickness": spec_thickness,
+        "spec_thickness_unit": spec_thickness_unit,
+        "card_actions": card_actions or {},
+        "comment": comment,
+    }
+    if dry_run:
+        plan = await _send(ctx, "POST", "/specimens/relocate-plan", body)
+        if isinstance(plan, dict) and "error" not in plan:
+            plan = {
+                "dry_run": True,
+                **plan,
+                "note": "이대로 옮기려면 dry_run=False 로 다시 부르세요. 걸린 카드는 사람에게 보이세요.",
+            }
+        return plan
+    return await _send(ctx, "POST", "/specimens/relocate", body)
+
+
 @mcp.tool()
 async def preview_card_fit(
     ctx: Context,
@@ -2455,6 +2505,9 @@ async def preview_card_fit(
     test_run_ids: list[str] | None = None,
     families: list[str] | None = None,
     extrapolate_to: float | None = None,
+    basis: str | None = None,
+    basis_method: str | None = None,
+    basis_k: float | None = None,
 ) -> dict[str, Any]:
     """시험 곡선에 **여러 경화식을 맞춰 견준다** — 저장하지 않는다.
 
@@ -2473,6 +2526,10 @@ async def preview_card_fit(
 
     `test_run_ids` 를 주면 **그 시험들만** 쓴다(이상치 하나를 빼고 다시 보는 것이
     실무의 정상 작업이다). 비우면 채택된 것 전부.
+
+    `basis` — 대표 곡선: `mean`(기본) · `median` · `upper` · `lower`. 상·하한은 `basis_method`
+    (`sd` 는 `basis_k` 필수 · `tolerance` · `envelope` · `specimen`)를 함께. **어느 것을 쓸지는
+    해석 목적이 정한다(강도 평가는 하한 …) — 고르지 말고 사람에게 물어라.**
     """
     answer = await _send(
         ctx,
@@ -2485,6 +2542,7 @@ async def preview_card_fit(
             "test_run_ids": test_run_ids,
             "families": families or [],
             "extrapolate_to": extrapolate_to,
+            "basis": _curve_basis(basis, basis_method, basis_k),
         },
     )
     if not isinstance(answer, dict):
@@ -2516,6 +2574,7 @@ async def preview_card_fit(
     ]
     return {
         "sample_count": answer.get("sample_count"),
+        "basis": answer.get("basis_label"),
         "point_count": len(answer.get("source_points") or []),
         "fits": fits,
         "inherited": answer.get("elastic") or [],
@@ -2704,6 +2763,9 @@ async def create_card_from_tests(
     density: float | None = None,
     resample_points: int | None = 50,
     resample_method: str = "curvature",
+    basis: str | None = None,
+    basis_method: str | None = None,
+    basis_k: float | None = None,
     dry_run: bool = True,
 ) -> dict[str, Any]:
     """시험에서 나온 값으로 **물성 카드(초안)** 를 만든다.
@@ -2746,6 +2808,11 @@ async def create_card_from_tests(
     남긴다. 화면의 기본과 같다. **측정 그대로** 굳히려면 `resample_points=None`.
     몇 점에서 몇 점으로 줄였는지는 카드 근거(`source.resample`)와 덱 머리글에 남는다.
     소성 표가 없는 식(초탄성·유변)에는 걸지 않는다.
+
+    `basis` — 대표 곡선: `mean`(기본) · `median` · `upper` · `lower`. 상·하한은 `basis_method`
+    (`sd` 는 `basis_k` 필수 · `tolerance` · `envelope` · `specimen`)를 함께. **어느 것을 쓸지는
+    해석 목적이 정한다(강도 평가는 하한 …) — 고르지 말고 사람에게 물어라.**
+    미리보기(`preview_card_fit`)와 **같은 기준**을 넘겨라 — 기준은 카드 근거에 남는다.
     """
     body: dict[str, Any] = {
         "material_id": material_id,
@@ -2756,6 +2823,7 @@ async def create_card_from_tests(
         "family": family,
         "poisson_ratio": poisson_ratio,
         "density": density,
+        "basis": _curve_basis(basis, basis_method, basis_k),
     }
     if resample_points:
         # 소성 표를 만드는 식(hardening)일 때만 — 서버가 다른 블록에는 거절한다.
