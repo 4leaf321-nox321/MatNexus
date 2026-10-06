@@ -23,8 +23,21 @@
 - **0 인 값은 흔들어도 0 이다.** 표의 첫 점(소성 변형률 0)은 그 열로 안 짚힌다. 홀로 0 인
   값은 1 로 흔든다.
 - **흔들면 덱이 안 나오는 값이 있다**(범위 검사). 그 값은 자리를 못 짚었다고 말한다.
-- 칸 끝은 **숫자 모양**으로 넓혀 잡는다. 고정폭 칸이 꽉 차 이웃과 붙어 있으면
-  (`7.85E-092.05E+05`) 지수 두 자리 뒤에서 끊는다 — 드물지만 한 글자가 이웃으로 넘칠 수 있다.
+- 칸 끝은 **숫자 모양**으로 넓혀 잡되, **다른 값을 흔들어 바뀐 칸**에서 멈춘다. 고정폭 칸이 꽉
+  차 이웃과 붙어 있으면(`7853.212.0567E+11`) 숫자 모양만으로는 어디서 끊을지 모른다 — 이웃을
+  흔들어 바뀐 칸이 그 경계다. 두 값 모두 안 바뀐 글자(이웃의 끝자리 0 같은)는 여전히 한쪽으로
+  넘칠 수 있다.
+
+## 자리가 이웃 칸으로 번지던 것 (2026-10-06)
+
+칸 배치에서 SIGY 를 누르면 바로 앞 PR 까지 칠해졌다. 원인 둘:
+
+- 오른쪽 맞춤 칸에서 값이 한 글자 넓어지면 앞 빈칸이 「바뀐 칸」 이 되고, 넓히기가 그 빈칸에서
+  왼쪽 숫자(PR 의 `0.3`)로 건너갔다 — 보통 덱에서도 SIGY 의 자리가 `0.3 3.0123E+8` 이었다.
+  이제 빈칸은 **넓히기 전에** 뗀다(전에는 넓힌 뒤에 뗐다).
+- 꽉 찬 칸끼리 붙은 덱에서는 숫자 모양으로 넓히기가 이웃 숫자를 통째로 먹었다(밀도 · E · PR 이
+  한 자리). 이제 넓히기는 다른 값이 바꾼 칸에서 멈추고, 값을 **두 번** 흔들어(0.9 · 0.6
+  배) 바뀐 칸을 늘린다 — 0.9 배로는 앞자리가 그대로인 값이 있다(250 → 225 의 「2」).
 """
 
 from __future__ import annotations
@@ -40,11 +53,20 @@ from matcore.export import Deck, ExportError, Rendered, _unit_of, block_spec
 #: 흔드는 배수. 자릿수가 대부분 바뀌어 칸이 통째로 드러나고, 줄이는 쪽이라 범위 검사
 #: (ν < 0.5 · 단조 증가 표)를 덜 건드린다.
 NUDGE = 0.9
+#: 한 번 더 흔드는 배수 — 0.9 배로 안 바뀐 앞자리(250 → 225 의 「2」)를 드러낸다. 그 글자를
+#: 넓히기로만 잡으면, 칸이 꽉 차 이웃과 붙어 있을 때 어디서 끊을지 모른다. 이것으로 흔들면 덱이
+#: 안 나오거나 줄 짜임이 달라지면(조건이 갈렸다) 첫 번만 쓴다.
+SECOND_NUDGE = 0.6
 
 _DIGITS = frozenset("0123456789.")
 #: 지수 — 자리는 둘까지만 본다. 꽉 찬 고정폭 칸이 이웃과 붙어 있으면(`E-092.05`) 셋째 자리는
 #: 이웃 칸의 것이다.
 _EXPONENT = re.compile(r"[eEdD][-+]?\d{1,2}")
+_EXPONENT_TAIL = re.compile(r"[-+]?\d{1,2}")
+_EXPONENT_DIGITS = re.compile(r"\d{1,2}")
+#: 숫자 **하나**의 모양. 넓힌 자리가 이것이 아니면(점이 둘 · 지수 뒤에 또 숫자) 이웃 칸과
+#: 붙은 것이다.
+_ONE_NUMBER = re.compile(r"[-+]?(\d+\.?\d*|\.\d+)([eEdD][-+]?\d+)?")
 
 
 @dataclass(frozen=True)
@@ -98,62 +120,94 @@ def candidates(deck: Deck) -> Iterator[tuple[str, str, bool]]:
             yield name, key, True
 
 
-def _nudged(value: Any, *, alone: bool) -> Any:
+def _nudged(value: Any, *, alone: bool, factor: float = NUDGE) -> Any:
     if not _number(value):
         return value
     if isinstance(value, int):
         return value + 1
     if value == 0:
         return 1.0 if alone else 0.0
-    return value * NUDGE
+    return value * factor
 
 
-def nudge(deck: Deck, block: str, key: str, column: bool) -> Deck:
+def nudge(deck: Deck, block: str, key: str, column: bool, factor: float = NUDGE) -> Deck:
     """그 값 하나(열이면 그 열 전부)만 흔든 덱."""
     blocks = dict(deck.blocks)
     payload = dict(blocks[block])
     if column:
         payload["rows"] = [
-            {**row, key: _nudged(row.get(key), alone=False)}
+            {**row, key: _nudged(row.get(key), alone=False, factor=factor)}
             if isinstance(row, Mapping)
             else row
             for row in payload.get("rows") or []
         ]
     else:
         values = dict(payload.get("values") or {})
-        values[key] = _nudged(values[key], alone=True)
+        values[key] = _nudged(values[key], alone=True, factor=factor)
         payload["values"] = values
     blocks[block] = payload
     return replace(deck, blocks=blocks)
 
 
-def _widen(line: str, start: int, end: int) -> tuple[int, int]:
-    """바뀐 글자를 **숫자 하나**로 넓힌다 — 앞의 자리 · 부호, 뒤의 자리 · 지수."""
+#: 넓히기를 막는 칸 — 칸 번호를 받아 참이면 거기서 멈춘다.
+Blocked = Callable[[int], bool]
+
+
+def _never(_column: int) -> bool:
+    return False
+
+
+def _widen(line: str, start: int, end: int, blocked: Blocked = _never) -> tuple[int, int]:
+    """바뀐 글자를 **숫자 하나**로 넓힌다 — 앞의 자리 · 부호, 뒤의 자리 · 지수.
+
+    `blocked` 는 **다른 값이 바꾼 칸**이다. 넓히다 거기 닿으면 멈춘다 — 꽉 찬 고정폭 칸끼리
+    붙어 있으면(`7853.212.0567E+11`) 숫자 모양만으로는 어디서 끊을지 모른다.
+    """
     start = max(0, min(start, len(line)))
     end = max(start, min(end, len(line)))
     while True:
-        while start > 0 and line[start - 1] in _DIGITS:
+        while start > 0 and line[start - 1] in _DIGITS and not blocked(start - 1):
             start -= 1
-        # 지수 안에서 시작했으면(`E-09` 의 `09`) 가수까지 간다.
+        # 지수 안에서 시작했으면(`E-09` 의 `09`) 가수까지 간다 — 그 가수가 남의 것이 아닐 때만.
         if (
-            start >= 2
+            start >= 3
             and line[start - 1] in "+-"
             and line[start - 2] in "eEdD"
-            and start >= 3
             and line[start - 3] in _DIGITS
+            and not any(blocked(column) for column in (start - 1, start - 2, start - 3))
         ):
             start -= 2
             continue
-        if start >= 2 and line[start - 1] in "eEdD" and line[start - 2] in _DIGITS:
+        if (
+            start >= 2
+            and line[start - 1] in "eEdD"
+            and line[start - 2] in _DIGITS
+            and not (blocked(start - 1) or blocked(start - 2))
+        ):
             start -= 1
             continue
         break
-    if start > 0 and line[start - 1] in "+-":
+    # 앞의 부호 — 이웃 지수의 부호(`E-` 의 `-`)는 아니다.
+    if (
+        start > 0
+        and line[start - 1] in "+-"
+        and not blocked(start - 1)
+        and not (start >= 2 and line[start - 2] in "eEdD")
+    ):
         start -= 1
-    while end < len(line) and line[end] in _DIGITS:
+    while end < len(line) and line[end] in _DIGITS and not blocked(end):
         end += 1
-    exponent = _EXPONENT.match(line, end)
-    if exponent is not None:
+    # 지수 — 바뀐 칸이 지수 한가운데서 끝났으면(`…946341E` | `-01`) 그 지수를 마저 잡는다.
+    # 줄 전체를 맞춰 보는 비교가 그렇게 끊는다(Nastran 소성 표, 2026-10-06).
+    if end >= 2 and line[end - 1] in "+-" and line[end - 2] in "eEdD":
+        exponent = _EXPONENT_DIGITS.match(line, end)
+    elif end >= 1 and line[end - 1] in "eEdD":
+        exponent = _EXPONENT_TAIL.match(line, end)
+    else:
+        exponent = _EXPONENT.match(line, end)
+    if exponent is not None and not any(
+        blocked(column) for column in range(end, exponent.end())
+    ):
         end = exponent.end()
     # 오른쪽 맞춤 칸의 앞 빈칸이 끼워 넣기로 잡힐 수 있다 — 자리는 글자만이다.
     while start < end - 1 and line[start].isspace():
@@ -173,27 +227,26 @@ def _merge(spans: list[tuple[int, int]]) -> list[tuple[int, int]]:
     return merged
 
 
-def _in_line(before: str, after: str) -> list[tuple[int, int]]:
-    """한 줄 안에서 바뀐 자리(앞 줄의 칸으로)."""
+def _runs(before: str, after: str) -> list[tuple[int, int]]:
+    """한 줄에서 **글자가 바뀐 칸**(앞 줄의 칸으로) — 아직 넓히지 않는다."""
+    runs: list[tuple[int, int]] = []
     matcher = difflib.SequenceMatcher(None, before, after, autojunk=False)
-    found: list[tuple[int, int]] = []
     for tag, i1, i2, _j1, _j2 in matcher.get_opcodes():
         if tag == "equal":
             continue
         if i1 == i2:
             # 끼워 넣기 — 그 자리 글자에, 줄 끝이면 앞 글자에 붙인다.
             i1, i2 = (i1, i1 + 1) if i1 < len(before) else (max(0, i1 - 1), max(1, i1))
-        start, end = _widen(before, i1, i2)
-        # 오른쪽 맞춤 칸에서 값이 한 글자 넓어지면 앞 빈칸 하나가 「지워진 것」 으로 잡힌다 —
-        # 진짜 자리는 다른 조각이 짚는다. 빈칸뿐인 자리는 버린다(LS-DYNA 열 덱에서 실측).
-        if before[start:end].strip():
-            found.append((start, end))
-    return _merge(found)
+        runs.append((i1, i2))
+    return runs
 
 
-def changed(before: list[str], after: list[str]) -> list[Span]:
-    """두 덱에서 바뀐 자리(앞 덱의 줄 · 칸으로)."""
-    spans: list[Span] = []
+def _raw(
+    before: list[str], after: list[str]
+) -> tuple[dict[int, list[tuple[int, int]]], set[int]]:
+    """두 덱에서 바뀐 칸(앞 덱의 줄 · 칸, 넓히기 전)과 **줄째 바뀐 줄**(줄 수가 달라졌다)."""
+    runs: dict[int, list[tuple[int, int]]] = {}
+    whole: set[int] = set()
     if len(before) == len(after):
         blocks = [
             ("replace", index, index + 1, index, index + 1) for index in range(len(before))
@@ -209,13 +262,49 @@ def changed(before: list[str], after: list[str]) -> list[Span]:
             for offset in range(i2 - i1):
                 old, new = before[i1 + offset], after[j1 + offset]
                 if old != new:
-                    spans.extend(
-                        Span(i1 + offset, start, end) for start, end in _in_line(old, new)
-                    )
+                    runs.setdefault(i1 + offset, []).extend(_runs(old, new))
         else:
             # 줄 수가 달라졌다(조건이 갈렸다) — 줄째 짚는다.
-            spans.extend(Span(line, 0, max(1, len(before[line]))) for line in range(i1, i2))
-    return spans
+            whole.update(range(i1, i2))
+    return runs, whole
+
+
+def _spans(line: str, runs: list[tuple[int, int]], blocked: Blocked) -> list[tuple[int, int]]:
+    """바뀐 칸을 자리로 — **빈칸을 먼저 떼고** 글자 덩어리마다 숫자 하나로 넓힌다.
+
+    오른쪽 맞춤 칸에서 값이 넓어지면 앞 빈칸이 바뀐 칸에 든다. 그 빈칸에서 넓히기를 시작하면
+    왼쪽 이웃의 숫자로 건너간다(2026-10-06: SIGY 의 자리가 `0.3 3.0123E+8`).
+
+    경계(`blocked`)는 넓힌 것이 **숫자 하나의 모양이 아닐 때만** 쓴다 — 이웃 칸과 붙은 것이다.
+    처음부터 쓰면 여러 값에서 셈한 칸(Nastran 소성 표의 총변형률 = 소성 변형률 + 응력/E)이
+    값마다 다른 자릿수에서 끊겨, 한 칸이 조각난다.
+    """
+    found: list[tuple[int, int]] = []
+    for start, end in runs:
+        at = start
+        while at < end:
+            if line[at].isspace():
+                at += 1
+                continue
+            piece = at
+            while at < end and not line[at].isspace():
+                at += 1
+            wide = _widen(line, piece, at)
+            if not _ONE_NUMBER.fullmatch(line[wide[0] : wide[1]]):
+                wide = _widen(line, piece, at, blocked)
+            found.append(wide)
+    return _merge(found)
+
+
+def changed(before: list[str], after: list[str]) -> list[Span]:
+    """두 덱에서 바뀐 자리(앞 덱의 줄 · 칸으로). 다른 값의 경계는 모른다 — `locate` 가 안다."""
+    runs, whole = _raw(before, after)
+    spans = [Span(line, 0, max(1, len(before[line]))) for line in sorted(whole)]
+    for line in sorted(runs):
+        spans.extend(
+            Span(line, start, end) for start, end in _spans(before[line], runs[line], _never)
+        )
+    return sorted(spans, key=lambda one: (one.line, one.start))
 
 
 def locate(render: Callable[[Deck], Rendered], deck: Deck) -> Layout:
@@ -227,7 +316,8 @@ def locate(render: Callable[[Deck], Rendered], deck: Deck) -> Layout:
     )
     skip = set(unstable)
 
-    placed: list[Placed] = []
+    # 1) 값마다 바뀐 칸 — 넓히기 전. 두 번 흔든다(`SECOND_NUDGE`).
+    found: dict[tuple[str, str, bool], tuple[dict[int, list[tuple[int, int]]], set[int]]] = {}
     unused: list[tuple[str, str, bool]] = []
     failed: list[tuple[str, str, bool, str]] = []
     for block, key, column in candidates(deck):
@@ -236,11 +326,62 @@ def locate(render: Callable[[Deck], Rendered], deck: Deck) -> Layout:
         except ExportError as exc:
             failed.append((block, key, column, str(exc)))
             continue
-        spans = tuple(span for span in changed(base, moved) if span.line not in skip)
-        if spans:
-            placed.append(Placed(block, key, column, spans))
+        runs, whole = _raw(base, moved)
+        if not whole:
+            try:
+                more = render(nudge(deck, block, key, column, SECOND_NUDGE)).text.splitlines()
+            except ExportError:
+                more = None
+            if more is not None:
+                extra, extra_whole = _raw(base, more)
+                if not extra_whole:
+                    for line, found_runs in extra.items():
+                        runs.setdefault(line, []).extend(found_runs)
+        runs = {line: _merge(cut) for line, cut in runs.items() if line not in skip}
+        whole -= skip
+        if runs or whole:
+            found[(block, key, column)] = (runs, whole)
         else:
             unused.append((block, key, column))
+
+    # 2) 칸마다 그 칸을 바꾼 값들 — 넓히기의 경계다.
+    owners: dict[int, list[tuple[int, int, tuple[str, str, bool]]]] = {}
+    for name, (runs, _whole) in found.items():
+        for line, cut in runs.items():
+            owners.setdefault(line, []).extend((start, end, name) for start, end in cut)
+
+    def blocked_for(name: tuple[str, str, bool], line: int) -> Blocked:
+        marks = owners.get(line, [])
+
+        def blocked(column: int) -> bool:
+            mine = False
+            other = False
+            for start, end, owner in marks:
+                if start <= column < end:
+                    if owner == name:
+                        mine = True
+                    else:
+                        other = True
+            return other and not mine
+
+        return blocked
+
+    # 3) 자리 — 바뀐 칸을 숫자 하나로 넓히되 남이 바꾼 칸에서 멈춘다.
+    placed: list[Placed] = []
+    for (block, key, column), (runs, whole) in found.items():
+        spans = [Span(line, 0, max(1, len(base[line]))) for line in sorted(whole)]
+        for line in sorted(runs):
+            spans.extend(
+                Span(line, start, end)
+                for start, end in _spans(
+                    base[line], runs[line], blocked_for((block, key, column), line)
+                )
+            )
+        placed.append(
+            Placed(
+                block, key, column, tuple(sorted(spans, key=lambda one: (one.line, one.start)))
+            )
+        )
     return Layout(tuple(placed), tuple(unused), tuple(failed), unstable)
 
 

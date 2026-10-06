@@ -98,6 +98,79 @@ def test_안_쓰는_값과_못_짚은_값을_가른다() -> None:
     assert "범위" in found.failed[0][3]
 
 
+def _material_line(lines: list[str], found: layout.Layout) -> dict[str, str]:
+    """LS-DYNA *MAT_024 의 첫 카드에서 값마다 짚힌 글자."""
+    line = next(index for index, text in enumerate(lines) if text.lstrip().startswith("7 "))
+    return {
+        one.key: lines[line][span.start : span.end]
+        for one in found.placed
+        for span in one.spans
+        if span.line == line
+    }
+
+
+def test_SIGY_를_고르면_PR_까지_칠해지지_않는다() -> None:
+    """**흔든 SIGY 가 한 글자 넓어지면 앞 빈칸이 바뀐 칸이 됐다**(2026-10-06 사용자 지적).
+
+    줄 전체를 맞춰 보는 비교가 그 빈칸에서 넓히기를 시작해 왼쪽 PR 의 `0.3` 까지 건너갔다 —
+    SIGY 의 자리가 `0.3 3.0123E+8` 이라, 칸 배치에서 SIGY 를 누르면 PR 도 짙게 칠해졌다.
+    """
+    deck = _deck()
+    deck.blocks["table"]["rows"][0]["true_stress"] = 3.0123e8
+    target = export.renderer("dyna")
+    lines = export.render(target, deck, SI).text.splitlines()
+    found = layout.locate(lambda one: export.render(target, one, SI), deck)
+
+    texts = _material_line(lines, found)
+    assert texts["poisson_ratio"] == "0.3"
+    assert texts["true_stress"] == "3.0123E+8"
+    # 이웃 경계(다른 값이 바꾼 칸) 없이도 맞아야 한다 — 빈칸을 넓히기 **전에** 떼는 것만으로.
+    spans = layout.changed(["       0.3 3.0123E+8"], ["       0.32.71107E+8"])
+    assert ["       0.3 3.0123E+8"[one.start : one.end] for one in spans] == ["3.0123E+8"]
+
+
+def test_꽉_찬_칸끼리_붙어도_값마다_갈린다() -> None:
+    """고정폭 칸이 꽉 차 이웃과 붙으면(`7853.212.0567E+11`) 숫자 모양만으로는 끊을 데를
+    모른다 — 밀도 · E · PR 이 한 자리로 잡혔다. 이웃을 흔들어 바뀐 칸이 경계다."""
+    deck = _deck()
+    deck.blocks["elastic"]["values"].update(
+        youngs_modulus=2.0567e11, poisson_ratio=0.2934567, density=7853.21
+    )
+    target = export.renderer("dyna")
+    lines = export.render(target, deck, SI).text.splitlines()
+    found = layout.locate(lambda one: export.render(target, one, SI), deck)
+
+    texts = _material_line(lines, found)
+    assert "7853.212.0567E+11" in "".join(lines), "붙은 칸이 안 나왔다 — 시험이 헛돈다"
+    assert texts["density"] == "7853.21"
+    assert texts["youngs_modulus"] == "2.0567E+11"
+    assert texts["poisson_ratio"] == "0.2934567"
+
+
+def test_여럿에서_셈한_칸은_한_자리로_남는다() -> None:
+    """Nastran 소성 표의 총변형률은 소성 변형률 + 응력/E 다 — 흔든 값마다 다른 자릿수가 바뀐다.
+    경계로 끊으면 그 칸이 값마다 조각나 「함께 셈한 칸」 으로 안 묶인다."""
+    import matcore.export.bulk  # noqa: F401  (Nastran 렌더러 등록)
+
+    target = export.renderer("nastran_plastic")
+    deck = _deck()
+    # 마지막 응력 3.99E+8 — 줄 전체 맞춤이 총변형률 `1.01946341E-01` 을 지수 기호 바로 뒤에서
+    # 끊었고(`…946341E` | `-01`), 넓히기가 지수를 마저 못 잡아 자리가 `946341E` 였다.
+    deck.blocks["table"]["rows"][-1]["true_stress"] = 3.99e8
+    lines = export.render(target, deck, SI).text.splitlines()
+    found = layout.locate(lambda one: export.render(target, one, SI), deck)
+    placed = {one.key: one for one in found.placed}
+
+    shared = {(span.line, span.start, span.end) for span in placed["youngs_modulus"].spans} & {
+        (span.line, span.start, span.end) for span in placed["true_stress"].spans
+    }
+    assert shared, "E 와 응력이 함께 셈한 칸을 같은 자리로 짚지 않았다"
+    for one in found.placed:
+        for span in one.spans:
+            text = lines[span.line][span.start : span.end]
+            assert float(text) == float(text), (one.key, text)  # 숫자 하나 그대로다
+
+
 def test_값이_넓어져도_앞_빈칸을_자리로_잡지_않는다() -> None:
     """오른쪽 맞춤 칸에서 `4.7E+8` 이 `4.23E+8` 이 되면 앞 빈칸 하나가 「지워진 것」 으로
     잡힌다 — 개발 DB 의 LS-DYNA 열 덱에서 실측(2026-10-04). 자리는 숫자만이다."""
