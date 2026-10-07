@@ -31,10 +31,12 @@ BIC 가 따로 고른다 — 그러면 `E₁` 끼리 평균 낸다는 말 자체
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
+from dataclasses import replace
 
 import numpy as np
 
+from matcore import viscoelastic
 from matcore.groups import GroupError, GroupOutcome, Member
 from matcore.prony import PronySeries, PronyTerm, choose_prony, fit_prony
 from matcore.registry import ParamSpec, Produced, register
@@ -254,6 +256,19 @@ def _outcome(
         Produced(key="reference_temperature_k", label="기준 온도", si_unit="K"),
         Produced(key="term_count", label="항 수", si_unit="1"),
         Produced(key="normalized_rmse", label="정규화 잔차", si_unit="1"),
+        # 온도 이동(2026-10-07) — 쓴 시편들의 이동을 모은 것. 방법은 `detail.shift_method`.
+        Produced(key="shift_c1", label="WLF C1", si_unit="1"),
+        Produced(key="shift_c2", label="WLF C2", si_unit="K"),
+        Produced(
+            key="shift_activation_energy", label="Arrhenius 활성화 에너지", si_unit="J/mol"
+        ),
+        Produced(
+            key="shift_temperature_min_k", label="이동을 맞춘 가장 낮은 온도", si_unit="K"
+        ),
+        Produced(
+            key="shift_temperature_max_k", label="이동을 맞춘 가장 높은 온도", si_unit="K"
+        ),
+        Produced(key="shift_max_residual", label="이동인자 최대 어긋남(자릿수)", si_unit="1"),
     ),
     order=10,
 )
@@ -270,10 +285,79 @@ def prony_group(
     reference_k, warnings = _same_reference(members)
 
     if method == "representative":
-        return _representative(members, reference_k, warnings, representative)
-    if method == "pooled":
-        return _pooled(members, reference_k, warnings, terms)
-    return _averaged(members, reference_k, warnings, terms)
+        outcome = _representative(members, reference_k, warnings, representative)
+    elif method == "pooled":
+        outcome = _pooled(members, reference_k, warnings, terms)
+    else:
+        outcome = _averaged(members, reference_k, warnings, terms)
+    said: list[str] = []
+    shift, shift_method = _group_shift(members, outcome.used, reference_k, said)
+    return replace(
+        outcome,
+        values={**outcome.values, **shift},
+        detail={**outcome.detail, **({"shift_method": shift_method} if shift_method else {})},
+        warnings=[*outcome.warnings, *said],
+    )
+
+
+#: 이동 방법의 이름 — 경고에 쓴다.
+_SHIFT_LABELS = {"wlf": "WLF", "arrhenius": "Arrhenius", "manual": "수동 이동인자"}
+
+
+def _group_shift(
+    members: Sequence[Member], used: list[str], reference_k: float, warnings: list[str]
+) -> tuple[dict[str, float], str | None]:
+    """쓴 시편들의 온도 이동 → 카드에 실을 상수와 이동 방법(2026-10-07). 모르면 비운다.
+
+    시편 하나면 그 시편의 상수를 그대로, 여럿이면 **관측 이동인자를 모아 다시 맞춘다**
+    (`viscoelastic.pooled_shift_values` — 상수를 평균 내지 않는 이유가 거기 있다). 방법이
+    섞였거나 이동을 모르는 시편이 있으면 상수를 안 싣고 그렇다고 말한다 — 카드는 지금처럼
+    기준 온도에서만 유효하다.
+    """
+    picked = [item for item in members if item.label in used]
+    found = [item.meta.get("shift") for item in picked]
+    shifts = [one for one in found if isinstance(one, Mapping)]
+    if not picked or len(shifts) != len(picked):
+        warnings.append(
+            "온도 이동을 모르는 시편이 있어 이동 상수를 카드에 싣지 않습니다 — 기준 "
+            "온도에서만 유효합니다."
+        )
+        return {}, None
+    methods = {str(one.get("method") or "") for one in shifts}
+    if len(methods) != 1:
+        warnings.append(
+            f"시편마다 온도 이동 방법이 다릅니다({', '.join(sorted(methods))}) — 상수를 "
+            f"하나로 못 정해 카드에 싣지 않습니다."
+        )
+        return {}, None
+    method = methods.pop()
+    if len(shifts) == 1:
+        one = shifts[0]
+        return (
+            viscoelastic.shift_card_values(
+                method, one.get("parameters") or {}, one.get("shifts") or []
+            ),
+            method,
+        )
+    if method not in ("wlf", "arrhenius"):
+        # 식이 없다(장비가 준 이동인자) — 온도 범위만 든다.
+        every = [shift for one in shifts for shift in one.get("shifts") or []]
+        return viscoelastic.shift_card_values(method, {}, every), method
+    try:
+        values = viscoelastic.pooled_shift_values(
+            method, reference_k, [one.get("shifts") or [] for one in shifts]
+        )
+    except viscoelastic.ViscoelasticError as exc:
+        warnings.append(
+            f"시편들의 이동인자를 모아 {_SHIFT_LABELS[method]} 를 맞추지 못해 이동 상수를 "
+            f"카드에 싣지 않습니다: {exc}"
+        )
+        return {}, method
+    warnings.append(
+        f"시편 {len(shifts)}개의 관측 이동인자를 모아 {_SHIFT_LABELS[method]} 를 다시 "
+        f"맞췄습니다 — 시편마다 맞춘 상수를 평균 내지 않았습니다."
+    )
+    return values, method
 
 
 def _representative(

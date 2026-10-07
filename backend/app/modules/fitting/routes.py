@@ -1947,7 +1947,14 @@ def _from_prony_fit(db: Session, user: User, fit_id: uuid.UUID) -> _Viscoelastic
             f"시편 {specimen.record_name} 한 건의 마스터커브에서 만들었습니다 — "
             f"재료의 대푯값이 아니라 그 시편의 값입니다.",
         ],
-        extra_values={"shift_method": curve.method},
+        # **이동 상수도 카드로**(2026-10-07) — 전에는 방법 이름만 실려, 덱이 다른 온도의 이동을
+        # 적을 수 없었다. 상수 · 맞춘 온도 범위는 마스터커브 기록에서 온다.
+        extra_values={
+            "shift_method": curve.method,
+            **viscoelastic.shift_card_values(
+                curve.method, curve.parameters or {}, curve.shifts or []
+            ),
+        },
         curve_notes=list(curve.notes),
     )
 
@@ -2038,7 +2045,21 @@ def _from_group(db: Session, user: User, group_id: uuid.UUID) -> _ViscoelasticSo
             f"시편 {len(runs)}건을 '{method}' 방법으로 묶어 만들었습니다.",
             *row.warnings,
         ],
-        extra_values={"group_method": method},
+        extra_values={
+            "group_method": method,
+            # 묶음이 시편들의 이동을 모아 다시 맞춘 것(`matcore.groups.prony._group_shift`).
+            # 옛 묶음 결과에는 없다 — 그 카드는 전처럼 기준 온도에서만 유효하다.
+            **(
+                {"shift_method": str(row.detail["shift_method"])}
+                if row.detail.get("shift_method")
+                else {}
+            ),
+            **{
+                key: float(row.values[key])
+                for key in viscoelastic.SHIFT_KEYS
+                if isinstance(row.values.get(key), int | float)
+            },
+        },
         curve_notes=[],
     )
 
@@ -3884,7 +3905,10 @@ def card_deck_layout(
         target = renderers.renderer_for(db, format)
         system = export.effective_system(target, system)
         base = export.render(target, deck, system)
-        located = export_layout.locate(lambda one: export.render(target, one, system), deck)
+        # 흔들어 다시 그리는 것은 자리만 본다 — 각주(접은 표 점검)는 위 `base` 가 든다.
+        located = export_layout.locate(
+            lambda one: export.render(target, one, system, check_folds=False), deck
+        )
     except export.ExportError as exc:
         return DeckLayoutOut(ok=False, format=format, units=system.key, error=str(exc))
 

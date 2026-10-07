@@ -39,7 +39,10 @@ from matcore.export import (
     prepare,
     prony_terms,
     register_renderer,
+    viscoelastic_shift,
+    viscoelastic_shift_notes,
 )
+from matcore.viscoelastic import GAS_CONSTANT
 
 Field = int | float | str | None
 
@@ -417,7 +420,33 @@ def render_nastran_viscoelastic(deck: Deck) -> Rendered:
     lines.append(
         "$ SOL 400 only, with the advanced solid (PSLDN1) - MATVE is ignored otherwise."
     )
-    _reference_notes(deck, lines, notes)
+    reference = deck.number("viscoelastic", "reference_temperature_k")
+    shift = viscoelastic_shift(deck) if reference is not None else None
+    wlf = shift if reference is not None and shift is not None and shift[0] == "wlf" else None
+    if reference is not None and wlf is not None:
+        lines.append(
+            f"$ Prony fitted at {reference:.2f} K ({reference - 273.15:.2f} C); "
+            f"MATTVE (WLF) shifts it to other temperatures."
+        )
+        low = deck.number("viscoelastic", "shift_temperature_min_k")
+        high = deck.number("viscoelastic", "shift_temperature_max_k")
+        if low is not None and high is not None:
+            lines.append(
+                f"$ Shift measured over {low:.2f}~{high:.2f} K - extrapolated outside."
+            )
+        notes.extend(viscoelastic_shift_notes(deck, "wlf", "MATTVE"))
+    else:
+        _reference_notes(deck, lines, notes)
+        if shift is not None:
+            # MSC 의 MATTVE 에는 Arrhenius 꼴이 없다 — NARA(Narayanaswamy)는 x=1 이면 같은
+            # 식이 되지만 가상 온도 자료가 더 필요하다(QRG MATTVE). 지어 넣지 않는다.
+            lines.append(
+                "$ Arrhenius shift not written - MSC MATTVE has no plain Arrhenius form."
+            )
+            notes.append(
+                "MSC Nastran MATTVE 에는 Arrhenius 식이 없어(NARA 는 가상 온도 자료가 더 "
+                "필요합니다) 온도 이동을 싣지 않았습니다 — 기준 온도에서만 유효합니다."
+            )
     body, said = _mat1(deck, with_tables=False)
     lines.extend(body)
     lines.append("$MATVE* MID             MODEL")
@@ -426,6 +455,17 @@ def render_nastran_viscoelastic(deck: Deck) -> Rendered:
     for g, tau in terms:
         fields.extend((g * shear0, tau, None, None, None, None, None, None))
     lines.extend(_card("MATVE", fields))
+    if reference is not None and wlf is not None:
+        # **MATTVE**(2026-10-07, MSC QRG): 같은 MID 의 MATVE 가 있어야 듣는다. 자리는
+        # MID · 함수 · RT · ENER · FRACT · TDIF · TREF · NP, 다음 줄 A1 · A2. 식은
+        # `log10 a_T = -A1(T-T0)/(A2+T-T0)`(SOL 400 사용자 안내서 Eq. 10-95) — 우리 것과
+        # 같아 A1 = C1, A2 = C2 그대로다. RT 가 기준 온도.
+        lines.append("$MATTVE* MID             FUNCTION        RT              ENER")
+        lines.append("$*      FRACT           TDIF            TREF            NP")
+        lines.append("$*      A1              A2")
+        mattve: list[Field] = [deck.solver_id, "WLF", reference, None, None, None, None, None]
+        mattve.extend(wlf[1])
+        lines.extend(_card("MATTVE", mattve))
     return _rendered(lines, [*notes, *said])
 
 
@@ -467,7 +507,27 @@ def render_optistruct_viscoelastic(deck: Deck) -> Rendered:
         "$ gD_i = relative shear moduli, tD_i = relaxation times. gB blank (elastic bulk)."
     )
     lines.append("$ Relaxation runs only with a VISCO case control entry.")
-    _reference_notes(deck, lines, notes)
+    reference = deck.number("viscoelastic", "reference_temperature_k")
+    shift = viscoelastic_shift(deck) if reference is not None else None
+    if reference is not None and shift is not None:
+        lines.append(
+            f"$ Prony fitted at {reference:.2f} K ({reference - 273.15:.2f} C); "
+            f"MATTVE shifts it to other temperatures."
+        )
+        lines.append("$ MATTVE applies in nonlinear static / nonlinear transient analyses.")
+        low = deck.number("viscoelastic", "shift_temperature_min_k")
+        high = deck.number("viscoelastic", "shift_temperature_max_k")
+        if low is not None and high is not None:
+            lines.append(
+                f"$ Shift measured over {low:.2f}~{high:.2f} K - extrapolated outside."
+            )
+        notes.extend(viscoelastic_shift_notes(deck, shift[0], "MATTVE"))
+        notes.append(
+            "OptiStruct 매뉴얼상 MATTVE 는 비선형 정적 · 비선형 과도 해석에서 쓰입니다 — "
+            "그 밖의 해석에서는 이 온도 이동이 적용되지 않을 수 있습니다."
+        )
+    else:
+        _reference_notes(deck, lines, notes)
     body, said = _mat1(
         deck, youngs=youngs_long, shear=long_term, poisson=None, with_tables=False
     )
@@ -488,6 +548,25 @@ def render_optistruct_viscoelastic(deck: Deck) -> Rendered:
         for g, tau in terms:
             fields.extend((g, tau, None, None, None, None, None, None))
         lines.extend(_card("MATVE", fields))
+    if reference is not None and shift is not None:
+        # **MATTVE**(2026-10-07) — 매뉴얼의 식이 우리 것과 같다: WLF `log10 A = -C1(T-T0)/
+        # (C2+T-T0)`, Arrhenius `ln A = (E0/R)(1/(T-Tz) - 1/(T0-Tz))`. MID 는 짝 MAT1 의 것.
+        # Ea 는 J/mol 로 실리고(단위계가 안 옮긴다) R 도 같은 단위로 적는다 — 솔버가 읽는 것은
+        # E0/R 이다. Tz 는 절대영도(K 라 0).
+        method, constants = shift
+        if method == "wlf":
+            lines.append("$MATTVE* MID             MODEL           C1              C2")
+            lines.append("$*      T0")
+            lines.extend(_card("MATTVE", [deck.solver_id, "WLF", *constants, reference]))
+        else:
+            lines.append("$MATTVE* MID             MODEL           E0              R")
+            lines.append("$*      T0              Tz")
+            lines.extend(
+                _card(
+                    "MATTVE",
+                    [deck.solver_id, "ARRHENIU", *constants, GAS_CONSTANT, reference, 0.0],
+                )
+            )
     return _rendered(lines, [*notes, *said])
 
 

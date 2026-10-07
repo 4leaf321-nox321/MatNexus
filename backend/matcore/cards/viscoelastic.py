@@ -25,8 +25,9 @@ VISCOELASTIC = register_block(
         key="viscoelastic",
         label="점탄성",
         help=(
-            "마스터커브에 맞춘 일반화 Maxwell 계수. **기준 온도 하나에서만 유효하다** — "
-            "다른 온도의 해석에 그대로 쓰면 안 된다."
+            "마스터커브에 맞춘 일반화 Maxwell 계수. **계수는 기준 온도의 것이다** — 다른 "
+            "온도로 쓰려면 온도 이동(WLF C1 · C2 또는 Arrhenius Ea)이 함께 가야 하고, 그 "
+            "이동도 맞춘 온도 범위 안에서만 잰 것이다."
         ),
         produces=(
             Produced(
@@ -65,6 +66,47 @@ VISCOELASTIC = register_block(
                 label="이동 방법",
                 si_unit="1",
                 help="WLF·Arrhenius·수동 중 마스터커브를 겹칠 때 쓴 것.",
+            ),
+            # **온도 이동 상수**(2026-10-07). 전에는 마스터커브 기록에만 남고 여기 안 실려,
+            # 덱이 다른 온도의 이동(`*TRS` · `TB,SHIFT`)을 적을 수 없었다.
+            Produced(
+                key="shift_c1",
+                label="WLF C1",
+                si_unit="1",
+                help="log10 a_T = -C1·(T - T_ref) / (C2 + T - T_ref). 기준 온도는 위의 것.",
+            ),
+            Produced(
+                key="shift_c2",
+                label="WLF C2",
+                si_unit="K",
+                help="온도 **차**다 — K 와 °C 가 같은 수다.",
+            ),
+            Produced(
+                key="shift_activation_energy",
+                label="Arrhenius 활성화 에너지",
+                si_unit="J/mol",
+                help="log10 a_T = Ea / (2.303 R) · (1/T - 1/T_ref).",
+            ),
+            Produced(
+                key="shift_temperature_min_k",
+                label="이동을 맞춘 가장 낮은 온도",
+                si_unit="K",
+                help="이 아래는 이동 식을 외삽한 것이다.",
+            ),
+            Produced(
+                key="shift_temperature_max_k",
+                label="이동을 맞춘 가장 높은 온도",
+                si_unit="K",
+                help="이 위는 이동 식을 외삽한 것이다.",
+            ),
+            Produced(
+                key="shift_max_residual",
+                label="이동인자 최대 어긋남",
+                si_unit="1",
+                help=(
+                    "맞춘 log10 a_T 와 관측값의 가장 큰 차(자릿수). 크면 그 식이 이 재료 · 이 "
+                    "온도 범위에 안 맞는다."
+                ),
             ),
         ),
         rows=(

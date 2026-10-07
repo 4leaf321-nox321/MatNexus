@@ -2260,6 +2260,104 @@
      "emissivity": 85.0
     }
    }
+  },
+  "점탄성_WLF": {
+   "elastic": {
+    "values": {
+     "youngs_modulus": 2400000000.0,
+     "poisson_ratio": 0.35,
+     "density": 1200.0
+    }
+   },
+   "viscoelastic": {
+    "values": {
+     "reference_temperature_k": 296.15,
+     "shift_method": "wlf",
+     "shift_c1": 12.5,
+     "shift_c2": 105.0,
+     "shift_temperature_min_k": 253.15,
+     "shift_temperature_max_k": 353.15,
+     "shift_max_residual": 0.08
+    },
+    "rows": [
+     {
+      "relative_modulus": 0.3,
+      "relaxation_time_s": 0.01
+     },
+     {
+      "relative_modulus": 0.2,
+      "relaxation_time_s": 1.0
+     },
+     {
+      "relative_modulus": 0.1,
+      "relaxation_time_s": 100.0
+     }
+    ]
+   }
+  },
+  "점탄성_Arrhenius": {
+   "elastic": {
+    "values": {
+     "youngs_modulus": 2400000000.0,
+     "poisson_ratio": 0.35,
+     "density": 1200.0
+    }
+   },
+   "viscoelastic": {
+    "values": {
+     "reference_temperature_k": 296.15,
+     "shift_method": "arrhenius",
+     "shift_activation_energy": 152000.0,
+     "shift_temperature_min_k": 263.15,
+     "shift_temperature_max_k": 333.15,
+     "shift_max_residual": 0.9
+    },
+    "rows": [
+     {
+      "relative_modulus": 0.3,
+      "relaxation_time_s": 0.01
+     },
+     {
+      "relative_modulus": 0.2,
+      "relaxation_time_s": 1.0
+     },
+     {
+      "relative_modulus": 0.1,
+      "relaxation_time_s": 100.0
+     }
+    ]
+   }
+  },
+  "점탄성_WLF_범위없음": {
+   "elastic": {
+    "values": {
+     "youngs_modulus": 2400000000.0,
+     "poisson_ratio": 0.35,
+     "density": 1200.0
+    }
+   },
+   "viscoelastic": {
+    "values": {
+     "reference_temperature_k": 296.15,
+     "shift_method": "wlf",
+     "shift_c1": 8.86,
+     "shift_c2": 101.6
+    },
+    "rows": [
+     {
+      "relative_modulus": 0.3,
+      "relaxation_time_s": 0.01
+     },
+     {
+      "relative_modulus": 0.2,
+      "relaxation_time_s": 1.0
+     },
+     {
+      "relative_modulus": 0.1,
+      "relaxation_time_s": 100.0
+     }
+    ]
+   }
   }
  }
 }

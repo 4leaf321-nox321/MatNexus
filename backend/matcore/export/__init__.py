@@ -968,6 +968,52 @@ def _register_template_blocks() -> None:
 _register_template_blocks()
 
 
+#: 맞춘 이동인자가 관측값과 이 자릿수보다 벌어지면 각주로 말한다 — 0.5 자릿수면 이완 시간이
+#: 약 3 배 어긋난다.
+SHIFT_WARN_DECADES = 0.5
+
+
+def viscoelastic_shift(deck: Deck) -> tuple[str, tuple[float, ...]] | None:
+    """카드의 온도 이동 → `("wlf", (C1, C2))` · `("arrhenius", (Ea,))`. 없으면 `None`.
+
+    점탄성 형식들이 함께 쓴다(2026-10-07). 상수는 `matcore.viscoelastic.shift_card_values` 가
+    카드에 실은 것이다 — WLF 는 `log10 a_T = -C1·ΔT/(C2+ΔT)`, Arrhenius 는 J/mol.
+    """
+    c1 = deck.number("viscoelastic", "shift_c1")
+    c2 = deck.number("viscoelastic", "shift_c2")
+    if c1 is not None and c2 is not None:
+        return "wlf", (c1, c2)
+    energy = deck.number("viscoelastic", "shift_activation_energy")
+    if energy is not None:
+        return "arrhenius", (energy,)
+    return None
+
+
+def viscoelastic_shift_notes(deck: Deck, method: str, keyword: str) -> list[str]:
+    """이동을 실었을 때의 각주 — 무엇을 실었고 **어느 온도 범위에서 잰 것인가.**"""
+    reference = deck.number("viscoelastic", "reference_temperature_k")
+    low = deck.number("viscoelastic", "shift_temperature_min_k")
+    high = deck.number("viscoelastic", "shift_temperature_max_k")
+    label = "WLF" if method == "wlf" else "Arrhenius"
+    where = (
+        f" — 이동은 {low - 273.15:.1f}~{high - 273.15:.1f} °C 에서 잰 것이고 그 밖은 "
+        "외삽입니다."
+        if low is not None and high is not None
+        else "."
+    )
+    said = [
+        f"기준 온도 {(reference or 0.0) - 273.15:.1f} °C 의 Prony 에 {label} 온도 이동"
+        f"({keyword})을 함께 실었습니다{where}"
+    ]
+    residual = deck.number("viscoelastic", "shift_max_residual")
+    if residual is not None and residual > SHIFT_WARN_DECADES:
+        said.append(
+            f"맞춘 이동인자가 관측값과 최대 {residual:.2f} 자릿수 어긋납니다 — 그 식이 이 "
+            f"재료 · 이 온도 범위에 잘 안 맞을 수 있습니다."
+        )
+    return said
+
+
 @register_renderer(
     key="abaqus_viscoelastic",
     label="Abaqus (점탄성)",
@@ -1008,12 +1054,15 @@ def render_abaqus_viscoelastic(deck: Deck) -> Rendered:
     같게 쓰는 것은 **푸아송비가 시간에 따라 안 변한다**는 가정이고, 이것도 흔한
     가정이지만 가정은 가정이라 적는다.
 
-    ## 온도가 하나뿐이다
+    ## 온도 이동 — `*TRS` (2026-10-07)
 
-    마스터커브는 기준 온도 하나에서만 유효하다. 다른 온도로 해석하려면
-    `*TRS`(WLF 이동)를 함께 줘야 하는데, 그건 이동인자를 카드에 싣는 별개의
-    일이다. 지금은 **유효 온도를 주석에 적고 끝낸다** — 조용히 온도 의존을
-    없는 셈 치는 것보다 낫다.
+    Prony 계수는 기준 온도의 것이다. 카드가 이동 상수를 들면 `*TRS` 로 함께 싣는다 —
+    매뉴얼의 식이 우리 것과 같다(WLF 는 `log10 A = -C1(θ-θ0)/(C2+θ-θ0)`, Arrhenius 는
+    `ln A = (E0/R)(1/(θ-θZ) - 1/(θ0-θZ))`, 환산 시간 `ξ = ∫ds/A`). 이동을 맞춘 온도 범위를
+    주석에 적는다 — 그 밖은 외삽이다. Arrhenius 는 모델의 `*PHYSICAL CONSTANTS`(절대영도 ·
+    기체 상수)가 있어야 하는데 그것은 **모델 전체 설정**이라 재료 덱에 넣으면 사용자 모델과
+    겹친다 — 주석으로 말한다. 상수가 없으면(수동 이동 · 옛 카드) 전처럼 **유효 온도를 주석에
+    적고 끝낸다** — 조용히 온도 의존을 없는 셈 치는 것보다 낫다.
     """
     prony = tuple(
         (float(row["relative_modulus"]), float(row["relaxation_time_s"]))
@@ -1037,7 +1086,33 @@ def render_abaqus_viscoelastic(deck: Deck) -> Rendered:
     lines.append(f"** Consistent units: {deck.units.declaration}")
     lines.append("** ELASTIC = instantaneous (t=0) moduli - MODULI=INSTANTANEOUS says so")
     lines.append("**          (Abaqus default with *VISCOELASTIC is LONG TERM).")
-    if reference is not None:
+    shift = viscoelastic_shift(deck) if reference is not None else None
+    if reference is not None and shift is not None:
+        celsius = reference - 273.15
+        lines.append(
+            f"** Prony fitted at {reference:.2f} K ({celsius:.2f} C); "
+            f"*TRS shifts it to other temperatures."
+        )
+        notes.extend(viscoelastic_shift_notes(deck, shift[0], "*TRS"))
+        low = deck.number("viscoelastic", "shift_temperature_min_k")
+        high = deck.number("viscoelastic", "shift_temperature_max_k")
+        if low is not None and high is not None:
+            lines.append(
+                f"** Shift measured over {low:.2f}~{high:.2f} K - extrapolated outside."
+            )
+        if shift[0] == "arrhenius":
+            lines.append(
+                "** ARRHENIUS needs *PHYSICAL CONSTANTS in the model: ABSOLUTE ZERO=0."
+            )
+            lines.append(
+                "**   and UNIVERSAL GAS CONSTANT=8.31446 - E0 below is in J/mol, T in K."
+            )
+            notes.append(
+                "Arrhenius 이동은 모델에 *PHYSICAL CONSTANTS(절대영도 0 · 기체 상수 "
+                "8.31446 J/(mol·K))가 있어야 합니다 — 모델 전체 설정이라 재료 덱에 넣지 않고 "
+                "덱 주석에 적었습니다."
+            )
+    elif reference is not None:
         celsius = reference - 273.15
         lines.append(f"** Valid at {reference:.2f} K ({celsius:.2f} C) only -")
         lines.append(
@@ -1074,6 +1149,11 @@ def render_abaqus_viscoelastic(deck: Deck) -> Rendered:
     lines.append("*VISCOELASTIC, TIME=PRONY, TYPE=ISOTROPIC")
     # 행 하나가 g, k, τ. 순서가 뒤바뀌면 솔버가 오류 없이 다른 재료를 만든다.
     lines.extend(f"{_free(g)}, 0.0, {_free(tau)}" for g, tau in prony)
+    if reference is not None and shift is not None:
+        # 데이터 줄: WLF 는 θ0, C1, C2 · Arrhenius 는 θ0, E0(매뉴얼 *TRS).
+        method, constants = shift
+        lines.append(f"*TRS, DEFINITION={method.upper()}")
+        lines.append(", ".join(_free(value) for value in (reference, *constants)))
 
     total = sum(g for g, _ in prony)
     if total >= 1.0:
@@ -1276,6 +1356,9 @@ def render_openradioss(deck: Deck) -> Rendered:
     # **단위를 선언한다.** Abaqus 와 달리 이 솔버는 단위 블록이 있어서 값이 아니라
     # 선언으로 맞출 수 있다.
     lines.extend(_unit_block(deck))
+    flat, said = law36_flat_elastic(deck)
+    lines.extend(flat)
+    notes.extend(said)
     # 변형률 속도 하나짜리 표다. 속도 의존을 넣으려면 곡선이 여러 개 있어야 하고,
     # 그것은 시험이 여러 속도로 있어야 한다는 뜻이다(`openradioss_rate`).
     lines.extend(law36_lines(deck, [(0.0, deck.solver_id, points)]))
@@ -1286,6 +1369,26 @@ def render_openradioss(deck: Deck) -> Rendered:
 def _chunks(items: list[str], size: int = 5) -> list[str]:
     """Radioss 가 한 줄에 다섯씩 받는 목록 — 함수 번호·배율·속도."""
     return ["".join(items[start : start + size]) for start in range(0, len(items), size)]
+
+
+def law36_flat_elastic(deck: Deck) -> tuple[list[str], list[str]]:
+    """온도별 탄성 표를 **상수 하나로 접는다** — 덱 주석과 각주로 말한다(LAW1 과 같다).
+
+    LAW36 의 E · nu 는 상수다. 2026-10-07 까지는 표가 있어도 아무 말 없이 첫 줄을 썼다.
+    `(덱 줄, 각주)` 를 돌려준다 — 탄소성 · 속도 의존 두 형식이 함께 쓴다.
+    """
+    if len(deck.rows("elastic")) <= 1:
+        return [], []
+    return (
+        [
+            "# LAW36 E and nu are temperature independent: "
+            "the lowest-temperature value is used."
+        ],
+        [
+            "온도별 탄성 표가 있는데 LAW36 의 E · nu 는 상수 하나입니다 — 블록의 대푯값"
+            "(가장 낮은 온도)을 썼습니다."
+        ],
+    )
 
 
 def law36_lines(
@@ -1998,11 +2101,110 @@ def to_system(deck: Deck, system: UnitSystem) -> Deck:
     return replace(deck, blocks=blocks, units=system)
 
 
-def render(format_key: str | Renderer, deck: Deck, system: UnitSystem = SI) -> Rendered:
+#: 축을 타는 표를 드는 블록 → (축 칸, 축 이름, 가장 작은 쪽, 그 물성을 부르는 말들).
+#: 형식이 이 표를 **첫 줄 하나로 접고 말하지 않으면** `render` 가 각주를 단다(`_folded`).
+_TABLE_AXES: dict[str, tuple[str, str, str, tuple[str, ...]]] = {
+    "elastic": ("temperature", "온도", "가장 낮은 온도", ("탄성",)),
+    "thermal": ("temperature", "온도", "가장 낮은 온도", ("열",)),
+    "electrical": (
+        "frequency",
+        "주파수",
+        "가장 낮은 주파수",
+        ("유전", "투자", "전도", "저항", "전기"),
+    ),
+    "optical": ("wavelength", "파장", "가장 짧은 파장", ("굴절", "소광", "광학", "방사")),
+}
+#: 「한 값으로 접었다」 를 말하는 각주의 말 — 형식이 이미 말했으면 더하지 않는다.
+_ONE_VALUE = ("하나", "한 칸", "상수", "첫")
+#: 표를 쓰는지 볼 때 흔드는 배수. 줄이는 쪽이라 범위 검사를 덜 건드린다(`layout.NUDGE`).
+_FOLD_NUDGE = 0.9
+
+
+def _scaled(deck: Deck, block: str, column: str, *, first: bool) -> Deck:
+    """그 블록 표의 한 열을 흔든 덱 — `first` 면 첫 줄과 대푯값을, 아니면 둘째 줄부터."""
+    payload = dict(deck.blocks[block])
+    rows = deck.rows(block)
+    for index, row in enumerate(rows):
+        if (index == 0) == first and isinstance(row.get(column), int | float):
+            row[column] = row[column] * _FOLD_NUDGE
+    payload["rows"] = rows
+    if first:
+        values = deck.values(block)
+        if isinstance(values.get(column), int | float):
+            values[column] = values[column] * _FOLD_NUDGE
+        payload["values"] = values
+    return replace(deck, blocks={**deck.blocks, block: payload})
+
+
+def _folded(target: Renderer, deck: Deck, result: Rendered) -> list[str]:
+    """**표를 첫 줄 하나로 접고 말하지 않은 자리** — 붙일 각주를 돌려준다(2026-10-07).
+
+    LS-DYNA *MAT_024 · *MAT_THERMAL_ISOTROPIC, Radioss LAW36, 그리고 확장의 Hill ·
+    Johnson-Cook · 온도 의존 형식 열둘이 온도별 탄성 · 열물성 표를 받고도 첫 줄만 쓰면서
+    아무 말을 안 했다 —
+    덱만 받은 사람은 온도를 타는 값이 빠진 줄 모른다. 같은 날 표의 둘째 줄을 바꿔 보는
+    점검으로 드러났다. 그 점검을 **여기 한 곳에** 둔다: 형식을 몰라도 되고, 확장 · 화면에서
+    만든 정의까지 같은 그물에 걸린다.
+
+    둘째 줄부터를 흔들어도 덱이 그대로이고, 첫 줄을 흔들면 덱이 바뀌면(= 그 값을 쓰긴 쓴다)
+    접은 것이다. 형식이 이미 말했으면 — 각주에 축 · 「하나」 · 그 물성의 말이 다 있으면 —
+    더하지 않는다. 흔든 덱을 형식이 거절하면 모르는 것으로 두고 넘어간다.
+    """
+    said: list[str] = []
+    for block, (axis, axis_word, lowest, words) in _TABLE_AXES.items():
+        rows = deck.rows(block)
+        if len(rows) < 2:
+            continue
+        if any(
+            axis_word in note
+            and any(word in note for word in _ONE_VALUE)
+            and any(word in note for word in words)
+            for note in result.notes
+        ):
+            continue
+        columns = [
+            key
+            for key in dict.fromkeys(key for row in rows[1:] for key in row)
+            if key != axis and any(isinstance(row.get(key), int | float) for row in rows[1:])
+        ]
+        folded: list[str] = []
+        for column in columns:
+            try:
+                if (
+                    target.render(_scaled(deck, block, column, first=False)).text
+                    != result.text
+                ):
+                    continue
+                if target.render(_scaled(deck, block, column, first=True)).text == result.text:
+                    continue  # 이 형식은 그 값을 아예 안 쓴다 — 접은 것이 아니다
+            except ExportError:
+                continue
+            folded.append(column)
+        if not folded:
+            continue
+        spec = block_spec(block)
+        labels = {item.key: item.label for item in spec.rows} if spec is not None else {}
+        said.append(
+            f"{' · '.join(labels.get(key, key) for key in folded)} — {axis_word}별 표"
+            f"({len(rows)}점)가 있는데 이 형식에는 한 값만 실렸습니다. 블록의 대푯값"
+            f"({lowest})을 썼습니다."
+        )
+    return said
+
+
+def render(
+    format_key: str | Renderer,
+    deck: Deck,
+    system: UnitSystem = SI,
+    *,
+    check_folds: bool = True,
+) -> Rendered:
     """덱을 솔버 텍스트로 만든다.
 
     **쓰고 나서 다시 읽는다.** 키워드가 빠진 파일은 솔버가 오류 없이 무시하기도
-    한다 — 그러면 해석은 도는데 재료가 안 들어간 채로 돈다.
+    한다 — 그러면 해석은 도는데 재료가 안 들어간 채로 돈다. 표를 첫 줄 하나로 접고
+    말하지 않았으면 각주를 단다(`_folded`) — 각주가 필요 없는 부름(칸 배치가 값을 흔들어
+    다시 그리는 것)은 `check_folds=False` 로 건너뛴다.
 
     `system` 은 **여기서 한 번** 적용된다(`to_system`). 렌더러는 이미 그 계로
     바뀐 덱을 받고, 선언 줄만 `deck.units` 에서 읽는다.
@@ -2026,11 +2228,16 @@ def render(format_key: str | Renderer, deck: Deck, system: UnitSystem = SI) -> R
         )
 
     # **형식이 단위를 정했으면 그 계로** — 고른 계가 무엇이든(`Renderer.fixed_units`).
-    result = target.render(to_system(deck, effective_system(target, system)))
+    moved = to_system(deck, effective_system(target, system))
+    result = target.render(moved)
     absent = [word for word in target.keywords if word not in result.text]
     if absent:
         raise ExportError(
             f"{target.label} 덱에 있어야 할 키워드가 빠졌습니다: {', '.join(absent)}. "
             f"내보내기 코드의 문제입니다 — 이대로 쓰면 솔버가 재료 없이 해석을 돌립니다."
         )
+    if check_folds:
+        extra = _folded(target, moved, result)
+        if extra:
+            result = replace(result, notes=(*result.notes, *extra))
     return result

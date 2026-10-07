@@ -121,7 +121,14 @@ KNOWN = DECLARED + EXCHANGED
 #: 그대로**다(`symbol` · `convert`). 이 값을 싣는 형식은 두 갈래뿐이다 — 값마다 단위를 적는
 #: 형식(중립 JSON)이거나, 단위가 정해진 형식(`Renderer.fixed_units` — AEDT · CST 는 SI 를
 #: 받는다). 계의 기호표(`symbols`)에는 안 넣는다: 넣으면 「이 계가 옮겼다」 로 읽힌다.
-UNSCALED = ("S/m", "ohm.m")
+UNSCALED = (
+    "S/m",
+    "ohm.m",
+    # Arrhenius 활성화 에너지(점탄성 블록, 2026-10-07). 물질량(mol)은 계가 정하지 않는다
+    # (위 `EXCHANGED` 머리말). 이 값을 싣는 형식은 기체 상수 R 을 **같은 단위로** 함께 적어야
+    # 한다 — 솔버가 읽는 것은 Ea/R(온도)이라, 둘을 한 단위로 두면 계와 상관없이 맞는다.
+    "J/mol",
+)
 
 
 @dataclass(frozen=True)

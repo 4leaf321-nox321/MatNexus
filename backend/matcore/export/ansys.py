@@ -44,9 +44,12 @@ from matcore.export import (
     prepare,
     prony_terms,
     register_renderer,
+    viscoelastic_shift,
+    viscoelastic_shift_notes,
 )
 from matcore.export.electronics import frequency_series, resistivity
 from matcore.export.systems import SI
+from matcore.viscoelastic import GAS_CONSTANT
 
 #: 재료 번호를 담는 APDL 매개변수. 스니펫에서는 `= matid` 로 바꾼다.
 MATERIAL = "MNX_MAT"
@@ -326,7 +329,31 @@ def render_ansys_viscoelastic(deck: Deck) -> Rendered:
     lines.append("! EX is the INSTANTANEOUS (t=0) modulus - ANSYS always reads it that way.")
     lines.append("! Shear ratios alpha_i from tensile/flexural E - assumes constant Poisson.")
     lines.append("! Bulk relaxation not measured by DMA - no TB,PRONY,BULK (elastic bulk).")
-    if reference is not None:
+    shift = viscoelastic_shift(deck) if reference is not None else None
+    if reference is not None and shift is not None:
+        # **TB,SHIFT**(2026-10-07) — ANSYS 는 시간을 A 로 **곱한다**(ξ = A·t, Material
+        # Reference Eq. 4-52) — 우리 a_T 의 역수다. 그래서 매뉴얼의 WLF
+        # `log10 A = C1(T-Tr)/(C2+T-Tr)` 에 마이너스가 없어도 C1 · C2 는 그대로 들어간다
+        # (매뉴얼도 「문헌은 흔히 반대 부호로 쓴다」 고 적는다). Arrhenius 는 TN 식
+        # `ln A = (H/R)(1/Tr - 1/T)` 이 같은 꼴이라 H/R = Ea/R 로 넣는다.
+        option = "WLF" if shift[0] == "wlf" else "TN"
+        lines.append(
+            f"! Prony fitted at {reference:.2f} K ({reference - 273.15:.2f} C); "
+            f"TB,SHIFT ({option}) shifts it to other temperatures."
+        )
+        low = deck.number("viscoelastic", "shift_temperature_min_k")
+        high = deck.number("viscoelastic", "shift_temperature_max_k")
+        if low is not None and high is not None:
+            lines.append(
+                f"! Shift measured over {low:.2f}~{high:.2f} K - extrapolated outside."
+            )
+        if option == "TN":
+            lines.append(
+                "! TN with H/R = Ea/R is the Arrhenius shift. Temperatures are absolute K "
+                "(TOFFST=0)."
+            )
+        notes.extend(viscoelastic_shift_notes(deck, shift[0], "TB,SHIFT"))
+    elif reference is not None:
         lines.append(
             f"! Valid at {reference:.2f} K only - master curve reference temperature "
             f"(no TB,SHIFT: the shift constants are not on the card)."
@@ -345,6 +372,17 @@ def render_ansys_viscoelastic(deck: Deck) -> Rendered:
         chunk = terms[start : start + 3]
         values = ",".join(f"{_free(g)},{_free(tau)}" for g, tau in chunk)
         lines.append(f"TBDATA,{2 * start + 1},{values}")
+    if reference is not None and shift is not None:
+        # TBDATA 자리: WLF 는 1=Tr · 2=C1 · 3=C2, TN 은 1=Tr · 2=H/R(매뉴얼 표).
+        method, constants = shift
+        if method == "wlf":
+            lines.append(f"TB,SHIFT,{MATERIAL},1,3,WLF")
+            lines.append(
+                f"TBDATA,1,{_free(reference)},{_free(constants[0])},{_free(constants[1])}"
+            )
+        else:
+            lines.append(f"TB,SHIFT,{MATERIAL},1,2,TN")
+            lines.append(f"TBDATA,1,{_free(reference)},{_free(constants[0] / GAS_CONSTANT)}")
     total = sum(g for g, _ in terms)
     notes.append(
         f"Prony {len(terms)}항, 상대 탄성률 합 {total:.4f} "

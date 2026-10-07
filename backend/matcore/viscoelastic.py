@@ -36,8 +36,9 @@ TA TRIOS 가 TTS 를 계산해 준다(`TTS - master curve (20.0 °C)`). 그것�
 from __future__ import annotations
 
 import math
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
+from typing import Any
 
 import numpy as np
 from scipy.optimize import least_squares, minimize_scalar
@@ -286,6 +287,58 @@ def _observed_all(
     return found
 
 
+def wlf_from_points(
+    temperatures: np.ndarray, targets: np.ndarray, reference_temperature_k: float
+) -> tuple[float, float]:
+    """관측 이동인자 `(온도, log10 a_T)` 점들에 WLF 를 맞춘다 → `(c1, c2)`.
+
+    마스터커브 하나(`fit_wlf`)와 시편 여럿의 점을 모은 것(`pooled_shift`)이 같은 식을 쓴다.
+    """
+    deltas = np.asarray(temperatures, dtype=float) - reference_temperature_k
+    goal = np.asarray(targets, dtype=float)
+    # `c2 + ΔT` 가 0 이 되면 발산한다. 가장 낮은 온도에서도 양수이게 아래를 막는다.
+    lower_c2 = max(1e-3, -float(np.min(deltas)) + 1e-3)
+
+    def residual(parameters: np.ndarray) -> np.ndarray:
+        c1, c2 = float(parameters[0]), float(parameters[1])
+        return np.asarray(-c1 * deltas / (c2 + deltas) - goal, dtype=float)
+
+    outcome = least_squares(
+        residual,
+        # 고분자의 흔한 보편값에서 출발한다(c1≈17.44, c2≈51.6).
+        x0=np.asarray([17.44, max(51.6, lower_c2 + 1.0)]),
+        bounds=(np.asarray([1e-8, lower_c2]), np.asarray([1000.0, 5000.0])),
+        method="trf",
+        max_nfev=5000,
+    )
+    if not outcome.success or not np.all(np.isfinite(outcome.x)):
+        raise ViscoelasticError("WLF 계수를 맞추지 못했습니다. 관측 이동인자를 확인하세요.")
+    return float(outcome.x[0]), float(outcome.x[1])
+
+
+def arrhenius_from_points(
+    temperatures: np.ndarray, targets: np.ndarray, reference_temperature_k: float
+) -> float:
+    """관측 이동인자 점들에 Arrhenius 를 맞춘다 → 활성화 에너지(J/mol). 원점을 지나는 직선."""
+    inverse_delta = 1.0 / np.asarray(temperatures, dtype=float) - 1.0 / reference_temperature_k
+    goal = np.asarray(targets, dtype=float)
+    denominator = float(np.dot(inverse_delta, inverse_delta))
+    if denominator <= np.finfo(float).tiny:
+        raise ViscoelasticError("온도 범위가 너무 좁아 Arrhenius 기울기를 낼 수 없습니다.")
+    slope = float(np.dot(inverse_delta, goal) / denominator)
+    activation_energy = slope * math.log(10.0) * GAS_CONSTANT
+    if not math.isfinite(activation_energy) or activation_energy <= 0:
+        # **음의 활성화 에너지는 물리가 아니다** — 온도가 올라갈수록 느려진다는
+        # 뜻이 된다. 그래도 숫자는 나오고 마스터커브도 그려지므로, 여기서 안
+        # 막으면 뒤집힌 곡선 위에서 Prony 를 맞추게 된다.
+        raise ViscoelasticError(
+            f"활성화 에너지가 양수가 아닙니다({activation_energy / 1000:.4g} kJ/mol). "
+            f"온도가 올라갈수록 느려진다는 뜻이라 물리가 아닙니다 — 이동인자의 "
+            f"부호나 온도 라벨을 확인하세요."
+        )
+    return activation_energy
+
+
 def fit_wlf(
     sweeps: list[Sweep], reference_temperature_k: float
 ) -> tuple[tuple[ShiftFactor, ...], float, float]:
@@ -306,25 +359,7 @@ def fit_wlf(
     temperatures = np.asarray(sorted(observed), dtype=float)
     deltas = temperatures - reference_temperature_k
     targets = np.asarray([observed[float(value)][0] for value in temperatures])
-
-    # `c2 + ΔT` 가 0 이 되면 발산한다. 가장 낮은 온도에서도 양수이게 아래를 막는다.
-    lower_c2 = max(1e-3, -float(np.min(deltas)) + 1e-3)
-
-    def residual(parameters: np.ndarray) -> np.ndarray:
-        c1, c2 = float(parameters[0]), float(parameters[1])
-        return np.asarray(-c1 * deltas / (c2 + deltas) - targets, dtype=float)
-
-    outcome = least_squares(
-        residual,
-        # 고분자의 흔한 보편값에서 출발한다(c1≈17.44, c2≈51.6).
-        x0=np.asarray([17.44, max(51.6, lower_c2 + 1.0)]),
-        bounds=(np.asarray([1e-8, lower_c2]), np.asarray([1000.0, 5000.0])),
-        method="trf",
-        max_nfev=5000,
-    )
-    if not outcome.success or not np.all(np.isfinite(outcome.x)):
-        raise ViscoelasticError("WLF 계수를 맞추지 못했습니다. 관측 이동인자를 확인하세요.")
-    c1, c2 = float(outcome.x[0]), float(outcome.x[1])
+    c1, c2 = wlf_from_points(temperatures, targets, reference_temperature_k)
 
     shifts = tuple(
         ShiftFactor(
@@ -357,21 +392,8 @@ def fit_arrhenius(
     temperatures = np.asarray(sorted(observed), dtype=float)
     inverse_delta = 1.0 / temperatures - 1.0 / reference_temperature_k
     targets = np.asarray([observed[float(value)][0] for value in temperatures])
-
-    denominator = float(np.dot(inverse_delta, inverse_delta))
-    if denominator <= np.finfo(float).tiny:
-        raise ViscoelasticError("온도 범위가 너무 좁아 Arrhenius 기울기를 낼 수 없습니다.")
-    slope = float(np.dot(inverse_delta, targets) / denominator)
-    activation_energy = slope * math.log(10.0) * GAS_CONSTANT
-    if not math.isfinite(activation_energy) or activation_energy <= 0:
-        # **음의 활성화 에너지는 물리가 아니다** — 온도가 올라갈수록 느려진다는
-        # 뜻이 된다. 그래도 숫자는 나오고 마스터커브도 그려지므로, 여기서 안
-        # 막으면 뒤집힌 곡선 위에서 Prony 를 맞추게 된다.
-        raise ViscoelasticError(
-            f"활성화 에너지가 양수가 아닙니다({activation_energy / 1000:.4g} kJ/mol). "
-            f"온도가 올라갈수록 느려진다는 뜻이라 물리가 아닙니다 — 이동인자의 "
-            f"부호나 온도 라벨을 확인하세요."
-        )
+    activation_energy = arrhenius_from_points(temperatures, targets, reference_temperature_k)
+    slope = activation_energy / (math.log(10.0) * GAS_CONSTANT)
 
     predicted = slope * inverse_delta
     shifts = tuple(
@@ -543,3 +565,115 @@ def _blend(grid: np.ndarray, curves: list[tuple[np.ndarray, np.ndarray]]) -> np.
         )
     blended: np.ndarray = np.power(10.0, total / count)
     return blended
+
+
+# --- 카드에 싣는 온도 이동 (2026-10-07) ----------------------------------------
+#
+# 맞춘 이동 상수(WLF c1 · c2, Arrhenius Ea)가 마스터커브 기록에만 남고 카드 · 덱으로 안
+# 갔다 — 점탄성 덱은 「기준 온도에서만 유효」 라고 적을 수밖에 없었고, 해석자가 솔버의
+# 이동 키워드(`*TRS` · `TB,SHIFT`)를 손으로 넣으려 해도 덱만 봐서는 값을 몰랐다. 이제 카드가
+# 상수와 **맞춘 온도 범위**를 든다 — 그 범위 밖은 외삽이다.
+
+#: 점탄성 블록에 싣는 이동 칸. 렌더러가 이 이름으로 읽는다.
+SHIFT_KEYS = (
+    "shift_c1",
+    "shift_c2",
+    "shift_activation_energy",
+    "shift_temperature_min_k",
+    "shift_temperature_max_k",
+    "shift_max_residual",
+)
+
+
+def _number(value: Any) -> float | None:
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        return None
+    return float(value) if math.isfinite(float(value)) else None
+
+
+def shift_card_values(
+    method: str, parameters: Mapping[str, Any], shifts: Sequence[Mapping[str, Any]]
+) -> dict[str, float]:
+    """마스터커브 하나의 온도 이동 → 카드 값. 저장된 모양(`MasterCurve.shifts` 의 dict)
+    그대로 받는다.
+
+    수동 이동인자(장비가 준 값)는 식이 없어 상수가 없다 — 온도 범위만 든다. 맞춘 값과 관측값의
+    차가 크면 그 식이 이 재료 · 이 온도 범위에 안 맞는다는 뜻이라 가장 큰 차(자릿수)를
+    함께 든다.
+    """
+    out: dict[str, float] = {}
+    temperatures = [
+        value
+        for value in (_number(one.get("temperature_k")) for one in shifts)
+        if value is not None
+    ]
+    if temperatures:
+        out["shift_temperature_min_k"] = min(temperatures)
+        out["shift_temperature_max_k"] = max(temperatures)
+    residuals = [
+        abs(value)
+        for value in (_number(one.get("residual")) for one in shifts)
+        if value is not None
+    ]
+    if residuals:
+        out["shift_max_residual"] = max(residuals)
+    if method == "wlf":
+        c1, c2 = _number(parameters.get("c1")), _number(parameters.get("c2"))
+        if c1 is not None and c2 is not None:
+            out["shift_c1"], out["shift_c2"] = c1, c2
+    elif method == "arrhenius":
+        energy = _number(parameters.get("activation_energy_j_per_mol"))
+        if energy is not None:
+            out["shift_activation_energy"] = energy
+    return out
+
+
+def pooled_shift_values(
+    method: str,
+    reference_temperature_k: float,
+    members: Sequence[Sequence[Mapping[str, Any]]],
+) -> dict[str, float]:
+    """시편 여럿의 **관측** 이동인자를 모아 식 하나를 다시 맞춘다 → 카드 값.
+
+    시편마다 맞춘 c1 · c2 를 평균 내지 않는다 — 두 상수는 함께 움직여서(한쪽이 커지면 다른
+    쪽도 커진다) 평균한 짝은 어느 시편에도 안 맞을 수 있다. 관측점을 모아 맞추면 시편 사이의
+    흩어짐이 잔차로 남는다(묶음 Prony 의 pooled 와 같은 판단). 기준 온도는 묶음이 하나로
+    맞춰 뒀다.
+    """
+    points: list[tuple[float, float]] = []
+    for shifts in members:
+        for one in shifts:
+            temperature = _number(one.get("temperature_k"))
+            # 관측값이 없으면(기준 온도 · 수동) 적힌 이동인자가 곧 관측이다.
+            observed = _number(one.get("observed_log10_a_t"))
+            if observed is None:
+                observed = _number(one.get("log10_a_t"))
+            if temperature is not None and observed is not None:
+                points.append((temperature, observed))
+    temperatures = np.asarray([one for one, _ in points], dtype=float)
+    targets = np.asarray([one for _, one in points], dtype=float)
+    if len({round(float(one), 6) for one in temperatures}) < MIN_TEMPERATURES:
+        raise ViscoelasticError(
+            f"모은 이동인자의 온도가 {MIN_TEMPERATURES}개보다 적습니다 — 식을 맞출 수 "
+            "없습니다."
+        )
+    if method == "wlf":
+        c1, c2 = wlf_from_points(temperatures, targets, reference_temperature_k)
+        deltas = temperatures - reference_temperature_k
+        fitted = -c1 * deltas / (c2 + deltas)
+        parameters: dict[str, float] = {"c1": c1, "c2": c2}
+    elif method == "arrhenius":
+        energy = arrhenius_from_points(temperatures, targets, reference_temperature_k)
+        fitted = (
+            energy
+            / (math.log(10.0) * GAS_CONSTANT)
+            * (1.0 / temperatures - 1.0 / reference_temperature_k)
+        )
+        parameters = {"activation_energy_j_per_mol": energy}
+    else:
+        raise ViscoelasticError(f"{method} 이동은 식이 없어 다시 맞출 수 없습니다.")
+    shifts = [
+        {"temperature_k": float(temperature), "residual": float(model - observed)}
+        for temperature, model, observed in zip(temperatures, fitted, targets, strict=True)
+    ]
+    return shift_card_values(method, parameters, shifts)

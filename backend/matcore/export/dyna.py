@@ -41,8 +41,11 @@ from matcore.export import (
     prony_terms,
     rate_curves,
     register_renderer,
+    viscoelastic_shift,
+    viscoelastic_shift_notes,
 )
 from matcore.export.template import fit
+from matcore.viscoelastic import GAS_CONSTANT
 
 #: *MAT_GENERAL_VISCOELASTIC 이 받는 항 카드 수. **장기 탄성률도 한 장을 쓴다**
 #: (β=0 항) — Prony 는 그만큼 덜 받는다.
@@ -139,6 +142,23 @@ def render_dyna_elastic(deck: Deck) -> Rendered:
     return Rendered(text="\n".join(lines) + "\n", notes=tuple(notes))
 
 
+def _flat_elastic(deck: Deck) -> tuple[list[str], list[str]]:
+    """온도별 탄성 표를 **상수 하나로 접는다** — 덱 주석과 각주로 말한다(`*MAT_001` 과 같다).
+
+    *MAT_024 의 E · PR 은 상수다. 2026-10-07 까지는 표가 있어도 아무 말 없이 첫 줄을 썼다 —
+    덱만 받은 사람은 온도를 타는 탄성이 빠진 줄 몰랐다. `(덱 줄, 각주)` 를 돌려준다.
+    """
+    if len(deck.rows("elastic")) <= 1:
+        return [], []
+    return (
+        ["$ *MAT_024 E and PR are temperature independent: lowest-temperature value."],
+        [
+            "온도별 탄성 표가 있는데 *MAT_024 의 E · PR 은 상수 하나입니다 — 블록의 대푯값"
+            "(가장 낮은 온도)을 썼습니다."
+        ],
+    )
+
+
 def _mat024_head(deck: Deck, yield_stress: float, lcss: int, vp: float | None) -> list[str]:
     """*MAT_024 카드 넷 — 1(탄성·SIGY) · 2(C·P·LCSS·LCSR·VP) · 3(EPS) · 4(ES)."""
     youngs = deck.number("elastic", "youngs_modulus")
@@ -198,6 +218,9 @@ def render_dyna(deck: Deck) -> Rendered:
     """
     points, notes = prepare(deck.pairs("table", "plastic_strain", "true_stress"))
     lines = ["*KEYWORD", *_header(deck, "$"), *_units_comment(deck)]
+    flat, said = _flat_elastic(deck)
+    lines.extend(flat)
+    notes.extend(said)
     lines.extend(_mat024_head(deck, points[0][1], deck.solver_id, None))
     # 소성변형률이 먼저, 응력이 나중 — *DEFINE_CURVE 는 (가로축, 세로축)이다.
     lines.extend(_curve(deck.solver_id, points))
@@ -304,6 +327,9 @@ def render_dyna_rate(deck: Deck) -> Rendered:
     table_id = deck.solver_id
 
     lines = ["*KEYWORD", *_header(deck, "$"), *_units_comment(deck)]
+    flat, said = _flat_elastic(deck)
+    lines.extend(flat)
+    notes.extend(said)
     lines.append(
         f"$ Strain rate dependent: {len(cut)} rates "
         f"({cut[0][0]:.4g} ~ {cut[-1][0]:.4g} per time unit), tabulated, VP=1."
@@ -397,7 +423,26 @@ def render_dyna_viscoelastic(deck: Deck) -> Rendered:
     lines.append(f"$ K  = E/(3(1-2nu)) = {bulk:.6E}   - bulk stays elastic (not measured)")
     lines.append(f"$ Ginf = (1 - sum gi) G0 = {long_term:.6E}  - first term, BETA = 0")
     lines.append("$ Gi = gi * G0,  BETAi = 1/tau_i   - shear ratios from tensile/flexural E")
-    if reference is not None:
+    shift = viscoelastic_shift(deck) if reference is not None else None
+    # **Arrhenius 만 싣는다**(2026-10-07). 매뉴얼(R16 Vol II *MAT_076 Remarks)의 Arrhenius 는
+    # `Φ = exp[-A(1/T - 1/TREF)]`, 시간을 Φ 로 곱한다 — A = Ea/R 이면 우리 a_T 의 역수라 맞다.
+    # 같은 쪽의 WLF `Φ = exp(-A(T-TREF)/(B+T-TREF))` 는 A>0 이면 뜨거울수록 **느려지는** 부호라
+    # Arrhenius 와 서로 어긋난다 — 어느 부호로 넣어야 하는지 글로 확인할 수 없어 WLF 는 안
+    # 싣는다.
+    energy = shift[1][0] if shift is not None and shift[0] == "arrhenius" else None
+    if reference is not None and energy is not None:
+        lines.append(
+            f"$ Prony fitted at {reference:.2f} K ({reference - 273.15:.2f} C); "
+            f"Arrhenius shift on card 1 (TREF, A = Ea/R, B = 0)."
+        )
+        low = deck.number("viscoelastic", "shift_temperature_min_k")
+        high = deck.number("viscoelastic", "shift_temperature_max_k")
+        if low is not None and high is not None:
+            lines.append(
+                f"$ Shift measured over {low:.2f}~{high:.2f} K - extrapolated outside."
+            )
+        notes.extend(viscoelastic_shift_notes(deck, "arrhenius", "*MAT_076 TREF · A"))
+    elif reference is not None:
         lines.append(
             f"$ Valid at {reference:.2f} K only - master curve reference temperature."
         )
@@ -405,14 +450,39 @@ def render_dyna_viscoelastic(deck: Deck) -> Rendered:
             f"기준 온도 {reference - 273.15:.1f} °C 에서만 유효하다는 사실을 덱 주석에 "
             f"적었습니다."
         )
+        if shift is not None:
+            lines.append(
+                "$ WLF shift not written - the *MAT_076 manual prints WLF and Arrhenius "
+                "with opposite signs."
+            )
+            notes.append(
+                "LS-DYNA *MAT_076 매뉴얼은 WLF 식과 Arrhenius 식을 서로 어긋나는 부호로 적고 "
+                "있어, WLF 상수를 어느 부호로 넣어야 하는지 확인할 수 없습니다 — WLF 이동은 "
+                "싣지 않았습니다."
+            )
     else:
         notes.append(
             "기준 온도가 카드에 없어 덱에 적지 못했습니다. 이 카드가 어느 온도의 "
             "것인지 덱만으로는 알 수 없습니다."
         )
     lines.append("*MAT_GENERAL_VISCOELASTIC")
-    lines.append("$      mid        ro      bulk      pcf       ef      tref")
-    lines.append(_i10(deck.solver_id) + _f10(density) + _f10(bulk))
+    if reference is not None and energy is not None:
+        # 1번 카드: MID RO BULK PCF EF TREF A B — B = 0 이면 Arrhenius 를 쓴다(매뉴얼 Remarks).
+        lines.append(
+            "$      mid        ro      bulk       pcf        ef      tref         a         b"
+        )
+        lines.append(
+            _i10(deck.solver_id)
+            + _f10(density)
+            + _f10(bulk)
+            + " " * 20
+            + _f10(reference)
+            + _f10(energy / GAS_CONSTANT)
+            + _f10(0.0)
+        )
+    else:
+        lines.append("$      mid        ro      bulk      pcf       ef      tref")
+        lines.append(_i10(deck.solver_id) + _f10(density) + _f10(bulk))
     # **2번 카드는 비워도 있어야 한다** — 「Prony 카드를 쓰면 비워 두라」 는 칸이지
     # 빼도 되는 카드가 아니다. 빼면 첫 Prony 줄이 LCID·NT 로 읽힌다.
     lines.append(
@@ -546,9 +616,10 @@ def render_dyna_hyperelastic(deck: Deck) -> Rendered:
 def render_dyna_thermal(deck: Deck) -> Rendered:
     """LS-DYNA `*MAT_THERMAL_ISOTROPIC` — 상수 비열·전도도.
 
-    이 키워드는 표(온도 의존)를 받지 않는다 — 온도 의존이 필요하면
-    *MAT_THERMAL_ISOTROPIC_TD 인데, 그건 표가 카드에 실릴 때 만든다. 값이
-    표에서 온 경우(첫 값만 쓰는 것)는 **조용히 누르는 일**이라 하지 않는다.
+    이 키워드는 표(온도 의존)를 받지 않는다 — 온도 의존은 *MAT_THERMAL_ISOTROPIC_TD 다.
+    카드에 온도별 열물성 표가 있으면 **첫 줄(가장 낮은 온도)을 쓰고 그렇다고 적는다.**
+    여기 설명은 전에 「조용히 누르지 않는다」 였는데, 코드는 표를 보지 않고 첫 값을 그냥
+    썼다(2026-10-07 — 모든 형식에서 표의 둘째 줄을 바꿔 보는 점검에서 드러났다).
     """
     heat = deck.number("thermal", "specific_heat")
     conductivity = deck.number("thermal", "thermal_conductivity")
@@ -557,6 +628,20 @@ def render_dyna_thermal(deck: Deck) -> Rendered:
 
     notes: list[str] = []
     lines = ["*KEYWORD", *_header(deck, "$"), *_units_comment(deck)]
+    tabled = [
+        row
+        for row in deck.rows("thermal")
+        if "specific_heat" in row or "thermal_conductivity" in row
+    ]
+    if len(tabled) > 1:
+        notes.append(
+            "온도별 열물성 표가 있는데 *MAT_THERMAL_ISOTROPIC 의 비열 · 열전도율은 "
+            "상수 하나입니다 — 블록의 대푯값(가장 낮은 온도)을 썼습니다. 온도 의존은 "
+            "*MAT_THERMAL_ISOTROPIC_TD 가 받습니다."
+        )
+        lines.append(
+            "$ *MAT_THERMAL_ISOTROPIC is temperature independent: lowest-temperature value."
+        )
     for key in ("specific_heat", "thermal_conductivity"):
         source = deck.values("thermal").get(f"{key}_source")
         lines.append(f"$ {key}: source={source or 'unknown'}")

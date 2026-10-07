@@ -349,6 +349,44 @@ class Test점탄성카드:
         assert card["source"]["sample_count"] == 1
         assert card["source"]["prony_fit_id"] == fit["id"]
 
+    def test_온도_이동_상수가_카드에_실린다(
+        self, client: TestClient, admin_headers: dict[str, str], dma_run_plain: dict[str, Any]
+    ) -> None:
+        """WLF C1 · C2 가 마스터커브 기록에만 남고 카드 · 덱으로 안 갔다(2026-10-07) — 덱은
+        「기준 온도에서만 유효」 라고 적을 수밖에 없었다. 맞춘 온도 범위도 함께 간다."""
+        sweeps = client.get(
+            f"/api/viscoelastic/runs/{dma_run_plain['id']}/sweeps", headers=admin_headers
+        ).json()["items"]
+        temperatures = sorted(float(item["temperature_k"]) for item in sweeps)
+        made = client.post(
+            f"/api/viscoelastic/runs/{dma_run_plain['id']}/master-curves",
+            json={
+                "reference_temperature_k": temperatures[len(temperatures) // 2],
+                "method": "wlf",
+            },
+            headers=admin_headers,
+        )
+        assert made.status_code == 201, made.text
+        curve = made.json()
+        fit = client.post(
+            f"/api/viscoelastic/master-curves/{curve['id']}/prony",
+            json={"terms": 2},
+            headers=admin_headers,
+        ).json()
+        card = client.post(
+            "/api/fitting/cards/viscoelastic",
+            json={"prony_fit_id": fit["id"], "label": "WLF", "poisson_ratio": 0.45},
+            headers=admin_headers,
+        )
+        assert card.status_code == 201, card.text
+        values = card.json()["blocks"]["viscoelastic"]["values"]
+        assert values["shift_method"] == "wlf"
+        assert values["shift_c1"] == pytest.approx(curve["parameters"]["c1"])
+        assert values["shift_c2"] == pytest.approx(curve["parameters"]["c2"])
+        assert values["shift_temperature_min_k"] == pytest.approx(temperatures[0])
+        assert values["shift_temperature_max_k"] == pytest.approx(temperatures[-1])
+        assert "shift_activation_energy" not in values
+
     def test_순간_탄성률이_탄성_블록에_든다(
         self, client: TestClient, admin_headers: dict[str, str], dma_run: dict[str, Any]
     ) -> None:

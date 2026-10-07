@@ -30,6 +30,7 @@ from matcore.export import (
     _header,
     _unit_block,
     hyperelastic_terms,
+    law36_flat_elastic,
     law36_lines,
     prony_terms,
     rate_curves,
@@ -139,6 +140,9 @@ def render_openradioss_rate(deck: Deck) -> Rendered:
             f"속도가 {len(curves)}개입니다 — LAW36 은 곡선을 {MAX_RATE_CURVES}개까지 받습니다."
         )
     lines = _starter(deck)
+    flat, said = law36_flat_elastic(deck)
+    lines.extend(flat)
+    notes.extend(said)
     lines.append(
         f"# Strain rate dependent: {len(curves)} rates "
         f"({curves[0][0]:.4g} ~ {curves[-1][0]:.4g} per time unit), "

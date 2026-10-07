@@ -9,6 +9,10 @@
 
 from __future__ import annotations
 
+import math
+from dataclasses import replace
+from typing import ClassVar
+
 import numpy as np
 import pytest
 
@@ -235,3 +239,139 @@ class Test막는_자리:
         with pytest.raises(groups.GroupError) as caught:
             run([naked, member("B")])
         assert "마스터커브를 먼저" in str(caught.value)
+
+
+def shifted(
+    one: groups.Member,
+    method: str,
+    temperatures: list[float],
+    *,
+    truth: dict[str, float],
+    claimed: dict[str, float],
+    reference_k: float = 293.15,
+) -> groups.Member:
+    """온도 이동을 든 시편. 관측점은 `truth` 로 짓고, 그 시편이 맞췄다고 **주장하는** 상수는
+    `claimed` 로 따로 둔다 — 묶음이 상수를 평균 내는지, 관측점을 모아 다시 맞추는지 가른다."""
+
+    def log_shift(temperature: float) -> float:
+        if method == "wlf":
+            delta = temperature - reference_k
+            return -truth["c1"] * delta / (truth["c2"] + delta)
+        return (
+            truth["activation_energy_j_per_mol"]
+            / (math.log(10.0) * 8.31446261815324)
+            * (1.0 / temperature - 1.0 / reference_k)
+        )
+
+    shifts = [
+        {
+            "temperature_k": temperature,
+            "log10_a_t": log_shift(temperature),
+            "observed_log10_a_t": log_shift(temperature),
+            "residual": 0.0,
+        }
+        for temperature in temperatures
+    ]
+    return replace(
+        one,
+        meta={
+            **one.meta,
+            "shift": {"method": method, "parameters": claimed, "shifts": shifts},
+        },
+    )
+
+
+class Test온도_이동:
+    """**이동 상수가 카드까지 간다**(2026-10-07). 전에는 방법 이름만 실려 덱이 다른 온도의
+    이동을 적을 수 없었다. 시편 여럿이면 관측 이동인자를 모아 다시 맞춘다 — 상수를 평균 내면
+    어느 시편에도 안 맞는 짝이 나올 수 있다(두 상수는 함께 움직인다)."""
+
+    TRUTH: ClassVar[dict[str, float]] = {"c1": 12.0, "c2": 100.0}
+
+    def test_시편_여럿이면_관측점을_모아_다시_맞춘다(self) -> None:
+        a = shifted(
+            member("A"),
+            "wlf",
+            [263.15, 293.15, 313.15],
+            truth=self.TRUTH,
+            claimed={"c1": 9.0, "c2": 70.0},
+        )
+        b = shifted(
+            member("B"),
+            "wlf",
+            [253.15, 293.15, 333.15],
+            truth=self.TRUTH,
+            claimed={"c1": 11.0, "c2": 90.0},
+        )
+        outcome = run([a, b], method="pooled")
+        assert outcome.detail["shift_method"] == "wlf"
+        # 주장한 상수의 평균(10, 80)이 아니라 관측점이 가리키는 (12, 100)이다.
+        assert outcome.values["shift_c1"] == pytest.approx(12.0, rel=1e-4)
+        assert outcome.values["shift_c2"] == pytest.approx(100.0, rel=1e-4)
+        assert outcome.values["shift_temperature_min_k"] == 253.15
+        assert outcome.values["shift_temperature_max_k"] == 333.15
+        assert outcome.values["shift_max_residual"] == pytest.approx(0.0, abs=1e-6)
+        assert any("다시 맞췄습니다" in line for line in outcome.warnings)
+
+    def test_Arrhenius_도_모아_맞춘다(self) -> None:
+        truth = {"activation_energy_j_per_mol": 1.5e5}
+        a = shifted(
+            member("A"),
+            "arrhenius",
+            [273.15, 293.15, 313.15],
+            truth=truth,
+            claimed={"activation_energy_j_per_mol": 1.0e5},
+        )
+        b = shifted(
+            member("B"),
+            "arrhenius",
+            [283.15, 293.15, 323.15],
+            truth=truth,
+            claimed={"activation_energy_j_per_mol": 2.0e5},
+        )
+        outcome = run([a, b], method="pooled")
+        assert outcome.values["shift_activation_energy"] == pytest.approx(1.5e5, rel=1e-6)
+        assert "shift_c1" not in outcome.values
+
+    def test_대표_하나면_그_시편의_상수다(self) -> None:
+        a = shifted(
+            member("A", fitted=True),
+            "wlf",
+            [263.15, 293.15, 313.15],
+            truth=self.TRUTH,
+            claimed={"c1": 9.0, "c2": 70.0},
+        )
+        b = shifted(
+            member("B", scatter=0.2, fitted=True),
+            "wlf",
+            [253.15, 293.15, 333.15],
+            truth=self.TRUTH,
+            claimed={"c1": 11.0, "c2": 90.0},
+        )
+        outcome = run([a, b], method="representative", representative="A")
+        assert outcome.values["shift_c1"] == 9.0 and outcome.values["shift_c2"] == 70.0
+        assert outcome.values["shift_temperature_max_k"] == 313.15
+
+    def test_방법이_섞였거나_모르면_싣지_않고_말한다(self) -> None:
+        a = shifted(
+            member("A"),
+            "wlf",
+            [263.15, 293.15, 313.15],
+            truth=self.TRUTH,
+            claimed={"c1": 9.0, "c2": 70.0},
+        )
+        b = shifted(
+            member("B"),
+            "arrhenius",
+            [273.15, 293.15, 313.15],
+            truth={"activation_energy_j_per_mol": 1.5e5},
+            claimed={"activation_energy_j_per_mol": 1.5e5},
+        )
+        mixed = run([a, b], method="pooled")
+        assert not any(key.startswith("shift_") for key in mixed.values)
+        assert "shift_method" not in mixed.detail
+        assert any("방법이 다릅니다" in line for line in mixed.warnings)
+
+        unknown = run([a, member("C")], method="pooled")
+        assert not any(key.startswith("shift_") for key in unknown.values)
+        assert any("온도 이동을 모르는" in line for line in unknown.warnings)

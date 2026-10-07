@@ -485,7 +485,15 @@ def _prony_members(db: Session, runs: list[TestRun]) -> list[groups.Member]:
         # **다른 모듈의 `services` 를 부르지 않는다**(경계 검사). 파케이를
         # 읽는 것은 그 모듈의 로직이 아니라 저장소 인프라다 — `shared` 를 쓴다.
         columns = _prony_columns(_read_points(curve.storage_path), run.record_name)
-        meta: dict[str, Any] = {}
+        # **온도 이동도 함께 간다**(2026-10-07) — 묶음이 시편들의 관측 이동인자를 모아 식을
+        # 다시 맞추고, 그 상수가 카드 · 덱까지 간다(`matcore.groups.prony._group_shift`).
+        meta: dict[str, Any] = {
+            "shift": {
+                "method": curve.method,
+                "parameters": dict(curve.parameters or {}),
+                "shifts": list(curve.shifts or []),
+            }
+        }
         fit = db.scalar(
             select(PronyFit)
             .where(PronyFit.master_curve_id == curve.id)

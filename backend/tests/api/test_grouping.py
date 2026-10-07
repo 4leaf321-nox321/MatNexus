@@ -175,6 +175,12 @@ class Test고치고_지운다:
             headers=admin_headers,
         )
         assert card.status_code == 201, card.text
+        # 온도 이동이 묶음을 거쳐 카드까지 온다(2026-10-07). 여기 시험들은 수동 이동인자로
+        # 겹쳤다 — 식이 없으니 상수는 없고, 맞춘 온도 범위만 간다.
+        values = card.json()["blocks"]["viscoelastic"]["values"]
+        assert values["shift_method"] == "manual"
+        assert "shift_temperature_min_k" in values and "shift_temperature_max_k" in values
+        assert "shift_c1" not in values and "shift_activation_energy" not in values
         blocked = client.delete(f"/api/groups/{group}", headers=admin_headers)
         assert blocked.status_code == 409, blocked.text
         assert "묶음 카드" in blocked.json()["error"]["message"]

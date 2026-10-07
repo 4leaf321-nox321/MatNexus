@@ -466,6 +466,40 @@ class Test온도의존:
             numbers.append(line)
         assert len(numbers) == 2, numbers
 
+    @pytest.mark.parametrize(
+        ("key", "keyword"), [("dyna", "*MAT_024"), ("openradioss", "LAW36")]
+    )
+    def test_상수만_받는_탄소성_형식은_접었다고_적는다(self, key: str, keyword: str) -> None:
+        """*MAT_024 · LAW36 의 E · ν 는 상수다 — 온도 표를 받고도 첫 줄만 쓰면서 **아무 말을
+        안 했다**(2026-10-07). 덱만 받은 사람이 알게 덱에, 화면이 보이게 각주에 적는다."""
+        rendered = export.render(key, temperature_deck(elastic_rows=self.ROWS))
+        assert f"{keyword} E and" in rendered.text
+        assert "temperature independent" in rendered.text
+        assert [
+            note for note in rendered.notes if keyword in note and "가장 낮은 온도" in note
+        ]
+        # 한 온도짜리에는 안 적는다 — 늘 적으면 경고로 안 읽힌다.
+        single = export.render(key, temperature_deck(elastic_rows=self.ROWS[:1]))
+        assert "temperature independent" not in single.text
+
+    def test_LS_DYNA_열물성도_표를_접었다고_적는다(self) -> None:
+        """*MAT_THERMAL_ISOTROPIC 은 상수다. 설명은 「조용히 누르지 않는다」 였는데 코드는 표를
+        안 보고 첫 값을 썼다(2026-10-07)."""
+        rows = [
+            {"temperature": 300.0, "specific_heat": 462.0, "thermal_conductivity": 45.0},
+            {"temperature": 500.0, "specific_heat": 520.0, "thermal_conductivity": 41.0},
+        ]
+        rendered = export.render("dyna_thermal", heat_deck(values=BASE, rows=rows))
+        assert "*MAT_THERMAL_ISOTROPIC is temperature independent" in rendered.text
+        assert [note for note in rendered.notes if "*MAT_THERMAL_ISOTROPIC_TD" in note]
+        # 열팽창만 온도를 타면(비열 · 전도도 표가 아니면) 이 형식이 접은 것이 없다.
+        expansion = [
+            {"temperature": 300.0, "thermal_expansion": 1.17e-05},
+            {"temperature": 500.0, "thermal_expansion": 1.42e-05},
+        ]
+        plain = export.render("dyna_thermal", heat_deck(values=BASE, rows=expansion))
+        assert "temperature independent" not in plain.text
+
     def test_열이_빠진_줄은_그_키워드에_안_실린다(self) -> None:
         """열팽창만 온도를 타고 비열은 상수인 것이 흔하다. 빈 칸을 0 으로
         채우면 **비열 0 인 재료**가 된다."""
@@ -627,3 +661,239 @@ def test_형식마다_파일_이름이_다르다() -> None:
             f"`suffix` 로 갈라 주세요 — 받는 쪽이 어느 쪽인지 알 방법이 없습니다."
         )
         seen[key] = renderer.key
+
+
+class Test말없이_접은_표:
+    """**표를 첫 줄 하나로 접고 말하지 않으면 `render` 가 말한다**(2026-10-07).
+
+    모든 형식에서 표의 둘째 줄을 바꿔 보니 열둘이 온도별 탄성 · 열물성 표를 받고도 첫 줄만
+    쓰면서 아무 말을 안 했다(LS-DYNA *MAT_024 · Radioss LAW36 · 확장의 Hill · Johnson-Cook ·
+    온도 의존). 그물을 `render` 한 곳에 둬서 확장 · 화면에서 만든 정의까지 걸린다.
+    """
+
+    ROWS: ClassVar[list[dict[str, Any]]] = Test온도의존.ROWS
+
+    @staticmethod
+    def _target(render: Any) -> export.Renderer:
+        return export.Renderer(
+            key="probe", label="시험 형식", extension="txt", describe="", render=render
+        )
+
+    def test_말없이_접으면_각주를_단다(self) -> None:
+        def silent(deck: export.Deck) -> export.Rendered:
+            return export.Rendered(text=f"E={deck.number('elastic', 'youngs_modulus')}\n")
+
+        rendered = export.render(
+            self._target(silent), temperature_deck(elastic_rows=self.ROWS)
+        )
+        said = [note for note in rendered.notes if "한 값만" in note]
+        assert said and "탄성계수" in said[0] and "가장 낮은 온도" in said[0], rendered.notes
+        # 칸 배치처럼 각주가 필요 없는 부름은 건너뛴다.
+        quiet = export.render(
+            self._target(silent), temperature_deck(elastic_rows=self.ROWS), check_folds=False
+        )
+        assert quiet.notes == ()
+
+    def test_이미_말했으면_더하지_않는다(self) -> None:
+        def honest(deck: export.Deck) -> export.Rendered:
+            return export.Rendered(
+                text=f"E={deck.number('elastic', 'youngs_modulus')}\n",
+                notes=(
+                    "온도별 탄성 표가 있는데 이 키워드는 상수 하나입니다 — 가장 낮은 온도.",
+                ),
+            )
+
+        rendered = export.render(
+            self._target(honest), temperature_deck(elastic_rows=self.ROWS)
+        )
+        assert len(rendered.notes) == 1
+
+    def test_표를_다_쓰거나_그_값을_안_쓰면_말하지_않는다(self) -> None:
+        def table(deck: export.Deck) -> export.Rendered:
+            rows = deck.rows("elastic")
+            return export.Rendered(
+                text="".join(
+                    f"{row['youngs_modulus']} {row['poisson_ratio']}\n" for row in rows
+                )
+            )
+
+        def unrelated(deck: export.Deck) -> export.Rendered:
+            return export.Rendered(text="no elastic here\n")
+
+        for render in (table, unrelated):
+            rendered = export.render(
+                self._target(render), temperature_deck(elastic_rows=self.ROWS)
+            )
+            assert rendered.notes == (), render.__name__
+
+
+def visco_deck(**shift: object) -> export.Deck:
+    """점탄성 카드 — 기준 23 °C, Prony 세 항. `shift` 는 점탄성 블록 값에 얹는다."""
+    return export.Deck(
+        name="EPDM",
+        solver_id=7,
+        blocks={
+            "elastic": {
+                "values": {"youngs_modulus": 2.4e9, "poisson_ratio": 0.35, "density": 1200.0}
+            },
+            "viscoelastic": {
+                "values": {"reference_temperature_k": 296.15, **shift},
+                "rows": [
+                    {"relative_modulus": 0.3, "relaxation_time_s": 0.01},
+                    {"relative_modulus": 0.2, "relaxation_time_s": 1.0},
+                    {"relative_modulus": 0.1, "relaxation_time_s": 100.0},
+                ],
+            },
+        },
+    )
+
+
+class TestAbaqus온도이동:
+    """**점탄성 덱이 기준 온도 밖에서도 맞게** — `*TRS`(2026-10-07).
+
+    매뉴얼의 식이 우리 것과 같다: WLF `log10 A = -C1(θ-θ0)/(C2+θ-θ0)` → C1 · C2 그대로,
+    Arrhenius `ln A = (E0/R)(1/(θ-θZ) - 1/(θ0-θZ))` → E0 = Ea(θZ = 0, K). 데이터 줄은 WLF 가
+    θ0 · C1 · C2, Arrhenius 가 θ0 · E0.
+    """
+
+    WLF: ClassVar[dict[str, float]] = {
+        "shift_c1": 12.5,
+        "shift_c2": 105.0,
+        "shift_temperature_min_k": 253.15,
+        "shift_temperature_max_k": 353.15,
+        "shift_max_residual": 0.08,
+    }
+
+    def test_WLF_는_Prony_바로_뒤에_TRS_로_간다(self) -> None:
+        rendered = export.render("abaqus_viscoelastic", visco_deck(**self.WLF))
+        lines = rendered.text.splitlines()
+        at = lines.index("*TRS, DEFINITION=WLF")
+        assert lines[at - 1].endswith(f"{100.0:.12E}"), "Prony 마지막 행 바로 뒤가 아니다"
+        assert lines[at + 1] == f"{296.15:.12E}, {12.5:.12E}, {105.0:.12E}"
+        assert "Shift measured over 253.15~353.15 K" in rendered.text
+        # 「기준 온도에서만 유효」 는 이제 거짓말이다 — 안 적는다.
+        assert "Add *TRS for other temperatures" not in rendered.text
+        said = [note for note in rendered.notes if "*TRS" in note]
+        assert said and "-20.0~80.0 °C" in said[0], rendered.notes
+
+    def test_Arrhenius_는_E0_와_모델_상수를_말한다(self) -> None:
+        rendered = export.render(
+            "abaqus_viscoelastic",
+            visco_deck(shift_activation_energy=152000.0, shift_max_residual=0.9),
+        )
+        lines = rendered.text.splitlines()
+        at = lines.index("*TRS, DEFINITION=ARRHENIUS")
+        assert lines[at + 1] == f"{296.15:.12E}, {152000.0:.12E}"
+        # *PHYSICAL CONSTANTS 는 모델 전체 설정이라 재료 덱에 안 넣고 말한다.
+        assert "*PHYSICAL CONSTANTS" in rendered.text
+        assert not any(line.startswith("*PHYSICAL CONSTANTS") for line in lines)
+        assert any("8.31446" in note for note in rendered.notes)
+        # 맞춘 이동이 관측과 0.9 자릿수 어긋났다 — 말한다.
+        assert any("0.90 자릿수" in note for note in rendered.notes)
+
+    def test_상수가_없으면_전처럼_기준_온도에서만이라고_한다(self) -> None:
+        rendered = export.render("abaqus_viscoelastic", visco_deck(shift_method="manual"))
+        assert "*TRS" not in rendered.text.replace("Add *TRS", "")
+        assert "Add *TRS for other temperatures" in rendered.text
+
+
+class TestOptiStruct온도이동:
+    """**MATTVE**(2026-10-07) — 매뉴얼의 식이 우리 것과 같다(WLF
+    `log10 A = -C1(T-T0)/(C2+T-T0)`, Arrhenius `ln A = (E0/R)(1/(T-Tz) - 1/(T0-Tz))`).
+    자리: MID · WLF · C1 · C2 / T0, Arrhenius 는 MID · ARRHENIU · E0 · R / T0 · Tz.
+    매뉴얼상 비선형 정적 · 과도 해석에서만 쓰인다."""
+
+    def test_WLF_는_MATVE_뒤에_MATTVE_로_간다(self) -> None:
+        rendered = export.render(
+            "optistruct_viscoelastic", visco_deck(**TestAbaqus온도이동.WLF)
+        )
+        lines = rendered.text.splitlines()
+        at = next(i for i, line in enumerate(lines) if line.startswith("MATTVE*"))
+        assert at > max(i for i, line in enumerate(lines) if line.startswith("MATVE*"))
+        assert lines[at] == (
+            f"MATTVE* {7:<16d}{'WLF':<16}{12.5:<16.8E}{105.0:<16.8E}".rstrip()
+        )
+        assert lines[at + 1] == f"*       {296.15:<16.8E}".rstrip()
+        assert "nonlinear static / nonlinear transient" in rendered.text
+        assert any("MATTVE" in note and "-20.0~80.0 °C" in note for note in rendered.notes)
+        assert "$ Valid at" not in rendered.text
+
+    def test_Arrhenius_는_E0_와_R_을_같은_단위로(self) -> None:
+        rendered = export.render(
+            "optistruct_viscoelastic", visco_deck(shift_activation_energy=152000.0)
+        )
+        lines = rendered.text.splitlines()
+        at = next(i for i, line in enumerate(lines) if line.startswith("MATTVE*"))
+        head = f"MATTVE* {7:<16d}{'ARRHENIU':<16}"
+        assert lines[at] == f"{head}{152000.0:<16.8E}{8.31446261815324:<16.8E}".rstrip()
+        assert lines[at + 1] == f"*       {296.15:<16.8E}{0.0:<16.8E}".rstrip()
+
+    def test_상수가_없으면_MATTVE_를_안_쓴다(self) -> None:
+        rendered = export.render("optistruct_viscoelastic", visco_deck())
+        assert "MATTVE" not in rendered.text
+        assert "$ Valid at 296.15 K only" in rendered.text
+
+
+class Test나머지_솔버_온도이동:
+    """매뉴얼 원문으로 확인한 것만 싣는다(2026-10-07).
+
+    ANSYS     TB,SHIFT — 시간을 A 로 **곱한다**(ξ = A·t) → A = 1/a_T. 매뉴얼의 WLF
+              `log10 A = C1(T-Tr)/(C2+T-Tr)` 에 마이너스가 없어도 C1 · C2 그대로.
+              Arrhenius 는 TN `ln A = (H/R)(1/Tr - 1/T)` → H/R = Ea/R.
+              TBDATA 1=Tr, 2=C1, 3=C2 / 1=Tr, 2=H/R.
+    Nastran   MATTVE(SOL 400) — `log10 a_T = -A1(T-T0)/(A2+T-T0)` 우리와 같다. Arrhenius 꼴
+              없음.
+    LS-DYNA   *MAT_076 1번 카드 TREF · A · B — Arrhenius `Φ = exp[-A(1/T - 1/TREF)]`, B = 0.
+              WLF 는 매뉴얼의 두 식 부호가 어긋나 **싣지 않는다.**
+    """
+
+    ARRHENIUS: ClassVar[dict[str, float]] = {
+        "shift_activation_energy": 152000.0,
+        "shift_temperature_min_k": 263.15,
+        "shift_temperature_max_k": 333.15,
+    }
+
+    def test_ANSYS_WLF_와_TN(self) -> None:
+        wlf = export.render("ansys_viscoelastic", visco_deck(**TestAbaqus온도이동.WLF)).text
+        lines = wlf.splitlines()
+        at = lines.index("TB,SHIFT,MNX_MAT,1,3,WLF")
+        assert lines[at + 1] == f"TBDATA,1,{296.15:.12E},{12.5:.12E},{105.0:.12E}"
+        assert at > max(i for i, line in enumerate(lines) if line.startswith("TB,PRONY"))
+        assert "no TB,SHIFT" not in wlf
+
+        tn = export.render(
+            "ansys_viscoelastic", visco_deck(**self.ARRHENIUS)
+        ).text.splitlines()
+        at = tn.index("TB,SHIFT,MNX_MAT,1,2,TN")
+        assert tn[at + 1] == f"TBDATA,1,{296.15:.12E},{152000.0 / 8.31446261815324:.12E}"
+
+    def test_Nastran_은_WLF_만_MATTVE_로(self) -> None:
+        wlf = export.render(
+            "nastran_viscoelastic", visco_deck(**TestAbaqus온도이동.WLF)
+        ).text.splitlines()
+        at = next(i for i, line in enumerate(wlf) if line.startswith("MATTVE*"))
+        assert wlf[at] == f"MATTVE* {7:<16d}{'WLF':<16}{296.15:<16.8E}".rstrip()
+        # 둘째 반 줄(FRACT · TDIF · TREF · NP)은 비고, 다음 논리 줄이 A1 · A2 다.
+        assert wlf[at + 1] == "*"
+        assert wlf[at + 2] == f"*       {12.5:<16.8E}{105.0:<16.8E}".rstrip()
+
+        arrhenius = export.render("nastran_viscoelastic", visco_deck(**self.ARRHENIUS))
+        assert "MATTVE*" not in arrhenius.text
+        assert "$ Valid at 296.15 K only" in arrhenius.text
+        assert any("Arrhenius 식이 없어" in note for note in arrhenius.notes)
+
+    def test_LS_DYNA_는_Arrhenius_만_1번_카드에(self) -> None:
+        rendered = export.render("dyna_viscoelastic", visco_deck(**self.ARRHENIUS))
+        lines = rendered.text.splitlines()
+        card = lines[lines.index("*MAT_GENERAL_VISCOELASTIC") + 2]
+        # MID RO BULK PCF EF TREF A B — 10칸씩. PCF · EF 는 비운다.
+        assert card[50:60].strip() == "296.15"
+        assert float(card[60:70]) == pytest.approx(152000.0 / 8.31446261815324, rel=1e-6)
+        assert float(card[70:80]) == 0.0, "B = 0 이어야 Arrhenius 다"
+        assert card[30:50].strip() == "", "PCF · EF 는 비운다"
+
+        wlf = export.render("dyna_viscoelastic", visco_deck(**TestAbaqus온도이동.WLF))
+        assert "WLF shift not written" in wlf.text
+        assert "$ Valid at 296.15 K only" in wlf.text
+        first = wlf.text.splitlines()
+        assert len(first[first.index("*MAT_GENERAL_VISCOELASTIC") + 2].rstrip()) <= 30
