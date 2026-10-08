@@ -28,8 +28,9 @@ REAL = json.loads(
     (BACKEND / "seeds" / "export-profiles" / "기본-형식-정의.json").read_text(encoding="utf-8")
 )
 #: 씨앗의 정의판 수 — 코드판마다 하나(중립 JSON · Zemax AGF 빼고). 2026-10-02 ECAE · 광학
-#: 여섯을 더해 50 → 56. 코드판을 더하면 정의판도 더하고 여기를 고친다.
-SEEDED = 56
+#: 여섯을 더해 50 → 56, 2026-10-08 OptiStruct 속도 의존 · LS-DYNA ICFD 점도 · OptiStruct ·
+#: Nastran 피로 · OptiStruct Hill48 로 61. 코드판을 더하면 정의판도 더하고 여기를 고친다.
+SEEDED = 61
 
 
 @pytest.fixture

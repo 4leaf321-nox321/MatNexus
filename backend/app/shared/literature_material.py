@@ -110,11 +110,18 @@ SYNTH_INPUTS = {
 }
 
 
+#: 문헌 재료로 **짓는** 블록 — 덱 각주는 이 블록의 칸이 가리키는 값에만 단다. 전에는 모든
+#: 블록의 칸을 봤는데, S-N 카드에 인장 · 항복강도 칸이, 소성 표에 파단 연신율 칸이 생기자
+#: (2026-10-08) 문헌 덱이 안 싣는 그 값들이 「값 = … [tier 1]」 로 덱 머리에 섰다. 덱이
+#: 안 읽는 참고 물성은 블록에 붙어도 각주를 안 단다.
+DECK_BLOCKS = ("elastic", "thermal")
+
+
 def deck_keys() -> dict[str, str]:
-    """블록 칸이 가리키는 문헌 키 → 사람이 읽는 이름. 이 값들이 덱 블록에 실린다."""
+    """문헌 덱이 짓는 블록의 칸이 가리키는 문헌 키 → 사람이 읽는 이름. 덱에 실리는 값이다."""
     cards.load_builtin()
     found: dict[str, str] = {}
-    for spec in cards.list_blocks():
+    for spec in (cards.block(key) for key in DECK_BLOCKS):
         for slot in spec.produces:
             if slot.property_key:
                 found.setdefault(slot.property_key, slot.label)

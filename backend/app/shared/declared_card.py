@@ -228,6 +228,22 @@ def thermal_block(material: Material) -> dict[str, Any]:
     return values
 
 
+def table_items(block: str) -> dict[str, str]:
+    """온도별 표의 **열**이 되는 칸만 — `declared_items` 중 블록 표(`rows`)에도 있는 칸.
+
+    탄성 블록에 전단탄성계수 칸이 생기자(2026-10-08) `declared_items("elastic")` 가 G 를 함께
+    돌려준다. 그것을 표의 열로 쓰면 G 를 다른 온도에서 적은 재료의 탄성 표에 E 가 빈 줄이
+    생겨 덱이 멈춘다 — 표는 표의 열로만 짓는다. 칸의 값은 `declared_slots` 가 채운다.
+    """
+    cards.load_builtin()
+    try:
+        spec = cards.block(block)
+    except KeyError:
+        return {}
+    columns = {column.key for column in spec.rows}
+    return {slot: item for slot, item in declared_items(block).items() if slot in columns}
+
+
 def item_of(block: str, slot: str) -> str:
     """칸 하나가 받는 기준정보 항목 이름. 없으면 빈 글자 — 그러면 값이 안 실린다.
 

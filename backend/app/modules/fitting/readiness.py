@@ -155,7 +155,13 @@ def _ways(
             )
         )
 
-    keys = tuple(item.property_key for item in spec.produces if item.property_key is not None)
+    # **곡선이 본체인 블록은 적어서 못 만든다**(`BlockSpec.from_values`) — 곁칸의 키(파단
+    # 연신율 · 인장강도)를 안내하면 사람은 그 값을 적고도 블록이 안 서는 것을 본다.
+    keys = (
+        tuple(item.property_key for item in spec.produces if item.property_key is not None)
+        if spec.from_values
+        else ()
+    )
     catalog: CatalogWay | None = None
     if keys:
         linked = select(CatalogLink.catalog_material_id).where(

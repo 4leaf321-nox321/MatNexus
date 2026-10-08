@@ -38,6 +38,7 @@ from matcore.export import (
     hyperelastic_terms,
     prepare,
     prony_terms,
+    rate_curves,
     register_renderer,
     viscoelastic_shift,
     viscoelastic_shift_notes,
@@ -350,6 +351,103 @@ def _register_common(prefix: str, solver: str, extension: str) -> None:
 
 _register_common("nastran", "Nastran", "bdf")
 _register_common("optistruct", "OptiStruct", "fem")
+
+
+# ── 속도 의존 — OptiStruct 만 ─────────────────────────────────────────────────
+
+
+@register_renderer(
+    key="optistruct_rate",
+    label="OptiStruct (속도 의존)",
+    extension="fem",
+    suffix="_rate",
+    describe=(
+        "MAT1 + MATS1 + TABLEMD — 속도별 소성 표를 (항복응력, 소성변형률, 소성변형률 속도)로 "
+        "그대로 싣는다. 가장 느린 곡선을 속도 0 에도 적는다(암시적 해석이 요구한다). 속도 "
+        "사이는 선형 보간. 비선형 서브케이스 · 명시적 해석에서 먹는다."
+    ),
+    keywords=("MAT1*", "MATS1*", "TABLEMD*"),
+    needs=(
+        Need("elastic", values=("youngs_modulus", "poisson_ratio")),
+        Need("elastic", values=("density",), optional=True),
+        Need("thermal", optional=True),
+        # 속도가 하나뿐이면 탄소성 형식이 낸다(`dyna_rate` 와 같은 판단).
+        Need(
+            "rate_table",
+            values=("rate_count",),
+            at_least=(("rate_count", 2),),
+            rows_min=2 * MIN_POINTS,
+        ),
+    ),
+)
+def render_optistruct_rate(deck: Deck) -> Rendered:
+    """`MATS1` 이 `TABLEMD` 를 가리키면 속도마다 곡선을 쓴다(OptiStruct Reference Guide).
+
+    ## 칸 — 점 하나가 논리 줄 하나
+
+        TABLEMD  TID  (빈칸)  NDEP=2  FLAT
+        *        Y(항복응력)  X1(소성변형률)  X2(소성변형률 속도)
+
+    차례는 **X2 오름차순, 같은 X2 안에서 X1 오름차순**이다 — 매뉴얼이 「앞 열이 그 안에서
+    오름차순」 을 요구한다. 칸을 하나 밀면 변형률이 속도로 읽히는데 경고가 안 난다.
+
+    ## 매뉴얼이 정한 것 셋
+
+    - 암시적 해석은 **소성변형률 속도만** 받고 TYPSTRT 를 무시한다. 명시적 해석에서도
+      TYPSTRT=1 로 맞춘다 — LS-DYNA(VP=1) · Radioss 덱과 같은 속도로 곡선을 고른다.
+    - 암시적 해석은 **속도 0 의 곡선**을 요구한다. 시험에 속도 0 은 없으므로 가장 느린
+      곡선을 속도 0 에도 적는다 — 그 아래 속도에서 준정적 곡선을 쓰는 것과 같다.
+    - TYPSTRN=0(전체 변형률)은 무시된다 — 표는 소성변형률이다(`TYPSTRN=1`). 그래서 탄소성
+      형식처럼 σ/E 를 더하지 않는다.
+
+    `LIMIT1` 은 비운다. 매뉴얼이 TABLEMD 를 가리키면 비워도 된다고 하고, 속도마다 첫
+    항복이 달라 한 값을 적으면 표와 두 번 정의된다.
+
+    ## 속도 사이는 선형 보간이다
+
+    `piecewise linear` 이고 로그 보간을 고르는 칸이 없다. 속도가 자릿수로 벌어지면 사이
+    속도의 응력은 **느린 쪽 곡선에 붙는다**(0.001 과 100 /s 사이의 1 /s 는 거의 0.001 의
+    곡선). 곡선을 사이에 지어 넣지 않는다 — 잰 곡선만 싣고 덱에 그렇다고 적는다.
+    FLAT=1(기본)은 표 밖에서 끝 값을 잡는다 — 가장 빠른 속도 위와 마지막 소성변형률 뒤.
+    """
+    curves, notes = rate_curves(deck)
+    if curves[0][0] < 0:
+        raise ExportError(
+            f"속도가 음수입니다({curves[0][0]:.4g} 1/s) — 속도는 0 이상이어야 합니다."
+        )
+    # 속도 0 의 곡선이 이미 있으면 그것이 기준이다 — 둘을 적으면 X2 가 겹친다.
+    zero = [] if curves[0][0] == 0 else [(0.0, curves[0][1])]
+    table = _table_id(deck, 0)
+    lines = _head(deck, "OptiStruct")
+    body, said = _mat1(deck)
+    notes.extend(said)
+    lines.extend(body)
+    lines.extend(
+        [
+            f"$ Strain rate dependent: {len(curves)} rates "
+            f"({curves[0][0]:.4g} ~ {curves[-1][0]:.4g} per time unit), MATS1 + TABLEMD.",
+            "$ TABLEMD rows: yield stress, plastic strain, plastic strain rate (TYPSTRN=1,",
+            "$   TYPSTRT=1). The slowest curve is repeated at rate 0 - implicit analysis",
+            "$   needs a zero-rate curve.",
+            "$ Rates are interpolated LINEARLY; FLAT=1 holds the end values outside the table",
+            "$   (above the fastest rate, beyond the last plastic strain).",
+            "$ Needs a nonlinear subcase (NLSTAT / nonlinear transient) or explicit "
+            "analysis -",
+            "$   a linear one ignores MATS1.",
+            "$MATS1* MID             TID             TYPE            H",
+            "$*      YF              HR              LIMIT1",
+            "$*      TYPSTRN         TYPSTRT",
+            *_card("MATS1", [deck.solver_id, table, "PLASTIC", None, 1, 1, None, None, 1, 1]),
+            "$TABLEMD* TID, (blank), NDEP, FLAT - then one row per point:",
+            "$*      Y               X1 (eps_p)      X2 (rate)",
+        ]
+    )
+    rows: list[Field] = [table, None, 2, 1, None, None, None, None]
+    for rate, points in [*zero, *curves]:
+        for strain, stress in points:
+            rows.extend((stress, strain, rate, None, None, None, None, None))
+    lines.extend(_card("TABLEMD", rows))
+    return _rendered(lines, notes)
 
 
 # ── 점탄성 — 두 솔버가 반대로 읽는다 ───────────────────────────────────────────

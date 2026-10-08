@@ -67,8 +67,10 @@ def test_나가는_파일의_단위도_모든_내장_단위계가_안다() -> No
 
 def test_확장_블록도_종류가_된다() -> None:
     """확장이 블록을 더하면 화면에서 카드 종류가 돼야 한다 — `kind_priority` 가 기본으로
-    켜져 있고(`None` 이 아님), 내장 기본 블록(탄성·소성 표·모델 파라미터)만 종류가 아니다."""
+    켜져 있고(`None` 이 아님), 내장 기본 블록(탄성·소성 표·모델 파라미터)과 참고 물성만 종류가
+    아니다 — 참고 물성은 적어 둔 값이 있으면 어느 카드에나 붙어서(ADR 0060) 종류가 되면 모든
+    카드가 「참고 물성 카드」 가 된다."""
     cards.load_builtin()
     extensions.load(BACKEND / "extensions")
     not_kinds = {spec.key for spec in cards.list_blocks() if spec.kind_priority is None}
-    assert not_kinds == {"elastic", "table", "model_params"}, not_kinds
+    assert not_kinds == {"elastic", "table", "model_params", "reference"}, not_kinds

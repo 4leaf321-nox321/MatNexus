@@ -67,6 +67,12 @@ def rate_block(c: float = 0.014, reference: float = 0.002) -> dict[str, object]:
     return {"values": {"model": "johnson_cook", "jc_c": c, "reference_rate": reference}}
 
 
+def _tens(line: str) -> list[float]:
+    """10칸 줄을 숫자로 — 솔버가 읽는 그대로. 글자로 견주면 서식이 바뀔 때마다 깨진다
+    (2026-10-08: 유효숫자 4자리 → 칸에 드는 만큼)."""
+    return [float(line[at : at + 10]) for at in range(0, len(line), 10)]
+
+
 class Test덱이_나온다:
     def test_키워드와_계수가_실린다(self) -> None:
         made = render(KEY, deck(rate_table=rate_block()))
@@ -75,7 +81,7 @@ class Test덱이_나온다:
         card = [line for line in made.text.splitlines() if not line.startswith(("$", "*"))]
         # 카드 두 줄: (mid ro e pr vp) 와 (a b n c psfail sigmax sigsat epso)
         assert len(card) == 2
-        assert "3.500E+08" in card[1] and "6.000E+08" in card[1]
+        assert _tens(card[1])[:2] == pytest.approx([350e6, 600e6])
 
     def test_고정_10칸을_지킨다(self) -> None:
         """**칸이 어긋나면 LS-DYNA 는 다른 필드로 읽는다.** 오류는 안 난다."""
@@ -116,14 +122,45 @@ class Test다른_식의_계수를_안_받는다:
         assert "A·B·n" in str(raised.value)
         assert "MAT_024" in str(raised.value), "대신 쓸 것을 알려 줘야 한다"
 
+    def test_식_키가_다르면_a_b_n_이름이어도_거절한다(self) -> None:
+        """「계산식」 으로 만든 다른 식이 a · b · n 이름을 쓰면 전에는 JC 계수로 실렸다
+        (2026-10-04 점검) — 이름이 아니라 **식 키**로 가른다."""
+        made = deck(rate_table=rate_block())
+        other = {
+            **made.blocks["hardening"],
+            "values": {"family": "formula_7f3a", "label": "내 경화식"},
+        }
+        with pytest.raises(ExportError, match="Johnson-Cook 준정적 항"):
+            render(
+                KEY,
+                Deck(name="X", solver_id=1, blocks={**made.blocks, "hardening": other}),
+            )
+
+    def test_혼합_곡선은_거절한다(self) -> None:
+        made = deck(rate_table=rate_block())
+        blended = {
+            **made.blocks["hardening"],
+            "values": {
+                "family": "johnson_cook_static",
+                "label": "Johnson-Cook (준정적 항)",
+                "blend_with": "voce",
+            },
+        }
+        with pytest.raises(ExportError, match="혼합"):
+            render(
+                KEY,
+                Deck(name="X", solver_id=1, blocks={**made.blocks, "hardening": blended}),
+            )
+
 
 class TestC_와_기준속도:
     def test_기준_속도가_EPSO_에_실린다(self) -> None:
         """**C 는 기준 속도와 한 몸이다.** 1 로 굳히면 응력이 조용히 어긋난다."""
         made = render(KEY, deck(rate_table=rate_block(c=0.014, reference=0.002)))
         card = [line for line in made.text.splitlines() if not line.startswith(("$", "*"))]
-        assert card[1].endswith("2.000E-03"), "EPSO 자리가 기준 속도여야 한다"
-        assert "1.400E-02" in card[1], "C 가 실려야 한다"
+        fields = _tens(card[1])
+        assert fields[7] == pytest.approx(0.002), "EPSO 자리가 기준 속도여야 한다"
+        assert fields[3] == pytest.approx(0.014), "C 가 실려야 한다"
 
     def test_C_가_있는데_기준_속도가_없으면_거절한다(self) -> None:
         bare = {"values": {"model": "johnson_cook", "jc_c": 0.014}}
@@ -148,8 +185,8 @@ class Test단위계:
         """
         made = render(KEY, deck(rate_table=rate_block()), MM_N_TONNE)
         card = [line for line in made.text.splitlines() if not line.startswith(("$", "*"))]
-        assert "3.500E+02" in card[1], "A 가 350 MPa 로 적혀야 한다"
-        assert "6.000E+02" in card[1], "B 가 600 MPa 로 적혀야 한다"
-        assert "n" not in card[1]
+        fields = _tens(card[1])
+        assert fields[0] == pytest.approx(350.0), "A 가 350 MPa 로 적혀야 한다"
+        assert fields[1] == pytest.approx(600.0), "B 가 600 MPa 로 적혀야 한다"
         # n 은 무차원이라 안 바뀐다.
-        assert "2.500E-01" in card[1]
+        assert fields[2] == pytest.approx(0.25)

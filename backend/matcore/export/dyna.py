@@ -36,6 +36,7 @@ from matcore.export import (
     Need,
     Rendered,
     _header,
+    failure_lines,
     hyperelastic_terms,
     prepare,
     prony_terms,
@@ -221,6 +222,9 @@ def render_dyna(deck: Deck) -> Rendered:
     flat, said = _flat_elastic(deck)
     lines.extend(flat)
     notes.extend(said)
+    fail, said = failure_lines(deck, "$", "FAIL")
+    lines.extend(fail)
+    notes.extend(said)
     lines.extend(_mat024_head(deck, points[0][1], deck.solver_id, None))
     # 소성변형률이 먼저, 응력이 나중 — *DEFINE_CURVE 는 (가로축, 세로축)이다.
     lines.extend(_curve(deck.solver_id, points))
@@ -329,6 +333,9 @@ def render_dyna_rate(deck: Deck) -> Rendered:
     lines = ["*KEYWORD", *_header(deck, "$"), *_units_comment(deck)]
     flat, said = _flat_elastic(deck)
     lines.extend(flat)
+    notes.extend(said)
+    fail, said = failure_lines(deck, "$", "FAIL")
+    lines.extend(fail)
     notes.extend(said)
     lines.append(
         f"$ Strain rate dependent: {len(cut)} rates "

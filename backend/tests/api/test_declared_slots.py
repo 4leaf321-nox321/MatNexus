@@ -344,3 +344,93 @@ def test_없던_블록은_안_만든다(
     )
     declared_slots.fill(db, db.get(Material, uuid.UUID(material["id"])), item.blocks)
     assert set(item.blocks) == {"elastic"}
+
+
+class Test자리가_없던_기본_항목:
+    """2026-10-08 — 기본 항목 43 중 27 이 카드로 갈 자리가 없었다. 셋이 자리를 얻었다:
+    전단탄성계수(탄성) · 파단 연신율(소성 표, ADR 0059) · 덱이 안 읽는 참고 물성(ADR 0060)."""
+
+    KEYS = (
+        ("mechanical.shear_modulus", "Pa", "Shear modulus"),
+        ("mechanical.elongation_at_break", "1", "Elongation at break"),
+        ("thermal.glass_transition", "K", "Glass transition"),
+    )
+
+    def _material(self, db: Session, rows: list[dict[str, Any]]) -> Material:
+        material = Material(
+            record_name=f"SLOT_{uuid.uuid4().hex[:6]}",
+            family="Polymer",
+            category="PC",
+            grade=f"G-{uuid.uuid4().hex[:6]}",
+            declared_properties=rows,
+        )
+        db.add(material)
+        db.commit()
+        return material
+
+    def _linked(self, db: Session) -> None:
+        from app.modules.catalog.links import ensure_builtin_property_links
+        from app.modules.vocabulary.definitions import ensure_builtin_property_items
+
+        ensure_builtin_property_items(db)
+        for key, unit, name in self.KEYS:
+            db.add(
+                CatalogDefinition(
+                    key=key,
+                    domain=key.split(".")[0],
+                    name=name,
+                    value_type="numeric",
+                    si_unit=unit,
+                )
+            )
+        db.commit()
+        ensure_builtin_property_links(db)
+        db.commit()
+
+    def test_적어_둔_값이_세_자리로_간다(self, db: Session) -> None:
+        self._linked(db)
+        material = self._material(
+            db,
+            [
+                {
+                    "item": "전단탄성계수",
+                    "points": [{"value_si": 0.85e9}],
+                    "source": "datasheet",
+                },
+                {"item": "연신율", "points": [{"value_si": 0.9}], "source": "datasheet"},
+                {
+                    "item": "유리전이온도",
+                    "points": [{"value_si": 420.0}],
+                    "source": "datasheet",
+                },
+            ],
+        )
+        blocks: dict[str, Any] = {
+            "elastic": {"values": {"youngs_modulus": 2.3e9}},
+            "table": {"rows": [{"plastic_strain": 0.0, "true_stress": 60e6}]},
+        }
+        filled = declared_slots.fill(db, material, blocks)
+        assert blocks["elastic"]["values"]["shear_modulus"] == pytest.approx(0.85e9)
+        assert blocks["table"]["values"]["elongation_at_break"] == pytest.approx(0.9)
+        # **참고 물성은 카드에 없어도 붙는다** — 규칙 ②의 예외(ADR 0060).
+        assert blocks["reference"]["values"]["glass_transition"] == pytest.approx(420.0)
+        assert blocks["reference"]["values"]["glass_transition_source"] == "declared:datasheet"
+        assert any("참고 물성" in one for one in filled)
+
+    def test_참고_물성_값이_없으면_블록을_안_붙인다(self, db: Session) -> None:
+        self._linked(db)
+        material = self._material(
+            db,
+            [
+                {
+                    "item": "전단탄성계수",
+                    "points": [{"value_si": 0.85e9}],
+                    "source": "datasheet",
+                }
+            ],
+        )
+        blocks: dict[str, Any] = {"elastic": {"values": {"youngs_modulus": 2.3e9}}}
+        declared_slots.fill(db, material, blocks)
+        assert "reference" not in blocks
+        # 다른 블록은 여전히 만들지 않는다(규칙 ②) — 열물성 블록이 따라 붙지 않는다.
+        assert set(blocks) == {"elastic"}

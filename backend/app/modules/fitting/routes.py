@@ -139,6 +139,7 @@ from app.shared.declared_card import inherit_density as _inherit_density
 from app.shared.declared_card import inherit_poisson as _inherit_poisson
 from app.shared.declared_card import item_of as _item_of
 from app.shared.declared_card import synthetic_plastic as _synthetic_plastic
+from app.shared.declared_card import table_items as _table_items
 from app.shared.declared_card import temperature_aware as _temperature_aware
 from app.shared.declared_card import thermal_block as _thermal_block
 from app.shared.errors import AppError, Conflict, NotFound
@@ -1266,7 +1267,7 @@ def create_card(
     density = _inherit_density(group.material, samples, payload.density)
     thermal = _thermal_block(group.material)
     uncut = _uncut_necking(group, strain)
-    thermal_rows = _declared_table(group.material, _declared_items("thermal"))
+    thermal_rows = _declared_table(group.material, _table_items("thermal"))
     inherited_notes = [
         # 잰 값이면 처리 결과가 근거를 들고 있다. 적은 값일 때만 적는다 —
         # **어느 문서에서 왔는지가 카드에 없으면 되짚을 수 없다.**
@@ -1403,7 +1404,7 @@ def create_card(
     # 온도를 타면 표가 붙는다. **격자가 어긋나면 여기서 멈춘다** — 조용히 한쪽을
     # 버리면 덱은 나가고 재료만 딴판이 된다.
     elastic_rows = _declared_table(
-        group.material, _declared_items("elastic"), constants=_constants(elastic)
+        group.material, _table_items("elastic"), constants=_constants(elastic)
     )
 
     item = PropertyCard(
@@ -1741,9 +1742,9 @@ def create_declared_card(
         db, material, payload.poisson_ratio, payload.density
     )
     elastic_rows = _declared_table(
-        material, _declared_items("elastic"), constants=_constants(elastic)
+        material, _table_items("elastic"), constants=_constants(elastic)
     )
-    thermal_rows = _declared_table(material, _declared_items("thermal"))
+    thermal_rows = _declared_table(material, _table_items("thermal"))
 
     synthetic_rows: list[dict[str, Any]] = []
     synthetic_notes: list[str] = []
@@ -2644,7 +2645,7 @@ def create_lve_card(
     thermal_rows: list[dict[str, Any]] = []
     if payload.include_declared:
         thermal_values = _thermal_block(material)
-        thermal_rows = _declared_table(material, _declared_items("thermal"))
+        thermal_rows = _declared_table(material, _table_items("thermal"))
         notes.append(
             "재료 기본 정보(열물성)를 함께 실었습니다."
             if thermal_values

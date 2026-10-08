@@ -41,6 +41,17 @@ ELASTIC = register_block(
                 help="동적 해석에 필요하다. 시료의 실측값이 있으면 그것을 쓴다.",
                 property_key="physical.density",
             ),
+            # 2026-10-08 — 재료에 적어 둔 G 가 카드까지 오게. 덱은 셋 중 둘(E · ν)만 쓴다.
+            Produced(
+                key="shear_modulus",
+                label="전단탄성계수",
+                si_unit="Pa",
+                help=(
+                    "재료에 적어 둔 값. 덱은 E·ν 를 쓰고, 이 값이 E/2(1+ν) 와 5% 넘게 "
+                    "어긋나면 내보낼 때 말한다."
+                ),
+                property_key="mechanical.shear_modulus",
+            ),
         ),
         rows=(
             Produced(
@@ -157,6 +168,18 @@ TABLE = register_block(
                     "크면 그 식이 곡선의 끝을 못 따라간 것이다."
                 ),
             ),
+            # 2026-10-08(ADR 0059) — 재료에 적어 둔 파단 연신율. 덱이 파단 소성변형률을
+            # 추정해 **주석으로** 적는다. 켜지는 않는다 — 요소가 지워지는 일이다.
+            Produced(
+                key="elongation_at_break",
+                label="파단 연신율 (공칭)",
+                si_unit="1",
+                help=(
+                    "재료에 적어 둔 값(게이지 길이의 공칭 연신율). 덱이 ln(1+A) 로 파단 "
+                    "소성변형률을 추정해 주석에 적는다 — 파단 칸은 비워 둔다."
+                ),
+                property_key="mechanical.elongation_at_break",
+            ),
         ),
         rows=(
             Produced(key="plastic_strain", label="진소성변형률", si_unit="1"),
@@ -166,6 +189,8 @@ TABLE = register_block(
         order=30,
         kind_priority=None,
         from_tests=("tensile",),
+        # 곡선이 본체다 — 적어 둔 파단 연신율은 곁칸만 채운다(덱 준비도가 안 권한다).
+        from_values=False,
     )
 )
 

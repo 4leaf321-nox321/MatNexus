@@ -3,7 +3,7 @@
     python scripts/import_export_profiles.py            # 배포가 도는 모드
     python scripts/import_export_profiles.py --check    # 넣지 않고 무엇이 바뀔지만 본다
 
-씨앗은 `seeds/export-profiles/기본-형식-정의.json` 이다 — 기본 형식(코드판) 56개를 정의로
+씨앗은 `seeds/export-profiles/기본-형식-정의.json` 이다 — 기본 형식(코드판) 61개를 정의로
 다시 적은 것이고, 코드판과 글자까지 같다는 시험이 묶는다(`tests/unit/test_export_twins.py`).
 파일 모양은 화면의 「불러오기」 가 읽는 것과 같다.
 

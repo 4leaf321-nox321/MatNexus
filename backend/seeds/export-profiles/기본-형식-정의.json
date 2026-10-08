@@ -578,6 +578,19 @@
             "note": "온도별 탄성 표가 있는데 LAW36 의 E · nu 는 상수 하나입니다 — 블록의 대푯값(가장 낮은 온도)을 썼습니다."
           },
           {
+            "text": "# Eps_p_max not set - estimate from elongation at break A={table.elongation_at_break:.1%}:",
+            "when": "table.elongation_at_break > 0",
+            "note": "재료에 적어 둔 파단 연신율 {table.elongation_at_break:.1%} 로 파단 소성변형률을 ln(1+A) = {log(1 + table.elongation_at_break):.3g} 로 추정해 덱 주석에 적었습니다 — Eps_p_max 칸은 비워 두었습니다(켜면 그 변형률에서 요소가 지워집니다). 게이지 길이에 따라 달라지는 값입니다."
+          },
+          {
+            "text": "#   ln(1+A) = {log(1 + table.elongation_at_break):.4g} (uniform strain, gauge-length dependent).",
+            "when": "table.elongation_at_break > 0"
+          },
+          {
+            "text": "#   Put it in Eps_p_max to delete elements at that plastic strain.",
+            "when": "table.elongation_at_break > 0"
+          },
+          {
             "text": "/MAT/LAW36/{id}/1"
           },
           {
@@ -1423,6 +1436,19 @@
             "note": "온도별 탄성 표가 있는데 *MAT_024 의 E · PR 은 상수 하나입니다 — 블록의 대푯값(가장 낮은 온도)을 썼습니다."
           },
           {
+            "text": "$ FAIL not set - estimate from elongation at break A={table.elongation_at_break:.1%}:",
+            "when": "table.elongation_at_break > 0",
+            "note": "재료에 적어 둔 파단 연신율 {table.elongation_at_break:.1%} 로 파단 소성변형률을 ln(1+A) = {log(1 + table.elongation_at_break):.3g} 로 추정해 덱 주석에 적었습니다 — FAIL 칸은 비워 두었습니다(켜면 그 변형률에서 요소가 지워집니다). 게이지 길이에 따라 달라지는 값입니다."
+          },
+          {
+            "text": "$   ln(1+A) = {log(1 + table.elongation_at_break):.4g} (uniform strain, gauge-length dependent).",
+            "when": "table.elongation_at_break > 0"
+          },
+          {
+            "text": "$   Put it in FAIL to delete elements at that plastic strain.",
+            "when": "table.elongation_at_break > 0"
+          },
+          {
             "text": "*MAT_PIECEWISE_LINEAR_PLASTICITY"
           },
           {
@@ -1627,6 +1653,19 @@
             "text": "$ *MAT_024 E and PR are temperature independent: lowest-temperature value.",
             "when": "count(elastic) > 1",
             "note": "온도별 탄성 표가 있는데 *MAT_024 의 E · PR 은 상수 하나입니다 — 블록의 대푯값(가장 낮은 온도)을 썼습니다."
+          },
+          {
+            "text": "$ FAIL not set - estimate from elongation at break A={table.elongation_at_break:.1%}:",
+            "when": "table.elongation_at_break > 0",
+            "note": "재료에 적어 둔 파단 연신율 {table.elongation_at_break:.1%} 로 파단 소성변형률을 ln(1+A) = {log(1 + table.elongation_at_break):.3g} 로 추정해 덱 주석에 적었습니다 — FAIL 칸은 비워 두었습니다(켜면 그 변형률에서 요소가 지워집니다). 게이지 길이에 따라 달라지는 값입니다."
+          },
+          {
+            "text": "$   ln(1+A) = {log(1 + table.elongation_at_break):.4g} (uniform strain, gauge-length dependent).",
+            "when": "table.elongation_at_break > 0"
+          },
+          {
+            "text": "$   Put it in FAIL to delete elements at that plastic strain.",
+            "when": "table.elongation_at_break > 0"
           },
           {
             "text": "$ Strain rate dependent: {count(curves)} rates ({first(curves, _key):.4g} ~ {last(curves, _key):.4g} per time unit), tabulated, VP=1."
@@ -7537,6 +7576,689 @@
       }
     },
     {
+      "key": "optistruct_rate_def",
+      "label": "OptiStruct (속도 의존) · 정의",
+      "description": "기본 제공 형식 optistruct_rate 를 정의로 옮긴 것. 코드판과 글자까지 같다 — 알림·거절까지(2026-10-08, 시험용 카드 전부, SI · mm-N-tonne). 코드판을 사용 중단하면 이것을 켜서 고친다.",
+      "is_active": false,
+      "definition": {
+        "extension": "fem",
+        "suffix": "_rate",
+        "describe": "MAT1 + MATS1 + TABLEMD — 속도별 소성 표를 (항복응력, 소성변형률, 소성변형률 속도)로 그대로 싣는다. 가장 느린 곡선을 속도 0 에도 적는다(암시적 해석이 요구한다). 속도 사이는 선형 보간. 비선형 서브케이스 · 명시적 해석에서 먹는다.",
+        "keywords": [
+          "MAT1*",
+          "MATS1*",
+          "TABLEMD*"
+        ],
+        "needs": [
+          {
+            "block": "elastic",
+            "values": [
+              "youngs_modulus",
+              "poisson_ratio"
+            ]
+          },
+          {
+            "block": "elastic",
+            "values": [
+              "density"
+            ],
+            "optional": true
+          },
+          {
+            "block": "thermal",
+            "optional": true
+          },
+          {
+            "block": "rate_table",
+            "values": [
+              "rate_count"
+            ],
+            "rows_min": 4,
+            "at_least": {
+              "rate_count": 2
+            }
+          }
+        ],
+        "tables": {
+          "etab": {
+            "of": "elastic",
+            "where": "has(temperature) and has(youngs_modulus) and has(poisson_ratio)",
+            "sort": [
+              "temperature",
+              "youngs_modulus",
+              "poisson_ratio"
+            ]
+          },
+          "alpha": {
+            "of": "thermal",
+            "where": "has(temperature) and has(thermal_expansion)",
+            "sort": [
+              "temperature",
+              "thermal_expansion"
+            ]
+          },
+          "curves": {
+            "of": "rate_table",
+            "by": "strain_rate",
+            "x": "plastic_strain",
+            "y": "true_stress",
+            "note": "속도 {_key:.3g} 1/s: "
+          }
+        },
+        "lines": [
+          {
+            "fail": "속도별 소성 표의 행에 속도·변형률·응력이 다 있어야 합니다.",
+            "when": "count(rate_table, not (has(strain_rate) and has(plastic_strain) and has(true_stress))) > 0"
+          },
+          {
+            "fail": "속도가 하나뿐입니다. 속도 의존 덱은 둘 이상의 속도가 있어야 합니다 — 하나면 탄소성 형식을 쓰세요.",
+            "when": "count(curves) < 2"
+          },
+          {
+            "fail": "속도가 음수입니다({first(curves, _key):.4g} 1/s) — 속도는 0 이상이어야 합니다.",
+            "when": "first(curves, _key) < 0"
+          },
+          {
+            "fail": "온도별 탄성 표에 빈 칸이 있습니다. 솔버는 한 온도에 탄성계수·푸아송비·온도가 다 있어야 받습니다 — 빈 칸을 이웃 값으로 메우는 것은 값을 지어내는 일이라 하지 않습니다.",
+            "when": "count(elastic, not (has(temperature) and has(youngs_modulus) and has(poisson_ratio))) > 0"
+          },
+          {
+            "block": "header",
+            "comment": "$"
+          },
+          {
+            "text": "$ Consistent units: {units}"
+          },
+          {
+            "text": "$ OptiStruct Bulk Data fragment - INCLUDE it between BEGIN BULK and ENDDATA."
+          },
+          {
+            "text": "$ Large field format: 16-character fields, continuation lines start with *."
+          },
+          {
+            "text": "$ RHO: no measured density on this card - left blank (no mass).",
+            "when": "missing:elastic.density",
+            "note": "밀도가 카드에 없어 RHO 를 비웠습니다 — 질량이 0 인 재료입니다."
+          },
+          {
+            "text": "$ TREF not on the card - left blank (0).",
+            "when": "(count(alpha) > 0 or has(thermal.thermal_expansion)) and not has(thermal.thermal_expansion_temperature)"
+          },
+          {
+            "text": "$MAT1*  MID             E               G               NU"
+          },
+          {
+            "text": "$*      RHO             A               TREF            GE"
+          },
+          {
+            "pack": [
+              {
+                "expr": "_id",
+                "format": [
+                  "spec",
+                  "<16d"
+                ]
+              },
+              {
+                "value": "elastic.youngs_modulus",
+                "format": [
+                  "fixed_left",
+                  16,
+                  8
+                ]
+              },
+              {
+                "const": "                "
+              },
+              {
+                "value": "elastic.poisson_ratio",
+                "format": [
+                  "fixed_left",
+                  16,
+                  8
+                ]
+              },
+              {
+                "value": "elastic.density",
+                "format": [
+                  "fixed_left",
+                  16,
+                  8
+                ],
+                "default": "                "
+              },
+              {
+                "expr": "(first(alpha, thermal_expansion) if count(alpha) > 0 else thermal.thermal_expansion)",
+                "format": [
+                  "fixed_left",
+                  16,
+                  8
+                ],
+                "when": "(count(alpha) > 0 or has(thermal.thermal_expansion))",
+                "default": "                "
+              },
+              {
+                "value": "thermal.thermal_expansion_temperature",
+                "format": [
+                  "fixed_left",
+                  16,
+                  8
+                ],
+                "when": "(count(alpha) > 0 or has(thermal.thermal_expansion))",
+                "default": "                "
+              }
+            ],
+            "per_line": 4,
+            "first": "MAT1*   ",
+            "next": "*       ",
+            "pad_to": 8,
+            "pad": "                ",
+            "rstrip": true
+          },
+          {
+            "text": "$ MATT1: field 3 = E(T), field 5 = NU(T), field 7 = A(T). Tables REPLACE MAT1.",
+            "when": "(count(etab) >= 2 or count(alpha) > 1)"
+          },
+          {
+            "text": "$ Temperatures are absolute (K) - the model must use K too.",
+            "when": "(count(etab) >= 2 or count(alpha) > 1)"
+          },
+          {
+            "pack": [
+              {
+                "expr": "_id",
+                "format": [
+                  "spec",
+                  "<16d"
+                ]
+              },
+              {
+                "expr": "_id * 10 + 1",
+                "format": [
+                  "spec",
+                  "<16d"
+                ],
+                "when": "count(etab) >= 2",
+                "default": "                "
+              },
+              {
+                "const": "                "
+              },
+              {
+                "expr": "_id * 10 + 2",
+                "format": [
+                  "spec",
+                  "<16d"
+                ],
+                "when": "count(etab) >= 2",
+                "default": "                "
+              },
+              {
+                "const": "                "
+              },
+              {
+                "expr": "_id * 10 + 3",
+                "format": [
+                  "spec",
+                  "<16d"
+                ],
+                "when": "count(alpha) > 1",
+                "default": "                "
+              }
+            ],
+            "per_line": 4,
+            "first": "MATT1*  ",
+            "next": "*       ",
+            "pad_to": 8,
+            "pad": "                ",
+            "rstrip": true,
+            "when": "(count(etab) >= 2 or count(alpha) > 1)"
+          },
+          {
+            "pack": [
+              {
+                "expr": "_id * 10 + 1",
+                "format": [
+                  "spec",
+                  "<16d"
+                ]
+              },
+              {
+                "const": "                "
+              },
+              {
+                "const": "                "
+              },
+              {
+                "const": "                "
+              },
+              {
+                "const": "                "
+              },
+              {
+                "const": "                "
+              },
+              {
+                "const": "                "
+              },
+              {
+                "const": "                "
+              },
+              {
+                "rows": "etab",
+                "fields": [
+                  {
+                    "value": "temperature",
+                    "format": [
+                      "fixed_left",
+                      16,
+                      8
+                    ]
+                  },
+                  {
+                    "value": "youngs_modulus",
+                    "format": [
+                      "fixed_left",
+                      16,
+                      8
+                    ]
+                  }
+                ]
+              },
+              {
+                "const": "ENDT            "
+              }
+            ],
+            "per_line": 4,
+            "first": "TABLEM1*",
+            "next": "*       ",
+            "pad_to": 8,
+            "pad": "                ",
+            "rstrip": true,
+            "when": "(count(etab) >= 2 or count(alpha) > 1) and count(etab) >= 2"
+          },
+          {
+            "pack": [
+              {
+                "expr": "_id * 10 + 2",
+                "format": [
+                  "spec",
+                  "<16d"
+                ]
+              },
+              {
+                "const": "                "
+              },
+              {
+                "const": "                "
+              },
+              {
+                "const": "                "
+              },
+              {
+                "const": "                "
+              },
+              {
+                "const": "                "
+              },
+              {
+                "const": "                "
+              },
+              {
+                "const": "                "
+              },
+              {
+                "rows": "etab",
+                "fields": [
+                  {
+                    "value": "temperature",
+                    "format": [
+                      "fixed_left",
+                      16,
+                      8
+                    ]
+                  },
+                  {
+                    "value": "poisson_ratio",
+                    "format": [
+                      "fixed_left",
+                      16,
+                      8
+                    ]
+                  }
+                ]
+              },
+              {
+                "const": "ENDT            "
+              }
+            ],
+            "per_line": 4,
+            "first": "TABLEM1*",
+            "next": "*       ",
+            "pad_to": 8,
+            "pad": "                ",
+            "rstrip": true,
+            "when": "(count(etab) >= 2 or count(alpha) > 1) and count(etab) >= 2"
+          },
+          {
+            "pack": [
+              {
+                "expr": "_id * 10 + 3",
+                "format": [
+                  "spec",
+                  "<16d"
+                ]
+              },
+              {
+                "const": "                "
+              },
+              {
+                "const": "                "
+              },
+              {
+                "const": "                "
+              },
+              {
+                "const": "                "
+              },
+              {
+                "const": "                "
+              },
+              {
+                "const": "                "
+              },
+              {
+                "const": "                "
+              },
+              {
+                "rows": "alpha",
+                "fields": [
+                  {
+                    "value": "temperature",
+                    "format": [
+                      "fixed_left",
+                      16,
+                      8
+                    ]
+                  },
+                  {
+                    "value": "thermal_expansion",
+                    "format": [
+                      "fixed_left",
+                      16,
+                      8
+                    ]
+                  }
+                ]
+              },
+              {
+                "const": "ENDT            "
+              }
+            ],
+            "per_line": 4,
+            "first": "TABLEM1*",
+            "next": "*       ",
+            "pad_to": 8,
+            "pad": "                ",
+            "rstrip": true,
+            "when": "count(alpha) > 1"
+          },
+          {
+            "text": "$ Strain rate dependent: {count(curves)} rates ({first(curves, _key):.4g} ~ {last(curves, _key):.4g} per time unit), MATS1 + TABLEMD."
+          },
+          {
+            "text": "$ TABLEMD rows: yield stress, plastic strain, plastic strain rate (TYPSTRN=1,"
+          },
+          {
+            "text": "$   TYPSTRT=1). The slowest curve is repeated at rate 0 - implicit analysis"
+          },
+          {
+            "text": "$   needs a zero-rate curve."
+          },
+          {
+            "text": "$ Rates are interpolated LINEARLY; FLAT=1 holds the end values outside the table"
+          },
+          {
+            "text": "$   (above the fastest rate, beyond the last plastic strain)."
+          },
+          {
+            "text": "$ Needs a nonlinear subcase (NLSTAT / nonlinear transient) or explicit analysis -"
+          },
+          {
+            "text": "$   a linear one ignores MATS1."
+          },
+          {
+            "text": "$MATS1* MID             TID             TYPE            H"
+          },
+          {
+            "text": "$*      YF              HR              LIMIT1"
+          },
+          {
+            "text": "$*      TYPSTRN         TYPSTRT"
+          },
+          {
+            "pack": [
+              {
+                "expr": "_id",
+                "format": [
+                  "spec",
+                  "<16d"
+                ]
+              },
+              {
+                "expr": "_id * 10",
+                "format": [
+                  "spec",
+                  "<16d"
+                ]
+              },
+              {
+                "const": "PLASTIC         "
+              },
+              {
+                "const": "                "
+              },
+              {
+                "expr": "1",
+                "format": [
+                  "spec",
+                  "<16d"
+                ]
+              },
+              {
+                "expr": "1",
+                "format": [
+                  "spec",
+                  "<16d"
+                ]
+              },
+              {
+                "const": "                "
+              },
+              {
+                "const": "                "
+              },
+              {
+                "expr": "1",
+                "format": [
+                  "spec",
+                  "<16d"
+                ]
+              },
+              {
+                "expr": "1",
+                "format": [
+                  "spec",
+                  "<16d"
+                ]
+              }
+            ],
+            "per_line": 4,
+            "first": "MATS1*  ",
+            "next": "*       ",
+            "pad_to": 8,
+            "pad": "                ",
+            "rstrip": true
+          },
+          {
+            "text": "$TABLEMD* TID, (blank), NDEP, FLAT - then one row per point:"
+          },
+          {
+            "text": "$*      Y               X1 (eps_p)      X2 (rate)"
+          },
+          {
+            "pack": [
+              {
+                "expr": "_id * 10",
+                "format": [
+                  "spec",
+                  "<16d"
+                ]
+              },
+              {
+                "const": "                "
+              },
+              {
+                "expr": "2",
+                "format": [
+                  "spec",
+                  "<16d"
+                ]
+              },
+              {
+                "expr": "1",
+                "format": [
+                  "spec",
+                  "<16d"
+                ]
+              }
+            ],
+            "per_line": 4,
+            "first": "TABLEMD*",
+            "next": "*       ",
+            "pad_to": 8,
+            "pad": "                ",
+            "rstrip": true
+          },
+          {
+            "each": "curves",
+            "as": "curve",
+            "lines": [
+              {
+                "pack": [
+                  {
+                    "rows": "curve",
+                    "fields": [
+                      {
+                        "value": "true_stress",
+                        "format": [
+                          "fixed_left",
+                          16,
+                          8
+                        ]
+                      },
+                      {
+                        "value": "plastic_strain",
+                        "format": [
+                          "fixed_left",
+                          16,
+                          8
+                        ]
+                      },
+                      {
+                        "expr": "0",
+                        "format": [
+                          "fixed_left",
+                          16,
+                          8
+                        ]
+                      },
+                      {
+                        "const": "                "
+                      },
+                      {
+                        "const": "                "
+                      },
+                      {
+                        "const": "                "
+                      },
+                      {
+                        "const": "                "
+                      },
+                      {
+                        "const": "                "
+                      }
+                    ]
+                  }
+                ],
+                "per_line": 4,
+                "first": "*       ",
+                "next": "*       ",
+                "pad_to": 8,
+                "pad": "                ",
+                "rstrip": true,
+                "when": "_index == 1 and _key > 0"
+              },
+              {
+                "pack": [
+                  {
+                    "rows": "curve",
+                    "fields": [
+                      {
+                        "value": "true_stress",
+                        "format": [
+                          "fixed_left",
+                          16,
+                          8
+                        ]
+                      },
+                      {
+                        "value": "plastic_strain",
+                        "format": [
+                          "fixed_left",
+                          16,
+                          8
+                        ]
+                      },
+                      {
+                        "expr": "_key",
+                        "format": [
+                          "fixed_left",
+                          16,
+                          8
+                        ]
+                      },
+                      {
+                        "const": "                "
+                      },
+                      {
+                        "const": "                "
+                      },
+                      {
+                        "const": "                "
+                      },
+                      {
+                        "const": "                "
+                      },
+                      {
+                        "const": "                "
+                      }
+                    ]
+                  }
+                ],
+                "per_line": 4,
+                "first": "*       ",
+                "next": "*       ",
+                "pad_to": 8,
+                "pad": "                ",
+                "rstrip": true
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
       "key": "nastran_viscoelastic_def",
       "label": "Nastran (점탄성) · 정의",
       "description": "기본 제공 형식 nastran_viscoelastic 를 정의로 옮긴 것. 코드판과 글자까지 같다 — 알림·거절까지(2026-09-28, 시험용 카드 41벌 · 개발 DB 카드 37벌, SI · mm-N-tonne). 코드판을 사용 중단하면 이것을 켜서 고친다.",
@@ -9180,6 +9902,19 @@
             "note": "온도별 탄성 표가 있는데 LAW36 의 E · nu 는 상수 하나입니다 — 블록의 대푯값(가장 낮은 온도)을 썼습니다."
           },
           {
+            "text": "# Eps_p_max not set - estimate from elongation at break A={table.elongation_at_break:.1%}:",
+            "when": "table.elongation_at_break > 0",
+            "note": "재료에 적어 둔 파단 연신율 {table.elongation_at_break:.1%} 로 파단 소성변형률을 ln(1+A) = {log(1 + table.elongation_at_break):.3g} 로 추정해 덱 주석에 적었습니다 — Eps_p_max 칸은 비워 두었습니다(켜면 그 변형률에서 요소가 지워집니다). 게이지 길이에 따라 달라지는 값입니다."
+          },
+          {
+            "text": "#   ln(1+A) = {log(1 + table.elongation_at_break):.4g} (uniform strain, gauge-length dependent).",
+            "when": "table.elongation_at_break > 0"
+          },
+          {
+            "text": "#   Put it in Eps_p_max to delete elements at that plastic strain.",
+            "when": "table.elongation_at_break > 0"
+          },
+          {
             "text": "# Strain rate dependent: {count(curves)} rates ({first(curves, _key):.4g} ~ {last(curves, _key):.4g} per time unit), log interpolation, plastic strain rate."
           },
           {
@@ -10063,7 +10798,7 @@
             "block": "thermal"
           },
           {
-            "text": "*PLASTIC, HARDENING=ISOTROPIC, EXTRAPOLATION=CONSTANT"
+            "text": "*PLASTIC, HARDENING=ISOTROPIC"
           },
           {
             "rows": "curve",
@@ -11420,6 +12155,393 @@
       }
     },
     {
+      "key": "optistruct_hill_def",
+      "label": "OptiStruct (이방성 Hill48) · 정의",
+      "description": "기본 제공 형식 optistruct_hill 를 정의로 옮긴 것. 코드판과 글자까지 같다 — 알림·거절까지(2026-10-08, 시험용 카드 전부, SI · mm-N-tonne). 코드판을 사용 중단하면 이것을 켜서 고친다.",
+      "is_active": false,
+      "definition": {
+        "extension": "fem",
+        "suffix": "_hill",
+        "describe": "MAT1 + PLASTIC(CRIT HILL 항복응력비 + HARD ISOT 표) — OptiStruct 2026 이상. 암시적 해석은 솔리드만, 쉘은 명시적 해석에서. 이방성 카드에 MD 카드를 짝으로 골라 낸다.",
+        "keywords": [
+          "MAT1*",
+          "PLASTIC*"
+        ],
+        "needs": [
+          {
+            "block": "anisotropy",
+            "values": [
+              "r_0",
+              "r_45",
+              "r_90"
+            ]
+          },
+          {
+            "block": "elastic",
+            "values": [
+              "youngs_modulus",
+              "poisson_ratio"
+            ]
+          },
+          {
+            "block": "elastic",
+            "values": [
+              "density"
+            ],
+            "optional": true
+          },
+          {
+            "block": "table",
+            "rows_min": 2
+          }
+        ],
+        "tables": {
+          "curve": {
+            "of": "table",
+            "x": "plastic_strain",
+            "y": "true_stress"
+          },
+          "alpha": {
+            "of": "thermal",
+            "where": "has(temperature) and has(thermal_expansion)",
+            "sort": [
+              "temperature",
+              "thermal_expansion"
+            ]
+          }
+        },
+        "lines": [
+          {
+            "fail": "r 값이 0 이하입니다(r₀={anisotropy.r_0:g}, r₄₅={anisotropy.r_45:g}, r₉₀={anisotropy.r_90:g}) — 소성 변형비는 양수여야 합니다. 이방성 묶음을 다시 보세요.",
+            "when": "min(anisotropy.r_0, anisotropy.r_45, anisotropy.r_90) <= 0"
+          },
+          {
+            "block": "header",
+            "comment": "$"
+          },
+          {
+            "text": "$ Consistent units: {units}"
+          },
+          {
+            "text": "$ OptiStruct Bulk Data fragment - INCLUDE it between BEGIN BULK and ENDDATA."
+          },
+          {
+            "text": "$ Large field format: 16-character fields, continuation lines start with *."
+          },
+          {
+            "text": "$ Hill48 from Lankford r0={anisotropy.r_0:.4g}, r45={anisotropy.r_45:.4g}, r90={anisotropy.r_90:.4g} (x = rolling direction, plane stress)."
+          },
+          {
+            "text": "$ R11=1 R22={sqrt(anisotropy.r_90 * (anisotropy.r_0 + 1) / (anisotropy.r_0 * (anisotropy.r_90 + 1))):.6g} R33={sqrt(anisotropy.r_90 * (anisotropy.r_0 + 1) / (anisotropy.r_0 + anisotropy.r_90)):.6g} R12={sqrt(3 * anisotropy.r_90 * (anisotropy.r_0 + 1) / ((2 * anisotropy.r_45 + 1) * (anisotropy.r_0 + anisotropy.r_90))):.6g}; R13=R23=1 by convention (sheet tests cannot fix them)."
+          },
+          {
+            "text": "$ Hardening curve must be the rolling-direction (MD) one - R11=1 is that direction."
+          },
+          {
+            "text": "$ PLASTIC needs OptiStruct 2026 or later. Implicit analysis: SOLID elements only;"
+          },
+          {
+            "text": "$   shells only in explicit analysis."
+          },
+          {
+            "text": "$ TEMP = 293.15 (one data set - OptiStruct uses it at every temperature)."
+          },
+          {
+            "text": "$ RHO: no measured density on this card - left blank (no mass).",
+            "when": "missing:elastic.density",
+            "note": "밀도가 카드에 없어 RHO 를 비웠습니다 — 질량이 0 인 재료입니다."
+          },
+          {
+            "text": "$ TREF not on the card - left blank (0).",
+            "when": "(count(alpha) > 0 or has(thermal.thermal_expansion)) and not has(thermal.thermal_expansion_temperature)"
+          },
+          {
+            "text": "$MAT1*  MID             E               G               NU"
+          },
+          {
+            "text": "$*      RHO             A               TREF            GE"
+          },
+          {
+            "pack": [
+              {
+                "expr": "_id",
+                "format": [
+                  "spec",
+                  "<16d"
+                ]
+              },
+              {
+                "value": "elastic.youngs_modulus",
+                "format": [
+                  "fixed_left",
+                  16,
+                  8
+                ]
+              },
+              {
+                "const": "                "
+              },
+              {
+                "value": "elastic.poisson_ratio",
+                "format": [
+                  "fixed_left",
+                  16,
+                  8
+                ]
+              },
+              {
+                "value": "elastic.density",
+                "format": [
+                  "fixed_left",
+                  16,
+                  8
+                ],
+                "default": "                "
+              },
+              {
+                "expr": "(first(alpha, thermal_expansion) if count(alpha) > 0 else thermal.thermal_expansion)",
+                "format": [
+                  "fixed_left",
+                  16,
+                  8
+                ],
+                "when": "(count(alpha) > 0 or has(thermal.thermal_expansion))",
+                "default": "                "
+              },
+              {
+                "value": "thermal.thermal_expansion_temperature",
+                "format": [
+                  "fixed_left",
+                  16,
+                  8
+                ],
+                "when": "(count(alpha) > 0 or has(thermal.thermal_expansion))",
+                "default": "                "
+              }
+            ],
+            "per_line": 4,
+            "first": "MAT1*   ",
+            "next": "*       ",
+            "pad_to": 8,
+            "pad": "                ",
+            "rstrip": true
+          },
+          {
+            "text": "$PLASTIC*MID"
+          },
+          {
+            "text": "$*      CRIT            HILL"
+          },
+          {
+            "text": "$*      R11             R22             R33             R12"
+          },
+          {
+            "text": "$*      R31             R23             TEMP"
+          },
+          {
+            "text": "$*      HARD            ISOT"
+          },
+          {
+            "text": "$*      YIELD           PLAS            TEMP"
+          },
+          {
+            "pack": [
+              {
+                "expr": "_id",
+                "format": [
+                  "spec",
+                  "<16d"
+                ]
+              },
+              {
+                "const": "                "
+              },
+              {
+                "const": "                "
+              },
+              {
+                "const": "                "
+              },
+              {
+                "const": "                "
+              },
+              {
+                "const": "                "
+              },
+              {
+                "const": "                "
+              },
+              {
+                "const": "                "
+              },
+              {
+                "const": "CRIT            "
+              },
+              {
+                "const": "HILL            "
+              },
+              {
+                "const": "                "
+              },
+              {
+                "const": "                "
+              },
+              {
+                "const": "                "
+              },
+              {
+                "const": "                "
+              },
+              {
+                "const": "                "
+              },
+              {
+                "const": "                "
+              },
+              {
+                "expr": "1",
+                "format": [
+                  "fixed_left",
+                  16,
+                  8
+                ]
+              },
+              {
+                "expr": "sqrt(anisotropy.r_90 * (anisotropy.r_0 + 1) / (anisotropy.r_0 * (anisotropy.r_90 + 1)))",
+                "format": [
+                  "fixed_left",
+                  16,
+                  8
+                ]
+              },
+              {
+                "expr": "sqrt(anisotropy.r_90 * (anisotropy.r_0 + 1) / (anisotropy.r_0 + anisotropy.r_90))",
+                "format": [
+                  "fixed_left",
+                  16,
+                  8
+                ]
+              },
+              {
+                "expr": "sqrt(3 * anisotropy.r_90 * (anisotropy.r_0 + 1) / ((2 * anisotropy.r_45 + 1) * (anisotropy.r_0 + anisotropy.r_90)))",
+                "format": [
+                  "fixed_left",
+                  16,
+                  8
+                ]
+              },
+              {
+                "expr": "1",
+                "format": [
+                  "fixed_left",
+                  16,
+                  8
+                ]
+              },
+              {
+                "expr": "1",
+                "format": [
+                  "fixed_left",
+                  16,
+                  8
+                ]
+              },
+              {
+                "expr": "293.15",
+                "format": [
+                  "fixed_left",
+                  16,
+                  8
+                ]
+              },
+              {
+                "const": "                "
+              },
+              {
+                "const": "HARD            "
+              },
+              {
+                "const": "ISOT            "
+              },
+              {
+                "const": "                "
+              },
+              {
+                "const": "                "
+              },
+              {
+                "const": "                "
+              },
+              {
+                "const": "                "
+              },
+              {
+                "const": "                "
+              },
+              {
+                "const": "                "
+              },
+              {
+                "rows": "curve",
+                "fields": [
+                  {
+                    "value": "true_stress",
+                    "format": [
+                      "fixed_left",
+                      16,
+                      8
+                    ]
+                  },
+                  {
+                    "value": "plastic_strain",
+                    "format": [
+                      "fixed_left",
+                      16,
+                      8
+                    ]
+                  },
+                  {
+                    "expr": "293.15",
+                    "format": [
+                      "fixed_left",
+                      16,
+                      8
+                    ],
+                    "when": "_index == 1",
+                    "default": "                "
+                  },
+                  {
+                    "const": "                "
+                  },
+                  {
+                    "const": "                "
+                  },
+                  {
+                    "const": "                "
+                  },
+                  {
+                    "const": "                "
+                  },
+                  {
+                    "const": "                "
+                  }
+                ]
+              }
+            ],
+            "per_line": 4,
+            "first": "PLASTIC*",
+            "next": "*       ",
+            "pad_to": 8,
+            "pad": "                ",
+            "rstrip": true
+          },
+          {
+            "note": "경화 곡선·탄성은 짝 카드에서 왔습니다 — 그 카드가 압연 방향(MD) 곡선이어야 항복응력비가 맞습니다(R11 = 1 이 그 방향입니다)."
+          }
+        ]
+      }
+    },
+    {
       "key": "dyna_fatigue_def",
       "label": "LS-DYNA (피로 S-N) · 정의",
       "description": "기본 제공 형식 dyna_fatigue 를 정의로 옮긴 것. 코드판과 글자까지 같다 — 알림·거절까지(2026-09-28, 시험용 카드 41벌 · 개발 DB 카드 37벌, SI · mm-N-tonne). 코드판을 사용 중단하면 이것을 켜서 고친다.",
@@ -11502,17 +12624,15 @@
               {
                 "value": "sn_curve.basquin_a",
                 "format": [
-                  "fixed",
-                  10,
-                  3
+                  "fit",
+                  10
                 ]
               },
               {
                 "value": "sn_curve.basquin_b",
                 "format": [
-                  "fixed",
-                  10,
-                  3
+                  "fit",
+                  10
                 ]
               },
               {
@@ -11523,6 +12643,507 @@
           },
           {
             "text": "*END"
+          }
+        ]
+      }
+    },
+    {
+      "key": "optistruct_fatigue_def",
+      "label": "OptiStruct (피로 S-N) · 정의",
+      "description": "기본 제공 형식 optistruct_fatigue 를 정의로 옮긴 것. 코드판과 글자까지 같다 — 알림·거절까지(2026-10-08, 시험용 카드 전부, SI · mm-N-tonne). 코드판을 사용 중단하면 이것을 켜서 고친다.",
+      "is_active": false,
+      "definition": {
+        "extension": "fem",
+        "suffix": "_fatigue",
+        "describe": "MATFAT — STATIC(인장 · 항복강도) + SN(SRI1 = 2A 범위 절편, B1 = B2 = b). 인장강도는 재료에 적어 둔 값이 카드에 실려 있어야 한다. MID 는 구조 재료(MAT1)의 번호.",
+        "keywords": [
+          "MATFAT*"
+        ],
+        "needs": [
+          {
+            "block": "sn_curve",
+            "values": [
+              "basquin_a",
+              "basquin_b",
+              "tensile_strength"
+            ]
+          },
+          {
+            "block": "sn_curve",
+            "values": [
+              "yield_strength"
+            ],
+            "optional": true
+          }
+        ],
+        "tables": {
+          "ratios": {
+            "of": "sn_curve",
+            "where": "has(stress_ratio)",
+            "by": "round(stress_ratio, 3)"
+          }
+        },
+        "lines": [
+          {
+            "fail": "Basquin a={sn_curve.basquin_a:g}, b={sn_curve.basquin_b:g} 입니다 — a 는 양수, b 는 음수여야 S-N 곡선입니다.",
+            "when": "sn_curve.basquin_a <= 0 or sn_curve.basquin_b >= 0"
+          },
+          {
+            "fail": "인장강도 · 항복강도는 양수여야 합니다 — 재료에 적어 둔 값을 보세요.",
+            "when": "sn_curve.tensile_strength <= 0 or (has(sn_curve.yield_strength) and sn_curve.yield_strength <= 0)"
+          },
+          {
+            "fail": "OptiStruct 피로 카드는 응력을 MPa · Pa · psi · ksi 로만 받습니다 — 이 단위계의 응력({units.Pa})은 이름이 없습니다. 다른 단위계로 내세요.",
+            "when": "not (units.Pa == \"MPa\" or units.Pa == \"Pa\" or units.Pa == \"psi\" or units.Pa == \"ksi\")"
+          },
+          {
+            "note": "피로 카드는 구조 재료(MAT1)에 붙습니다 — MID 를 그 재료 번호로 맞추세요."
+          },
+          {
+            "note": "시험의 응력비 R 이 {joined(ratios, fmt(_key, \"g\"), \", \")} 입니다 — 완전 역전(R=-1) 곡선이 아니므로 평균응력 보정을 쓰면 두 번 보정될 수 있습니다.",
+            "when": "count(ratios) > 0 and not (count(ratios) == 1 and first(ratios, _key) == -1)"
+          },
+          {
+            "block": "header",
+            "comment": "$"
+          },
+          {
+            "text": "$ Consistent units: {units}"
+          },
+          {
+            "text": "$ OptiStruct Bulk Data fragment - INCLUDE it between BEGIN BULK and ENDDATA."
+          },
+          {
+            "text": "$ Large field format: 16-character fields, continuation lines start with *."
+          },
+          {
+            "text": "$ S-N in stress RANGE: SRI1 = 2 x amplitude intercept ({sn_curve.basquin_a:.6g} * N^{sn_curve.basquin_b:.6g} amplitude)."
+          },
+          {
+            "text": "$ B2 = B1: one straight line, no endurance limit;"
+          },
+          {
+            "text": "$   NC1 = {(max_of(sn_curve, cycles_to_failure, cycles_to_failure > 0) if count(sn_curve, cycles_to_failure > 0) > 0 else 10000000):.6g} cycles is where the tests ended (same slope on both sides -"
+          },
+          {
+            "text": "$   the curve is unchanged)."
+          },
+          {
+            "text": "$ UTS / YS are the values stated on the material, not from the fatigue tests."
+          },
+          {
+            "text": "$ MID must be the structural MAT1 this fatigue curve belongs to."
+          },
+          {
+            "text": "$ LENUNIT left blank - this length unit has no MATFAT name.",
+            "when": "not (units.m == \"m\" or units.m == \"mm\" or units.m == \"cm\" or units.m == \"km\" or units.m == \"in\" or units.m == \"ft\")"
+          },
+          {
+            "text": "$MATFAT* MID             UNIT            LENUNIT"
+          },
+          {
+            "text": "$*      STATIC          YS              UTS"
+          },
+          {
+            "text": "$*      SN              SRI1            B1              NC1"
+          },
+          {
+            "text": "$*      B2              FL              SE"
+          },
+          {
+            "pack": [
+              {
+                "expr": "_id",
+                "format": [
+                  "spec",
+                  "<16d"
+                ]
+              },
+              {
+                "expr": "(\"MPA\" if units.Pa == \"MPa\" else (\"PA\" if units.Pa == \"Pa\" else (\"PSI\" if units.Pa == \"psi\" else \"KSI\")))",
+                "format": [
+                  "spec",
+                  "<16s"
+                ]
+              },
+              {
+                "expr": "(\"M\" if units.m == \"m\" else (\"MM\" if units.m == \"mm\" else (\"CM\" if units.m == \"cm\" else (\"KM\" if units.m == \"km\" else (\"IN\" if units.m == \"in\" else (\"FT\" if units.m == \"ft\" else \"\"))))))",
+                "format": [
+                  "spec",
+                  "<16s"
+                ],
+                "when": "(units.m == \"m\" or units.m == \"mm\" or units.m == \"cm\" or units.m == \"km\" or units.m == \"in\" or units.m == \"ft\")",
+                "default": "                "
+              },
+              {
+                "const": "                "
+              },
+              {
+                "const": "                "
+              },
+              {
+                "const": "                "
+              },
+              {
+                "const": "                "
+              },
+              {
+                "const": "                "
+              },
+              {
+                "const": "STATIC          "
+              },
+              {
+                "expr": "sn_curve.yield_strength",
+                "format": [
+                  "fixed_left",
+                  16,
+                  8
+                ],
+                "when": "has(sn_curve.yield_strength)",
+                "default": "                "
+              },
+              {
+                "expr": "sn_curve.tensile_strength",
+                "format": [
+                  "fixed_left",
+                  16,
+                  8
+                ]
+              },
+              {
+                "const": "                "
+              },
+              {
+                "const": "                "
+              },
+              {
+                "const": "                "
+              },
+              {
+                "const": "                "
+              },
+              {
+                "const": "                "
+              },
+              {
+                "const": "SN              "
+              },
+              {
+                "expr": "2 * sn_curve.basquin_a",
+                "format": [
+                  "fixed_left",
+                  16,
+                  8
+                ]
+              },
+              {
+                "expr": "sn_curve.basquin_b",
+                "format": [
+                  "fixed_left",
+                  16,
+                  8
+                ]
+              },
+              {
+                "expr": "(max_of(sn_curve, cycles_to_failure, cycles_to_failure > 0) if count(sn_curve, cycles_to_failure > 0) > 0 else 10000000)",
+                "format": [
+                  "fixed_left",
+                  16,
+                  8
+                ]
+              },
+              {
+                "expr": "sn_curve.basquin_b",
+                "format": [
+                  "fixed_left",
+                  16,
+                  8
+                ]
+              },
+              {
+                "const": "                "
+              },
+              {
+                "const": "                "
+              },
+              {
+                "const": "                "
+              }
+            ],
+            "first": "MATFAT* ",
+            "per_line": 4,
+            "next": "*       ",
+            "pad_to": 8,
+            "pad": "                ",
+            "rstrip": true
+          }
+        ]
+      }
+    },
+    {
+      "key": "nastran_fatigue_def",
+      "label": "Nastran (피로 S-N) · 정의",
+      "description": "기본 제공 형식 nastran_fatigue 를 정의로 옮긴 것. 코드판과 글자까지 같다 — 알림·거절까지(2026-10-08, 시험용 카드 전부, SI · mm-N-tonne). 코드판을 사용 중단하면 이것을 켜서 고친다.",
+      "is_active": false,
+      "definition": {
+        "extension": "bdf",
+        "suffix": "_fatigue",
+        "describe": "MATFTG — STATIC(인장 · 항복강도, 시험 R) + SN(SRI1 = 2A 범위 절편, b1 = b2 = b). SOL 101 · 103 · 112 임베디드 피로(금속). 모델 응력이 MPa 가 아니면 DTI,UNITS 를 모델에 둔다.",
+        "keywords": [
+          "MATFTG*"
+        ],
+        "needs": [
+          {
+            "block": "sn_curve",
+            "values": [
+              "basquin_a",
+              "basquin_b",
+              "tensile_strength"
+            ]
+          },
+          {
+            "block": "sn_curve",
+            "values": [
+              "yield_strength"
+            ],
+            "optional": true
+          }
+        ],
+        "tables": {
+          "ratios": {
+            "of": "sn_curve",
+            "where": "has(stress_ratio)",
+            "by": "round(stress_ratio, 3)"
+          }
+        },
+        "lines": [
+          {
+            "fail": "Basquin a={sn_curve.basquin_a:g}, b={sn_curve.basquin_b:g} 입니다 — a 는 양수, b 는 음수여야 S-N 곡선입니다.",
+            "when": "sn_curve.basquin_a <= 0 or sn_curve.basquin_b >= 0"
+          },
+          {
+            "fail": "인장강도 · 항복강도는 양수여야 합니다 — 재료에 적어 둔 값을 보세요.",
+            "when": "sn_curve.tensile_strength <= 0 or (has(sn_curve.yield_strength) and sn_curve.yield_strength <= 0)"
+          },
+          {
+            "fail": "Nastran 피로 카드는 응력을 MPa · Pa · psi · ksi 로만 받습니다 — 이 단위계의 응력({units.Pa})은 이름이 없습니다. 다른 단위계로 내세요.",
+            "when": "not (units.Pa == \"MPa\" or units.Pa == \"Pa\" or units.Pa == \"psi\" or units.Pa == \"ksi\")"
+          },
+          {
+            "fail": "MATFTG 의 b1 은 -1 과 -0.02 사이여야 합니다 — 이 카드는 b = {sn_curve.basquin_b:.4g}.",
+            "when": "not (sn_curve.basquin_b > -1 and sn_curve.basquin_b < -0.02)"
+          },
+          {
+            "fail": "MATFTG 의 b2 는 -0.5 보다 커야 하는데, 한 직선으로 이으려면 b2 = b1 = {sn_curve.basquin_b:.4g} 입니다.",
+            "when": "not (sn_curve.basquin_b > -0.5)"
+          },
+          {
+            "fail": "MATFTG 는 인장강도 100~4000 MPa 만 받습니다(금속 피로) — 이 카드는 {sn_curve.tensile_strength / (1 if units.Pa == \"MPa\" else (1000000 if units.Pa == \"Pa\" else (145.0377377 if units.Pa == \"psi\" else 0.1450377377))):.4g} MPa.",
+            "when": "not (sn_curve.tensile_strength / (1 if units.Pa == \"MPa\" else (1000000 if units.Pa == \"Pa\" else (145.0377377 if units.Pa == \"psi\" else 0.1450377377))) >= 100 and sn_curve.tensile_strength / (1 if units.Pa == \"MPa\" else (1000000 if units.Pa == \"Pa\" else (145.0377377 if units.Pa == \"psi\" else 0.1450377377))) <= 4000)"
+          },
+          {
+            "fail": "MATFTG 의 SRI1 은 1~25000 MPa 만 받습니다 — 이 카드는 2A = {2 * sn_curve.basquin_a / (1 if units.Pa == \"MPa\" else (1000000 if units.Pa == \"Pa\" else (145.0377377 if units.Pa == \"psi\" else 0.1450377377))):.4g} MPa.",
+            "when": "not (2 * sn_curve.basquin_a / (1 if units.Pa == \"MPa\" else (1000000 if units.Pa == \"Pa\" else (145.0377377 if units.Pa == \"psi\" else 0.1450377377))) >= 1 and 2 * sn_curve.basquin_a / (1 if units.Pa == \"MPa\" else (1000000 if units.Pa == \"Pa\" else (145.0377377 if units.Pa == \"psi\" else 0.1450377377))) <= 25000)"
+          },
+          {
+            "note": "피로 카드는 구조 재료(MAT1)에 붙습니다 — MID 를 그 재료 번호로 맞추세요."
+          },
+          {
+            "note": "항복강도 {sn_curve.yield_strength / (1 if units.Pa == \"MPa\" else (1000000 if units.Pa == \"Pa\" else (145.0377377 if units.Pa == \"psi\" else 0.1450377377))):.4g} MPa 는 MATFTG 범위(50~3000 MPa) 밖이라 뺐습니다.",
+            "when": "has(sn_curve.yield_strength) and not (sn_curve.yield_strength / (1 if units.Pa == \"MPa\" else (1000000 if units.Pa == \"Pa\" else (145.0377377 if units.Pa == \"psi\" else 0.1450377377))) >= 50 and sn_curve.yield_strength / (1 if units.Pa == \"MPa\" else (1000000 if units.Pa == \"Pa\" else (145.0377377 if units.Pa == \"psi\" else 0.1450377377))) <= 3000)"
+          },
+          {
+            "note": "시험의 응력비 R 이 여럿입니다({joined(ratios, fmt(_key, \"g\"), \", \")}) — RR 을 비웠습니다(기본 -1). 한 R 의 시험으로 묶은 S-N 이어야 평균응력 보정이 맞습니다.",
+            "when": "count(ratios) > 1"
+          },
+          {
+            "block": "header",
+            "comment": "$"
+          },
+          {
+            "text": "$ Consistent units: {units}"
+          },
+          {
+            "text": "$ MSC Nastran Bulk Data fragment - INCLUDE it between BEGIN BULK and ENDDATA."
+          },
+          {
+            "text": "$ Large field format: 16-character fields, continuation lines start with *."
+          },
+          {
+            "text": "$ S-N in stress RANGE: SRI1 = 2 x amplitude intercept ({sn_curve.basquin_a:.6g} * N^{sn_curve.basquin_b:.6g} amplitude)."
+          },
+          {
+            "text": "$ b2 = b1: one straight line, no endurance limit;"
+          },
+          {
+            "text": "$   Nc1 = {(max_of(sn_curve, cycles_to_failure, cycles_to_failure > 0) if count(sn_curve, cycles_to_failure > 0) > 0 else 10000000):.6g} cycles is where the tests ended (same slope on both sides -"
+          },
+          {
+            "text": "$   the curve is unchanged)."
+          },
+          {
+            "text": "$ UTS / YS are the values stated on the material, not from the fatigue tests."
+          },
+          {
+            "text": "$ MID must be the structural MAT1 this fatigue curve belongs to."
+          },
+          {
+            "text": "$ Stresses in MPa - the Nastran fatigue default (no DTI,UNITS needed).",
+            "when": "units.Pa == \"MPa\""
+          },
+          {
+            "text": "$ Stresses are in {units.Pa}: the model needs DTI,UNITS,1,{(\"MPA\" if units.Pa == \"MPa\" else (\"PA\" if units.Pa == \"Pa\" else (\"PSI\" if units.Pa == \"psi\" else \"KSI\")))}",
+            "when": "not (units.Pa == \"MPa\")"
+          },
+          {
+            "text": "$   (one per model - not written in this material fragment).",
+            "when": "not (units.Pa == \"MPa\")",
+            "note": "모델 응력이 {units.Pa} 입니다 — Nastran 피로는 MPa 로 바꿔 읽으므로 모델에 DTI,UNITS,1,{(\"MPA\" if units.Pa == \"MPa\" else (\"PA\" if units.Pa == \"Pa\" else (\"PSI\" if units.Pa == \"psi\" else \"KSI\")))} 를 한 번 두세요(모델 전체 설정이라 덱에 넣지 않았습니다)."
+          },
+          {
+            "text": "$ RR = {first(ratios, _key):g}: stress ratio R of the tests.",
+            "when": "count(ratios) == 1"
+          },
+          {
+            "text": "$MATFTG* MID"
+          },
+          {
+            "text": "$*      STATIC          YS              UTS             CODE"
+          },
+          {
+            "text": "$*      TYPE            RR              SE              mp"
+          },
+          {
+            "text": "$*      SN              SRI1            b1              Nc1"
+          },
+          {
+            "text": "$*      b2              Nfc             SE              BTHRES"
+          },
+          {
+            "pack": [
+              {
+                "expr": "_id",
+                "format": [
+                  "spec",
+                  "<16d"
+                ]
+              },
+              {
+                "const": "                "
+              },
+              {
+                "const": "                "
+              },
+              {
+                "const": "                "
+              },
+              {
+                "const": "                "
+              },
+              {
+                "const": "                "
+              },
+              {
+                "const": "                "
+              },
+              {
+                "const": "                "
+              },
+              {
+                "const": "STATIC          "
+              },
+              {
+                "expr": "sn_curve.yield_strength",
+                "format": [
+                  "fixed_left",
+                  16,
+                  8
+                ],
+                "when": "has(sn_curve.yield_strength) and sn_curve.yield_strength / (1 if units.Pa == \"MPa\" else (1000000 if units.Pa == \"Pa\" else (145.0377377 if units.Pa == \"psi\" else 0.1450377377))) >= 50 and sn_curve.yield_strength / (1 if units.Pa == \"MPa\" else (1000000 if units.Pa == \"Pa\" else (145.0377377 if units.Pa == \"psi\" else 0.1450377377))) <= 3000",
+                "default": "                "
+              },
+              {
+                "expr": "sn_curve.tensile_strength",
+                "format": [
+                  "fixed_left",
+                  16,
+                  8
+                ]
+              },
+              {
+                "const": "                "
+              },
+              {
+                "const": "                "
+              },
+              {
+                "expr": "first(ratios, _key)",
+                "format": [
+                  "fixed_left",
+                  16,
+                  8
+                ],
+                "when": "count(ratios) == 1",
+                "default": "                "
+              },
+              {
+                "const": "                "
+              },
+              {
+                "const": "                "
+              },
+              {
+                "const": "SN              "
+              },
+              {
+                "expr": "2 * sn_curve.basquin_a",
+                "format": [
+                  "fixed_left",
+                  16,
+                  8
+                ]
+              },
+              {
+                "expr": "sn_curve.basquin_b",
+                "format": [
+                  "fixed_left",
+                  16,
+                  8
+                ]
+              },
+              {
+                "expr": "(max_of(sn_curve, cycles_to_failure, cycles_to_failure > 0) if count(sn_curve, cycles_to_failure > 0) > 0 else 10000000)",
+                "format": [
+                  "fixed_left",
+                  16,
+                  8
+                ]
+              },
+              {
+                "expr": "sn_curve.basquin_b",
+                "format": [
+                  "fixed_left",
+                  16,
+                  8
+                ]
+              },
+              {
+                "const": "                "
+              },
+              {
+                "const": "                "
+              },
+              {
+                "const": "                "
+              }
+            ],
+            "first": "MATFTG* ",
+            "per_line": 4,
+            "next": "*       ",
+            "pad_to": 8,
+            "pad": "                ",
+            "rstrip": true
           }
         ]
       }
@@ -11560,6 +13181,14 @@
           }
         ],
         "lines": [
+          {
+            "fail": "카드의 경화식이 '{hardening.label or \"이름 없는 적합\"}' 입니다 — Johnson-Cook 준정적 항으로 적합한 카드에서만 A·B·n 을 냅니다. 표 형식이 필요하면 *MAT_024 를 쓰세요.",
+            "when": "not (hardening.family == \"johnson_cook_static\" or (not has(hardening.family) and (hardening.label == \"Johnson-Cook\" or hardening.label == \"Johnson-Cook (준정적 항)\")))"
+          },
+          {
+            "fail": "경화 곡선이 '{hardening.blend_with}' 와 혼합돼 있습니다 — A·B·n 한 벌이 그 곡선이 아닙니다. 혼합 없이 맞춘 카드를 쓰세요.",
+            "when": "has(hardening.blend_with)"
+          },
           {
             "fail": "카드의 경화식이 '{hardening.label or \"이름 없는 적합\"}' 이라 A·B·n 이 없습니다. *MAT_098 은 Johnson-Cook 준정적 항으로 적합한 카드에서만 나옵니다 — 표 형식이 필요하면 *MAT_024 를 쓰세요.",
             "when": "not (count(hardening, name == \"a\" and has(value)) > 0) or not (count(hardening, name == \"b\" and has(value)) > 0) or not (count(hardening, name == \"n\" and has(value)) > 0)"
@@ -11621,33 +13250,29 @@
               {
                 "value": "elastic.density",
                 "format": [
-                  "fixed",
-                  10,
-                  3
+                  "fit",
+                  10
                 ]
               },
               {
                 "value": "elastic.youngs_modulus",
                 "format": [
-                  "fixed",
-                  10,
-                  3
+                  "fit",
+                  10
                 ]
               },
               {
                 "value": "elastic.poisson_ratio",
                 "format": [
-                  "fixed",
-                  10,
-                  3
+                  "fit",
+                  10
                 ]
               },
               {
                 "expr": "1.0",
                 "format": [
-                  "fixed",
-                  10,
-                  3
+                  "fit",
+                  10
                 ]
               }
             ],
@@ -11661,65 +13286,57 @@
               {
                 "expr": "last(hardening, value, name == \"a\")",
                 "format": [
-                  "fixed",
-                  10,
-                  3
+                  "fit",
+                  10
                 ]
               },
               {
                 "expr": "last(hardening, value, name == \"b\")",
                 "format": [
-                  "fixed",
-                  10,
-                  3
+                  "fit",
+                  10
                 ]
               },
               {
                 "expr": "last(hardening, value, name == \"n\")",
                 "format": [
-                  "fixed",
-                  10,
-                  3
+                  "fit",
+                  10
                 ]
               },
               {
                 "expr": "rate_table.jc_c if has(rate_table.jc_c) else 0",
                 "format": [
-                  "fixed",
-                  10,
-                  3
+                  "fit",
+                  10
                 ]
               },
               {
                 "expr": "0",
                 "format": [
-                  "fixed",
-                  10,
-                  3
+                  "fit",
+                  10
                 ]
               },
               {
                 "expr": "0",
                 "format": [
-                  "fixed",
-                  10,
-                  3
+                  "fit",
+                  10
                 ]
               },
               {
                 "expr": "0",
                 "format": [
-                  "fixed",
-                  10,
-                  3
+                  "fit",
+                  10
                 ]
               },
               {
                 "expr": "rate_table.reference_rate if has(rate_table.jc_c) else 1",
                 "format": [
-                  "fixed",
-                  10,
-                  3
+                  "fit",
+                  10
                 ]
               }
             ],
@@ -11764,6 +13381,14 @@
           }
         ],
         "lines": [
+          {
+            "fail": "카드의 경화식이 '{hardening.label or \"이름 없는 적합\"}' 입니다 — Johnson-Cook 준정적 항으로 적합한 카드에서만 A·B·n 을 냅니다. 표 형식이 필요하면 *MAT_024 를 쓰세요.",
+            "when": "not (hardening.family == \"johnson_cook_static\" or (not has(hardening.family) and (hardening.label == \"Johnson-Cook\" or hardening.label == \"Johnson-Cook (준정적 항)\")))"
+          },
+          {
+            "fail": "경화 곡선이 '{hardening.blend_with}' 와 혼합돼 있습니다 — A·B·n 한 벌이 그 곡선이 아닙니다. 혼합 없이 맞춘 카드를 쓰세요.",
+            "when": "has(hardening.blend_with)"
+          },
           {
             "fail": "카드의 경화식이 '{hardening.label or \"이름 없는 적합\"}' 이라 A·B·n 이 없습니다. *MAT_098 은 Johnson-Cook 준정적 항으로 적합한 카드에서만 나옵니다 — 표 형식이 필요하면 *MAT_024 를 쓰세요.",
             "when": "not (count(hardening, name == \"a\" and has(value)) > 0) or not (count(hardening, name == \"b\" and has(value)) > 0) or not (count(hardening, name == \"n\" and has(value)) > 0)"
@@ -12054,6 +13679,267 @@
           {
             "fail": "'{rheology.family or \"?\"}' 은 Abaqus *VISCOSITY 로 낼 수 없는 식입니다 — Cross·Carreau 만.",
             "when": "not has(rheology.family) or (rheology.family != \"cross\" and rheology.family != \"carreau\")"
+          }
+        ]
+      }
+    },
+    {
+      "key": "dyna_viscosity_def",
+      "label": "LS-DYNA (점도 · ICFD) · 정의",
+      "description": "기본 제공 형식 dyna_viscosity 를 정의로 옮긴 것. 코드판과 글자까지 같다 — 알림·거절까지(2026-10-08, 시험용 카드 전부, SI · mm-N-tonne). 코드판을 사용 중단하면 이것을 켜서 고친다.",
+      "is_active": false,
+      "definition": {
+        "extension": "k",
+        "suffix": "_viscosity",
+        "describe": "*ICFD_MAT + *ICFD_MODEL_NONNEWT — ICFD 유체의 전단 박화 점도. Cross 는 Cross II(NNID=5, 지수 m 그대로), Carreau 는 NNID=2(온도 항 없이). 밀도가 있어야 낸다.",
+        "keywords": [
+          "*KEYWORD",
+          "*ICFD_MAT",
+          "*ICFD_MODEL_NONNEWT",
+          "*END"
+        ],
+        "needs": [
+          {
+            "block": "rheology",
+            "values": [
+              "label"
+            ],
+            "rows_min": 4
+          },
+          {
+            "block": "elastic",
+            "values": [
+              "density"
+            ]
+          }
+        ],
+        "lines": [
+          {
+            "fail": "유변 계수(eta_0·eta_inf·lambda)가 카드에 없습니다.",
+            "when": "not (count(rheology, name == \"eta_0\" and has(value)) > 0) or not (count(rheology, name == \"eta_inf\" and has(value)) > 0) or not (count(rheology, name == \"lambda\" and has(value)) > 0)"
+          },
+          {
+            "fail": "Cross 계수 m 이 카드에 없습니다.",
+            "when": "rheology.family == \"cross\" and not (count(rheology, name == \"m\" and has(value)) > 0)"
+          },
+          {
+            "fail": "Carreau 계수 n 이 카드에 없습니다.",
+            "when": "rheology.family == \"carreau\" and not (count(rheology, name == \"n\" and has(value)) > 0)"
+          },
+          {
+            "fail": "'{rheology.family or \"?\"}' 은 ICFD 비뉴턴 모델로 낼 수 없는 식입니다 — Cross·Carreau 만.",
+            "when": "not has(rheology.family) or (rheology.family != \"cross\" and rheology.family != \"carreau\")"
+          },
+          {
+            "text": "*KEYWORD"
+          },
+          {
+            "block": "header",
+            "comment": "$"
+          },
+          {
+            "text": "$ Consistent units: {units}"
+          },
+          {
+            "text": "$   (LS-DYNA declares no units - every material in this deck must match.)"
+          },
+          {
+            "text": "$ ICFD fluid material - *ICFD_PART must point to this MID."
+          },
+          {
+            "text": "$ Cross -> NNID=5 (Cross II): N = our m = {last(rheology, value, name == \"m\"):.6g} as is.",
+            "when": "rheology.family == \"cross\""
+          },
+          {
+            "text": "$ Carreau -> NNID=2, ALPHA=0 (no temperature shift, H=1).",
+            "when": "rheology.family == \"carreau\""
+          },
+          {
+            "text": "*ICFD_MAT"
+          },
+          {
+            "text": "$      mid       flg        ro       vis"
+          },
+          {
+            "fields": [
+              {
+                "expr": "_id",
+                "format": [
+                  "spec",
+                  ">10d"
+                ]
+              },
+              {
+                "expr": "1",
+                "format": [
+                  "spec",
+                  ">10d"
+                ]
+              },
+              {
+                "expr": "elastic.density",
+                "format": [
+                  "fit",
+                  10
+                ]
+              },
+              {
+                "expr": "last(rheology, value, name == \"eta_0\")",
+                "format": [
+                  "fit",
+                  10
+                ]
+              }
+            ],
+            "join": ""
+          },
+          {
+            "text": "$ thermal card left blank (manual: blank card if no thermal problem)"
+          },
+          {
+            "text": ""
+          },
+          {
+            "text": "$   nnmoid    pmmoid    sptrid       vid"
+          },
+          {
+            "fields": [
+              {
+                "expr": "_id",
+                "format": [
+                  "spec",
+                  ">10d"
+                ]
+              }
+            ],
+            "join": ""
+          },
+          {
+            "text": "*ICFD_MODEL_NONNEWT"
+          },
+          {
+            "text": "$   nnmoid      nnid"
+          },
+          {
+            "fields": [
+              {
+                "expr": "_id",
+                "format": [
+                  "spec",
+                  ">10d"
+                ]
+              },
+              {
+                "expr": "5",
+                "format": [
+                  "spec",
+                  ">10d"
+                ]
+              }
+            ],
+            "join": "",
+            "when": "rheology.family == \"cross\""
+          },
+          {
+            "fields": [
+              {
+                "expr": "_id",
+                "format": [
+                  "spec",
+                  ">10d"
+                ]
+              },
+              {
+                "expr": "2",
+                "format": [
+                  "spec",
+                  ">10d"
+                ]
+              }
+            ],
+            "join": "",
+            "when": "rheology.family == \"carreau\""
+          },
+          {
+            "text": "$        k         n     mumin    lambda     alpha    talpha"
+          },
+          {
+            "fields": [
+              {
+                "expr": "last(rheology, value, name == \"eta_0\")",
+                "format": [
+                  "fit",
+                  10
+                ]
+              },
+              {
+                "expr": "last(rheology, value, name == \"m\")",
+                "format": [
+                  "fit",
+                  10
+                ]
+              },
+              {
+                "expr": "last(rheology, value, name == \"eta_inf\")",
+                "format": [
+                  "fit",
+                  10
+                ]
+              },
+              {
+                "expr": "last(rheology, value, name == \"lambda\")",
+                "format": [
+                  "fit",
+                  10
+                ]
+              }
+            ],
+            "join": "",
+            "when": "rheology.family == \"cross\""
+          },
+          {
+            "fields": [
+              {
+                "expr": "last(rheology, value, name == \"eta_0\")",
+                "format": [
+                  "fit",
+                  10
+                ]
+              },
+              {
+                "expr": "last(rheology, value, name == \"n\")",
+                "format": [
+                  "fit",
+                  10
+                ]
+              },
+              {
+                "expr": "last(rheology, value, name == \"eta_inf\")",
+                "format": [
+                  "fit",
+                  10
+                ]
+              },
+              {
+                "expr": "last(rheology, value, name == \"lambda\")",
+                "format": [
+                  "fit",
+                  10
+                ]
+              },
+              {
+                "expr": "0",
+                "format": [
+                  "fit",
+                  10
+                ]
+              }
+            ],
+            "join": "",
+            "when": "rheology.family == \"carreau\""
+          },
+          {
+            "text": "*END"
           }
         ]
       }
@@ -13184,6 +15070,10 @@
             "when": "count(curves) < 2"
           },
           {
+            "fail": "온도가 {count(curves)}개입니다 — Nastran · OptiStruct 덱은 재료 하나의 표 번호 자리(8자리 안)에 온도 6개까지 싣습니다. 온도를 줄이거나 LS-DYNA · Abaqus 형식을 쓰세요.",
+            "when": "count(curves) > 6"
+          },
+          {
             "fail": "온도별 탄성 표에 빈 칸이 있습니다. 솔버는 한 온도에 탄성계수·푸아송비·온도가 다 있어야 받습니다 — 빈 칸을 이웃 값으로 메우는 것은 값을 지어내는 일이라 하지 않습니다.",
             "when": "count(elastic, not (has(temperature) and has(youngs_modulus) and has(poisson_ratio))) > 0"
           },
@@ -13652,7 +15542,7 @@
                     ]
                   },
                   {
-                    "expr": "_id * 100 + 10 + _index - 1",
+                    "expr": "_id * 10 + 3 + _index",
                     "format": [
                       "spec",
                       "<16d"
@@ -13677,7 +15567,7 @@
               {
                 "pack": [
                   {
-                    "expr": "_id * 100 + 10 + _index - 1",
+                    "expr": "_id * 10 + 3 + _index",
                     "format": [
                       "spec",
                       "<16d"
@@ -13826,6 +15716,10 @@
           {
             "fail": "온도가 하나뿐입니다. 온도 의존 덱은 둘 이상의 온도가 있어야 합니다 — 하나면 탄소성 형식을 쓰세요.",
             "when": "count(curves) < 2"
+          },
+          {
+            "fail": "온도가 {count(curves)}개입니다 — Nastran · OptiStruct 덱은 재료 하나의 표 번호 자리(8자리 안)에 온도 6개까지 싣습니다. 온도를 줄이거나 LS-DYNA · Abaqus 형식을 쓰세요.",
+            "when": "count(curves) > 6"
           },
           {
             "fail": "온도별 탄성 표에 빈 칸이 있습니다. 솔버는 한 온도에 탄성계수·푸아송비·온도가 다 있어야 받습니다 — 빈 칸을 이웃 값으로 메우는 것은 값을 지어내는 일이라 하지 않습니다.",
@@ -14191,7 +16085,7 @@
                 "const": "                "
               },
               {
-                "expr": "_id * 100 + 10",
+                "expr": "_id * 10 + 4",
                 "format": [
                   "spec",
                   "<16d"
@@ -14280,7 +16174,7 @@
                     ]
                   },
                   {
-                    "expr": "_id * 100 + 10 + _index - 1",
+                    "expr": "_id * 10 + 3 + _index",
                     "format": [
                       "spec",
                       "<16d"
@@ -14305,7 +16199,7 @@
               {
                 "pack": [
                   {
-                    "expr": "_id * 100 + 10 + _index - 1",
+                    "expr": "_id * 10 + 3 + _index",
                     "format": [
                       "spec",
                       "<16d"

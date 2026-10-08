@@ -201,6 +201,25 @@ class Test묶음:
         assert len(first) == len(blocks["table"]["rows"])
 
 
+class Test탄성_자국:
+    def test_소성변형률_0_이_여럿이면_마지막_항복점을_남긴다(self) -> None:
+        """`clip_zero` 자국(ε_p=0 이 여럿)에서 첫 점을 남기면 기준 곡선의 항복이 탄성 구간의
+        가장 낮은 응력(5 MPa)이 된다 — 중심 `groups/rate.py` 는 2026-10-04 에 고쳤고 이쪽이
+        남아 있었다(2026-10-08 고침)."""
+        strain = np.concatenate([np.zeros(4), np.linspace(0.002, 0.1, 40)])
+        stress = np.concatenate([[5e6, 100e6, 200e6, 300e6], 300e6 + 500e6 * strain[4:]])
+        cold = groups.Member(
+            label="T293",
+            columns={"strain_true_plastic": strain, "stress_true": stress},
+            values={"temperature": 293.15},
+        )
+        out = groups.run_group(
+            "tensile.temperature_family", [cold, _member("T353", 353.15, 1e6)], {}
+        )
+        assert out.columns["strain_true_plastic"][0] == 0.0
+        assert out.columns["stress_true"][0] == pytest.approx(300e6)
+
+
 class Test덱:
     def test_Abaqus_온도_의존_덱은_온도별_PLASTIC_행을_낸다(self) -> None:
         from matcore import export

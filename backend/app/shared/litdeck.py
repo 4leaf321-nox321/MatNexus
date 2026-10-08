@@ -48,7 +48,8 @@ from matcore import cards, export, synth
 MAX_LINES = 200
 
 #: 문헌이 채우는 블록 — 선언 물성 카드가 짓는 것과 같다. 「곡선 합성」 을 켜면 소성 표도.
-LITERATURE_BLOCKS = ("elastic", "thermal")
+#: 문헌 재료로 짓는 블록 — 각주의 정본은 `literature_material.DECK_BLOCKS` 하나다.
+LITERATURE_BLOCKS = literature_material.DECK_BLOCKS
 SYNTHETIC_BLOCK = "table"
 
 
@@ -254,12 +255,10 @@ def assemble(
     elastic, thermal, _ = declared_card.declared_blocks(db, stand_in, None, None)
     elastic_rows = declared_card.declared_table(
         stand_in,
-        declared_card.declared_items("elastic"),
+        declared_card.table_items("elastic"),
         constants=declared_card.constants(elastic),
     )
-    thermal_rows = declared_card.declared_table(
-        stand_in, declared_card.declared_items("thermal")
-    )
+    thermal_rows = declared_card.declared_table(stand_in, declared_card.table_items("thermal"))
     blocks: dict[str, Any] = {
         **declared_card.temperature_aware("elastic", elastic, elastic_rows),
         **declared_card.temperature_aware("thermal", thermal, thermal_rows),

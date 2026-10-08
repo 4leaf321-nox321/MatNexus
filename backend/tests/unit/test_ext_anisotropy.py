@@ -107,6 +107,48 @@ class Test곡선에서_재기:
             _run(bare)
         assert "specimen_width" in str(failed.value)
 
+    def test_숫자가_아닌_점은_빼고_잰다(self) -> None:
+        """폭 채널에 NaN 하나 — 전에는 r = NaN 이 R² 문턱(`NaN < 0.95` 는 거짓)을 지나 카드로
+        갔다(2026-10-04 점검)."""
+        frame = _frame(-0.4)
+        width = frame.columns["specimen_width"].copy()
+        width[20] = np.nan
+        stage = _run(Frame({**frame.columns, "specimen_width": width}, frame.units))
+        values = {one.key: one.value for one in stage.scalars}
+        assert values["r_value"] == pytest.approx(0.4 / 0.6, rel=1e-6)
+        assert any("숫자가 아닌 점 1개" in note for note in stage.notes)
+
+    def test_폭_변화량_채널이면_처리_오류로_말한다(self) -> None:
+        """첫 점이 0 인 Δw 채널 — 묶음의 오류를 그대로 던지면 중심이 못 잡아 500 이었다."""
+        frame = _frame(-0.4)
+        delta = frame.columns["specimen_width"] - WIDTH_0
+        with pytest.raises(processing.ProcessingError, match="폭 그 자체"):
+            _run(Frame({**frame.columns, "specimen_width": delta}, frame.units))
+
+    def test_진소성_열이_있으면_소성_변형률로_잰다(self) -> None:
+        """ISO 10113 은 소성 변형률의 비다. 탄성분(σ/E, 폭은 -ν·σ/E)을 섞은 곡선에서 소성 r 이
+        그대로 돌아와야 한다 — 전체 진변형률로 재면 약 0.5% 작다."""
+        plastic = np.linspace(0.05, 0.20, 40)
+        stress = 300e6 + 900e6 * plastic  # 경화 — 탄성분이 구간에서 변한다
+        elastic = stress / 200e9
+        width_plastic = -0.4 * plastic
+        columns = {
+            "strain_true": plastic + elastic,
+            "strain_true_plastic": plastic,
+            "specimen_width": WIDTH_0 * np.exp(width_plastic - 0.3 * elastic),
+        }
+        units = {"strain_true": "1", "strain_true_plastic": "1", "specimen_width": "m"}
+        stage = _run(Frame(columns, units))
+        values = {one.key: one.value for one in stage.scalars}
+        assert values["r_value"] == pytest.approx(0.4 / 0.6, rel=1e-9)
+        assert any("소성 변형률로" in note for note in stage.notes)
+        total = _run(
+            Frame({k: v for k, v in columns.items() if k != "strain_true_plastic"}, units)
+        )
+        r_total = {one.key: one.value for one in total.scalars}["r_value"]
+        assert r_total != pytest.approx(0.4 / 0.6, rel=1e-3)
+        assert any("탄성분을 빼지 않았습니다" in note for note in total.notes)
+
 
 class Test세_방향_묶음:
     def _group(self, members: list[Member], **options: Any) -> Any:

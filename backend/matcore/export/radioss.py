@@ -29,6 +29,7 @@ from matcore.export import (
     _fixed,
     _header,
     _unit_block,
+    failure_lines,
     hyperelastic_terms,
     law36_flat_elastic,
     law36_lines,
@@ -130,9 +131,10 @@ def render_openradioss_rate(deck: Deck) -> Rendered:
     """LAW36 에 곡선 여럿 — **표가 잰 것이고 식은 요약이다**(Abaqus 속도 의존과 같다).
 
     `Fsmooth=2` 는 속도 사이를 로그로 보간한다. 속도가 자릿수로 벌어지는데 선형으로
-    두면 0.001 과 100 /s 사이가 거의 100 /s 곡선이 된다. `VP=1` 은 소성변형률 속도로
-    곡선을 고른다 — 시험의 속도는 전체 변형률 속도지만 소성 구간에서는 거의 같고,
-    탄성파의 떨림이 항복응력으로 번지지 않는다.
+    두면 0.001 과 100 /s 사이(1 /s 등)가 거의 0.001 /s 곡선이 된다 — 거리의 99% 가
+    마지막 자릿수에 있다(2026-10-08 바로잡음: 전에는 「거의 100 /s」 로 거꾸로 적었다).
+    `VP=1` 은 소성변형률 속도로 곡선을 고른다 — 시험의 속도는 전체 변형률 속도지만
+    소성 구간에서는 거의 같고, 탄성파의 떨림이 항복응력으로 번지지 않는다.
     """
     curves, notes = rate_curves(deck)
     if len(curves) > MAX_RATE_CURVES:
@@ -142,6 +144,9 @@ def render_openradioss_rate(deck: Deck) -> Rendered:
     lines = _starter(deck)
     flat, said = law36_flat_elastic(deck)
     lines.extend(flat)
+    notes.extend(said)
+    fail, said = failure_lines(deck, "#", "Eps_p_max")
+    lines.extend(fail)
     notes.extend(said)
     lines.append(
         f"# Strain rate dependent: {len(curves)} rates "

@@ -33,6 +33,7 @@ DB 도 HTTP 도 모른다. `tests/architecture` 가 검사한다.
 
 from __future__ import annotations
 
+import math
 import re
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field, replace
@@ -1359,6 +1360,9 @@ def render_openradioss(deck: Deck) -> Rendered:
     flat, said = law36_flat_elastic(deck)
     lines.extend(flat)
     notes.extend(said)
+    fail, said = failure_lines(deck, "#", "Eps_p_max")
+    lines.extend(fail)
+    notes.extend(said)
     # 변형률 속도 하나짜리 표다. 속도 의존을 넣으려면 곡선이 여러 개 있어야 하고,
     # 그것은 시험이 여러 속도로 있어야 한다는 뜻이다(`openradioss_rate`).
     lines.extend(law36_lines(deck, [(0.0, deck.solver_id, points)]))
@@ -2240,4 +2244,76 @@ def render(
         extra = _folded(target, moved, result)
         if extra:
             result = replace(result, notes=(*result.notes, *extra))
+    shear = _shear_mismatch(target, deck)
+    if shear:
+        result = replace(result, notes=(*result.notes, *shear))
     return result
+
+
+def failure_estimate(deck: Deck) -> tuple[float, float] | None:
+    """파단 연신율 A → 파단 진변형률 추정 `ln(1+A)` — `(A, 추정)`. 없으면 `None`(ADR 0059).
+
+    A 는 게이지 길이 위의 **공칭** 연신율이다. 균일하게 늘었다고 보면 진변형률은
+    ln(1+A) 다. 실제 파단은 네킹 자리에 몰려 국부 변형률이 그보다 크다 — 그래서 이 값은
+    **이르게 끊는 쪽**이고, 게이지 길이가 짧을수록(A5 > A80) 크게 나온다. 탄성분(σ/E,
+    0.3% 안팎)은 빼지 않는다 — 게이지 길이 효과에 비해 작다.
+
+    덱은 이것을 **주석으로만** 적는다. FAIL 같은 칸을 켜면 그 변형률에서 요소가 지워져
+    해석이 달라지는데, 그 결정은 해석하는 사람의 것이다.
+    """
+    elongation = deck.number("table", "elongation_at_break")
+    if elongation is None or elongation <= 0:
+        return None
+    return elongation, math.log(1.0 + elongation)
+
+
+def failure_lines(deck: Deck, comment: str, field: str) -> tuple[list[str], list[str]]:
+    """파단 추정의 덱 주석과 남길 말 — 줄은 80열 안(LS-DYNA)."""
+    found = failure_estimate(deck)
+    if found is None:
+        return [], []
+    elongation, strain = found
+    lines = [
+        f"{comment} {field} not set - estimate from elongation at break A={elongation:.1%}:",
+        f"{comment}   ln(1+A) = {strain:.4g} (uniform strain, gauge-length dependent).",
+        f"{comment}   Put it in {field} to delete elements at that plastic strain.",
+    ]
+    notes = [
+        f"재료에 적어 둔 파단 연신율 {elongation:.1%} 로 파단 소성변형률을 ln(1+A) = "
+        f"{strain:.3g} 로 추정해 덱 주석에 적었습니다 — {field} 칸은 비워 두었습니다(켜면 그 "
+        f"변형률에서 요소가 지워집니다). 게이지 길이에 따라 달라지는 값입니다."
+    ]
+    return lines, notes
+
+
+#: 적어 둔 전단탄성계수가 E·ν 로 정해지는 값과 이만큼 넘게 어긋나면 말한다.
+SHEAR_MISMATCH = 0.05
+
+
+def _shear_mismatch(target: Renderer, deck: Deck) -> list[str]:
+    """탄성 블록의 G 가 E/2(1+ν) 와 어긋나는가 — **덱은 E·ν 를 쓴다**(2026-10-08).
+
+    등방 재료의 G 는 E · ν 로 정해진다. 그래서 덱은 셋 중 둘(E · ν)만 적고 G 를 안 쓴다 —
+    셋이 서로 안 맞으면 어느 것이 이겼는지 모른 채 결과가 나온다. 재료에 G 를 따로 적어
+    두었는데 그것이 E · ν 와 다르면, 등방이 아닌 재료이거나 값의 출처가 서로 다르다는
+    뜻이라 말한다. 점탄성 · LVE 카드의 E 는 DMA 의 순간 탄성률이라 정적 G 와 안 견준다.
+    """
+    if not any(need.block == "elastic" for need in target.needs):
+        return []
+    if deck.values("viscoelastic") or deck.values("lve"):
+        return []
+    youngs = deck.number("elastic", "youngs_modulus")
+    poisson = deck.number("elastic", "poisson_ratio")
+    shear = deck.number("elastic", "shear_modulus")
+    if youngs is None or poisson is None or shear is None or youngs <= 0 or shear <= 0:
+        return []
+    if poisson <= -1.0:
+        return []
+    isotropic = youngs / (2.0 * (1.0 + poisson))
+    gap = shear / isotropic - 1.0
+    if abs(gap) <= SHEAR_MISMATCH:
+        return []
+    return [
+        f"적어 둔 전단탄성계수 G 가 E·ν 로 정해지는 값 E/2(1+ν) 와 {gap:+.1%} 다릅니다 — "
+        f"덱은 E·ν 를 씁니다. 등방이 아닌 재료이거나 값의 출처가 서로 다를 수 있습니다."
+    ]

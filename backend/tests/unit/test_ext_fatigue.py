@@ -56,6 +56,40 @@ class Test적합:
         assert len(points) == 7
         assert next(p for p in points if p["runout"])["used"] is False
 
+    def test_수명을_응력에_회귀한다_ASTM_E739(self) -> None:
+        """흩어짐은 수명 쪽에 있다. 응력마다 수명을 ±0.3 자릿수로 대칭으로 흩어 두면 log N 을
+        log S 에 맞춘 직선은 참값을 그대로 되찾는다. 반대로(log S 를 log N 에) 맞추면 기울기가
+        완만해져 긴 수명의 강도가 높게 나온다 — 2026-10-04 점검에서 찾은 결함."""
+        members = []
+        for index, stress in enumerate((400e6, 350e6, 300e6, 250e6)):
+            for sign in (1.0, -1.0):
+                cycles = (stress / A) ** (1.0 / B) * 10.0 ** (0.3 * sign)
+                members.append(
+                    groups.Member(
+                        label=f"S{index}{'+' if sign > 0 else '-'}",
+                        columns={},
+                        values={"stress_amplitude": stress, "cycles_to_failure": cycles},
+                    )
+                )
+        out = groups.run_group("fatigue.sn_curve", members, {})
+        assert out.values["basquin_b"] == pytest.approx(B, rel=1e-9)
+        assert out.values["basquin_a"] == pytest.approx(A, rel=1e-9)
+        assert out.values["strength_at_1e7"] == pytest.approx(A * 1e7**B, rel=1e-9)
+        # 흩어짐은 **수명의** 자릿수 — 잔차 ±0.3 여덟 개, 자유도 6.
+        assert out.values["log_scatter"] == pytest.approx((8 * 0.09 / 6) ** 0.5, rel=1e-9)
+
+    def test_응력이_하나뿐이면_막는다(self) -> None:
+        same = [
+            groups.Member(
+                label=f"S{i}",
+                columns={},
+                values={"stress_amplitude": 400e6, "cycles_to_failure": 1e4 * 10**i},
+            )
+            for i in range(4)
+        ]
+        with pytest.raises(groups.GroupError, match="응력 진폭이 모두 같습니다"):
+            groups.run_group("fatigue.sn_curve", same, {})
+
     def test_런아웃을_넣으면_곡선이_달라진다(self) -> None:
         """뺀 것과 넣은 것이 같으면 옵션이 아무것도 안 하는 것이다."""
         members = [_point(f"F{i}", s) for i, s in enumerate(STRESSES)]

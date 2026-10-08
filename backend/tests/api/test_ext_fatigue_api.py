@@ -97,3 +97,71 @@ def test_표로_넣은_피로_시험이_S_N_묶음과_카드가_된다(
     assert blocks["sn_curve"]["values"]["strength_at_1e6"] == pytest.approx(
         A * 1e6**B, rel=1e-3
     )
+
+
+def test_재료에_적어_둔_인장강도가_S_N_카드에_실리고_OptiStruct_Nastran_이_열린다(
+    client: TestClient, db: Session, admin_headers: dict[str, str], imported: dict[str, Any]
+) -> None:
+    """MATFAT · MATFTG 는 인장강도가 필수인데 피로 시험은 그 값을 안 준다(2026-10-08).
+
+    S-N 블록의 칸이 물성 키를 들고, 카드를 저장할 때 **재료에 적어 둔 값**이 빈 칸을 채운다
+    (`shared/declared_slots`). 기본 항목 「인장강도」 는 씨앗 연결로 그 키에 이어진다.
+    """
+    from app.modules.catalog.links import ensure_builtin_property_links
+    from app.modules.catalog.models import CatalogDefinition
+    from app.modules.vocabulary.definitions import ensure_builtin_property_items
+
+    ensure_builtin_property_items(db)
+    db.add(
+        CatalogDefinition(
+            key="mechanical.tensile_strength",
+            domain="mechanical",
+            name="Tensile strength",
+            value_type="numeric",
+            si_unit="Pa",
+        )
+    )
+    db.commit()
+    ensure_builtin_property_links(db)
+    db.commit()
+
+    stated = client.patch(
+        f"/api/materials/{imported['material_id']}",
+        json={
+            "declared_properties": [
+                {
+                    "item": "인장강도",
+                    "points": [{"value": 680}],
+                    "input_unit": "MPa",
+                    "source": "standard",
+                    "reference": "KS D 3503",
+                }
+            ]
+        },
+        headers=admin_headers,
+    )
+    assert stated.status_code == 200, stated.text
+
+    group = client.post(
+        "/api/groups",
+        json={"plugin_id": "fatigue.sn_curve", "run_ids": imported["run_ids"]},
+        headers=admin_headers,
+    ).json()
+    card = client.post(
+        "/api/fitting/cards/from-group",
+        json={"group_result_id": group["id"], "label": "SM490 S-N"},
+        headers=admin_headers,
+    )
+    assert card.status_code == 201, card.text
+    body = card.json()
+    values = body["blocks"]["sn_curve"]["values"]
+    assert values["tensile_strength"] == pytest.approx(680e6)
+    assert values["tensile_strength_source"] == "declared:standard"
+    assert {"optistruct_fatigue", "nastran_fatigue"} <= set(body["available_formats"])
+
+    deck = client.get(
+        f"/api/fitting/cards/{body['id']}/export?format=optistruct_fatigue",
+        headers=admin_headers,
+    )
+    assert deck.status_code == 200, deck.text
+    assert "MATFAT*" in deck.text and "6.80000000E+02" in deck.text  # mm·N·tonne 기본

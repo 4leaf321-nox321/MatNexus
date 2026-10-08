@@ -897,3 +897,66 @@ class Test나머지_솔버_온도이동:
         assert "$ Valid at 296.15 K only" in wlf.text
         first = wlf.text.splitlines()
         assert len(first[first.index("*MAT_GENERAL_VISCOELASTIC") + 2].rstrip()) <= 30
+
+
+# ── 선언 물성의 자리(2026-10-08) — G 일치 검사 · 파단 연신율 → 파단 추정 ──────────────────
+
+
+def _with(base: export.Deck, block: str, **values: object) -> export.Deck:
+    blocks = {key: dict(value) for key, value in base.blocks.items()}
+    blocks[block] = {
+        **blocks.get(block, {}),
+        "values": {**blocks.get(block, {}).get("values", {}), **values},
+    }
+    return export.Deck(name=base.name, solver_id=base.solver_id, blocks=blocks)
+
+
+class Test전단탄성계수:
+    """덱은 E·ν 를 쓴다(셋 중 둘). 적어 둔 G 가 E/2(1+ν) 와 5% 넘게 어긋나면 말한다."""
+
+    def test_어긋나면_말한다(self) -> None:
+        notes = export.render("abaqus", _with(CARD, "elastic", shear_modulus=60e9)).notes
+        assert any("전단탄성계수 G" in one and "E·ν 를 씁니다" in one for one in notes)
+
+    def test_맞으면_조용하다(self) -> None:
+        # 200 GPa · 0.3 → 76.9 GPa. 2% 차이는 데이터시트의 반올림이다.
+        notes = export.render("abaqus", _with(CARD, "elastic", shear_modulus=78.5e9)).notes
+        assert not any("전단탄성계수" in one for one in notes)
+
+    def test_점탄성_카드는_안_견준다(self) -> None:
+        """그 E 는 DMA 의 순간 탄성률이라 정적 G 와 늘 어긋난다."""
+        visco = _with(visco_deck(), "elastic", shear_modulus=1e6)
+        notes = export.render("abaqus_viscoelastic", visco).notes
+        assert not any("전단탄성계수" in one for one in notes)
+
+
+class Test파단_연신율:
+    """ADR 0059 — ln(1+A) 를 **주석으로만** 적는다. 파단 칸을 켜면 요소가 지워진다."""
+
+    CARD_A = _with(CARD, "table", elongation_at_break=0.25)
+
+    def test_추정은_ln_1_더하기_A(self) -> None:
+        assert export.failure_estimate(self.CARD_A) == pytest.approx(
+            (0.25, 0.22314355), rel=1e-6
+        )
+        assert export.failure_estimate(CARD) is None
+
+    def test_LS_DYNA_는_FAIL_칸을_비우고_주석에_적는다(self) -> None:
+        made = export.render("dyna", self.CARD_A)
+        lines = made.text.splitlines()
+        assert "$   ln(1+A) = 0.2231 (uniform strain, gauge-length dependent)." in lines
+        card1 = lines[lines.index("*MAT_PIECEWISE_LINEAR_PLASTICITY") + 2]
+        assert card1[60:70].strip() in ("", "0", "0.0")  # FAIL — 켜지 않는다
+        assert any("FAIL 칸은 비워 두었습니다" in one for one in made.notes)
+        assert all(len(line) <= 80 for line in lines if line.startswith("$"))
+
+    def test_Radioss_는_Eps_p_max_를_비운다(self) -> None:
+        lines = export.render("openradioss", self.CARD_A).text.splitlines()
+        assert any(line.startswith("# Eps_p_max not set") for line in lines)
+        values = lines[
+            lines.index(f"#{'E':>19}{'nu':>20}{'Eps_p_max':>20}{'Eps_t':>20}{'Eps_m':>20}") + 1
+        ]
+        assert values[40:60].strip() == ""  # Eps_p_max — 켜지 않는다
+
+    def test_연신율이_없으면_아무_말도_없다(self) -> None:
+        assert "not set - estimate" not in export.render("dyna", CARD).text

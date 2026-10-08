@@ -128,3 +128,59 @@ class Test덱:
         deck = export.to_system(self._deck("carreau"), export.systems.MM_N_TONNE)
         eta0 = next(row["value"] for row in deck.rows("rheology") if row["name"] == "eta_0")
         assert eta0 == pytest.approx(12.0e-6, rel=1e-3)
+
+
+def _tens(line: str) -> list[str]:
+    """LS-DYNA 10칸 줄을 칸으로 — 솔버가 읽는 그대로."""
+    return [line[start : start + 10].strip() for start in range(0, 80, 10)]
+
+
+class TestICFD:
+    """LS-DYNA ICFD `*ICFD_MODEL_NONNEWT` — R16 매뉴얼 Vol III 의 식과 칸(2026-10-08)."""
+
+    def _deck(self, key: str) -> export.Deck:
+        return Test덱()._deck(key)
+
+    def _after(self, text: str, label: str) -> list[str]:
+        lines = text.splitlines()
+        at = next(i for i, line in enumerate(lines) if line.startswith(label))
+        return _tens(lines[at + 1])
+
+    def test_Cross_는_Cross_II_이고_지수를_돌리지_않는다(self) -> None:
+        """Cross II 는 (λγ̇)^n — 우리 m 그대로다. Abaqus 처럼 1-m 으로 돌리면 박화가 반대로
+        간다. NNID=3(Cross)은 μ∞ 가 없어 쓰지 않는다."""
+        deck = self._deck("cross")
+        rows = {row["name"]: row["value"] for row in deck.rows("rheology")}
+        text = export.render("dyna_viscosity", deck).text
+        assert self._after(text, "$   nnmoid      nnid")[:2] == ["1", "5"]
+        k, n, mumin, lam = (float(v) for v in self._after(text, "$        k")[:4])
+        assert (k, n, mumin, lam) == pytest.approx(
+            (rows["eta_0"], rows["m"], rows["eta_inf"], rows["lambda"]), rel=1e-6
+        )
+
+    def test_Carreau_는_NNID_2_이고_온도_항을_끈다(self) -> None:
+        deck = self._deck("carreau")
+        text = export.render("dyna_viscosity", deck).text
+        assert self._after(text, "$   nnmoid      nnid")[:2] == ["1", "2"]
+        fields = self._after(text, "$        k")
+        assert float(fields[1]) == pytest.approx(0.35, rel=1e-2)  # N = n
+        assert float(fields[3]) == pytest.approx(0.5, rel=1e-2)  # LAMBDA — 기본 1e30
+        assert float(fields[4]) == 0.0  # ALPHA = 0 → H(T) = 1
+
+    def test_ICFD_MAT_은_빈_열_카드_뒤에_NNMOID_를_가리킨다(self) -> None:
+        """둘째 카드(열)를 0 으로 채우면 PRT 기본 0.85 가 0 이 된다 — 매뉴얼대로 빈 카드."""
+        text = export.render("dyna_viscosity", self._deck("cross")).text
+        lines = text.splitlines()
+        at = lines.index("*ICFD_MAT")
+        cards = [line for line in lines[at + 1 :] if not line.startswith("$")]
+        assert _tens(cards[0])[:3] == ["1", "1", "900.0"]  # MID · FLG=1(비압축) · RO
+        assert cards[1] == ""
+        assert _tens(cards[2])[0] == "1"  # NNMOID
+
+    def test_밀도가_없으면_목록에서_막힌다(self) -> None:
+        deck = self._deck("cross")
+        bare = export.Deck(
+            name=deck.name, solver_id=1, blocks={"rheology": deck.blocks["rheology"]}
+        )
+        assert "dyna_viscosity" not in export.available_formats(bare)
+        assert "abaqus_viscosity" in export.available_formats(bare)

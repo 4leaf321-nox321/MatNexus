@@ -42,6 +42,7 @@
     {"note": "…"}                              덱에는 안 적고 사람에게만 남긴다
     "when": "elastic.density"                  있을 때만 · "missing:elastic.density" 없을 때만
     "when": "has(a.b) and c.d < 0.5"            그 밖에는 식 — 빠진 값은 거짓
+    "units.Pa == \"MPa\""                        단위계의 기호 — 응력 단위를 이름으로 적는 형식
 
 칸: `{"value": "블록.값" | "열"}` · `{"expr": 식}` · `{"const": 글자}`, 형식은 `"free"` ·
 `["fixed", 폭, 자릿수]` · `["fixed_left", 폭, 자릿수]` · `["fit", 폭]`(폭에 드는 만큼 정밀하게,
@@ -247,6 +248,15 @@ class _Scope:
             )
         if "." in name:
             block, _, key = name.partition(".")
+            if block == "units":
+                # **이 단위계에서 그 SI 단위의 기호** — mm·N·tonne 면 `units.Pa` 가 "MPa".
+                # 파일이 응력 단위를 이름으로 적는 형식(OptiStruct MATFAT 의 UNIT)이 쓴다.
+                try:
+                    return self.render.deck.units.symbol(key)
+                except KeyError:
+                    raise expressions.BadExpression(
+                        f"모르는 SI 단위입니다: {name} — 예: units.Pa · units.m"
+                    ) from None
             value = self.render.deck.values(block).get(key)
             if isinstance(value, bool) or value is None:
                 raise expressions.MissingName(name)

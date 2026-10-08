@@ -114,8 +114,17 @@ class Test모델이_솔버마다_있다:
     EXPECTED: ClassVar[dict[str, tuple[str, ...]]] = {
         "ansys": ("elastic", "plastic", "rate", "viscoelastic", "hyperelastic", "thermal"),
         "dyna": ("elastic", "", "rate", "viscoelastic", "hyperelastic", "thermal"),
+        # Nastran 은 속도 의존이 없다 — SOL 400 MATEP 의 TABL3D 는 칸은 매뉴얼에 있으나 속도
+        # 사이 보간과 「등가 변형률 속도」 가 전체인지 소성인지 적혀 있지 않다(2026-10-08).
         "nastran": ("elastic", "plastic", "viscoelastic", "hyperelastic", "thermal"),
-        "optistruct": ("elastic", "plastic", "viscoelastic", "hyperelastic", "thermal"),
+        "optistruct": (
+            "elastic",
+            "plastic",
+            "rate",
+            "viscoelastic",
+            "hyperelastic",
+            "thermal",
+        ),
         "openradioss": ("elastic", "", "rate", "viscoelastic", "hyperelastic", "thermal"),
     }
 
@@ -248,6 +257,53 @@ class TestNastran계열:
         assert pairs[2] == pytest.approx((0.02 + 455.0 / 210000.0, 455.0))
         mats1 = [line for line in lines if line.startswith(("MATS1*",))]
         assert large(mats1[0])[1:4] == ["101", "1010", "PLASTIC"]
+
+    def test_OptiStruct_속도_의존은_TABLEMD_에_응력_변형률_속도_차례다(self) -> None:
+        """TABLEMD 는 점마다 잇는 줄 하나 — Y(응력) · X1(소성변형률) · X2(속도). 칸 하나를
+        밀면 변형률이 속도로 읽히고 경고가 안 난다. 차례는 X2 오름차순, 그 안에서 X1."""
+        lines = mm("optistruct_rate", elastic=STEEL, rate_table=rates(0.001, 1.0, 100.0))
+        lines_ = lines.splitlines()
+        start = next(i for i, line in enumerate(lines_) if line.startswith("TABLEMD*"))
+        assert large(lines_[start])[1:5] == ["1010", "", "2", "1"]  # TID · 빈칸 · NDEP · FLAT
+        points = [
+            tuple(float(one) for one in large(line)[1:4])
+            for line in lines_[start + 2 :: 2]
+            if line.startswith("*") and large(line)[1]
+        ]
+        # 가장 느린 곡선이 속도 0 에도 — 암시적 해석은 속도 0 곡선을 요구한다.
+        assert [rate for _, _, rate in points] == [0.0] * 5 + [0.001] * 5 + [1.0] * 5 + [
+            100.0
+        ] * 5
+        assert points[0] == pytest.approx((350.0, 0.0, 0.0))
+        assert points[5] == pytest.approx((350.0, 0.0, 0.001))
+        assert points[11] == pytest.approx((455.0 * 1.1, 0.02, 1.0))
+        assert points[-1] == pytest.approx((790.0 * 1.1**2, 1.0, 100.0))
+
+    def test_OptiStruct_속도_의존의_MATS1_은_소성변형률과_소성변형률_속도다(self) -> None:
+        """TYPSTRN=1(표가 소성변형률) · TYPSTRT=1(소성변형률 속도)은 잇는 줄 2 · 3번 칸.
+        TYPSTRN 을 비우면 0(전체 변형률)인데 TABLEMD 와 함께면 무시된다고 매뉴얼이 적는다
+        — 그 빈칸이 나중에 다른 뜻으로 읽히지 않게 적어 둔다. LIMIT1 은 비운다."""
+        lines = mm(
+            "optistruct_rate", elastic=STEEL, rate_table=rates(0.001, 100.0)
+        ).splitlines()
+        start = next(i for i, line in enumerate(lines) if line.startswith("MATS1*"))
+        assert large(lines[start])[1:5] == ["101", "1010", "PLASTIC", ""]
+        assert large(lines[start + 1])[1:4] == ["1", "1", ""]  # YF · HR · LIMIT1
+        assert large(lines[start + 2])[1:3] == ["1", "1"]  # TYPSTRN · TYPSTRT
+        assert "TABLES1" not in "\n".join(lines)
+
+    def test_OptiStruct_속도_의존은_속도_0_이_있으면_겹쳐_적지_않고_음수는_거절한다(
+        self,
+    ) -> None:
+        text = mm("optistruct_rate", elastic=STEEL, rate_table=rates(0.0, 100.0))
+        zeros = [
+            line
+            for line in text.splitlines()
+            if line.startswith("*") and large(line)[3:4] == ["0.00000000E+00"]
+        ]
+        assert len(zeros) == 5
+        with pytest.raises(ExportError, match="음수"):
+            mm("optistruct_rate", elastic=STEEL, rate_table=rates(-1.0, 100.0))
 
     def test_MATT1_의_자리는_E_3_NU_5_다(self) -> None:
         """하나 밀면 G 의 표가 NU 로 들어가 포아송비가 20만이 되는데 경고가 안 난다."""

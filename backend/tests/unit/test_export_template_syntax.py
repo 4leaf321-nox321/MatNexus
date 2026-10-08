@@ -43,6 +43,16 @@ class Test자리표:
         got = _text([{"text": 'source={thermal.specific_heat_source or "unknown"}'}], deck)
         assert got == "source=unknown\n"
 
+    def test_units_는_그_단위계의_기호다(self) -> None:
+        """응력 단위를 이름으로 적는 형식(OptiStruct MATFAT 의 UNIT)이 쓴다 — 계마다 다르다."""
+        lines = [{"text": '{units.Pa} {units.m} {"MPA" if units.Pa == "MPa" else "PA"}'}]
+        deck = _deck(elastic=STEEL)
+        assert template.render({"lines": lines}, deck).text == "Pa m PA\n"
+        mm = export.to_system(deck, export.systems.MM_N_TONNE)
+        assert template.render({"lines": lines}, mm).text == "MPa mm MPA\n"
+        with pytest.raises(export.ExportError, match=r"units\.furlong"):
+            _text([{"text": "{units.furlong}"}], deck)
+
     def test_빠진_값은_when_으로_거르라고_말한다(self) -> None:
         with pytest.raises(export.ExportError) as caught:
             _text([{"text": "{elastic.density:.3g}"}], _deck(elastic={"values": {}}))

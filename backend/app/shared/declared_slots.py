@@ -33,7 +33,8 @@
 
 **② 카드에 **있는** 블록만 본다.** 재료에 적어 둔 값이 있다고 없던 블록을 만들지
 않는다. 이방성 카드를 만들었는데 열물성 블록이 따라 붙으면, 그 카드가 무엇의 카드인지
-흐려진다.
+흐려진다. **예외는 `attach_when_stated` 블록 하나 — 참고 물성**(ADR 0060, 2026-10-08):
+덱이 안 읽고 카드의 종류도 안 되며, 「이 재료의 값이 카드에 함께 보이는가」 가 목적 전부다.
 
 값에는 `<키>_source = declared:<출처>` 가 함께 붙는다. 등급 판정이 그 낱말을 읽어
 밀시트 1 · 규격 2 · 문헌 3 · 추정 4 로 매긴다 — 여기서 등급을 따로 계산하지 않는다.
@@ -176,6 +177,16 @@ def fill(db: Session, material: Material | None, blocks: dict[str, Any]) -> list
         return []
 
     cards.load_builtin()
+    # **규칙 ②의 예외 — 참고 물성**(ADR 0060). 덱이 안 읽고 카드의 종류도 안 되는 블록은
+    # 적어 둔 값이 있으면 스스로 붙는다. 그 블록의 목적이 「이 재료의 값이 카드에 함께
+    # 보이는가」 하나라서다. 빈 블록은 안 붙인다 — 채울 값이 하나라도 있을 때만.
+    for spec in cards.list_blocks():
+        if (
+            spec.attach_when_stated
+            and spec.key not in blocks
+            and any(slot.property_key in stated for slot in spec.produces if slot.property_key)
+        ):
+            blocks[spec.key] = {"values": {}}
     filled: list[str] = []
     for block_key, payload in blocks.items():
         if not isinstance(payload, dict):

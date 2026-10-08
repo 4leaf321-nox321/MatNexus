@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from app.modules.vocabulary.definitions import BUILTIN_ITEM_OF_KEY, BUILTIN_PROPERTY_ITEMS
 from app.shared import property_names
-from app.shared.declared_card import FROM_RECORD
+from app.shared.declared_card import FROM_RECORD, table_items
 from app.shared.declared_card import declared_items as _declared_items
 from matcore import cards
 
@@ -40,7 +40,12 @@ def test_기본_항목란의_칸이_전부_이름을_찾는다() -> None:
 def test_탄성계수와_열물성이_옛_이름_그대로_풀린다() -> None:
     """**행동이 안 바뀌었다는 증거다.** 정리 전 코드가 들고 있던 이름 그대로여야
     이미 쌓인 선언 물성이 계속 카드로 간다."""
-    assert _declared_items("elastic") == {"youngs_modulus": "탄성계수"}
+    assert _declared_items("elastic") == {
+        "youngs_modulus": "탄성계수",
+        "shear_modulus": "전단탄성계수",
+    }
+    # **표의 열은 그대로다** — G 는 칸에만 실리고 탄성 표의 열이 되지 않는다(2026-10-08).
+    assert table_items("elastic") == {"youngs_modulus": "탄성계수"}
     assert _declared_items("thermal") == {
         "thermal_expansion": "선팽창계수(CTE)",
         "specific_heat": "비열",
