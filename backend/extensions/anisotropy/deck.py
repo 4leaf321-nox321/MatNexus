@@ -23,8 +23,9 @@ Hill48 의 항복응력비는 기준 방향(R11 = 1)에 대한 비다. 짝 카�
 R23`). 지금은 둘 다 1 이라 같은 줄이 나오지만, 언젠가 둘이 달라지는 날 조용히 뒤바뀌지
 않게 이름으로 적는다.
 
-LS-DYNA `*MAT_036`(M=2)과 Radioss LAW43 은 r 셋을 **그대로** 받는다 — 옮길 것이 없다.
-둘 다 **쉘 전용**이다.
+OptiStruct `PLASTIC`(2026)은 항복응력비를 받고 차례가 `R11 R22 R33 R12 R31 R23` 이다(Abaqus 와
+같은 끝 둘). LS-DYNA `*MAT_036`(M=2)과 Radioss LAW43 은 r 셋을 **그대로** 받는다 — 옮길
+것이 없다. 둘 다 **쉘 전용**이다.
 """
 
 from __future__ import annotations
@@ -143,7 +144,9 @@ def render_abaqus_hill(deck: Deck) -> Rendered:
         )
     )
     lines.extend(_thermal_lines(deck))
-    lines.append("*PLASTIC, HARDENING=ISOTROPIC, EXTRAPOLATION=CONSTANT")
+    # **`EXTRAPOLATION=` 을 안 붙인다** — Abaqus 2022 에 생긴 인자라 그 전 판이 덱을
+    # 못 읽고, 기본 동작이 이미 상수 외삽이다(중심은 2026-10-03, 이쪽은 2026-10-08).
+    lines.append("*PLASTIC, HARDENING=ISOTROPIC")
     lines.extend(f"{_free(stress)}, {_free(strain)}" for strain, stress in points)
     lines.append("*POTENTIAL")
     lines.append(
@@ -346,4 +349,70 @@ def render_nastran_hill(deck: Deck) -> Rendered:
         body_table.extend((strain, stress))
     body_table.append("ENDT")
     lines.extend(_bulk._card("TABLES1", body_table))
+    return Rendered(text="\n".join(lines) + "\n", notes=(*notes, *said, _PAIR_NOTE))
+
+
+#: OptiStruct PLASTIC 의 TEMP 칸 — 「기본 없음, 0 보다 큼」. 줄이 하나면 보간할 것이 없어 모든
+#: 온도에서 그 값을 쓴다(매뉴얼: 여러 줄이면 요소 온도로 보간). 상온(K)을 적고 덱에 말한다.
+_OS_TEMP = 293.15
+
+
+@register_renderer(
+    key="optistruct_hill",
+    label="OptiStruct (이방성 Hill48)",
+    extension="fem",
+    suffix="_hill",
+    describe=(
+        "MAT1 + PLASTIC(CRIT HILL 항복응력비 + HARD ISOT 표) — OptiStruct 2026 이상. 암시적 "
+        "해석은 솔리드만, 쉘은 명시적 해석에서. 이방성 카드에 MD 카드를 짝으로 골라 낸다."
+    ),
+    keywords=("MAT1*", "PLASTIC*"),
+    needs=_needs(density=False),
+)
+def render_optistruct_hill(deck: Deck) -> Rendered:
+    """OptiStruct `PLASTIC`(Reference Guide 2026) — MAT1 에 소성을 얹는 모듈식 항목.
+
+        PLASTIC  MID
+                 CRIT  HILL
+                 R11  R22  R33  R12  R31  R23  TEMP     ← 항복응력비, **R31 이 R23 앞**
+                 HARD  ISOT
+                 YIELD  PLAS  TEMP                       ← **응력이 먼저**(TABLES1 과 반대)
+                 YIELD  PLAS
+
+    항복응력비는 Abaqus · ANSYS 와 같은 값이다(Rii = σYii/σY, Rij = √3·τYij/σY) — `LANK`(r 를
+    그대로 받는 꼴)를 안 쓰는 이유: 암시적 해석은 솔리드만 받는데 LANK 가 면외 계수를 어떻게
+    정하는지 매뉴얼에 없다. 여기서는 R13 = R23 = 1 을 덱에 적어 둔다(다른 솔버와 같다).
+
+    **2026 도움말에만 있는 항목**이다 — 그 이전 판은 읽지 못한다(덱에 적는다).
+    """
+    r = _r_values(deck)
+    ratios = hill_ratios(*r)
+    points, notes = prepare(deck.pairs("table", "plastic_strain", "true_stress"))
+    lines = _bulk._head(deck, "OptiStruct")
+    lines.extend(_ratio_comment("$", ratios, r))
+    lines.append(
+        "$ PLASTIC needs OptiStruct 2026 or later. Implicit analysis: SOLID elements only;"
+    )
+    lines.append("$   shells only in explicit analysis.")
+    lines.append(
+        f"$ TEMP = {_OS_TEMP:g} (one data set - OptiStruct uses it at every temperature)."
+    )
+    body, said = _bulk._mat1(deck, with_tables=False)
+    lines.extend(body)
+    lines.append("$PLASTIC*MID")
+    lines.append("$*      CRIT            HILL")
+    lines.append("$*      R11             R22             R33             R12")
+    lines.append("$*      R31             R23             TEMP")
+    lines.append("$*      HARD            ISOT")
+    lines.append("$*      YIELD           PLAS            TEMP")
+    fields: list[_bulk.Field] = [
+        deck.solver_id, None, None, None, None, None, None, None,
+        "CRIT", "HILL", None, None, None, None, None, None,
+        ratios["R11"], ratios["R22"], ratios["R33"], ratios["R12"],
+        ratios["R13"], ratios["R23"], _OS_TEMP, None,
+        "HARD", "ISOT", None, None, None, None, None, None,
+    ]  # fmt: skip
+    for index, (strain, stress) in enumerate(points):
+        fields.extend((stress, strain, _OS_TEMP if index == 0 else None, *[None] * 5))
+    lines.extend(_bulk._card("PLASTIC", fields))
     return Rendered(text="\n".join(lines) + "\n", notes=(*notes, *said, _PAIR_NOTE))

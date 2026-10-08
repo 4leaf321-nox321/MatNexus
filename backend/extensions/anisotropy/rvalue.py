@@ -60,6 +60,11 @@ from matcore.groups import GroupError, GroupOutcome, Member
 
 #: 길이 방향 진변형률. 인장 처리(`tensile.true`)가 내는 열 이름 그대로다.
 STRAIN = "strain_true"
+#: 소성 길이 진변형률 — 진소성 처리(`tensile.true_plastic`)가 같은 E 로 만든 열. 있으면 r 을
+#: 소성 변형률로 잰다(ISO 10113).
+PLASTIC = "strain_true_plastic"
+#: 폭의 탄성 수축을 뺄 때 쓰는 푸아송비 기본값(금속). 그 항은 ν·σ/E 로 작다.
+DEFAULT_POISSON = 0.3
 #: 폭 채널 — 인장 시험 종류가 선언해 둔 이름(`specimen_width`, 단위 m).
 #: **폭 변형률이 아니라 폭 그 자체다.** 변형률은 이 확장이 만든다.
 WIDTH = "specimen_width"
@@ -71,8 +76,12 @@ def width_strain(width: np.ndarray, initial: float | None = None) -> np.ndarray:
     시편 정의의 폭을 주는 편이 낫다 — 첫 점은 예하중이 걸린 뒤일 수 있다.
     """
     first = float(initial if initial else width[0])
-    if first <= 0:
-        raise GroupError("초기 폭이 0 이하입니다 — 시편 폭을 확인하세요.")
+    if not math.isfinite(first) or first <= 0:
+        # **폭의 변화량(Δw) 채널이면 첫 점이 0 이다** — 폭 그 자체를 이어야 한다.
+        raise GroupError(
+            f"초기 폭이 {first:g} 입니다 — 폭 그 자체(m)의 채널인지, 시편 폭이 적혀 있는지 "
+            f"확인하세요(폭의 변화량 채널이면 첫 점이 0 입니다)."
+        )
     return np.log(width / first)
 
 
@@ -102,27 +111,45 @@ class Fitted:
     start: float
     end: float
     why: str | None = None
+    dropped: int = 0
+    """구간 안에서 숫자가 아니라 뺀 점의 수 — 채널이 끊긴 자리."""
 
 
-def fit(length: np.ndarray, width: np.ndarray, *, start: float, end: float) -> Fitted:
+def fit(
+    length: np.ndarray,
+    width: np.ndarray,
+    *,
+    start: float,
+    end: float,
+    select: np.ndarray | None = None,
+) -> Fitted:
     """구간 [start, end] 의 점들로 ε_w-ε_l 직선을 맞춰 r 을 낸다.
 
     **못 믿을 값은 안 낸다.** 점이 모자라거나 직선이 아니면 `value` 는 `None` 이고,
     왜 못 냈는지는 `why` 에 있다 — 부르는 쪽이 그것을 사람에게 그대로 옮긴다.
+
+    `select` 는 구간을 고르는 변형률이다(없으면 `length`). 소성 변형률로 회귀할 때도 구간은
+    사람이 적은 전체 진변형률(0.08~0.15)로 고른다 — 옵션의 뜻이 바뀌지 않게.
+
+    **숫자가 아닌 점은 회귀 전에 뺀다**(2026-10-08). 폭 채널에 NaN 이 하나 섞이면 polyfit 이
+    NaN 을 내고, `NaN < 0.95` 가 거짓이라 R² 문턱을 지나 r = NaN 이 카드로 갔다.
     """
     if length.size != width.size:
         raise GroupError("길이와 폭 변형률의 점 수가 다릅니다.")
-    inside = (length >= start) & (length <= end)
-    x = length[inside]
-    y = width[inside]
+    picked = length if select is None else select
+    inside = (picked >= start) & (picked <= end)
+    finite = inside & np.isfinite(length) & np.isfinite(width)
+    dropped = int(np.count_nonzero(inside & ~finite))
+    x = length[finite]
+    y = width[finite]
+
+    def refuse(slope: float, r_squared: float, why: str) -> Fitted:
+        return Fitted(None, slope, r_squared, int(x.size), start, end, why, dropped)
+
     if x.size < MIN_POINTS:
-        return Fitted(
-            None,
+        return refuse(
             0.0,
             0.0,
-            int(x.size),
-            start,
-            end,
             f"{start:.3g}~{end:.3g} 구간에 점이 {x.size}개뿐입니다"
             f"({MIN_POINTS}개 이상이어야 합니다).",
         )
@@ -135,34 +162,26 @@ def fit(length: np.ndarray, width: np.ndarray, *, start: float, end: float) -> F
         if total == 0 and residual == 0
         else (0.0 if total == 0 else 1.0 - residual / total)
     )
-    if r_squared < MIN_R_SQUARED:
-        return Fitted(
-            None,
+    if not r_squared >= MIN_R_SQUARED:  # NaN 도 여기서 막힌다
+        return refuse(
             slope,
             r_squared,
-            int(x.size),
-            start,
-            end,
             f"그 구간의 R² 가 {r_squared:.4f} 입니다 — 직선이 아닙니다"
             f"(넥킹에 들어갔거나 구간을 잘못 잡았습니다).",
         )
     if slope >= 0:
         # 인장인데 폭이 안 줄었다 — 채널이 뒤바뀌었거나 부호가 반대다.
-        return Fitted(
-            None,
+        return refuse(
             slope,
             r_squared,
-            int(x.size),
-            start,
-            end,
             f"폭 변형률이 늘고 있습니다(기울기 {slope:+.4g}) — 폭 채널의 부호나 "
             f"열 지정을 확인하세요.",
         )
     if math.isclose(slope, -1.0, abs_tol=1e-9):
-        return Fitted(
-            None, slope, r_squared, int(x.size), start, end, "두께가 안 변합니다(r 이 무한)."
-        )
-    return Fitted(-slope / (1.0 + slope), slope, r_squared, int(x.size), start, end)
+        return refuse(slope, r_squared, "두께가 안 변합니다(r 이 무한).")
+    return Fitted(
+        -slope / (1.0 + slope), slope, r_squared, int(x.size), start, end, None, dropped
+    )
 
 
 # ── 세 방향 묶음 ──────────────────────────────────────────────────────────────

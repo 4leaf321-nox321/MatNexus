@@ -92,6 +92,17 @@ from . import (  # noqa: F401  (card·deck 은 import 만으로 블록·렌더�
                 "뒤의 점이면 그만큼 변형률이 밀립니다."
             ),
         ),
+        ParamSpec(
+            name="poisson_ratio",
+            label="푸아송비 (탄성 수축)",
+            type="float",
+            default=rvalue.DEFAULT_POISSON,
+            unit="1",
+            help=(
+                "소성 변형률로 잴 때 폭의 탄성 수축 ν·σ/E 를 뺍니다(ISO 10113). 진소성 단계가 "
+                "앞에 있을 때만 쓰입니다. 그 항이 작아 금속이면 0.3 으로 충분합니다."
+            ),
+        ),
     ),
     applies_to=("tensile",),
     # **시험종류 키만 보고 거르지 않는다.** 폭 채널이 없는 장비의 인장에는 이 단계가
@@ -129,7 +140,8 @@ from . import (  # noqa: F401  (card·deck 은 import 만으로 블록·렌더�
     # **길이 진변형률 다음이다** — `tensile.true_plastic`(order 90)이 그 열을 만든다.
     # 앞에 서면 화면의 '변형률 열' 목록이 비어 있다.
     order=95,
-    version="1",
+    # 2: 소성 변형률(ISO 10113) · NaN 점 빼기 · 처리 오류로 내기(2026-10-08).
+    version="2",
 )
 def r_value(frame: Frame, options: dict[str, Any]) -> StepResult:
     """구간에서 r 을 잰다. **곡선은 안 바뀐다.**
@@ -137,16 +149,33 @@ def r_value(frame: Frame, options: dict[str, Any]) -> StepResult:
     못 믿을 값은 아예 안 낸다 — 왜 못 냈는지는 각주로 남는다. 그 각주가 「폭 채널이
     없다」 이면 이 시험은 표로 적는 길로 가야 한다.
     """
-    from matcore.processing import Scalar
+    from matcore.groups import GroupError
+    from matcore.processing import ProcessingError, Scalar
 
-    length = frame.require(str(options.get("strain") or rvalue.STRAIN), what="길이 변형률")
+    strain_key = str(options.get("strain") or rvalue.STRAIN)
+    length = frame.require(strain_key, what="길이 변형률")
     raw_width = frame.require(str(options.get("width") or rvalue.WIDTH), what="폭")
-    fitted = rvalue.fit(
-        length,
-        rvalue.width_strain(raw_width, options.get("initial_width")),
-        start=float(options.get("minimum_strain", rvalue.DEFAULT_START)),
-        end=float(options.get("maximum_strain", rvalue.DEFAULT_END)),
-    )
+    # **ISO 10113 은 소성 변형률의 비다.** 진소성 단계가 소성 길이 변형률 열을 남겼으면(같은 E)
+    # 길이는 그 열을, 폭은 탄성 수축 ν·σ/E 를 더해 소성분만 쓴다. 전에는 전체 진변형률이라
+    # r 이 약 0.5% 작았다(2026-10-04 점검). 그 열이 없으면 전처럼 전체로 재고 그렇다고 적는다.
+    plastic = frame.columns.get(rvalue.PLASTIC) if strain_key == rvalue.STRAIN else None
+    poisson = float(options.get("poisson_ratio", rvalue.DEFAULT_POISSON))
+    # **처리 단계의 오류는 처리 오류로 낸다** — 묶음의 오류(GroupError)를 그대로 던지면 중심이
+    # 못 잡아 500 이 됐다(초기 폭 0 · 폭 변화량 채널).
+    try:
+        width = rvalue.width_strain(raw_width, options.get("initial_width"))
+        bounds = {
+            "start": float(options.get("minimum_strain", rvalue.DEFAULT_START)),
+            "end": float(options.get("maximum_strain", rvalue.DEFAULT_END)),
+        }
+        if plastic is not None:
+            fitted = rvalue.fit(
+                plastic, width + poisson * (length - plastic), select=length, **bounds
+            )
+        else:
+            fitted = rvalue.fit(length, width, **bounds)
+    except GroupError as exc:
+        raise ProcessingError(str(exc)) from None
     scalars = [
         Scalar("r_value_r_squared", "r 구간 R²", fitted.r_squared, "1"),
         Scalar("r_value_point_count", "r 구간 점 수", float(fitted.points), "1"),
@@ -155,6 +184,20 @@ def r_value(frame: Frame, options: dict[str, Any]) -> StepResult:
         f"r 을 {fitted.start:.3g}~{fitted.end:.3g} 구간의 점 {fitted.points}개로 쟀습니다"
         f"(R²={fitted.r_squared:.4f})."
     ]
+    if plastic is not None:
+        notes.append(
+            f"소성 변형률로 쟀습니다 — 길이는 진소성 단계의 소성 변형률, 폭은 탄성 수축 "
+            f"ν·σ/E(ν={poisson:g})를 뺀 값입니다(ISO 10113)."
+        )
+    else:
+        notes.append(
+            "탄성분을 빼지 않았습니다 — 진소성 단계가 앞에 없어 전체 진변형률로 쟀습니다"
+            "(r 이 약 0.5% 작게 나옵니다)."
+        )
+    if fitted.dropped:
+        notes.append(
+            f"구간 안에서 숫자가 아닌 점 {fitted.dropped}개를 뺐습니다(채널이 끊긴 자리)."
+        )
     if fitted.value is None:
         notes.append(f"**r 을 내지 않았습니다** — {fitted.why}")
     else:

@@ -39,23 +39,37 @@ C 는 `σ/σ₀ = 1 + C·ln(ε̇/ε̇₀)` 로 맞춘 값이라 **ε̇₀ 가 �
 from __future__ import annotations
 
 from matcore.export import Deck, ExportError, Need, Rendered, register_renderer
+from matcore.export.dyna import _f10
 
 #: 이 식의 파라미터 이름. 등록부와 같아야 한다.
 _A, _B, _N = "a", "b", "n"
-
-
-def _f10(value: float) -> str:
-    """고정 10칸 — LS-DYNA 는 칸이 어긋나면 다른 필드로 읽는다."""
-    return f"{value:>10.3E}"
+#: 이 식의 키(`fitting` 등록부)와 이름. 식 키가 없는 옛 카드는 이름으로만 안다.
+_FAMILY = "johnson_cook_static"
+_LABELS = ("Johnson-Cook", "Johnson-Cook (준정적 항)")
 
 
 def _params(deck: Deck) -> dict[str, float]:
     """경화 블록에서 A·B·n 을 꺼낸다.
 
-    **식 이름이 아니라 파라미터 이름으로 본다.** 카드에 담긴 적합이 Voce 면
-    `sigma_0·q·b` 라 여기서 걸리고, 그때 「이 카드로는 못 낸다」 고 말해야 한다 —
-    Voce 계수를 A·B·n 자리에 넣으면 덱은 나오고 해석은 조용히 틀린다.
+    **식 키를 먼저 본다**(2026-10-08). 전에는 파라미터 이름(a · b · n)만 봐서, 사용자가
+    「계산식」 으로 만든 다른 식이 같은 이름을 쓰면 그 계수가 JC 자리에 실렸다 — 덱은
+    나오고 해석은 조용히 틀린다. 식 키가 없는 옛 카드는 이름이 Johnson-Cook 일 때만 받는다.
+    혼합 곡선(`blend_with`)은 A·B·n 한 벌이 그 곡선이 아니라 받지 않는다.
+
+    그다음 파라미터 이름을 본다 — Voce 면 `sigma_0·q·b` 라 여기서 걸린다.
     """
+    values = deck.values("hardening")
+    family, label = values.get("family"), values.get("label") or "이름 없는 적합"
+    if family != _FAMILY and not (family is None and label in _LABELS):
+        raise ExportError(
+            f"카드의 경화식이 '{label}' 입니다 — Johnson-Cook 준정적 항으로 적합한 카드에서만 "
+            "A·B·n 을 냅니다. 표 형식이 필요하면 *MAT_024 를 쓰세요."
+        )
+    if values.get("blend_with"):
+        raise ExportError(
+            f"경화 곡선이 '{values['blend_with']}' 와 혼합돼 있습니다 — A·B·n 한 벌이 그 "
+            "곡선이 아닙니다. 혼합 없이 맞춘 카드를 쓰세요."
+        )
     found: dict[str, float] = {}
     for row in deck.rows("hardening"):
         name, value = row.get("name"), row.get("value")

@@ -275,9 +275,25 @@ def _tablest(table_id: int, pairs: list[tuple[float, int]]) -> list[str]:
     return _bulk._card("TABLEST", fields)
 
 
+#: 온도별 TABLES1 이 쓰는 표 번호 자리 — `재료 번호 * 10 + 자리` 의 4~9(중심 `_bulk._table_id`
+#: 가 0 소성 · 1 E · 2 ν · 3 α 를 쓴다). 그래서 온도는 여섯까지다.
+_CURVE_SLOTS = range(4, 10)
+
+
 def _curve_ids(deck: Deck, count: int) -> list[int]:
-    """온도별 TABLES1 번호 — 재료 번호 * 100 + 차례(표 번호 칸 `* 10 + 자리` 와 안 겹친다)."""
-    return [deck.solver_id * 100 + 10 + index for index in range(count)]
+    """온도별 TABLES1 번호 — **8자리 안**(재료 번호 * 10 + 4~9).
+
+    전에는 `재료 번호 * 100 + 10 + 차례` 라 재료 번호(최대 7자리)가 크면 9자리가 됐다 —
+    Nastran 의 번호는 1억 미만이다(2026-10-04 점검, 2026-10-08 고침). 자리를 넘으면 지어
+    붙이지 않고 말한다 — LS-DYNA · Abaqus 형식은 온도 수에 제한이 없다.
+    """
+    if count > len(_CURVE_SLOTS):
+        raise ExportError(
+            f"온도가 {count}개입니다 — Nastran · OptiStruct 덱은 재료 하나의 표 번호 자리"
+            f"(8자리 안)에 온도 {len(_CURVE_SLOTS)}개까지 싣습니다. 온도를 줄이거나 "
+            f"LS-DYNA · Abaqus 형식을 쓰세요."
+        )
+    return [_bulk._table_id(deck, slot) for slot in _CURVE_SLOTS[:count]]
 
 
 @register_renderer(

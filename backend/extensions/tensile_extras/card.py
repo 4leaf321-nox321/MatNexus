@@ -61,7 +61,15 @@ TEMPERATURE_TABLE = register_block(
                 si_unit="1",
                 help="`none`·`johnson_cook`. 표와 별개로, 요약한 식이다.",
             ),
-            Produced(key="melt_temperature", label="녹는점", si_unit="K"),
+            # 물성 키를 단다(2026-10-08) — 재료에 적어 둔 융점이 빈 칸을 채운다.
+            # Johnson-Cook m 을 맞춘 카드는 묶음이 쓴 녹는점이 이미 있어 그대로다.
+            Produced(
+                key="melt_temperature",
+                label="녹는점",
+                si_unit="K",
+                help="Johnson-Cook 온도 연화의 T_melt. 맞출 때 쓴 값이거나 적어 둔 값.",
+                property_key="thermal.melting_point",
+            ),
             Produced(key="jc_m", label="Johnson-Cook m", si_unit="1"),
             Produced(key="model_r_squared", label="식의 R²", si_unit="1"),
             # 연화 기울기(Pa/K)는 묶음 결과에만 둔다 — 덱 단위계 표가 그 단위를 모르고,
@@ -74,6 +82,8 @@ TEMPERATURE_TABLE = register_block(
         ),
         order=36,
         kind_priority=1,
+        # 점 · 곡선이 본체다 — 적어 둔 값(인장강도 · 녹는점)은 곁칸만 채운다(2026-10-08).
+        from_values=False,
     )
 )
 

@@ -2,6 +2,10 @@
 
 Basquin    S = A · N^b        로그-로그에서 직선: log S = log A + b·log N
 
+**맞출 때는 수명을 응력에 회귀한다**(ASTM E739 — 수명이 종속변수다): log N = c0 + c1·log S 를
+맞추고 b = 1/c1, A = 10^(-c0/c1) 로 뒤집는다. 응력을 수명에 회귀하면 수명의 흩어짐이 회귀변수에
+들어가 기울기가 완만해진다.
+
 런아웃(안 부러진 채 멈춘 시편)은 **적합에서 뺀다** — 그 점은 수명이 아니라 하한이다.
 넣으면 곡선이 위로 휘어 안전하지 않은 쪽으로 틀린다. 뺐다는 사실과 몇 건인지는
 결과에 남고, 점은 표에 런아웃 표시로 남는다.
@@ -73,11 +77,23 @@ def sn_curve(
 
     log_n = np.log10(cycles)
     log_s = np.log10(stress)
-    b, log_a = np.polyfit(log_n, log_s, 1)
-    predicted = log_a + b * log_n
-    residual = log_s - predicted
+    if float(np.ptp(log_s)) == 0.0:
+        raise GroupError(
+            "응력 진폭이 모두 같습니다 — 수명을 응력에 회귀할 수 없습니다. "
+            "다른 응력 진폭의 시험을 더하세요."
+        )
+    # **수명이 종속변수다**(ASTM E739). 흩어짐은 수명 쪽에 있다 — 같은 응력에서 수명이 몇 배
+    # 갈린다. 전에는 log S 를 log N 에 회귀해(2026-10-04 점검) 기울기가 완만해졌고 긴 수명의
+    # 강도가 높게 나왔다(합성 시험: 참 b=-0.100 → -0.092, 1e7 강도 +4.4%). 이제 log N 을
+    # log S 에 맞추고 Basquin 꼴로 뒤집는다: log N = c0 + c1·log S → b = 1/c1, log A = -c0/c1.
+    slope, intercept = (float(one) for one in np.polyfit(log_s, log_n, 1))
+    if slope == 0.0:
+        raise GroupError("수명이 응력에 따라 변하지 않습니다 — 기울기를 정할 수 없습니다.")
+    b = 1.0 / slope
+    log_a = -intercept / slope
+    residual = log_n - (intercept + slope * log_s)
     ss_res = float(np.sum(residual**2))
-    ss_tot = float(np.sum((log_s - log_s.mean()) ** 2))
+    ss_tot = float(np.sum((log_n - log_n.mean()) ** 2))
     r_squared = 1.0 - ss_res / ss_tot if ss_tot > 0 else 1.0
     a = float(10.0**log_a)
     if b >= 0:
@@ -97,7 +113,8 @@ def sn_curve(
     }
     for level in levels:
         values[f"strength_at_{_level_key(level)}"] = float(a * level**b)
-    # 로그 잔차의 표준편차 — 흩어짐. 같은 응력에서 수명이 열 배 갈리는 것이 피로다.
+    # **수명의 흩어짐** — log N 잔차의 표준편차(자릿수). 같은 응력에서 수명이 열 배 갈리는 것이
+    # 피로다. 전에는 log S 잔차라 이 값의 약 |b| 배(≈1/10)였다.
     if len(fitted) > 2:
         values["log_scatter"] = float(np.sqrt(ss_res / (len(fitted) - 2)))
 

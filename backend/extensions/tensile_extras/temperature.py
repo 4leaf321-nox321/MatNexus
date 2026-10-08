@@ -170,8 +170,12 @@ def _curve_of(member: Member) -> _Curve:
     x, y = x[keep], y[keep]
     order = np.argsort(x, kind="stable")
     x, y = x[order], y[order]
-    x, first = np.unique(x, return_index=True)
-    y = y[first]
+    # 같은 x 는 **마지막 것을 남긴다** — 탄성 구간을 0 으로 자른 자국(ε_p=0 이 여럿)이면
+    # 마지막이 항복점이다(중심 `groups/rate.py` · `processing.plastic_branch` 와 같은 규칙).
+    # 전에는 첫 점을 남겨 덱의 항복이 탄성 구간의 가장 낮은 응력이 됐다(2026-10-04 점검,
+    # 2026-10-08 고침). 정렬이 안정이라 뒤집으면 같은 x 안에서 마지막 것이 앞에 선다.
+    x, last = np.unique(x[::-1], return_index=True)
+    y = y[::-1][last]
     if len(x) < MIN_CURVE_POINTS:
         raise GroupError(f"'{member.label}' 의 소성 곡선이 너무 짧습니다({len(x)}점).")
     return _Curve(x, y)

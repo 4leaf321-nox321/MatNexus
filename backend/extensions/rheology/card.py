@@ -5,6 +5,8 @@
     덱    Abaqus `*VISCOSITY, DEFINITION=CROSS | CARREAU-YASUDA`. Abaqus 의 Cross 는
           지수를 `1-n` 으로 받으므로 우리 m 을 n = 1 - m 으로 돌려 적는다 — 그대로
           적으면 박화가 반대로 간다. Carreau 는 Carreau-Yasuda 의 a=2 다.
+    덱    LS-DYNA ICFD `*ICFD_MODEL_NONNEWT` — Cross II(NNID=5)는 지수가 우리 m 그대로,
+          Carreau(NNID=2)는 같은 식(2026-10-08, R16 매뉴얼로 확인).
 
 밀도는 있으면 `*DENSITY` 로 함께 낸다(CEL·유동 해석에 필요). 탄성은 안 낸다 —
 유체 카드에 `*ELASTIC` 을 넣으면 솔버가 고체로 읽는다.
@@ -22,6 +24,7 @@ from matcore.export import (
     _header,
     register_renderer,
 )
+from matcore.export import dyna as _dyna
 from matcore.registry import Produced
 
 RHEOLOGY = register_block(
@@ -128,3 +131,91 @@ def render_abaqus_viscosity(deck: Deck) -> Rendered:
             "Cross·Carreau 만."
         )
     return Rendered(text="\n".join(lines) + "\n", notes=tuple(notes))
+
+
+@register_renderer(
+    key="dyna_viscosity",
+    label="LS-DYNA (점도 · ICFD)",
+    extension="k",
+    suffix="_viscosity",
+    describe=(
+        "*ICFD_MAT + *ICFD_MODEL_NONNEWT — ICFD 유체의 전단 박화 점도. Cross 는 Cross II"
+        "(NNID=5, 지수 m 그대로), Carreau 는 NNID=2(온도 항 없이). 밀도가 있어야 낸다."
+    ),
+    keywords=("*KEYWORD", "*ICFD_MAT", "*ICFD_MODEL_NONNEWT", "*END"),
+    needs=(
+        Need("rheology", values=("label",), rows_min=4),
+        # 유동 해석의 밀도는 빼면 0 이다(*ICFD_MAT RO 기본) — 덱을 낼 이유가 없다.
+        Need("elastic", values=("density",)),
+    ),
+)
+def render_dyna_viscosity(deck: Deck) -> Rendered:
+    """LS-DYNA ICFD — 유체 재료(`*ICFD_MAT`)가 비뉴턴 모델(`*ICFD_MODEL_NONNEWT`)을 가리킨다.
+
+    매뉴얼(R16 Vol III, ICFD 장)의 식이 우리 것과 **같은 꼴**이다:
+
+        NNID=5 Cross II   mu = mu_inf + (mu_0 - mu_inf) / (1 + (lambda*rate)^n)   → n = 우리 m
+        NNID=2 Carreau    mu = mu_inf + (mu_0 - mu_inf)(1 + (H(T)*rate*lambda)^2)^((n-1)/2)
+                                                                     → ALPHA=0 이면 H=1
+        NNID=3 Cross      mu = mu_0 / (1 + (lambda*rate)^(1-n))     ← mu_inf 가 없어 안 쓴다
+
+    Abaqus Cross 와 달리 지수를 돌리지 않는다 — Abaqus 규약(1-n)을 여기 옮겨 오면 박화가
+    반대로 간다. 칸 셋은 늘 적는다: **LAMBDA 의 기본은 1e30** 이라 비우면 첫 전단율부터
+    박화 끝이다. K(영전단)·MUMIN(무한 전단)은 비우면 0 이다.
+
+    `*ICFD_MAT` 둘째 카드(열)는 **빈 카드**로 둔다 — 매뉴얼이 그렇게 하라고 하고, 0 을 채우면
+    PRT 의 기본 0.85 가 0 이 된다. 셋째 카드의 첫 칸이 NNMOID 다. VIS 에는 영전단 점도를
+    적는다 — 비뉴턴 모델이 점도를 정하지만 뉴턴 점도 칸을 0 으로 두지 않는다.
+    """
+    values = deck.values("rheology")
+    family = str(values.get("family") or "")
+    parameters = {
+        str(row["name"]): float(row["value"])
+        for row in deck.rows("rheology")
+        if "name" in row and "value" in row
+    }
+    density = deck.number("elastic", "density")
+    assert density is not None
+    try:
+        eta0, eta_inf, lam = parameters["eta_0"], parameters["eta_inf"], parameters["lambda"]
+    except KeyError as exc:
+        raise ExportError("유변 계수(eta_0·eta_inf·lambda)가 카드에 없습니다.") from exc
+    if family == "cross":
+        exponent = parameters.get("m")
+        if exponent is None:
+            raise ExportError("Cross 계수 m 이 카드에 없습니다.")
+        nnid, said = 5, f"$ Cross -> NNID=5 (Cross II): N = our m = {exponent:.6g} as is."
+    elif family == "carreau":
+        exponent = parameters.get("n")
+        if exponent is None:
+            raise ExportError("Carreau 계수 n 이 카드에 없습니다.")
+        nnid, said = 2, "$ Carreau -> NNID=2, ALPHA=0 (no temperature shift, H=1)."
+    else:
+        raise ExportError(
+            f"'{family or '?'}' 은 ICFD 비뉴턴 모델로 낼 수 없는 식입니다 — Cross·Carreau 만."
+        )
+
+    mid = deck.solver_id
+    lines = ["*KEYWORD", *_header(deck, "$"), *_dyna._units_comment(deck)]
+    lines.append("$ ICFD fluid material - *ICFD_PART must point to this MID.")
+    lines.append(said)
+    lines.append("*ICFD_MAT")
+    lines.append("$      mid       flg        ro       vis")
+    lines.append(_dyna._i10(mid) + _dyna._i10(1) + _dyna._f10(density) + _dyna._f10(eta0))
+    lines.append("$ thermal card left blank (manual: blank card if no thermal problem)")
+    lines.append("")
+    lines.append("$   nnmoid    pmmoid    sptrid       vid")
+    lines.append(_dyna._i10(mid))
+    lines.append("*ICFD_MODEL_NONNEWT")
+    lines.append("$   nnmoid      nnid")
+    lines.append(_dyna._i10(mid) + _dyna._i10(nnid))
+    lines.append("$        k         n     mumin    lambda     alpha    talpha")
+    lines.append(
+        _dyna._f10(eta0)
+        + _dyna._f10(exponent)
+        + _dyna._f10(eta_inf)
+        + _dyna._f10(lam)
+        + (_dyna._f10(0.0) if nnid == 2 else "")
+    )
+    lines.append("*END")
+    return Rendered(text="\n".join(lines) + "\n", notes=())
