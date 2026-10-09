@@ -38,6 +38,8 @@ from matcore.export import (
     _free,
     _header,
     elastic_by_temperature,
+    flat_elastic_lines,
+    flat_expansion_lines,
     prepare,
     register_renderer,
 )
@@ -215,6 +217,9 @@ def render_dyna_temperature(deck: Deck) -> Rendered:
         notes.append("탄성은 온도 하나의 값입니다 — 온도별 탄성계수는 카드에 없습니다.")
     if alpha is None:
         lines.append("$ ALPHA = 0: no thermal expansion on the card.")
+    expansion, said = flat_expansion_lines(deck, "$", "*MAT_255")
+    lines.extend(expansion)
+    notes.extend(said)
     lines.append("*MAT_PIECEWISE_LINEAR_PLASTIC_THERMAL")
     lines.append(
         "$      mid        ro         e        pr         c         p      fail      tdel"
@@ -388,6 +393,9 @@ def render_nastran_temperature(deck: Deck) -> Rendered:
         "$ SOL 400: MAT1 + MATEP(FORM=TABLE) + MATT1 + MATTEP (MATS1 may not use TABLEST)."
     )
     lines.append("$ TABLES1 TYPE=2: true stress vs PLASTIC strain, first point (0, yield).")
+    expansion, folded = flat_expansion_lines(deck, "$", "MAT1", "A")
+    lines.extend(expansion)
+    notes.extend(folded)
     lines.extend(body)
     if rows:
         e_points = [(t, e) for t, e, _ in rows]
@@ -461,6 +469,9 @@ def render_openradioss_temperature(deck: Deck) -> Rendered:
     if not elastic_by_temperature(deck):
         lines.append("# E, nu are single-temperature values (not measured per temperature).")
         notes.append("탄성은 온도 하나의 값입니다 — 온도별 탄성계수는 카드에 없습니다.")
+    flat, said = flat_elastic_lines(deck, "#", "LAW109")
+    lines.extend(flat)
+    notes.extend(said)
     lines.append(f"/MAT/LAW109/{deck.solver_id}/1")
     lines.append(deck.name)
     lines.append(f"#{'RHO_I':>19}")

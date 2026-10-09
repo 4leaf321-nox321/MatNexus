@@ -38,7 +38,14 @@ C 는 `σ/σ₀ = 1 + C·ln(ε̇/ε̇₀)` 로 맞춘 값이라 **ε̇₀ 가 �
 
 from __future__ import annotations
 
-from matcore.export import Deck, ExportError, Need, Rendered, register_renderer
+from matcore.export import (
+    Deck,
+    ExportError,
+    Need,
+    Rendered,
+    flat_elastic_lines,
+    register_renderer,
+)
 from matcore.export.dyna import _f10
 
 #: 이 식의 파라미터 이름. 등록부와 같아야 한다.
@@ -145,6 +152,9 @@ def render_dyna_johnson_cook(deck: Deck) -> Rendered:
         lines.append(f"$ 경화 적합 R^2 = {quality:.4f}")
     lines.append("$ 온도 의존은 이 카드에 없습니다. 고온 해석이면 *MAT_015 가 필요하고,")
     lines.append("$ 그러려면 여러 온도의 인장 시험이 있어야 합니다 — 지금은 없습니다.")
+    flat, said = flat_elastic_lines(deck, "$", "*MAT_098", ("E", "PR"))
+    lines.extend(flat)
+    notes.extend(said)
 
     lines.append("*MAT_SIMPLIFIED_JOHNSON_COOK")
     lines.append("$#     mid        ro         e        pr        vp")
@@ -228,6 +238,9 @@ def render_openradioss_johnson_cook(deck: Deck) -> Rendered:
     else:
         lines.append(f"# c fitted against the reference rate {reference:.4g} (deck units).")
     lines.append("# T_melt blank = 1e20: T* stays 0 (no temperature data on this card).")
+    flat, said = flat_elastic_lines(deck, "#", "LAW2")
+    lines.extend(flat)
+    notes.extend(said)
     lines.append(f"/MAT/LAW2/{deck.solver_id}/1")
     lines.append(deck.name)
     lines.append(f"#{'RHO_I':>19}")

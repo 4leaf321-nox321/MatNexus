@@ -43,6 +43,8 @@ from matcore.export import (
     _free,
     _header,
     _thermal_lines,
+    flat_elastic_lines,
+    flat_expansion_lines,
     prepare,
     register_renderer,
 )
@@ -216,6 +218,8 @@ def render_dyna_hill(deck: Deck) -> Rendered:
         "$ SHELLS ONLY. AOPT=0: material axis a = element node 1->2 - align with rolling."
     )
     lines.append("$ Hardening curve must be the rolling-direction (MD) one.")
+    flat, said = flat_elastic_lines(deck, "$", "*MAT_036", ("E", "PR"))
+    lines.extend(flat)
     lines.append("*MAT_3-PARAMETER_BARLAT")
     lines.append(
         "$      mid        ro         e        pr        hr        p1        p2      iter"
@@ -237,7 +241,7 @@ def render_dyna_hill(deck: Deck) -> Rendered:
     lines.append(zeros())
     lines.extend(_dyna._curve(deck.solver_id, points))
     lines.append("*END")
-    return Rendered(text="\n".join(lines) + "\n", notes=(*notes, _PAIR_NOTE))
+    return Rendered(text="\n".join(lines) + "\n", notes=(*notes, *said, _PAIR_NOTE))
 
 
 @register_renderer(
@@ -276,6 +280,8 @@ def render_openradioss_hill(deck: Deck) -> Rendered:
         "# Hill48 from Lankford r00/r45/r90 as measured. SHELLS ONLY (/PROP/TYPE9 or 10)."
     )
     lines.append("# Hardening curve must be the rolling-direction (MD) one.")
+    flat, said = flat_elastic_lines(deck, "#", "LAW43")
+    lines.extend(flat)
     lines.append(f"/MAT/LAW43/{deck.solver_id}/1")
     lines.append(deck.name)
     lines.append(f"#{'RHO_I':>19}")
@@ -298,7 +304,7 @@ def render_openradioss_hill(deck: Deck) -> Rendered:
     lines.append(f"#{'X':>19}{'Y':>20}")
     lines.extend(f"{strain:>20.12E}{stress:>20.9E}" for strain, stress in points)
     lines.append("/END")
-    return Rendered(text="\n".join(lines) + "\n", notes=(*notes, _PAIR_NOTE))
+    return Rendered(text="\n".join(lines) + "\n", notes=(*notes, *said, _PAIR_NOTE))
 
 
 @register_renderer(
@@ -327,7 +333,11 @@ def render_nastran_hill(deck: Deck) -> Rendered:
     lines = _bulk._head(deck, "MSC Nastran")
     lines.extend(_ratio_comment("$", ratios, r))
     lines.append("$ SOL 400 only - MATEP is the advanced plasticity entry.")
+    flat, folded = flat_elastic_lines(deck, "$", "MAT1", ("E", "NU"))
+    expansion, folded_alpha = flat_expansion_lines(deck, "$", "MAT1", "A")
+    lines.extend([*flat, *expansion])
     body, said = _bulk._mat1(deck, with_tables=False)
+    said = [*folded, *folded_alpha, *said]
     lines.extend(body)
     lines.append("$MATEP* MID             FORM            Y0              FID")
     lines.append("$*      RYIELD          WKHARD                          H")
@@ -397,7 +407,11 @@ def render_optistruct_hill(deck: Deck) -> Rendered:
     lines.append(
         f"$ TEMP = {_OS_TEMP:g} (one data set - OptiStruct uses it at every temperature)."
     )
+    flat, folded = flat_elastic_lines(deck, "$", "MAT1", ("E", "NU"))
+    expansion, folded_alpha = flat_expansion_lines(deck, "$", "MAT1", "A")
+    lines.extend([*flat, *expansion])
     body, said = _bulk._mat1(deck, with_tables=False)
+    said = [*folded, *folded_alpha, *said]
     lines.extend(body)
     lines.append("$PLASTIC*MID")
     lines.append("$*      CRIT            HILL")

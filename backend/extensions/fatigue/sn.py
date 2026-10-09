@@ -105,6 +105,8 @@ def sn_curve(
     values: dict[str, float] = {
         "basquin_a": a,
         "basquin_b": float(b),
+        # 문헌 σf′ 은 2N(역전 수) 기준이다: A·N^b = σf′·(2N)^b → σf′ = A·2^(-b).
+        "fatigue_strength_coefficient": a * 2.0 ** (-float(b)),
         "sn_r_squared": float(r_squared),
         "point_count": float(len(fitted)),
         "runout_count": float(len(runouts)),

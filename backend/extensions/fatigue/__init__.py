@@ -41,8 +41,21 @@ register(
     ),
     makes_values=(
         Produced(key="basquin_a", label="Basquin A", si_unit="Pa", help="S = A·N^b 의 A."),
+        # 문헌 키(2026-10-08). b 는 N 기준이든 2N 기준이든 같은 지수다. A 는 아니다 —
+        # 문헌 σf′ 은 2N(역전 수) 기준이라 σf′ = A·2^(-b) 를 따로 내고 그것에 키를 단다.
         Produced(
-            key="basquin_b", label="Basquin b", si_unit="1", help="로그-로그 기울기. 음수."
+            key="basquin_b",
+            label="Basquin b",
+            si_unit="1",
+            help="로그-로그 기울기. 음수.",
+            property_key="mechanical.fatigue_strength_exponent",
+        ),
+        Produced(
+            key="fatigue_strength_coefficient",
+            label="피로강도계수 σf′ (2N 기준)",
+            si_unit="Pa",
+            help="σa = σf′·(2N)^b 의 σf′ = A·2^(-b). 문헌(ASTM E466)과 같은 기준.",
+            property_key="mechanical.fatigue_strength_coefficient",
         ),
         Produced(key="sn_r_squared", label="적합의 R²", si_unit="1"),
         Produced(key="point_count", label="적합에 쓴 점 수", si_unit="1"),
