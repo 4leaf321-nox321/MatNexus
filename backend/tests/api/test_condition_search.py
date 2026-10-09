@@ -323,6 +323,10 @@ class Test단위가_이름에_박힌_조건:
             {"frequency_cpm": 60},
             {"frequency_hz": "미상"},
             {"frequency": "5 Hz"},
+            {"strain_rate_s": 0.001},
+            {"humidity_pct": 85},
+            {"humidity_rh": 50, "humidity_pct": 60},
+            {"reference_strain_rate_s": 1.0},
             {},
         ]
         for index, conditions in enumerate(cases):
@@ -332,6 +336,8 @@ class Test단위가_이름에_박힌_조건:
                 CatalogMaterial.name,
                 property_search._catalog_condition_si("temperature"),
                 property_search._catalog_condition_si("frequency"),
+                property_search._catalog_condition_si("strain_rate"),
+                property_search._catalog_condition_si("humidity"),
             ).join(CatalogValue, CatalogValue.material_id == CatalogMaterial.id)
         ).all()
         assert len(rows) == len(cases)
@@ -341,12 +347,18 @@ class Test단위가_이름에_박힌_조건:
                 return sql is None and python is None
             return sql == pytest.approx(python)
 
-        for name, kelvin, hertz in rows:
+        for name, kelvin, hertz, rate, humidity in rows:
             conditions = cases[int(name[1:])]
             assert same(kelvin, standard_conditions.read_catalog(conditions, "temperature")), (
                 name
             )
             assert same(hertz, standard_conditions.read_catalog(conditions, "frequency")), name
+            assert same(rate, standard_conditions.read_catalog(conditions, "strain_rate")), (
+                name
+            )
+            assert same(humidity, standard_conditions.read_catalog(conditions, "humidity")), (
+                name
+            )
 
         read = standard_conditions.read_catalog
         assert read({"temperature_f": 212}, "temperature") == pytest.approx(373.15)
@@ -358,6 +370,11 @@ class Test단위가_이름에_박힌_조건:
         )
         assert read({"frequency_cpm": 60}, "frequency") == pytest.approx(1.0)
         assert read({"frequency": "5 Hz"}, "frequency") is None
+        # 변형률 속도 · 습도(%) — 2026-10-08. 습도는 분율로 읽는다(85 % → 0.85).
+        assert read({"strain_rate_s": 0.001}, "strain_rate") == pytest.approx(0.001)
+        assert read({"humidity_pct": 85}, "humidity") == pytest.approx(0.85)
+        # 식의 기준 속도는 시험 조건이 아니다.
+        assert read({"reference_strain_rate_s": 1.0}, "strain_rate") is None
 
 
 class Test등급:

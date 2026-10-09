@@ -87,6 +87,7 @@ export const ACTION_LABELS: Record<string, string> = {
   'catalog_material.created_by_client': 'AI 가 문헌 재료 추가',
   'catalog_value.added_by_client': 'AI 가 문헌 값 추가',
   'commission.created_by_client': 'AI 가 측정 의뢰 작성',
+  'catalog_link.set_by_client': 'AI 가 사내 재료를 문헌 재료에 연결',
   // 이 둘은 **사람이 해도 남는다** — 되돌릴 수 없다.
   'catalog_value.deleted': '문헌 값 삭제',
   'catalog_property.migrated': '문헌 물성 키 이관',

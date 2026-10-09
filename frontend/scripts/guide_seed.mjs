@@ -11,6 +11,11 @@
  * 스크립트(`backend/scripts/import_guides.py`)가 올리면서 진짜 주소로 바꾼다.
  *
  * 문서마다 제 `<style>` 이 있었다 — 버린다. 서식은 앱이 한 벌로 정한다.
+ *
+ * **씨앗 JSON 만 고치지 않는다 — 원본 HTML 을 고치고 이것으로 다시 만든다.** 2026-10-04 에 네 편
+ * (플랫폼 사용 · 용어 · DMA-Prony · TMA)의 열 절이 JSON 에서만 고쳐져, 원본에서 다시 만들면 그
+ * 수정(워크벤치 개편 · DMA 전단 모드 · θ₀)이 말없이 되돌아갈 뻔했다(2026-10-08 원본으로 되돌림).
+ * CI 의 「가이드 씨앗 최신성」 이 이것을 돌려 커밋된 씨앗과 견준다.
  */
 
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'

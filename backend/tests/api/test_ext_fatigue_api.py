@@ -165,3 +165,78 @@ def test_재료에_적어_둔_인장강도가_S_N_카드에_실리고_OptiStruct
     )
     assert deck.status_code == 200, deck.text
     assert "MATFAT*" in deck.text and "6.80000000E+02" in deck.text  # mm·N·tonne 기본
+
+
+def test_묶음_결과가_물성_지도와_값_검색에_선다(
+    client: TestClient, db: Session, admin_headers: dict[str, str], imported: dict[str, Any]
+) -> None:
+    """Basquin 은 처리 결과가 아니라 **묶음 결과**에 산다 — 전에는 문헌 키를 달아도 물성 지도 ·
+    값 검색이 처리 결과만 읽어 안 섰다(2026-10-08). 문헌 σf′ 은 2N 기준이라 A·2^(-b) 로 낸다.
+    다시 묶으면 **가장 최근 결과 하나만** 센다."""
+    from app.modules.catalog.models import CatalogDefinition
+
+    for key, unit, name in (
+        ("mechanical.fatigue_strength_exponent", "1", "Fatigue strength exponent"),
+        ("mechanical.fatigue_strength_coefficient", "Pa", "Fatigue strength coefficient"),
+    ):
+        db.add(
+            CatalogDefinition(
+                key=key, domain="mechanical", name=name, value_type="numeric", si_unit=unit
+            )
+        )
+    db.commit()
+    for options in ({"exclude_runouts": False}, {}):  # 둘째(런아웃 뺀 것)가 최신
+        made = client.post(
+            "/api/groups",
+            json={
+                "plugin_id": "fatigue.sn_curve",
+                "run_ids": imported["run_ids"],
+                "options": options,
+            },
+            headers=admin_headers,
+        )
+        assert made.status_code == 201, made.text
+    latest = made.json()
+    assert latest["values"]["fatigue_strength_coefficient"] == pytest.approx(
+        A * 2.0 ** (-B), rel=1e-3
+    )
+
+    coverage = client.get(
+        f"/api/materials/{imported['material_id']}/property-coverage", headers=admin_headers
+    ).json()
+    rows = {row["key"]: row for row in coverage["properties"]}
+    exponent = [one for one in rows["mechanical.fatigue_strength_exponent"]["entries"]]
+    assert len(exponent) == 1, exponent  # 옛 묶음은 안 센다
+    assert exponent[0]["value_si"] == pytest.approx(B, rel=1e-3)
+    assert exponent[0]["ref_kind"] == "group_result"
+    sigma = rows["mechanical.fatigue_strength_coefficient"]["entries"][0]
+    assert sigma["value_si"] == pytest.approx(A * 2.0 ** (-B), rel=1e-3)
+
+    found = client.get(
+        "/api/catalog/properties/search",
+        params={
+            "q": "mechanical.fatigue_strength_exponent",
+            "unit": "1",
+            "min": -0.2,
+            "max": -0.05,
+        },
+        headers=admin_headers,
+    )
+    assert found.status_code == 200, found.text
+    hits = [one for one in found.json()["hits"] if one["world"] == "measured"]
+    assert [one["material_id"] for one in hits] == [imported["material_id"]]
+    assert hits[0]["value_si"] == pytest.approx(B, rel=1e-3)
+
+    # **재료 목록의 「물성 값」 거르기**도 같은 규칙으로 묶음 결과를 본다.
+    listed = client.get(
+        "/api/materials",
+        params={
+            "value_key": "mechanical.fatigue_strength_exponent",
+            "value_unit": "1",
+            "value_min": -0.2,
+            "value_max": -0.05,
+        },
+        headers=admin_headers,
+    )
+    assert listed.status_code == 200, listed.text
+    assert [one["id"] for one in listed.json()["items"]] == [imported["material_id"]]

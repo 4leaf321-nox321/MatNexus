@@ -30,6 +30,7 @@ from matcore.export import (
     _header,
     _unit_block,
     failure_lines,
+    failure_value,
     hyperelastic_terms,
     law36_flat_elastic,
     law36_lines,
@@ -168,6 +169,7 @@ def render_openradioss_rate(deck: Deck) -> Rendered:
             ],
             fsmooth=2,
             vp=1,
+            eps_p_max=failure_value(deck),
         )
     )
     lines.append("/END")

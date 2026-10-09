@@ -102,7 +102,7 @@ ms)를 알린다 — 「관리 → 사용 현황」 의 MCP 숫자가 여기서 
 도구의 답은 그대로 나간다. 도구 하나가 백엔드를 여러 번 부르므로 API 요청 수(`X-Client: mcp`)와
 도구 수는 다르다 — 둘 다 그 화면에 있다.
 
-## 5. 지금 있는 것 (도구 97개)
+## 5. 지금 있는 것 (도구 98개)
 
 **전부 한 번에 불러 보려면 `probe.py` 를 돌린다** — 진짜 MCP 클라이언트로 한 바퀴
 돈다(아래 「실측으로 잡은 것」 참조). 화면이나 curl 로는 안 보이는 층이 있다.
@@ -170,6 +170,8 @@ Family·Category·Grade·제조사·유통사·시편 규격은 **기준정보**
     how_to_measure(property_key)       이 물성은 무엇으로 어떻게 재나
     list_equipment(query?, status?)    우리 장비 — 모델·소속 랩·교정 만료
     measurement_gaps()                 우리가 못 재는 물성 — 능력의 빈 칸
+    ★ link_catalog_material(material_id, 사내 재료 ↔ 문헌 재료. id 를 비우면 지금 연결과
+        catalog_material_id?)          **서버의 연결 후보**(등급 · 별칭이 같은 것)만
     ★ adopt_catalog_values(...)        문헌 값 → 선언 물성 (스냅샷)
     ★ adopt_parameter_set(...)         파라미터 한 벌을 통째로
     ★ create_declared_card(...)        적어 둔 값만으로 카드 초안 — `block_keys` 로 항목란을 골라 싣는다

@@ -62,6 +62,72 @@ class Test처리_단계:
         assert "내지 않았습니다" in " ".join(stage.notes)
 
 
+def _hollomon(n: float, k: float, *, end: float = 0.3, points: int = 61) -> Frame:
+    """답을 아는 곡선 — 진값이 σ = K·ε^n 인 공칭 곡선(ε = ln(1+e), σ = S(1+e))."""
+    engineering = np.linspace(0.002, end, points)
+    true_stress = k * np.log1p(engineering) ** n
+    return Frame(
+        {
+            "strain_engineering": engineering,
+            "stress_engineering": true_stress / (1.0 + engineering),
+        },
+        {"strain_engineering": "1", "stress_engineering": "Pa"},
+    )
+
+
+class Test가공경화지수_n:
+    """ASTM E646 · ISO 10275 — 진응력-진변형률 로그-로그 기울기(2026-10-08)."""
+
+    def _run(self, frame: Frame, **options: object) -> processing.Stage:
+        result = processing.apply([processing.Step("tensile.n_value", dict(options))], frame)
+        return result.stages[-1]
+
+    def _values(self, stage: processing.Stage) -> dict[str, float]:
+        return {one.key: one.value for one in stage.scalars}
+
+    def test_답을_아는_곡선에서_n_과_K_를_되찾고_문헌_키를_든다(self) -> None:
+        stage = self._run(_hollomon(0.22, 520e6))
+        got = self._values(stage)
+        assert got["n_value"] == pytest.approx(0.22, rel=1e-6)
+        assert got["n_strength_coefficient"] == pytest.approx(520e6, rel=1e-6)
+        assert got["n_r_squared"] == pytest.approx(1.0)
+        produced = {one.key: one for one in registry.get("tensile.n_value").makes_values}
+        assert (
+            produced["n_value"].property_key
+            == "mechanical.monotonic_strain_hardening_exponent"
+        )
+
+    def test_균일_연신율이_짧으면_거기까지만_쓰고_말한다(self) -> None:
+        """넥킹 뒤의 점이 들어가면 σ = S(1+e) 가 성립하지 않는다 — 기울기가 조용히 틀린다."""
+        frame = _hollomon(0.2, 500e6)
+        engineering = frame.columns["strain_engineering"]
+        stress = frame.columns["stress_engineering"].copy()
+        # 0.15 뒤를 넥킹처럼 꺾는다 — 상한(0.20)까지 쓰면 n 이 달라진다.
+        stress[engineering > 0.15] *= 0.9
+        necked = Frame(
+            {"strain_engineering": engineering, "stress_engineering": stress},
+            {"strain_engineering": "1", "stress_engineering": "Pa"},
+        )
+        capped = self._run(necked, uniform_elongation=0.15)
+        assert self._values(capped)["n_value"] == pytest.approx(0.2, rel=1e-6)
+        assert "균일 연신율" in " ".join(capped.notes)
+        uncapped = self._values(self._run(necked))["n_value"]
+        assert abs(uncapped - 0.2) > 0.01
+
+    def test_점이_모자라면_n_을_내지_않고_까닭을_남긴다(self) -> None:
+        stage = self._run(_hollomon(0.2, 500e6, end=0.3, points=12))
+        assert "n_value" not in self._values(stage)
+        assert self._values(stage)["n_point_count"] < 5
+        assert "내지 않았습니다" in " ".join(stage.notes)
+
+    def test_진소성변형률로_재면_탄성계수가_있어야_하고_n_이_달라진다(self) -> None:
+        frame = _hollomon(0.2, 500e6)
+        missing = self._run(frame, basis="plastic")
+        assert "n_value" not in self._values(missing)
+        plastic = self._values(self._run(frame, basis="plastic", youngs_modulus=200e9))
+        assert plastic["n_value"] < 0.2  # 탄성분을 빼면 ln ε 이 더 빨리 늘어 기울기가 준다
+
+
 def _member(label: str, temperature_k: float, drop_per_k: float) -> groups.Member:
     strain = np.linspace(0.0, 0.1, 21)
     stress = 400e6 - drop_per_k * (temperature_k - 293.15) + 500e6 * strain

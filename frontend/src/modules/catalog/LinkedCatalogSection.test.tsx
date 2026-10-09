@@ -3,6 +3,7 @@
  *
  *   비어 있으면 잇는 길이 보인다     「문헌 재료 연결」 → 검색 → 선택
  *   이어져 있으면 요약이 보인다      이름·분류·물성값 수 + 채우기·해제
+ *   안 이어져 있으면 후보가 먼저     왜 걸렸나와 함께, 누르면 그것으로 잇는다
  */
 
 import { render, screen, waitFor } from '@testing-library/react'
@@ -18,6 +19,7 @@ const setLink = vi.fn()
 const clearLink = vi.fn()
 const materials = vi.fn()
 const material = vi.fn()
+const linkCandidates = vi.fn()
 
 vi.mock('@/modules/catalog/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/modules/catalog/api')>()),
@@ -27,6 +29,7 @@ vi.mock('@/modules/catalog/api', async (importOriginal) => ({
     clearLink: (...args: unknown[]) => clearLink(...args),
     materials: (...args: unknown[]) => materials(...args),
     material: (...args: unknown[]) => material(...args),
+    linkCandidates: (...args: unknown[]) => linkCandidates(...args),
   },
 }))
 
@@ -51,6 +54,7 @@ const EMPTY = { catalog_material_id: null, name: null, category: null, subsystem
 beforeEach(() => {
   vi.clearAllMocks()
   material.mockResolvedValue({ id: LINKED.catalog_material_id, name: 'SUS304', values: [] })
+  linkCandidates.mockResolvedValue([])
   materials.mockResolvedValue({
     total: 1,
     limit: 8,
@@ -94,5 +98,34 @@ describe('문헌 연결', () => {
 
     await userEvent.click(screen.getByRole('button', { name: /연결 해제/ }))
     await waitFor(() => expect(clearLink).toHaveBeenCalledWith(String(MATERIAL.id)))
+    // 이어져 있는 동안에는 후보를 묻지 않는다.
+    expect(linkCandidates).not.toHaveBeenCalled()
+  })
+
+  it('안 이어져 있으면 후보를 근거와 함께 보이고, 누르면 그것으로 잇는다', async () => {
+    link.mockResolvedValue(EMPTY)
+    setLink.mockResolvedValue(LINKED)
+    linkCandidates.mockResolvedValue([
+      {
+        catalog_material_id: LINKED.catalog_material_id,
+        name: 'SUS304_annealed Bilinear',
+        category: 'metal',
+        value_count: 59,
+        matched_by: 'prefix',
+        matched_on: 'grade',
+        matched_text: 'SUS304',
+      },
+    ])
+    show()
+    // 데이터로 그려진 것을 기다린다 — 근거 문장까지.
+    expect(await screen.findByText(/등급 「SUS304」 · 이름이 이것으로 시작한다/)).toBeInTheDocument()
+    expect(screen.getByText(/물성값 59건/)).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'SUS304_annealed Bilinear 에 연결' }))
+    await waitFor(() =>
+      expect(setLink).toHaveBeenCalledWith(String(MATERIAL.id), LINKED.catalog_material_id)
+    )
+    // 이으면 후보는 내려간다.
+    expect(await screen.findByText(/물성값 42건/)).toBeInTheDocument()
+    expect(screen.queryByText(/이을 만한 문헌 재료/)).not.toBeInTheDocument()
   })
 })

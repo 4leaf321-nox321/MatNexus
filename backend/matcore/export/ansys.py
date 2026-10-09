@@ -506,6 +506,80 @@ def render_ansys_thermal(deck: Deck) -> Rendered:
     return Rendered(text="\n".join(lines) + "\n", notes=tuple(notes))
 
 
+#: 흡습 블록 칸 → APDL `MP` 이름. 세 방향을 다 적는다 — Y · Z 가 X 를 따르는 기본값에
+#: 기대지 않는다(받는 쪽이 이방 재료로 고쳐 쓸 때 어느 칸이 비었는지 보이게).
+_MOISTURE_MP = (
+    ("moisture_diffusivity", ("DXX", "DYY", "DZZ")),
+    ("moisture_saturation", ("CSAT",)),
+    ("hygroscopic_expansion", ("BETX", "BETY", "BETZ")),
+)
+
+
+@register_renderer(
+    key="ansys_moisture",
+    label="ANSYS (흡습)",
+    extension="mac",
+    suffix="_moisture",
+    describe=(
+        "MP,DXX · CSAT · BETX — 수분 확산 · 흡습 팽윤 해석용(확산 · 구조-확산 요소). 한 환경"
+        "(온도 · 습도)의 값이다."
+    ),
+    keywords=(f"DXX,{MATERIAL}",),
+    needs=(Need("moisture", values=("moisture_diffusivity",)),),
+)
+def render_ansys_moisture(deck: Deck) -> Rendered:
+    """흡습 스니펫 — `DXX..DZZ` · `CSAT` · `BETX..BETZ`. 구조 표(TB)는 안 건드린다
+    (열 덱과 같다).
+
+    **팽윤은 실제 농도로 계산된다.** CSAT 이 있으면 농도 자유도는 정규화 농도(C/CSAT)이고,
+    팽윤 변형 `BETX·(C - CREF)` 의 C 는 정규화 농도에 CSAT 을 곱한 값이다 — 도움말의 바이모프
+    예제가 β(m³/kg)와 CSAT(kg/m³)을 그렇게 짝지었다. 블록이 질량 농도를 드는 이유다.
+
+    `CREF` 는 안 적는다 — 기본 0(마른 상태)이 흡습 팽창 계수의 기준과 같다. `REFT` 를 지어
+    넣지 않는 것과 같은 이유로, 모르는 기준을 덱이 정하지 않는다.
+    """
+    temperature = deck.number("moisture", "temperature")
+    humidity = deck.number("moisture", "humidity")
+    notes: list[str] = []
+    lines = _head(deck)
+    lines.append(
+        "! Moisture: DXX..DZZ diffusivity, CSAT saturated concentration (mass/volume)."
+    )
+    lines.append(
+        "! With CSAT the CONC dof is normalized (C/CSAT); swelling uses C = CONC*CSAT:"
+    )
+    lines.append(
+        "!   strain = BETX*(C - CREF), BETX in volume/mass. CREF not written (default 0, dry)."
+    )
+    if temperature is not None:
+        lines.append(
+            f"! Values measured at {temperature:.5g} K - diffusivity depends on temperature."
+        )
+    if humidity is not None and deck.number("moisture", "moisture_saturation") is not None:
+        lines.append(
+            f"! CSAT is the saturation at RH {humidity * 100:.4g} % - other RH, other CSAT."
+        )
+    for key, labels in _MOISTURE_MP:
+        value = deck.number("moisture", key)
+        if value is None:
+            continue
+        lines.extend(f"MP,{label},{MATERIAL},{_free(value)}" for label in labels)
+    if deck.number("moisture", "moisture_saturation") is None:
+        lines.append(
+            "! CSAT not on the card - CONC is the actual concentration (not normalized)."
+        )
+        notes.append(
+            "포화 수분 농도(CSAT)가 카드에 없어 농도 자유도가 실제 농도입니다 — 포화 농도가 "
+            "다른 재료가 맞닿는 모델이면 경계에서 농도가 끊겨 정규화 농도(CSAT)가 필요합니다."
+        )
+    if deck.number("moisture", "hygroscopic_expansion") is None:
+        lines.append("! BETX not on the card - no swelling strain.")
+        notes.append(
+            "흡습 팽창 계수가 카드에 없어 MP,BETX 를 뺐습니다 — 팽윤 변형이 생기지 않습니다."
+        )
+    return Rendered(text="\n".join(lines) + "\n", notes=tuple(notes))
+
+
 #: 카드 칸 → APDL `MP` 이름. 전부 무차원이라 계와 상관없다(비유전율 · 손실 · 비투자율 ·
 #: 방사율).
 _ELECTRIC_MP = (

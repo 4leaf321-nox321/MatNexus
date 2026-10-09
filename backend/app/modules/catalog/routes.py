@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session
 from app import version
 from app.database import get_db
 from app.modules.accounts.models import User
-from app.modules.catalog import contribute, links, mapping, parameters, spans
+from app.modules.catalog import contribute, links, mapping, material_links, parameters, spans
 from app.modules.catalog.models import (
     CatalogDefinition,
     CatalogLink,
@@ -72,6 +72,9 @@ from app.modules.catalog.schemas import (
     DeckMatchIn,
     DeckMatchRowOut,
     DeckSkippedOut,
+    LinkCandidateOut,
+    LinkCandidatesPageOut,
+    MaterialLinkCandidatesOut,
     PropertyAdoptableOut,
     PropertyAliasCreate,
     PropertyAliasOut,
@@ -107,7 +110,12 @@ from app.shared import litdeck as deck_builder
 from app.shared.auth import current_user, require_system_admin
 from app.shared.errors import AppError, NotFound
 from app.shared.pagination import clamp_limit
-from app.shared.permissions import require_edit, visible_material_ids, visible_materials
+from app.shared.permissions import (
+    editor,
+    require_edit,
+    visible_material_ids,
+    visible_materials,
+)
 from app.shared.property_search import ValueRange
 from app.shared.property_search import value_range as _value_range
 from app.shared.text import clean, compare_key
@@ -550,12 +558,109 @@ def put_link(
     if linked is None:
         raise NotFound("MNX-CATALOG-0001", "카탈로그에 없는 재료입니다.")
     row = db.scalar(select(CatalogLink).where(CatalogLink.material_id == material_id))
+    before = row.catalog_material_id if row is not None else None
     if row is None:
         db.add(CatalogLink(material_id=material_id, catalog_material_id=linked.id))
     else:
         row.catalog_material_id = linked.id
+    audit.record_by_client(
+        db,
+        action=audit.CATALOG_LINK_SET_BY_CLIENT,
+        actor=user,
+        target_table="materials",
+        target_id=material.id,
+        target_label=material.record_name,
+        changes={
+            "catalog_material_id": {
+                "before": str(before) if before is not None else None,
+                "after": str(linked.id),
+            },
+            "catalog_material": linked.name,
+        },
+    )
     db.commit()
     return get_link(material_id, user, db)
+
+
+def _candidate_out(one: material_links.Candidate) -> LinkCandidateOut:
+    return LinkCandidateOut(
+        catalog_material_id=one.catalog_material_id,
+        name=one.name,
+        category=one.category,
+        manufacturer=one.manufacturer,
+        subsystem=one.subsystem,
+        role=one.role,
+        value_count=one.value_count,
+        matched_by=one.matched_by,
+        matched_on=one.matched_on,
+        matched_text=one.matched_text,
+    )
+
+
+@router.get("/links/{material_id}/candidates", response_model=list[LinkCandidateOut])
+def get_link_candidates(
+    material_id: uuid.UUID,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> list[LinkCandidateOut]:
+    """이 사내 재료에 **이을 만한 문헌 재료** — 등급 · 별칭이 코드 · 이름과 같거나 이름이
+    그것으로 시작하는 것만(`material_links`). 잇지는 않는다. 이미 이어진 문헌 재료는 뺀다."""
+    material = _my_material(db, user, material_id)
+    linked = db.scalar(
+        select(CatalogLink.catalog_material_id).where(CatalogLink.material_id == material_id)
+    )
+    found = material_links.for_materials(db, [material])[material.id]
+    return [_candidate_out(one) for one in found if one.catalog_material_id != linked]
+
+
+#: 연결 후보 목록에 한 번에 싣는 재료 수의 기본 · 상한. 재료마다 후보가 다섯까지라
+#: 행이 다섯 배다.
+LINK_CANDIDATES_DEFAULT = 50
+LINK_CANDIDATES_MAX = 200
+
+
+@router.get("/link-candidates", response_model=LinkCandidatesPageOut)
+def list_link_candidates(
+    limit: int = Query(LINK_CANDIDATES_DEFAULT, ge=1),
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> LinkCandidatesPageOut:
+    """**아직 문헌과 안 이어진** 보이는 사내 재료마다 연결 후보. 후보가 있는 재료만 싣는다.
+
+    잇는 것은 사람이 한 건씩 누른다(`PUT /links/{id}`) — 후보가 확실해도 일괄로 잇지 않는다.
+    `prefix` 후보에는 열처리 · 충전재가 다른 재료가 섞이고, 연결은 BOM 덱이 문헌 값을 그대로
+    가져가는 입구라서다. 확정은 운영에서 한다 — 개발 DB 재료로 이은 것은 운영에 안 간다.
+    """
+    cap = min(limit, LINK_CANDIDATES_MAX)
+    linked = select(CatalogLink.material_id)
+    rows = list(
+        db.scalars(
+            visible_materials(db, user)
+            .where(Material.deleted_at.is_(None), Material.id.not_in(linked))
+            .order_by(Material.record_name)
+        )
+    )
+    found = material_links.for_materials(db, rows)
+    who = editor(db, user)
+    with_candidates = [one for one in rows if found[one.id]]
+    return LinkCandidatesPageOut(
+        items=[
+            MaterialLinkCandidatesOut(
+                material_id=one.id,
+                code=one.code,
+                record_name=one.record_name,
+                family=one.family,
+                category=one.category,
+                grade=one.grade,
+                alias=one.alias,
+                can_edit=who.allows(one),
+                candidates=[_candidate_out(each) for each in found[one.id]],
+            )
+            for one in with_candidates[:cap]
+        ],
+        unlinked=len(rows),
+        with_candidates=len(with_candidates),
+    )
 
 
 @router.delete("/links/{material_id}", status_code=204)
@@ -2143,6 +2248,32 @@ def search_by_property(
             )
             hits += part
             parts.append(len(part))
+            # **묶음 결과도 잰 값이다**(Cowper-Symonds · Basquin · Prony …, 2026-10-08). 시험
+            # 조건으로 거르면 안 본다 — 묶음에는 시험 한 건의 조건이 없다.
+            part = property_search.group_hits(
+                db,
+                scalar_keys=chosen.measured,
+                low=low,
+                high=high,
+                unit=unit,
+                limit=limit,
+                visible=visible_material_ids(db, user),
+                convert=not raw_scale,
+                condition=cond,
+                min_tier=min_tier,
+                center=center,
+            )
+            hits += part
+            parts.append(len(part))
+            grouped_scalars = {
+                scalar
+                for plugin, scalar in registry.measured_by(chosen.key)
+                if registry.get(plugin).kind == "grouping"
+            }
+            if cond is not None and grouped_scalars & set(chosen.measured):
+                notes.append(
+                    "묶음 결과(여러 시험을 묶어 맞춘 값)는 시험 조건이 없어 안 봤습니다."
+                )
         if chosen.item_filters and (wanted_worlds is None or "internal" in wanted_worlds):
             for item, scale in chosen.item_filters:
                 part = property_search.internal_hits(

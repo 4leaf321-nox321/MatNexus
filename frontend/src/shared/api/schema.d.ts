@@ -809,6 +809,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/catalog/link-candidates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Link Candidates
+         * @description **아직 문헌과 안 이어진** 보이는 사내 재료마다 연결 후보. 후보가 있는 재료만 싣는다.
+         *
+         *     잇는 것은 사람이 한 건씩 누른다(`PUT /links/{id}`) — 후보가 확실해도 일괄로 잇지 않는다.
+         *     `prefix` 후보에는 열처리 · 충전재가 다른 재료가 섞이고, 연결은 BOM 덱이 문헌 값을 그대로
+         *     가져가는 입구라서다. 확정은 운영에서 한다 — 개발 DB 재료로 이은 것은 운영에 안 간다.
+         */
+        get: operations["list_link_candidates_api_catalog_link_candidates_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/catalog/links/{material_id}": {
         parameters: {
             query?: never;
@@ -835,6 +859,27 @@ export interface paths {
         post?: never;
         /** Delete Link */
         delete: operations["delete_link_api_catalog_links__material_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/catalog/links/{material_id}/candidates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Link Candidates
+         * @description 이 사내 재료에 **이을 만한 문헌 재료** — 등급 · 별칭이 코드 · 이름과 같거나 이름이
+         *     그것으로 시작하는 것만(`material_links`). 잇지는 않는다. 이미 이어진 문헌 재료는 뺀다.
+         */
+        get: operations["get_link_candidates_api_catalog_links__material_id__candidates_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -11497,6 +11542,16 @@ export interface components {
             /** Error */
             error?: string | null;
             /**
+             * Fail From Elongation
+             * @default false
+             */
+            fail_from_elongation: boolean;
+            /**
+             * Fail Option
+             * @default false
+             */
+            fail_option: boolean;
+            /**
              * Failed
              * @default []
              */
@@ -14742,6 +14797,44 @@ export interface components {
             /** Slug */
             slug: string;
         };
+        /**
+         * LinkCandidateOut
+         * @description 사내 재료 하나에 **이을 만한 문헌 재료** 하나. 잇지는 않는다 — 사람이 누른다.
+         */
+        LinkCandidateOut: {
+            /**
+             * Catalog Material Id
+             * Format: uuid
+             */
+            catalog_material_id: string;
+            /** Category */
+            category: string;
+            /** Manufacturer */
+            manufacturer?: string | null;
+            /** Matched By */
+            matched_by: string;
+            /** Matched On */
+            matched_on: string;
+            /** Matched Text */
+            matched_text: string;
+            /** Name */
+            name: string;
+            /** Role */
+            role?: string | null;
+            /** Subsystem */
+            subsystem?: string | null;
+            /** Value Count */
+            value_count: number;
+        };
+        /** LinkCandidatesPageOut */
+        LinkCandidatesPageOut: {
+            /** Items */
+            items: components["schemas"]["MaterialLinkCandidatesOut"][];
+            /** Unlinked */
+            unlinked: number;
+            /** With Candidates */
+            with_candidates: number;
+        };
         /** LinkRunRequest */
         LinkRunRequest: {
             /**
@@ -15010,6 +15103,33 @@ export interface components {
             include_test_runs: boolean;
             /** Material Ids */
             material_ids: string[];
+        };
+        /**
+         * MaterialLinkCandidatesOut
+         * @description 아직 문헌과 안 이어진 사내 재료 하나와 그 후보.
+         */
+        MaterialLinkCandidatesOut: {
+            /** Alias */
+            alias?: string | null;
+            /** Can Edit */
+            can_edit: boolean;
+            /** Candidates */
+            candidates: components["schemas"]["LinkCandidateOut"][];
+            /** Category */
+            category: string;
+            /** Code */
+            code: string;
+            /** Family */
+            family: string;
+            /** Grade */
+            grade: string;
+            /**
+             * Material Id
+             * Format: uuid
+             */
+            material_id: string;
+            /** Record Name */
+            record_name: string;
         };
         /** MaterialOut */
         MaterialOut: {
@@ -22826,6 +22946,37 @@ export interface operations {
             };
         };
     };
+    list_link_candidates_api_catalog_link_candidates_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LinkCandidatesPageOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_link_api_catalog_links__material_id__get: {
         parameters: {
             query?: never;
@@ -22909,6 +23060,37 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_link_candidates_api_catalog_links__material_id__candidates_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                material_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LinkCandidateOut"][];
+                };
             };
             /** @description Validation Error */
             422: {
@@ -25609,6 +25791,8 @@ export interface operations {
                 mid?: number | null;
                 /** @description 짝 카드 — 이 카드에 없는 블록을 채운다. 같은 재료의 카드만. 이방성(r값) 카드에 MD 카드의 경화 곡선·탄성을 붙여 Hill 재료를 낼 때 쓴다. */
                 with_card?: string | null;
+                /** @description 파단 연신율로 추정한 파단 변형률 ln(1+A) 를 파단 칸(LS-DYNA FAIL · Radioss Eps_p_max)에 넣는다(ADR 0059 후속). 기본은 덱 주석으로만 적는다 — 켜면 그 변형률에서 요소가 지워진다. */
+                fail_from_elongation?: boolean;
             };
             header?: never;
             path: {
@@ -25679,6 +25863,8 @@ export interface operations {
                 format: string;
                 units?: string;
                 with_card?: string | null;
+                /** @description 파단 연신율로 추정한 파단 변형률 ln(1+A) 를 파단 칸(LS-DYNA FAIL · Radioss Eps_p_max)에 넣는다(ADR 0059 후속). 기본은 덱 주석으로만 적는다 — 켜면 그 변형률에서 요소가 지워진다. */
+                fail_from_elongation?: boolean;
             };
             header?: never;
             path: {

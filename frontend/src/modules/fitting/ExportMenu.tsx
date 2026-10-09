@@ -473,19 +473,24 @@ function LayoutPanel({
   system: UnitSystem
   onError: (error: Error) => void
 }) {
+  // **파단 칸 켜기**(ADR 0059 후속) — 카드가 아니라 이 덱 한 벌의 결정이다. 고를 수 있는지는
+  // 서버가 켜고 끈 덱을 그려 보고 알린다(`fail_option`) — 형식 이름을 여기 외우지 않는다.
+  const [fail, setFail] = useState(false)
   const layout = useResource(
-    () => fittingApi.layout(card.id, choice.format, system, choice.withCard),
-    []
+    () => fittingApi.layout(card.id, choice.format, system, choice.withCard, fail),
+    [fail]
   )
   const [focus, setFocus] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const data = layout.data
   const format = choice.format
+  // 미리보기가 고른 것을 아직 못 따라왔으면 받지 않는다 — 미리 본 덱과 받은 덱이 갈린다.
+  const behind = layout.loading || (data !== null && Boolean(data.fail_from_elongation) !== fail)
 
   function download() {
     setBusy(true)
     fittingApi
-      .download(card.id, format, card.label, system, choice.withCard)
+      .download(card.id, format, card.label, system, choice.withCard, fail)
       .catch((caught: unknown) =>
         onError(caught instanceof Error ? caught : new Error('내보내지 못했습니다.'))
       )
@@ -509,11 +514,30 @@ function LayoutPanel({
           ) : null}
           {data?.ok ? <p className="font-mono text-xs">{data.filename}</p> : null}
         </div>
-        <Button size="sm" disabled={busy || !data?.ok} onClick={download}>
+        <Button size="sm" disabled={busy || behind || !data?.ok} onClick={download}>
           <Download className="size-3.5" />
           내려받기
         </Button>
       </header>
+
+      {data?.fail_option || fail ? (
+        <label className="flex items-start gap-2 text-sm">
+          <input
+            type="checkbox"
+            className="mt-1"
+            checked={fail}
+            onChange={(event) => setFail(event.target.checked)}
+          />
+          <span>
+            추정 파단 변형률을 파단 칸에 넣기
+            <span className="text-muted-foreground block text-xs">
+              파단 연신율 A 로 ln(1+A) 를 추정해 FAIL · Eps_p_max 칸에 적습니다 — 그 변형률에서
+              요소가 지워집니다. 게이지 길이 · 요소 크기에 따라 맞는 값이 달라서 기본은 덱 주석으로만
+              적습니다.
+            </span>
+          </span>
+        </label>
+      ) : null}
 
       <ErrorNotice error={layout.error} />
       {layout.loading && !data ? (

@@ -111,9 +111,26 @@ MIN_CURVE_POINTS = 3
         Produced(key="reference_rate", label="기준 속도", si_unit="1/s"),
         Produced(key="rate_min", label="가장 느린 속도", si_unit="1/s"),
         Produced(key="rate_max", label="가장 빠른 속도", si_unit="1/s"),
-        Produced(key="cs_d", label="Cowper-Symonds D", si_unit="1/s"),
-        Produced(key="cs_p", label="Cowper-Symonds p", si_unit="1"),
-        Produced(key="jc_c", label="Johnson-Cook C", si_unit="1"),
+        # 문헌 키(2026-10-08) — 묶음 결과도 커버리지 · 값 검색에 선다. 문헌의 Cowper-Symonds
+        # 「C」 가 우리 D 다(같은 속도 상수, 1/s). JC C 는 기준 속도와 한 몸이다.
+        Produced(
+            key="cs_d",
+            label="Cowper-Symonds D",
+            si_unit="1/s",
+            property_key="mechanical.cowper_symonds_c",
+        ),
+        Produced(
+            key="cs_p",
+            label="Cowper-Symonds p",
+            si_unit="1",
+            property_key="mechanical.cowper_symonds_p",
+        ),
+        Produced(
+            key="jc_c",
+            label="Johnson-Cook C",
+            si_unit="1",
+            property_key="mechanical.johnson_cook_c",
+        ),
         Produced(key="model_r_squared", label="식의 R²", si_unit="1"),
     ),
     order=20,

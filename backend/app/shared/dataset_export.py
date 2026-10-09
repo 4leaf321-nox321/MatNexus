@@ -530,6 +530,9 @@ def _write_values(
             "temperature_k",
             "frequency_hz",
             "wavelength_m",
+            # 선팽창계수 표의 할선 기준 온도 θ₀(K) — 줄(표)마다 하나라 점마다 같은 값이 선다.
+            # 할선 α 는 「θ₀ 에서 그 온도까지의 평균」 이라 이것 없이는 열변형을 셀 수 없다.
+            "secant_reference_k",
             "value_si",
             "si_unit",
             "scale",
@@ -568,6 +571,7 @@ def _write_values(
                         # 주파수 · 파장을 타는 항목(유전율 · 굴절률)의 조건 — 없으면 빈 칸.
                         point.get("frequency_hz"),
                         point.get("wavelength_m"),
+                        row.get("secant_reference_k"),
                         # **저장 키는 `value_si` 다.** 전에는 `value` 를 읽어 이 열이 늘 비어
                         # 나갔다 — 저장된 점에는 `value` 가 없다(2026-10-01 실측, 442점 전부).
                         point.get("value_si"),
@@ -942,7 +946,9 @@ README = """# MatNexus 물성 데이터 내보내기
 
 사내 선언 값(`declared_properties.csv`)의 `approved_at` 은 자료 관리자가 근거 문서와
 대조해 **승인한 때**입니다. 승인된 값은 등급이 한 단계 오릅니다 — 문헌 3 → 2, 추정
-4 → 3, 2 위로는 안 갑니다. 승인 뒤 값이 바뀌었으면 비어 있습니다.
+4 → 3, 2 위로는 안 갑니다. 승인 뒤 값이 바뀌었으면 비어 있습니다. 선팽창계수의
+`secant_reference_k` 는 할선 기준 온도 θ₀(K)입니다 — 할선 α 는 θ₀ 에서 그 온도까지의 평균이라
+이것 없이는 열변형을 셀 수 없습니다(비어 있으면 적힌 적이 없습니다).
 
 ## 빠진 것 — 일부러
 

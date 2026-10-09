@@ -416,6 +416,14 @@ class Test카드와_내보내기:
                     "source": "literature",
                     "reference": "핸드북",
                 },
+                {
+                    "item": "선팽창계수(CTE)",
+                    "points": [{"value": 2.3e-5, "temperature_k": 373.15}],
+                    "input_unit": "1/K",
+                    "source": "datasheet",
+                    "reference": "시트",
+                    "secant_reference_k": 293.15,
+                },
             ],
         )
         db.commit()
@@ -429,3 +437,6 @@ class Test카드와_내보내기:
         assert float(rows["탄성계수"]["value_si"]) == pytest.approx(200e9)
         assert float(rows[DK]["frequency_hz"]) == pytest.approx(1e9)
         assert float(rows[DK]["value_si"]) == pytest.approx(3.6)
+        # 할선 기준 온도 θ₀ — 없으면 할선 α 로 열변형을 못 센다(2026-10-08 부터 실린다).
+        assert float(rows["선팽창계수(CTE)"]["secant_reference_k"]) == pytest.approx(293.15)
+        assert rows["탄성계수"]["secant_reference_k"] == ""

@@ -2265,6 +2265,53 @@ async def build_deck(
 
 
 @mcp.tool()
+async def link_catalog_material(
+    ctx: Context,
+    material_id: str,
+    catalog_material_id: str | None = None,
+    dry_run: bool = True,
+) -> dict[str, Any]:
+    """사내 재료를 **문헌 재료에 잇는다** — BOM 덱 · 문헌 값 받아오기의 입구.
+
+    `catalog_material_id` 를 비우면 지금 연결과 **서버의 연결 후보**만 준다 — 등급 · 별칭이
+    문헌 재료의 코드 · 이름과 같거나(`code` · `name`) 이름이 그것으로 시작하는 것(`prefix`).
+    `prefix` 는 열처리 · 충전재가 다를 수 있으니 어느 것인지 사람에게 묻는다. 후보에 없는
+    문헌 재료면 같은 재료인 근거를 설명하고 확인받는다. 재료당 하나라 다시 이으면 바뀐다.
+    """
+    resolved = await _resolve_material(ctx, material_id)
+    if isinstance(resolved, dict):
+        return resolved
+    material_id = resolved
+    found = await _get(ctx, f"/catalog/links/{material_id}/candidates")
+    if isinstance(found, dict) and "error" in found:
+        return found
+    candidates = found if isinstance(found, list) else []
+    if catalog_material_id is None:
+        linked = await _get(ctx, f"/catalog/links/{material_id}")
+        return {"material_id": material_id, "linked": linked, "candidates": candidates}
+    suggested = next(
+        (one for one in candidates if str(one.get("catalog_material_id")) == catalog_material_id),
+        None,
+    )
+    if dry_run:
+        return {
+            "dry_run": True,
+            "will_link": {"material_id": material_id, "catalog_material_id": catalog_material_id},
+            "server_suggested": suggested is not None,
+            "matched_by": suggested.get("matched_by") if suggested else None,
+            "note": (
+                "서버의 연결 후보에 있다."
+                if suggested
+                else "서버의 연결 후보에 **없다** — 같은 재료인 근거를 사용자에게 설명하고 "
+                "확인받은 뒤 dry_run=False 로 부르세요."
+            ),
+        }
+    return await _send(
+        ctx, "PUT", f"/catalog/links/{material_id}", {"catalog_material_id": catalog_material_id}
+    )
+
+
+@mcp.tool()
 async def adopt_catalog_values(
     ctx: Context,
     material_id: str,
@@ -3204,6 +3251,8 @@ DECLARED_ROW_FIELDS = (
     ("scale", "scale"),
     ("source", "source"),
     ("reference", "reference"),
+    # 선팽창계수 표의 할선 기준 온도 θ₀(K) — 표 한 장에 하나다(2026-10-08 부터 MCP 로도 적는다).
+    ("secant_reference_k", "secant_reference_k"),
 )
 
 
@@ -3230,6 +3279,7 @@ async def set_declared_values(
                    붙이면 거절된다. 측정 온도는 줄마다 같은 `temperature_k` 로 적을 수 있다
                  · `source` 는 literature · standard · datasheet · millsheet · estimate
                  · `reference` 는 근거(문서 이름 · 판) — **비우지 않는다**
+                 · 선팽창계수의 할선 기준 온도 θ₀ 는 `secant_reference_k`(K) — 줄마다 같게
 
     같은 `item` 이 이미 있으면 **덮어쓴다** — 미리보기에서 무엇이 바뀌는지 먼저 본다.
     """
@@ -3279,6 +3329,7 @@ async def set_declared_values(
                 "source": one.get("source"),
                 "reference": one.get("reference") or "",
                 "note": one.get("note"),
+                "secant_reference_k": one.get("secant_reference_k"),
             },
         )
         row["points"].append(
@@ -3303,6 +3354,25 @@ async def set_declared_values(
             "source": row["source"],
             "reference": row["reference"],
             "replaces": item in before,
+            **(
+                {"secant_reference_k": row["secant_reference_k"]}
+                if row["secant_reference_k"] is not None
+                else {}
+            ),
+            # **덮어쓰면서 θ₀ 를 안 주면 θ₀ 가 지워진다** — 통째 교체다. 덱의 ZERO · REFT · TREF 가
+            # 비게 되니 사람이 먼저 알아야 한다.
+            **(
+                {
+                    "secant_reference_warning": (
+                        f"지금 적힌 θ₀ {before[item]['secant_reference_k']:g} K 가 지워집니다 — "
+                        "남기려면 secant_reference_k 를 함께 주세요."
+                    )
+                }
+                if item in before
+                and before[item].get("secant_reference_k") is not None
+                and row["secant_reference_k"] is None
+                else {}
+            ),
             # 승인된 값을 덮어쓰면 승인이 풀린다(ADR 0049) — 사람이 먼저 알아야 한다.
             **(
                 {"approval_warning": warning}

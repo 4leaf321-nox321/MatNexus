@@ -39,6 +39,7 @@ from app.modules.catalog.models import (
     CatalogValue,
 )
 from app.modules.catalog.ontology_models import PropertyLink
+from app.modules.grouping.models import GroupResult
 from app.modules.materials.models import Material, Sample, Specimen
 from app.modules.processing.models import ProcessingResult
 from app.modules.tests.models import TestConditionField, TestRun
@@ -200,8 +201,10 @@ def _catalog_condition(conditions: dict[str, Any] | None) -> dict[str, float]:
 def measured_entries(
     db: Session, material_id: uuid.UUID
 ) -> tuple[dict[str, list[Entry]], list[str]]:
-    """시험으로 잰 값을 물성별로. 이어지지 않은 스칼라 키는 따로 돌려준다."""
+    """시험으로 잰 값을 물성별로 — 채택된 처리 결과와 **묶음 결과**. 이어지지 않은 스칼라 키는
+    따로 돌려준다."""
     scalar_map = _scalar_property_map()
+    grouped = group_entries(db, material_id)
     rows = db.execute(
         select(TestRun, ProcessingResult)
         .join(ProcessingResult, ProcessingResult.id == TestRun.adopted_result_id)
@@ -210,7 +213,7 @@ def measured_entries(
         .where(Sample.material_id == material_id, TestRun.deleted_at.is_(None))
     ).all()
     if not rows:
-        return {}, []
+        return grouped, []
     type_ids = {run.test_type_id for run, _ in rows}
     fields = db.execute(
         select(
@@ -273,7 +276,53 @@ def measured_entries(
                 ref_label=first.record_name,
             )
         )
+    for property_key, entries in grouped.items():
+        made[property_key].extend(entries)
     return made, sorted(unmapped)
+
+
+def group_entries(db: Session, material_id: uuid.UUID) -> dict[str, list[Entry]]:
+    """**묶음 결과**가 낸 값 — 재료마다 묶음 종류별 가장 최근 결과 하나(2026-10-08).
+
+    Cowper-Symonds · Johnson-Cook · Basquin · Prony 처럼 여러 시험을 묶어 맞춘 값은 처리 결과가
+    아니라 묶음 결과에 산다. 전에는 처리 결과만 읽어 문헌 키를 달아도 물성 지도에 안 섰다.
+    다시 돌린 옛 결과는 세지 않는다 — 처리 결과에서 채택된 것만 보는 것과 같은 이유.
+    조건은 비운다 — 묶음에는 시험 한 건의 조건이 없다.
+    """
+    rows = db.scalars(
+        select(GroupResult)
+        .where(GroupResult.material_id == material_id)
+        .distinct(GroupResult.plugin_id)
+        .order_by(GroupResult.plugin_id, GroupResult.created_at.desc())
+    ).all()
+    made: dict[str, list[Entry]] = defaultdict(list)
+    for row in rows:
+        try:
+            plugin = registry.get(row.plugin_id)
+        except KeyError:  # 등록이 사라진 확장의 옛 결과
+            continue
+        count = max(len(row.used or []), 1)
+        for produced in plugin.makes_values:
+            value = (row.values or {}).get(produced.key)
+            if not produced.property_key or not isinstance(value, int | float):
+                continue
+            if isinstance(value, bool):
+                continue
+            made[produced.property_key].append(
+                Entry(
+                    origin="measured",
+                    tier=tiers.measured_tier(count),
+                    value_si=float(value),
+                    count=count,
+                    spread_si=None,
+                    conditions={},
+                    method=f"{plugin.label} · {produced.label}",
+                    ref_kind="group_result",
+                    ref_id=str(row.id),
+                    ref_label=plugin.label,
+                )
+            )
+    return made
 
 
 def collect(db: Session, material_id: uuid.UUID) -> Coverage:

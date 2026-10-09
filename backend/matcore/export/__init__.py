@@ -145,6 +145,13 @@ class Deck:
     선언 줄을 쓴다 — 기호를 손으로 적으면 값과 선언이 갈라지는 날이 온다.
 
     기본이 SI 인 이유: 고르지 않으면 전과 같은 것이 나가야 한다."""
+    options: Mapping[str, Any] = field(default_factory=dict)
+    """**내보낼 때 사람이 고른 것** — 카드의 값이 아니라 그 덱 한 벌의 결정이다.
+
+    지금은 하나다 — `FAIL_FROM_ELONGATION`(ADR 0059 후속): 파단 연신율로 추정한 파단
+    변형률을 파단 칸(LS-DYNA FAIL · Radioss Eps_p_max)에 **넣는다.** 기본은 주석으로만 적는다
+    — 칸을 켜면 그 변형률에서 요소가 지워져 해석이 달라지고, 그 결정은 해석하는 사람의 것이다.
+    정의판은 `options.<이름>` 으로 읽는다(켜져 있으면 1, 아니면 없는 값)."""
 
     def has(self, block: str) -> bool:
         return bool(self.blocks.get(block))
@@ -853,6 +860,9 @@ def _thermal_lines(deck: Deck) -> list[str]:
         # **표는 빠지면 안 된다.** 전에는 검사를 지나 `render` 안에서 터졌고,
         # 그러면 화면이 "이 형식은 아직 못 낸다" 를 미리 말할 수 없다.
         Need("table", rows_min=MIN_POINTS),
+        # 속도별 표 없이 Cowper-Symonds 요약만 있으면 *RATE DEPENDENT
+        # (`cowper_symonds_summary`).
+        Need("rate_table", optional=True),
     ),
 )
 def render_abaqus(deck: Deck) -> Rendered:
@@ -889,6 +899,16 @@ def render_abaqus(deck: Deck) -> Rendered:
     lines.append("*PLASTIC, HARDENING=ISOTROPIC")
     # **응력이 먼저, 소성변형률이 나중이다.** OpenRadioss 와 순서가 반대다.
     lines.extend(f"{_free(stress)}, {_free(strain)}" for strain, stress in points)
+    summary = cowper_symonds_summary(deck)
+    if summary is not None:
+        # Cowper-Symonds 꼴의 과응력 거듭제곱 법칙 — ε̇ = D(σ/σ0 - 1)^n 이라 n = p 다.
+        d, p = summary
+        lines.append("*RATE DEPENDENT, TYPE=POWER LAW")
+        lines.append(f"{_free(d)}, {_free(p)}")
+        notes.append(
+            f"속도별 표 없이 Cowper-Symonds 요약(D = {d:.4g}, p = {p:.4g})만 있어 *RATE "
+            "DEPENDENT(POWER LAW)로 실었습니다 — 곡선 전체를 그 비로 늘립니다."
+        )
     return Rendered(text="\n".join(lines) + "\n", notes=tuple(notes))
 
 
@@ -899,6 +919,9 @@ def render_abaqus(deck: Deck) -> Rendered:
 #:
 #: **검증과 정리는 여기 없다.** 온도별 표의 빈 칸 검사(`_elastic_lines`)와 표 정리
 #: (`prepare`)는 코드에 남는다 — 그것은 조판이 아니라 계산이다.
+#: 정의판이 「속도별 표 없이 CS 요약만」 을 묻는 식 — `cowper_symonds_summary` 와 같은 뜻.
+CS_ONLY = "has(rate_table.cs_d) and has(rate_table.cs_p) and count(rate_table) == 0"
+
 ABAQUS_TEMPLATE: dict[str, Any] = {
     "lines": [
         {"block": "header"},
@@ -931,6 +954,20 @@ ABAQUS_TEMPLATE: dict[str, Any] = {
                 {"value": "true_stress", "format": "free"},
                 {"value": "plastic_strain", "format": "free"},
             ],
+        },
+        {"when": CS_ONLY, "text": "*RATE DEPENDENT, TYPE=POWER LAW"},
+        {
+            "when": CS_ONLY,
+            "fields": [
+                {"value": "rate_table.cs_d", "format": "free"},
+                {"value": "rate_table.cs_p", "format": "free"},
+            ],
+            "join": ", ",
+            "note": (
+                "속도별 표 없이 Cowper-Symonds 요약(D = {rate_table.cs_d:.4g}, p = "
+                "{rate_table.cs_p:.4g})만 있어 *RATE DEPENDENT(POWER LAW)로 실었습니다 — 곡선 "
+                "전체를 그 비로 늘립니다."
+            ),
         },
     ],
 }
@@ -1365,7 +1402,9 @@ def render_openradioss(deck: Deck) -> Rendered:
     notes.extend(said)
     # 변형률 속도 하나짜리 표다. 속도 의존을 넣으려면 곡선이 여러 개 있어야 하고,
     # 그것은 시험이 여러 속도로 있어야 한다는 뜻이다(`openradioss_rate`).
-    lines.extend(law36_lines(deck, [(0.0, deck.solver_id, points)]))
+    lines.extend(
+        law36_lines(deck, [(0.0, deck.solver_id, points)], eps_p_max=failure_value(deck))
+    )
     lines.append("/END")
     return Rendered(text="\n".join(lines) + "\n", notes=tuple(notes))
 
@@ -1373,6 +1412,74 @@ def render_openradioss(deck: Deck) -> Rendered:
 def _chunks(items: list[str], size: int = 5) -> list[str]:
     """Radioss 가 한 줄에 다섯씩 받는 목록 — 함수 번호·배율·속도."""
     return ["".join(items[start : start + size]) for start in range(0, len(items), size)]
+
+
+def flat_elastic_lines(
+    deck: Deck, comment: str, card: str, fields: tuple[str, ...] = ("E", "nu")
+) -> tuple[list[str], list[str]]:
+    """온도별 탄성 표를 **상수로 접는** 형식이 덱 주석과 각주로 그렇다고 말한다 — `(줄, 각주)`.
+
+    코어 형식은 저마다 적어 왔고(`dyna._flat_elastic` · `law36_flat_elastic`), 확장 형식(Hill ·
+    Johnson-Cook · 온도 의존)은 덱 안에서 아무 말을 안 했다 — 내보내기 창의 각주(`_folded`)만
+    섰다(2026-10-08 점검: 아홉). 덱만 받은 사람은 창을 못 본다. 확장도 같은 말을 쓰게
+    여기 둔다.
+    """
+    if len(deck.rows("elastic")) <= 1:
+        return [], []
+    return (
+        [
+            f"{comment} {card} {' and '.join(fields)} are temperature independent: "
+            "lowest-temperature value."
+        ],
+        [
+            f"온도별 탄성 표가 있는데 {card} 의 {' · '.join(fields)} 칸은 상수 하나입니다 — "
+            "블록의 대푯값(가장 낮은 온도)을 썼습니다."
+        ],
+    )
+
+
+def flat_expansion_lines(
+    deck: Deck, comment: str, card: str, field: str = "ALPHA"
+) -> tuple[list[str], list[str]]:
+    """온도별 선팽창계수 표를 **상수 하나로** 적는 형식의 덱 주석과 각주 — `(줄, 각주)`.
+
+    `flat_elastic_lines` 와 같은 자리다. 줄은 온도와 선팽창계수가 둘 다 있는 것만 센다 —
+    정의판의 `{"of": "thermal", "where": "has(temperature) and has(thermal_expansion)"}`
+    와 같다.
+    """
+    rows = [
+        row
+        for row in deck.rows("thermal")
+        if isinstance(row.get("temperature"), int | float)
+        and isinstance(row.get("thermal_expansion"), int | float)
+    ]
+    if len(rows) <= 1:
+        return [], []
+    return (
+        [f"{comment} {card} {field} is temperature independent: lowest-temperature value."],
+        [
+            f"온도별 열팽창(선팽창계수) 표가 있는데 {card} 의 {field} 칸은 상수 하나입니다 — "
+            "블록의 대푯값(가장 낮은 온도)을 썼습니다."
+        ],
+    )
+
+
+def cowper_symonds_summary(deck: Deck) -> tuple[float, float] | None:
+    """속도별 표 **없이** Cowper-Symonds 요약만 든 카드의 `(D, p)` — 없으면 None(2026-10-08).
+
+    문헌 덱이 그렇게 싣는다(문헌에는 곡선이 없고 CS 의 C · p 만 99종에 있다). 단일 곡선 형식
+    (LS-DYNA *MAT_024 의 C · P, Abaqus *RATE DEPENDENT POWER LAW)이 그것으로 곡선을 늘린다.
+
+    **속도별 표가 있으면 None** — 그 카드는 속도 의존 형식이 표로 낸다. 단일 곡선 덱이 요약을
+    덧붙이면 같은 카드가 형식마다 다른 속도 효과를 낸다(사내 속도 카드의 출력은 그대로다).
+    """
+    if deck.rows("rate_table"):
+        return None
+    d = deck.number("rate_table", "cs_d")
+    p = deck.number("rate_table", "cs_p")
+    if d is None or p is None:
+        return None
+    return d, p
 
 
 def law36_flat_elastic(deck: Deck) -> tuple[list[str], list[str]]:
@@ -1401,8 +1508,12 @@ def law36_lines(
     *,
     fsmooth: int | None = None,
     vp: int | None = None,
+    eps_p_max: float | None = None,
 ) -> list[str]:
     """`/MAT/LAW36` + 곡선마다 `/FUNCT` — `curves` 는 `(속도, 함수 번호, 점들)`.
+
+    `eps_p_max` 는 파단 소성변형률 — 내보낼 때 켰을 때만 온다(`failure_value`). 비면 칸을
+    비운다.
 
     칸은 파서의 형식 문자열 그대로다(OpenRadioss `matl36_plas_tab.cfg`):
 
@@ -1425,7 +1536,9 @@ def law36_lines(
     lines.append(f"#{'RHO_I':>19}")
     lines.append(_fixed(density))
     lines.append(f"#{'E':>19}{'nu':>20}{'Eps_p_max':>20}{'Eps_t':>20}{'Eps_m':>20}")
-    lines.append(_fixed(youngs) + _fixed(poisson))
+    lines.append(
+        _fixed(youngs) + _fixed(poisson) + (_fixed(eps_p_max) if eps_p_max is not None else "")
+    )
     lines.append(
         f"#{'N_funct':>9}{'Fsmooth':>10}{'Chard':>20}{'Fcut':>20}{'Eps_f':>20}"
         f"{'':>10}{'VP':>10}"
@@ -2267,12 +2380,49 @@ def failure_estimate(deck: Deck) -> tuple[float, float] | None:
     return elongation, math.log(1.0 + elongation)
 
 
-def failure_lines(deck: Deck, comment: str, field: str) -> tuple[list[str], list[str]]:
-    """파단 추정의 덱 주석과 남길 말 — 줄은 80열 안(LS-DYNA)."""
+#: 내보내기 선택 — 추정 파단 변형률을 파단 칸에 넣는다(`Deck.options`, ADR 0059 후속).
+FAIL_FROM_ELONGATION = "fail_from_elongation"
+
+
+def failure_value(deck: Deck) -> float | None:
+    """파단 칸에 **넣을** 값 — 내보낼 때 켰고 파단 연신율이 있을 때만. 아니면 칸을 비운다."""
+    if deck.options.get(FAIL_FROM_ELONGATION) is not True:
+        return None
     found = failure_estimate(deck)
+    return found[1] if found is not None else None
+
+
+def failure_lines(deck: Deck, comment: str, field: str) -> tuple[list[str], list[str]]:
+    """파단 추정의 덱 주석과 남길 말 — 줄은 80열 안(LS-DYNA).
+
+    켜고 냈으면(`FAIL_FROM_ELONGATION`) 칸에 넣었다고 적는다 — **근거 주석은 그대로 남긴다**
+    (ADR 0059). 켰는데 연신율이 없으면 칸을 비우고 그렇다고 말한다.
+    """
+    found = failure_estimate(deck)
+    asked = deck.options.get(FAIL_FROM_ELONGATION) is True
     if found is None:
+        if asked:
+            return [], [
+                f"파단 칸({field})을 켜라고 했지만 이 카드에 파단 연신율이 없어 "
+                "비워 두었습니다."
+            ]
         return [], []
     elongation, strain = found
+    if asked:
+        return (
+            [
+                f"{comment} {field} = ln(1+A) = {strain:.4g} from elongation at break "
+                f"A={elongation:.1%}",
+                f"{comment}   (uniform strain, gauge-length dependent) - elements are "
+                "deleted there.",
+            ],
+            [
+                f"파단 연신율 {elongation:.1%} 로 추정한 파단 소성변형률 ln(1+A) = "
+                f"{strain:.3g} 를 {field} 칸에 넣었습니다(내보낼 때 고름) — 그 변형률에서 "
+                "요소가 지워집니다. "
+                "게이지 길이 · 요소 크기에 따라 맞는 값이 다릅니다."
+            ],
+        )
     lines = [
         f"{comment} {field} not set - estimate from elongation at break A={elongation:.1%}:",
         f"{comment}   ln(1+A) = {strain:.4g} (uniform strain, gauge-length dependent).",

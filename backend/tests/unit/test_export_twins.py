@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import pathlib
+from dataclasses import replace
 from typing import Any
 
 import pytest
@@ -44,7 +45,10 @@ CARDS: dict[str, dict[str, Any]] = json.loads(
 #: 정의로 옮기지 않는 코드판. JSON 은 카드의 블록을 **구조째** 적는 형식이라 줄 문법이
 #: 아니고, Zemax AGF 는 잰 점에서 분산식의 계수를 **맞춰** 적는다(`matcore.dispersion`) —
 #: ADR 0023 의 「계산이 필요하면 코드로」 자리다(2026-10-02).
-CODE_ONLY = {"json", "zemax_agf"}
+#: Anand(확장 `anand`) · Garofalo 크리프(확장 `creep`)는 항마다 다른 단위로 와서 덱 단위계로
+#: 옮기는 것이 계산이다
+#: (2026-10-08).
+CODE_ONLY = {"json", "zemax_agf", "ansys_anand", "ansys_creep"}
 
 
 def _seed() -> dict[str, Any]:
@@ -120,6 +124,31 @@ def test_글자까지_같다(key: str) -> None:
             assert made.notes == real.notes, where
             compared += 1
     assert compared, f"{key}: 견줄 카드가 하나도 없다 — 시험 카드를 더한다"
+
+
+@pytest.mark.parametrize("key", ["dyna", "dyna_rate", "openradioss", "openradioss_rate"])
+def test_파단_칸을_켜도_글자까지_같다(key: str) -> None:
+    """내보내기 선택(`Deck.options`, ADR 0059 후속, 2026-10-08) — 켜면 추정 파단 변형률이 칸에
+    선다. 정의판도 같은 결정을 읽는다(`options.fail_from_elongation`). 연신율이 없는 카드에
+    켜면 칸은 비고 그렇다는 말이 남는다 — 그것까지 같아야 한다."""
+    code, twin = export.renderer(key), TWINS[key]
+    compared = filled = 0
+    for name, blocks in CARDS.items():
+        deck = replace(_deck(blocks), options={export.FAIL_FROM_ELONGATION: True})
+        if export.missing_for(deck, code):
+            continue
+        for system in export.SYSTEMS:
+            real, made = _run(code, deck, system), _run(twin, deck, system)
+            where = f"{key} · {name} · {system.key}"
+            if isinstance(real, str):
+                assert isinstance(made, str), where
+                continue
+            assert not isinstance(made, str), f"{where}: 정의판만 거절한다 — {made}"
+            assert made.text == real.text, where
+            assert made.notes == real.notes, where
+            compared += 1
+            filled += "from elongation at break" in real.text
+    assert compared and filled, key
 
 
 def test_거절하는_카드가_실제로_시험된다() -> None:

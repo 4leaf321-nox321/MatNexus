@@ -325,11 +325,14 @@ export const fittingApi = {
     format: ExportFormat,
     label: string,
     system: UnitSystem,
-    withCard?: string
+    withCard?: string,
+    /** 추정 파단 변형률을 파단 칸에 넣는다(ADR 0059 후속) — 미리보기와 같은 값을 넘긴다. */
+    failFromElongation = false
   ) =>
     downloadFile(
       `/fitting/cards/${id}/export?format=${format.key}&units=${system.key}` +
-        (withCard ? `&with_card=${withCard}` : ''),
+        (withCard ? `&with_card=${withCard}` : '') +
+        (failFromElongation ? '&fail_from_elongation=true' : ''),
       // **형식이 단위를 정해 두었으면 그 계다**(AEDT · CST · Zemax — SI). 서버가 그 계로 내는데
       // 이름이 고른 계를 말하면, 받은 사람은 이름을 믿는다.
       `${filename(label)}_${format.fixed_units ?? system.key}.${format.extension}`
@@ -339,10 +342,17 @@ export const fittingApi = {
    * 덱을 **내려받기 전에** 본다 — 어느 줄 몇째 칸에 카드의 어느 값이 가나와 덱 그대로의
    * 미리보기(2026-10-04). 못 내는 형식도 200 이다(`ok=false` · `error`).
    */
-  layout: (id: string, format: ExportFormat, system: UnitSystem, withCard?: string) =>
+  layout: (
+    id: string,
+    format: ExportFormat,
+    system: UnitSystem,
+    withCard?: string,
+    failFromElongation = false
+  ) =>
     api.get<DeckLayout>(
       `/fitting/cards/${id}/export/layout?format=${format.key}&units=${system.key}` +
-        (withCard ? `&with_card=${withCard}` : '')
+        (withCard ? `&with_card=${withCard}` : '') +
+        (failFromElongation ? '&fail_from_elongation=true' : '')
     ),
 
   /**

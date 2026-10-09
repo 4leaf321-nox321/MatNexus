@@ -118,6 +118,7 @@ from app.shared import (
     declared_slots,
     definition_keys,
     filestore,
+    hyperelastic_sets,
     litdeck,
     pagination,
     permissions,
@@ -157,6 +158,7 @@ from matcore import (
     units,
     viscoelastic,
 )
+from matcore.cards.hyperelastic import from_parameter_set
 from matcore.export import layout as export_layout
 from matcore.export import scan, template
 from matcore.export.systems import UnitSystem
@@ -1688,6 +1690,9 @@ def _parameter_blocks(
             rows.append(
                 {
                     "set": where,
+                    # 벌을 가르는 열쇠 — 모델 글자에 `/` 가 든 벌이 있어 `set` 을 갈라 쓰면
+                    # 틀린다(문헌 Garofalo: `…exp(-C4/T)`). 같은 출처의 벌을 합칠 때 쓴다.
+                    "group": one.source_ref or where,
                     "name": term.get("term"),
                     "value": term.get("value"),
                     "unit": term.get("unit") or "1",
@@ -1697,7 +1702,7 @@ def _parameter_blocks(
             f"{one.label}({where}) — 문헌에서 받은 값입니다"
             + (f": {one.source_detail}" if one.source_detail else ".")
         )
-    block = {
+    block: dict[str, Any] = {
         "model_params": {
             "values": {
                 "sets": len(rows_found),
@@ -1706,6 +1711,34 @@ def _parameter_blocks(
             "rows": rows,
         }
     }
+    # **초탄성 벌이면 초탄성 블록도**(2026-10-08) — 덱 렌더러는 그 블록을 읽는다. 옮기는 규칙은
+    # 문헌 덱과 같다(`shared/hyperelastic_sets`). 사람이 고른 벌이라 고르지 않는다 — 둘이면
+    # 거절.
+    hyper = [
+        one for one in rows_found if one.property_key == hyperelastic_sets.COEFFICIENT_KEY
+    ]
+    moved = []
+    for one in hyper:
+        made = from_parameter_set(
+            one.model,
+            hyperelastic_sets.terms_of(db, hyperelastic_sets.COEFFICIENT_KEY, one.terms or []),
+        )
+        if isinstance(made, str):
+            notes.append(f"{one.label}({one.model}) 는 초탄성 덱으로 못 옮깁니다 — {made}")
+        else:
+            moved.append(made)
+    if len(moved) > 1:
+        raise AppError(
+            "MNX-FITTING-0046",
+            "초탄성 벌을 둘 이상 골랐습니다 — 카드의 초탄성은 한 식이라 하나만 고르세요.",
+            status=422,
+        )
+    if moved:
+        block[hyperelastic_sets.BLOCK] = hyperelastic_sets.block_of(
+            moved[0], origin="파라미터 벌"
+        )
+        if moved[0].note:
+            notes.append(moved[0].note)
     return block, notes
 
 
@@ -3662,6 +3695,14 @@ def _paired(
     )
 
 
+def _with_choices(deck: export.Deck, fail_from_elongation: bool) -> export.Deck:
+    """내보낼 때 고른 것을 덱에 싣는다(`Deck.options`). **내려받기와 미리보기가 같은 함수를
+    지난다** — 미리 본 덱과 받은 덱이 갈리면 사람은 미리 본 것을 믿는다."""
+    if not fail_from_elongation:
+        return deck
+    return replace(deck, options={**deck.options, export.FAIL_FROM_ELONGATION: True})
+
+
 @router.get("/cards/{card_id}/paired-formats", response_model=PairedFormatsOut)
 def paired_formats(
     card_id: uuid.UUID,
@@ -3775,6 +3816,14 @@ def export_card(
             "카드에 MD 카드의 경화 곡선·탄성을 붙여 Hill 재료를 낼 때 쓴다."
         ),
     ),
+    fail_from_elongation: bool = Query(
+        default=False,
+        description=(
+            "파단 연신율로 추정한 파단 변형률 ln(1+A) 를 파단 칸(LS-DYNA FAIL · Radioss "
+            "Eps_p_max)에 넣는다(ADR 0059 후속). 기본은 덱 주석으로만 적는다 — 켜면 그 "
+            "변형률에서 요소가 지워진다."
+        ),
+    ),
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> Response:
@@ -3800,7 +3849,7 @@ def export_card(
     어느 쪽이 어느 계인지 파일을 열어야 알게 되고, 그때 안 열어 보는 사람이
     생긴다.
     """
-    deck = _deck_for_card(db, user, card_id, with_card)
+    deck = _with_choices(_deck_for_card(db, user, card_id, with_card), fail_from_elongation)
     if mid is not None:
         deck = replace(deck, solver_id=mid)
     system = _unit_system(db, units)
@@ -3888,6 +3937,14 @@ def card_deck_layout(
     format: str = Query(),
     units: str = Query(default=unit_systems.DEFAULT),
     with_card: uuid.UUID | None = Query(default=None),
+    fail_from_elongation: bool = Query(
+        default=False,
+        description=(
+            "파단 연신율로 추정한 파단 변형률 ln(1+A) 를 파단 칸(LS-DYNA FAIL · Radioss "
+            "Eps_p_max)에 넣는다(ADR 0059 후속). 기본은 덱 주석으로만 적는다 — 켜면 그 "
+            "변형률에서 요소가 지워진다."
+        ),
+    ),
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> DeckLayoutOut:
@@ -3900,7 +3957,8 @@ def card_deck_layout(
     자리는 값을 하나씩 흔들어 다시 그려서 짚는다(`matcore.export.layout`) — 코드판이든
     정의판이든 **실제로 내려받을 덱 그대로**다. 덱 · 그리기는 내려받기(`export_card`)와 한 벌.
     """
-    deck = _deck_for_card(db, user, card_id, with_card)
+    plain = _deck_for_card(db, user, card_id, with_card)
+    deck = _with_choices(plain, fail_from_elongation)
     system = _unit_system(db, units)
     try:
         target = renderers.renderer_for(db, format)
@@ -3912,6 +3970,18 @@ def card_deck_layout(
         )
     except export.ExportError as exc:
         return DeckLayoutOut(ok=False, format=format, units=system.key, error=str(exc))
+    # **고를 수 있나는 그려 보고 정한다** — 켜고 끈 덱의 글자가 다르면 그 형식에 파단 칸이 있고
+    # 카드에 연신율이 있다. 형식 이름을 적어 두면 정의판 · 새 형식이 빠진다.
+    try:
+        other = export.render(
+            target,
+            _with_choices(plain, not fail_from_elongation),
+            system,
+            check_folds=False,
+        )
+        fail_option = other.text != base.text
+    except export.ExportError:
+        fail_option = False
 
     lines = base.text.splitlines()
     shown = lines[:LAYOUT_LINES]
@@ -3996,6 +4066,8 @@ def card_deck_layout(
         unused=[skipped(*one) for one in located.unused],
         failed=[skipped(*one) for one in located.failed],
         notes=list(base.notes),
+        fail_option=fail_option,
+        fail_from_elongation=fail_from_elongation,
     )
 
 
@@ -4607,7 +4679,7 @@ def build_bom_deck(
             # **사내 물성 매핑을 거친다** — 반영했다면 적혔을 선언 물성을 선언 카드의
             # 조립기로 짓는다(저장은 안 한다). 곡선 합성도 그 조립기의 것이다.
             deck_or_why = litdeck.literature_deck(
-                db, material, row.mid, synthesize=row.synthesize
+                db, material, row.mid, synthesize=row.synthesize, target=lit_row_target
             )
             if isinstance(deck_or_why, str):
                 skipped.append(BomDeckSkippedOut(mid=row.mid, name=row.name, why=deck_or_why))

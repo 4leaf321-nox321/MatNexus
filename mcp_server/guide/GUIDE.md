@@ -193,6 +193,10 @@ origin `declared:literature+catalog1`). `adopt_catalog_values` 가 어느 문헌
 한 번이다.** `get_material` 은 선언 물성(과 그 등급)만 보이고 시험으로 잰 값이 없어서, 거기서
 `list_test_runs`·`list_specimens` 로 이어 가면 다섯 번을 불러도 잰 값의 등급 열이 안 나온다.
 
+**사내 재료가 문헌 재료와 안 이어져 있으면**(`get_material` 의 문헌 연결이 비었으면)
+`link_catalog_material(material_id)` 가 서버의 연결 후보를 준다. 잇는 것은 사용자가 고른
+뒤다 — `prefix` 후보는 열처리 · 충전재가 다른 재료일 수 있다(`Al6063-T6` 과 `-T5`).
+
 ### 문헌 값을 **넣을** 때 — 찾은 숫자는 출처와 함께만
 
 문헌 카탈로그에 없는 물성·재료·값은 직접 넣을 수 있다(`add_catalog_property` ·

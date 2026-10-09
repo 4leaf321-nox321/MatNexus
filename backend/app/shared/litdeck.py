@@ -26,6 +26,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 import uuid
 from dataclasses import dataclass, field
@@ -34,12 +35,22 @@ from typing import Any
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.modules.catalog.models import CatalogDefinition, CatalogMaterial, CatalogValue
+from app.modules.catalog import parameters
+from app.modules.catalog.models import (
+    QUALITY_TIERS,
+    CatalogDefinition,
+    CatalogMaterial,
+    CatalogSource,
+    CatalogValue,
+)
 from app.shared import (
     deckmap,
     declared_card,
     declared_slots,
+    hyperelastic_sets,
     literature_material,
+    moisture,
+    representative,
     unit_systems,
 )
 from matcore import cards, export, synth
@@ -48,9 +59,136 @@ from matcore import cards, export, synth
 MAX_LINES = 200
 
 #: 문헌이 채우는 블록 — 선언 물성 카드가 짓는 것과 같다. 「곡선 합성」 을 켜면 소성 표도.
-#: 문헌 재료로 짓는 블록 — 각주의 정본은 `literature_material.DECK_BLOCKS` 하나다.
-LITERATURE_BLOCKS = literature_material.DECK_BLOCKS
+#: 문헌 재료로 짓는 블록 — 사내 매핑을 거치는 값의 각주는 `literature_material.DECK_BLOCKS`
+#: 가 정본이다. 흡습은 그 길을 안 거친다 — 확산 종과 환경을 골라야 해서 `shared/moisture` 가
+#: 바로 읽고 각주도 거기서 단다(2026-10-08).
+LITERATURE_BLOCKS = (*literature_material.DECK_BLOCKS, moisture.BLOCK)
 SYNTHETIC_BLOCK = "table"
+#: 탄성 · 열 말고 문헌이 짓는 블록 — **형식이 읽을 때만, 채울 값이 있을 때만** 붙는다
+#: (2026-10-08). 주파수 · 파장 표는 선언 물성과 같은 길(`declared_slots.fill`)로 편다.
+AXIS_BLOCKS = ("electrical", "optical")
+#: 변형률 속도 — 문헌에는 곡선이 없고 Cowper-Symonds 의 C · p 만 있다(99종, 2026-10-08).
+#: 속도별 표 없이 요약만 싣고, 단일 곡선 덱이 그 비로 곡선을 늘린다(`cowper_symonds_summary`).
+RATE_BLOCK = "rate_table"
+CS_KEYS = ("mechanical.cowper_symonds_c", "mechanical.cowper_symonds_p")
+
+
+def rate_summary(
+    db: Session, material: CatalogMaterial
+) -> tuple[dict[str, Any] | None, list[str]]:
+    """문헌 Cowper-Symonds 짝 → 속도 블록 — `(블록 또는 None, 각주)`.
+
+    **C 와 p 는 같은 출처 · 같은 조건의 짝만 쓴다.** 물성마다 대표값을 따로 고르면 다른 논문의
+    C 와 p 가 섞인다 — 둘은 한 번의 적합에서 함께 나온 값이라 섞으면 속도 효과가 자릿수째
+    틀린다. 짝이 여럿이면 등급이 좋은 쪽, 나머지는 각주로 말한다.
+    """
+    values = db.scalars(
+        select(CatalogValue).where(
+            CatalogValue.material_id == material.id,
+            CatalogValue.property_key.in_(CS_KEYS),
+            CatalogValue.value_num.is_not(None),
+            CatalogValue.source_missing_at.is_(None),
+        )
+    ).all()
+    groups: dict[tuple[Any, str], dict[str, CatalogValue]] = {}
+    for value in values:
+        semantic = representative.semantic_conditions(value.conditions)
+        key = (value.source_id, json.dumps(semantic, sort_keys=True, default=str))
+        groups.setdefault(key, {})[value.property_key] = value
+    pairs = [group for group in groups.values() if set(CS_KEYS) <= set(group)]
+    if not pairs:
+        return None, []
+    pairs.sort(key=lambda group: max(one.quality_tier for one in group.values()))
+    chosen = pairs[0]
+    c, p = chosen[CS_KEYS[0]], chosen[CS_KEYS[1]]
+    conditions = representative.semantic_conditions(c.conditions)
+    reference = conditions.get("reference_strain_rate_s")
+    block: dict[str, Any] = {
+        "values": {
+            "model": "cowper_symonds",
+            "cs_d": float(c.value_num or 0.0),
+            "cs_p": float(p.value_num or 0.0),
+            **(
+                {"reference_rate": float(reference)}
+                if isinstance(reference, int | float)
+                else {}
+            ),
+        }
+    }
+    source = db.get(CatalogSource, c.source_id) if c.source_id else None
+    tier = max(c.quality_tier, p.quality_tier)
+    basis = conditions.get("basis")
+    said = [
+        f"Cowper-Symonds D = {float(c.value_num or 0.0):.6g} 1/s · "
+        f"p = {float(p.value_num or 0.0):.4g} — "
+        f"{literature_material.cite_of(c, source) or '출처 미상'} "
+        f"[tier {tier}: {QUALITY_TIERS.get(tier, str(tier))}]"
+        + (f" · 기준: {basis}" if basis else "")
+        + (f" · 기준 속도 {reference:g} 1/s" if isinstance(reference, int | float) else "")
+    ]
+    if len(pairs) > 1:
+        said.append(f"다른 Cowper-Symonds 짝 {len(pairs) - 1}개는 안 썼습니다.")
+    return block, said
+
+
+#: 모델 파라미터 — Anand 9항처럼 한 벌이어야 뜻이 있는 값(ADR 0029). 사내 카드가 재료의 벌을
+#: 인용하듯, 문헌 덱은 카탈로그의 벌을 그대로 싣는다(`catalog.parameters.sets`).
+PARAMS_BLOCK = "model_params"
+
+
+def parameter_rows(
+    db: Session, material: CatalogMaterial
+) -> tuple[list[dict[str, Any]], list[str]]:
+    """카탈로그 재료의 파라미터 벌 전부 → 블록 행과 각주. **값은 환산하지 않는다** — 항마다
+    단위가 다르고 블록이 그렇게 정했다(`matcore.cards.model_params`). 덱이 단위를 읽어 옮긴다.
+
+    같은 항이 두 번 든 벌은 싣지 않고 말한다 — 가를 축을 못 찾은 벌이라 어느 값이 이길지
+    모른다(`ParameterSet.duplicated`).
+    """
+    rows: list[dict[str, Any]] = []
+    said: list[str] = []
+    for key in parameters.parameterized_keys(db):
+        for found in parameters.sets(db, key=key, material_id=material.id):
+            label = f"{found.model or key.rsplit('.', 1)[-1]}/{found.set_id or '-'}"
+            if found.variant:
+                label += f" ({found.variant})"
+            if found.duplicated:
+                said.append(
+                    f"파라미터 벌 {label} 은 같은 항({', '.join(found.duplicated)})이 두 번 "
+                    "있어 싣지 않았습니다."
+                )
+                continue
+            for term in found.terms:
+                if not isinstance(term.get("value"), int | float):
+                    continue
+                rows.append(
+                    {
+                        "set": label,
+                        # 벌을 가르는 열쇠 — 모델 글자만 다른 두 벌(한 출처의 상수가 갈려
+                        # 들어온 것)을 덱이 합칠 때 쓴다. 조건으로 갈린 벌은 다른 열쇠다.
+                        "group": (found.set_id or label)
+                        + (f" ({found.variant})" if found.variant else ""),
+                        "name": term["term"],
+                        "value": float(term["value"]),
+                        # 항 단위 칸이 비면 정의의 단위 — 초탄성 계수는 Pa 다(빈 칸을 「1」 로
+                        # 읽으면 그 값이 무차원이 된다).
+                        "unit": term.get("unit") or parameters.unit_of(db, key, term["term"]),
+                    }
+                )
+            tier = QUALITY_TIERS.get(found.quality_tier or 0, str(found.quality_tier))
+            said.append(
+                f"파라미터 벌 {label} = {len(found.terms)}항 — {found.source or '출처 미상'} "
+                f"[tier {found.quality_tier}: {tier}]"
+            )
+    return rows, said
+
+
+def deck_blocks(target: export.Renderer | None) -> tuple[str, ...]:
+    """이 형식이 읽는 문헌 블록 — 각주를 그 블록의 값에만 단다. 형식을 모르면 전부."""
+    if target is None:
+        return LITERATURE_BLOCKS
+    needed = {need.block for need in target.needs}
+    return tuple(block for block in LITERATURE_BLOCKS if block in needed)
 
 
 @dataclass(frozen=True)
@@ -173,6 +311,12 @@ def _fillable(block: str) -> set[str]:
     found = {slot.key for slot in spec.produces if slot.property_key}
     if block == "elastic":
         found |= set(declared_card.FROM_RECORD)
+    if block == RATE_BLOCK:
+        # 문헌 Cowper-Symonds 짝(`rate_summary`) — 속도별 표는 없고 요약만 선다.
+        found |= {"cs_d", "cs_p", "model", "reference_rate"}
+    if block == moisture.BLOCK:
+        # 문헌 흡습 셋(`moisture.from_catalog`) — 포화 농도 칸은 물성 키가 없어도 선다.
+        found |= {slot.key for slot in spec.produces}
     return found
 
 
@@ -242,15 +386,21 @@ class Assembled:
 
 
 def assemble(
-    db: Session, material: CatalogMaterial, *, synthesize: bool = False
+    db: Session,
+    material: CatalogMaterial,
+    *,
+    synthesize: bool = False,
+    target: export.Renderer | None = None,
 ) -> Assembled | str:
     """문헌 재료 하나를 블록으로 — **선언 물성 카드와 같은 조립기**. 못 지으면 이유 글자.
 
     가상 사내 재료(`literature_material`)를 선언 카드가 짓는 대로 짓는다: 탄성·열 블록,
     온도별 표, 사내 항목 연결로 빈 칸 채우기(카드를 내보낼 때와 같다), 합성 소성 표.
+    `target` 이 전기 · 광학 블록을 읽으면 그 블록도(주파수 · 파장 표까지) 짓는다.
     """
     cards.load_builtin()
-    virtual = literature_material.virtual(db, material, synthesize=synthesize)
+    wanted = deck_blocks(target)
+    virtual = literature_material.virtual(db, material, synthesize=synthesize, blocks=wanted)
     stand_in = virtual.material
     elastic, thermal, _ = declared_card.declared_blocks(db, stand_in, None, None)
     elastic_rows = declared_card.declared_table(
@@ -262,9 +412,44 @@ def assemble(
     blocks: dict[str, Any] = {
         **declared_card.temperature_aware("elastic", elastic, elastic_rows),
         **declared_card.temperature_aware("thermal", thermal, thermal_rows),
+        # 빈 채로 올려 두면 `fill` 이 채운다 — 사내 선언 카드의 「항목란 고르기」 와 같다.
+        **{key: {"values": {}} for key in AXIS_BLOCKS if key in wanted},
     }
     declared_slots.fill(db, stand_in, blocks)
+    for key in AXIS_BLOCKS:
+        # 채울 값이 없으면 내린다 — 빈 블록이 서면 「이 재료는 유전율이 있다」 고 말하게 된다.
+        if key in blocks and not blocks[key].get("values") and not blocks[key].get("rows"):
+            del blocks[key]
     provenance = list(virtual.provenance)
+    if RATE_BLOCK in wanted and RATE_BLOCK not in blocks:
+        rate, said = rate_summary(db, material)
+        if rate is not None:
+            blocks[RATE_BLOCK] = rate
+        provenance.extend(said)
+    if moisture.BLOCK in wanted:
+        # 확산 종이 물인 값만 · 한 환경(온도 · 습도)의 셋으로(2026-10-08).
+        wet, said = moisture.from_catalog(db, material.id)
+        if wet is not None:
+            blocks[moisture.BLOCK] = wet
+        provenance.extend(said)
+    if hyperelastic_sets.BLOCK in wanted:
+        # 문헌 초탄성 벌 → 초탄성 블록(2026-10-08). 여럿이면 정한 차례로 하나, 나머지는 각주.
+        hyper, said = hyperelastic_sets.from_catalog(db, material.id)
+        if hyper is not None:
+            blocks[hyperelastic_sets.BLOCK] = hyper
+        provenance.extend(said)
+    if PARAMS_BLOCK in wanted:
+        rows, said = parameter_rows(db, material)
+        if rows:
+            models = sorted({str(row["set"]).split("/", 1)[0] for row in rows})
+            blocks[PARAMS_BLOCK] = {
+                "values": {
+                    "sets": len({row["set"] for row in rows}),
+                    "models": ", ".join(models),
+                },
+                "rows": rows,
+            }
+        provenance.extend(said)
     if synthesize:
         made = declared_card.synthetic_plastic(stand_in, elastic)
         if isinstance(made, str):
@@ -349,10 +534,17 @@ def synthetic_preview(db: Session, material: CatalogMaterial) -> SyntheticPrevie
 
 
 def literature_deck(
-    db: Session, material: CatalogMaterial, mid: int, *, synthesize: bool = False
+    db: Session,
+    material: CatalogMaterial,
+    mid: int,
+    *,
+    synthesize: bool = False,
+    target: export.Renderer | None = None,
 ) -> export.Deck | str:
-    """문헌 재료 하나 → 덱 재료 하나. 못 지으면 이유 글자(합성할 스칼라가 모자라다 등)."""
-    made = assemble(db, material, synthesize=synthesize)
+    """문헌 재료 하나 → 덱 재료 하나. 못 지으면 이유 글자(합성할 스칼라가 모자라다 등).
+
+    `target` 을 주면 그 형식이 읽는 블록만 각주를 단다(`deck_blocks`)."""
+    made = assemble(db, material, synthesize=synthesize, target=target)
     if isinstance(made, str):
         return made
     return export.Deck(
@@ -486,7 +678,7 @@ def build(
         material = db.get(CatalogMaterial, material_id)
         if material is None:
             raise export.ExportError(f"카탈로그에 없는 재료입니다: {material_id}")
-        deck = literature_deck(db, material, mid)
+        deck = literature_deck(db, material, mid, target=target)
         assert not isinstance(deck, str)  # 합성을 안 켜면 늘 덱이 선다
         missing = export.missing_for(deck, target)
         if missing:

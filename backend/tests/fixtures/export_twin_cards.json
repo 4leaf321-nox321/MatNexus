@@ -2855,6 +2855,291 @@
      }
     ]
    }
+  },
+  "이방성_온도표": {
+   "elastic": {
+    "values": {
+     "youngs_modulus": 210000000000.0,
+     "poisson_ratio": 0.3,
+     "density": 7850.0
+    },
+    "rows": [
+     {
+      "temperature": 293.15,
+      "youngs_modulus": 210000000000.0,
+      "poisson_ratio": 0.3
+     },
+     {
+      "temperature": 673.15,
+      "youngs_modulus": 170000000000.0,
+      "poisson_ratio": 0.32
+     }
+    ]
+   },
+   "table": {
+    "values": {},
+    "rows": [
+     {
+      "plastic_strain": 0.0,
+      "true_stress": 350000000.0
+     },
+     {
+      "plastic_strain": 0.02,
+      "true_stress": 420000000.0
+     },
+     {
+      "plastic_strain": 0.05,
+      "true_stress": 480000000.0
+     },
+     {
+      "plastic_strain": 0.1,
+      "true_stress": 540000000.0
+     },
+     {
+      "plastic_strain": 0.2,
+      "true_stress": 600000000.0
+     }
+    ]
+   },
+   "anisotropy": {
+    "values": {
+     "r_0": 1.8,
+     "r_45": 1.4,
+     "r_90": 2.1
+    }
+   },
+   "thermal": {
+    "values": {
+     "thermal_expansion": 1.2e-05
+    },
+    "rows": [
+     {
+      "temperature": 293.15,
+      "thermal_expansion": 1.2e-05
+     },
+     {
+      "temperature": 673.15,
+      "thermal_expansion": 1.4e-05
+     }
+    ]
+   }
+  },
+  "JC_탄성온도": {
+   "elastic": {
+    "values": {
+     "youngs_modulus": 210000000000.0,
+     "poisson_ratio": 0.3,
+     "density": 7850.0
+    },
+    "rows": [
+     {
+      "temperature": 293.15,
+      "youngs_modulus": 210000000000.0,
+      "poisson_ratio": 0.3
+     },
+     {
+      "temperature": 673.15,
+      "youngs_modulus": 170000000000.0,
+      "poisson_ratio": 0.32
+     }
+    ]
+   },
+   "hardening": {
+    "values": {
+     "label": "Johnson-Cook",
+     "r_squared": 0.9987
+    },
+    "rows": [
+     {
+      "name": "a",
+      "value": 350000000.0,
+      "si_unit": "Pa"
+     },
+     {
+      "name": "b",
+      "value": 600000000.0,
+      "si_unit": "Pa"
+     },
+     {
+      "name": "n",
+      "value": 0.4,
+      "si_unit": "1"
+     }
+    ]
+   }
+  },
+  "온도표_열팽창온도": {
+   "elastic": {
+    "values": {
+     "youngs_modulus": 210000000000.0,
+     "poisson_ratio": 0.3,
+     "density": 7850.0
+    }
+   },
+   "thermal": {
+    "values": {
+     "thermal_expansion": 1.2e-05
+    },
+    "rows": [
+     {
+      "temperature": 293.15,
+      "thermal_expansion": 1.2e-05
+     },
+     {
+      "temperature": 473.15,
+      "thermal_expansion": 1.3e-05
+     },
+     {
+      "temperature": 673.15,
+      "thermal_expansion": 1.4e-05
+     }
+    ]
+   },
+   "temperature_table": {
+    "values": {
+     "temperature_count": 3,
+     "model": "johnson_cook",
+     "jc_m": 1.1,
+     "melt_temperature": 1800.0
+    },
+    "rows": [
+     {
+      "temperature": 473.15,
+      "plastic_strain": 0.0,
+      "true_stress": 297500000.0
+     },
+     {
+      "temperature": 473.15,
+      "plastic_strain": 0.02,
+      "true_stress": 357000000.0
+     },
+     {
+      "temperature": 473.15,
+      "plastic_strain": 0.05,
+      "true_stress": 408000000.0
+     },
+     {
+      "temperature": 473.15,
+      "plastic_strain": 0.1,
+      "true_stress": 459000000.0
+     },
+     {
+      "temperature": 473.15,
+      "plastic_strain": 0.2,
+      "true_stress": 510000000.0
+     },
+     {
+      "temperature": 293.15,
+      "plastic_strain": 0.0,
+      "true_stress": 350000000.0
+     },
+     {
+      "temperature": 293.15,
+      "plastic_strain": 0.02,
+      "true_stress": 420000000.0
+     },
+     {
+      "temperature": 293.15,
+      "plastic_strain": 0.05,
+      "true_stress": 480000000.0
+     },
+     {
+      "temperature": 293.15,
+      "plastic_strain": 0.1,
+      "true_stress": 540000000.0
+     },
+     {
+      "temperature": 293.15,
+      "plastic_strain": 0.2,
+      "true_stress": 600000000.0
+     },
+     {
+      "temperature": 673.15,
+      "plastic_strain": 0.0,
+      "true_stress": 210000000.0
+     },
+     {
+      "temperature": 673.15,
+      "plastic_strain": 0.02,
+      "true_stress": 252000000.0
+     },
+     {
+      "temperature": 673.15,
+      "plastic_strain": 0.05,
+      "true_stress": 288000000.0
+     },
+     {
+      "temperature": 673.15,
+      "plastic_strain": 0.1,
+      "true_stress": 324000000.0
+     }
+    ]
+   }
+  },
+  "열표_전도율만": {
+   "elastic": {
+    "values": {
+     "youngs_modulus": 210000000000.0,
+     "poisson_ratio": 0.3,
+     "density": 7850.0
+    }
+   },
+   "thermal": {
+    "values": {
+     "specific_heat": 460.0,
+     "thermal_conductivity": 50.0
+    },
+    "rows": [
+     {
+      "temperature": 293.15,
+      "thermal_conductivity": 50.0
+     },
+     {
+      "temperature": 373.15,
+      "thermal_conductivity": 48.0
+     },
+     {
+      "temperature": 473.15,
+      "thermal_conductivity": 45.0
+     }
+    ]
+   }
+  },
+  "흡습_셋_85_85": {
+   "moisture": {
+    "values": {
+     "moisture_diffusivity": 2.5e-13,
+     "moisture_saturation": 3.966903,
+     "hygroscopic_expansion": 0.00017,
+     "temperature": 358.15,
+     "humidity": 0.85
+    }
+   }
+  },
+  "흡습_확산만": {
+   "moisture": {
+    "values": {
+     "moisture_diffusivity": 1.665e-12,
+     "temperature": 323.15
+    }
+   }
+  },
+  "흡습_포화_조건없음": {
+   "moisture": {
+    "values": {
+     "moisture_diffusivity": 6e-12,
+     "moisture_saturation": 1.478
+    }
+   }
+  },
+  "흡습_팽창_습도만": {
+   "moisture": {
+    "values": {
+     "moisture_diffusivity": 3e-12,
+     "hygroscopic_expansion": 0.0004,
+     "humidity": 0.6
+    }
+   }
   }
  }
 }

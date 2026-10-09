@@ -2749,6 +2749,50 @@ class Test칸_배치를_내려받기_전에_보인다:
         assert stress["column"] is True and stress["rows"] > 1
         assert len(stress["spans"]) >= stress["rows"] - 1
 
+    def test_파단_칸을_고르면_미리보기와_내려받기가_같이_켠다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        ready: dict[str, Any],
+    ) -> None:
+        """ADR 0059 후속(2026-10-08) — 내보낼 때 고르면 ln(1+A) 가 FAIL 칸에 선다.
+
+        고른 것은 카드가 아니라 그 덱 한 벌의 결정이라 카드는 안 바뀐다. 미리보기도 같은
+        덱이어야 한다."""
+        from app.modules.fitting.models import PropertyCard
+
+        card = self._card(
+            client, admin_headers, ready["id"], poisson_ratio=0.3, density=7850.0
+        )
+        row = db.get(PropertyCard, uuid.UUID(card["id"]))
+        assert row is not None
+        blocks = json.loads(json.dumps(row.blocks))
+        blocks["table"].setdefault("values", {})["elongation_at_break"] = 0.25
+        row.blocks = blocks
+        db.commit()
+        url = f"/api/fitting/cards/{card['id']}/export"
+        chosen = {"format": "dyna", "units": "si", "fail_from_elongation": "true"}
+
+        layout = client.get(f"{url}/layout", params=chosen, headers=admin_headers)
+        exported = client.get(url, params=chosen, headers=admin_headers)
+
+        assert layout.status_code == 200 and exported.status_code == 200, exported.text
+        assert layout.json()["text"].splitlines() == exported.text.splitlines()
+        # 고를 수 있다는 것을 서버가 그려 보고 알린다 — 화면이 형식 이름을 외우지 않는다.
+        assert layout.json()["fail_option"] is True
+        assert layout.json()["fail_from_elongation"] is True
+        abaqus = client.get(
+            f"{url}/layout", params={**chosen, "format": "abaqus"}, headers=admin_headers
+        ).json()
+        assert abaqus["ok"] is True and abaqus["fail_option"] is False
+        assert "$ FAIL = ln(1+A) = 0.2231 from elongation at break A=25.0%" in exported.text
+        plain = client.get(
+            url, params={"format": "dyna", "units": "si"}, headers=admin_headers
+        )
+        assert "$ FAIL not set - estimate from elongation at break A=25.0%:" in plain.text
+        assert "$ FAIL = ln(1+A)" not in plain.text
+
     def test_못_내는_형식은_200_으로_까닭을_든다(
         self, client: TestClient, admin_headers: dict[str, str], ready: dict[str, Any]
     ) -> None:

@@ -30,6 +30,20 @@
 받은 사람은 그것이 덱에 들어간 줄 안다(2026-09-28, MCP 점검에서 AI 가 「각주에만 실린 값」
 을 따로 가려 말해야 했다). 합성 곡선의 입력은 합성 쪽이 제 각주를 단다.
 
+## 주파수 · 파장 표 (2026-10-08)
+
+유전율 · 굴절률처럼 주파수 · 파장을 타는 항목은 대표값 **하나**로는 덱이 안 선다 — Dk 의
+분산, n(λ) 가 덱의 본문이다. 그 항목은 **축 값마다 대표 하나씩** 점으로 옮긴다(`_series`).
+값들이 여러 온도에 걸쳐 있으면 **한 온도의 점만** 쓴다 — 주파수와 온도의 2차원 표는 선언
+물성이 담지 않는 모양이라(`declared_conditions`) 섞으면 어느 축의 표인지 덱이 모른다.
+뺀 값 수는 각주가 말한다.
+
+## 각주는 그 덱이 읽는 블록에만
+
+`blocks` 를 주면 그 블록의 칸이 가리키는 값에만 각주를 단다 — 형식마다 다르다. 유전율이
+있는 PCB 적층판을 LS-DYNA 탄성 덱으로 내면서 덱 머리에 「유전율 = …」 이 서면, 덱만 받은
+사람은 그것이 덱에 들어간 줄 안다.
+
 ## 합성 곡선의 입력은 정합한 짝으로
 
 항복강도·인장강도의 대표값은 물성마다 따로 뽑혀 서로 다른 출처에서 올 수 있다. 그대로
@@ -40,6 +54,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -113,15 +128,30 @@ SYNTH_INPUTS = {
 #: 문헌 재료로 **짓는** 블록 — 덱 각주는 이 블록의 칸이 가리키는 값에만 단다. 전에는 모든
 #: 블록의 칸을 봤는데, S-N 카드에 인장 · 항복강도 칸이, 소성 표에 파단 연신율 칸이 생기자
 #: (2026-10-08) 문헌 덱이 안 싣는 그 값들이 「값 = … [tier 1]」 로 덱 머리에 섰다. 덱이
-#: 안 읽는 참고 물성은 블록에 붙어도 각주를 안 단다.
-DECK_BLOCKS = ("elastic", "thermal")
+#: 안 읽는 참고 물성은 블록에 붙어도 각주를 안 단다. 전기 · 광학은 2026-10-08 부터 —
+#: 그 전에는 AEDT · CST · Zemax 같은 형식을 문헌 재료로 아예 못 냈다.
+DECK_BLOCKS = (
+    "elastic",
+    "thermal",
+    "electrical",
+    "optical",
+    "model_params",
+    "hyperelastic",
+    "rate_table",
+)
+
+#: 축 값이 같은지 볼 때의 자릿수 — `frequency_MHz` 에 1e6 을 곱하는 환산이 끝자리를 흔든다.
+AXIS_DIGITS = 12
 
 
-def deck_keys() -> dict[str, str]:
-    """문헌 덱이 짓는 블록의 칸이 가리키는 문헌 키 → 사람이 읽는 이름. 덱에 실리는 값이다."""
+def deck_keys(blocks: Iterable[str] | None = None) -> dict[str, str]:
+    """문헌 덱이 짓는 블록의 칸이 가리키는 문헌 키 → 사람이 읽는 이름. 덱에 실리는 값이다.
+
+    `blocks` 를 주면 그 가운데 `DECK_BLOCKS` 에 드는 것만 — 형식이 읽는 블록이다."""
     cards.load_builtin()
+    wanted = set(DECK_BLOCKS if blocks is None else blocks)
     found: dict[str, str] = {}
-    for spec in (cards.block(key) for key in DECK_BLOCKS):
+    for spec in (cards.block(key) for key in DECK_BLOCKS if key in wanted):
         for slot in spec.produces:
             if slot.property_key:
                 found.setdefault(slot.property_key, slot.label)
@@ -198,11 +228,112 @@ def _consistent(
     )
 
 
-def virtual(db: Session, material: CatalogMaterial, *, synthesize: bool = False) -> Virtual:
-    """문헌 재료 하나를 사내 재료의 모양으로. **대표값만**, 매핑된 것만.
+#: 축의 점 하나 — `(축 SI 값, 켈빈 또는 None, 값, 출처)`.
+Point = tuple[float, float | None, CatalogValue, CatalogSource | None]
+
+
+def _series(
+    rows: list[tuple[CatalogValue, CatalogSource | None]],
+    key: str,
+    condition: declared_conditions.Condition,
+) -> tuple[list[Point], int]:
+    """주파수 · 파장 축의 점 — **축 값마다 대표 하나, 한 온도에서만.** `(점들, 뺀 값 수)`.
+
+    점은 축 오름차순이다. 온도는 축 값이 가장 많이 서는 온도를 고르고, 같으면 23 °C 에
+    가까운 것(대표값과 같은 기준, 미기재는 5 K 벌점).
+    """
+    found: list[Point] = []
+    for value, source in rows:
+        if (
+            value.property_key != key
+            or representative.is_term(value)
+            or representative.is_missing(value)
+        ):
+            continue
+        at = declared_conditions.from_catalog(value.conditions, condition)
+        if at is None:
+            continue
+        kelvin = declared_conditions.from_catalog(
+            value.conditions, declared_conditions.TEMPERATURE
+        )
+        found.append((float(f"{at:.{AXIS_DIGITS}g}"), kelvin, value, source))
+    groups: dict[float | None, list[Point]] = {}
+    for one in found:
+        groups.setdefault(None if one[1] is None else round(one[1], 1), []).append(one)
+    if not groups:
+        return [], 0
+
+    def rank(item: tuple[float | None, list[Point]]) -> tuple[int, float]:
+        kelvin, members = item
+        distance = 5.0 if kelvin is None else abs(kelvin - 296.15)
+        return (-len({member[0] for member in members}), distance)
+
+    _, members = min(groups.items(), key=rank)
+    by_axis: dict[float, list[Point]] = {}
+    for one in members:
+        by_axis.setdefault(one[0], []).append(one)
+    points: list[Point] = []
+    for at in sorted(by_axis):
+        bucket = by_axis[at]
+        marks = representative.annotate([member[2] for member in bucket])
+        best = next((member for member in bucket if marks[member[2].id].representative), None)
+        if best is not None:
+            points.append(best)
+    return points, len(found) - len(members)
+
+
+def _footnote(
+    label: str, number: float, value: CatalogValue, source: CatalogSource | None, at: str = ""
+) -> str:
+    """덱 각주 한 줄 — 출처와 `[tier N: 뜻]`. 덱만 받은 사람이 숫자의 무게를 되짚는 자리다."""
+    tier = QUALITY_TIERS.get(value.quality_tier, str(value.quality_tier))
+    return (
+        f"{label} = {number:.6E}{at} — {cite_of(value, source) or '출처 미상'} "
+        f"[tier {value.quality_tier}: {tier}]"
+    )
+
+
+def _series_row(
+    name: str, condition: declared_conditions.Condition, series: list[Point]
+) -> dict[str, Any]:
+    """축의 점들을 선언 물성 한 줄로 — 저장 모양(`materials/declared.py`)과 같다.
+
+    출처 낱말은 **가장 약한 것**을 쓴다(추정 > 문헌 > 규격 > 데이터시트) — 표 한 장에 한
+    낱말이라 센 쪽을 쓰면 추정값이 섞인 표가 데이터시트 등급을 받는다.
+    """
+    order = ("datasheet", "standard", "literature", "estimate")
+    words = [source_of(value, source) for _, _, value, source in series]
+    weakest = max(words, key=lambda word: order.index(word) if word in order else 0)
+    cited = list(dict.fromkeys(reference_of(value, source) for _, _, value, source in series))
+    return {
+        "item": name,
+        "points": [
+            {
+                condition.key: at,
+                "temperature_k": kelvin,
+                "value_si": float(value.value_num or 0.0),
+            }
+            for at, kelvin, value, _ in series
+        ],
+        "source": weakest,
+        "reference": cited[0] + (f" 외 {len(cited) - 1}건" if len(cited) > 1 else ""),
+        "note": "문헌 물성 카탈로그에서 — 덱에 바로 실었다(반영하지 않음)",
+    }
+
+
+def virtual(
+    db: Session,
+    material: CatalogMaterial,
+    *,
+    synthesize: bool = False,
+    blocks: Iterable[str] | None = None,
+) -> Virtual:
+    """문헌 재료 하나를 사내 재료의 모양으로. **대표값만**(주파수 · 파장 항목은 축 값마다
+    하나), 매핑된 것만.
 
     `synthesize` 면 합성 입력(항복·인장·연신율)도 「덱에 쓰일 값」 으로 친다 — 안 이어져
-    있으면 그 이름을 말한다.
+    있으면 그 이름을 말한다. `blocks` 는 덱이 읽는 블록 — 각주와 「안 이어진 값」 을 그
+    블록의 칸으로 좁힌다(비우면 `DECK_BLOCKS` 전부).
     """
     rows = list(
         db.execute(
@@ -224,12 +355,13 @@ def virtual(db: Session, material: CatalogMaterial, *, synthesize: bool = False)
             and value.property_key not in chosen
         ):
             chosen[value.property_key] = (value, source)
-    fix = _consistent([(value, source) for value, source in rows], chosen)
+    pairs = [(value, source) for value, source in rows]
+    fix = _consistent(pairs, chosen)
 
     places = targets(db)
     # 항목마다 값이 무엇에 따라 변하나 — 유전율이면 주파수를 점에 싣는다.
     axes = declared_conditions.of_items(db)
-    slots = deck_keys()
+    slots = deck_keys(blocks)
     usable = {**slots, **(SYNTH_INPUTS if synthesize else {})}
     out = Virtual(
         material=Material(record_name=material.name, declared_properties=[]),
@@ -257,6 +389,22 @@ def virtual(db: Session, material: CatalogMaterial, *, synthesize: bool = False)
             # **조건을 항목의 축으로 옮긴다.** 온도는 `temperature_k` 와 `temperature_c` 가
             # 둘 다 있다 — 전에는 앞엣것만 읽어 섭씨로 적힌 값의 온도가 빠졌다.
             condition = axes.get(name, declared_conditions.DEFAULT)
+            if condition is not declared_conditions.TEMPERATURE:
+                series, dropped = _series(pairs, key, condition)
+                if len(series) >= 2:
+                    declared_rows.append(_series_row(name, condition, series))
+                    if key in slots:
+                        for at, _, one, cited in series:
+                            where = f" ({condition.label} {at:.4g} {condition.si_unit})"
+                            out.provenance.append(
+                                _footnote(name, float(one.value_num or 0.0), one, cited, where)
+                            )
+                        if dropped:
+                            out.provenance.append(
+                                f"{name}: 다른 온도에서 잰 값 {dropped}개는 안 실었습니다 — "
+                                f"{condition.label} 축과 온도의 2차원 표는 담지 않습니다."
+                            )
+                    continue
             point: dict[str, Any] = {
                 "temperature_k": declared_conditions.from_catalog(
                     value.conditions, declared_conditions.TEMPERATURE
@@ -280,13 +428,8 @@ def virtual(db: Session, material: CatalogMaterial, *, synthesize: bool = False)
         if key not in slots:
             # 옮기되(반영과 같다) 각주는 안 단다 — 블록에 안 실리는 값이다(머리말).
             continue
-        # 덱 각주는 전과 같은 모양 — 출처와 `[tier N: 뜻]`. 덱만 받은 사람이 숫자의 무게를
-        # 되짚는 자리다. 이름만 사내 항목 이름이 됐다.
-        tier = QUALITY_TIERS.get(value.quality_tier, str(value.quality_tier))
-        line = (
-            f"{label} = {number:.6E} — {cite_of(value, source) or '출처 미상'} "
-            f"[tier {value.quality_tier}: {tier}]"
-        )
+        # 덱 각주는 전과 같은 모양 — 이름만 사내 항목 이름이 됐다.
+        line = _footnote(label, number, value, source)
         if marks[value.id].n_candidates > 1:
             line += f" (후보 {marks[value.id].n_candidates}개 중 대표값)"
         out.provenance.append(line)

@@ -243,6 +243,21 @@ export function adoptionReference(value: CatalogValue): string {
 }
 
 export type CatalogLink = components['schemas']['CatalogLinkOut']
+export type LinkCandidate = components['schemas']['LinkCandidateOut']
+export type LinkCandidatesPage = components['schemas']['LinkCandidatesPageOut']
+
+/** 연결 후보가 왜 걸렸나 — 서버의 `matched_by`. `prefix` 는 꼬리가 다를 수 있다고 말한다. */
+export const MATCHED_BY_LABELS: Record<string, string> = {
+  code: '코드가 같다',
+  name: '이름이 같다',
+  prefix: '이름이 이것으로 시작한다 — 열처리 · 충전재가 다를 수 있다',
+}
+
+/** 사내 재료의 어느 칸이 걸렸나. */
+export const MATCHED_ON_LABELS: Record<string, string> = {
+  grade: '등급',
+  alias: '별칭',
+}
 export type DeckMatchRow = components['schemas']['DeckMatchRowOut']
 export type DeckBuilt = components['schemas']['DeckBuiltOut']
 
@@ -285,6 +300,14 @@ export const catalogApi = {
       catalog_material_id: catalogMaterialId,
     }),
   clearLink: (materialId: string) => api.delete<void>(`/catalog/links/${materialId}`),
+  /** 이 재료에 이을 만한 문헌 재료 — 잇지는 않는다. 이미 이어진 것은 빠진다. */
+  linkCandidates: (materialId: string) =>
+    api.get<LinkCandidate[]>(`/catalog/links/${materialId}/candidates`),
+  /** 안 이어진 사내 재료마다 후보. 후보가 있는 재료만 온다. */
+  linkCandidateList: (limit?: number) =>
+    api.get<LinkCandidatesPage>(
+      limit ? `/catalog/link-candidates?limit=${limit}` : '/catalog/link-candidates'
+    ),
   materials: (params: {
     q?: string
     subsystem?: string

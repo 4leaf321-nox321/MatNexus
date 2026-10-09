@@ -43,6 +43,7 @@
     "when": "elastic.density"                  있을 때만 · "missing:elastic.density" 없을 때만
     "when": "has(a.b) and c.d < 0.5"            그 밖에는 식 — 빠진 값은 거짓
     "units.Pa == \"MPa\""                        단위계의 기호 — 응력 단위를 이름으로 적는 형식
+    "has(options.fail_from_elongation)"         내보낼 때 고른 것(`Deck.options`) — 켜면 1
 
 칸: `{"value": "블록.값" | "열"}` · `{"expr": 식}` · `{"const": 글자}`, 형식은 `"free"` ·
 `["fixed", 폭, 자릿수]` · `["fixed_left", 폭, 자릿수]` · `["fit", 폭]`(폭에 드는 만큼 정밀하게,
@@ -257,6 +258,13 @@ class _Scope:
                     raise expressions.BadExpression(
                         f"모르는 SI 단위입니다: {name} — 예: units.Pa · units.m"
                     ) from None
+            if block == "options":
+                # **내보낼 때 고른 것**(`Deck.options`) — 켜져 있으면 1, 아니면 없는 값이라
+                # `has(options.fail_from_elongation)` 로 묻는다. 코드판과 같은 결정을 읽는다.
+                chosen = self.render.deck.options.get(key)
+                if chosen is True:
+                    return 1.0
+                raise expressions.MissingName(name)
             value = self.render.deck.values(block).get(key)
             if isinstance(value, bool) or value is None:
                 raise expressions.MissingName(name)

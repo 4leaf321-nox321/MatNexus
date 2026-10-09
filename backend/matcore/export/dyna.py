@@ -36,7 +36,9 @@ from matcore.export import (
     Need,
     Rendered,
     _header,
+    cowper_symonds_summary,
     failure_lines,
+    failure_value,
     hyperelastic_terms,
     prepare,
     prony_terms,
@@ -160,13 +162,27 @@ def _flat_elastic(deck: Deck) -> tuple[list[str], list[str]]:
     )
 
 
-def _mat024_head(deck: Deck, yield_stress: float, lcss: int, vp: float | None) -> list[str]:
-    """*MAT_024 카드 넷 — 1(탄성·SIGY) · 2(C·P·LCSS·LCSR·VP) · 3(EPS) · 4(ES)."""
+def _mat024_head(
+    deck: Deck,
+    yield_stress: float,
+    lcss: int,
+    vp: float | None,
+    *,
+    log_interpolation: bool = False,
+    fail: float | None = None,
+    cowper: tuple[float, float] | None = None,
+) -> list[str]:
+    """*MAT_024 카드 넷 — 1(탄성·SIGY) · 2(C·P·LCSS·LCSR·VP) · 3(EPS) · 4(ES).
+
+    `log_interpolation` 이면 키워드에 `_LOG_INTERPOLATION` 을 붙인다 — 표(LCSS)의 속도 사이를
+    ln(속도)로 보간한다(R9+). 카드는 같다. `fail` 은 파단 소성변형률 — 내보낼 때 켰을 때만
+    온다(`failure_value`). 비면 칸을 비운다(ETAN 도 비운다)."""
     youngs = deck.number("elastic", "youngs_modulus")
     poisson = deck.number("elastic", "poisson_ratio")
     density = deck.number("elastic", "density")
     assert youngs is not None and poisson is not None and density is not None
-    lines = ["*MAT_PIECEWISE_LINEAR_PLASTICITY"]
+    keyword = "*MAT_PIECEWISE_LINEAR_PLASTICITY"
+    lines = [keyword + ("_LOG_INTERPOLATION" if log_interpolation else "")]
     lines.append(
         "$      mid        ro         e        pr      sigy      etan      fail      tdel"
     )
@@ -176,12 +192,15 @@ def _mat024_head(deck: Deck, yield_stress: float, lcss: int, vp: float | None) -
         + _f10(youngs)
         + _f10(poisson)
         + _f10(yield_stress)
+        + (" " * 10 + _f10(fail) if fail is not None else "")
     )
     lines.append("$        c         p      lcss      lcsr        vp")
     # C·P(Cowper-Symonds)는 비운다 — LCSS 가 표면 둘 다 안 쓰이고, 곡선이면 잰 값이
     # 없는 자리다. 0 을 적는 것과 비우는 것이 LS-DYNA 에서는 같지만, 칸을 그려 두면
     # 넣을 자리가 보인다.
-    card2 = " " * 20 + _i10(lcss)
+    # `cowper` = (D, p) 면 C · P 칸에 — LCSS 가 곡선일 때 LS-DYNA 가 그 비로 늘린다
+    # (2026-10-08).
+    card2 = (_f10(cowper[0]) + _f10(cowper[1]) if cowper else " " * 20) + _i10(lcss)
     if vp is not None:
         card2 += " " * 10 + f"{vp:>10.1f}"
     lines.append(card2)
@@ -208,6 +227,8 @@ def _mat024_head(deck: Deck, yield_stress: float, lcss: int, vp: float | None) -
         # RO 는 자리 있는 필드다 — 동적 해석 솔버라 비울 수 없다(OpenRadioss 와 같다).
         Need("elastic", values=("youngs_modulus", "poisson_ratio", "density")),
         Need("table", rows_min=MIN_POINTS),
+        # 속도별 표 없이 Cowper-Symonds 요약만 있으면 C · P 칸에(`cowper_symonds_summary`).
+        Need("rate_table", optional=True),
     ),
 )
 def render_dyna(deck: Deck) -> Rendered:
@@ -225,7 +246,27 @@ def render_dyna(deck: Deck) -> Rendered:
     fail, said = failure_lines(deck, "$", "FAIL")
     lines.extend(fail)
     notes.extend(said)
-    lines.extend(_mat024_head(deck, points[0][1], deck.solver_id, None))
+    summary = cowper_symonds_summary(deck)
+    if summary is not None:
+        lines.append(
+            f"$ Cowper-Symonds summary: C={summary[0]:.6g}, P={summary[1]:.6g} "
+            "(no rate table) - the curve is scaled, VP=1."
+        )
+        notes.append(
+            f"속도별 표 없이 Cowper-Symonds 요약(D = {summary[0]:.4g}, p = "
+            f"{summary[1]:.4g})만 있어 *MAT_024 의 C · P 칸에 실었습니다(VP=1) — 곡선 전체를 "
+            "그 비로 늘립니다."
+        )
+    lines.extend(
+        _mat024_head(
+            deck,
+            points[0][1],
+            deck.solver_id,
+            1.0 if summary is not None else None,
+            fail=failure_value(deck),
+            cowper=summary,
+        )
+    )
     # 소성변형률이 먼저, 응력이 나중 — *DEFINE_CURVE 는 (가로축, 세로축)이다.
     lines.extend(_curve(deck.solver_id, points))
     lines.append("*END")
@@ -263,11 +304,12 @@ def _rate_curve_id(deck: Deck, index: int) -> int:
     suffix="_rate",
     describe=(
         "*MAT_024 + *DEFINE_TABLE(변형률 속도) + 속도마다 *DEFINE_CURVE — 속도별 소성 표를 "
-        "그대로 싣는다. 곡선은 소성변형률 속도로 고른다(VP=1)."
+        "그대로 싣는다. 곡선은 소성변형률 속도로 고른다(VP=1). 속도 사이는 로그로 보간한다"
+        "(_LOG_INTERPOLATION)."
     ),
     keywords=(
         "*KEYWORD",
-        "*MAT_PIECEWISE_LINEAR_PLASTICITY",
+        "*MAT_PIECEWISE_LINEAR_PLASTICITY_LOG_INTERPOLATION",
         "*DEFINE_TABLE",
         "*DEFINE_CURVE",
         "*END",
@@ -297,6 +339,21 @@ def render_dyna_rate(deck: Deck) -> Rendered:
     끝이 다르면 **가장 짧은 곡선의 끝에서 모두 자르고 그 사실을 적는다.** 긴 곡선을
     늘리는 것은 값을 지어내는 일이다. 교차는 막지 않고 적는다 — 높은 속도에서 열 연화가
     실제로 그럴 수 있고, 거부하면 사람은 시스템 밖에서 표를 고친다.
+
+    ## 속도 사이는 로그로 보간한다 — `_LOG_INTERPOLATION`
+
+    LS-DYNA 의 기본은 표의 값(속도) 사이 **선형** 보간이다. 시험 속도는 자릿수로 벌어지므로
+    (0.001 · 0.1 · 10 /s) 선형이면 사이 속도의 응력이 느린 쪽 곡선에 붙는다 — 0.001 과 10 /s
+    사이의 1 /s 는 거리의 90% 를 0.001 쪽에서 본다. 게다가 표는 안에서 **값을 등간격으로 다시
+    나눠** 쓴다(LCINT 칸) — 넓은 속도 범위를 선형 간격으로 나누면 느린 속도의 곡선들이 한 칸에
+    뭉개진다. 2026-10-08 까지 이 덱은 말없이 선형이었다(OpenRadioss 덱은 처음부터 `Fsmooth=2`
+    로그였다).
+
+    R9 부터 길이 둘이다 — 값을 ln(속도)로 적고 첫 값을 음수로 두거나, 키워드에
+    `_LOG_INTERPOLATION` 을 붙이고 속도를 그대로 둔다(DYNAmore 「Good old *MAT_024」, 2020).
+    **뒤엣것을 쓴다.** ln 으로 적는 길은 가장 느린 속도가 1 /시간단위 이상이면 첫 값이 음수가
+    아니게 되어 LS-DYNA 가 ln 값을 속도로 읽는다 — 조용히 틀린다. 키워드는 단위계(초 ·
+    밀리초)와 상관없이 같은 뜻이다.
 
     ## VP=1
 
@@ -341,6 +398,7 @@ def render_dyna_rate(deck: Deck) -> Rendered:
         f"$ Strain rate dependent: {len(cut)} rates "
         f"({cut[0][0]:.4g} ~ {cut[-1][0]:.4g} per time unit), tabulated, VP=1."
     )
+    lines.append("$ Log interpolation between rates (_LOG_INTERPOLATION, LS-DYNA R9+).")
     lines.append("$ Outside the tested rates LS-DYNA uses the first or last curve.")
     if trimmed:
         lines.append(
@@ -353,7 +411,16 @@ def render_dyna_rate(deck: Deck) -> Rendered:
         d, p = deck.number("rate_table", "cs_d"), deck.number("rate_table", "cs_p")
         if d is not None and p is not None:
             lines.append(f"$ Cowper-Symonds summary (not used): C={d:.6g}, P={p:.6g}")
-    lines.extend(_mat024_head(deck, cut[0][1][0][1], table_id, 1.0))
+    lines.extend(
+        _mat024_head(
+            deck,
+            cut[0][1][0][1],
+            table_id,
+            1.0,
+            log_interpolation=True,
+            fail=failure_value(deck),
+        )
+    )
     lines.append("*DEFINE_TABLE")
     lines.append("$     tbid       sfa      offa")
     lines.append(_i10(table_id))
@@ -607,12 +674,37 @@ def render_dyna_hyperelastic(deck: Deck) -> Rendered:
     return Rendered(text="\n".join(lines) + "\n", notes=tuple(notes))
 
 
+#: 열물성 곡선 번호 — `재료 번호 * 100 + 71 · 72`. 속도 곡선(+1…)·온도 의존 탄성(+90 · 91)과
+#: 같은 번호 공간이라 겹치지 않는 자리를 쓴다.
+THERMAL_CURVES = (71, 72)
+
+
+def _thermal_series(deck: Deck, key: str) -> list[tuple[float, float]]:
+    """열물성 표의 한 열 — 온도 순. **같은 온도가 둘이면 멈춘다** — LS-DYNA 곡선은 x 가 늘기만
+    해야 하고, 겹친 점은 어느 값이 이기는지 정해져 있지 않다."""
+    points = sorted(
+        (float(row["temperature"]), float(row[key]))
+        for row in deck.rows("thermal")
+        if isinstance(row.get("temperature"), int | float)
+        and isinstance(row.get(key), int | float)
+    )
+    if len({at for at, _ in points}) != len(points):
+        raise ExportError(
+            f"열물성 표({key})에 같은 온도가 두 번 있습니다 — LS-DYNA 곡선은 온도가 늘기만 "
+            "해야 합니다."
+        )
+    return points
+
+
 @register_renderer(
     key="dyna_thermal",
     label="LS-DYNA (열물성)",
     extension="k",
     suffix="_thermal",
-    describe="*MAT_THERMAL_ISOTROPIC — 열해석용 재료(비열·전도도, 상수).",
+    describe=(
+        "*MAT_THERMAL_ISOTROPIC — 열해석용 재료(비열·전도도). 온도별 표가 있으면 "
+        "*MAT_THERMAL_ISOTROPIC_TD_LC 와 온도 곡선으로 낸다."
+    ),
     keywords=("*KEYWORD", "*MAT_THERMAL_ISOTROPIC", "*END"),
     needs=(
         Need("thermal", values=("specific_heat", "thermal_conductivity")),
@@ -621,12 +713,20 @@ def render_dyna_hyperelastic(deck: Deck) -> Rendered:
     ),
 )
 def render_dyna_thermal(deck: Deck) -> Rendered:
-    """LS-DYNA `*MAT_THERMAL_ISOTROPIC` — 상수 비열·전도도.
+    """LS-DYNA 열 재료 — 상수면 `*MAT_THERMAL_ISOTROPIC`, 온도별 표면 `_TD_LC`(2026-10-08).
 
-    이 키워드는 표(온도 의존)를 받지 않는다 — 온도 의존은 *MAT_THERMAL_ISOTROPIC_TD 다.
-    카드에 온도별 열물성 표가 있으면 **첫 줄(가장 낮은 온도)을 쓰고 그렇다고 적는다.**
-    여기 설명은 전에 「조용히 누르지 않는다」 였는데, 코드는 표를 보지 않고 첫 값을 그냥
-    썼다(2026-10-07 — 모든 형식에서 표의 둘째 줄을 바꿔 보는 점검에서 드러났다).
+    ## 온도별 표는 곡선으로
+
+    `_TD_LC` 는 비열(HCLC) · 열전도율(TCLC)을 **곡선 번호**로 받는다 — 곡선의 x 가 온도다.
+    점 수 한도가 없어 `_TD`(점 여덟까지, 카드에 직접)보다 낫다. 카드는 R12 매뉴얼에서 확인했다:
+    1 = TMID TRO TGRLC TGMULT (TLAT HLAT), 2 = HCLC TCLC (…). 키워드 번호는 판마다 바뀌어서
+    (971 · R6 의 T06 → R12 의 T10) 이름으로 적는다. TLAT · HLAT 는 비운다 — 옛 판의 네 칸
+    꼴에도 맞는다. 전에는 표가 있어도 첫 값(가장 낮은 온도)만 쓰고 그렇다고 알리기만 했다.
+
+    한쪽만 표면 다른 쪽은 카드의 값 하나로 **평평한 곡선**을 적고 그렇다고 말한다 — 두 칸 다
+    곡선 번호를 받는다. 지어 넣는 값은 없다(그 값은 카드에 있는 것이다).
+
+    HC 는 질량당 비열이다(SI 면 J/(kg·K)). 단위계 환산은 `render` 가 블록 단위로 이미 했다.
     """
     heat = deck.number("thermal", "specific_heat")
     conductivity = deck.number("thermal", "thermal_conductivity")
@@ -635,19 +735,34 @@ def render_dyna_thermal(deck: Deck) -> Rendered:
 
     notes: list[str] = []
     lines = ["*KEYWORD", *_header(deck, "$"), *_units_comment(deck)]
-    tabled = [
-        row
-        for row in deck.rows("thermal")
-        if "specific_heat" in row or "thermal_conductivity" in row
-    ]
-    if len(tabled) > 1:
-        notes.append(
-            "온도별 열물성 표가 있는데 *MAT_THERMAL_ISOTROPIC 의 비열 · 열전도율은 "
-            "상수 하나입니다 — 블록의 대푯값(가장 낮은 온도)을 썼습니다. 온도 의존은 "
-            "*MAT_THERMAL_ISOTROPIC_TD 가 받습니다."
-        )
+    heat_points = _thermal_series(deck, "specific_heat")
+    conductivity_points = _thermal_series(deck, "thermal_conductivity")
+    tabled = len(heat_points) > 1 or len(conductivity_points) > 1
+    curves: list[tuple[int, list[tuple[float, float]]]] = []
+    if tabled:
+        span = heat_points if len(heat_points) > 1 else conductivity_points
+        low, high = span[0][0], span[-1][0]
         lines.append(
-            "$ *MAT_THERMAL_ISOTROPIC is temperature independent: lowest-temperature value."
+            "$ HC(T) and TC(T) are load curves (x = temperature) - "
+            "*MAT_THERMAL_ISOTROPIC_TD_LC."
+        )
+        for name, label, points, value in (
+            ("HC", "비열", heat_points, heat),
+            ("TC", "열전도율", conductivity_points, conductivity),
+        ):
+            if len(points) <= 1:
+                points = [(low, value), (high, value)]
+                lines.append(
+                    f"$ {name} is a single value on the card - written as a flat curve."
+                )
+                notes.append(
+                    f"{label}은 카드에 값 하나라 그 값으로 평평한 곡선을 적었습니다 — "
+                    "*MAT_THERMAL_ISOTROPIC_TD_LC 는 두 칸 다 곡선 번호를 받습니다."
+                )
+            curves.append((deck.solver_id * 100 + THERMAL_CURVES[len(curves)], points))
+        notes.append(
+            f"온도별 열물성 표를 *MAT_THERMAL_ISOTROPIC_TD_LC 의 곡선으로 실었습니다(비열 "
+            f"{len(curves[0][1])}점 · 열전도율 {len(curves[1][1])}점)."
         )
     for key in ("specific_heat", "thermal_conductivity"):
         source = deck.values("thermal").get(f"{key}_source")
@@ -655,10 +770,16 @@ def render_dyna_thermal(deck: Deck) -> Rendered:
     if density is None:
         notes.append("밀도가 카드에 없어 TRO 를 비우고 그 사실을 덱 주석에 적었습니다.")
         lines.append("$ TRO: no measured density on this card - field left blank.")
-    lines.append("*MAT_THERMAL_ISOTROPIC")
+    lines.append("*MAT_THERMAL_ISOTROPIC_TD_LC" if tabled else "*MAT_THERMAL_ISOTROPIC")
     lines.append("$     tmid       tro     tgrlc    tgmult")
     lines.append(_i10(deck.solver_id) + (_f10(density) if density is not None else ""))
-    lines.append("$       hc        tc")
-    lines.append(_f10(heat) + _f10(conductivity))
+    if tabled:
+        lines.append("$     hclc      tclc")
+        lines.append("".join(_i10(curve_id) for curve_id, _ in curves))
+        for curve_id, points in curves:
+            lines.extend(_curve(curve_id, points))
+    else:
+        lines.append("$       hc        tc")
+        lines.append(_f10(heat) + _f10(conductivity))
     lines.append("*END")
     return Rendered(text="\n".join(lines) + "\n", notes=tuple(notes))

@@ -239,6 +239,7 @@ def load_builtin() -> None:
         hyperelastic,
         mechanical,
         model_params,
+        moisture,
         optical,
         reference,
         thermal,

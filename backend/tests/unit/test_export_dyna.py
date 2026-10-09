@@ -11,13 +11,15 @@
 
 from __future__ import annotations
 
+import math
+from dataclasses import replace
 from typing import Any, ClassVar
 
 import pytest
 
 import matcore.export.dyna  # noqa: F401  (렌더러 등록)
 from matcore import cards
-from matcore.export import Deck, ExportError, render
+from matcore.export import FAIL_FROM_ELONGATION, Deck, ExportError, render
 from matcore.export.systems import MM_N_TONNE
 
 # 블록의 단위 선언(si_unit)이 있어야 to_system 이 환산한다.
@@ -43,6 +45,44 @@ def deck(**blocks: object) -> Deck:
         blocks=base,
         provenance=("시험 3건: T-0001 · T-0002 · T-0003",),
     )
+
+
+class Test파단_칸:
+    """ADR 0059 후속(2026-10-08) — 내보낼 때 고르면 ln(1+A) 가 FAIL 칸에 선다.
+    기본은 주석만."""
+
+    TABLE: ClassVar[dict[str, Any]] = {
+        "values": {"elongation_at_break": 0.25},
+        "rows": [
+            {"plastic_strain": 0.0, "true_stress": 350e6},
+            {"plastic_strain": 0.05, "true_stress": 420e6},
+        ],
+    }
+
+    def card1(self, made: str) -> str:
+        lines = [line for line in made.splitlines() if not line.startswith("$")]
+        return lines[lines.index("*MAT_PIECEWISE_LINEAR_PLASTICITY") + 1]
+
+    def test_고르면_FAIL_칸에_서고_ETAN_은_빈다(self) -> None:
+        on = replace(deck(table=self.TABLE), options={FAIL_FROM_ELONGATION: True})
+        made = render("dyna", on)
+        line = self.card1(made.text)
+        # mid ro e pr sigy etan fail — 고정 10칸. FAIL 은 61~70열이다(ETAN 51~60 은 빈다).
+        assert line[50:60].strip() == ""
+        assert float(line[60:70]) == pytest.approx(math.log(1.25), rel=1e-3)
+        assert "$ FAIL = ln(1+A) = 0.2231 from elongation at break A=25.0%" in made.text
+        assert any("FAIL 칸에 넣었습니다" in note for note in made.notes)
+
+    def test_기본은_칸을_비우고_주석만(self) -> None:
+        made = render("dyna", deck(table=self.TABLE))
+        assert len(self.card1(made.text)) == 50
+        assert "$ FAIL not set - estimate from elongation at break A=25.0%:" in made.text
+
+    def test_연신율이_없는데_고르면_비우고_말한다(self) -> None:
+        on = replace(deck(), options={FAIL_FROM_ELONGATION: True})
+        made = render("dyna", on)
+        assert len(self.card1(made.text)) == 50
+        assert any("파단 연신율이 없어 비워 두었습니다" in note for note in made.notes)
 
 
 class Test탄소성_024:
@@ -187,6 +227,50 @@ def _rate_deck(*ends: float) -> Deck:
     return deck(rate_table={"values": {"rate_count": 2}, "rows": rows})
 
 
+class TestCowper_Symonds_요약:
+    """속도별 표 없이 CS 요약만 든 카드(문헌 덱, 2026-10-08) — *MAT_024 의 C · P 칸에
+    싣는다."""
+
+    def _card2(self, text: str) -> str:
+        lines = [line for line in text.splitlines() if not line.startswith("$")]
+        return lines[lines.index("*MAT_PIECEWISE_LINEAR_PLASTICITY") + 2]
+
+    def test_요약만_있으면_C_P_칸과_VP_1(self) -> None:
+        summary = {"values": {"model": "cowper_symonds", "cs_d": 6500.0, "cs_p": 4.0}}
+        made = render("dyna", deck(rate_table=summary))
+        card2 = self._card2(made.text)
+        # c · p · lcss · lcsr · vp — 고정 10칸.
+        assert float(card2[0:10]) == pytest.approx(6500.0)
+        assert float(card2[10:20]) == pytest.approx(4.0)
+        assert card2[20:30].strip() == "101" and card2[40:50].strip() == "1.0"
+        assert any("C · P 칸에" in note for note in made.notes)
+
+    def test_속도별_표가_있으면_단일_곡선_덱은_그대로(self) -> None:
+        """사내 속도 카드는 속도 의존 형식이 표로 낸다 — 단일 곡선 덱이 요약을 덧붙이면 같은
+        카드가 형식마다 다른 속도 효과를 낸다."""
+        rate = _rate_deck(0.2, 0.2)
+        blocks = dict(rate.blocks)
+        blocks["rate_table"] = {
+            **blocks["rate_table"],
+            "values": {
+                "rate_count": 2,
+                "model": "cowper_symonds",
+                "cs_d": 6500.0,
+                "cs_p": 4.0,
+            },
+        }
+        made = render("dyna", deck(**blocks))
+        assert self._card2(made.text)[0:20].strip() == ""
+
+    def test_Abaqus_는_RATE_DEPENDENT_POWER_LAW(self) -> None:
+        import matcore.export as export
+
+        summary = {"values": {"model": "cowper_symonds", "cs_d": 6500.0, "cs_p": 4.0}}
+        text = export.render("abaqus", deck(rate_table=summary)).text.splitlines()
+        at = text.index("*RATE DEPENDENT, TYPE=POWER LAW")
+        assert [float(one) for one in text[at + 1].split(",")] == [6500.0, 4.0]
+
+
 class Test속도별_표:
     def test_표_뒤에_곡선이_값의_차례대로(self) -> None:
         """짝은 번호가 아니라 **자리**다. 곡선 사이에 다른 키워드가 끼면 안 된다."""
@@ -199,8 +283,23 @@ class Test속도별_표:
         curves = [i for i, line in enumerate(lines) if line == "*DEFINE_CURVE"]
         assert [lines[i + 1][:10].strip() for i in curves] == ["10101", "10102"]
         # LCSS 가 표를 가리키고 VP=1 이다.
-        card2 = _between(text, "*MAT_PIECEWISE_LINEAR_PLASTICITY", "*DEFINE_TABLE")[1]
+        card2 = _between(
+            text, "*MAT_PIECEWISE_LINEAR_PLASTICITY_LOG_INTERPOLATION", "*DEFINE_TABLE"
+        )[1]
         assert card2[20:30].strip() == "101" and card2[40:50].strip() == "1.0"
+
+    def test_속도_사이는_로그로_보간하고_속도는_그대로_적는다(self) -> None:
+        """기본(선형)이면 0.001 과 100 /s 사이의 1 /s 가 거의 0.001 곡선이 된다(2026-10-08).
+        ln 으로 적는 길은 가장 느린 속도가 1 이상이면 첫 값이 음수가 아니라 속도로 읽힌다 —
+        그래서 키워드로 고르고 표에는 속도를 그대로 둔다. 단일 곡선 덱은 그대로다."""
+        text = render("dyna_rate", _rate_deck(0.2, 0.2), MM_N_TONNE).text
+        keywords = [line for line in text.splitlines() if line.startswith("*MAT_")]
+        assert keywords == ["*MAT_PIECEWISE_LINEAR_PLASTICITY_LOG_INTERPOLATION"]
+        lines = [line for line in text.splitlines() if not line.startswith("$")]
+        table = lines.index("*DEFINE_TABLE")
+        assert [float(one) for one in lines[table + 2 : table + 4]] == [0.001, 100.0]
+        single = render("dyna", deck(), MM_N_TONNE).text
+        assert "_LOG_INTERPOLATION" not in single
 
     def test_끝이_다르면_짧은_끝에서_자르고_말한다(self) -> None:
         """표의 곡선은 같은 x 에서 끝나야 한다. 긴 곡선을 늘리지 않고 자른다."""

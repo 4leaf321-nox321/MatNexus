@@ -16,7 +16,7 @@
  * 내보내기는 **지금 거른 그대로** 받는다 — 축을 더하면 거기에도 싣는다.
  */
 
-import { FileCode2, GitCompare, Grid3X3, ScatterChart } from 'lucide-react'
+import { FileCode2, GitCompare, Grid3X3, Link2, ScatterChart } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 
@@ -145,6 +145,12 @@ export default function CatalogPage() {
               <Link to="/catalog/coverage">
                 <Grid3X3 className="size-4" />
                 커버리지
+              </Link>
+            </Button>
+            <Button variant="outline" asChild>
+              <Link to="/catalog/links">
+                <Link2 className="size-4" />
+                사내 재료 연결
               </Link>
             </Button>
             <Button variant="outline" asChild>

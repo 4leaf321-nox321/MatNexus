@@ -620,6 +620,12 @@ class DeckLayoutOut(BaseModel):
     """흔들어 보니 덱이 안 나와 자리를 못 짚은 값(범위 검사)."""
     notes: list[str] = []
     """내보내면서 한 말 — 내려받은 덱의 각주와 같다."""
+    fail_option: bool = False
+    """「추정 파단 변형률을 파단 칸에 넣기」 를 **고를 수 있나** — 이 형식에 파단 칸이 있고
+    카드에 파단 연신율이 있을 때(ADR 0059 후속). 서버가 켜고 끈 덱을 그려 보고 다르면 참이다 —
+    화면이 형식 이름을 외우지 않는다."""
+    fail_from_elongation: bool = False
+    """이 미리보기가 그것을 켠 덱인가."""
     error: str | None = None
 
 

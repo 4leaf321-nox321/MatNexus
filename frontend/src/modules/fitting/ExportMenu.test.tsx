@@ -117,6 +117,8 @@ const LAYOUT: DeckLayout = {
   ],
   failed: [],
   notes: ['밀도가 카드에 없어 *DENSITY 를 뺐습니다.'],
+  fail_option: false,
+  fail_from_elongation: false,
   error: null,
 }
 
@@ -248,6 +250,43 @@ describe('칸 배치와 미리보기', () => {
     await userEvent.click(cards().getByRole('button', { name: /Abaqus/ }))
     expect(await screen.findByRole('alert')).toHaveTextContent('푸아송비 가 필요한데')
     expect(screen.getByRole('button', { name: /내려받기/ })).toBeDisabled()
+  })
+})
+
+describe('파단 칸 켜기 (ADR 0059 후속)', () => {
+  it('서버가 고를 수 있다고 할 때만 서고, 켜면 미리보기와 내려받기에 함께 실린다', async () => {
+    // 고를 수 있는지는 서버가 켜고 끈 덱을 그려 보고 정한다 — 화면은 형식 이름을 모른다.
+    layout.mockImplementation((...args: unknown[]) =>
+      Promise.resolve({
+        ...LAYOUT,
+        fail_option: true,
+        fail_from_elongation: args[4] === true,
+        text: args[4] === true ? '$ FAIL = ln(1+A) = 0.2231' : '$ FAIL not set',
+      })
+    )
+    await open()
+    await userEvent.click(cards().getByRole('button', { name: /Abaqus/ }))
+    const box = await screen.findByRole('checkbox', { name: /추정 파단 변형률을 파단 칸에 넣기/ })
+    expect(box).not.toBeChecked()
+
+    await userEvent.click(box)
+    // 미리보기가 켠 덱으로 다시 선 것을 기다린다 — 그 전에는 받지 않는다.
+    await waitFor(() =>
+      expect(screen.getByLabelText('덱 본문')).toHaveTextContent('$ FAIL = ln(1+A) = 0.2231')
+    )
+    expect(layout.mock.calls.at(-1)?.[4]).toBe(true)
+    const button = screen.getByRole('button', { name: /내려받기/ })
+    await waitFor(() => expect(button).toBeEnabled())
+    await userEvent.click(button)
+    await waitFor(() => expect(download).toHaveBeenCalled())
+    expect(download.mock.calls[0][5]).toBe(true)
+  })
+
+  it('고를 수 없는 형식이면 서지 않는다', async () => {
+    await open()
+    await userEvent.click(cards().getByRole('button', { name: /Abaqus/ }))
+    await screen.findByRole('table', { name: '칸 배치' })
+    expect(screen.queryByRole('checkbox', { name: /파단 칸/ })).not.toBeInTheDocument()
   })
 })
 

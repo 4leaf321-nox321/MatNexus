@@ -482,23 +482,36 @@ class Test온도의존:
         single = export.render(key, temperature_deck(elastic_rows=self.ROWS[:1]))
         assert "temperature independent" not in single.text
 
-    def test_LS_DYNA_열물성도_표를_접었다고_적는다(self) -> None:
-        """*MAT_THERMAL_ISOTROPIC 은 상수다. 설명은 「조용히 누르지 않는다」 였는데 코드는 표를
-        안 보고 첫 값을 썼다(2026-10-07)."""
+    def test_LS_DYNA_열물성_표는_TD_LC_곡선으로_낸다(self) -> None:
+        """*MAT_THERMAL_ISOTROPIC 은 상수다 — 2026-10-07 에는 첫 값만 쓰고 그렇다고 적었고,
+        2026-10-08 부터 표가 있으면 `_TD_LC`(HCLC · TCLC 곡선 번호, x = 온도)로 낸다."""
         rows = [
             {"temperature": 300.0, "specific_heat": 462.0, "thermal_conductivity": 45.0},
             {"temperature": 500.0, "specific_heat": 520.0, "thermal_conductivity": 41.0},
         ]
         rendered = export.render("dyna_thermal", heat_deck(values=BASE, rows=rows))
-        assert "*MAT_THERMAL_ISOTROPIC is temperature independent" in rendered.text
-        assert [note for note in rendered.notes if "*MAT_THERMAL_ISOTROPIC_TD" in note]
-        # 열팽창만 온도를 타면(비열 · 전도도 표가 아니면) 이 형식이 접은 것이 없다.
+        lines = [line for line in rendered.text.splitlines() if not line.startswith("$")]
+        at = lines.index("*MAT_THERMAL_ISOTROPIC_TD_LC")
+        hclc, tclc = int(lines[at + 2][:10]), int(lines[at + 2][10:20])
+        curves = {
+            int(lines[index + 1][:10]): [
+                tuple(float(part) for part in (row[:20], row[20:40]))
+                for row in lines[index + 2 : index + 4]
+            ]
+            for index, line in enumerate(lines)
+            if line == "*DEFINE_CURVE"
+        }
+        assert curves[hclc] == [(300.0, 462.0), (500.0, 520.0)]
+        assert curves[tclc] == [(300.0, 45.0), (500.0, 41.0)]
+        assert [note for note in rendered.notes if "_TD_LC 의 곡선으로" in note]
+        # 열팽창만 온도를 타면(비열 · 전도도 표가 아니면) 상수 카드 그대로다.
         expansion = [
             {"temperature": 300.0, "thermal_expansion": 1.17e-05},
             {"temperature": 500.0, "thermal_expansion": 1.42e-05},
         ]
         plain = export.render("dyna_thermal", heat_deck(values=BASE, rows=expansion))
-        assert "temperature independent" not in plain.text
+        assert "*MAT_THERMAL_ISOTROPIC\n" in plain.text
+        assert "_TD_LC" not in plain.text
 
     def test_열이_빠진_줄은_그_키워드에_안_실린다(self) -> None:
         """열팽창만 온도를 타고 비열은 상수인 것이 흔하다. 빈 칸을 0 으로

@@ -107,6 +107,9 @@ CATALOG_PROPERTY_DEPRECATED_BY_CLIENT = "catalog_property.deprecated_by_client"
 CATALOG_MATERIAL_CREATED_BY_CLIENT = "catalog_material.created_by_client"
 CATALOG_VALUE_ADDED_BY_CLIENT = "catalog_value.added_by_client"
 COMMISSION_CREATED_BY_CLIENT = "commission.created_by_client"
+#: 사내 재료 ↔ 문헌 재료 연결(2026-10-08) — MCP 가 연결 후보로 이을 수 있게 되면서. 연결은
+#: BOM 덱이 문헌 값을 그대로 가져가는 입구라, AI 가 이은 것인지가 남아야 한다.
+CATALOG_LINK_SET_BY_CLIENT = "catalog_link.set_by_client"
 #: 문헌 값을 **실제로 지운** 일과 폐기된 키의 값을 **옮긴** 일. 둘 다 되돌릴 수 없어
 #: 위의 규칙대로 사람이 해도 남긴다(누가 했든 `client` 가 길을 말한다) — 지운 값은 이미
 #: 덱에 실렸을 수 있고, 옮긴 값은 원래 어느 키에 있었는지가 이 기록에만 남는다.

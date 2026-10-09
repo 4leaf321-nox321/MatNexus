@@ -427,83 +427,60 @@ a:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-of
 
 <section id="s4">
   <h2><span class="num">04 / Tg</span>왜 장비마다 다른 값이 나오는가</h2>
-  <p>같은 재료의 Tg를 DSC·TMA·DMA로 재면 <strong>20 – 30 °C 차이가 나는 것이 정상</strong>입니다. 세 장비가 서로 다른 물리량의 변화를 보고 있고, 각자의 판정 규칙이 다르기 때문입니다.</p>
-  <div class="tw"><table>
-    <thead><tr><th>장비</th><th>보는 물리량</th><th>판정 방법</th><th>상대적 위치</th></tr></thead>
-    <tbody>
-      <tr><td class="k">DSC</td><td>열용량 변화</td><td>계단의 중점(midpoint)</td><td>가장 낮게 나오는 편</td></tr>
-      <tr><td class="k">TMA</td><td>CTE 변화</td><td>Tg 위·아래 접선의 교점</td><td>DSC와 비슷하거나 조금 높음</td></tr>
-      <tr><td class="k">DMA · E′ onset</td><td>저장탄성률 하강 시작</td><td>접선 교점</td><td>TMA보다 높음</td></tr>
-      <tr><td class="k">DMA · E″ peak</td><td>손실탄성률 최대</td><td>봉우리</td><td>더 높음</td></tr>
-      <tr><td class="k">DMA · tan δ peak</td><td>손실계수 최대</td><td>봉우리</td><td><b>가장 높게 나옴</b> (E′ onset보다 10 – 25 °C 위)</td></tr>
-    </tbody>
-  </table></div>
-  <ul class="tight">
-    <li>DMA의 Tg는 <strong>주파수에 따라 이동합니다</strong>(주파수 10배당 대략 5 – 7 °C). TMA·DSC는 주파수가 없고 대신 <strong>승온 속도</strong>에 의존합니다.</li>
-    <li>따라서 “이 재료 Tg가 몇 도냐”는 질문에는 <strong>장비·판정법·조건을 붙여야</strong> 답이 됩니다. 사양서에 “Tg 150 °C (DMA tan δ)”와 “Tg 135 °C (TMA)”가 동시에 적혀 있어도 모순이 아닙니다.</li>
-    <li>CAE 관점에서는 어느 값이 “진짜”인지 다투는 것보다 <strong>물성 곡선 전체를 넣는 것</strong>이 항상 낫습니다. Tg는 결국 곡선을 요약한 한 개의 숫자일 뿐입니다.</li>
-  </ul>
-
+<p>같은 재료의 Tg를 DSC·TMA·DMA로 재면 <strong>20 – 30 °C 차이가 나는 것이 정상</strong>입니다. 세 장비가 서로 다른 물리량의 변화를 보고 있고, 각자의 판정 규칙이 다르기 때문입니다.</p>
+  <div class="tw">
+  <table>
+  <thead>
+  <tr><th>장비</th><th>보는 물리량</th><th>판정 방법</th><th>상대적 위치</th></tr></thead>
+  <tbody>
+  <tr><td>DSC</td><td>열용량 변화</td><td>계단의 중점(midpoint)</td><td>가장 낮게 나오는 편</td></tr>
+  <tr><td>TMA</td><td>CTE 변화</td><td>Tg 위·아래 접선의 교점</td><td>DSC와 비슷하거나 조금 높음</td></tr>
+  <tr><td>DMA · E′ onset</td><td>저장탄성률 하강 시작</td><td>접선 교점</td><td>TMA보다 높음</td></tr>
+  <tr><td>DMA · E″ peak</td><td>손실탄성률 최대</td><td>봉우리</td><td>더 높음</td></tr>
+  <tr><td>DMA · tan δ peak</td><td>손실계수 최대</td><td>봉우리</td><td><strong>가장 높게 나옴</strong> (E′ onset보다 10 – 25 °C 위)</td></tr></tbody></table></div>
+  <ul>
+  <li>DMA의 Tg는 <strong>주파수에 따라 이동합니다</strong>(주파수 10배당 대략 5 – 7 °C). TMA·DSC는 주파수가 없고 대신 <strong>승온 속도</strong>에 의존합니다.</li>
+  <li>따라서 “이 재료 Tg가 몇 도냐”는 질문에는 <strong>장비·판정법·조건을 붙여야</strong> 답이 됩니다. 사양서에 “Tg 150 °C (DMA tan δ)”와 “Tg 135 °C (TMA)”가 동시에 적혀 있어도 모순이 아닙니다.</li>
+  <li>CAE 관점에서는 어느 값이 “진짜”인지 다투는 것보다 <strong>물성 곡선 전체를 넣는 것</strong>이 항상 낫습니다. Tg는 결국 곡선을 요약한 한 개의 숫자일 뿐입니다.</li></ul>
   <div class="note">
-    <h4>이 앱에서는</h4>
-    <p>DMA 처리의 「유리전이온도」 단계는 정의를 「tan δ 피크」 · 「손실 탄성률 피크」 · 「저장 탄성률 낙폭 지점 (최댓값 대비)」 중에서 고르게 하고, 고른 정의를 값과 함께 남깁니다(낙폭 지점은 접선 교점 온셋이 아니라 E′가 정한 비율 — 기본 절반 — 만큼 떨어진 첫 온도입니다). TMA 접선 교점이나 DSC 중점으로 Tg를 내는 처리는 없습니다. 「문헌 물성」의 유리전이온도에도 DSC · DMA · TMA 값이 한 항목에 섞여 있으니 값마다 기법을 확인하세요.</p>
-  </div>
+  <h4>이 앱에서는</h4>
+  <p>DMA 처리의 「유리전이온도」 단계는 정의를 「tan δ 피크」 · 「손실 탄성률 피크」 · 「저장 탄성률 낙폭 지점 (최댓값 대비)」 · 「저장 탄성률 온셋 (접선 교점, ASTM E1640)」 중에서 고르게 하고, 고른 정의를 값과 함께 남깁니다(낙폭 지점은 온셋이 아니라 E′가 정한 비율 — 기본 절반 — 만큼 떨어진 첫 온도이고, 온셋은 log E′ 의 두 접선이 만나는 온도입니다). TMA 접선 교점이나 DSC 중점으로 Tg를 내는 처리는 없습니다. 「문헌 물성」의 유리전이온도에도 DSC · DMA · TMA 값이 한 항목에 섞여 있으니 값마다 기법을 확인하세요.</p></div>
 </section>
 
 <section id="s5">
   <h2><span class="num">05 / 기준온도</span>같은 이름, 다른 두 온도</h2>
-  <p class="lede">열팽창 카드에는 <strong>성격이 완전히 다른 두 개의 기준온도</strong>가 등장합니다. 이름이 비슷해서 섞이기 쉽지만, 하나는 데이터의 성질이고 하나는 해석의 초기 조건입니다.</p>
-  <div class="cards">
-    <div class="card">
-      <h4>① 데이터 기준온도 T_o</h4>
-      <p>할선 계수 α_sec 값이 <strong>어느 온도로부터의 평균인지</strong>를 말합니다. 시험 리포트에 “25 °C 기준”이라고 적히는 그 온도입니다. 순간 계수에는 이 개념 자체가 없습니다.</p>
-    </div>
-    <div class="card">
-      <h4>② 무응력 온도 T_ref</h4>
-      <p>해석에서 <strong>열변형률이 0인 온도</strong>. 부품이 응력 없이 만들어진 상태의 온도이며, PCB라면 상온이 아니라 <strong>라미네이션·경화 온도</strong>(예: 175 °C)나 솔더 응고 온도입니다.</p>
-    </div>
-  </div>
+<p>열팽창 카드에는 <strong>성격이 완전히 다른 두 개의 기준온도</strong>가 등장합니다. 이름이 비슷해서 섞이기 쉽지만, 하나는 데이터의 성질이고 하나는 해석의 초기 조건입니다.</p>
+  <h4>① 데이터 기준온도 T_o</h4>
+  <p>할선 계수 α_sec 값이 <strong>어느 온도로부터의 평균인지</strong>를 말합니다. 시험 리포트에 “25 °C 기준”이라고 적히는 그 온도입니다. 순간 계수에는 이 개념 자체가 없습니다.</p>
+  <h4>② 무응력 온도 T_ref</h4>
+  <p>해석에서 <strong>열변형률이 0인 온도</strong>. 부품이 응력 없이 만들어진 상태의 온도이며, PCB라면 상온이 아니라 <strong>라미네이션·경화 온도</strong>(예: 175 °C)나 솔더 응고 온도입니다.</p>
   <p>이 둘은 얼마든지 다를 수 있습니다. 시험은 25 °C 기준으로 보고되었는데 해석의 무응력 온도는 175 °C인 상황이 오히려 일반적입니다. 그래서 <strong>재환산</strong>이 필요합니다.</p>
-
   <h3>재환산 공식</h3>
-  <div class="eq">T_o 기준으로 주어진 α를 T_ref 기준으로 옮기기:
-
-  α_new(T) = [ α_o(T)·(T − T_o) − α_o(T_ref)·(T_ref − T_o) ] / (T − T_ref)
-
-같은 식을 열변형률로 쓰면 훨씬 직관적입니다:
-
-  α_new(T) = [ ε_th(T) − ε_th(T_ref) ] / (T − T_ref)     <span class="cm">기준점을 옮겨 다시 평균낼 뿐</span></div>
-
+  <p>T_o 기준으로 주어진 α를 T_ref 기준으로 옮기기: α_new(T) = [ α_o(T)·(T − T_o) − α_o(T_ref)·(T_ref − T_o) ] / (T − T_ref) 같은 식을 열변형률로 쓰면 훨씬 직관적입니다: α_new(T) = [ ε_th(T) − ε_th(T_ref) ] / (T − T_ref) 기준점을 옮겨 다시 평균낼 뿐</p>
   <h3>얼마나 달라지는가 — 예제 재료 z축</h3>
-  <div class="tw"><table>
-    <thead><tr><th class="n">T [°C]</th><th class="n">α_sec (25 °C 기준)</th><th class="n">α_sec (175 °C 기준)</th><th>메모</th></tr></thead>
-    <tbody>
-      <tr><td class="n">25</td><td class="n">50.0</td><td class="n">103.4</td><td>175 °C에서 상온까지 내려오며 Tg를 지나므로 평균이 커짐</td></tr>
-      <tr><td class="n">100</td><td class="n">50.3</td><td class="n">156.5</td><td>3배 이상 차이</td></tr>
-      <tr><td class="n">135</td><td class="n">60.1</td><td class="n">222.5</td><td></td></tr>
-      <tr><td class="n">220</td><td class="n">137.2</td><td class="n">249.8</td><td></td></tr>
-      <tr><td class="n">260</td><td class="n">156.4</td><td class="n">249.9</td><td></td></tr>
-    </tbody>
-  </table></div>
-  <p class="eqn">단위 ppm/K. 두 열은 <strong>완전히 같은 재료, 완전히 같은 시험 데이터</strong>입니다 — 기준점만 다릅니다.</p>
-
-  <div class="note trap">
-    <h4>솔버별로 이 둘이 어떻게 다뤄지는가</h4>
-    <ul class="tight">
-      <li><strong>Abaqus</strong>는 두 개를 <strong>분리</strong>합니다. <code>*EXPANSION, ZERO=θ⁰</code>가 ①이고, <code>*INITIAL CONDITIONS, TYPE=TEMPERATURE</code>의 초기온도가 ②입니다. 그래서 재환산 없이 25 °C 기준 데이터를 그대로 넣고 초기온도만 175로 주면 됩니다 — Abaqus가 내부에서 ε_th = α(θ)(θ−θ⁰) − α(θ_I)(θ_I−θ⁰)로 처리합니다. <strong>ZERO의 기본값은 0.0</strong>이니 25 °C 기준 데이터라면 반드시 명시하세요.</li>
-      <li><strong>Ansys</strong>는 둘을 <strong>하나로 묶습니다</strong>. <code>MP,REFT</code>(또는 <code>TREF</code>)가 ①과 ② 역할을 동시에 하므로, 데이터 기준이 다르면 <code>MPAMOD</code>로 재환산해야 합니다. <code>MP,REFT</code>가 <code>TREF</code>보다 우선합니다.</li>
-      <li><strong>LS-DYNA</strong>는 접선 계수를 쓰므로 ①이 <strong>아예 없습니다</strong>. ②는 초기 온도장(<code>*INITIAL_TEMPERATURE_…</code>)이 정합니다.</li>
-    </ul>
-  </div>
-
+  <div class="tw">
+  <table>
+  <thead>
+  <tr><th>T [°C]</th><th>α_sec (25 °C 기준)</th><th>α_sec (175 °C 기준)</th><th>메모</th></tr></thead>
+  <tbody>
+  <tr><td>25</td><td>50.0</td><td>103.4</td><td>175 °C에서 상온까지 내려오며 Tg를 지나므로 평균이 커짐</td></tr>
+  <tr><td>100</td><td>50.3</td><td>156.5</td><td>3배 이상 차이</td></tr>
+  <tr><td>135</td><td>60.1</td><td>222.5</td><td></td></tr>
+  <tr><td>220</td><td>137.2</td><td>249.8</td><td></td></tr>
+  <tr><td>260</td><td>156.4</td><td>249.9</td><td></td></tr></tbody></table></div>
+  <pre><code>단위 ppm/K. 두 열은 완전히 같은 재료, 완전히 같은 시험 데이터입니다 — 기준점만 다릅니다.</code></pre>
   <div class="note">
-    <h4>이 앱에서는</h4>
-    <ul class="tight">
-      <li>선팽창계수를 <strong>온도 한 점</strong>으로 적었으면 그 온도를 기준 온도로 적습니다 — Abaqus <code>ZERO=</code> · ANSYS <code>MP,REFT</code> · Nastran · OptiStruct <code>MAT1</code>의 TREF. 값이 하나(상수 α)면 Abaqus에서는 ZERO가 결과에 안 들어가지만, ANSYS의 REFT는 위에서 본 대로 ②를 겸하므로 해석의 무응력 온도와 다르면 덱의 그 줄을 고칩니다.</li>
-      <li><strong>온도별 표</strong>로 적었거나 온도 없이 값만 적었으면 기준 온도를 알 수 없어 어느 형식에도 적지 않고, 없다는 사실을 덱 주석에 남깁니다(Abaqus는 표일 때). 그대로 쓰면 Abaqus는 <code>ZERO=0</code>, ANSYS는 <code>TREF</code> 기본값 0, Nastran · OptiStruct는 TREF 0을 씁니다 — 덱의 온도는 켈빈이므로 <strong>0 K가 기준</strong>이 됩니다. 할선 데이터의 기준온도(①)를, ANSYS라면 무응력 온도(②)까지 직접 적어 넣으세요.</li>
-      <li>무응력 온도(②)를 정하는 초기 온도 · 초기 온도장은 해석 모델의 것이라 앱이 쓰지 않고, <code>MPAMOD</code> 같은 재환산도 하지 않습니다.</li>
-    </ul>
-  </div>
+  <h4>솔버별로 이 둘이 어떻게 다뤄지는가</h4>
+  <ul>
+  <li><strong>Abaqus</strong>는 두 개를 <strong>분리</strong>합니다. <code>*EXPANSION, ZERO=θ⁰</code>가 ①이고, <code>*INITIAL CONDITIONS, TYPE=TEMPERATURE</code>의 초기온도가 ②입니다. 그래서 재환산 없이 25 °C 기준 데이터를 그대로 넣고 초기온도만 175로 주면 됩니다 — Abaqus가 내부에서 ε_th = α(θ)(θ−θ⁰) − α(θ_I)(θ_I−θ⁰)로 처리합니다. <strong>ZERO의 기본값은 0.0</strong>이니 25 °C 기준 데이터라면 반드시 명시하세요.</li>
+  <li><strong>Ansys</strong>는 둘을 <strong>하나로 묶습니다</strong>. <code>MP,REFT</code>(또는 <code>TREF</code>)가 ①과 ② 역할을 동시에 하므로, 데이터 기준이 다르면 <code>MPAMOD</code>로 재환산해야 합니다. <code>MP,REFT</code>가 <code>TREF</code>보다 우선합니다.</li>
+  <li><strong>LS-DYNA</strong>는 접선 계수를 쓰므로 ①이 <strong>아예 없습니다</strong>. ②는 초기 온도장(<code>*INITIAL_TEMPERATURE_…</code>)이 정합니다.</li></ul></div>
+  <div class="note">
+  <h4>이 앱에서는</h4>
+  <ul>
+  <li>선팽창계수를 <strong>온도 한 점</strong>으로 적었으면 그 온도를 기준 온도로 적습니다 — Abaqus <code>ZERO=</code> · ANSYS <code>MP,REFT</code> · Nastran · OptiStruct <code>MAT1</code>의 TREF. 값이 하나(상수 α)면 Abaqus에서는 ZERO가 결과에 안 들어가지만, ANSYS의 REFT는 위에서 본 대로 ②를 겸하므로 해석의 무응력 온도와 다르면 덱의 그 줄을 고칩니다.</li>
+  <li><strong>온도별 표</strong>로 적었으면 선언 물성 창의 「할선 기준 온도 θ₀」 칸에 데이터의 기준 온도(①)를 적으세요 — 그 값이 Abaqus ZERO= · ANSYS MP,REFT · Nastran · OptiStruct TREF 로 나갑니다(2026-10-04). 표의 측정 온도와 다른 칸입니다. 칸을 비웠거나 온도 없이 값만 적었으면 기준 온도를 알 수 없어 어느 형식에도 적지 않고, 없다는 사실을 덱 주석에 남깁니다(Abaqus는 표일 때). 그대로 쓰면 Abaqus는 <code>ZERO=0</code>, ANSYS는 <code>TREF</code> 기본값 0, Nastran · OptiStruct는 TREF 0을 씁니다 — 덱의 온도는 켈빈이므로 <strong>0 K가 기준</strong>이 됩니다. 할선 데이터의 기준온도(①)를, ANSYS라면 무응력 온도(②)까지 직접 적어 넣으세요.</li>
+  <li>무응력 온도(②)를 정하는 초기 온도 · 초기 온도장은 해석 모델의 것이라 앱이 쓰지 않고, <code>MPAMOD</code> 같은 재환산도 하지 않습니다.</li></ul></div>
 </section>
 
 <section id="s6">

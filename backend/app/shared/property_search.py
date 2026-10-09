@@ -52,6 +52,7 @@ from sqlalchemy.orm import Session
 from app.modules.catalog import parameters
 from app.modules.catalog.models import CatalogDefinition, CatalogMaterial, CatalogValue
 from app.modules.catalog.ontology_models import PropertyLink
+from app.modules.grouping.models import GroupResult
 from app.modules.materials.models import Material, Sample, Specimen
 from app.modules.processing.models import ProcessingResult
 from app.modules.tests.models import TestConditionField, TestRun
@@ -504,6 +505,99 @@ def measured_hits(
     return made[:limit]
 
 
+def latest_groups() -> Select[tuple[uuid.UUID]]:
+    """재료마다 **묶음 종류별 가장 최근 결과** 하나 — 다시 돌리면 옛 결과는 물러난다.
+
+    채택이 없는 묶음 결과에서 「그 재료의 값」 을 고르는 규칙이다. 다 세면 같은 S-N 을 두 번
+    돌린 재료가 값을 둘 든다(처리 결과에서 **채택된 것만** 보는 것과 같은 이유).
+    """
+    return (
+        select(GroupResult.id)
+        .distinct(GroupResult.material_id, GroupResult.plugin_id)
+        .order_by(
+            GroupResult.material_id, GroupResult.plugin_id, GroupResult.created_at.desc()
+        )
+    )
+
+
+def _group_value_in(keys: tuple[str, ...], low: float, high: float) -> ColumnElement[bool]:
+    return or_(
+        *(
+            GroupResult.values.has_key(key)
+            & cast(GroupResult.values[key].astext, Float).between(low, high)
+            for key in keys
+        )
+    )
+
+
+def group_hits(
+    db: Session,
+    *,
+    scalar_keys: tuple[str, ...],
+    low: float,
+    high: float,
+    unit: str,
+    limit: int,
+    visible: Select[Any] | None = None,
+    convert: bool = True,
+    condition: ConditionFilter | None = None,
+    min_tier: int | None = None,
+    center: float | None = None,
+) -> list[Hit]:
+    """**묶음 결과**(여러 시험을 묶어 맞춘 값)에서 찾는다 — Cowper-Symonds · Basquin 등.
+
+    잰 값의 한 갈래다(`world="measured"`). 전에는 처리 결과만 읽어, 묶음이 낸 값은 문헌 키를
+    달아도 검색에 안 섰다(2026-10-08). **시험 조건으로 거르면 안 본다** — 묶음 결과에는 시험
+    한 건의 조건이 없고, 지어 붙이면 걸러지지 않은 값이 걸러진 척한다.
+    """
+    if not scalar_keys or condition is not None:
+        return []
+    query = (
+        select(GroupResult, Material.record_name)
+        .join(Material, Material.id == GroupResult.material_id)
+        .where(
+            GroupResult.id.in_(latest_groups()),
+            Material.deleted_at.is_(None),
+            _group_value_in(scalar_keys, low, high),
+        )
+        .limit(MAX_ROWS)
+    )
+    if visible is not None:
+        query = query.where(Material.id.in_(visible))
+    made: list[Hit] = []
+    for group, name in db.execute(query).all():
+        try:
+            plugin = registry.get(group.plugin_id)
+        except KeyError:  # 등록이 사라진 확장의 옛 결과
+            continue
+        count = len(group.used or [])
+        tier = tiers.measured_tier(max(count, 1))
+        if min_tier is not None and tier > min_tier:
+            continue
+        for key in scalar_keys:
+            value = (group.values or {}).get(key)
+            if not isinstance(value, int | float) or isinstance(value, bool):
+                continue
+            if not low <= float(value) <= high:
+                continue
+            made.append(
+                Hit(
+                    world="measured",
+                    material_id=group.material_id,
+                    material_name=name,
+                    value_si=float(value),
+                    value_shown=units.from_si(float(value), unit) if convert else float(value),
+                    unit_shown=unit,
+                    quality_tier=tier,
+                    source_detail=f"{key} · 묶음 {plugin.label} (시험 {count}건)",
+                    count=count,
+                    method=plugin.label,
+                )
+            )
+    made.sort(key=rank(center))
+    return made[:limit]
+
+
 def _method_of(scalar_key: str, stages: list[dict[str, Any]] | None) -> str:
     """이 값을 낸 단계와 그 인자 — 「항복강도 · offset_strain=0.002」.
 
@@ -846,6 +940,13 @@ def material_ids_in(db: Session, window: ValueRange) -> Select[tuple[uuid.UUID]]
                 scalar_key.in_(measured),
                 scalar_value >= window.low,
                 scalar_value <= window.high,
+            )
+        )
+        # **묶음 결과도** — 재료마다 묶음 종류별 최신 하나(`group_hits` 와 같은 규칙).
+        parts.append(
+            select(GroupResult.material_id).where(
+                GroupResult.id.in_(latest_groups()),
+                _group_value_in(measured, window.low, window.high),
             )
         )
     links = select(VocabularyTerm.value, PropertyLink.scale).join(

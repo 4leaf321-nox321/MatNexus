@@ -184,6 +184,19 @@ async def sweep(session: ClientSession) -> None:
         name = (detail or {}).get("name") if isinstance(detail, dict) else None
         if name:
             await call(session, "get_material", {"material_id": name})
+        # 문헌 연결 — 후보를 보고, 있으면 첫 후보로 **미리보기만**(2026-10-08).
+        linking = await call(session, "link_catalog_material", {"material_id": material_id})
+        offered = (linking or {}).get("candidates") if isinstance(linking, dict) else None
+        if offered:
+            await call(
+                session,
+                "link_catalog_material",
+                {
+                    "material_id": material_id,
+                    "catalog_material_id": str(offered[0]["catalog_material_id"]),
+                    "dry_run": True,
+                },
+            )
         samples = await call(session, "list_samples", {"material_id": material_id})
         rows = (samples or {}).get("samples") if isinstance(samples, dict) else None
         if rows:

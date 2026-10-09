@@ -168,6 +168,48 @@ class CatalogLinkOut(BaseModel):
     value_count: int = 0
 
 
+class LinkCandidateOut(BaseModel):
+    """사내 재료 하나에 **이을 만한 문헌 재료** 하나. 잇지는 않는다 — 사람이 누른다."""
+
+    catalog_material_id: uuid.UUID
+    name: str
+    category: str
+    manufacturer: str | None = None
+    subsystem: str | None = None
+    role: str | None = None
+    value_count: int
+    matched_by: str
+    """`code`(코드 · 등급이 같다) · `name`(이름 전체가 같다) · `prefix`(이름이 그것으로
+    시작한다 — 열처리 · 충전재 꼬리가 다를 수 있다)."""
+    matched_on: str
+    """사내 재료의 어느 칸이 걸렸나 — `grade` · `alias`."""
+    matched_text: str
+
+
+class MaterialLinkCandidatesOut(BaseModel):
+    """아직 문헌과 안 이어진 사내 재료 하나와 그 후보."""
+
+    material_id: uuid.UUID
+    code: str
+    record_name: str
+    family: str
+    category: str
+    grade: str
+    alias: str | None = None
+    can_edit: bool
+    """잇는 권한이 있나 — 재료 편집과 같은 판정(ADR 0035). 없으면 화면이 단추를 잠근다."""
+    candidates: list[LinkCandidateOut]
+
+
+class LinkCandidatesPageOut(BaseModel):
+    items: list[MaterialLinkCandidatesOut]
+    """후보가 **있는** 재료만, 이름순. 상한은 서버가 정한다."""
+    unlinked: int
+    """보이는 사내 재료 중 문헌과 안 이어진 것."""
+    with_candidates: int
+    """그중 후보가 하나라도 있는 것. `items` 가 상한에 잘렸으면 이것이 더 크다."""
+
+
 class DeckMatchIn(BaseModel):
     text: str
     """붙여넣은 줄들 — `MID, 이름` 또는 `이름`."""

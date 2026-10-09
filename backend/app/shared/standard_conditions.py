@@ -160,6 +160,15 @@ UNIT_KEYS: dict[str, tuple[str, float, float]] = {
     "frequency_rad_per_s": ("frequency", 1 / (2 * math.pi), 0.0),
     "frequency_rad_s": ("frequency", 1 / (2 * math.pi), 0.0),
     "frequency_cpm": ("frequency", 1 / 60, 0.0),
+    # 변형률 속도 · 습도(2026-10-08 실측: strain_rate_s 2,370 · humidity_pct 998 ·
+    # relative_humidity_pct 312 · humidity_rh 272 — 셋 다 0~100 이라 % 다). 별칭이 아니라
+    # 이름에 단위가 박힌 키라 여기 둔다. reference_strain_rate_s 는 **시험 조건이 아니라
+    # 식의 기준**이라 안 넣는다 — 변형률 속도로 읽으면 JC C 의 기준 속도가 시험 속도
+    # 행세를 한다.
+    "strain_rate_s": ("strain_rate", 1.0, 0.0),
+    "humidity_pct": ("humidity", 0.01, 0.0),
+    "relative_humidity_pct": ("humidity", 0.01, 0.0),
+    "humidity_rh": ("humidity", 0.01, 0.0),
     "wavelength_m": ("wavelength", 1.0, 0.0),
     "wavelength_um": ("wavelength", 1e-6, 0.0),
     "wavelength_nm": ("wavelength", 1e-9, 0.0),
