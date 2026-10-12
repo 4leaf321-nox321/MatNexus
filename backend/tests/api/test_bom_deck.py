@@ -15,6 +15,7 @@ import zipfile
 from pathlib import Path
 from typing import Any
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -565,3 +566,70 @@ class Test검증_모델:
         )
         assert refused.status_code == 422
         assert "검증 모델이 아직 없습니다" in refused.json()["error"]["message"]
+
+
+class Test고무는_초탄성으로:
+    """「곡선 합성」 을 켠 고무 줄은 탄소성 곡선 대신 초탄성 덱으로 간다(2026-10-13).
+
+    문헌 초탄성 벌이 없으면 탄성계수에서 Neo-Hookean(C10 = E/6)을 합성하고 「합성」 각주를
+    단다. 고무 분류가 아니면 전처럼 곡선(*MAT_024)이다
+    (`test_합성을_켜면_문헌_스칼라로_곡선_덱이_나온다`).
+    """
+
+    def _rubber(self, db: Session, tmp_path: Path) -> Any:
+        ids = catalog_ids(db, tmp_path)
+        material = db.get(CatalogMaterial, ids["sus"])
+        assert material is not None
+        material.category = "rubber"
+        db.commit()
+        return ids["sus"]
+
+    def test_합성을_켜면_E_에서_Neo_Hookean_초탄성_덱(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str], tmp_path: Path
+    ) -> None:
+        rubber = self._rubber(db, tmp_path)
+        body = client.post(
+            "/api/fitting/decks/bom",
+            json={
+                "rows": [
+                    {
+                        "mid": 5,
+                        "name": "고무 부싱",
+                        "catalog_material_id": str(rubber),
+                        "synthesize": True,
+                    }
+                ],
+                "units": "si",
+            },
+            headers=admin_headers,
+        )
+        assert body.status_code == 200, body.text
+        made = body.json()
+        text = made["text"]
+        assert "*MAT_MOONEY-RIVLIN_RUBBER" in text
+        assert "*MAT_PIECEWISE_LINEAR_PLASTICITY" not in text
+        assert "합성 초탄성" in text and "실측이 아니다" in text
+        assert any("고무라 곡선 대신 초탄성" in one for one in made["notes"])
+        lines = text.splitlines()
+        card = lines[
+            lines.index("$      mid        ro        pr         a         b       ref") + 1
+        ]
+        # A = C10 = E/6 — 문헌 E 193 GPa(대표값).
+        assert float(card[30:40]) == pytest.approx(193e9 / 6, rel=1e-3)
+        assert made["synthetic_count"] == 1
+
+    def test_합성을_안_켜면_고무도_문헌_스칼라(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str], tmp_path: Path
+    ) -> None:
+        rubber = self._rubber(db, tmp_path)
+        body = client.post(
+            "/api/fitting/decks/bom",
+            json={
+                "rows": [{"mid": 5, "name": "고무 부싱", "catalog_material_id": str(rubber)}],
+                "units": "si",
+            },
+            headers=admin_headers,
+        )
+        assert body.status_code == 200, body.text
+        assert "*MAT_MOONEY-RIVLIN_RUBBER" not in body.json()["text"]
+        assert body.json()["literature_count"] == 1

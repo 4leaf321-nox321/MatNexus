@@ -54,6 +54,7 @@ from app.shared import (
     unit_systems,
 )
 from matcore import cards, export, synth
+from matcore.cards.hyperelastic import FromSet
 
 #: 한 번에 받는 줄 수 상한. BOM 은 수십 줄이지 수천 줄이 아니다.
 MAX_LINES = 200
@@ -351,6 +352,55 @@ def literature_formats(db: Session, *, synthesize: bool = False) -> list[export.
     ]
 
 
+#: 고무 — 「곡선 합성」 을 켜면 탄소성 곡선 대신 **초탄성 덱**으로 간다(2026-10-13). 문헌
+#: 분류가 `rubber` 인 재료(실리콘 · NBR · EPDM · 천연고무)만 — 폼 · 점착 테이프는 분류가 달라
+#: 안 든다.
+#:
+#: 왜: 곡선 합성이 거절하던 문헌 재료 40종을 들여다보니 전부 실리콘 · 고무 · 폼 · 테이프였고,
+#: 27종은 탄성 직선이 인장강도에 닿는 변형이 파단 연신율보다 컸다(E 0.3 MPa · UTS 2.2 MPa 면
+#: 733%). 항복 = 인장강도의 탄소성 덱은 고무의 물리가 아니다.
+RUBBER_CATEGORY = "rubber"
+
+
+def is_rubber(material: CatalogMaterial) -> bool:
+    """문헌 분류가 고무인가."""
+    return (material.category or "").strip().lower() == RUBBER_CATEGORY
+
+
+def synthetic_rubber(elastic: dict[str, Any]) -> tuple[dict[str, Any] | None, list[str]]:
+    """탄성계수 E → Neo-Hookean **C10 = E/6** — 비압축 고무의 작은 변형 근사
+    (G = E/3, C10 = G/2).
+
+    문헌 초탄성 벌이 없는 고무에만 쓴다(벌이 있으면 그것이 이긴다). 큰 변형의 경화 · 연화는 못
+    따르므로 각주가 「합성」 으로 시작한다 — 덱 머리에 그대로 실린다.
+    """
+    youngs = elastic.get("youngs_modulus")
+    if not isinstance(youngs, int | float) or youngs <= 0:
+        return None, [
+            "초탄성을 합성할 탄성계수가 없습니다 — 고무의 탄성계수가 문헌에 있어야 합니다."
+        ]
+    c10 = float(youngs) / 6.0
+    block = hyperelastic_sets.block_of(
+        FromSet("neo_hookean", {"c10": c10}), origin="E 에서 합성"
+    )
+    return block, [
+        f"합성 초탄성 — 실측이 아니다: 탄성계수 {youngs / 1e6:.4g} MPa 에서 Neo-Hookean "
+        f"C10 = E/6 = {c10 / 1e6:.4g} MPa(비압축 · 작은 변형의 근사). 큰 변형의 경화 · 연화는 "
+        "못 따른다 — 고무의 인장 · 이축 시험으로 맞춘 식이 있으면 그것을 쓰세요."
+    ]
+
+
+def default_hyperelastic_format(db: Session, solver: str) -> export.Renderer | None:
+    """솔버 하나의 초탄성 형식 — BOM 의 고무 줄이 곡선 형식 대신 쓴다. 목록 차례(코드판
+    먼저)."""
+    for one in literature_formats(db, synthesize=True):
+        if solver_of(one) == solver and any(
+            need.block == hyperelastic_sets.BLOCK and not need.optional for need in one.needs
+        ):
+            return one
+    return None
+
+
 def default_literature_format(
     db: Session, solver: str, *, curve: bool = False
 ) -> export.Renderer | None:
@@ -435,6 +485,10 @@ def assemble(
     if hyperelastic_sets.BLOCK in wanted:
         # 문헌 초탄성 벌 → 초탄성 블록(2026-10-08). 여럿이면 정한 차례로 하나, 나머지는 각주.
         hyper, said = hyperelastic_sets.from_catalog(db, material.id)
+        if hyper is None and synthesize and is_rubber(material):
+            # 벌이 없는 고무 — 곡선 합성을 켰으면 E 에서 Neo-Hookean(2026-10-13).
+            hyper, more = synthetic_rubber(elastic)
+            said = [*said, *more]
         if hyper is not None:
             blocks[hyperelastic_sets.BLOCK] = hyper
         provenance.extend(said)
@@ -450,7 +504,11 @@ def assemble(
                 "rows": rows,
             }
         provenance.extend(said)
-    if synthesize:
+    # 소성 표는 **형식이 표를 읽을 때만** 짓는다(2026-10-13) — 고무 줄이 초탄성 형식으로 가면
+    # 합성은 켜져 있어도 곡선이 필요 없고, 곡선 합성의 거절(「소성 표가 안 나오는 재료」)이 그
+    # 줄을 막으면 안 된다. 형식을 모르면(미리보기) 전처럼 짓는다.
+    wants_table = target is None or any(need.block == SYNTHETIC_BLOCK for need in target.needs)
+    if synthesize and wants_table:
         made = declared_card.synthetic_plastic(stand_in, elastic)
         if isinstance(made, str):
             if made.startswith("소성 표가"):

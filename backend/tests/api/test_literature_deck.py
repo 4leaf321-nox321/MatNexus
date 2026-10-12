@@ -866,3 +866,29 @@ class Test문헌_흡습:
         assert not isinstance(deck, str), deck
         assert "moisture" not in deck.blocks
         assert export.missing_for(deck, target)
+
+
+class Test고무_합성은_벌이_없을_때만:
+    """고무의 초탄성 합성(E → Neo-Hookean)은 **문헌 벌이 없을 때만** — 벌이 있으면 그것이
+    이긴다."""
+
+    def test_벌이_있으면_합성하지_않는다(self, db: Session, tmp_path: Path) -> None:
+        fr4 = Test초탄성_벌()._load(db, tmp_path)
+        material = db.get(CatalogMaterial, fr4)
+        assert material is not None
+        material.category = "rubber"
+        db.commit()
+        target = litdeck.find_format(db, "abaqus_hyperelastic")
+        deck = litdeck.literature_deck(db, material, 1, synthesize=True, target=target)
+        assert not isinstance(deck, str), deck
+        assert "합성" not in deck.blocks["hyperelastic"]["values"]["label"]
+        assert not any(line.startswith("합성 초탄성") for line in deck.provenance)
+
+    def test_고무가_아니면_합성하지_않는다(self, db: Session, tmp_path: Path) -> None:
+        sus, _ = load(db, tmp_path)
+        material = db.get(CatalogMaterial, sus)
+        assert material is not None and material.category != "rubber"
+        target = litdeck.find_format(db, "abaqus_hyperelastic")
+        deck = litdeck.literature_deck(db, material, 1, synthesize=True, target=target)
+        assert not isinstance(deck, str), deck
+        assert "hyperelastic" not in deck.blocks

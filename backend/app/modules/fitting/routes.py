@@ -4715,7 +4715,26 @@ def build_bom_deck(
             continue
 
         if row.catalog_material_id is not None:
+            material = db.get(CatalogMaterial, row.catalog_material_id)
+            if material is None:
+                skipped.append(
+                    BomDeckSkippedOut(
+                        mid=row.mid, name=row.name, why="카탈로그에 없는 재료입니다."
+                    )
+                )
+                continue
             lit_row_target = curve_target if row.synthesize else lit_target
+            # **고무는 곡선 대신 초탄성**(2026-10-13) — 항복 = 인장강도의 탄소성 곡선은 고무의
+            # 물리가 아니다. 문헌 초탄성 벌이 있으면 그것, 없으면 E 에서 Neo-Hookean
+            # (`litdeck`).
+            if row.synthesize and litdeck.is_rubber(material):
+                rubber_target = litdeck.default_hyperelastic_format(db, family)
+                if rubber_target is not None:
+                    lit_row_target = rubber_target
+                    notes.append(
+                        f"{row.name}: 고무라 곡선 대신 초탄성 형식({rubber_target.label})으로 "
+                        "냈습니다."
+                    )
             if lit_row_target is None:
                 skipped.append(
                     BomDeckSkippedOut(
@@ -4727,14 +4746,6 @@ def build_bom_deck(
                             + "형식이 없습니다 — 문헌 값이 채울 수 있는 물성만 요구하는 "
                             "형식이 있어야 합니다(사용 중단된 형식은 안 씁니다)."
                         ),
-                    )
-                )
-                continue
-            material = db.get(CatalogMaterial, row.catalog_material_id)
-            if material is None:
-                skipped.append(
-                    BomDeckSkippedOut(
-                        mid=row.mid, name=row.name, why="카탈로그에 없는 재료입니다."
                     )
                 )
                 continue

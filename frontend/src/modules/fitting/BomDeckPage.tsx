@@ -560,7 +560,7 @@ function MatchRow({
               checked={row.synthesize}
               onChange={(event) => onChange({ ...row, synthesize: event.target.checked })}
             />
-            곡선 합성(*MAT_024) — 실측 아님, 덱에 합성 표지
+            곡선 합성 — 실측 아님, 덱에 합성 표지(고무는 곡선 대신 초탄성)
           </label>
         )}
       </td>
