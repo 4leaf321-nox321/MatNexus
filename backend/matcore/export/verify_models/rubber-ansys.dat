@@ -1,0 +1,75 @@
+!------------------------------------------------------------------------------
+! MatNexus 1-element verification model -- rubber tension -- Mechanical APDL
+!
+!   units : mm - N - tonne - s   (stress MPa)
+!   model : 1 x 1 x 1 mm hex, 1/8 symmetry, x-face pulled to u = @@PULL@@ mm
+!   check : SX against expected.csv (see README.txt)
+!   source: repository example rubber-1elem-ansys.dat with the material
+!           replaced by the card exactly as MatNexus exports it
+!
+!   run   : ansys -b -i <this file> -o out.txt
+!------------------------------------------------------------------------------
+FINISH
+/CLEAR,NOSTART
+/TITLE, MatNexus 1-element rubber tension (mm-N-tonne-s)
+/UNITS,MPA                       ! tag only -- mm, tonne, s, N, MPa
+/PREP7
+
+!==============================================================================
+! MATERIAL -- as exported by MatNexus (sets MNX_MAT)
+!==============================================================================
+@@MATERIAL@@
+
+!==============================================================================
+! MESH
+!==============================================================================
+ET,1,SOLID185
+KEYOPT,1,2,0                     ! B-bar (selective reduced) -- the default
+KEYOPT,1,6,1                     ! MIXED u-P for near-incompressible hyperelasticity
+
+N,1, 0.0, 0.0, 0.0
+N,2, 1.0, 0.0, 0.0
+N,3, 1.0, 1.0, 0.0
+N,4, 0.0, 1.0, 0.0
+N,5, 0.0, 0.0, 1.0
+N,6, 1.0, 0.0, 1.0
+N,7, 1.0, 1.0, 1.0
+N,8, 0.0, 1.0, 1.0
+
+TYPE,1  $  MAT,MNX_MAT
+E,1,2,3,4,5,6,7,8
+
+!==============================================================================
+! BOUNDARY CONDITIONS  (1/8 symmetry + pulled face)
+!==============================================================================
+NSEL,S,LOC,X,0.0  $  D,ALL,UX,0.0
+NSEL,S,LOC,Y,0.0  $  D,ALL,UY,0.0
+NSEL,S,LOC,Z,0.0  $  D,ALL,UZ,0.0
+NSEL,S,LOC,X,1.0  $  D,ALL,UX,@@PULL@@
+NSEL,ALL
+FINISH
+
+!==============================================================================
+! SOLVE
+!==============================================================================
+/SOLU
+ANTYPE,STATIC
+NLGEOM,ON
+NSUBST,50,500,20
+OUTRES,ALL,ALL
+AUTOTS,ON
+SOLVE
+FINISH
+
+!==============================================================================
+! CHECK -- compare with the last row of expected.csv
+!==============================================================================
+/POST1
+SET,LAST
+ESEL,S,ELEM,,1
+ETABLE,SX_,S,X
+PRETAB,SX_
+NSEL,S,LOC,X,1.0
+FSUM
+NSEL,ALL
+FINISH

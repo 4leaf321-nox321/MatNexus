@@ -41,9 +41,11 @@ FAMILY_LABELS = {
     "mooney_rivlin": "Mooney-Rivlin",
     "yeoh": "Yeoh",
     "ogden_1": "Ogden (N=1)",
+    "polynomial_2": "다항식 (N=2)",
 }
-#: 여럿일 때 앞서는 식 — 항이 많은 쪽이 큰 변형을 더 잘 따른다.
-RICHNESS = {"yeoh": 0, "mooney_rivlin": 1, "neo_hookean": 2}
+#: 여럿일 때 앞서는 식 — 항이 많은 쪽이 큰 변형을 더 잘 따른다. 2차 다항식은 Yeoh 뒤다 —
+#: 항은 더 많아도 I₂ 항이 섞이면 큰 변형에서 불안정해지기 쉽다(Yeoh 는 계수가 양이면 안정).
+RICHNESS = {"yeoh": 0, "polynomial_2": 1, "mooney_rivlin": 2, "neo_hookean": 3}
 
 
 @dataclass(frozen=True)

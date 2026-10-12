@@ -10,6 +10,8 @@
 
 from __future__ import annotations
 
+import io
+import zipfile
 from pathlib import Path
 from typing import Any
 
@@ -524,3 +526,42 @@ class Test솔버를_고른다:
             ).status_code
             == 422
         )
+
+
+class Test검증_모델:
+    """1요소 검증 모델 ZIP(`GET /fitting/cards/{id}/export/verify`, 2026-10-12)."""
+
+    def test_카드의_덱을_1요소_모델에_끼워_기대값과_함께(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str]
+    ) -> None:
+        _, card = make_card(db)
+        got = client.get(
+            f"/api/fitting/cards/{card.id}/export/verify?format=dyna", headers=admin_headers
+        )
+        assert got.status_code == 200, got.text
+        assert got.headers["content-type"] == "application/zip"
+        archive = zipfile.ZipFile(io.BytesIO(got.content))
+        names = set(archive.namelist())
+        model = next(name for name in names if name.endswith(".k"))
+        assert {"expected.csv", "README.txt", model} == names
+        text = archive.read(model).decode()
+        # 재료 번호는 늘 1 — 모델의 *PART 가 1 을 가리킨다.
+        assert "*MAT_PIECEWISE_LINEAR_PLASTICITY" in text and "@@" not in text
+        # 표가 εp 0.05 까지라 그 90% 까지만 당긴다.
+        last = archive.read("expected.csv").decode().splitlines()[-1].split(",")
+        assert abs(float(last[3]) - 0.045) < 1e-3
+
+    def test_형식_목록이_키트_있는_형식을_말하고_없는_형식은_거절한다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str]
+    ) -> None:
+        listed = client.get("/api/fitting/formats", headers=admin_headers).json()
+        kits = {one["key"] for one in listed if one["verify_kit"]}
+        assert {"dyna", "abaqus_hyperelastic", "openradioss"} <= kits
+        assert "dyna_elastic" not in kits
+        _, card = make_card(db)
+        refused = client.get(
+            f"/api/fitting/cards/{card.id}/export/verify?format=dyna_elastic",
+            headers=admin_headers,
+        )
+        assert refused.status_code == 422
+        assert "검증 모델이 아직 없습니다" in refused.json()["error"]["message"]

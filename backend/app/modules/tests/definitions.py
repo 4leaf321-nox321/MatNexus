@@ -158,6 +158,58 @@ BUILTIN_TEST_TYPES: list[dict[str, Any]] = [
             ("testing_group", "시험 그룹", "text", None, None, None, False),
         ],
     },
+    {
+        # **크리프**(2026-10-12) — 정하중을 걸고 시간에 따른 변형률을 잰다. 시험 한 건이 (응력,
+        # 온도) 점 하나의 최소 크리프 속도를 주고(처리 `creep.rate`), 여러 건을 묶어 Norton ·
+        # Garofalo 를 맞춘다(묶음 `creep.law`, 확장 `creep`). 장비마다 파일 모양이 달라 전용
+        # 파서는 없다 — 형식 프로파일이 읽는다. 보고서의 최소 크리프 속도만 있으면 표로 넣는다
+        # (요약값 `min_creep_rate`).
+        "key": "creep",
+        "label": "크리프",
+        "abbr": "CRP",
+        "parser_key": None,
+        "description": (
+            "정하중 크리프. 시간-변형률 곡선에서 최소(정상상태) 크리프 속도를 얻는다 — "
+            "응력 · 온도마다 한 건."
+        ),
+        "sort_order": 50,
+        "channels": [
+            ("time", "시간", "time", "s", True),
+            ("strain", "변형률", "strain", "1", True),
+            ("temperature", "온도", "temperature", "K", False),
+        ],
+        "conditions": [
+            # 묶음이 이 둘로 점을 놓는다 — 없으면 그 시험은 Norton 점이 못 된다.
+            ("applied_stress", "가한 응력", "number", "stress", "Pa", None, True),
+            ("temperature", "시험 온도", "number", "temperature", "K", None, True),
+            ("testing_group", "시험 그룹", "text", None, None, None, False),
+        ],
+    },
+    {
+        # **응력완화**(2026-10-12) — 변형률을 잡아 두고 시간에 따른 응력을 잰다. 완화 탄성률
+        # E(t) = σ(t)/ε₀ 가 시간 영역의 점탄성이라, 묶어서 Prony 를 맞추면 DMA 와 같은 점탄성
+        # 카드가 선다(확장 `relaxation`).
+        "key": "stress_relaxation",
+        "label": "응력완화",
+        "abbr": "SRX",
+        "parser_key": None,
+        "description": (
+            "응력완화. 변형률을 유지한 채 시간에 따른 응력에서 완화 탄성률 E(t) 를 얻는다."
+        ),
+        "sort_order": 60,
+        "channels": [
+            ("time", "시간", "time", "s", True),
+            ("stress", "응력", "stress", "Pa", True),
+            ("strain", "변형률", "strain", "1", False),
+            ("temperature", "온도", "temperature", "K", False),
+        ],
+        "conditions": [
+            # E(t) = σ/ε₀ 의 ε₀ — 변형률 채널이 있으면 그 평균을 쓰고 이것과 견준다.
+            ("held_strain", "유지 변형률", "number", "strain", "1", None, False),
+            ("temperature", "시험 온도", "number", "temperature", "K", None, False),
+            ("testing_group", "시험 그룹", "text", None, None, None, False),
+        ],
+    },
 ]
 
 

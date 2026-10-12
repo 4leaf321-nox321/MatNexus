@@ -231,6 +231,31 @@ TA_HR_FLOW_DEFINITION: dict[str, Any] = {
     ],
 }
 
+#: **MatNexus 표준 CSV — 크리프 · 응력완화**(2026-10-12). 두 시험 종류는 장비마다 파일이 달라
+#: 받은 실파일이 아직 없다 — 그래도 목록에 서는 종류는 읽혀야 한다(정의만 있고 못 읽는 종류를
+#: 보이면 사용자가 올렸다가 실패한다). 그래서 **우리가 정한 꼴**을 하나 읽는다: 첫 줄 열 이름,
+#: 둘째 줄 단위(`s, 1, K` 처럼 — 단위 줄이 없으면 멈춘다). 지문은 다른 장비 파일에 안 나올
+#: 이름(`Creep strain` · `Relaxation stress`)이다. 장비 파일은 형식 정의에서 열을 이어 준다.
+MNX_CREEP_CSV_KEY = "mnx_creep_csv"
+MNX_CREEP_CSV_DEFINITION: dict[str, Any] = {
+    "match": {"extensions": [".csv", ".txt"], "header_any": ["Creep strain"]},
+    "columns": {
+        "Time": {"channel": "time"},
+        "Creep strain": {"channel": "strain"},
+        "Temperature": {"channel": "temperature"},
+    },
+}
+MNX_RELAXATION_CSV_KEY = "mnx_relaxation_csv"
+MNX_RELAXATION_CSV_DEFINITION: dict[str, Any] = {
+    "match": {"extensions": [".csv", ".txt"], "header_any": ["Relaxation stress"]},
+    "columns": {
+        "Time": {"channel": "time"},
+        "Relaxation stress": {"channel": "stress"},
+        "Strain": {"channel": "strain"},
+        "Temperature": {"channel": "temperature"},
+    },
+}
+
 #: (key, label, 시험 종류 key, description, definition)
 BUILTIN_FORMAT_PROFILES: list[tuple[str, str, str, str, dict[str, Any]]] = [
     (
@@ -254,6 +279,22 @@ BUILTIN_FORMAT_PROFILES: list[tuple[str, str, str, str, dict[str, Any]]] = [
         "Flow sweep 단의 전단율·점도·전단응력이 들어온다. "
         "Peak hold·Amplitude sweep 은 건너뛴다.",
         TA_HR_FLOW_DEFINITION,
+    ),
+    (
+        MNX_CREEP_CSV_KEY,
+        "MatNexus 표준 CSV — 크리프",
+        "creep",
+        "첫 줄 열 이름 Time · Creep strain(· Temperature), 둘째 줄 단위(s · 1 · K 처럼). "
+        "장비 파일은 이 꼴로 옮기거나 형식 정의에서 열을 이어 준다.",
+        MNX_CREEP_CSV_DEFINITION,
+    ),
+    (
+        MNX_RELAXATION_CSV_KEY,
+        "MatNexus 표준 CSV — 응력완화",
+        "stress_relaxation",
+        "첫 줄 열 이름 Time · Relaxation stress(· Strain · Temperature), 둘째 줄 단위"
+        "(s · MPa · 1 · K 처럼). 장비 파일은 이 꼴로 옮기거나 형식 정의에서 열을 이어 준다.",
+        MNX_RELAXATION_CSV_DEFINITION,
     ),
 ]
 

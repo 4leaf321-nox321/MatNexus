@@ -387,8 +387,8 @@
             "when": "not has(hyperelastic.family) or hyperelastic.family == \"\""
           },
           {
-            "fail": "'{hyperelastic.family}' 는 덱으로 옮기는 법을 모르는 식입니다. 있는 것: mooney_rivlin, neo_hookean, ogden_1, yeoh",
-            "when": "hyperelastic.family != \"neo_hookean\" and hyperelastic.family != \"mooney_rivlin\" and hyperelastic.family != \"yeoh\" and hyperelastic.family != \"ogden_1\""
+            "fail": "'{hyperelastic.family}' 는 덱으로 옮기는 법을 모르는 식입니다. 있는 것: mooney_rivlin, neo_hookean, ogden_1, polynomial_2, yeoh",
+            "when": "hyperelastic.family != \"neo_hookean\" and hyperelastic.family != \"mooney_rivlin\" and hyperelastic.family != \"yeoh\" and hyperelastic.family != \"ogden_1\" and hyperelastic.family != \"polynomial_2\""
           },
           {
             "fail": "neo_hookean 에 필요한 계수가 없습니다: c10 가운데 빠진 것이 있습니다. 카드가 다른 식으로 맞춰졌을 수 있습니다.",
@@ -405,6 +405,10 @@
           {
             "fail": "ogden_1 에 필요한 계수가 없습니다: mu, alpha 가운데 빠진 것이 있습니다. 카드가 다른 식으로 맞춰졌을 수 있습니다.",
             "when": "hyperelastic.family == \"ogden_1\" and (not (count(hyperelastic, name == \"mu\" and has(value)) > 0) or not (count(hyperelastic, name == \"alpha\" and has(value)) > 0))"
+          },
+          {
+            "fail": "polynomial_2 에 필요한 계수가 없습니다: c10, c01, c20, c11, c02 가운데 빠진 것이 있습니다. 카드가 다른 식으로 맞춰졌을 수 있습니다.",
+            "when": "hyperelastic.family == \"polynomial_2\" and (not (count(hyperelastic, name == \"c10\" and has(value)) > 0) or not (count(hyperelastic, name == \"c01\" and has(value)) > 0) or not (count(hyperelastic, name == \"c20\" and has(value)) > 0) or not (count(hyperelastic, name == \"c11\" and has(value)) > 0) or not (count(hyperelastic, name == \"c02\" and has(value)) > 0))"
           },
           {
             "fail": "푸아송비가 {elastic.poisson_ratio:g} 입니다 — 0 보다 크고 0.5 이하여야 합니다(0.5 는 완전 비압축).",
@@ -425,7 +429,7 @@
             "when": "not (has(elastic.poisson_ratio) and elastic.poisson_ratio < 0.5)"
           },
           {
-            "text": "** D1 = 2/K from the card nu={elastic.poisson_ratio:g}: mu0 = {(last(hyperelastic, value, name == \"mu\") if hyperelastic.family == \"ogden_1\" else (2 * (last(hyperelastic, value, name == \"c10\") + last(hyperelastic, value, name == \"c01\")) if hyperelastic.family == \"mooney_rivlin\" else 2 * last(hyperelastic, value, name == \"c10\"))):.6g}, K = {(2 * (last(hyperelastic, value, name == \"mu\") if hyperelastic.family == \"ogden_1\" else (2 * (last(hyperelastic, value, name == \"c10\") + last(hyperelastic, value, name == \"c01\")) if hyperelastic.family == \"mooney_rivlin\" else 2 * last(hyperelastic, value, name == \"c10\"))) * (1 + elastic.poisson_ratio) / (3 * (1 - 2 * elastic.poisson_ratio))):.6g}.",
+            "text": "** D1 = 2/K from the card nu={elastic.poisson_ratio:g}: mu0 = {(last(hyperelastic, value, name == \"mu\") if hyperelastic.family == \"ogden_1\" else (2 * (last(hyperelastic, value, name == \"c10\") + last(hyperelastic, value, name == \"c01\")) if hyperelastic.family == \"mooney_rivlin\" or hyperelastic.family == \"polynomial_2\" else 2 * last(hyperelastic, value, name == \"c10\"))):.6g}, K = {(2 * (last(hyperelastic, value, name == \"mu\") if hyperelastic.family == \"ogden_1\" else (2 * (last(hyperelastic, value, name == \"c10\") + last(hyperelastic, value, name == \"c01\")) if hyperelastic.family == \"mooney_rivlin\" or hyperelastic.family == \"polynomial_2\" else 2 * last(hyperelastic, value, name == \"c10\"))) * (1 + elastic.poisson_ratio) / (3 * (1 - 2 * elastic.poisson_ratio))):.6g}.",
             "when": "has(elastic.poisson_ratio) and elastic.poisson_ratio < 0.5"
           },
           {
@@ -468,7 +472,7 @@
                 "format": "free"
               },
               {
-                "expr": "(2 / (2 * (last(hyperelastic, value, name == \"mu\") if hyperelastic.family == \"ogden_1\" else (2 * (last(hyperelastic, value, name == \"c10\") + last(hyperelastic, value, name == \"c01\")) if hyperelastic.family == \"mooney_rivlin\" else 2 * last(hyperelastic, value, name == \"c10\"))) * (1 + elastic.poisson_ratio) / (3 * (1 - 2 * elastic.poisson_ratio))) if has(elastic.poisson_ratio) and elastic.poisson_ratio < 0.5 else 0)",
+                "expr": "(2 / (2 * (last(hyperelastic, value, name == \"mu\") if hyperelastic.family == \"ogden_1\" else (2 * (last(hyperelastic, value, name == \"c10\") + last(hyperelastic, value, name == \"c01\")) if hyperelastic.family == \"mooney_rivlin\" or hyperelastic.family == \"polynomial_2\" else 2 * last(hyperelastic, value, name == \"c10\"))) * (1 + elastic.poisson_ratio) / (3 * (1 - 2 * elastic.poisson_ratio))) if has(elastic.poisson_ratio) and elastic.poisson_ratio < 0.5 else 0)",
                 "format": "free"
               }
             ],
@@ -490,7 +494,7 @@
                 "format": "free"
               },
               {
-                "expr": "(2 / (2 * (last(hyperelastic, value, name == \"mu\") if hyperelastic.family == \"ogden_1\" else (2 * (last(hyperelastic, value, name == \"c10\") + last(hyperelastic, value, name == \"c01\")) if hyperelastic.family == \"mooney_rivlin\" else 2 * last(hyperelastic, value, name == \"c10\"))) * (1 + elastic.poisson_ratio) / (3 * (1 - 2 * elastic.poisson_ratio))) if has(elastic.poisson_ratio) and elastic.poisson_ratio < 0.5 else 0)",
+                "expr": "(2 / (2 * (last(hyperelastic, value, name == \"mu\") if hyperelastic.family == \"ogden_1\" else (2 * (last(hyperelastic, value, name == \"c10\") + last(hyperelastic, value, name == \"c01\")) if hyperelastic.family == \"mooney_rivlin\" or hyperelastic.family == \"polynomial_2\" else 2 * last(hyperelastic, value, name == \"c10\"))) * (1 + elastic.poisson_ratio) / (3 * (1 - 2 * elastic.poisson_ratio))) if has(elastic.poisson_ratio) and elastic.poisson_ratio < 0.5 else 0)",
                 "format": "free"
               }
             ],
@@ -516,7 +520,7 @@
                 "format": "free"
               },
               {
-                "expr": "(2 / (2 * (last(hyperelastic, value, name == \"mu\") if hyperelastic.family == \"ogden_1\" else (2 * (last(hyperelastic, value, name == \"c10\") + last(hyperelastic, value, name == \"c01\")) if hyperelastic.family == \"mooney_rivlin\" else 2 * last(hyperelastic, value, name == \"c10\"))) * (1 + elastic.poisson_ratio) / (3 * (1 - 2 * elastic.poisson_ratio))) if has(elastic.poisson_ratio) and elastic.poisson_ratio < 0.5 else 0)",
+                "expr": "(2 / (2 * (last(hyperelastic, value, name == \"mu\") if hyperelastic.family == \"ogden_1\" else (2 * (last(hyperelastic, value, name == \"c10\") + last(hyperelastic, value, name == \"c01\")) if hyperelastic.family == \"mooney_rivlin\" or hyperelastic.family == \"polynomial_2\" else 2 * last(hyperelastic, value, name == \"c10\"))) * (1 + elastic.poisson_ratio) / (3 * (1 - 2 * elastic.poisson_ratio))) if has(elastic.poisson_ratio) and elastic.poisson_ratio < 0.5 else 0)",
                 "format": "free"
               }
             ],
@@ -538,12 +542,50 @@
                 "format": "free"
               },
               {
-                "expr": "(2 / (2 * (last(hyperelastic, value, name == \"mu\") if hyperelastic.family == \"ogden_1\" else (2 * (last(hyperelastic, value, name == \"c10\") + last(hyperelastic, value, name == \"c01\")) if hyperelastic.family == \"mooney_rivlin\" else 2 * last(hyperelastic, value, name == \"c10\"))) * (1 + elastic.poisson_ratio) / (3 * (1 - 2 * elastic.poisson_ratio))) if has(elastic.poisson_ratio) and elastic.poisson_ratio < 0.5 else 0)",
+                "expr": "(2 / (2 * (last(hyperelastic, value, name == \"mu\") if hyperelastic.family == \"ogden_1\" else (2 * (last(hyperelastic, value, name == \"c10\") + last(hyperelastic, value, name == \"c01\")) if hyperelastic.family == \"mooney_rivlin\" or hyperelastic.family == \"polynomial_2\" else 2 * last(hyperelastic, value, name == \"c10\"))) * (1 + elastic.poisson_ratio) / (3 * (1 - 2 * elastic.poisson_ratio))) if has(elastic.poisson_ratio) and elastic.poisson_ratio < 0.5 else 0)",
                 "format": "free"
               }
             ],
             "join": ", ",
             "when": "hyperelastic.family == \"ogden_1\""
+          },
+          {
+            "text": "*HYPERELASTIC, POLYNOMIAL, N=2",
+            "when": "hyperelastic.family == \"polynomial_2\""
+          },
+          {
+            "fields": [
+              {
+                "expr": "last(hyperelastic, value, name == \"c10\")",
+                "format": "free"
+              },
+              {
+                "expr": "last(hyperelastic, value, name == \"c01\")",
+                "format": "free"
+              },
+              {
+                "expr": "last(hyperelastic, value, name == \"c20\")",
+                "format": "free"
+              },
+              {
+                "expr": "last(hyperelastic, value, name == \"c11\")",
+                "format": "free"
+              },
+              {
+                "expr": "last(hyperelastic, value, name == \"c02\")",
+                "format": "free"
+              },
+              {
+                "expr": "(2 / (2 * (last(hyperelastic, value, name == \"mu\") if hyperelastic.family == \"ogden_1\" else (2 * (last(hyperelastic, value, name == \"c10\") + last(hyperelastic, value, name == \"c01\")) if hyperelastic.family == \"mooney_rivlin\" or hyperelastic.family == \"polynomial_2\" else 2 * last(hyperelastic, value, name == \"c10\"))) * (1 + elastic.poisson_ratio) / (3 * (1 - 2 * elastic.poisson_ratio))) if has(elastic.poisson_ratio) and elastic.poisson_ratio < 0.5 else 0)",
+                "format": "free"
+              },
+              {
+                "expr": "0",
+                "format": "free"
+              }
+            ],
+            "join": ", ",
+            "when": "hyperelastic.family == \"polynomial_2\""
           }
         ]
       }
@@ -2276,7 +2318,7 @@
       "definition": {
         "extension": "k",
         "suffix": "_hyperelastic",
-        "describe": "Neo-Hookean·Mooney-Rivlin 은 *MAT_027, Yeoh 는 *MAT_077_H, Ogden 은 *MAT_077_O. 비압축 정도는 카드의 푸아송비로 준다(0.495~0.4995).",
+        "describe": "Neo-Hookean·Mooney-Rivlin 은 *MAT_027, Yeoh·다항식(N=2)은 *MAT_077_H, Ogden 은 *MAT_077_O. 비압축 정도는 카드의 푸아송비로 준다(0.495~0.4995).",
         "keywords": [
           "*KEYWORD",
           "*MAT_",
@@ -2301,8 +2343,8 @@
             "when": "not has(hyperelastic.family) or hyperelastic.family == \"\""
           },
           {
-            "fail": "'{hyperelastic.family}' 는 덱으로 옮기는 법을 모르는 식입니다. 있는 것: mooney_rivlin, neo_hookean, ogden_1, yeoh",
-            "when": "hyperelastic.family != \"neo_hookean\" and hyperelastic.family != \"mooney_rivlin\" and hyperelastic.family != \"yeoh\" and hyperelastic.family != \"ogden_1\""
+            "fail": "'{hyperelastic.family}' 는 덱으로 옮기는 법을 모르는 식입니다. 있는 것: mooney_rivlin, neo_hookean, ogden_1, polynomial_2, yeoh",
+            "when": "hyperelastic.family != \"neo_hookean\" and hyperelastic.family != \"mooney_rivlin\" and hyperelastic.family != \"yeoh\" and hyperelastic.family != \"ogden_1\" and hyperelastic.family != \"polynomial_2\""
           },
           {
             "fail": "neo_hookean 에 필요한 계수가 없습니다: c10 가운데 빠진 것이 있습니다. 카드가 다른 식으로 맞춰졌을 수 있습니다.",
@@ -2319,6 +2361,10 @@
           {
             "fail": "ogden_1 에 필요한 계수가 없습니다: mu, alpha 가운데 빠진 것이 있습니다. 카드가 다른 식으로 맞춰졌을 수 있습니다.",
             "when": "hyperelastic.family == \"ogden_1\" and (not (count(hyperelastic, name == \"mu\" and has(value)) > 0) or not (count(hyperelastic, name == \"alpha\" and has(value)) > 0))"
+          },
+          {
+            "fail": "polynomial_2 에 필요한 계수가 없습니다: c10, c01, c20, c11, c02 가운데 빠진 것이 있습니다. 카드가 다른 식으로 맞춰졌을 수 있습니다.",
+            "when": "hyperelastic.family == \"polynomial_2\" and (not (count(hyperelastic, name == \"c10\" and has(value)) > 0) or not (count(hyperelastic, name == \"c01\" and has(value)) > 0) or not (count(hyperelastic, name == \"c20\" and has(value)) > 0) or not (count(hyperelastic, name == \"c11\" and has(value)) > 0) or not (count(hyperelastic, name == \"c02\" and has(value)) > 0))"
           },
           {
             "fail": "푸아송비가 {elastic.poisson_ratio:g} 입니다 — 고무 카드는 0 과 0.5 사이여야 합니다(0.5 면 체적 탄성률이 발산합니다). 보통 0.495~0.4995 입니다.",
@@ -2424,12 +2470,16 @@
             "when": "hyperelastic.family == \"yeoh\""
           },
           {
+            "text": "$ Polynomial N=2: C10 C01 C11 C20 C02 (N=0: coefficients given).",
+            "when": "hyperelastic.family == \"polynomial_2\""
+          },
+          {
             "text": "*MAT_HYPERELASTIC_RUBBER",
-            "when": "hyperelastic.family == \"yeoh\""
+            "when": "hyperelastic.family == \"yeoh\" or hyperelastic.family == \"polynomial_2\""
           },
           {
             "text": "$      mid        ro        pr         n        nv         g      sigf       ref",
-            "when": "hyperelastic.family == \"yeoh\""
+            "when": "hyperelastic.family == \"yeoh\" or hyperelastic.family == \"polynomial_2\""
           },
           {
             "fields": [
@@ -2459,11 +2509,11 @@
               }
             ],
             "join": "",
-            "when": "hyperelastic.family == \"yeoh\""
+            "when": "hyperelastic.family == \"yeoh\" or hyperelastic.family == \"polynomial_2\""
           },
           {
             "text": "$      c10       c01       c11       c20       c02       c30    therml",
-            "when": "hyperelastic.family == \"yeoh\""
+            "when": "hyperelastic.family == \"yeoh\" or hyperelastic.family == \"polynomial_2\""
           },
           {
             "fields": [
@@ -2475,14 +2525,14 @@
                 ]
               },
               {
-                "expr": "0",
+                "expr": "(last(hyperelastic, value, name == \"c01\") if hyperelastic.family == \"polynomial_2\" else 0)",
                 "format": [
                   "fit",
                   10
                 ]
               },
               {
-                "expr": "0",
+                "expr": "(last(hyperelastic, value, name == \"c11\") if hyperelastic.family == \"polynomial_2\" else 0)",
                 "format": [
                   "fit",
                   10
@@ -2496,14 +2546,14 @@
                 ]
               },
               {
-                "expr": "0",
+                "expr": "(last(hyperelastic, value, name == \"c02\") if hyperelastic.family == \"polynomial_2\" else 0)",
                 "format": [
                   "fit",
                   10
                 ]
               },
               {
-                "expr": "last(hyperelastic, value, name == \"c30\")",
+                "expr": "(last(hyperelastic, value, name == \"c30\") if hyperelastic.family == \"yeoh\" else 0)",
                 "format": [
                   "fit",
                   10
@@ -2514,7 +2564,7 @@
               }
             ],
             "join": "",
-            "when": "hyperelastic.family == \"yeoh\""
+            "when": "hyperelastic.family == \"yeoh\" or hyperelastic.family == \"polynomial_2\""
           },
           {
             "text": "$ MU1 = 2*mu/alpha = {2 * last(hyperelastic, value, name == \"mu\") / last(hyperelastic, value, name == \"alpha\"):.6g} (card mu is the Abaqus convention, G = mu = {last(hyperelastic, value, name == \"mu\"):.6g}); 077_O: G = sum(mu*alpha)/2",
@@ -4972,8 +5022,8 @@
             "when": "not has(hyperelastic.family) or hyperelastic.family == \"\""
           },
           {
-            "fail": "'{hyperelastic.family}' 는 덱으로 옮기는 법을 모르는 식입니다. 있는 것: mooney_rivlin, neo_hookean, ogden_1, yeoh",
-            "when": "hyperelastic.family != \"neo_hookean\" and hyperelastic.family != \"mooney_rivlin\" and hyperelastic.family != \"yeoh\" and hyperelastic.family != \"ogden_1\""
+            "fail": "'{hyperelastic.family}' 는 덱으로 옮기는 법을 모르는 식입니다. 있는 것: mooney_rivlin, neo_hookean, ogden_1, polynomial_2, yeoh",
+            "when": "hyperelastic.family != \"neo_hookean\" and hyperelastic.family != \"mooney_rivlin\" and hyperelastic.family != \"yeoh\" and hyperelastic.family != \"ogden_1\" and hyperelastic.family != \"polynomial_2\""
           },
           {
             "fail": "neo_hookean 에 필요한 계수가 없습니다: c10 가운데 빠진 것이 있습니다. 카드가 다른 식으로 맞춰졌을 수 있습니다.",
@@ -4990,6 +5040,10 @@
           {
             "fail": "ogden_1 에 필요한 계수가 없습니다: mu, alpha 가운데 빠진 것이 있습니다. 카드가 다른 식으로 맞춰졌을 수 있습니다.",
             "when": "hyperelastic.family == \"ogden_1\" and (not (count(hyperelastic, name == \"mu\" and has(value)) > 0) or not (count(hyperelastic, name == \"alpha\" and has(value)) > 0))"
+          },
+          {
+            "fail": "polynomial_2 에 필요한 계수가 없습니다: c10, c01, c20, c11, c02 가운데 빠진 것이 있습니다. 카드가 다른 식으로 맞춰졌을 수 있습니다.",
+            "when": "hyperelastic.family == \"polynomial_2\" and (not (count(hyperelastic, name == \"c10\" and has(value)) > 0) or not (count(hyperelastic, name == \"c01\" and has(value)) > 0) or not (count(hyperelastic, name == \"c20\" and has(value)) > 0) or not (count(hyperelastic, name == \"c11\" and has(value)) > 0) or not (count(hyperelastic, name == \"c02\" and has(value)) > 0))"
           },
           {
             "fail": "푸아송비가 {elastic.poisson_ratio:g} 입니다 — 0 보다 크고 0.5 이하여야 합니다(0.5 는 완전 비압축).",
@@ -5033,7 +5087,7 @@
             "when": "not (has(elastic.poisson_ratio) and elastic.poisson_ratio < 0.5)"
           },
           {
-            "text": "! d = 2/K from the card nu={elastic.poisson_ratio:g}: mu = {(last(hyperelastic, value, name == \"mu\") if hyperelastic.family == \"ogden_1\" else (2 * (last(hyperelastic, value, name == \"c10\") + last(hyperelastic, value, name == \"c01\")) if hyperelastic.family == \"mooney_rivlin\" else 2 * last(hyperelastic, value, name == \"c10\"))):.6g}, K = {(2 * (last(hyperelastic, value, name == \"mu\") if hyperelastic.family == \"ogden_1\" else (2 * (last(hyperelastic, value, name == \"c10\") + last(hyperelastic, value, name == \"c01\")) if hyperelastic.family == \"mooney_rivlin\" else 2 * last(hyperelastic, value, name == \"c10\"))) * (1 + elastic.poisson_ratio) / (3 * (1 - 2 * elastic.poisson_ratio))):.6g}.",
+            "text": "! d = 2/K from the card nu={elastic.poisson_ratio:g}: mu = {(last(hyperelastic, value, name == \"mu\") if hyperelastic.family == \"ogden_1\" else (2 * (last(hyperelastic, value, name == \"c10\") + last(hyperelastic, value, name == \"c01\")) if hyperelastic.family == \"mooney_rivlin\" or hyperelastic.family == \"polynomial_2\" else 2 * last(hyperelastic, value, name == \"c10\"))):.6g}, K = {(2 * (last(hyperelastic, value, name == \"mu\") if hyperelastic.family == \"ogden_1\" else (2 * (last(hyperelastic, value, name == \"c10\") + last(hyperelastic, value, name == \"c01\")) if hyperelastic.family == \"mooney_rivlin\" or hyperelastic.family == \"polynomial_2\" else 2 * last(hyperelastic, value, name == \"c10\"))) * (1 + elastic.poisson_ratio) / (3 * (1 - 2 * elastic.poisson_ratio))):.6g}.",
             "when": "has(elastic.poisson_ratio) and elastic.poisson_ratio < 0.5"
           },
           {
@@ -5066,7 +5120,7 @@
                 "format": "free"
               },
               {
-                "expr": "2 / (2 * (last(hyperelastic, value, name == \"mu\") if hyperelastic.family == \"ogden_1\" else (2 * (last(hyperelastic, value, name == \"c10\") + last(hyperelastic, value, name == \"c01\")) if hyperelastic.family == \"mooney_rivlin\" else 2 * last(hyperelastic, value, name == \"c10\"))) * (1 + elastic.poisson_ratio) / (3 * (1 - 2 * elastic.poisson_ratio)))",
+                "expr": "2 / (2 * (last(hyperelastic, value, name == \"mu\") if hyperelastic.family == \"ogden_1\" else (2 * (last(hyperelastic, value, name == \"c10\") + last(hyperelastic, value, name == \"c01\")) if hyperelastic.family == \"mooney_rivlin\" or hyperelastic.family == \"polynomial_2\" else 2 * last(hyperelastic, value, name == \"c10\"))) * (1 + elastic.poisson_ratio) / (3 * (1 - 2 * elastic.poisson_ratio)))",
                 "format": "free",
                 "when": "has(elastic.poisson_ratio) and elastic.poisson_ratio < 0.5",
                 "default": "0.0"
@@ -5091,7 +5145,7 @@
                 "format": "free"
               },
               {
-                "expr": "2 / (2 * (last(hyperelastic, value, name == \"mu\") if hyperelastic.family == \"ogden_1\" else (2 * (last(hyperelastic, value, name == \"c10\") + last(hyperelastic, value, name == \"c01\")) if hyperelastic.family == \"mooney_rivlin\" else 2 * last(hyperelastic, value, name == \"c10\"))) * (1 + elastic.poisson_ratio) / (3 * (1 - 2 * elastic.poisson_ratio)))",
+                "expr": "2 / (2 * (last(hyperelastic, value, name == \"mu\") if hyperelastic.family == \"ogden_1\" else (2 * (last(hyperelastic, value, name == \"c10\") + last(hyperelastic, value, name == \"c01\")) if hyperelastic.family == \"mooney_rivlin\" or hyperelastic.family == \"polynomial_2\" else 2 * last(hyperelastic, value, name == \"c10\"))) * (1 + elastic.poisson_ratio) / (3 * (1 - 2 * elastic.poisson_ratio)))",
                 "format": "free",
                 "when": "has(elastic.poisson_ratio) and elastic.poisson_ratio < 0.5",
                 "default": "0.0"
@@ -5100,6 +5154,43 @@
             "join": ",",
             "prefix": "TBDATA,1,",
             "when": "hyperelastic.family == \"mooney_rivlin\""
+          },
+          {
+            "text": "TB,HYPER,MNX_MAT,1,5,MOONEY",
+            "when": "hyperelastic.family == \"polynomial_2\""
+          },
+          {
+            "fields": [
+              {
+                "expr": "last(hyperelastic, value, name == \"c10\")",
+                "format": "free"
+              },
+              {
+                "expr": "last(hyperelastic, value, name == \"c01\")",
+                "format": "free"
+              },
+              {
+                "expr": "last(hyperelastic, value, name == \"c20\")",
+                "format": "free"
+              },
+              {
+                "expr": "last(hyperelastic, value, name == \"c11\")",
+                "format": "free"
+              },
+              {
+                "expr": "last(hyperelastic, value, name == \"c02\")",
+                "format": "free"
+              },
+              {
+                "expr": "2 / (2 * (last(hyperelastic, value, name == \"mu\") if hyperelastic.family == \"ogden_1\" else (2 * (last(hyperelastic, value, name == \"c10\") + last(hyperelastic, value, name == \"c01\")) if hyperelastic.family == \"mooney_rivlin\" or hyperelastic.family == \"polynomial_2\" else 2 * last(hyperelastic, value, name == \"c10\"))) * (1 + elastic.poisson_ratio) / (3 * (1 - 2 * elastic.poisson_ratio)))",
+                "format": "free",
+                "when": "has(elastic.poisson_ratio) and elastic.poisson_ratio < 0.5",
+                "default": "0.0"
+              }
+            ],
+            "join": ",",
+            "prefix": "TBDATA,1,",
+            "when": "hyperelastic.family == \"polynomial_2\""
           },
           {
             "text": "TB,HYPER,MNX_MAT,1,3,YEOH",
@@ -5120,7 +5211,7 @@
                 "format": "free"
               },
               {
-                "expr": "2 / (2 * (last(hyperelastic, value, name == \"mu\") if hyperelastic.family == \"ogden_1\" else (2 * (last(hyperelastic, value, name == \"c10\") + last(hyperelastic, value, name == \"c01\")) if hyperelastic.family == \"mooney_rivlin\" else 2 * last(hyperelastic, value, name == \"c10\"))) * (1 + elastic.poisson_ratio) / (3 * (1 - 2 * elastic.poisson_ratio)))",
+                "expr": "2 / (2 * (last(hyperelastic, value, name == \"mu\") if hyperelastic.family == \"ogden_1\" else (2 * (last(hyperelastic, value, name == \"c10\") + last(hyperelastic, value, name == \"c01\")) if hyperelastic.family == \"mooney_rivlin\" or hyperelastic.family == \"polynomial_2\" else 2 * last(hyperelastic, value, name == \"c10\"))) * (1 + elastic.poisson_ratio) / (3 * (1 - 2 * elastic.poisson_ratio)))",
                 "format": "free",
                 "when": "has(elastic.poisson_ratio) and elastic.poisson_ratio < 0.5",
                 "default": "0.0"
@@ -5150,7 +5241,7 @@
                 "format": "free"
               },
               {
-                "expr": "2 / (2 * (last(hyperelastic, value, name == \"mu\") if hyperelastic.family == \"ogden_1\" else (2 * (last(hyperelastic, value, name == \"c10\") + last(hyperelastic, value, name == \"c01\")) if hyperelastic.family == \"mooney_rivlin\" else 2 * last(hyperelastic, value, name == \"c10\"))) * (1 + elastic.poisson_ratio) / (3 * (1 - 2 * elastic.poisson_ratio)))",
+                "expr": "2 / (2 * (last(hyperelastic, value, name == \"mu\") if hyperelastic.family == \"ogden_1\" else (2 * (last(hyperelastic, value, name == \"c10\") + last(hyperelastic, value, name == \"c01\")) if hyperelastic.family == \"mooney_rivlin\" or hyperelastic.family == \"polynomial_2\" else 2 * last(hyperelastic, value, name == \"c10\"))) * (1 + elastic.poisson_ratio) / (3 * (1 - 2 * elastic.poisson_ratio)))",
                 "format": "free",
                 "when": "has(elastic.poisson_ratio) and elastic.poisson_ratio < 0.5",
                 "default": "0.0"
@@ -9667,7 +9758,7 @@
       "definition": {
         "extension": "bdf",
         "suffix": "_hyperelastic",
-        "describe": "MATHP — Neo-Hookean·Mooney-Rivlin·Yeoh(다항식). D1 은 카드의 푸아송비로 만들고, 없으면 비워 기본값(K = 1000·G 쯤)을 쓴다. Ogden 은 MSC 에서 MATHE(SOL 400)라 안 낸다.",
+        "describe": "MATHP — Neo-Hookean·Mooney-Rivlin·Yeoh·2차 다항식. D1 은 카드의 푸아송비로 만들고, 없으면 비워 기본값(K = 1000·G 쯤)을 쓴다. Ogden 은 MSC 에서 MATHE(SOL 400)라 안 낸다.",
         "keywords": [
           "MATHP*"
         ],
@@ -9691,8 +9782,8 @@
             "when": "not has(hyperelastic.family) or hyperelastic.family == \"\""
           },
           {
-            "fail": "'{hyperelastic.family}' 는 덱으로 옮기는 법을 모르는 식입니다. 있는 것: mooney_rivlin, neo_hookean, ogden_1, yeoh",
-            "when": "hyperelastic.family != \"neo_hookean\" and hyperelastic.family != \"mooney_rivlin\" and hyperelastic.family != \"yeoh\" and hyperelastic.family != \"ogden_1\""
+            "fail": "'{hyperelastic.family}' 는 덱으로 옮기는 법을 모르는 식입니다. 있는 것: mooney_rivlin, neo_hookean, ogden_1, polynomial_2, yeoh",
+            "when": "hyperelastic.family != \"neo_hookean\" and hyperelastic.family != \"mooney_rivlin\" and hyperelastic.family != \"yeoh\" and hyperelastic.family != \"ogden_1\" and hyperelastic.family != \"polynomial_2\""
           },
           {
             "fail": "neo_hookean 에 필요한 계수가 없습니다: c10 가운데 빠진 것이 있습니다. 카드가 다른 식으로 맞춰졌을 수 있습니다.",
@@ -9709,6 +9800,10 @@
           {
             "fail": "ogden_1 에 필요한 계수가 없습니다: mu, alpha 가운데 빠진 것이 있습니다. 카드가 다른 식으로 맞춰졌을 수 있습니다.",
             "when": "hyperelastic.family == \"ogden_1\" and (not (count(hyperelastic, name == \"mu\" and has(value)) > 0) or not (count(hyperelastic, name == \"alpha\" and has(value)) > 0))"
+          },
+          {
+            "fail": "polynomial_2 에 필요한 계수가 없습니다: c10, c01, c20, c11, c02 가운데 빠진 것이 있습니다. 카드가 다른 식으로 맞춰졌을 수 있습니다.",
+            "when": "hyperelastic.family == \"polynomial_2\" and (not (count(hyperelastic, name == \"c10\" and has(value)) > 0) or not (count(hyperelastic, name == \"c01\" and has(value)) > 0) or not (count(hyperelastic, name == \"c20\" and has(value)) > 0) or not (count(hyperelastic, name == \"c11\" and has(value)) > 0) or not (count(hyperelastic, name == \"c02\" and has(value)) > 0))"
           },
           {
             "fail": "MSC Nastran 의 MATHP 는 다항식이라 Ogden 을 못 받습니다 — MATHE(OGDEN)는 SOL 400 전용이고 체적 탄성률 칸의 뜻을 우리가 대조하지 못했습니다. OptiStruct·Abaqus·ANSYS·LS-DYNA·Radioss 형식은 Ogden 을 냅니다.",
@@ -9756,6 +9851,10 @@
           {
             "text": "$ Yeoh: NA=3 (line 2 field 3), A20 line 3, A30 line 4.",
             "when": "hyperelastic.family == \"yeoh\""
+          },
+          {
+            "text": "$ Polynomial N=2: NA=2 (line 2 field 3), A20 A11 A02 on line 3.",
+            "when": "hyperelastic.family == \"polynomial_2\""
           },
           {
             "pack": [
@@ -9923,6 +10022,93 @@
               {
                 "const": "                ",
                 "when": "hyperelastic.family == \"yeoh\""
+              },
+              {
+                "const": "                ",
+                "when": "hyperelastic.family == \"polynomial_2\""
+              },
+              {
+                "expr": "2",
+                "format": [
+                  "spec",
+                  "<16d"
+                ],
+                "when": "hyperelastic.family == \"polynomial_2\""
+              },
+              {
+                "expr": "1",
+                "format": [
+                  "spec",
+                  "<16d"
+                ],
+                "when": "hyperelastic.family == \"polynomial_2\""
+              },
+              {
+                "const": "                ",
+                "when": "hyperelastic.family == \"polynomial_2\""
+              },
+              {
+                "const": "                ",
+                "when": "hyperelastic.family == \"polynomial_2\""
+              },
+              {
+                "const": "                ",
+                "when": "hyperelastic.family == \"polynomial_2\""
+              },
+              {
+                "const": "                ",
+                "when": "hyperelastic.family == \"polynomial_2\""
+              },
+              {
+                "const": "                ",
+                "when": "hyperelastic.family == \"polynomial_2\""
+              },
+              {
+                "expr": "last(hyperelastic, value, name == \"c20\")",
+                "format": [
+                  "fixed_left",
+                  16,
+                  8
+                ],
+                "when": "hyperelastic.family == \"polynomial_2\""
+              },
+              {
+                "expr": "last(hyperelastic, value, name == \"c11\")",
+                "format": [
+                  "fixed_left",
+                  16,
+                  8
+                ],
+                "when": "hyperelastic.family == \"polynomial_2\""
+              },
+              {
+                "expr": "last(hyperelastic, value, name == \"c02\")",
+                "format": [
+                  "fixed_left",
+                  16,
+                  8
+                ],
+                "when": "hyperelastic.family == \"polynomial_2\""
+              },
+              {
+                "const": "                ",
+                "when": "hyperelastic.family == \"polynomial_2\""
+              },
+              {
+                "const": "                ",
+                "when": "hyperelastic.family == \"polynomial_2\""
+              },
+              {
+                "const": "                ",
+                "when": "hyperelastic.family == \"polynomial_2\""
+              },
+              {
+                "const": "                ",
+                "when": "hyperelastic.family == \"polynomial_2\""
+              },
+              {
+                "const": "                ",
+                "when": "hyperelastic.family == \"polynomial_2\""
               }
             ],
             "per_line": 4,
@@ -9943,7 +10129,7 @@
       "definition": {
         "extension": "fem",
         "suffix": "_hyperelastic",
-        "describe": "MATHE — NEOH·MOONEY·YEOH·OGDEN. 비압축 정도는 NU(카드에 없으면 기본 0.495). 요소 속성은 PLSOLID 다.",
+        "describe": "MATHE — NEOH·MOONEY(2차 다항식까지)·YEOH·OGDEN. 비압축 정도는 NU(카드에 없으면 기본 0.495). 요소 속성은 PLSOLID 다.",
         "keywords": [
           "MATHE*"
         ],
@@ -9967,8 +10153,8 @@
             "when": "not has(hyperelastic.family) or hyperelastic.family == \"\""
           },
           {
-            "fail": "'{hyperelastic.family}' 는 덱으로 옮기는 법을 모르는 식입니다. 있는 것: mooney_rivlin, neo_hookean, ogden_1, yeoh",
-            "when": "hyperelastic.family != \"neo_hookean\" and hyperelastic.family != \"mooney_rivlin\" and hyperelastic.family != \"yeoh\" and hyperelastic.family != \"ogden_1\""
+            "fail": "'{hyperelastic.family}' 는 덱으로 옮기는 법을 모르는 식입니다. 있는 것: mooney_rivlin, neo_hookean, ogden_1, polynomial_2, yeoh",
+            "when": "hyperelastic.family != \"neo_hookean\" and hyperelastic.family != \"mooney_rivlin\" and hyperelastic.family != \"yeoh\" and hyperelastic.family != \"ogden_1\" and hyperelastic.family != \"polynomial_2\""
           },
           {
             "fail": "neo_hookean 에 필요한 계수가 없습니다: c10 가운데 빠진 것이 있습니다. 카드가 다른 식으로 맞춰졌을 수 있습니다.",
@@ -9985,6 +10171,10 @@
           {
             "fail": "ogden_1 에 필요한 계수가 없습니다: mu, alpha 가운데 빠진 것이 있습니다. 카드가 다른 식으로 맞춰졌을 수 있습니다.",
             "when": "hyperelastic.family == \"ogden_1\" and (not (count(hyperelastic, name == \"mu\" and has(value)) > 0) or not (count(hyperelastic, name == \"alpha\" and has(value)) > 0))"
+          },
+          {
+            "fail": "polynomial_2 에 필요한 계수가 없습니다: c10, c01, c20, c11, c02 가운데 빠진 것이 있습니다. 카드가 다른 식으로 맞춰졌을 수 있습니다.",
+            "when": "hyperelastic.family == \"polynomial_2\" and (not (count(hyperelastic, name == \"c10\" and has(value)) > 0) or not (count(hyperelastic, name == \"c01\" and has(value)) > 0) or not (count(hyperelastic, name == \"c20\" and has(value)) > 0) or not (count(hyperelastic, name == \"c11\" and has(value)) > 0) or not (count(hyperelastic, name == \"c02\" and has(value)) > 0))"
           },
           {
             "block": "header",
@@ -10021,6 +10211,10 @@
           {
             "text": "$ OGDEN: W = sum 2 mu/alpha^2 (...) - card mu used as is (G = mu).",
             "when": "hyperelastic.family == \"ogden_1\""
+          },
+          {
+            "text": "$ MOONEY polynomial N=2: C20 C11 C02 on line 3 (NA default 2).",
+            "when": "hyperelastic.family == \"polynomial_2\""
           },
           {
             "text": "$MATHE* MID             MODEL                           NU"
@@ -10106,7 +10300,7 @@
                 ]
               },
               {
-                "expr": "(\"NEOH\" if hyperelastic.family == \"neo_hookean\" else (\"MOONEY\" if hyperelastic.family == \"mooney_rivlin\" else \"YEOH\"))",
+                "expr": "(\"NEOH\" if hyperelastic.family == \"neo_hookean\" else (\"MOONEY\" if hyperelastic.family == \"mooney_rivlin\" or hyperelastic.family == \"polynomial_2\" else \"YEOH\"))",
                 "format": [
                   "spec",
                   "<16"
@@ -10250,6 +10444,53 @@
               {
                 "const": "                ",
                 "when": "hyperelastic.family == \"yeoh\""
+              },
+              {
+                "expr": "last(hyperelastic, value, name == \"c20\")",
+                "format": [
+                  "fixed_left",
+                  16,
+                  8
+                ],
+                "when": "hyperelastic.family == \"polynomial_2\""
+              },
+              {
+                "expr": "last(hyperelastic, value, name == \"c11\")",
+                "format": [
+                  "fixed_left",
+                  16,
+                  8
+                ],
+                "when": "hyperelastic.family == \"polynomial_2\""
+              },
+              {
+                "expr": "last(hyperelastic, value, name == \"c02\")",
+                "format": [
+                  "fixed_left",
+                  16,
+                  8
+                ],
+                "when": "hyperelastic.family == \"polynomial_2\""
+              },
+              {
+                "const": "                ",
+                "when": "hyperelastic.family == \"polynomial_2\""
+              },
+              {
+                "const": "                ",
+                "when": "hyperelastic.family == \"polynomial_2\""
+              },
+              {
+                "const": "                ",
+                "when": "hyperelastic.family == \"polynomial_2\""
+              },
+              {
+                "const": "                ",
+                "when": "hyperelastic.family == \"polynomial_2\""
+              },
+              {
+                "const": "                ",
+                "when": "hyperelastic.family == \"polynomial_2\""
               }
             ],
             "per_line": 4,
@@ -10646,7 +10887,7 @@
       "definition": {
         "extension": "rad",
         "suffix": "_hyperelastic",
-        "describe": "/MAT/LAW42(OGDEN) — Neo-Hookean·Mooney-Rivlin·Ogden 을 Ogden 꼴로 옮긴다. Yeoh 는 이 꼴로 못 적어 안 낸다. 비압축 정도는 카드의 푸아송비로 준다.",
+        "describe": "/MAT/LAW42(OGDEN) — Neo-Hookean·Mooney-Rivlin·Ogden 을 Ogden 꼴로 옮긴다. Yeoh·2차 다항식은 이 꼴로 못 적어 안 낸다. 비압축 정도는 카드의 푸아송비로 준다.",
         "keywords": [
           "/MAT/LAW42",
           "/UNIT/1",
@@ -10671,8 +10912,8 @@
             "when": "not has(hyperelastic.family) or hyperelastic.family == \"\""
           },
           {
-            "fail": "'{hyperelastic.family}' 는 덱으로 옮기는 법을 모르는 식입니다. 있는 것: mooney_rivlin, neo_hookean, ogden_1, yeoh",
-            "when": "hyperelastic.family != \"neo_hookean\" and hyperelastic.family != \"mooney_rivlin\" and hyperelastic.family != \"yeoh\" and hyperelastic.family != \"ogden_1\""
+            "fail": "'{hyperelastic.family}' 는 덱으로 옮기는 법을 모르는 식입니다. 있는 것: mooney_rivlin, neo_hookean, ogden_1, polynomial_2, yeoh",
+            "when": "hyperelastic.family != \"neo_hookean\" and hyperelastic.family != \"mooney_rivlin\" and hyperelastic.family != \"yeoh\" and hyperelastic.family != \"ogden_1\" and hyperelastic.family != \"polynomial_2\""
           },
           {
             "fail": "neo_hookean 에 필요한 계수가 없습니다: c10 가운데 빠진 것이 있습니다. 카드가 다른 식으로 맞춰졌을 수 있습니다.",
@@ -10691,12 +10932,16 @@
             "when": "hyperelastic.family == \"ogden_1\" and (not (count(hyperelastic, name == \"mu\" and has(value)) > 0) or not (count(hyperelastic, name == \"alpha\" and has(value)) > 0))"
           },
           {
+            "fail": "polynomial_2 에 필요한 계수가 없습니다: c10, c01, c20, c11, c02 가운데 빠진 것이 있습니다. 카드가 다른 식으로 맞춰졌을 수 있습니다.",
+            "when": "hyperelastic.family == \"polynomial_2\" and (not (count(hyperelastic, name == \"c10\" and has(value)) > 0) or not (count(hyperelastic, name == \"c01\" and has(value)) > 0) or not (count(hyperelastic, name == \"c20\" and has(value)) > 0) or not (count(hyperelastic, name == \"c11\" and has(value)) > 0) or not (count(hyperelastic, name == \"c02\" and has(value)) > 0))"
+          },
+          {
             "fail": "푸아송비가 {elastic.poisson_ratio:g} 입니다 — LAW42 는 0 과 0.5 사이만 받습니다(0.5 면 체적 탄성률이 발산합니다). 고무는 보통 0.495~0.4995 입니다.",
             "when": "not (0 < elastic.poisson_ratio < 0.5)"
           },
           {
-            "fail": "'{hyperelastic.family}' 는 LAW42(Ogden 꼴)로 정확히 못 옮깁니다 — Yeoh 는 I₁ 의 고차항이라 Ogden 항으로 바꾸면 다른 재료가 됩니다. Neo-Hookean·Mooney-Rivlin·Ogden 으로 맞춘 카드를 쓰세요.",
-            "when": "hyperelastic.family == \"yeoh\""
+            "fail": "'{hyperelastic.family}' 는 LAW42(Ogden 꼴)로 정확히 못 옮깁니다 — Yeoh · 2차 다항식은 불변량의 고차항이라 Ogden 항으로 바꾸면 다른 재료가 됩니다. Neo-Hookean·Mooney-Rivlin·Ogden 으로 맞춘 카드를 쓰세요.",
+            "when": "hyperelastic.family == \"yeoh\" or hyperelastic.family == \"polynomial_2\""
           },
           {
             "text": "#RADIOSS STARTER"

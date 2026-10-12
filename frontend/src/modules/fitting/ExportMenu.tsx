@@ -497,6 +497,16 @@ function LayoutPanel({
       .finally(() => setBusy(false))
   }
 
+  function downloadVerify() {
+    setBusy(true)
+    fittingApi
+      .downloadVerify(card.id, format, card.label, choice.withCard)
+      .catch((caught: unknown) =>
+        onError(caught instanceof Error ? caught : new Error('검증 모델을 만들지 못했습니다.'))
+      )
+      .finally(() => setBusy(false))
+  }
+
   // 이름 → 사람이 읽는 이름. 「함께 셈한 값」 을 이 이름으로 적는다.
   const names = new Map((data?.values ?? []).map((one) => [one.name, one.label]))
 
@@ -518,6 +528,19 @@ function LayoutPanel({
           <Download className="size-3.5" />
           내려받기
         </Button>
+        {format.verify_kit ? (
+          // 덱을 1요소 모델에 끼워 기대 응답과 함께 — 솔버로 돌려 견주는 데 쓴다(2026-10-12).
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={busy || !data?.ok}
+            onClick={downloadVerify}
+            title="이 카드의 재료 덱을 1요소 인장 모델에 끼우고 기대 응답(expected.csv)을 함께 받습니다 — mm·N·tonne"
+          >
+            <Download className="size-3.5" />
+            검증 모델
+          </Button>
+        ) : null}
       </header>
 
       {data?.fail_option || fail ? (

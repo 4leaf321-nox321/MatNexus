@@ -26,7 +26,7 @@ HYPERELASTIC = register_block(
                 key="label",
                 label="식",
                 si_unit="1",
-                help="Neo-Hookean·Mooney-Rivlin·Yeoh·Ogden 중 고른 것.",
+                help="Neo-Hookean·Mooney-Rivlin·Yeoh·Ogden·다항식(N=2) 중 고른 것.",
             ),
             Produced(
                 key="mode",
@@ -86,18 +86,41 @@ class FromSet:
     note: str | None = None
 
 
-#: 벌의 모델 이름 → (우리 식, 받는 항 이름 묶음들). 묶음마다 **우리 계수 차례**로 대응한다.
+#: 벌의 모델 이름 → (우리 식, 받는 항 표기들). 표기마다 `{그쪽 항(소문자): 우리 계수}` 다.
 #:
 #: 이름은 출처마다 다르다(개발 DB 문헌 벌, 2026-10-08): Mooney-Rivlin · Yeoh 는 `C10 · C01` 과
 #: 원래 표기 `C1 · C2` 가 섞여 온다. 원래 표기는 식마다 뜻이 정해져 있어 옮긴다 — Mooney 의
 #: W = C1(I1-3) + C2(I2-3), Yeoh 의 W = Σ Ci(I1-3)^i. **Neo-Hookean 의 `C1` 은 받지 않는다** —
 #: 출처에 따라 μ 이기도 하고 μ/2(= C10)이기도 해서, 옮기면 둘 중 하나는 강성이 두 배로 틀린다.
 #: Neo-Hookean 은 `mu`(초기 전단탄성률, C10 = μ/2)나 `C10` 만 받는다.
-FROM_SET: dict[str, tuple[str, tuple[tuple[str, ...], ...]]] = {
-    "neo_hookean": ("neo_hookean", (("C10",), ("c10",))),
-    "mooney_rivlin_2": ("mooney_rivlin", (("C10", "C01"), ("c10", "c01"), ("C1", "C2"))),
-    "yeoh_3": ("yeoh", (("C10", "C20", "C30"), ("c10", "c20", "c30"), ("C1", "C2", "C3"))),
-    "yeoh_2": ("yeoh", (("C10", "C20"), ("c10", "c20"), ("C1", "C2"))),
+#:
+#: **3 · 5항 Mooney-Rivlin 은 2차 다항식이다**(2026-10-12) — W = Σ Cij(I1-3)^i(I2-3)^j 의
+#: Cij 는 솔버마다 뜻이 같아서 옮길 때 판단이 없다. 3항은 출처마다 셋째 항이 `C11` 이기도
+#: `C20` 이기도 해서 표기를 둘 받는다. 빠진 항은 0 이다(같은 식).
+#:
+#: **항은 표기와 똑같아야 받는다.** 일부만 맞는 벌을 받으면 남는 항이 말없이 버려진다.
+FROM_SET: dict[str, tuple[str, tuple[dict[str, str], ...]]] = {
+    "neo_hookean": ("neo_hookean", ({"c10": "c10"},)),
+    "mooney_rivlin_2": (
+        "mooney_rivlin",
+        ({"c10": "c10", "c01": "c01"}, {"c1": "c10", "c2": "c01"}),
+    ),
+    "yeoh_3": (
+        "yeoh",
+        ({"c10": "c10", "c20": "c20", "c30": "c30"}, {"c1": "c10", "c2": "c20", "c3": "c30"}),
+    ),
+    "yeoh_2": ("yeoh", ({"c10": "c10", "c20": "c20"}, {"c1": "c10", "c2": "c20"})),
+    "mooney_rivlin_3": (
+        "polynomial_2",
+        (
+            {"c10": "c10", "c01": "c01", "c11": "c11"},
+            {"c10": "c10", "c01": "c01", "c20": "c20"},
+        ),
+    ),
+    "mooney_rivlin_5": (
+        "polynomial_2",
+        ({"c10": "c10", "c01": "c01", "c20": "c20", "c11": "c11", "c02": "c02"},),
+    ),
 }
 
 
@@ -105,8 +128,12 @@ def from_parameter_set(model: str, terms: Mapping[str, tuple[float, str]]) -> Fr
     """`terms` 는 항 → (값, 단위). 옮길 수 있으면 `FromSet`, 아니면 **까닭 글자**.
 
     계수는 응력 단위여야 한다 — 아니면 멈춘다(단위 칸이 「1」 로 와서 MPa 를 Pa 로 읽으면
-    고무가 백만 배 무르게 돈다). 덱이 받는 식은 넷뿐이라(`HYPERELASTIC_PARAMETERS`) Ogden N≥2 ·
-    Arruda-Boyce · Gent 같은 벌은 옮기지 않는다.
+    고무가 백만 배 무르게 돈다). 덱이 받는 식만(`HYPERELASTIC_PARAMETERS`) — Ogden 은 출처마다
+    μ 의 규약(μ · μ/α)이 달라 옮기지 않는다. Arruda-Boyce · Gent 도 옮기지 않는다.
+
+    **초기 전단탄성률 2(C10 + C01) 이 0 이하인 벌은 거절한다** — 작은 변형에서 불안정한
+    재료라 솔버가 첫 증분에서 멈추거나 거꾸로 선다(문헌 3항 Mooney-Rivlin 가운데 실리콘 둘이
+    그렇다: C10 = 21.8 kPa, C01 = -72.2 kPa).
     """
     from matcore import units  # 순환 import 를 피한다 — cards 는 export 보다 먼저 읽힌다
 
@@ -125,31 +152,50 @@ def from_parameter_set(model: str, terms: Mapping[str, tuple[float, str]]) -> Fr
         mu = stress("mu")
         if isinstance(mu, str):
             return mu
-        return FromSet("neo_hookean", {"c10": mu / 2.0}, "μ 를 C10 = μ/2 로 옮겼습니다.")
+        return _stable(
+            model, FromSet("neo_hookean", {"c10": mu / 2.0}, "μ 를 C10 = μ/2 로 옮겼습니다.")
+        )
     found = FROM_SET.get(model)
     if found is None:
         return f"덱이 받는 식이 아닙니다: {model}"
     family, spellings = found
-    names = next((one for one in spellings if set(one) <= set(terms)), None)
-    if names is None:
-        if model == "neo_hookean" and "C1" in terms:
+    lowered = {name.lower(): name for name in terms}
+    spelling = next((one for one in spellings if set(one) == set(lowered)), None)
+    if spelling is None:
+        if model == "neo_hookean" and "c1" in lowered:
             return (
                 "Neo-Hookean 의 C1 은 출처마다 μ 이기도 하고 μ/2 이기도 해서 옮기지 "
                 "않았습니다 — mu 나 C10 으로 적힌 벌만 받습니다."
             )
         return f"{model} 의 항 이름을 모릅니다: {', '.join(sorted(terms))}"
-    ours = HYPERELASTIC_ORDER[family]
     values: dict[str, float] = {}
-    for theirs, mine in zip(names, ours, strict=False):
-        converted = stress(theirs)
+    for theirs, mine in spelling.items():
+        converted = stress(lowered[theirs])
         if isinstance(converted, str):
             return converted
         values[mine] = converted
+    absent = [name for name in HYPERELASTIC_ORDER[family] if name not in values]
     note = None
-    if model == "yeoh_2":
-        values["c30"] = 0.0
-        note = "2항 Yeoh 라 C30 = 0 으로 적었습니다 — 같은 식입니다."
-    return FromSet(family, values, note)
+    if absent:
+        values.update(dict.fromkeys(absent, 0.0))
+        shown = " · ".join(name.upper() for name in absent)
+        note = (
+            "2항 Yeoh 라 C30 = 0 으로 적었습니다 — 같은 식입니다."
+            if model == "yeoh_2"
+            else f"벌에 없는 항 {shown} 은 0 으로 적었습니다 — 같은 식입니다."
+        )
+    return _stable(model, FromSet(family, values, note))
+
+
+def _stable(model: str, made: FromSet) -> FromSet | str:
+    """초기 전단탄성률(다항식 꼴 2(C10 + C01))이 0 보다 커야 받는다."""
+    shear = 2.0 * (made.values.get("c10", 0.0) + made.values.get("c01", 0.0))
+    if shear <= 0.0:
+        return (
+            f"{model} 의 초기 전단탄성률 2(C10 + C01) = {shear:.4g} Pa 가 0 이하입니다 — "
+            "작은 변형에서 불안정한 벌이라 덱으로 옮기지 않았습니다."
+        )
+    return made
 
 
 #: 우리 식의 계수 차례 — `matcore.export.HYPERELASTIC_PARAMETERS` 와 같아야 한다
@@ -159,4 +205,6 @@ HYPERELASTIC_ORDER: dict[str, tuple[str, ...]] = {
     "mooney_rivlin": ("c10", "c01"),
     "yeoh": ("c10", "c20", "c30"),
     "ogden_1": ("mu", "alpha"),
+    # 2차 다항식 — Abaqus `POLYNOMIAL, N=2` 의 차례(C10, C01, C20, C11, C02).
+    "polynomial_2": ("c10", "c01", "c20", "c11", "c02"),
 }

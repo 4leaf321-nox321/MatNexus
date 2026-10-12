@@ -703,6 +703,8 @@ HYPERELASTIC_PARAMETERS: dict[str, tuple[str, ...]] = {
     "mooney_rivlin": ("c10", "c01"),
     "yeoh": ("c10", "c20", "c30"),
     "ogden_1": ("mu", "alpha"),
+    # 2차 다항식(3 · 5항 Mooney-Rivlin, 2026-10-12) — Cij 는 솔버마다 뜻이 같다.
+    "polynomial_2": ("c10", "c01", "c20", "c11", "c02"),
 }
 
 
@@ -1215,6 +1217,8 @@ HYPERELASTIC_KEYWORDS: dict[str, tuple[str, tuple[str, ...]]] = {
     "mooney_rivlin": ("MOONEY-RIVLIN", ("c10", "c01")),
     "yeoh": ("YEOH", ("c10", "c20", "c30")),
     "ogden_1": ("OGDEN, N=1", ("mu", "alpha")),
+    # N=2 의 데이터 줄은 C10, C01, C20, C11, C02, D1, D2 다 — D2 는 아래에서 0 으로 붙인다.
+    "polynomial_2": ("POLYNOMIAL, N=2", ("c10", "c01", "c20", "c11", "c02")),
 }
 
 #: 비압축 계수 D — **카드에 푸아송비가 없거나 0.5 일 때**의 값(`hyperelastic_bulk`).
@@ -1234,7 +1238,7 @@ def initial_shear(family: str, values: Mapping[str, float]) -> float:
     Ogden 은 카드의 μ 그대로다(우리 μ 는 Abaqus 규약, G = μ)."""
     if family == "ogden_1":
         return values["mu"]
-    if family == "mooney_rivlin":
+    if family in ("mooney_rivlin", "polynomial_2"):
         return 2.0 * (values["c10"] + values["c01"])
     return 2.0 * values["c10"]
 
@@ -1364,7 +1368,11 @@ def render_abaqus_hyperelastic(deck: Deck) -> Rendered:
 
     lines.extend(_thermal_lines(deck))
     lines.append(f"*HYPERELASTIC, {keyword}")
-    lines.append(", ".join([*(_free(values[name]) for name in order), _free(compressibility)]))
+    data = [*(_free(values[name]) for name in order), _free(compressibility)]
+    if family == "polynomial_2":
+        # D2 — 체적 항은 1차(D1)만 든다. 비워도 0 이지만 칸이 있다는 것을 보인다.
+        data.append(_free(0.0))
+    lines.append(", ".join(data))
     return Rendered(text="\n".join(lines) + "\n", notes=tuple(notes))
 
 

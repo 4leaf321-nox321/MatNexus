@@ -12895,6 +12895,11 @@
             },
             "title": "Requires",
             "type": "array"
+          },
+          "verify_kit": {
+            "default": false,
+            "title": "Verify Kit",
+            "type": "boolean"
           }
         },
         "required": [
@@ -42376,6 +42381,78 @@
           }
         },
         "summary": "Card Deck Layout",
+        "tags": [
+          "fitting"
+        ]
+      }
+    },
+    "/api/fitting/cards/{card_id}/export/verify": {
+      "get": {
+        "description": "1요소 검증 모델(ZIP) — 이 카드의 재료 덱을 1요소 인장 모델에 끼우고 기대 응답을 함께\n낸다(`matcore.export.verify`, 2026-10-12).\n\n**늘 mm·N·tonne · 재료 번호 1** — 틀의 모델이 그 계의 1 mm 정육면체다(명시 솔버가 준정적인\n시간 척도). 내보내기에서 고른 계 · 번호와 상관없이 같은 모델이 나오고, README 가 그렇게\n말한다. 파단 칸은 켜지 않는다 — 요소 하나로 파단은 검증되지 않는다.",
+        "operationId": "export_card_verify_api_fitting_cards__card_id__export_verify_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "card_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Card Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "키트가 있는 형식 — `GET /formats` 의 `verify_kit`.",
+            "in": "query",
+            "name": "format",
+            "required": true,
+            "schema": {
+              "description": "키트가 있는 형식 — `GET /formats` 의 `verify_kit`.",
+              "title": "Format",
+              "type": "string"
+            }
+          },
+          {
+            "description": "짝 카드 — 내보내기와 같다.",
+            "in": "query",
+            "name": "with_card",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "짝 카드 — 내보내기와 같다.",
+              "title": "With Card"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Export Card Verify",
         "tags": [
           "fitting"
         ]

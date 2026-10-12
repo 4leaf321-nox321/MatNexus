@@ -59,3 +59,68 @@ def test_단위를_SI_로_옮기고_응력이_아니면_멈춘다() -> None:
 def test_덱이_받는_식이_아니면_까닭을_말한다() -> None:
     refused = from_parameter_set("ogden_N3", {"mu1": (1.0, "Pa")})
     assert isinstance(refused, str) and "ogden_N3" in refused
+
+
+class Test2차_다항식:
+    """3 · 5항 Mooney-Rivlin → 2차 다항식(2026-10-12). Cij 는 솔버마다 뜻이 같다."""
+
+    def test_3항은_셋째_항이_C11_이든_C20_이든_받고_빠진_항은_0(self) -> None:
+        c11 = _ok(
+            "mooney_rivlin_3",
+            {"C10": (367000.0, "Pa"), "C01": (-69000.0, "Pa"), "C11": (5000.0, "Pa")},
+        )
+        assert c11.family == "polynomial_2"
+        assert c11.values == {
+            "c10": 367000.0,
+            "c01": -69000.0,
+            "c11": 5000.0,
+            "c20": 0.0,
+            "c02": 0.0,
+        }
+        assert c11.note and "C20 · C02" in c11.note
+        c20 = _ok(
+            "mooney_rivlin_3",
+            {"c10": (0.4, "MPa"), "c01": (0.1, "MPa"), "c20": (0.01, "MPa")},
+        )
+        assert c20.values["c20"] == pytest.approx(1e4) and c20.values["c11"] == 0.0
+
+    def test_5항은_그대로(self) -> None:
+        made = _ok(
+            "mooney_rivlin_5",
+            {
+                name: (value, "Pa")
+                for name, value in (
+                    ("C10", 1e5),
+                    ("C01", 2e4),
+                    ("C20", 3e3),
+                    ("C11", -4e3),
+                    ("C02", 5e2),
+                )
+            },
+        )
+        assert made.values == {"c10": 1e5, "c01": 2e4, "c20": 3e3, "c11": -4e3, "c02": 5e2}
+        assert made.note is None
+
+    def test_표기에_없는_항이_섞이면_버리지_않고_거절한다(self) -> None:
+        refused = from_parameter_set(
+            "mooney_rivlin_3",
+            {
+                "C10": (1e5, "Pa"),
+                "C01": (2e4, "Pa"),
+                "C11": (1e3, "Pa"),
+                "C20": (1e3, "Pa"),
+            },
+        )
+        assert isinstance(refused, str) and "항 이름을 모릅니다" in refused
+
+    def test_초기_전단탄성률이_0_이하면_거절한다(self) -> None:
+        """문헌 실리콘 3항 벌(C10 = 21.8 kPa, C01 = -72.2 kPa) — 작은 변형에서 불안정하다."""
+        refused = from_parameter_set(
+            "mooney_rivlin_3",
+            {"C10": (21800.0, "Pa"), "C01": (-72200.0, "Pa"), "C20": (12.6, "Pa")},
+        )
+        assert isinstance(refused, str) and "불안정" in refused
+        assert isinstance(
+            from_parameter_set("mooney_rivlin_2", {"C10": (1e4, "Pa"), "C01": (-2e4, "Pa")}),
+            str,
+        )

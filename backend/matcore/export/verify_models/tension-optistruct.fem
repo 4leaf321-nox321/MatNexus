@@ -1,0 +1,71 @@
+$$------------------------------------------------------------------------------
+$$ MatNexus 1-element verification model -- uniaxial tension -- Altair OptiStruct
+$$
+$$   units : mm - N - tonne - s   (stress MPa)
+$$   model : 1 x 1 x 1 mm CHEXA, 1/8 symmetry, x-face pulled to u = @@PULL@@ mm
+$$   check : sigma_x against expected.csv (see README.txt)
+$$   source: repository example dp600-1elem-optistruct.fem with the material
+$$           replaced by the card exactly as MatNexus exports it (MID 1)
+$$
+$$   run   : optistruct <this file>
+$$------------------------------------------------------------------------------
+$$ I/O Options
+SCREEN,OUT
+OUTPUT,H3D
+DISPLACEMENT(H3D) = ALL
+STRESS(H3D)       = ALL
+STRAIN(H3D)       = ALL
+SPCFORCE(H3D)     = ALL
+$$
+$$ Subcase Information
+SUBCASE 1
+  LABEL    = pull x face
+  ANALYSIS = NLSTAT
+  SPC      = 1
+  LOAD     = 2
+  NLPARM   = 10
+$$
+BEGIN BULK
+$
+$ Large strain elasto-plasticity with MATS1 needs the large displacement
+$ solution together with hash assembly (Altair).
+PARAM,LGDISP,1
+PARAM,HASHASSM,YES
+$
+$       ID      NINC    DT      KMETHOD KSTEP   MAXITER CONV
+NLPARM  10      50              AUTO    5       25      UPW
+$
+$$-----------------------------------------------------------------------------
+$$ MESH
+$$-----------------------------------------------------------------------------
+GRID    1               0.0     0.0     0.0
+GRID    2               1.0     0.0     0.0
+GRID    3               1.0     1.0     0.0
+GRID    4               0.0     1.0     0.0
+GRID    5               0.0     0.0     1.0
+GRID    6               1.0     0.0     1.0
+GRID    7               1.0     1.0     1.0
+GRID    8               0.0     1.0     1.0
+$
+CHEXA   1       1       1       2       3       4       5       6
++       7       8
+$
+PSOLID  1       1       0
+$
+$$-----------------------------------------------------------------------------
+$$ MATERIAL -- as exported by MatNexus
+$$-----------------------------------------------------------------------------
+@@MATERIAL@@
+$
+$$-----------------------------------------------------------------------------
+$$ BOUNDARY CONDITIONS   (1/8 symmetry + enforced displacement)
+$$-----------------------------------------------------------------------------
+SPC1    1       1       1       4       5       8
+SPC1    1       2       1       2       5       6
+SPC1    1       3       1       2       3       4
+SPC1    1       1       2       3       6       7
+$
+SPCD    2       2       1       @@PULL8@@3       1       @@PULL8@@
+SPCD    2       6       1       @@PULL8@@7       1       @@PULL8@@
+$
+ENDDATA

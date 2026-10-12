@@ -331,15 +331,15 @@ $                       ^TABLES1 ID     ^경화규칙</pre>
 <section id="s6">
   <h2><span class="num">06 / 고무</span>초탄성 — MATHP · MATHE</h2>
   <pre>$MATHP  MID     A10     A01     D1      RHO     AV      TREF    GE
-$       NA      ND      KT
+$               NA      ND
 MATHP   20      0.60    0.15    0.001   1.10-9
-+       2       1</pre>
++               2       1</pre>
   <div class="tw"><table>
     <thead><tr><th>필드</th><th>뜻</th></tr></thead>
     <tbody>
       <tr><td class="k">A10, A01, A20 …</td><td>일반화 Mooney–Rivlin 다항식 계수</td></tr>
       <tr><td class="k">D1, D2 …</td><td>체적(압축성) 계수 — <b>2·D1 = K</b> (체적탄성계수)</td></tr>
-      <tr><td class="k">NA</td><td>편차항 차수 (기본 1)</td></tr>
+      <tr><td class="k">NA</td><td>편차항 차수 (기본 1) — <b>2번 줄 셋째 칸</b>, ND 는 넷째 칸. 둘째 칸에 적으면 NA 는 기본 1 로 남아 2차 이상의 항이 말없이 버려진다(2026-10-12 바로잡음: 이 문서가 둘째 칸으로 적고 있었다 — 실제 덱 대조)</td></tr>
       <tr><td class="k">ND</td><td>체적항 차수 (기본 1)</td></tr>
       <tr><td class="k">RHO, AV, TREF, GE</td><td>밀도 · 체적 열팽창 · 기준온도 · 감쇠</td></tr>
     </tbody>
@@ -486,7 +486,7 @@ TABLES1 502
 $
 $$ ---- 고무 부싱: 초탄성 + 점탄성 --------------------------------
 MATHP   20      0.60    0.15    0.001   1.10-9
-+       2       1
++               2       1
 MATVE   20      PRONY
 +       0.30    0.01    0.25    0.10    0.18    1.00
 $

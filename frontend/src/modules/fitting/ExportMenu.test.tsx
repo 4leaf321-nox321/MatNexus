@@ -22,6 +22,7 @@ import { ExportMenu } from '@/modules/fitting/ExportMenu'
 import type { DeckLayout, ExportFormat, PropertyCard } from '@/modules/fitting/api'
 
 const download = vi.fn((..._args: unknown[]) => Promise.resolve())
+const downloadVerify = vi.fn((..._args: unknown[]) => Promise.resolve())
 const unitSystems = vi.fn()
 const pairedFormats = vi.fn()
 const layout = vi.fn()
@@ -30,6 +31,7 @@ vi.mock('@/modules/fitting/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/modules/fitting/api')>()),
   fittingApi: {
     download: (...args: unknown[]) => download(...args),
+    downloadVerify: (...args: unknown[]) => downloadVerify(...args),
     unitSystems: () => unitSystems(),
     pairedFormats: (...args: unknown[]) => pairedFormats(...args),
     layout: (...args: unknown[]) => layout(...args),
@@ -124,6 +126,7 @@ const LAYOUT: DeckLayout = {
 
 beforeEach(() => {
   download.mockClear()
+  downloadVerify.mockClear()
   layout.mockReset()
   layout.mockResolvedValue(LAYOUT)
   unitSystems.mockReset()
@@ -310,9 +313,9 @@ describe('낼 수 없는 형식', () => {
 describe('솔버로 묶는다', () => {
   it('괄호 앞이 같은 형식은 한 제목 아래 선다', async () => {
     const models = [
-      { key: 'ansys_elastic', label: 'ANSYS (선형)', extension: 'mac', describe: 'MP', requires: [] },
-      { key: 'ansys_plastic', label: 'ANSYS (탄소성)', extension: 'mac', describe: 'TB', requires: [] },
-      { key: 'dyna', label: 'LS-DYNA (탄소성)', extension: 'k', describe: '024', requires: [] },
+      { key: 'ansys_elastic', label: 'ANSYS (선형)', extension: 'mac', describe: 'MP', requires: [], verify_kit: false },
+      { key: 'ansys_plastic', label: 'ANSYS (탄소성)', extension: 'mac', describe: 'TB', requires: [], verify_kit: true },
+      { key: 'dyna', label: 'LS-DYNA (탄소성)', extension: 'k', describe: '024', requires: [], verify_kit: true },
     ] as ExportFormat[]
     const card = {
       ...CARD,
@@ -429,5 +432,32 @@ describe('단위가 정해진 형식', () => {
     expect(aedt).toHaveTextContent('고른 계와 상관없이 SI로 나갑니다')
     const abaqus = cards().getByRole('button', { name: /Abaqus/ })
     expect(abaqus).not.toHaveTextContent('고른 계와 상관없이')
+  })
+})
+
+describe('1요소 검증 모델', () => {
+  it('키트가 있는 형식에서만 단추가 서고, 누르면 그 카드 · 형식 · 짝 카드로 받는다', async () => {
+    // 2026-10-12 — 덱을 1요소 인장 모델에 끼워 기대 응답과 함께 받는다. 계는 늘 mm·N·tonne 이라
+    // 고른 계를 넘기지 않는다.
+    const formats = [
+      { ...FORMATS[0], verify_kit: true },
+      { ...FORMATS[1], verify_kit: false },
+    ] as ExportFormat[]
+    const card = { ...CARD, available_formats: ['abaqus', 'openradioss'] } as unknown as PropertyCard
+    await open(card, formats)
+
+    await userEvent.click(cards().getByRole('button', { name: /OpenRadioss/ }))
+    await screen.findByRole('button', { name: /내려받기/ })
+    expect(screen.queryByRole('button', { name: /검증 모델/ })).toBeNull()
+
+    await userEvent.click(cards().getByRole('button', { name: /Abaqus/ }))
+    const button = await screen.findByRole('button', { name: /검증 모델/ })
+    await waitFor(() => expect(button).toBeEnabled())
+    await userEvent.click(button)
+    expect(downloadVerify).toHaveBeenCalledTimes(1)
+    const call = downloadVerify.mock.calls[0] as unknown as unknown[]
+    expect(call[0]).toBe('c1')
+    expect((call[1] as ExportFormat).key).toBe('abaqus')
+    expect(download).not.toHaveBeenCalled()
   })
 })

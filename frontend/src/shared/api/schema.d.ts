@@ -2572,6 +2572,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/fitting/cards/{card_id}/export/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export Card Verify
+         * @description 1요소 검증 모델(ZIP) — 이 카드의 재료 덱을 1요소 인장 모델에 끼우고 기대 응답을 함께
+         *     낸다(`matcore.export.verify`, 2026-10-12).
+         *
+         *     **늘 mm·N·tonne · 재료 번호 1** — 틀의 모델이 그 계의 1 mm 정육면체다(명시 솔버가 준정적인
+         *     시간 척도). 내보내기에서 고른 계 · 번호와 상관없이 같은 모델이 나오고, README 가 그렇게
+         *     말한다. 파단 칸은 켜지 않는다 — 요소 하나로 파단은 검증되지 않는다.
+         */
+        get: operations["export_card_verify_api_fitting_cards__card_id__export_verify_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/fitting/cards/{card_id}/paired-formats": {
         parameters: {
             query?: never;
@@ -13013,6 +13038,11 @@ export interface components {
             label: string;
             /** Requires */
             requires: string[];
+            /**
+             * Verify Kit
+             * @default false
+             */
+            verify_kit: boolean;
         };
         /**
          * ExportOut
@@ -25881,6 +25911,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DeckLayoutOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_card_verify_api_fitting_cards__card_id__export_verify_get: {
+        parameters: {
+            query: {
+                /** @description 키트가 있는 형식 — `GET /formats` 의 `verify_kit`. */
+                format: string;
+                /** @description 짝 카드 — 내보내기와 같다. */
+                with_card?: string | null;
+            };
+            header?: never;
+            path: {
+                card_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */

@@ -411,6 +411,7 @@ def render_ansys_hyperelastic(deck: Deck) -> Rendered:
 
     NEO      (μ, d)             μ = 2·C10
     MOONEY   (C10, C01, d)      NPTS=2 를 적는다(문서 안에서 기본값이 2 와 3 으로 갈린다)
+    MOONEY   (C10, C01, C20, C11, C02, d)  2차 다항식은 NPTS=5(검증 예제 15.5 의 차례)
     YEOH     (C10, C20, C30, d1, d2, d3)
     OGDEN    (μ₁, α₁, d₁)       μ₁ = 2μ/α — ANSYS 는 G = Σμα/2
 
@@ -454,6 +455,13 @@ def render_ansys_hyperelastic(deck: Deck) -> Rendered:
     elif family == "mooney_rivlin":
         lines.append(f"TB,HYPER,{MATERIAL},1,2,MOONEY")
         lines.append(f"TBDATA,1,{_free(values['c10'])},{_free(values['c01'])},{d}")
+    elif family == "polynomial_2":
+        lines.append(f"TB,HYPER,{MATERIAL},1,5,MOONEY")
+        lines.append(
+            "TBDATA,1,"
+            + ",".join(_free(values[name]) for name in ("c10", "c01", "c20", "c11", "c02"))
+            + f",{d}"
+        )
     elif family == "yeoh":
         lines.append(f"TB,HYPER,{MATERIAL},1,3,YEOH")
         lines.append(

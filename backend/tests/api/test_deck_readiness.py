@@ -128,7 +128,8 @@ def test_지도에_정적_관계가_실린다(client: TestClient, admin_headers:
     assert set(req["format_needs"]["dyna"]) >= {"elastic", "table"}
     assert "json" not in req["format_needs"]
     assert req["block_from_tests"]["table"] == ["tensile"]
-    assert req["block_from_tests"]["viscoelastic"] == ["dma_sweep"]
+    # 응력완화(2026-10-12)도 시간 영역 Prony 로 점탄성 블록을 낸다.
+    assert req["block_from_tests"]["viscoelastic"] == ["dma_sweep", "stress_relaxation"]
     assert "mechanical.youngs_modulus" in req["block_fills"]["elastic"]
     # 열물성은 시험이 아니라 사람·문헌이 채운다.
     assert req["block_from_tests"]["thermal"] == []

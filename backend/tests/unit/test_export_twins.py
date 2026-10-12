@@ -46,9 +46,9 @@ CARDS: dict[str, dict[str, Any]] = json.loads(
 #: 아니고, Zemax AGF 는 잰 점에서 분산식의 계수를 **맞춰** 적는다(`matcore.dispersion`) —
 #: ADR 0023 의 「계산이 필요하면 코드로」 자리다(2026-10-02).
 #: Anand(확장 `anand`) · Garofalo 크리프(확장 `creep`)는 항마다 다른 단위로 와서 덱 단위계로
-#: 옮기는 것이 계산이다
-#: (2026-10-08).
-CODE_ONLY = {"json", "zemax_agf", "ansys_anand", "ansys_creep"}
+#: 옮기는 것이 계산이다(2026-10-08). Norton 크리프(2026-10-12)는 A 에 응력 단위가 n 제곱으로
+#: 들어간다.
+CODE_ONLY = {"json", "zemax_agf", "ansys_anand", "ansys_creep", "ansys_creep_norton"}
 
 
 def _seed() -> dict[str, Any]:

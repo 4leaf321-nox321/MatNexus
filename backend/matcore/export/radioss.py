@@ -234,7 +234,7 @@ def _rubber_poisson(deck: Deck) -> float:
     suffix="_hyperelastic",
     describe=(
         "/MAT/LAW42(OGDEN) — Neo-Hookean·Mooney-Rivlin·Ogden 을 Ogden 꼴로 옮긴다. "
-        "Yeoh 는 이 꼴로 못 적어 안 낸다. 비압축 정도는 카드의 푸아송비로 준다."
+        "Yeoh·2차 다항식은 이 꼴로 못 적어 안 낸다. 비압축 정도는 카드의 푸아송비로 준다."
     ),
     keywords=("/MAT/LAW42", "/UNIT/1", "/END"),
     needs=(
@@ -267,9 +267,9 @@ def render_openradioss_hyperelastic(deck: Deck) -> Rendered:
         said = "mu_1 = 2*mu/alpha (card mu is the Abaqus convention, G = mu), alpha_1 = alpha"
     else:
         raise ExportError(
-            f"'{family}' 는 LAW42(Ogden 꼴)로 정확히 못 옮깁니다 — Yeoh 는 I₁ 의 고차항이라 "
-            f"Ogden 항으로 바꾸면 다른 재료가 됩니다. Neo-Hookean·Mooney-Rivlin·Ogden 으로 "
-            f"맞춘 카드를 쓰세요."
+            f"'{family}' 는 LAW42(Ogden 꼴)로 정확히 못 옮깁니다 — Yeoh · 2차 다항식은 "
+            f"불변량의 고차항이라 Ogden 항으로 바꾸면 다른 재료가 됩니다. "
+            f"Neo-Hookean·Mooney-Rivlin·Ogden 으로 맞춘 카드를 쓰세요."
         )
     shear = sum(mu * alpha for mu, alpha in terms) / 2.0
     lines = _starter(deck)

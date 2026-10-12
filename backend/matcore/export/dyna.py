@@ -576,8 +576,8 @@ def render_dyna_viscoelastic(deck: Deck) -> Rendered:
     extension="k",
     suffix="_hyperelastic",
     describe=(
-        "Neo-Hookean·Mooney-Rivlin 은 *MAT_027, Yeoh 는 *MAT_077_H, Ogden 은 *MAT_077_O. "
-        "비압축 정도는 카드의 푸아송비로 준다(0.495~0.4995)."
+        "Neo-Hookean·Mooney-Rivlin 은 *MAT_027, Yeoh·다항식(N=2)은 *MAT_077_H, "
+        "Ogden 은 *MAT_077_O. 비압축 정도는 카드의 푸아송비로 준다(0.495~0.4995)."
     ),
     keywords=("*KEYWORD", "*MAT_", "*END"),
     needs=(
@@ -593,6 +593,7 @@ def render_dyna_hyperelastic(deck: Deck) -> Rendered:
     Neo-Hookean    *MAT_027  A = C10, B = 0
     Mooney-Rivlin  *MAT_027  A = C10, B = C01          (전단탄성률 2(A+B))
     Yeoh           *MAT_077_H  C10·C20·C30 (N=0, 계수 직접)
+    다항식(N=2)    *MAT_077_H  C10·C01·C11·C20·C02 (카드 2 의 차례가 C10 C01 C11 C20 C02 C30)
     Ogden(1항)     *MAT_077_O  MU1 = 2μ/α, ALPHA1 = α — 077_O 는 W = Σ μ/α (λ^α - 1)
                                이라 G = Σμα/2 다. 우리 μ 는 Abaqus 규약(G = μ)이다.
     """
@@ -629,8 +630,13 @@ def render_dyna_hyperelastic(deck: Deck) -> Rendered:
         # **비워도 있어야 한다.**
         lines.append("$      sgl        sw        st      lcid")
         lines.append(_zeros(4))
-    elif family == "yeoh":
-        lines.append("$ Yeoh = polynomial with C10, C20, C30 only (N=0: coefficients given).")
+    elif family in ("yeoh", "polynomial_2"):
+        if family == "yeoh":
+            lines.append(
+                "$ Yeoh = polynomial with C10, C20, C30 only (N=0: coefficients given)."
+            )
+        else:
+            lines.append("$ Polynomial N=2: C10 C01 C11 C20 C02 (N=0: coefficients given).")
         lines.append("*MAT_HYPERELASTIC_RUBBER")
         lines.append(
             "$      mid        ro        pr         n        nv         g      sigf       ref"
@@ -639,11 +645,11 @@ def render_dyna_hyperelastic(deck: Deck) -> Rendered:
         lines.append("$      c10       c01       c11       c20       c02       c30    therml")
         lines.append(
             _f10(values["c10"])
-            + _f10(0.0)
-            + _f10(0.0)
+            + _f10(values.get("c01", 0.0))
+            + _f10(values.get("c11", 0.0))
             + _f10(values["c20"])
-            + _f10(0.0)
-            + _f10(values["c30"])
+            + _f10(values.get("c02", 0.0))
+            + _f10(values.get("c30", 0.0))
             + f"{0:>10}"
         )
     else:

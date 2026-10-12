@@ -11,9 +11,11 @@
 
 from __future__ import annotations
 
+import io
 import math
 import re
 import uuid
+import zipfile
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
@@ -160,8 +162,8 @@ from matcore import (
 )
 from matcore.cards.hyperelastic import from_parameter_set
 from matcore.export import layout as export_layout
-from matcore.export import scan, template
-from matcore.export.systems import UnitSystem
+from matcore.export import scan, template, verify
+from matcore.export.systems import MM_N_TONNE, UnitSystem
 from matcore.fitting import hyperelastic
 from matcore.processing import dma
 from matcore.processing.tensile import PLASTIC_STRAIN, TRUE_STRESS
@@ -2551,6 +2553,21 @@ def create_card_from_group(
     if density.value is not None:
         elastic_values.update({"density": density.value, "density_source": density.source})
 
+    # **묶음이 탄성을 내면 그 칸이 이기고, 안 낸 칸은 물려받는다**(2026-10-12). 응력완화 묶음이
+    # Prony 의 순간 탄성률을 E 로 낸다 — 점탄성 덱은 E 를 순간 값으로 읽고 gᵢ 를 그것에 곱해서,
+    # 다른 E(재료에 적어 둔 값)가 서면 장기 탄성률이 조용히 다른 배수가 된다. 전에는 블록째
+    # 갈아 끼워 푸아송비 · 밀도까지 사라졌다.
+    given_elastic = dict((blocks.get("elastic") or {}).get("values") or {})
+    if given_elastic:
+        elastic_values.update(given_elastic)
+        if "youngs_modulus" in given_elastic:
+            notes = [
+                f"탄성계수: 묶음이 낸 값입니다({plugin.label})."
+                if line.startswith("탄성계수:")
+                else line
+                for line in notes
+            ]
+        blocks = {**blocks, "elastic": {**blocks["elastic"], "values": elastic_values}}
     table_rows = list((blocks.get("table") or {}).get("rows") or [])
     item = PropertyCard(
         material_id=material.id,
@@ -3198,6 +3215,7 @@ def list_formats(
             describe=item.describe,
             requires=list(export.requires_labels(item)),
             fixed_units=item.fixed_units.key if item.fixed_units else None,
+            verify_kit=verify.kit_for(item.key) is not None,
         )
         for item in renderers.all_renderers(db)
     ]
@@ -3871,6 +3889,50 @@ def export_card(
             "Content-Disposition": (
                 f'attachment; filename="{deck.name}{target.suffix}'
                 f'_{system.key}.{target.extension}"'
+            )
+        },
+    )
+
+
+@router.get("/cards/{card_id}/export/verify")
+def export_card_verify(
+    card_id: uuid.UUID,
+    format: str = Query(..., description="키트가 있는 형식 — `GET /formats` 의 `verify_kit`."),
+    with_card: uuid.UUID | None = Query(
+        default=None, description="짝 카드 — 내보내기와 같다."
+    ),
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> Response:
+    """1요소 검증 모델(ZIP) — 이 카드의 재료 덱을 1요소 인장 모델에 끼우고 기대 응답을 함께
+    낸다(`matcore.export.verify`, 2026-10-12).
+
+    **늘 mm·N·tonne · 재료 번호 1** — 틀의 모델이 그 계의 1 mm 정육면체다(명시 솔버가 준정적인
+    시간 척도). 내보내기에서 고른 계 · 번호와 상관없이 같은 모델이 나오고, README 가 그렇게
+    말한다. 파단 칸은 켜지 않는다 — 요소 하나로 파단은 검증되지 않는다.
+    """
+    deck = _with_choices(_deck_for_card(db, user, card_id, with_card), False)
+    try:
+        target = renderers.renderer_for(db, format)
+        if verify.kit_for(target.key) is None:
+            raise export.ExportError(
+                f"'{target.label}' 은 검증 모델이 아직 없습니다 — 탄소성 · 초탄성 인장 형식"
+                "(여섯 솔버)만 있습니다."
+            )
+        rendered = export.render(target, replace(deck, solver_id=1), MM_N_TONNE)
+        kit = verify.build(target.key, target.label, deck, rendered.text, rendered.notes)
+    except export.ExportError as exc:
+        raise AppError("MNX-FITTING-0009", str(exc), status=422) from exc
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+        for name, data in kit.files.items():
+            archive.writestr(name, data)
+    return Response(
+        content=buffer.getvalue(),
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="{deck.name}{target.suffix}_verify_mm_n_tonne.zip"'
             )
         },
     )

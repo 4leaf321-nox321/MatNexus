@@ -329,6 +329,9 @@ class ExportFormatOut(BaseModel):
     """**형식이 단위를 정해 두었으면** 그 단위계 key(`si`). 고른 계와 상관없이 이 계로 나가고
     파일 이름도 이 계를 말한다 — AEDT · CST · FloXML · Zemax 처럼 읽는 쪽이 단위를 정해 둔
     형식이다. 화면이 그 사실을 고르기 전에 말한다."""
+    verify_kit: bool = False
+    """1요소 검증 모델(`GET /cards/{id}/export/verify`)이 있는 형식인가 — 탄소성 · 초탄성 인장
+    (여섯 솔버, 2026-10-12). 화면이 그때만 「검증 모델」 단추를 세운다."""
 
 
 class PairedFormatsOut(BaseModel):

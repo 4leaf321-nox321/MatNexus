@@ -3140,6 +3140,81 @@
      "humidity": 0.6
     }
    }
+  },
+  "초탄성_다항식2": {
+   "elastic": {
+    "values": {
+     "poisson_ratio": 0.4995,
+     "density": 1100.0
+    }
+   },
+   "hyperelastic": {
+    "values": {
+     "family": "polynomial_2",
+     "label": "polynomial_2"
+    },
+    "rows": [
+     {
+      "name": "c10",
+      "value": 300000.0,
+      "si_unit": "Pa"
+     },
+     {
+      "name": "c01",
+      "value": 60000.0,
+      "si_unit": "Pa"
+     },
+     {
+      "name": "c20",
+      "value": 2000.0,
+      "si_unit": "Pa"
+     },
+     {
+      "name": "c11",
+      "value": -1500.0,
+      "si_unit": "Pa"
+     },
+     {
+      "name": "c02",
+      "value": 800.0,
+      "si_unit": "Pa"
+     }
+    ]
+   }
+  },
+  "초탄성_다항식2_푸아송없음": {
+   "hyperelastic": {
+    "values": {
+     "family": "polynomial_2"
+    },
+    "rows": [
+     {
+      "name": "c10",
+      "value": 300000.0,
+      "si_unit": "Pa"
+     },
+     {
+      "name": "c01",
+      "value": 60000.0,
+      "si_unit": "Pa"
+     },
+     {
+      "name": "c20",
+      "value": 2000.0,
+      "si_unit": "Pa"
+     },
+     {
+      "name": "c11",
+      "value": -1500.0,
+      "si_unit": "Pa"
+     },
+     {
+      "name": "c02",
+      "value": 800.0,
+      "si_unit": "Pa"
+     }
+    ]
+   }
   }
  }
 }

@@ -684,7 +684,7 @@ def _hyper_head(deck: Deck, solver: str) -> list[str]:
     extension="bdf",
     suffix="_hyperelastic",
     describe=(
-        "MATHP — Neo-Hookean·Mooney-Rivlin·Yeoh(다항식). D1 은 카드의 푸아송비로 만들고, "
+        "MATHP — Neo-Hookean·Mooney-Rivlin·Yeoh·2차 다항식. D1 은 카드의 푸아송비로 만들고, "
         "없으면 비워 기본값(K = 1000·G 쯤)을 쓴다. Ogden 은 MSC 에서 MATHE(SOL 400)라 안 낸다."
     ),
     keywords=("MATHP*",),
@@ -699,7 +699,8 @@ def render_nastran_hyperelastic(deck: Deck) -> Rendered:
     같은 기호, 역수). 비우면 1000·(A10+A01), 곧 K ≈ 1000·G 로 거의 비압축이다.
 
     Yeoh 는 NA=3 을 적어야 A20·A30 이 읽힌다(2번 줄 3칸 NA · 4칸 ND, A20 은 3번 줄 · A30 은
-    4번 줄 첫 칸).
+    4번 줄 첫 칸). 2차 다항식은 NA=2 에 3번 줄 A20 · A11 · A02 — NA 의 기본은 1 이라 안 적으면
+    2차 항이 말없이 버려진다.
     """
     family, values = hyperelastic_terms(deck)
     if family == "ogden_1":
@@ -741,6 +742,12 @@ def render_nastran_hyperelastic(deck: Deck) -> Rendered:
         fields.extend((None, 3, 1, None, None, None, None, None))
         fields.extend((values["c20"], None, None, None, None, None, None, None))
         fields.extend((values["c30"], None, None, None, None, None, None, None))
+    elif family == "polynomial_2":
+        lines.append("$ Polynomial N=2: NA=2 (line 2 field 3), A20 A11 A02 on line 3.")
+        fields.extend((None, 2, 1, None, None, None, None, None))
+        fields.extend(
+            (values["c20"], values["c11"], values["c02"], None, None, None, None, None)
+        )
     lines.extend(_card("MATHP", fields))
     return _rendered(lines, notes)
 
@@ -751,7 +758,8 @@ def render_nastran_hyperelastic(deck: Deck) -> Rendered:
     extension="fem",
     suffix="_hyperelastic",
     describe=(
-        "MATHE — NEOH·MOONEY·YEOH·OGDEN. 비압축 정도는 NU(카드에 없으면 기본 0.495). "
+        "MATHE — NEOH·MOONEY(2차 다항식까지)·YEOH·OGDEN. 비압축 정도는 NU(카드에 없으면 "
+        "기본 0.495). "
         "요소 속성은 PLSOLID 다."
     ),
     keywords=("MATHE*",),
@@ -785,12 +793,23 @@ def render_optistruct_hyperelastic(deck: Deck) -> Rendered:
         head = [deck.solver_id, "OGDEN", 1, poisson, density, None, None, None]
         rest = [values["mu"], values["alpha"], None, None, None, None, None, None]
     else:
-        model = {"neo_hookean": "NEOH", "mooney_rivlin": "MOONEY", "yeoh": "YEOH"}[family]
+        model = {
+            "neo_hookean": "NEOH",
+            "mooney_rivlin": "MOONEY",
+            "polynomial_2": "MOONEY",
+            "yeoh": "YEOH",
+        }[family]
         head = [deck.solver_id, model, None, poisson, density, None, None, None]
         rest = [values["c10"], values.get("c01"), None, None, None, None, None, None]
         if family == "yeoh":
             rest.extend((values["c20"], None, None, None, None, None, None, None))
             rest.extend((values["c30"], None, None, None, None, None, None, None))
+        elif family == "polynomial_2":
+            # MOONEY 의 NA(C20 줄의 다섯째 칸)는 기본 2 라 안 적어도 2차 항이 읽힌다.
+            lines.append("$ MOONEY polynomial N=2: C20 C11 C02 on line 3 (NA default 2).")
+            rest.extend(
+                (values["c20"], values["c11"], values["c02"], None, None, None, None, None)
+            )
     lines.append("$MATHE* MID             MODEL                           NU")
     lines.extend(_card("MATHE", [*head, *rest]))
     return _rendered(lines, notes)

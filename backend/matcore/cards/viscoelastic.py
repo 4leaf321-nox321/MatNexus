@@ -121,7 +121,9 @@ VISCOELASTIC = register_block(
         ),
         order=40,
         kind_priority=4,
-        from_tests=("dma_sweep",),
+        # 응력완화(2026-10-12) — 시간 영역의 E(t) 를 Prony 로 맞춰도 이 블록이 선다
+        # (확장 `relaxation`).
+        from_tests=("dma_sweep", "stress_relaxation"),
     )
 )
 

@@ -1,0 +1,72 @@
+**-----------------------------------------------------------------------------
+** MatNexus 1-element verification model -- uniaxial tension -- Abaqus/Standard
+**
+**   units : mm - N - tonne - s   (stress MPa)
+**   model : 1 x 1 x 1 mm hex, 1/8 symmetry, x-face pulled to u = @@PULL@@ mm
+**   check : S11 / LE11 / PEEQ against expected.csv (see README.txt)
+**   source: repository example dp600-1elem-abaqus.inp with the material
+**           replaced by the card exactly as MatNexus exports it
+**
+**   run   : abaqus job=<this file without .inp> interactive
+**-----------------------------------------------------------------------------
+*HEADING
+MatNexus 1-element tension (mm-N-tonne-s)
+*PREPRINT, ECHO=NO, MODEL=NO, HISTORY=NO
+**
+**=============================================================================
+** MESH
+**=============================================================================
+*NODE, NSET=ALLN
+ 1,  0.0, 0.0, 0.0
+ 2,  1.0, 0.0, 0.0
+ 3,  1.0, 1.0, 0.0
+ 4,  0.0, 1.0, 0.0
+ 5,  0.0, 0.0, 1.0
+ 6,  1.0, 0.0, 1.0
+ 7,  1.0, 1.0, 1.0
+ 8,  0.0, 1.0, 1.0
+*ELEMENT, TYPE=C3D8, ELSET=CUBE
+ 1, 1, 2, 3, 4, 5, 6, 7, 8
+**
+*NSET, NSET=XSYM
+ 1, 4, 5, 8
+*NSET, NSET=YSYM
+ 1, 2, 5, 6
+*NSET, NSET=ZSYM
+ 1, 2, 3, 4
+*NSET, NSET=PULL
+ 2, 3, 6, 7
+**
+*SOLID SECTION, ELSET=CUBE, MATERIAL=@@NAME@@
+,
+**
+**=============================================================================
+** MATERIAL -- as exported by MatNexus
+**=============================================================================
+@@MATERIAL@@
+**
+**=============================================================================
+** STEP
+**=============================================================================
+*STEP, NLGEOM=YES, INC=500
+pull to @@PULL@@ mm
+*STATIC
+0.002, 1.0, 1.E-08, 0.02
+**
+*BOUNDARY
+XSYM, 1, 1, 0.0
+YSYM, 2, 2, 0.0
+ZSYM, 3, 3, 0.0
+PULL, 1, 1, @@PULL@@
+**
+*OUTPUT, FIELD, FREQUENCY=1
+*ELEMENT OUTPUT
+S, E, PE, PEEQ, LE
+*NODE OUTPUT
+U, RF
+*OUTPUT, HISTORY, FREQUENCY=1
+*ELEMENT OUTPUT, ELSET=CUBE
+S11, LE11, PEEQ
+*NODE OUTPUT, NSET=PULL
+U1, RF1
+*END STEP

@@ -339,6 +339,17 @@ export const fittingApi = {
     ),
 
   /**
+   * 1요소 검증 모델(ZIP) — 이 카드의 재료 덱을 1요소 인장 모델에 끼우고 기대 응답을 함께
+   * 낸다(2026-10-12). **늘 mm·N·tonne · 재료 번호 1** 이라 고른 계를 넘기지 않는다.
+   */
+  downloadVerify: (id: string, format: ExportFormat, label: string, withCard?: string) =>
+    downloadFile(
+      `/fitting/cards/${id}/export/verify?format=${format.key}` +
+        (withCard ? `&with_card=${withCard}` : ''),
+      `${filename(label)}_verify_mm_n_tonne.zip`
+    ),
+
+  /**
    * 덱을 **내려받기 전에** 본다 — 어느 줄 몇째 칸에 카드의 어느 값이 가나와 덱 그대로의
    * 미리보기(2026-10-04). 못 내는 형식도 200 이다(`ok=false` · `error`).
    */
