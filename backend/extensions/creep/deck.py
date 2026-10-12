@@ -192,3 +192,107 @@ def render_ansys_creep(deck: Deck) -> Rendered:
             "얹는 정상상태 크리프입니다. C4 는 Q/R(K)이라 모델의 온도도 절대온도여야 합니다.",
         ),
     )
+
+
+# ── Norton (TBOPT 10, 2026-10-12) ─────────────────────────────────────────────
+
+#: Norton A 의 단위 — `1/(s.<응력>^n)`. 응력 단위가 n 제곱으로 들어간다.
+_NORTON_A = re.compile(r"^1/\(s\.(?P<stress>[^)^]+)\^n\)$")
+
+
+def norton(deck: Deck) -> tuple[str, list[float], bool]:
+    """`(벌 이름, [C1, C2, C3], Q 가 있었나)` — 덱 단위계의 TBOPT 10 상수.
+
+        ε̇ = C1 · σ^C2 · exp(-C3 / T)        C1 = A, C2 = n, C3 = Q/R
+
+    **A 는 응력 단위가 n 제곱으로 들어간다.** σ 가 덱 단위계로 f 배(Pa → MPa 면 1e-6)가 되면
+    A 는 1/f^n 배다 — 응력 상수처럼 1/f 배로 옮기면 n = 5 에서 10²⁴ 배 틀린 크리프가 오류 없이
+    돈다. Garofalo 벌(C2 · α 가 있는 벌)은 받지 않는다.
+    """
+    candidates: dict[str, dict[str, tuple[float, str]]] = {}
+    for key, terms in _sets(deck).items():
+        if {"A", "n"} <= set(terms) and not ({"alpha", "C2"} & set(terms)):
+            candidates[key] = terms
+    if not candidates:
+        raise ExportError("카드에 Norton 벌(A · n, 있으면 Q)이 없습니다.")
+    if len(candidates) > 1:
+        raise ExportError(
+            f"카드에 Norton 벌이 {len(candidates)}개 있습니다"
+            f"({', '.join(sorted(candidates))}) — "
+            "한 덱에는 한 벌만 냅니다."
+        )
+    ((where, terms),) = candidates.items()
+    a_value, a_unit = terms["A"]
+    n_value, n_unit = terms["n"]
+    if n_unit not in ("1", "-", ""):
+        raise ExportError(f"Norton n 은 무차원이어야 하는데 단위가 '{n_unit}' 입니다.")
+    found = _NORTON_A.match(a_unit.replace(" ", ""))
+    stress = units.canonical(found.group("stress")) if found else None
+    if stress is None or not units.same_dimension(units.unit_of(stress).dimension, "stress"):
+        raise ExportError(
+            f"Norton A 의 단위가 '{a_unit}' 입니다 — 1/(s.Pa^n) 처럼 응력 단위가 n 제곱으로 "
+            "든 "
+            "꼴이어야 덱 단위계로 옮길 수 있습니다."
+        )
+    # A·σ^n 에서 σ 를 SI(Pa)로: A_si = A / (Pa per unit)^n.
+    # 그다음 덱 응력으로: σ_pa = σ_deck / f.
+    a_si = a_value / units.to_si(1.0, stress) ** n_value
+    factor = deck.units.convert(1.0, "Pa")
+    c1 = deck.units.convert(a_si / factor**n_value, "1/s")
+    q = terms.get("Q")
+    c3 = 0.0
+    if q is not None:
+        q_value, q_unit = q
+        if q_unit not in ENERGY:
+            raise ExportError(
+                f"Norton Q 의 단위가 '{q_unit}' 입니다 — K · J/mol · kJ/mol · eV 중 하나여야 "
+                "합니다."
+            )
+        c3 = q_value / ENERGY[q_unit]
+    return where, [c1, n_value, c3], q is not None
+
+
+@register_renderer(
+    key="ansys_creep_norton",
+    label="ANSYS (크리프 Norton)",
+    extension="mac",
+    suffix="_creep_norton",
+    describe=(
+        "MP(EX · PRXY) + TB,CREEP(TBOPT 10, Norton) — 크리프 변형률 속도 = "
+        "C1·σ^C2·exp(-C3/T). "
+        "A 는 응력 단위가 n 제곱으로 들어가 덱 단위계로 옮긴다. 온도는 절대온도(K)."
+    ),
+    keywords=(f"EX,{_ansys.MATERIAL}", "TB,CREEP"),
+    needs=(
+        Need("elastic", values=("youngs_modulus", "poisson_ratio")),
+        Need("elastic", values=("density",), optional=True),
+        Need("thermal", optional=True),
+        Need("model_params", rows_min=2),
+    ),
+)
+def render_ansys_creep_norton(deck: Deck) -> Rendered:
+    where, constants, with_q = norton(deck)
+    lines, notes = _ansys._structural(deck)
+    stress, rate = deck.units.symbol("Pa"), deck.units.symbol("1/s")
+    lines.extend(
+        [
+            f"! Implicit creep - Norton (TB,CREEP TBOPT=10). Set: {where or '-'}",
+            "!   creep strain rate = C1 * sigma^C2 * exp(-C3/T), T absolute (K).",
+            f"! C1 in {rate}/{stress}^C2 (A carries stress to the power n), C2 = n, "
+            "C3 = Q/R in K.",
+            f"TB,CREEP,{_ansys.MATERIAL},1,3,10",
+            "TBDATA,1," + ",".join(_free(value) for value in constants),
+        ]
+    )
+    said = [
+        f"Norton 벌 「{where or '이름 없음'}」 을 TB,CREEP(TBOPT 10)으로 실었습니다 — A 는 "
+        "응력 "
+        f"단위가 n 제곱으로 들어가 {stress} 계로 옮겼습니다."
+    ]
+    if not with_q:
+        said.append(
+            "벌에 Q 가 없어 C3 = 0 으로 적었습니다 — 온도 의존이 없는 식이라 맞춘 그 "
+            "온도에서만 "
+            "맞습니다."
+        )
+    return Rendered(text="\n".join(lines) + "\n", notes=(*notes, *said))
