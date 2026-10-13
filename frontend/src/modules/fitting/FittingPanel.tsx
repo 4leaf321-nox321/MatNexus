@@ -131,7 +131,7 @@ const CARD_KINDS: { name: string; input: string; output: string; deck: string }[
   {
     name: '재료 기본 정보 카드',
     input: '재료에 적어 둔 값(문헌·규격·밀시트) + 밀도·푸아송비. 시험이 없어도 됩니다.',
-    output: '탄성 · 열물성 블록',
+    output: '탄성 · 열물성 블록 + 「함께 실을 항목란」 에서 고른 블록(전기 · 광학 · 흡습 등) · 참고 물성',
     deck: '*ELASTIC · *EXPANSION 등',
   },
   {
@@ -160,8 +160,9 @@ const CARD_KINDS: { name: string; input: string; output: string; deck: string }[
   },
   {
     name: '점탄성 카드',
-    input: '마스터커브의 Prony 적합 — 시편 하나 또는 글로벌 피팅 묶음',
-    output: 'Prony 계수 한 벌 + 순간 탄성률 (기준 온도 하나)',
+    input:
+      'DMA 마스터커브의 Prony 적합(시편 하나 또는 글로벌 피팅 묶음) · 응력완화의 시간 영역 Prony 묶음',
+    output: 'Prony 계수 한 벌 + 순간 탄성률 + 온도 이동(WLF · Arrhenius, 있으면)',
     deck: '*ELASTIC + *VISCOELASTIC',
   },
   {
@@ -514,9 +515,9 @@ export function FittingPanel({ materialId }: Props) {
             </table>
           </div>
           <p className="text-muted-foreground text-xs">
-            탄소성 카드의 「경화식 맞춰 보기」 후보에는 고무용 초탄성 식도 섞여 있습니다 — 그것을
-            고르면 카드는 「초탄성」 으로 분류됩니다. 점탄성·속도 의존은 먼저 글로벌 피팅으로
-            시편들을 하나로 묶고, 그 묶음을 카드로 만듭니다.
+            「경화식 맞춰 보기」 는 탄소성 식만, 「초탄성 카드」 · 「유변 카드」 는 각자의 식만
+            견줍니다. 점탄성 · 속도 의존 · 크리프 식 · S-N · 이방성 · 온도별 소성은 먼저 글로벌
+            피팅으로 시편들을 하나로 묶고, 그 묶음을 카드로 만듭니다.
           </p>
         </DialogContent>
       </Dialog>

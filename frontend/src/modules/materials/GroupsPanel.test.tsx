@@ -622,6 +622,8 @@ describe('후보의 조건은 서버가 말한다', () => {
     await userEvent.click(await screen.findByRole('button', { name: /^생성$/ }))
     const dialog = await screen.findByRole('dialog')
     expect(dialog).toHaveTextContent('점탄성 카드 생성')
+    // **기준 온도 하나라고 적지 않는다** — v1.280 부터 묶음 카드는 온도 이동을 싣는다.
+    expect(dialog).toHaveTextContent('온도 이동: 없음 — 기준 온도에서만 유효')
     await userEvent.click(within(dialog).getByRole('button', { name: '생성' }))
     await waitFor(() =>
       expect(createViscoelastic).toHaveBeenCalledWith(
@@ -629,6 +631,52 @@ describe('후보의 조건은 서버가 말한다', () => {
       )
     )
     expect(onCardMade).toHaveBeenCalled()
+  })
+
+  it('항이 있어도 카드를 선언한 묶음(응력완화)은 공용 길이다 — DMA 창으로 가지 않는다', async () => {
+    // 전에는 항이 있으면 「마스터커브를 한 번에 맞춘」 DMA 창이 열렸다(2026-10-13).
+    ofMaterial.mockResolvedValue([
+      {
+        ...ROW,
+        id: 'g5',
+        plugin_id: 'relaxation.prony',
+        options: {},
+        used: ['A', 'B'],
+        values: { equilibrium_pa: 2.0e6, instantaneous_pa: 5.0e6, term_count: 3 },
+        detail: { terms: [{}, {}, {}] },
+        warnings: [],
+      },
+    ])
+    kinds.mockResolvedValue([
+      {
+        id: 'relaxation.prony',
+        label: '완화 Prony (시간 영역)',
+        applies_to: ['stress_relaxation'],
+        needs: 'adopted_result',
+        params: [],
+        makes_values: [
+          { key: 'equilibrium_pa', label: '장기 탄성률 E∞', si_unit: 'Pa' },
+          { key: 'instantaneous_pa', label: '순간 탄성률 E₀', si_unit: 'Pa' },
+        ],
+        makes_card: true,
+      },
+    ])
+    createCardFromGroup.mockResolvedValue({ id: 'c12', material_id: 'm1' })
+    show(<GroupsPanel materialId="m1" />)
+
+    await screen.findByText('완화 Prony (시간 영역)')
+    expect(screen.getAllByRole('button', { name: /^생성$/ })).toHaveLength(1)
+    await userEvent.click(screen.getByRole('button', { name: /^생성$/ }))
+    const dialog = await screen.findByRole('dialog')
+    expect(dialog).toHaveTextContent('완화 Prony (시간 영역) 카드 생성')
+    expect(dialog).not.toHaveTextContent('마스터커브')
+    await userEvent.click(within(dialog).getByRole('button', { name: '생성' }))
+    await waitFor(() =>
+      expect(createCardFromGroup).toHaveBeenCalledWith(
+        expect.objectContaining({ group_result_id: 'g5' })
+      )
+    )
+    expect(createViscoelastic).not.toHaveBeenCalled()
   })
 
   it('카드를 만들 수 있다고 서버가 말한 묶음은 공용 길로 카드가 된다', async () => {

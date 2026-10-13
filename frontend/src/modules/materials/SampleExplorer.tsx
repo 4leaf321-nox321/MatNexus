@@ -696,8 +696,6 @@ export function SampleExplorer({
             <SummaryImportDialog
               sampleId={active.id}
               sampleName={active.record_name}
-              testType="tensile"
-              testTypeLabel="인장시험"
               onClose={() => setImporting(false)}
               onDone={() => {
                 specimens.reload()

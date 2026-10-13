@@ -15,12 +15,19 @@
  * 만들면 편하지만 오타 하나가 유령 시편을 만든다 — 기준정보에서 겪은 것과 같은
  * 병이다. 그래서 **기본은 끔**이고, 켰을 때는 미리보기가 어느 줄이 시편까지
  * 만드는지 줄마다 말한다.
+ *
+ * ## 시험 종류는 창에서 고른다 (2026-10-13)
+ *
+ * 전에는 시료 화면이 인장시험을 박아 넘겼다. 서버는 어느 종류든 받는데 화면에 길이 없어서,
+ * **곡선 채널이 없는 피로 시험과 보고서의 최소 크리프 속도를 넣을 방법이 없었다** — v1.283
+ * 공지는 크리프를 「표로 입력」 할 수 있다고 적었는데 사실이 아니었다. 종류를 고르면 기본 열이
+ * 그 종류의 필수 조건과 **묶음이 읽는 요약값 키**로 바뀐다(열 이름이 곧 저장 키다).
  */
 
 import { useMemo, useState } from 'react'
 
 import { testsApi } from '@/modules/tests/api'
-import type { SummaryImport } from '@/modules/tests/api'
+import type { SummaryImport, TestType } from '@/modules/tests/api'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { PasteGrid, toLines } from '@/shared/components/PasteGrid'
 import type { Column } from '@/shared/components/PasteGrid'
@@ -36,6 +43,42 @@ import {
 } from '@/shared/components/ui/dialog'
 import { Input } from '@/shared/components/ui/input'
 import { Label } from '@/shared/components/ui/label'
+import { useResource } from '@/shared/hooks/useResource'
+import { axisLabel } from '@/shared/units'
+
+/** 인장의 기본 열 — 옛 앱이 내보낸 요약표의 열 이름 그대로. */
+const TENSILE_COLUMNS = '항복강도 (MPa), 인장강도 (MPa), 연신율 (%)'
+
+/**
+ * 종류마다 **묶음이 읽는 요약값 키.** 요약값은 열 이름이 곧 키라서, 이 이름이 아니면
+ * 「S-N 곡선 (Basquin)」 · 「크리프 식 (Norton · Garofalo)」 묶음이 그 시험을 못 본다.
+ */
+const SUMMARY_KEYS: Record<string, { header: string; siUnit?: string }[]> = {
+  fatigue: [{ header: 'cycles_to_failure' }, { header: 'runout' }],
+  creep: [{ header: 'min_creep_rate', siUnit: '1/s' }],
+}
+
+const HINTS: Record<string, string> = {
+  fatigue:
+    '파단 수명은 cycles_to_failure, 런아웃이면 runout 에 1(아니면 비웁니다). 응력 진폭이 ' +
+    '필수 조건입니다 — 「S-N 곡선 (Basquin)」 묶음이 이 값을 씁니다.',
+  creep:
+    '보고서의 최소 크리프 속도는 min_creep_rate 에 적습니다. 가한 응력 · 시험 온도가 필수 ' +
+    '조건입니다 — 「크리프 식 (Norton · Garofalo)」 묶음이 이 값을 씁니다.',
+}
+
+/** 종류를 고르면 채우는 기본 열 — 필수 조건, 묶음이 읽는 요약값, 나머지 숫자 조건 순. */
+export function defaultColumns(type: TestType | undefined): string {
+  if (!type || type.key === 'tensile') return TENSILE_COLUMNS
+  const numeric = type.conditions.filter((field) => field.value_type === 'number')
+  const label = (field: TestType['conditions'][number]) =>
+    axisLabel(field.label, field.si_unit, field.dimension)
+  return [
+    ...numeric.filter((field) => field.is_required).map(label),
+    ...(SUMMARY_KEYS[type.key] ?? []).map((one) => axisLabel(one.header, one.siUnit)),
+    ...numeric.filter((field) => !field.is_required).map(label),
+  ].join(', ')
+}
 
 /**
  * 늘 있는 열.
@@ -52,19 +95,23 @@ const FIXED: Column[] = [
 export function SummaryImportDialog({
   sampleId,
   sampleName,
-  testType,
-  testTypeLabel,
+  testType = 'tensile',
   onClose,
   onDone,
 }: {
   sampleId: string
   sampleName: string
-  testType: string
-  testTypeLabel: string
+  /** 처음 고를 종류. 창 안에서 바꿀 수 있다. */
+  testType?: string
   onClose: () => void
   onDone: () => void
 }) {
-  const [extra, setExtra] = useState('항복강도 (MPa), 인장강도 (MPa), 연신율 (%)')
+  const types = useResource(() => testsApi.types(), [])
+  const available = (types.data ?? []).filter((type) => type.is_active)
+  const [typeKey, setTypeKey] = useState(testType)
+  const selected = available.find((type) => type.key === typeKey)
+  const typeLabel = selected?.label ?? (typeKey === 'tensile' ? '인장시험' : '시험')
+  const [extra, setExtra] = useState(TENSILE_COLUMNS)
   const [rows, setRows] = useState<string[][]>([[]])
   const [createMissing, setCreateMissing] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -93,7 +140,7 @@ export function SummaryImportDialog({
     setDone(null)
     try {
       const answer = await testsApi.importSummaries(
-        { sample_id: sampleId, test_type: testType, values: toLines(columns, rows) },
+        { sample_id: sampleId, test_type: typeKey, values: toLines(columns, rows) },
         { dry, createMissing }
       )
       if (dry) setPreview(answer)
@@ -111,18 +158,45 @@ export function SummaryImportDialog({
 
   const answer = done ?? preview
 
+  /** 종류를 바꾸면 열도 그 종류의 것으로 — 인장의 열로 피로를 넣으면 묶음이 못 본다. */
+  function pickType(key: string) {
+    setTypeKey(key)
+    setExtra(defaultColumns(available.find((type) => type.key === key)))
+    setPreview(null)
+    setDone(null)
+  }
+
   return (
     <Dialog open onOpenChange={onClose}>
       <DialogContent className="gap-3 sm:max-w-4xl">
         <DialogHeader>
-          <DialogTitle>표로 {testTypeLabel} 입력</DialogTitle>
+          <DialogTitle>표로 {typeLabel} 입력</DialogTitle>
           <DialogDescription>
             <b>{sampleName}</b> 의 시편들입니다. 한 줄이 시험 하나가 되고, <b>곡선은
             없습니다</b> — 요약값이 답할 수 있는 데까지 쓰입니다(통계·카드 근거).
           </DialogDescription>
         </DialogHeader>
 
-        <ErrorNotice error={error} />
+        <ErrorNotice error={error ?? types.error} />
+
+        {available.length > 1 && (
+          <div className="space-y-1.5">
+            <Label htmlFor="import-type">시험 종류</Label>
+            <select
+              id="import-type"
+              className="border-input bg-background h-9 w-full rounded-md border px-2 text-sm"
+              value={typeKey}
+              onChange={(event) => pickType(event.target.value)}
+            >
+              {available.map((type) => (
+                <option key={type.key} value={type.key}>
+                  {type.label}
+                </option>
+              ))}
+            </select>
+            {HINTS[typeKey] && <p className="text-muted-foreground text-xs">{HINTS[typeKey]}</p>}
+          </div>
+        )}
 
         <div className="space-y-1.5">
           <Label htmlFor="import-extra">요약값 열</Label>

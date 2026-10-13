@@ -133,8 +133,15 @@ function GroupCard({
   const fit = (row.detail?.fit as Record<string, number> | undefined) ?? {}
   // **그 밖의 묶음은 서버가 「카드를 만들 수 있다」 고 말한 것만.** 플러그인이 `card=` 로
   // 블록을 선언했으면 공용 길(`/fitting/cards/from-group`)로 간다 — 확장 폴더의 묶음이
-  // 화면 한 줄 없이 카드까지 가는 자리다. 제 경로가 있는 속도·Prony 는 위에서 잡힌다.
-  const generic = Boolean(spec?.makes_card) && rates.length === 0 && terms.length === 0
+  // 화면 한 줄 없이 카드까지 가는 자리다. 제 경로가 있는 속도 묶음은 위에서 잡힌다.
+  //
+  // **항이 있어도 카드를 선언한 묶음은 공용 길이다(2026-10-13).** 전에는 항이 있으면 DMA 의
+  // 「점탄성 카드 생성 (글로벌 피팅)」 창으로 갔다 — 응력완화의 시간 영역 Prony 가 「마스터커브를
+  // 한 번에 맞춘」 창으로 열렸고, 제 블록(순간 탄성률 E₀ 를 탄성 칸으로)을 두고 DMA 경로로 카드를 지었다.
+  const declaresCard = Boolean(spec?.makes_card)
+  const generic = declaresCard && rates.length === 0
+  const pronyPath = terms.length > 0 && !declaresCard
+  const shiftMethod = row.detail?.shift_method ? String(row.detail.shift_method) : ''
   const makes = (spec?.makes_values ?? []).filter((one) => row.values[one.key] != null)
 
   return (
@@ -181,7 +188,9 @@ function GroupCard({
           description={
             <>
               시편 여럿의 마스터커브를 한 번에 맞춘 <b>Prony 계수 한 벌</b>이 점탄성 블록으로,
-              순간 탄성률이 탄성 블록으로 실립니다. 기준 온도 하나에서만 유효합니다.
+              순간 탄성률이 탄성 블록으로 실립니다. 시편들의 이동인자를 모아 다시 맞춘{' '}
+              <b>온도 이동(WLF · Arrhenius)</b>도 함께 실립니다 — 이동을 모르는 시편이 있거나
+              방법이 섞이면 싣지 않고, 그 카드는 기준 온도에서만 유효합니다.
             </>
           }
           preview={
@@ -199,6 +208,7 @@ function GroupCard({
                 {terms.length}항 · 시편 {row.used.length}건
                 {method && ` · ${method}`}
               </li>
+              <li>온도 이동: {shiftMethod || '없음 — 기준 온도에서만 유효'}</li>
             </ul>
           }
           suggestedLabel={`${spec?.label ?? '점탄성'} · ${terms.length}항`}
@@ -218,8 +228,9 @@ function GroupCard({
           title={`${spec.label} 카드 생성`}
           description={
             <>
-              이 묶음의 결과가 카드 블록으로 실립니다. 탄성계수는 구성원의 채택 결과를
-              평균하고, 없으면 재료에 적어 둔 값을 씁니다.
+              이 묶음의 결과가 카드 블록으로 실립니다. 탄성계수는 묶음이 낸 값(예: 순간
+              탄성률 E₀)이 있으면 그것을, 없으면 구성원의 채택 결과 평균을, 그것도 없으면 재료에
+              적어 둔 값을 씁니다. 푸아송비 · 밀도는 재료에서 물려받습니다.
             </>
           }
           preview={
@@ -267,8 +278,9 @@ function GroupCard({
         )}
         {/* **Prony 묶음도 카드가 된다.** 서버는 `group_result_id` 를 받았는데 화면에 단추가
             없어서, 글로벌 피팅을 하고도 카드는 시편 하나의 적합으로만 만들 수 있었다
-            (2026-09-05). 항이 있으면 Prony 결과다 — 플러그인 id 를 화면이 외우지 않는다. */}
-        {terms.length > 0 && (
+            (2026-09-05). 항이 있으면 Prony 결과다 — 플러그인 id 를 화면이 외우지 않는다.
+            카드를 스스로 선언한 묶음(응력완화의 시간 영역 Prony)은 아래 공용 길로 간다. */}
+        {pronyPath && (
           <Button
             size="sm"
             variant="outline"

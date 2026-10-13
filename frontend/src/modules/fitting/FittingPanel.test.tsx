@@ -592,6 +592,11 @@ describe('시험 종류에 맞는 길만 연다', () => {
       expect(within(dialog).getByText(name)).toBeInTheDocument()
     }
     expect(dialog).toHaveTextContent('*ELASTIC + *PLASTIC')
+    // 점탄성 카드는 v1.280 부터 온도 이동을 담고, 식 후보는 블록별로 걸러진다 —
+    // 「기준 온도 하나」 · 「초탄성 식도 섞여」 는 낡은 설명이었다(2026-10-13).
+    expect(dialog).toHaveTextContent('온도 이동(WLF · Arrhenius, 있으면)')
+    expect(dialog).not.toHaveTextContent('기준 온도 하나')
+    expect(dialog).not.toHaveTextContent('초탄성 식도')
   })
 
   it('인장이면 경화식 길이 열린다 — 옛 응답(fittable 없음)도 된다', async () => {
