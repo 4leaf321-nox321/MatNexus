@@ -3,7 +3,8 @@
 키트가 틀리면 해석 담당이 **맞는 덱을 틀렸다고** 읽는다 — 그래서 여기서 무는 것:
 
     기대 응답   README 의 손계산(DP600 σx 700.32 MPa · εp 0.40213 · 반력 467.50 N,
-               고무 4.725 MPa)과 같은가. 당기는 양이 카드가 아는 범위 안인가
+               고무 비압축 4.725 MPa)과 같은가. 고무는 카드의 ν 로 압축성 해를 내나
+               (OpenRadioss 실측과 0.15% 안쪽). 당기는 양이 카드가 아는 범위 안인가
     끼우기     재료 번호 1 · Abaqus 재료 이름 · Radioss 런 이름이 모델과 맞는가, 틀의 자리가
                남지 않았나, 고정폭 칸(Nastran SPCD 8칸 · 곡선 20칸)에 당기는 양이 들어갔나
 """
@@ -89,11 +90,50 @@ def test_소성_표_너머로는_안_당긴다() -> None:
     assert f"PULL, 1, 1, {made.pull:.4f}" in model(made)
 
 
-def test_고무_기대값은_비압축_해석해() -> None:
-    made = kit("abaqus_hyperelastic", RUBBER)
+def test_고무_기대값은_푸아송비가_없으면_비압축_해석해() -> None:
+    incompressible = {**RUBBER, "elastic": {"values": {"density": 1100.0}}}
+    made = kit("abaqus_hyperelastic", incompressible)
     assert made.pull == 1.0
     assert last(made)["true_stress_MPa"] == pytest.approx(4.725, abs=1e-6)
     assert last(made)["nominal_stress_MPa"] == pytest.approx(2.3625, abs=1e-6)
+
+
+@pytest.mark.parametrize(
+    ("family", "values", "poisson", "stress"),
+    [
+        # OpenRadioss 실측(2026-10-13, λ=2): 3.3564 · 3.4880 · 4.7108 · 7.6071 MPa.
+        # 비압축 해석해(3.5 · 3.5 · 4.725 · 7.646)로는 ν=0.49 가 4.1% 어긋나 틀려 보였다.
+        ("neo_hookean", {"c10": 0.5e6}, 0.49, 3.3614),
+        ("neo_hookean", {"c10": 0.5e6}, 0.4995, 3.4926),
+        ("mooney_rivlin", {"c10": 0.6e6, "c01": 0.15e6}, 0.4995, 4.7162),
+        ("ogden_1", {"mu": 1.5e6, "alpha": 3.0}, 0.4995, 7.6197),
+    ],
+)
+def test_고무_기대값은_카드의_푸아송비로_압축성(
+    family: str, values: dict[str, float], poisson: float, stress: float
+) -> None:
+    blocks = {
+        "elastic": {"values": {"poisson_ratio": poisson, "density": 1100.0}},
+        "hyperelastic": {
+            "values": {"family": family},
+            "rows": [
+                {"name": name, "value": value, "si_unit": "1" if name == "alpha" else "Pa"}
+                for name, value in values.items()
+            ],
+        },
+    }
+    made = kit("openradioss_hyperelastic", blocks)
+    end = last(made)
+    assert end["true_stress_MPa"] == pytest.approx(stress, rel=2e-4)
+    # 압축성이라 단면이 1/λ 보다 넓다 — 반력은 σ/λ 보다 크다.
+    assert end["reaction_N"] > end["true_stress_MPa"] / 2.0
+    assert f"푸아송비 {poisson:g}" in made.files["README.txt"].decode()
+
+
+def test_Radioss_반력은_충격량이라고_적는다() -> None:
+    """REACX 를 그대로 견주면 맞는 덱이 반력 0.3% 로 보인다(2026-10-13 실측)."""
+    readme = kit("openradioss", STEEL).files["README.txt"].decode()
+    assert "충격량" in readme and "4 를 곱한다" in readme
 
 
 def test_고무는_맞춘_구간_끝까지만() -> None:

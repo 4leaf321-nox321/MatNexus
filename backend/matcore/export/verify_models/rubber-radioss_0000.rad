@@ -5,6 +5,8 @@
 #   units : Mg - mm - s   (force N, stress MPa)
 #   model : 1 x 1 x 1 mm brick, 1/8 symmetry, x-face pulled to u = @@PULL@@ mm
 #   check : /TH/BRIC SX (and PLAS) against expected.csv (see README.txt)
+#           /TH/NODE REACX is an IMPULSE (time integral of the force) on one of the
+#           four pulled nodes -- differentiate in time and multiply by 4
 #   source: repository example rubber-1elem-radioss_0000.rad with the material
 #           replaced by the card exactly as MatNexus exports it (MID 1)
 #
@@ -55,7 +57,7 @@ one brick, rubber
 #---1----|----2----|----3----|----4----|----5----|----6----|----7----|----8----|----9----|---10----|
 #-  FUNCTIONS
 #---1----|----2----|----3----|----4----|----5----|----6----|----7----|----8----|----9----|---10----|
-# stretch ramp: 0 -> 1.0 mm over 0.01 s
+# stretch ramp: 0 -> @@PULL@@ mm over 0.01 s
 /FUNCT/200
 stretch ramp
 #                  X                   Y

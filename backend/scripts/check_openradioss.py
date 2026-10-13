@@ -2,16 +2,25 @@
 
     python scripts/check_openradioss.py --openradioss <OpenRadioss 폴더> [--work <작업 폴더>]
 
-OpenRadioss 는 무료다 — https://github.com/OpenRadioss/OpenRadioss/releases 의
-`OpenRadioss_win64.zip` 을 풀면 `OpenRadioss/exec/starter_win64.exe` 가 있다. 그 `OpenRadioss`
-폴더를 준다. 시험 스위트는 이것을 안 돈다(바이너리가 없는 자리가 많다) — 렌더러의 칸이나
-규약을 고쳤으면 손으로 한 번 돈다.
+OpenRadioss 는 무료다. `OpenRadioss_win64.zip` 을 풀면 `OpenRadioss/exec/starter_win64.exe` 가
+있다. 그 `OpenRadioss` 폴더를 준다. 시험 스위트는 이것을 안 돈다(바이너리가 없는 자리가 많다) —
+렌더러의 칸이나 규약을 고쳤으면 손으로 한 번 돈다.
+
+**받는 곳이 바뀌었다(2026-10-13).** 원래 저장소(github.com/OpenRadioss)는 2026-10-01 에
+닫혔다. 원판의 마지막 Windows 빌드(2026-07-28)를 이어받은 쪽이 보관한다 —
+https://github.com/OpenCourant/extlib/releases/download/upstream-latest-20260728-win64/OpenRadioss_win64.zip
+(343,196,578 바이트, SHA-256 04dfecb0bf26ce071132cda86dc6861417c6a4127a389befe82b8c97341b3268).
+이 판으로 아래 열한 건과 검증 모델 넷이 모두 통과했다.
 
 ## 무엇을 하나
 
 예제 덱(`시뮬레이션 인풋 덱/예제/*-radioss_0000.rad`)의 재료·함수 블록을 빼고, 앱의 렌더러가
 낸 조각(`/UNIT/1` + `/MAT` + `/FUNCT`)을 넣어 돌린다. 모델·하중·출력은 예제 그대로라 결과를
 README 의 기대값이나 손계산과 견줄 수 있다.
+
+이어서 **검증 모델**(`matcore.export.verify`)을 앱이 내려 주는 그대로 돌려 `expected.csv` 의
+끝 줄(진응력 · 반력)과 견준다 — 키트의 기대값이 틀리면 해석 담당이 맞는 덱을 틀렸다고 읽는다
+(2026-10-13: 고무 기대값을 비압축 해석해로 냈더니 ν = 0.49 카드가 4.1% 어긋나 보였다).
 
 ## 왜 있나 (2026-09-27)
 
@@ -49,7 +58,7 @@ sys.path.insert(0, str(BACKEND / "scripts"))
 
 from _console import survive_cp949  # noqa: E402
 from matcore import cards, export, extensions  # noqa: E402
-from matcore.export import radioss  # noqa: E402,F401  (렌더러 등록)
+from matcore.export import radioss, verify  # noqa: E402,F401  (렌더러 등록)
 from matcore.export.systems import MM_N_TONNE  # noqa: E402
 
 # 한국어를 찍는다 — 운영 서버의 콘솔(cp949)에서 멈추지 않게 먼저 푼다.
@@ -286,6 +295,27 @@ CASES: dict[str, Case] = {
 #: 기대값과의 허용 오차(상대). 명시 해석이라 해석해와 1% 안쪽에서 어긋난다.
 TOLERANCE = 0.01
 
+#: 검증 모델 — 이름 → (형식, 블록). 기대값은 키트의 expected.csv 가 낸다.
+KITS: dict[str, tuple[str, dict[str, Any]]] = {
+    "키트 인장 DP600": ("openradioss", {"elastic": STEEL, "table": TABLE}),
+    "키트 고무 Mooney": (
+        "openradioss_hyperelastic",
+        {"elastic": RUBBER, "hyperelastic": _hyper("mooney_rivlin", c10=0.6e6, c01=0.15e6)},
+    ),
+    "키트 고무 Ogden α=3": (
+        "openradioss_hyperelastic",
+        {"elastic": RUBBER, "hyperelastic": _hyper("ogden_1", mu=1.5e6, alpha=3.0)},
+    ),
+    # 문헌 고무에 흔한 ν. 비압축 해석해로는 λ = 2 에서 4.1% 어긋났다.
+    "키트 고무 ν=0.49": (
+        "openradioss_hyperelastic",
+        {
+            "elastic": {"values": {"poisson_ratio": 0.49, "density": 1100.0}},
+            "hyperelastic": _hyper("neo_hookean", c10=0.5e6),
+        },
+    ),
+}
+
 
 def _env(root: pathlib.Path) -> dict[str, str]:
     out = dict(os.environ)
@@ -360,6 +390,7 @@ def _run(root: pathlib.Path, case: pathlib.Path, runname: str, engine: bool) -> 
         rows = list(csv.reader(table.open(errors="replace")))
         result["header"] = [cell.strip() for cell in rows[0]]
         result["last"] = [float(cell) for cell in rows[-1]]
+        result["before"] = [float(cell) for cell in rows[-2]]
     return result
 
 
@@ -384,6 +415,46 @@ def _measure(got: dict[str, Any], shell: bool) -> dict[str, float]:
     length = math.log(1.0 + node[0]) - sx / youngs
     width = math.log(1.0 + node[8]) + poisson * sx / youngs
     return {"sx": sx, "plas": plas, "r": width / -(length + width)}
+
+
+def _kit(
+    root: pathlib.Path, case: pathlib.Path, name: str, key: str, blocks: dict[str, Any]
+) -> bool:
+    """검증 모델을 내려 주는 그대로 돌려 expected.csv 의 끝 줄과 견준다.
+
+    반력은 당기는 절점의 REACX 인데 **충격량**(∫F dt)이고 네 절점 중 하나의 몫이다 — 마지막 두
+    기록의 차를 시간 차로 나눠 4 를 곱한다. 여러 기록에 걸쳐 나누면 고무는 힘이 오르는 중이라
+    0.8% 낮게 나왔다(2026-10-13).
+    """
+    deck = export.Deck(name="MNX_KIT", solver_id=1, blocks=blocks, provenance=(name,))
+    rendered = export.render(key, deck, MM_N_TONNE)
+    kit = verify.build(key, name, deck, rendered.text, rendered.notes)
+    shutil.rmtree(case, ignore_errors=True)
+    case.mkdir(parents=True)
+    for file, data in kit.files.items():
+        (case / file).write_bytes(data)
+    got = _run(root, case, verify.RADIOSS_RUN, True)
+    ok = got["errors"] == 0 and bool(got.get("normal"))
+    engine = "정상 종료" if got.get("normal") else "비정상"
+    said = f"Starter 오류 {got['errors']} · Engine {engine}"
+    header, last, before = got.get("header"), got.get("last"), got.get("before")
+    if header and last and before:
+        end = list(csv.DictReader(kit.files["expected.csv"].decode().splitlines()))[-1]
+        stress, reaction = float(end["true_stress_MPa"]), float(end["reaction_N"])
+        node = [i for i, column in enumerate(header) if "pulled node" in column][-1]
+        force = 4.0 * (last[node] - before[node]) / (last[0] - before[0])
+        ok = ok and abs(last[24] - stress) <= TOLERANCE * stress
+        ok = ok and abs(force - reaction) <= TOLERANCE * reaction
+        said += (
+            f" · σx {last[24]:.5g} MPa (기대 {stress:.5g}) · 반력 {force:.5g} N "
+            f"(기대 {reaction:.5g})"
+        )
+    else:
+        ok = False
+    print(f"{'통과' if ok else '실패'}  {name:22s} {key:26s} {said}")
+    for message in got["messages"][:3]:
+        print(f"        {message}")
+    return ok
 
 
 def main() -> int:
@@ -439,6 +510,8 @@ def main() -> int:
         print(f"{'통과' if ok else '실패'}  {name:22s} {spec.key:26s} {said}")
         for message in got["messages"][:3]:
             print(f"        {message}")
+    for index, (name, (key, blocks)) in enumerate(KITS.items(), start=len(CASES) + 1):
+        failed += 0 if _kit(root, work / f"case{index}", name, key, blocks) else 1
     print(f"작업 폴더: {work}")
     return 1 if failed else 0
 
