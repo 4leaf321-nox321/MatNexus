@@ -110,6 +110,17 @@ COMMISSION_CREATED_BY_CLIENT = "commission.created_by_client"
 #: 사내 재료 ↔ 문헌 재료 연결(2026-10-08) — MCP 가 연결 후보로 이을 수 있게 되면서. 연결은
 #: BOM 덱이 문헌 값을 그대로 가져가는 입구라, AI 가 이은 것인지가 남아야 한다.
 CATALOG_LINK_SET_BY_CLIENT = "catalog_link.set_by_client"
+#: **사람만 하던 일곱 가지를 AI 에게 열면서**(2026-10-14, ADR 0061) 남기는 자리 — 채택 · 시험
+#: 파일 올리기 · 의뢰 옮기기 · 담당 · 시험 연결 · 기준정보 별칭. 카드 확정과 시험 종류 · 해석용
+#: 정의 켜고 끄기 · 기준정보 새 값은 이미 남기던 길이다. 화면에서 한 것은 전처럼 안 남는다.
+#: 채택은 그 값이 통계 · 카드로 가는 결정이고, 의뢰 상태는 두 부서의 약속이라 「사람이 한
+#: 건가」 가 반년 뒤에 물어진다.
+RESULTS_ADOPTED_BY_CLIENT = "results.adopted_by_client"
+TEST_RUN_UPLOADED_BY_CLIENT = "test_run.uploaded_by_client"
+COMMISSION_MOVED_BY_CLIENT = "commission.moved_by_client"
+COMMISSION_ASSIGNED_BY_CLIENT = "commission.assigned_by_client"
+COMMISSION_RUN_LINKED_BY_CLIENT = "commission.run_linked_by_client"
+VOCABULARY_ALIAS_ADDED_BY_CLIENT = "vocabulary.alias_added_by_client"
 #: 문헌 값을 **실제로 지운** 일과 폐기된 키의 값을 **옮긴** 일. 둘 다 되돌릴 수 없어
 #: 위의 규칙대로 사람이 해도 남긴다(누가 했든 `client` 가 길을 말한다) — 지운 값은 이미
 #: 덱에 실렸을 수 있고, 옮긴 값은 원래 어느 키에 있었는지가 이 기록에만 남는다.

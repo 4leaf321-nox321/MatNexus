@@ -691,3 +691,164 @@ class Test등록_문헌_의뢰도_남는다:
         assert mine[0]["changes"]["status"] == "draft"
         hand_id = by_hand.json()["id"]
         assert not _mine(client, admin_headers, "commission.created_by_client", hand_id)
+
+
+class Test사람만_하던_일을_AI_에게:
+    """**사람만 하던 일을 AI 에게 열면서 남기는 자리**(2026-10-14, ADR 0061).
+
+    채택 · 시험 파일 올리기 · 의뢰 옮기기 · 기준정보 별칭은 화면에서는 감사에 안 남던 일이다.
+    MCP 가 그 일을 하게 되면서 「사람이 한 건가」 가 다시 물어진다 — 채택된 값은 통계 · 카드로
+    가고, 의뢰 상태는 두 부서의 약속이다. 규칙은 같다: **화면에서 한 것은 안 남는다.**
+    """
+
+    def test_AI_가_한_채택과_되돌리기가_남는다(
+        self, client: TestClient, admin_headers: dict[str, str], run_id: str
+    ) -> None:
+        result = client.post(
+            "/api/processing/results",
+            json={"test_run_id": run_id, "steps": STEPS},
+            headers=admin_headers,
+        )
+        assert result.status_code == 201, result.text
+        mcp = {**admin_headers, "X-Client": "mcp"}
+        took = client.post(
+            "/api/processing/adopt-many",
+            json={"items": [{"test_run_id": run_id, "result_id": result.json()["id"]}]},
+            headers=mcp,
+        )
+        assert took.status_code == 200, took.text
+        assert took.json()["changed"] == 1
+        back = client.post(
+            "/api/processing/adopt-many",
+            json={"items": [{"test_run_id": run_id, "result_id": None}]},
+            headers=mcp,
+        )
+        assert back.json()["changed"] == 1
+
+        mine = _mine(client, admin_headers, "results.adopted_by_client", run_id)
+        assert len(mine) == 2, "채택과 되돌리기가 한 줄씩 남는다"
+        assert {one["changes"]["to"] for one in mine} == {result.json()["id"], None}
+        assert all(one["client"] == "mcp" for one in mine)
+
+    def test_사람이_한_채택은_안_남는다(
+        self, client: TestClient, admin_headers: dict[str, str], run_id: str
+    ) -> None:
+        result = client.post(
+            "/api/processing/results",
+            json={"test_run_id": run_id, "steps": STEPS},
+            headers=admin_headers,
+        ).json()
+        took = client.post(
+            "/api/processing/adopt-many",
+            json={"items": [{"test_run_id": run_id, "result_id": result["id"]}]},
+            headers=admin_headers,
+        )
+        assert took.json()["changed"] == 1
+        assert not _actions(client, admin_headers, "results.adopted_by_client")
+
+    def test_AI_가_올린_시험_파일이_남는다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str]
+    ) -> None:
+        """MCP 의 `upload_test_run` 이 보내는 그 폼 — 조건은 JSON 글자로 온다."""
+        ensure_builtin_test_types(db)
+        db.commit()
+        material = client.post(
+            "/api/materials",
+            json={
+                "family": "Metal",
+                "category": "Steel",
+                "grade": "AUDU",
+                "spec_thickness": 1.0,
+            },
+            headers=admin_headers,
+        ).json()
+        sample = client.post(
+            f"/api/materials/{material['id']}/samples", json={}, headers=admin_headers
+        ).json()
+        specimen = client.post(
+            f"/api/samples/{sample['id']}/specimens",
+            json={"orientation": "MD"},
+            headers=admin_headers,
+        ).json()
+        form = {
+            "specimen_id": specimen["id"],
+            "test_type": "tensile",
+            "conditions": "{}",
+            "condition_units": "{}",
+        }
+        by_ai = client.post(
+            "/api/test-runs",
+            data=form,
+            files={"file": ("Example.tra", TRA.read_bytes(), "application/octet-stream")},
+            headers={**admin_headers, "X-Client": "mcp"},
+        )
+        assert by_ai.status_code == 202, by_ai.text
+        by_hand = client.post(
+            "/api/test-runs",
+            data=form,
+            files={"file": ("Example.tra", TRA.read_bytes())},
+            headers=admin_headers,
+        )
+        assert by_hand.status_code == 202, by_hand.text
+
+        mine = _mine(client, admin_headers, "test_run.uploaded_by_client", by_ai.json()["id"])
+        assert mine and mine[0]["changes"]["source_filename"] == "Example.tra"
+        assert not _mine(
+            client, admin_headers, "test_run.uploaded_by_client", by_hand.json()["id"]
+        )
+
+    def test_AI_가_낸_의뢰가_남는다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str]
+    ) -> None:
+        """작성 중 → 의뢰(접수 대기). 받는 부서에 알림이 가는 일이라 길이 남아야 한다."""
+        ensure_builtin_test_types(db)
+        db.add(Workspace(slug="reliability", name="신뢰성그룹"))
+        db.commit()
+        body = {
+            "title": "SECC 인장 물성",
+            "purpose": "성형 해석용",
+            "material_hint": "SECC 1.0t",
+            "lab_workspace_slug": "reliability",
+            "items": [{"test_type_key": "tensile", "deliverable": "curves"}],
+            "submit": False,
+        }
+        by_ai = client.post("/api/commissions", json=body, headers=admin_headers).json()
+        by_hand = client.post("/api/commissions", json=body, headers=admin_headers).json()
+
+        moved = client.post(
+            f"/api/commissions/{by_ai['id']}/events",
+            json={"status": "submitted"},
+            headers={**admin_headers, "X-Client": "mcp"},
+        )
+        assert moved.status_code == 200, moved.text
+        assert moved.json()["status"] == "submitted"
+        client.post(
+            f"/api/commissions/{by_hand['id']}/events",
+            json={"status": "submitted"},
+            headers=admin_headers,
+        )
+
+        mine = _mine(client, admin_headers, "commission.moved_by_client", by_ai["id"])
+        assert mine and mine[0]["changes"]["from"] == "draft"
+        assert mine[0]["changes"]["to"] == "submitted"
+        assert not _mine(client, admin_headers, "commission.moved_by_client", by_hand["id"])
+
+    def test_AI_가_단_기준정보_별칭이_남는다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        term = client.post(
+            "/api/vocabularies/manufacturer/terms",
+            json={"value": f"감사제조-{uuid.uuid4().hex[:6]}"},
+            headers=admin_headers,
+        )
+        assert term.status_code == 201, term.text
+        term_id = term.json()["id"]
+        added = client.post(
+            f"/api/vocabularies/manufacturer/terms/{term_id}/aliases",
+            json={"alias": f"AUD-{uuid.uuid4().hex[:6]}"},
+            headers={**admin_headers, "X-Client": "mcp"},
+        )
+        assert added.status_code == 201, added.text
+
+        mine = _mine(client, admin_headers, "vocabulary.alias_added_by_client", term_id)
+        assert mine and mine[0]["client"] == "mcp"

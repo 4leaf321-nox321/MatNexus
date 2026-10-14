@@ -1002,6 +1002,18 @@ def upload_test_run(
             f"{run.note}\n" if run.note else ""
         ) + f"※ 내용이 같은 파일이 이미 {duplicate}건 등록돼 있습니다."
 
+    # **AI 가 올렸으면 남긴다**(ADR 0061) — 등록자 칸은 토큰 주인이라, 그 곡선을 사람이
+    # 붙였는지 AI 가 붙였는지는 여기에만 남는다. 화면에서 올린 것은 전처럼 안 남는다.
+    audit.record_by_client(
+        db,
+        action=audit.TEST_RUN_UPLOADED_BY_CLIENT,
+        actor=user,
+        target_table="test_runs",
+        target_id=run.id,
+        target_label=run.record_name,
+        workspace_id=run.workspace_id,
+        changes={"source_filename": run.source_filename, "test_type": test_type},
+    )
     # 도메인 변경과 같은 트랜잭션에 넣는다 — 따로 커밋하면 "시험은 생겼는데
     # 파싱 작업은 없는" 상태가 생긴다.
     queue.enqueue(db, kind=kinds.TESTS_PARSE_UPLOAD, payload={"test_run_id": str(run.id)})

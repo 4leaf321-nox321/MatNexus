@@ -800,6 +800,19 @@ def create_alias(
     vocabulary = services.get_vocabulary(db, slug)
     term = _term_or_404(db, vocabulary, term_id)
     created = services.add_alias(db, term, payload.alias)
+    if created is not None:
+        # **AI 가 단 별칭은 남긴다**(ADR 0061) — 별칭은 검색 · 피커 · BOM 매칭이 정본으로
+        # 이끄는 길이라, 틀린 별칭은 다른 값을 조용히 같은 것으로 묶는다.
+        db.flush()
+        audit.record_by_client(
+            db,
+            action=audit.VOCABULARY_ALIAS_ADDED_BY_CLIENT,
+            actor=user,
+            target_table="vocabulary_terms",
+            target_id=term.id,
+            target_label=f"{vocabulary.label}: {term.value} ← {created.alias}",
+            changes={"alias": created.alias},
+        )
     db.commit()
     if created is None:
         # 이미 이 값의 표기다 — 만들지 않았지만 실패도 아니다.

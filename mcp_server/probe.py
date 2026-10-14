@@ -602,11 +602,14 @@ async def sweep(session: ClientSession) -> None:
                 },
             )
     # ── 측정 의뢰 — 짓는 것까지 **미리보기로** ───────────────────────────────
+    commission_detail: Any = None
     commissions = await call(session, "list_commissions", {"limit": 3})
     listed = commissions.get("items") if isinstance(commissions, dict) else None
     commission = listed[0] if isinstance(listed, list) and listed else None
     if commission:
-        await call(session, "get_commission", {"commission_id": commission["id"]})
+        commission_detail = await call(
+            session, "get_commission", {"commission_id": commission["id"]}
+        )
         lab = (commission.get("lab_workspace") or {}).get("slug")
         if lab:
             await call(
@@ -788,6 +791,95 @@ async def sweep(session: ClientSession) -> None:
                 "rows": [{"mid": 1, "name": "점검용 부품", "catalog_material_id": catalog_id}],
                 "include_text": True,
             },
+        )
+
+    # ── 2026-10-14 에 연 쓰기(ADR 0061) — 전부 미리보기, 상태가 안 맞으면 거절을 본다 ──
+    zero = "00000000-0000-0000-0000-000000000000"
+    if card_id:
+        card = await call(session, "get_card", {"card_id": card_id})
+        status = card.get("status") if isinstance(card, dict) else None
+        action = {"draft": "publish", "published": "deprecate", "deprecated": "restore"}.get(
+            str(status), "publish"
+        )
+        await call(
+            session, "set_card_status", {"card_id": card_id, "action": action, "dry_run": True}
+        )
+    if run_id:
+        tried = await call(session, "list_processing_results", {"test_run_id": run_id})
+        result_id = _first(tried, "id")
+        await call(
+            session,
+            "adopt_results",
+            {"items": [{"test_run_id": run_id, "result_id": result_id}], "dry_run": True},
+        )
+    if isinstance(commission_detail, dict) and commission_detail.get("id"):
+        cid = commission_detail["id"]
+        await call(
+            session,
+            "change_commission_status",
+            {"commission_id": cid, "note": "MCP 점검 — 저장하지 않는다", "dry_run": True},
+        )
+        await call(
+            session,
+            "assign_commission",
+            {"commission_id": cid, "assignee": None, "dry_run": True},
+            expect_error=not commission_detail.get("can_assign"),
+        )
+        items = commission_detail.get("items") or []
+        await call(
+            session,
+            "link_commission_run",
+            {
+                "commission_id": cid,
+                "item_id": (items[0]["id"] if items else zero),
+                "test_run_id": run_id or zero,
+                "dry_run": True,
+            },
+            expect_error=not (commission_detail.get("can_link") and items and run_id),
+        )
+    if specimen_id:
+        await call(
+            session,
+            "upload_test_run",
+            {
+                "specimen_id": specimen_id,
+                "test_type": "tensile",
+                "filename": "probe.csv",
+                "content": "displacement,force\n0,0\n0.1,100\n",
+                "dry_run": True,
+            },
+        )
+    await call(
+        session,
+        "create_vocabulary_term",
+        {"vocabulary": "manufacturer", "value": "MCP 점검용 제조사", "dry_run": True},
+    )
+    await call(
+        session,
+        "add_vocabulary_alias",
+        {"vocabulary": "manufacturer", "value": "없는 값 — 점검", "alias": "x", "dry_run": True},
+        expect_error=True,
+    )
+    await call(
+        session,
+        "save_test_type",
+        {
+            "key": "probe_only",
+            "label": "점검용 시험법",
+            "abbr": "PRB",
+            "channels": [
+                {"key": "force", "label": "하중", "dimension": "force", "si_unit": "N"}
+            ],
+            "dry_run": True,
+        },
+    )
+    profiles = await call(session, "list_export_profiles")
+    rows = profiles.get("profiles") if isinstance(profiles, dict) else None
+    if isinstance(rows, list) and rows:
+        await call(
+            session,
+            "set_export_profile_active",
+            {"key": rows[0]["key"], "is_active": not rows[0].get("is_active"), "dry_run": True},
         )
 
     missed = sorted(set(names) - {one["tool"] for one in results})

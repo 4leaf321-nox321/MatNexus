@@ -1838,8 +1838,27 @@ def adopt_many(
     # (하나가 막혀도 나머지는 남게) 돌면서 적으면 시험 수만큼 줄이 생긴다 — 실제로 바꾼 것만
     # 끝의 한 트랜잭션에 모은다. 배치(`run_batch`)와 같은 판단이다.
     if took:
+        moved = {row.test_run_id: row for row in rows if row.status == "ok"}
         for one in took:
             permissions.note_edit(db, user, one)
+            # **AI 가 채택을 바꿨으면 시험마다 남긴다**(ADR 0061) — 채택된 값이 통계 · 카드로
+            # 간다. 화면에서 한 것은 `record_by_client` 가 거른다(전처럼 안 남는다).
+            before = moved.get(one.id)
+            audit.record_by_client(
+                db,
+                action=audit.RESULTS_ADOPTED_BY_CLIENT,
+                actor=user,
+                target_table="test_runs",
+                target_id=one.id,
+                target_label=one.record_name,
+                workspace_id=one.workspace_id,
+                changes={
+                    "from": str(before.previous_adopted_id)
+                    if before and before.previous_adopted_id
+                    else None,
+                    "to": str(one.adopted_result_id) if one.adopted_result_id else None,
+                },
+            )
         db.commit()
     changed = sum(1 for one in rows if one.status == "ok")
     unchanged = sum(1 for one in rows if one.status == "unchanged")

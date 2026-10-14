@@ -25,6 +25,9 @@
 
 from __future__ import annotations
 
+import base64
+import binascii
+import json
 import os
 import uuid
 from pathlib import Path
@@ -267,14 +270,29 @@ async def _get_text(ctx: Context, path: str, params: dict[str, Any] | None = Non
 
 
 async def _send(
-    ctx: Context, method: str, path: str, body: dict[str, Any] | None = None
+    ctx: Context,
+    method: str,
+    path: str,
+    body: dict[str, Any] | None = None,
+    *,
+    files: dict[str, tuple[str, bytes, str]] | None = None,
 ) -> Any:
-    """POST·PATCH 하나. **쓰기는 이 함수만 지난다** — 오류 모양을 한 곳에 둔다."""
+    """POST·PATCH 하나. **쓰기는 이 함수만 지난다** — 오류 모양을 한 곳에 둔다.
+
+    `files` 를 주면 multipart 로 보낸다 — 그때 `body` 는 폼 칸(문자열)이다. 시험 파일
+    올리기가 이 길을 쓴다. 따로 함수를 두지 않는 이유: 쓰기가 한 함수만 지나야
+    `test_mcp_writes_audited` 가 감사 누락을 빠짐없이 본다.
+    """
     try:
-        async with httpx.AsyncClient(base_url=API_BASE, timeout=60.0) as client:
-            got = await client.request(
-                method, path, json=body or {}, headers=_headers(ctx)
-            )
+        async with httpx.AsyncClient(base_url=API_BASE, timeout=120.0) as client:
+            if files is not None:
+                got = await client.request(
+                    method, path, data=body or {}, files=files, headers=_headers(ctx)
+                )
+            else:
+                got = await client.request(
+                    method, path, json=body or {}, headers=_headers(ctx)
+                )
     except httpx.RequestError as failed:
         return {"error": f"백엔드에 닿지 못했습니다({API_BASE}): {failed}"}
     if got.status_code == 401:
@@ -1649,11 +1667,12 @@ async def create_material(
     이름(`similar`)을 함께 주니 **그것을 사람에게 그대로 보여 주고 물어라** —
     하나라도 있으면 새로 만들기 전에 사람이 판단할 일이다.
 
-    ## 새 등급은 못 만든다
+    ## 새 등급은 먼저 세우고 온다
 
     `family`·`category`·`grade` 는 기준정보에 **이미 있는 값**이어야 한다. 없으면
-    비슷한 값을 후보로 돌려주고 아무것도 안 만든다(ADR 0032). 정말 새 등급이면
-    사람이 화면에서 세운다 — 지어낸 등급 하나가 그 뒤의 검색·통계를 가른다.
+    비슷한 값을 후보로 돌려주고 아무것도 안 만든다(ADR 0032). 후보에 같은 것이 없고
+    사람이 「새 등급이 맞다」 고 하면 `create_vocabulary_term` 으로 세운 뒤 다시 부른다
+    (ADR 0061) — 지어낸 등급 하나가 그 뒤의 검색·통계를 가른다.
 
     ## 이름은 서버가 짓는다
 
@@ -1894,7 +1913,234 @@ async def create_specimen(
     return {
         **(_specimen_brief(made) or {}),
         "sample_id": sample_id,
-        "note": "만들었습니다. 시험 파일은 화면에서 올립니다 — MCP 로는 못 올립니다.",
+        "note": "만들었습니다. 시험 파일은 upload_test_run 으로 이 시편에 올립니다.",
+    }
+
+
+async def _vocabulary(ctx: Context, vocabulary: str) -> dict[str, Any]:
+    """기준정보 축 — slug 나 이름(Grade · 제조사 …)을 받아 준다."""
+    axes = await _get(ctx, "/vocabularies")
+    if not isinstance(axes, list):
+        return {"error": "기준정보 축 목록을 읽지 못했습니다."}
+    needle = str(vocabulary).strip().lower()
+    found = [
+        one
+        for one in axes
+        if str(one.get("slug", "")).lower() == needle or str(one.get("label", "")).lower() == needle
+    ]
+    if len(found) != 1:
+        return {
+            "error": f"그런 기준정보 축이 없습니다: {vocabulary}",
+            "vocabularies": [{"slug": one.get("slug"), "label": one.get("label")} for one in axes],
+        }
+    return found[0]
+
+
+async def _term_matches(ctx: Context, slug: str, value: str) -> list[dict[str, Any]]:
+    found = await _get(ctx, f"/vocabularies/{slug}/terms", {"q": value, "limit": 8})
+    return found.get("items", []) if isinstance(found, dict) else []
+
+
+@mcp.tool()
+async def create_vocabulary_term(
+    ctx: Context,
+    vocabulary: str,
+    value: str,
+    parent_value: str | None = None,
+    dry_run: bool = True,
+) -> dict[str, Any]:
+    """기준정보에 **새 값**을 세운다 — Family · Category · Grade · 제조사 · 시편 규격 ….
+
+    등록 도구가 「기준정보에 없는 값」 으로 멈췄을 때 온다. 미리보기의 비슷한 값(`similar`)을
+    **사람에게 보이고 「새 값이 맞다」 를 들은 뒤에만** `dry_run=False` — 같은 실물의 다른
+    표기면 `add_vocabulary_alias`. 지어낸 등급 하나가 검색 · 통계 · 카드를 가른다.
+    계층 축은 `parent_value`(Category ← Family …). 통제 축은 자료 관리자만(서버가 판정).
+    """
+    axis = await _vocabulary(ctx, vocabulary)
+    if "error" in axis:
+        return axis
+    slug = str(axis.get("slug"))
+    text = value.strip()
+    if not text:
+        return {"error": "값이 비어 있습니다."}
+    matches = await _term_matches(ctx, slug, text)
+    if not term_gate.is_new(text, matches):
+        same = next(one for one in matches if str(one.get("value", "")).strip().lower() == text.lower())
+        return {"exists": True, "term": same, "note": "이미 있는 값입니다 — 그 표기로 쓰세요."}
+    if axis.get("parent_slug") and not parent_value:
+        return {
+            "error": f"'{axis.get('label')}' 는 위 값({axis.get('parent_slug')})을 함께 줘야 계층에 들어갑니다.",
+            "similar": term_gate.candidates(matches),
+        }
+    if dry_run:
+        return {
+            "dry_run": True,
+            "vocabulary": {"slug": slug, "label": axis.get("label"), "entry_policy": axis.get("entry_policy")},
+            "will_create": {"value": text, "parent_value": parent_value},
+            "similar": term_gate.candidates(matches),
+            "note": "비슷한 값(similar)을 사람에게 보이고 「새 값이 맞다」 를 들은 뒤 dry_run=False 로 "
+            "다시 부르세요. 같은 실물이면 그 값을 쓰거나 별칭을 다세요.",
+        }
+    made = await _send(
+        ctx, "POST", f"/vocabularies/{slug}/terms", {"value": text, "parent_value": parent_value}
+    )
+    if isinstance(made, dict) and "error" in made:
+        return made
+    return {"term": made, "note": "세웠습니다. 이제 이 표기로 등록 도구를 다시 부르세요."}
+
+
+@mcp.tool()
+async def add_vocabulary_alias(
+    ctx: Context, vocabulary: str, value: str, alias: str, dry_run: bool = True
+) -> dict[str, Any]:
+    """기준정보 값에 **별칭**을 단다 — 「포스코(주)」 를 쳐도 「포스코」 로 찾아지게.
+
+    새 값을 세우는 대신 쓰는 길이다: 같은 실물의 다른 표기면 별칭이 맞다. 별칭은 검색 ·
+    등록 피커 · BOM 매칭이 정본 값으로 이끈다. **시스템 관리자만** 단다(서버가 판정).
+    기본이 미리보기 — 지금 달린 별칭을 함께 준다.
+    """
+    axis = await _vocabulary(ctx, vocabulary)
+    if "error" in axis:
+        return axis
+    slug = str(axis.get("slug"))
+    matches = await _term_matches(ctx, slug, value.strip())
+    term = next(
+        (one for one in matches if str(one.get("value", "")).strip().lower() == value.strip().lower()),
+        None,
+    )
+    if term is None:
+        return {"error": f"그런 값이 없습니다: {value}", "similar": term_gate.candidates(matches)}
+    current = await _get(ctx, f"/vocabularies/{slug}/terms/{term['id']}/aliases")
+    if dry_run:
+        return {
+            "dry_run": True,
+            "term": {"id": term.get("id"), "value": term.get("value")},
+            "aliases": current if isinstance(current, list) else [],
+            "will_add": alias,
+            "note": "확인받은 뒤 dry_run=False 로 다시 부르세요.",
+        }
+    made = await _send(
+        ctx, "POST", f"/vocabularies/{slug}/terms/{term['id']}/aliases", {"alias": alias}
+    )
+    if isinstance(made, dict) and "error" in made:
+        return made
+    return {"alias": made, "note": "별칭을 달았습니다."}
+
+
+#: MCP 로 나르는 시험 파일의 상한. 대화로 실어 나르는 것이라 서버 상한(시험 종류마다,
+#: 기본 50MB)보다 작게 둔다 — 큰 파일은 장비의 수집 에이전트(수집함 → `assign_inbox_item`)로.
+UPLOAD_MAX_BYTES = 10 * 1024 * 1024
+
+
+@mcp.tool()
+async def upload_test_run(
+    ctx: Context,
+    specimen_id: str,
+    test_type: str,
+    filename: str,
+    content: str | None = None,
+    content_base64: str | None = None,
+    conditions: dict[str, Any] | None = None,
+    condition_units: dict[str, str] | None = None,
+    instrument: str | None = None,
+    operator: str | None = None,
+    tested_at: str | None = None,
+    note: str | None = None,
+    dry_run: bool = True,
+) -> dict[str, Any]:
+    """장비 원본 파일 하나를 **시편에 시험으로 올린다** — 서버가 읽어 곡선을 만든다.
+
+    글 파일(CSV · TXT · JSON · MTET)은 `content`, 바이너리(.tra 등)는 `content_base64`.
+    `filename` 의 확장자를 지켜라 — 읽는 법이 그것으로 정해진다. 10MB 까지(더 크면 수집
+    에이전트 → `assign_inbox_item`). **시편을 짐작하지 마라** — 확정 못 하면 사람에게 묻는다.
+    `conditions` 키는 `list_condition_fields`, 단위는 `condition_units` 에(SI 로 바꾸지 마라).
+
+    기본이 미리보기(시편 · 종류 · 크기 · 첫 줄 · 빠진 필수 조건) — 사람에게 보이고 확인받은 뒤
+    `dry_run=False`. 읽기는 뒤에서 돈다 — 잠시 뒤 `get_test_run` 의 상태(parsed · failed)를 본다.
+    """
+    if (content is None) == (content_base64 is None):
+        return {"error": "content 나 content_base64 중 하나만 주세요."}
+    if content is not None:
+        data = content.encode("utf-8")
+    else:
+        try:
+            data = base64.b64decode(content_base64 or "", validate=True)
+        except (binascii.Error, ValueError):
+            return {"error": "content_base64 를 풀지 못했습니다 — base64 가 맞는지 보세요."}
+    if not data:
+        return {"error": "파일 내용이 비어 있습니다."}
+    if len(data) > UPLOAD_MAX_BYTES:
+        return {
+            "error": f"파일이 {len(data) / 1024 / 1024:.1f}MB 입니다 — MCP 로는 10MB 까지만 나릅니다.",
+            "hint": "장비 PC 의 수집 에이전트로 올리고 assign_inbox_item 으로 붙이세요.",
+        }
+
+    specimen = await _get(ctx, f"/specimens/{specimen_id}")
+    if not isinstance(specimen, dict) or "error" in specimen:
+        return specimen if isinstance(specimen, dict) else {"error": "시편을 읽지 못했습니다."}
+    types = await _get(ctx, "/test-types")
+    if isinstance(types, dict) and "error" in types:
+        return types
+    kind = next((one for one in types or [] if one.get("key") == test_type), None)
+    if kind is None:
+        return {
+            "error": f"그런 시험 종류가 없습니다: {test_type}",
+            "test_types": [one.get("key") for one in types or []],
+        }
+    limit = int(kind.get("max_upload_bytes_effective") or UPLOAD_MAX_BYTES)
+    if len(data) > limit:
+        return {"error": f"이 시험 종류는 {limit // 1024 // 1024}MB 까지 받습니다."}
+    given = set((conditions or {}).keys())
+    missing = [
+        one.get("key")
+        for one in kind.get("conditions") or []
+        if one.get("is_required") and one.get("key") not in given
+    ]
+
+    form: dict[str, Any] = {
+        "specimen_id": specimen.get("id") or specimen_id,
+        "test_type": test_type,
+        "conditions": json.dumps(conditions or {}, ensure_ascii=False),
+        "condition_units": json.dumps(condition_units or {}, ensure_ascii=False),
+        "instrument": instrument,
+        "operator": operator,
+        "tested_at": tested_at,
+        "note": note,
+    }
+    form = {key: value for key, value in form.items() if value is not None}
+
+    if dry_run:
+        head: list[str] = []
+        if content is not None:
+            head = content.splitlines()[:5]
+        return {
+            "dry_run": True,
+            "specimen": _specimen_brief(specimen),
+            "test_type": {"key": kind.get("key"), "label": kind.get("label")},
+            "file": {"name": filename, "bytes": len(data), "first_lines": head},
+            "conditions": conditions or {},
+            "condition_units": condition_units or {},
+            **({"missing_required_conditions": missing} if missing else {}),
+            "note": "이 미리보기를 사람에게 보이고 확인받은 뒤 dry_run=False 로 다시 부르세요.",
+        }
+    made = await _send(
+        ctx,
+        "POST",
+        "/test-runs",
+        form,
+        files={"file": (filename, data, "application/octet-stream")},
+    )
+    if isinstance(made, dict) and "error" in made:
+        return made
+    return {
+        "id": made.get("id"),
+        "record_name": made.get("record_name"),
+        "status": made.get("status"),
+        "note": (
+            f"올렸습니다(/test-runs/{made.get('id')}). 읽기는 뒤에서 돕니다 — 잠시 뒤 "
+            "get_test_run 으로 status 가 parsed 인지 봅니다. failed 면 parse_error 를 사람에게 "
+            "옮기고 형식 정의를 확인하세요."
+        ),
     }
 
 
@@ -2258,10 +2504,11 @@ async def build_deck(
     }
 
 
-# ── 제한적 쓰기 (3단계) ───────────────────────────────────────────────────────
+# ── 쓰기 ──────────────────────────────────────────────────────────────────────
 #
-# **확정·삭제·게시는 도구를 안 낸다.** 되돌리기 비싸고, 사람이 화면에서 하는
-# 편이 낫다. 여기 있는 둘은 초안까지만 만든다.
+# **삭제는 도구를 안 낸다.** 확정 · 채택 · 의뢰 제출 · 시험 파일 올리기 · 기준정보 새 값 ·
+# 시험 종류 저장 · 해석용 정의 켜고 끄기는 2026-10-14 부터 낸다(ADR 0061) — 전부
+# 미리보기가 기본이고, 미리보기를 사람에게 보이고 「그대로」 를 들은 뒤에 실행한다.
 
 
 @mcp.tool()
@@ -2826,7 +3073,7 @@ async def create_card_from_tests(
     """시험에서 나온 값으로 **물성 카드(초안)** 를 만든다.
 
     **기본이 미리보기(dry_run=True)다.** 그리고 카드는 **언제나 초안으로** 생긴다 —
-    확정(publish)하는 도구는 안 냈다. 확정은 사람이 화면에서 한다.
+    확정은 따로 `set_card_status(card_id, "publish")` 로 한다(미리보기를 사람에게 보인 뒤).
 
     ## `preview_card_fit` 을 먼저 거쳐라
 
@@ -2897,7 +3144,7 @@ async def create_card_from_tests(
             "will_create": {key: value for key, value in body.items() if value is not None},
             "note": (
                 "이대로 만들려면 dry_run=False 로 다시 부르세요. **초안으로 생깁니다** —"
-                " 확정은 사람이 화면에서 합니다."
+                " 확정은 set_card_status 로 따로 합니다."
                 + ("" if family else " 식을 안 골랐으므로 표만 저장됩니다.")
             ),
         }
@@ -2906,7 +3153,8 @@ async def create_card_from_tests(
         made = dict(made)
         made["note"] = (
             "**초안으로 만들었습니다.** 덱으로 뽑아 볼 수는 있지만 덱 머리에"
-            " 「초안」 이 박힙니다 — 확정은 사람이 화면에서 합니다."
+            " 「초안」 이 박힙니다 — 확정하려면 set_card_status(card_id, \"publish\")"
+            " 의 미리보기를 사람에게 보이고 확인받으세요."
         )
     return made
 
@@ -2922,8 +3170,8 @@ async def create_declared_card(
 ) -> dict[str, Any]:
     """적어 둔 값만으로 **물성 카드(초안)** 를 만든다 — 시험이 없는 재료의 길.
 
-    **언제나 초안(draft)으로 만들어진다.** 확정은 사람이 화면에서 한다 —
-    확정된 카드로는 해석이 돌아가므로 그 결정을 AI 가 대신하지 않는다.
+    **언제나 초안(draft)으로 만들어진다.** 확정은 `set_card_status` 로 따로 한다 —
+    확정된 카드로는 해석이 돌아가므로 미리보기를 사람에게 보이고 확인받은 뒤에.
 
     `synthesize_plastic=True` 면 선언 스칼라(항복·인장·연신율)로 **소성 곡선을
     지어** 싣는다. 지어낸 표라는 사실이 카드 근거와 덱 각주에 남지만, 사람에게도
@@ -3017,8 +3265,77 @@ async def create_declared_card(
     if "error" in made:
         return made
     out = _card_summary(made)
-    out["note"] = "초안으로 만들어졌다 — 확정은 사람이 화면에서 한다."
+    out["note"] = "초안으로 만들어졌다 — 확정은 set_card_status(card_id, \"publish\") 로."
     return out
+
+
+#: 카드 상태를 옮기는 길 — (지금 상태로 허용되는 것, 사람에게 할 말).
+_CARD_MOVES: dict[str, tuple[tuple[str, ...], str]] = {
+    "publish": (
+        ("draft",),
+        "확정하면 덱 머리의 「초안」 이 사라지고, BOM 덱이 이 재료의 카드로 **이것을 먼저** 쓴다.",
+    ),
+    "deprecate": (
+        ("published",),
+        "사용 중지하면 목록에 「쓰지 마세요」 로 남고 BOM 덱이 더는 고르지 않는다. 지우지는 않는다.",
+    ),
+    "restore": (
+        ("deprecated",),
+        "사용 중지한 카드를 **초안으로** 되살린다 — 다시 쓰려면 확정을 다시 받는다.",
+    ),
+}
+
+
+@mcp.tool()
+async def set_card_status(
+    ctx: Context, card_id: str, action: str, dry_run: bool = True
+) -> dict[str, Any]:
+    """물성 카드의 상태를 옮긴다 — `publish`(초안 → 확정) · `deprecate`(확정 → 사용 중지) ·
+    `restore`(사용 중지 → 초안). 지우는 도구는 없다. **셋 다 자료 관리자만**(서버가 판정).
+
+    기본이 미리보기(카드 · 재료 · 상태 · `warnings`) — **사람에게 그대로 보이고 「그대로」 를
+    들은 뒤** `dry_run=False`. 확정 카드가 공식 물성으로 다른 시스템에 넘어간다: 경고(외삽 ·
+    네킹 · 합성 · 표본 1)는 빼지 말고 옮긴다.
+    """
+    move = _CARD_MOVES.get(action)
+    if move is None:
+        return {"error": f"모르는 동작입니다: {action}", "allowed": list(_CARD_MOVES)}
+    allowed_from, effect = move
+    resolved = await _resolve_card(ctx, card_id)
+    if isinstance(resolved, dict):
+        return resolved
+    card = await _get(ctx, f"/fitting/cards/{resolved}")
+    if isinstance(card, dict) and "error" in card:
+        return card
+    status = str(card.get("status") or "")
+    if status not in allowed_from:
+        return {
+            "error": f"지금 상태({status})에서는 {action} 할 수 없습니다.",
+            "allowed_from": list(allowed_from),
+        }
+    summary = _card_summary(card)
+    if dry_run:
+        return {
+            "dry_run": True,
+            "card": summary,
+            "material": card.get("material_name"),
+            # 카드를 지을 때 남긴 경고(외삽 · 네킹 · 합성 …)와 서버가 짚은 문제 — 빼지 말고 옮긴다.
+            "warnings": (card.get("source") or {}).get("notes") or [],
+            "problem": card.get("problem"),
+            "will": f"{status} → {action}",
+            "effect": effect,
+            "note": "이 미리보기를 사람에게 보이고 확인받은 뒤 dry_run=False 로 다시 부르세요.",
+        }
+    # 경로를 글자 그대로 — `test_mcp_writes_audited` 가 읽어 감사를 대조한다.
+    if action == "publish":
+        done = await _send(ctx, "POST", f"/fitting/cards/{resolved}/publish")
+    elif action == "deprecate":
+        done = await _send(ctx, "POST", f"/fitting/cards/{resolved}/deprecate")
+    else:
+        done = await _send(ctx, "POST", f"/fitting/cards/{resolved}/restore")
+    if isinstance(done, dict) and "error" in done:
+        return done
+    return {**_card_summary(done), "note": f"{action} 했습니다. {effect}"}
 
 # ── 사내 물성 들이기 (2026-09-30) ─────────────────────────────────────────────
 #
@@ -4725,7 +5042,8 @@ async def save_export_profile(
         "definition": full,
     }
     # **고칠 때는 켜짐을 안 보낸다** — 꺼 둔 정의판(기본 형식의 비상용 사본)을 고치러 왔다가
-    # 켜 버리면 내보내기 메뉴에 같은 형식이 두 줄 선다. 켜고 끄기는 사람이 화면에서 한다.
+    # 켜 버리면 내보내기 메뉴에 같은 형식이 두 줄 선다. 켜고 끄기는 `set_export_profile_active`
+    # 로 따로 — 정의를 고치는 일에 섞이지 않게.
     if existing is None:
         body["is_active"] = True
     if dry_run:
@@ -4746,6 +5064,41 @@ async def save_export_profile(
     if workspace:
         body["owner_workspace_slug"] = workspace
     return await _send(ctx, "POST", "/fitting/export-profiles", body)
+
+
+@mcp.tool()
+async def set_export_profile_active(
+    ctx: Context, key: str, is_active: bool, dry_run: bool = True
+) -> dict[str, Any]:
+    """해석용 정의를 **켜거나 끈다** — 켜진 정의만 카드의 「내보내기」 메뉴에 선다.
+
+    끄면 지우지 않고 메뉴에서만 내린다 — 비상용 사본(기본 형식의 정의판)을 꺼 두는 것이
+    대표적인 쓰임이다. **같은 형식의 정의가 둘 켜지면 메뉴에 두 줄 선다** — 켜기 전에
+    `list_export_profiles` 로 같은 솔버 · 형식이 이미 켜져 있는지 본다. 기본이 미리보기.
+    """
+    listed = await _get(ctx, "/fitting/export-profiles")
+    if isinstance(listed, dict) and "error" in listed:
+        return listed
+    rows: list[dict[str, Any]] = []
+    if isinstance(listed, list):
+        rows = listed
+    elif isinstance(listed, dict):
+        rows = listed.get("items", [])
+    row = next((one for one in rows if one.get("key") == key), None)
+    if row is None:
+        return {"error": f"그런 해석용 정의가 없습니다: {key}", "keys": [one.get("key") for one in rows]}
+    if bool(row.get("is_active")) == bool(is_active):
+        return {"unchanged": True, "key": key, "is_active": bool(is_active), "note": "이미 그 상태입니다."}
+    if dry_run:
+        return {
+            "dry_run": True,
+            "profile": {"key": key, "label": row.get("label"), "is_active": row.get("is_active")},
+            "will": "켜기" if is_active else "끄기",
+            "note": "확인받은 뒤 dry_run=False 로 다시 부르세요.",
+        }
+    return await _send(
+        ctx, "POST", f"/fitting/export-profiles/{key}/active", {"is_active": bool(is_active)}
+    )
 
 
 @mcp.tool()
@@ -5066,8 +5419,8 @@ async def draft_test_type(
       시험의 뜻이 바뀐다.
     - **채널 이름이 서버 계약이다.** 같은 이름은 같은 차원·단위여야 한다.
 
-    그래서 이 도구는 **초안과 충돌 검사까지만** 한다. 저장은 사람이 화면에서
-    한다 — 그 판단은 부서의 것이다.
+    그래서 이 도구는 **초안과 충돌 검사까지만** 한다. 저장은 `save_test_type` 으로
+    따로 한다 — 이 초안을 사람에게 보이고 그 부서의 판단을 받은 뒤에.
 
     돌려주는 `conflicts` 를 반드시 사람에게 옮겨라: 같은 채널 이름이 다른 시험법에
     다른 단위로 이미 있으면, 그 이름을 쓰면 안 된다.
@@ -5075,11 +5428,29 @@ async def draft_test_type(
     existing = await _get(ctx, "/test-types")
     if isinstance(existing, dict) and "error" in existing:
         return existing
+    conflicts = _test_type_conflicts(existing, key, channels, updating=False)
+    return {
+        "draft": {"key": key, "label": label, "channels": channels},
+        "conflicts": conflicts,
+        "note": (
+            "**저장하지 않았습니다.** 시험법은 검증할 방법이 없고 한번 시험이 붙으면 "
+            "되돌리기 어렵습니다 — 이 초안을 사람에게 보이고, 확인받으면 save_test_type 으로 "
+            "저장하세요."
+            + (" 충돌을 먼저 해결해야 합니다." if conflicts else "")
+        ),
+    }
 
+
+def _test_type_conflicts(
+    existing: Any, key: str, channels: list[dict[str, Any]], *, updating: bool
+) -> list[dict[str, Any]]:
+    """같은 키(새로 지을 때) · 같은 채널 이름의 다른 단위 — 시험법 사이의 계약."""
     conflicts: list[dict[str, Any]] = []
-    for one in existing:
+    for one in existing or []:
         if one.get("key") == key:
-            conflicts.append({"kind": "키 중복", "detail": f"'{key}' 시험법이 이미 있습니다."})
+            if not updating:
+                conflicts.append({"kind": "키 중복", "detail": f"'{key}' 시험법이 이미 있습니다."})
+            continue
         for channel in one.get("channels") or []:
             for wanted in channels:
                 if channel.get("key") != wanted.get("key"):
@@ -5095,16 +5466,94 @@ async def draft_test_type(
                             ),
                         }
                     )
+    return conflicts
 
+
+@mcp.tool()
+async def save_test_type(
+    ctx: Context,
+    key: str,
+    label: str,
+    abbr: str,
+    channels: list[dict[str, Any]],
+    conditions: list[dict[str, Any]] | None = None,
+    description: str | None = None,
+    parser_key: str | None = None,
+    is_active: bool | None = None,
+    owner_workspace_slug: str | None = None,
+    dry_run: bool = True,
+) -> dict[str, Any]:
+    """시험 종류(시험법)를 **저장한다** — 없으면 새로, 있으면 고친다. `draft_test_type` 뒤에 온다.
+
+        channels    [{key, label, dimension, si_unit, is_required}] — 같은 이름은 같은 단위
+        conditions  [{key, label, value_type(number|text|choice|date|boolean), si_unit?, is_required}]
+        abbr        약호(TEN · DMA)      parser_key  비우면 형식 정의로 읽는다
+
+    고칠 때 채널은 전부 다시 준다. 비운 칸은 지금 값을 둔다. 시험이 붙은 시험법은 서버가
+    못 바꾸는 칸을 막는다. 기본이 미리보기(새로/고침 · 충돌 · 바뀌는 채널) — 시험이 붙으면
+    되돌리기 어려우니 **사람에게 보이고 확인받은 뒤** `dry_run=False`.
+    """
+    existing = await _get(ctx, "/test-types")
+    if isinstance(existing, dict) and "error" in existing:
+        return existing
+    current = next((one for one in existing or [] if one.get("key") == key), None)
+    conflicts = _test_type_conflicts(existing, key, channels, updating=current is not None)
+    # **안 준 칸은 지금 값으로** — PUT 은 통째로 바꾸므로, 보내지 않은 칸이 기본값(상한 없음 ·
+    # 켜짐)으로 조용히 덮인다(AGENTS.md 「안 보낸 것과 비운 것」).
+    was = current or {}
+
+    def _ordered(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        # 화면 편집기와 같게 차례대로 10씩 — 안 매기면 전부 0 이라 순서가 흩어진다.
+        return [{**row, "sort_order": row.get("sort_order", index * 10)} for index, row in enumerate(rows)]
+
+    body: dict[str, Any] = {
+        "label": label,
+        "abbr": abbr,
+        "channels": _ordered(channels),
+        "conditions": _ordered(conditions if conditions is not None else was.get("conditions") or []),
+        "description": description if description is not None else was.get("description"),
+        "parser_key": parser_key if parser_key is not None else was.get("parser_key"),
+        "is_active": is_active if is_active is not None else bool(was.get("is_active", True)),
+        "max_upload_bytes": was.get("max_upload_bytes"),
+    }
+    if dry_run:
+        plan: dict[str, Any] = {
+            "dry_run": True,
+            "mode": "update" if current else "create",
+            "will_save": {"key": key, **body},
+            "conflicts": conflicts,
+            "note": "이 미리보기를 사람에게 보이고 확인받은 뒤 dry_run=False 로 다시 부르세요."
+            + (" 충돌을 먼저 해결해야 합니다." if conflicts else ""),
+        }
+        if current:
+            before = {str(one.get("key")) for one in current.get("channels") or []}
+            after = {str(one.get("key")) for one in channels}
+            plan["channels_added"] = sorted(after - before)
+            plan["channels_removed"] = sorted(before - after)
+        return plan
+    if conflicts:
+        return {"error": "충돌이 있어 저장하지 않았습니다.", "conflicts": conflicts}
+    if current:
+        saved = await _send(
+            ctx,
+            "PUT",
+            f"/test-types/{key}",
+            {**body, "expected_revision": current.get("revision")},
+        )
+    else:
+        saved = await _send(
+            ctx,
+            "POST",
+            "/test-types",
+            {**body, "key": key, "owner_workspace_slug": owner_workspace_slug},
+        )
+    if isinstance(saved, dict) and "error" in saved:
+        return saved
     return {
-        "draft": {"key": key, "label": label, "channels": channels},
-        "conflicts": conflicts,
-        "note": (
-            "**저장하지 않았습니다.** 시험법은 검증할 방법이 없고 한번 시험이 붙으면 "
-            "되돌리기 어렵습니다 — 이 초안을 사람에게 보이고, 화면(설정 → 시험 종류)"
-            "에서 만들게 하세요."
-            + (" 충돌을 먼저 해결해야 합니다." if conflicts else "")
-        ),
+        "key": saved.get("key"),
+        "label": saved.get("label"),
+        "revision": saved.get("revision"),
+        "note": "저장했습니다." + (" 이제 이 종류로 시험을 올릴 수 있습니다." if not current else ""),
     }
 
 
@@ -5248,7 +5697,9 @@ async def get_commission(ctx: Context, commission_id: str) -> dict[str, Any]:
 
     `progress` 가 {total, linked, done} 이다: 항목 수량 합 · 붙은 시험 · 채택된 결과.
     `items[].runs` 에 붙은 시험이, `events` 에 누가 언제 무슨 말로 옮겼는지가 있다.
-    **상태를 옮기는 도구는 없다** — 접수·보류·결과 전달은 사람이 화면에서 말과 함께 한다.
+    `allowed` 가 **이 사람이 지금 옮길 수 있는 상태**다(낸 쪽 · 받는 쪽이 다르다) —
+    옮기기는 `change_commission_status`, 담당은 `assign_commission`, 시험 붙이기는
+    `link_commission_run`.
     """
     return await _get(ctx, f"/commissions/{commission_id}")
 
@@ -5293,19 +5744,20 @@ async def create_commission(
     sample_plan: str | None = None,
     due_on: str | None = None,
     priority: str = "normal",
+    submit: bool = False,
     dry_run: bool = True,
 ) -> dict[str, Any]:
-    """측정 의뢰를 **작성 중으로** 만든다 — 「이 물성이 없으니 재 달라」 의 끝.
+    """측정 의뢰를 만든다 — 「이 물성이 없으니 재 달라」 의 끝.
 
     `measurement_gaps` · `property_coverage` 가 「없다」 고 답했을 때 거기서 멈추지
     말고 여기까지 온다. 없는 값을 채우는 길은 문헌을 뒤지는 것 아니면 **재는 것**이다.
 
-    ## 내지는 않는다
+    ## 낼 것인가 — `submit`
 
-    **작성 중(draft)으로만 만든다.** 접수 대기로 내는 것은 사람이 화면에서 한다 —
-    의뢰는 두 부서 사이의 약속이고, 받는 쪽 일정을 잡아 두는 일이라 AI 가 대신
-    결정할 것이 아니다. 만든 뒤 사람에게 **링크(`/commissions/<id>`)를 주고 확인을
-    부탁해라.** 상태를 옮기는 도구는 없다(`get_commission` 참고).
+    기본(`submit=False`)은 **작성 중(draft)** 이라 받는 부서에 안 보인다. `submit=True` 면
+    만들면서 바로 **접수 대기로 낸다** — 받는 부서에 알림이 가고 그쪽 일정이 잡히는
+    약속이다. 내는 것은 **사람이 「내라」 고 말했을 때만** 켠다. 작성 중으로 만든 것을
+    나중에 내려면 `change_commission_status(id, "submitted")`.
 
     **기본이 미리보기(dry_run=True)다.** 무엇이 적힐지 사람에게 보이고 나서 만든다.
 
@@ -5348,24 +5800,214 @@ async def create_commission(
         "due_on": due_on,
         "priority": priority,
         "items": items,
-        # **AI 는 내지 않는다.** 위 「내지는 않는다」 를 코드로 못 박아 둔다.
-        "submit": False,
+        # 사람이 「내라」 고 했을 때만 참 — 받는 부서에 알림이 가고 일정이 잡힌다.
+        "submit": bool(submit),
     }
     if dry_run:
         return {
             "dry_run": True,
             "will_create": {**body, "lab": resolved},
-            "note": "이대로 만들려면 dry_run=False 로 다시 부르세요. 만든 뒤에도 "
-            "**작성 중**이라 받는 부서에는 안 보입니다 — 사람이 화면에서 냅니다.",
+            "note": "이대로 만들려면 dry_run=False 로 다시 부르세요. "
+            + (
+                "**만들면서 접수 대기로 냅니다** — 받는 부서에 알림이 갑니다."
+                if submit
+                else "**작성 중**으로 생겨 받는 부서에는 안 보입니다."
+            ),
         }
     made = await _send(ctx, "POST", "/commissions", body)
     if isinstance(made, dict) and "error" in made:
         return made
     return {
         **made,
-        "note": f"작성 중으로 만들었습니다. 사람에게 /commissions/{made.get('id')} 를 "
-        f"보여 주고, 확인한 뒤 화면에서 「의뢰」 를 누르라고 전하세요.",
+        "note": (
+            f"접수 대기로 냈습니다. 사람에게 /commissions/{made.get('id')} 를 보여 주세요."
+            if submit
+            else f"작성 중으로 만들었습니다. 사람에게 /commissions/{made.get('id')} 를 보여 "
+            "주고, 내려면 change_commission_status(id, \"submitted\") 로."
+        ),
     }
+
+
+async def _commission(ctx: Context, commission_id: str) -> dict[str, Any]:
+    """의뢰 상세 — 옮길 수 있는 상태 · 담당 후보 · 붙일 시험 후보가 함께 온다."""
+    got = await _get(ctx, f"/commissions/{commission_id}")
+    if not isinstance(got, dict):
+        return {"error": "의뢰를 읽지 못했습니다."}
+    return got
+
+
+def _commission_brief(item: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": item.get("id"),
+        "title": item.get("title"),
+        "status": item.get("status"),
+        "status_label": item.get("status_label"),
+        "lab": (item.get("lab_workspace") or {}).get("name"),
+        "assignee": (item.get("assignee") or {}).get("name"),
+        "progress": item.get("progress"),
+    }
+
+
+@mcp.tool()
+async def change_commission_status(
+    ctx: Context,
+    commission_id: str,
+    status: str | None = None,
+    note: str | None = None,
+    dry_run: bool = True,
+) -> dict[str, Any]:
+    """측정 의뢰의 상태를 옮긴다 — submitted(의뢰 내기) · accepted(접수) · in_progress ·
+    on_hold(보류) · delivered(결과 전달) · closed(완료) · rejected(반려) · draft(되돌림).
+
+    갈 수 있는 곳은 서버가 정한다(미리보기의 `allowed` — 낸 쪽 · 받는 쪽이 다르다). 접수 ·
+    보류 · 결과 전달 · 반려는 `note` 필수. `status` 를 비우고 `note` 만 주면 말만 보탠다.
+    기본이 미리보기 — 두 부서 사이의 약속이라 사람에게 보이고 확인받은 뒤 `dry_run=False`.
+    """
+    item = await _commission(ctx, commission_id)
+    if "error" in item:
+        return item
+    allowed = [str(one) for one in item.get("allowed") or []]
+    labels = item.get("allowed_labels") or {}
+    needs_note = [str(one) for one in item.get("note_required") or []]
+    brief = _commission_brief(item)
+    if status is None and not note:
+        return {"error": "status 나 note 중 하나는 있어야 합니다.", "commission": brief}
+    if status is not None and status not in allowed:
+        return {
+            "error": f"지금 상태에서 '{status}' 로 옮길 수 없습니다.",
+            "commission": brief,
+            "allowed": {key: labels.get(key, key) for key in allowed},
+        }
+    if status in needs_note and not (note or "").strip():
+        return {"error": f"'{labels.get(status, status)}' 은 말(note)이 필요합니다.", "commission": brief}
+    if dry_run:
+        return {
+            "dry_run": True,
+            "commission": brief,
+            "will": (
+                f"{brief['status']} → {status}({labels.get(status, status)})"
+                if status
+                else "상태는 그대로 — 말만 보탠다"
+            ),
+            "note_to_leave": note,
+            "allowed": {key: labels.get(key, key) for key in allowed},
+            "hint": "이 미리보기를 사람에게 보이고 확인받은 뒤 dry_run=False 로 다시 부르세요.",
+        }
+    done = await _send(
+        ctx, "POST", f"/commissions/{commission_id}/events", {"status": status, "note": note}
+    )
+    if isinstance(done, dict) and "error" in done:
+        return done
+    return {"commission": _commission_brief(done), "note": "옮겼습니다."}
+
+
+@mcp.tool()
+async def assign_commission(
+    ctx: Context, commission_id: str, assignee: str | None, dry_run: bool = True
+) -> dict[str, Any]:
+    """측정 의뢰의 **담당자**를 정한다(받는 부서 쪽). `assignee` 를 비우면 담당을 비운다.
+
+    `assignee` 는 사람 id 나 **이름**이다 — 미리보기가 받는 부서 멤버(`assignees`)에서 찾아
+    준다. 못 찾거나 여럿이면 후보를 준다. 받는 쪽이 아니면 서버가 거절한다(`can_assign`).
+    기본이 미리보기다.
+    """
+    item = await _commission(ctx, commission_id)
+    if "error" in item:
+        return item
+    brief = _commission_brief(item)
+    if not item.get("can_assign"):
+        return {"error": "이 의뢰의 담당을 정할 수 없습니다 — 받는 부서 쪽만 정합니다.", "commission": brief}
+    people = item.get("assignees") or []
+    target: dict[str, Any] | None = None
+    if assignee:
+        needle = str(assignee).strip().lower()
+        exact = [one for one in people if str(one.get("id")) == assignee]
+        near = exact or [one for one in people if needle in str(one.get("name", "")).lower()]
+        if len(near) != 1:
+            return {
+                "error": f"담당자를 못 정했습니다: {assignee}",
+                "candidates": [{"id": one.get("id"), "name": one.get("name")} for one in (near or people)],
+            }
+        target = near[0]
+    if dry_run:
+        return {
+            "dry_run": True,
+            "commission": brief,
+            "will": f"담당 {brief.get('assignee') or '없음'} → {(target or {}).get('name') or '없음'}",
+            "hint": "확인받은 뒤 dry_run=False 로 다시 부르세요.",
+        }
+    done = await _send(
+        ctx,
+        "POST",
+        f"/commissions/{commission_id}/assignee",
+        {"assignee_id": (target or {}).get("id")},
+    )
+    if isinstance(done, dict) and "error" in done:
+        return done
+    return {"commission": _commission_brief(done), "note": "담당을 정했습니다."}
+
+
+@mcp.tool()
+async def link_commission_run(
+    ctx: Context,
+    commission_id: str,
+    item_id: str,
+    test_run_id: str,
+    unlink: bool = False,
+    dry_run: bool = True,
+) -> dict[str, Any]:
+    """측정 의뢰의 항목에 **시험을 붙인다**(`unlink=True` 면 뗀다) — 받는 부서 쪽, 접수 뒤.
+
+    붙일 수 있는 시험은 미리보기의 `candidates` 다(같은 시료 · 같은 시험 종류 · 아직 어느
+    항목에도 안 붙은 것). 붙은 시험의 채택된 결과가 의뢰 진행률이 된다. 기본이 미리보기다.
+    """
+    item = await _commission(ctx, commission_id)
+    if "error" in item:
+        return item
+    brief = _commission_brief(item)
+    if not item.get("can_link"):
+        return {"error": "이 의뢰에 시험을 붙이거나 뗄 수 없습니다 — 받는 부서 쪽, 접수 뒤에만.", "commission": brief}
+    row = next((one for one in item.get("items") or [] if str(one.get("id")) == item_id), None)
+    if row is None:
+        return {
+            "error": f"그런 항목이 없습니다: {item_id}",
+            "items": [
+                {"id": one.get("id"), "test_type": one.get("test_type_key"), "count": one.get("count")}
+                for one in item.get("items") or []
+            ],
+        }
+    resolved = await _resolve_run(ctx, test_run_id)
+    if isinstance(resolved, dict):
+        return resolved
+    if dry_run:
+        return {
+            "dry_run": True,
+            "commission": brief,
+            "item": {
+                "id": row.get("id"),
+                "test_type": row.get("test_type_key"),
+                "count": row.get("count"),
+                "runs": [one.get("record_name") for one in row.get("runs") or []],
+            },
+            "will": f"{'떼기' if unlink else '붙이기'}: {resolved}",
+            "candidates": [
+                {"id": one.get("id"), "record_name": one.get("record_name"), "adopted": one.get("adopted")}
+                for one in row.get("candidates") or []
+            ],
+            "hint": "확인받은 뒤 dry_run=False 로 다시 부르세요.",
+        }
+    # 경로를 변수로 두지 않는다 — `test_mcp_writes_audited` 가 글자 그대로 읽어 감사를 대조한다.
+    if unlink:
+        done = await _send(
+            ctx, "DELETE", f"/commissions/{commission_id}/items/{item_id}/runs/{resolved}"
+        )
+    else:
+        done = await _send(
+            ctx, "POST", f"/commissions/{commission_id}/items/{item_id}/runs", {"run_id": resolved}
+        )
+    if isinstance(done, dict) and "error" in done:
+        return done
+    return {"note": "떼었습니다." if unlink else "붙였습니다.", "commission": brief}
 
 
 @mcp.tool()
@@ -5411,7 +6053,8 @@ async def list_processing_results(ctx: Context, test_run_id: str) -> dict[str, A
 
     `stale` 이 참이면 그 결과를 만든 뒤 원본 · 시편 값이 바뀌었다 — 다시 처리할 후보다.
     `has_true_stress` 가 거짓이면 진응력 · 진소성변형률 단계가 없어 그 결과로는 카드를 못 짓는다.
-    **채택은 사람이 화면에서 한다** — 어느 결과를 공식으로 삼을지는 AI 가 정하지 않는다(ADR 0007).
+    채택은 `adopt_results` 로 한다 — 어느 결과를 공식으로 삼을지는 **사람에게 견준 것을 보이고
+    확인받은 뒤에**(ADR 0061). 채택된 값이 재료의 통계 · 카드로 간다.
     """
     resolved = await _resolve_run(ctx, test_run_id)
     if isinstance(resolved, dict):
@@ -5445,7 +6088,81 @@ async def list_processing_results(ctx: Context, test_run_id: str) -> dict[str, A
         "test_run_id": resolved,
         "count": len(rows),
         "results": rows,
-        "note": "곡선은 get_result_curve(result_id) 로 본다. 채택은 사람이 화면에서 한다.",
+        "note": "곡선은 get_result_curve(result_id) 로 본다. 채택은 adopt_results 로 — "
+        "미리보기를 사람에게 보이고 확인받은 뒤에.",
+    }
+
+
+#: 한 번에 채택을 바꾸는 시험 수. 서버 상한(200)보다 작게 — 미리보기가 시험마다 한 번씩 읽는다.
+ADOPT_MAX = 50
+
+
+@mcp.tool()
+async def adopt_results(
+    ctx: Context, items: list[dict[str, Any]], dry_run: bool = True
+) -> dict[str, Any]:
+    """처리 결과를 **채택**한다 — 시험마다 어느 결과를 그 시험의 값으로 삼을지.
+
+    `items`: [{"test_run_id", "result_id"}] — `result_id` 가 null 이면 채택을 거둔다. 최대 50건.
+    고르기 전에 `list_processing_results` · `get_result_curve` 로 견주고, `stale` 은 고르지 않는다.
+    기본이 미리보기(시험마다 `current` → `next` 와 값) — **사람에게 보이고 「그대로」 를 들은 뒤**
+    `dry_run=False`. 채택된 값이 통계 · 카드 · 덱으로 간다. 되돌리기: 줄마다 온
+    `previous_adopted_id` 를 다시 보낸다. 막힌 줄만 `error` 가 온다(권한은 서버가 판정).
+    """
+    if not items:
+        return {"error": "items 가 비어 있습니다."}
+    if len(items) > ADOPT_MAX:
+        return {"error": f"한 번에 {ADOPT_MAX}건까지입니다 — 나눠서 부르세요.", "asked": len(items)}
+    plan: list[dict[str, Any]] = []
+    payload: list[dict[str, Any]] = []
+    for one in items:
+        asked_run = str(one.get("test_run_id") or "")
+        result_id = one.get("result_id")
+        resolved = await _resolve_run(ctx, asked_run)
+        if isinstance(resolved, dict):
+            plan.append({"test_run_id": asked_run, "error": resolved.get("error")})
+            continue
+        payload.append({"test_run_id": resolved, "result_id": result_id})
+        if not dry_run:
+            continue
+        run = await _get(ctx, f"/test-runs/{resolved}")
+        results = await _get(ctx, "/processing/results", {"test_run_id": resolved})
+        if isinstance(run, dict) and "error" in run:
+            plan.append({"test_run_id": resolved, "error": run["error"]})
+            continue
+        listed = results if isinstance(results, list) else []
+        chosen = next((r for r in listed if str(r.get("id")) == str(result_id)), None)
+        row: dict[str, Any] = {
+            "test_run_id": resolved,
+            "record_name": run.get("record_name"),
+            "current": run.get("adopted_result_id"),
+            "next": result_id,
+        }
+        if result_id is not None and chosen is None:
+            row["error"] = "그 결과는 이 시험의 것이 아닙니다 — list_processing_results 로 id 를 확인하세요."
+        elif chosen is not None:
+            row["stale"] = bool(chosen.get("stale"))
+            row["values"] = [
+                {"key": v.get("key"), "value": v.get("value"), "unit": v.get("si_unit")}
+                for v in chosen.get("scalars") or []
+            ]
+        plan.append(row)
+    if dry_run:
+        return {
+            "dry_run": True,
+            "plan": plan,
+            "note": "이 표를 사람에게 보이고 확인받은 뒤 dry_run=False 로 다시 부르세요. "
+            "result_id 가 null 인 줄은 채택을 거둡니다.",
+        }
+    if not payload:
+        return {"error": "채택할 시험을 하나도 못 찾았습니다.", "plan": plan}
+    done = await _send(ctx, "POST", "/processing/adopt-many", {"items": payload})
+    if isinstance(done, dict) and "error" in done:
+        return done
+    return {
+        **done,
+        **({"unresolved": plan} if plan else {}),
+        "note": "되돌리려면 줄마다 온 previous_adopted_id 를 result_id 로 다시 보내세요.",
     }
 
 

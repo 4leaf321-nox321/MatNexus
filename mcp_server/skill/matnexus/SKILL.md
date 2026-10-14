@@ -99,7 +99,17 @@ allowed-tools: mcp__matnexus__*,
   mcp__hwax__get_ontology, mcp__hwax__matnexus_get_ontology,
   mcp__hwax__related, mcp__hwax__matnexus_related,
   mcp__hwax__find_path, mcp__hwax__matnexus_find_path,
-  mcp__hwax__get_taxonomy, mcp__hwax__matnexus_get_taxonomy
+  mcp__hwax__get_taxonomy, mcp__hwax__matnexus_get_taxonomy,
+  mcp__hwax__set_card_status, mcp__hwax__matnexus_set_card_status,
+  mcp__hwax__adopt_results, mcp__hwax__matnexus_adopt_results,
+  mcp__hwax__change_commission_status, mcp__hwax__matnexus_change_commission_status,
+  mcp__hwax__assign_commission, mcp__hwax__matnexus_assign_commission,
+  mcp__hwax__link_commission_run, mcp__hwax__matnexus_link_commission_run,
+  mcp__hwax__upload_test_run, mcp__hwax__matnexus_upload_test_run,
+  mcp__hwax__create_vocabulary_term, mcp__hwax__matnexus_create_vocabulary_term,
+  mcp__hwax__add_vocabulary_alias, mcp__hwax__matnexus_add_vocabulary_alias,
+  mcp__hwax__save_test_type, mcp__hwax__matnexus_save_test_type,
+  mcp__hwax__set_export_profile_active, mcp__hwax__matnexus_set_export_profile_active
 ---
 
 # MatNexus 물성

@@ -346,7 +346,7 @@ def create_commission(
     if status == "submitted":
         services.notify_submitted(db, item, user)
     # **AI 가 지었으면 남긴다.** 의뢰 이력(`CommissionEvent`)은 누가·언제를 적지만 어느 길로
-    # 들어왔는지는 모른다 — MCP 는 작성 중으로만 짓고, 내는 것은 사람이 한다.
+    # 들어왔는지는 모른다 — MCP 도 사람이 「내라」 고 하면 바로 낸다(ADR 0061).
     audit.record_by_client(
         db,
         action=audit.COMMISSION_CREATED_BY_CLIENT,
@@ -463,6 +463,16 @@ def assign(
                 "MNX-COMMISSIONS-0017", "담당자는 받는 부서의 멤버여야 합니다.", status=422
             )
     item.assignee_id = payload.assignee_id
+    audit.record_by_client(
+        db,
+        action=audit.COMMISSION_ASSIGNED_BY_CLIENT,
+        actor=user,
+        target_table="commissions",
+        target_id=item.id,
+        target_label=item.title,
+        workspace_id=item.lab_workspace_id,
+        changes={"assignee_id": str(payload.assignee_id) if payload.assignee_id else None},
+    )
     db.commit()
     return _detail(db, item, user)
 
@@ -507,6 +517,16 @@ def add_event(
         services.notify_submitted(db, item, user)
     else:
         services.notify_changed(db, item, event, user, previous_handler)
+    audit.record_by_client(
+        db,
+        action=audit.COMMISSION_MOVED_BY_CLIENT,
+        actor=user,
+        target_table="commissions",
+        target_id=item.id,
+        target_label=item.title,
+        workspace_id=item.requester_workspace_id,
+        changes={"from": event.from_status, "to": target, "note": note},
+    )
     db.commit()
     return _detail(db, item, user)
 
@@ -588,6 +608,16 @@ def link_run(
         note=f"{row.position + 1}번 항목에 시험 연결: {run.record_name}",
     )
     services.auto_start(db, item, actor=user)
+    audit.record_by_client(
+        db,
+        action=audit.COMMISSION_RUN_LINKED_BY_CLIENT,
+        actor=user,
+        target_table="commissions",
+        target_id=item.id,
+        target_label=item.title,
+        workspace_id=item.lab_workspace_id,
+        changes={"item": row.position + 1, "run_id": str(run.id), "linked": True},
+    )
     db.commit()
     return _detail(db, item, user)
 
@@ -615,6 +645,16 @@ def unlink_run(
         actor=user,
         target=None,
         note=f"{row.position + 1}번 항목의 시험 연결 해제: {run.record_name}",
+    )
+    audit.record_by_client(
+        db,
+        action=audit.COMMISSION_RUN_LINKED_BY_CLIENT,
+        actor=user,
+        target_table="commissions",
+        target_id=item.id,
+        target_label=item.title,
+        workspace_id=item.lab_workspace_id,
+        changes={"item": row.position + 1, "run_id": str(run.id), "linked": False},
     )
     db.commit()
     return _detail(db, item, user)

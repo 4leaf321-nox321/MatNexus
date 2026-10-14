@@ -88,6 +88,13 @@ export const ACTION_LABELS: Record<string, string> = {
   'catalog_value.added_by_client': 'AI 가 문헌 값 추가',
   'commission.created_by_client': 'AI 가 측정 의뢰 작성',
   'catalog_link.set_by_client': 'AI 가 사내 재료를 문헌 재료에 연결',
+  // 사람만 하던 일을 AI 에게 연 자리(2026-10-14, ADR 0061).
+  'results.adopted_by_client': 'AI 가 처리 결과 채택',
+  'test_run.uploaded_by_client': 'AI 가 시험 파일 올림',
+  'commission.moved_by_client': 'AI 가 측정 의뢰 상태 변경',
+  'commission.assigned_by_client': 'AI 가 측정 의뢰 담당 지정',
+  'commission.run_linked_by_client': 'AI 가 측정 의뢰에 시험 연결',
+  'vocabulary.alias_added_by_client': 'AI 가 기준정보 별칭 추가',
   // 이 둘은 **사람이 해도 남는다** — 되돌릴 수 없다.
   'catalog_value.deleted': '문헌 값 삭제',
   'catalog_property.migrated': '문헌 물성 키 이관',
