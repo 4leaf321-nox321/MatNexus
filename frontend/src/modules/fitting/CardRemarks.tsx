@@ -28,9 +28,16 @@ export const PUBLISH_REQUESTED = 'publish_requested'
 /** 서버 `fitting.routes.COMMENT` — 사람이 남긴 말. */
 export const COMMENT = 'comment'
 
-/** 누가 언제 — 「관리자 · 2026. 9. 29.」 */
+/**
+ * 누가 언제 — 「관리자 · 2026. 9. 29.」. AI 가 토큰 주인의 이름으로 남긴 것이면 「관리자 · AI(MCP) 경유
+ * · …」 — 이름만 보이면 그 사람이 직접 쓴 말로 읽힌다(2026-10-16).
+ */
 function who(remark: Remark): string {
-  return [remark.created_by_name, new Date(remark.created_at).toLocaleDateString('ko-KR')]
+  return [
+    remark.created_by_name,
+    remark.via ? `${remark.via} 경유` : null,
+    new Date(remark.created_at).toLocaleDateString('ko-KR'),
+  ]
     .filter(Boolean)
     .join(' · ')
 }

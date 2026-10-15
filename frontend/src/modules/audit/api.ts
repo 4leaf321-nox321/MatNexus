@@ -98,6 +98,9 @@ export const ACTION_LABELS: Record<string, string> = {
   'test_runs.imported_by_client': 'AI 가 표로 시험 입력',
   'master_curve.built_by_client': 'AI 가 마스터커브 생성',
   'prony.fitted_by_client': 'AI 가 Prony 적합',
+  'card.remarked_by_client': 'AI 가 카드에 코멘트',
+  'card.publish_requested_by_client': 'AI 가 카드 확정 요청',
+  'declared.approval_requested_by_client': 'AI 가 선언 값 승인 요청',
   // 이 둘은 **사람이 해도 남는다** — 되돌릴 수 없다.
   'catalog_value.deleted': '문헌 값 삭제',
   'catalog_property.migrated': '문헌 물성 키 이관',

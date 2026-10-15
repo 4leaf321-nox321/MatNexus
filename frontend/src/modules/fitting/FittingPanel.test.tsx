@@ -394,6 +394,28 @@ describe('카드 번호 · 코멘트', () => {
     await waitFor(() => expect(cards.mock.calls.length).toBeGreaterThanOrEqual(2))
   })
 
+  it('AI 가 남긴 코멘트는 이름 곁에 경유를 적는다', async () => {
+    // 이름만 보이면 그 사람이 직접 쓴 말로 읽힌다(2026-10-16).
+    withCard('draft', {
+      remarks: [
+        {
+          id: 'r9',
+          kind: 'comment',
+          message: '코멘트',
+          comment: '네킹 미절단 — 보완 필요',
+          created_by_id: 'u2',
+          created_by_name: '앨리스',
+          via: 'AI(MCP)',
+          created_at: '2026-10-16T00:00:00Z',
+        },
+      ],
+    })
+    panel()
+    await userEvent.click(await screen.findByRole('button', { name: '인장 MD 펼치기' }))
+    expect(await screen.findByText('네킹 미절단 — 보완 필요')).toBeInTheDocument()
+    expect(screen.getByText(/앨리스 · AI\(MCP\) 경유/)).toBeInTheDocument()
+  })
+
   it('내가 남긴 코멘트에만 지우기 단추가 선다', async () => {
     role.steward = false
     try {

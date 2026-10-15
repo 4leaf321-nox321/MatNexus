@@ -4101,6 +4101,17 @@
           "message": {
             "title": "Message",
             "type": "string"
+          },
+          "via": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Via"
           }
         },
         "required": [

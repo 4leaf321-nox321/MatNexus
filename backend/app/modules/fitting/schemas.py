@@ -769,6 +769,9 @@ class CardRemarkOut(BaseModel):
     created_by_id: uuid.UUID | None = None
     """누가 — 화면이 「내 코멘트」 에만 지우기 단추를 세운다(판정은 서버)."""
     created_by_name: str | None = None
+    via: str | None = None
+    """사람이 아닌 길로 들어왔으면 그 이름 — `AI(MCP)`(2026-10-16). 화면에서 쓴 것은
+    비어 있다."""
     created_at: datetime
 
 

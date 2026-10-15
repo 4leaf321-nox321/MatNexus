@@ -2153,6 +2153,16 @@ def request_declared_approval(
             status=422,
         )
     note = (body.note or "").strip()
+    audit.record_by_client(
+        db,
+        action=audit.DECLARED_APPROVAL_REQUESTED_BY_CLIENT,
+        actor=user,
+        target_table="materials",
+        target_id=material.id,
+        target_label=material.record_name,
+        workspace_id=material.owner_workspace_id,
+        changes={"pending": pending, "note": note or None},
+    )
     sent = steward_notice.notify_stewards(
         db,
         event_kind=steward_notice.REVIEW_REQUESTED,

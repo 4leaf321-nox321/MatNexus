@@ -140,14 +140,24 @@ def visible_ids(db: Session, user: User, kind: relations.EntityKind) -> Select[A
 
     문헌·기준정보·장비·조직은 가리지 않는다 — 사내 공용 기준정보다.
     """
-    if kind.slug == "property_card":
-        # **카드에는 지움 칸이 없다 — 재료의 휴지통을 따른다.** 시스템 관리자 지름길 앞에
-        # 둔다: 거기서 `None` 을 돌려주면 휴지통에 든 재료의 카드가 검색에 뜨고, 열면 「재료를
-        # 찾을 수 없습니다」 였다(2026-10-16 AI 평가 — 카드 번호로 찾자 드러났다). 카드 목록은
-        # 전부터 이 규칙이다(`fitting.routes._cards_query`).
-        return select(PropertyCard.id).where(
-            PropertyCard.material_id.in_(permissions.visible_material_ids(db, user))
-        )
+    # **지움 칸이 없는 것은 부모의 휴지통을 따른다 — 시스템 관리자에게도**(2026-10-16).
+    # 아래 지름길이 `None` 을 돌려주면 휴지통에 든 재료의 카드 · 받아 온 벌, 지운 시험의
+    # 처리 결과가 검색에 뜨고 열면 「찾을 수 없습니다」 였다 — 카드 번호로 찾던 AI 평가가
+    # 처음 드러냈다. 카드 목록은 전부터 이 규칙이다(`fitting.routes._cards_query`). 시료 ·
+    # 시편 · 시험은 제 지움 칸이 있어(`EntityKind.soft_delete`) 검색이 따로 거른다.
+    if kind.slug in ("property_card", "parameter_set", "processing_result"):
+        live = permissions.visible_material_ids(db, user)
+        if kind.slug == "property_card":
+            return select(PropertyCard.id).where(PropertyCard.material_id.in_(live))
+        if kind.slug == "parameter_set":
+            # **재료를 따라간다.** 안 붙이면 남의 부서 재료가 받아 온 벌이 검색에 뜨고, 열면
+            # 404 가 난다 — 이 함수가 있는 이유가 그 어긋남을 막는 것이다.
+            return select(MaterialParameterSet.id).where(
+                MaterialParameterSet.material_id.in_(live)
+            )
+        # 처리 결과는 시험을 따른다 — 범위는 `permissions` 것 그대로(관리자는 산 시험 전부).
+        alive = permissions.visible_runs(db, user).with_only_columns(TestRun.id)
+        return select(ProcessingResult.id).where(ProcessingResult.test_run_id.in_(alive))
     if user.is_system_admin:
         return None
     materials = permissions.visible_material_ids(db, user)
@@ -167,8 +177,6 @@ def visible_ids(db: Session, user: User, kind: relations.EntityKind) -> Select[A
         )
     if kind.slug == "test_run":
         return runs
-    if kind.slug == "processing_result":
-        return select(ProcessingResult.id).where(ProcessingResult.test_run_id.in_(runs))
     if kind.slug in ("commission", "commission_item"):
         # **의뢰의 가시 규칙을 베끼지 않는다** — 낸 부서·받는 부서·작성 중은 낸 사람만은
         # `commissions.services.visible` 의 것이다. 여기서는 열만 좁힌다.
@@ -183,12 +191,6 @@ def visible_ids(db: Session, user: User, kind: relations.EntityKind) -> Select[A
         # 보기는 전원이다(ADR 0035). 여기만 「내 부서 + 전역」 으로 남으면 목록에는
         # 있는데 검색·지도에는 없는 레시피가 생긴다.
         return select(ProcessingRecipe.id).where(ProcessingRecipe.deleted_at.is_(None))
-    if kind.slug == "parameter_set":
-        # **재료를 따라간다.** 안 붙이면 남의 부서 재료가 받아 온 벌이 검색에 뜨고,
-        # 열면 404 가 난다 — 이 함수가 있는 이유가 그 어긋남을 막는 것이다.
-        return select(MaterialParameterSet.id).where(
-            MaterialParameterSet.material_id.in_(materials)
-        )
     return None
 
 

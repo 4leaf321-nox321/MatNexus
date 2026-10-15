@@ -9994,6 +9994,8 @@ export interface components {
             kind: string;
             /** Message */
             message: string;
+            /** Via */
+            via?: string | null;
         };
         /**
          * CardSlotIn

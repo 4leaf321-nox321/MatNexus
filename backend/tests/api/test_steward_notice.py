@@ -622,3 +622,90 @@ class TestAI_가_하면_안다:
         assert took.json()["changed"] == 1
         drain(db)
         assert not [one for one in _inbox(client, admin_headers) if "채택을" in one["title"]]
+
+
+def _audits(client: TestClient, headers: dict[str, str], action: str) -> list[dict[str, Any]]:
+    got = client.get("/api/audit", params={"action": action, "limit": 200}, headers=headers)
+    assert got.status_code == 200, got.text
+    return list(got.json())
+
+
+class TestAI_가_부탁하고_말을_남기면:
+    """AI(MCP)도 코멘트 · 확정 요청 · 승인 요청을 한다(2026-10-16). 값은 안 바뀌어도 사람에게
+    알림이 간다 — **토큰 주인의 이름만 보이면 그 사람이 직접 쓴 말로 읽힌다.** 경유를 카드와
+    감사에 남기고, 화면에서 한 것은 전처럼 아무것도 더하지 않는다."""
+
+    def test_코멘트에_경유가_붙고_감사에_남는다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        alice: tuple[User, dict[str, str]],
+    ) -> None:
+        owner, headers = alice
+        card = _card(client, headers, _material(db, owner, modulus()))
+        by_ai = _remark(client, {**headers, "X-Client": "mcp"}, card["id"], "AI 의 검토 의견")
+        by_hand = _remark(client, headers, card["id"], "사람의 검토 의견")
+        assert by_ai.json()["via"] == "AI(MCP)"
+        assert by_hand.json()["via"] is None
+
+        got = client.get(f"/api/fitting/cards/{card['id']}", headers=headers).json()
+        assert [one["via"] for one in got["remarks"]] == ["AI(MCP)", None]
+        mine = [
+            one
+            for one in _audits(client, admin_headers, "card.remarked_by_client")
+            if one["target_id"] == card["id"]
+        ]
+        assert len(mine) == 1, "화면에서 남긴 코멘트는 감사에 안 남는다"
+        assert mine[0]["changes"]["comment"] == "AI 의 검토 의견"
+
+    def test_확정_요청에_경유가_붙고_감사에_남는다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin: User,
+        admin_headers: dict[str, str],
+        alice: tuple[User, dict[str, str]],
+    ) -> None:
+        _rules(db, admin)
+        owner, headers = alice
+        card = _card(client, headers, _material(db, owner, modulus()))
+        asked = _ask(client, {**headers, "X-Client": "mcp"}, card["id"], "해석 일정")
+        assert asked.status_code == 200, asked.text
+        (remark,) = asked.json()["card"]["remarks"]
+        assert remark["via"] == "AI(MCP)"
+        mine = [
+            one
+            for one in _audits(client, admin_headers, "card.publish_requested_by_client")
+            if one["target_id"] == card["id"]
+        ]
+        assert mine and mine[0]["changes"]["note"] == "해석 일정"
+
+        drain(db)
+        title = f"카드 확정 요청 — {_named(card)}"
+        found = [one for one in _inbox(client, admin_headers) if one["title"] == title]
+        assert found and "AI(MCP) 경유" in found[0]["body"]
+
+    def test_승인_요청이_감사에_남는다_화면은_안_남는다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        alice: tuple[User, dict[str, str]],
+    ) -> None:
+        owner, headers = alice
+        by_ai = _material(db, owner, modulus())
+        by_hand = _material(db, owner, modulus())
+        for material, extra in ((by_ai, {"X-Client": "mcp"}), (by_hand, {})):
+            sent = client.post(
+                f"/api/materials/{material.id}/declared/request-approval",
+                json={},
+                headers={**headers, **extra},
+            )
+            assert sent.status_code == 200, sent.text
+        targets = {
+            one["target_id"]
+            for one in _audits(client, admin_headers, "declared.approval_requested_by_client")
+        }
+        assert str(by_ai.id) in targets
+        assert str(by_hand.id) not in targets

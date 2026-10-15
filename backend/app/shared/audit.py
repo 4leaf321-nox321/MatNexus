@@ -126,6 +126,11 @@ VOCABULARY_ALIAS_ADDED_BY_CLIENT = "vocabulary.alias_added_by_client"
 TEST_RUNS_IMPORTED_BY_CLIENT = "test_runs.imported_by_client"
 MASTER_CURVE_BUILT_BY_CLIENT = "master_curve.built_by_client"
 PRONY_FITTED_BY_CLIENT = "prony.fitted_by_client"
+#: **AI 가 사람에게 말을 거는 셋**(2026-10-16) — 카드 코멘트 · 확정 요청 · 선언 값 승인 요청.
+#: 값은 안 바뀌지만 알림이 사람에게 간다 — 「이 부탁 누가 했나」 가 물어진다.
+CARD_REMARKED_BY_CLIENT = "card.remarked_by_client"
+CARD_PUBLISH_REQUESTED_BY_CLIENT = "card.publish_requested_by_client"
+DECLARED_APPROVAL_REQUESTED_BY_CLIENT = "declared.approval_requested_by_client"
 #: 문헌 값을 **실제로 지운** 일과 폐기된 키의 값을 **옮긴** 일. 둘 다 되돌릴 수 없어
 #: 위의 규칙대로 사람이 해도 남긴다(누가 했든 `client` 가 길을 말한다) — 지운 값은 이미
 #: 덱에 실렸을 수 있고, 옮긴 값은 원래 어느 키에 있었는지가 이 기록에만 남는다.

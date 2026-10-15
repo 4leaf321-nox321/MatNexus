@@ -818,6 +818,20 @@ async def sweep(session: ClientSession) -> None:
         await call(
             session, "set_card_status", {"card_id": card_id, "action": action, "dry_run": True}
         )
+        # 2026-10-16 — 코멘트 · 부탁. 초안이 아니면 확정 요청은 거절이 맞는 답이다.
+        await call(
+            session,
+            "add_card_remark",
+            {"card_id": card_id, "comment": "점검용 코멘트", "dry_run": True},
+        )
+        await call(
+            session,
+            "request_review",
+            {"card_id": card_id, "dry_run": True},
+            expect_error=status != "draft",
+        )
+    if material_id:
+        await call(session, "request_review", {"material_id": material_id, "dry_run": True})
     if run_id:
         tried = await call(session, "list_processing_results", {"test_run_id": run_id})
         result_id = _first(tried, "id")

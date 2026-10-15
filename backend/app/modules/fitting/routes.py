@@ -1050,10 +1050,24 @@ def _remarks_of(
                 comment=remark.comment,
                 created_by_id=remark.created_by_id,
                 created_by_name=name,
+                via=_via_label(remark.payload),
                 created_at=remark.created_at,
             )
         )
     return found
+
+
+def _via(client: str | None) -> dict[str, Any]:
+    """코멘트 · 확정 요청이 **어느 길로** 들어왔나(2026-10-16) — 화면이면 비운다.
+
+    카드를 보는 사람에게 「앨리스」 라고만 보이면 앨리스가 직접 쓴 말로 읽힌다. 토큰 주인의
+    AI 가 쓴 말이면 그렇다고 곁에 적는다(감사의 `client` 와 같은 값)."""
+    return {"client": client} if client else {}
+
+
+def _via_label(payload: dict[str, Any] | None) -> str | None:
+    client = (payload or {}).get("client")
+    return steward_notice.client_label(str(client)) if client else None
 
 
 def _card_out(
@@ -4496,6 +4510,7 @@ def request_publish(
         )
 
     note = (payload.note or "").strip() or None
+    client = get_client()
     db.add(
         PropertyCardRemark(
             card_id=item.id,
@@ -4503,11 +4518,21 @@ def request_publish(
             message="자료 관리자에게 확정을 요청했습니다",
             comment=note,
             created_by_id=user.id,
+            payload=_via(client),
         )
     )
-    material = db.get(Material, item.material_id)
-    about = (
-        f"{user.display_name} 님 · 재료 {material.record_name if material else '(알 수 없음)'}"
+    audit.record_by_client(
+        db,
+        action=audit.CARD_PUBLISH_REQUESTED_BY_CLIENT,
+        actor=user,
+        target_table="property_cards",
+        target_id=item.id,
+        target_label=_named(item),
+        workspace_id=_card_workspace(db, item),
+        changes={"note": note},
+    )
+    about = _about(db, user, item) + (
+        f" · {steward_notice.client_label(client)} 경유" if client else ""
     )
     notified = steward_notice.notify_stewards(
         db,
@@ -4603,9 +4628,20 @@ def add_card_remark(
         message="코멘트",
         comment=text,
         created_by_id=user.id,
+        payload=_via(get_client()),
     )
     db.add(remark)
     db.flush()
+    audit.record_by_client(
+        db,
+        action=audit.CARD_REMARKED_BY_CLIENT,
+        actor=user,
+        target_table="property_cards",
+        target_id=item.id,
+        target_label=_named(item),
+        workspace_id=_card_workspace(db, item),
+        changes={"remark_id": str(remark.id), "comment": text},
+    )
     people = [
         one
         for one in [item.created_by_id, *_requesters(db, item)]
@@ -4618,7 +4654,8 @@ def add_card_remark(
             event_kind=steward_notice.REVIEW_ANSWERED,
             key=f"card-remark:{remark.id}",
             title=f"{user.display_name} 님이 카드에 코멘트를 남겼습니다 — {_named(item)}",
-            body=text if len(text) <= 300 else text[:299] + "…",
+            body=(f"({_via_label(remark.payload)} 경유) " if remark.payload else "")
+            + (text if len(text) <= 300 else text[:299] + "…"),
             link=f"/materials/{item.material_id}?tab=cards",
         )
     db.commit()
@@ -4630,6 +4667,7 @@ def add_card_remark(
         comment=remark.comment,
         created_by_id=remark.created_by_id,
         created_by_name=user.display_name,
+        via=_via_label(remark.payload),
         created_at=remark.created_at,
     )
 

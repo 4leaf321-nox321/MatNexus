@@ -3448,10 +3448,7 @@ async def set_card_status(
     if dry_run:
         # **토큰 주인이 할 수 있는지 미리 말한다**(2026-10-16 AI 평가) — 모르면 AI 는 자료 관리자인
         # 사람에게도 「화면에서 확정 요청을 누르세요」 라고만 답했다. 판정은 여전히 서버가 한다.
-        me = await _get(ctx, "/auth/me")
-        steward = isinstance(me, dict) and bool(
-            me.get("is_system_admin") or me.get("is_data_manager")
-        )
+        steward = await _token_owner_is_steward(ctx)
         return {
             "dry_run": True,
             "card": summary,
@@ -3465,8 +3462,8 @@ async def set_card_status(
             "note": (
                 "이 미리보기를 사람에게 보이고 확인받은 뒤 dry_run=False 로 다시 부르세요."
                 if steward
-                else "토큰 주인이 자료 관리자가 아니라 서버가 거절한다 — 화면의 「확정 요청」 으로 "
-                "자료 관리자에게 부탁하라고 안내하세요(도구는 없다)."
+                else "토큰 주인이 자료 관리자가 아니라 서버가 거절한다 — request_review(card_id)"
+                " 로 자료 관리자에게 확정을 부탁할 수 있다고 안내하세요."
             ),
         }
     # 경로를 글자 그대로 — `test_mcp_writes_audited` 가 읽어 감사를 대조한다.
@@ -3479,6 +3476,127 @@ async def set_card_status(
     if isinstance(done, dict) and "error" in done:
         return done
     return {**_card_summary(done), "note": f"{action} 했습니다. {effect}"}
+
+
+async def _token_owner_is_steward(ctx: Context) -> bool:
+    """토큰 주인이 자료 관리자(또는 시스템 관리자)인가 — 확정 · 승인을 직접 할 수 있나."""
+    me = await _get(ctx, "/auth/me")
+    return isinstance(me, dict) and bool(me.get("is_system_admin") or me.get("is_data_manager"))
+
+
+@mcp.tool()
+async def add_card_remark(
+    ctx: Context, card_id: str, comment: str, dry_run: bool = True
+) -> dict[str, Any]:
+    """카드에 코멘트를 남긴다 — 검토 의견 · 확정하지 않는 사유. 값은 안 바뀌고, 카드를 만든
+    사람과 확정을 요청한 사람에게 알림이 간다. 미리보기가 기본 — 문구를 사람에게 보이고 확인받은
+    뒤 `dry_run=False`.
+    """
+    text = (comment or "").strip()
+    if not text:
+        return {"error": "코멘트가 비었습니다."}
+    resolved = await _resolve_card(ctx, card_id)
+    if isinstance(resolved, dict):
+        return resolved
+    card = await _get(ctx, f"/fitting/cards/{resolved}")
+    if isinstance(card, dict) and "error" in card:
+        return card
+    if dry_run:
+        return {
+            "dry_run": True,
+            "card": _card_summary(card),
+            "will_add": text,
+            "notifies": "카드를 만든 사람 · 확정을 요청한 사람(토큰 주인 제외)",
+            "note": "문구를 사람에게 보이고 확인받은 뒤 dry_run=False 로 다시 부르세요. "
+            "카드에는 토큰 주인의 이름과 「AI(MCP) 경유」 가 함께 남는다.",
+        }
+    done = await _send(ctx, "POST", f"/fitting/cards/{resolved}/remarks", {"comment": text})
+    if isinstance(done, dict) and "error" in done:
+        return done
+    return {"added": True, "card": _card_summary(card), "remark_id": done.get("id")}
+
+
+@mcp.tool()
+async def request_review(
+    ctx: Context,
+    card_id: str | None = None,
+    material_id: str | None = None,
+    note: str | None = None,
+    dry_run: bool = True,
+) -> dict[str, Any]:
+    """자료 관리자에게 부탁한다 — `card_id` 면 초안 카드의 확정 요청(하루 한 번), `material_id`
+    면 그 재료 · 시료의 승인 대기 선언 값의 승인 요청. 알림만 간다(상태는 그대로). 미리보기가
+    기본이고, 토큰 주인이 자료 관리자면 부탁 대신 직접 할 수 있다고 알려 준다.
+    """
+    if bool(card_id) == bool(material_id):
+        return {"error": "card_id 나 material_id 중 하나만 주세요."}
+    steward = await _token_owner_is_steward(ctx)
+    # 자료 관리자에게는 부탁할 까닭이 없다 — 그 사람이 직접 한다(2026-10-16 AI 평가).
+    direct = (
+        "토큰 주인이 자료 관리자다 — 부탁 대신 직접 할 수 있다고 먼저 말하라"
+        " (카드는 set_card_status, 선언 값 승인은 화면)."
+    )
+    ask = "부탁할 내용을 사람에게 보이고 확인받은 뒤 dry_run=False 로 다시 부르세요."
+    if card_id:
+        resolved = await _resolve_card(ctx, card_id)
+        if isinstance(resolved, dict):
+            return resolved
+        card = await _get(ctx, f"/fitting/cards/{resolved}")
+        if isinstance(card, dict) and "error" in card:
+            return card
+        if card.get("status") != "draft":
+            return {"error": f"초안만 확정을 요청할 수 있습니다 — 지금 {card.get('status')}."}
+        if dry_run:
+            return {
+                "dry_run": True,
+                "card": _card_summary(card),
+                "warnings": (card.get("source") or {}).get("notes") or [],
+                "will": "자료 관리자에게 확정 요청 알림 · 카드에 「확정 요청」 기록",
+                "token_owner_is_steward": steward,
+                "note": direct if steward else ask,
+            }
+        done = await _send(
+            ctx, "POST", f"/fitting/cards/{resolved}/request-publish", {"note": note}
+        )
+        if isinstance(done, dict) and "error" in done:
+            return done
+        return {
+            "requested": True,
+            "notified": done.get("notified"),
+            "card": _card_summary(done.get("card") or card),
+        }
+    found = await _resolve_material(ctx, str(material_id))
+    if isinstance(found, dict):
+        return found
+    if dry_run:
+        material = await _get(ctx, f"/materials/{found}")
+        if isinstance(material, dict) and "error" in material:
+            return material
+        waiting = [
+            {
+                "item": row.get("item"),
+                "tier": row.get("quality_tier"),
+                "tier_if_approved": row.get("tier_if_approved"),
+                "reference": row.get("reference"),
+            }
+            for row in material.get("declared_properties") or []
+            if not row.get("approval")
+            and (row.get("tier_if_approved") or 4) < (row.get("quality_tier") or 4)
+        ]
+        return {
+            "dry_run": True,
+            "material": material.get("record_name"),
+            "waiting_on_material": waiting,
+            "will": "자료 관리자에게 승인 요청 알림(시료 · 밀시트 값도 서버가 함께 센다)",
+            "token_owner_is_steward": steward,
+            "note": direct if steward else ask,
+        }
+    done = await _send(
+        ctx, "POST", f"/materials/{found}/declared/request-approval", {"note": note}
+    )
+    if isinstance(done, dict) and "error" in done:
+        return done
+    return {"requested": True, "pending": done.get("pending"), "notified": done.get("notified")}
 
 # ── 사내 물성 들이기 (2026-09-30) ─────────────────────────────────────────────
 #
