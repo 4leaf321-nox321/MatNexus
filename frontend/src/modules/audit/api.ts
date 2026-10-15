@@ -95,6 +95,9 @@ export const ACTION_LABELS: Record<string, string> = {
   'commission.assigned_by_client': 'AI 가 측정 의뢰 담당 지정',
   'commission.run_linked_by_client': 'AI 가 측정 의뢰에 시험 연결',
   'vocabulary.alias_added_by_client': 'AI 가 기준정보 별칭 추가',
+  'test_runs.imported_by_client': 'AI 가 표로 시험 입력',
+  'master_curve.built_by_client': 'AI 가 마스터커브 생성',
+  'prony.fitted_by_client': 'AI 가 Prony 적합',
   // 이 둘은 **사람이 해도 남는다** — 되돌릴 수 없다.
   'catalog_value.deleted': '문헌 값 삭제',
   'catalog_property.migrated': '문헌 물성 키 이관',

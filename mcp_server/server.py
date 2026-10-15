@@ -27,9 +27,11 @@ from __future__ import annotations
 
 import base64
 import binascii
+import io
 import json
 import os
 import uuid
+import zipfile
 from pathlib import Path
 from typing import Any
 
@@ -267,6 +269,21 @@ async def _get_text(ctx: Context, path: str, params: dict[str, Any] | None = Non
     if got.status_code >= 400:
         return _failed(got)
     return got.text
+
+
+async def _get_bytes(
+    ctx: Context, path: str, params: dict[str, Any] | None = None
+) -> bytes | dict[str, Any]:
+    """**바이트로 오는 응답**(ZIP) — 검증 모델 키트. 오류는 다른 읽기와 같은 봉투다."""
+    clean = {key: value for key, value in (params or {}).items() if value is not None}
+    try:
+        async with httpx.AsyncClient(base_url=API_BASE, timeout=60.0) as client:
+            got = await client.get(path, params=clean, headers=_headers(ctx))
+    except httpx.RequestError as failed:
+        return {"error": f"백엔드에 닿지 못했습니다({API_BASE}): {failed}"}
+    if got.status_code >= 400:
+        return _failed(got)
+    return got.content
 
 
 async def _send(
@@ -2025,6 +2042,90 @@ async def add_vocabulary_alias(
     if isinstance(made, dict) and "error" in made:
         return made
     return {"alias": made, "note": "별칭을 달았습니다."}
+
+
+#: 표로 넣는 시험 수 — 서버 상한(첫 줄 포함 1,000줄)에 맞춘다.
+IMPORT_MAX_ROWS = 999
+
+
+@mcp.tool()
+async def import_test_summaries(
+    ctx: Context,
+    sample_id: str,
+    test_type: str,
+    columns: list[str],
+    rows: list[list[Any]],
+    create_missing_specimens: bool = False,
+    dry_run: bool = True,
+) -> dict[str, Any]:
+    """**요약값 표로 시험을 넣는다** — 곡선 없이 보고서 · 데이터시트의 값(화면의 「표로 시험 입력」).
+
+    한 줄이 시험 하나다. `columns` 는 열 이름: `시편`(필수 — 그 시료의 시편 이름 · 번호) ·
+    `방향` · `원본 파일명`, 그 시험 종류의 **조건**(이름은 `list_condition_fields(test_type)`),
+    나머지는 요약값이다. **숫자 열은 이름에 단위를 붙인다**(`항복강도 (MPa)`) — 서버가 SI 로
+    바꾼다. 요약값은 열 이름이 곧 저장 키라 피로는 `cycles_to_failure` · `runout`, 크리프는
+    `min_creep_rate (1/s)` 를 그대로 쓴다(바꾸면 S-N · 크리프 식 묶음이 그 시험을 못 본다).
+    `create_missing_specimens` 는 표에 있고 시료에 없는 시편을 만든다(오타가 유령 시편이 된다).
+
+    기본이 미리보기 — 줄마다 `new` · `existing` · `rejected` 와 이유를 사람에게 보이고 확인받은
+    뒤 `dry_run=False`.
+    """
+    if not columns:
+        return {"error": "columns 가 비었습니다 — 첫 열은 `시편` 입니다."}
+    if not rows:
+        return {"error": "rows 가 비었습니다."}
+    if len(rows) > IMPORT_MAX_ROWS:
+        return {"error": f"한 번에 {IMPORT_MAX_ROWS}줄까지입니다 — 나눠서 부르세요."}
+    bad = [index for index, row in enumerate(rows) if len(row) != len(columns)]
+    if bad:
+        return {
+            "error": f"열 수가 다른 줄이 있습니다(열 {len(columns)}개): {bad[:10]}번째 줄",
+        }
+
+    def _cell(value: Any) -> str:
+        return "" if value is None else str(value).replace("\t", " ").replace("\n", " ")
+
+    body = {
+        "sample_id": sample_id,
+        "test_type": test_type,
+        "values": ["\t".join(_cell(one) for one in columns)]
+        + ["\t".join(_cell(one) for one in row) for row in rows],
+        "create_missing": bool(create_missing_specimens),
+    }
+    if dry_run:
+        got = await _send(ctx, "POST", "/test-runs/import/preview", body)
+    else:
+        got = await _send(ctx, "POST", "/test-runs/import", body)
+    if isinstance(got, dict) and "error" in got:
+        return got
+    items = got.get("items") or []
+    out: dict[str, Any] = {
+        **({"dry_run": True} if dry_run else {}),
+        "created": got.get("created"),
+        "existing": got.get("existing"),
+        "skipped": got.get("skipped"),
+        "rejected": got.get("rejected"),
+        "specimens_created": got.get("specimens_created"),
+        "items": [
+            {
+                "specimen": one.get("specimen"),
+                "status": one.get("status"),
+                "run": one.get("run"),
+                "conditions": one.get("conditions"),
+                "summaries": one.get("summaries"),
+                **({"reason": one.get("reason")} if one.get("reason") else {}),
+                **({"warnings": one.get("warnings")} if one.get("warnings") else {}),
+                **({"creates_specimen": True} if one.get("creates_specimen") else {}),
+            }
+            for one in items[:100]
+        ],
+        "note": (
+            "이 표를 사람에게 보이고 확인받은 뒤 dry_run=False 로 다시 부르세요."
+            if dry_run
+            else "넣었습니다. 만든 시험은 list_test_runs 로 본다."
+        ),
+    }
+    return _complete(out, whole=len(items) <= 100)
 
 
 #: MCP 로 나르는 시험 파일의 상한. 대화로 실어 나르는 것이라 서버 상한(시험 종류마다,
@@ -5214,6 +5315,52 @@ async def check_card_deck(
     )
 
 
+#: 검증 키트 파일 하나에서 돌려줄 글자 수. 덱 본문(소성 표)이 길 수 있다 — 넘으면 자른다.
+VERIFY_FILE_MAX = 20_000
+
+
+@mcp.tool()
+async def get_verify_kit(
+    ctx: Context, card_id: str, format: str, with_card: str | None = None
+) -> dict[str, Any]:
+    """카드의 **1요소 검증 모델** — 솔버에 바로 돌릴 모델 · 재료 덱 · 기대 응답(README).
+
+    늘 mm · N · tonne · 재료 번호 1 이다(1 mm 정육면체 인장). 키트가 있는 형식은 탄소성 ·
+    초탄성 인장(여섯 솔버) — 없는 형식이면 서버가 이유를 말한다. 돌려주는 것은 파일마다
+    이름 · 글자(`text`, 20,000자 넘으면 `truncated`). **기대값은 README 에 있다** — 사람이 솔버로
+    돌린 반력을 README 와 견주게 안내한다. 파일로 건네려면 각 `text` 를 그 이름으로 저장한다.
+    """
+    resolved = await _resolve_card(ctx, card_id)
+    if isinstance(resolved, dict):
+        return resolved
+    got = await _get_bytes(
+        ctx, f"/fitting/cards/{resolved}/export/verify", {"format": format, "with_card": with_card}
+    )
+    if isinstance(got, dict):
+        return got
+    try:
+        archive = zipfile.ZipFile(io.BytesIO(got))
+    except zipfile.BadZipFile:
+        return {"error": "키트를 풀지 못했습니다 — 서버가 ZIP 이 아닌 것을 줬습니다."}
+    files: list[dict[str, Any]] = []
+    for name in archive.namelist():
+        text = archive.read(name).decode("utf-8", errors="replace")
+        files.append(
+            {
+                "name": name,
+                "chars": len(text),
+                "text": text[:VERIFY_FILE_MAX],
+                **({"truncated": True} if len(text) > VERIFY_FILE_MAX else {}),
+            }
+        )
+    return {
+        "card_id": resolved,
+        "format": format,
+        "files": files,
+        "note": "README 의 기대 응답과 솔버 결과를 견주게 하세요. 단위는 mm · N · tonne.",
+    }
+
+
 @mcp.tool()
 async def get_master_curves(ctx: Context, test_run_id: str) -> dict[str, Any]:
     """DMA 시험의 **마스터커브** — 온도 스윕을 기준 온도로 겹친 것과, 겹칠 수 있는 스윕.
@@ -5264,12 +5411,98 @@ async def get_master_curves(ctx: Context, test_run_id: str) -> dict[str, Any]:
             for one in (curves if isinstance(curves, list) else [])
         ],
         **(
-            {"caveat": "마스터커브가 없다 — 겹치는 것은 사람이 화면에서 기준 온도를 골라 한다."}
+            {"caveat": "마스터커브가 없다 — build_master_curve 로 기준 온도를 골라 겹친다."}
             if not curves
             else {}
         ),
     }
     return _complete(out, whole=True)
+
+
+@mcp.tool()
+async def build_master_curve(
+    ctx: Context,
+    test_run_id: str,
+    reference_temperature_k: float,
+    method: str = "wlf",
+    curve_keys: list[str] | None = None,
+    manual_shifts: dict[str, float] | None = None,
+    import_curve_key: str | None = None,
+    dry_run: bool = True,
+) -> dict[str, Any]:
+    """DMA 온도 스윕을 **기준 온도로 겹쳐 마스터커브를 만든다** — Prony · 점탄성 카드의 출발점.
+
+    `reference_temperature_k` 는 **잰 온도(`get_master_curves` 의 `sweeps[].temperature_k`) 중
+    하나**다(K). `method`: `wlf` · `arrhenius`(이동 모델을 맞춤) · `manual`(`manual_shifts` =
+    {온도 K: log10 a_T}). 장비가 이미 겹쳐 준 표를 그대로 받으려면 `import_curve_key`.
+    기본이 미리보기(쓸 스윕 · 기준 온도) — 확인받은 뒤 `dry_run=False`. 만든 뒤 `shifts[].residual`
+    이 벌어지면 그 이동 모델이 안 맞는 것이다 — 사람에게 말한다. 다음은 `fit_prony`.
+    """
+    resolved = await _resolve_run(ctx, test_run_id)
+    if isinstance(resolved, dict):
+        return resolved
+    sweeps = await _get(ctx, f"/viscoelastic/runs/{resolved}/sweeps")
+    if isinstance(sweeps, dict) and "error" in sweeps and not import_curve_key:
+        return sweeps
+    items = sweeps.get("items", []) if isinstance(sweeps, dict) else []
+    temps = [one.get("temperature_k") for one in items]
+    if not import_curve_key:
+        if method not in ("wlf", "arrhenius", "manual"):
+            return {"error": f"모르는 방법입니다: {method}", "methods": ["wlf", "arrhenius", "manual"]}
+        if not any(abs(float(t or 0) - reference_temperature_k) < 0.05 for t in temps):
+            return {
+                "error": "기준 온도는 잰 온도 중 하나여야 합니다 — 없는 온도의 곡선을 지어내지 않는다.",
+                "measured_temperatures_k": temps,
+            }
+        if method == "manual" and not manual_shifts:
+            return {"error": "method=manual 이면 manual_shifts 가 필요합니다."}
+    if dry_run:
+        plan: dict[str, Any] = {
+            "dry_run": True,
+            "test_run_id": resolved,
+            "reference_temperature_k": reference_temperature_k,
+            "note": "확인받은 뒤 dry_run=False 로 다시 부르세요.",
+        }
+        if import_curve_key:
+            importable = await _get(ctx, f"/viscoelastic/runs/{resolved}/importable-curves")
+            plan["import"] = import_curve_key
+            plan["importable_curves"] = importable if isinstance(importable, list) else importable
+        else:
+            used = [one for one in items if not curve_keys or one.get("curve_key") in curve_keys]
+            plan["method"] = method
+            plan["sweeps"] = used
+            plan["warnings"] = sweeps.get("warnings") if isinstance(sweeps, dict) else []
+        return plan
+    if import_curve_key:
+        made = await _send(
+            ctx,
+            "POST",
+            f"/viscoelastic/runs/{resolved}/master-curves/import",
+            {"curve_key": import_curve_key, "reference_temperature_k": reference_temperature_k},
+        )
+    else:
+        made = await _send(
+            ctx,
+            "POST",
+            f"/viscoelastic/runs/{resolved}/master-curves",
+            {
+                "reference_temperature_k": reference_temperature_k,
+                "method": method,
+                "curve_keys": curve_keys,
+                "manual_shifts": manual_shifts,
+            },
+        )
+    if isinstance(made, dict) and "error" in made:
+        return made
+    return {
+        "id": made.get("id"),
+        "method": made.get("method"),
+        "reference_temperature_k": made.get("reference_temperature_k"),
+        "parameters": made.get("parameters"),
+        "shifts": made.get("shifts"),
+        "notes": made.get("notes"),
+        "note": "만들었습니다. 다음은 fit_prony(master_curve_id=id).",
+    }
 
 
 @mcp.tool()
@@ -5316,12 +5549,53 @@ async def get_prony_fits(ctx: Context, master_curve_id: str) -> dict[str, Any]:
             for one in rows
         ],
         **(
-            {"caveat": "Prony 적합이 없다 — 화면의 「Prony 맞추기」 는 사람이 한다."}
+            {"caveat": "Prony 적합이 없다 — fit_prony 로 맞춘다."}
             if not rows
             else {}
         ),
     }
     return _complete(out, whole=True)
+
+
+@mcp.tool()
+async def fit_prony(
+    ctx: Context, master_curve_id: str, terms: int | None = None, dry_run: bool = True
+) -> dict[str, Any]:
+    """마스터커브에 **Prony 벌(일반화 Maxwell)을 맞춘다** — 점탄성 카드의 계수.
+
+    `terms` 를 비우면 후보 항 수를 재고 BIC 로 고른다(재 본 후보가 전부 남는다). 기본이
+    미리보기(이미 맞춘 것 수) — 확인받은 뒤 `dry_run=False`. 결과의 `at_bound` 가 비어 있지
+    않으면 **관측 밖을 외삽**하는 완화시간이다 — 사람에게 반드시 말한다. 카드는
+    `create_viscoelastic_card` 로 짓는다.
+    """
+    existing = await _get(ctx, f"/viscoelastic/master-curves/{master_curve_id}/prony")
+    if isinstance(existing, dict) and "error" in existing:
+        return existing
+    if terms is not None and not 1 <= terms <= 12:
+        return {"error": "terms 는 1~12 입니다 — 비우면 BIC 로 고릅니다."}
+    if dry_run:
+        return {
+            "dry_run": True,
+            "master_curve_id": master_curve_id,
+            "terms": terms if terms is not None else "BIC 로 고름",
+            "existing_fits": len(existing) if isinstance(existing, list) else 0,
+            "note": "확인받은 뒤 dry_run=False 로 다시 부르세요.",
+        }
+    made = await _send(
+        ctx, "POST", f"/viscoelastic/master-curves/{master_curve_id}/prony", {"terms": terms}
+    )
+    if isinstance(made, dict) and "error" in made:
+        return made
+    return {
+        "id": made.get("id"),
+        "equilibrium_pa": made.get("equilibrium_pa"),
+        "instantaneous_pa": made.get("instantaneous_pa"),
+        "terms": made.get("terms"),
+        "normalized_rmse": made.get("normalized_rmse"),
+        "at_bound": made.get("at_bound"),
+        "note": "맞췄습니다. at_bound 가 있으면 외삽입니다 — 사람에게 말하세요. 카드는 "
+        "create_viscoelastic_card 로.",
+    }
 
 
 @mcp.tool()

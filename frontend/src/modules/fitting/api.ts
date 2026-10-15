@@ -16,6 +16,7 @@ export type FitPreviewRequest = components['schemas']['FitPreviewRequest']
 export type InheritedValue = components['schemas']['InheritedValueOut']
 export type FittedParameter = components['schemas']['FittedParameterOut']
 export type PropertyCard = components['schemas']['PropertyCardOut']
+export type PublishAsk = components['schemas']['PublishAskOut']
 /** 덱을 쓸 단위계. **목록은 서버가 준다** — 화면이 적어 두면 계가 늘 때 뒤처진다. */
 export type UnitSystem = components['schemas']['UnitSystemOut']
 export type UnitSystemCreate = components['schemas']['UnitSystemCreate']
@@ -262,6 +263,13 @@ export const fittingApi = {
   resampleMethods: () => api.get<ResampleMethod[]>('/fitting/resample-methods'),
 
   publish: (id: string) => api.post<PropertyCard>(`/fitting/cards/${id}/publish`, {}),
+
+  /**
+   * 초안의 확정을 자료 관리자에게 **부탁한다**(2026-10-15). 상태는 그대로 초안이고, 카드에
+   * 「확정 요청」 코멘트가 붙는다. 같은 카드는 하루에 한 번.
+   */
+  requestPublish: (id: string, note?: string) =>
+    api.post<PublishAsk>(`/fitting/cards/${id}/request-publish`, { note: note ?? null }),
 
   /**
    * 사용 중지한 카드를 **초안으로** 되살린다. 부서 관리자만.

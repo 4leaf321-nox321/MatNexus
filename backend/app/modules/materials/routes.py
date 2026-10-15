@@ -38,6 +38,8 @@ from app.modules.materials.schemas import (
     LENGTH_UNIT,
     SI_DENSITY,
     SI_LENGTH,
+    ApprovalAskIn,
+    ApprovalAskOut,
     BulkBlockedOut,
     BulkDeletePlanOut,
     BulkMadeOut,
@@ -121,6 +123,7 @@ from app.shared import (
     semantic,
     sorting,
     specimen_size,
+    steward_notice,
     unit_systems,
 )
 from app.shared.access import AccessBook, EditAccessOut, access_of
@@ -831,12 +834,7 @@ def declared_review(
         .order_by(Material.record_name, Sample.record_name)
     ).all()
 
-    def waiting(row: Any) -> bool:
-        return (
-            isinstance(row, dict)
-            and declared_approval.of(row) is None
-            and declared_approval.tier_if_approved(row) < declared_approval.tier(row)
-        )
+    waiting = declared_approval.waiting
 
     def made(row: dict[str, Any], **where: Any) -> DeclaredReviewOut:
         points = [one for one in row.get("points") or [] if isinstance(one, dict)]
@@ -2113,6 +2111,55 @@ def unapprove_declared(
         **_declared_target(material, item),
     )
     return _saved_material(db, user, material)
+
+
+@router.post("/{material_id}/declared/request-approval", response_model=ApprovalAskOut)
+def request_declared_approval(
+    material_id: uuid.UUID,
+    body: ApprovalAskIn,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> ApprovalAskOut:
+    """승인을 기다리는 값을 자료 관리자에게 **부탁한다**(2026-10-15).
+
+    전에는 상태만 있었다 — 「승인 대기 값」 화면을 열어 보지 않으면 자료 관리자는 몰랐다.
+    부탁은 **알림뿐**이다: 줄을 잠그거나 큐를 세우지 않는다(승인 자체는 그 값이 사는 화면에서,
+    근거 문서를 펴 보고 한다). 같은 재료를 같은 날 거듭 누르면 한 번만 간다(알림 키에 날짜).
+    다만 알림 워커는 받는 사람마다 **마지막 키 하나**만 견주므로 사이에 다른 요청이 끼면 다시
+    간다 — 카드 요청(코멘트로 하루 한 번을 막는다)과 달리 부탁을 적어 둘 자리가 없어
+    그만큼만 막는다.
+
+    고칠 수 있는 사람이 부탁한다 — 그 값을 적었거나 맡은 사람이다(ADR 0035).
+    """
+    material = services.get_material(db, user, material_id)
+    permissions.require_edit(db, user, material, code="MNX-MATERIALS-0051", note=False)
+    rows: list[Any] = list(material.declared_properties or [])
+    for (sample_rows,) in db.execute(
+        select(Sample.declared_properties).where(
+            Sample.material_id == material.id, Sample.deleted_at.is_(None)
+        )
+    ):
+        rows.extend(sample_rows or [])
+    pending = sum(1 for row in rows if declared_approval.waiting(row))
+    if pending == 0:
+        raise AppError(
+            "MNX-MATERIALS-0052",
+            "승인을 기다리는 값이 없습니다 — 이미 승인됐거나, 승인해도 등급이 안 오르는 "
+            "값(규격 · 데이터시트 · 밀시트 · 받아 온 문헌 1~2)뿐입니다.",
+            status=422,
+        )
+    note = (body.note or "").strip()
+    sent = steward_notice.notify_stewards(
+        db,
+        event_kind=steward_notice.REVIEW_REQUESTED,
+        key=f"approval-request:{material.id}:{datetime.now(UTC).date().isoformat()}",
+        title=f"선언 값 승인 요청 — {material.record_name} {pending}건",
+        body=f"{user.display_name} 님의 요청" + (f" · {note}" if note else ""),
+        link="/materials/declared-review",
+        exclude=user.id,
+    )
+    db.commit()
+    return ApprovalAskOut(pending=pending, notified=sent)
 
 
 def _saved_material(db: Session, user: User, material: Material) -> MaterialOut:

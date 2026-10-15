@@ -5,6 +5,7 @@ import type { components } from '@/shared/api/schema'
 import { display } from '@/shared/units'
 
 export type Material = components['schemas']['MaterialOut']
+export type ApprovalAsk = components['schemas']['ApprovalAskOut']
 export type PropertyCoverage = components['schemas']['PropertyCoverageOut']
 export type CoverageEntry = components['schemas']['CoverageEntryOut']
 export type MaterialPage = components['schemas']['Page_MaterialOut_']
@@ -259,6 +260,12 @@ export const materialsApi = {
       // 승인 대기 목록에서 바로 승인할 때 — 보고 있던 값인지 서버가 대 본다.
       digest: digest ?? null,
     }),
+  /**
+   * 승인을 기다리는 값을 자료 관리자에게 **부탁한다**(2026-10-15) — 재료와 그 시료의 값 전부.
+   * 알림뿐이다: 값도 상태도 안 바뀐다.
+   */
+  requestDeclaredApproval: (id: string, note?: string) =>
+    api.post<ApprovalAsk>(`/materials/${id}/declared/request-approval`, { note: note ?? null }),
   unapproveDeclared: (id: string, item: string) =>
     api.post<Material>(`/materials/${id}/declared/unapprove`, { item }),
   remove: (id: string) => api.delete<void>(`/materials/${id}`),

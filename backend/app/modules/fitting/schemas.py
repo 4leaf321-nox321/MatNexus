@@ -760,7 +760,8 @@ class CardRemarkOut(BaseModel):
 
     id: uuid.UUID
     kind: str
-    """`relocated`(근거 시험이 다른 두께의 재료로 옮겨짐) · `comment`."""
+    """`relocated`(근거 시험이 다른 두께의 재료로 옮겨짐) · `publish_requested`(확정 요청)
+    · `comment`."""
     message: str
     """서버가 적은 사실."""
     comment: str | None = None
@@ -1060,6 +1061,18 @@ class PropertyCardUpdateRequest(BaseModel):
 
     label: str | None = Field(default=None, min_length=1, max_length=120)
     note: str | None = None
+
+
+class PublishAskIn(BaseModel):
+    """확정 요청 — 자료 관리자에게 남길 말(2026-10-15). 비어도 된다."""
+
+    note: str | None = Field(default=None, max_length=500)
+
+
+class PublishAskOut(BaseModel):
+    notified: int
+    """알린 자료 관리자 수. 0 이면 알릴 사람이 없다 — 요청은 카드 코멘트로만 남는다."""
+    card: PropertyCardOut
 
 
 class BomDeckRowIn(BaseModel):

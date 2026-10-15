@@ -118,6 +118,15 @@ def tier_if_approved(row: dict[str, Any]) -> int:
     )
 
 
+def waiting(row: Any) -> bool:
+    """**승인을 기다리는 줄** — 아직 승인 전이고, 승인하면 등급이 오른다.
+
+    「승인 대기 값」 화면과 승인 요청(2026-10-15)이 같은 판정을 쓴다 — 두 곳에 두면 요청은
+    「3건」 이라는데 화면에는 2건이 뜬다.
+    """
+    return isinstance(row, dict) and of(row) is None and tier_if_approved(row) < tier(row)
+
+
 def origin(row: dict[str, Any]) -> str:
     """카드 칸에 적는 출처 표지(`declared:literature+catalog1+approved`)."""
     return tiers.declared_origin(

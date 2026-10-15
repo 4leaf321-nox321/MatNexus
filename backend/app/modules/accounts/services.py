@@ -426,6 +426,10 @@ def set_data_manager(db: Session, *, user_id: uuid.UUID, grant: bool, actor: Use
     if before == grant:
         return user
     user.is_data_manager = grant
+    # 자료 관리자만 받는 알림(확정 · 승인 요청, AI 가 한 확정 · 채택)이 있다(2026-10-15) —
+    # 시스템 관리자와 같게 역할이 바뀌면 규칙을 다시 맞춘다. 안 하면 알림 설정 화면을 열기
+    # 전까지 그 사람에게 규칙이 없어 조용히 안 간다.
+    _on_activated(db, user)
     # **누가 전사 자료를 고칠 수 있게 됐는가** — 권한이 실린 변경이라 남긴다.
     audit.record(
         db,

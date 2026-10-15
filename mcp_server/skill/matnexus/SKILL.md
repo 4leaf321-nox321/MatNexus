@@ -109,7 +109,11 @@ allowed-tools: mcp__matnexus__*,
   mcp__hwax__create_vocabulary_term, mcp__hwax__matnexus_create_vocabulary_term,
   mcp__hwax__add_vocabulary_alias, mcp__hwax__matnexus_add_vocabulary_alias,
   mcp__hwax__save_test_type, mcp__hwax__matnexus_save_test_type,
-  mcp__hwax__set_export_profile_active, mcp__hwax__matnexus_set_export_profile_active
+  mcp__hwax__set_export_profile_active, mcp__hwax__matnexus_set_export_profile_active,
+  mcp__hwax__import_test_summaries, mcp__hwax__matnexus_import_test_summaries,
+  mcp__hwax__build_master_curve, mcp__hwax__matnexus_build_master_curve,
+  mcp__hwax__fit_prony, mcp__hwax__matnexus_fit_prony,
+  mcp__hwax__get_verify_kit, mcp__hwax__matnexus_get_verify_kit
 ---
 
 # MatNexus 물성

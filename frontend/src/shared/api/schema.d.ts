@@ -2638,9 +2638,42 @@ export interface paths {
          *     사용 중지하고(`deprecated`) 새 카드를 만든다.
          *
          *     **리뷰 큐는 없다**(D8). 상태만 두고, 절차는 운영 규칙이 보인 뒤에 만든다 —
-         *     절차를 먼저 만들면 그 절차가 일을 정의해 버린다.
+         *     절차를 먼저 만들면 그 절차가 일을 정의해 버린다. 부탁하는 길(`request_publish`)은
+         *     알림과 코멘트일 뿐 큐가 아니다 — 부탁이 없어도 확정할 수 있다.
          */
         post: operations["publish_api_fitting_cards__card_id__publish_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/fitting/cards/{card_id}/request-publish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Request Publish
+         * @description 초안의 확정을 자료 관리자에게 **부탁한다**(2026-10-15).
+         *
+         *     확정은 자료 관리자만 한다(ADR 0035). 그런데 부탁할 길이 없어서 초안을 만든 사람은
+         *     누구에게 말해야 할지 몰랐고, 자료 관리자는 홈의 숫자로만 대기 카드를 봤다.
+         *
+         *     **큐는 여전히 두지 않는다**(D8). 부탁은 상태가 아니라 자료 관리자에게 가는 알림과 카드에
+         *     붙는 코멘트 한 줄(`publish_requested`)이다 — 카드는 초안 그대로이고 확정하는 길도 그대로다.
+         *     코멘트로 남기는 이유: 누가 언제 부탁했는지가 카드를 보는 사람에게 보여야 하고, 같은 부탁을
+         *     하루 안에 다시 받지 않는 근거가 된다(알림의 중복 막기는 마지막 키 하나만 본다 — 사이에 다른
+         *     요청이 끼면 다시 간다).
+         *
+         *     고칠 수 있는 사람만 부탁한다 — 남의 초안을 아무나 「확정해 달라」 고 올리면 자료 관리자는
+         *     누구의 뜻인지 모른다.
+         */
+        post: operations["request_publish_api_fitting_cards__card_id__request_publish_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4088,6 +4121,35 @@ export interface paths {
          *     고치면 승인은 저절로 풀린다 — 승인은 그때의 값에 묶여 있다.
          */
         post: operations["approve_declared_api_materials__material_id__declared_approve_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/materials/{material_id}/declared/request-approval": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Request Declared Approval
+         * @description 승인을 기다리는 값을 자료 관리자에게 **부탁한다**(2026-10-15).
+         *
+         *     전에는 상태만 있었다 — 「승인 대기 값」 화면을 열어 보지 않으면 자료 관리자는 몰랐다.
+         *     부탁은 **알림뿐**이다: 줄을 잠그거나 큐를 세우지 않는다(승인 자체는 그 값이 사는 화면에서,
+         *     근거 문서를 펴 보고 한다). 같은 재료를 같은 날 거듭 누르면 한 번만 간다(알림 키에 날짜).
+         *     다만 알림 워커는 받는 사람마다 **마지막 키 하나**만 견주므로 사이에 다른 요청이 끼면 다시
+         *     간다 — 카드 요청(코멘트로 하루 한 번을 막는다)과 달리 부탁을 적어 둘 자리가 없어
+         *     그만큼만 막는다.
+         *
+         *     고칠 수 있는 사람이 부탁한다 — 그 값을 적었거나 맡은 사람이다(ADR 0035).
+         */
+        post: operations["request_declared_approval_api_materials__material_id__declared_request_approval_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -8588,6 +8650,21 @@ export interface components {
              * Format: uuid
              */
             specimen_id: string;
+        };
+        /**
+         * ApprovalAskIn
+         * @description 승인을 **부탁**한다(2026-10-15). 무엇을 왜 봐 달라는지 한 줄 — 비어도 된다.
+         */
+        ApprovalAskIn: {
+            /** Note */
+            note?: string | null;
+        };
+        /** ApprovalAskOut */
+        ApprovalAskOut: {
+            /** Notified */
+            notified: number;
+            /** Pending */
+            pending: number;
         };
         /** ApproveRequest */
         ApproveRequest: {
@@ -17492,6 +17569,20 @@ export interface components {
             term_id: string;
         };
         /**
+         * PublishAskIn
+         * @description 확정 요청 — 자료 관리자에게 남길 말(2026-10-15). 비어도 된다.
+         */
+        PublishAskIn: {
+            /** Note */
+            note?: string | null;
+        };
+        /** PublishAskOut */
+        PublishAskOut: {
+            card: components["schemas"]["PropertyCardOut"];
+            /** Notified */
+            notified: number;
+        };
+        /**
          * QueueOut
          * @description 큐 현황. 도는 것은 문제없다 — **보이지 않는 것이 문제였다.**
          *
@@ -26025,6 +26116,41 @@ export interface operations {
             };
         };
     };
+    request_publish_api_fitting_cards__card_id__request_publish_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                card_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PublishAskIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublishAskOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     restore_api_fitting_cards__card_id__restore_post: {
         parameters: {
             query?: never;
@@ -28494,6 +28620,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MaterialOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    request_declared_approval_api_materials__material_id__declared_request_approval_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                material_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ApprovalAskIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApprovalAskOut"];
                 };
             };
             /** @description Validation Error */

@@ -35,6 +35,7 @@ from app.modules.viscoelastic.schemas import (
     SweepListOut,
     SweepOut,
 )
+from app.shared import audit
 from app.shared.auth import current_user
 from app.shared.errors import AppError
 from app.shared.permissions import get_run, require_edit
@@ -152,9 +153,35 @@ def create_master_curve(
         curve_keys=payload.curve_keys,
         created_by_id=user.id,
     )
+    _record_curve(db, user, run.id, run.record_name, row, payload.method)
     db.commit()
     db.refresh(row)
     return _curve_out(row)
+
+
+def _record_curve(
+    db: Session,
+    user: User,
+    run_id: uuid.UUID,
+    run_name: str,
+    row: MasterCurve,
+    method: str,
+) -> None:
+    """**AI 가 겹쳤으면 남긴다**(2026-10-15) — 마스터커브는 Prony · 점탄성 카드의 근거다."""
+    db.flush()
+    audit.record_by_client(
+        db,
+        action=audit.MASTER_CURVE_BUILT_BY_CLIENT,
+        actor=user,
+        target_table="test_runs",
+        target_id=run_id,
+        target_label=run_name,
+        changes={
+            "master_curve_id": str(row.id),
+            "method": method,
+            "reference_temperature_k": row.reference_temperature_k,
+        },
+    )
 
 
 @router.get(
@@ -202,6 +229,7 @@ def import_master_curve(
         reference_temperature_k=payload.reference_temperature_k,
         created_by_id=user.id,
     )
+    _record_curve(db, user, run.id, run.record_name, row, "imported")
     db.commit()
     db.refresh(row)
     return _curve_out(row)
@@ -277,6 +305,23 @@ def create_prony_fit(
     run = get_run(db, user, row.test_run_id)
     assert run is not None
     fit = services.fit_prony(db, row, terms=payload.terms, created_by_id=user.id)
+    db.flush()
+    # **AI 가 맞췄으면 남긴다**(2026-10-15) — Prony 벌이 점탄성 카드 · 덱으로 간다.
+    audit.record_by_client(
+        db,
+        action=audit.PRONY_FITTED_BY_CLIENT,
+        actor=user,
+        target_table="test_runs",
+        target_id=run.id,
+        target_label=run.record_name,
+        changes={
+            "master_curve_id": str(row.id),
+            "prony_fit_id": str(fit.id),
+            # 고른 항 수 — 맡겼으면(`None`) BIC 가 고른 것이다.
+            "terms": len(fit.terms),
+            "terms_asked": payload.terms,
+        },
+    )
     db.commit()
     db.refresh(fit)
     return _fit_out(fit)

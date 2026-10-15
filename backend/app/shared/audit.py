@@ -121,6 +121,11 @@ COMMISSION_MOVED_BY_CLIENT = "commission.moved_by_client"
 COMMISSION_ASSIGNED_BY_CLIENT = "commission.assigned_by_client"
 COMMISSION_RUN_LINKED_BY_CLIENT = "commission.run_linked_by_client"
 VOCABULARY_ALIAS_ADDED_BY_CLIENT = "vocabulary.alias_added_by_client"
+#: **AI 가 시험 데이터를 짓는 셋**(2026-10-15) — 표로 시험 입력 · 마스터커브 · Prony 적합.
+#: 셋 다 카드의 근거가 되는 값을 새로 만든다. 화면에서 한 것은 전처럼 안 남는다.
+TEST_RUNS_IMPORTED_BY_CLIENT = "test_runs.imported_by_client"
+MASTER_CURVE_BUILT_BY_CLIENT = "master_curve.built_by_client"
+PRONY_FITTED_BY_CLIENT = "prony.fitted_by_client"
 #: 문헌 값을 **실제로 지운** 일과 폐기된 키의 값을 **옮긴** 일. 둘 다 되돌릴 수 없어
 #: 위의 규칙대로 사람이 해도 남긴다(누가 했든 `client` 가 길을 말한다) — 지운 값은 이미
 #: 덱에 실렸을 수 있고, 옮긴 값은 원래 어느 키에 있었는지가 이 기록에만 남는다.

@@ -148,6 +148,10 @@ def wanted_kinds(db: Session, user: User) -> list[str]:
     if user.is_system_admin:
         wanted.append("account.signup")
         wanted.append("voc.registered")
+    # 확정 · 승인은 **자료 관리자**가 한다(ADR 0035 D4) — 부탁과 AI 가 한 확정 · 채택을 그쪽에.
+    if permissions.is_data_steward(user):
+        wanted.append("review.requested")
+        wanted.append("ai.confirmed")
     # 장비 커넥터가 시편을 못 정한 파일은 **부서 관리자**가 붙인다(ADR 0021).
     if user.is_system_admin or permissions.is_any_manager(db, user):
         wanted.append("pipelines.needs_specimen")

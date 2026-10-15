@@ -26,11 +26,15 @@ const forMaterial = vi.fn()
 const deprecate = vi.fn()
 const restore = vi.fn()
 const create = vi.fn()
+const requestPublish = vi.fn()
 
 // **확정·내리기·되살리기는 자료 관리자의 단추다**(ADR 0035). 이 파일은 그 단추들이
-// 무엇을 하는지를 보므로 자료 관리자로 연다.
+// 무엇을 하는지를 보므로 자료 관리자로 연다 — 확정 요청만 평범한 멤버로 본다.
+const role = vi.hoisted(() => ({ steward: true }))
 vi.mock('@/shared/auth/AuthContext', () => ({
-  useAuth: () => ({ user: { is_system_admin: false, is_data_manager: true, memberships: [] } }),
+  useAuth: () => ({
+    user: { is_system_admin: false, is_data_manager: role.steward, memberships: [] },
+  }),
 }))
 
 vi.mock('@/modules/fitting/api', async (importOriginal) => ({
@@ -45,6 +49,7 @@ vi.mock('@/modules/fitting/api', async (importOriginal) => ({
     // 카드 줄에는 내보내기 메뉴가 딸려 있다 — 그 안이 단위계를 읽는다.
     unitSystems: () => Promise.resolve([{ key: 'si', label: 'SI', is_default: true }]),
     create: (...args: unknown[]) => create(...args),
+    requestPublish: (...args: unknown[]) => requestPublish(...args),
     // 방법 목록은 서버가 준다 — 차례가 곧 추천 순서다.
     resampleMethods: () =>
       Promise.resolve([
@@ -183,7 +188,7 @@ async function compare() {
 }
 
 /** 카드 한 장이 있는 화면. 상태를 바꿔 가며 단추를 본다. */
-function withCard(status: string) {
+function withCard(status: string, extra: Record<string, unknown> = {}) {
   // **실제 응답과 같은 모양이어야 한다.** 칸이 빠지면 화면이 그것을 읽다 죽는데,
   // 그 죽음은 빈 화면으로만 보여서 원인을 못 찾는다 — 실제로 여기서 겪었다.
   cards.mockResolvedValue({
@@ -209,6 +214,7 @@ function withCard(status: string) {
         is_global: false,
         published_at: status === 'published' ? '2026-09-01T00:00:00Z' : null,
         created_at: '2026-08-25T00:00:00Z',
+        ...extra,
       },
     ],
   })
@@ -292,6 +298,75 @@ describe('확정한 값을 못 쓰게 만들 때', () => {
     panel()
     await userEvent.click(await screen.findByRole('button', { name: '초안으로 복원' }))
     await waitFor(() => expect(restore).toHaveBeenCalledWith('c1'))
+  })
+})
+
+describe('확정 요청', () => {
+  // 확정은 자료 관리자만 한다 — 만든 사람에게는 **부탁할 길**이 있어야 한다(2026-10-15).
+  beforeEach(() => {
+    role.steward = false
+    return () => {
+      role.steward = true
+    }
+  })
+
+  it('고칠 수 있는 멤버는 초안의 확정을 부탁하고, 몇 명에게 갔는지 본다', async () => {
+    withCard('draft', { access: { can_edit: true } })
+    requestPublish.mockResolvedValue({ notified: 2, card: {} })
+    panel()
+    expect(await screen.findByText('인장 MD')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '확정' })).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: '확정 요청' }))
+    await userEvent.type(screen.getByLabelText('남길 말'), '다음 주 해석')
+    await userEvent.click(screen.getByRole('button', { name: '요청 보내기' }))
+
+    expect(await screen.findByText('자료 관리자 2명에게 알렸습니다.')).toBeInTheDocument()
+    expect(requestPublish).toHaveBeenCalledWith('c1', '다음 주 해석')
+  })
+
+  it('받을 사람이 없으면 그렇다고 말한다', async () => {
+    withCard('draft', { access: { can_edit: true } })
+    requestPublish.mockResolvedValue({ notified: 0, card: {} })
+    panel()
+    await userEvent.click(await screen.findByRole('button', { name: '확정 요청' }))
+    await userEvent.click(screen.getByRole('button', { name: '요청 보내기' }))
+    expect(await screen.findByText(/알릴 자료 관리자가 없습니다/)).toBeInTheDocument()
+  })
+
+  it('하루 안에 다시 보내면 서버의 이유를 창 안에 적는다', async () => {
+    withCard('draft', { access: { can_edit: true } })
+    requestPublish.mockRejectedValue(new Error('이 카드는 하루 안에 이미 확정을 요청했습니다'))
+    panel()
+    await userEvent.click(await screen.findByRole('button', { name: '확정 요청' }))
+    await userEvent.click(screen.getByRole('button', { name: '요청 보내기' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('하루 안에 이미')
+  })
+
+  it('못 고치는 사람에게는 단추가 없다', async () => {
+    withCard('draft', { access: { can_edit: false } })
+    panel()
+    expect(await screen.findByText('인장 MD')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '확정 요청' })).not.toBeInTheDocument()
+  })
+
+  it('부탁이 와 있는 초안에는 표지가 붙는다', async () => {
+    withCard('draft', {
+      remarks: [
+        {
+          id: 'r1',
+          kind: 'publish_requested',
+          message: '자료 관리자에게 확정을 요청했습니다',
+          comment: null,
+          created_by_name: '앨리스',
+          created_at: '2026-10-15T00:00:00Z',
+        },
+      ],
+    })
+    panel()
+    expect(await screen.findByText('확정 요청됨')).toBeInTheDocument()
+    // 경고 코멘트가 아니다 — 노란 「코멘트 N」 으로 세지 않는다.
+    expect(screen.queryByText(/코멘트 1/)).not.toBeInTheDocument()
   })
 })
 

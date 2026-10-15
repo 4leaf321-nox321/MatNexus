@@ -27,7 +27,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 
 import { CardFilterPanel } from '@/modules/fitting/CardFilterPanel'
-import { RemarkBadge } from '@/modules/fitting/CardRemarks'
+import { AskedBadge, RemarkBadge } from '@/modules/fitting/CardRemarks'
 import { ExportMenu } from '@/modules/fitting/ExportMenu'
 import { STATUS_LABELS, fittingApi } from '@/modules/fitting/api'
 import type { PropertyCard } from '@/modules/fitting/api'
@@ -289,6 +289,8 @@ function Row({
       )}
       {/* **근거가 옮겨진 카드를 목록에서 짚는다** — 열어 봐야 아는 표기는 표기가 아니다. */}
       <RemarkBadge card={card} />
+      {/* 확정을 부탁받은 초안 — 자료 관리자가 여기서 찾는다(2026-10-15). */}
+      <AskedBadge card={card} />
 
       <div className="ml-auto">
         <ExportMenu card={card} formats={formats} onError={onError} siblings={siblings} />

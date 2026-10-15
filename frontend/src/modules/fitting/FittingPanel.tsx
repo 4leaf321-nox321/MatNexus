@@ -58,6 +58,7 @@ import { ApiError } from '@/shared/api/client'
 import { CreatedOn } from '@/shared/components/CreatedOn'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { Badge } from '@/shared/components/ui/badge'
+import { AskDialog, askedMessage } from '@/shared/components/AskDialog'
 import { ConfirmDialog } from '@/shared/components/ConfirmDialog'
 import { Button } from '@/shared/components/ui/button'
 import {
@@ -71,7 +72,7 @@ import {
 import { Input } from '@/shared/components/ui/input'
 import { Label } from '@/shared/components/ui/label'
 import { BlockChips, CardBlocks } from '@/modules/fitting/CardBlocks'
-import { RemarkBadge } from '@/modules/fitting/CardRemarks'
+import { AskedBadge, RemarkBadge } from '@/modules/fitting/CardRemarks'
 import { cardKind, kindLabel } from '@/modules/fitting/cardKind'
 import { LveCardDialog } from '@/modules/fitting/LveCardDialog'
 import { hasLve } from '@/modules/fitting/lve'
@@ -1241,6 +1242,9 @@ function CardList({
   // **사용 중지는 한 번 묻는다.** 확정된 값을 쓰지 못하게 만드는 일이고, 되살려도
   // 초안으로만 돌아온다 — 확정을 다시 받아야 한다.
   const [stopping, setStopping] = useState<PropertyCard | null>(null)
+  // **확정을 부탁할 길**(2026-10-15) — 확정은 자료 관리자만 하는데, 만든 사람은 누구에게
+  // 말해야 할지 몰랐다. 창은 목록 밖에 하나만 둔다.
+  const [asking, setAsking] = useState<PropertyCard | null>(null)
   // **기본은 접힌다.** 카드마다 블록 값을 전부 펼치면 한 장이 화면 절반을 먹는다.
   const [opened, setOpened] = useState<Set<string>>(new Set())
   // **종류로 가른다.** 경화식·선형탄성구간·점탄성·재료 기본 정보가 한 목록에 섞이면
@@ -1338,6 +1342,7 @@ function CardList({
             >
               {STATUS_LABELS[card.status] ?? card.status}
             </Badge>
+            <AskedBadge card={card} />
             {/* **시험에서 나온 카드와 같은 모양으로 그리면 안 된다.**
                 시험종류가 비어 있으면 `· · 시편 0개` 로 보이는데, 그것은
                 "시험이 지워졌다" 로 읽힌다. 무엇인지 말로 적는다. */}
@@ -1380,6 +1385,16 @@ function CardList({
                       title="확정 — 자료 관리자만. 올린 뒤에는 값을 바꿀 수 없습니다."
                     >
                       확정
+                    </Button>
+                  )}
+                  {!steward && canEdit(card.access) && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setAsking(card)}
+                      title="확정 요청 — 자료 관리자에게 알립니다. 확정은 자료 관리자가 합니다."
+                    >
+                      확정 요청
                     </Button>
                   )}
                   <Button
@@ -1436,6 +1451,23 @@ function CardList({
       {/* **한 번 묻는다.** 확정된 값을 앞으로 쓰지 않겠다는 결정이고, 되살려도
           초안으로만 돌아온다 — 확정을 다시 받아야 한다. 창은 목록 밖에 하나만
           둔다: 카드마다 그리면 같은 창이 수십 개 뜬다. */}
+      <AskDialog
+        open={asking !== null}
+        title={`「${asking?.label ?? ''}」 확정 요청`}
+        body={
+          <>
+            이 초안을 확정해 달라고 자료 관리자에게 부탁합니다. 카드에 「확정 요청」 이 남고, 같은
+            카드는 하루에 한 번만 보낼 수 있습니다.
+          </>
+        }
+        onSend={async (note) => {
+          if (!asking) return ''
+          const result = await fittingApi.requestPublish(asking.id, note)
+          onChanged()
+          return askedMessage(result.notified)
+        }}
+        onClose={() => setAsking(null)}
+      />
       <ConfirmDialog
         open={stopping !== null}
         title={`「${stopping?.label ?? ''}」 를 사용 중지합니다`}

@@ -25,6 +25,7 @@ from sqlalchemy.orm import Session
 from app.modules.materials.models import Material
 from app.modules.tests import services
 from app.modules.tests.definitions import ensure_builtin_test_types
+from app.modules.tests.legacy_profiles import ensure_builtin_format_profiles
 from app.modules.workspaces.models import Workspace
 
 TRA = Path(__file__).resolve().parents[1] / "fixtures" / "Example.tra"
@@ -852,3 +853,150 @@ class Test사람만_하던_일을_AI_에게:
 
         mine = _mine(client, admin_headers, "vocabulary.alias_added_by_client", term_id)
         assert mine and mine[0]["client"] == "mcp"
+
+
+FREQ_TEMP = Path(__file__).resolve().parents[1] / "fixtures" / "dma_freq_temp.csv"
+
+
+@pytest.fixture
+def dma_run_id(client: TestClient, admin_headers: dict[str, str], db: Session) -> str:
+    """읽힌 DMA 시험 하나 — 온도 스윕 여섯."""
+    ensure_builtin_test_types(db)
+    ensure_builtin_format_profiles(db)
+    db.commit()
+    material = client.post(
+        "/api/materials",
+        json={
+            "family": "Polymer",
+            "category": "EPDM",
+            "grade": "AUDVE",
+            "spec_thickness": 1.0,
+        },
+        headers=admin_headers,
+    ).json()
+    sample = client.post(
+        f"/api/materials/{material['id']}/samples", json={}, headers=admin_headers
+    ).json()
+    specimen = client.post(
+        f"/api/samples/{sample['id']}/specimens",
+        json={"orientation": "MD"},
+        headers=admin_headers,
+    ).json()
+    created = client.post(
+        "/api/test-runs",
+        data={"specimen_id": specimen["id"], "test_type": "dma_sweep", "conditions": "{}"},
+        files={"file": ("Example FreqTemp2.csv", FREQ_TEMP.read_bytes())},
+        headers=admin_headers,
+    ).json()
+    assert services.parse_run(db, uuid.UUID(created["id"])) == "parsed"
+    return str(created["id"])
+
+
+def _curve(client: TestClient, headers: dict[str, str], run_id: str) -> Any:
+    sweeps = client.get(f"/api/viscoelastic/runs/{run_id}/sweeps", headers=headers).json()
+    ordered = sorted(sweeps["items"], key=lambda one: one["temperature_k"])
+    return client.post(
+        f"/api/viscoelastic/runs/{run_id}/master-curves",
+        json={
+            "reference_temperature_k": ordered[0]["temperature_k"],
+            "method": "manual",
+            "manual_shifts": {
+                str(one["temperature_k"]): -1.0 * index for index, one in enumerate(ordered)
+            },
+        },
+        headers=headers,
+    )
+
+
+class Test표_입력과_점탄성도_남는다:
+    """MCP 에 연 셋(2026-10-15) — 표로 시험 입력 · 마스터커브 · Prony 적합.
+
+    셋 다 곡선 · 카드의 **근거**가 되는 일이다. 표로 넣은 요약값은 통계 · 카드로 가고,
+    마스터커브와 Prony 벌은 점탄성 카드와 덱으로 간다. 규칙은 같다 — 화면은 안 남는다.
+    """
+
+    def test_AI_가_표로_넣은_시험이_남는다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str]
+    ) -> None:
+        ensure_builtin_test_types(db)
+        db.commit()
+        material = client.post(
+            "/api/materials",
+            json={
+                "family": "Metal",
+                "category": "Steel",
+                "grade": "AUDIM",
+                "spec_thickness": 1.0,
+            },
+            headers=admin_headers,
+        ).json()
+        sample = client.post(
+            f"/api/materials/{material['id']}/samples", json={}, headers=admin_headers
+        ).json()
+        client.post(
+            f"/api/samples/{sample['id']}/specimens",
+            json={"orientation": "MD", "seq_no": 1},
+            headers=admin_headers,
+        )
+        header = "시편\t방향\t원본 파일명\t항복강도 (MPa)"
+
+        def send(path: str, line: str, headers: dict[str, str]) -> Any:
+            return client.post(
+                path,
+                json={
+                    "sample_id": sample["id"],
+                    "test_type": "tensile",
+                    "values": [header, line],
+                    "create_missing": False,
+                },
+                headers=headers,
+            )
+
+        mcp = {**admin_headers, "X-Client": "mcp"}
+        # 미리보기는 아무것도 안 쓴다 — 남을 것도 없다.
+        assert (
+            send("/api/test-runs/import/preview", "MD-1\tMD\ta.tra\t320", mcp).status_code
+            == 200
+        )
+        by_ai = send("/api/test-runs/import", "MD-1\tMD\ta.tra\t320", mcp)
+        assert by_ai.status_code == 200, by_ai.text
+        by_hand = send("/api/test-runs/import", "MD-1\tMD\tb.tra\t330", admin_headers)
+        assert by_hand.status_code == 200, by_hand.text
+
+        mine = _mine(client, admin_headers, "test_runs.imported_by_client", sample["id"])
+        assert len(mine) == 1, "미리보기 · 화면에서 넣은 것은 안 남는다"
+        assert mine[0]["changes"]["created"] == 1
+        assert mine[0]["changes"]["test_type"] == "tensile"
+
+    def test_AI_가_겹친_마스터커브와_Prony_가_남는다(
+        self, client: TestClient, admin_headers: dict[str, str], dma_run_id: str
+    ) -> None:
+        mcp = {**admin_headers, "X-Client": "mcp"}
+        curve = _curve(client, mcp, dma_run_id)
+        assert curve.status_code == 201, curve.text
+        fit = client.post(
+            f"/api/viscoelastic/master-curves/{curve.json()['id']}/prony", json={}, headers=mcp
+        )
+        assert fit.status_code == 201, fit.text
+
+        built = _mine(client, admin_headers, "master_curve.built_by_client", dma_run_id)
+        assert built and built[0]["changes"]["master_curve_id"] == curve.json()["id"]
+        assert built[0]["changes"]["method"] == "manual"
+        fitted = _mine(client, admin_headers, "prony.fitted_by_client", dma_run_id)
+        assert fitted and fitted[0]["changes"]["prony_fit_id"] == fit.json()["id"]
+        # **맡겼으면 고른 항 수가 남는다** — 요청한 값(None)만 남기면 무엇이 됐는지 모른다.
+        assert fitted[0]["changes"]["terms"] == len(fit.json()["terms"])
+        assert fitted[0]["changes"]["terms_asked"] is None
+
+    def test_화면에서_겹친_것은_안_남는다(
+        self, client: TestClient, admin_headers: dict[str, str], dma_run_id: str
+    ) -> None:
+        curve = _curve(client, admin_headers, dma_run_id)
+        assert curve.status_code == 201, curve.text
+        client.post(
+            f"/api/viscoelastic/master-curves/{curve.json()['id']}/prony",
+            json={"terms": 2},
+            headers=admin_headers,
+        )
+        assert not _mine(client, admin_headers, "master_curve.built_by_client", dma_run_id)
+        assert not _mine(client, admin_headers, "prony.fitted_by_client", dma_run_id)

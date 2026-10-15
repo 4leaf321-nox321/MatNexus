@@ -75,12 +75,14 @@ from app.shared import (
     filestore,
     permissions,
     revision,
+    steward_notice,
     test_type_channels,
 )
 from app.shared.access import AccessBook, EditAccessOut, access_of
 from app.shared.auth import current_user
 from app.shared.errors import AppError, Conflict, NotFound
 from app.shared.permissions import get_run, visible_runs
+from app.shared.request_context import get_client
 from matcore import curves, processing, registry, runtime
 from matcore.parsers import Channel
 from matcore.processing import SCALAR_KEY_MAX
@@ -1747,6 +1749,28 @@ def result_curves(
     return out
 
 
+def _notify_ai_adopted(db: Session, user: User, took: list[TestRun]) -> None:
+    """**AI · 외부 프로그램이 채택을 바꿨으면 자료 관리자에게 한 번 알린다**(2026-10-15).
+
+    채택된 값이 통계 · 카드로 간다. 시험마다 보내면 50건 채택이 알림 50개가 된다 — 한 번의
+    호출을 한 줄로. 화면에서 한 것은 알리지 않는다.
+    """
+    client = get_client()
+    if not client or not took:
+        return
+    names = ", ".join(one.record_name for one in took[:5])
+    more = f" 외 {len(took) - 5}건" if len(took) > 5 else ""
+    who = steward_notice.client_label(client)
+    steward_notice.notify_stewards(
+        db,
+        event_kind=steward_notice.AI_CONFIRMED,
+        key=f"ai-adopt:{took[0].id}:{len(took)}:{datetime.now(UTC).isoformat()}",
+        title=f"{who} 가 처리 결과 채택을 {len(took)}건 바꿨습니다",
+        body=f"{user.display_name} 님의 토큰으로 · {names}{more}",
+        link=f"/test-runs/{took[0].id}",
+    )
+
+
 @router.post("/adopt-many", response_model=AdoptManyOut)
 def adopt_many(
     payload: AdoptManyRequest,
@@ -1859,6 +1883,7 @@ def adopt_many(
                     "to": str(one.adopted_result_id) if one.adopted_result_id else None,
                 },
             )
+        _notify_ai_adopted(db, user, took)
         db.commit()
     changed = sum(1 for one in rows if one.status == "ok")
     unchanged = sum(1 for one in rows if one.status == "unchanged")

@@ -29,6 +29,7 @@ import { PropertyCoverageTable } from '@/modules/materials/PropertyCoverageTable
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { LinkedCatalogSection } from '@/modules/catalog/LinkedCatalogSection'
 import { DeclaredPropertiesCard } from '@/modules/materials/DeclaredPropertiesCard'
+import { DeclaredApprovalAsk } from '@/modules/materials/DeclaredApprovalAsk'
 import { tabOf } from '@/modules/materials/tabs'
 import { MasterCurveNotice } from '@/modules/materials/MasterCurveNotice'
 import { groupsApi } from '@/modules/materials/api.groups'
@@ -352,6 +353,9 @@ export default function MaterialDetailPage() {
                           : undefined
                       }
                     />
+                    {/* **승인을 부탁할 길**(2026-10-15) — 고칠 수 있는 사람에게만. 자료
+                        관리자는 위 단추로 바로 승인한다. */}
+                    {!steward && canEdit(item.access) && <DeclaredApprovalAsk material={item} />}
                   </>
                 )
               }

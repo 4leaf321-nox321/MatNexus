@@ -887,9 +887,25 @@ def import_summaries(
     )
     importing.require_columns(rows)
     importing.apply(db, sample=sample, definition=definition, rows=rows, user_id=user.id)
+    out = _import_out(rows)
+    # **AI 가 표로 넣었으면 남긴다** — 곡선 없는 요약값이 통계 · 카드의 근거가 된다.
+    audit.record_by_client(
+        db,
+        action=audit.TEST_RUNS_IMPORTED_BY_CLIENT,
+        actor=user,
+        target_table="samples",
+        target_id=sample.id,
+        target_label=sample.record_name,
+        workspace_id=sample.workspace_id,
+        changes={
+            "test_type": payload.test_type,
+            "created": out.created,
+            "specimens_created": out.specimens_created,
+        },
+    )
     db.commit()
 
-    return _import_out(rows)
+    return out
 
 
 @runs_router.post("", response_model=TestRunOut, status_code=202)

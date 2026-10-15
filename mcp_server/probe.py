@@ -441,7 +441,21 @@ async def sweep(session: ClientSession) -> None:
     if dma:
         curves = await call(session, "get_master_curves", {"test_run_id": dma})
         found = (curves or {}).get("master_curves") if isinstance(curves, dict) else None
+        sweeps = (curves or {}).get("sweeps") if isinstance(curves, dict) else None
+        if sweeps:
+            await call(
+                session,
+                "build_master_curve",
+                {
+                    "test_run_id": dma,
+                    "reference_temperature_k": sweeps[0]["temperature_k"],
+                    "dry_run": True,
+                },
+            )
         if found:
+            await call(
+                session, "fit_prony", {"master_curve_id": found[0]["id"], "dry_run": True}
+            )
             fits = await call(session, "get_prony_fits", {"master_curve_id": found[0]["id"]})
             listed_fits = (fits or {}).get("fits") if isinstance(fits, dict) else None
             if listed_fits:
@@ -836,6 +850,39 @@ async def sweep(session: ClientSession) -> None:
                 "dry_run": True,
             },
             expect_error=not (commission_detail.get("can_link") and items and run_id),
+        )
+    # ── 2026-10-15 — 표로 시험 입력 · 검증 키트 ────────────────────────────────
+    sample = await call(session, "list_samples", {"material_id": material_id}) if material_id else None
+    # `_first` 는 `samples` 칸을 안 뒤진다 — 여기서만 직접 꺼낸다(2026-10-15 프로브에서 빠졌다).
+    samples = (sample or {}).get("samples") if isinstance(sample, dict) else None
+    sample_id = samples[0].get("id") if samples else None
+    if sample_id:
+        await call(
+            session,
+            "import_test_summaries",
+            {
+                "sample_id": sample_id,
+                "test_type": "tensile",
+                "columns": ["시편", "항복강도 (MPa)"],
+                "rows": [["점검-없는-시편", 300]],
+                "dry_run": True,
+            },
+        )
+    tensile = await call(session, "list_cards", {"limit": 50})
+    kit_card = next(
+        (
+            one
+            for one in ((tensile or {}).get("cards") or [] if isinstance(tensile, dict) else [])
+            if one.get("test_type") == "tensile" and "abaqus" in (one.get("available_formats") or [])
+        ),
+        None,
+    )
+    if kit_card:
+        await call(session, "get_verify_kit", {"card_id": kit_card["id"], "format": "abaqus"})
+    elif card_id:
+        # 인장 카드가 없으면 키트가 없다는 거절이 맞는 답이다 — 서버까지 가는지만 본다.
+        await call(
+            session, "get_verify_kit", {"card_id": card_id, "format": "abaqus"}, expect_error=True
         )
     if specimen_id:
         await call(

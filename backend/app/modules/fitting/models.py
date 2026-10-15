@@ -9,6 +9,8 @@
 `draft → published → deprecated`. **리뷰 큐와 승인자는 두지 않는다** — 운영
 규칙이 보이기 전에 절차를 만들면 그 절차가 일을 정의해 버린다. `published` 로
 올리는 권한만 자료 관리자에게 준다(D12 — ADR 0035 가 부서 관리자에서 옮겼다).
+확정을 **부탁하는 길**은 있다(2026-10-15) — 상태가 아니라 자료 관리자에게 가는 알림과
+카드에 붙는 코멘트 한 줄이다(`routes.request_publish`).
 
 ## 물성의 갈래는 데이터다
 
@@ -160,7 +162,8 @@ class PropertyCardRemark(Base):
         PgUUID(as_uuid=True), ForeignKey("property_cards.id", ondelete="CASCADE"), index=True
     )
     kind: Mapped[str] = mapped_column(String(40), default="comment")
-    """`relocated`(근거 시험이 다른 재료로 옮겨짐) · `comment`."""
+    """`relocated`(근거 시험이 다른 재료로 옮겨짐) · `publish_requested`(확정 요청,
+    2026-10-15) · `comment`."""
     message: Mapped[str] = mapped_column(Text)
     """서버가 적는 사실 — 「근거 시험 2건이 SECC_MDOI_1.2 로 옮겨졌습니다」."""
     comment: Mapped[str | None] = mapped_column(Text, nullable=True)

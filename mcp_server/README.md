@@ -102,7 +102,7 @@ ms)를 알린다 — 「관리 → 사용 현황」 의 MCP 숫자가 여기서 
 도구의 답은 그대로 나간다. 도구 하나가 백엔드를 여러 번 부르므로 API 요청 수(`X-Client: mcp`)와
 도구 수는 다르다 — 둘 다 그 화면에 있다.
 
-## 5. 지금 있는 것 (도구 108개)
+## 5. 지금 있는 것 (도구 112개)
 
 **전부 한 번에 불러 보려면 `probe.py` 를 돌린다** — 진짜 MCP 클라이언트로 한 바퀴
 돈다(아래 「실측으로 잡은 것」 참조). 화면이나 curl 로는 안 보이는 층이 있다.
@@ -165,6 +165,8 @@ Family·Category·Grade·제조사·유통사·시편 규격은 **기준정보**
     ★ add_vocabulary_alias(...)        같은 실물의 다른 표기 → 정본 값에 별칭 (시스템 관리자)
     ★ upload_test_run(specimen, ...)   시험 파일을 시편에 올린다 — 글은 content, 바이너리는
                                        content_base64(10MB 까지). 읽기는 뒤에서 돈다
+    ★ import_test_summaries(...)       곡선 없이 요약값 표로 시험을 넣는다(화면의 「표로 시험 입력」)
+                                       — 미리보기가 줄마다 new · existing · rejected 와 이유
 
 ### 문헌 카탈로그 → 사내로 받아 오기
 
@@ -205,11 +207,15 @@ Family·Category·Grade·제조사·유통사·시편 규격은 **기준정보**
 
 카드는 언제나 초안으로 생기고, 확정은 **따로 일부러** 한다(2026-10-14, ADR 0061 — 그전에는
 사람만 화면에서 했다). 미리보기가 카드의 경고(외삽 · 네킹 · 합성 · 표본 1)를 함께 준다.
+AI 가 상태를 바꾸면 자료 관리자에게 알림이 간다(채택도, 2026-10-15) — 토큰 주인에게도.
 
 ### 시험과 처리
 
     get_master_curves(test_run_id)    DMA 마스터커브 — 기준 온도·이동 모델·대표
     get_prony_fits(master_curve_id)   Prony 벌 — at_bound 가 있으면 외삽 중
+    ★ build_master_curve(run, T_ref)  스윕을 기준 온도(잰 온도 중 하나, K)로 겹친다 — wlf ·
+                                       arrhenius · manual, 장비가 겹친 표는 import_curve_key
+    ★ fit_prony(master_curve_id)      Prony 벌을 맞춘다 — terms 를 비우면 BIC 로 고른다
 
     list_inbox(status?)                장비가 떨어뜨린, 아직 안 붙은 파일들
     list_test_runs(material_id?, ...)  시험 목록
@@ -270,6 +276,8 @@ Family·Category·Grade·제조사·유통사·시편 규격은 **기준정보**
                     expect?)
     build_deck(rows, units,            부품 여럿 → 덱 한 파일. 파일로 건네려면
                include_text)           include_text=True (500줄 넘으면 잘린다)
+    get_verify_kit(card, fmt)          1요소 검증 모델 — 모델 · 재료 덱 · 기대 응답(README)을
+                                       파일마다 글로. 늘 mm · N · tonne
 
 ### 통계 — 흩어짐
 

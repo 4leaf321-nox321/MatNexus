@@ -18,7 +18,7 @@ import uuid
 import zipfile
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import numpy as np
@@ -95,6 +95,8 @@ from app.modules.fitting.schemas import (
     PropertyCardOut,
     PropertyCardSaveRequest,
     PropertyCardUpdateRequest,
+    PublishAskIn,
+    PublishAskOut,
     RateCardSaveRequest,
     ResampleMethodOut,
     ShortRunOut,
@@ -124,6 +126,7 @@ from app.shared import (
     litdeck,
     pagination,
     permissions,
+    steward_notice,
     tiers,
     unit_systems,
 )
@@ -147,6 +150,7 @@ from app.shared.declared_card import temperature_aware as _temperature_aware
 from app.shared.declared_card import thermal_block as _thermal_block
 from app.shared.errors import AppError, Conflict, NotFound
 from app.shared.pagination import Page
+from app.shared.request_context import get_client
 from matcore import (
     cards,
     curves,
@@ -4359,7 +4363,8 @@ def publish(
     사용 중지하고(`deprecated`) 새 카드를 만든다.
 
     **리뷰 큐는 없다**(D8). 상태만 두고, 절차는 운영 규칙이 보인 뒤에 만든다 —
-    절차를 먼저 만들면 그 절차가 일을 정의해 버린다.
+    절차를 먼저 만들면 그 절차가 일을 정의해 버린다. 부탁하는 길(`request_publish`)은
+    알림과 코멘트일 뿐 큐가 아니다 — 부탁이 없어도 확정할 수 있다.
     """
     item = _visible_card(db, user, card_id)
     _require_publisher(db, user, item)
@@ -4381,9 +4386,33 @@ def publish(
         workspace_id=_card_workspace(db, item),
         changes={"status": {"before": "draft", "after": "published"}},
     )
+    _notify_ai_card(db, user, item, "확정했습니다")
     db.commit()
     db.refresh(item)
     return _card_out(db, item, access=access_of(db, user, item))
+
+
+def _notify_ai_card(db: Session, user: User, item: PropertyCard, verb: str) -> None:
+    """**AI · 외부 프로그램이 카드 상태를 바꿨으면 자료 관리자에게 알린다**(2026-10-15).
+
+    ADR 0061 의 남은 위험 — AI 가 확인 없이 확정해도 서버는 못 막는다. 막지 못하면 적어도
+    **바로 안다**. 토큰 주인에게도 간다(제 AI 가 한 일이다). 화면에서 한 것은 알리지 않는다.
+    """
+    client = get_client()
+    if not client:
+        return
+    material = db.get(Material, item.material_id)
+    steward_notice.notify_stewards(
+        db,
+        event_kind=steward_notice.AI_CONFIRMED,
+        key=f"ai-card:{item.id}:{verb}:{datetime.now(UTC).isoformat()}",
+        title=f"{steward_notice.client_label(client)} 가 카드를 {verb} — {item.label}",
+        body=(
+            f"{user.display_name} 님의 토큰으로 · 재료 "
+            f"{material.record_name if material else '(알 수 없음)'}"
+        ),
+        link=f"/materials/{item.material_id}?tab=cards",
+    )
 
 
 def _require_publisher(db: Session, user: User, item: PropertyCard) -> None:
@@ -4398,6 +4427,85 @@ def _require_publisher(db: Session, user: User, item: PropertyCard) -> None:
     """
     permissions.require_steward(
         user, code="MNX-FITTING-0006", what="카드 확정·내리기·되살리기"
+    )
+
+
+#: 카드 코멘트의 종류 — 확정 요청.
+PUBLISH_REQUESTED = "publish_requested"
+
+#: 같은 카드의 확정 요청을 다시 받기까지. 거듭 누르면 자료 관리자의 수신함이 같은 말로 찬다.
+PUBLISH_ASK_COOLDOWN = timedelta(hours=24)
+
+
+@router.post("/cards/{card_id}/request-publish", response_model=PublishAskOut)
+def request_publish(
+    card_id: uuid.UUID,
+    payload: PublishAskIn,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> PublishAskOut:
+    """초안의 확정을 자료 관리자에게 **부탁한다**(2026-10-15).
+
+    확정은 자료 관리자만 한다(ADR 0035). 그런데 부탁할 길이 없어서 초안을 만든 사람은
+    누구에게 말해야 할지 몰랐고, 자료 관리자는 홈의 숫자로만 대기 카드를 봤다.
+
+    **큐는 여전히 두지 않는다**(D8). 부탁은 상태가 아니라 자료 관리자에게 가는 알림과 카드에
+    붙는 코멘트 한 줄(`publish_requested`)이다 — 카드는 초안 그대로이고 확정하는 길도 그대로다.
+    코멘트로 남기는 이유: 누가 언제 부탁했는지가 카드를 보는 사람에게 보여야 하고, 같은 부탁을
+    하루 안에 다시 받지 않는 근거가 된다(알림의 중복 막기는 마지막 키 하나만 본다 — 사이에 다른
+    요청이 끼면 다시 간다).
+
+    고칠 수 있는 사람만 부탁한다 — 남의 초안을 아무나 「확정해 달라」 고 올리면 자료 관리자는
+    누구의 뜻인지 모른다.
+    """
+    item = _visible_card(db, user, card_id)
+    if item.status != "draft":
+        raise AppError("MNX-FITTING-0047", "초안만 확정을 요청할 수 있습니다.", status=409)
+    # 부탁은 카드를 고치는 일이 아니다 — 「남의 자료를 고쳤다」 기록을 안 남긴다.
+    permissions.require_edit(db, user, item, code="MNX-FITTING-0039", note=False)
+    last = db.scalar(
+        select(PropertyCardRemark.created_at)
+        .where(
+            PropertyCardRemark.card_id == item.id,
+            PropertyCardRemark.kind == PUBLISH_REQUESTED,
+        )
+        .order_by(PropertyCardRemark.created_at.desc())
+        .limit(1)
+    )
+    if last is not None and datetime.now(UTC) - last < PUBLISH_ASK_COOLDOWN:
+        raise AppError(
+            "MNX-FITTING-0048",
+            "이 카드는 하루 안에 이미 확정을 요청했습니다 — 카드 코멘트에서 확인하세요.",
+            status=409,
+        )
+
+    note = (payload.note or "").strip() or None
+    db.add(
+        PropertyCardRemark(
+            card_id=item.id,
+            kind=PUBLISH_REQUESTED,
+            message="자료 관리자에게 확정을 요청했습니다",
+            comment=note,
+            created_by_id=user.id,
+        )
+    )
+    material = db.get(Material, item.material_id)
+    about = (
+        f"{user.display_name} 님 · 재료 {material.record_name if material else '(알 수 없음)'}"
+    )
+    notified = steward_notice.notify_stewards(
+        db,
+        event_kind=steward_notice.REVIEW_REQUESTED,
+        key=f"publish-request:{item.id}:{datetime.now(UTC).date().isoformat()}",
+        title=f"카드 확정 요청 — {item.label}",
+        body=f"{about}\n{note}" if note else about,
+        link=f"/materials/{item.material_id}?tab=cards",
+        exclude=user.id,
+    )
+    db.commit()
+    db.refresh(item)
+    return PublishAskOut(
+        notified=notified, card=_card_out(db, item, access=access_of(db, user, item))
     )
 
 
@@ -4443,6 +4551,7 @@ def restore(
         workspace_id=_card_workspace(db, item),
         changes={"status": {"before": "deprecated", "after": "draft"}},
     )
+    _notify_ai_card(db, user, item, "초안으로 되살렸습니다")
     db.commit()
     db.refresh(item)
     return _card_out(db, item, access=access_of(db, user, item))
@@ -4480,6 +4589,7 @@ def deprecate(
         workspace_id=_card_workspace(db, item),
         changes={"status": {"before": before, "after": "deprecated"}},
     )
+    _notify_ai_card(db, user, item, "사용 중지했습니다")
     db.commit()
     db.refresh(item)
     return _card_out(db, item, access=access_of(db, user, item))

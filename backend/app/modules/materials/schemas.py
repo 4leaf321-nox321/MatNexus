@@ -78,6 +78,19 @@ class DeclaredApprovalOut(BaseModel):
     """무엇을 확인했나 — 「ASM Handbook Vol.1 p.120 대조」 같은 것."""
 
 
+class ApprovalAskIn(BaseModel):
+    """승인을 **부탁**한다(2026-10-15). 무엇을 왜 봐 달라는지 한 줄 — 비어도 된다."""
+
+    note: str | None = Field(default=None, max_length=500)
+
+
+class ApprovalAskOut(BaseModel):
+    pending: int
+    """이 재료(와 시료)에서 승인을 기다리는 값 — 「승인 대기 값」 화면과 같은 판정."""
+    notified: int
+    """알림을 받은 자료 관리자 수."""
+
+
 class DeclaredApprovalRequest(BaseModel):
     """승인하거나 승인을 거둘 줄. 줄은 항목 이름으로 고른다 — 한 물성은 한 줄이다."""
 
