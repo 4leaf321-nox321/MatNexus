@@ -20609,6 +20609,11 @@
       "OverviewOut": {
         "description": "홈에 뿌리는 요약.\n\n**세는 일을 서버가 한다.** 재료 94개를 세려고 94행을 화면으로 보낼 이유가\n없다 — 목록 엔드포인트만 있으면 그렇게 된다.\n\n부서 범위는 **각 항목이 원래 따르는 규칙 그대로**다. 시험은 부서 것이고\n재료·카드는 전사 카탈로그다(ADR 0004: 남의 부서가 잰 물성도 보라고 만든\n자리다). 여기서 규칙을 새로 만들면 홈의 숫자와 목록 화면의 숫자가 갈린다.",
         "properties": {
+          "card_asked": {
+            "default": 0,
+            "title": "Card Asked",
+            "type": "integer"
+          },
           "card_deprecated": {
             "title": "Card Deprecated",
             "type": "integer"
@@ -41522,6 +41527,18 @@
                 }
               ],
               "title": "Q"
+            }
+          },
+          {
+            "description": "확정 요청이 와 있는 초안만(2026-10-16) — 큐가 아니라 거르기다",
+            "in": "query",
+            "name": "asked",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "확정 요청이 와 있는 초안만(2026-10-16) — 큐가 아니라 거르기다",
+              "title": "Asked",
+              "type": "boolean"
             }
           },
           {

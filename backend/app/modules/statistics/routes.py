@@ -24,7 +24,11 @@ from app.config import get_settings
 from app.database import get_db
 from app.modules.accounts.models import User
 from app.modules.commissions.models import Commission
-from app.modules.fitting.models import PropertyCard
+from app.modules.fitting.models import (
+    REMARK_PUBLISH_REQUESTED,
+    PropertyCard,
+    PropertyCardRemark,
+)
 from app.modules.materials.models import Material, Sample, Specimen
 from app.modules.pipelines.models import PipelineConnector, PipelineInboxItem
 from app.modules.statistics import analysis, services
@@ -913,6 +917,19 @@ def overview(
         card_total=sum(by_status.values()),
         card_published=by_status.get("published", 0),
         card_draft=by_status.get("draft", 0),
+        # 그중 **확정을 부탁받은 것**(2026-10-16) — 홈이 「확정 요청 N」 으로 보낸다.
+        card_asked=count(
+            select(PropertyCard.id).where(
+                PropertyCard.material_id.in_(material_ids),
+                PropertyCard.status == "draft",
+                select(PropertyCardRemark.id)
+                .where(
+                    PropertyCardRemark.card_id == PropertyCard.id,
+                    PropertyCardRemark.kind == REMARK_PUBLISH_REQUESTED,
+                )
+                .exists(),
+            )
+        ),
         card_deprecated=by_status.get("deprecated", 0),
         materials_with_card=count(
             select(PropertyCard.material_id)

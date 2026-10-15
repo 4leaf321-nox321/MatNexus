@@ -57,6 +57,12 @@ from app.database import Base
 #: 카드의 생애. **리뷰 큐는 없다**(D8) — 상태만 둔다.
 PROPERTY_STATUSES = ("draft", "published", "deprecated")
 
+#: 카드 코멘트(`PropertyCardRemark.kind`)의 종류 — 근거 이동 · 확정 요청 · 사람의 말. 통계 ·
+#: 워크벤치도 센다(모듈끼리 못 부르니 이름을 여기 한 곳에 둔다, 2026-10-16).
+REMARK_RELOCATED = "relocated"
+REMARK_PUBLISH_REQUESTED = "publish_requested"
+REMARK_COMMENT = "comment"
+
 #: 카드 번호의 채번기(2026-10-16) — 재료 · 시료 · 시편 · 시험 번호와 같은 까닭으로 maxvalue 를
 #: 둔다(`lpad` 는 넘치면 조용히 자른다, `materials.models.MATERIAL_CODE_SEQ`).
 PROPERTY_CARD_CODE_SEQ = Sequence(

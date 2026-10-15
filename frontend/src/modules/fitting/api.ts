@@ -73,6 +73,8 @@ export interface CardQuery {
   /** 부서 id. `none` 은 소속 부서가 없는 재료의 카드. */
   owner?: string
   q?: string
+  /** 확정 요청이 와 있는 초안만(2026-10-16) — 큐가 아니라 거르기다. */
+  asked?: boolean
   limit?: number
   offset?: number
 }

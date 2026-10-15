@@ -92,6 +92,33 @@ function page(at = '/cards') {
   )
 }
 
+describe('확정 요청 온 초안', () => {
+  // 자료 관리자가 알림을 하나씩 열지 않게 — 큐가 아니라 거르기다(2026-10-16).
+  it('홈의 「확정 요청」 이 보낸 목록을 연다', async () => {
+    page('/cards?asked=1')
+    await waitFor(() =>
+      expect(cards).toHaveBeenCalledWith(expect.objectContaining({ asked: true }))
+    )
+    expect(await screen.findByRole('button', { name: /확정 요청됨/ })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    )
+  })
+
+  it('단추로 켜고 끈다', async () => {
+    page()
+    await screen.findByRole('link', { name: 'SECC_MDOI_1.0' })
+    await userEvent.click(screen.getByRole('button', { name: /확정 요청됨/ }))
+    await waitFor(() =>
+      expect(cards).toHaveBeenLastCalledWith(expect.objectContaining({ asked: true }))
+    )
+    await userEvent.click(screen.getByRole('button', { name: /확정 요청됨/ }))
+    await waitFor(() =>
+      expect(cards).toHaveBeenLastCalledWith(expect.objectContaining({ asked: undefined }))
+    )
+  })
+})
+
 describe('주소로 걸러서 들어온다', () => {
   it('홈의 「확정 대기」 가 보낸 초안만 연다', async () => {
     // **숫자가 가리킨 목록을 열어야 한다.** 안 읽으면 전체가 뜨고, 누른 사람은
@@ -126,7 +153,8 @@ describe('물성 카드 목록', () => {
     // **앞 50장만 받아 화면에서 거르면 뒤엣것이 없는 카드가 된다.**
     page()
     await waitFor(() => expect(cards).toHaveBeenCalled())
-    await userEvent.click(await screen.findByRole('button', { name: /확정/ }))
+    // 상태 거르기의 「확정 N」 — 옆의 「확정 요청됨」 단추와 가른다.
+    await userEvent.click(await screen.findByRole('button', { name: /^확정\s*\d/ }))
     await waitFor(() =>
       expect(cards).toHaveBeenLastCalledWith(expect.objectContaining({ status: 'published' }))
     )

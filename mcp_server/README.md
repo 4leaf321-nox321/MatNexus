@@ -119,7 +119,7 @@ ms)를 알린다 — 「관리 → 사용 현황」 의 MCP 숫자가 여기서 
     get_guide(topic?)                  규약 — 단위·값의 무게·층·흐름
     platform_summary()                 무엇이 얼마나 있나 — 규모부터 안다
     get_taxonomy()                     분류 체계와 지금 DB 의 분포
-    convert_unit(value, from, to?)     환산은 **서버가** — AI 가 곱하지 않게
+    convert_unit(from, value | values, to?)  환산은 **서버가** — AI 가 곱하지 않게
     list_condition_fields(test_type)   조건 칸의 키 — 의뢰·시험 조건을 적기 전에
     matnexus://guide                   같은 안내를 리소스로
 
@@ -137,7 +137,8 @@ ms)를 알린다 — 「관리 → 사용 현황」 의 MCP 숫자가 여기서 
 
     get_material(material_id)          기본 칸·선언 물성·카드·문헌 연결
     get_parameter_sets(material_id)    모델 파라미터 벌 (Anand·Prony·Ogden)
-    list_cards(material_id?, status?, q?)  물성 카드 목록 — q 는 이름 · 카드 번호 · 재료 번호
+    list_cards(material_id?, status?, q?, asked?)  물성 카드 목록 — q 는 이름 · 카드 번호 · 재료
+                                       번호, asked 면 확정 요청 온 초안만
     list_card_blocks()                 카드가 담을 수 있는 갈래 — 「점탄성은 어디에」
     get_card(card_id)                  카드 하나 — 덱에 실릴 값 그대로. 번호(C-000038) · 이름도 받는다
     list_samples(material_id)          시료 — 로트·업체·시편 수·시험 수
@@ -396,6 +397,9 @@ DB 가 바뀌는 것을 감수할 때만 시킨다.
 - **권한을 모르면 돌아가는 길로 보낸다**(2026-10-16 AI 평가). 자료 관리자 토큰으로 「확정 요청해 줘」 라고
   하자 「화면의 확정 요청을 누르세요」 로만 답했다 — 직접 확정할 수 있는 사람이었다. 확정 미리보기가
   `token_owner_can`(토큰 주인이 자료 관리자인가)을 싣는다. 판정은 여전히 서버가 한다.
+- **환산을 숫자마다 불렀다**(2026-10-16 평가 세트). 분포 하나의 평균 · 하위 1% 를 MPa 로 옮기며
+  `convert_unit` 을 네 번 불러 호출 상한을 넘었다 — 손잡이가 한 값씩만 받았다. `values=[…]` 로 같은
+  단위의 숫자를 한 번에 옮긴다(다시 돌리니 11개를 한 번에).
 - **쓰기 지시 셋은 미리보기에서 멈췄다**(2026-10-16 AI 평가) — 「확정해 줘」 · 「채택해 줘」 · 「확정 요청해
   줘」 에 `dry_run=True` 로 보이고 확인을 물었다. 앞뒤 상태 · 감사가 그대로였다. `claude -p` 는 사람이 없어
   확인을 받을 수 없으니 이것이 맞는 끝이다.

@@ -589,6 +589,8 @@ class OverviewOut(BaseModel):
     card_total: int
     card_published: int
     card_draft: int
+    card_asked: int = 0
+    """초안 중 확정 요청이 와 있는 것(2026-10-16)."""
     card_deprecated: int
     materials_with_card: int
     """카드가 하나라도 있는 재료 수. `material_count` 와 견주면 **덮인 정도**다."""

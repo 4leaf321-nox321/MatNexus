@@ -25,7 +25,11 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.modules.accounts.models import User
-from app.modules.fitting.models import PropertyCard, PropertyCardRemark
+from app.modules.fitting.models import (
+    REMARK_PUBLISH_REQUESTED,
+    PropertyCard,
+    PropertyCardRemark,
+)
 from app.modules.materials.models import Material, Sample, Specimen
 from app.modules.processing.models import ProcessingResult
 from app.modules.tests.models import Curve, TestRun
@@ -187,7 +191,7 @@ FACT_KEYS = {
     "material": {"cards", "published_cards"},
     # `notes` 가 있었다 — 출처 설명까지 세어 카드마다 「경고」 가 섰다(2026-10-04). 이제
     # 경고만 센다(`warnings`), 사용 중지와 코멘트는 따로 센다.
-    "card": {"published", "deprecated", "samples", "warnings", "remarks"},
+    "card": {"published", "deprecated", "samples", "warnings", "remarks", "asked"},
 }
 
 #: 카드 상태를 **사람의 말로.** 영어 상태값을 그대로 보이면 「published」 를 읽고 무엇이
@@ -299,19 +303,20 @@ def _cards(db: Session, ids: set[uuid.UUID]) -> dict[uuid.UUID, Resolved]:
             select(Material).where(Material.id.in_({row.material_id for row in rows}))
         )
     }
-    # 코멘트도 한 번에 센다 — 근거 시험이 다른 재료로 옮겨졌다는 말이 여기 붙는다.
-    remarks: dict[uuid.UUID, int] = (
-        {
-            card_id: int(count)
-            for card_id, count in db.execute(
-                select(PropertyCardRemark.card_id, func.count())
-                .where(PropertyCardRemark.card_id.in_([row.id for row in rows]))
-                .group_by(PropertyCardRemark.card_id)
-            )
-        }
-        if rows
-        else {}
-    )
+    # 코멘트도 한 번에 센다 — 근거 이동 · 사람의 말. **확정 요청은 따로**(2026-10-16): 같이
+    # 세면 「코멘트가 있습니다」 가 「누가 확정을 부탁했다」 까지 경고처럼 읽힌다.
+    remarks: dict[uuid.UUID, int] = {}
+    asked: set[uuid.UUID] = set()
+    if rows:
+        for card_id, kind, count in db.execute(
+            select(PropertyCardRemark.card_id, PropertyCardRemark.kind, func.count())
+            .where(PropertyCardRemark.card_id.in_([row.id for row in rows]))
+            .group_by(PropertyCardRemark.card_id, PropertyCardRemark.kind)
+        ):
+            if kind == REMARK_PUBLISH_REQUESTED:
+                asked.add(card_id)
+            else:
+                remarks[card_id] = remarks.get(card_id, 0) + int(count)
     # **카드는 소프트 삭제가 없다** — 지우면 행이 사라진다(내리는 것은
     # `deprecated` 상태다). 그래서 여기서 거를 것도 없고, 지워진 카드는 조회에서
     # 안 나와 자연히 「사라졌습니다」 가 된다.
@@ -334,6 +339,8 @@ def _cards(db: Session, ids: set[uuid.UUID]) -> dict[uuid.UUID, Resolved]:
                 # 각주 중 **경고만**(`shared/card_notes`) — 출처 설명은 세지 않는다.
                 "warnings": len(cautions(row.source.get("notes"))),
                 "remarks": remarks.get(row.id, 0),
+                # 확정을 부탁받은 초안인가 — 검토 순서를 정할 때 이것부터.
+                "asked": 1 if row.status == "draft" and row.id in asked else 0,
             },
             material_id=row.material_id,
             material_label=material.record_name if material else None,

@@ -730,7 +730,11 @@ async def get_material(ctx: Context, material_id: str) -> dict[str, Any]:
 
 @mcp.tool()
 async def convert_unit(
-    ctx: Context, value: float, from_unit: str, to_unit: str | None = None
+    ctx: Context,
+    from_unit: str,
+    value: float | None = None,
+    to_unit: str | None = None,
+    values: list[float] | None = None,
 ) -> dict[str, Any]:
     """단위 환산 — **네가 곱하지 말고 서버에 시켜라**(2026-09-19).
 
@@ -738,7 +742,7 @@ async def convert_unit(
     지켜지지 않는다 — tonne/mm³ 를 kg/m³ 로 옮기며 10¹² 을 세는 것은 사람도 자주
     틀리고, 틀린 숫자는 그럴듯하게 남는다.
 
-        value       숫자
+        value       숫자 하나 — 같은 단위의 숫자가 여럿이면 `values` 로 한 번에
         from_unit   받은 표기 그대로 — `W/(m*K)`·`kgf/mm2`·`°C`·`tonne/mm3` 다 된다
         to_unit     비우면 그 차원의 **저장 단위(SI)** 로
 
@@ -750,6 +754,26 @@ async def convert_unit(
     **덱의 단위계는 이 도구로 맞추지 않는다.** 덱은 `render_card_deck(units=...)` 가
     통째로 바꾼다 — 값 하나씩 옮기면 한 줄을 빠뜨린다.
     """
+    if values:
+        # **한 번에 여럿**(2026-10-16 평가) — 분포 하나를 MPa 로 옮기며 숫자마다 불러 호출이 네 번
+        # 늘었다. 서버는 한 값씩 받으니 여기서 돈다 — 대화의 호출은 한 번이다.
+        done: list[Any] = []
+        last: dict[str, Any] = {}
+        for one in values:
+            got = await _get(
+                ctx,
+                "/units/convert",
+                {"value": one, "from": from_unit, **({"to": to_unit} if to_unit else {})},
+            )
+            if isinstance(got, dict) and "error" in got:
+                return got
+            last = got if isinstance(got, dict) else {}
+            done.append(last.get("result"))
+        # 받은 값과 바꾼 값을 같은 차례로 — 한 값씩의 `value` · `result` · `si_value` 는 뺀다.
+        keep = {k: v for k, v in last.items() if k not in ("value", "result", "si_value")}
+        return {**keep, "values": list(values), "results": done}
+    if value is None:
+        return {"error": "value 나 values 중 하나를 주세요."}
     params: dict[str, Any] = {"value": value, "from": from_unit}
     if to_unit:
         params["to"] = to_unit
@@ -4051,8 +4075,10 @@ async def list_cards(
     status: str | None = None,
     limit: int = 20,
     q: str | None = None,
+    asked: bool = False,
 ) -> dict[str, Any]:
     """물성 카드 목록 — 재료를 안 거치고 카드를 찾는다. `q` 는 이름 · 카드 번호 · 재료 번호.
+    `asked=True` 면 확정 요청이 와 있는 초안만.
 
     `status` 는 `published`(확정) · `draft`(초안) · `deprecated`(중지). **확정된
     카드만 해석에 쓴다** — 초안은 만들어 본 것이지 결론이 아니다.
@@ -4066,6 +4092,7 @@ async def list_cards(
             "material_id": material_id,
             "status": status,
             "q": q,
+            "asked": "true" if asked else None,
             "limit": max(1, min(limit, MAX_LIMIT)),
         },
     )

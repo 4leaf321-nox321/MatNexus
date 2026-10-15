@@ -22,7 +22,7 @@
  * 내보낸다(ADR 0024 ②) — 받은 쪽이 「그때 그 카드가 맞나」 를 검산할 수 있다.
  */
 
-import { AlertTriangle, Search } from 'lucide-react'
+import { AlertTriangle, Search, Send } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 
@@ -51,6 +51,9 @@ export default function CardsPage() {
   // **재료로 걸러 들어오는 길.** 재료 화면에서 카드를 만들고 여기로 오면 그 재료의
   // 것만 보여야 한다 — 전에는 이 값을 읽지 않아 전체 목록이 떴다(2026-09-05 실사용).
   const materialId = search.get('material_id')
+  // **부탁받은 초안만**(2026-10-16) — 홈의 「확정 요청 N」 이 `?asked=1` 로 보낸다. 주소에 두는 것은
+  // 알림에서 와서 뒤로 가도 같은 목록이 보이게.
+  const asked = search.get('asked') === '1'
   const [testType, setTestType] = useState<string | null>(null)
   const [owner, setOwner] = useState<string | null>(null)
   const [typed, setTyped] = useState('')
@@ -72,7 +75,7 @@ export default function CardsPage() {
   // 걸었을 때 빈 화면을 본다.**
   useEffect(() => {
     setLimit(PAGE)
-  }, [status, testType, owner, q, materialId])
+  }, [status, testType, owner, q, materialId, asked])
 
   const page = useResource(
     () =>
@@ -82,9 +85,10 @@ export default function CardsPage() {
         test_type_key: testType ?? undefined,
         owner: owner ?? undefined,
         q: q || undefined,
+        asked: asked || undefined,
         limit,
       }),
-    [status, testType, owner, q, limit, materialId]
+    [status, testType, owner, q, limit, materialId, asked]
   )
   // **거르기 목록은 필터와 함께 안 바뀐다.** 「무엇이 있나」를 답하는 자리라
   // 한 번만 읽는다.
@@ -125,6 +129,23 @@ export default function CardsPage() {
         <span className="text-muted-foreground text-sm">
           {page.loading ? '찾는 중…' : `${total}장`}
         </span>
+        <Button
+          size="sm"
+          variant={asked ? 'secondary' : 'outline'}
+          aria-pressed={asked}
+          title="확정 요청이 와 있는 초안만 봅니다 — 큐가 아니라 거르기입니다."
+          onClick={() =>
+            setSearch((now) => {
+              const copy = new URLSearchParams(now)
+              if (asked) copy.delete('asked')
+              else copy.set('asked', '1')
+              return copy
+            })
+          }
+        >
+          <Send className="size-3.5" />
+          확정 요청됨
+        </Button>
         {materialId && (
           // **걸려 있다는 것을 보이고, 풀 수 있게.** 조용히 걸어 두면 「카드가 이것뿐인가」
           // 로 읽힌다.

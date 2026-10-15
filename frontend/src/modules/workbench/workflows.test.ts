@@ -283,6 +283,27 @@ describe('카드 확정 전 검토 — 근거의 두께', () => {
     expect(names(check)).toEqual(['인장'])
   })
 
+  it('확정 요청이 온 카드를 따로 짚는다 — 코멘트로 세지 않는다', () => {
+    // 같이 세면 「코멘트가 있습니다」 가 「누가 확정을 부탁했다」 까지 경고처럼 읽힌다(2026-10-16).
+    const check = judge('review_cards', 'read', [
+      card('부탁받은 것', { samples: 4, asked: 1 }),
+      card('조용한 것', { samples: 4 }),
+    ])
+    expect(check!.say).toContain('1장은 확정 요청이 와 있습니다')
+    expect(check!.say).not.toContain('코멘트')
+    expect(names(check)).toEqual(['부탁받은 것'])
+  })
+
+  it('확정하지 않을 것은 코멘트로 사유를 남기라고 말한다 — 「반려」 상태는 없다', () => {
+    const check = judge('review_cards', 'decide', [card('새것', { published: 0 })])
+    expect(check!.say).toContain('코멘트로 사유')
+  })
+
+  it('담으러 가는 길은 확정 요청 온 카드 목록이다', () => {
+    const step = workflowOf('review_cards')!.steps.find((one) => one.key === 'pick')!
+    expect(step.where).toBe('/cards?asked=1')
+  })
+
   it('둘 다인 카드를 두 번 세지 않는다', () => {
     const check = judge('review_cards', 'read', [card('점탄성', { samples: 1, warnings: 1 })])
     expect(names(check)).toEqual(['점탄성'])

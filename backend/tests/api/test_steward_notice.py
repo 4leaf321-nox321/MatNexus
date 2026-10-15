@@ -428,6 +428,36 @@ class Test답이_간다:
         assert not [one for one in _inbox(client, headers) if "요청한 카드가" in one["title"]]
 
 
+class Test부탁받은_초안_모아_보기:
+    """자료 관리자가 알림을 하나씩 열지 않게 — **큐가 아니라 거르기다**(D8, 2026-10-16)."""
+
+    def test_확정_요청이_온_초안만_거른다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        alice: tuple[User, dict[str, str]],
+    ) -> None:
+        owner, headers = alice
+        material = _material(db, owner, modulus())
+        asked = _card(client, headers, material)
+        quiet = _card(client, headers, material)
+        _ask(client, headers, asked["id"])
+
+        def listed() -> set[str]:
+            got = client.get(
+                "/api/fitting/cards", params={"asked": "true"}, headers=admin_headers
+            )
+            assert got.status_code == 200, got.text
+            return {one["id"] for one in got.json()["items"]}
+
+        assert asked["id"] in listed()
+        assert quiet["id"] not in listed()
+        # 확정되면 부탁은 끝났다 — 목록에서 빠진다.
+        client.post(f"/api/fitting/cards/{asked['id']}/publish", headers=admin_headers)
+        assert asked["id"] not in listed()
+
+
 class Test코멘트:
     """카드에 「반려」 가 없어(D8) 확정하지 않는 사유를 남길 자리가 없었다(2026-10-16)."""
 

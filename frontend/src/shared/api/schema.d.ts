@@ -16004,6 +16004,11 @@ export interface components {
          *     자리다). 여기서 규칙을 새로 만들면 홈의 숫자와 목록 화면의 숫자가 갈린다.
          */
         OverviewOut: {
+            /**
+             * Card Asked
+             * @default 0
+             */
+            card_asked: number;
             /** Card Deprecated */
             card_deprecated: number;
             /** Card Draft */
@@ -25455,6 +25460,8 @@ export interface operations {
                 test_type_key?: string | null;
                 owner?: string | null;
                 q?: string | null;
+                /** @description 확정 요청이 와 있는 초안만(2026-10-16) — 큐가 아니라 거르기다 */
+                asked?: boolean;
                 limit?: number | null;
                 offset?: number;
             };

@@ -279,6 +279,12 @@ class Test담긴_것이_무엇을_갖췄는지_센다:
         db.add(card)
         db.commit()
         db.add(PropertyCardRemark(card_id=card.id, kind="relocated", message="옮겨졌습니다"))
+        # 확정 요청은 코멘트로 세지 않는다(2026-10-16) — 따로 `asked` 로 온다.
+        db.add(
+            PropertyCardRemark(
+                card_id=card.id, kind="publish_requested", message="요청했습니다"
+            )
+        )
         db.commit()
 
         [item] = client.post(
@@ -289,6 +295,7 @@ class Test담긴_것이_무엇을_갖췄는지_센다:
         assert item["facts"]["samples"] == 1
         assert item["facts"]["warnings"] == 1
         assert item["facts"]["remarks"] == 1
+        assert item["facts"]["asked"] == 1
         assert item["facts"]["published"] == 0
         assert item["facts"]["deprecated"] == 0
         assert item["detail"].endswith("초안")

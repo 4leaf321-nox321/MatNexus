@@ -32,6 +32,8 @@ from app.modules.accounts.models import User
 from app.modules.catalog.models import CatalogMaterial
 from app.modules.fitting import blocks, bundle, card_tiers, readiness, renderers
 from app.modules.fitting.models import (
+    REMARK_COMMENT,
+    REMARK_PUBLISH_REQUESTED,
     CardBlock,
     ExportFormatHold,
     ExportProfile,
@@ -2884,6 +2886,10 @@ def list_cards(
     test_type_key: str | None = Query(default=None),
     owner: str | None = Query(default=None),
     q: str | None = Query(default=None),
+    asked: bool = Query(
+        default=False,
+        description="확정 요청이 와 있는 초안만(2026-10-16) — 큐가 아니라 거르기다",
+    ),
     limit: int | None = Query(default=None, le=pagination.MAX_LIMIT),
     offset: int = Query(default=0, ge=0),
     user: User = Depends(current_user),
@@ -2925,6 +2931,19 @@ def list_cards(
                 status=422,
             ) from caught
         query = query.where(Material.owner_workspace_id == owner_id)
+    if asked:
+        # **부탁받은 초안을 모아 본다**(2026-10-16) — 자료 관리자가 알림을 하나씩 열지 않게.
+        # 상태가 아니라 거르기다(D8): 카드에 「확정 요청」 이 붙은 초안. 확정하지 않기로 했으면
+        # 코멘트로 사유를 남기고 사용 중지하면 여기서 빠진다.
+        query = query.where(
+            PropertyCard.status == "draft",
+            select(PropertyCardRemark.id)
+            .where(
+                PropertyCardRemark.card_id == PropertyCard.id,
+                PropertyCardRemark.kind == PUBLISH_REQUESTED,
+            )
+            .exists(),
+        )
     if q and (text := q.strip()):
         like = f"%{text}%"
         # **번호로도 찾는다**(2026-10-16) — 카드 번호는 그 카드, 재료 번호는 그 재료의 카드.
@@ -4461,7 +4480,7 @@ def _require_publisher(db: Session, user: User, item: PropertyCard) -> None:
 
 
 #: 카드 코멘트의 종류 — 확정 요청.
-PUBLISH_REQUESTED = "publish_requested"
+PUBLISH_REQUESTED = REMARK_PUBLISH_REQUESTED
 
 #: 같은 카드의 확정 요청을 다시 받기까지. 거듭 누르면 자료 관리자의 수신함이 같은 말로 찬다.
 PUBLISH_ASK_COOLDOWN = timedelta(hours=24)
@@ -4551,7 +4570,7 @@ def request_publish(
 
 
 #: 카드 코멘트의 종류 — 사람이 남긴 말(2026-10-16).
-COMMENT = "comment"
+COMMENT = REMARK_COMMENT
 
 
 def _named(item: PropertyCard) -> str:

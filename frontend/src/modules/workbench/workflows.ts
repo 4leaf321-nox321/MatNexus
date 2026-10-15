@@ -197,7 +197,7 @@ export const FACTS_READ: Record<ItemKind, string[]> = {
     'temperature_steps',
   ],
   material: ['cards', 'published_cards'],
-  card: ['published', 'deprecated', 'samples', 'warnings', 'remarks'],
+  card: ['published', 'deprecated', 'samples', 'warnings', 'remarks', 'asked'],
 }
 
 /** 「담긴 게 있나」 — 여러 단계가 같은 말을 한다. */
@@ -466,16 +466,17 @@ export const WORKFLOWS: Workflow[] = [
     key: 'review_cards',
     group: 'cards',
     title: '카드 확정 전 검토하기',
-    when: '초안 카드의 근거(표본 수 · 경고 · 코멘트)를 보고 확정하거나 반려합니다.',
+    when: '초안 카드의 근거(표본 수 · 경고 · 코멘트)를 보고 확정하거나, 확정하지 않는 사유를 코멘트로 남깁니다.',
     cadence: '이따금',
     steps: [
       {
         key: 'pick',
         title: '초안 담기',
-        what: '확정 대기 카드를 담습니다.',
+        // **부탁받은 것부터**(2026-10-16) — 「확정 요청됨」 으로 거른 목록으로 보낸다.
+        what: '확정 대기 카드를 담습니다 — 확정 요청이 온 것부터.',
         collects: 'card',
-        where: '/cards',
-        whereLabel: '카드 목록으로',
+        where: '/cards?asked=1',
+        whereLabel: '확정 요청 온 카드로',
         judge: (items) => {
           const check = collected(items, 'card', '카드')
           // **사용 중지는 확정할 것이 아니다** — 담겨 있으면 뒤 단계가 그것을 초안처럼 센다.
@@ -503,9 +504,12 @@ export const WORKFLOWS: Workflow[] = [
           // **경고만 센다**(서버의 `shared/card_notes`) — 출처 설명까지 세던 동안에는 모든
           // 카드에 「경고」 가 붙어 아무도 안 읽었다(2026-10-04).
           const warned = cards.filter((one) => fact(one, 'warnings') > 0)
-          // 코멘트 — 근거 시험이 다른 재료로 옮겨졌다는 말이 여기 붙는다.
+          // 코멘트 — 근거 이동 · 사람의 말. **확정 요청은 따로 센다**(2026-10-16) — 같이 세면
+          // 「코멘트가 있습니다」 가 「누가 확정을 부탁했다」 까지 경고처럼 읽힌다.
           const remarked = cards.filter((one) => fact(one, 'remarks') > 0)
+          const asked = cards.filter((one) => fact(one, 'asked') > 0)
           const say: string[] = []
+          if (asked.length > 0) say.push(`${asked.length}장은 확정 요청이 와 있습니다.`)
           if (thin.length > 0) say.push(`${thin.length}장은 표본이 하나입니다.`)
           if (warned.length > 0) say.push(`${warned.length}장에 경고가 붙어 있습니다.`)
           if (remarked.length > 0) say.push(`${remarked.length}장에 코멘트가 있습니다.`)
@@ -514,7 +518,7 @@ export const WORKFLOWS: Workflow[] = [
             // 읽어 보라는 안내이지 막는 것이 아니다 — 읽었는지는 화면이 알 수 없다.
             ok: true,
             say: say.length > 0 ? say.join(' ') : `카드 ${cards.length}장의 근거를 보세요.`,
-            blocking: [...new Set([...thin, ...warned, ...remarked])],
+            blocking: [...new Set([...asked, ...thin, ...warned, ...remarked])],
             // **근거는 재료 화면의 물성 패널에 있다.** 카드 목록은 내보내는 자리이지
             // 근거를 펴 보는 자리가 아니다.
             go: href ? { href, label: '그 재료의 CAE 카드로' } : undefined,
@@ -523,8 +527,12 @@ export const WORKFLOWS: Workflow[] = [
       },
       {
         key: 'decide',
-        title: '확정 또는 반려',
-        what: '재료 화면의 「CAE 카드」 탭에서 자료 관리자가 누릅니다 — 워크벤치가 대신 누르지 않습니다.',
+        // 단계 key 는 그대로 둔다 — 진행 중인 작업이 이 key 로 단계를 기억한다(ADR 0025).
+        title: '확정하거나 사유 남기기',
+        what:
+          '재료 화면의 「CAE 카드」 탭에서 자료 관리자가 「확정」 을 누릅니다. 확정하지 않을 카드는 카드 줄의 ' +
+          '「코멘트 남기기」 로 사유를 적습니다 — 만든 사람과 확정을 요청한 사람에게 알림이 갑니다(카드에 「반려」 상태는 없습니다). ' +
+          '워크벤치가 대신 누르지 않습니다.',
         judge: (items) => {
           const cards = live(items, 'card').filter((one) => fact(one, 'deprecated') === 0)
           if (cards.length === 0) return null
@@ -535,7 +543,7 @@ export const WORKFLOWS: Workflow[] = [
             say:
               left.length === 0
                 ? `담은 ${cards.length}건이 모두 확정됐습니다.`
-                : `${left.length}건이 아직 초안입니다.`,
+                : `${left.length}건이 아직 초안입니다 — 확정하지 않을 것은 코멘트로 사유를 남기세요.`,
             blocking: left,
             // **「확정」 단추는 카드 목록에 없다.** 거기로 보내면 막다른 길이다 —
             // 눌러야 할 것이 없는 화면에 도착하면 사람은 기능이 없다고 결론 낸다.

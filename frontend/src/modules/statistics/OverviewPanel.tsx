@@ -149,6 +149,10 @@ export function OverviewPanel({ data, loading }: { data: Overview | null; loadin
               확정 대기 {data.card_draft}
             </Pending>
           )}
+          {/* **그중 부탁받은 것**(2026-10-16) — 자료 관리자가 알림을 하나씩 열지 않고 모아 본다. */}
+          {data.card_asked > 0 && (
+            <Pending to="/cards?asked=1">확정 요청 {data.card_asked}</Pending>
+          )}
         </div>
       )}
 

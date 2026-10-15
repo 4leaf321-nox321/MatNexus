@@ -34,6 +34,7 @@ const REAL: Overview = {
   card_total: 11,
   card_published: 1,
   card_draft: 10,
+  card_asked: 0,
   card_deprecated: 0,
   materials_with_card: 5,
   waiting_to_process: 71,
@@ -152,6 +153,20 @@ describe('홈 요약', () => {
       '/tests?status=failed'
     )
     expect(screen.getByRole('link', { name: /처리 대기 71/ })).toBeInTheDocument()
+  })
+
+  it('확정 요청이 온 초안은 따로 세고 그것만 거른 목록으로 데려간다', () => {
+    // 자료 관리자가 알림을 하나씩 열지 않게 — 큐가 아니라 거르기다(2026-10-16).
+    panel({ card_asked: 2 })
+    expect(screen.getByRole('link', { name: /확정 요청 2/ })).toHaveAttribute(
+      'href',
+      '/cards?asked=1'
+    )
+  })
+
+  it('확정 요청이 없으면 그 칸은 없다', () => {
+    panel()
+    expect(screen.queryByRole('link', { name: /확정 요청/ })).not.toBeInTheDocument()
   })
 
   it('덮인 정도를 말한다', () => {

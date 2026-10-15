@@ -511,7 +511,7 @@ class Test요약:
         카드를 API 로 만들려면 진응력 열까지 처리해야 한다. 여기서 보는 것은
         **세는 방식**이지 카드 만들기가 아니므로 행을 직접 넣는다.
         """
-        from app.modules.fitting.models import PropertyCard
+        from app.modules.fitting.models import PropertyCard, PropertyCardRemark
         from app.modules.tests.models import TestType
 
         test_type = db.scalar(select(TestType).where(TestType.key == "tensile"))
@@ -529,7 +529,13 @@ class Test요약:
         body = client.get("/api/statistics/overview", headers=admin_headers).json()
         assert body["card_total"] == 1
         assert body["card_draft"] == 1
+        assert body["card_asked"] == 0
         assert body["card_published"] == 0
+        # **그중 확정을 부탁받은 것**(2026-10-16) — 홈의 「확정 요청 N」.
+        db.add(PropertyCardRemark(card_id=card.id, kind="publish_requested", message="요청"))
+        db.commit()
+        asked = client.get("/api/statistics/overview", headers=admin_headers).json()
+        assert asked["card_asked"] == 1
         # 덮인 정도. 재료 1개 중 1개에 카드가 있다.
         assert body["materials_with_card"] == 1
 
@@ -537,6 +543,7 @@ class Test요약:
         db.commit()
         after = client.get("/api/statistics/overview", headers=admin_headers).json()
         assert after["card_draft"] == 0
+        assert after["card_asked"] == 0, "확정되면 부탁은 끝났다"
         assert after["card_published"] == 1
 
     def test_안_보이는_재료는_안_센다(
