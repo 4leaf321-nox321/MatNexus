@@ -1,4 +1,5 @@
-"""고유 번호 — 재료 `M` · 시료 `S` · 시편 `P` · 시험 `T`(2026-09-30, ADR 0043).
+"""고유 번호 — 재료 `M` · 시료 `S` · 시편 `P` · 시험 `T`(2026-09-30, ADR 0043), 물성 카드
+`C`(2026-10-16).
 
 이름(`SECC_MDOI_1.0__01__MD_01__TEN_01`)은 밑줄로 엮여 길고, 기준정보 개명 · 다른 두께로
 옮기기에 따라 바뀐다. 말 · 문서 · 라벨로 가리킬 **짧고 안 바뀌는 손잡이**가 번호다. DB
@@ -15,6 +16,11 @@
 시험 목록에 **시편 번호**를 쳐도 그 시편의 시험이 나와야 한다 — 사람은 손에 든 라벨의
 번호를 친다. `chain` 이 번호 하나를 재료 · 시료 · 시편 · 시험 id 로 푼다(아래 것은 비어
 있다). 목록마다 그 사슬에서 자기 칸을 골라 건다.
+
+**카드는 사슬 밖이다.** 카드는 재료에 붙지만 시료 · 시편 · 시험의 위도 아래도 아니다 — 시험
+목록에 카드 번호를 쳐서 그 재료의 시험이 전부 나오면 「이 카드의 근거 시험」 으로 읽힌다.
+그래서 `chain` 은 카드 번호에 `None` 이고, 재료 목록만 `card_material` 로 그 카드의 재료를
+찾는다.
 """
 
 from __future__ import annotations
@@ -26,23 +32,30 @@ from dataclasses import dataclass
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.modules.fitting.models import PropertyCard
 from app.modules.materials.models import Material, Sample, Specimen
 from app.modules.tests.models import TestRun
 
 #: 온톨로지 종류 → 머리글자. **바꾸지 않는다** — 문서 · 라벨에 이미 적혀 나간다.
-PREFIXES = {"material": "M", "sample": "S", "specimen": "P", "test_run": "T"}
+PREFIXES = {
+    "material": "M",
+    "sample": "S",
+    "specimen": "P",
+    "test_run": "T",
+    "property_card": "C",
+}
 _KINDS = {prefix: kind for kind, prefix in PREFIXES.items()}
 
 #: 자릿수. `lpad` 는 넘으면 **조용히 자르므로** 시퀀스에 maxvalue 를 같이 둔다(models).
 DIGITS = 6
 
-_SHAPE = re.compile(r"([MSPTmspt])-?(\d{1,6})")
+_SHAPE = re.compile(r"([MSPTCmsptc])-?(\d{1,6})")
 
 
 @dataclass(frozen=True)
 class Code:
     kind: str
-    """`material` · `sample` · `specimen` · `test_run`."""
+    """`material` · `sample` · `specimen` · `test_run` · `property_card`."""
     value: str
     """맞춘 꼴 — `T-000203`."""
 
@@ -76,7 +89,7 @@ def chain(db: Session, text: str) -> Chain | None:
     """번호 → 사슬. 번호 꼴이 아니거나 없는 번호면 `None`. **지운 것도 푼다** — 가시 범위와
     지움은 목록의 거르기가 따로 건다(여기서 거르면 규칙이 두 벌이 된다)."""
     code = parse(text)
-    if code is None:
+    if code is None or code.kind == "property_card":
         return None
     if code.kind == "material":
         found = db.scalar(select(Material.id).where(Material.code == code.value))
@@ -104,6 +117,14 @@ def chain(db: Session, text: str) -> Chain | None:
     if run is None:
         return None
     return Chain(material_id=run[3], sample_id=run[2], specimen_id=run[1], test_run_id=run[0])
+
+
+def card_material(db: Session, text: str) -> uuid.UUID | None:
+    """카드 번호 → 그 카드의 재료. 카드 번호 꼴이 아니거나 없는 번호면 `None`."""
+    code = of_kind(text, "property_card")
+    if code is None:
+        return None
+    return db.scalar(select(PropertyCard.material_id).where(PropertyCard.code == code))
 
 
 def specimen_ids(db: Session, found: Chain) -> list[uuid.UUID]:

@@ -116,6 +116,10 @@ EXEMPT: dict[tuple[str, str], str] = {
     ("fitting", "export_bundle"): _읽기,
     ("fitting", "check_card_deck"): _읽기,
     ("fitting", "build_bom_deck"): _읽기,
+    ("fitting", "add_card_remark"): "카드를 고치지 않는다 — 값 · 근거는 그대로, 말만 붙는다. "
+    "볼 수 있는 사람 누구나(2026-10-16)",
+    ("fitting", "remove_card_remark"): "사람이 남긴 코멘트만, 남긴 사람이나 자료 관리자가 — "
+    "카드 판정이 아니라 코멘트의 주인 판정이다",
     ("grouping", "create_group"): _만들기,
     ("viscoelastic", "create_master_curve"): _만들기 + " — 시험에서 나온 파생 자료다",
     ("viscoelastic", "import_master_curve"): _만들기 + " — 시험에서 나온 파생 자료다",

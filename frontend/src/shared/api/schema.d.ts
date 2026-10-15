@@ -2648,6 +2648,56 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/fitting/cards/{card_id}/remarks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add Card Remark
+         * @description 카드에 **코멘트를 남긴다**(2026-10-16) — 볼 수 있는 사람 누구나, 확정 카드에도.
+         *
+         *     전에는 코멘트를 서버만 적었다(근거 시험이 옮겨졌을 때 · 확정 요청). 카드에는 「반려」
+         *     상태가 없어서(D8) 자료 관리자가 확정하지 않을 때 **그 사유를 남길 자리가 없었다** —
+         *     부탁한 사람은 왜 초안으로 남아 있는지 몰랐다. 검토 의견 · 보완 요청도 같은 자리다.
+         *
+         *     카드를 고치는 일이 아니다 — 값 · 근거는 그대로이고 말만 붙는다(불변과 가변을 섞지 않는다).
+         *     그래서 고칠 권한을 묻지 않는다. 카드를 만든 사람과 확정을 부탁한 사람에게 알린다.
+         */
+        post: operations["add_card_remark_api_fitting_cards__card_id__remarks_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/fitting/cards/{card_id}/remarks/{remark_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove Card Remark
+         * @description **사람이 남긴 코멘트만** 지운다 — 남긴 사람이나 자료 관리자가(2026-10-16).
+         *
+         *     서버가 적은 것(근거 시험이 옮겨짐 · 확정 요청)은 지우지 않는다 — 카드를 보는 사람이 알아야
+         *     하는 사실이고, 확정 요청은 하루 한 번을 막는 근거다.
+         */
+        delete: operations["remove_card_remark_api_fitting_cards__card_id__remarks__remark_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/fitting/cards/{card_id}/request-publish": {
         parameters: {
             query?: never;
@@ -9912,6 +9962,14 @@ export interface components {
             value: number | string | null;
         };
         /**
+         * CardRemarkIn
+         * @description 카드에 남길 코멘트(2026-10-16) — 확정하지 않는 사유 · 검토 의견 · 보완 요청.
+         */
+        CardRemarkIn: {
+            /** Comment */
+            comment: string;
+        };
+        /**
          * CardRemarkOut
          * @description 카드에 붙은 코멘트(2026-09-29). **카드의 값·근거와 따로 산다** — 확정 카드에도.
          */
@@ -9923,6 +9981,8 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /** Created By Id */
+            created_by_id?: string | null;
             /** Created By Name */
             created_by_name?: string | null;
             /**
@@ -17007,6 +17067,8 @@ export interface components {
             blocks: {
                 [key: string]: unknown;
             };
+            /** Code */
+            code: string;
             /**
              * Created At
              * Format: date-time
@@ -26104,6 +26166,71 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["PropertyCardOut"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_card_remark_api_fitting_cards__card_id__remarks_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                card_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CardRemarkIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardRemarkOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_card_remark_api_fitting_cards__card_id__remarks__remark_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                card_id: string;
+                remark_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

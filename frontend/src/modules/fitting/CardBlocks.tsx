@@ -16,6 +16,7 @@
  */
 
 import { CardRemarks } from '@/modules/fitting/CardRemarks'
+import type { Remark } from '@/modules/fitting/CardRemarks'
 import type { BlockSpec, Produced, PropertyCard } from '@/modules/fitting/api'
 import { Badge } from '@/shared/components/ui/badge'
 import { formatScalar } from '@/shared/units'
@@ -162,7 +163,18 @@ function Rows({ columns, rows }: { columns: Produced[]; rows: Record<string, unk
   )
 }
 
-export function CardBlocks({ specs, card }: { specs: BlockSpec[]; card: PropertyCard }) {
+export function CardBlocks({
+  specs,
+  card,
+  canRemoveRemark,
+  onRemoveRemark,
+}: {
+  specs: BlockSpec[]
+  card: PropertyCard
+  /** 사람이 남긴 코멘트를 지울 수 있나 — 주면 그 줄에 지우기 단추가 선다(판정은 서버). */
+  canRemoveRemark?: (remark: Remark) => boolean
+  onRemoveRemark?: (remark: Remark) => void
+}) {
   const blocks = (card.blocks ?? {}) as Record<string, Record<string, unknown>>
   const present = specs.filter((spec) => blocks[spec.key])
 
@@ -173,7 +185,7 @@ export function CardBlocks({ specs, card }: { specs: BlockSpec[]; card: Property
         <p className="text-amber-700 text-xs dark:text-amber-500">{card.problem}</p>
       )}
       {/* 근거 시험이 다른 두께의 재료로 옮겨진 일 따위 — 값은 그대로라 말로 남는다. */}
-      <CardRemarks card={card} />
+      <CardRemarks card={card} canRemove={canRemoveRemark} onRemove={onRemoveRemark} />
 
       {present.map((spec) => {
         const payload = blocks[spec.key]

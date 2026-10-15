@@ -42,6 +42,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    Sequence,
     String,
     Text,
     func,
@@ -55,6 +56,12 @@ from app.database import Base
 
 #: 카드의 생애. **리뷰 큐는 없다**(D8) — 상태만 둔다.
 PROPERTY_STATUSES = ("draft", "published", "deprecated")
+
+#: 카드 번호의 채번기(2026-10-16) — 재료 · 시료 · 시편 · 시험 번호와 같은 까닭으로 maxvalue 를
+#: 둔다(`lpad` 는 넘치면 조용히 자른다, `materials.models.MATERIAL_CODE_SEQ`).
+PROPERTY_CARD_CODE_SEQ = Sequence(
+    "property_card_code_seq", metadata=Base.metadata, maxvalue=999_999
+)
 
 
 class PropertyCard(Base):
@@ -83,6 +90,15 @@ class PropertyCard(Base):
     `"—"` 같은 자리표시를 넣지 않는 이유는 같다: 목록이 그것을 방향 이름으로
     줄 세우고, 나중에 그 값을 거르는 코드가 생긴다."""
 
+    code: Mapped[str] = mapped_column(
+        String(20),
+        unique=True,
+        server_default=text("'C-' || lpad(nextval('property_card_code_seq')::text, 6, '0')"),
+    )
+    """**불변 고유 번호** — `C-000038`(2026-10-16, ADR 0043 을 카드로 넓힘). 카드 이름은 사람이
+    짓고 고칠 수 있고, 같은 재료에 「인장 MD」 가 여러 장이라 이름으로는 한 장을 가리키지
+    못한다 — 덱 머리 · 메신저 · 확정 요청이 가리킬 손잡이는 이것이다. 지워도 재사용하지
+    않는다."""
     label: Mapped[str] = mapped_column(String(120))
     status: Mapped[str] = mapped_column(
         String(20), default="draft", server_default="draft", index=True

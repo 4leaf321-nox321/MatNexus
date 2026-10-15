@@ -140,6 +140,14 @@ def visible_ids(db: Session, user: User, kind: relations.EntityKind) -> Select[A
 
     문헌·기준정보·장비·조직은 가리지 않는다 — 사내 공용 기준정보다.
     """
+    if kind.slug == "property_card":
+        # **카드에는 지움 칸이 없다 — 재료의 휴지통을 따른다.** 시스템 관리자 지름길 앞에
+        # 둔다: 거기서 `None` 을 돌려주면 휴지통에 든 재료의 카드가 검색에 뜨고, 열면 「재료를
+        # 찾을 수 없습니다」 였다(2026-10-16 AI 평가 — 카드 번호로 찾자 드러났다). 카드 목록은
+        # 전부터 이 규칙이다(`fitting.routes._cards_query`).
+        return select(PropertyCard.id).where(
+            PropertyCard.material_id.in_(permissions.visible_material_ids(db, user))
+        )
     if user.is_system_admin:
         return None
     materials = permissions.visible_material_ids(db, user)
@@ -161,8 +169,6 @@ def visible_ids(db: Session, user: User, kind: relations.EntityKind) -> Select[A
         return runs
     if kind.slug == "processing_result":
         return select(ProcessingResult.id).where(ProcessingResult.test_run_id.in_(runs))
-    if kind.slug == "property_card":
-        return select(PropertyCard.id).where(PropertyCard.material_id.in_(materials))
     if kind.slug in ("commission", "commission_item"):
         # **의뢰의 가시 규칙을 베끼지 않는다** — 낸 부서·받는 부서·작성 중은 낸 사람만은
         # `commissions.services.visible` 의 것이다. 여기서는 열만 좁힌다.

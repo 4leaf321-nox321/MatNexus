@@ -30,6 +30,7 @@ import binascii
 import io
 import json
 import os
+import re
 import uuid
 import zipfile
 from pathlib import Path
@@ -416,10 +417,17 @@ def _card_summary(card: dict[str, Any]) -> dict[str, Any]:
     remarks = card.get("remarks") or []
     if any(one.get("kind") == "relocated" for one in remarks):
         caveats.append("근거 시험 일부가 다른 두께의 재료로 옮겨졌다 — 값은 그 시험을 포함해 계산됐다")
-    elif remarks:
-        caveats.append(f"코멘트 {len(remarks)}건 — get_card 의 remarks 를 함께 전하라")
+    said = [one for one in remarks if one.get("kind") == "comment"]
+    if said:
+        caveats.append(f"사람이 남긴 코멘트 {len(said)}건 — get_card 의 remarks 를 함께 전하라")
+    if card.get("status") == "draft" and any(
+        one.get("kind") == "publish_requested" for one in remarks
+    ):
+        caveats.append("확정 요청이 와 있는 초안")
     return {
         "id": card.get("id"),
+        # 사람이 부르는 번호 — 답에서 카드를 가리킬 때는 이것을 쓴다(2026-10-16).
+        "code": card.get("code"),
         "label": card.get("label"),
         "status": card.get("status"),
         "test_type": card.get("test_type_key"),
@@ -584,10 +592,31 @@ async def _resolve_run(ctx: Context, test_run_id: str) -> str | dict[str, Any]:
     }
 
 
+#: 카드 번호 꼴(2026-10-16) — `C-000038` · `C-38` · `c38` 은 같은 번호다(백엔드 `codes`).
+_CARD_CODE = re.compile(r"[Cc]-?(\d{1,6})")
+
+
 async def _resolve_card(ctx: Context, card_id: str) -> str | dict[str, Any]:
-    """카드 식별자 — 이름(라벨)이나 재료 이름을 줘도 받아 준다. 여럿이면 후보를 준다."""
+    """카드 식별자 — 번호(`C-000038`) · 이름(라벨) · 재료 이름을 줘도 받아 준다. 여럿이면
+    후보를 준다."""
     if _looks_like_uuid(card_id):
         return card_id
+    shape = _CARD_CODE.fullmatch(str(card_id).strip())
+    if shape:
+        wanted = f"C-{int(shape.group(1)):06d}"
+        got = await _get(ctx, "/fitting/cards", {"q": wanted, "limit": 5})
+        if isinstance(got, dict) and "error" in got:
+            return got
+        for one in got.get("items", []) if isinstance(got, dict) else []:
+            if one.get("code") == wanted:
+                return str(one["id"])
+        # **「빈 번호」 로 단정하지 않게**(2026-10-16 AI 평가) — 재료가 휴지통에 든 카드 · 볼 수
+        # 없는 부서의 카드도 목록에 안 뜬다. 번호는 지워도 재사용하지 않는다.
+        return {
+            "error": f"{wanted} 카드가 보이지 않습니다 — 없는 번호이거나, 재료가 휴지통에 있거나, "
+            "이 토큰으로 볼 수 없는 카드입니다. 번호는 재사용하지 않으니 사람에게 어디서 본 "
+            "번호인지 물어라."
+        }
     found = await _get(ctx, "/fitting/cards", {"limit": 200})
     if isinstance(found, dict) and "error" in found:
         return found
@@ -2314,7 +2343,7 @@ async def get_card(ctx: Context, card_id: str) -> dict[str, Any]:
     소성 표는 점이 많아 **개수와 앞뒤 몇 점만** 낸다.
 
     `caveat` 를 반드시 함께 전한다 — 초안 카드나 합성 소성 표를 확정된 실측처럼
-    옮기면 그 값으로 해석이 돌아간다.
+    옮기면 그 값으로 해석이 돌아간다. `card_id` 에 카드 번호(`C-` 여섯 자리)나 이름을 줘도 된다.
     """
     found = await _resolve_card(ctx, card_id)
     if isinstance(found, dict):
@@ -2350,6 +2379,7 @@ async def get_card(ctx: Context, card_id: str) -> dict[str, Any]:
     if remarks:
         out["remarks"] = [
             {
+                "kind": one.get("kind"),
                 "message": one.get("message"),
                 "comment": one.get("comment"),
                 "by": one.get("created_by_name"),
@@ -3416,6 +3446,12 @@ async def set_card_status(
         }
     summary = _card_summary(card)
     if dry_run:
+        # **토큰 주인이 할 수 있는지 미리 말한다**(2026-10-16 AI 평가) — 모르면 AI 는 자료 관리자인
+        # 사람에게도 「화면에서 확정 요청을 누르세요」 라고만 답했다. 판정은 여전히 서버가 한다.
+        me = await _get(ctx, "/auth/me")
+        steward = isinstance(me, dict) and bool(
+            me.get("is_system_admin") or me.get("is_data_manager")
+        )
         return {
             "dry_run": True,
             "card": summary,
@@ -3425,7 +3461,13 @@ async def set_card_status(
             "problem": card.get("problem"),
             "will": f"{status} → {action}",
             "effect": effect,
-            "note": "이 미리보기를 사람에게 보이고 확인받은 뒤 dry_run=False 로 다시 부르세요.",
+            "token_owner_can": steward,
+            "note": (
+                "이 미리보기를 사람에게 보이고 확인받은 뒤 dry_run=False 로 다시 부르세요."
+                if steward
+                else "토큰 주인이 자료 관리자가 아니라 서버가 거절한다 — 화면의 「확정 요청」 으로 "
+                "자료 관리자에게 부탁하라고 안내하세요(도구는 없다)."
+            ),
         }
     # 경로를 글자 그대로 — `test_mcp_writes_audited` 가 읽어 감사를 대조한다.
     if action == "publish":
@@ -3890,8 +3932,9 @@ async def list_cards(
     material_id: str | None = None,
     status: str | None = None,
     limit: int = 20,
+    q: str | None = None,
 ) -> dict[str, Any]:
-    """물성 카드 목록 — 재료를 안 거치고 카드를 찾는다.
+    """물성 카드 목록 — 재료를 안 거치고 카드를 찾는다. `q` 는 이름 · 카드 번호 · 재료 번호.
 
     `status` 는 `published`(확정) · `draft`(초안) · `deprecated`(중지). **확정된
     카드만 해석에 쓴다** — 초안은 만들어 본 것이지 결론이 아니다.
@@ -3904,6 +3947,7 @@ async def list_cards(
         {
             "material_id": material_id,
             "status": status,
+            "q": q,
             "limit": max(1, min(limit, MAX_LIMIT)),
         },
     )

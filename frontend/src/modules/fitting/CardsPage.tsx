@@ -32,6 +32,7 @@ import { ExportMenu } from '@/modules/fitting/ExportMenu'
 import { STATUS_LABELS, fittingApi } from '@/modules/fitting/api'
 import type { PropertyCard } from '@/modules/fitting/api'
 import { SelectionBar } from '@/modules/fitting/SelectionBar'
+import { CodeChip } from '@/shared/components/CodeChip'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { PageHeader } from '@/shared/components/PageHeader'
 import { Badge } from '@/shared/components/ui/badge'
@@ -116,7 +117,7 @@ export default function CardsPage() {
           <Input
             className="pl-8"
             value={typed}
-            placeholder="재료 이름 · 카드 이름"
+            placeholder="재료 이름 · 카드 이름 · 번호"
             aria-label="카드 검색"
             onChange={(event) => setTyped(event.target.value)}
           />
@@ -229,6 +230,8 @@ function Row({
         checked={picked}
         onChange={(event) => onPick(event.target.checked)}
       />
+      {/* 번호 — 메신저 · 확정 요청이 한 장을 가리키는 손잡이(2026-10-16). 누르면 복사. */}
+      <CodeChip code={card.code} />
       <span className="font-medium">{card.label}</span>
       <Badge
         variant={

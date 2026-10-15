@@ -5,19 +5,28 @@
  * 대신 카드를 보는 사람이 「이 값의 근거 일부가 다른 재료로 갔다」 를 알아야 한다. 코멘트는
  * 카드의 값·근거와 따로 산다(서버 `PropertyCardRemark`).
  *
- * **확정 요청(`publish_requested`, 2026-10-15)은 경고와 따로 그린다.** 같은 노란 상자에 섞으면
- * 「누가 확정을 부탁했다」 가 「근거가 다른 재료로 갔다」 와 같은 무게로 읽힌다.
+ * 셋으로 갈라 그린다:
+ *
+ *   근거 이동(`relocated`)       서버가 적는 경고 — 노란 상자
+ *   사람의 코멘트(`comment`)      확정하지 않는 사유 · 검토 의견(2026-10-16) — 남긴 사람 · 자료
+ *                                관리자는 지울 수 있다
+ *   확정 요청(`publish_requested`) 부탁의 기록(2026-10-15) — 세지 않고 「확정 요청됨」 으로 구별
+ *
+ * 한 상자에 섞으면 「누가 확정을 부탁했다」 가 「근거가 다른 재료로 갔다」 와 같은 무게로 읽힌다.
  */
 
-import { MessageSquareWarning, Send } from 'lucide-react'
+import { MessageSquare, MessageSquareWarning, Send, X } from 'lucide-react'
 
 import type { PropertyCard } from '@/modules/fitting/api'
 import { Badge } from '@/shared/components/ui/badge'
+import { Button } from '@/shared/components/ui/button'
 
-type Remark = NonNullable<PropertyCard['remarks']>[number]
+export type Remark = NonNullable<PropertyCard['remarks']>[number]
 
 /** 서버 `fitting.routes.PUBLISH_REQUESTED`. */
 export const PUBLISH_REQUESTED = 'publish_requested'
+/** 서버 `fitting.routes.COMMENT` — 사람이 남긴 말. */
+export const COMMENT = 'comment'
 
 /** 누가 언제 — 「관리자 · 2026. 9. 29.」 */
 function who(remark: Remark): string {
@@ -27,29 +36,39 @@ function who(remark: Remark): string {
 }
 
 function said(remark: Remark): string {
+  if (remark.kind === COMMENT) return `${remark.comment ?? ''} (${who(remark)})`
   return `${remark.message}${remark.comment ? ` — ${remark.comment}` : ''} (${who(remark)})`
 }
 
-function split(card: PropertyCard): { warnings: Remark[]; asks: Remark[] } {
+function split(card: PropertyCard): { moved: Remark[]; comments: Remark[]; asks: Remark[] } {
   const remarks = card.remarks ?? []
   return {
-    warnings: remarks.filter((remark) => remark.kind !== PUBLISH_REQUESTED),
-    asks: remarks.filter((remark) => remark.kind === PUBLISH_REQUESTED),
+    moved: remarks.filter((one) => one.kind !== PUBLISH_REQUESTED && one.kind !== COMMENT),
+    comments: remarks.filter((one) => one.kind === COMMENT),
+    asks: remarks.filter((one) => one.kind === PUBLISH_REQUESTED),
   }
 }
 
-/** 펼친 카드의 머리에 — 코멘트 전부. */
-export function CardRemarks({ card }: { card: PropertyCard }) {
-  const { warnings, asks } = split(card)
-  if (warnings.length === 0 && asks.length === 0) return null
+/** 펼친 카드의 머리에 — 코멘트 전부. 지우기는 부모가 판단해 넘긴다(판정은 서버). */
+export function CardRemarks({
+  card,
+  canRemove,
+  onRemove,
+}: {
+  card: PropertyCard
+  canRemove?: (remark: Remark) => boolean
+  onRemove?: (remark: Remark) => void
+}) {
+  const { moved, comments, asks } = split(card)
+  if (moved.length + comments.length + asks.length === 0) return null
   return (
     <div className="space-y-1">
-      {warnings.length > 0 && (
+      {moved.length > 0 && (
         <ul
           aria-label="카드 코멘트"
           className="space-y-1 rounded-md border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-xs"
         >
-          {warnings.map((remark) => (
+          {moved.map((remark) => (
             <li key={remark.id} className="flex items-start gap-1.5">
               <MessageSquareWarning className="mt-0.5 size-3.5 shrink-0 text-amber-600" />
               <span>
@@ -57,6 +76,31 @@ export function CardRemarks({ card }: { card: PropertyCard }) {
                 {remark.comment && <b className="ml-1">— {remark.comment}</b>}
                 <span className="text-muted-foreground ml-1">({who(remark)})</span>
               </span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {comments.length > 0 && (
+        <ul aria-label="사람이 남긴 코멘트" className="space-y-1 rounded-md border px-3 py-2 text-xs">
+          {comments.map((remark) => (
+            <li key={remark.id} className="flex items-start gap-1.5">
+              <MessageSquare className="text-muted-foreground mt-0.5 size-3.5 shrink-0" />
+              <span className="min-w-0 flex-1 whitespace-pre-wrap">
+                {remark.comment}
+                <span className="text-muted-foreground ml-1">({who(remark)})</span>
+              </span>
+              {onRemove && canRemove?.(remark) && (
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="size-5 shrink-0"
+                  aria-label="코멘트 지우기"
+                  title="코멘트 지우기"
+                  onClick={() => onRemove(remark)}
+                >
+                  <X className="size-3" />
+                </Button>
+              )}
             </li>
           ))}
         </ul>
@@ -79,18 +123,27 @@ export function CardRemarks({ card }: { card: PropertyCard }) {
   )
 }
 
-/** 목록 한 줄에 — 몇 개 붙었는지만, 내용은 가리키면 보인다. 확정 요청은 세지 않는다. */
+/**
+ * 목록 한 줄에 — 몇 개 붙었는지만, 내용은 가리키면 보인다. 확정 요청은 세지 않는다.
+ * 근거 이동이 하나라도 있으면 노랗게(경고), 사람의 코멘트뿐이면 평범하게.
+ */
 export function RemarkBadge({ card }: { card: PropertyCard }) {
-  const { warnings } = split(card)
-  if (warnings.length === 0) return null
+  const { moved, comments } = split(card)
+  const shown = [...moved, ...comments]
+  if (shown.length === 0) return null
+  const warn = moved.length > 0
   return (
     <Badge
       variant="outline"
-      className="gap-1 border-amber-500/50 font-normal text-amber-700 dark:text-amber-500"
-      title={warnings.map(said).join('\n')}
+      className={
+        warn
+          ? 'gap-1 border-amber-500/50 font-normal text-amber-700 dark:text-amber-500'
+          : 'gap-1 font-normal'
+      }
+      title={shown.map(said).join('\n')}
     >
-      <MessageSquareWarning className="size-3" />
-      코멘트 {warnings.length}
+      {warn ? <MessageSquareWarning className="size-3" /> : <MessageSquare className="size-3" />}
+      코멘트 {shown.length}
     </Badge>
   )
 }

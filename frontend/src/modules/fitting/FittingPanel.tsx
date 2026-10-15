@@ -27,6 +27,7 @@ import {
   FileDown,
   Info,
   Layers,
+  MessageSquarePlus,
   Pencil,
   Plus,
   Trash2,
@@ -72,7 +73,9 @@ import {
 import { Input } from '@/shared/components/ui/input'
 import { Label } from '@/shared/components/ui/label'
 import { BlockChips, CardBlocks } from '@/modules/fitting/CardBlocks'
-import { AskedBadge, RemarkBadge } from '@/modules/fitting/CardRemarks'
+import { AskedBadge, COMMENT, RemarkBadge } from '@/modules/fitting/CardRemarks'
+import { RemarkDialog } from '@/modules/fitting/RemarkDialog'
+import { CodeChip } from '@/shared/components/CodeChip'
 import { cardKind, kindLabel } from '@/modules/fitting/cardKind'
 import { LveCardDialog } from '@/modules/fitting/LveCardDialog'
 import { hasLve } from '@/modules/fitting/lve'
@@ -1245,6 +1248,8 @@ function CardList({
   // **확정을 부탁할 길**(2026-10-15) — 확정은 자료 관리자만 하는데, 만든 사람은 누구에게
   // 말해야 할지 몰랐다. 창은 목록 밖에 하나만 둔다.
   const [asking, setAsking] = useState<PropertyCard | null>(null)
+  // **사유를 남길 자리**(2026-10-16) — 카드에 「반려」 가 없어, 확정하지 않는 까닭을 말로 붙인다.
+  const [commenting, setCommenting] = useState<PropertyCard | null>(null)
   // **기본은 접힌다.** 카드마다 블록 값을 전부 펼치면 한 장이 화면 절반을 먹는다.
   const [opened, setOpened] = useState<Set<string>>(new Set())
   // **종류로 가른다.** 경화식·선형탄성구간·점탄성·재료 기본 정보가 한 목록에 섞이면
@@ -1327,6 +1332,8 @@ function CardList({
                 <ChevronRight className="size-4" />
               )}
             </Button>
+            {/* 번호 — 같은 재료에 「인장 MD」 가 여러 장이라 한 장을 가리키는 손잡이(2026-10-16). */}
+            <CodeChip code={card.code} />
             <span className="font-medium">{card.label}</span>
             {/* **이 카드가 언제 것인가.** 같은 재료에 카드가 쌓이면 그 물음이
                 먼저 온다 — 어느 것이 최신인지 이름만으로는 안 보인다. */}
@@ -1366,6 +1373,15 @@ function CardList({
                 onError={onError}
                 siblings={cards}
               />
+              <Button
+                size="sm"
+                variant="ghost"
+                aria-label={`${card.label} 코멘트 남기기`}
+                title="코멘트 남기기 — 확정하지 않는 사유 · 검토 의견 (값은 안 바뀝니다)"
+                onClick={() => setCommenting(card)}
+              >
+                <MessageSquarePlus className="size-3.5" />
+              </Button>
               {card.status === 'draft' && (
                 <>
                   {/* **오타를 고치려고 적합을 다시 돌리게 하지 않는다.** */}
@@ -1437,7 +1453,17 @@ function CardList({
               새 물성이 붙어도 이 파일은 안 고친다. */}
           {opened.has(card.id) ? (
             <div className="mt-2">
-              <CardBlocks specs={specs} card={card} />
+              <CardBlocks
+                specs={specs}
+                card={card}
+                // 내가 남긴 코멘트 · 자료 관리자 — 서버와 같은 판정을 미리 본다.
+                canRemoveRemark={(remark) =>
+                  remark.kind === COMMENT && (steward || remark.created_by_id === user?.id)
+                }
+                onRemoveRemark={(remark) =>
+                  void act(() => fittingApi.removeRemark(card.id, remark.id))
+                }
+              />
             </div>
           ) : (
             <div className="mt-1 flex flex-wrap items-center gap-1 pl-8">
@@ -1451,6 +1477,14 @@ function CardList({
       {/* **한 번 묻는다.** 확정된 값을 앞으로 쓰지 않겠다는 결정이고, 되살려도
           초안으로만 돌아온다 — 확정을 다시 받아야 한다. 창은 목록 밖에 하나만
           둔다: 카드마다 그리면 같은 창이 수십 개 뜬다. */}
+      <RemarkDialog
+        card={commenting}
+        onClose={() => setCommenting(null)}
+        onSaved={() => {
+          setCommenting(null)
+          onChanged()
+        }}
+      />
       <AskDialog
         open={asking !== null}
         title={`「${asking?.label ?? ''}」 확정 요청`}

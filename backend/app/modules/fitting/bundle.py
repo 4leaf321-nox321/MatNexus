@@ -56,6 +56,9 @@ class BundleCard:
     material: str
     status: str
     deck: export.Deck
+    code: str = ""
+    """카드 번호(`C-000038`, 2026-10-16) — manifest 와 초안 경고가 이것으로 한 장을
+    가리킨다."""
 
 
 @dataclass(frozen=True)
@@ -119,6 +122,7 @@ def build(
         entries.append(
             {
                 "card_id": card.card_id,
+                "code": card.code,
                 "label": card.label,
                 "material": card.material,
                 "status": card.status,
@@ -137,7 +141,10 @@ def build(
         # 열어야 보이고, 안 여는 사람이 있다.
         warnings.append(
             f"초안 {len(drafts)}장이 들어 있습니다: "
-            + ", ".join(f"{one.material} · {one.label}" for one in drafts)
+            + ", ".join(
+                f"{one.code + ' ' if one.code else ''}{one.material} · {one.label}"
+                for one in drafts
+            )
         )
 
     manifest = {

@@ -477,6 +477,7 @@ def _write_values(
         "cards.csv",
         [
             "card_id",
+            "code",
             "material_id",
             "label",
             "status",
@@ -498,6 +499,7 @@ def _write_values(
         card_sheet.write(
             [
                 card.id,
+                card.code,
                 card.material_id,
                 card.label,
                 card.status,
@@ -900,8 +902,8 @@ README = """# MatNexus 물성 데이터 내보내기
     cards.card_id         → card_values.card_id
 
 `code` 칸은 **사람이 부르는 고유 번호**입니다 — 재료 `M-` · 시료 `S-` · 시편 `P-` ·
-시험 `T-`. 이름(`record_name`)은 재료 개명이나 두께 정정에 따라 바뀌지만 번호는 안
-바뀝니다. 문서·라벨에서 가리킬 때는 번호를 쓰세요.
+시험 `T-` · 물성 카드 `C-`. 이름(`record_name` · 카드의 `label`)은 재료 개명이나 두께
+정정에 따라 바뀌지만 번호는 안 바뀝니다. 문서·라벨에서 가리킬 때는 번호를 쓰세요.
 
 ## 단위
 

@@ -1,4 +1,5 @@
 """자료 관리자에게 알린다 — 확정 · 승인 요청, 그리고 AI 가 한 확정 · 채택(2026-10-15).
+그 답은 부탁한 사람에게 간다(2026-10-16, `notify`).
 
 **상태만 두면 아무도 모른다.** 확정 대기 카드는 홈의 숫자로만 보였고, 승인 대기 값은 그
 화면을 열어야 보였다. AI 가 확인 없이 확정해도(ADR 0061 의 남은 위험) 감사 표를 열어 보기
@@ -23,6 +24,7 @@ from app.modules.accounts.models import User
 
 REVIEW_REQUESTED = "review.requested"
 AI_CONFIRMED = "ai.confirmed"
+REVIEW_ANSWERED = "review.answered"
 
 #: 들어온 길의 이름 — `request_context.KNOWN_CLIENTS` 와 같은 키.
 _CLIENT_NAMES = {"mcp": "AI(MCP)", "pylon": "MatPylon", "script": "스크립트"}
@@ -57,10 +59,32 @@ def notify_stewards(
     에게도 보낸다(제 AI 가 무엇을 했는지 알아야 한다) — 그래서 그때는 비워 둔다.
     `key` 는 중복을 막는다(워커가 같은 키를 두 번 보내지 않는다).
     """
+    return notify(
+        db,
+        [one for one in steward_ids(db) if one != exclude],
+        event_kind=event_kind,
+        key=key,
+        title=title,
+        body=body,
+        link=link,
+    )
+
+
+def notify(
+    db: Session,
+    user_ids: list[uuid.UUID],
+    *,
+    event_kind: str,
+    key: str,
+    title: str,
+    body: str | None,
+    link: str | None,
+) -> int:
+    """정한 사람마다 하나씩 큐에 넣는다 — 같은 사람이 두 번 들어 있어도 한 번. 넣은 수를
+    돌려준다. **커밋은 부르는 쪽이 한다.** 받으려면 그 사람에게 그 사건의 규칙이 있어야
+    한다."""
     sent = 0
-    for user_id in steward_ids(db):
-        if user_id == exclude:
-            continue
+    for user_id in dict.fromkeys(user_ids):
         queue.enqueue(
             db,
             kind=kinds.NOTIFY_DELIVER,

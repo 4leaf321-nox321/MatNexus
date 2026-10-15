@@ -17,6 +17,7 @@ export type InheritedValue = components['schemas']['InheritedValueOut']
 export type FittedParameter = components['schemas']['FittedParameterOut']
 export type PropertyCard = components['schemas']['PropertyCardOut']
 export type PublishAsk = components['schemas']['PublishAskOut']
+export type CardRemark = components['schemas']['CardRemarkOut']
 /** 덱을 쓸 단위계. **목록은 서버가 준다** — 화면이 적어 두면 계가 늘 때 뒤처진다. */
 export type UnitSystem = components['schemas']['UnitSystemOut']
 export type UnitSystemCreate = components['schemas']['UnitSystemCreate']
@@ -270,6 +271,17 @@ export const fittingApi = {
    */
   requestPublish: (id: string, note?: string) =>
     api.post<PublishAsk>(`/fitting/cards/${id}/request-publish`, { note: note ?? null }),
+
+  /**
+   * 카드에 **코멘트를 남긴다**(2026-10-16) — 확정하지 않는 사유 · 검토 의견. 볼 수 있는 사람
+   * 누구나, 확정 카드에도. 카드를 만든 사람과 확정을 부탁한 사람에게 알림이 간다.
+   */
+  addRemark: (id: string, comment: string) =>
+    api.post<CardRemark>(`/fitting/cards/${id}/remarks`, { comment }),
+
+  /** 사람이 남긴 코멘트만, 남긴 사람이나 자료 관리자가 지운다. */
+  removeRemark: (id: string, remarkId: string) =>
+    api.delete<void>(`/fitting/cards/${id}/remarks/${remarkId}`),
 
   /**
    * 사용 중지한 카드를 **초안으로** 되살린다. 부서 관리자만.

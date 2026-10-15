@@ -4031,6 +4031,22 @@
         "title": "CardItemValueOut",
         "type": "object"
       },
+      "CardRemarkIn": {
+        "description": "카드에 남길 코멘트(2026-10-16) — 확정하지 않는 사유 · 검토 의견 · 보완 요청.",
+        "properties": {
+          "comment": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Comment",
+            "type": "string"
+          }
+        },
+        "required": [
+          "comment"
+        ],
+        "title": "CardRemarkIn",
+        "type": "object"
+      },
       "CardRemarkOut": {
         "description": "카드에 붙은 코멘트(2026-09-29). **카드의 값·근거와 따로 산다** — 확정 카드에도.",
         "properties": {
@@ -4049,6 +4065,18 @@
             "format": "date-time",
             "title": "Created At",
             "type": "string"
+          },
+          "created_by_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By Id"
           },
           "created_by_name": {
             "anyOf": [
@@ -23031,6 +23059,10 @@
             "title": "Blocks",
             "type": "object"
           },
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -23145,6 +23177,7 @@
         },
         "required": [
           "id",
+          "code",
           "material_id",
           "material_name",
           "test_type_key",
@@ -42626,6 +42659,107 @@
           }
         },
         "summary": "Publish",
+        "tags": [
+          "fitting"
+        ]
+      }
+    },
+    "/api/fitting/cards/{card_id}/remarks": {
+      "post": {
+        "description": "카드에 **코멘트를 남긴다**(2026-10-16) — 볼 수 있는 사람 누구나, 확정 카드에도.\n\n전에는 코멘트를 서버만 적었다(근거 시험이 옮겨졌을 때 · 확정 요청). 카드에는 「반려」\n상태가 없어서(D8) 자료 관리자가 확정하지 않을 때 **그 사유를 남길 자리가 없었다** —\n부탁한 사람은 왜 초안으로 남아 있는지 몰랐다. 검토 의견 · 보완 요청도 같은 자리다.\n\n카드를 고치는 일이 아니다 — 값 · 근거는 그대로이고 말만 붙는다(불변과 가변을 섞지 않는다).\n그래서 고칠 권한을 묻지 않는다. 카드를 만든 사람과 확정을 부탁한 사람에게 알린다.",
+        "operationId": "add_card_remark_api_fitting_cards__card_id__remarks_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "card_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Card Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CardRemarkIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CardRemarkOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Add Card Remark",
+        "tags": [
+          "fitting"
+        ]
+      }
+    },
+    "/api/fitting/cards/{card_id}/remarks/{remark_id}": {
+      "delete": {
+        "description": "**사람이 남긴 코멘트만** 지운다 — 남긴 사람이나 자료 관리자가(2026-10-16).\n\n서버가 적은 것(근거 시험이 옮겨짐 · 확정 요청)은 지우지 않는다 — 카드를 보는 사람이 알아야\n하는 사실이고, 확정 요청은 하루 한 번을 막는 근거다.",
+        "operationId": "remove_card_remark_api_fitting_cards__card_id__remarks__remark_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "card_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Card Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "remark_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Remark Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Remove Card Remark",
         "tags": [
           "fitting"
         ]

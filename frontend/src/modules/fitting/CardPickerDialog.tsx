@@ -100,7 +100,7 @@ export function CardPickerDialog({ open, onOpenChange, onPick, specs, current }:
             value={text}
             autoFocus
             onChange={(event) => setText(event.target.value)}
-            placeholder="재료 이름 · 카드 이름"
+            placeholder="재료 이름 · 카드 이름 · 번호"
             aria-label="카드 찾기"
           />
         </div>
@@ -109,6 +109,8 @@ export function CardPickerDialog({ open, onOpenChange, onPick, specs, current }:
           <Table>
             <TableHeader>
               <TableRow>
+                {/* 번호가 첫 열 — 메신저로 받은 「C-000038」 을 여기서 찾는다(2026-10-16). */}
+                <TableHead>번호</TableHead>
                 <TableHead>재료</TableHead>
                 <TableHead>물성</TableHead>
                 <TableHead className="text-right">점</TableHead>
@@ -118,6 +120,7 @@ export function CardPickerDialog({ open, onOpenChange, onPick, specs, current }:
             <TableBody>
               {rows.map((card) => (
                 <TableRow key={card.id} data-current={card.id === current || undefined}>
+                  <TableCell className="font-mono whitespace-nowrap">{card.code}</TableCell>
                   <TableCell>
                     <span className="font-medium">{card.material_name}</span>
                     {card.orientation ? (

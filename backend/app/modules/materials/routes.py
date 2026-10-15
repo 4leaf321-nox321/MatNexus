@@ -594,10 +594,14 @@ def _exact_terms(db: Session, q: str) -> ColumnElement[bool]:
 
 
 def _code_branches(db: Session, word: str) -> list[ColumnElement[bool]]:
-    """번호로 찾는 가지 — 재료 번호는 그 재료, 시료 · 시편 · 시험 번호는 그것이 든 재료."""
+    """번호로 찾는 가지 — 재료 번호는 그 재료, 시료 · 시편 · 시험 · 카드 번호는 그것이 든
+    재료."""
     material = codes.of_kind(word, "material")
     if material is not None:
         return [Material.code == material]
+    card = codes.card_material(db, word)
+    if card is not None:
+        return [Material.id == card]
     found = codes.chain(db, word)
     return [Material.id == found.material_id] if found is not None else []
 

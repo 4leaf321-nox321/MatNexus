@@ -176,7 +176,7 @@ class Test카드_확정_요청:
         mine = [
             one
             for one in _inbox(client, admin_headers)
-            if one["title"] == f"카드 확정 요청 — {card['label']}"
+            if one["title"] == f"카드 확정 요청 — {card['code']} {card['label']}"
         ]
         assert mine, "자료 관리자의 수신함에 부탁이 없다"
         assert mine[0]["link"] == f"/materials/{card['material_id']}?tab=cards"
@@ -317,7 +317,7 @@ class Test받는_사람:
         asked = _ask(client, headers, card["id"])
         assert asked.json()["notified"] == 1
         drain(db)
-        title = f"카드 확정 요청 — {card['label']}"
+        title = f"카드 확정 요청 — {card['code']} {card['label']}"
         steward_inbox = _inbox(client, _headers(client, "steward@example.com"))
         assert title in {one["title"] for one in steward_inbox}
         assert title not in {one["title"] for one in _inbox(client, admin_headers)}
@@ -356,6 +356,157 @@ class Test받는_사람:
             )
         )
         assert {"review.requested", "ai.confirmed"} <= kinds
+
+
+def _named(card: dict[str, Any]) -> str:
+    return f"{card['code']} {card['label']}"
+
+
+def _remark(client: TestClient, headers: dict[str, str], card_id: str, text: str) -> Any:
+    return client.post(
+        f"/api/fitting/cards/{card_id}/remarks", json={"comment": text}, headers=headers
+    )
+
+
+class Test답이_간다:
+    """부탁은 한 방향이었다 — 부탁한 사람은 확정됐는지 카드를 다시 열어 봐야 알았다
+    (2026-10-16)."""
+
+    def test_확정되면_부탁한_사람이_안다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        alice: tuple[User, dict[str, str]],
+    ) -> None:
+        owner, headers = alice
+        _rules(db, owner)
+        card = _card(client, headers, _material(db, owner, modulus()))
+        assert _ask(client, headers, card["id"]).status_code == 200
+
+        done = client.post(f"/api/fitting/cards/{card['id']}/publish", headers=admin_headers)
+        assert done.status_code == 200, done.text
+        drain(db)
+        mine = [
+            one
+            for one in _inbox(client, headers)
+            if one["title"] == f"요청한 카드가 확정됐습니다 — {_named(card)}"
+        ]
+        assert mine and mine[0]["link"] == f"/materials/{card['material_id']}?tab=cards"
+
+    def test_사용_중지돼도_안다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        alice: tuple[User, dict[str, str]],
+    ) -> None:
+        owner, headers = alice
+        _rules(db, owner)
+        card = _card(client, headers, _material(db, owner, modulus()))
+        _ask(client, headers, card["id"])
+
+        client.post(f"/api/fitting/cards/{card['id']}/deprecate", headers=admin_headers)
+        drain(db)
+        titles = {one["title"] for one in _inbox(client, headers)}
+        assert f"요청한 카드가 사용 중지됐습니다 — {_named(card)}" in titles
+
+    def test_부탁하지_않았으면_안_간다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        alice: tuple[User, dict[str, str]],
+    ) -> None:
+        """만든 사람이라도 부탁하지 않았으면 — 확정은 늘 일어나는 일이라 다 알리면 안
+        읽힌다."""
+        owner, headers = alice
+        _rules(db, owner)
+        card = _card(client, headers, _material(db, owner, modulus()))
+        client.post(f"/api/fitting/cards/{card['id']}/publish", headers=admin_headers)
+        drain(db)
+        assert not [one for one in _inbox(client, headers) if "요청한 카드가" in one["title"]]
+
+
+class Test코멘트:
+    """카드에 「반려」 가 없어(D8) 확정하지 않는 사유를 남길 자리가 없었다(2026-10-16)."""
+
+    def test_남기면_만든_사람과_부탁한_사람이_안다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin: User,
+        admin_headers: dict[str, str],
+        alice: tuple[User, dict[str, str]],
+        bob: dict[str, str],
+    ) -> None:
+        owner, headers = alice
+        _rules(db, owner)
+        _rules(db, admin)
+        card = _card(client, headers, _material(db, owner, modulus()))
+        assert _ask(client, admin_headers, card["id"]).status_code == 200  # 관리자가 부탁
+
+        said = _remark(client, bob, card["id"], "푸아송비 근거가 없습니다 — 보완 후 다시 요청")
+        assert said.status_code == 201, said.text
+        assert said.json()["kind"] == "comment"
+        assert said.json()["created_by_name"] == "bob"
+        got = client.get(f"/api/fitting/cards/{card['id']}", headers=headers).json()
+        assert got["status"] == "draft", "코멘트는 카드를 고치지 않는다"
+        assert [one["kind"] for one in got["remarks"]] == ["publish_requested", "comment"]
+
+        drain(db)
+        title = f"bob 님이 카드에 코멘트를 남겼습니다 — {_named(card)}"
+        for inbox in (_inbox(client, headers), _inbox(client, admin_headers)):
+            mine = [one for one in inbox if one["title"] == title]
+            assert mine and "보완 후 다시 요청" in mine[0]["body"]
+
+    def test_내_것만_지우고_자료_관리자는_누구_것이든(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        alice: tuple[User, dict[str, str]],
+        bob: dict[str, str],
+    ) -> None:
+        owner, headers = alice
+        card = _card(client, headers, _material(db, owner, modulus()))
+        mine = _remark(client, headers, card["id"], "오타").json()
+        path = f"/api/fitting/cards/{card['id']}/remarks"
+
+        denied = client.delete(f"{path}/{mine['id']}", headers=bob)
+        assert denied.status_code == 403
+        assert denied.json()["error"]["code"] == "MNX-FITTING-0052"
+        assert client.delete(f"{path}/{mine['id']}", headers=headers).status_code == 204
+
+        theirs = _remark(client, bob, card["id"], "검토 의견").json()
+        assert (
+            client.delete(f"{path}/{theirs['id']}", headers=admin_headers).status_code == 204
+        )
+        got = client.get(f"/api/fitting/cards/{card['id']}", headers=headers).json()
+        assert got["remarks"] == []
+
+    def test_서버가_남긴_기록은_못_지운다(
+        self, client: TestClient, db: Session, alice: tuple[User, dict[str, str]]
+    ) -> None:
+        """확정 요청은 하루 한 번을 막는 근거다 — 지우면 그 막기가 풀린다."""
+        owner, headers = alice
+        card = _card(client, headers, _material(db, owner, modulus()))
+        asked = _ask(client, headers, card["id"]).json()
+        (remark,) = asked["card"]["remarks"]
+        kept = client.delete(
+            f"/api/fitting/cards/{card['id']}/remarks/{remark['id']}", headers=headers
+        )
+        assert kept.status_code == 409
+        assert kept.json()["error"]["code"] == "MNX-FITTING-0051"
+
+    def test_빈_코멘트는_거절한다(
+        self, client: TestClient, db: Session, alice: tuple[User, dict[str, str]]
+    ) -> None:
+        owner, headers = alice
+        card = _card(client, headers, _material(db, owner, modulus()))
+        empty = _remark(client, headers, card["id"], "   ")
+        assert empty.status_code == 422
+        assert empty.json()["error"]["code"] == "MNX-FITTING-0049"
 
 
 @pytest.fixture
@@ -415,7 +566,7 @@ class TestAI_가_하면_안다:
         drain(db)
 
         titles = {one["title"] for one in _inbox(client, admin_headers)}
-        assert f"AI(MCP) 가 카드를 확정했습니다 — {by_ai['label']}" in titles
+        assert f"AI(MCP) 가 카드를 확정했습니다 — {by_ai['code']} {by_ai['label']}" in titles
         assert not [title for title in titles if by_hand["label"] in title]
 
     def test_AI_가_채택하면_한_번_알린다(

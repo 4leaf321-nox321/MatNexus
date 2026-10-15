@@ -7,18 +7,23 @@
     옮겨도 번호는 그대로다              번호가 따라 바뀌면 옛 라벨이 다른 것을 가리킨다
     목록 찾기는 어느 번호로든           손에 든 라벨이 시편 번호여도 시험 목록에서 찾힌다
     전체 검색은 번호로 곧장             번호를 아는 사람은 그것 하나를 원한다
+    물성 카드도 번호를 받는다(C-)       같은 재료에 「인장 MD」 가 여러 장이다(2026-10-16)
+    카드는 사슬 밖이다                  시험 목록에 카드 번호를 치면 아무것도 안 나온다
 """
 
 from __future__ import annotations
 
 import re
 import uuid
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.modules.fitting.models import PropertyCard
+from app.modules.materials.models import Material
 from app.modules.tests.definitions import ensure_builtin_test_types
 from app.modules.tests.models import TestRun, TestType
 from app.modules.workspaces.models import Workspace
@@ -178,3 +183,82 @@ def test_전체_검색은_번호로_곧장_찾고_결과마다_번호를_싣는�
     assert {hit["code"] for hit in specimen["hits"]} == {
         one["code"] for one in made["specimens"]
     }
+
+
+def test_물성_카드도_번호를_받고_어느_목록에서든_그_번호로_찾는다(
+    client: TestClient, admin_headers: dict[str, str], db: Session, workspace: Workspace
+) -> None:
+    """같은 재료에 같은 이름의 카드가 여러 장이라 이름으로는 한 장을 못 가리킨다
+    (2026-10-16)."""
+    made = _chain(client, admin_headers, db, workspace)
+    material_id = uuid.UUID(made["material"]["id"])
+    twins = [PropertyCard(material_id=material_id, label="인장 MD") for _ in range(2)]
+    db.add_all(twins)
+    db.commit()
+    first, second = (
+        client.get(f"/api/fitting/cards/{one.id}", headers=admin_headers).json()
+        for one in twins
+    )
+    assert re.fullmatch(r"C-\d{6}", first["code"])
+    assert first["code"] != second["code"]
+
+    def cards(q: str) -> set[str]:
+        got = client.get("/api/fitting/cards", params={"q": q}, headers=admin_headers)
+        assert got.status_code == 200, got.text
+        return {one["id"] for one in got.json()["items"]}
+
+    # 카드 목록 — 패딩 없이 친 카드 번호는 그 한 장, 재료 번호는 그 재료의 카드.
+    assert cards(_short(second["code"])) == {second["id"]}
+    assert cards(made["material"]["code"]) == {first["id"], second["id"]}
+    # 재료 목록 — 카드 번호로 그 카드의 재료.
+    materials = client.get(
+        "/api/materials", params={"q": first["code"]}, headers=admin_headers
+    ).json()["items"]
+    assert [one["id"] for one in materials] == [made["material"]["id"]]
+    # **카드는 사슬 밖이다** — 시험 목록이 그 재료의 시험을 전부 내면 「근거 시험」 으로
+    # 읽힌다.
+    runs = client.get(
+        "/api/test-runs", params={"q": first["code"]}, headers=admin_headers
+    ).json()["items"]
+    assert runs == []
+
+    # 전체 검색은 번호로 곧장.
+    body = client.get(
+        "/api/search", params={"q": _short(first["code"])}, headers=admin_headers
+    ).json()
+    [group] = [one for one in body["groups"] if one["kind"] == "property_card"]
+    top = group["hits"][0]
+    assert (top["id"], top["code"], top["via"]) == (
+        first["id"],
+        first["code"],
+        f"번호 {first['code']}",
+    )
+
+
+def test_휴지통에_든_재료의_카드는_번호로도_안_뜬다(
+    client: TestClient, admin_headers: dict[str, str], db: Session, workspace: Workspace
+) -> None:
+    """**시스템 관리자에게도.** 카드에는 지움 칸이 없어 재료의 휴지통을 따른다 — 검색에 뜨고
+    열면 「재료를 찾을 수 없습니다」 였다(2026-10-16 AI 평가)."""
+    made = _chain(client, admin_headers, db, workspace)
+    material_id = uuid.UUID(made["material"]["id"])
+    card = PropertyCard(material_id=material_id, label="휴지통 카드")
+    db.add(card)
+    db.commit()
+    db.refresh(card)
+
+    def found() -> list[str]:
+        body = client.get("/api/search", params={"q": card.code}, headers=admin_headers).json()
+        return [
+            hit["id"]
+            for group in body["groups"]
+            if group["kind"] == "property_card"
+            for hit in group["hits"]
+        ]
+
+    assert found() == [str(card.id)]
+    material = db.get(Material, material_id)
+    assert material is not None
+    material.deleted_at = datetime.now(UTC)
+    db.commit()
+    assert found() == []

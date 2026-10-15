@@ -144,6 +144,8 @@ def wanted_kinds(db: Session, user: User) -> list[str]:
         "voc.changed",
         "commission.changed",
         "commission.due_soon",
+        # 확정을 부탁한 사람 · 카드를 만든 사람이 받는다 — 누구나 부탁하고 만든다(2026-10-16).
+        "review.answered",
     ]
     if user.is_system_admin:
         wanted.append("account.signup")

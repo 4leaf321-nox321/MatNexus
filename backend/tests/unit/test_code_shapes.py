@@ -20,6 +20,8 @@ from app.shared import codes
         (" P-12 ", "specimen", "P-000012"),  # 복사해 붙이면 공백이 붙어 온다
         ("s1", "sample", "S-000001"),
         ("M-82", "material", "M-000082"),
+        ("c38", "property_card", "C-000038"),  # 물성 카드(2026-10-16)
+        ("C-000038", "property_card", "C-000038"),
     ],
 )
 def test_여러_꼴이_한_꼴로_맞춰진다(typed: str, kind: str, value: str) -> None:

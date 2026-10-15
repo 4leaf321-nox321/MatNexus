@@ -51,6 +51,7 @@ from app.modules.fitting.schemas import (
     CardBundleRequest,
     CardFacetOut,
     CardFacetsOut,
+    CardRemarkIn,
     CardRemarkOut,
     CardSlotIn,
     CardValueOut,
@@ -117,6 +118,7 @@ from app.modules.viscoelastic.models import MasterCurve, PronyFit
 from app.modules.workspaces.models import Workspace
 from app.shared import (
     audit,
+    codes,
     deckmap,
     declared_card,
     declared_slots,
@@ -148,7 +150,7 @@ from app.shared.declared_card import synthetic_plastic as _synthetic_plastic
 from app.shared.declared_card import table_items as _table_items
 from app.shared.declared_card import temperature_aware as _temperature_aware
 from app.shared.declared_card import thermal_block as _thermal_block
-from app.shared.errors import AppError, Conflict, NotFound
+from app.shared.errors import AppError, Conflict, Forbidden, NotFound
 from app.shared.pagination import Page
 from app.shared.request_context import get_client
 from matcore import (
@@ -1046,6 +1048,7 @@ def _remarks_of(
                 kind=remark.kind,
                 message=remark.message,
                 comment=remark.comment,
+                created_by_id=remark.created_by_id,
                 created_by_name=name,
                 created_at=remark.created_at,
             )
@@ -1102,6 +1105,7 @@ def _card_out(
         problem = _table_problem(deck)
     return PropertyCardOut(
         id=item.id,
+        code=item.code,
         material_id=item.material_id,
         material_name=material.record_name if material else "?",
         test_type_key=test_type.key if test_type else None,
@@ -2909,8 +2913,17 @@ def list_cards(
         query = query.where(Material.owner_workspace_id == owner_id)
     if q and (text := q.strip()):
         like = f"%{text}%"
+        # **번호로도 찾는다**(2026-10-16) — 카드 번호는 그 카드, 재료 번호는 그 재료의 카드.
+        # `C-38` · `c38` 도 같은 번호다(`codes`).
+        card_code = codes.of_kind(text, "property_card")
+        material_code = codes.of_kind(text, "material")
         query = query.where(
-            or_(Material.record_name.ilike(like), PropertyCard.label.ilike(like))
+            or_(
+                Material.record_name.ilike(like),
+                PropertyCard.label.ilike(like),
+                *([PropertyCard.code == card_code] if card_code else []),
+                *([Material.code == material_code] if material_code else []),
+            )
         )
 
     total = db.scalar(select(func.count()).select_from(query.subquery())) or 0
@@ -3595,7 +3608,8 @@ def _deck_for_card(
             if item.source.get("sample_count") == 1
             else f"시편 {item.source.get('sample_count', '?')}개의 대표 곡선에서 만들었습니다."
         ),
-        f"카드 {item.id} ({STATUS_NOTES.get(item.status, item.status)})",
+        # 번호를 앞에 — 덱을 받은 사람이 「C-000038 카드」 라고 되물을 수 있게(2026-10-16).
+        f"카드 {item.code} · {item.id} ({STATUS_NOTES.get(item.status, item.status)})",
     ]
     # **네킹을 안 잘랐다는 사실은 덱까지 따라가야 한다.** 소성 표만 봐서는
     # 구별할 방법이 없다 — 점이 나란히 있을 뿐이다.
@@ -3786,6 +3800,7 @@ def export_bundle(
         items.append(
             bundle.BundleCard(
                 card_id=str(card.id),
+                code=card.code,
                 label=card.label,
                 material=material.record_name if material else "?",
                 status=card.status,
@@ -4387,6 +4402,7 @@ def publish(
         changes={"status": {"before": "draft", "after": "published"}},
     )
     _notify_ai_card(db, user, item, "확정했습니다")
+    _notify_answer(db, user, item, "확정됐습니다")
     db.commit()
     db.refresh(item)
     return _card_out(db, item, access=access_of(db, user, item))
@@ -4406,7 +4422,7 @@ def _notify_ai_card(db: Session, user: User, item: PropertyCard, verb: str) -> N
         db,
         event_kind=steward_notice.AI_CONFIRMED,
         key=f"ai-card:{item.id}:{verb}:{datetime.now(UTC).isoformat()}",
-        title=f"{steward_notice.client_label(client)} 가 카드를 {verb} — {item.label}",
+        title=f"{steward_notice.client_label(client)} 가 카드를 {verb} — {_named(item)}",
         body=(
             f"{user.display_name} 님의 토큰으로 · 재료 "
             f"{material.record_name if material else '(알 수 없음)'}"
@@ -4497,7 +4513,7 @@ def request_publish(
         db,
         event_kind=steward_notice.REVIEW_REQUESTED,
         key=f"publish-request:{item.id}:{datetime.now(UTC).date().isoformat()}",
-        title=f"카드 확정 요청 — {item.label}",
+        title=f"카드 확정 요청 — {_named(item)}",
         body=f"{about}\n{note}" if note else about,
         link=f"/materials/{item.material_id}?tab=cards",
         exclude=user.id,
@@ -4507,6 +4523,146 @@ def request_publish(
     return PublishAskOut(
         notified=notified, card=_card_out(db, item, access=access_of(db, user, item))
     )
+
+
+#: 카드 코멘트의 종류 — 사람이 남긴 말(2026-10-16).
+COMMENT = "comment"
+
+
+def _named(item: PropertyCard) -> str:
+    """알림 제목의 카드 — 번호와 이름. 같은 재료에 「인장 MD」 가 여러 장이라 이름만으로는
+    어느 카드인지 모른다."""
+    return f"{item.code} {item.label}"
+
+
+def _requesters(db: Session, item: PropertyCard) -> list[uuid.UUID]:
+    """이 카드의 확정을 부탁한 사람들(오래된 부탁부터, 겹치면 한 번)."""
+    rows = db.scalars(
+        select(PropertyCardRemark.created_by_id)
+        .where(
+            PropertyCardRemark.card_id == item.id,
+            PropertyCardRemark.kind == PUBLISH_REQUESTED,
+            PropertyCardRemark.created_by_id.is_not(None),
+        )
+        .order_by(PropertyCardRemark.created_at)
+    )
+    return [one for one in dict.fromkeys(rows) if one is not None]
+
+
+def _about(db: Session, user: User, item: PropertyCard) -> str:
+    material = db.get(Material, item.material_id)
+    return (
+        f"{user.display_name} 님 · 재료 {material.record_name if material else '(알 수 없음)'}"
+    )
+
+
+def _notify_answer(db: Session, user: User, item: PropertyCard, verb: str) -> None:
+    """**확정을 부탁한 사람에게 답을 알린다**(2026-10-16).
+
+    부탁은 한 방향이었다 — 부탁한 사람은 확정됐는지 알려면 카드를 다시 열어 봐야 했다.
+    한 사람이 여러 번 부탁했어도 한 통이다. 답한 사람 자신에게는 안 보낸다. 되살린 뒤 다시
+    확정하면 앞서 부탁한 사람도 받는다 — 같은 카드를 부탁했던 사람이다.
+    """
+    people = [one for one in _requesters(db, item) if one != user.id]
+    if not people:
+        return
+    steward_notice.notify(
+        db,
+        people,
+        event_kind=steward_notice.REVIEW_ANSWERED,
+        key=f"card-answer:{item.id}:{verb}:{datetime.now(UTC).isoformat()}",
+        title=f"요청한 카드가 {verb} — {_named(item)}",
+        body=_about(db, user, item),
+        link=f"/materials/{item.material_id}?tab=cards",
+    )
+
+
+@router.post("/cards/{card_id}/remarks", response_model=CardRemarkOut, status_code=201)
+def add_card_remark(
+    card_id: uuid.UUID,
+    payload: CardRemarkIn,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> CardRemarkOut:
+    """카드에 **코멘트를 남긴다**(2026-10-16) — 볼 수 있는 사람 누구나, 확정 카드에도.
+
+    전에는 코멘트를 서버만 적었다(근거 시험이 옮겨졌을 때 · 확정 요청). 카드에는 「반려」
+    상태가 없어서(D8) 자료 관리자가 확정하지 않을 때 **그 사유를 남길 자리가 없었다** —
+    부탁한 사람은 왜 초안으로 남아 있는지 몰랐다. 검토 의견 · 보완 요청도 같은 자리다.
+
+    카드를 고치는 일이 아니다 — 값 · 근거는 그대로이고 말만 붙는다(불변과 가변을 섞지 않는다).
+    그래서 고칠 권한을 묻지 않는다. 카드를 만든 사람과 확정을 부탁한 사람에게 알린다.
+    """
+    item = _visible_card(db, user, card_id)
+    text = payload.comment.strip()
+    if not text:
+        raise AppError("MNX-FITTING-0049", "코멘트가 비었습니다.", status=422)
+    remark = PropertyCardRemark(
+        card_id=item.id,
+        kind=COMMENT,
+        message="코멘트",
+        comment=text,
+        created_by_id=user.id,
+    )
+    db.add(remark)
+    db.flush()
+    people = [
+        one
+        for one in [item.created_by_id, *_requesters(db, item)]
+        if one is not None and one != user.id
+    ]
+    if people:
+        steward_notice.notify(
+            db,
+            people,
+            event_kind=steward_notice.REVIEW_ANSWERED,
+            key=f"card-remark:{remark.id}",
+            title=f"{user.display_name} 님이 카드에 코멘트를 남겼습니다 — {_named(item)}",
+            body=text if len(text) <= 300 else text[:299] + "…",
+            link=f"/materials/{item.material_id}?tab=cards",
+        )
+    db.commit()
+    db.refresh(remark)
+    return CardRemarkOut(
+        id=remark.id,
+        kind=remark.kind,
+        message=remark.message,
+        comment=remark.comment,
+        created_by_id=remark.created_by_id,
+        created_by_name=user.display_name,
+        created_at=remark.created_at,
+    )
+
+
+@router.delete("/cards/{card_id}/remarks/{remark_id}", status_code=204)
+def remove_card_remark(
+    card_id: uuid.UUID,
+    remark_id: uuid.UUID,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> Response:
+    """**사람이 남긴 코멘트만** 지운다 — 남긴 사람이나 자료 관리자가(2026-10-16).
+
+    서버가 적은 것(근거 시험이 옮겨짐 · 확정 요청)은 지우지 않는다 — 카드를 보는 사람이 알아야
+    하는 사실이고, 확정 요청은 하루 한 번을 막는 근거다.
+    """
+    item = _visible_card(db, user, card_id)
+    remark = db.get(PropertyCardRemark, remark_id)
+    if remark is None or remark.card_id != item.id:
+        raise NotFound("MNX-FITTING-0050", "코멘트를 찾을 수 없습니다.")
+    if remark.kind != COMMENT:
+        raise AppError(
+            "MNX-FITTING-0051",
+            "서버가 남긴 기록(근거 이동 · 확정 요청)은 지울 수 없습니다.",
+            status=409,
+        )
+    if remark.created_by_id != user.id and not permissions.is_data_steward(user):
+        raise Forbidden(
+            "MNX-FITTING-0052", "남긴 사람이나 자료 관리자만 코멘트를 지울 수 있습니다."
+        )
+    db.delete(remark)
+    db.commit()
+    return Response(status_code=204)
 
 
 @router.post("/cards/{card_id}/restore", response_model=PropertyCardOut)
@@ -4590,6 +4746,7 @@ def deprecate(
         changes={"status": {"before": before, "after": "deprecated"}},
     )
     _notify_ai_card(db, user, item, "사용 중지했습니다")
+    _notify_answer(db, user, item, "사용 중지됐습니다")
     db.commit()
     db.refresh(item)
     return _card_out(db, item, access=access_of(db, user, item))

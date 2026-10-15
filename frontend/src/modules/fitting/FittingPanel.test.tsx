@@ -27,13 +27,15 @@ const deprecate = vi.fn()
 const restore = vi.fn()
 const create = vi.fn()
 const requestPublish = vi.fn()
+const addRemark = vi.fn()
+const removeRemark = vi.fn()
 
 // **확정·내리기·되살리기는 자료 관리자의 단추다**(ADR 0035). 이 파일은 그 단추들이
 // 무엇을 하는지를 보므로 자료 관리자로 연다 — 확정 요청만 평범한 멤버로 본다.
 const role = vi.hoisted(() => ({ steward: true }))
 vi.mock('@/shared/auth/AuthContext', () => ({
   useAuth: () => ({
-    user: { is_system_admin: false, is_data_manager: role.steward, memberships: [] },
+    user: { id: 'u1', is_system_admin: false, is_data_manager: role.steward, memberships: [] },
   }),
 }))
 
@@ -50,6 +52,8 @@ vi.mock('@/modules/fitting/api', async (importOriginal) => ({
     unitSystems: () => Promise.resolve([{ key: 'si', label: 'SI', is_default: true }]),
     create: (...args: unknown[]) => create(...args),
     requestPublish: (...args: unknown[]) => requestPublish(...args),
+    addRemark: (...args: unknown[]) => addRemark(...args),
+    removeRemark: (...args: unknown[]) => removeRemark(...args),
     // 방법 목록은 서버가 준다 — 차례가 곧 추천 순서다.
     resampleMethods: () =>
       Promise.resolve([
@@ -367,6 +371,68 @@ describe('확정 요청', () => {
     expect(await screen.findByText('확정 요청됨')).toBeInTheDocument()
     // 경고 코멘트가 아니다 — 노란 「코멘트 N」 으로 세지 않는다.
     expect(screen.queryByText(/코멘트 1/)).not.toBeInTheDocument()
+  })
+})
+
+describe('카드 번호 · 코멘트', () => {
+  // 같은 재료에 「인장 MD」 가 여러 장이라 번호가 한 장을 가리킨다(2026-10-16).
+  it('줄에 번호가 서고 누르면 복사할 수 있다', async () => {
+    withCard('draft', { code: 'C-000038' })
+    panel()
+    expect(await screen.findByRole('button', { name: '번호 C-000038 복사' })).toBeInTheDocument()
+  })
+
+  it('코멘트를 남기면 보내고 목록을 다시 읽는다', async () => {
+    withCard('published', { code: 'C-000038' })
+    addRemark.mockResolvedValue({})
+    panel()
+    await userEvent.click(await screen.findByRole('button', { name: '인장 MD 코멘트 남기기' }))
+    await userEvent.type(screen.getByLabelText('코멘트'), '푸아송비 근거 보완 필요')
+    await userEvent.click(screen.getByRole('button', { name: '코멘트 남기기' }))
+    await waitFor(() => expect(addRemark).toHaveBeenCalledWith('c1', '푸아송비 근거 보완 필요'))
+    // 다시 읽는다 — 처음 한 번 + 남긴 뒤 한 번.
+    await waitFor(() => expect(cards.mock.calls.length).toBeGreaterThanOrEqual(2))
+  })
+
+  it('내가 남긴 코멘트에만 지우기 단추가 선다', async () => {
+    role.steward = false
+    try {
+      withCard('draft', {
+        remarks: [
+          {
+            id: 'r1',
+            kind: 'comment',
+            message: '코멘트',
+            comment: '내가 쓴 말',
+            created_by_id: 'u1',
+            created_by_name: '나',
+            created_at: '2026-10-16T00:00:00Z',
+          },
+          {
+            id: 'r2',
+            kind: 'comment',
+            message: '코멘트',
+            comment: '남이 쓴 말',
+            created_by_id: 'u2',
+            created_by_name: '남',
+            created_at: '2026-10-16T00:00:00Z',
+          },
+        ],
+      })
+      removeRemark.mockResolvedValue(undefined)
+      panel()
+      // 사람의 코멘트뿐이면 노란 경고가 아니라 평범한 「코멘트 2」.
+      expect(await screen.findByText('코멘트 2')).toBeInTheDocument()
+      await userEvent.click(screen.getByRole('button', { name: '인장 MD 펼치기' }))
+      expect(await screen.findByText('내가 쓴 말')).toBeInTheDocument()
+      expect(screen.getByText('남이 쓴 말')).toBeInTheDocument()
+      const removes = screen.getAllByRole('button', { name: '코멘트 지우기' })
+      expect(removes).toHaveLength(1)
+      await userEvent.click(removes[0])
+      await waitFor(() => expect(removeRemark).toHaveBeenCalledWith('c1', 'r1'))
+    } finally {
+      role.steward = true
+    }
   })
 })
 

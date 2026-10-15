@@ -761,17 +761,28 @@ class CardRemarkOut(BaseModel):
     id: uuid.UUID
     kind: str
     """`relocated`(근거 시험이 다른 두께의 재료로 옮겨짐) · `publish_requested`(확정 요청)
-    · `comment`."""
+    · `comment`(사람이 남긴 코멘트, 2026-10-16)."""
     message: str
     """서버가 적은 사실."""
     comment: str | None = None
     """사람이 적은 말."""
+    created_by_id: uuid.UUID | None = None
+    """누가 — 화면이 「내 코멘트」 에만 지우기 단추를 세운다(판정은 서버)."""
     created_by_name: str | None = None
     created_at: datetime
 
 
+class CardRemarkIn(BaseModel):
+    """카드에 남길 코멘트(2026-10-16) — 확정하지 않는 사유 · 검토 의견 · 보완 요청."""
+
+    comment: str = Field(min_length=1, max_length=1000)
+
+
 class PropertyCardOut(BaseModel):
     id: uuid.UUID
+    code: str
+    """**불변 고유 번호** — `C-000038`(2026-10-16). 이름은 고칠 수 있고 같은 재료에 같은 이름이
+    여러 장이라, 사람이 한 장을 가리키는 손잡이는 이것이다."""
     material_id: uuid.UUID
     material_name: str
     test_type_key: str | None
