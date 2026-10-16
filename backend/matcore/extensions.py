@@ -108,8 +108,20 @@ def load(root: str | Path) -> tuple[Loaded, ...]:
     return tuple(
         _load_one(folder)
         for folder in sorted(base.iterdir())
-        if folder.is_dir() and not folder.name.startswith((".", "_"))
+        if folder.is_dir() and not folder.name.startswith((".", "_")) and _meant(folder)
     )
+
+
+def _meant(folder: Path) -> bool:
+    """**확장을 만들려던 폴더인가.** 파이썬 이름이 될 수 없고(공백 등) `.py` 도 없으면 아니다.
+
+    실측(2026-10-16): 그래픽 드라이버가 작업 폴더에 로그 폴더(`NVIDIA Corporation/umdlogs`)를
+    만들었고, 그것이 「실패: __init__.py 가 없습니다」 로 확장 계약서에 실렸다 — 그 PC 에서만.
+    CI 가 새로 만든 계약서와 어긋나 릴리스 검사가 빨갛게 됐다. 좁게 거른다 — 확장 이름이 될 수
+    있는 빈 폴더(만들다 만 확장)나 `.py` 가 든 폴더(이름을 잘못 지은 진짜 확장)는 지금처럼
+    실패로 보고된다. 조용히 사라지지 않는다.
+    """
+    return folder.name.isidentifier() or any(folder.glob("*.py"))
 
 
 def failures(report: tuple[Loaded, ...]) -> tuple[Loaded, ...]:

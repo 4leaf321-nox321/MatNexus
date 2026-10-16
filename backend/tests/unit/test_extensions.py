@@ -107,6 +107,21 @@ class Test읽기:
 
 
 class Test실패:
+    def test_파이썬이_없는_폴더는_확장이_아니다(self, tmp_path: Path, sandbox: Any) -> None:
+        """드라이버가 만든 로그 폴더(`NVIDIA Corporation/umdlogs`)가 계약서에 「실패」 로
+        실렸다(2026-10-16). 그런데 `.py` 가 있고 `__init__.py` 만 없으면 여전히 실패다 —
+        이름을 잘못 지은 진짜 확장이 조용히 사라지면 안 된다."""
+        del sandbox
+        (tmp_path / "NVIDIA Corporation" / "umdlogs").mkdir(parents=True)
+        assert extensions.load(tmp_path) == ()
+        # 이름이 파이썬 이름이 아니어도 `.py` 가 있으면 확장을 만들려던 것이다 — 말해 준다.
+        misnamed = tmp_path / "my-ext"
+        misnamed.mkdir()
+        (misnamed / "steps.py").write_bytes(b"x = 1\n")
+        (failed,) = extensions.failures(extensions.load(tmp_path))
+        assert failed.name == "my-ext"
+        assert "__init__.py" in (failed.error or "")
+
     def test_하나가_터져도_나머지는_산다(self, tmp_path: Path, sandbox: Any) -> None:
         """**남의 확장 때문에 내 물성을 못 쓰면 안 된다.**"""
         write(tmp_path, "a_broken", BROKEN)

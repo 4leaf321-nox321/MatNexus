@@ -41,6 +41,17 @@ def upgrade() -> None:
         ensure_builtin_vocabularies,
     )
 
+    # **이 마이그레이션은 지금의 ORM 모델로 값을 만든다** — 그래서 모델에 뒤에 더한 칸이 이 시점
+    # DB 에도 있어야 한다. 실측(2026-10-16): `processing_defaults`(f3c8a1d6e2b9)를 더하자 새 설치
+    # (CI 스모크)가 여기서 「column vocabulary_terms.processing_defaults does not exist」 로 통째로
+    # 되돌아갔다. 이미 이 지점을 지난 DB 는 이 줄을 다시 돌지 않는다 — 새 설치에서만 미리 만든다.
+    # 뒤 마이그레이션은 `IF NOT EXISTS` 로 같은 칸을 만든다. `vocabulary_terms` 에 칸을 더할
+    # 때마다 여기에 한 줄 — 같은 ORM 을 쓰는 6e746a0bfd2b · c7a4e0b93f16 은 이 뒤다.
+    op.execute(
+        "ALTER TABLE vocabulary_terms "
+        "ADD COLUMN IF NOT EXISTS processing_defaults JSONB NOT NULL DEFAULT '{}'::jsonb"
+    )
+
     session = Session(bind=op.get_bind())
     made = ensure_builtin_vocabularies(session)
     fields = ensure_builtin_axis_fields(session)

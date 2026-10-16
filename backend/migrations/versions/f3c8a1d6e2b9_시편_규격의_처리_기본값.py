@@ -11,9 +11,7 @@ Create Date: 2026-10-16
 
 from typing import Sequence, Union
 
-import sqlalchemy as sa
 from alembic import op
-from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision: str = "f3c8a1d6e2b9"
@@ -23,14 +21,11 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.add_column(
-        "vocabulary_terms",
-        sa.Column(
-            "processing_defaults",
-            postgresql.JSONB(astext_type=sa.Text()),
-            server_default="{}",
-            nullable=False,
-        ),
+    # **이미 있을 수 있다** — 새 설치는 b3cecec7f07c 가 미리 만든다(그 마이그레이션이 지금의 ORM
+    # 모델로 값을 만들어서, 칸이 없으면 새 설치가 거기서 멈춘다 — 2026-10-16 CI 스모크).
+    op.execute(
+        "ALTER TABLE vocabulary_terms "
+        "ADD COLUMN IF NOT EXISTS processing_defaults JSONB NOT NULL DEFAULT '{}'::jsonb"
     )
 
 
