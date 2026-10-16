@@ -180,7 +180,56 @@ export const RHEOMETER_STARTER: RecipeStep[] = [
   { plugin: 'curve.sort_unique', options: { x: 'shear_rate', duplicate_policy: 'mean' } },
 ]
 
+/**
+ * 굽힘(3점 · 4점, 2026-10-16) — 시편 기록(규격)의 스팬 · 폭 · 두께로 굽힘 응력 · 변형률을 내고
+ * 탄성률(등가 E) · 강도를 잰다.
+ *
+ * **하중 스팬은 「있으면 쓴다」**(`@?specimen_load_span`, 2026-10-16). 시편에 하중 스팬이 있으면
+ * 4점, 없으면 3점이다. 전에는 안 깔아서 4점 시편이 3점 식으로 조용히 계산됐고, `@` 로 깔면 3점
+ * 시편이 멈춘다. 탄성률 방법은 규격이 정한다 — 기본은 현이고, 시편 규격의 처리 기본값(D790 은
+ * 접선)이 화면에서 덮는다(`processingApi.defaults`).
+ */
+export const FLEXURAL_STARTER: RecipeStep[] = [
+  {
+    plugin: 'flexural.engineering',
+    options: {
+      support_span: '@specimen_span',
+      width: '@specimen_width',
+      thickness: '@specimen_thickness',
+      load_span: '@?specimen_load_span',
+    },
+  },
+  { plugin: 'flexural.modulus', options: { method: 'chord' } },
+  { plugin: 'flexural.strength', options: {} },
+]
+
+/**
+ * 압축(2026-10-16) — 초기 높이 · 하중 면적으로 압축 응력 · 변형률(양수)을 내고, 탄성률과 규격
+ * 보고값(몇 % 압축 응력 · 압축 강도 · 폼 지표)을 잰다. 탄성률 기본은 고무 · 폼의 할선 10% 다 —
+ * 플라스틱(ISO 604)은 현으로 바꾼다. 반복 하중 규격(ISO 3386 은 4번째)은 첫 단계의 사이클을 정한다.
+ */
+export const COMPRESSION_STARTER: RecipeStep[] = [
+  {
+    plugin: 'compression.engineering',
+    options: { height: '@specimen_height', area: '@specimen_area' },
+  },
+  { plugin: 'compression.modulus', options: { method: 'secant', maximum_strain: 0.1 } },
+  { plugin: 'compression.indices', options: {} },
+]
+
 export const TENSILE_STARTER: RecipeStep[] = TENSILE_STANDARD.map((step) => ({
   plugin: step.plugin,
   options: { ...step.options },
 }))
+
+/**
+ * 시험 종류 → 처음 깔리는 순서. 없는 종류는 빈 상태에서 시작한다 — 그 종류의 표준 순서를
+ * 우리가 모른다(지어내지 않는다).
+ */
+export const STARTERS: Record<string, RecipeStep[]> = {
+  tensile: TENSILE_STARTER,
+  dma_sweep: DMA_STARTER,
+  rheometer_flow: RHEOMETER_STARTER,
+  flexural: FLEXURAL_STARTER,
+  compression: COMPRESSION_STARTER,
+}

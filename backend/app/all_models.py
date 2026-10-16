@@ -50,6 +50,7 @@ from app.modules.guide.models import (
 )
 from app.modules.materials.models import (
     Material,
+    MaterialApprovalRequest,
     MaterialParameterSet,
     MaterialUse,
     Sample,
@@ -115,6 +116,7 @@ __all__ = [
     "InstrumentCapability",
     "Job",
     "Material",
+    "MaterialApprovalRequest",
     "MaterialParameterSet",
     "MaterialUse",
     "McpToolDaily",

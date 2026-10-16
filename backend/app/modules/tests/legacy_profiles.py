@@ -256,6 +256,74 @@ MNX_RELAXATION_CSV_DEFINITION: dict[str, Any] = {
     },
 }
 
+#: **Instron Bluehill 원시 데이터 CSV — 굽힘 · 압축**(2026-10-16). 받은 실파일이 아직 없어
+#: Bluehill 이 쓰는 이름으로 적었다 — 첫 줄 열 이름, 둘째 줄 괄호 단위(`(mm)` · `(N)` · `(s)`),
+#: 또는 이름 안의 단위(`Load (N)`). 굽힘 방법은 `Flexure …`, 압축 방법은 `Compressive …` 로
+#: 이름을 바꿔 적는 것이 지문이다. `Time · Extension · Load` 뿐인 파일은 종류를 못 가르므로
+#: 지문으로 잡지 않는다 — 시험 종류를 고르고 올리면 Zwick 파서가 같은 꼴로 읽는다.
+#:
+#: `Extension` 은 크로스헤드다. 신율계 · 압축계는 `Strain 1`, 처짐계는 `Deflection`.
+_INSTRON_COMMON: dict[str, Any] = {
+    "Time": {"channel": "time"},
+    "Time (s)": {"channel": "time", "unit": "s"},
+    "Extension": {"channel": "displacement"},
+    "Extension (mm)": {"channel": "displacement", "unit": "mm"},
+    "Load": {"channel": "force"},
+    "Load (N)": {"channel": "force", "unit": "N"},
+    "Load (kN)": {"channel": "force", "unit": "kN"},
+}
+INSTRON_FLEXURAL_KEY = "instron_bluehill_flexural"
+INSTRON_FLEXURAL_DEFINITION: dict[str, Any] = {
+    "match": {
+        "extensions": [".csv", ".txt"],
+        "header_any": [
+            "Flexure extension",
+            "Flexure load",
+            "Flexure stress",
+            "Flexure strain",
+            "Flexure extension (mm)",
+            "Flexure load (N)",
+            # `Deflection` 하나로는 잡지 않는다 — DMA 3점 굽힘 CSV 에도 나올 수 있는 이름이다.
+        ],
+    },
+    "columns": {
+        **_INSTRON_COMMON,
+        "Flexure extension": {"channel": "displacement"},
+        "Flexure extension (mm)": {"channel": "displacement", "unit": "mm"},
+        "Flexure load": {"channel": "force"},
+        "Flexure load (N)": {"channel": "force", "unit": "N"},
+        "Flexure load (kN)": {"channel": "force", "unit": "kN"},
+        "Deflection": {"channel": "deflection"},
+        "Deflection (mm)": {"channel": "deflection", "unit": "mm"},
+    },
+}
+INSTRON_COMPRESSION_KEY = "instron_bluehill_compression"
+INSTRON_COMPRESSION_DEFINITION: dict[str, Any] = {
+    "match": {
+        "extensions": [".csv", ".txt"],
+        "header_any": [
+            "Compressive extension",
+            "Compressive load",
+            "Compressive stress",
+            "Compressive strain (Strain 1)",
+            "Compressive extension (mm)",
+            "Compressive load (N)",
+            "Compressive load (kN)",
+        ],
+    },
+    "columns": {
+        **_INSTRON_COMMON,
+        "Compressive extension": {"channel": "displacement"},
+        "Compressive extension (mm)": {"channel": "displacement", "unit": "mm"},
+        "Compressive load": {"channel": "force"},
+        "Compressive load (N)": {"channel": "force", "unit": "N"},
+        "Compressive load (kN)": {"channel": "force", "unit": "kN"},
+        "Strain 1": {"channel": "strain"},
+        "Strain 1 (%)": {"channel": "strain", "unit": "%"},
+        "Compressive strain (Strain 1)": {"channel": "strain"},
+    },
+}
+
 #: (key, label, 시험 종류 key, description, definition)
 BUILTIN_FORMAT_PROFILES: list[tuple[str, str, str, str, dict[str, Any]]] = [
     (
@@ -295,6 +363,22 @@ BUILTIN_FORMAT_PROFILES: list[tuple[str, str, str, str, dict[str, Any]]] = [
         "첫 줄 열 이름 Time · Relaxation stress(· Strain · Temperature), 둘째 줄 단위"
         "(s · MPa · 1 · K 처럼). 장비 파일은 이 꼴로 옮기거나 형식 정의에서 열을 이어 준다.",
         MNX_RELAXATION_CSV_DEFINITION,
+    ),
+    (
+        INSTRON_FLEXURAL_KEY,
+        "Instron Bluehill 굽힘 (원시 데이터 CSV)",
+        "flexural",
+        "Flexure extension · Flexure load(· Deflection) 와 괄호 단위 줄. 실파일로 확인 전이라 "
+        "열 이름이 다르면 형식 정의에서 이어 준다.",
+        INSTRON_FLEXURAL_DEFINITION,
+    ),
+    (
+        INSTRON_COMPRESSION_KEY,
+        "Instron Bluehill 압축 (원시 데이터 CSV)",
+        "compression",
+        "Compressive extension · Compressive load(· Strain 1) 와 괄호 단위 줄. 실파일로 확인 "
+        "전이라 열 이름이 다르면 형식 정의에서 이어 준다.",
+        INSTRON_COMPRESSION_DEFINITION,
     ),
 ]
 

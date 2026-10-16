@@ -79,6 +79,10 @@ const ALLOWED: Record<string, { to: string; why: string }[]> = {
   ],
   vocabulary: [
     {
+      to: 'processing',
+      why: '시편 규격이 **처리 방법**을 든다(2026-10-16) — D790 은 탄성률을 접선으로, ISO 178 은 현으로. 그 값은 처리 단계 · 옵션 · 선택지라 고치는 부품(`StandardDefaultsEditor`)은 처리 모듈의 것이고, 규격 치수 창은 자리만 내준다(아래 catalog · units 와 같은 판단). 뒤집으면 처리 화면이 기준정보 창을 알게 된다.',
+    },
+    {
       to: 'catalog',
       why: '물성 항목 축에 「물성 매핑」 표가 붙는다 — 문헌 키 · 사내 항목 · 잰 값이 한 줄에 서는 표. 매핑(`property_links`)은 문헌 카탈로그의 것이라 표를 그리는 것은 catalog 의 일이고, 기준정보 화면은 그 축의 자리만 내준다(바로 아래 units 와 같은 판단). 반대로 뒤집으면 카탈로그가 기준정보 화면을 알게 된다.',
     },

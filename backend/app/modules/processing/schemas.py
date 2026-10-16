@@ -100,6 +100,20 @@ class ProcessingStepOut(BaseModel):
     """권장 순서. 작을수록 앞. 목록이 이미 이 순서로 온다."""
 
 
+class ProcessingDefaultsOut(BaseModel):
+    """이 시험을 **어떻게 처리할지** — 시편 규격이 정한 옵션(2026-10-16).
+
+    처리 단계는 규격 이름을 모른다. 규격마다 다른 방법(D790 은 접선, ISO 178 은 현, ISO 7743 은
+    4번째 하중 구간)은 규격 값(`vocabulary_terms.processing_defaults`)에 있고, 화면이 기본
+    순서를 깔 때 이것으로 채운다. 규격이 없거나 적어 둔 것이 없으면 `steps` 가 빈다.
+    """
+
+    standard: str | None = None
+    """시편의 규격 이름. 화면이 「ASTM D790 기준으로 채움」 이라고 말한다."""
+    steps: dict[str, dict[str, bool | int | float | str | None]] = {}
+    """처리 단계 → 옵션 → 값. `@` 로 시작하면 참조, `None` 은 「비움」."""
+
+
 class ProcessingScalarOut(BaseModel):
     key: str
     label: str

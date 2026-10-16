@@ -100,6 +100,19 @@ NOT_YET_CHANNELS = {
     "tensile.true_plastic",
 }
 
+#: **채널로는 안 가려지는 계산**(2026-10-16). 굽힘 · 압축은 인장과 같은 하중 · 변위를 잰다 —
+#: 채널로 거르면 인장 시험의 단계 목록에 굽힘 · 압축 단계가 뜨고(반대도), 사람은 단계를 고를
+#: 때마다 그것을 걸러 내야 한다. 위 목록이 미뤄 둔 판단을 이 둘에는 내렸다: **키로만 거른다.**
+#: 대가 — 부서가 굽힘 · 압축 종류를 따로 만들면 이 단계가 안 보인다(기본 종류를 쓴다).
+SAME_SHAPE_AS_TENSILE = {
+    "flexural.engineering",
+    "flexural.modulus",
+    "flexural.strength",
+    "compression.engineering",
+    "compression.modulus",
+    "compression.indices",
+}
+
 
 def test_시험종류를_가리키면_채널도_함께_적는다() -> None:
     """**키만 적힌 계산은 부서가 만든 종류에서 사라진다.**
@@ -120,6 +133,7 @@ def test_시험종류를_가리키면_채널도_함께_적는다() -> None:
         for plugin in registry.list_plugins()
         if plugin.kind in ("processing", "grouping")
         and plugin.id not in NOT_YET_CHANNELS
+        and plugin.id not in SAME_SHAPE_AS_TENSILE
         and any(target in known for target in plugin.applies_to)
         and not plugin.requires_channels
         # **요약값 묶음은 채널이 없다** — 피로는 시편마다 점 하나라 곡선 채널이 없는 것이
@@ -144,7 +158,7 @@ def test_안_옮긴_목록이_실제로_남아_있다() -> None:
     구나」 로 읽는다. 없는 계산을 가리키는 것도 같은 이유로 막는다.
     """
     ids = {plugin.id for plugin in registry.list_plugins()}
-    gone = sorted(NOT_YET_CHANNELS - ids)
+    gone = sorted((NOT_YET_CHANNELS | SAME_SHAPE_AS_TENSILE) - ids)
     assert not gone, f"없는 계산이 목록에 있습니다: {gone}"
     done = sorted(one for one in NOT_YET_CHANNELS if registry.get(one).requires_channels)
     assert not done, f"이미 옮겼습니다 — 목록에서 빼세요: {done}"

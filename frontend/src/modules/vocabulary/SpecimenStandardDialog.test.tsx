@@ -30,6 +30,14 @@ vi.mock('@/modules/vocabulary/api', async (importOriginal) => ({
   },
 }))
 
+/** 처리 기본값 부품이 부르는 단계 목록(2026-10-16). 기본값이 있을 때만 불린다. */
+const processingSteps = vi.fn()
+
+vi.mock('@/modules/processing/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/modules/processing/api')>()),
+  processingApi: { steps: () => processingSteps() },
+}))
+
 const field = (key: string, label: string, required = false, inherited = true) => ({
   key,
   label,
@@ -251,5 +259,63 @@ describe('시편 규격 치수', () => {
     show()
     expect(await screen.findByRole('button', { name: /환봉/ })).toBeDisabled()
     expect(screen.getByRole('button', { name: '저장' })).toBeDisabled()
+  })
+})
+
+describe('처리 기본값 (2026-10-16)', () => {
+  const D790 = {
+    ...TERM,
+    processing_defaults: { 'flexural.modulus': { method: 'tangent' } },
+  } as unknown as Term
+
+  beforeEach(() => {
+    termFields.mockResolvedValue(FIELDS)
+    crossSections.mockResolvedValue([])
+    update.mockReset()
+    update.mockResolvedValue(TERM)
+    processingSteps.mockResolvedValue([
+      {
+        id: 'flexural.modulus',
+        label: '굽힘 탄성률 (등가 E)',
+        params: [
+          {
+            name: 'method',
+            label: '방법',
+            type: 'choice',
+            default: 'chord',
+            choices: ['chord', 'tangent'],
+            choice_labels: { chord: '현', tangent: '접선' },
+            unit: null,
+            dimension: null,
+            help: null,
+            required: false,
+            role: null,
+            when: {},
+          },
+        ],
+      },
+    ])
+  })
+
+  it('안 고치면 보내지 않는다 — 그사이 다른 사람이 고친 것을 되돌리지 않게', async () => {
+    const user = userEvent.setup()
+    show(D790)
+    await screen.findByLabelText('게이지 길이')
+    await user.click(screen.getByRole('button', { name: '저장' }))
+    await waitFor(() => expect(update).toHaveBeenCalled())
+    const [, , body] = update.mock.calls[0]
+    expect(body).not.toHaveProperty('processing_defaults')
+  })
+
+  it('고치면 통째로 보낸다', async () => {
+    const user = userEvent.setup()
+    show(D790)
+    const method = await screen.findByLabelText('굽힘 탄성률 (등가 E) · 방법')
+    await waitFor(() => expect(method).toHaveValue('tangent'))
+    await user.selectOptions(method, 'chord')
+    await user.click(screen.getByRole('button', { name: '저장' }))
+    await waitFor(() => expect(update).toHaveBeenCalled())
+    const [, , body] = update.mock.calls[0]
+    expect(body.processing_defaults).toEqual({ 'flexural.modulus': { method: 'chord' } })
   })
 })

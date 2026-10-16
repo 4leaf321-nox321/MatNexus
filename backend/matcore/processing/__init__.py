@@ -278,6 +278,12 @@ def front_intact_stage(stages: Sequence[Stage], x: str, y: str) -> Stage | None:
 #: 앞 단계가 낸 값을 가리키는 표기. `{"youngs_modulus": "@youngs_modulus"}`
 REFERENCE_PREFIX = "@"
 
+#: **있으면 쓰는** 참조(2026-10-16). 없으면 오류 대신 비운다(`None`). 「없음」 이 그 자체로
+#: 뜻인 칸에만 쓴다 — 굽힘의 하중 스팬은 비면 3점이다. 시편에 하중 스팬이 있으면 4점이 되므로
+#: 4점 시편을 3점 식으로 조용히 계산하던 자리가 닫힌다. 꼭 있어야 하는 값은 `@` 로 둔다 —
+#: 없으면 멈춰야 한다.
+OPTIONAL_PREFIX = "@?"
+
 
 def _why_missing(name: str, stages: Sequence[Stage]) -> str:
     """그 값을 **내기로 되어 있던 단계**가 남긴 말.
@@ -318,6 +324,10 @@ def _resolve_references(
     for key, value in options.items():
         if not isinstance(value, str) or not value.startswith(REFERENCE_PREFIX):
             resolved[key] = value
+            continue
+        if value.startswith(OPTIONAL_PREFIX):
+            found = carried.get(value[len(OPTIONAL_PREFIX) :])
+            resolved[key] = found.value if found is not None else None
             continue
         name = value[len(REFERENCE_PREFIX) :]
         scalar = carried.get(name)

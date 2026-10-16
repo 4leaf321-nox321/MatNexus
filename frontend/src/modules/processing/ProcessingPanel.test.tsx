@@ -48,6 +48,10 @@ const recipes = vi.fn()
 const preview = vi.fn()
 const dimensions = vi.fn()
 const save = vi.fn()
+/** 시편 규격이 정한 처리 옵션(2026-10-16). 기본은 「규격 없음」. */
+const standardDefaults = vi.fn(() =>
+  Promise.resolve({ standard: null as string | null, steps: {} as Record<string, unknown> })
+)
 
 vi.mock('@/modules/processing/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/modules/processing/api')>()),
@@ -57,6 +61,7 @@ vi.mock('@/modules/processing/api', async (importOriginal) => ({
     preview: (...args: unknown[]) => preview(...args),
     inputs: () => inputs(),
     save: (...args: unknown[]) => save(...args),
+    defaults: () => standardDefaults(),
   },
 }))
 
@@ -215,9 +220,9 @@ function show() {
       <RightPanelHost />
       <ProcessingPanel
         testRunId="run-1"
-        // 인장이 아닌 종류로 연다 — 인장은 기본 순서가 미리 깔려서 "처음엔
-        // 아무것도 안 켜져 있다" 를 볼 수 없다.
-        testTypeKey="flexural"
+        // 기본 순서가 없는 종류로 연다 — 인장 · 굽힘 · 압축 등은 기본 순서가 미리 깔려서
+        // "처음엔 아무것도 안 켜져 있다" 를 볼 수 없다(`STARTERS`).
+        testTypeKey="shear"
         curveKey="curve-1"
         sourceColumns={SOURCE}
         sourceChannels={[
@@ -1038,7 +1043,7 @@ describe('열이 단위를 정하는 칸', () => {
         <RightPanelHost />
         <ProcessingPanel
           testRunId="run-1"
-          testTypeKey="flexural"
+          testTypeKey="shear"
           curveKey="curve-1"
           sourceColumns={['displacement', 'force', 'temperature']}
           sourceChannels={[
@@ -1098,5 +1103,126 @@ describe('열이 단위를 정하는 칸', () => {
     await user.click(screen.getByRole('button', { name: /미리보기/ }))
     await waitFor(() => expect(preview).toHaveBeenCalled())
     expect(sentCrop()?.start).toBeCloseTo(298.15)
+  })
+})
+
+describe('시편 규격이 처리 방법을 정한다 (2026-10-16)', () => {
+  const choice = (name: string, label: string, labels: Record<string, string>, dflt: string) => ({
+    name,
+    label,
+    type: 'choice',
+    default: dflt,
+    choices: Object.keys(labels),
+    choice_labels: labels,
+    unit: null,
+    dimension: null,
+    help: null,
+    required: false,
+    role: null,
+    when: {},
+  })
+
+  const FLEX = [
+    {
+      id: 'flexural.engineering',
+      label: '굽힘 응력-변형률',
+      version: '1',
+      applies_to: ['flexural'],
+      params: [
+        { ...number('support_span', '지지 스팬 L'), default: '@specimen_span' },
+        { ...number('load_span', '하중 스팬 Lᵢ (4점)'), default: '@?specimen_load_span' },
+        { ...number('width', '폭 b'), default: '@specimen_width' },
+        { ...number('thickness', '두께 h'), default: '@specimen_thickness' },
+        column('force', '하중 열', 'force'),
+      ],
+      makes_columns: [made('flexural_strain', '굽힘 변형률'), made('flexural_stress', '굽힘 응력', 'Pa')],
+      makes_values: [],
+      order: 10,
+    },
+    {
+      id: 'flexural.modulus',
+      label: '굽힘 탄성률 (등가 E)',
+      version: '1',
+      applies_to: ['flexural'],
+      params: [
+        choice('method', '방법', { chord: '현 (두 변형률 사이)', tangent: '접선 (가장 가파른 처음 직선)' }, 'chord'),
+        column('strain', '변형률 열', 'flexural_strain'),
+        column('stress', '응력 열', 'flexural_stress'),
+      ],
+      makes_columns: [],
+      makes_values: [made('flexural_modulus', '굽힘 탄성률(등가 E)', 'Pa')],
+      order: 20,
+    },
+    {
+      id: 'flexural.strength',
+      label: '굽힘 강도',
+      version: '1',
+      applies_to: ['flexural'],
+      params: [column('strain', '변형률 열', 'flexural_strain'), column('stress', '응력 열', 'flexural_stress')],
+      makes_columns: [],
+      makes_values: [made('flexural_strength', '굽힘 강도', 'Pa')],
+      order: 30,
+    },
+  ] as unknown as ProcessingStep[]
+
+  beforeEach(() => {
+    steps.mockResolvedValue(FLEX)
+    recipes.mockResolvedValue([])
+    dimensions.mockResolvedValue({ items: [] })
+    preview.mockReset()
+    standardDefaults.mockResolvedValue({ standard: null, steps: {} })
+  })
+
+  function showFlex() {
+    return render(
+      <RightPanelProvider>
+        <RightPanelHost />
+        <ProcessingPanel
+          testRunId="run-1"
+          testTypeKey="flexural"
+          curveKey="curve-1"
+          sourceColumns={['force', 'deflection']}
+          sourceChannels={[
+            { key: 'force', label: '하중', si_unit: 'N' },
+            { key: 'deflection', label: '처짐', si_unit: 'm' },
+          ]}
+        />
+      </RightPanelProvider>
+    )
+  }
+
+  const sent = (plugin: string) =>
+    (preview.mock.calls.at(-1) as [{ steps: { plugin: string; options: Record<string, unknown> }[] }])[0].steps.find(
+      (one) => one.plugin === plugin
+    )?.options
+
+  it('규격의 방법으로 채우고, 어느 규격 기준인지 말한다', async () => {
+    // D790 은 탄성률을 접선으로 잰다 — 기본(현)으로 돌면 몇 % 다른 값이 오류 없이 남는다.
+    standardDefaults.mockResolvedValue({
+      standard: 'ASTM D790 (플라스틱 3점 굽힘)',
+      steps: { 'flexural.modulus': { method: 'tangent' }, 'flexural.engineering': { load_span: null } },
+    })
+    const user = userEvent.setup()
+    showFlex()
+    const note = await screen.findByRole('note')
+    expect(note).toHaveTextContent('ASTM D790 (플라스틱 3점 굽힘)')
+    expect(note).toHaveTextContent('방법 = 접선 (가장 가파른 처음 직선)')
+    expect(note).toHaveTextContent('하중 스팬 Lᵢ (4점) = 비움')
+
+    await user.click(screen.getByRole('button', { name: /미리보기/ }))
+    await waitFor(() => expect(preview).toHaveBeenCalled())
+    expect(sent('flexural.modulus')?.method).toBe('tangent')
+    expect(sent('flexural.engineering')?.load_span).toBeNull()
+  })
+
+  it('규격이 없으면 기본 순서 그대로 — 하중 스팬은 있으면 쓴다', async () => {
+    const user = userEvent.setup()
+    showFlex()
+    await findStep('굽힘 응력-변형률')
+    await user.click(screen.getByRole('button', { name: /미리보기/ }))
+    await waitFor(() => expect(preview).toHaveBeenCalled())
+    expect(sent('flexural.modulus')?.method).toBe('chord')
+    expect(sent('flexural.engineering')?.load_span).toBe('@?specimen_load_span')
+    expect(screen.queryByRole('note')).not.toBeInTheDocument()
   })
 })

@@ -213,6 +213,18 @@ class VocabularyTerm(Base):
     분류를 모양별로 쪼개야 한다. 규격은 어차피 자기 치수 칸을 갖고 있고
     (`ASTM E8 R1` 에는 직경이 있다), 식이 요구하는 칸이 거기 있는지 서버가
     검사할 수 있다."""
+    processing_defaults: Mapped[dict[str, dict[str, Any]]] = mapped_column(
+        JSONB, default=dict, server_default="{}"
+    )
+    """이 규격으로 자른 시편을 **어떻게 처리하는가** — 처리 단계 → 옵션 → 값(2026-10-16).
+
+    `{"flexural.modulus": {"method": "tangent"}}` — D790 은 탄성률을 접선으로, ISO 178 은
+    현(0.05 ~ 0.25%)으로 잰다. 처리 단계는 규격 이름을 모른다(숫자 치수만 받는다). 그래서
+    규격마다 다른 **방법**은 여기 적고, 처리 화면이 시편의 규격을 보고 기본 순서의 옵션을 이
+    값으로 채운다. 사람이 바꿔도 되고 — 결과에는 실제로 돌린 옵션이 남는다.
+
+    단계 · 옵션은 저장할 때 레지스트리와 대조한다(`services.check_processing_defaults`).
+    치수(`attributes`)와 섞지 않는다 — 치수는 시편이 물려받고, 이것은 처리가 받는다."""
     attributes: Mapped[dict[str, Any]] = mapped_column(
         JSONB, default=dict, server_default="{}"
     )

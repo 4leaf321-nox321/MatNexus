@@ -24,11 +24,12 @@ from app.modules.tests.definitions import ensure_builtin_test_types
 
 TRA = Path(__file__).resolve().parents[1] / "fixtures" / "Example.tra"
 
-COMPRESSION: dict[str, Any] = {
-    "key": "compression",
-    "label": "압축시험",
-    "abbr": "COM",
-    "description": "단축 압축.",
+#: 사용자가 만드는 종류의 예. 압축이었는데 압축이 기본 종류가 되어(2026-10-16) 전단으로 바꿨다.
+SHEAR: dict[str, Any] = {
+    "key": "shear",
+    "label": "전단시험",
+    "abbr": "SHR",
+    "description": "단순 전단.",
     "parser_key": None,
     "channels": [
         {"key": "displacement", "label": "변위", "dimension": "length", "si_unit": "m"},
@@ -89,20 +90,20 @@ class TestCreate:
         self, client: TestClient, admin_headers: dict[str, str]
     ) -> None:
         """이것이 되지 않으면 '정의는 데이터' 는 말뿐이다."""
-        response = client.post("/api/test-types", json=COMPRESSION, headers=admin_headers)
+        response = client.post("/api/test-types", json=SHEAR, headers=admin_headers)
         assert response.status_code == 201, response.text
         created = response.json()
-        assert created["key"] == "compression"
+        assert created["key"] == "shear"
         assert [c["key"] for c in created["channels"]] == ["displacement", "force"]
 
         listed = client.get("/api/test-types", headers=admin_headers).json()
-        assert "compression" in {t["key"] for t in listed}
+        assert "shear" in {t["key"] for t in listed}
 
     def test_같은_키는_거절한다(
         self, client: TestClient, admin_headers: dict[str, str], tensile: None
     ) -> None:
         response = client.post(
-            "/api/test-types", json={**COMPRESSION, "key": "tensile"}, headers=admin_headers
+            "/api/test-types", json={**SHEAR, "key": "tensile"}, headers=admin_headers
         )
         assert response.status_code == 409
 
@@ -110,7 +111,7 @@ class TestCreate:
         self, client: TestClient, admin_headers: dict[str, str]
     ) -> None:
         response = client.post(
-            "/api/test-types", json={**COMPRESSION, "channels": []}, headers=admin_headers
+            "/api/test-types", json={**SHEAR, "channels": []}, headers=admin_headers
         )
         assert response.status_code == 422
 
@@ -119,7 +120,7 @@ class TestCreate:
     ) -> None:
         """저장은 되는데 변환할 때 터진다 — 그때는 이미 데이터가 들어온 뒤다."""
         broken = {
-            **COMPRESSION,
+            **SHEAR,
             "channels": [
                 {"key": "force", "label": "하중", "dimension": "force", "si_unit": "furlong"}
             ],
@@ -132,7 +133,7 @@ class TestCreate:
         self, client: TestClient, admin_headers: dict[str, str]
     ) -> None:
         broken = {
-            **COMPRESSION,
+            **SHEAR,
             "channels": [
                 {"key": "force", "label": "하중", "dimension": "force", "si_unit": "mm"}
             ],
@@ -147,7 +148,7 @@ class TestCreate:
         종류를 만들어 놓고 왜 파일이 안 읽히는지 모른다."""
         response = client.post(
             "/api/test-types",
-            json={**COMPRESSION, "parser_key": "nonexistent"},
+            json={**SHEAR, "parser_key": "nonexistent"},
             headers=admin_headers,
         )
         assert response.status_code == 422
@@ -187,7 +188,14 @@ class TestEditWithoutData:
                         "dimension": "length",
                         "si_unit": "m",
                     },
-                    {"key": "force", "label": "응력", "dimension": "stress", "si_unit": "Pa"},
+                    # `force` 는 굽힘 · 압축도 N 으로 쓴다(같은 이름은 같은 뜻) — 다른 종류가
+                    # 안 쓰는 칸으로 바꿔 본다.
+                    {
+                        "key": "specimen_width",
+                        "label": "응력",
+                        "dimension": "stress",
+                        "si_unit": "Pa",
+                    },
                 ],
                 "conditions": [],
                 "expected_revision": current_revision(client, admin_headers),
@@ -378,10 +386,12 @@ class TestEditWithData:
 
         저장 단위는 고를 수 없으므로 단위가 바뀌는 길은 **차원을 바꾸는 것**뿐이다.
         """
+        # `force` 는 굽힘 · 압축도 쓰는 이름이라 「이름 충돌」 이 먼저 막는다 — 인장만 쓰는
+        # 칸으로 바꿔 본다.
         changed = [
             {**TENSILE_CHANNELS[0]},
-            {**TENSILE_CHANNELS[1], "dimension": "stress", "si_unit": "Pa"},
-            {**TENSILE_CHANNELS[2]},
+            {**TENSILE_CHANNELS[1]},
+            {**TENSILE_CHANNELS[2], "dimension": "stress", "si_unit": "Pa"},
         ]
         response = self._put(client, admin_headers, changed)
         assert response.status_code == 409
@@ -443,11 +453,11 @@ class TestEditWithData:
     def test_안_쓰는_종류는_지울_수_있다(
         self, client: TestClient, admin_headers: dict[str, str]
     ) -> None:
-        client.post("/api/test-types", json=COMPRESSION, headers=admin_headers)
-        response = client.delete("/api/test-types/compression", headers=admin_headers)
+        client.post("/api/test-types", json=SHEAR, headers=admin_headers)
+        response = client.delete("/api/test-types/shear", headers=admin_headers)
         assert response.status_code == 204
         listed = client.get("/api/test-types", headers=admin_headers).json()
-        assert "compression" not in {t["key"] for t in listed}
+        assert "shear" not in {t["key"] for t in listed}
 
 
 class TestPermissions:
@@ -478,7 +488,7 @@ class TestPermissions:
 
         # **만들기는 누구나**(ADR 0035 3단계) — 새 장비를 붙이는 사람이 관리자를 기다리지
         # 않는다. 만든 사람이 등록자다.
-        made = client.post("/api/test-types", json=COMPRESSION, headers=headers)
+        made = client.post("/api/test-types", json=SHEAR, headers=headers)
         assert made.status_code == 201, made.text
         assert made.json()["access"]["registrant"] == "일반 사용자"
         # 기본 종류(인장)는 등록자가 없다 — 자료 관리자만 고친다.

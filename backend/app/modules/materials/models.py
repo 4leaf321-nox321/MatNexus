@@ -677,3 +677,36 @@ class MaterialParameterSet(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+
+class MaterialApprovalRequest(Base):
+    """선언 값 **승인 요청** 한 번 — 자료 관리자에게 부탁한 기록(2026-10-16).
+
+    부탁은 알림으로 가지만, 알림은 받는 사람마다 마지막 키 하나만 견줘서 사이에 다른
+    요청이 끼면 같은 부탁이 다시 갔다(2026-10-15 의 한계). 카드는 코멘트로 하루 한 번을
+    막는데 재료에는 적어 둘 자리가 없었다 — 여기가 그 자리다. 「승인 대기 값」 화면의
+    「요청됨」 도 이것을 읽는다.
+
+    상태가 아니다 — 큐도 아니다(ADR 0049 결정 5). 승인 여부는 값의 `approval` 이 말하고, 이
+    줄은 「누가 언제 부탁했나」 만 남긴다.
+    """
+
+    __tablename__ = "material_approval_requests"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    material_id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("materials.id", ondelete="CASCADE"), index=True
+    )
+    pending: Mapped[int] = mapped_column(Integer)
+    """부탁할 때 센 승인 대기 값 수(재료와 그 시료)."""
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    client: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    """사람이 아닌 길(`mcp` …)로 들어왔으면 그 이름 — 화면은 「AI(MCP) 경유」 로 적는다."""
+    created_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("users.id"), index=True, nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), index=True
+    )

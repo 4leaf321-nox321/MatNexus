@@ -56,6 +56,10 @@ const TENSILE_COLUMNS = '항복강도 (MPa), 인장강도 (MPa), 연신율 (%)'
 const SUMMARY_KEYS: Record<string, { header: string; siUnit?: string }[]> = {
   fatigue: [{ header: 'cycles_to_failure' }, { header: 'runout' }],
   creep: [{ header: 'min_creep_rate', siUnit: '1/s' }],
+  flexural: [
+    { header: 'flexural_modulus', siUnit: 'Pa' },
+    { header: 'flexural_strength', siUnit: 'Pa' },
+  ],
 }
 
 const HINTS: Record<string, string> = {
@@ -65,6 +69,9 @@ const HINTS: Record<string, string> = {
   creep:
     '보고서의 최소 크리프 속도는 min_creep_rate 에 적습니다. 가한 응력 · 시험 온도가 필수 ' +
     '조건입니다 — 「크리프 식 (Norton · Garofalo)」 묶음이 이 값을 씁니다.',
+  flexural:
+    '보고서의 굽힘 탄성률은 flexural_modulus, 굽힘 강도는 flexural_strength 에 적습니다 — ' +
+    '「굽힘 등가 탄성률」 묶음이 곡선 없는 시험의 이 값을 씁니다.',
 }
 
 /** 종류를 고르면 채우는 기본 열 — 필수 조건, 묶음이 읽는 요약값, 나머지 숫자 조건 순. */

@@ -185,6 +185,7 @@ const CARD_KINDS: { name: string; input: string; output: string; deck: string }[
 const GROUP_CARD_LABELS: Record<string, string> = {
   'viscoelastic.prony_group': '점탄성 카드',
   'tensile.rate_family': '속도 의존 카드',
+  'flexural.equivalent': '굽힘 등가 E 카드',
 }
 
 export function FittingPanel({ materialId }: Props) {

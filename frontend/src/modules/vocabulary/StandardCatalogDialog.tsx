@@ -274,6 +274,11 @@ export function StandardCatalogDialog({
                           : ' · 값 없음'}
                         {item.ratio_checks.length > 0 &&
                           ` · 비율 조건 ${item.ratio_checks.length}개`}
+                        {Object.keys(item.processing_defaults ?? {}).length > 0 &&
+                          ` · 처리 기본값 ${Object.values(item.processing_defaults ?? {}).reduce(
+                            (sum, one) => sum + Object.keys(one).length,
+                            0
+                          )}개`}
                       </span>
                     </span>
                     {item.help && (

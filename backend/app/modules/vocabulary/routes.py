@@ -122,6 +122,7 @@ def _term_out(
         attribute_list=_attributes_out(item, fields),
         ratio_checks=[RatioCheckOut(**row) for row in (item.ratio_checks or [])],
         cross_section=item.cross_section,
+        processing_defaults=dict(item.processing_defaults or {}),
         # **이 값이 직접 선언한 칸 수.** 분류 축에서 "이 분류는 칸이 몇 개" 를
         # 말한다 — 0 이면 그 분류의 규격은 치수를 하나도 못 갖는다.
         field_count=field_count
@@ -283,6 +284,7 @@ def list_standard_catalog(
             cross_section=item.get("cross_section"),
             attributes=dict(item.get("attributes") or {}),
             ratio_checks=[RatioCheckOut(**one) for one in item.get("ratio_checks", [])],
+            processing_defaults=dict(item.get("processing") or {}),
             help=item.get("help"),
             taken=compare_key(str(item["value"])) in taken,
         )
@@ -374,6 +376,12 @@ def import_standards(
         if item.get("ratio_checks"):
             term.ratio_checks = services.check_ratio_checks(
                 db, axis, term, item["ratio_checks"]
+            )
+        # **처리 방법도 함께 온다**(2026-10-16) — D790 은 접선, ISO 178 은 현. 처리 화면이
+        # 시편의 규격을 보고 이 값으로 채운다.
+        if item.get("processing"):
+            term.processing_defaults = services.check_processing_defaults(
+                axis, item["processing"]
             )
         made.append(term)
 
@@ -714,6 +722,10 @@ def update_term(
     if "cross_section" in data:
         term.cross_section = services.check_cross_section(
             db, vocabulary, term, data["cross_section"] or None
+        )
+    if "processing_defaults" in data:
+        term.processing_defaults = services.check_processing_defaults(
+            vocabulary, data["processing_defaults"]
         )
     if "attributes" in data or "parent_value" in data:
         attributes = data.get("attributes")

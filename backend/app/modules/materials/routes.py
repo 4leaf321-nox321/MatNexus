@@ -29,6 +29,7 @@ from app.modules.materials import declared, relocation, services, thickness_gap
 from app.modules.materials.models import (
     ORIENTATIONS,
     Material,
+    MaterialApprovalRequest,
     MaterialParameterSet,
     MaterialUse,
     Sample,
@@ -40,6 +41,8 @@ from app.modules.materials.schemas import (
     SI_LENGTH,
     ApprovalAskIn,
     ApprovalAskOut,
+    ApprovalAskRecordOut,
+    ApprovalAskStatusOut,
     BulkBlockedOut,
     BulkDeletePlanOut,
     BulkMadeOut,
@@ -130,6 +133,7 @@ from app.shared.access import AccessBook, EditAccessOut, access_of
 from app.shared.auth import current_user
 from app.shared.errors import AppError, Conflict, NotFound
 from app.shared.pagination import Page, clamp_limit
+from app.shared.request_context import get_client
 from matcore import naming, units
 from matcore import specimen as specimen_kit
 from matcore.export.systems import UnitSystem
@@ -839,6 +843,18 @@ def declared_review(
     ).all()
 
     waiting = declared_approval.waiting
+    # 재료마다 **마지막 승인 요청** — 「요청됨」(2026-10-16). 큐가 아니라 표시다.
+    asked: dict[uuid.UUID, datetime] = {
+        mid: at
+        for mid, at in db.execute(
+            select(
+                MaterialApprovalRequest.material_id,
+                func.max(MaterialApprovalRequest.created_at),
+            )
+            .where(MaterialApprovalRequest.material_id.in_(select(visible.c.id)))
+            .group_by(MaterialApprovalRequest.material_id)
+        )
+    }
 
     def made(row: dict[str, Any], **where: Any) -> DeclaredReviewOut:
         points = [one for one in row.get("points") or [] if isinstance(one, dict)]
@@ -854,6 +870,7 @@ def declared_review(
             quality_tier=declared_approval.tier(row),
             tier_if_approved=declared_approval.tier_if_approved(row),
             digest=declared_approval.digest(row),
+            requested_at=asked.get(where["material_id"]),
         )
 
     found = [
@@ -2117,6 +2134,66 @@ def unapprove_declared(
     return _saved_material(db, user, material)
 
 
+#: 같은 재료의 승인 요청을 다시 받기까지 — 카드 확정 요청과 같은 하루(2026-10-16).
+APPROVAL_ASK_COOLDOWN = timedelta(hours=24)
+
+
+def _approval_pending(db: Session, material: Material) -> int:
+    """이 재료와 그 시료에서 **승인을 기다리는 값** — 「승인 대기 값」 화면과 같은 판정."""
+    rows: list[Any] = list(material.declared_properties or [])
+    for (sample_rows,) in db.execute(
+        select(Sample.declared_properties).where(
+            Sample.material_id == material.id, Sample.deleted_at.is_(None)
+        )
+    ):
+        rows.extend(sample_rows or [])
+    return sum(1 for row in rows if declared_approval.waiting(row))
+
+
+def _last_approval_ask(
+    db: Session, material_id: uuid.UUID
+) -> tuple[MaterialApprovalRequest, str | None] | None:
+    found = db.execute(
+        select(MaterialApprovalRequest, User.display_name)
+        .outerjoin(User, User.id == MaterialApprovalRequest.created_by_id)
+        .where(MaterialApprovalRequest.material_id == material_id)
+        .order_by(MaterialApprovalRequest.created_at.desc())
+        .limit(1)
+    ).first()
+    return (found[0], found[1]) if found else None
+
+
+@router.get("/{material_id}/declared/approval-request", response_model=ApprovalAskStatusOut)
+def declared_approval_status(
+    material_id: uuid.UUID,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> ApprovalAskStatusOut:
+    """승인 요청 단추가 볼 것 — **서버가 센 승인 대기 값 수**와 지난 요청(2026-10-16).
+
+    화면이 재료 쪽 값만 세서 서버(시료 · 밀시트까지)와 수가 갈렸다. 같은 판정을 여기서 한 번에
+    준다. 보기는 누구나다 — 고칠 권한은 부탁할 때 본다.
+    """
+    material = services.get_material(db, user, material_id)
+    last = _last_approval_ask(db, material.id)
+    record = None
+    allowed = None
+    if last is not None:
+        ask, name = last
+        record = ApprovalAskRecordOut(
+            by_name=name,
+            via=steward_notice.client_label(ask.client) if ask.client else None,
+            at=ask.created_at,
+            note=ask.note,
+            pending=ask.pending,
+        )
+        until = ask.created_at + APPROVAL_ASK_COOLDOWN
+        allowed = until if until > datetime.now(UTC) else None
+    return ApprovalAskStatusOut(
+        pending=_approval_pending(db, material), last=record, next_allowed_at=allowed
+    )
+
+
 @router.post("/{material_id}/declared/request-approval", response_model=ApprovalAskOut)
 def request_declared_approval(
     material_id: uuid.UUID,
@@ -2127,24 +2204,16 @@ def request_declared_approval(
     """승인을 기다리는 값을 자료 관리자에게 **부탁한다**(2026-10-15).
 
     전에는 상태만 있었다 — 「승인 대기 값」 화면을 열어 보지 않으면 자료 관리자는 몰랐다.
-    부탁은 **알림뿐**이다: 줄을 잠그거나 큐를 세우지 않는다(승인 자체는 그 값이 사는 화면에서,
-    근거 문서를 펴 보고 한다). 같은 재료를 같은 날 거듭 누르면 한 번만 간다(알림 키에 날짜).
-    다만 알림 워커는 받는 사람마다 **마지막 키 하나**만 견주므로 사이에 다른 요청이 끼면 다시
-    간다 — 카드 요청(코멘트로 하루 한 번을 막는다)과 달리 부탁을 적어 둘 자리가 없어
-    그만큼만 막는다.
+    부탁은 **알림과 기록 한 줄**이다: 줄을 잠그거나 큐를 세우지 않는다(승인 자체는 그 값이
+    사는 화면에서, 근거 문서를 펴 보고 한다). **같은 재료는 하루 한 번**(2026-10-16) — 전에는
+    알림 키에 기대었는데 워커가 마지막 키 하나만 견줘서 사이에 다른 요청이 끼면 다시 갔다.
+    이제 기록(`MaterialApprovalRequest`)으로 막는다 — 카드가 코멘트로 막는 것과 같다.
 
     고칠 수 있는 사람이 부탁한다 — 그 값을 적었거나 맡은 사람이다(ADR 0035).
     """
     material = services.get_material(db, user, material_id)
     permissions.require_edit(db, user, material, code="MNX-MATERIALS-0051", note=False)
-    rows: list[Any] = list(material.declared_properties or [])
-    for (sample_rows,) in db.execute(
-        select(Sample.declared_properties).where(
-            Sample.material_id == material.id, Sample.deleted_at.is_(None)
-        )
-    ):
-        rows.extend(sample_rows or [])
-    pending = sum(1 for row in rows if declared_approval.waiting(row))
+    pending = _approval_pending(db, material)
     if pending == 0:
         raise AppError(
             "MNX-MATERIALS-0052",
@@ -2152,7 +2221,25 @@ def request_declared_approval(
             "값(규격 · 데이터시트 · 밀시트 · 받아 온 문헌 1~2)뿐입니다.",
             status=422,
         )
+    last = _last_approval_ask(db, material.id)
+    if last is not None and datetime.now(UTC) - last[0].created_at < APPROVAL_ASK_COOLDOWN:
+        raise AppError(
+            "MNX-MATERIALS-0053",
+            f"이 재료는 하루 안에 이미 승인을 요청했습니다({last[1] or '알 수 없음'}) — "
+            "같은 부탁은 하루에 한 번입니다.",
+            status=409,
+        )
     note = (body.note or "").strip()
+    client = get_client()
+    db.add(
+        MaterialApprovalRequest(
+            material_id=material.id,
+            pending=pending,
+            note=note or None,
+            client=client or None,
+            created_by_id=user.id,
+        )
+    )
     audit.record_by_client(
         db,
         action=audit.DECLARED_APPROVAL_REQUESTED_BY_CLIENT,
@@ -2163,12 +2250,13 @@ def request_declared_approval(
         workspace_id=material.owner_workspace_id,
         changes={"pending": pending, "note": note or None},
     )
+    via = f" · {steward_notice.client_label(client)} 경유" if client else ""
     sent = steward_notice.notify_stewards(
         db,
         event_kind=steward_notice.REVIEW_REQUESTED,
-        key=f"approval-request:{material.id}:{datetime.now(UTC).date().isoformat()}",
+        key=f"approval-request:{material.id}:{datetime.now(UTC).isoformat()}",
         title=f"선언 값 승인 요청 — {material.record_name} {pending}건",
-        body=f"{user.display_name} 님의 요청" + (f" · {note}" if note else ""),
+        body=f"{user.display_name} 님의 요청{via}" + (f" · {note}" if note else ""),
         link="/materials/declared-review",
         exclude=user.id,
     )

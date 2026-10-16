@@ -65,6 +65,43 @@ def _extensions(parser_key: str | None) -> list[str]:
     return [str(one).lower() for one in plugin.meta.get("extensions", ())]
 
 
+def settle(
+    matched: list[TestType], data: bytes, preferred_key: str | None = None
+) -> tuple[TestType, str] | None:
+    """확장자로 **여럿이** 걸렸을 때 하나로 좁힌다. 못 좁히면 `None` — 그때는 고르지 않는다.
+
+    2026-10-16: Zwick `.tra` 를 인장 · 굽힘 · 압축이 함께 읽게 되면서 생긴 자리다. 그 전에는
+    `.tra` 를 읽는 종류가 인장 하나라 커넥터가 귀띔 없이 보내도 인장이 됐다. 좁히는 근거는
+    둘이다 — **추측이 아니라 근거가 있을 때만** 고른다.
+
+    1. 커넥터가 귀띔한 종류(`test_type` 힌트)가 그 안에 있다 — 폴더 이름이 가장 확실하다.
+    2. 모두 같은 파서이고, 그 파서의 `classify` 가 파일 안의 이름으로 한 종류만 짚는다.
+    """
+    if preferred_key:
+        for one in matched:
+            if one.key == preferred_key:
+                return one, f"커넥터가 귀띔한 종류({one.label})입니다."
+    parser_keys = {one.parser_key for one in matched}
+    if len(parser_keys) != 1:
+        return None
+    parsers.load_builtin()
+    try:
+        plugin = registry.get(next(iter(parser_keys)) or "")
+    except KeyError:
+        return None
+    classify = plugin.meta.get("classify")
+    if not callable(classify):
+        return None
+    verdict = classify(data)
+    if not verdict:
+        return None
+    key, word = verdict
+    for one in matched:
+        if one.key == key:
+            return one, f"파일 안의 이름 「{word}」 로 {one.label} 을 골랐습니다."
+    return None
+
+
 def detect(
     db: Session,
     *,
@@ -138,10 +175,16 @@ def detect(
         if len(matched) == 1:
             return Detected(matched[0], None, f"{suffix} 를 읽는 종류가 하나입니다.")
         if len(matched) > 1:
+            settled = settle(matched, data, preferred_type_key)
+            if settled is not None:
+                return Detected(settled[0], None, settled[1])
             # **여럿이면 고르지 않는다.** 하나를 찍으면 그럴듯해 보이는데 틀린다.
             names = ", ".join(t.label for t in matched)
             return Detected(
-                None, None, f"{suffix} 를 읽는 종류가 {len(matched)}개입니다: {names}."
+                None,
+                None,
+                f"{suffix} 를 읽는 종류가 {len(matched)}개입니다: {names}. "
+                "커넥터의 경로 규칙으로 시험 종류(test_type)를 귀띔하세요.",
             )
 
     return Detected(None, None, "맞는 프로파일도 확장자도 없습니다. 형식 프로파일을 만드세요.")

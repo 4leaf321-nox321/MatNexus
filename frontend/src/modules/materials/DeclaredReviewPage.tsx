@@ -28,6 +28,7 @@ import { ConfirmDialog } from '@/shared/components/ConfirmDialog'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { PageHeader } from '@/shared/components/PageHeader'
 import { RecordName } from '@/shared/components/RecordName'
+import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
 import { Input } from '@/shared/components/ui/input'
 import {
@@ -188,6 +189,17 @@ export default function DeclaredReviewPage() {
                     >
                       <RecordName name={row.material_name} />
                     </Link>
+                    {/* **부탁이 왔다** — 이 재료에 승인 요청이 온 적이 있으면(2026-10-16). 큐가
+                        아니라 표시다 — 가리키면 마지막으로 온 때가 보인다. */}
+                    {row.requested_at && (
+                      <Badge
+                        variant="outline"
+                        className="ml-1.5 font-normal"
+                        title={`마지막 승인 요청 ${new Date(row.requested_at).toLocaleString('ko-KR')}`}
+                      >
+                        요청됨
+                      </Badge>
+                    )}
                   </TableCell>
                   <TableCell>
                     {row.level}

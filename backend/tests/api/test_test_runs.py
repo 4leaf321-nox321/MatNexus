@@ -102,6 +102,8 @@ class TestDefinitions:
         # 올렸다가 실패하므로, 그 선은 그대로다.
         # 크리프 · 응력완화(2026-10-12)는 실파일이 없어 「MatNexus 표준 CSV」 프로파일이 읽는다
         # (`legacy_profiles.MNX_*_CSV`) — 크리프는 최소 속도만 표로 넣어도 된다.
+        # 굽힘 · 압축(2026-10-16)은 Zwick `.tra` 를 인장과 함께 읽고, Instron CSV 는
+        # 프로파일이 읽는다.
         assert [t["key"] for t in types] == [
             "tensile",
             "dma_sweep",
@@ -109,6 +111,8 @@ class TestDefinitions:
             "fatigue",
             "creep",
             "stress_relaxation",
+            "flexural",
+            "compression",
         ]
         dma_type = next(t for t in types if t["key"] == "dma_sweep")
         assert dma_type["parser_key"] is None  # 프로파일이 읽는다

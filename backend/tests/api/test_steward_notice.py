@@ -27,7 +27,7 @@ from app.jobs import handlers, queue, worker
 from app.modules.accounts.models import User
 from app.modules.auth import security
 from app.modules.materials import declared
-from app.modules.materials.models import Material
+from app.modules.materials.models import Material, Sample
 from app.modules.notifications import services as notification_services
 from app.modules.notifications.models import NotificationRule
 from app.modules.tests import services as test_services
@@ -296,6 +296,82 @@ class Test선언_값_승인_요청:
         )
         assert denied.status_code == 403
         assert denied.json()["error"]["code"] == "MNX-MATERIALS-0051"
+
+
+class Test승인_요청_기록:
+    """승인 요청을 기록으로 남긴다(2026-10-16) — **하루 한 번 · 서버가 센 수 · 「요청됨」**.
+
+    전에는 알림 키에만 기대어, 워커가 마지막 키 하나만 견주는 탓에 사이에 다른 요청이 끼면 같은
+    부탁이 다시 갔다. 화면은 재료 쪽 값만 세어 서버(시료까지)와 수가 갈렸다.
+    """
+
+    def test_하루에_한_번이다(
+        self, client: TestClient, db: Session, alice: tuple[User, dict[str, str]]
+    ) -> None:
+        owner, headers = alice
+        material = _material(db, owner, modulus())
+        path = f"/api/materials/{material.id}/declared/request-approval"
+        assert client.post(path, json={}, headers=headers).status_code == 200
+        again = client.post(path, json={}, headers=headers)
+        assert again.status_code == 409
+        assert again.json()["error"]["code"] == "MNX-MATERIALS-0053"
+
+    def test_상태는_시료까지_센_수와_지난_요청을_준다(
+        self,
+        client: TestClient,
+        db: Session,
+        workspace: Workspace,
+        alice: tuple[User, dict[str, str]],
+    ) -> None:
+        owner, headers = alice
+        material = _material(db, owner, modulus())
+        # 시료(밀시트 층)에도 승인을 기다리는 값이 하나 — 화면이 재료만 세면 빠지던 것.
+        db.add(
+            Sample(
+                workspace_id=workspace.id,
+                material_id=material.id,
+                seq_no=1,
+                record_name=f"{material.record_name}__01",
+                declared_properties=list(material.declared_properties),
+            )
+        )
+        db.commit()
+        status = f"/api/materials/{material.id}/declared/approval-request"
+
+        before = client.get(status, headers=headers).json()
+        assert before == {"pending": 2, "last": None, "next_allowed_at": None}
+
+        sent = client.post(
+            f"/api/materials/{material.id}/declared/request-approval",
+            json={"note": "원문 대조 부탁"},
+            headers={**headers, "X-Client": "mcp"},
+        )
+        assert sent.json()["pending"] == 2
+        after = client.get(status, headers=headers).json()
+        assert after["last"]["by_name"] == "alice"
+        assert after["last"]["via"] == "AI(MCP)"
+        assert after["last"]["note"] == "원문 대조 부탁"
+        assert after["next_allowed_at"] is not None
+
+    def test_승인_대기_값_목록에_요청됨이_선다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        alice: tuple[User, dict[str, str]],
+    ) -> None:
+        owner, headers = alice
+        asked = _material(db, owner, modulus())
+        quiet = _material(db, owner, modulus())
+        client.post(
+            f"/api/materials/{asked.id}/declared/request-approval", json={}, headers=headers
+        )
+        rows = client.get(
+            "/api/materials/declared-review", params={"limit": 200}, headers=admin_headers
+        ).json()["items"]
+        marks = {one["material_id"]: one["requested_at"] for one in rows}
+        assert marks[str(asked.id)] is not None
+        assert marks[str(quiet.id)] is None
 
 
 class Test받는_사람:

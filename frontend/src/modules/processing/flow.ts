@@ -19,7 +19,13 @@
  * 화면에 적으면 계산을 고칠 때 두 곳을 고쳐야 하고, 그러면 한 곳을 빠뜨린다.
  */
 
-import { isReference, isUsed, referenceLabel } from '@/modules/processing/api'
+import {
+  isOptionalReference,
+  isReference,
+  isUsed,
+  referenceKey,
+  referenceLabel,
+} from '@/modules/processing/api'
 import type {
   Produced,
   ProcessingScalar,
@@ -144,7 +150,9 @@ export function blockersAt(
 
     // `@youngs_modulus` 처럼 앞 단계의 값을 가리키는 칸.
     if (isReference(value)) {
-      const key = String(value).slice(1)
+      // **있으면 쓰는** 참조(`@?`)는 없어도 막지 않는다 — 없음이 그 자체로 뜻이다(3점).
+      if (isOptionalReference(value)) continue
+      const key = referenceKey(String(value))
       if (key.startsWith(FROM_SPECIMEN) || values.has(key)) continue
       found.push({
         reason: `${param.label}에 쓸 값이 아직 없습니다.`,
@@ -241,7 +249,7 @@ export function stepIO(
       continue
     }
     if (isReference(value)) {
-      const key = String(value).slice(1)
+      const key = referenceKey(String(value))
       const outside = key.startsWith(FROM_SPECIMEN)
       takes.push({
         key,

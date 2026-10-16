@@ -435,6 +435,20 @@ def loose_key(symbol: str) -> str:
     return _normalize(_styled(symbol.strip()))
 
 
+def unwrap(text: str) -> str:
+    """`(mm)` · `[N]` 처럼 **한 겹 싼** 단위를 벗긴다. 안 쌌으면 그대로(앞뒤 공백만 뗀다).
+
+    Instron Bluehill 이 단위 줄을 괄호에 싸서 적는다(2026-10-16). 안 벗기면 단위를 몰라
+    원값으로 남는다 — mm 가 m 인 척 저장된다. 가운데의 괄호(`W/(m*K)`)는 건드리지 않는다.
+    """
+    stripped = text.strip()
+    if len(stripped) >= 2 and (stripped[0], stripped[-1]) in (("(", ")"), ("[", "]")):
+        inner = stripped[1:-1]
+        if "(" not in inner and ")" not in inner:
+            return inner.strip()
+    return stripped
+
+
 def canonical(symbol: str) -> str | None:
     """표기가 조금 다른 단위를 정본 심볼로. 모르면 `None`.
 

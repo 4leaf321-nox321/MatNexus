@@ -4154,6 +4154,29 @@ export interface paths {
         patch: operations["update_material_api_materials__material_id__patch"];
         trace?: never;
     };
+    "/api/materials/{material_id}/declared/approval-request": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Declared Approval Status
+         * @description 승인 요청 단추가 볼 것 — **서버가 센 승인 대기 값 수**와 지난 요청(2026-10-16).
+         *
+         *     화면이 재료 쪽 값만 세서 서버(시료 · 밀시트까지)와 수가 갈렸다. 같은 판정을 여기서 한 번에
+         *     준다. 보기는 누구나다 — 고칠 권한은 부탁할 때 본다.
+         */
+        get: operations["declared_approval_status_api_materials__material_id__declared_approval_request_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/materials/{material_id}/declared/approve": {
         parameters: {
             query?: never;
@@ -4191,11 +4214,10 @@ export interface paths {
          * @description 승인을 기다리는 값을 자료 관리자에게 **부탁한다**(2026-10-15).
          *
          *     전에는 상태만 있었다 — 「승인 대기 값」 화면을 열어 보지 않으면 자료 관리자는 몰랐다.
-         *     부탁은 **알림뿐**이다: 줄을 잠그거나 큐를 세우지 않는다(승인 자체는 그 값이 사는 화면에서,
-         *     근거 문서를 펴 보고 한다). 같은 재료를 같은 날 거듭 누르면 한 번만 간다(알림 키에 날짜).
-         *     다만 알림 워커는 받는 사람마다 **마지막 키 하나**만 견주므로 사이에 다른 요청이 끼면 다시
-         *     간다 — 카드 요청(코멘트로 하루 한 번을 막는다)과 달리 부탁을 적어 둘 자리가 없어
-         *     그만큼만 막는다.
+         *     부탁은 **알림과 기록 한 줄**이다: 줄을 잠그거나 큐를 세우지 않는다(승인 자체는 그 값이
+         *     사는 화면에서, 근거 문서를 펴 보고 한다). **같은 재료는 하루 한 번**(2026-10-16) — 전에는
+         *     알림 키에 기대었는데 워커가 마지막 키 하나만 견줘서 사이에 다른 요청이 끼면 다시 갔다.
+         *     이제 기록(`MaterialApprovalRequest`)으로 막는다 — 카드가 코멘트로 막는 것과 같다.
          *
          *     고칠 수 있는 사람이 부탁한다 — 그 값을 적었거나 맡은 사람이다(ADR 0035).
          */
@@ -5239,6 +5261,31 @@ export interface paths {
          *     남았는지 모른 채 다시 눌러야 한다.
          */
         post: operations["undo_batch_api_processing_batch_undo_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/processing/defaults": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Processing Defaults
+         * @description 이 시험을 **어떻게 처리할지** — 시편 규격이 정한 옵션(2026-10-16).
+         *
+         *     전에는 처리 로직이 시험 종류로만 골라졌다. 굽힘이면 늘 「현」 으로 깔려서 D790(접선)
+         *     시편도 그대로 돌면 몇 % 다른 탄성률이 오류 없이 남았다. 규격이 방법을 들고(`표준 규격
+         *     가져오기` 가 함께 심는다), 화면이 이것으로 기본 순서를 채운다. 사람이 바꿔도 되고 —
+         *     결과에는 실제로 돌린 옵션이 남는다.
+         */
+        get: operations["processing_defaults_api_processing_defaults_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -8713,6 +8760,38 @@ export interface components {
         ApprovalAskOut: {
             /** Notified */
             notified: number;
+            /** Pending */
+            pending: number;
+        };
+        /**
+         * ApprovalAskRecordOut
+         * @description 지난 승인 요청 한 번(2026-10-16).
+         */
+        ApprovalAskRecordOut: {
+            /**
+             * At
+             * Format: date-time
+             */
+            at: string;
+            /** By Name */
+            by_name?: string | null;
+            /** Note */
+            note?: string | null;
+            /** Pending */
+            pending: number;
+            /** Via */
+            via?: string | null;
+        };
+        /**
+         * ApprovalAskStatusOut
+         * @description 승인 요청 단추가 볼 것 — **서버가 센 수**와 지난 요청(2026-10-16).
+         *
+         *     화면이 재료 쪽 값만 세면 서버(시료 · 밀시트까지)와 수가 갈렸다. 여기서 같은 수를 받는다.
+         */
+        ApprovalAskStatusOut: {
+            last?: components["schemas"]["ApprovalAskRecordOut"] | null;
+            /** Next Allowed At */
+            next_allowed_at?: string | null;
             /** Pending */
             pending: number;
         };
@@ -12235,6 +12314,8 @@ export interface components {
             quality_tier: number;
             /** Reference */
             reference?: string | null;
+            /** Requested At */
+            requested_at?: string | null;
             /** Sample Id */
             sample_id?: string | null;
             /** Sample Name */
@@ -16521,6 +16602,27 @@ export interface components {
             /** Rss Bytes */
             rss_bytes: number | null;
         };
+        /**
+         * ProcessingDefaultsOut
+         * @description 이 시험을 **어떻게 처리할지** — 시편 규격이 정한 옵션(2026-10-16).
+         *
+         *     처리 단계는 규격 이름을 모른다. 규격마다 다른 방법(D790 은 접선, ISO 178 은 현, ISO 7743 은
+         *     4번째 하중 구간)은 규격 값(`vocabulary_terms.processing_defaults`)에 있고, 화면이 기본
+         *     순서를 깔 때 이것으로 채운다. 규격이 없거나 적어 둔 것이 없으면 `steps` 가 빈다.
+         */
+        ProcessingDefaultsOut: {
+            /** Standard */
+            standard?: string | null;
+            /**
+             * Steps
+             * @default {}
+             */
+            steps: {
+                [key: string]: {
+                    [key: string]: boolean | number | string | null;
+                };
+            };
+        };
         /** ProcessingPreviewOut */
         ProcessingPreviewOut: {
             /** Columns */
@@ -19924,6 +20026,15 @@ export interface components {
             /** Key */
             key: string;
             /**
+             * Processing Defaults
+             * @default {}
+             */
+            processing_defaults: {
+                [key: string]: {
+                    [key: string]: boolean | number | string | null;
+                };
+            };
+            /**
              * Ratio Checks
              * @default []
              */
@@ -20472,6 +20583,15 @@ export interface components {
             /** Parent Value */
             parent_value?: string | null;
             /**
+             * Processing Defaults
+             * @default {}
+             */
+            processing_defaults: {
+                [key: string]: {
+                    [key: string]: boolean | number | string | null;
+                };
+            };
+            /**
              * Ratio Checks
              * @default []
              */
@@ -20508,6 +20628,12 @@ export interface components {
             } | null;
             /** Parent Value */
             parent_value?: string | null;
+            /** Processing Defaults */
+            processing_defaults?: {
+                [key: string]: {
+                    [key: string]: boolean | number | string | null;
+                };
+            } | null;
             /** Ratio Checks */
             ratio_checks?: components["schemas"]["RatioCheckOut"][] | null;
             /** Status */
@@ -28734,6 +28860,37 @@ export interface operations {
             };
         };
     };
+    declared_approval_status_api_materials__material_id__declared_approval_request_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                material_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApprovalAskStatusOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     approve_declared_api_materials__material_id__declared_approve_post: {
         parameters: {
             query?: never;
@@ -30417,6 +30574,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BatchUndoOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    processing_defaults_api_processing_defaults_get: {
+        parameters: {
+            query: {
+                test_run_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProcessingDefaultsOut"];
                 };
             };
             /** @description Validation Error */

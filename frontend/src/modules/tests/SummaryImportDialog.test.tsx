@@ -15,7 +15,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { SummaryImportDialog } from '@/modules/tests/SummaryImportDialog'
+import { SummaryImportDialog, defaultColumns } from '@/modules/tests/SummaryImportDialog'
 
 const importSummaries = vi.fn()
 
@@ -209,5 +209,19 @@ describe('시험 종류', () => {
 
     await waitFor(() => expect(importSummaries).toHaveBeenCalled())
     expect(importSummaries.mock.calls[0][0]).toMatchObject({ test_type: 'creep' })
+  })
+})
+
+describe('굽힘 요약값 열', () => {
+  it('묶음이 읽는 굽힘 탄성률 · 강도 키를 깐다', () => {
+    // 보고서만 있는 굽힘 시험(칩 · 모듈)도 「굽힘 등가 탄성률」 묶음에 들어가야 한다 — 열
+    // 이름이 곧 저장 키라서 flexural_modulus 가 아니면 묶음이 못 본다.
+    const flexural = {
+      key: 'flexural',
+      conditions: [field('temperature', '시험 온도', 'K', 'temperature', false)],
+    } as unknown as Parameters<typeof defaultColumns>[0]
+    expect(defaultColumns(flexural)).toBe(
+      'flexural_modulus (MPa), flexural_strength (MPa), 시험 온도 (°C)'
+    )
   })
 })

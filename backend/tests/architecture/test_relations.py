@@ -230,6 +230,10 @@ EXCLUDED_TABLES: dict[str, str] = {
         "카드에 붙는 코멘트(근거 시험이 다른 두께로 옮겨짐 등) — 카드의 칸이다."
         " 카드를 집으면 함께 온다(`remarks`)"
     ),
+    "material_approval_requests": (
+        "선언 값 승인 요청의 기록(누가 · 언제 부탁했나) — 재료의 칸이다. 승인 상태는 값의"
+        " `approval` 이 말하고, 요청은 `/declared/approval-request` 로 함께 온다"
+    ),
 }
 
 #: **막힌 물음이 있는데 아직 안 정한 것.** 「모른다」 를 적는 자리가 아니라

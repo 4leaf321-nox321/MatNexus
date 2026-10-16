@@ -762,6 +762,53 @@
       ],
       "max_calls": 9,
       "note": "23 °C 는 잰 온도가 아니다 — 지어내지 말고 잰 온도(25 °C 등)를 말해야 한다. 미리보기만."
+    },
+    {
+      "id": "card-09",
+      "category": "카드",
+      "prompt": "확정 요청이 와 있는 카드 있어? 있으면 어느 재료의 무슨 카드인지 알려 줘.",
+      "must_mention": [
+        [
+          "확정 요청",
+          "요청"
+        ]
+      ],
+      "tools_any": [
+        "mcp__matnexus__list_cards"
+      ],
+      "max_calls": 4,
+      "note": "list_cards(asked=True) 한 번이면 된다(2026-10-16). 없으면 없다고 말한다."
+    },
+    {
+      "id": "card-10",
+      "category": "카드",
+      "prompt": "SCATTER_DP600_1.0 카드 중 가장 최근에 만든 게 뭐야? 번호와 소성 표 점 수만 알려 줘.",
+      "must_mention": [
+        [
+          "C-"
+        ]
+      ],
+      "tools_any": [
+        "mcp__matnexus__list_cards",
+        "mcp__matnexus__get_card"
+      ],
+      "max_calls": 3,
+      "note": "목록 요약의 created_at · point_count 로 고른다 — 카드를 하나씩 열지 않는다(2026-10-16)."
+    },
+    {
+      "id": "unit-01",
+      "category": "단위",
+      "prompt": "SCATTER_DP600_1.0 MD 인장 항복강도의 평균 · 표준편차 · 최솟값 · 최댓값을 kgf/mm² 로 알려 줘.",
+      "must_mention": [
+        [
+          "kgf"
+        ]
+      ],
+      "tools_any": [
+        "mcp__matnexus__convert_unit"
+      ],
+      "max_calls": 6,
+      "note": "숫자 넷을 convert_unit(values=…) 한 번에 옮긴다 — 숫자마다 부르면 상한을 넘는다(2026-10-16)."
     }
   ]
 }

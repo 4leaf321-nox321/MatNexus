@@ -12,6 +12,10 @@ from pydantic import BaseModel, Field
 BULK_MAX = 500
 
 
+#: 처리 기본값의 값 하나 — 수 · 글자(선택지 · `@` 참조) · 참/거짓 · 비움(2026-10-16).
+ProcessingDefaultValue = bool | int | float | str | None
+
+
 class VocabularyOut(BaseModel):
     slug: str
     label: str
@@ -77,6 +81,9 @@ class TermOut(BaseModel):
     """이 규격의 시편은 단면적을 어떻게 내는가(`matcore.specimen`)."""
     ratio_checks: list[RatioCheckOut] = []
     """이 규격이 요구하는 비율 조건. **어겨도 막지 않는다** — 보이게만 한다."""
+    processing_defaults: dict[str, dict[str, ProcessingDefaultValue]] = {}
+    """이 규격의 시편을 처리할 때 채울 옵션 — 처리 단계 → 옵션 → 값(2026-10-16).
+    처리 화면이 시편의 규격을 보고 기본 순서를 이 값으로 채운다."""
     field_count: int = 0
     """이 값이 **직접 선언한** 칸 수. 분류 축에서 쓴다 — 0 이면 그 분류의
     규격은 치수를 하나도 못 갖는다."""
@@ -165,6 +172,8 @@ class StandardTemplateOut(BaseModel):
     최소값(`R >= 25`)·범위(`40~120`)·근사(`C ~= 50`)·재료가 정하는 것(두께)은
     없다 — 그런 칸은 빈 채로 와서 사람이 채운다."""
     ratio_checks: list[RatioCheckOut] = []
+    processing_defaults: dict[str, dict[str, ProcessingDefaultValue]] = {}
+    """이 규격의 처리 방법(탄성률 방법 · 구간 · 하중 구간 · 3점/4점). 가져오면 함께 온다."""
     help: str | None = None
     taken: bool = False
     """이미 그 이름의 값이 있는가. **덮어쓰지 않는다** — 있으면 건너뛴다."""
@@ -248,6 +257,9 @@ class TermUpdateRequest(BaseModel):
     cross_section: str | None = Field(default=None, max_length=20)
     """단면적 식. **빈 문자열이면 뗀다.** 그 식이 요구하는 치수 칸이 이 규격에
     있어야 고를 수 있다 — 없는 칸을 요구하는 식은 늘 실패한다."""
+    processing_defaults: dict[str, dict[str, ProcessingDefaultValue]] | None = None
+    """처리 기본값 — **주면 통째로 바꾼다**(빈 묶음이면 지운다). 단계 · 옵션은 레지스트리와
+    대조한다 — 없는 것을 적으면 처리 화면이 조용히 버리므로 저장 자리에서 거절한다."""
     extra_fields: list[SpecimenFieldSaveRequest] | None = None
     """이 값**만** 갖는 치수 칸. 상위 분류의 기본 칸에 더해진다.
 

@@ -57,6 +57,8 @@ from typing import Any
 #: 이 카탈로그가 기대는 시편 분류. 없으면 그 항목은 안 보여 준다.
 TENSILE = "인장"
 DMA = "DMA"
+FLEXURAL = "굽힘"
+COMPRESSION = "압축"
 
 
 def field(
@@ -225,6 +227,42 @@ _DMA_BAR = [
         "블랭크 길이",
         help="클램프 스팬이 아니라 실제로 잘라야 하는 길이입니다 — 물림 여유를 더합니다.",
     ),
+]
+
+
+# --- 굽힘: b · h · L · Lᵢ ------------------------------------------------------
+#
+# 직사각형 단면 보. 3점과 4점은 **하중 스팬이 있느냐**로만 갈린다 — 처리(`flexural.*`)도
+# 그 칸으로 가른다. 스팬은 대개 두께의 배수로 정해져 값이 아니라 비율 조건으로 건다.
+
+_FLEX_3PT = [
+    field("width", "폭", symbol="b"),
+    field("thickness", "두께", symbol="h"),
+    field("span", "지지 스팬", symbol="L", help="받침 사이 거리입니다."),
+    field("total_length", "전체 길이", symbol="l"),
+]
+
+_FLEX_4PT = [
+    *_FLEX_3PT,
+    field(
+        "load_span",
+        "하중 스팬 (4점)",
+        symbol="Li",
+        help="누르는 두 노즈 사이 거리입니다. 3점이면 비웁니다.",
+    ),
+]
+
+# --- 압축: 높이 h₀ 와 하중 면 ---------------------------------------------------
+
+_COMP_CYLINDER = [
+    field("diameter", "직경", symbol="d"),
+    field("height", "초기 높이", symbol="h0"),
+]
+
+_COMP_BLOCK = [
+    field("width", "하중면 가로", symbol="a"),
+    field("thickness", "하중면 세로", symbol="b"),
+    field("height", "초기 높이", symbol="h0"),
 ]
 
 
@@ -619,5 +657,397 @@ CATALOG: list[dict[str, Any]] = [
         "ratio_checks": [
             ratio("free_length", "thickness", minimum=10, help="전단 변형 기여 억제"),
         ],
+    },
+    # ── 굽힘 ──────────────────────────────────────────────────────────────
+    #
+    # 처리는 규격 이름을 모른다 — 규격마다 다른 것(3점 · 4점, 탄성률을 재는 방법과 구간)은
+    # 처리 단계에서 고른다. 무엇을 고르는지는 `help` 와 가이드에 적는다.
+    {
+        "key": "iso_178",
+        # 권장 시편 80 x 10 x 4 와 그때의 스팬 16h = 64 만 고정값이다.
+        "attributes": {
+            "total_length": 0.080,
+            "width": 0.010,
+            "thickness": 0.004,
+            "span": 0.064,
+        },
+        "value": "ISO 178 (플라스틱 3점 굽힘)",
+        "category": FLEXURAL,
+        "family": "플라스틱 굽힘",
+        "fields": _FLEX_3PT,
+        "cross_section": "rectangle",
+        "processing": {
+            "flexural.engineering": {"load_span": None},
+            "flexural.modulus": {
+                "method": "chord",
+                "minimum_strain": 0.0005,
+                "maximum_strain": 0.0025,
+            },
+        },
+        "ratio_checks": [
+            ratio("span", "thickness", minimum=15, maximum=17, help="스팬 = (16 ± 1) x 두께"),
+        ],
+        "help": "탄성률은 현(변형률 0.05% ~ 0.25%). 규정 처짐(변형률 3.5%)의 응력 σfC 를 "
+        "함께 봅니다. JIS K 7171 이 같은 방법입니다.",
+    },
+    {
+        "key": "astm_d790",
+        # 성형 시편 127 x 12.7 x 3.2 와 스팬 50.8(16:1)을 규격이 정한다(규격 정리 문서 03 절).
+        "attributes": {
+            "total_length": 0.127,
+            "width": 0.0127,
+            "thickness": 0.0032,
+            "span": 0.0508,
+        },
+        "value": "ASTM D790 (플라스틱 3점 굽힘)",
+        "category": FLEXURAL,
+        "family": "플라스틱 굽힘",
+        "fields": _FLEX_3PT,
+        "cross_section": "rectangle",
+        "processing": {
+            "flexural.engineering": {"load_span": None},
+            "flexural.modulus": {"method": "tangent"},
+        },
+        # 최대는 안 건다 — 저전단강도 재료는 32 · 40 · 60 : 1 을 고른다.
+        "ratio_checks": [
+            ratio(
+                "span", "thickness", minimum=15, help="16 : 1 (±1) 기본, 32 · 40 · 60 : 1 선택"
+            ),
+        ],
+        "help": "탄성률은 처음 직선 구간의 접선. 처짐이 스팬의 10% 를 넘으면 큰 처짐 보정을 "
+        "켭니다. 절차 A 는 변형률 속도 0.01 /min.",
+    },
+    {
+        "key": "astm_d6272",
+        "value": "ASTM D6272 (플라스틱 4점 굽힘)",
+        "category": FLEXURAL,
+        "family": "플라스틱 굽힘",
+        "fields": _FLEX_4PT,
+        "cross_section": "rectangle",
+        "processing": {
+            "flexural.engineering": {"load_span": "@specimen_load_span"},
+            "flexural.modulus": {"method": "tangent"},
+        },
+        "ratio_checks": [
+            ratio(
+                "span", "thickness", minimum=15, maximum=17, help="스팬 : 두께 = 16 : 1 (±1)"
+            ),
+            ratio(
+                "load_span", "span", minimum=0.33, maximum=0.5, help="하중 스팬 = L/3 또는 L/2"
+            ),
+        ],
+        "help": "하중 스팬은 지지 스팬의 1/3 또는 1/2. 탄성률은 접선.",
+    },
+    {
+        "key": "iso_14125",
+        "value": "ISO 14125 (섬유강화 복합재 굽힘)",
+        "category": FLEXURAL,
+        "family": "복합재 굽힘",
+        "fields": _FLEX_4PT,
+        "cross_section": "rectangle",
+        "processing": {
+            "flexural.modulus": {
+                "method": "chord",
+                "minimum_strain": 0.0005,
+                "maximum_strain": 0.0025,
+            },
+        },
+        "ratio_checks": [
+            ratio(
+                "span",
+                "thickness",
+                minimum=16,
+                maximum=40.5,
+                help="등급(I ~ IV)에 따라 16 · 20 · 40 : 1",
+            ),
+        ],
+        "help": "등급 I 80 x 10 x 4(스팬 64), II 80 x 15 x 4(64), III 60 x 15 x 2(40), "
+        "IV 100 x 15 x 2(80). 등급은 재료가 아니라 Ef1/G13 비로 정함. 3점(방법 A) · "
+        "4점(방법 B, 하중 스팬 = L/3). 탄성률은 현(변형률 0.05% ~ 0.25%).",
+    },
+    {
+        "key": "astm_d7264",
+        # 표준 형상의 폭 13 · 두께 4 와 32 : 1 스팬 128 이 고정값이다(다른 비도 허용).
+        "attributes": {"width": 0.013, "thickness": 0.004, "span": 0.128},
+        "value": "ASTM D7264 (고분자 복합재 굽힘)",
+        "category": FLEXURAL,
+        "family": "복합재 굽힘",
+        "fields": _FLEX_4PT,
+        "cross_section": "rectangle",
+        "processing": {
+            "flexural.modulus": {
+                "method": "chord",
+                "minimum_strain": 0.001,
+                "maximum_strain": 0.003,
+            },
+        },
+        "ratio_checks": [
+            ratio(
+                "span", "thickness", minimum=16, help="표준 32 : 1 (16 · 20 · 40 · 60 도 허용)"
+            ),
+        ],
+        "help": "절차 A 는 3점, 절차 B 는 4점(하중 스팬 = L/2). "
+        "탄성률은 현(변형률 0.1% ~ 0.3%).",
+    },
+    {
+        "key": "astm_c1161_b",
+        # 형상 B 는 치수가 전부 정해져 있다.
+        "attributes": {
+            "width": 0.004,
+            "thickness": 0.003,
+            "span": 0.040,
+            "load_span": 0.020,
+            "total_length": 0.045,
+        },
+        "value": "ASTM C1161 형상 B (세라믹 굽힘 강도)",
+        "category": FLEXURAL,
+        "family": "세라믹 굽힘",
+        "fields": _FLEX_4PT,
+        "cross_section": "rectangle",
+        "processing": {
+            "flexural.engineering": {"load_span": "@specimen_load_span"},
+            "flexural.modulus": {"method": "stress_window", "band_low": 0.1, "band_high": 0.4},
+        },
+        "ratio_checks": [
+            ratio("load_span", "span", minimum=0.5, maximum=0.5, help="하중 스팬 = L/2"),
+        ],
+        "help": "강도가 목적인 규격. 탄성률을 함께 내려면 처짐계와 응력 띠 방법을 씁니다.",
+    },
+    {
+        "key": "iso_14704",
+        "attributes": {"width": 0.004, "thickness": 0.003, "span": 0.040},
+        "value": "ISO 14704 (세라믹 굽힘 강도)",
+        "category": FLEXURAL,
+        "family": "세라믹 굽힘",
+        "fields": _FLEX_4PT,
+        "cross_section": "rectangle",
+        "processing": {
+            "flexural.modulus": {"method": "stress_window", "band_low": 0.1, "band_high": 0.4},
+        },
+        "help": "3점 · 4점(하중 스팬 20 mm). C1161 형상 B 와 시편이 같습니다.",
+    },
+    {
+        "key": "inhouse_flexural_3pt",
+        "value": "사내 3점 굽힘 (칩 · 모듈 등가 E)",
+        "category": FLEXURAL,
+        "family": "사내 굽힘",
+        "fields": _FLEX_3PT,
+        "cross_section": "rectangle",
+        "processing": {
+            "flexural.engineering": {"load_span": None},
+            "flexural.modulus": {"method": "stress_window", "band_low": 0.1, "band_high": 0.4},
+        },
+        "help": "직사각형 단면을 균질한 보로 보고 등가 E 를 냅니다. "
+        "스팬 / 두께가 16 보다 작으면 "
+        "전단 처짐 때문에 E 가 작게 나올 수 있습니다 — 처짐계를 쓰거나 장비 컴플라이언스를 "
+        "뺍니다.",
+    },
+    {
+        "key": "inhouse_flexural_4pt",
+        "value": "사내 4점 굽힘 (칩 · 모듈 등가 E)",
+        "category": FLEXURAL,
+        "family": "사내 굽힘",
+        "fields": _FLEX_4PT,
+        "cross_section": "rectangle",
+        "processing": {
+            "flexural.engineering": {"load_span": "@specimen_load_span"},
+            "flexural.modulus": {"method": "stress_window", "band_low": 0.1, "band_high": 0.4},
+        },
+        "help": "두 하중점 사이가 순수 굽힘이라 전단 영향이 적습니다.",
+    },
+    # ── 압축 ──────────────────────────────────────────────────────────────
+    {
+        "key": "iso_7743_a",
+        "attributes": {"diameter": 0.029, "height": 0.0125},
+        "value": "ISO 7743 시험편 A (고무 압축)",
+        "category": COMPRESSION,
+        "family": "고무 압축",
+        "fields": _COMP_CYLINDER,
+        "cross_section": "circle",
+        "processing": {
+            "compression.engineering": {"cycle": 4},
+            "compression.modulus": {"method": "secant", "maximum_strain": 0.1},
+        },
+        "help": "네 번 눌러 네 번째 하중 구간의 압축 응력 · 할선 탄성률을 봅니다"
+        "(처리의 사이클 "
+        "= 4). 방법 A 윤활 · B 접착 · C 사포.",
+    },
+    {
+        "key": "astm_d575",
+        "attributes": {"diameter": 0.0286, "height": 0.0125},
+        "value": "ASTM D575 (고무 압축)",
+        "category": COMPRESSION,
+        "family": "고무 압축",
+        "fields": _COMP_CYLINDER,
+        "cross_section": "circle",
+        "processing": {
+            "compression.modulus": {"method": "secant", "maximum_strain": 0.1},
+        },
+        "help": "방법 A 는 정한 변형에서의 하중, 방법 B 는 정한 하중에서의 변형.",
+    },
+    {
+        "key": "iso_3386_1",
+        "attributes": {"width": 0.100, "thickness": 0.100, "height": 0.050},
+        "value": "ISO 3386-1 (연질 폼 압축 응력값)",
+        "category": COMPRESSION,
+        "family": "폼 압축",
+        "fields": _COMP_BLOCK,
+        "cross_section": "rectangle",
+        "processing": {
+            "compression.engineering": {"cycle": 4},
+            "compression.modulus": {"method": "secant", "maximum_strain": 0.1},
+        },
+        "help": "70% 까지 네 번 눌러 네 번째 하중 구간의 40% 압축 응력"
+        "(CV40, 처리의 사이클 = 4).",
+    },
+    {
+        "key": "astm_d3574_c",
+        "value": "ASTM D3574 시험 C (연질 폼 압축 하중)",
+        "category": COMPRESSION,
+        "family": "폼 압축",
+        "fields": _COMP_BLOCK,
+        "cross_section": "rectangle",
+        "processing": {
+            "compression.modulus": {"method": "secant", "maximum_strain": 0.1},
+        },
+        "help": "최소 50 x 50 x 25 mm. 두 번 미리 누른 뒤 세 번째의 50% 압축 응력(CFD, 처리의 "
+        "사이클 = 3). 25 · 65% 도 봅니다.",
+    },
+    {
+        "key": "iso_844",
+        "value": "ISO 844 (경질 폼 압축)",
+        "category": COMPRESSION,
+        "family": "폼 압축",
+        "fields": _COMP_BLOCK,
+        "cross_section": "rectangle",
+        "processing": {
+            "compression.modulus": {"method": "tangent", "tangent_width": 0.01},
+        },
+        "help": "10% 변형 전에 최대가 있으면 그 응력, 없으면 10% 압축 응력이 압축 강도. "
+        "탄성률은 처음 직선 구간의 접선.",
+    },
+    {
+        "key": "astm_d1621",
+        "value": "ASTM D1621 (경질 폼 압축)",
+        "category": COMPRESSION,
+        "family": "폼 압축",
+        "fields": _COMP_BLOCK,
+        "cross_section": "rectangle",
+        "processing": {
+            "compression.modulus": {"method": "tangent", "tangent_width": 0.01},
+        },
+        "ratio_checks": [ratio("height", "width", maximum=1, help="높이 ≤ 폭")],
+        "help": "하중면 25.8 ~ 232 cm², 높이 25.4 mm 이상. ISO 844 와 같은 강도 정의"
+        "(항복 또는 10%). 탄성률은 접선.",
+    },
+    {
+        "key": "iso_604",
+        # 탄성률 시편 50 x 10 x 4(강도 시편은 높이 10 mm).
+        "attributes": {"width": 0.010, "thickness": 0.004, "height": 0.050},
+        "value": "ISO 604 탄성률 시편 (플라스틱 압축)",
+        "category": COMPRESSION,
+        "family": "플라스틱 압축",
+        "fields": _COMP_BLOCK,
+        "cross_section": "rectangle",
+        "processing": {
+            "compression.modulus": {
+                "method": "chord",
+                "minimum_strain": 0.0005,
+                "maximum_strain": 0.0025,
+            },
+        },
+        "help": "탄성률은 현(변형률 0.05% ~ 0.25%) — 압축계 변형률이 있어야 맞습니다.",
+    },
+    {
+        "key": "astm_d695",
+        "attributes": {"width": 0.0127, "thickness": 0.0127, "height": 0.0254},
+        "value": "ASTM D695 강도 시편 (경질 플라스틱 압축)",
+        "category": COMPRESSION,
+        "family": "플라스틱 압축",
+        "fields": _COMP_BLOCK,
+        "cross_section": "rectangle",
+        "processing": {
+            "compression.modulus": {"method": "tangent", "tangent_width": 0.001},
+        },
+        "ratio_checks": [
+            ratio("height", "width", minimum=2, maximum=2, help="강도 시편 L = 2W"),
+        ],
+        "help": "프리즘 12.7 x 12.7 x 25.4 mm(탄성률 시편은 높이 50.8 mm). 탄성률은 접선.",
+    },
+    {
+        "key": "astm_e9",
+        "value": "ASTM E9 원통 (금속 압축)",
+        "category": COMPRESSION,
+        "family": "금속 압축",
+        "fields": _COMP_CYLINDER,
+        "cross_section": "circle",
+        "processing": {
+            "compression.modulus": {"method": "tangent", "tangent_width": 0.0005},
+        },
+        "ratio_checks": [
+            ratio("height", "diameter", minimum=2, maximum=10, help="L/D 2 · 3 · 8 · 10 등급"),
+        ],
+        "help": "짧은 시편(L/D 2)은 강도, 긴 시편(L/D 8 · 10)은 탄성계수 · 항복. 짧은 시편은 "
+        "단부 마찰이 탄성계수를 오염 — 탄성계수는 압축계 변형률로.",
+    },
+    {
+        "key": "astm_d6641",
+        "value": "ASTM D6641 (복합재 압축, CLC)",
+        "category": COMPRESSION,
+        "family": "복합재 압축",
+        "fields": [
+            *_COMP_BLOCK,
+            field(
+                "gauge_length", "게이지 길이(비지지 길이)", help="CLC 블록 사이 길이입니다."
+            ),
+        ],
+        "cross_section": "rectangle",
+        "processing": {
+            "compression.engineering": {"source": "strain"},
+            "compression.modulus": {
+                "method": "chord",
+                "minimum_strain": 0.001,
+                "maximum_strain": 0.003,
+            },
+        },
+        "help": "약 140 x 12 ~ 13 x 2 ~ 2.5 mm, 게이지 12 ~ 13 mm. 변형률은 스트레인 게이지"
+        "(변형률 채널)로 — 크로스헤드 변위에는 지그 · 탭 변형이 섞임.",
+    },
+    {
+        "key": "astm_d3410",
+        "value": "ASTM D3410 (복합재 압축, 전단 하중)",
+        "category": COMPRESSION,
+        "family": "복합재 압축",
+        "fields": [
+            *_COMP_BLOCK,
+            field("gauge_length", "게이지 길이(비지지 길이)", help="그립 사이 길이입니다."),
+        ],
+        "cross_section": "rectangle",
+        "processing": {
+            "compression.engineering": {"source": "strain"},
+            "compression.modulus": {
+                "method": "chord",
+                "minimum_strain": 0.001,
+                "maximum_strain": 0.003,
+            },
+        },
+        "help": "SI 열과 인치-파운드 열이 환산이 아닌 별개 규격(폭 10 mm 와 12.7 mm) — 섞어 "
+        "쓰지 않음. 변형률은 스트레인 게이지(변형률 채널)로.",
+    },
+    {
+        "key": "inhouse_compression_cylinder",
+        "value": "사내 압축 (원통)",
+        "category": COMPRESSION,
+        "family": "사내 압축",
+        "fields": _COMP_CYLINDER,
+        "cross_section": "circle",
+    },
+    {
+        "key": "inhouse_compression_block",
+        "value": "사내 압축 (직육면체)",
+        "category": COMPRESSION,
+        "family": "사내 압축",
+        "fields": _COMP_BLOCK,
+        "cross_section": "rectangle",
     },
 ]

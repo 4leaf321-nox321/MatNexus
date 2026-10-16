@@ -435,6 +435,10 @@ def _card_summary(card: dict[str, Any]) -> dict[str, Any]:
         "blocks": sorted((card.get("blocks") or {}).keys()),
         "available_formats": card.get("available_formats") or [],
         "sample_count": source.get("sample_count"),
+        # **카드를 열어 보지 않고 고르게**(2026-10-16 평가 세트) — 같은 재료에 카드가 셋이면
+        # 언제 것인지 · 표가 몇 점인지 보려고 하나씩 열어 호출 상한을 넘었다.
+        "point_count": card.get("point_count"),
+        "created_at": card.get("created_at"),
         **({"caveat": " · ".join(caveats)} if caveats else {}),
     }
 
@@ -637,15 +641,8 @@ async def _resolve_card(ctx: Context, card_id: str) -> str | dict[str, Any]:
         }
     return {
         "error": f"'{card_id}' 로 카드가 여럿입니다 — 하나를 골라 id 로 다시 부르세요.",
-        "candidates": [
-            {
-                "id": one["id"],
-                "label": one.get("label"),
-                "material": one.get("material_name"),
-                "status": one.get("status"),
-            }
-            for one in items[:10]
-        ],
+        # 고를 근거를 함께 준다 — 없으면 하나씩 열어 본다(2026-10-16 평가 세트).
+        "candidates": [_card_summary(one) | {"material": one.get("material_name")} for one in items[:10]],
     }
 
 
@@ -3607,11 +3604,17 @@ async def request_review(
             if not row.get("approval")
             and (row.get("tier_if_approved") or 4) < (row.get("quality_tier") or 4)
         ]
+        # **수는 서버가 센 것으로**(2026-10-16) — 재료 쪽만 세면 시료 · 밀시트 값이 빠진다.
+        status = await _get(ctx, f"/materials/{found}/declared/approval-request")
+        status = status if isinstance(status, dict) and "error" not in status else {}
         return {
             "dry_run": True,
             "material": material.get("record_name"),
+            "pending_total": status.get("pending"),
             "waiting_on_material": waiting,
-            "will": "자료 관리자에게 승인 요청 알림(시료 · 밀시트 값도 서버가 함께 센다)",
+            "last_request": status.get("last"),
+            "next_allowed_at": status.get("next_allowed_at"),
+            "will": "자료 관리자에게 승인 요청 알림 · 요청 기록(같은 재료는 하루 한 번)",
             "token_owner_is_steward": steward,
             "note": direct if steward else ask,
         }
@@ -6041,6 +6044,26 @@ TENSILE_STANDARD: tuple[str, ...] = (
     "curve.resample",
 )
 
+#: 시험법마다의 표준 순서(2026-10-16 굽힘 · 압축). 화면의 `STARTERS` 와 같은 차례다.
+STANDARD_ORDERS: dict[str, tuple[str, ...]] = {
+    "tensile": TENSILE_STANDARD,
+    "flexural": ("flexural.engineering", "flexural.modulus", "flexural.strength"),
+    "compression": ("compression.engineering", "compression.modulus", "compression.indices"),
+}
+
+
+def _param_brief(item: dict[str, Any]) -> str:
+    """인자 하나를 한 줄로 — 이름 (단위), 기본값이 `@` 참조면 그것까지.
+
+    서버는 `@` 기본값을 채우지 않는다(화면이 채워 보낸다). 안 보이면 AI 는 `support_span` 이
+    「값이 필요합니다」 로 멈춘 뒤에야 무엇을 적을지 찾아 나선다(2026-10-16 굽힘에서 실측).
+    """
+    text = f"{item.get('name')} ({item.get('unit')})" if item.get("unit") else str(item.get("name"))
+    default = item.get("default")
+    if isinstance(default, str) and default.startswith("@"):
+        text += f" = {default}"
+    return text
+
 
 @mcp.tool()
 async def list_processing_steps(
@@ -6089,18 +6112,16 @@ async def list_processing_steps(
                 "label": one.get("label"),
                 "applies_to": one.get("applies_to") or "전부",
                 # 단위를 이름 옆에 적는다 — 인자는 SI 라 `0.2` 와 `0.002` 가 다른 값이다.
-                "params": [
-                    f"{item.get('name')} ({item.get('unit')})" if item.get("unit") else item.get("name")
-                    for item in one.get("params") or []
-                ],
+                "params": [_param_brief(item) for item in one.get("params") or []],
             }
             for one in rows
         ],
-        "standard": list(TENSILE_STANDARD),
+        "standard": list(STANDARD_ORDERS.get(test_type or "tensile", TENSILE_STANDARD)),
         "note": (
-            "`standard` 는 인장 표준 순서다. **재샘플은 재는 단계 뒤에 둔다** — "
-            "앞에 두면 탄성계수가 격자점으로 계산돼 값이 안 나온다. "
-            "**인자는 SI 다** — 변형률 0.2% 는 0.002, 응력은 Pa."
+            "`standard` 는 그 시험법의 표준 순서다(인장 · 굽힘 · 압축, 없으면 인장). **재샘플은 "
+            "재는 단계 뒤에 둔다** — 앞에 두면 탄성계수가 격자점으로 계산돼 값이 안 나온다. "
+            "**인자는 SI 다** — 변형률 0.2% 는 0.002, 응력은 Pa. `= @…` 가 붙은 인자는 "
+            "**그 참조를 직접 적어 보낸다** — 서버는 기본값을 채우지 않는다."
         ),
     }
 
@@ -6117,10 +6138,24 @@ async def list_processing_inputs(ctx: Context, test_run_id: str) -> dict[str, An
 
     이름에 「(재료 스펙)」·「(규격 공칭)」 이 붙은 것은 **그 시편에서 잰 값이
     아니다.** 그대로 써도 되지만, 답에 옮길 때는 그 사실을 함께 적어라.
+
+    `standard_defaults` 는 시편 규격이 정한 처리 옵션이다(D790 → 접선) — 단계를 짤 때 쓴다.
     """
-    return _listed(
+    listed = _listed(
         await _get(ctx, "/processing/inputs", {"test_run_id": test_run_id}), "inputs"
     )
+    if "error" in listed:
+        return listed
+    # **규격이 정한 방법도 함께 준다**(2026-10-16). 화면은 이것으로 기본 순서를 채우는데, AI 는
+    # 안 보면 굽힘을 늘 기본(현)으로 돌려 D790 시편에서 몇 % 다른 탄성률을 낸다.
+    defaults = await _get(ctx, "/processing/defaults", {"test_run_id": test_run_id})
+    if isinstance(defaults, dict) and "error" not in defaults:
+        listed = {
+            **listed,
+            "standard": defaults.get("standard"),
+            "standard_defaults": defaults.get("steps") or {},
+        }
+    return listed
 
 
 @mcp.tool()

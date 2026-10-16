@@ -91,6 +91,29 @@ class ApprovalAskOut(BaseModel):
     """알림을 받은 자료 관리자 수."""
 
 
+class ApprovalAskRecordOut(BaseModel):
+    """지난 승인 요청 한 번(2026-10-16)."""
+
+    by_name: str | None = None
+    via: str | None = None
+    """사람이 아닌 길이면 그 이름 — `AI(MCP)`."""
+    at: datetime
+    note: str | None = None
+    pending: int
+    """그때 센 승인 대기 값 수."""
+
+
+class ApprovalAskStatusOut(BaseModel):
+    """승인 요청 단추가 볼 것 — **서버가 센 수**와 지난 요청(2026-10-16).
+
+    화면이 재료 쪽 값만 세면 서버(시료 · 밀시트까지)와 수가 갈렸다. 여기서 같은 수를 받는다."""
+
+    pending: int
+    last: ApprovalAskRecordOut | None = None
+    next_allowed_at: datetime | None = None
+    """이때부터 다시 부탁할 수 있다 — 하루 한 번. 비어 있으면 지금 된다."""
+
+
 class DeclaredApprovalRequest(BaseModel):
     """승인하거나 승인을 거둘 줄. 줄은 항목 이름으로 고른다 — 한 물성은 한 줄이다."""
 
@@ -412,6 +435,8 @@ class DeclaredReviewOut(BaseModel):
     tier_if_approved: int
     digest: str
     """이 값의 지문 — 이 목록에서 바로 승인할 때 되보낸다(`DeclaredApprovalRequest.digest`)."""
+    requested_at: datetime | None = None
+    """이 재료에 마지막으로 승인 요청이 온 때(2026-10-16) — 「요청됨」. 큐가 아니라 표시다."""
 
 
 class ClassificationOut(BaseModel):

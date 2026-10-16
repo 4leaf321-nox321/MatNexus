@@ -273,12 +273,23 @@ def _unit_likeness(row: list[str]) -> float:
     filled = [cell for cell in row if cell]
     if not filled:
         return 0.0
-    hits = sum(
-        1
-        for cell in filled
-        if cell in {"-", "1"} or cell in units.UNITS or cell.lower() in _UNIT_ALIASES
-    )
+    hits = sum(1 for cell in filled if _unit_like(cell))
     return hits / len(filled)
+
+
+def _unit_like(cell: str) -> bool:
+    if cell in {"-", "1"} or cell in units.UNITS or cell.lower() in _UNIT_ALIASES:
+        return True
+    # Instron Bluehill 은 단위 줄을 괄호에 싸서 적는다(`(mm)` · `(sec)`, 2026-10-16). 괄호로
+    # 싼 칸만 표기 별칭까지 본다 — 맨 글자 `Time` 같은 헤더가 단위로 잡히지 않게.
+    inner = units.unwrap(cell)
+    if inner == cell.strip():
+        return False
+    return (
+        inner in {"-", "1", ""}
+        or units.canonical(inner) is not None
+        or (inner.lower() in _UNIT_ALIASES)
+    )
 
 
 #: 장비가 흔히 쓰는 표기. 단위 판정에만 쓴다 — 실제 변환은 프로파일이 정한다.

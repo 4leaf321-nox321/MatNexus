@@ -1708,6 +1708,98 @@ def _as_bound(raw: Any) -> float | None:
     return value
 
 
+#: 처리 기본값을 둘 수 있는 축. 처리는 시편의 **규격**을 보고 채운다(2026-10-16).
+PROCESSING_DEFAULTS_AXIS = "specimen_standard"
+
+
+def check_processing_defaults(
+    vocabulary: Vocabulary, raw: Mapping[str, Any] | None
+) -> dict[str, dict[str, Any]]:
+    """처리 기본값을 검사한다 — **단계 · 옵션은 레지스트리에 있어야 한다.**
+
+    없는 단계 · 옵션을 적으면 처리 화면이 그 값을 둘 자리가 없어 조용히 버린다 — 사람은
+    「규격에 접선이라고 적었는데 왜 현으로 돌지」 를 처리 결과에서야 묻게 된다. 그래서
+    저장하는 자리에서 거절한다. 값은 옵션의 모양을 따른다(선택지 · 참/거짓 · 수 또는 `@` 참조).
+    `None` 은 「비움」 이다 — 굽힘의 하중 스팬을 비우면 3점이다.
+    """
+    from matcore import processing, registry
+
+    if not raw:
+        return {}
+    if vocabulary.slug != PROCESSING_DEFAULTS_AXIS:
+        raise AppError(
+            "MNX-VOCABULARY-0031", "처리 기본값은 시편 규격에만 둘 수 있습니다.", status=422
+        )
+    processing.load_builtin()
+    cleaned: dict[str, dict[str, Any]] = {}
+    for plugin_id, options in raw.items():
+        try:
+            plugin = registry.get(str(plugin_id))
+        except KeyError:
+            plugin = None
+        if plugin is None or plugin.kind != "processing":
+            raise AppError(
+                "MNX-VOCABULARY-0031",
+                f"등록되지 않은 처리 단계입니다: {plugin_id}",
+                status=422,
+            )
+        if not isinstance(options, Mapping):
+            raise AppError(
+                "MNX-VOCABULARY-0031",
+                f"'{plugin.label}' 의 기본값은 옵션 → 값 묶음이어야 합니다.",
+                status=422,
+            )
+        specs = {spec.name: spec for spec in plugin.params}
+        kept: dict[str, Any] = {}
+        for name, value in options.items():
+            spec = specs.get(str(name))
+            if spec is None:
+                raise AppError(
+                    "MNX-VOCABULARY-0031",
+                    f"'{plugin.label}' 에 '{name}' 옵션이 없습니다. 있는 옵션: "
+                    f"{', '.join(specs) or '(없음)'}",
+                    status=422,
+                )
+            kept[spec.name] = _processing_value(plugin.label, spec, value)
+        if kept:
+            cleaned[plugin.id] = kept
+    return cleaned
+
+
+def _processing_value(step: str, spec: Any, value: Any) -> Any:
+    """옵션 하나의 값. **옵션의 모양을 따른다** — 모르는 선택지 · 글자 수 칸을 거절한다."""
+    where = f"'{step}' 의 '{spec.label}'"
+    if value is None:
+        return None
+    if isinstance(value, str) and value.startswith("@"):
+        if spec.type in ("float", "int", "str"):
+            return value
+        raise AppError(
+            "MNX-VOCABULARY-0031", f"{where} 에는 참조를 쓸 수 없습니다.", status=422
+        )
+    if spec.type == "choice":
+        if str(value) not in spec.choices:
+            raise AppError(
+                "MNX-VOCABULARY-0031",
+                f"{where} 은 {', '.join(spec.choices)} 중 하나여야 합니다: {value}",
+                status=422,
+            )
+        return str(value)
+    if spec.type == "bool":
+        if not isinstance(value, bool):
+            raise AppError("MNX-VOCABULARY-0031", f"{where} 은 참/거짓입니다.", status=422)
+        return value
+    if spec.type in ("float", "int"):
+        if isinstance(value, bool) or not isinstance(value, int | float):
+            raise AppError(
+                "MNX-VOCABULARY-0031", f"{where} 은 수여야 합니다: {value!r}", status=422
+            )
+        if not math.isfinite(float(value)):
+            raise AppError("MNX-VOCABULARY-0031", f"{where} 이 유한하지 않습니다.", status=422)
+        return int(value) if spec.type == "int" else float(value)
+    return str(value)
+
+
 def check_cross_section(
     db: Session, vocabulary: Vocabulary, term: VocabularyTerm, key: str | None
 ) -> str | None:

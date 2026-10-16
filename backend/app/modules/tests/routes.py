@@ -85,6 +85,7 @@ from app.shared import (
     curvedata,
     facets,
     filestore,
+    ingest,
     list_search,
     permissions,
     property_search,
@@ -367,6 +368,17 @@ def detect_test_type(
                 reason=f"{suffix} 를 읽는 종류가 하나입니다.",
             )
         if len(matched) > 1:
+            # 파일 안의 이름으로 한 종류가 짚이면 그것(Zwick `.tra` 는 인장 · 굽힘 · 압축).
+            settled = ingest.settle(matched, data)
+            if settled is not None:
+                return DetectOut(
+                    filename=filename,
+                    test_type_key=settled[0].key,
+                    test_type_label=settled[0].label,
+                    profile_key=None,
+                    source="extension",
+                    reason=settled[1],
+                )
             # **여럿이면 고르지 않는다.** 하나를 찍으면 그럴듯해 보이는데 틀린다.
             return DetectOut(
                 filename=filename,

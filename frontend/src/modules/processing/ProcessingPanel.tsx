@@ -38,10 +38,12 @@ import {
 import { RecipePicker } from '@/modules/processing/RecipePicker'
 import { CurveChart } from '@/modules/tests/CurveChart'
 import {
+  isOptionalReference,
   isReference,
   isUsed,
   processingApi,
   referenceFor,
+  referenceKey,
   referenceLabel,
   referencesFor,
 } from '@/modules/processing/api'
@@ -74,12 +76,7 @@ import {
   SelectValue,
 } from '@/shared/components/ui/select'
 import { missingSteps } from '@/modules/processing/gaps'
-import {
-  DMA_STARTER,
-  RHEOMETER_STARTER,
-  TENSILE_STARTER,
-  missingStandard,
-} from '@/modules/processing/standard'
+import { STARTERS, missingStandard } from '@/modules/processing/standard'
 import {
   blockersAt,
   columnsAt,
@@ -172,6 +169,23 @@ const SOURCE_HELP: Record<string, string> = {
 }
 
 /** `ParamSpec` 의 기본값. 화면과 서버가 같은 값을 보게 하는 유일한 출처다. */
+/**
+ * 규격이 채운 옵션 하나를 사람이 읽는 말로 — 「굽힘 탄성률 (등가 E) 방법 = 접선」.
+ * `null` 은 「비움」(굽힘의 하중 스팬이면 3점), `@` 는 참조다.
+ */
+function presetLabel(plugin: ProcessingStep | undefined, name: string, value: unknown): string {
+  const param = plugin?.params.find((one) => one.name === name)
+  const shown =
+    value === null
+      ? '비움'
+      : isReference(value)
+        ? `시편의 ${referenceLabel(value)}`
+        : param?.type === 'choice'
+          ? (param.choice_labels?.[String(value)] ?? String(value))
+          : String(value)
+  return `${plugin?.label ?? ''} ${param?.label ?? name} = ${shown}`.trim()
+}
+
 function defaults(plugin: ProcessingStep | undefined): Record<string, unknown> {
   const options: Record<string, unknown> = {}
   for (const param of plugin?.params ?? []) {
@@ -304,33 +318,53 @@ export function ProcessingPanel({
     [available]
   )
 
+  /**
+   * **시편 규격이 정한 처리 옵션**(2026-10-16). 전에는 처리 로직이 시험 종류로만 골라져서,
+   * 굽힘이면 늘 「현」 이 깔렸다 — D790(접선) 시편을 그대로 돌리면 몇 % 다른 탄성률이 오류 없이
+   * 남았다. 규격이 방법을 들고, 기본 순서를 깔 때 이것으로 채운다. 사람이 바꿔도 된다.
+   */
+  const standard = useResource(() => processingApi.defaults(testRunId), [testRunId])
+  /** 규격 기준으로 채운 것 — **무엇을 어느 규격으로 채웠는지 말한다.** 안 말하면 사람은
+   * 기본값인 줄 안다. 레시피를 불러오면 지운다(그때는 레시피가 정한다). */
+  const [fromStandard, setFromStandard] = useState<{ standard: string; filled: string[] } | null>(
+    null
+  )
+
   useEffect(() => {
-    // 인장이면 바로 돌려 볼 수 있는 순서를 깔아 둔다. 다른 종류는 빈 상태에서
-    // 시작한다 — 아직 그 종류의 표준 순서를 우리가 모른다.
+    // 표준 순서를 아는 종류(인장 · DMA · 레오미터 · 굽힘 · 압축)면 바로 돌려 볼 수 있는
+    // 순서를 깔아 둔다. 다른 종류는 빈 상태에서 시작한다 — 아직 그 종류의 표준 순서를
+    // 우리가 모른다(`STARTERS`).
     //
     // **기본값은 여기서 채운다.** 서버도 생략된 옵션에 기본값을 쓰지만, 화면이
     // 빈 칸을 보여 주면 사람은 "설정 안 됨" 으로 읽는다. 실제로 '변위 열' 이
     // '열을 고르세요' 로 비어 보였는데 서버는 displacement 로 잘 돌고 있었다 —
     // 화면과 서버가 서로 다른 것을 아는 상태다.
-    if (!available.length) return
-    const starter: RecipeStep[] =
-      testTypeKey === 'tensile'
-        ? TENSILE_STARTER
-        : testTypeKey === 'dma_sweep'
-          ? DMA_STARTER
-          : testTypeKey === 'rheometer_flow'
-            ? RHEOMETER_STARTER
-            : []
+    //
+    // **규격의 처리 옵션을 덮는다.** 그것이 오기 전에는 깔지 않는다 — 깐 뒤에 오면 사람이
+    // 고치던 단계를 다시 덮게 된다. 못 받았으면(오류) 규격 없이 깐다.
+    if (!available.length || standard.loading) return
+    const starter: RecipeStep[] = STARTERS[testTypeKey] ?? []
+    const preset = standard.data?.steps ?? {}
+    const filled: string[] = []
     setSteps(
-      starter.map((step) => ({
-        ...step,
-        options: { ...defaults(byId.get(step.plugin)), ...step.options },
-      }))
+      starter.map((step) => {
+        const plugin = byId.get(step.plugin)
+        const rule = preset[step.plugin] ?? {}
+        for (const [name, value] of Object.entries(rule)) {
+          filled.push(presetLabel(plugin, name, value))
+        }
+        return { ...step, options: { ...defaults(plugin), ...step.options, ...rule } }
+      })
+    )
+    setFromStandard(
+      standard.data?.standard && filled.length
+        ? { standard: standard.data.standard, filled }
+        : null
     )
     setResult(null)
     setSaved(null)
     setFromRecipe(null)
-  }, [testTypeKey, curveKey, available.length, byId])
+  }, [testTypeKey, curveKey, available.length, byId, standard.loading, standard.data])
 
   /**
    * 그림이 **어느 단계의 것인가.** `null` 이면 마지막.
@@ -636,6 +670,7 @@ export function ProcessingPanel({
               onSelect={(recipe) => {
                 setSteps((recipe.steps as unknown as RecipeStep[]).map((s) => ({ ...s })))
                 setFromRecipe({ key: recipe.key, label: recipe.label })
+                setFromStandard(null)
                 setResult(null)
                 setSaved(null)
                 setNotice(`'${recipe.label}' 을 불러왔습니다. 돌려 보고 저장하세요.`)
@@ -867,6 +902,13 @@ export function ProcessingPanel({
           <b>켠 단계가 없습니다.</b> 왼쪽 순서도에서 「공칭 응력-변형률」부터 켜세요 —
           장비가 준 것은 변위·하중이라 그 단계가 응력·변형률을 만듭니다.
         </div>
+      )}
+
+      {fromStandard && (
+        <p className="text-muted-foreground mb-3 text-xs" role="note">
+          시편 규격 <b className="text-foreground">{fromStandard.standard}</b> 기준으로
+          채웠습니다 — {fromStandard.filled.join(' · ')}. 바꿔도 됩니다.
+        </p>
       )}
 
       {(saved || notice) && (
@@ -1798,7 +1840,7 @@ function ParamField({
   const candidates: LinkCandidate[] = [...fromInputs, ...fromSteps]
 
   /** 이어 붙인 값이 지금 얼마인가. **몇인지 모르면 고칠지 말지를 못 정한다.** */
-  const linkedName = referenced ? String(value).slice(1) : ''
+  const linkedName = referenced ? referenceKey(String(value)) : ''
   const linked: LinkCandidate | null = referenced
     ? (inputs.get(linkedName) ?? made.find((one) => one.key === linkedName) ?? null)
     : null
@@ -1830,11 +1872,16 @@ function ParamField({
               {/* **자동이라는 것을 말한다.** 「쓴다」만으로는 지금 숫자를 한 번
                   베낀 것인지, 돌릴 때마다 다시 가져오는 것인지 알 수 없다 —
                   그 둘은 곡선을 다시 처리했을 때 갈린다. */}
-              앞 단계의{' '}
+              {isOptionalReference(value) ? '있으면 ' : '앞 단계의 '}
               <b className="text-foreground">
                 {referenceLabel(String(value), inputs, catalog)}
               </b>
               를 자동으로 가져옵니다
+              {/* **있으면 쓰는 참조가 지금 없으면 그렇다고 말한다** — 굽힘의 하중 스팬이면
+                  그것이 곧 「3점」 이다. 말하지 않으면 4점 시편에서 값을 빠뜨린 것을 모른다. */}
+              {isOptionalReference(value) && !linked && (
+                <b className="text-foreground"> · 지금 없음(비움)</b>
+              )}
               {/* **규격의 공칭과 그 시편의 실측은 뜻이 조금 다르다.** 얼마인지
                   보여 주지 않으면 고칠지 말지를 판단할 수 없다. */}
               {linkedShown && <b className="text-foreground"> · 지금 {linkedShown}</b>}
@@ -1854,7 +1901,13 @@ function ParamField({
               className="ml-auto h-7 shrink-0 text-xs"
               title="지금 값을 그대로 옮겨 담고 자동 연결을 끊습니다. 그 뒤로는 곡선을 다시 처리해도 이 숫자가 그대로 남습니다."
               onClick={() =>
-                onChange(linked && linked.value !== null ? linked.value : (param.default ?? null))
+                onChange(
+                  linked && linked.value !== null
+                    ? linked.value
+                    : isOptionalReference(value)
+                      ? null
+                      : (param.default ?? null)
+                )
               }
             >
               숫자로 고정

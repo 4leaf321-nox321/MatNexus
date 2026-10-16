@@ -46,6 +46,7 @@ from app.modules.processing.schemas import (
     BatchUndoRequest,
     CurvesRequest,
     OverviewRequest,
+    ProcessingDefaultsOut,
     ProcessingPreviewOut,
     ProcessingResultOut,
     ProcessingRunRequest,
@@ -75,6 +76,7 @@ from app.shared import (
     filestore,
     permissions,
     revision,
+    specimen_size,
     steward_notice,
     test_type_channels,
 )
@@ -449,6 +451,29 @@ def list_inputs(
         _scalar_out(item, sources)
         for item in (*curvedata.specimen_scalars(db, run), *conditions, *declared)
     ]
+
+
+@router.get("/defaults", response_model=ProcessingDefaultsOut)
+def processing_defaults(
+    test_run_id: uuid.UUID = Query(),
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> ProcessingDefaultsOut:
+    """이 시험을 **어떻게 처리할지** — 시편 규격이 정한 옵션(2026-10-16).
+
+    전에는 처리 로직이 시험 종류로만 골라졌다. 굽힘이면 늘 「현」 으로 깔려서 D790(접선)
+    시편도 그대로 돌면 몇 % 다른 탄성률이 오류 없이 남았다. 규격이 방법을 들고(`표준 규격
+    가져오기` 가 함께 심는다), 화면이 이것으로 기본 순서를 채운다. 사람이 바꿔도 되고 —
+    결과에는 실제로 돌린 옵션이 남는다.
+    """
+    run = get_run(db, user, test_run_id)
+    specimen = db.get(Specimen, run.specimen_id)
+    standard = specimen_size.standard_of(db, specimen) if specimen is not None else None
+    if standard is None:
+        return ProcessingDefaultsOut()
+    return ProcessingDefaultsOut(
+        standard=standard.value, steps=dict(standard.processing_defaults or {})
+    )
 
 
 @router.post("/preview", response_model=ProcessingPreviewOut)

@@ -227,7 +227,7 @@ AI 가 상태를 바꾸면 자료 관리자에게 알림이 간다(채택도, 20
     ★ relocate_specimens(ids, 두께)    다른 두께의 같은 재료로 — 걸린 카드는 미리보기가 보인다(ADR 0042)
     get_specimen(specimen_id)          치수와 **그것이 어디서 온 값인지**
     list_processing_steps(test_type?)  돌릴 수 있는 단계와 **인장 표준 순서**
-    list_processing_inputs(run_id)     `@` 로 꽂을 수 있는 값 (시편 치수·단면적)
+    list_processing_inputs(run_id)     `@` 로 꽂을 수 있는 값 (시편 치수·단면적) + 규격이 정한 처리 옵션
     list_recipes(test_type?)           사람이 합의해 둔 단계 묶음
     list_processing_results(run_id)    시험 하나의 처리 결과 전부 — 채택 안 된 시도까지
     get_result_curve(result_id)        결과 곡선 + 자르기 전 앞쪽 곡선 · E 선 · 오프셋 선 ·

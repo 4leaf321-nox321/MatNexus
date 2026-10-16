@@ -1,4 +1,8 @@
-"""Zwick 인장시험 `.tra` 파서.
+"""Zwick testXpert `.tra` 파서 — 인장 · 굽힘 · 압축(2026-10-16 에 굽힘 · 압축을 더했다).
+
+**한 파서를 세 종류가 함께 쓴다.** 꼴(요약 · 이름 줄 · 단위 줄 · 수치)이 시험 프로그램과
+무관하게 같고, 다른 것은 채널 이름뿐이다. 그래서 확장자로는 종류를 못 가른다 — 파일 안의
+이름으로 가르는 `classify` 를 함께 등록하고, 감지(`app.shared.ingest`)가 그것을 쓴다.
 
 실제 파일(`002_Material/.../Example.tra`)을 읽고 확인한 구조:
 
@@ -45,6 +49,33 @@ CHANNEL_KEYS = {
     # 근거가 관측이 아니라 짐작이라는 것을 알고 있어야 한다.
     "standard travel": "displacement",
     "standard force": "force",
+    # ── 굽힘 · 압축(2026-10-16) — 이것도 **실파일 없이 적은 추정**이다. testXpert 가 독일어
+    # 설정이면 독일어로 쓴다. 처짐계(LVDT)는 처짐, 압축계는 변형률(%)이다.
+    "standardkraft": "force",
+    "standardweg": "displacement",
+    "deflection": "deflection",
+    "durchbiegung": "deflection",
+    "strain": "strain",
+    "dehnung": "strain",
+    "test time": "time",
+    "prüfzeit": "time",
+    "time": "time",
+    # Instron Bluehill 의 원시 데이터 CSV 도 「이름 줄 · 단위 줄 · 수치」 꼴이라 이 파서로
+    # 읽힌다. Extension 은 크로스헤드다(신율계는 `Strain 1`).
+    "load": "force",
+    "extension": "displacement",
+}
+
+#: 파일 안의 이름으로 **시험 종류를 가른다**(2026-10-16). `.tra` 를 읽는 종류가 인장 · 굽힘 ·
+#: 압축 셋이 되어 확장자만으로는 못 고른다. 그 종류에만 나오는 낱말이 **한 종류만** 걸릴
+#: 때 고르고, 아니면 고르지 않는다(`classify`) — 사람이 고르거나 커넥터가 귀띔한다.
+#:
+#: 인장 낱말은 지금 받는 파일(`Example.tra`)에 실제로 있는 것들이다 — 가공경화 · 이방성은
+#: 판재 인장에만 있다. 신율계(`extensometer`)는 압축에도 붙을 수 있어 넣지 않았다.
+CLASSIFY_WORDS = {
+    "flexural": ("deflection", "durchbiegung", "flexural", "flexure", "biege", "bending"),
+    "compression": ("compressive", "compression", "druck", "stauchung"),
+    "tensile": ("work hardening", "anisotropy", "tensile", "zugfestigkeit", "zugversuch"),
 }
 
 #: 요약 항목(원문, `{...}` 제거·소문자) → 우리 키.
@@ -228,9 +259,15 @@ def _slug(label: str) -> str:
 
 
 def _unit_symbol(raw: str) -> str | None:
-    """원문 단위를 matcore 심볼로. 모르면 None — 그러면 변환하지 않는다."""
-    text = raw.strip().strip('"').strip()
-    return UNIT_ALIASES.get(text.lower(), text if text in units.UNITS else None)
+    """원문 단위를 matcore 심볼로. 모르면 None — 그러면 변환하지 않는다.
+
+    Instron 은 단위를 괄호에 싸서 적는다(`(mm)` · `(sec)`) — 한 겹 벗긴다. 표에 없는 표기는
+    `units.canonical` 에 묻는다(모호하면 그쪽이 안 고른다)."""
+    text = units.unwrap(raw.strip().strip('"').strip())
+    known = UNIT_ALIASES.get(text.lower())
+    if known:
+        return known
+    return text if text in units.UNITS else units.canonical(text)
 
 
 def parse(data: bytes) -> ParsedTest:
@@ -447,14 +484,45 @@ def _build_summary(
     return summary, metadata
 
 
+def classify(data: bytes) -> tuple[str, str] | None:
+    """파일 안의 이름(요약 항목 · 채널)으로 시험 종류를 고른다. `(종류 key, 근거 낱말)`.
+
+    **한 종류의 낱말만 걸릴 때만 고른다.** 둘 이상 걸리거나 아무것도 안 걸리면 `None` —
+    그럴듯한 하나를 찍으면 압축 파일이 인장으로 처리되어 음수 응력이 조용히 남는다.
+    수치는 안 본다(이름만). 읽지 못하는 파일도 `None` 이다 — 판정은 읽기의 일이 아니다.
+    """
+    try:
+        text, _ = _decode(data)
+        rows, delimiter = _rows(text)
+    except ParseError:
+        return None
+    start = _find_data_start(rows, delimiter)
+    head = rows[: start if start is not None else len(rows)]
+    words = (
+        " ".join(_normalize_label(row[0]) for row in head if row)
+        + " "
+        + " ".join(_normalize_label(cell) for cell in (head[-2] if len(head) >= 2 else []))
+    )
+    found = {
+        key: next(word for word in vocabulary if word in words)
+        for key, vocabulary in CLASSIFY_WORDS.items()
+        if any(word in words for word in vocabulary)
+    }
+    if len(found) != 1:
+        return None
+    ((key, word),) = found.items()
+    return key, word
+
+
 @registry.register(
     id="zwick_tra",
     kind="parser",
-    label="Zwick 인장 (.tra)",
+    label="Zwick testXpert (.tra)",
     produces="curve",
-    applies_to=("tensile",),
+    applies_to=("tensile", "flexural", "compression"),
     version="1",
     extensions=(".tra",),
+    classify=classify,
 )
 def zwick_tra(data: bytes) -> ParsedTest:
     return parse(data)

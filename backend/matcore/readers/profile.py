@@ -83,7 +83,8 @@ def unit_symbol(raw: str | None) -> str | None:
     """
     if raw is None:
         return None
-    text = raw.strip()
+    # Instron 은 `(mm)` 처럼 괄호에 싸서 적는다 — 한 겹 벗긴다(2026-10-16).
+    text = units.unwrap(raw)
     alias = UNIT_ALIASES.get(text.lower())
     if alias:
         return alias

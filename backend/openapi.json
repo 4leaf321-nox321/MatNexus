@@ -755,6 +755,95 @@
         "title": "ApprovalAskOut",
         "type": "object"
       },
+      "ApprovalAskRecordOut": {
+        "description": "지난 승인 요청 한 번(2026-10-16).",
+        "properties": {
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "by_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "By Name"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "pending": {
+            "title": "Pending",
+            "type": "integer"
+          },
+          "via": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Via"
+          }
+        },
+        "required": [
+          "at",
+          "pending"
+        ],
+        "title": "ApprovalAskRecordOut",
+        "type": "object"
+      },
+      "ApprovalAskStatusOut": {
+        "description": "승인 요청 단추가 볼 것 — **서버가 센 수**와 지난 요청(2026-10-16).\n\n화면이 재료 쪽 값만 세면 서버(시료 · 밀시트까지)와 수가 갈렸다. 여기서 같은 수를 받는다.",
+        "properties": {
+          "last": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ApprovalAskRecordOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "next_allowed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Allowed At"
+          },
+          "pending": {
+            "title": "Pending",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "pending"
+        ],
+        "title": "ApprovalAskStatusOut",
+        "type": "object"
+      },
       "ApproveRequest": {
         "properties": {
           "role": {
@@ -9946,6 +10035,18 @@
               }
             ],
             "title": "Reference"
+          },
+          "requested_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requested At"
           },
           "sample_id": {
             "anyOf": [
@@ -21843,6 +21944,51 @@
         "title": "ProcessOut",
         "type": "object"
       },
+      "ProcessingDefaultsOut": {
+        "description": "이 시험을 **어떻게 처리할지** — 시편 규격이 정한 옵션(2026-10-16).\n\n처리 단계는 규격 이름을 모른다. 규격마다 다른 방법(D790 은 접선, ISO 178 은 현, ISO 7743 은\n4번째 하중 구간)은 규격 값(`vocabulary_terms.processing_defaults`)에 있고, 화면이 기본\n순서를 깔 때 이것으로 채운다. 규격이 없거나 적어 둔 것이 없으면 `steps` 가 빈다.",
+        "properties": {
+          "standard": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Standard"
+          },
+          "steps": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "object"
+            },
+            "default": {},
+            "title": "Steps",
+            "type": "object"
+          }
+        },
+        "title": "ProcessingDefaultsOut",
+        "type": "object"
+      },
       "ProcessingPreviewOut": {
         "properties": {
           "columns": {
@@ -30479,6 +30625,33 @@
             "title": "Key",
             "type": "string"
           },
+          "processing_defaults": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "object"
+            },
+            "default": {},
+            "title": "Processing Defaults",
+            "type": "object"
+          },
           "ratio_checks": {
             "default": [],
             "items": {
@@ -31850,6 +32023,33 @@
             ],
             "title": "Parent Value"
           },
+          "processing_defaults": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "object"
+            },
+            "default": {},
+            "title": "Processing Defaults",
+            "type": "object"
+          },
           "ratio_checks": {
             "default": [],
             "items": {
@@ -31955,6 +32155,39 @@
               }
             ],
             "title": "Parent Value"
+          },
+          "processing_defaults": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "additionalProperties": {
+                    "anyOf": [
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "type": "object"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Processing Defaults"
           },
           "ratio_checks": {
             "anyOf": [
@@ -47090,6 +47323,50 @@
         ]
       }
     },
+    "/api/materials/{material_id}/declared/approval-request": {
+      "get": {
+        "description": "승인 요청 단추가 볼 것 — **서버가 센 승인 대기 값 수**와 지난 요청(2026-10-16).\n\n화면이 재료 쪽 값만 세서 서버(시료 · 밀시트까지)와 수가 갈렸다. 같은 판정을 여기서 한 번에\n준다. 보기는 누구나다 — 고칠 권한은 부탁할 때 본다.",
+        "operationId": "declared_approval_status_api_materials__material_id__declared_approval_request_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "material_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Material Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApprovalAskStatusOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Declared Approval Status",
+        "tags": [
+          "materials"
+        ]
+      }
+    },
     "/api/materials/{material_id}/declared/approve": {
       "post": {
         "description": "적어 둔 값 하나를 **승인**한다 — 근거 문서와 대조해 확인했다는 기록(ADR 0049).\n\n승인된 값은 등급이 한 단계 오른다(문헌 3 → 2 · 추정 4 → 3, 2 위로는 안 간다). 값을\n고치면 승인은 저절로 풀린다 — 승인은 그때의 값에 묶여 있다.",
@@ -47146,7 +47423,7 @@
     },
     "/api/materials/{material_id}/declared/request-approval": {
       "post": {
-        "description": "승인을 기다리는 값을 자료 관리자에게 **부탁한다**(2026-10-15).\n\n전에는 상태만 있었다 — 「승인 대기 값」 화면을 열어 보지 않으면 자료 관리자는 몰랐다.\n부탁은 **알림뿐**이다: 줄을 잠그거나 큐를 세우지 않는다(승인 자체는 그 값이 사는 화면에서,\n근거 문서를 펴 보고 한다). 같은 재료를 같은 날 거듭 누르면 한 번만 간다(알림 키에 날짜).\n다만 알림 워커는 받는 사람마다 **마지막 키 하나**만 견주므로 사이에 다른 요청이 끼면 다시\n간다 — 카드 요청(코멘트로 하루 한 번을 막는다)과 달리 부탁을 적어 둘 자리가 없어\n그만큼만 막는다.\n\n고칠 수 있는 사람이 부탁한다 — 그 값을 적었거나 맡은 사람이다(ADR 0035).",
+        "description": "승인을 기다리는 값을 자료 관리자에게 **부탁한다**(2026-10-15).\n\n전에는 상태만 있었다 — 「승인 대기 값」 화면을 열어 보지 않으면 자료 관리자는 몰랐다.\n부탁은 **알림과 기록 한 줄**이다: 줄을 잠그거나 큐를 세우지 않는다(승인 자체는 그 값이\n사는 화면에서, 근거 문서를 펴 보고 한다). **같은 재료는 하루 한 번**(2026-10-16) — 전에는\n알림 키에 기대었는데 워커가 마지막 키 하나만 견줘서 사이에 다른 요청이 끼면 다시 갔다.\n이제 기록(`MaterialApprovalRequest`)으로 막는다 — 카드가 코멘트로 막는 것과 같다.\n\n고칠 수 있는 사람이 부탁한다 — 그 값을 적었거나 맡은 사람이다(ADR 0035).",
         "operationId": "request_declared_approval_api_materials__material_id__declared_request_approval_post",
         "parameters": [
           {
@@ -49655,6 +49932,50 @@
           }
         },
         "summary": "Undo Batch",
+        "tags": [
+          "processing"
+        ]
+      }
+    },
+    "/api/processing/defaults": {
+      "get": {
+        "description": "이 시험을 **어떻게 처리할지** — 시편 규격이 정한 옵션(2026-10-16).\n\n전에는 처리 로직이 시험 종류로만 골라졌다. 굽힘이면 늘 「현」 으로 깔려서 D790(접선)\n시편도 그대로 돌면 몇 % 다른 탄성률이 오류 없이 남았다. 규격이 방법을 들고(`표준 규격\n가져오기` 가 함께 심는다), 화면이 이것으로 기본 순서를 채운다. 사람이 바꿔도 되고 —\n결과에는 실제로 돌린 옵션이 남는다.",
+        "operationId": "processing_defaults_api_processing_defaults_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "test_run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Test Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProcessingDefaultsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Processing Defaults",
         "tags": [
           "processing"
         ]

@@ -112,6 +112,19 @@ it('값을 화면 단위로 보이고, 근거를 더 볼 탭으로 링크한다'
   expect(declaredReview).toHaveBeenCalledWith(200, 0)
 })
 
+it('승인 요청이 온 재료에는 「요청됨」 이 선다 — 큐가 아니라 표시다', async () => {
+  // 2026-10-16 — 부탁은 기록으로 남고, 자료 관리자는 목록에서 알아본다.
+  declaredReview.mockResolvedValue({
+    items: [{ ...ROWS[0], requested_at: '2026-10-16T01:00:00Z' }, ROWS[1]],
+    total: 2,
+    limit: 200,
+    offset: 0,
+  })
+  show()
+  await screen.findByRole('link', { name: 'SECC_-_1.0' })
+  expect(screen.getAllByText('요청됨')).toHaveLength(1)
+})
+
 it('자료 관리자가 아니면 승인 단추가 없다', async () => {
   me = { is_system_admin: false, is_data_manager: false }
   show()

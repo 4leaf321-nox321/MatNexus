@@ -6,6 +6,7 @@ import { display } from '@/shared/units'
 
 export type Material = components['schemas']['MaterialOut']
 export type ApprovalAsk = components['schemas']['ApprovalAskOut']
+export type ApprovalAskStatus = components['schemas']['ApprovalAskStatusOut']
 export type PropertyCoverage = components['schemas']['PropertyCoverageOut']
 export type CoverageEntry = components['schemas']['CoverageEntryOut']
 export type MaterialPage = components['schemas']['Page_MaterialOut_']
@@ -266,6 +267,12 @@ export const materialsApi = {
    */
   requestDeclaredApproval: (id: string, note?: string) =>
     api.post<ApprovalAsk>(`/materials/${id}/declared/request-approval`, { note: note ?? null }),
+  /**
+   * 승인 요청 단추가 볼 것 — **서버가 센 승인 대기 값 수**(시료 · 밀시트까지)와 지난 요청 ·
+   * 다시 부탁할 수 있는 때(2026-10-16). 화면이 세면 서버와 수가 갈린다.
+   */
+  declaredApprovalStatus: (id: string) =>
+    api.get<ApprovalAskStatus>(`/materials/${id}/declared/approval-request`),
   unapproveDeclared: (id: string, item: string) =>
     api.post<Material>(`/materials/${id}/declared/unapprove`, { item }),
   remove: (id: string) => api.delete<void>(`/materials/${id}`),

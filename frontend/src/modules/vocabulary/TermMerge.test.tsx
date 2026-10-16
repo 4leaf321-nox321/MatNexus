@@ -55,6 +55,7 @@ function term(id: string, value: string, usage = 0): Term {
     field_symbols: {},
     attribute_list: [],
     ratio_checks: [],
+    processing_defaults: {},
     status: 'active',
   }
 }

@@ -24,6 +24,7 @@ export type ProcessingResult = components['schemas']['ProcessingResultOut']
 export type ResultCurve = components['schemas']['ResultCurveOut']
 export type ProcessingStage = components['schemas']['ProcessingStageOut']
 export type ProcessingScalar = components['schemas']['ProcessingScalarOut']
+export type ProcessingDefaults = components['schemas']['ProcessingDefaultsOut']
 export type Recipe = components['schemas']['RecipeOut']
 export type BatchOut = components['schemas']['BatchOut']
 export type BatchItem = components['schemas']['BatchItemOut']
@@ -53,6 +54,23 @@ export const REFERENCE_PREFIX = '@'
 
 export const isReference = (value: unknown): value is string =>
   typeof value === 'string' && value.startsWith(REFERENCE_PREFIX)
+
+/**
+ * **있으면 쓰는** 참조(2026-10-16). 없으면 서버가 비운다 — 굽힘의 하중 스팬은 비면 3점이다.
+ * 꼭 있어야 하는 값(`@`)과 달리 없다고 막지 않는다.
+ */
+export const OPTIONAL_PREFIX = '@?'
+
+export const isOptionalReference = (value: unknown): value is string =>
+  typeof value === 'string' && value.startsWith(OPTIONAL_PREFIX)
+
+/** 참조가 가리키는 값 이름. `@youngs_modulus` · `@?specimen_load_span` → 앞머리를 뗀 것. */
+export const referenceKey = (raw: string): string =>
+  raw.startsWith(OPTIONAL_PREFIX)
+    ? raw.slice(OPTIONAL_PREFIX.length)
+    : raw.startsWith(REFERENCE_PREFIX)
+      ? raw.slice(REFERENCE_PREFIX.length)
+      : raw
 
 /** 시편에서 온 값의 키 앞머리. `게이지 길이` 칸 ↔ `specimen_gauge_length`. */
 export const FROM_SPECIMEN = 'specimen_'
@@ -146,7 +164,7 @@ export function referenceLabel(
   available?: Map<string, ProcessingScalar>,
   catalog?: Map<string, ProcessingStep>
 ): string {
-  const name = raw.startsWith(REFERENCE_PREFIX) ? raw.slice(1) : raw
+  const name = referenceKey(raw)
   const known = available?.get(name)
   if (known) return known.label
   for (const plugin of catalog?.values() ?? []) {
@@ -172,6 +190,12 @@ export const processingApi = {
    */
   inputs: (testRunId: string) =>
     api.get<ProcessingScalar[]>(`/processing/inputs?test_run_id=${testRunId}`),
+  /**
+   * 이 시험의 **시편 규격이 정한 처리 옵션**(2026-10-16). 기본 순서를 깔 때 이것으로 채운다 —
+   * D790 은 접선, ISO 178 은 현, ISO 7743 은 4번째 하중 구간.
+   */
+  defaults: (testRunId: string) =>
+    api.get<ProcessingDefaults>(`/processing/defaults?test_run_id=${testRunId}`),
 
   /** 등록된 단계와 입력 칸. **화면이 이 응답만으로 폼을 그린다.** */
   steps: (testType?: string) =>

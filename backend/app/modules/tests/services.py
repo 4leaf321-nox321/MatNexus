@@ -46,6 +46,7 @@ from app.shared import (
     conditions,
     curvedata,
     filestore,
+    ingest,
     parse_hooks,
     permissions,
     specimen_size,
@@ -828,12 +829,15 @@ def _who_could_read(db: Session, run: TestRun, data: bytes) -> str | None:
     suffix = filename[filename.rfind(".") :].lower() if "." in filename else ""
     if suffix:
         parsers.load_builtin()
+        readable: list[TestType] = []
         for kind in db.scalars(
-            select(TestType).where(
+            select(TestType)
+            .where(
                 TestType.id != run.test_type_id,
                 TestType.parser_key.is_not(None),
                 TestType.is_active.is_(True),
             )
+            .order_by(TestType.sort_order, TestType.label)
         ):
             try:
                 plugin = registry.get(kind.parser_key or "")
@@ -841,7 +845,16 @@ def _who_could_read(db: Session, run: TestRun, data: bytes) -> str | None:
                 continue
             declared = [str(one).lower() for one in plugin.meta.get("extensions", ())]
             if suffix in declared:
-                return f"'{kind.label}' (파서 {kind.parser_key})"
+                readable.append(kind)
+        # 여럿이면(Zwick `.tra` 는 인장 · 굽힘 · 압축) 파일 안의 이름으로 좁혀 본다 — 못 좁히면
+        # 다 적는다. 하나만 찍으면 굽힘 파일에 「인장으로 바꾸세요」 를 말하게 된다.
+        if len(readable) > 1:
+            settled = ingest.settle(readable, data)
+            if settled is not None:
+                readable = [settled[0]]
+        if readable:
+            names = " · ".join(f"'{kind.label}'" for kind in readable)
+            return f"{names} (파서 {readable[0].parser_key})"
     return None
 
 

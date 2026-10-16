@@ -210,6 +210,58 @@ BUILTIN_TEST_TYPES: list[dict[str, Any]] = [
             ("testing_group", "시험 그룹", "text", None, None, None, False),
         ],
     },
+    {
+        # **굽힘**(2026-10-16) — 3점 · 4점. 칩 · 모듈처럼 인장 시편을 못 만드는 것의 등가 E 를
+        # 이 길로 낸다(확장 `flexural`). 처짐은 처짐계(`deflection`)가 있으면 그것, 없으면
+        # 크로스헤드(`displacement`) — 둘 중 하나면 된다. 스팬 · 폭 · 두께는 **시편
+        # 기록**(규격)이 정한다(분류 「굽힘」). Zwick `.tra` 는 파서가, Instron Bluehill
+        # CSV 는 형식 프로파일이 읽는다.
+        "key": "flexural",
+        "label": "굽힘시험",
+        "abbr": "FLX",
+        "parser_key": "zwick_tra",
+        "description": (
+            "3점 · 4점 굽힘. 하중-처짐에서 굽힘 응력 · 변형률 · 탄성률(등가 E) · 강도를 낸다."
+        ),
+        "sort_order": 70,
+        "channels": [
+            ("force", "하중", "force", "N", True),
+            ("displacement", "크로스헤드 변위", "length", "m", False),
+            ("deflection", "처짐(처짐계)", "length", "m", False),
+            ("time", "시간", "time", "s", False),
+        ],
+        "conditions": [
+            ("temperature", "시험 온도", "number", "temperature", "K", None, False),
+            ("test_speed", "시험 속도", "number", "velocity", "m/s", None, False),
+            ("testing_group", "시험 그룹", "text", None, None, None, False),
+        ],
+    },
+    {
+        # **압축**(2026-10-16) — 고무 · 폼 · 플라스틱. 변형은 압축계 변형률(`strain`)이 있으면
+        # 그것, 없으면 크로스헤드 변위 ÷ 초기 높이. 높이 · 면적은 시편 기록(분류 「압축」)이
+        # 정한다. 반복 하중(Mullins · ISO 3386 의 4번째 사이클)은 처리에서 고른다(확장
+        # `compression`).
+        "key": "compression",
+        "label": "압축시험",
+        "abbr": "CMP",
+        "parser_key": "zwick_tra",
+        "description": (
+            "압축. 하중-변위에서 압축 응력 · 변형률 · 탄성률과 규격 보고값(몇 % 압축 응력 · "
+            "압축 강도 · 폼 지표)을 낸다."
+        ),
+        "sort_order": 80,
+        "channels": [
+            ("force", "하중", "force", "N", True),
+            ("displacement", "크로스헤드 변위", "length", "m", False),
+            ("strain", "변형률(압축계)", "strain", "1", False),
+            ("time", "시간", "time", "s", False),
+        ],
+        "conditions": [
+            ("temperature", "시험 온도", "number", "temperature", "K", None, False),
+            ("test_speed", "시험 속도", "number", "velocity", "m/s", None, False),
+            ("testing_group", "시험 그룹", "text", None, None, None, False),
+        ],
+    },
 ]
 
 

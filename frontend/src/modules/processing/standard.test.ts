@@ -9,6 +9,7 @@ import { describe, expect, it } from 'vitest'
 
 import { missingSteps } from '@/modules/processing/gaps'
 import {
+  STARTERS,
   TENSILE_STANDARD,
   TENSILE_STARTER,
   missingStandard,
@@ -185,5 +186,33 @@ describe('진소성 축의 중복 정리', () => {
       (one) => one.plugin === 'curve.sort_unique' && one.options.x === 'strain_engineering'
     )
     expect(공칭[0].options.duplicate_policy).toBe('mean')
+  })
+})
+
+describe('굽힘 · 압축 처음 순서', () => {
+  it('시편 치수를 시편 기록에서 받는다', () => {
+    // 서버는 `@` 기본값을 채우지 않는다 — 화면이 깔아 보내야 첫 단계가 돈다.
+    expect(STARTERS.flexural[0].options).toEqual({
+      support_span: '@specimen_span',
+      width: '@specimen_width',
+      thickness: '@specimen_thickness',
+      load_span: '@?specimen_load_span',
+    })
+    expect(STARTERS.compression[0].options).toEqual({
+      height: '@specimen_height',
+      area: '@specimen_area',
+    })
+  })
+
+  it('하중 스팬은 「있으면 쓴다」 — 시편에 있으면 4점, 없으면 3점', () => {
+    // 안 깔면 4점 시편이 3점 식으로 조용히 계산되고, `@` 로 깔면 3점 시편이 멈춘다.
+    expect(STARTERS.flexural[0].options.load_span).toBe('@?specimen_load_span')
+  })
+
+  it('압축 탄성률 기본은 고무 · 폼의 할선 10%', () => {
+    expect(STARTERS.compression[1]).toEqual({
+      plugin: 'compression.modulus',
+      options: { method: 'secant', maximum_strain: 0.1 },
+    })
   })
 })

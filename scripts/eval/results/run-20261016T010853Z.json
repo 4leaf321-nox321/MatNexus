@@ -1,0 +1,294 @@
+{
+  "at": "20261016T010853Z",
+  "git": "5aaceb8",
+  "summary": {
+    "n": 5,
+    "passed": 5,
+    "calls": 16,
+    "calls_per_question": 3.2,
+    "empty_calls": 0,
+    "map_first": 1,
+    "errors": 0,
+    "seconds": 110.6,
+    "cost_usd": 1.8354,
+    "by_category": {
+      "카드": {
+        "n": 3,
+        "passed": 3,
+        "calls": 9,
+        "empty": 0,
+        "map_first": 1
+      },
+      "값 찾기": {
+        "n": 1,
+        "passed": 1,
+        "calls": 3,
+        "empty": 0,
+        "map_first": 0
+      },
+      "단위": {
+        "n": 1,
+        "passed": 1,
+        "calls": 4,
+        "empty": 0,
+        "map_first": 0
+      }
+    }
+  },
+  "traces": [
+    {
+      "id": "deck-05",
+      "category": "카드",
+      "prompt": "SCATTER_DP600_1.0 의 카드로 LS-DYNA 덱을 뽑고, 그 덱이 카드 값과 맞는지 되읽어 확인해 줘. 단위계는 mm-N-tonne.",
+      "calls": [
+        {
+          "name": "mcp__matnexus__get_guide",
+          "input": {
+            "topic": "cards"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__list_cards",
+          "input": {
+            "q": "SCATTER_DP600_1.0"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__get_card",
+          "input": {
+            "card_id": "C-000003"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__render_card_deck",
+          "input": {
+            "card_id": "C-000003",
+            "format": "dyna",
+            "units": "mm_n_tonne"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__check_card_deck",
+          "input": {
+            "card_id": "C-000003",
+            "format": "dyna",
+            "units": "mm_n_tonne"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__render_card_deck",
+          "input": {
+            "card_id": "2b225245-7ae3-4cf3-9b0f-829570c028ba",
+            "format": "dyna",
+            "units": "mm_n_tonne"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__check_card_deck",
+          "input": {
+            "card_id": "2b225245-7ae3-4cf3-9b0f-829570c028ba",
+            "format": "dyna",
+            "units": "mm_n_tonne"
+          },
+          "empty": false,
+          "is_error": false
+        }
+      ],
+      "answer": "**덱 — LS-DYNA (`dyna`, mm·N·tonne) · 카드 C-000003**\n\n- 재료 SCATTER_DP600_1.0 · tensile · MD · 시편 8개 대표곡선\n- `*MAT_PIECEWISE_LINEAR_PLASTICITY` + `*DEFINE_CURVE`(120점), 145줄\n- 파일명 제안: `SCATTER_DP600_1_0_MD_mm_n_tonne.k`\n\n| 값 | 덱(mm·N·tonne) | SI |\n|---|---|---|\n| RO 밀도 | 7.85E-9 tonne/mm³ | 7850 kg/m³ |\n| E | 199905.295 MPa | 199.905 GPa |\n| PR | 0.3 | — |\n| SIGY(표 첫 점) | 333.213 MPa | 333.21 MPa |\n| 표 끝 | ε_p 0.11 / 476.83 MPa | 476.83 MPa |\n\n**되읽기 결과(check_card_deck): 3개 검사 모두 통과**\n- 읽기 — LS-DYNA 탄소성 덱으로 정상 파싱\n- 값 — 밀도·푸아송비·탄성계수·적합 구간(0~0.11) 5개가 이 단위계 숫자 그대로 들어 있음\n- 표 — 120점 마지막 점까지 잘림 없이 실림\n- `notes` 경고 없음 (네킹·합성 경고 없음)\n\n**건네기 전에 알아야 할 것**\n1. **초안 카드다.** 3장(C-000001/2/3) 모두 `draft` — 확정된 카드가 없어 가장 최근 것(C-000003, resample 0.11)을 썼습니다. 덱 머리에도 \"초안 — 아직 확정되지 않았습니다\"가 박혀 있습니다. 다른 카드를 원하시면 말씀해 주세요(C-000001 은 resample 0.24).\n2. **MID = 1167775** — `mid` 를 안 줘서 카드 id 로 만든 수입니다. 받는 쪽 모델 번호를 알려 주시면 그 번호로 다시 뽑겠습니다(파일을 손으로 고치면 고정폭 칸이 어긋납니다).\n3. 경화식은 Voce(상대 RMSE 0.04%)지만 덱에는 **표**로 실렸고, 적합·표 구간은 ε_p 0~0.11 까지입니다. 그 밖은 검증되지 않았습니다.\n4. 값 등급 1(실측, 표본 8). `hardening.rmse` 만 단위 선언이 없어 SI 로 남았습니다.\n\n알고 계신 E 나 항복강도가 있으면 `expect` 로 한 번 더 대조하겠습니다 — 환산까지 검증되는 항목입니다. 덱 본문이 필요하면 저장용으로 드리겠습니다.",
+      "error": null,
+      "seconds": 42.34162092208862,
+      "cost_usd": 0.7647445,
+      "map_first": true,
+      "empty_calls": 0,
+      "over_budget": false,
+      "tools_any_ok": true,
+      "forbidden_hit": [],
+      "missing_mentions": [],
+      "passed": true
+    },
+    {
+      "id": "search-02",
+      "category": "값 찾기",
+      "prompt": "200 °C 에서 잰 항복강도가 있는 사내 재료가 있어? 있으면 값과 표본 수.",
+      "calls": [
+        {
+          "name": "mcp__matnexus__find_by_property",
+          "input": {
+            "property": "항복강도",
+            "unit": "MPa",
+            "condition": "temperature",
+            "condition_unit": "degC",
+            "condition_near": 200,
+            "origins": "measured,internal"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__find_by_property",
+          "input": {
+            "property": "항복강도",
+            "unit": "MPa",
+            "min": 0,
+            "max": 100000,
+            "condition": "temperature",
+            "condition_unit": "degC",
+            "condition_near": 200,
+            "origins": "measured,internal"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__find_by_property",
+          "input": {
+            "property": "항복강도",
+            "unit": "MPa",
+            "min": 0,
+            "max": 100000,
+            "origins": "measured,internal"
+          },
+          "empty": false,
+          "is_error": false
+        }
+      ],
+      "answer": "**200 °C 에서 잰 항복강도는 사내에 없습니다.**\n\n195~205 °C 조건이 붙은 값은 0건입니다(조건을 적지 않은 값은 그 온도에서 잰 것으로 보지 않습니다).\n\n조건을 빼면 사내 항복강도(Rp0.2, ISO 6892)는 6건 있고, 실측으로 잰 것은 둘입니다 — 둘 다 **온도 조건 없음(상온 추정)**:\n\n| 재료 | 값 | 표본 | 표준편차 | 방법 |\n|---|---|---|---|---|\n| SCATTER_DP600_1.0 | 346.9 MPa | 11 | 21.5 MPa | 오프셋 항복강도 offset_strain=0.002 |\n| EXAMPLE-MIX_예제 | 392.0 MPa | 3 | 8.44 MPa | 오프셋 항복강도 offset_strain=0.002 |\n\n둘 다 등급 1(실측, 표본 3 이상). 나머지 4건은 사람이 적어 넣은 선언값(표본 1) — SRCDEMO 205·231 MPa(등급 1, 출처 Vendor Catalog 2026 p.14 / MTC-2026-0912), AL5052H32DEMO 193 MPa(등급 2, MakeItFrom), SAC305 25.3 MPa(등급 1, 문헌 2002).\n\n200 °C 값이 필요하면 고온 인장 시험을 새로 걸어야 합니다.",
+      "error": null,
+      "seconds": 25.7778480052948,
+      "cost_usd": 0.3186965,
+      "map_first": false,
+      "empty_calls": 0,
+      "over_budget": false,
+      "tools_any_ok": true,
+      "forbidden_hit": [],
+      "missing_mentions": [],
+      "passed": true
+    },
+    {
+      "id": "card-09",
+      "category": "카드",
+      "prompt": "확정 요청이 와 있는 카드 있어? 있으면 어느 재료의 무슨 카드인지 알려 줘.",
+      "calls": [
+        {
+          "name": "mcp__matnexus__list_cards",
+          "input": {
+            "asked": true,
+            "limit": 20
+          },
+          "empty": false,
+          "is_error": false
+        }
+      ],
+      "answer": "확정 요청이 와 있는 카드는 **없습니다** (`list_cards(asked=True)` → 0건, 목록 전체 조회).\n\n참고로 초안 카드 자체가 있는지까지 보려면 `status=draft` 로 다시 볼 수 있습니다 — 필요하면 말씀해 주세요.",
+      "error": null,
+      "seconds": 10.817661046981812,
+      "cost_usd": 0.2013,
+      "map_first": false,
+      "empty_calls": 0,
+      "over_budget": false,
+      "tools_any_ok": true,
+      "forbidden_hit": [],
+      "missing_mentions": [],
+      "passed": true
+    },
+    {
+      "id": "card-10",
+      "category": "카드",
+      "prompt": "SCATTER_DP600_1.0 카드 중 가장 최근에 만든 게 뭐야? 번호와 소성 표 점 수만 알려 줘.",
+      "calls": [
+        {
+          "name": "mcp__matnexus__list_cards",
+          "input": {
+            "q": "SCATTER_DP600_1.0",
+            "limit": 50
+          },
+          "empty": false,
+          "is_error": false
+        }
+      ],
+      "answer": "**C-000003** (2026-08-17 16:10, DP600 MD resample 0.11) — 소성 표 **120점**\n\n주의: 초안 카드다(확정 안 됨). 3장 모두 초안이라 해석에 바로 쓸 값은 아니다.",
+      "error": null,
+      "seconds": 10.560261249542236,
+      "cost_usd": 0.20258900000000002,
+      "map_first": false,
+      "empty_calls": 0,
+      "over_budget": false,
+      "tools_any_ok": true,
+      "forbidden_hit": [],
+      "missing_mentions": [],
+      "passed": true
+    },
+    {
+      "id": "unit-01",
+      "category": "단위",
+      "prompt": "SCATTER_DP600_1.0 MD 인장 항복강도의 평균 · 표준편차 · 최솟값 · 최댓값을 kgf/mm² 로 알려 줘.",
+      "calls": [
+        {
+          "name": "mcp__matnexus__get_statistics",
+          "input": {
+            "material_id": "SCATTER_DP600_1.0",
+            "orientation": "MD",
+            "test_type": "tensile"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__search_materials",
+          "input": {
+            "query": "SCATTER_DP600_1.0"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__get_statistics",
+          "input": {
+            "material_id": "60959881-2063-474e-82d9-a2eec429561e",
+            "orientation": "MD"
+          },
+          "empty": false,
+          "is_error": false
+        },
+        {
+          "name": "mcp__matnexus__convert_unit",
+          "input": {
+            "from_unit": "Pa",
+            "to_unit": "kgf/mm2",
+            "values": [
+              337908950.6367843,
+              17665665.460740034,
+              304604369.58891976,
+              362339055.0777057
+            ]
+          },
+          "empty": false,
+          "is_error": false
+        }
+      ],
+      "answer": "**SCATTER_DP600_1.0 · 인장 MD · 항복강도** (시편 8개, 채택된 결과만, 미채택 0건)\n\n| 항목 | kgf/mm² | (SI, Pa) |\n|---|---|---|\n| 평균 | 34.46 | 3.379e8 |\n| 표준편차 | 1.80 | 1.767e7 |\n| 최솟값 | 31.06 | 3.046e8 |\n| 최댓값 | 36.95 | 3.623e8 |\n\n- 변동계수 5.2%, 이상치 후보 1건 — 지운 값이 아니라 의심하는 값입니다.\n- 출처: 시험 처리로 잰 값(measured, `proof_stress`), 압연 방향 MD 묶음. TD 와 섞지 않았습니다.\n- 환산은 convert_unit 결과(1 kgf/mm² = 9.80665 MPa).",
+      "error": null,
+      "seconds": 21.11009192466736,
+      "cost_usd": 0.34811499999999995,
+      "map_first": false,
+      "empty_calls": 0,
+      "over_budget": false,
+      "tools_any_ok": true,
+      "forbidden_hit": [],
+      "missing_mentions": [],
+      "passed": true
+    }
+  ]
+}

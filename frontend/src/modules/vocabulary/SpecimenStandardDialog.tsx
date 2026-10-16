@@ -27,6 +27,8 @@
 import { useEffect, useState } from 'react'
 import { Plus, Ruler, Trash2 } from 'lucide-react'
 
+import { StandardDefaultsEditor } from '@/modules/processing/StandardDefaultsEditor'
+import type { StandardDefaults } from '@/modules/processing/StandardDefaultsEditor'
 import { SpecimenFieldsDialog } from '@/modules/vocabulary/SpecimenFieldsDialog'
 import { vocabularyApi } from '@/modules/vocabulary/api'
 import type {
@@ -95,6 +97,17 @@ export function SpecimenStandardDialog({ slug, term, onClose, onSaved }: Props) 
    * 파트가 셋뿐이고 나머지는 전부 비율이거나 장비 위임이다.
    */
   const [checks, setChecks] = useState<RatioCheck[]>(term.ratio_checks ?? [])
+  /**
+   * 이 규격의 시편을 **어떻게 처리하는가**(2026-10-16) — D790 은 탄성률을 접선으로, ISO 178 은
+   * 현으로. 처리 화면이 시편의 규격을 보고 기본 순서를 이것으로 채운다.
+   *
+   * **고쳤을 때만 보낸다.** 서버는 통째로 갈아 끼우므로, 안 건드린 채 보내면 그사이 다른
+   * 사람이 고친 것을 이 창이 연 시점의 값으로 되돌린다.
+   */
+  const [processing, setProcessing] = useState<StandardDefaults>(
+    (term.processing_defaults ?? {}) as StandardDefaults
+  )
+  const [processingTouched, setProcessingTouched] = useState(false)
 
   useEffect(() => {
     const shown: Record<string, string> = {}
@@ -183,6 +196,13 @@ export function SpecimenStandardDialog({ slug, term, onClose, onSaved }: Props) 
           attributes,
           // 빈 문자열이면 뗀다 — 그러면 옛 규칙(폭 곱하기 두께)으로 돈다.
           cross_section: crossSection ?? '',
+          ...(processingTouched
+            ? {
+                processing_defaults: processing as NonNullable<
+                  Parameters<typeof vocabularyApi.update>[2]['processing_defaults']
+                >,
+              }
+            : {}),
         })
       )
     } catch (caught) {
@@ -451,6 +471,19 @@ export function SpecimenStandardDialog({ slug, term, onClose, onSaved }: Props) 
                 : '어겨도 저장은 됩니다 — 시편 화면이 붉게 말합니다.'}
             </span>
           </div>
+        </div>
+
+        {/* **처리 방법도 규격의 것이다**(2026-10-16). 처리 단계는 규격 이름을 모른다 —
+            탄성률을 현으로 잴지 접선으로 잴지, 몇 번째 하중 구간을 쓸지는 여기 적는다. */}
+        <div className="space-y-1.5">
+          <Label className="text-xs">처리 기본값</Label>
+          <StandardDefaultsEditor
+            value={processing}
+            onChange={(next) => {
+              setProcessing(next)
+              setProcessingTouched(true)
+            }}
+          />
         </div>
 
         {/* **칸이 모자라면 여기서 바로 더한다.** "이 규격은 환봉이라 직경이
