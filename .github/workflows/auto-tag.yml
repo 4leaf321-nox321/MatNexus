@@ -4,6 +4,12 @@
 # 릴리스를 만들지 않으므로, main 에 자유롭게 커밋하면서 배포 시점만 따로 정할 수
 # 있다(52에서 검증된 방식).
 #
+# **CI 가 통과한 커밋에만 태그를 단다**(2026-10-16). 전에는 package.json 이 바뀐 푸시에서
+# CI 와 나란히 돌아, v1.292.0 이 CI 빨강(새 설치가 마이그레이션에서 멈춤) 그대로 배포 패키지로
+# 나갔다. 이제 main 푸시의 CI 가 끝나 통과하면 돌고, 그 커밋의 버전에 태그가 아직 없을 때만
+# 태그를 단다 — 그래서 릴리스 커밋의 CI 가 빨개도, 고친 커밋의 CI 가 초록이 되는 순간 그 커밋에
+# 태그가 붙는다(고친 코드로 패키지가 나간다). 태그가 이미 있으면 몇 초 만에 넘어간다.
+#
 # 릴리스를 **같은 실행 안에서** 호출한다. GitHub 은 GITHUB_TOKEN 이 만든 이벤트로
 # 다른 워크플로를 트리거하지 않아서, 태그만 밀어 두면 release 워크플로가 영영 돌지
 # 않는다(실측). PAT 없이 해결하는 방법이 workflow_call 이다.
@@ -11,13 +17,22 @@
 name: Auto tag on version bump
 
 on:
-  push:
+  workflow_run:
+    workflows: ['CI - Windows']
+    types: [completed]
     branches: [main, master]
-    paths:
-      - 'frontend/package.json'
+
+# 초록 CI 둘이 겹쳐도 같은 태그를 두 번 밀지 않게 줄 세운다.
+concurrency:
+  group: auto-tag
+  cancel-in-progress: false
 
 jobs:
   tag:
+    # **main 푸시의 CI 가 통과했을 때만.** PR 의 CI 는 보지 않는다 — 합쳐지기 전 커밋이다.
+    if: >-
+      github.event.workflow_run.conclusion == 'success'
+      && github.event.workflow_run.event == 'push'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -28,6 +43,9 @@ jobs:
     steps:
       - uses: actions/checkout@v5
         with:
+          # **CI 가 검사한 그 커밋이다** — 그사이 main 이 앞서 나가도 검사 안 된 커밋에 태그를
+          # 달지 않는다.
+          ref: ${{ github.event.workflow_run.head_sha }}
           fetch-depth: 0
 
       - name: 버전 읽기

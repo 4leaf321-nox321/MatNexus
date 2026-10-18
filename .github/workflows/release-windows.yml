@@ -35,13 +35,16 @@ on:
 jobs:
   package-and-release:
     # **배포 패키지는 관리자의 릴리스로만 만든다**(2026-10-14, docs/협업.md).
-    # - auto-tag 가 부른 경우: 호출한 쪽 문맥이라 `push` · `refs/heads/main` 이다 — 버전을
-    #   올린 커밋이 main 에 들어온 것이고, 그것은 CODEOWNERS 승인을 거쳤다.
+    # - auto-tag 가 부른 경우: 호출한 쪽 문맥이라 `workflow_run` · `refs/heads/main` 이다 —
+    #   main 푸시의 CI 가 통과한 커밋이고(2026-10-16 부터 auto-tag 가 CI 를 기다린다), 그 커밋은
+    #   CODEOWNERS 승인을 거쳤다. `workflow_run` 은 기본 브랜치의 워크플로만 돌아서 브랜치에서
+    #   새로 만든 워크플로로는 이 길에 못 들어온다. 옛 auto-tag 의 `push` 도 그대로 받는다.
     # - 태그를 직접 푸시하거나 손으로 돌린 경우: 저장소 주인만.
     # 개인 계정 저장소는 태그 규칙(Rulesets)에 GitHub Actions 를 예외로 넣을 수 없어
     # (API 422) 태그 자체를 막으면 auto-tag 가 죽는다 — 그래서 여기서 거른다.
     if: >-
-      (github.event_name == 'push' && github.ref == 'refs/heads/main')
+      ((github.event_name == 'push' || github.event_name == 'workflow_run')
+        && github.ref == 'refs/heads/main')
       || github.actor == github.repository_owner
     runs-on: windows-latest
     permissions:
