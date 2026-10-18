@@ -358,26 +358,34 @@ def _guard_channel_dictionary(
     일이고, 그것을 막으면 문을 연 의미가 없다. 막는 것은 *같은 이름으로 다른
     것을 뜻하는* 경우뿐이다.
     """
+    # **정해진 순서로, 쓰는 종류를 전부 말한다**(2026-10-18). 전에는 순서 없이 처음 만난 하나만
+    # 적어서, `force` 를 인장 · 굽힘 · 압축이 함께 쓰게 되자 어느 이름이 나올지가 DB 의 읽는
+    # 순서에 달렸다 — CI 에서만 「인장」 대신 「굽힘시험」 이 나와 시험이 졌다. 사람도 한 곳만
+    # 들으면 나머지를 모른 채 그 종류만 고친다.
     query = select(TestChannel.key, TestChannel.si_unit, TestChannel.dimension, TestType.label)
     query = query.join(TestType, TestType.id == TestChannel.test_type_id)
     if test_type_id is not None:
         query = query.where(TestChannel.test_type_id != test_type_id)
+    query = query.order_by(TestType.sort_order, TestType.label)
 
-    known: dict[str, tuple[str, str, str]] = {}
+    known: dict[str, tuple[str, str]] = {}
+    owners: dict[str, list[str]] = {}
     for key, si_unit, dimension, owner_label in db.execute(query):
-        known.setdefault(key, (si_unit, dimension, owner_label))
+        known.setdefault(key, (si_unit, dimension))
+        owners.setdefault(key, []).append(owner_label)
 
     for item in channels:
         key = str(item["key"])
         existing = known.get(key)
         if existing is None:
             continue
-        si_unit, dimension, owner_label = existing
+        si_unit, dimension = existing
         if str(item.get("si_unit")) == si_unit and str(item.get("dimension")) == dimension:
             continue
+        names = " · ".join(f"'{one}'" for one in owners[key])
         raise AppError(
             "MNX-TESTS-0028",
-            f"채널 '{key}' 는 이미 '{owner_label}' 에서 {dimension}({si_unit}) 로 "
+            f"채널 '{key}' 는 이미 {names} 에서 {dimension}({si_unit}) 로 "
             f"쓰고 있습니다. 여기서는 {item.get('dimension')}({item.get('si_unit')}) 입니다. "
             f"같은 이름은 같은 것을 뜻해야 합니다 — 곡선을 겹쳐 그릴 때 축이 어긋납니다. "
             f"다른 뜻이면 이름을 다르게 지으세요.",

@@ -177,7 +177,9 @@ class Test채널이름은전사자산:
         assert "force" in message
         # **어디서 쓰고 있는지**를 말해 줘야 사람이 판단한다. "충돌합니다" 만으로는
         # 자기 정의를 고쳐야 하는지 상대에게 물어야 하는지 알 수 없다.
-        assert "인장" in message
+        # **전부, 정해진 순서로**(2026-10-18) — `force` 를 인장 · 굽힘 · 압축이 함께 쓰게 되자
+        # 하나만 적던 이름이 읽는 순서에 따라 갈려 CI 에서만 졌다.
+        assert "'인장시험' · '굽힘시험' · '압축시험'" in message
 
     def test_새_이름은_막지_않는다(
         self, client: TestClient, admin_headers: dict[str, str], db: Session
