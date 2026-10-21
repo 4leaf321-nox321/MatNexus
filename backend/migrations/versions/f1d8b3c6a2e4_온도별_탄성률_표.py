@@ -29,7 +29,9 @@ def upgrade() -> None:
         sa.Column("frequency_hz", sa.Float(), nullable=False),
         sa.Column("modulus_basis", sa.String(length=1), server_default="E", nullable=False),
         sa.Column("rows", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
-        sa.Column("source_curve_keys", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
+        sa.Column(
+            "source_curve_keys", postgresql.JSONB(astext_type=sa.Text()), nullable=False
+        ),
         sa.Column("notes", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
         sa.Column("created_by_id", postgresql.UUID(as_uuid=True), nullable=True),
         sa.Column(
@@ -42,9 +44,7 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["created_by_id"], ["users.id"]),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index(
-        op.f("ix_modulus_tables_test_run_id"), "modulus_tables", ["test_run_id"]
-    )
+    op.create_index(op.f("ix_modulus_tables_test_run_id"), "modulus_tables", ["test_run_id"])
 
 
 def downgrade() -> None:
