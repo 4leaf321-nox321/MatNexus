@@ -227,6 +227,8 @@ describe('저장된 프로파일을 열었을 때', () => {
     expect(sent.material).toEqual(SAVED.definition.material)
     expect(sent.sample).toEqual(SAVED.definition.sample)
     expect(sent.specimen_props).toEqual(SAVED.definition.specimen_props)
+    // 램프 나누기는 적었을 때만 담는다(2026-10-20).
+    expect((sent as { tables: object }).tables).not.toHaveProperty('split')
   })
 
   it('파일을 안 놓아도 저장된 헤더 지문이 보인다', async () => {
@@ -488,5 +490,19 @@ describe('시험 조건의 단위 칸', () => {
   it('글자 조건에는 안 뜬다', async () => {
     const before = await pickCondition('시험 그룹')
     expect(units()).toBe(before)
+  })
+})
+
+describe('온도 램프 나누기 (2026-10-20)', () => {
+  // 사용자 보고: HITACHI DMA 7100 은 온도를 올리며 주파수 다섯을 번갈아 재 등온 단계가 없다 —
+  // 마스터커브를 못 만들었다. 정의에 「구간 폭」 을 적으면 읽을 때 준등온 곡선으로 나눈다.
+  it('구간 폭을 적으면 정의의 표 규칙에 담긴다', async () => {
+    open()
+    await screen.findByDisplayValue('옛 앱 인장 결과')
+    await userEvent.type(screen.getByLabelText('온도 램프 나누기 — 구간 폭 (K)'), '5')
+    await userEvent.click(screen.getByRole('button', { name: /저장/ }))
+    await waitFor(() => expect(updateFormat).toHaveBeenCalled())
+    const sent = (updateFormat.mock.calls[0] as unknown as [string, { definition: { tables: object } }])[1]
+    expect(sent.definition.tables).toMatchObject({ split: { by: 'temperature', step_k: 5 } })
   })
 })

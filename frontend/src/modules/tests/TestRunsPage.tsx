@@ -297,11 +297,10 @@ export default function TestRunsPage() {
   const [removing, setRemoving] = useState(false)
   const [busy, setBusy] = useState(false)
   const [failure, setFailure] = useState<Error | null>(null)
-  /** 읽히지 않은 시험은 처리할 곡선이 없다. 고를 수 있게 두면 전부 실패한다. */
-  const processable = rows.filter((run) => run.status === 'parsed')
-  // **고를 수 있는 줄만 넘긴다.** Shift 범위가 못 고르는 줄을 건너뛰어야 한다 —
-  // 안 그러면 범위 안의 실패한 시험까지 켜지고, 배치가 통째로 실패한다.
-  const selection = useRowSelection(processable.map((run) => run.id))
+  // **실패한 시험도 고른다**(2026-10-20). 전에는 일괄 처리만 생각해 읽힌 시험만 고르게 해서,
+  // 잘못된 옵션으로 올려 읽기에 실패한 시험을 **골라 지울 수가 없었다**(사용자 보고). 처리는
+  // 읽힌 것만 되므로 그 단추가 따로 막는다(`unreadable`).
+  const selection = useRowSelection(rows.map((run) => run.id))
   // 고를 수 있는 줄만 세는 선택과 달리, 오가는 것은 **보이는 줄 전부**다.
   const focus = useRowFocus(rows.map((run) => run.id))
   const picked = selection.picked
@@ -309,6 +308,8 @@ export default function TestRunsPage() {
   const pickedTypes = new Set(
     rows.filter((run) => picked.has(run.id)).map((run) => run.test_type_key)
   )
+  /** 고른 것 중 읽히지 않은 시험 — 처리할 곡선이 없어 일괄 처리에 넣으면 전부 실패한다. */
+  const unreadable = rows.filter((run) => picked.has(run.id) && run.status !== 'parsed').length
 
   useEffect(() => {
     if (!pending) return
@@ -471,11 +472,13 @@ export default function TestRunsPage() {
             <Button
               size="sm"
               onClick={() => setBatching(true)}
-              disabled={pickedTypes.size !== 1}
+              disabled={pickedTypes.size !== 1 || unreadable > 0}
               title={
-                pickedTypes.size === 1
-                  ? '고른 시험에 같은 처리 단계를 한 번에 겁니다'
-                  : '시험 종류가 섞여 있습니다 — 종류별로 나눠 거세요'
+                unreadable > 0
+                  ? `읽히지 않은 시험 ${unreadable}건이 섞여 있습니다 — 처리할 곡선이 없습니다`
+                  : pickedTypes.size === 1
+                    ? '고른 시험에 같은 처리 단계를 한 번에 겁니다'
+                    : '시험 종류가 섞여 있습니다 — 종류별로 나눠 거세요'
               }
             >
               <Layers className="size-4" />
@@ -752,7 +755,6 @@ export default function TestRunsPage() {
                   <input
                     type="checkbox"
                     aria-label={`${run.record_name} 선택`}
-                    disabled={run.status !== 'parsed'}
                     checked={picked.has(run.id)}
                     // **`onClick` 이다.** `onChange` 이벤트에는 shiftKey 가 없다 —
                     // 브라우저가 만들어 내는 합성 이벤트라 누른 키가 안 실린다.

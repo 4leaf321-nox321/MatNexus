@@ -19,7 +19,7 @@ from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.modules.accounts.models import User
@@ -179,9 +179,80 @@ class Test정의:
     def test_모르는_단위와_도메인은_거절(
         self, client: TestClient, admin_headers: dict[str, str], imported: CatalogMaterial
     ) -> None:
-        assert make_property(client, admin_headers, si_unit="HV").status_code == 422
+        refused = make_property(client, admin_headers, si_unit="furlong")
+        assert refused.status_code == 422
+        # 받을 수 있는 눈금을 함께 말한다 — 「SI 정본으로」 만 들으면 경도는 갈 데가 없다.
+        assert "IRHD" in refused.json()["error"]["message"]
         assert make_property(client, admin_headers, domain="magic").status_code == 422
         assert make_property(client, admin_headers, slug="Flex Mod").status_code == 422
+
+    @pytest.mark.parametrize(
+        ("given", "stored"), [("IRHD", "IRHD"), ("irhd", "IRHD"), ("Shore A", "ShoreA")]
+    )
+    def test_눈금은_그_기호로_만든다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        imported: CatalogMaterial,
+        given: str,
+        stored: str,
+    ) -> None:
+        """사용자 보고(2026-10-20): 쇼어 경도는 ShoreA 로 있는데 IRHD 만 「단위표에
+        없습니다」 로 거절돼, 단위 1 에 기호 IRHD 로 만들 수밖에 없었다 — 값 목록에서 둘의
+        표시가 갈렸다."""
+        made = make_property(
+            client, admin_headers, name="고무 경도 IRHD", slug="hardness_irhd", si_unit=given
+        )
+        assert made.status_code == 201, made.text
+        assert made.json()["si_unit"] == stored
+
+    def test_미리보기는_만들_때와_같은_검사를_하고_남기지_않는다(
+        self,
+        client: TestClient,
+        db: Session,
+        workspace: Workspace,
+        admin_headers: dict[str, str],
+        imported: CatalogMaterial,
+    ) -> None:
+        """AI 의 미리보기가 서버에 묻지 않아, 미리보기는 통과하고 실제 생성에서 단위로 거절되는
+        일이 있었다(사용자 보고, 2026-10-20). 미리보기는 생성 코드를 그대로 돌리고 되돌린다."""
+        body = {
+            **PROPERTY,
+            "name": "고무 경도 IRHD",
+            "slug": "hardness_irhd",
+            "si_unit": "irhd",
+        }
+        seen = client.post("/api/catalog/properties/preview", json=body, headers=admin_headers)
+        assert seen.status_code == 200, seen.text
+        assert seen.json()["key"] == "local.mechanical.hardness_irhd"
+        assert seen.json()["si_unit"] == "IRHD"
+        assert seen.json()["scale"] is True
+        # **남기지 않는다** — 미리 본 뒤 같은 것을 만들어도 「이미 있다」 가 아니다.
+        made = client.post("/api/catalog/properties", json=body, headers=admin_headers)
+        assert made.status_code == 201, made.text
+
+        # 만들 때와 **같은 거절**을 한다.
+        bad = client.post(
+            "/api/catalog/properties/preview",
+            json={**body, "slug": "other", "name": "다른 것", "si_unit": "furlong"},
+            headers=admin_headers,
+        )
+        assert bad.status_code == 422
+        assert bad.json()["error"]["code"] == "MNX-CATALOG-0036"
+        dup = client.post(
+            "/api/catalog/properties/preview",
+            json={**PROPERTY, "name": "탄성계수", "slug": "again"},
+            headers=admin_headers,
+        )
+        assert dup.status_code == 409
+        assert dup.json()["error"]["code"] == "MNX-CATALOG-0037"
+        member = member_headers(client, db, workspace)
+        assert (
+            client.post(
+                "/api/catalog/properties/preview", json=body, headers=member
+            ).status_code
+            == 403
+        )
 
     def test_관리자만_만든다(
         self,
@@ -214,6 +285,44 @@ class Test정의:
 
 
 class Test값:
+    def test_눈금_물성은_그_눈금으로만_받고_미리보기도_같다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        imported: CatalogMaterial,
+    ) -> None:
+        """IRHD 경도에 쇼어 A 값을 넣으면 거절 — 환산할 수 없는 눈금이다. 미리보기도 같은
+        거절을 한다(전에는 「환산해 저장」 이라 말하고 통과했다)."""
+        key = make_property(
+            client, admin_headers, name="고무 경도 IRHD", slug="hardness_irhd", si_unit="IRHD"
+        ).json()["key"]
+        url = f"/api/catalog/materials/{imported.id}/values"
+        body = {
+            "property_key": key,
+            "value_num": 55,
+            "unit": "ShoreA",
+            "method": "handbook",
+            "quality_tier": 2,
+            "source": SOURCE,
+        }
+        before = db.scalar(select(func.count()).select_from(CatalogValue))
+
+        wrong = client.post(f"{url}/preview", json=body, headers=admin_headers)
+        assert wrong.status_code == 422, wrong.text
+        assert wrong.json()["error"]["code"] == "MNX-CATALOG-0044"
+        assert client.post(url, json=body, headers=admin_headers).status_code == 422
+
+        right = client.post(
+            f"{url}/preview", json={**body, "unit": "irhd"}, headers=admin_headers
+        )
+        assert right.status_code == 200, right.text
+        assert right.json()["unit"] == "IRHD" and right.json()["value_num"] == 55
+        # **남기지 않는다** — 값도 출처도.
+        db.expire_all()
+        assert db.scalar(select(func.count()).select_from(CatalogValue)) == before
+        assert db.scalar(select(func.count()).select_from(CatalogSource)) == 0
+
     def test_다른_단위로_넣어도_정의_단위로_저장된다(
         self, client: TestClient, admin_headers: dict[str, str], imported: CatalogMaterial
     ) -> None:

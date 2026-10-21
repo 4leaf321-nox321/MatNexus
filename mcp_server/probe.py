@@ -398,6 +398,14 @@ async def sweep(session: ClientSession) -> None:
     )
     if run_id:
         detail = await call(session, "get_test_run", {"test_run_id": run_id})
+        # 다시 읽기(2026-10-20) — 미리보기만. 없는 형식은 서버에 닿기 전에 거절해야 한다.
+        await call(session, "reparse_test_run", {"test_run_id": run_id, "dry_run": True})
+        await call(
+            session,
+            "reparse_test_run",
+            {"test_run_id": run_id, "profile_key": "없는-형식-점검", "dry_run": True},
+            expect_error=True,
+        )
         await call(session, "list_processing_inputs", {"test_run_id": run_id})
         # ── 처리 결과 — 채택 화면과 같은 목록, 그리고 결과 하나의 곡선(앞쪽 곡선 · E 선) ───
         listed_results = await call(session, "list_processing_results", {"test_run_id": run_id})
@@ -742,7 +750,9 @@ async def sweep(session: ClientSession) -> None:
                 "value": 1.0,
                 "unit": adoptable_unit,
                 "quality_tier": 2,
-                "source_kind": "handbook",
+                # 출처 종류다 — `handbook` 은 측정 방법(`method`)의 낱말이라 서버가 거절했다
+                # (2026-10-20 프로브: 「출처 종류 'handbook' 는 없습니다」).
+                "source_kind": "book",
                 "source_title": "점검용 — 저장하지 않는다",
                 "dry_run": True,
             },

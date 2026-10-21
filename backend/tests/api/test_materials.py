@@ -905,6 +905,305 @@ class Test사슬_삭제:
         )
 
 
+class Test시료_사슬_삭제:
+    """*"시험 데이터가 있는 시료는 삭제 창에서 지운다고 해도 지워지지 않는다"* — 사용자 보고
+    (2026-10-20). 삭제 창이 「시편이 남아 있어 지울 수 없습니다」 를 적어 놓고도 확인을 받았고,
+    누르면 `DELETE /samples/{id}` 가 거절해 아무 일도 없었다.
+
+    재료와 같은 「다른 문」 이다 — 무엇이 사라지는지 먼저 보고, **시험은 따로 허락을 받는다.**
+    """
+
+    def tree(
+        self, client: TestClient, db: Session, headers: dict[str, str], with_run: bool = False
+    ) -> dict[str, Any]:
+        material = _create_material(client, headers)
+        sample = client.post(
+            f"/api/materials/{material['id']}/samples", json={}, headers=headers
+        ).json()
+        specimens = [
+            client.post(
+                f"/api/samples/{sample['id']}/specimens",
+                json={"orientation": "MD"},
+                headers=headers,
+            ).json()
+            for _ in range(2)
+        ]
+        run = None
+        if with_run:
+            ensure_builtin_test_types(db)
+            db.commit()
+            tra = Path(__file__).resolve().parents[1] / "fixtures" / "Example.tra"
+            made = client.post(
+                "/api/test-runs",
+                data={
+                    "specimen_id": specimens[0]["id"],
+                    "test_type": "tensile",
+                    "conditions": "{}",
+                },
+                files={"file": ("Example.tra", tra.read_bytes())},
+                headers=headers,
+            )
+            assert made.status_code == 202, made.text
+            run = made.json()
+        return {"material": material, "sample": sample, "specimens": specimens, "run": run}
+
+    def test_무엇이_사라지는지_먼저_말한다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str]
+    ) -> None:
+        tree = self.tree(client, db, admin_headers, with_run=True)
+        plan = client.get(
+            f"/api/samples/{tree['sample']['id']}/delete-plan", headers=admin_headers
+        )
+        assert plan.status_code == 200, plan.text
+        assert plan.json() == {
+            "sample_name": tree["sample"]["record_name"],
+            "specimens": 2,
+            "test_runs": 1,
+        }
+
+    def test_시험은_따로_허락을_받고_허락하면_함께_지운다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str]
+    ) -> None:
+        from app.modules.audit.models import AuditEntry
+        from app.modules.tests.models import TestRun
+
+        tree = self.tree(client, db, admin_headers, with_run=True)
+        sample_id = tree["sample"]["id"]
+
+        blocked = client.post(
+            f"/api/samples/{sample_id}/delete-cascade",
+            json={"include_test_runs": False},
+            headers=admin_headers,
+        )
+        assert blocked.status_code == 409, blocked.text
+        assert blocked.json()["error"]["code"] == "MNX-MATERIALS-0029"
+        assert "1건" in blocked.json()["error"]["message"]
+        # 막혔으면 **아무것도 안 지워져 있어야 한다.**
+        assert (
+            client.get(f"/api/samples/{sample_id}", headers=admin_headers).status_code == 200
+        )
+
+        gone = client.post(
+            f"/api/samples/{sample_id}/delete-cascade",
+            json={"include_test_runs": True},
+            headers=admin_headers,
+        )
+        assert gone.status_code == 200, gone.text
+        assert gone.json() == {
+            "sample_name": tree["sample"]["record_name"],
+            "specimens": 2,
+            "test_runs": 1,
+        }
+        assert (
+            client.get(f"/api/samples/{sample_id}", headers=admin_headers).status_code == 404
+        )
+        assert (
+            client.get(
+                f"/api/test-runs/{tree['run']['id']}", headers=admin_headers
+            ).status_code
+            == 404
+        )
+        # **DB 로 본다** — 부모가 지워지면 자식도 화면에서 404 라, 행이 살아 있어도 구별이
+        # 안 된다.
+        db.expire_all()
+        for one in tree["specimens"]:
+            stored = db.get(Specimen, uuid.UUID(one["id"]))
+            assert stored is not None and stored.deleted_at is not None, (
+                "시편 행이 안 지워졌다"
+            )
+        stored_run = db.get(TestRun, uuid.UUID(tree["run"]["id"]))
+        assert stored_run is not None and stored_run.deleted_at is not None, (
+            "시험 행이 안 지워졌다"
+        )
+        # 재료는 남는다 — 지운 것은 시료 하나다.
+        assert (
+            client.get(
+                f"/api/materials/{tree['material']['id']}", headers=admin_headers
+            ).status_code
+            == 200
+        )
+        # **누가 무엇을 얼마나 지웠는지 남는다** — 시험은 건마다, 시료는 딸려 간 수와 함께.
+        entries = {
+            row.action: row
+            for row in db.scalars(
+                select(AuditEntry).where(
+                    AuditEntry.target_id.in_(
+                        [uuid.UUID(sample_id), uuid.UUID(tree["run"]["id"])]
+                    )
+                )
+            )
+        }
+        assert "test_run.deleted" in entries
+        assert entries["sample.deleted"].changes["cascade"]["after"] == {
+            "specimens": 2,
+            "test_runs": 1,
+        }
+
+    def test_휴지통에서_되살리면_시편_시험이_함께_돌아온다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str]
+    ) -> None:
+        """시험까지 지우는 문이라 **되돌릴 길**이 있어야 한다."""
+        tree = self.tree(client, db, admin_headers, with_run=True)
+        sample_id = tree["sample"]["id"]
+        client.post(
+            f"/api/samples/{sample_id}/delete-cascade",
+            json={"include_test_runs": True},
+            headers=admin_headers,
+        )
+        back = client.post(f"/api/trash/sample/{sample_id}/restore", headers=admin_headers)
+        assert back.status_code == 200, back.text
+        assert (
+            client.get(f"/api/samples/{sample_id}", headers=admin_headers).status_code == 200
+        )
+        assert (
+            client.get(
+                f"/api/test-runs/{tree['run']['id']}", headers=admin_headers
+            ).status_code
+            == 200
+        )
+        listed = client.get(
+            f"/api/samples/{sample_id}/specimens", headers=admin_headers
+        ).json()
+        assert len(listed) == 2
+
+    def test_시편만_있으면_허락_없이_지워진다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str]
+    ) -> None:
+        """**막는 것이 목적이 아니다.** 시험이 없으면 시편과 함께 그냥 지워진다."""
+        tree = self.tree(client, db, admin_headers)
+        gone = client.post(
+            f"/api/samples/{tree['sample']['id']}/delete-cascade",
+            json={"include_test_runs": False},
+            headers=admin_headers,
+        )
+        assert gone.status_code == 200, gone.text
+        assert gone.json()["specimens"] == 2 and gone.json()["test_runs"] == 0
+
+    def test_옛_문은_그대로_막는다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str]
+    ) -> None:
+        """`DELETE /samples/{id}` 는 시편이 남으면 여전히 막는다 — 그 버튼이 시험까지 지우면
+        안 된다. 통째로는 다른 문(`delete-cascade`)이다."""
+        tree = self.tree(client, db, admin_headers)
+        refused = client.delete(f"/api/samples/{tree['sample']['id']}", headers=admin_headers)
+        assert refused.status_code == 409
+        assert refused.json()["error"]["code"] == "MNX-MATERIALS-0006"
+
+
+class Test시편_한꺼번에_지우기:
+    """*"잘못된 옵션으로 올린 시험을 치우려면 시험을 하나씩 지운 뒤에야 시편을 지울 수 있다"* —
+    사용자 보고(2026-10-20). 고른 시편을 **매달린 시험까지** 한꺼번에, 시험은 따로 허락받고.
+    """
+
+    def test_미리_세고_시험은_따로_허락을_받는다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str]
+    ) -> None:
+        from app.modules.audit.models import AuditEntry
+        from app.modules.tests.models import TestRun
+
+        tree = Test시료_사슬_삭제().tree(client, db, admin_headers, with_run=True)
+        with_run, bare = (one["id"] for one in tree["specimens"])
+
+        plan = client.post(
+            "/api/specimens/delete-plan",
+            json={"specimen_ids": [with_run, bare]},
+            headers=admin_headers,
+        )
+        assert plan.status_code == 200, plan.text
+        assert plan.json() == {"specimens": 2, "test_runs": 1, "blocked": []}
+
+        # **허락 없이** — 시험이 없는 것만 지우고, 시험이 매달린 것은 이유와 함께 남는다.
+        first = client.post(
+            "/api/specimens/delete",
+            json={"specimen_ids": [with_run, bare], "include_test_runs": False},
+            headers=admin_headers,
+        )
+        assert first.status_code == 200, first.text
+        assert first.json()["specimens"] == 1 and first.json()["test_runs"] == 0
+        assert [(one["id"], one["reason"]) for one in first.json()["blocked"]] == [
+            (with_run, "시험 1건이 매달려 있습니다")
+        ]
+        db.expire_all()
+        assert db.get(Specimen, uuid.UUID(bare)).deleted_at is not None  # type: ignore[union-attr]
+        assert db.get(Specimen, uuid.UUID(with_run)).deleted_at is None  # type: ignore[union-attr]
+
+        # **허락하면** 시험까지.
+        second = client.post(
+            "/api/specimens/delete",
+            json={"specimen_ids": [with_run], "include_test_runs": True},
+            headers=admin_headers,
+        )
+        assert second.status_code == 200, second.text
+        assert second.json() == {"specimens": 1, "test_runs": 1, "blocked": []}
+        db.expire_all()
+        assert db.get(Specimen, uuid.UUID(with_run)).deleted_at is not None  # type: ignore[union-attr]
+        stored_run = db.get(TestRun, uuid.UUID(tree["run"]["id"]))
+        assert stored_run is not None and stored_run.deleted_at is not None, "시험이 남았다"
+        # 시료는 남는다 — 지운 것은 시편이다.
+        assert (
+            client.get(
+                f"/api/samples/{tree['sample']['id']}", headers=admin_headers
+            ).status_code
+            == 200
+        )
+        # **누가 무엇을 얼마나 지웠는지 남는다** — 시험은 건마다, 시편은 딸려 간 수와 함께.
+        entries = {
+            (row.action, str(row.target_id)): row
+            for row in db.scalars(
+                select(AuditEntry).where(
+                    AuditEntry.action.in_(["specimen.deleted", "test_run.deleted"])
+                )
+            )
+        }
+        assert ("test_run.deleted", tree["run"]["id"]) in entries
+        assert entries[("specimen.deleted", with_run)].changes["cascade"]["after"] == {
+            "test_runs": 1
+        }
+        assert entries[("specimen.deleted", bare)].changes["cascade"]["after"] == {
+            "test_runs": 0
+        }
+
+    def test_휴지통에서_시편을_되살리면_시험도_돌아온다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str]
+    ) -> None:
+        """시험까지 지우는 문이라 **되돌릴 길**이 있어야 한다."""
+        tree = Test시료_사슬_삭제().tree(client, db, admin_headers, with_run=True)
+        specimen_id = tree["specimens"][0]["id"]
+        client.post(
+            "/api/specimens/delete",
+            json={"specimen_ids": [specimen_id], "include_test_runs": True},
+            headers=admin_headers,
+        )
+        assert (
+            client.get(
+                f"/api/test-runs/{tree['run']['id']}", headers=admin_headers
+            ).status_code
+            == 404
+        )
+        back = client.post(f"/api/trash/specimen/{specimen_id}/restore", headers=admin_headers)
+        assert back.status_code == 200, back.text
+        assert (
+            client.get(
+                f"/api/test-runs/{tree['run']['id']}", headers=admin_headers
+            ).status_code
+            == 200
+        )
+
+    def test_못_찾는_것은_id_로_말하고_같은_것은_한_번만_센다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str]
+    ) -> None:
+        tree = Test시료_사슬_삭제().tree(client, db, admin_headers)
+        one = tree["specimens"][0]["id"]
+        ghost = str(uuid.uuid4())
+        plan = client.post(
+            "/api/specimens/delete-plan",
+            json={"specimen_ids": [one, one, ghost]},
+            headers=admin_headers,
+        ).json()
+        assert plan["specimens"] == 1
+        assert [(row["id"], row["name"]) for row in plan["blocked"]] == [(ghost, None)]
+
+
 class Test여럿을_한꺼번에_사슬로:
     """목록 화면에서 고른 것들을 아래까지 통째로.
 

@@ -74,6 +74,10 @@ beforeEach(() => {
       { key: 'proof_stress', label: '항복강도 (Pa)', made_by: '항복강도' },
       { key: 'tensile_strength', label: '인장강도 (Pa)', made_by: '인장강도' },
     ],
+    inputs: [
+      { key: 'specimen_thickness', label: '시편 두께 (m)', made_by: '시편 치수' },
+      { key: 'condition_temperature', label: '시험 온도 (K)', made_by: '시험 조건' },
+    ],
     blocks: [{ key: 'hardening', label: '경화' }],
     functions: ['pow', 'exp'],
     constants: ['pi'],
@@ -129,5 +133,23 @@ describe('FormulasPage', () => {
       result: { key: 'yield_ratio', label: '항복비', si_unit: '1' },
       applies_to: ['tensile', 'compression'],
     })
+  })
+
+  it('열 식에서도 그 시험의 시편 치수 · 시험 조건을 입력으로 고른다 (2026-10-20)', async () => {
+    // 사용자 보고: 계산식 어휘에 곡선 열과 처리 결과값만 있어, 굽힘 · 압축 응력을 식으로 못 만들었다.
+    const user = userEvent.setup()
+    render(<FormulasPage />)
+    await screen.findByText('항복비')
+    await user.click(screen.getByRole('button', { name: /곡선에서 열을 내는 식/ }))
+    const first = screen.getByLabelText('1번 입력') as HTMLSelectElement
+    const texts = Array.from(first.options).map((o) => o.text)
+    expect(texts.some((t) => t.includes('stress_true'))).toBe(true)
+    expect(texts).toContain('specimen_thickness · 시편 두께 (m) ← 시편 치수')
+    expect(texts).toContain('condition_temperature · 시험 온도 (K) ← 시험 조건')
+
+    // 고르면 단위가 따라온다 — SI 저장 단위.
+    await user.selectOptions(first, 'specimen_thickness')
+    const unit = screen.getAllByPlaceholderText('단위(SI)')[0] as HTMLInputElement
+    expect(unit.value).toBe('m')
   })
 })

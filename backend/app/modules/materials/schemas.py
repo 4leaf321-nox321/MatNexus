@@ -557,6 +557,40 @@ class CascadeDeleteOut(BaseModel):
     test_runs: int
 
 
+class SampleDeletePlanOut(BaseModel):
+    """이 시료를 지우면 **무엇이 함께 사라지는가**(2026-10-20). 재료의 `DeletePlanOut` 과
+    같은 뜻 — 숫자는 서버가 센다. `CascadeDeleteRequest` 를 그대로 받고, 지운 뒤에도 이
+    모양으로 돌려준다(요청한 것이 아니라 **지운 것**)."""
+
+    sample_name: str
+    specimens: int
+    test_runs: int
+
+
+class SpecimenDeleteRequest(BaseModel):
+    """고른 시편을 한꺼번에 지운다(2026-10-20).
+
+    사용자 보고: 잘못된 옵션으로 올린 시험을 치우려면 시험을 하나씩 지운 뒤에야 시편을 지울
+    수 있었다. **시험은 따로 허락을 받는다**(재료 · 시료와 같다) — 끄면 시험이 매달린 시편은
+    이유와 함께 남는다.
+    """
+
+    specimen_ids: list[uuid.UUID] = Field(min_length=1, max_length=MAX_BULK)
+    include_test_runs: bool = False
+
+
+class SpecimenDeleteOut(BaseModel):
+    """고른 시편을 지우면(미리 세기) · 지웠더니(지우기) — **같은 판정**을 지난 숫자다.
+
+    못 지우는 것은 **낱개로 이유와 함께**(권한 · 아래에 남의 시험 · 시험 허락 없음) —
+    사람이 해야 할 일이 각각 다르다.
+    """
+
+    specimens: int
+    test_runs: int
+    blocked: list[MaterialBlockedOut]
+
+
 class NamePreviewRequest(BaseModel):
     """등록 폼이 입력 중에 부르는 것. 서버가 이름을 만드는 유일한 곳이므로,
     화면이 같은 규칙을 다시 구현하지 않게 한다."""

@@ -184,6 +184,12 @@ SAMPLES: dict[str, tuple[np.ndarray, np.ndarray]] = {
     "mooney_rivlin": (np.linspace(0.0, 2.0, 15), np.array([0.3e6, 0.1e6])),
     "yeoh": (np.linspace(0.0, 2.0, 15), np.array([0.4e6, -0.02e6, 0.005e6])),
     "ogden_1": (np.linspace(0.0, 2.0, 15), np.array([0.5e6, 2.3])),
+    # 같은 식을 단축 압축 축(압축이 양수)에 뒤집어 건 것(2026-10-20, 확장 `compression`) —
+    # 신축비가 0 보다 커야 하므로 압축 변형률 0 ~ 0.6.
+    "neo_hookean_compression": (np.linspace(0.0, 0.6, 15), np.array([0.4e6])),
+    "mooney_rivlin_compression": (np.linspace(0.0, 0.6, 15), np.array([0.3e6, 0.1e6])),
+    "yeoh_compression": (np.linspace(0.0, 0.6, 15), np.array([0.4e6, -0.02e6, 0.005e6])),
+    "ogden_1_compression": (np.linspace(0.0, 0.6, 15), np.array([0.5e6, 2.3])),
 }
 
 

@@ -160,12 +160,17 @@ def create_property(
                 "수치 물성은 단위가 있어야 합니다 — 무차원이면 '1'.",
                 status=422,
             )
-        found = units.canonical(si_unit)
+        # **눈금(HV · ShoreA · IRHD …)도 받는다**(2026-10-20) — 단위가 아니라 읽음이라
+        # 단위표에는 없고, 그 기호 그대로 둔다(값도 그 눈금으로만 받는다 —
+        # `_to_definition_unit`). 원본의 쇼어 경도는 그렇게 들어와 있는데 새로 만들 길이
+        # 없었다.
+        found = units.canonical(si_unit) or units.scale(si_unit)
         if found is None:
             raise AppError(
                 "MNX-CATALOG-0036",
-                f"단위 '{si_unit}' 은 단위표에 없습니다. SI 정본(Pa · J/(kg.K) · 1 …)으로 "
-                "적으세요 — 값을 담고 찾을 때 이 단위로 환산합니다.",
+                f"단위 '{si_unit}' 은 단위표에 없습니다. SI 정본(Pa · J/(kg.K) · 1 …)이나 "
+                f"눈금({' · '.join(units.SCALES)})으로 적으세요 — 값을 담고 찾을 때 이 단위로 "
+                "환산합니다(눈금은 환산하지 않습니다).",
                 status=422,
             )
         si_unit = found

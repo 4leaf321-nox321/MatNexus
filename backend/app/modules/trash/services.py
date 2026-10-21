@@ -228,12 +228,14 @@ def _below(db: Session, kind: str, row: Any) -> dict[str, int]:
         return {}
 
     counted: dict[str, int] = {}
+    # **함께 지워진 것만 센다** — 되살리기가 손대는 나무(`_tree(together=True)`)와 같은 수.
+    at = row.deleted_at
     if kind == "material":
-        samples = _ids(db, Sample, Sample.material_id == row.id)
-        specimens = _ids(db, Specimen, Specimen.sample_id.in_(samples)) if samples else []
+        samples = _ids(db, Sample, Sample.material_id == row.id, at)
+        specimens = _ids(db, Specimen, Specimen.sample_id.in_(samples), at) if samples else []
     else:  # sample
         samples = []
-        specimens = _ids(db, Specimen, Specimen.sample_id == row.id)
+        specimens = _ids(db, Specimen, Specimen.sample_id == row.id, at)
 
     if kind == "specimen":
         specimens = [row.id]
@@ -246,16 +248,17 @@ def _below(db: Session, kind: str, row: Any) -> dict[str, int]:
         runs = db.scalar(
             select(func.count())
             .select_from(TestRun)
-            .where(TestRun.specimen_id.in_(specimens), TestRun.deleted_at.is_not(None))
+            .where(TestRun.specimen_id.in_(specimens), TestRun.deleted_at == at)
         )
         if runs:
             counted["시험"] = int(runs)
     return counted
 
 
-def _ids(db: Session, model: Any, where: Any) -> list[uuid.UUID]:
-    """지워진 자식의 id. **지워진 것만** 본다 — 살아 있는 자식은 되살릴 대상이 아니다."""
-    return list(db.scalars(select(model.id).where(where, model.deleted_at.is_not(None))))
+def _ids(db: Session, model: Any, where: Any, at: datetime) -> list[uuid.UUID]:
+    """**함께 지워진** 자식의 id — 살아 있는 자식도, 따로 먼저 지운 자식도 되살릴
+    대상이 아니다."""
+    return list(db.scalars(select(model.id).where(where, model.deleted_at == at)))
 
 
 # --- 되살릴 수 있나 ----------------------------------------------------------
@@ -386,7 +389,7 @@ def _foreign(db: Session, editor: permissions.Editor, kind: str, row: Any) -> st
     """
     if kind not in TREE_KINDS:
         return None
-    tree = _tree(db, kind, row)
+    tree = _tree(db, kind, row, together=True)
     counts: dict[tuple[str, uuid.UUID | None], int] = {}
     for one in TREE_KINDS:
         for target in tree[one]:
@@ -455,28 +458,36 @@ def _get(db: Session, kind: str, item_id: uuid.UUID) -> Any:
 # --- 되살리기 ----------------------------------------------------------------
 
 
-def _tree(db: Session, kind: str, row: Any) -> dict[str, list[Any]]:
-    """이 행과 **함께 지워진 아래 전부.** 되살리기와 영구 삭제가 같은 것을 본다.
+def _tree(db: Session, kind: str, row: Any, *, together: bool = False) -> dict[str, list[Any]]:
+    """이 행과 그 아래 지워진 것.
 
-    두 길이 다른 목록을 보면, 화면이 보여 준 숫자와 실제로 손대는 것이 어긋난다.
+    `together` 면 **이 행과 함께 지워진 것만**(같은 `deleted_at`) — 되살리기 · 그 숫자 · 남의
+    자료 판정이 쓴다. 통째로 지우는 길은 모두 한 시각(`now`)을 찍는다. 전에는 「그 아래
+    지워진 것 전부」 였다 — 실패한 시험만 먼저 치운 시편을 나중에 시료째 지웠다 되살리면
+    치웠던 실패 시험까지 돌아왔고, 남이 먼저 지운 자기 시편이 끼어 되살리기가 막혔다
+    (2026-10-20 검토, 골라 지우기가 이 일을 흔하게 만들었다).
+
+    영구 삭제는 `together=False` — **아래 지워진 것 전부**를 가져간다. 부모 행이 사라지는데
+    먼저 지운 자식만 남으면 FK 가 막는다.
     """
     if kind in FLAT_KINDS:
         # 아래가 없다. 자기 하나뿐인 나무다.
         return {one: ([row] if one == kind else []) for one in KINDS}
 
+    at = row.deleted_at if together else None
     materials: list[Any] = [row] if kind == "material" else []
     samples: list[Any] = [row] if kind == "sample" else []
     specimens: list[Any] = [row] if kind == "specimen" else []
     runs: list[Any] = [row] if kind == "test_run" else []
 
     if kind == "material":
-        samples = _dead(db, Sample, Sample.material_id == row.id)
+        samples = _dead(db, Sample, Sample.material_id == row.id, at)
     if kind in ("material", "sample"):
         parents = [s.id for s in samples] or ([row.id] if kind == "sample" else [])
-        specimens = _dead(db, Specimen, Specimen.sample_id.in_(parents)) if parents else []
+        specimens = _dead(db, Specimen, Specimen.sample_id.in_(parents), at) if parents else []
     if kind in ("material", "sample", "specimen"):
         parents = [s.id for s in specimens] or ([row.id] if kind == "specimen" else [])
-        runs = _dead(db, TestRun, TestRun.specimen_id.in_(parents)) if parents else []
+        runs = _dead(db, TestRun, TestRun.specimen_id.in_(parents), at) if parents else []
 
     return {
         "material": materials,
@@ -487,8 +498,12 @@ def _tree(db: Session, kind: str, row: Any) -> dict[str, list[Any]]:
     }
 
 
-def _dead(db: Session, model: Any, where: Any) -> list[Any]:
-    return list(db.scalars(select(model).where(where, model.deleted_at.is_not(None))))
+def _dead(db: Session, model: Any, where: Any, at: datetime | None = None) -> list[Any]:
+    """지워진 자식. `at` 이 있으면 **그 시각에 함께 지워진 것만.**"""
+    query = select(model).where(where, model.deleted_at.is_not(None))
+    if at is not None:
+        query = query.where(model.deleted_at == at)
+    return list(db.scalars(query))
 
 
 @dataclass(frozen=True)
@@ -515,7 +530,7 @@ def restore(db: Session, kind: str, item_id: uuid.UUID, *, actor: User) -> Done:
     if blocked:
         raise Conflict("MNX-TRASH-0004", blocked)
 
-    tree = _tree(db, kind, row)
+    tree = _tree(db, kind, row, together=True)
     counts: dict[str, int] = {}
     for one in KINDS:
         rows = tree[one]

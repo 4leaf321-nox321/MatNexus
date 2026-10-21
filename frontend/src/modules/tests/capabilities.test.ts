@@ -36,8 +36,18 @@ describe('점탄성 탭', () => {
 describe('무엇이 빠졌는지', () => {
   it('빠진 것을 이름으로 돌려준다', () => {
     expect(missingFor(capability('viscoelastic_tab'), ['storage_modulus'])).toEqual([
-      ['loss_modulus'],
+      ['loss_modulus', 'shear_loss_modulus'],
     ])
+  })
+
+  it('전단 채널(G′ · G″)만 있어도 점탄성 탭이 뜬다 (2026-10-20)', () => {
+    // 레오미터 진동 시험은 채널 이름부터 G 다 — 전에는 E′ 이름만 찾아 탭도 겹치기도 없었다.
+    expect(
+      missingFor(capability('viscoelastic_tab'), ['shear_storage_modulus', 'shear_loss_modulus'])
+    ).toEqual([])
+    expect(
+      missingFor(capability('master_curve'), ['temperature', 'shear_storage_modulus', 'frequency'])
+    ).toEqual([])
   })
 
   it('여럿 중 하나면 채워진 것으로 본다', () => {

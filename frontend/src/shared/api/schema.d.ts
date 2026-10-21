@@ -1011,6 +1011,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/catalog/materials/{material_id}/values/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Preview Catalog Value
+         * @description 넣기 전에 **넣을 때와 같은 검사**를 돌린다(2026-10-20) — 단위 환산 · 눈금 일치 · 출처 ·
+         *     등급. 넣는 코드를 그대로 돌리고 되돌린다(두 벌이면 어긋난다).
+         */
+        post: operations["preview_catalog_value_api_catalog_materials__material_id__values_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/catalog/properties": {
         parameters: {
             query?: never;
@@ -1233,6 +1254,30 @@ export interface paths {
         get: operations["property_mapping_api_catalog_properties_mapping_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/catalog/properties/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Preview Property
+         * @description 만들기 전에 **만들 때와 같은 검사**를 돌린다(2026-10-20) — 생성 코드를 그대로 돌리고
+         *     되돌린다.
+         *
+         *     검사를 두 벌로 두면 언젠가 어긋난다. AI 의 미리보기가 서버에 묻지 않아, 미리보기는 통과하고
+         *     실제 생성에서 단위로 거절되는 일이 있었다(사용자 보고).
+         */
+        post: operations["preview_property_api_catalog_properties_preview_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -5659,6 +5704,52 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/samples/{sample_id}/delete-cascade": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Delete Sample Cascade
+         * @description 시료를 **아래까지 통째로** 지운다 — 시험 → 시편 → 시료(2026-10-20).
+         *
+         *     `DELETE /samples/{id}` 는 시편이 남아 있으면 막는다(그 버튼이 시험까지 지우면 안 된다).
+         *     그런데 삭제 창은 그 사실을 적어 놓고도 확인을 받았고, 누르면 거절되어 **아무 일도 없었다**
+         *     (사용자 보고: 시험 데이터가 있다고 묻길래 지운다고 했는데 안 지워진다). 재료와 같은 「다른
+         *     문」 을 둔다 — 무엇이 사라지는지 먼저 보고(`delete-plan`), **시험은 따로 허락을 받는다.**
+         *     휴지통에서 시료를 되살리면 함께 지운 시편 · 시험이 같이 돌아온다.
+         */
+        post: operations["delete_sample_cascade_api_samples__sample_id__delete_cascade_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/samples/{sample_id}/delete-plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Sample Delete Plan
+         * @description 지우기 전에 **무엇이 함께 사라지는지** — 재료의 `delete-plan` 과 같다(2026-10-20).
+         */
+        get: operations["sample_delete_plan_api_samples__sample_id__delete_plan_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/samples/{sample_id}/mill-check": {
         parameters: {
             query?: never;
@@ -5951,6 +6042,53 @@ export interface paths {
          *     것과 **같은 함수**다. 여기서 다시 구현하면 두 길이 갈라진다.
          */
         post: operations["bulk_update_specimens_api_specimens_bulk_update_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/specimens/delete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Delete Specimens
+         * @description 고른 시편을 **매달린 시험까지** 한꺼번에 지운다 — 시험은 따로 허락(2026-10-20).
+         *
+         *     사용자 보고: 잘못된 옵션으로 올린 시험을 치우려면 시험을 하나씩 지운 뒤에야 시편을 지울
+         *     수 있었다. 소프트 삭제이고 휴지통에서 되살린다. 돌려주는 것은 요청한 것이 아니라
+         *     **지운 것**이다. `DELETE` 가 아니라 `POST /delete` 인 이유는 시험 · 재료 쪽과 같다.
+         */
+        post: operations["delete_specimens_api_specimens_delete_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/specimens/delete-plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Specimen Delete Plan
+         * @description 고른 시편을 지우면 **무엇이 함께 사라지는가** — 쓰지 않는다(2026-10-20).
+         *
+         *     시험은 **허락했다고 치고** 센다 — 창이 「시험 N건도 함께 지웁니다」 칸을 띄우려면 그 수를
+         *     알아야 한다. 허락 없이 지우면 그 시편들은 이유와 함께 남는다(`delete`).
+         */
+        post: operations["specimen_delete_plan_api_specimens_delete_plan_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -6484,6 +6622,10 @@ export interface paths {
         /**
          * Upload Test Run
          * @description 원본을 받아 저장하고 파싱을 큐에 넣는다. 202 를 준다 — 아직 안 끝났다.
+         *
+         *     **읽을 형식을 처음부터 고를 수 있다**(`profile_key`, 2026-10-20). 사용자 보고: 맞는 형식이
+         *     둘 이상인 파일을 자동이 다른 형식으로 골라 곡선 하나로 읽혔고, 올릴 때 고를 방법이
+         *     없어 잘못 읽힌 뒤에 「다시 읽기」 를 해야 했다. 고르면 「다시 읽기」 의 고정과 같다.
          */
         post: operations["upload_test_run_api_test_runs_post"];
         delete?: never;
@@ -9235,6 +9377,11 @@ export interface components {
             /** Operator */
             operator?: string | null;
             /**
+             * Profile Key
+             * @description 읽을 형식(프로파일) key. 비우면 지문으로 자동으로 고른다
+             */
+            profile_key?: string | null;
+            /**
              * Specimen Id
              * Format: uuid
              */
@@ -10518,6 +10665,28 @@ export interface components {
             values_imported: number;
         };
         /**
+         * CatalogPropertyPreviewOut
+         * @description 만들면 **이렇게 된다** — 만들 때와 같은 검사를 지났다(2026-10-20).
+         *
+         *     AI 의 미리보기가 서버에 묻지 않고 입력을 그대로 돌려줘서, 미리보기는 통과하고 실제 생성에서
+         *     「단위표에 없습니다」 로 거절되는 일이 있었다(사용자 보고). 이 응답은 생성 코드를 그대로
+         *     돌리고 되돌린 결과다.
+         */
+        CatalogPropertyPreviewOut: {
+            /** Domain */
+            domain: string;
+            /** Key */
+            key: string;
+            /** Name */
+            name: string;
+            /** Scale */
+            scale: boolean;
+            /** Si Unit */
+            si_unit: string | null;
+            /** Symbol */
+            symbol: string | null;
+        };
+        /**
          * CatalogPropertyUpdate
          * @description 물성 정의 고치기 — 지금은 **정의문** 하나(ADR 0050).
          *
@@ -10708,6 +10877,27 @@ export interface components {
             term?: string | null;
             /** Term Unit */
             term_unit?: string | null;
+            /** Uncertainty */
+            uncertainty: number | null;
+            /** Unit */
+            unit: string | null;
+            /** Value Num */
+            value_num: number | null;
+            /** Value Text */
+            value_text: string | null;
+        };
+        /**
+         * CatalogValuePreviewOut
+         * @description 넣으면 **이렇게 저장된다** — 넣을 때와 같은 검사(단위 환산 · 눈금 일치 · 출처)를
+         *     지났다.
+         */
+        CatalogValuePreviewOut: {
+            /** Converted */
+            converted?: string | null;
+            /** Property Key */
+            property_key: string;
+            /** Property Name */
+            property_name: string;
             /** Uncertainty */
             uncertainty: number | null;
             /** Unit */
@@ -12380,6 +12570,11 @@ export interface components {
         DetectOut: {
             /** Filename */
             filename: string;
+            /**
+             * Profile Candidates
+             * @default []
+             */
+            profile_candidates: string[];
             /** Profile Key */
             profile_key: string | null;
             /** Reason */
@@ -14087,6 +14282,13 @@ export interface components {
             constants: string[];
             /** Functions */
             functions: string[];
+            /**
+             * Inputs
+             * @default []
+             */
+            inputs: {
+                [key: string]: string;
+            }[];
             /** Scalars */
             scalars: {
                 [key: string]: string;
@@ -15199,6 +15401,11 @@ export interface components {
             method: string;
             /** Minimum Frequency Hz */
             minimum_frequency_hz: number;
+            /**
+             * Modulus Basis
+             * @default E
+             */
+            modulus_basis: string;
             /** Notes */
             notes: string[];
             /** Parameters */
@@ -18808,6 +19015,20 @@ export interface components {
             /** Workspace Slug */
             workspace_slug?: string | null;
         };
+        /**
+         * SampleDeletePlanOut
+         * @description 이 시료를 지우면 **무엇이 함께 사라지는가**(2026-10-20). 재료의 `DeletePlanOut` 과
+         *     같은 뜻 — 숫자는 서버가 센다. `CascadeDeleteRequest` 를 그대로 받고, 지운 뒤에도 이
+         *     모양으로 돌려준다(요청한 것이 아니라 **지운 것**).
+         */
+        SampleDeletePlanOut: {
+            /** Sample Name */
+            sample_name: string;
+            /** Specimens */
+            specimens: number;
+            /** Test Runs */
+            test_runs: number;
+        };
         /** SampleOut */
         SampleOut: {
             access?: components["schemas"]["EditAccessOut"] | null;
@@ -19494,6 +19715,38 @@ export interface components {
             thickness?: number | null;
             /** Width */
             width?: number | null;
+        };
+        /**
+         * SpecimenDeleteOut
+         * @description 고른 시편을 지우면(미리 세기) · 지웠더니(지우기) — **같은 판정**을 지난 숫자다.
+         *
+         *     못 지우는 것은 **낱개로 이유와 함께**(권한 · 아래에 남의 시험 · 시험 허락 없음) —
+         *     사람이 해야 할 일이 각각 다르다.
+         */
+        SpecimenDeleteOut: {
+            /** Blocked */
+            blocked: components["schemas"]["MaterialBlockedOut"][];
+            /** Specimens */
+            specimens: number;
+            /** Test Runs */
+            test_runs: number;
+        };
+        /**
+         * SpecimenDeleteRequest
+         * @description 고른 시편을 한꺼번에 지운다(2026-10-20).
+         *
+         *     사용자 보고: 잘못된 옵션으로 올린 시험을 치우려면 시험을 하나씩 지운 뒤에야 시편을 지울
+         *     수 있었다. **시험은 따로 허락을 받는다**(재료 · 시료와 같다) — 끄면 시험이 매달린 시편은
+         *     이유와 함께 남는다.
+         */
+        SpecimenDeleteRequest: {
+            /**
+             * Include Test Runs
+             * @default false
+             */
+            include_test_runs: boolean;
+            /** Specimen Ids */
+            specimen_ids: string[];
         };
         /**
          * SpecimenFacetsOut
@@ -20251,6 +20504,11 @@ export interface components {
         SweepListOut: {
             /** Items */
             items: components["schemas"]["SweepOut"][];
+            /**
+             * Modulus Basis
+             * @default E
+             */
+            modulus_basis: string;
             /**
              * Warnings
              * @default []
@@ -23654,6 +23912,41 @@ export interface operations {
             };
         };
     };
+    preview_catalog_value_api_catalog_materials__material_id__values_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                material_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CatalogValueCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CatalogValuePreviewOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     create_property_api_catalog_properties_post: {
         parameters: {
             query?: never;
@@ -23953,6 +24246,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PropertyMappingOut"];
+                };
+            };
+        };
+    };
+    preview_property_api_catalog_properties_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CatalogPropertyCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CatalogPropertyPreviewOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -31264,6 +31590,72 @@ export interface operations {
             };
         };
     };
+    delete_sample_cascade_api_samples__sample_id__delete_cascade_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sample_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CascadeDeleteRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SampleDeletePlanOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    sample_delete_plan_api_samples__sample_id__delete_plan_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sample_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SampleDeletePlanOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     mill_check_api_samples__sample_id__mill_check_get: {
         parameters: {
             query?: never;
@@ -31635,6 +32027,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SpecimenBulkUpdateOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_specimens_api_specimens_delete_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SpecimenDeleteRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SpecimenDeleteOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    specimen_delete_plan_api_specimens_delete_plan_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SpecimenDeleteRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SpecimenDeleteOut"];
                 };
             };
             /** @description Validation Error */

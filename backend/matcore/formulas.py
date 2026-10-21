@@ -32,6 +32,18 @@ PREFIX = "formula."
 
 KINDS = ("family", "scalar_step", "column_step")
 
+#: **그 시험이 들고 오는 값**의 이름 앞머리 — 시편 치수 · 시험 조건 · 재료 선언값(2026-10-20).
+#: 처리가 바깥에서 받는 값(`given`)이 이 이름으로 온다(`app/shared/curvedata`). 열 식에서도
+#: 이 이름은 **열이 아니라 그 시험의 수 하나**로 받는다(`@이름`) — 사용자 보고: 굽힘 · 압축처럼
+#: 시편 치수와 조건이 들어가는 응력 · 변형률을 식으로 못 만들었다. 이제 굽힘 응력은
+#: `3*force*specimen_span/(2*specimen_width*specimen_thickness**2)` 한 줄이다.
+GIVEN_PREFIXES = ("specimen_", "condition_", "declared_")
+
+
+def is_given(name: str) -> bool:
+    """그 시험의 값(시편 치수 · 시험 조건 · 재료 선언값)인가 — 열이 아니다."""
+    return name.startswith(GIVEN_PREFIXES)
+
 
 class FormulaSpecError(ValueError):
     """식은 읽히는데 **자리에 맞지 않는다** — 축이 없거나, 파라미터 선언이 식과 안 맞거나."""
@@ -54,7 +66,8 @@ class Variable:
 
     - family: `x` 하나 — 곡선의 x 축(`x_column`)
     - scalar_step: 앞 단계가 낸 스칼라 (`@name` 으로 받는다)
-    - column_step: 프레임의 열
+    - column_step: 프레임의 열 — 다만 `specimen_` · `condition_` · `declared_` 로 시작하면 그
+      시험의 값 하나(`@name`, `is_given`)
     """
 
     name: str
@@ -248,10 +261,24 @@ def build_step(spec: FormulaSpec) -> tuple[Callable[..., StepResult], dict[str, 
         }
         return scalar_step, kwargs
 
-    # column_step
+    # column_step — 열과 **그 시험의 값**(시편 치수 · 조건)을 섞어 쓴다(2026-10-20).
+    given = tuple(one for one in spec.variables if is_given(one.name))
+    lines = tuple(one for one in spec.variables if not is_given(one.name))
+
     def column_step(frame: Frame, options: dict[str, Any]) -> StepResult:
         values: dict[str, Any] = {}
-        for one in spec.variables:
+        for one in given:
+            raw = options.get(one.name)
+            if not isinstance(raw, int | float) or isinstance(raw, bool):
+                return StepResult(
+                    frame=frame,
+                    notes=(
+                        f"'{one.label or one.name}' 값이 없어 {result.label} 을 만들지 "
+                        "않았습니다 — 시편 치수 · 시험 조건을 채우세요.",
+                    ),
+                )
+            values[one.name] = float(raw)
+        for one in lines:
             if one.name not in frame.columns:
                 available = ", ".join(sorted(frame.columns)) or "(없음)"
                 return StepResult(
@@ -267,19 +294,34 @@ def build_step(spec: FormulaSpec) -> tuple[Callable[..., StepResult], dict[str, 
         except (formula.FormulaError, TypeError, ValueError) as exc:
             return StepResult(frame=frame, notes=(f"{result.label}: {exc}",))
         got = np.broadcast_to(got, (frame.length(),)).copy()
+        used = ", ".join(f"{one.name} = {values[one.name]:.6g}" for one in given)
         return StepResult(
             frame=frame.with_columns({result.key: got}, {result.key: result.si_unit or "1"}),
-            notes=(f"{result.key} = {spec.expression}",),
+            notes=(f"{result.key} = {spec.expression}" + (f" ({used})" if used else ""),),
         )
 
     kwargs = {
         "id": spec.registry_key,
         "kind": "processing",
         "label": spec.label,
-        "params": (),
+        # 그 시험의 값은 단계의 입력으로 선다 — 처리 화면이 어디서 왔는지 보이고 바꿀 수 있게.
+        "params": tuple(
+            ParamSpec(
+                name=one.name,
+                label=one.label or one.name,
+                type="float",
+                unit=one.unit,
+                default=f"@{one.name}",
+                required=True,
+                help="그 시험의 시편 치수 · 시험 조건 · 재료 선언값. `@이름` 이면 그대로 "
+                "받는다.",
+            )
+            for one in given
+        ),
         "applies_to": spec.applies_to,
-        "requires_channels": spec.requires_channels
-        or tuple((one.name,) for one in spec.variables),
+        # **채널로 요구하는 것은 열뿐이다.** 시편 치수를 채널로 요구하면 어느 시험 종류에도
+        # 그런 채널이 없어 단계 목록에서 사라진다.
+        "requires_channels": spec.requires_channels or tuple((one.name,) for one in lines),
         "makes_columns": (result,),
         "order": spec.order,
         "version": spec.version,

@@ -83,6 +83,7 @@ from app.modules.materials.schemas import (
     RelocateSampleOut,
     RelocateTargetOut,
     SampleCreateRequest,
+    SampleDeletePlanOut,
     SampleOut,
     SampleUpdateRequest,
     SimilarNameOut,
@@ -90,6 +91,8 @@ from app.modules.materials.schemas import (
     SpecimenBulkUpdateOut,
     SpecimenBulkUpdateRequest,
     SpecimenCreateRequest,
+    SpecimenDeleteOut,
+    SpecimenDeleteRequest,
     SpecimenFacetsOut,
     SpecimenOut,
     SpecimenRelocateRequest,
@@ -2760,6 +2763,60 @@ def delete_sample(
     return Response(status_code=204)
 
 
+@samples_router.get("/{sample_id}/delete-plan", response_model=SampleDeletePlanOut)
+def sample_delete_plan(
+    sample_id: uuid.UUID,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> SampleDeletePlanOut:
+    """지우기 전에 **무엇이 함께 사라지는지** — 재료의 `delete-plan` 과 같다(2026-10-20)."""
+    sample = _get_sample(db, user, sample_id)
+    specimens, runs = services.sample_tree(db, sample)
+    return SampleDeletePlanOut(
+        sample_name=sample.record_name, specimens=len(specimens), test_runs=len(runs)
+    )
+
+
+@samples_router.post("/{sample_id}/delete-cascade", response_model=SampleDeletePlanOut)
+def delete_sample_cascade(
+    sample_id: uuid.UUID,
+    payload: CascadeDeleteRequest,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> SampleDeletePlanOut:
+    """시료를 **아래까지 통째로** 지운다 — 시험 → 시편 → 시료(2026-10-20).
+
+    `DELETE /samples/{id}` 는 시편이 남아 있으면 막는다(그 버튼이 시험까지 지우면 안 된다).
+    그런데 삭제 창은 그 사실을 적어 놓고도 확인을 받았고, 누르면 거절되어 **아무 일도 없었다**
+    (사용자 보고: 시험 데이터가 있다고 묻길래 지운다고 했는데 안 지워진다). 재료와 같은 「다른
+    문」 을 둔다 — 무엇이 사라지는지 먼저 보고(`delete-plan`), **시험은 따로 허락을 받는다.**
+    휴지통에서 시료를 되살리면 함께 지운 시편 · 시험이 같이 돌아온다.
+    """
+    sample = _get_sample(db, user, sample_id)
+    permissions.require_edit(db, user, sample, code="MNX-MATERIALS-0033")
+    # **허락을 먼저 본다.** 지우기 시작한 뒤에 막으면 절반만 지워진 시료가 남는다.
+    foreign = services.foreign_below_sample(db, permissions.editor(db, user), sample)
+    if foreign:
+        raise Conflict(
+            "MNX-MATERIALS-0035",
+            "아래에 남의 자료가 있어 통째로 지울 수 없습니다: "
+            + " · ".join(foreign)
+            + ". 그 사람이 지우거나 등록자를 넘겨받은 뒤, 또는 자료 관리자에게 부탁하세요.",
+        )
+    _, runs = services.sample_tree(db, sample)
+    if runs and not payload.include_test_runs:
+        raise Conflict(
+            "MNX-MATERIALS-0029",
+            f"시험 {len(runs)}건이 함께 지워집니다 — 곡선과 처리 결과가 거기 매달려 "
+            f"있습니다. 그래도 지우려면 시험까지 지우기를 함께 켜세요.",
+        )
+    done = services.delete_sample_tree(db, sample, actor=user, now=_now())
+    db.commit()
+    return SampleDeletePlanOut(
+        sample_name=sample.record_name, specimens=done.specimens, test_runs=done.test_runs
+    )
+
+
 # --- 시편 -------------------------------------------------------------------
 
 
@@ -3216,6 +3273,98 @@ def _relocate_plan_out(plan: relocation.Plan) -> RelocatePlanOut:
         ],
         records=plan.records,
         blocked=plan.blocked,
+    )
+
+
+def _deletable_specimens(
+    db: Session, user: User, specimen_ids: list[uuid.UUID], *, include_test_runs: bool
+) -> tuple[list[tuple[Specimen, list[TestRun]]], list[MaterialBlockedOut]]:
+    """고른 시편을 **지울 것과 못 지울 것으로** 가른다(2026-10-20).
+
+    미리 세기와 지우기가 **이 하나를** 지난다 — 두 벌이면 사람이 본 숫자와 지워지는 것이
+    어긋나고, 그때 누른 「예」 는 다른 것에 대한 대답이 된다. 막는 것은 셋이다: 고칠 권한
+    (MNX-MATERIALS-0034) · 아래에 남의 시험(ADR 0035 D4) · 시험 허락 없음. **하나가 막혀도
+    나머지는 지운다** — 200장 중 하나 때문에 199장을 다시 고르게 하지 않는다.
+    """
+    editor = permissions.editor(db, user)
+    runs_of = services.specimen_runs(db, specimen_ids)
+    ready: list[tuple[Specimen, list[TestRun]]] = []
+    blocked: list[MaterialBlockedOut] = []
+    # 같은 id 가 두 번 와도 한 번만 — 두 번 세면 본 숫자가 실제보다 커진다.
+    for specimen_id in dict.fromkeys(specimen_ids):
+        try:
+            specimen = _get_specimen(db, user, specimen_id)
+            # 가르기만 한다 — 남의 것을 고쳤다는 기록은 실제로 지우는 자리에서(`note_edit`).
+            permissions.require_edit(db, user, specimen, code="MNX-MATERIALS-0034", note=False)
+        except AppError as exc:
+            # **이름을 모르면 id 라도 준다.** 조용히 세지 않는 것이 요점이다.
+            blocked.append(MaterialBlockedOut(id=specimen_id, name=None, reason=exc.message))
+            continue
+        runs = runs_of.get(specimen.id, [])
+        foreign = services.foreign_below_specimen(db, editor, runs)
+        if foreign:
+            blocked.append(
+                MaterialBlockedOut(
+                    id=specimen.id,
+                    name=specimen.record_name,
+                    reason="아래에 남의 자료가 있습니다: " + " · ".join(foreign),
+                )
+            )
+            continue
+        if runs and not include_test_runs:
+            blocked.append(
+                MaterialBlockedOut(
+                    id=specimen.id,
+                    name=specimen.record_name,
+                    reason=f"시험 {len(runs)}건이 매달려 있습니다",
+                )
+            )
+            continue
+        ready.append((specimen, runs))
+    return ready, blocked
+
+
+@specimens_router.post("/delete-plan", response_model=SpecimenDeleteOut)
+def specimen_delete_plan(
+    payload: SpecimenDeleteRequest,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> SpecimenDeleteOut:
+    """고른 시편을 지우면 **무엇이 함께 사라지는가** — 쓰지 않는다(2026-10-20).
+
+    시험은 **허락했다고 치고** 센다 — 창이 「시험 N건도 함께 지웁니다」 칸을 띄우려면 그 수를
+    알아야 한다. 허락 없이 지우면 그 시편들은 이유와 함께 남는다(`delete`).
+    """
+    ready, blocked = _deletable_specimens(
+        db, user, payload.specimen_ids, include_test_runs=True
+    )
+    return SpecimenDeleteOut(
+        specimens=len(ready), test_runs=sum(len(runs) for _, runs in ready), blocked=blocked
+    )
+
+
+@specimens_router.post("/delete", response_model=SpecimenDeleteOut)
+def delete_specimens(
+    payload: SpecimenDeleteRequest,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> SpecimenDeleteOut:
+    """고른 시편을 **매달린 시험까지** 한꺼번에 지운다 — 시험은 따로 허락(2026-10-20).
+
+    사용자 보고: 잘못된 옵션으로 올린 시험을 치우려면 시험을 하나씩 지운 뒤에야 시편을 지울
+    수 있었다. 소프트 삭제이고 휴지통에서 되살린다. 돌려주는 것은 요청한 것이 아니라
+    **지운 것**이다. `DELETE` 가 아니라 `POST /delete` 인 이유는 시험 · 재료 쪽과 같다.
+    """
+    ready, blocked = _deletable_specimens(
+        db, user, payload.specimen_ids, include_test_runs=payload.include_test_runs
+    )
+    now = _now()
+    for specimen, runs in ready:
+        permissions.note_edit(db, user, specimen)
+        services.delete_specimen_tree(db, specimen, runs, actor=user, now=now)
+    db.commit()
+    return SpecimenDeleteOut(
+        specimens=len(ready), test_runs=sum(len(runs) for _, runs in ready), blocked=blocked
     )
 
 

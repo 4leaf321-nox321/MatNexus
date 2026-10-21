@@ -25,6 +25,28 @@ class ParseError(Exception):
     """
 
 
+#: 곡선 키 · 이름의 길이 한도 — `Curve.key`(50) · `Curve.label`(100) 칸과 같다. 넘으면 저장에서
+#: 막혀, 읽기는 끝났는데 시험이 「읽는 중」 에 남았다(2026-10-20).
+CURVE_KEY_MAX = 50
+CURVE_LABEL_MAX = 100
+
+
+def unique_key(want: str, taken: set[str] | frozenset[str], limit: int = CURVE_KEY_MAX) -> str:
+    """`taken` 에 없는 키 — 겹치면 `_2` · `_3` 을 붙이고, 길면 한도 안으로 자른다.
+
+    **조용히 덮지 않는다.** 같은 키가 둘이면 하나가 사라지거나(파일) 저장이 막힌다(DB).
+    """
+    base = want[:limit] or "unnamed"
+    if base not in taken:
+        return base
+    for number in range(2, 10_000):
+        tail = f"_{number}"
+        candidate = base[: limit - len(tail)] + tail
+        if candidate not in taken:
+            return candidate
+    raise ValueError(f"키를 더 만들 수 없습니다: {want}")
+
+
 @dataclass(frozen=True)
 class Channel:
     """곡선의 열 하나. 값은 이미 SI 다."""

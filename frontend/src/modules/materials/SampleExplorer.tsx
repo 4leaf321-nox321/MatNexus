@@ -15,6 +15,12 @@
  *
  * 줄 안에서 펼치는 것과 오른쪽에 띄우는 것 중 무엇이 나은지는 **써 봐야 안다.**
  * 그래서 지금은 고를 수 있게 두고, 한쪽으로 정해지면 다른 쪽을 걷는다.
+ *
+ * ## 시편을 골라 한꺼번에 지운다(2026-10-20)
+ *
+ * 사용자 보고: 잘못된 옵션으로 올린 시험을 치우려면 시험을 하나씩 지운 뒤에야 시편을 지울
+ * 수 있었다. 시편 표에 고르는 칸을 두고, 「실패가 있는 시편 고르기」 로 실패한 것을 한 번에
+ * 고른다. 지우는 창은 재료 · 시료와 같다 — 시험은 따로 허락받는다(`DeleteSpecimensDialog`).
  */
 
 import { Fragment, useEffect, useMemo, useState } from 'react'
@@ -44,7 +50,8 @@ import { materialsApi } from '@/modules/materials/api'
 import type { Sample, Specimen } from '@/modules/materials/api'
 import { SpecimenTests } from '@/modules/tests/SpecimenTests'
 import { SummaryImportDialog } from '@/modules/tests/SummaryImportDialog'
-import { ConfirmDialog } from '@/shared/components/ConfirmDialog'
+import { DeleteSampleDialog } from '@/modules/materials/DeleteSampleDialog'
+import { DeleteSpecimensDialog } from '@/modules/materials/DeleteSpecimensDialog'
 import { display, significant, toDisplay } from '@/shared/units'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { Badge } from '@/shared/components/ui/badge'
@@ -59,6 +66,7 @@ import {
   TableRow,
 } from '@/shared/components/ui/table'
 import { useResource } from '@/shared/hooks/useResource'
+import { useRowSelection } from '@/shared/hooks/useRowSelection'
 import { cn } from '@/shared/lib/utils'
 import { RecordName } from '@/shared/components/RecordName'
 
@@ -241,24 +249,21 @@ export function SampleExplorer({
   const [adding, setAdding] = useState(false)
   const [importing, setImporting] = useState(false)
   const [editingSpecimen, setEditingSpecimen] = useState<Specimen | null>(null)
-  const [removingSpecimen, setRemovingSpecimen] = useState<Specimen | null>(null)
-  const [busy, setBusy] = useState(false)
-  const [failure, setFailure] = useState<Error | null>(null)
+  /** 지울 시편 — 줄의 휴지통이면 하나, 고른 것을 지우면 여럿. 같은 창이다. */
+  const [removingSpecimens, setRemovingSpecimens] = useState<Specimen[]>([])
+  /** 지운 뒤 한 줄 — 무엇을 지웠고 무엇이 남았는지. */
+  const [notice, setNotice] = useState<string | null>(null)
 
-  async function run(job: () => Promise<unknown>, done: () => void) {
-    setBusy(true)
-    setFailure(null)
-    try {
-      await job()
-      done()
-      specimens.reload()
-      onChanged()
-    } catch (caught) {
-      setFailure(caught instanceof Error ? caught : new Error('처리하지 못했습니다.'))
-    } finally {
-      setBusy(false)
-    }
-  }
+  // **고르는 것은 이 시료의 시편이다.** 시료를 바꾸면 안 보이는 줄은 저절로 빠진다
+  // (`useRowSelection`) — 그래도 비워 둔다. 돌아왔을 때 옛 선택이 살아나면 헷갈린다.
+  const selection = useRowSelection(rows.map((one) => one.id))
+  const clearSelection = selection.clear
+  useEffect(() => {
+    clearSelection()
+    setNotice(null)
+  }, [active?.id, clearSelection])
+  /** 시험이 실패한 시편 — 잘못된 옵션으로 올린 것을 한 번에 고르는 자리(2026-10-20). */
+  const failing = rows.filter((one) => one.failed_count > 0)
 
   if (samples.length === 0) return null
 
@@ -355,7 +360,6 @@ export function SampleExplorer({
                 disabled={!canEdit(sample.access)}
                 onClick={() => {
                   setSampleId(sample.id)
-                  setFailure(null)
                   setRemovingSample(true)
                 }}
               >
@@ -432,6 +436,54 @@ export function SampleExplorer({
 
         <ErrorNotice error={specimens.error} className="mb-2" />
 
+        {/* **고른 게 있거나 실패한 시편이 있을 때만** 선다 — 늘 떠 있으면 표의 기본 상태가
+            「무언가 골라야 하는 화면」 으로 읽힌다. */}
+        {(selection.picked.size > 0 || failing.length > 0) && (
+          <div className="bg-muted/40 mb-2 flex flex-wrap items-center gap-2 rounded-md border px-3 py-1.5 text-sm">
+            {selection.picked.size > 0 && (
+              <span>
+                <b>{selection.picked.size}건</b> 선택
+              </span>
+            )}
+            {failing.length > 0 && (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 text-xs"
+                onClick={() => selection.replace(failing.map((one) => one.id))}
+                title="시험 읽기에 실패한 것이 있는 시편을 고릅니다"
+              >
+                <AlertTriangle className="text-destructive size-3.5" />
+                실패가 있는 시편 고르기 ({failing.length})
+              </Button>
+            )}
+            {selection.picked.size > 0 && (
+              <span className="ml-auto flex items-center gap-1">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 text-xs"
+                  onClick={() => selection.clear()}
+                >
+                  선택 해제
+                </Button>
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  className="h-7 text-xs"
+                  onClick={() => {
+                    setNotice(null)
+                    setRemovingSpecimens(rows.filter((one) => selection.picked.has(one.id)))
+                  }}
+                >
+                  <Trash2 className="size-3.5" />
+                  삭제
+                </Button>
+              </span>
+            )}
+          </div>
+        )}
+
         <div
           className={cn(
             'grid gap-4',
@@ -448,6 +500,17 @@ export function SampleExplorer({
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="w-8">
+                      <input
+                        type="checkbox"
+                        aria-label="시편 전체 선택"
+                        checked={selection.allOn}
+                        ref={(node) => {
+                          if (node) node.indeterminate = selection.someOn
+                        }}
+                        onChange={(event) => selection.setAll(event.target.checked)}
+                      />
+                    </TableHead>
                     <TableHead className="w-8" />
                     <TableHead className="w-24">번호</TableHead>
                     {/* **시편이 가장 넓다.** 이름·규격·치수가 여기 걸리고, 나머지는
@@ -489,6 +552,17 @@ export function SampleExplorer({
                             aimed && 'ring-primary/60 ring-2 ring-inset'
                           )}
                         >
+                          {/* 고르는 칸은 줄을 펼치지 않는다 — 고르려다 시험이 펼쳐지면 표가 출렁인다. */}
+                          <TableCell onClick={(event) => event.stopPropagation()}>
+                            <input
+                              type="checkbox"
+                              aria-label={`${specimen.record_name} 선택`}
+                              checked={selection.picked.has(specimen.id)}
+                              // **`onClick` 이다** — `onChange` 에는 Shift 가 안 실린다.
+                              onClick={(event) => selection.toggle(specimen.id, event)}
+                              onChange={() => {}}
+                            />
+                          </TableCell>
                           <TableCell>
                             {/* 흐리게 하는 것은 **값이 아닌 것**뿐이다 — 이건
                                 펼침 표시라 아이콘에 직접 준다. 칸에 주면 값
@@ -545,8 +619,8 @@ export function SampleExplorer({
                               title={lockedTitle(specimen.access) ?? '시편 삭제'}
                               disabled={!canEdit(specimen.access)}
                               onClick={() => {
-                                setFailure(null)
-                                setRemovingSpecimen(specimen)
+                                setNotice(null)
+                                setRemovingSpecimens([specimen])
                               }}
                             >
                               <Trash2 className="size-3.5" />
@@ -556,10 +630,14 @@ export function SampleExplorer({
                         </TableRow>
                         {mode === 'inline' && open && (
                           <TableRow>
-                            <TableCell colSpan={7} className="bg-muted/30 p-3">
+                            <TableCell colSpan={9} className="bg-muted/30 p-3">
                               <SpecimenTests
                                 specimenId={specimen.id}
                                 specimenName={specimen.record_name}
+                                onChanged={() => {
+                                  specimens.reload()
+                                  onChanged()
+                                }}
                               />
                             </TableCell>
                           </TableRow>
@@ -608,7 +686,14 @@ export function SampleExplorer({
                 </span>
               </div>
               {picked ? (
-                <SpecimenTests specimenId={picked.id} specimenName={picked.record_name} />
+                <SpecimenTests
+                  specimenId={picked.id}
+                  specimenName={picked.record_name}
+                  onChanged={() => {
+                    specimens.reload()
+                    onChanged()
+                  }}
+                />
               ) : (
                 <p className="text-muted-foreground text-sm">
                   왼쪽 표에서 시편을 고르면 그 시험이 여기 뜹니다. 곡선 없이 요약값만
@@ -625,10 +710,7 @@ export function SampleExplorer({
           </p>
         )}
 
-        {/* 지우기 창이 열려 있으면 그 안에 선다 — 여기는 창 뒤에 가려진다. */}
-        {failure && !removingSample && !removingSpecimen && (
-          <p className="text-destructive mt-2 text-xs">{failure.message}</p>
-        )}
+        {notice && <p className="mt-2 text-xs">{notice}</p>}
       </div>
 
       {active && (
@@ -648,38 +730,21 @@ export function SampleExplorer({
             onClose={() => setMill(false)}
             onSaved={onChanged}
           />
-          <ConfirmDialog
+          {/* **시편 · 시험이 달려 있어도 지운다 — 물어본 뒤에**(2026-10-20). 전에는 「시편이 남아
+              있어 지울 수 없습니다」 를 적어 놓고도 확인을 받았고, 누르면 서버가 거절해 아무 일도
+              없었다. 시험이 있으면 그 칸을 따로 켜야 지운다. */}
+          <DeleteSampleDialog
+            sampleId={active.id}
+            sampleName={
+              active.lot_no ? `${active.record_name} (로트 ${active.lot_no})` : active.record_name
+            }
             open={removingSample}
-            busy={busy}
-            title="이 시료를 지웁니다"
-            body={
-              <>
-                <p>
-                  <b className="font-mono">{active.record_name}</b>
-                  {active.lot_no ? ` (로트 ${active.lot_no})` : ''} 이 사라집니다.
-                </p>
-                {/* **무엇이 막는지 미리 말한다.** 눌러 보고 오류로 아는 것보다 낫다. */}
-                {active.specimen_count > 0 && (
-                  <p className="text-destructive mt-2 text-xs">
-                    시편 {active.specimen_count}건이 남아 있어 지울 수 없습니다. 시편을
-                    먼저 지우세요.
-                  </p>
-                )}
-                {failure && <p className="text-destructive mt-2 text-xs">{failure.message}</p>}
-              </>
-            }
-            onConfirm={() =>
-              void run(
-                () => materialsApi.removeSample(active.id),
-                () => {
-                  setRemovingSample(false)
-                  setSampleId(null)
-                }
-              )
-            }
-            onClose={() => {
+            onClose={() => setRemovingSample(false)}
+            onDeleted={() => {
               setRemovingSample(false)
-              setFailure(null)
+              setSampleId(null)
+              specimens.reload()
+              onChanged()
             }}
           />
           <NewSpecimenDialog
@@ -719,37 +784,26 @@ export function SampleExplorer({
         />
       )}
 
-      <ConfirmDialog
-        open={removingSpecimen !== null}
-        busy={busy}
-        title="이 시편을 지웁니다"
-        body={
-          <>
-            <p>
-              <b className="font-mono">{removingSpecimen?.record_name}</b> 이 사라집니다.
-            </p>
-            {/* **서버가 하는 일을 그대로 말한다**(2026-10-04). 전에는 「시험이 함께 가려집니다」
-                라고 했는데, 서버는 시험이 남은 시편을 지우지 않는다(409). 사람은 함께 지워질
-                줄 알고 눌렀다가, 창 뒤에 가려진 오류만 받았다. */}
-            {(removingSpecimen?.test_run_count ?? 0) > 0 && (
-              <p className="text-destructive mt-2 text-xs">
-                시험 {removingSpecimen?.test_run_count}건이 남아 있어 지울 수 없습니다. 시험을
-                먼저 지우세요.
-              </p>
-            )}
-            {failure && <p className="text-destructive mt-2 text-xs">{failure.message}</p>}
-          </>
-        }
-        onConfirm={() =>
-          removingSpecimen &&
-          void run(
-            () => materialsApi.removeSpecimen(removingSpecimen.id),
-            () => setRemovingSpecimen(null)
+      {/* **시험이 매달려 있어도 지운다 — 물어본 뒤에**(2026-10-20). 전에는 「시험이 남아 있어
+          지울 수 없습니다. 시험을 먼저 지우세요」 였다 — 잘못 올린 시험 열 건이면 열 번 지우고
+          나서야 시편을 지웠다. 하나든 여럿이든 같은 창이다. */}
+      <DeleteSpecimensDialog
+        specimens={removingSpecimens}
+        open={removingSpecimens.length > 0}
+        onClose={() => setRemovingSpecimens([])}
+        onDeleted={(done) => {
+          setRemovingSpecimens([])
+          selection.clear()
+          // 펼쳐 둔 시편이 사라졌으면 닫는다 — 안 그러면 없는 시편의 시험 칸이 남는다.
+          setSpecimenId(null)
+          setNotice(
+            `시편 ${done.specimens}개${
+              done.test_runs > 0 ? `(시험 ${done.test_runs}건)` : ''
+            }를 지웠습니다.` +
+              (done.blocked.length > 0 ? ` 못 지운 것 ${done.blocked.length}개는 남았습니다.` : '')
           )
-        }
-        onClose={() => {
-          setRemovingSpecimen(null)
-          setFailure(null)
+          specimens.reload()
+          onChanged()
         }}
       />
     </div>

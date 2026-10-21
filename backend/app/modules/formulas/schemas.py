@@ -127,6 +127,10 @@ class FormulaVocabularyOut(BaseModel):
 
     columns: list[dict[str, str]]
     scalars: list[dict[str, str]]
+    inputs: list[dict[str, str]] = []
+    """**그 시험이 들고 오는 값** — `specimen_*`(시편 치수) · `condition_*`(시험 조건)
+    (2026-10-20).
+    스칼라 식에서도, 열 식에서도 쓴다 — 열 식에서는 점마다 같은 수 하나다."""
     blocks: list[dict[str, str]]
     functions: list[str]
     constants: list[str]

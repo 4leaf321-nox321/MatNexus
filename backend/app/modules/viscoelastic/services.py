@@ -51,11 +51,14 @@ def _channel(columns: dict[str, np.ndarray], *names: str) -> np.ndarray | None:
 
 def sweeps_of(
     db: Session, run: TestRun, curve_keys: list[str] | None = None
-) -> tuple[list[viscoelastic.Sweep], list[str], list[str]]:
-    """시험의 측정 곡선을 스윕으로 바꾼다. `(스윕, 쓴 곡선 키, 경고)`.
+) -> tuple[list[viscoelastic.Sweep], list[str], list[str], str]:
+    """시험의 측정 곡선을 스윕으로 바꾼다. `(스윕, 쓴 곡선 키, 경고, 탄성률 기준 E|G)`.
 
     **장비가 계산한 곡선(`derived`)은 안 쓴다.** 마스터커브에 또 마스터커브를
     씌우게 된다 — 그것을 막으려고 취입 때 갈라 둔 것이다.
+
+    **저장 탄성률은 E′ 채널이든 G′ 채널이든 받는다**(2026-10-20, `MODULUS_PAIRS`). 한 시험에
+    둘이 섞이면 막는다 — E 와 G 를 한 곡선으로 겹치면 어느 쪽도 아니다.
     """
     available = curvedata.curves_of(db, run.id)
     if not available:
@@ -77,16 +80,26 @@ def sweeps_of(
     sweeps: list[viscoelastic.Sweep] = []
     used: list[str] = []
     warnings: list[str] = []
+    bases: set[str] = set()
     for curve in measured:
         frame, _ = curvedata.load_frame(db, run, curve.key)
         columns = frame.columns
         temperature = _channel(columns, "temperature")
-        storage = _channel(columns, "storage_modulus")
+        storage = loss = None
+        basis = ""
+        for storage_key, loss_key, kind in viscoelastic.MODULUS_PAIRS:
+            storage = _channel(columns, storage_key)
+            if storage is not None:
+                loss = _channel(columns, loss_key)
+                basis = kind
+                break
         if temperature is None or storage is None:
             warnings.append(
-                f"'{curve.label or curve.key}' 에 온도나 저장 탄성률이 없어 뺐습니다."
+                f"'{curve.label or curve.key}' 에 온도나 저장 탄성률(E′ 또는 G′)이 없어 "
+                "뺐습니다."
             )
             continue
+        bases.add(basis)
 
         frequency = _channel(columns, "frequency")
         if frequency is None:
@@ -106,7 +119,6 @@ def sweeps_of(
             )
 
         order = np.argsort(frequency)
-        loss = _channel(columns, "loss_modulus")
         sweeps.append(
             viscoelastic.Sweep(
                 temperature_k=float(np.median(temperature)),
@@ -117,13 +129,30 @@ def sweeps_of(
         )
         used.append(curve.key)
 
-    if len(sweeps) < 2:
+    if len(bases) > 1:
         raise AppError(
-            "MNX-VISCOELASTIC-0003",
-            f"겹칠 수 있는 온도 스윕이 {len(sweeps)}개뿐입니다. 최소 2개가 필요합니다.",
+            "MNX-VISCOELASTIC-0010",
+            "한 시험에 E′(인장 · 굽힘) 곡선과 G′(전단) 곡선이 섞여 있습니다 — 둘을 겹치면 "
+            "어느 쪽도 아닙니다. 형식 정의의 열 매핑을 확인하세요.",
             status=422,
         )
-    return sweeps, used, warnings
+    if len(sweeps) < 2:
+        # **왜 빠졌는지를 함께 말한다**(2026-10-20) — 전에는 곡선마다 모은 까닭을 버리고
+        # 「0개」 만 말해, 채널 이름이 틀린 것인지 온도가 없는 것인지 화면에서 알 수 없었다.
+        reasons = " ".join(warnings[:3])
+        raise AppError(
+            "MNX-VISCOELASTIC-0003",
+            f"겹칠 수 있는 온도 스윕이 {len(sweeps)}개뿐입니다. 최소 2개가 필요합니다."
+            + (f" {reasons}" if reasons else ""),
+            status=422,
+        )
+    basis = bases.pop() if bases else "E"
+    if basis == "G":
+        warnings.append(
+            "전단 채널(G′ · G″)로 잰 곡선입니다 — 카드에 담을 때 E = 2(1+ν)G 로 옮겨 담고, "
+            "덱이 같은 ν 로 G 를 다시 만듭니다(ADR 0057)."
+        )
+    return sweeps, used, warnings, basis
 
 
 def build_master_curve(
@@ -137,7 +166,8 @@ def build_master_curve(
     created_by_id: uuid.UUID | None = None,
 ) -> MasterCurve:
     """겹쳐서 저장한다. **커밋은 호출부가 한다.**"""
-    sweeps, used, warnings = sweeps_of(db, run, curve_keys)
+    sweeps, used, warnings, basis = sweeps_of(db, run, curve_keys)
+    shear = basis == "G"
     try:
         curve = viscoelastic.master_curve(
             sweeps,
@@ -153,9 +183,11 @@ def build_master_curve(
         Channel(
             key="frequency", label="주파수", si_unit="Hz", values=tuple(curve.frequency_hz)
         ),
+        # 키는 E/G 와 무관하게 같다 — 마스터커브를 읽는 쪽(Prony · 묶음)이 한 이름으로 읽는다.
+        # 무엇을 잰 것인지는 이름표와 기록(`notes`)이 말한다.
         Channel(
             key="storage_modulus",
-            label="저장 탄성률",
+            label="저장 전단 탄성률 G′" if shear else "저장 탄성률",
             si_unit="Pa",
             values=tuple(curve.storage_pa),
         ),
@@ -164,7 +196,7 @@ def build_master_curve(
         channels.append(
             Channel(
                 key="loss_modulus",
-                label="손실 탄성률",
+                label="손실 전단 탄성률 G″" if shear else "손실 탄성률",
                 si_unit="Pa",
                 values=tuple(curve.loss_pa),
             )
@@ -323,14 +355,28 @@ IMPORT_FREQUENCY = ("frequency", "frequency_hz")
 #: 전에는 위 목록에 섞여 있어 그대로 Hz 로 저장됐고, Prony 완화시간이 2π 배 짧게 나왔다
 #: (측정 스윕 쪽 `sweeps_of` 는 이미 나누고 있었다).
 IMPORT_ANGULAR = ("angular_frequency", "omega")
-IMPORT_STORAGE = ("storage_modulus", "storage_pa", "e_prime", "g_prime")
+#: 전단 채널(`shear_…`)도 받는다(2026-10-20). 무엇을 잰 것인지는 시험 종류의 채널이 말한다 —
+#: 카드가 그것으로 E 로 옮긴다(`curvedata.measures_shear_channels`).
+IMPORT_STORAGE = (
+    "storage_modulus",
+    "storage_pa",
+    "e_prime",
+    "g_prime",
+    "shear_storage_modulus",
+)
 #: 손실 탄성률. **없어도 받지만, 있으면 반드시 함께 담는다.**
 #:
 #: 묶음 Prony 는 저장·손실을 함께 맞춘다 — 손실이 없는 마스터커브는 글로벌 피팅에서
 #: 거절된다(`MNX-GROUPING-0006`). 가져온 곡선이 그 자리에서 막히면 「가져오기는
 #: 됐는데 묶이지가 않는다」 가 되고, 원인이 곡선 안에 있어 화면에서 안 보인다
 #: (실측 2026-08-31: 자동 등록을 켜자 묶음 시험 여섯이 이 오류로 떨어졌다).
-IMPORT_LOSS = ("loss_modulus", "loss_pa", "e_double_prime", "g_double_prime")
+IMPORT_LOSS = (
+    "loss_modulus",
+    "loss_pa",
+    "e_double_prime",
+    "g_double_prime",
+    "shear_loss_modulus",
+)
 
 
 def mark_primary(db: Session, curve: MasterCurve) -> MasterCurve:

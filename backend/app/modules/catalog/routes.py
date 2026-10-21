@@ -59,12 +59,14 @@ from app.modules.catalog.schemas import (
     CatalogPropertyDeprecate,
     CatalogPropertyMigrateIn,
     CatalogPropertyMigrateOut,
+    CatalogPropertyPreviewOut,
     CatalogPropertyUpdate,
     CatalogSourceOut,
     CatalogSummaryOut,
     CatalogValueCreate,
     CatalogValueCreatedOut,
     CatalogValueOut,
+    CatalogValuePreviewOut,
     DeckBuildIn,
     DeckBuiltOut,
     DeckCandidateOut,
@@ -1310,6 +1312,33 @@ def undeprecate_property(
     return _definition_out(db, definition)
 
 
+@router.post("/properties/preview", response_model=CatalogPropertyPreviewOut)
+def preview_property(
+    payload: CatalogPropertyCreate,
+    user: User = Depends(require_system_admin),
+    db: Session = Depends(get_db),
+) -> CatalogPropertyPreviewOut:
+    """만들기 전에 **만들 때와 같은 검사**를 돌린다(2026-10-20) — 생성 코드를 그대로 돌리고
+    되돌린다.
+
+    검사를 두 벌로 두면 언젠가 어긋난다. AI 의 미리보기가 서버에 묻지 않아, 미리보기는 통과하고
+    실제 생성에서 단위로 거절되는 일이 있었다(사용자 보고).
+    """
+    try:
+        definition = contribute.create_property(db, payload, user)
+        return CatalogPropertyPreviewOut(
+            key=definition.key,
+            name=definition.name,
+            domain=definition.domain,
+            si_unit=definition.si_unit,
+            scale=bool(definition.si_unit)
+            and units.canonical(definition.si_unit or "") is None,
+            symbol=definition.symbol,
+        )
+    finally:
+        db.rollback()
+
+
 @router.post("/properties", response_model=CatalogDefinitionOut, status_code=201)
 def create_property(
     payload: CatalogPropertyCreate,
@@ -1384,6 +1413,33 @@ def delete_catalog_material(
     contribute.delete_material(db, material_id, user)
     db.commit()
     return Response(status_code=204)
+
+
+@router.post("/materials/{material_id}/values/preview", response_model=CatalogValuePreviewOut)
+def preview_catalog_value(
+    material_id: uuid.UUID,
+    payload: CatalogValueCreate,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> CatalogValuePreviewOut:
+    """넣기 전에 **넣을 때와 같은 검사**를 돌린다(2026-10-20) — 단위 환산 · 눈금 일치 · 출처 ·
+    등급. 넣는 코드를 그대로 돌리고 되돌린다(두 벌이면 어긋난다)."""
+    try:
+        row, converted = contribute.create_value(db, material_id, payload, user)
+        definition = db.scalar(
+            select(CatalogDefinition).where(CatalogDefinition.key == row.property_key)
+        )
+        return CatalogValuePreviewOut(
+            property_key=row.property_key,
+            property_name=definition.name if definition else row.property_key,
+            value_num=row.value_num,
+            value_text=row.value_text,
+            unit=row.unit,
+            uncertainty=row.uncertainty,
+            converted=converted,
+        )
+    finally:
+        db.rollback()
 
 
 @router.post(

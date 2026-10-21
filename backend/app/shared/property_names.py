@@ -488,6 +488,7 @@ _SCALE_HINTS = (
     ("rockwell", "HR"),
     ("knoop", "HK"),
     ("shore", "Shore"),
+    ("irhd", "IRHD"),
 )
 
 

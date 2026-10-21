@@ -163,6 +163,20 @@ def engineering(frame: Frame, options: dict[str, Any]) -> StepResult:
                 si_unit="1",
                 dimension="dimensionless",
             ),
+            # **잰 배치를 결과에 남긴다**(2026-10-20) — 하중/처짐 기울기(강성)는 이
+            # 배치에서만 뜻이 있다. 묶음이 구조 강성 블록을 만들 때 시편마다 같은 배치였는지
+            # 이것으로 본다.
+            *(
+                Scalar(
+                    key=key, label=label, value=float(value), si_unit="m", dimension="length"
+                )
+                for key, label, value in (
+                    ("support_span", "지지 스팬", support),
+                    ("load_span", "하중 스팬", load_span or 0.0),
+                    ("beam_width", "시편 폭", width),
+                    ("beam_thickness", "시편 두께", thickness),
+                )
+            ),
         ),
     )
 
@@ -330,6 +344,7 @@ def equivalent_modulus(members: list[Member]) -> GroupOutcome:
     if strengths:
         out["flexural_strength"] = float(np.mean(strengths))
     warnings: list[str] = []
+    out.update(_stiffness(members, warnings))
     if out["flexural_modulus_cv"] > 0.1:
         warnings.append(
             f"굽힘 탄성률의 변동계수가 {out['flexural_modulus_cv']:.0%} 입니다 — 시편 치수 · "
@@ -343,6 +358,62 @@ def equivalent_modulus(members: list[Member]) -> GroupOutcome:
         warnings=warnings,
         used=[label for label, _ in moduli],
     )
+
+
+#: 구조 강성을 평균해도 되는 배치 차이 — 스팬 · 폭 · 두께가 이보다 다르면 강성이 다른 부품이다.
+SAME_LAYOUT = 0.01
+#: 배치 칸 — `engineering` 이 결과에 남기는 이름.
+LAYOUT = ("support_span", "load_span", "beam_width", "beam_thickness")
+
+
+def _stiffness(members: Sequence[Member], warnings: list[str]) -> dict[str, float]:
+    """시편마다의 하중/처짐 기울기(`flexural_stiffness`) → **같은 배치일 때만**
+    평균(2026-10-20).
+
+    강성은 재료가 아니라 **그 부품 · 그 배치**의 값이다 — 스팬이 두 배면 3점 강성은 1/8 이
+    된다.
+    배치가 다르면 평균하지 않고 말한다(등가 E 는 배치를 걷어 낸 값이라 그대로 평균한다).
+    """
+    rows = [
+        one
+        for one in members
+        if isinstance(one.values.get("flexural_stiffness"), int | float)
+        and float(one.values["flexural_stiffness"]) > 0
+    ]
+    if not rows:
+        return {}
+    layout: dict[str, float] = {}
+    for key in LAYOUT:
+        found = [
+            float(one.values[key])
+            for one in rows
+            if isinstance(one.values.get(key), int | float)
+        ]
+        if len(found) != len(rows):
+            warnings.append(
+                "배치(스팬 · 폭 · 두께)를 모르는 결과가 있어 구조 강성을 내지 않았습니다 — "
+                "굽힘 응력-변형률 단계를 다시 돌린 결과를 채택하세요."
+            )
+            return {}
+        top, bottom = max(found), min(found)
+        if top > 0 and (top - bottom) / top > SAME_LAYOUT:
+            warnings.append(
+                f"시편마다 배치가 다릅니다({key} {bottom:.4g} ~ {top:.4g} m) — 강성은 "
+                "배치마다 다른 값이라 구조 강성을 평균하지 않았습니다. 같은 배치끼리 묶으세요."
+            )
+            return {}
+        layout[key] = float(np.mean(found))
+    stiffness = np.array([float(one.values["flexural_stiffness"]) for one in rows])
+    mean = float(np.mean(stiffness))
+    spread = float(np.std(stiffness, ddof=1)) if len(stiffness) > 1 else 0.0
+    return {
+        "flexural_stiffness": mean,
+        "flexural_stiffness_cv": spread / mean if mean > 0 else 0.0,
+        # 강성이 있는 시편만 센다 — 묶음의 `sample_count` 는 굽힘 탄성률이 있는 시편 수라,
+        # 다섯 중 둘만 평균해도 블록이 「5」 라고 적었다(2026-10-20 검토).
+        "flexural_stiffness_count": float(len(rows)),
+        **layout,
+    }
 
 
 def card_blocks(
@@ -365,10 +436,34 @@ def card_blocks(
         "직사각형 단면을 균질한 보로 본 값이라 인장 탄성계수와 다를 수 있습니다"
         "(적층 · 이방성)."
     )
-    return {
+    blocks: dict[str, dict[str, Any]] = {
         "elastic": {
             "values": {"youngs_modulus": float(modulus_value)},
             "notes": [note, *warnings],
         },
         "reference": {"values": reference},
     }
+    stiffness = values.get("flexural_stiffness")
+    if isinstance(stiffness, int | float) and stiffness > 0:
+        # **부품의 강성을 그 배치와 함께 싣는다**(2026-10-20) — 칩 · 모듈처럼 균질한 보가 아닌
+        # 것은 등가 E 보다 잰 강성이 정직하다. 배치가 없으면 그 숫자는 아무 데도 못 옮긴다.
+        load_span = float(values.get("load_span", 0.0))
+        blocks["structural_stiffness"] = {
+            "values": {
+                "stiffness": float(stiffness),
+                "stiffness_cv": float(values.get("flexural_stiffness_cv", 0.0)),
+                "support_span": float(values.get("support_span", 0.0)),
+                "load_span": load_span,
+                "width": float(values.get("beam_width", 0.0)),
+                "thickness": float(values.get("beam_thickness", 0.0)),
+                "sample_count": float(
+                    values.get("flexural_stiffness_count", values.get("sample_count", 0.0))
+                ),
+                "loading": "4점 굽힘" if load_span > 0 else "3점 굽힘",
+            },
+            "notes": [
+                "하중/처짐 기울기 — 이 배치(스팬 · 폭 · 두께)에서만 그 값입니다. 다른 "
+                "스팬으로 옮기려면 보 식(3점: k = 48EI/L³)으로 바꾸세요."
+            ],
+        }
+    return blocks

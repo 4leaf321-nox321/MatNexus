@@ -330,6 +330,7 @@ def detect_test_type(
         structure = None
 
     if structure is not None:
+        found: list[FormatProfile] = []
         for candidate in candidates:
             if not profiles.matches(
                 candidate.definition, filename=filename, structure=structure
@@ -338,13 +339,28 @@ def detect_test_type(
             test_type = db.get(TestType, candidate.test_type_id)
             if test_type is None or not test_type.is_active:
                 continue
+            found.append(candidate)
+        if found:
+            first = found[0]
+            test_type = db.get(TestType, first.test_type_id)
+            assert test_type is not None
+            # **같은 종류에 맞는 형식이 여럿이면 말한다**(2026-10-20) — 자동은 우선순위가 높은
+            # 것을 고르는데, 그것이 틀린 형식이면 곡선이 하나로 읽힌다(사용자 보고). 화면이
+            # 후보를 보이고 사람이 고르게 한다.
+            same = [one.key for one in found if one.test_type_id == first.test_type_id]
             return DetectOut(
                 filename=filename,
                 test_type_key=test_type.key,
                 test_type_label=test_type.label,
-                profile_key=candidate.key,
+                profile_key=first.key,
+                profile_candidates=same,
                 source="profile",
-                reason=f"'{candidate.label}' 프로파일의 지문이 맞습니다.",
+                reason=(
+                    f"'{first.label}' 프로파일의 지문이 맞습니다."
+                    if len(same) == 1
+                    else f"맞는 형식이 {len(same)}개입니다 — 우선순위가 높은 "
+                    f"'{first.label}' 를 골랐습니다. 다르면 형식을 직접 고르세요."
+                ),
             )
 
     # 프로파일이 없을 때만 확장자로 내려간다. 파서가 있는 종류는 이 길로 잡힌다.
@@ -934,13 +950,24 @@ def upload_test_run(
     instrument: str | None = Form(default=None),
     division: str | None = Form(default=None),
     note: str | None = Form(default=None),
+    profile_key: str | None = Form(
+        default=None,
+        description="읽을 형식(프로파일) key. 비우면 지문으로 자동으로 고른다",
+    ),
     file: UploadFile = File(...),
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> TestRunOut:
-    """원본을 받아 저장하고 파싱을 큐에 넣는다. 202 를 준다 — 아직 안 끝났다."""
+    """원본을 받아 저장하고 파싱을 큐에 넣는다. 202 를 준다 — 아직 안 끝났다.
+
+    **읽을 형식을 처음부터 고를 수 있다**(`profile_key`, 2026-10-20). 사용자 보고: 맞는 형식이
+    둘 이상인 파일을 자동이 다른 형식으로 골라 곡선 하나로 읽혔고, 올릴 때 고를 방법이
+    없어 잘못 읽힌 뒤에 「다시 읽기」 를 해야 했다. 고르면 「다시 읽기」 의 고정과 같다.
+    """
     specimen = permissions.visible_specimen(db, user, specimen_id)
     definition = services.get_test_type(db, test_type)
+    # **파일을 저장하기 전에 본다** — 틀린 형식이면 시험도 파일도 남기지 않는다.
+    pinned = formats.chosen_profile(db, definition.id, profile_key) if profile_key else None
     raw_conditions = _json_object(conditions, "조건")
     # 화면은 사람이 쓰는 단위로 입력을 받는다(예: mm/min). 그 단위를 함께 보내지
     # 않으면 서버가 정의의 si_unit(m/s)으로 해석해 **6만 배** 어긋난 값을 저장한다.
@@ -978,6 +1005,7 @@ def upload_test_run(
             note=note,
             status="uploaded",
             registered_by_id=user.id,
+            parse_profile_id=pinned.id if pinned else None,
         )
         # 장비 기준정보(ADR 0010). 'Zwick Z100' 과 'zwick z100' 이 갈리면 장비별
         # 비교가 무의미해진다.
@@ -1040,7 +1068,11 @@ def upload_test_run(
         target_id=run.id,
         target_label=run.record_name,
         workspace_id=run.workspace_id,
-        changes={"source_filename": run.source_filename, "test_type": test_type},
+        changes={
+            "source_filename": run.source_filename,
+            "test_type": test_type,
+            **({"profile_key": pinned.key} if pinned else {}),
+        },
     )
     # 도메인 변경과 같은 트랜잭션에 넣는다 — 따로 커밋하면 "시험은 생겼는데
     # 파싱 작업은 없는" 상태가 생긴다.
@@ -2090,21 +2122,8 @@ def reparse(
     given = payload is not None and "profile_key" in payload.model_fields_set
     key = payload.profile_key if payload else None
     if given and key:
-        # **이 시험 종류의 것만.** 다른 종류의 프로파일로 읽으면 채널 이름이
-        # 안 맞아 어차피 실패하는데, 그 실패는 「형식이 틀렸다」 로 안 읽힌다.
-        profile = db.scalar(
-            formats.visible_profiles(db).where(
-                FormatProfile.key == key,
-                FormatProfile.test_type_id == run.test_type_id,
-            )
-        )
-        if profile is None:
-            raise AppError(
-                "MNX-TESTS-0022",
-                f"그 시험 종류로 쓸 수 있는 형식이 아닙니다: {key}",
-                status=422,
-            )
-        run.parse_profile_id = profile.id
+        # **이 시험 종류의 것, 쓰는 중인 것만** — 업로드와 같은 판정(`chosen_profile`).
+        run.parse_profile_id = formats.chosen_profile(db, run.test_type_id, key).id
     elif given:
         # 명시적으로 비웠다 — 자동으로 되돌린다.
         run.parse_profile_id = None
@@ -2112,8 +2131,20 @@ def reparse(
     run.status = "uploaded"
     run.parse_error = None
     queue.enqueue(db, kind=kinds.TESTS_PARSE_UPLOAD, payload={"test_run_id": str(run.id)})
-    db.commit()
     pinned = db.get(FormatProfile, run.parse_profile_id) if run.parse_profile_id else None
+    # **AI 가 다시 읽게 했으면 남긴다**(2026-10-20, MCP `reparse_test_run`) — 곡선이 새로 서고
+    # 형식 고정이 바뀌는 일이다. 화면에서 한 것은 전처럼 안 남는다.
+    audit.record_by_client(
+        db,
+        action=audit.TEST_RUN_REPARSED_BY_CLIENT,
+        actor=user,
+        target_table="test_runs",
+        target_id=run.id,
+        target_label=run.record_name,
+        workspace_id=run.workspace_id,
+        changes={"profile_key": pinned.key if pinned else None},
+    )
+    db.commit()
     return ReparseOut(
         status="queued",
         message=(

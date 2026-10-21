@@ -75,8 +75,8 @@ SI_UNITS = {
     #
     # **차원 이름은 물리량으로 짓는다.** 차원이 같아도(N/m 과 J/m² 는 같다) 뜻이 다른
     # 물성은 다른 이름을 준다 — 잇지 못하는 쪽이 엉뚱한 것끼리 이어지는 쪽보다 낫다.
-    # 눈금(HV·Shore·HR·HBW·HK·GU)은 **넣지 않는다** — 환산할 수 없는 것을 표에 넣으면
-    # 환산할 수 있는 척하게 된다.
+    # 눈금(HV·Shore·HR·HBW·HK·GU · IRHD)은 **넣지 않는다** — 환산할 수 없는 것을 표에 넣으면
+    # 환산할 수 있는 척하게 된다. 눈금은 따로 적는다(`SCALES`).
     "line_force": "N/m",  # 선하중 (박리·택)
     "energy_per_area": "J/m2",  # 단위면적당 에너지
     "resistivity": "ohm.m",  # 체적저항률
@@ -428,6 +428,31 @@ def _case_index() -> dict[str, str]:
 
 
 CASE_INDEX = _case_index()
+
+
+#: **눈금** — 단위가 아니라 시험의 읽음이다(2026-10-20). 단위표(`UNITS`)에 넣지 않는다 —
+#: 넣으면 환산할 수 있는 척하게 된다(`HV 200` 과 `HB 200` 은 다른 값이고 환산식이 없다). 문헌
+#: 원본(MaterialTwin)이 정의의 단위 자리에 이 기호를 그대로 들고 있고, 사내 물성 항목은 「시험
+#: 척도」(`scales`)로 고른다. 여기 목록은 **새 정의를 만들 때 받아 줄 눈금 기호**다 — 원본에
+#: 있는 여덟과, 고무 경도 IRHD(사용자 보고: 쇼어는 만들어지는데 IRHD 만 「단위표에
+#: 없습니다」 로 거절돼, 단위 1 에 기호 IRHD 로 만들 수밖에 없었다).
+SCALES: tuple[str, ...] = (
+    "HV",
+    "HBW",
+    "HK",
+    "HR",
+    "ShoreA",
+    "ShoreD",
+    "ShoreOO",
+    "IRHD",
+    "GU",
+)
+
+
+def scale(symbol: str) -> str | None:
+    """눈금 기호의 정본 표기(`shore a` · `ShoreA` → `ShoreA`). 눈금이 아니면 `None`."""
+    key = loose_key(symbol)
+    return next((one for one in SCALES if loose_key(one) == key), None)
 
 
 def loose_key(symbol: str) -> str:

@@ -42,6 +42,12 @@ CARD_RESTORED = "card.restored"
 WORKSPACE_MERGED = "workspace.merged"
 CARD_DELETED = "card.deleted"
 MATERIAL_DELETED = "material.deleted"
+#: 시료를 지웠다 — 아래 시편 · 시험까지 함께 지웠으면 그 수를 남긴다(2026-10-20). 시험 수십
+#: 건과 함께 사라진 시료는 「그 시료 어디 갔나」 를 반드시 묻는다.
+SAMPLE_DELETED = "sample.deleted"
+#: 시편을 지웠다 — 매달린 시험까지 함께 지웠으면 그 수를 남긴다(2026-10-20, 고른 시편
+#: 한꺼번에 지우기). 잘못 올린 시험을 시편째 치우는 길이라, 「그 시편 어디 갔나」 를 묻는다.
+SPECIMEN_DELETED = "specimen.deleted"
 TEST_RUN_DELETED = "test_run.deleted"
 TEST_RUN_UPDATED = "test_run.updated"
 ACCOUNT_DECIDED = "account.decided"
@@ -126,6 +132,9 @@ VOCABULARY_ALIAS_ADDED_BY_CLIENT = "vocabulary.alias_added_by_client"
 TEST_RUNS_IMPORTED_BY_CLIENT = "test_runs.imported_by_client"
 MASTER_CURVE_BUILT_BY_CLIENT = "master_curve.built_by_client"
 PRONY_FITTED_BY_CLIENT = "prony.fitted_by_client"
+#: **AI 가 시험을 다시 읽음**(2026-10-20) — 곡선이 새로 만들어지고 읽을 형식이 고정 · 해제된다.
+#: 「이 시험 누가 다른 형식으로 읽게 했나」 가 물어지는 자리다. 화면에서 한 것은 안 남는다.
+TEST_RUN_REPARSED_BY_CLIENT = "test_run.reparsed_by_client"
 #: **AI 가 사람에게 말을 거는 셋**(2026-10-16) — 카드 코멘트 · 확정 요청 · 선언 값 승인 요청.
 #: 값은 안 바뀌지만 알림이 사람에게 간다 — 「이 부탁 누가 했나」 가 물어진다.
 CARD_REMARKED_BY_CLIENT = "card.remarked_by_client"

@@ -196,6 +196,122 @@ class Test카드가_선다:
         assert shear == pytest.approx(TRUE_STRAIN_PLATEAU_PA, rel=0.02)
         assert any("전단 모드(전단 샌드위치)" in line for line in body["source"]["notes"])
 
+    def test_전단_채널_진폭_스윕도_카드가_E_로_옮겨_담는다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        sample: dict[str, Any],
+    ) -> None:
+        """레오미터 진폭 스윕(채널이 G′) — 「선형점탄성 탄성률」 단계가 E′ 채널만 받아 안 떴고,
+        카드의 전단 분기에 닿을 길이 없었다(2026-10-20 검토)."""
+        from app.modules.tests.legacy_profiles import TA_DMA850_DEFINITION
+
+        channels = [
+            ("shear_storage_modulus", "저장 전단 탄성률", "stress", "Pa", True),
+            ("shear_loss_modulus", "손실 전단 탄성률", "stress", "Pa", False),
+            ("oscillation_strain", "진동 변형률", "strain", "1", True),
+            ("temperature", "온도", "temperature", "K", False),
+            ("frequency", "주파수", "frequency", "Hz", False),
+            ("angular_frequency", "각주파수", "angular_frequency", "rad/s", False),
+        ]
+        made = client.post(
+            "/api/test-types",
+            json={
+                "key": "rheometer_amp",
+                "label": "레오미터 진폭 스윕",
+                "abbr": "AMP",
+                "channels": [
+                    {
+                        "key": key,
+                        "label": label,
+                        "dimension": dimension,
+                        "si_unit": unit,
+                        "is_required": required,
+                    }
+                    for key, label, dimension, unit, required in channels
+                ],
+            },
+            headers=admin_headers,
+        )
+        assert made.status_code == 201, made.text
+        columns = {
+            **TA_DMA850_DEFINITION["columns"],
+            "Storage modulus": {"channel": "shear_storage_modulus"},
+            "Loss modulus": {"channel": "shear_loss_modulus"},
+        }
+        tables = {
+            key: value
+            for key, value in TA_DMA850_DEFINITION["tables"].items()
+            if key != "master_curve"
+        }
+        profile = client.post(
+            "/api/formats",
+            json={
+                "key": "ares_amp",
+                "label": "레오미터 진폭(시험)",
+                "test_type_key": "rheometer_amp",
+                "definition": {**TA_DMA850_DEFINITION, "columns": columns, "tables": tables},
+            },
+            headers=admin_headers,
+        )
+        assert profile.status_code == 201, profile.text
+        steps = client.get(
+            "/api/processing/steps",
+            params={"test_type": "rheometer_amp"},
+            headers=admin_headers,
+        ).json()
+        assert "dma.lve_modulus" in {one["id"] for one in steps}
+
+        specimen = client.post(
+            f"/api/samples/{sample['id']}/specimens",
+            json={"orientation": "NA"},
+            headers=admin_headers,
+        ).json()
+        created = client.post(
+            "/api/test-runs",
+            data={
+                "specimen_id": specimen["id"],
+                "test_type": "rheometer_amp",
+                "conditions": "{}",
+            },
+            files={"file": (STRAIN_SWEEP.name, STRAIN_SWEEP.read_bytes())},
+            headers=admin_headers,
+        ).json()
+        assert test_services.parse_run(db, uuid.UUID(created["id"])) == "parsed"
+        # 화면처럼 열 칸의 기본값(`storage_modulus`)을 채워 보낸다.
+        stored = client.post(
+            "/api/processing/results",
+            json={
+                "test_run_id": created["id"],
+                "steps": [
+                    {"plugin": "dma.lve_modulus", "options": {"storage": "storage_modulus"}}
+                ],
+            },
+            headers=admin_headers,
+        )
+        assert stored.status_code == 201, stored.text
+        notes = [line for stage in stored.json()["stages"] for line in stage["notes"]]
+        assert any("전단 채널(G′)" in one for one in notes)
+        client.post(
+            f"/api/processing/results/{stored.json()['id']}/adopt", headers=admin_headers
+        )
+
+        card = client.post(
+            "/api/fitting/cards/lve",
+            json={
+                "material_id": sample["material_id"],
+                "test_type_key": "rheometer_amp",
+                "orientation": "NA",
+            },
+            headers=admin_headers,
+        )
+        assert card.status_code == 201, card.text
+        expected = TRUE_STRAIN_PLATEAU_PA * 2 * (1 + 0.49)
+        assert card.json()["blocks"]["lve"]["values"]["youngs_modulus"] == pytest.approx(
+            expected, rel=0.02
+        )
+
     def test_전단과_다른_모드가_섞이면_막는다(
         self,
         client: TestClient,

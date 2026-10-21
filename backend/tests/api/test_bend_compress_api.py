@@ -373,7 +373,8 @@ class TestDetect:
             headers=admin_headers,
         ).json()
         assert body["test_type_key"] is None
-        assert "3개" in body["reason"]
+        # 인장 · 굽힘 · 압축 · 박리 · 이탈력(2026-10-20) — 넷 다 하중 · 변위 .tra 를 읽는다.
+        assert "4개" in body["reason"]
 
     def test_커넥터가_귀띔하면_그_종류(self, db: Session, seeded: None) -> None:
         plain = b'"Standard force","Standard travel"\n"N","mm"\n0,0\n1,0.1\n2,0.2\n'
@@ -421,6 +422,10 @@ class TestSteps:
         )
         assert "compression.indices" in ids("compression")
         assert "flexural.engineering" not in ids("compression")
+        # 토우 보정은 인장의 계산을 굽힘 · 압축 열로(2026-10-20) — 각자 제 목록에만.
+        assert "compression.toe_compensation" in ids("compression")
+        assert "flexural.toe_compensation" in ids("flexural")
+        assert "compression.toe_compensation" not in ids("flexural")
 
 
 class TestChain:
@@ -483,6 +488,14 @@ class TestChain:
         assert blocks["reference"]["values"]["flexural_modulus"] == pytest.approx(
             E_FLEX, rel=1e-3
         )
+        # **구조 강성 블록**(2026-10-20) — 3점이면 k = 48·E·I / L³, 그 배치와 함께.
+        inertia = 0.010 * 0.004**3 / 12
+        stiffness = blocks["structural_stiffness"]["values"]
+        assert stiffness["stiffness"] == pytest.approx(
+            48 * E_FLEX * inertia / 0.064**3, rel=1e-3
+        )
+        assert stiffness["support_span"] == pytest.approx(0.064)
+        assert stiffness["loading"] == "3점 굽힘"
 
     def test_Instron_압축에서_할선_탄성률과_25퍼센트_응력(
         self, client: TestClient, db: Session, admin_headers: dict[str, str], seeded: None
@@ -519,3 +532,127 @@ class TestChain:
             E_RUBBER * 0.25, rel=1e-3
         )
         assert "compressive_stress_at_40pct" not in values
+
+    def test_압축에서_초탄성_카드까지_모드가_남는다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str], seeded: None
+    ) -> None:
+        """사용자 보고(2026-10-20): 압축 시험을 초탄성 카드로 내보낼 경로가 없었다."""
+        _import(client, admin_headers, "iso_7743_a")
+        (run_id,) = _runs(
+            client,
+            db,
+            admin_headers,
+            standard="ISO 7743 시험편 A (고무 압축)",
+            test_type="compression",
+            filename="raw.csv",
+            data=_instron_compression(),
+            count=1,
+        )
+        _process(
+            client,
+            admin_headers,
+            run_id,
+            [
+                {
+                    "plugin": "compression.engineering",
+                    "options": {"height": "@specimen_height", "area": "@specimen_area"},
+                }
+            ],
+        )
+        run = client.get(f"/api/test-runs/{run_id}", headers=admin_headers).json()
+        made = client.post(
+            "/api/fitting/cards",
+            json={
+                "material_id": run["material_id"],
+                "test_type_key": "compression",
+                "orientation": "NA",
+                "label": "고무 압축 초탄성",
+                "family": "neo_hookean_compression",
+            },
+            headers=admin_headers,
+        )
+        assert made.status_code == 201, made.text
+        block = made.json()["blocks"]["hyperelastic"]["values"]
+        assert block["mode"] == "단축 압축"
+        assert block["model"] == "neo_hookean"
+        # 이 곡선은 직선(E)이다 — Neo-Hookean 은 압축에서 굳어지므로 30% 까지 맞추면 μ 가 E/3
+        # 보다 조금 작게 나온다. 자릿수가 맞는지만 본다.
+        assert E_RUBBER / 5 < block["shear_modulus"] < E_RUBBER / 2
+        deck = client.get(
+            f"/api/fitting/cards/{made.json()['id']}/export",
+            params={"format": "json"},
+            headers=admin_headers,
+        )
+        assert deck.status_code == 200, deck.text
+        joined = " ".join(deck.json()["provenance"])
+        assert "단축 압축 하나로 맞춘 계수" in joined
+        assert "단축 인장 하나로" not in joined
+        # **고를 수 있다고 한 형식은 다 나와야 한다**(2026-10-20 검토) — Abaqus 만 식 이름 대신
+        # `family`(neo_hookean_compression)를 읽어 「매핑이 없는 식」 으로 막혔다. JSON 만 보던
+        # 이 시험은 그것을 못 봤다.
+        formats = made.json()["available_formats"]
+        assert "abaqus_hyperelastic" in formats
+        for key in formats:
+            got = client.get(
+                f"/api/fitting/cards/{made.json()['id']}/export",
+                params={"format": key},
+                headers=admin_headers,
+            )
+            assert got.status_code == 200, (key, got.text)
+
+    def test_압축에서_폼_카드와_LS_DYNA_까지(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str], seeded: None
+    ) -> None:
+        """사용자 보고(2026-10-20): 폼 소재를 해석 카드로 내보낼 경로가 없었다."""
+        _import(client, admin_headers, "iso_7743_a")
+        run_ids = _runs(
+            client,
+            db,
+            admin_headers,
+            standard="ISO 7743 시험편 A (고무 압축)",
+            test_type="compression",
+            filename="raw.csv",
+            data=_instron_compression(),
+            count=2,
+        )
+        for run_id in run_ids:
+            _process(
+                client,
+                admin_headers,
+                run_id,
+                [
+                    {
+                        "plugin": "compression.engineering",
+                        "options": {"height": "@specimen_height", "area": "@specimen_area"},
+                    }
+                ],
+            )
+        group = client.post(
+            "/api/groups",
+            json={"plugin_id": "compression.foam", "run_ids": run_ids},
+            headers=admin_headers,
+        )
+        assert group.status_code == 201, group.text
+        assert group.json()["values"]["strain_max"] == pytest.approx(0.3, rel=1e-3)
+        card = client.post(
+            "/api/fitting/cards/from-group",
+            json={"group_result_id": group.json()["id"], "label": "PU 폼", "density": 45.0},
+            headers=admin_headers,
+        )
+        assert card.status_code == 201, card.text
+        blocks = card.json()["blocks"]
+        rows = blocks["foam_curve"]["rows"]
+        assert rows[0] == {"strain": 0.0, "stress": 0.0}
+        assert rows[-1]["stress"] == pytest.approx(E_RUBBER * 0.3, rel=1e-3)
+        # 직선 곡선이라 처음 기울기가 곧 E 다 — 묶음이 낸 E 가 이긴다.
+        assert blocks["elastic"]["values"]["youngs_modulus"] == pytest.approx(
+            E_RUBBER, rel=1e-3
+        )
+        assert blocks["elastic"]["values"]["density"] == pytest.approx(45.0)
+        deck = client.get(
+            f"/api/fitting/cards/{card.json()['id']}/export",
+            params={"format": "dyna_foam"},
+            headers=admin_headers,
+        )
+        assert deck.status_code == 200, deck.text
+        assert "*MAT_LOW_DENSITY_FOAM" in deck.text

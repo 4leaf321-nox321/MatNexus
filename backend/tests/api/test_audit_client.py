@@ -798,6 +798,25 @@ class Test사람만_하던_일을_AI_에게:
             client, admin_headers, "test_run.uploaded_by_client", by_hand.json()["id"]
         )
 
+        # **다시 읽기도 남는다**(2026-10-20, MCP `reparse_test_run`) — 곡선이 새로 서고 형식
+        # 고정이 바뀐다. 화면에서 다시 읽은 것은 안 남는다.
+        run_id = by_hand.json()["id"]
+        again = client.post(
+            f"/api/test-runs/{run_id}/reparse",
+            json={"profile_key": None},
+            headers={**admin_headers, "X-Client": "mcp"},
+        )
+        assert again.status_code == 202, again.text
+        reread = _mine(client, admin_headers, "test_run.reparsed_by_client", run_id)
+        assert reread and reread[0]["changes"]["profile_key"] is None
+        by_hand_again = client.post(
+            f"/api/test-runs/{by_ai.json()['id']}/reparse", headers=admin_headers
+        )
+        assert by_hand_again.status_code == 202, by_hand_again.text
+        assert not _mine(
+            client, admin_headers, "test_run.reparsed_by_client", by_ai.json()["id"]
+        )
+
     def test_AI_가_낸_의뢰가_남는다(
         self, client: TestClient, db: Session, admin_headers: dict[str, str]
     ) -> None:

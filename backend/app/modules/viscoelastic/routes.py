@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.modules.accounts.models import User
+from app.modules.tests.models import TestRun
 from app.modules.viscoelastic import services
 from app.modules.viscoelastic.models import MasterCurve, PronyFit
 from app.modules.viscoelastic.schemas import (
@@ -35,7 +36,7 @@ from app.modules.viscoelastic.schemas import (
     SweepListOut,
     SweepOut,
 )
-from app.shared import audit
+from app.shared import audit, curvedata
 from app.shared.auth import current_user
 from app.shared.errors import AppError
 from app.shared.permissions import get_run, require_edit
@@ -43,7 +44,13 @@ from app.shared.permissions import get_run, require_edit
 router = APIRouter(prefix="/viscoelastic", tags=["viscoelastic"])
 
 
-def _curve_out(row: MasterCurve) -> MasterCurveOut:
+def _basis(db: Session, run: TestRun) -> str:
+    """E 인가 G 인가 — 카드와 같은 판정(곡선에 든 채널,
+    `curvedata.measures_shear_channels`)."""
+    return "G" if curvedata.measures_shear_channels(db, run) else "E"
+
+
+def _curve_out(row: MasterCurve, basis: str = "E") -> MasterCurveOut:
     return MasterCurveOut(
         id=row.id,
         test_run_id=row.test_run_id,
@@ -57,6 +64,7 @@ def _curve_out(row: MasterCurve) -> MasterCurveOut:
         minimum_frequency_hz=row.minimum_frequency_hz,
         maximum_frequency_hz=row.maximum_frequency_hz,
         is_primary=row.is_primary,
+        modulus_basis=basis,
         created_at=row.created_at,
     )
 
@@ -89,7 +97,7 @@ def list_sweeps(
     입력칸에 숫자를 치게 두면 없는 온도를 적고 나서 오류를 본다.
     """
     run = get_run(db, user, test_run_id)
-    sweeps, used, warnings = services.sweeps_of(db, run)
+    sweeps, used, warnings, basis = services.sweeps_of(db, run)
     labels = {item.key: item.label for item in services.measured_curves(db, run.id)}
     return SweepListOut(
         items=[
@@ -104,6 +112,7 @@ def list_sweeps(
             for key, sweep in zip(used, sweeps, strict=True)
         ],
         warnings=warnings,
+        modulus_basis=basis,
     )
 
 
@@ -114,7 +123,8 @@ def list_master_curves(
     db: Session = Depends(get_db),
 ) -> list[MasterCurveOut]:
     run = get_run(db, user, test_run_id)
-    return [_curve_out(item) for item in services.master_curves_of(db, run.id)]
+    basis = _basis(db, run)
+    return [_curve_out(item, basis) for item in services.master_curves_of(db, run.id)]
 
 
 @router.post(
@@ -156,7 +166,7 @@ def create_master_curve(
     _record_curve(db, user, run.id, run.record_name, row, payload.method)
     db.commit()
     db.refresh(row)
-    return _curve_out(row)
+    return _curve_out(row, _basis(db, run))
 
 
 def _record_curve(
@@ -232,7 +242,7 @@ def import_master_curve(
     _record_curve(db, user, run.id, run.record_name, row, "imported")
     db.commit()
     db.refresh(row)
-    return _curve_out(row)
+    return _curve_out(row, _basis(db, run))
 
 
 @router.post("/master-curves/{master_curve_id}/primary", response_model=MasterCurveOut)
@@ -257,7 +267,7 @@ def set_primary(
     services.mark_primary(db, curve)
     db.commit()
     db.refresh(curve)
-    return _curve_out(curve)
+    return _curve_out(curve, _basis(db, run))
 
 
 @router.get("/master-curves/{master_curve_id}/points")

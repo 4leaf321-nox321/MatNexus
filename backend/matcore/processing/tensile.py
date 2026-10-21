@@ -210,11 +210,14 @@ TOE_MIN_POINTS = 5
 TOE_MIN_R_SQUARED = 0.995
 
 
-@register(
-    id="tensile.toe_compensation",
-    kind="processing",
-    label="토우 보정",
-    params=(
+def toe_params(strain: str, stress: str) -> tuple[ParamSpec, ...]:
+    """토우 보정의 입력 — **열 이름만 시험마다 다르다**(2026-10-20).
+
+    굽힘(`flexural_strain`) · 압축(`compressive_strain`)도 같은 계산을 쓴다(사용자 보고: 압축
+    처리에 토우 보정이 없다 — 기존 단계 재사용). 계산은 하나이고, 확장이 자기 열 이름으로
+    같은 함수를 등록한다 — 두 벌이면 한쪽만 고쳐진다.
+    """
+    return (
         ParamSpec(
             name="minimum_strain",
             dimension="strain",
@@ -233,30 +236,56 @@ TOE_MIN_R_SQUARED = 0.995
             unit="1",
             help="**공칭 변형률**입니다. 토우가 끝난 뒤의 직선 구간을 잡습니다.",
         ),
-        ParamSpec(name="strain", label="변형률 열", type="str", role="column", default=STRAIN),
-        ParamSpec(name="stress", label="응력 열", type="str", role="column", default=STRESS),
+        ParamSpec(name="strain", label="변형률 열", type="str", role="column", default=strain),
+        ParamSpec(name="stress", label="응력 열", type="str", role="column", default=stress),
+    )
+
+
+def toe_compensation_on(strain: str, stress: str) -> Any:
+    """`strain` · `stress` 를 **이 시험의 열**로 채워 부르는 토우 보정(2026-10-20).
+
+    처리 엔진은 열 이름 칸의 기본값을 채워 넘기지 않는다 — 비우면 함수가 인장의 열을 집는다.
+    그래서 확장이 자기 열을 기본으로 채운 손잡이를 등록한다. 계산은 `toe_compensation` 하나다.
+    """
+
+    def step(frame: Frame, options: dict[str, Any]) -> StepResult:
+        given = {key: value for key, value in options.items() if value not in (None, "")}
+        done: StepResult = toe_compensation(
+            frame, {"strain": strain, "stress": stress, **given}
+        )
+        return done
+
+    step.__doc__ = toe_compensation.__doc__
+    return step
+
+
+#: 토우 보정이 남기는 값 — 어느 시험에서 돌든 같은 이름이다.
+TOE_VALUES = (
+    Produced(
+        key="toe_strain_offset",
+        label="토우 보정량",
+        si_unit="1",
+        help=(
+            "변형률 축을 왼쪽으로 민 양. 물린 시편이 자리를 잡는 동안 생긴 가짜 변형입니다."
+        ),
     ),
+    Produced(
+        key="toe_r_squared",
+        label="토우 구간 R²",
+        si_unit="1",
+        help=("보정에 쓴 직선이 그 구간에 얼마나 맞는가. 낮으면 구간을 잘못 잡은 것입니다."),
+    ),
+)
+
+
+@register(
+    id="tensile.toe_compensation",
+    kind="processing",
+    label="토우 보정",
+    params=toe_params(STRAIN, STRESS),
     applies_to=("tensile",),
     # 열을 새로 만들지 않는다 — **고른 변형률 열을 그 자리에서 민다.**
-    makes_values=(
-        Produced(
-            key="toe_strain_offset",
-            label="토우 보정량",
-            si_unit="1",
-            help=(
-                "변형률 축을 왼쪽으로 민 양. "
-                "물린 시편이 자리를 잡는 동안 생긴 가짜 변형입니다."
-            ),
-        ),
-        Produced(
-            key="toe_r_squared",
-            label="토우 구간 R²",
-            si_unit="1",
-            help=(
-                "보정에 쓴 직선이 그 구간에 얼마나 맞는가. 낮으면 구간을 잘못 잡은 것입니다."
-            ),
-        ),
-    ),
+    makes_values=TOE_VALUES,
     order=30,
     version="1",
 )

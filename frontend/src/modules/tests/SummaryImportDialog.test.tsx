@@ -225,3 +225,14 @@ describe('굽힘 요약값 열', () => {
     )
   })
 })
+
+describe('박리 · 이탈력 요약값 열 (2026-10-20)', () => {
+  it('와이블 · 박리 묶음이 읽는 파단 하중 · 박리 강도 키를 깐다', () => {
+    // 곡선 없이 파단 하중만 있는 외부 자료가 「와이블 강도 분포」 에 들어가는 길이다.
+    const adhesion = {
+      key: 'adhesion',
+      conditions: [field('temperature', '시험 온도', 'K', 'temperature', false)],
+    } as unknown as Parameters<typeof defaultColumns>[0]
+    expect(defaultColumns(adhesion)).toBe('max_force (N), peel_strength (N/m), 시험 온도 (°C)')
+  })
+})

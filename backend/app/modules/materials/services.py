@@ -154,12 +154,49 @@ def foreign_descendants(
     if editor.steward:
         return []
     samples, specimens, runs = deletable_tree(db, material)
+    return _foreign(db, editor, [("시료", samples), ("시편", specimens), ("시험", runs)])
+
+
+def foreign_below_sample(db: Session, editor: permissions.Editor, sample: Sample) -> list[str]:
+    """시료를 통째로 지우면 함께 사라질 **남의 자료** — 재료와 같은 규칙(ADR 0035 D4)."""
+    if editor.steward:
+        return []
+    specimens, runs = sample_tree(db, sample)
+    return _foreign(db, editor, [("시편", specimens), ("시험", runs)])
+
+
+def specimen_runs(
+    db: Session, specimen_ids: Sequence[uuid.UUID]
+) -> dict[uuid.UUID, list[TestRun]]:
+    """고른 시편마다 매달린 **살아 있는** 시험(2026-10-20). 한 번에 읽는다 — 시편마다 물으면
+    200장을 고른 화면이 200번 묻는다."""
+    found: dict[uuid.UUID, list[TestRun]] = {}
+    if not specimen_ids:
+        return found
+    for run in db.scalars(
+        select(TestRun).where(
+            TestRun.specimen_id.in_(list(specimen_ids)), TestRun.deleted_at.is_(None)
+        )
+    ):
+        found.setdefault(run.specimen_id, []).append(run)
+    return found
+
+
+def foreign_below_specimen(
+    db: Session, editor: permissions.Editor, runs: Sequence[TestRun]
+) -> list[str]:
+    """시편을 지우면 함께 사라질 **남의 시험** — 재료 · 시료와 같은 규칙(ADR 0035 D4)."""
+    if editor.steward:
+        return []
+    return _foreign(db, editor, [("시험", runs)])
+
+
+def _foreign(
+    db: Session,
+    editor: permissions.Editor,
+    rows: Sequence[tuple[str, Sequence[Sample] | Sequence[Specimen] | Sequence[TestRun]]],
+) -> list[str]:
     counts: dict[tuple[str, uuid.UUID | None], int] = {}
-    rows: list[tuple[str, list[Sample] | list[Specimen] | list[TestRun]]] = [
-        ("시료", samples),
-        ("시편", specimens),
-        ("시험", runs),
-    ]
     for label, found in rows:
         for row in found:
             if not editor.allows(row):
@@ -641,7 +678,18 @@ def deletable_tree(
     )
     if not samples:
         return [], [], []
-    sample_ids = [one.id for one in samples]
+    specimens, runs = _below_samples(db, [one.id for one in samples])
+    return samples, specimens, runs
+
+
+def sample_tree(db: Session, sample: Sample) -> tuple[list[Specimen], list[TestRun]]:
+    """이 시료에 매달린 **살아 있는** 시편 · 시험(2026-10-20). 재료와 같은 셈이다."""
+    return _below_samples(db, [sample.id])
+
+
+def _below_samples(
+    db: Session, sample_ids: Sequence[uuid.UUID]
+) -> tuple[list[Specimen], list[TestRun]]:
     specimens = list(
         db.scalars(
             select(Specimen).where(
@@ -650,7 +698,7 @@ def deletable_tree(
         )
     )
     if not specimens:
-        return samples, [], []
+        return [], []
     specimen_ids = [one.id for one in specimens]
     runs = list(
         db.scalars(
@@ -659,7 +707,7 @@ def deletable_tree(
             )
         )
     )
-    return samples, specimens, runs
+    return specimens, runs
 
 
 def delete_plan(db: Session, material: Material) -> DeletePlan:
@@ -686,26 +734,7 @@ def delete_tree(db: Session, material: Material, *, actor: User, now: datetime) 
     """
     samples, specimens, runs = deletable_tree(db, material)
 
-    for run in runs:
-        run.deleted_at = now
-        vocabulary_services.release_bindings(db, run, vocabulary_services.TEST_RUN_BINDINGS)
-        # **건마다 남긴다.** 되돌리려면 먼저 무엇이 지워졌는지 알아야 하고,
-        # 파일 정리 잡이 나중에 파일을 치우면 그때는 정말로 되돌릴 수 없다.
-        audit.record(
-            db,
-            action=audit.TEST_RUN_DELETED,
-            actor=actor,
-            target_table="test_runs",
-            target_id=run.id,
-            target_label=run.source_filename or str(run.id),
-            workspace_id=run.workspace_id,
-            changes={"deleted_at": {"after": now.isoformat()}},
-        )
-    for specimen in specimens:
-        specimen.deleted_at = now
-        vocabulary_services.release_bindings(
-            db, specimen, vocabulary_services.SPECIMEN_BINDINGS
-        )
+    _bury(db, specimens, runs, actor=actor, now=now)
     for sample in samples:
         sample.deleted_at = now
         vocabulary_services.release_bindings(db, sample, vocabulary_services.SAMPLE_BINDINGS)
@@ -735,6 +764,93 @@ def delete_tree(db: Session, material: Material, *, actor: User, now: datetime) 
         },
     )
     return DeletePlan(samples=len(samples), specimens=len(specimens), test_runs=len(runs))
+
+
+def delete_sample_tree(
+    db: Session, sample: Sample, *, actor: User, now: datetime
+) -> DeletePlan:
+    """시료를 **아래까지** 지운다 — 시험 → 시편 → 시료(2026-10-20). 재료의 `delete_tree` 와
+    같은 길(`_bury`)을 지나고, 같은 규칙이다: 커밋은 부르는 쪽, 시험 허락도 부르는 쪽이 본다.
+
+    전에는 시편이 남은 시료를 못 지웠다 — 삭제 창은 「시편이 남아 있어 지울 수 없습니다」 라고
+    적어 놓고도 확인을 받았고, 누르면 서버가 거절해 아무 일도 없었다(사용자 보고). 휴지통에서
+    시료를 되살리면 함께 지운 시편 · 시험이 같이 돌아온다(`trash.services._tree`).
+    """
+    specimens, runs = sample_tree(db, sample)
+    _bury(db, specimens, runs, actor=actor, now=now)
+    sample.deleted_at = now
+    vocabulary_services.release_bindings(db, sample, vocabulary_services.SAMPLE_BINDINGS)
+    audit.record(
+        db,
+        action=audit.SAMPLE_DELETED,
+        actor=actor,
+        target_table="samples",
+        target_id=sample.id,
+        target_label=sample.record_name,
+        workspace_id=sample.workspace_id,
+        changes={
+            "deleted_at": {"after": now.isoformat()},
+            "cascade": {"after": {"specimens": len(specimens), "test_runs": len(runs)}},
+        },
+    )
+    return DeletePlan(samples=1, specimens=len(specimens), test_runs=len(runs))
+
+
+def delete_specimen_tree(
+    db: Session, specimen: Specimen, runs: Sequence[TestRun], *, actor: User, now: datetime
+) -> None:
+    """시편을 **매달린 시험까지** 지운다 — 시험 → 시편(2026-10-20). 재료 · 시료와 같은 길
+    (`_bury`)이고 같은 규칙이다: 커밋도 시험 허락도 부르는 쪽이 본다. 휴지통에서 시편을
+    되살리면 함께 지운 시험이 같이 돌아온다(`trash.services._tree`)."""
+    _bury(db, [specimen], runs, actor=actor, now=now)
+    audit.record(
+        db,
+        action=audit.SPECIMEN_DELETED,
+        actor=actor,
+        target_table="specimens",
+        target_id=specimen.id,
+        target_label=specimen.record_name,
+        workspace_id=specimen.workspace_id,
+        changes={
+            "deleted_at": {"after": now.isoformat()},
+            "cascade": {"after": {"test_runs": len(runs)}},
+        },
+    )
+
+
+def _bury(
+    db: Session,
+    specimens: Sequence[Specimen],
+    runs: Sequence[TestRun],
+    *,
+    actor: User,
+    now: datetime,
+) -> None:
+    """시험 → 시편 순서로 지운다. 재료 · 시료 통째로 지우기가 함께 지난다."""
+    for run in runs:
+        # **남의 시험이면 그 사람에게 남긴다** — 시험 목록에서 지우면 건마다 남는데
+        # (`tests.routes.delete_runs`), 통째로 지우는 길은 위의 재료 · 시료 · 시편에만 남겼다
+        # (2026-10-20 검토). 막는 판정은 이미 지났다(`foreign_below_*`).
+        permissions.note_edit(db, actor, run)
+        run.deleted_at = now
+        vocabulary_services.release_bindings(db, run, vocabulary_services.TEST_RUN_BINDINGS)
+        # **건마다 남긴다.** 되돌리려면 먼저 무엇이 지워졌는지 알아야 하고,
+        # 파일 정리 잡이 나중에 파일을 치우면 그때는 정말로 되돌릴 수 없다.
+        audit.record(
+            db,
+            action=audit.TEST_RUN_DELETED,
+            actor=actor,
+            target_table="test_runs",
+            target_id=run.id,
+            target_label=run.source_filename or str(run.id),
+            workspace_id=run.workspace_id,
+            changes={"deleted_at": {"after": now.isoformat()}},
+        )
+    for specimen in specimens:
+        specimen.deleted_at = now
+        vocabulary_services.release_bindings(
+            db, specimen, vocabulary_services.SPECIMEN_BINDINGS
+        )
 
 
 def workspace_names(db: Session, ids: Sequence[uuid.UUID | None]) -> dict[uuid.UUID, str]:

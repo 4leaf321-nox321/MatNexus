@@ -24,6 +24,10 @@ import { SampleExplorer } from '@/modules/materials/SampleExplorer'
 
 const specimens = vi.fn()
 const removeSpecimen = vi.fn()
+const sampleDeletePlan = vi.fn()
+const removeSampleCascade = vi.fn()
+const specimenDeletePlan = vi.fn()
+const removeSpecimens = vi.fn()
 
 vi.mock('@/modules/materials/api', async () => {
   const actual = await vi.importActual<typeof import('@/modules/materials/api')>(
@@ -35,6 +39,10 @@ vi.mock('@/modules/materials/api', async () => {
       ...actual.materialsApi,
       specimens: (...a: unknown[]) => specimens(...a),
       removeSpecimen: (...a: unknown[]) => removeSpecimen(...a),
+      sampleDeletePlan: (...a: unknown[]) => sampleDeletePlan(...a),
+      removeSampleCascade: (...a: unknown[]) => removeSampleCascade(...a),
+      specimenDeletePlan: (...a: unknown[]) => specimenDeletePlan(...a),
+      removeSpecimens: (...a: unknown[]) => removeSpecimens(...a),
     },
   }
 })
@@ -68,15 +76,15 @@ const SAMPLES = [
   },
 ]
 
-const specimen = (id: string, name: string, orientation: string, runs = 0) => ({
+const specimen = (id: string, name: string, orientation: string, runs = 0, failed = 0) => ({
   id,
   record_name: name,
   orientation,
   standard: 'ASTM E8',
   sizes: [],
   test_run_count: runs,
-  adopted_count: runs > 0 ? 1 : 0,
-  failed_count: 0,
+  adopted_count: runs > failed ? 1 : 0,
+  failed_count: failed,
   created_at: '2026-08-01T00:00:00Z',
   registered_by: null,
 })
@@ -209,10 +217,11 @@ describe('아코디언에 있던 일', () => {
     expect(screen.getAllByTitle('시편 삭제')).toHaveLength(2)
   })
 
-  it('시험이 남은 시편은 못 지운다고 말하고, 거절은 창 안에 보인다', async () => {
-    // **서버는 시험이 남은 시편을 지우지 않는다**(409). 전에는 「시험이 함께 가려집니다」 라고
-    // 해서 사람은 함께 지워질 줄 알고 눌렀고, 오류는 창 뒤에 가려졌다(2026-10-04).
-    removeSpecimen.mockRejectedValue(new Error('서버가 지우기를 거절했습니다'))
+  it('시험이 남은 시편도 지운다 — 시험 칸을 켜야, 거절은 창 안에 보인다', async () => {
+    // **전에는 「시험을 먼저 지우세요」 였다**(2026-10-04 ~ 10-20). 잘못 올린 시험 열 건이면
+    // 열 번 지우고 나서야 시편을 지웠다(사용자 보고). 이제 재료 · 시료와 같은 창이다.
+    specimenDeletePlan.mockResolvedValue({ specimens: 1, test_runs: 2, blocked: [] })
+    removeSpecimens.mockRejectedValue(new Error('서버가 지우기를 거절했습니다'))
     const user = userEvent.setup()
     show()
     await screen.findByText('MD_01')
@@ -220,11 +229,179 @@ describe('아코디언에 있던 일', () => {
     await user.click(within(row).getByTitle('시편 삭제'))
 
     const dialog = await screen.findByRole('dialog')
-    expect(dialog).toHaveTextContent('시험 2건이 남아 있어 지울 수 없습니다')
-    expect(dialog).not.toHaveTextContent('함께 가려집니다')
+    expect(await within(dialog).findByText(/곡선과 처리 결과가 여기 매달려/)).toBeInTheDocument()
+    expect(specimenDeletePlan).toHaveBeenCalledWith(['p1'])
+    expect(dialog).toHaveTextContent('MD_01')
+    expect(dialog).not.toHaveTextContent('지울 수 없습니다')
 
-    await user.click(within(dialog).getByRole('button', { name: '삭제' }))
+    const button = within(dialog).getByRole('button', { name: '삭제' })
+    expect(button).toBeDisabled()
+    await user.click(within(dialog).getByRole('checkbox'))
+    await user.click(button)
+    await waitFor(() => expect(removeSpecimens).toHaveBeenCalledWith(['p1'], true))
     expect(await within(dialog).findByText('서버가 지우기를 거절했습니다')).toBeInTheDocument()
+    // 옛 문(`DELETE /specimens/{id}`)은 안 부른다 — 그것은 시험이 남으면 막는다.
+    expect(removeSpecimen).not.toHaveBeenCalled()
+  })
+})
+
+describe('시료 삭제 (2026-10-20)', () => {
+  // **시편 · 시험이 달린 시료도 지운다 — 물어본 뒤에.** 전에는 「시편이 남아 있어 지울 수
+  // 없습니다」 를 적어 놓고도 확인을 받았고, 누르면 서버가 거절해 아무 일도 없었다(사용자 보고).
+  function showWith(onChanged: () => void) {
+    render(
+      <MemoryRouter>
+        <SampleExplorer
+          materialId="m1"
+          samples={SAMPLES as never}
+          onChanged={onChanged}
+          onAddSample={() => {}}
+        />
+      </MemoryRouter>
+    )
+  }
+
+  it('시험이 달려 있으면 그 칸을 켜야 지우고, 켜면 시험과 함께 지운다', async () => {
+    sampleDeletePlan.mockResolvedValue({ sample_name: 'SECC_1.0__01', specimens: 2, test_runs: 1 })
+    removeSampleCascade.mockResolvedValue({ sample_name: 'SECC_1.0__01', specimens: 2, test_runs: 1 })
+    const onChanged = vi.fn()
+    const user = userEvent.setup()
+    showWith(onChanged)
+    await screen.findByText('MD_01')
+    await user.click(screen.getByRole('button', { name: 'SECC_1.0__01 삭제' }))
+
+    const dialog = await screen.findByRole('dialog')
+    // **서버가 센 것이 그려진 뒤에 본다.**
+    expect(await within(dialog).findByText(/곡선과 처리 결과가 여기 매달려/)).toBeInTheDocument()
+    expect(dialog).toHaveTextContent('시편 2건')
+    expect(dialog).not.toHaveTextContent('지울 수 없습니다')
+    expect(sampleDeletePlan).toHaveBeenCalledWith('s1')
+
+    const button = within(dialog).getByRole('button', { name: '삭제' })
+    expect(button).toBeDisabled()
+    await user.click(within(dialog).getByRole('checkbox'))
+    await user.click(button)
+
+    await waitFor(() => expect(removeSampleCascade).toHaveBeenCalledWith('s1', true))
+    await waitFor(() => expect(onChanged).toHaveBeenCalled())
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+  })
+
+  it('시험이 없으면 칸 없이 시편과 함께 지운다', async () => {
+    sampleDeletePlan.mockResolvedValue({ sample_name: 'SECC_1.0__02', specimens: 1, test_runs: 0 })
+    removeSampleCascade.mockResolvedValue({ sample_name: 'SECC_1.0__02', specimens: 1, test_runs: 0 })
+    const user = userEvent.setup()
+    showWith(() => {})
+    await screen.findByText('MD_01')
+    await user.click(screen.getByRole('button', { name: 'SECC_1.0__02 삭제' }))
+
+    const dialog = await screen.findByRole('dialog')
+    expect(await within(dialog).findByText(/함께 사라집니다/)).toBeInTheDocument()
+    expect(within(dialog).queryByRole('checkbox')).not.toBeInTheDocument()
+    await user.click(within(dialog).getByRole('button', { name: '삭제' }))
+    await waitFor(() => expect(removeSampleCascade).toHaveBeenCalledWith('s2', false))
+  })
+
+  it('서버가 거절하면 창 안에 그 이유가 보인다', async () => {
+    sampleDeletePlan.mockResolvedValue({ sample_name: 'SECC_1.0__02', specimens: 1, test_runs: 0 })
+    removeSampleCascade.mockRejectedValue(new Error('아래에 남의 자료가 있어 통째로 지울 수 없습니다'))
+    const user = userEvent.setup()
+    showWith(() => {})
+    await screen.findByText('MD_01')
+    await user.click(screen.getByRole('button', { name: 'SECC_1.0__02 삭제' }))
+    const dialog = await screen.findByRole('dialog')
+    await within(dialog).findByText(/함께 사라집니다/)
+    await user.click(within(dialog).getByRole('button', { name: '삭제' }))
+    expect(await within(dialog).findByText(/남의 자료가 있어/)).toBeInTheDocument()
+  })
+})
+
+describe('시편 골라 지우기 (2026-10-20)', () => {
+  // 사용자 보고: 잘못된 옵션으로 올린 시험을 치우려면 시험을 하나씩 지운 뒤에야 시편을 지울 수
+  // 있었다. 시편 표에서 고르고(실패한 것은 한 번에), 매달린 시험까지 함께 지운다.
+  beforeEach(() => {
+    specimens.mockImplementation(() =>
+      Promise.resolve([
+        specimen('p1', 'MD_01', 'MD', 2, 1),
+        specimen('p2', 'TD_01', 'TD'),
+        specimen('p3', 'DD_01', 'DD', 1, 1),
+      ])
+    )
+  })
+
+  it('「실패가 있는 시편 고르기」 가 실패한 시편만 고르고, 고른 것을 함께 지운다', async () => {
+    specimenDeletePlan.mockResolvedValue({
+      specimens: 1,
+      test_runs: 2,
+      blocked: [{ id: 'p3', name: 'DD_01', reason: '아래에 남의 자료가 있습니다: 시험 1건(보라)' }],
+    })
+    removeSpecimens.mockResolvedValue({
+      specimens: 1,
+      test_runs: 2,
+      blocked: [{ id: 'p3', name: 'DD_01', reason: '아래에 남의 자료가 있습니다: 시험 1건(보라)' }],
+    })
+    const onChanged = vi.fn()
+    const user = userEvent.setup()
+    render(
+      <MemoryRouter>
+        <SampleExplorer
+          materialId="m1"
+          samples={SAMPLES as never}
+          onChanged={onChanged}
+          onAddSample={() => {}}
+        />
+      </MemoryRouter>
+    )
+    await screen.findByText('MD_01')
+
+    await user.click(screen.getByRole('button', { name: /실패가 있는 시편 고르기 \(2\)/ }))
+    expect(screen.getByRole('checkbox', { name: 'MD_01 선택' })).toBeChecked()
+    expect(screen.getByRole('checkbox', { name: 'DD_01 선택' })).toBeChecked()
+    expect(screen.getByRole('checkbox', { name: 'TD_01 선택' })).not.toBeChecked()
+    expect(screen.getByText('2건')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '삭제' }))
+    const dialog = await screen.findByRole('dialog')
+    // **서버가 센 것이 그려진 뒤에 본다.** 막힌 것은 누구의 무엇 때문인지 함께.
+    expect(await within(dialog).findByText(/지우지 않는 것 1건/)).toBeInTheDocument()
+    expect(dialog).toHaveTextContent('시험 1건(보라)')
+    expect(dialog).toHaveTextContent('고른 시편 2건')
+    expect(specimenDeletePlan).toHaveBeenCalledWith(['p1', 'p3'])
+
+    await user.click(within(dialog).getByRole('checkbox'))
+    await user.click(within(dialog).getByRole('button', { name: '삭제' }))
+    await waitFor(() => expect(removeSpecimens).toHaveBeenCalledWith(['p1', 'p3'], true))
+    // **무엇을 지웠고 무엇이 남았는지** 말한다.
+    expect(
+      await screen.findByText('시편 1개(시험 2건)를 지웠습니다. 못 지운 것 1개는 남았습니다.')
+    ).toBeInTheDocument()
+    expect(onChanged).toHaveBeenCalled()
+  })
+
+  it('고른 것이 전부 막히면 삭제가 안 눌린다', async () => {
+    specimenDeletePlan.mockResolvedValue({
+      specimens: 0,
+      test_runs: 0,
+      blocked: [{ id: 'p2', name: 'TD_01', reason: '고칠 권한이 없습니다' }],
+    })
+    const user = userEvent.setup()
+    show()
+    await screen.findByText('MD_01')
+    await user.click(screen.getByRole('checkbox', { name: 'TD_01 선택' }))
+    await user.click(screen.getByRole('button', { name: '삭제' }))
+    const dialog = await screen.findByRole('dialog')
+    expect(await within(dialog).findByText('지울 수 있는 것이 없습니다.')).toBeInTheDocument()
+    expect(dialog).toHaveTextContent('고칠 권한이 없습니다')
+    expect(within(dialog).getByRole('button', { name: '삭제' })).toBeDisabled()
+  })
+
+  it('고르는 칸을 눌러도 줄이 펼쳐지지 않는다', async () => {
+    // 고르려다 시험이 펼쳐지면 표가 출렁여, 다음 칸이 손 밑에서 비켜 간다.
+    const user = userEvent.setup()
+    show()
+    await screen.findByText('MD_01')
+    await user.click(screen.getByRole('checkbox', { name: 'MD_01 선택' }))
+    expect(screen.queryByText(/시험 목록:/)).not.toBeInTheDocument()
   })
 })
 

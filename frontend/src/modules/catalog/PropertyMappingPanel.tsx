@@ -940,6 +940,10 @@ function AddPropertyDialog({
                 className="font-mono"
                 onChange={(event) => set('si_unit', event.target.value)}
               />
+              {/* 눈금은 단위표에 없어 「단위표에 없습니다」 만 보고 1 로 만들던 것(2026-10-20 사용자 보고). */}
+              <p className="text-muted-foreground text-xs">
+                경도 같은 눈금은 그 기호로 — HV · ShoreA · IRHD (환산 없음)
+              </p>
             </div>
             <div className="grid gap-1">
               <Label htmlFor="new-prop-symbol">기호</Label>

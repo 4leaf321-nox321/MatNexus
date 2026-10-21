@@ -721,6 +721,9 @@ class DetectOut(BaseModel):
     test_type_key: str | None
     test_type_label: str | None
     profile_key: str | None
+    profile_candidates: list[str] = []
+    """지문이 맞은 같은 종류의 형식 전부 — 우선순위 차례(2026-10-20). 둘 이상이면 자동이
+    틀릴 수 있다는 뜻이라, 화면이 사람에게 고르게 한다."""
     source: str
     """`profile` · `extension` · `none`. **무엇으로 정했는지 화면이 보여 준다** —
     자동 선택이 틀렸을 때 사람이 의심할 근거가 있어야 한다."""

@@ -394,8 +394,11 @@ function FormulaDialog({
   const kindMeta = KINDS.find((one) => one.key === kind) ?? KINDS[0]
   const isFamily = kind === 'family'
   const names = useMemo(() => {
-    const source = isFamily || kind === 'column_step' ? vocabulary?.columns : vocabulary?.scalars
-    return source ?? []
+    if (isFamily) return vocabulary?.columns ?? []
+    const source = kind === 'column_step' ? vocabulary?.columns : vocabulary?.scalars
+    // **그 시험의 값도 고를 수 있다**(2026-10-20) — 시편 치수 · 시험 조건. 굽힘 · 압축처럼 치수와
+    // 조건이 들어가는 응력 · 변형률을 식으로 만들 수 없던 것(사용자 보고).
+    return [...(source ?? []), ...(vocabulary?.inputs ?? [])]
   }, [vocabulary, kind, isFamily])
 
   useEffect(() => {
@@ -570,8 +573,8 @@ function FormulaDialog({
                 {isFamily
                   ? '변수 — x = 아래 「x 열」 의 값'
                   : kind === 'scalar_step'
-                    ? '입력 — 앞 단계의 값 (출처 단계 표시)'
-                    : '입력 — 곡선의 열 (원본 파일 채널 또는 앞 단계의 열)'}
+                    ? '입력 — 앞 단계의 값 또는 그 시험의 시편 치수 · 시험 조건 (출처 표시)'
+                    : '입력 — 곡선의 열(원본 파일 채널 · 앞 단계의 열) 또는 그 시험의 시편 치수 · 시험 조건'}
               </Label>
               {!isFamily && (
                 <Button

@@ -510,3 +510,56 @@ def test_식으로_낸_결과가_그래프에서_식으로_이어진다(
         headers=admin_headers,
     ).json()
     assert none["counts"].get("computed_by", 0) == 0
+
+
+STRESS_BY_AREA = {
+    "key": "stress_by_area_api",
+    "kind": "column_step",
+    "label": "공칭응력(식)",
+    "expression": "force / specimen_area",
+    "variables": [{"name": "force", "unit": "N"}, {"name": "specimen_area", "unit": "m2"}],
+    "result": {"key": "stress_by_area", "label": "공칭응력(식)", "si_unit": "Pa"},
+    "applies_to": ["tensile"],
+}
+
+
+def test_시편_치수를_열_식에서_쓴다(
+    client: TestClient, db: Session, admin_headers: dict[str, str], sample: dict[str, Any]
+) -> None:
+    """사용자 보고(2026-10-20): 계산식 어휘에 곡선 열과 처리 결과값만 있고 시편 치수 · 시험
+    조건이 없어, 굽힘 · 압축 변환을 개발 없이 레시피로 만들 수 없었다."""
+    result = _run(client, db, admin_headers, sample["id"], STEPS)
+
+    # 어휘에 선다 — 시편 치수 · 단면적 · 시험 조건.
+    vocab = client.get("/api/formulas/vocabulary", headers=admin_headers).json()
+    inputs = {one["key"]: one for one in vocab["inputs"]}
+    assert inputs["specimen_area"]["made_by"] == "시편 치수"
+    assert "specimen_gauge_length" in inputs
+    assert inputs["condition_temperature"]["made_by"] == "시험 조건"
+
+    # 미리보기가 **그 시험의 단면적**으로 계산한다 — 전에는 미리보기만 이 값을 몰랐다.
+    given = client.get(
+        "/api/processing/inputs",
+        params={"test_run_id": result["test_run_id"]},
+        headers=admin_headers,
+    ).json()
+    area = next(one["value"] for one in given if one["key"] == "specimen_area")
+    seen = client.post(
+        "/api/formulas/preview",
+        json={"spec": STRESS_BY_AREA, "result_id": result["id"]},
+        headers=admin_headers,
+    )
+    assert seen.status_code == 200, seen.text
+    body = seen.json()
+    assert body["ok"] is True, body["message"]
+    row = next(one for one in body["sample"] if one["force"] > 0)
+    assert row["stress_by_area"] == pytest.approx(row["force"] / area)
+
+    # 저장하면 인장 단계 목록에 선다 — 치수를 채널로 요구하지 않으므로 숨지 않는다.
+    created = client.post("/api/formulas", json=STRESS_BY_AREA, headers=admin_headers)
+    assert created.status_code == 201, created.text
+    listed = client.get(
+        "/api/processing/steps", params={"test_type": "tensile"}, headers=admin_headers
+    ).json()
+    step = next(one for one in listed if one["id"] == "formula.stress_by_area_api")
+    assert [p["name"] for p in step["params"]] == ["specimen_area"]

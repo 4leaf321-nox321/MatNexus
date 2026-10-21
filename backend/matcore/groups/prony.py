@@ -193,7 +193,11 @@ def _outcome(
     applies_to=("dma_sweep",),
     # **키만으로 거르면 부서가 만든 DMA 종류에서 이 방법이 사라진다.** 이름이
     # 무엇이든 저장·손실 탄성률을 재는 시험이면 겹치고 맞출 수 있다.
-    requires_channels=(("storage_modulus",), ("loss_modulus",)),
+    # 전단 채널(G′ · G″)로 재는 시험도 — 레오미터 진동(2026-10-20). 안쪽 튜플은 「그중 하나」.
+    requires_channels=(
+        ("storage_modulus", "shear_storage_modulus"),
+        ("loss_modulus", "shear_loss_modulus"),
+    ),
     params=(
         ParamSpec(
             name="method",

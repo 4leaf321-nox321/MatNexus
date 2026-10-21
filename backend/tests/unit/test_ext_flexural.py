@@ -348,3 +348,94 @@ def test_꼭_있어야_하는_참조는_여전히_멈춘다() -> None:
             _frame(force=force, deflection=force * 1e-6),
             given=_given(None),
         )
+
+
+def _toe_curve(strain_key: str, stress_key: str) -> Frame:
+    """앞 2 % 가 눕는 곡선 — 그 뒤 직선을 응력 0 까지 늘이면 1.9 % 에서 만난다."""
+    strain = np.linspace(0.0, 0.2, 401)
+    soft = (2.0e9 / 20) * strain
+    stiff = 2.0e9 * (strain - 0.019)
+    stress = np.where(strain < 0.02, soft, stiff)
+    return Frame({strain_key: strain, stress_key: stress}, {strain_key: "1", stress_key: "Pa"})
+
+
+def test_토우_보정은_인장의_계산을_이_시험의_열로_쓴다() -> None:
+    """사용자 보고(2026-10-20): 압축 · 굽힘 처리에 토우 보정이 없다 — 기존 단계를 재사용.
+    열 이름만 이 시험의 것이 기본으로 선다(사람이 열을 다시 고르지 않아도 된다)."""
+    from matcore import processing, registry
+
+    frame = _toe_curve("flexural_strain", "flexural_stress")
+    out = processing.apply(
+        [
+            processing.Step(
+                "flexural.toe_compensation", {"minimum_strain": 0.05, "maximum_strain": 0.1}
+            )
+        ],
+        frame,
+    )
+    found = {one.key: one.value for one in out.stages[-1].scalars}
+    assert found["toe_strain_offset"] == pytest.approx(0.019, abs=1e-6)
+    assert found["toe_r_squared"] == pytest.approx(1.0)
+    moved = out.stages[-1].frame.columns["flexural_strain"]
+    assert moved[-1] == pytest.approx(0.2 - 0.019)
+    # 계산은 하나다 — 인장의 그 함수를 이 시험의 열로 부른다.
+    assert registry.get("flexural.toe_compensation").makes_values == (
+        registry.get("tensile.toe_compensation").makes_values
+    )
+
+
+class Test구조_강성:
+    """카드 부품용 구조 강성 블록(2026-10-20) — 강성은 **그 배치**의 값이라 배치와 함께 싣고,
+    배치가 다른 시편끼리는 평균하지 않는다."""
+
+    @staticmethod
+    def member(label: str, stiffness: float, span: float = SPAN) -> Member:
+        return Member(
+            label=label,
+            values={
+                "flexural_modulus": E,
+                "flexural_stiffness": stiffness,
+                "support_span": span,
+                "load_span": 0.0,
+                "beam_width": WIDTH,
+                "beam_thickness": THICKNESS,
+            },
+        )
+
+    def test_같은_배치면_평균하고_블록에_배치와_함께_싣는다(self) -> None:
+        got = bending.equivalent_modulus([self.member("A", 900.0), self.member("B", 1100.0)])
+        assert got.values["flexural_stiffness"] == pytest.approx(1000.0)
+        block = bending.card_blocks(got.values, got.detail, got.warnings)[
+            "structural_stiffness"
+        ]
+        assert block["values"]["stiffness"] == pytest.approx(1000.0)
+        assert block["values"]["support_span"] == pytest.approx(SPAN)
+        assert block["values"]["loading"] == "3점 굽힘"
+        assert block["values"]["sample_count"] == 2
+
+    def test_시편_수는_강성이_있는_시편만_센다(self) -> None:
+        """다섯 중 둘만 강성이 있으면 「2」 — 묶음의 시편 수(굽힘 탄성률이 있는 5)를 그대로
+        적었다(2026-10-20 검토)."""
+        bare = [
+            Member(label=f"R{index}", values={"flexural_modulus": E}) for index in range(3)
+        ]
+        got = bending.equivalent_modulus(
+            [self.member("A", 900.0), self.member("B", 1100.0), *bare]
+        )
+        assert got.values["sample_count"] == 5
+        block = bending.card_blocks(got.values, got.detail, got.warnings)[
+            "structural_stiffness"
+        ]
+        assert block["values"]["sample_count"] == 2
+
+    def test_배치가_다르면_평균하지_않고_말한다(self) -> None:
+        """스팬이 두 배면 3점 강성은 1/8 — 섞어 평균하면 어느 부품의 값도 아니다."""
+        got = bending.equivalent_modulus(
+            [self.member("A", 1000.0), self.member("B", 125.0, span=2 * SPAN)]
+        )
+        assert "flexural_stiffness" not in got.values
+        assert any("배치가 다릅니다" in one for one in got.warnings)
+        blocks = bending.card_blocks(got.values, got.detail, got.warnings)
+        assert "structural_stiffness" not in blocks
+        # 등가 E 는 배치를 걷어 낸 값이라 그대로 평균한다.
+        assert blocks["elastic"]["values"]["youngs_modulus"] == pytest.approx(E)

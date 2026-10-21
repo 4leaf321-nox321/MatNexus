@@ -1952,6 +1952,18 @@
             ],
             "title": "Operator"
           },
+          "profile_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "읽을 형식(프로파일) key. 비우면 지문으로 자동으로 고른다",
+            "title": "Profile Key"
+          },
           "specimen_id": {
             "format": "uuid",
             "title": "Specimen Id",
@@ -5491,6 +5503,59 @@
         "title": "CatalogPropertyMigrateOut",
         "type": "object"
       },
+      "CatalogPropertyPreviewOut": {
+        "description": "만들면 **이렇게 된다** — 만들 때와 같은 검사를 지났다(2026-10-20).\n\nAI 의 미리보기가 서버에 묻지 않고 입력을 그대로 돌려줘서, 미리보기는 통과하고 실제 생성에서\n「단위표에 없습니다」 로 거절되는 일이 있었다(사용자 보고). 이 응답은 생성 코드를 그대로\n돌리고 되돌린 결과다.",
+        "properties": {
+          "domain": {
+            "title": "Domain",
+            "type": "string"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "scale": {
+            "title": "Scale",
+            "type": "boolean"
+          },
+          "si_unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Si Unit"
+          },
+          "symbol": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Symbol"
+          }
+        },
+        "required": [
+          "key",
+          "name",
+          "domain",
+          "si_unit",
+          "scale",
+          "symbol"
+        ],
+        "title": "CatalogPropertyPreviewOut",
+        "type": "object"
+      },
       "CatalogPropertyUpdate": {
         "description": "물성 정의 고치기 — 지금은 **정의문** 하나(ADR 0050).\n\n부분 수정이다. 안 보낸 칸은 그대로, `description: null`(또는 빈 글)은 정의문을 비운다.",
         "properties": {
@@ -6140,6 +6205,84 @@
           "notes"
         ],
         "title": "CatalogValueOut",
+        "type": "object"
+      },
+      "CatalogValuePreviewOut": {
+        "description": "넣으면 **이렇게 저장된다** — 넣을 때와 같은 검사(단위 환산 · 눈금 일치 · 출처)를\n지났다.",
+        "properties": {
+          "converted": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Converted"
+          },
+          "property_key": {
+            "title": "Property Key",
+            "type": "string"
+          },
+          "property_name": {
+            "title": "Property Name",
+            "type": "string"
+          },
+          "uncertainty": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Uncertainty"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit"
+          },
+          "value_num": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value Num"
+          },
+          "value_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value Text"
+          }
+        },
+        "required": [
+          "property_key",
+          "property_name",
+          "value_num",
+          "value_text",
+          "unit",
+          "uncertainty"
+        ],
+        "title": "CatalogValuePreviewOut",
         "type": "object"
       },
       "ChangePasswordRequest": {
@@ -10214,6 +10357,14 @@
           "filename": {
             "title": "Filename",
             "type": "string"
+          },
+          "profile_candidates": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Profile Candidates",
+            "type": "array"
           },
           "profile_key": {
             "anyOf": [
@@ -15339,6 +15490,17 @@
             "title": "Functions",
             "type": "array"
           },
+          "inputs": {
+            "default": [],
+            "items": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "title": "Inputs",
+            "type": "array"
+          },
           "scalars": {
             "items": {
               "additionalProperties": {
@@ -18319,6 +18481,11 @@
           "minimum_frequency_hz": {
             "title": "Minimum Frequency Hz",
             "type": "number"
+          },
+          "modulus_basis": {
+            "default": "E",
+            "title": "Modulus Basis",
+            "type": "string"
           },
           "notes": {
             "items": {
@@ -27593,6 +27760,30 @@
         "title": "SampleCreateRequest",
         "type": "object"
       },
+      "SampleDeletePlanOut": {
+        "description": "이 시료를 지우면 **무엇이 함께 사라지는가**(2026-10-20). 재료의 `DeletePlanOut` 과\n같은 뜻 — 숫자는 서버가 센다. `CascadeDeleteRequest` 를 그대로 받고, 지운 뒤에도 이\n모양으로 돌려준다(요청한 것이 아니라 **지운 것**).",
+        "properties": {
+          "sample_name": {
+            "title": "Sample Name",
+            "type": "string"
+          },
+          "specimens": {
+            "title": "Specimens",
+            "type": "integer"
+          },
+          "test_runs": {
+            "title": "Test Runs",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "sample_name",
+          "specimens",
+          "test_runs"
+        ],
+        "title": "SampleDeletePlanOut",
+        "type": "object"
+      },
       "SampleOut": {
         "properties": {
           "access": {
@@ -29388,6 +29579,58 @@
         "title": "SpecimenCreateRequest",
         "type": "object"
       },
+      "SpecimenDeleteOut": {
+        "description": "고른 시편을 지우면(미리 세기) · 지웠더니(지우기) — **같은 판정**을 지난 숫자다.\n\n못 지우는 것은 **낱개로 이유와 함께**(권한 · 아래에 남의 시험 · 시험 허락 없음) —\n사람이 해야 할 일이 각각 다르다.",
+        "properties": {
+          "blocked": {
+            "items": {
+              "$ref": "#/components/schemas/MaterialBlockedOut"
+            },
+            "title": "Blocked",
+            "type": "array"
+          },
+          "specimens": {
+            "title": "Specimens",
+            "type": "integer"
+          },
+          "test_runs": {
+            "title": "Test Runs",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "specimens",
+          "test_runs",
+          "blocked"
+        ],
+        "title": "SpecimenDeleteOut",
+        "type": "object"
+      },
+      "SpecimenDeleteRequest": {
+        "description": "고른 시편을 한꺼번에 지운다(2026-10-20).\n\n사용자 보고: 잘못된 옵션으로 올린 시험을 치우려면 시험을 하나씩 지운 뒤에야 시편을 지울\n수 있었다. **시험은 따로 허락을 받는다**(재료 · 시료와 같다) — 끄면 시험이 매달린 시편은\n이유와 함께 남는다.",
+        "properties": {
+          "include_test_runs": {
+            "default": false,
+            "title": "Include Test Runs",
+            "type": "boolean"
+          },
+          "specimen_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 2000,
+            "minItems": 1,
+            "title": "Specimen Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "specimen_ids"
+        ],
+        "title": "SpecimenDeleteRequest",
+        "type": "object"
+      },
       "SpecimenFacetsOut": {
         "description": "시편 목록을 무엇으로 거를 수 있나. **지금 걸린 필터를 안 본다** — 「무엇이\n있나」 를 답하는 자리다(시험 목록과 같은 판단).",
         "properties": {
@@ -31145,6 +31388,11 @@
             },
             "title": "Items",
             "type": "array"
+          },
+          "modulus_basis": {
+            "default": "E",
+            "title": "Modulus Basis",
+            "type": "string"
           },
           "warnings": {
             "default": [],
@@ -38599,6 +38847,60 @@
         ]
       }
     },
+    "/api/catalog/materials/{material_id}/values/preview": {
+      "post": {
+        "description": "넣기 전에 **넣을 때와 같은 검사**를 돌린다(2026-10-20) — 단위 환산 · 눈금 일치 · 출처 ·\n등급. 넣는 코드를 그대로 돌리고 되돌린다(두 벌이면 어긋난다).",
+        "operationId": "preview_catalog_value_api_catalog_materials__material_id__values_preview_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "material_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Material Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CatalogValueCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogValuePreviewOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Preview Catalog Value",
+        "tags": [
+          "catalog"
+        ]
+      }
+    },
     "/api/catalog/properties": {
       "post": {
         "description": "문헌 물성 정의를 만든다 — 키는 `local.<domain>.<slug>`.\n\n시스템 관리자만. 정의는 모든 부서의 검색·매핑·사전에 걸리고, 키는 한 번 나가면\n못 바꾼다. 이름·별칭이 같은 물성이 이미 있으면 그 키를 알려 주고 거절한다(409).",
@@ -39006,6 +39308,48 @@
           }
         },
         "summary": "Property Mapping",
+        "tags": [
+          "catalog"
+        ]
+      }
+    },
+    "/api/catalog/properties/preview": {
+      "post": {
+        "description": "만들기 전에 **만들 때와 같은 검사**를 돌린다(2026-10-20) — 생성 코드를 그대로 돌리고\n되돌린다.\n\n검사를 두 벌로 두면 언젠가 어긋난다. AI 의 미리보기가 서버에 묻지 않아, 미리보기는 통과하고\n실제 생성에서 단위로 거절되는 일이 있었다(사용자 보고).",
+        "operationId": "preview_property_api_catalog_properties_preview_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CatalogPropertyCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogPropertyPreviewOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Preview Property",
         "tags": [
           "catalog"
         ]
@@ -50964,6 +51308,104 @@
         ]
       }
     },
+    "/api/samples/{sample_id}/delete-cascade": {
+      "post": {
+        "description": "시료를 **아래까지 통째로** 지운다 — 시험 → 시편 → 시료(2026-10-20).\n\n`DELETE /samples/{id}` 는 시편이 남아 있으면 막는다(그 버튼이 시험까지 지우면 안 된다).\n그런데 삭제 창은 그 사실을 적어 놓고도 확인을 받았고, 누르면 거절되어 **아무 일도 없었다**\n(사용자 보고: 시험 데이터가 있다고 묻길래 지운다고 했는데 안 지워진다). 재료와 같은 「다른\n문」 을 둔다 — 무엇이 사라지는지 먼저 보고(`delete-plan`), **시험은 따로 허락을 받는다.**\n휴지통에서 시료를 되살리면 함께 지운 시편 · 시험이 같이 돌아온다.",
+        "operationId": "delete_sample_cascade_api_samples__sample_id__delete_cascade_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sample_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Sample Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CascadeDeleteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SampleDeletePlanOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Sample Cascade",
+        "tags": [
+          "materials"
+        ]
+      }
+    },
+    "/api/samples/{sample_id}/delete-plan": {
+      "get": {
+        "description": "지우기 전에 **무엇이 함께 사라지는지** — 재료의 `delete-plan` 과 같다(2026-10-20).",
+        "operationId": "sample_delete_plan_api_samples__sample_id__delete_plan_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sample_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Sample Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SampleDeletePlanOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Sample Delete Plan",
+        "tags": [
+          "materials"
+        ]
+      }
+    },
     "/api/samples/{sample_id}/mill-check": {
       "get": {
         "description": "밀시트가 말한 값과 **우리가 잰 값을 나란히.**\n\n이것이 시료 층 선언 물성의 쓸모다. 값을 적어 두기만 하면 기록으로 끝나는데,\n같은 물성을 우리 처리 결과가 낸다 — `proof_stress`·`tensile_strength` 가\n밀시트의 항복강도·인장강도와 같은 값이다.\n\n## 무엇을 세는가\n\n**채택된 처리 결과만**(ADR 0007). 채택은 \"이 계산을 이 시험의 답으로 삼는다\"\n는 선언이고, 안 채택된 것까지 평균에 넣으면 시험해 본 것과 결론을 낸 것이\n섞인다.\n\n## 판정하지 않는다\n\n차이를 비율로 낼 뿐 「맞다/틀리다」를 말하지 않는다. 몇 %부터 문제인지는\n규격과 용도가 정하고, 그것을 여기서 상수로 박으면 **그 숫자가 곧 규격 행세를\n한다.**",
@@ -51677,6 +52119,90 @@
           }
         },
         "summary": "Bulk Update Specimens",
+        "tags": [
+          "materials"
+        ]
+      }
+    },
+    "/api/specimens/delete": {
+      "post": {
+        "description": "고른 시편을 **매달린 시험까지** 한꺼번에 지운다 — 시험은 따로 허락(2026-10-20).\n\n사용자 보고: 잘못된 옵션으로 올린 시험을 치우려면 시험을 하나씩 지운 뒤에야 시편을 지울\n수 있었다. 소프트 삭제이고 휴지통에서 되살린다. 돌려주는 것은 요청한 것이 아니라\n**지운 것**이다. `DELETE` 가 아니라 `POST /delete` 인 이유는 시험 · 재료 쪽과 같다.",
+        "operationId": "delete_specimens_api_specimens_delete_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SpecimenDeleteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpecimenDeleteOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Specimens",
+        "tags": [
+          "materials"
+        ]
+      }
+    },
+    "/api/specimens/delete-plan": {
+      "post": {
+        "description": "고른 시편을 지우면 **무엇이 함께 사라지는가** — 쓰지 않는다(2026-10-20).\n\n시험은 **허락했다고 치고** 센다 — 창이 「시험 N건도 함께 지웁니다」 칸을 띄우려면 그 수를\n알아야 한다. 허락 없이 지우면 그 시편들은 이유와 함께 남는다(`delete`).",
+        "operationId": "specimen_delete_plan_api_specimens_delete_plan_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SpecimenDeleteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpecimenDeleteOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Specimen Delete Plan",
         "tags": [
           "materials"
         ]
@@ -53318,7 +53844,7 @@
         ]
       },
       "post": {
-        "description": "원본을 받아 저장하고 파싱을 큐에 넣는다. 202 를 준다 — 아직 안 끝났다.",
+        "description": "원본을 받아 저장하고 파싱을 큐에 넣는다. 202 를 준다 — 아직 안 끝났다.\n\n**읽을 형식을 처음부터 고를 수 있다**(`profile_key`, 2026-10-20). 사용자 보고: 맞는 형식이\n둘 이상인 파일을 자동이 다른 형식으로 골라 곡선 하나로 읽혔고, 올릴 때 고를 방법이\n없어 잘못 읽힌 뒤에 「다시 읽기」 를 해야 했다. 고르면 「다시 읽기」 의 고정과 같다.",
         "operationId": "upload_test_run_api_test_runs_post",
         "requestBody": {
           "content": {

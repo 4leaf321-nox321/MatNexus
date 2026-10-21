@@ -13,6 +13,7 @@ import { UploadDialog } from '@/modules/tests/UploadDialog'
 const upload = vi.fn()
 const specimens = vi.fn()
 const createSpecimen = vi.fn()
+const formats = vi.fn()
 
 vi.mock('@/modules/tests/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/modules/tests/api')>()),
@@ -42,6 +43,7 @@ vi.mock('@/modules/tests/api', async (importOriginal) => ({
         },
       ]),
     upload: (...args: unknown[]) => upload(...args),
+    formats: (...args: unknown[]) => formats(...args),
   },
 }))
 
@@ -64,6 +66,7 @@ beforeEach(() => {
   specimens.mockResolvedValue([SPECIMEN])
   createSpecimen.mockResolvedValue({ id: 'sp2', record_name: 'SECC_S1_TD_01', orientation: 'TD' })
   upload.mockResolvedValue({ id: 'run1', record_name: 'SECC_S1_MD_01__TEN_01' })
+  formats.mockResolvedValue([])
 })
 
 describe('의뢰 항목에서 열 때', () => {
@@ -113,5 +116,57 @@ describe('의뢰 항목에서 열 때', () => {
     await waitFor(() =>
       expect(createSpecimen).toHaveBeenCalledWith('s1', expect.objectContaining({ orientation: 'TD' }))
     )
+  })
+})
+const profile = (key: string, label: string) => ({
+  key,
+  label,
+  test_type_key: 'tensile',
+  test_type_label: '인장시험',
+  is_active: true,
+  priority: 0,
+})
+
+describe('읽을 형식 (2026-10-20)', () => {
+  // 사용자 보고: 맞는 형식이 둘 이상인 파일을 자동이 다른 형식으로 골라 곡선 하나로 읽혔고,
+  // 올릴 때 고를 방법이 없어 잘못 읽힌 뒤에 「다시 읽기」 를 해야 했다.
+  async function openWith() {
+    const user = userEvent.setup()
+    render(
+      <UploadDialog open specimenId="sp1" specimenName="SECC_S1_MD_01" presetTestType="tensile" onClose={() => {}} onDone={() => {}} />
+    )
+    return user
+  }
+
+  it('형식이 둘 이상이면 고르고, 고른 형식으로 올린다', async () => {
+    formats.mockResolvedValue([profile('zwick_a', 'Zwick 기본'), profile('zwick_b', 'Zwick 다단')])
+    const user = await openWith()
+    // **데이터로 그려진 것을 기다린다** — 형식 칸은 목록이 와야 선다.
+    await user.click(await screen.findByRole('combobox', { name: '읽을 형식' }))
+    await user.click(screen.getByRole('option', { name: /Zwick 다단/ }))
+    await user.upload(screen.getByLabelText('원본 파일'), new File(['x'], 'run.csv'))
+    await user.click(screen.getByRole('button', { name: '업로드' }))
+    await waitFor(() => expect(upload).toHaveBeenCalled())
+    const [payload] = upload.mock.calls[0] as [Record<string, unknown>]
+    expect(payload.profileKey).toBe('zwick_b')
+    expect(formats).toHaveBeenCalledWith('tensile')
+  })
+
+  it('안 고르면 자동이다 — 형식 key 를 안 보낸다', async () => {
+    formats.mockResolvedValue([profile('zwick_a', 'Zwick 기본'), profile('zwick_b', 'Zwick 다단')])
+    const user = await openWith()
+    expect(await screen.findByRole('combobox', { name: '읽을 형식' })).toHaveTextContent('자동')
+    await user.upload(screen.getByLabelText('원본 파일'), new File(['x'], 'run.csv'))
+    await user.click(screen.getByRole('button', { name: '업로드' }))
+    await waitFor(() => expect(upload).toHaveBeenCalled())
+    const [payload] = upload.mock.calls[0] as [Record<string, unknown>]
+    expect(payload.profileKey).toBeUndefined()
+  })
+
+  it('형식이 하나뿐이면 칸을 안 띄운다', async () => {
+    formats.mockResolvedValue([profile('zwick_a', 'Zwick 기본')])
+    await openWith()
+    await waitFor(() => expect(formats).toHaveBeenCalled())
+    expect(screen.queryByRole('combobox', { name: '읽을 형식' })).not.toBeInTheDocument()
   })
 })

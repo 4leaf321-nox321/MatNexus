@@ -75,6 +75,32 @@ def visible_profiles(db: Session) -> Select[tuple[FormatProfile]]:
     return select(FormatProfile).where(FormatProfile.deleted_at.is_(None))
 
 
+def chosen_profile(db: Session, test_type_id: Any, key: str) -> FormatProfile:
+    """사람이 고른 형식 — **이 시험 종류의 것, 쓰는 중인 것만**(2026-10-20).
+
+    업로드와 「다시 읽기」 가 같은 판정을 지난다. 다른 종류의 형식으로 읽으면 채널 이름이
+    안 맞아 어차피 실패하는데, 그 실패는 「형식이 틀렸다」 로 안 읽힌다. 사용 중지한 형식은
+    고정해 두면 읽을 때 조용히 막힌다 — 고르는 자리에서 말한다.
+    """
+    profile = db.scalar(
+        visible_profiles(db).where(
+            FormatProfile.key == key, FormatProfile.test_type_id == test_type_id
+        )
+    )
+    if profile is None:
+        raise AppError(
+            "MNX-TESTS-0022", f"그 시험 종류로 쓸 수 있는 형식이 아닙니다: {key}", status=422
+        )
+    if not profile.is_active:
+        raise AppError(
+            "MNX-TESTS-0022",
+            f"사용 중지된 형식입니다: {key} — 「장비 파일 정의」 에서 다시 켜거나 다른 형식을 "
+            "고르세요.",
+            status=422,
+        )
+    return profile
+
+
 def auto_profiles(db: Session, user: User) -> Select[tuple[FormatProfile]]:
     """**자동으로 고를 때** 대 보는 것 — 내 부서가 등록한 것과 부서 없이 올린 것.
 
@@ -447,6 +473,7 @@ def _validate(definition: dict[str, Any], db: Session, test_type: TestType) -> N
         raise AppError("MNX-TESTS-0026", "열 매핑이 비어 있습니다.", status=422)
 
     _check_units(definition)
+    _check_split(definition)
     _check_fields(definition, "record", RECORD_FIELDS, "MNX-TESTS-0034")
     _check_fields(definition, "identity", IDENTITY_FIELDS, "MNX-TESTS-0035")
     # 재료·시료는 이관 경로만 읽는다. 그래도 **저장할 때** 검사한다 — 오타를 이관
@@ -491,6 +518,31 @@ def _check_units(definition: dict[str, Any]) -> None:
             "MNX-TESTS-0026",
             f"모르는 단위 표기입니다 — {' / '.join(bad)}. 무차원은 1 로 적습니다.",
             status=422,
+        )
+
+
+def _check_split(definition: dict[str, Any]) -> None:
+    """온도 램프 나누기(`tables.split`)를 **저장할 때** 본다(2026-10-20).
+
+    안 보면 `step_k: "5K"` 같은 정의가 저장되고, 읽을 때마다 「나누지 않았습니다」 경고만
+    남는다 — 화면 · MCP 둘 다 이 칸을 쓴다.
+    """
+    split = (definition.get("tables") or {}).get("split")
+    if split is None:
+        return
+    problem = None
+    if not isinstance(split, dict):
+        problem = "객체여야 합니다"
+    else:
+        step = split.get("step_k")
+        by = split.get("by", "temperature")
+        if isinstance(step, bool) or not isinstance(step, int | float) or not 0 < step < 1000:
+            problem = f"구간 폭 step_k 는 0 보다 큰 K 수여야 합니다(받은 값 {step!r})"
+        elif not isinstance(by, str) or not by:
+            problem = f"by 는 온도 열 이름이어야 합니다(받은 값 {by!r})"
+    if problem:
+        raise AppError(
+            "MNX-TESTS-0026", f"온도 램프 나누기(tables.split): {problem}.", status=422
         )
 
 

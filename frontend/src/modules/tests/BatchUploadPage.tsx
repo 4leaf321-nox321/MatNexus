@@ -72,6 +72,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/shared/components/ui/select'
+import { FormatSelect, formatChoices } from '@/modules/tests/FormatSelect'
 import {
   Table,
   TableBody,
@@ -106,6 +107,14 @@ interface Row {
   typeKey: string | null
   typeSource: TypeSource
   typeReason?: string
+  /** 읽을 형식 — `null` 이면 자동(2026-10-20). 종류를 바꾸면 비운다. */
+  profileKey: string | null
+  /**
+   * 지문이 맞은 형식들(서버 추정) · 그 추정이 고른 종류. **둘 이상이면 자동이 틀릴 수 있다** —
+   * 그 줄에 「맞는 형식 N개」 를 띄워 사람이 고르게 한다(사용자 보고: 곡선 하나로 읽혔다).
+   */
+  candidates: string[]
+  candidatesFor: string | null
   materialId: string | null
   sampleId: string | null
   /** 올리고 나면 만들어진 시험 id. **치수 채우기가 이 값을 쓴다.** */
@@ -168,6 +177,8 @@ export default function BatchUploadPage() {
   const askedItem = asked.get('item')
   const navigate = useNavigate()
   const types = useResource(() => testsApi.types(), [])
+  /** 읽을 형식 전부 — 한 번 받아 줄마다 그 종류의 것만 고른다(줄마다 묻지 않는다). */
+  const formats = useResource(() => testsApi.formats(), [])
   const commission = useResource(
     () => (askedCommission ? commissionsApi.get(askedCommission) : Promise.resolve(null)),
     [askedCommission]
@@ -266,6 +277,9 @@ export default function BatchUploadPage() {
       // **어디서 왔는지 이어받는다.** 재료 화면에서 「파일 여러 개 올리기」 로
       // 오면 그 재료·시료가 정해져 있다 — 줄마다 다시 고르게 하면 열 줄부터 일이
       // 되고, 그것이 이 화면을 만든 이유다.
+      profileKey: null,
+      candidates: [],
+      candidatesFor: null,
       materialId: askedMaterial,
       sampleId: askedSample,
       specimen: null,
@@ -293,12 +307,21 @@ export default function BatchUploadPage() {
       const found = await testsApi.detectType(file)
       setRows((current) =>
         current.map((row) => {
-          if (row.key !== key || row.typeSource === 'manual') return row
+          if (row.key !== key) return row
+          // 후보는 사람이 종류를 골랐어도 남긴다 — 그 종류가 같으면 여전히 쓸모 있다.
+          const seen = {
+            candidates: found.profile_candidates ?? [],
+            candidatesFor: found.test_type_key ?? null,
+          }
+          if (row.typeSource === 'manual') return { ...row, ...seen }
+          row = { ...row, ...seen }
           if (!found.test_type_key) {
             return { ...row, typeReason: found.reason }
           }
           return {
             ...row,
+            // 응답을 기다리는 사이 고른 형식은 **다른 종류의 것**일 수 있다 — 남기면 서버가 거절한다.
+            ...(found.test_type_key !== row.typeKey ? { profileKey: null } : {}),
             typeKey: found.test_type_key,
             typeSource: found.source === 'profile' ? 'profile' : 'extension',
             typeReason: found.reason,
@@ -358,8 +381,13 @@ export default function BatchUploadPage() {
       current.map((row) => {
         if (row.key !== key) return row
         // **종류가 바뀌면 줄의 개별 조건을 비운다** — 칸 정의가 종류마다 다르다.
+        // 고른 형식도 — 형식은 종류에 딸려 있다.
         const retyped = change.typeKey !== undefined && change.typeKey !== row.typeKey
-        return { ...row, ...(retyped ? { conditions: {} } : {}), ...change }
+        return {
+          ...row,
+          ...(retyped ? { conditions: {}, profileKey: null } : {}),
+          ...change,
+        }
       })
     )
   }
@@ -379,9 +407,13 @@ export default function BatchUploadPage() {
     }
     setNotice(null)
     setRows((current) =>
-      current.map((row) =>
-        row.selected && row.status !== 'done' ? { ...row, ...change } : row
-      )
+      current.map((row) => {
+        if (!row.selected || row.status === 'done') return row
+        // **종류를 바꾸면 고른 형식을 비운다**(줄의 `patch` 와 같다). 남기면 새 종류에 고를 형식이
+        // 하나뿐이라 칸이 안 보이는데도 옛 형식이 실려 가 서버가 422 로 거절했다.
+        const retyped = change.typeKey !== undefined && change.typeKey !== row.typeKey
+        return { ...row, ...(retyped ? { profileKey: null } : {}), ...change }
+      })
     )
   }
 
@@ -469,6 +501,7 @@ export default function BatchUploadPage() {
           ),
           conditionUnits: conditionUnits(definition?.conditions ?? []),
           division: row.division || undefined,
+          profileKey: row.profileKey ?? undefined,
         })
         // **의뢰 항목에 붙인다.** 붙이기가 막혀도 올린 것은 남는다 — 무엇이 안 됐는지 그 줄에 적는다.
         let linkNote: string | undefined
@@ -856,7 +889,7 @@ export default function BatchUploadPage() {
                     />
                   </TableHead>
                   <TableHead>파일</TableHead>
-                  <TableHead className="w-36">종류</TableHead>
+                  <TableHead className="w-44">종류 · 형식</TableHead>
                   <TableHead className="w-52">재료</TableHead>
                   <TableHead className="w-32">시료</TableHead>
                   <TableHead className="w-36">시편</TableHead>
@@ -924,6 +957,31 @@ export default function BatchUploadPage() {
                           자동 인식 안 됨
                         </span>
                       )}
+                      {(() => {
+                        // **고를 형식이 둘 이상일 때만** 칸이 선다(2026-10-20).
+                        const choices = formatChoices(formats.data ?? [], row.typeKey)
+                        if (choices.length < 2) return null
+                        const many =
+                          row.candidatesFor === row.typeKey && row.candidates.length > 1
+                        return (
+                          <>
+                            <FormatSelect
+                              className="mt-1 h-8 text-xs"
+                              choices={choices}
+                              value={row.profileKey}
+                              onChange={(next) => patch(row.key, { profileKey: next })}
+                            />
+                            {many && row.profileKey === null && (
+                              <span
+                                className="mt-0.5 block text-xs text-amber-600 dark:text-amber-500"
+                                title={`지문이 맞은 형식: ${row.candidates.join(', ')} — 자동은 첫 번째로 읽습니다.`}
+                              >
+                                맞는 형식 {row.candidates.length}개 — 확인
+                              </span>
+                            )}
+                          </>
+                        )
+                      })()}
                     </TableCell>
 
                     <TableCell>

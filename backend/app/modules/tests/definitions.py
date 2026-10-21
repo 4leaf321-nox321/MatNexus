@@ -262,6 +262,32 @@ BUILTIN_TEST_TYPES: list[dict[str, Any]] = [
             ("testing_group", "시험 그룹", "text", None, None, None, False),
         ],
     },
+    {
+        # **박리 · 이탈력**(2026-10-20) — 테이프 박리, 배터리 PTT(당김), SIM 트레이 삽입 ·
+        # 인출. 하중-변위에서 최대 하중 · 안정 구간 평균 박리력 · 박리 강도(N/m) · 파단
+        # 에너지를 낸다(확장 `adhesion`). 폭은 시편 기록, 박리 각도는 조건이다. 사용자 보고:
+        # 이 시험들의 처리 단계가 없었다.
+        "key": "adhesion",
+        "label": "박리 · 이탈력",
+        "abbr": "ADH",
+        "parser_key": "zwick_tra",
+        "description": (
+            "박리 · 삽입/인출 · 이탈. 하중-변위에서 최대 하중 · 안정 구간 평균 박리력 · "
+            "박리 강도(N/m) · 파단 에너지를 낸다."
+        ),
+        "sort_order": 90,
+        "channels": [
+            ("force", "하중", "force", "N", True),
+            ("displacement", "변위", "length", "m", True),
+            ("time", "시간", "time", "s", False),
+        ],
+        "conditions": [
+            ("temperature", "시험 온도", "number", "temperature", "K", None, False),
+            ("test_speed", "시험 속도", "number", "velocity", "m/s", None, False),
+            ("peel_angle", "박리 각도", "number", "angle", "rad", None, False),
+            ("testing_group", "시험 그룹", "text", None, None, None, False),
+        ],
+    },
 ]
 
 

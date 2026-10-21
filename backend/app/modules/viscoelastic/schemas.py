@@ -23,6 +23,9 @@ class SweepListOut(BaseModel):
     items: list[SweepOut]
     warnings: list[str] = []
     """뺀 곡선과 그 이유. **말없이 빼면 "왜 6벌인데 4벌만 겹쳤지" 가 된다.**"""
+    modulus_basis: str = "E"
+    """잰 탄성률 — `E`(인장 · 굽힘의 E′ · E″) 또는 `G`(전단 채널의 G′ · G″, 2026-10-20). 화면이
+    축 이름을 이것으로 고른다."""
 
 
 class ShiftOut(BaseModel):
@@ -93,6 +96,10 @@ class MasterCurveOut(BaseModel):
     minimum_frequency_hz: float
     maximum_frequency_hz: float
     is_primary: bool = False
+    modulus_basis: str = "E"
+    """`G` 면 전단 채널(G′)로 잰 시험의 곡선 — 카드가 E = 2(1+ν)G 로 옮긴다(ADR 0057). 스윕을
+    다시 못 읽는 시험(장비 마스터커브만 가져온 것)에서도 화면이 축 이름을 바로 적게 곡선에
+    싣는다(2026-10-20)."""
     """**이 시험의 대표인가.** 재료의 글로벌 피팅이 이 곡선을 읽는다."""
     created_at: datetime
 

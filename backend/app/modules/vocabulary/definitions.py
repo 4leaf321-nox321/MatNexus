@@ -599,6 +599,9 @@ BUILTIN_PROPERTY_ITEMS: list[tuple[str, str, str, str, str | None, str | None, s
     # **접착·적층의 값이다.** 구성체(ADR 0026)가 생기면 그쪽으로 옮길 후보인데,
     # 지금은 적층 소재를 재료로 등록하므로 재료에 적는다.
     ("박리강도", "line_force", "P", "재료", None, None, "interface.peel_strength"),
+    # **와이블 계수**(2026-10-20) — 강도 분포의 형상 m. 곡선 없이 파단 하중과 와이블만 있는
+    # 외부 자료를 재료에 적는 자리다. 강도 분포 블록(확장 `weibull`)의 형상 칸을 채운다.
+    ("와이블 계수", "dimensionless", "m", "재료", None, None, "mechanical.weibull_modulus"),
     ("점도", "viscosity", "eta", "재료", None, None, "rheological.viscosity"),
 ]
 

@@ -1147,3 +1147,301 @@ class Test장비가_겹친_곡선을_가져온다:
             headers=admin_headers,
         )
         assert response.status_code in (404, 422), response.text
+
+
+class Test전단_채널로_잰_시험:
+    """사용자 보고(2026-10-20): 레오미터 진동 온도 스윕을 전단 채널(`shear_storage_modulus` ·
+    `shear_loss_modulus`)을 가진 시험 종류로 올렸더니 「겹칠 수 있는 온도 스윕 0개」 로
+    거절됐다. 그리고 그대로 카드가 됐다면 G 가 E 로 담겨 덱이 2(1+ν) 로 한 번 더 나눴을
+    것이다."""
+
+    @staticmethod
+    def shear_run(
+        client: TestClient, db: Session, headers: dict[str, str], *, both: bool = False
+    ) -> dict[str, Any]:
+        """`both` 면 시험 종류가 **E′ 채널도** 선언한다 — 파일은 그래도 G′ 로 매핑된다."""
+        from app.modules.tests.legacy_profiles import TA_DMA850_DEFINITION
+
+        ensure_builtin_test_types(db)
+        db.commit()
+        # 범용 진동 종류 — E′ 채널은 선택(이 파일에는 없다).
+        tensile_pair = [
+            {
+                "key": key,
+                "label": label,
+                "dimension": "stress",
+                "si_unit": "Pa",
+                "is_required": False,
+            }
+            for key, label in (
+                ("storage_modulus", "저장 탄성률"),
+                ("loss_modulus", "손실 탄성률"),
+            )
+        ]
+        made = client.post(
+            "/api/test-types",
+            json={
+                "key": "rheometer_osc",
+                "label": "레오미터 진동",
+                "abbr": "OSC",
+                "channels": [
+                    *(tensile_pair if both else []),
+                    {
+                        "key": "shear_storage_modulus",
+                        "label": "저장 전단 탄성률",
+                        "dimension": "stress",
+                        "si_unit": "Pa",
+                    },
+                    {
+                        "key": "shear_loss_modulus",
+                        "label": "손실 전단 탄성률",
+                        "dimension": "stress",
+                        "si_unit": "Pa",
+                    },
+                    {
+                        "key": "temperature",
+                        "label": "온도",
+                        "dimension": "temperature",
+                        "si_unit": "K",
+                    },
+                    {
+                        "key": "angular_frequency",
+                        "label": "각주파수",
+                        "dimension": "angular_frequency",
+                        "si_unit": "rad/s",
+                    },
+                    {
+                        "key": "frequency",
+                        "label": "주파수",
+                        "dimension": "frequency",
+                        "si_unit": "Hz",
+                    },
+                ],
+            },
+            headers=headers,
+        )
+        assert made.status_code == 201, made.text
+        columns = {
+            **TA_DMA850_DEFINITION["columns"],
+            "Storage modulus": {"channel": "shear_storage_modulus"},
+            "Loss modulus": {"channel": "shear_loss_modulus"},
+        }
+        tables = {
+            key: value
+            for key, value in TA_DMA850_DEFINITION["tables"].items()
+            if key != "master_curve"
+        }
+        profile = client.post(
+            "/api/formats",
+            json={
+                "key": "ares_osc",
+                "label": "레오미터 진동(시험)",
+                "test_type_key": "rheometer_osc",
+                "definition": {**TA_DMA850_DEFINITION, "columns": columns, "tables": tables},
+            },
+            headers=headers,
+        )
+        assert profile.status_code == 201, profile.text
+        material = client.post(
+            "/api/materials",
+            json={
+                "family": "Polymer",
+                "category": "Gel",
+                "grade": "OSC1",
+                "spec_thickness": 1.0,
+            },
+            headers=headers,
+        ).json()
+        sample = client.post(
+            f"/api/materials/{material['id']}/samples", json={}, headers=headers
+        ).json()
+        specimen = client.post(
+            f"/api/samples/{sample['id']}/specimens",
+            json={"orientation": "NA"},
+            headers=headers,
+        ).json()
+        created = client.post(
+            "/api/test-runs",
+            data={
+                "specimen_id": specimen["id"],
+                "test_type": "rheometer_osc",
+                "conditions": "{}",
+            },
+            files={"file": ("Example FreqTemp2.csv", FREQ_TEMP.read_bytes())},
+            headers=headers,
+        ).json()
+        assert test_services.parse_run(db, uuid.UUID(created["id"])) == "parsed"
+        run: dict[str, Any] = created
+        return run
+
+    def test_전단_채널도_온도_스윕으로_겹친다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str]
+    ) -> None:
+        run = self.shear_run(client, db, admin_headers)
+        got = client.get(f"/api/viscoelastic/runs/{run['id']}/sweeps", headers=admin_headers)
+        assert got.status_code == 200, got.text
+        assert len(got.json()["items"]) == 6
+        assert got.json()["modulus_basis"] == "G"
+        assert any("전단 채널" in one for one in got.json()["warnings"])
+
+    @pytest.mark.parametrize("both", [False, True], ids=["G만", "E·G_둘_다_선언"])
+    def test_카드는_E_로_옮겨_담고_잰_것이_G_라고_적는다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str], both: bool
+    ) -> None:
+        """변형 모드를 안 적어도 채널이 G 라고 말한다 — 옮기지 않으면 덱이 G 를 E 로 읽어
+        2(1+ν) 로 또 나눈다(이중 환산).
+
+        **종류가 E′ 채널까지 선언해도** 곡선이 G′ 면 G 다(2026-10-20 검토) — 카드가 종류 정의를
+        보던 때는 화면이 「G′ 로 잰 곡선」 이라 말하는 시험을 E 로 담았다."""
+        run = self.shear_run(client, db, admin_headers, both=both)
+        curve = Test마스터커브._make(client, admin_headers, run)
+        assert any("전단 채널" in one for one in curve["notes"])
+        # 곡선에도 실린다 — 스윕을 다시 못 읽는 화면이 축 이름을 여기서 읽는다.
+        assert curve["modulus_basis"] == "G"
+        listed = client.get(
+            f"/api/viscoelastic/runs/{run['id']}/master-curves", headers=admin_headers
+        ).json()
+        assert {one["modulus_basis"] for one in listed} == {"G"}
+        fit = client.post(
+            f"/api/viscoelastic/master-curves/{curve['id']}/prony",
+            json={"terms": 2},
+            headers=admin_headers,
+        ).json()
+        made = client.post(
+            "/api/fitting/cards/viscoelastic",
+            json={"prony_fit_id": fit["id"], "label": "겔 전단", "poisson_ratio": 0.49},
+            headers=admin_headers,
+        )
+        assert made.status_code == 201, made.text
+        card = made.json()
+        factor = 2 * (1 + 0.49)
+        assert card["blocks"]["elastic"]["values"]["youngs_modulus"] == pytest.approx(
+            fit["instantaneous_pa"] * factor
+        )
+        basis = card["blocks"]["viscoelastic"]["values"]["modulus_basis"]
+        assert basis.startswith("G′ (전단, 전단 채널(G′))") and "ν = 0.49" in basis
+
+    def test_푸아송비_없이는_옮기지_않는다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str]
+    ) -> None:
+        run = self.shear_run(client, db, admin_headers)
+        curve = Test마스터커브._make(client, admin_headers, run)
+        fit = client.post(
+            f"/api/viscoelastic/master-curves/{curve['id']}/prony",
+            json={"terms": 2},
+            headers=admin_headers,
+        ).json()
+        refused = client.post(
+            "/api/fitting/cards/viscoelastic",
+            json={"prony_fit_id": fit["id"], "label": "겔 전단"},
+            headers=admin_headers,
+        )
+        assert refused.status_code == 422, refused.text
+        assert refused.json()["error"]["code"] == "MNX-FITTING-0045"
+
+
+class Test온도_램프_파일:
+    """사용자 보고(2026-10-20): HITACHI DMA 7100 온도 램프(-40 ~ 30 °C, 5 °C/min, 주파수
+    다섯)는 등온 단계가 없어 마스터커브를 못 만들었다. 형식 정의의 「온도 램프 나누기」 로
+    읽으면 준등온 곡선이 여러 벌 서고, 점탄성 화면이 그것을 겹친다."""
+
+    @staticmethod
+    def ramp() -> bytes:
+        rows = ["Temp,Freq,Omega,E1,E2"]
+        temperature = -40.0
+        while temperature <= 30.0 + 1e-9:
+            for frequency in (0.5, 1.0, 2.0, 5.0, 10.0):
+                storage = 1e9 * (1 + 0.1 * frequency) * (1 - 0.01 * (temperature + 40))
+                rows.append(
+                    f"{temperature:.3f},{frequency},{2 * math.pi * frequency:.6g},"
+                    f"{storage:.6g},{storage * 0.1:.6g}"
+                )
+                temperature += 0.05
+        return ("\n".join(rows) + "\n").encode()
+
+    def test_램프를_나눠_겹칠_스윕이_된다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str]
+    ) -> None:
+        ensure_builtin_test_types(db)
+        db.commit()
+        made = client.post(
+            "/api/formats",
+            json={
+                "key": "hitachi_ramp",
+                "label": "HITACHI DMA7100 램프(시험)",
+                "test_type_key": "dma_sweep",
+                "definition": {
+                    "match": {"extensions": [".csv"], "header_any": ["Omega"]},
+                    "tables": {"mode": "first", "split": {"by": "temperature", "step_k": 5}},
+                    "columns": {
+                        "Temp": {"channel": "temperature", "unit": "degC"},
+                        "Freq": {"channel": "frequency", "unit": "Hz"},
+                        "Omega": {"channel": "angular_frequency", "unit": "rad/s"},
+                        "E1": {"channel": "storage_modulus", "unit": "Pa"},
+                        "E2": {"channel": "loss_modulus", "unit": "Pa"},
+                    },
+                },
+            },
+            headers=admin_headers,
+        )
+        assert made.status_code == 201, made.text
+        material = client.post(
+            "/api/materials",
+            json={
+                "family": "Polymer",
+                "category": "PU",
+                "grade": "RAMP1",
+                "spec_thickness": 1.0,
+            },
+            headers=admin_headers,
+        ).json()
+        sample = client.post(
+            f"/api/materials/{material['id']}/samples", json={}, headers=admin_headers
+        ).json()
+        specimen = client.post(
+            f"/api/samples/{sample['id']}/specimens",
+            json={"orientation": "MD"},
+            headers=admin_headers,
+        ).json()
+        created = client.post(
+            "/api/test-runs",
+            data={"specimen_id": specimen["id"], "test_type": "dma_sweep", "conditions": "{}"},
+            files={"file": ("hitachi_ramp.csv", self.ramp())},
+            headers=admin_headers,
+        ).json()
+        assert test_services.parse_run(db, uuid.UUID(created["id"])) == "parsed"
+        detail = client.get(f"/api/test-runs/{created['id']}", headers=admin_headers).json()
+        assert detail["temperature_step_count"] == 15
+        sweeps = client.get(
+            f"/api/viscoelastic/runs/{created['id']}/sweeps", headers=admin_headers
+        ).json()
+        assert len(sweeps["items"]) == 15
+        # 구간마다 주파수 다섯 — 오름차순으로 한 점씩.
+        assert {item["point_count"] for item in sweeps["items"]} == {5}
+
+    @pytest.mark.parametrize(
+        "split", [{"step_k": "5K"}, {"step_k": 0}, {"step_k": 5, "by": ""}]
+    )
+    def test_구간_폭이_틀리면_저장에서_막는다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str], split: Any
+    ) -> None:
+        """안 막으면 저장은 되고, 읽을 때마다 「나누지 않았습니다」 경고만 남는다 — 화면 · MCP
+        둘 다 이 칸을 쓴다(2026-10-20 검토)."""
+        ensure_builtin_test_types(db)
+        db.commit()
+        refused = client.post(
+            "/api/formats",
+            json={
+                "key": "hitachi_bad",
+                "label": "틀린 램프 규칙",
+                "test_type_key": "dma_sweep",
+                "definition": {
+                    "match": {"extensions": [".csv"], "header_any": ["Omega"]},
+                    "tables": {"mode": "first", "split": split},
+                    "columns": {"Temp": {"channel": "temperature", "unit": "degC"}},
+                },
+            },
+            headers=admin_headers,
+        )
+        assert refused.status_code == 422, refused.text
+        assert "tables.split" in refused.json()["error"]["message"]

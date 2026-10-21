@@ -84,6 +84,18 @@ DMA_MODES = (
 )
 SHEAR_MODES = frozenset({"전단 샌드위치", "비틀림", "평행판"})
 
+#: 저장 · 손실 탄성률 채널 한 쌍과 **그것이 무엇을 잰 것인가**(2026-10-20). 인장 · 굽힘 계열은
+#: E′ · E″, 전단(레오미터 진동 · 비틀림)은 G′ · G″. 앞에 있는 것이 먼저다.
+#:
+#: 사용자 보고: 레오미터 진동 온도 스윕을 전단 채널(`shear_storage_modulus`)로 올렸더니 마스터
+#: 커브가 「겹칠 수 있는 온도 스윕 0개」 로 거절했다 — 저장 탄성률을 `storage_modulus` 이름
+#: 하나로만 찾았다. **채널 이름이 G 라고 말하면 변형 모드를 안 적어도 G 다.**
+MODULUS_PAIRS: tuple[tuple[str, str, str], ...] = (
+    ("storage_modulus", "loss_modulus", "E"),
+    ("shear_storage_modulus", "shear_loss_modulus", "G"),
+)
+SHEAR_STORAGE = "shear_storage_modulus"
+
 
 def measures_shear(mode: object) -> bool | None:
     """그 모드가 전단 탄성률을 재는가. **모르는 모드는 `None`** — 짐작하지 않는다."""

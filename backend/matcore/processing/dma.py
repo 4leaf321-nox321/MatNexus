@@ -48,9 +48,24 @@ COMPLEX = "complex_modulus"
 PHASE = "phase_angle"
 
 
+#: 전단 채널(G′ · G″) — 레오미터 진동처럼 채널 이름부터 G 인 시험(2026-10-20).
+SHEAR_STORAGE = "shear_storage_modulus"
+SHEAR_LOSS = "shear_loss_modulus"
+
+
 def _moduli(frame: Frame, options: dict[str, Any]) -> tuple[np.ndarray, np.ndarray]:
-    storage_key = str(options.get("storage") or STORAGE)
-    loss_key = str(options.get("loss") or LOSS)
+    # 열을 안 골랐고 E′ 열이 없으면 **G′ 열을 찾는다**(2026-10-20) — tan δ · 복소 탄성률은
+    # E 든 G 든 같은 식이다. 전에는 전단 시험에서 열을 손으로 골라야만 돌았다(사용자 보고).
+    # **기본값을 그대로 보낸 것도 「안 골랐다」 로 본다** — 처리 화면은 열 칸의 기본값
+    # (`storage_modulus`)을 채워 보내므로, 빈 값만 보면 화면에서는 이 대체가 한 번도 안 탔다
+    # (2026-10-20 검토).
+    shear = STORAGE not in frame.columns and SHEAR_STORAGE in frame.columns
+    asked_storage = str(options.get("storage") or "")
+    asked_loss = str(options.get("loss") or "")
+    storage_key = SHEAR_STORAGE if shear and asked_storage in ("", STORAGE) else asked_storage
+    loss_key = SHEAR_LOSS if shear and asked_loss in ("", LOSS) else asked_loss
+    storage_key = storage_key or STORAGE
+    loss_key = loss_key or LOSS
     storage = frame.require(storage_key, what="저장 탄성률")
     loss = frame.require(loss_key, what="손실 탄성률")
     if np.any(storage <= 0):
@@ -74,7 +89,8 @@ def _moduli(frame: Frame, options: dict[str, Any]) -> tuple[np.ndarray, np.ndarr
         ),
     ),
     applies_to=("dma_sweep",),
-    requires_channels=(("storage_modulus",), ("loss_modulus",)),
+    # 전단 채널로 재는 시험에도 선다 — 안쪽 튜플은 「그중 하나」.
+    requires_channels=((STORAGE, SHEAR_STORAGE), (LOSS, SHEAR_LOSS)),
     makes_columns=(
         Produced(
             key=TAN_DELTA,
@@ -554,7 +570,9 @@ LVE_POINTS = "lve_point_count"
         ),
     ),
     applies_to=("dma_sweep",),
-    requires_channels=(("storage_modulus",), ("oscillation_strain",)),
+    # 전단 채널(레오미터 진폭 스윕)에도 선다(2026-10-20) — 카드는 그 시험이 G 를 잰 것을 보고
+    # E = 2(1+ν)G 로 옮긴다(`fitting._modulus_basis`). 안쪽 튜플은 「그중 하나」.
+    requires_channels=((STORAGE, SHEAR_STORAGE), (STRAIN,)),
     makes_values=(
         Produced(
             key=LVE_MODULUS,
@@ -607,7 +625,11 @@ def lve_modulus(frame: Frame, options: dict[str, Any]) -> StepResult:
     않는 것이 이 저장소의 규칙이다.
     """
     strain_key = str(options.get("strain") or STRAIN)
-    storage_key = str(options.get("storage") or STORAGE)
+    # E′ 열이 없고 G′ 열이 있으면 그것 — 기본값을 채워 보낸 화면도 「안 골랐다」 로 본다
+    # (`_moduli` 와 같은 판단, 2026-10-20).
+    asked = str(options.get("storage") or "")
+    shear = STORAGE not in frame.columns and SHEAR_STORAGE in frame.columns
+    storage_key = SHEAR_STORAGE if shear and asked in ("", STORAGE) else asked or STORAGE
     strain = frame.require(strain_key, what="변형률")
     storage = frame.require(storage_key, what="저장 탄성률")
 
@@ -647,6 +669,11 @@ def lve_modulus(frame: Frame, options: dict[str, Any]) -> StepResult:
         notes.append(
             "끝까지 평탄합니다 — 선형 한계를 관측하지 못했습니다. 더 큰 변형률까지 "
             "재야 그 값이 나옵니다."
+        )
+    if storage_key == SHEAR_STORAGE:
+        notes.append(
+            "전단 채널(G′)의 선형 구간입니다 — 카드에 담을 때 E = 2(1+ν)G 로 "
+            "옮깁니다(ADR 0057)."
         )
 
     return StepResult(

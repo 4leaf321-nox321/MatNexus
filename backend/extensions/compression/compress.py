@@ -49,6 +49,8 @@ STRAIN_POINTS: tuple[tuple[str, float, str], ...] = (
 
 #: 사이클을 가르는 되돌림의 크기 — 최대 변형의 이 비율 넘게 줄면 내리는 구간으로 본다.
 CYCLE_DROP = 0.02
+#: `cycle` 이 이 값이면 하중 구간을 하나로 고르지 않고 전부 남긴다(반복 시험 단계용).
+ALL_CYCLES = -1
 
 
 def _flip_needed(force: np.ndarray) -> bool:
@@ -147,11 +149,19 @@ def engineering(frame: Frame, options: dict[str, Any]) -> StepResult:
 
     segments = loading_segments(strain)
     cycle = int(options.get("cycle") or 0)
-    if cycle < 0:
-        raise ProcessingError("사이클 번호는 0(자동) 이상이어야 합니다.")
+    if cycle < ALL_CYCLES:
+        raise ProcessingError("사이클 번호는 0(자동) 이상, 또는 -1(전부)이어야 합니다.")
     if cycle > len(segments):
         raise ProcessingError(f"하중 구간이 {len(segments)}개뿐인데 {cycle}번째를 골랐습니다.")
-    if len(segments) > 1 or cycle:
+    if cycle == ALL_CYCLES:
+        # **반복 시험 단계(사이클 분리 등)용**(2026-10-20 검토) — 하나만 남기면 그 뒤의
+        # `cyclic.*` 이 「사이클을 찾지 못했습니다」 로 멈췄다. 탄성률 · 지표는 첫 하중 구간의
+        # 값이 아니게 되므로 그 사실을 적는다.
+        notes.append(
+            f"하중 구간 {len(segments)}개를 모두 남겼습니다(반복 시험용) — 탄성률 · "
+            "압축 지표는 전체 곡선에서 읽힙니다."
+        )
+    elif len(segments) > 1 or cycle:
         chosen = cycle or len(segments)
         start, end = segments[chosen - 1]
         notes.append(

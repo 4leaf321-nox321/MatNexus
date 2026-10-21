@@ -26,8 +26,9 @@ from app.modules.formulas.schemas import (
     FormulaVocabularyOut,
 )
 from app.modules.processing.models import ProcessingResult
-from app.modules.tests.models import TestChannel
-from app.shared import filestore, permissions
+from app.modules.tests.models import TestChannel, TestConditionField, TestRun
+from app.modules.vocabulary.models import SpecimenField, VocabularyTerm
+from app.shared import curvedata, filestore, permissions, specimen_size
 from app.shared.auth import current_user, require_system_admin
 from app.shared.errors import AppError, NotFound
 from matcore import cards, curves, fitting, formula, processing, registry
@@ -121,10 +122,60 @@ def vocabulary(
     return FormulaVocabularyOut(
         columns=[columns[key] for key in sorted(columns)],
         scalars=[scalars[key] for key in sorted(scalars)],
+        inputs=_given_inputs(db),
         blocks=[{"key": block.key, "label": block.label} for block in cards.list_blocks()],
         functions=sorted(formula.FUNCTIONS),
         constants=sorted(formula.CONSTANTS),
     )
+
+
+def _given_inputs(db: Session) -> list[dict[str, str]]:
+    """**그 시험이 들고 오는 값** — 시편 치수 · 시험 조건(2026-10-20).
+
+    처리가 바깥에서 받는 값(`curvedata.specimen_scalars` · `condition_scalars`)과 같은
+    이름이다.
+    전에는 어휘에 없어, 굽힘 · 압축처럼 치수와 조건이 들어가는 응력 · 변형률을 식으로 만들
+    수 없다고 읽혔다(사용자 보고). 치수 칸은 시편 분류의 기본 칸과 규격이 더한 칸 전부,
+    조건은 시험 종류마다 정의한 숫자 칸 전부다. 단위는 저장 단위(SI) — 식은 SI 로 계산한다.
+    """
+    found: dict[str, dict[str, str]] = {}
+
+    def add(key: str, label: str, unit: str | None, made_by: str) -> None:
+        found.setdefault(
+            key, {"key": key, "label": f"{label} ({unit or '?'})", "made_by": made_by}
+        )
+
+    for key, label, si_unit in db.execute(
+        select(SpecimenField.key, SpecimenField.label, SpecimenField.si_unit).where(
+            SpecimenField.kind == "number"
+        )
+    ).all():
+        add(f"specimen_{key}", f"시편 {label}", si_unit, "시편 치수")
+    for extra in db.scalars(
+        select(VocabularyTerm.extra_fields).where(VocabularyTerm.extra_fields != [])
+    ).all():
+        for one in extra or []:
+            if not isinstance(one, dict) or one.get("kind", "number") != "number":
+                continue
+            if one.get("key"):
+                add(
+                    f"specimen_{one['key']}",
+                    f"시편 {one.get('label') or one['key']}",
+                    one.get("si_unit"),
+                    "시편 치수 (규격)",
+                )
+    # 규격을 안 붙인 시편이 쓰는 옛 세 칸 — 칸 정의 표가 비어 있어도 처리는 이 값을 받는다.
+    for key, label in specimen_size.LEGACY_LABELS.items():
+        add(f"specimen_{key}", f"시편 {label}", "m", "시편 치수")
+    # 단면적은 칸이 아니라 규격이 고른 식으로 낸다(`specimen_size.area_of`).
+    add("specimen_area", "시편 초기 단면적", "m2", "시편 치수")
+    for key, label, si_unit in db.execute(
+        select(TestConditionField.key, TestConditionField.label, TestConditionField.si_unit)
+        .where(TestConditionField.value_type == "number")
+        .distinct()
+    ).all():
+        add(f"condition_{key}", label, si_unit, "시험 조건")
+    return [found[key] for key in sorted(found)]
 
 
 @router.post("", response_model=FormulaOut, status_code=201)
@@ -235,8 +286,26 @@ def preview(
 
     fn, _kwargs = kit.build_step(spec)
     frame = processing.Frame(columns, dict.fromkeys(columns, "?"))
+    # **그 시험의 값도 넘긴다**(2026-10-20) — 처리가 돌 때와 같은 시편 치수 · 시험 조건 ·
+    # 재료 선언값. 전에는 미리보기만 이것을 몰라, 치수를 쓴 식이 「값이 없어」 로 끝났다.
+    run = db.get(TestRun, result.test_run_id)
+    given = (
+        {
+            one.key: one.value
+            for one in (
+                *curvedata.specimen_scalars(db, run),
+                *curvedata.condition_scalars(db, run),
+                *curvedata.declared_scalars(db, run),
+            )
+        }
+        if run is not None
+        else {}
+    )
     if spec.kind == "scalar_step":
-        scalars = {str(one.get("key")): one.get("value") for one in result.scalars or []}
+        scalars = {
+            **given,
+            **{str(one.get("key")): one.get("value") for one in result.scalars or []},
+        }
         options = {v.name: scalars.get(v.name) for v in spec.variables}
         out = fn(frame, options)
         value = out.scalars[0].value if out.scalars else None
@@ -252,7 +321,9 @@ def preview(
             notes=list(out.notes),
         )
 
-    out = fn(frame, {})
+    out = fn(
+        frame, {v.name: given.get(v.name) for v in spec.variables if kit.is_given(v.name)}
+    )
     assert spec.result is not None
     made = out.frame.columns.get(spec.result.key)
     if made is None:
@@ -260,7 +331,11 @@ def preview(
     head = min(8, len(made))
     sample = [
         {
-            **{v.name: float(columns[v.name][i]) for v in spec.variables},
+            **{
+                v.name: float(columns[v.name][i])
+                for v in spec.variables
+                if not kit.is_given(v.name)
+            },
             spec.result.key: float(made[i]),
         }
         for i in range(head)

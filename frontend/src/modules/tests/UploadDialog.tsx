@@ -16,6 +16,7 @@ import { SpecimenPicker } from '@/modules/materials/SpecimenPicker'
 import { LENGTH_UNIT, materialsApi } from '@/modules/materials/api'
 import type { Specimen } from '@/modules/materials/api'
 import { testsApi } from '@/modules/tests/api'
+import { FormatSelect, formatChoices } from '@/modules/tests/FormatSelect'
 import { VocabularyField } from '@/modules/vocabulary/VocabularyField'
 import type { TestRun, TestType } from '@/modules/tests/api'
 import { conditionUnits, display } from '@/shared/units'
@@ -71,6 +72,8 @@ export function UploadDialog({
 }: Props) {
   const types = useResource(() => (open ? testsApi.types() : Promise.resolve([])), [open])
   const [typeKey, setTypeKey] = useState('')
+  /** 읽을 형식 — `null` 이면 자동(2026-10-20). */
+  const [profileKey, setProfileKey] = useState<string | null>(null)
   const [file, setFile] = useState<File | null>(null)
   const [conditions, setConditions] = useState<Record<string, string>>({})
   const [operator, setOperator] = useState('')
@@ -93,6 +96,12 @@ export function UploadDialog({
   const available = types.data ?? []
   const selected: TestType | undefined =
     available.find((t) => t.key === typeKey) ?? available[0]
+  // **열렸을 때만 묻는다** — 닫힌 창이 목록마다 서버를 부르지 않게.
+  const formats = useResource(
+    () => (open && selected ? testsApi.formats(selected.key) : Promise.resolve([])),
+    [open, selected?.key]
+  )
+  const choices = formatChoices(formats.data ?? [], selected?.key ?? null)
 
   useEffect(() => {
     if (open) {
@@ -101,9 +110,13 @@ export function UploadDialog({
       setOperator('')
       setError(null)
       setPicked(null)
+      setProfileKey(null)
       if (presetTestType) setTypeKey(presetTestType)
     }
   }, [open, presetTestType, presetConditions])
+
+  // 종류를 바꾸면 고른 형식은 그 종류의 것이 아니다.
+  useEffect(() => setProfileKey(null), [selected?.key])
 
   useEffect(() => {
     if (selected && !typeKey) setTypeKey(selected.key)
@@ -152,6 +165,7 @@ export function UploadDialog({
         operator: operator || undefined,
         instrument: instrument || undefined,
         division: division || undefined,
+        profileKey: profileKey ?? undefined,
       })
       onUploaded?.(run)
       onDone()
@@ -248,6 +262,20 @@ export function UploadDialog({
                 ))}
               </SelectContent>
             </Select>
+          </div>
+        )}
+
+        {/* **맞는 형식이 둘 이상인 종류에서만** — 자동이 다른 형식을 골라 곡선 하나로 읽히던
+            것을 올릴 때 바로잡는다(2026-10-20 사용자 보고). */}
+        {choices.length > 1 && (
+          <div className="space-y-1.5">
+            <Label htmlFor="upload-format">읽을 형식</Label>
+            <FormatSelect
+              id="upload-format"
+              choices={choices}
+              value={profileKey}
+              onChange={setProfileKey}
+            />
           </div>
         )}
 

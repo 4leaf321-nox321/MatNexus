@@ -2183,6 +2183,27 @@ async def import_test_summaries(
 UPLOAD_MAX_BYTES = 10 * 1024 * 1024
 
 
+async def _formats_for(ctx: Context, test_type: str) -> list[dict[str, Any]] | dict[str, Any]:
+    """이 시험 종류를 읽는 형식 — **쓰는 중인 것만**, 서버가 준 차례(우선순위 높은 것부터).
+
+    올리기 · 다시 읽기 미리보기가 함께 쓴다(2026-10-20). 전에는 `profile_key` 를 받아 놓고 고를
+    목록을 볼 도구가 없었다 — 틀린 key 는 실제 올리기에서야 422 로 드러났다.
+    """
+    found = await _get(ctx, "/formats", {"test_type": test_type})
+    if isinstance(found, dict):
+        return found
+    return [
+        {
+            "key": one.get("key"),
+            "label": one.get("label"),
+            "priority": one.get("priority"),
+            "workspace": one.get("owner_workspace_name"),
+        }
+        for one in found or []
+        if one.get("is_active")
+    ]
+
+
 @mcp.tool()
 async def upload_test_run(
     ctx: Context,
@@ -2197,6 +2218,7 @@ async def upload_test_run(
     operator: str | None = None,
     tested_at: str | None = None,
     note: str | None = None,
+    profile_key: str | None = None,
     dry_run: bool = True,
 ) -> dict[str, Any]:
     """장비 원본 파일 하나를 **시편에 시험으로 올린다** — 서버가 읽어 곡선을 만든다.
@@ -2205,6 +2227,7 @@ async def upload_test_run(
     `filename` 의 확장자를 지켜라 — 읽는 법이 그것으로 정해진다. 10MB 까지(더 크면 수집
     에이전트 → `assign_inbox_item`). **시편을 짐작하지 마라** — 확정 못 하면 사람에게 묻는다.
     `conditions` 키는 `list_condition_fields`, 단위는 `condition_units` 에(SI 로 바꾸지 마라).
+    `profile_key` 는 읽을 형식을 고정한다(비우면 지문으로 자동).
 
     기본이 미리보기(시편 · 종류 · 크기 · 첫 줄 · 빠진 필수 조건) — 사람에게 보이고 확인받은 뒤
     `dry_run=False`. 읽기는 뒤에서 돈다 — 잠시 뒤 `get_test_run` 의 상태(parsed · failed)를 본다.
@@ -2247,6 +2270,14 @@ async def upload_test_run(
         for one in kind.get("conditions") or []
         if one.get("is_required") and one.get("key") not in given
     ]
+    formats = await _formats_for(ctx, test_type)
+    if isinstance(formats, dict):
+        return formats
+    if profile_key and profile_key not in {one["key"] for one in formats}:
+        return {
+            "error": f"이 시험 종류로 쓸 수 있는 형식이 아닙니다: {profile_key}",
+            "formats": formats,
+        }
 
     form: dict[str, Any] = {
         "specimen_id": specimen.get("id") or specimen_id,
@@ -2257,6 +2288,7 @@ async def upload_test_run(
         "operator": operator,
         "tested_at": tested_at,
         "note": note,
+        "profile_key": profile_key,
     }
     form = {key: value for key, value in form.items() if value is not None}
 
@@ -2271,6 +2303,9 @@ async def upload_test_run(
             "file": {"name": filename, "bytes": len(data), "first_lines": head},
             "conditions": conditions or {},
             "condition_units": condition_units or {},
+            "profile_key": profile_key or "자동",
+            # 고를 수 있는 형식 — 둘 이상이면 자동이 그중 우선순위 높은 것을 고른다.
+            "formats": formats,
             **({"missing_required_conditions": missing} if missing else {}),
             "note": "이 미리보기를 사람에게 보이고 확인받은 뒤 dry_run=False 로 다시 부르세요.",
         }
@@ -2292,6 +2327,61 @@ async def upload_test_run(
             "get_test_run 으로 status 가 parsed 인지 봅니다. failed 면 parse_error 를 사람에게 "
             "옮기고 형식 정의를 확인하세요."
         ),
+    }
+
+
+@mcp.tool()
+async def reparse_test_run(
+    ctx: Context, test_run_id: str, profile_key: str | None = None, dry_run: bool = True
+) -> dict[str, Any]:
+    """시험을 **원본 파일에서 다시 읽는다** — 읽기 실패나 자동이 고른 형식이 틀렸을 때.
+
+    `profile_key` 를 주면 그 형식으로 고정, `"auto"` 면 고정을 풀고 자동, 안 주면 지금 정한
+    대로. 미리보기가 형식 목록 · 지금 고정 · 읽기 오류를 보인다 — 사람에게 확인받은 뒤
+    `dry_run=False`.
+    """
+    run = await _get(ctx, f"/test-runs/{test_run_id}")
+    if not isinstance(run, dict) or "error" in run:
+        return run if isinstance(run, dict) else {"error": "시험을 읽지 못했습니다."}
+    formats = await _formats_for(ctx, str(run.get("test_type_key")))
+    if isinstance(formats, dict):
+        return formats
+    unpin = profile_key == "auto"
+    if profile_key and not unpin and profile_key not in {one["key"] for one in formats}:
+        return {
+            "error": f"이 시험 종류로 쓸 수 있는 형식이 아닙니다: {profile_key}",
+            "formats": formats,
+        }
+    pinned = run.get("parse_profile_key")
+    if dry_run:
+        return {
+            "dry_run": True,
+            "test_run": {
+                "id": run.get("id"),
+                "record_name": run.get("record_name"),
+                "status": run.get("status"),
+                "read_with": run.get("parser_version"),
+            },
+            "parse_error": run.get("parse_error"),
+            "warnings": (run.get("warnings") or [])[:10],
+            "pinned": pinned or "자동",
+            "will_read_with": (
+                "자동(고정 풀기)" if unpin else profile_key or f"{pinned or '자동'}(그대로)"
+            ),
+            "formats": formats,
+            "note": "이 미리보기를 사람에게 보이고 확인받은 뒤 dry_run=False 로 다시 부르세요.",
+        }
+    # **안 보낸 것과 비운 것이 다르다**(`ReparseRequest`) — 안 보내면 지금 고정 그대로, null 이면
+    # 고정을 푼다.
+    body: dict[str, Any] = (
+        {"profile_key": None} if unpin else {"profile_key": profile_key} if profile_key else {}
+    )
+    done = await _send(ctx, "POST", f"/test-runs/{test_run_id}/reparse", body)
+    if isinstance(done, dict) and "error" in done:
+        return done
+    return {
+        **done,
+        "note": "다시 읽기는 뒤에서 돈다 — 잠시 뒤 get_test_run 으로 status · parse_error 를 본다.",
     }
 
 
@@ -2341,6 +2431,9 @@ async def get_test_run(ctx: Context, test_run_id: str) -> dict[str, Any]:
         "name": run.get("record_name"),
         "test_type": run.get("test_type_key"),
         "status": run.get("status"),
+        # 읽기 실패의 이유 · 읽기 경고(형식 후보가 여럿이었다 등) — 사람에게 옮길 것.
+        **({"parse_error": run["parse_error"]} if run.get("parse_error") else {}),
+        **({"warnings": run["warnings"]} if run.get("warnings") else {}),
         "conditions": run.get("conditions"),
         "material_id": run.get("material_id"),
         **({"specimen": specimen} if specimen else {}),
@@ -4132,7 +4225,7 @@ async def add_catalog_property(
       chemical · acoustic · rheological · surface · interface · structure
     - `slug`: 영문 snake_case — `flexural_modulus_wet`. **한 번 만들면 못 바꾼다.**
     - `si_unit`: SI 정본 — `Pa` · `W/(m.K)` · `J/(kg.K)` · 무차원이면 `1`. 값은 이
-      단위로 환산돼 저장된다. 단위표에 없는 눈금(HV 등)은 못 만든다.
+      단위로 환산돼 저장된다. 경도 같은 눈금은 그 기호(`HV` · `ShoreA` · `IRHD`) — 환산 없음.
     - `condition_axes`: 조건 없이는 무의미한 축 — `["temperature_k"]`.
 
     시스템 관리자만 만들 수 있다. 만든 뒤 `add_catalog_value` 로 값을 단다.
@@ -4153,11 +4246,17 @@ async def add_catalog_property(
         "value_type": "numeric",
     }
     if dry_run:
+        # **만들 때와 같은 검사를 서버에서**(2026-10-20). 전에는 입력을 그대로 돌려줘서 미리보기는
+        # 통과하고 실제 생성에서 「단위표에 없습니다」 로 거절되는 일이 있었다(사용자 보고).
+        checked = await _send(ctx, "POST", "/catalog/properties/preview", body)
+        if "error" in checked:
+            return checked
         return {
             "dry_run": True,
-            "will_create": {**body, "key": f"local.{domain}.{slug}"},
-            "note": "이대로 만들려면 dry_run=False 로 다시 부르세요. slug 는 한 번 만들면 못 "
-            "바꿉니다 — resolve_property 로 같은 물성이 없는지 먼저 봤는지 확인하세요.",
+            "will_create": checked,
+            "note": "만들 때와 같은 검사를 지났습니다. 이대로 만들려면 dry_run=False 로 다시 "
+            "부르세요. slug 는 한 번 만들면 못 바꿉니다 — resolve_property 로 같은 물성이 없는지 "
+            "먼저 봤는지 확인하세요.",
         }
     got = await _send(ctx, "POST", "/catalog/properties", body)
     if "error" in got:
@@ -4273,29 +4372,20 @@ async def add_catalog_value(
         material = await _get(ctx, f"/catalog/materials/{catalog_material_id}")
         if "error" in material:
             return material
-        resolved = await _get(ctx, "/catalog/properties/resolve", {"q": property_key})
-        found = next(
-            (
-                one
-                for one in (resolved.get("candidates") or [])
-                if one.get("key") == property_key
-            ),
-            None,
+        # **넣을 때와 같은 검사를 서버에서**(2026-10-20) — 단위 환산 · 눈금 일치 · 출처 · 등급.
+        # 전에는 키와 출처만 보고 「환산해 저장」 이라 말해, 눈금이 다른 값도 미리보기를 통과했다.
+        checked = await _send(
+            ctx, "POST", f"/catalog/materials/{catalog_material_id}/values/preview", body
         )
-        if found is None:
-            return {
-                "error": (
-                    f"없는 물성 키입니다: {property_key} — resolve_property 로 찾거나 "
-                    "add_catalog_property 로 만드세요."
-                )
-            }
-        if not (source_title or source_doi or source_url):
-            return {"error": "출처가 비었습니다 — source_title·source_doi·source_url 중 하나."}
+        if "error" in checked:
+            return checked
+        stored = f"{checked.get('value_num')} {checked.get('unit') or ''}".strip()
         return {
             "dry_run": True,
             "material": material.get("name"),
-            "property": found.get("name"),
-            "will_store": f"{value} {unit} → {found.get('si_unit')} 로 환산해 저장",
+            "property": checked.get("property_name"),
+            "will_store": stored
+            + (f" ({checked['converted']})" if checked.get("converted") else ""),
             "quality_tier": quality_tier,
             "method": method,
             "conditions": conditions,
@@ -5058,12 +5148,7 @@ async def check_format_profile(
 
     `expect` 는 사람이 아는 답이다 — 「장비 화면에 최대하중이 12.34 kN 이라고
     떴다」 를 `{"summary": {"max_force": 12.34}}` 로 주면, 지은 정의가 같은 답을
-    내는지 기계가 판정한다. **사용자에게 그 값을 물어보는 편이 낫다.**
-
-    ## 단위 표기가 엄격해진다
-
-    열에 이름을 정하는 순간 단위 검사가 엄격해진다 — 안 정하면 넘어가던 `C` 가
-    「모르는 단위」 로 막힌다(`°C` 여야 한다). 그것도 이 검사가 잡아 준다.
+    내는지 기계가 판정한다. 그 값은 사용자에게 묻는다(`get_guide` 의 장비 파일 정의 절).
     """
     return await _send(
         ctx,
@@ -5844,6 +5929,7 @@ async def formula_vocabulary(ctx: Context) -> dict[str, Any]:
     변수 이름을 지어 적으면 식은 문법을 통과하고 **돌 때** 「그런 열이 없다」 로 멎는다.
     열·스칼라 항목의 `made_by` 가 그 이름을 **어느 처리 단계가 내는지**다 — 그 단계가
     레시피에 없으면 그 변수도 없다. 함수 목록 밖의 함수는 안 된다(안전한 평가기다).
+    `inputs` 는 그 시험의 시편 치수 · 조건 — 열 식에서도 수 하나로 쓴다.
     """
     return await _get(ctx, "/formulas/vocabulary")
 

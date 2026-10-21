@@ -186,7 +186,7 @@ export function ViscoelasticPanel({
         {!sweeps.loading && options.length < 2 && (
           <p className="text-muted-foreground mb-3 rounded-md border p-4 text-sm">
             {options.length === 0
-              ? '겹칠 스윕이 없습니다. 저장 탄성률과 온도가 있는 곡선이 필요합니다.'
+              ? '겹칠 스윕이 없습니다. 저장 탄성률(E′ 또는 전단 G′)과 온도가 있는 곡선이 필요합니다.'
               : '온도가 한 단뿐이라 겹칠 것이 없습니다. 마스터커브는 온도가 다른 스윕이 둘 이상 있어야 만들 수 있습니다.'}
           </p>
         )}
@@ -305,7 +305,15 @@ export function ViscoelasticPanel({
         }}
       />
 
-      {selected && <MasterCurveView materialId={materialId} curve={selected} />}
+      {selected && (
+        <MasterCurveView
+          materialId={materialId}
+          curve={selected}
+          // 곡선이 든 판정을 먼저 — 스윕 목록은 겹칠 스윕이 없으면(가져온 마스터커브만) 422 라
+          // 그것만 보면 G′ 곡선에도 E′ 축 이름이 붙었다(2026-10-20 검토).
+          shear={(selected.modulus_basis ?? sweeps.data?.modulus_basis) === 'G'}
+        />
+      )}
     </section>
   )
 }
@@ -538,7 +546,16 @@ function manualShifts(
   return shifts
 }
 
-function MasterCurveView({ curve, materialId }: { curve: MasterCurve; materialId?: string }) {
+function MasterCurveView({
+  curve,
+  materialId,
+  shear = false,
+}: {
+  curve: MasterCurve
+  materialId?: string
+  /** 전단 채널(G′)로 잰 시험 — 축 이름이 G′ 다. 카드에는 E = 2(1+ν)G 로 옮겨 담긴다. */
+  shear?: boolean
+}) {
   const points = useResource<MasterCurvePoints>(() => viscoelasticApi.points(curve.id), [curve.id])
   const [fits, setFits] = useState<PronyFit[]>([])
   const [busy, setBusy] = useState(false)
@@ -593,7 +610,7 @@ function MasterCurveView({ curve, materialId }: { curve: MasterCurve; materialId
         <CurveChart
           points={chart}
           xLabel="환산 주파수 (Hz)"
-          yLabel="저장 탄성률 (Pa)"
+          yLabel={shear ? '저장 전단 탄성률 G′ (Pa)' : '저장 탄성률 (Pa)'}
           logX
           logY
           height={320}

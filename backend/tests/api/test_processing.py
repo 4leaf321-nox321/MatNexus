@@ -394,9 +394,10 @@ class Test단계목록:
         고쳐야 하고, 그러면 한 곳을 빠뜨린다."""
         response = client.get("/api/processing/steps", headers=admin_headers)
         found = {item["id"]: item for item in response.json()}
+        # 안쪽 목록은 「그중 하나」 — 전단 채널(레오미터 진동)도 연다(2026-10-20, ADR 0057).
         assert found["dma.derived"]["requires_channels"] == [
-            ["storage_modulus"],
-            ["loss_modulus"],
+            ["storage_modulus", "shear_storage_modulus"],
+            ["loss_modulus", "shear_loss_modulus"],
         ]
 
 

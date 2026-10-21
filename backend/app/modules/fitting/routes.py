@@ -121,6 +121,7 @@ from app.modules.workspaces.models import Workspace
 from app.shared import (
     audit,
     codes,
+    curvedata,
     deckmap,
     declared_card,
     declared_slots,
@@ -1890,9 +1891,16 @@ class _ModulusBasis:
 
     factor: float
     note: str
+    label: str = "E′ (인장 · 굽힘)"
+    """블록의 「잰 탄성률」 칸(2026-10-20) — 카드는 E 로 담지만 **무엇을 잰 것인지**는
+    남긴다."""
 
 
-def _modulus_basis(runs: Sequence[TestRun], poisson: Inherited) -> _ModulusBasis:
+#: 전단 채널(G′)로 재는 시험 종류를 부르는 이름 — 변형 모드 조건이 없는 레오미터 진동 등.
+SHEAR_CHANNEL_MODE = "전단 채널(G′)"
+
+
+def _modulus_basis(db: Session, runs: Sequence[TestRun], poisson: Inherited) -> _ModulusBasis:
     """**카드는 E 로 담는다** — 덱이 카드의 E 와 같은 ν 로 G = E/2(1+ν) 를 만든다.
 
     전단 모드로 잰 G′ 는 여기서 E = 2(1+ν)G 로 옮긴다. 안 옮기면 덱이 G′ 를 E 로 읽어
@@ -1900,9 +1908,24 @@ def _modulus_basis(runs: Sequence[TestRun], poisson: Inherited) -> _ModulusBasis
 
     모드가 안 적힌 시험은 지금까지처럼 E 로 보되 **그렇게 봤다고 적는다.** 전단과 다른
     것이 섞이면 막는다 — E 와 G 의 평균은 어느 쪽도 아니다.
+
+    **시험 종류가 전단 채널(`shear_storage_modulus`)로 재면 모드를 안 적어도 G 다**
+    (2026-10-20). 레오미터 진동 시험은 변형 모드 조건이 없어 E 로 읽혔고, 덱이 2(1+ν) 로
+    한 번 더 나눠 이중 환산이 됐다(사용자 보고).
     """
-    modes = sorted({str((run.conditions or {}).get(DEFORMATION_MODE) or "") for run in runs})
-    shear = {viscoelastic.measures_shear(mode or None) for mode in modes}
+    channel_shear = {run.id for run in runs if curvedata.measures_shear_channels(db, run)}
+    modes = sorted(
+        {
+            SHEAR_CHANNEL_MODE
+            if run.id in channel_shear
+            else str((run.conditions or {}).get(DEFORMATION_MODE) or "")
+            for run in runs
+        }
+    )
+    shear = {
+        True if mode == SHEAR_CHANNEL_MODE else viscoelastic.measures_shear(mode or None)
+        for mode in modes
+    }
     named = ", ".join(mode for mode in modes if mode) or "없음"
     if True in shear and len(shear) > 1:
         raise AppError(
@@ -1929,6 +1952,7 @@ def _modulus_basis(runs: Sequence[TestRun], poisson: Inherited) -> _ModulusBasis
             f"전단 모드({named})로 잰 G′ 입니다 — E = 2(1+ν)G, ν = {poisson.value:g} 로 "
             f"옮겨 담았습니다. 덱이 같은 ν 로 G 를 다시 만들므로 전단 탄성률은 잰 값 "
             f"그대로 실립니다.",
+            f"G′ (전단, {named}) → E = 2(1+ν)G, ν = {poisson.value:g}",
         )
     if None in shear:
         return _ModulusBasis(
@@ -1936,8 +1960,9 @@ def _modulus_basis(runs: Sequence[TestRun], poisson: Inherited) -> _ModulusBasis
             "변형 모드가 안 적힌 시험이 있어 인장 · 굽힘으로 잰 E′ 로 봤습니다 — 전단으로 "
             "잰 G′ 였다면 이 카드는 2(1+ν) 배(고무면 약 3 배) 무릅니다. 시험 조건의 "
             "「변형 모드」 를 적고 다시 만드세요.",
+            "E′ 로 봄 (변형 모드 안 적힘)",
         )
-    return _ModulusBasis(1.0, "")
+    return _ModulusBasis(1.0, "", f"E′ (인장 · 굽힘, {named})" if named != "없음" else "E′")
 
 
 @dataclass(frozen=True)
@@ -2155,7 +2180,7 @@ def create_viscoelastic_card(
         assert payload.group_result_id is not None
         source = _from_group(db, user, payload.group_result_id)
     poisson = _inherit_poisson(source.material, payload.poisson_ratio)
-    basis = _modulus_basis(source.runs, poisson)
+    basis = _modulus_basis(db, source.runs, poisson)
     # gᵢ · τᵢ 는 그대로고 탄성률만 옮긴다(ν 일정).
     series = source.series.scaled(basis.factor)
     try:
@@ -2222,6 +2247,8 @@ def create_viscoelastic_card(
                     "equilibrium_pa": series.equilibrium_pa,
                     "instantaneous_pa": series.instantaneous_pa,
                     "reference_temperature_k": source.reference_temperature_k,
+                    # 무엇을 잰 것인가(E′ · G′) — 카드는 E 로 담는다(ADR 0057).
+                    "modulus_basis": basis.label,
                     "normalized_rmse": series.normalized_rmse,
                     **({"bic": series.bic} if math.isfinite(series.bic) else {}),
                     **source.extra_values,
@@ -2670,7 +2697,7 @@ def create_lve_card(
     ]
     material = group.material
     poisson = _inherit_poisson(material, payload.poisson_ratio)
-    basis = _modulus_basis([member.run for member in group.members], poisson)
+    basis = _modulus_basis(db, [member.run for member in group.members], poisson)
     modulus_values = [e * basis.factor for _, e, _ in kept]
     limit_values = [g for _, _, g in kept]
     modulus = float(np.mean(modulus_values))
@@ -3703,7 +3730,8 @@ def _deck_for_card(
             f"{float(hyper.get('strain_max', 0.0)):.5g} "
             f"(그 밖은 검증되지 않았습니다)"
         )
-        provenance.append(hyperelastic.UNIAXIAL_ONLY)
+        # 어느 모드 하나로 맞췄는지(인장 · 압축) — 그 밖의 모드는 이 계수가 보장하지 않는다.
+        provenance.append(hyperelastic.only_note(hyper.get("mode")))
     if hardening.get("label"):
         # **경화식은 덱에 안 들어간다.** 표로 나간다. 그래도 어떤 식으로 봤는지는
         # 적어 둔다 — 이 표가 어디까지 검증된 것인지가 거기에 있다.

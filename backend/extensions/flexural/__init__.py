@@ -4,6 +4,7 @@
     처리   flexural.engineering   하중 · 처짐 → 굽힘 응력 · 변형률(3점 · 4점,
                                   처짐계 · 크로스헤드,
                                   장비 컴플라이언스, D790 큰 처짐 보정)
+           flexural.toe_compensation  토우 보정 — 인장과 같은 계산(굽힘 열로, D790 부록)
            flexural.modulus       굽힘 탄성률(등가 E) — 현 · 회귀 · 할선 · 접선 · 응력 띠
            flexural.strength      굽힘 강도 · 파단 · ISO 178 규정 처짐 응력 σfC
     묶음   flexural.equivalent    시편 여럿의 굽힘 탄성률 → 등가 E 카드(탄성 블록) + 참고 물성
@@ -17,9 +18,11 @@
 
 from __future__ import annotations
 
+from matcore.processing.tensile import TOE_VALUES, toe_compensation_on, toe_params
 from matcore.registry import ParamSpec, Produced, register
 
 from . import bending
+from . import card as _card  # noqa: F401  (블록 등록)
 
 _METHOD_LABELS = {
     "chord": "현 (두 변형률 사이)",
@@ -157,10 +160,30 @@ register(
             key=bending.USED, label="쓴 처짐", si_unit="m", help="영점 · 컴플라이언스 보정 뒤."
         ),
     ),
-    makes_values=(Produced(key="span_to_depth_ratio", label="스팬/두께", si_unit="1"),),
+    makes_values=(
+        Produced(key="span_to_depth_ratio", label="스팬/두께", si_unit="1"),
+        # 잰 배치(2026-10-20) — 구조 강성은 이 배치에서만 뜻이 있다.
+        Produced(key="support_span", label="지지 스팬", si_unit="m"),
+        Produced(key="load_span", label="하중 스팬", si_unit="m", help="4점일 때. 3점이면 0."),
+        Produced(key="beam_width", label="시편 폭", si_unit="m"),
+        Produced(key="beam_thickness", label="시편 두께", si_unit="m"),
+    ),
     order=10,
     version="1",
 )(bending.engineering)
+
+# **토우 보정은 인장의 것을 그대로 쓴다**(2026-10-20) — 열 이름만 굽힘의 것. ASTM D790 부록
+# A1 의 토우 보정이 이것이다: 처음 직선 구간을 응력 0 까지 늘여 처짐 원점을 다시 잡는다.
+register(
+    id="flexural.toe_compensation",
+    kind="processing",
+    label="토우 보정",
+    applies_to=("flexural",),
+    params=toe_params(bending.STRAIN, bending.STRESS),
+    makes_values=TOE_VALUES,
+    order=15,
+    version="1",
+)(toe_compensation_on(bending.STRAIN, bending.STRESS))
 
 register(
     id="flexural.modulus",
@@ -301,12 +324,28 @@ register(
         Produced(key="flexural_modulus_max", label="최댓값", si_unit="Pa"),
         Produced(key="sample_count", label="시편 수", si_unit="1"),
         Produced(key="flexural_strength", label="굽힘 강도 (평균)", si_unit="Pa"),
+        Produced(
+            key="flexural_stiffness",
+            label="구조 강성 (평균, 하중/처짐)",
+            si_unit="N/m",
+            help="같은 배치(스팬 · 폭 · 두께)일 때만 — 다르면 내지 않고 말한다.",
+        ),
+        Produced(key="flexural_stiffness_cv", label="구조 강성 변동계수", si_unit="1"),
+        Produced(key="flexural_stiffness_count", label="구조 강성 시편 수", si_unit="1"),
     ),
     # 채택된 결과의 굽힘 탄성률 — 없으면 사람이 표로 적은 요약값에서(보고서만 있는 시험).
     members={
         "from": "measured_or_stated",
         "values": ["flexural_modulus"],
-        "optional": ["flexural_strength"],
+        "optional": [
+            "flexural_strength",
+            # 구조 강성(2026-10-20) — 기울기와 그 배치.
+            "flexural_stiffness",
+            "support_span",
+            "load_span",
+            "beam_width",
+            "beam_thickness",
+        ],
     },
     card=bending.card_blocks,
     order=40,

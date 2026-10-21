@@ -37,11 +37,23 @@
 from __future__ import annotations
 
 import re
+from collections import Counter, defaultdict
 from collections.abc import Mapping
+from dataclasses import replace
 from typing import Any
 
+import numpy as np
+
 from matcore import units
-from matcore.parsers import Channel, CurveData, ParsedTest, ParseError, SummaryValue
+from matcore.parsers import (
+    CURVE_KEY_MAX,
+    Channel,
+    CurveData,
+    ParsedTest,
+    ParseError,
+    SummaryValue,
+    unique_key,
+)
 from matcore.readers.tabular import ReadOptions, Table, TabularFile, read
 
 #: **파일을 읽을 때만** 뜻이 있는 표기.
@@ -73,6 +85,25 @@ _SLUG = re.compile(r"[^\w]+", re.UNICODE)
 
 def slug(text: str) -> str:
     return _SLUG.sub("_", text.strip().lower()).strip("_") or "unnamed"
+
+
+#: 부호로 읽을 `-` · `+` · 유니코드 빼기(U+2212) — 앞이 처음 · 빈칸 · 여는 괄호이고
+#: **뒤가 숫자일 때만.** `A-1` 의 `-` 는 부호가 아니라 이음표다.
+_SIGN = re.compile(r"(^|[\s(\[{])([-+\u2212])(?=\d)")
+
+
+def signed_slug(text: str) -> str:
+    """부호를 살린 키 — `-40도` → `minus_40도`, `(+20 °C)` → `plus_20_c`.
+
+    `slug` 는 부호를 지운다(`-` 는 글자가 아니다). 그래서 단계 이름이 부호만 다르면
+    (`-40도` · `40도`) 두 곡선의 키가 같아졌다(2026-10-20 사용자 보고).
+    """
+    return slug(
+        _SIGN.sub(
+            lambda found: f"{found.group(1)}{'plus' if found.group(2) == '+' else 'minus'}_",
+            text,
+        )
+    )
 
 
 def unit_symbol(raw: str | None) -> str | None:
@@ -148,10 +179,13 @@ def apply(profile: dict[str, Any], data: bytes) -> ParsedTest:
 
     columns: dict[str, Any] = profile.get("columns") or {}
     errors: list[str] = []
-    curves = [
+    built = [
         _build_curve(table, columns, warnings, errors, single=len(tables) == 1, kind=kind)
         for table, kind in tables
     ]
+    curves = _distinct_keys(
+        _split_ramps(built, (profile.get("tables") or {}).get("split"), warnings), warnings
+    )
     if errors:
         # **매핑한 열의 단위를 모르면 멈춘다.** 그냥 두면 원값이 SI 인 척 저장된다 —
         # 201242 MPa 가 201242 Pa 가 되어 10⁶ 배 틀리는데, 숫자는 멀쩡해 보이고
@@ -324,6 +358,161 @@ def _build_curve(
 
     key = "raw" if single else (slug(table.name) if table.name else f"table_{table.index + 1}")
     return CurveData(key=key, label=table.name, channels=tuple(channels), kind=kind)
+
+
+#: 온도 램프를 나눌 때 같은 주파수로 볼 유효숫자 — 장비가 적는 주파수의 끝자리 흔들림을 묶는다.
+FREQUENCY_DIGITS = 6
+#: 주파수를 묶는 열 — 앞에 있는 것이 먼저다.
+FREQUENCY_KEYS = ("frequency", "angular_frequency")
+
+
+def _numbers(values: tuple[float | None, ...]) -> np.ndarray:
+    return np.asarray(
+        [np.nan if one is None else float(one) for one in values], dtype=np.float64
+    )
+
+
+def _split_ramps(curves: list[CurveData], rule: Any, warnings: list[str]) -> list[CurveData]:
+    """온도 **램프** 곡선을 **준등온 구간**으로 나눈다(2026-10-20).
+
+    사용자 보고: HITACHI DMA 7100 은 -40 ~ 30 °C 를 5 °C/min 으로 올리며 주파수 다섯을 번갈아
+    잰다 — 등온 단계가 없어 곡선 하나가 온도 한 단으로 읽히고, 마스터커브를 못 만들었다.
+
+    규칙 `{"by": "temperature", "step_k": 5}` 이면 측정 곡선의 온도를 °C 의 `step_k` 배수에
+    가장 가까운 값으로 묶고, 구간마다 **주파수별로 평균**한다 — 구간 하나가 그 온도의 주파수
+    스윕(준등온)이 된다. 평균하지 않으면 한 구간에 같은 주파수가 여러 번 서고, 마스터커브는
+    주파수가 엄격히 증가하기를 요구한다.
+
+    **나누는 폭이 곧 근사다.** 5 K 구간이면 한 점이 ±2.5 K 안의 평균이다 — 그렇다고 경고에
+    남긴다. 장비가 계산한 표(`derived`)는 안 나눈다.
+    """
+    if not isinstance(rule, dict):
+        return curves
+    try:
+        step = float(rule.get("step_k") or 0.0)
+    except (TypeError, ValueError):
+        # 저장에서 막지만(`formats._validate`) 옛 정의 · 다른 길로 들어온 값에 읽기가
+        # 터지면 안 된다.
+        warnings.append(
+            f"온도 구간 폭 {rule.get('step_k')!r} 이 숫자가 아니라 나누지 않았습니다."
+        )
+        return curves
+    by = str(rule.get("by") or "temperature")
+    if not np.isfinite(step) or step <= 0:
+        return curves
+    out: list[CurveData] = []
+    for curve in curves:
+        channels = {one.key: one for one in curve.channels}
+        temperature = channels.get(by)
+        group = next((key for key in FREQUENCY_KEYS if key in channels), None)
+        if curve.kind != "measured" or temperature is None or group is None:
+            if curve.kind == "measured":
+                warnings.append(
+                    f"곡선 '{curve.label or curve.key}' 에 '{by}' 또는 주파수 열이 없어 온도 "
+                    "구간으로 나누지 않았습니다."
+                )
+            out.append(curve)
+            continue
+        if temperature.si_unit != "K":
+            warnings.append(
+                f"'{by}' 열의 단위를 몰라(저장 단위 {temperature.si_unit!r}) 온도 구간으로 "
+                "나누지 않았습니다 — 열 매핑에서 단위(degC 등)를 지정하세요."
+            )
+            out.append(curve)
+            continue
+        celsius = _numbers(temperature.values) - 273.15
+        frequency = _numbers(channels[group].values)
+        columns = {one.key: _numbers(one.values) for one in curve.channels}
+        bins: dict[float, dict[float, list[int]]] = defaultdict(lambda: defaultdict(list))
+        for index, (at, f) in enumerate(zip(celsius, frequency, strict=True)):
+            if not (np.isfinite(at) and np.isfinite(f)):
+                continue
+            # `+ 0.0` 이 -0.0 을 지운다 — 승온의 0 구간 첫 점이 음수면 「-0 °C」 키가 되어 강온
+            # 파일의 같은 구간(`_0_c`)과 키가 갈렸다.
+            center = float(np.round(at / step) * step) + 0.0
+            bins[center][float(f"{f:.{FREQUENCY_DIGITS}g}")].append(index)
+        made = 0
+        thin: list[str] = []
+        for center in sorted(bins):
+            by_frequency = bins[center]
+            if len(by_frequency) < 2:
+                thin.append(f"{center:g} °C")
+                continue
+            order = sorted(by_frequency)
+            parts = tuple(
+                Channel(
+                    key=one.key,
+                    label=one.label,
+                    si_unit=one.si_unit,
+                    values=tuple(
+                        float(np.nanmean(columns[one.key][by_frequency[f]]))
+                        if np.any(np.isfinite(columns[one.key][by_frequency[f]]))
+                        else None
+                        for f in order
+                    ),
+                    source_unit=one.source_unit,
+                )
+                for one in curve.channels
+            )
+            # 온도 꼬리를 남기고 앞을 자른다 — 표 이름이 길면 키 한도(50)에서 꼬리가 떨어져
+            # 구간들이 `_2` · `_3` 으로만 갈렸다.
+            tail = f"_{signed_slug(f'{center:g} C')}"
+            out.append(
+                replace(
+                    curve,
+                    key=curve.key[: CURVE_KEY_MAX - len(tail)] + tail,
+                    label=f"{center:g} °C (램프 ±{step / 2:g} K 평균)",
+                    channels=parts,
+                )
+            )
+            made += 1
+        if made == 0:
+            # **나눌 것이 없으면 원래 곡선을 둔다.** 같은 장비의 1 Hz 온도 스윕(Tg 측정)이 이
+            # 형식에 맞으면 구간마다 주파수가 하나뿐이다 — 전에는 곡선이 통째로 사라져 「필수
+            # 채널이 없습니다」 라는 엉뚱한 이유로 실패했다.
+            warnings.append(
+                f"곡선 '{curve.label or curve.key}' 은 {step:g} K 구간마다 주파수가 "
+                "하나뿐이라 나누지 않고 그대로 두었습니다 — 램프가 아니라 단일 주파수 "
+                "온도 스윕입니다."
+            )
+            out.append(curve)
+            continue
+        warnings.append(
+            f"온도 램프 곡선 '{curve.label or curve.key}' 을 {step:g} K 구간 {made}개로 "
+            f"나눴습니다 — 구간마다 주파수별 평균(준등온, ±{step / 2:g} K)."
+            + (f" 주파수가 하나뿐이라 뺀 구간: {', '.join(thin)}." if thin else "")
+        )
+    return out
+
+
+def _distinct_keys(curves: list[CurveData], warnings: list[str]) -> list[CurveData]:
+    """곡선 키를 **시험 안에서 하나씩으로**(2026-10-20).
+
+    사용자 보고: 한 파일에 곡선이 여럿인 시험에서 단계 이름이 부호만 다르면(`-40도` ·
+    `40도`) 키가 같아져, 저장에서 막히고 시험이 「읽는 중」 에 멈췄다 — 오류도 없이.
+
+    **겹치는 것만** 부호를 살린 키로 다시 짓는다. 겹치지 않던 키는 그대로 둔다 — 처리
+    결과가 키로 곡선을 가리키므로(`source_curve_key`), 이미 읽힌 파일의 키를 흔들면 안
+    된다(겹치던 파일은 한 번도 저장된 적이 없어 흔들 것이 없다). 그래도 겹치면 번호를
+    붙이고 그 사실을 경고로 남긴다.
+    """
+    counts = Counter(curve.key for curve in curves)
+    taken: set[str] = set()
+    result: list[CurveData] = []
+    for curve in curves:
+        want = curve.key
+        if counts[want] > 1 and curve.label:
+            want = signed_slug(curve.label)
+        key = unique_key(want, taken)
+        # 길어서 잘리기만 한 것은 겹친 것이 아니다 — 전에는 그것도 「겹쳐」 라고 말했다.
+        if key != want[:CURVE_KEY_MAX]:
+            warnings.append(
+                f"곡선 '{curve.label or curve.key}' 의 키가 다른 곡선과 겹쳐 '{key}' 로 "
+                "저장합니다."
+            )
+        taken.add(key)
+        result.append(curve if key == curve.key else replace(curve, key=key))
+    return result
 
 
 def _build_meta(

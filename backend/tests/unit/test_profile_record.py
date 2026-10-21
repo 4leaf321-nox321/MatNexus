@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 from app.modules.tests.legacy_profiles import LEGACY_TENSILE_DEFINITION
 from matcore.readers import profile as profiles
@@ -302,6 +302,56 @@ class Test키를_만들_때:
         assert sorted(parsed.metadata.values()) == ["나중", "먼저"]
 
 
+class Test곡선_키:
+    """한 파일에 곡선이 여럿일 때 **키가 시험 안에서 하나씩**이어야 한다(2026-10-20).
+
+    사용자 보고: 단계 이름이 부호만 다르면(`-40도` · `40도`) 키가 같아져, 저장에서 막히고
+    시험이 「읽는 중」 에 멈췄다.
+    """
+
+    RULE: ClassVar[dict[str, Any]] = {
+        "match": {"extensions": [".json"], "header_any": ["load"]},
+        "tables": {"mode": "all", "include": "."},
+        "columns": {
+            "disp": {"channel": "displacement", "unit": "mm"},
+            "load": {"channel": "force", "unit": "N"},
+        },
+    }
+
+    @staticmethod
+    def steps(*names: str) -> bytes:
+        rows = [{"disp": 0.0, "load": 0.0}, {"disp": 0.1, "load": 400.0}]
+        return json.dumps({name: rows for name in names}, ensure_ascii=False).encode("utf-8")
+
+    def test_부호만_다른_단계는_다른_곡선이다(self) -> None:
+        parsed = profiles.apply(self.RULE, self.steps("-40도", "40도", "+40도"))
+        keys = [curve.key for curve in parsed.curves]
+        assert keys == ["minus_40도", "40도", "plus_40도"]
+        assert [curve.label for curve in parsed.curves] == ["-40도", "40도", "+40도"]
+        # 부호를 살려 갈랐으면 번호를 붙인 것이 아니다 — 경고할 일도 아니다.
+        assert not any("겹쳐" in warning for warning in parsed.warnings)
+
+    def test_안_겹치는_키는_그대로다(self) -> None:
+        """처리 결과가 키로 곡선을 가리킨다 — 이미 읽힌 파일의 키를 흔들면 안 된다.
+        `(-20.0 °C)` 하나만 있으면 전처럼 부호 없는 키다."""
+        parsed = profiles.apply(self.RULE, self.steps("Step (-20.0 °C)", "Step (10 °C)"))
+        assert [curve.key for curve in parsed.curves] == ["step_20_0_c", "step_10_c"]
+
+    def test_그래도_겹치면_번호를_붙이고_말한다(self) -> None:
+        """`A-1` 의 `-` 는 부호가 아니다 — `A 1` 과 같은 키가 되면 번호로 가른다."""
+        parsed = profiles.apply(self.RULE, self.steps("A-1", "A 1"))
+        assert [curve.key for curve in parsed.curves] == ["a_1", "a_1_2"]
+        assert any("a_1_2" in warning for warning in parsed.warnings)
+
+    def test_긴_이름도_칸_안으로(self) -> None:
+        """`Curve.key` 칸은 50자다 — 넘으면 저장에서 막힌다."""
+        long = "Temperature sweep at constant frequency " * 3
+        parsed = profiles.apply(self.RULE, self.steps(f"-{long}", long))
+        keys = [curve.key for curve in parsed.curves]
+        assert all(len(key) <= 50 for key in keys)
+        assert len(set(keys)) == 2
+
+
 class Test시험_조건:
     """시험 조건은 **시험 종류마다 다르다** — 인장은 속도·예하중이고 DMA 는
     진폭이다. 그래서 이 층은 무엇이 유효한지 모르고, 원문을 그대로 넘긴다.
@@ -367,3 +417,93 @@ class Test식별자:
         rule = {**BASE, "identity": {"재료": {"field": "material_grade", "format": "%Y"}}}
         parsed = profiles.apply(rule, made(재료="2024"))
         assert parsed.identity == {"material_grade": "2024"}
+
+
+class Test온도_램프를_등온_구간으로:
+    """사용자 보고(2026-10-20): HITACHI DMA 7100 은 -40 ~ 30 °C 를 5 °C/min 으로 올리며 주파수
+    다섯을 번갈아 잰다 — 등온 단계가 없어 마스터커브를 못 만들었다."""
+
+    FREQUENCIES = (0.5, 1.0, 2.0, 5.0, 10.0)
+    RULE: ClassVar[dict[str, Any]] = {
+        "match": {"extensions": [".csv"], "header_any": ["Freq"]},
+        "tables": {"mode": "first", "split": {"by": "temperature", "step_k": 5}},
+        "columns": {
+            "Temp": {"channel": "temperature", "unit": "degC"},
+            "Freq": {"channel": "frequency", "unit": "Hz"},
+            "E1": {"channel": "storage_modulus", "unit": "Pa"},
+            "E2": {"channel": "loss_modulus", "unit": "Pa"},
+        },
+    }
+
+    def ramp(self) -> bytes:
+        """-40 → 30 °C, 한 바퀴(주파수 다섯)에 0.25 °C — 저장 탄성률은 온도 · 주파수에 따라."""
+        rows = ["Temp,Freq,E1,E2"]
+        temperature = -40.0
+        while temperature <= 30.0 + 1e-9:
+            for frequency in self.FREQUENCIES:
+                storage = 1e9 * (1 + 0.1 * frequency) * (1 - 0.01 * (temperature + 40))
+                rows.append(f"{temperature:.3f},{frequency},{storage:.6g},{storage * 0.1:.6g}")
+                temperature += 0.05
+        return ("\n".join(rows) + "\n").encode()
+
+    def test_구간마다_주파수_스윕_하나(self) -> None:
+        parsed = profiles.apply(self.RULE, self.ramp())
+        # -40 ~ 30 °C 를 5 K 로 — 가운데 값 -40, -35, … 30 의 15 구간.
+        assert len(parsed.curves) == 15
+        first, last = parsed.curves[0], parsed.curves[-1]
+        assert first.key == "raw_minus_40_c" and last.key == "raw_30_c"
+        assert first.label == "-40 °C (램프 ±2.5 K 평균)"
+        for curve in parsed.curves:
+            frequency = next(one for one in curve.channels if one.key == "frequency")
+            # 주파수마다 한 점 — 오름차순(마스터커브가 엄격 증가를 요구한다).
+            found = [value for value in frequency.values if value is not None]
+            assert found == sorted(set(found))
+        middle = next(one for one in parsed.curves if one.key == "raw_minus_10_c")
+        temperature = next(one for one in middle.channels if one.key == "temperature")
+        # **구간의 평균이다** — 구간 안 점들(-12.5 ~ -7.5 °C)을 평균하면 가운데(-10 °C)에
+        # 붙는다. 평균하지 않고 한 점을 집으면 구간 끝(±2.5 K)으로 밀린다.
+        assert all(abs(value - 263.15) <= 0.3 for value in temperature.values if value)
+        assert any("구간 15개로 나눴습니다" in one for one in parsed.warnings)
+        # 0 구간은 승온에서 음수 쪽 점으로 시작한다 — `-0.0` 이 「minus_0」 키를 만들면 강온
+        # 파일의 같은 구간과 키가 갈린다(2026-10-20 검토).
+        keys = {curve.key for curve in parsed.curves}
+        assert "raw_0_c" in keys and "raw_minus_0_c" not in keys
+
+    def test_주파수가_하나뿐이면_곡선을_그대로_둔다(self) -> None:
+        """같은 장비의 1 Hz 온도 스윕(Tg 측정)이 이 형식에 맞을 때 — 전에는 구간을 다 빼서
+        곡선이 통째로 사라지고 「필수 채널이 없습니다」 로 실패했다(2026-10-20 검토)."""
+        rows = ["Temp,Freq,E1,E2"]
+        for step in range(400):
+            temperature = -40.0 + step * 0.175
+            rows.append(f"{temperature:.3f},1,{1e9 - step * 1e6:.6g},{1e8:.6g}")
+        parsed = profiles.apply(self.RULE, ("\n".join(rows) + "\n").encode())
+        assert [curve.key for curve in parsed.curves] == ["raw"]
+        assert len(parsed.curves[0].channels[0].values) == 400
+        assert any("주파수가 하나뿐이라 나누지 않고" in one for one in parsed.warnings)
+
+    def test_표_이름이_길어도_온도_꼬리가_남는다(self) -> None:
+        """키 한도(50)에서 꼬리가 잘리면 구간들이 `_2` · `_3` 으로만 갈렸다
+        (2026-10-20 검토)."""
+        from dataclasses import replace
+
+        from matcore.readers import profile as reader
+
+        (curve,) = profiles.apply(
+            {**self.RULE, "tables": {"mode": "first"}}, self.ramp()
+        ).curves
+        long = replace(curve, key="hitachi_dma7100_temperature_ramp_multi_frequency_x")
+        split = reader._split_ramps([long], {"step_k": 5}, [])
+        assert all(len(one.key) <= 50 for one in split)
+        assert split[0].key.endswith("_minus_40_c") and split[-1].key.endswith("_30_c")
+        assert len({one.key for one in split}) == len(split)
+
+    def test_구간_폭이_숫자가_아니면_말하고_안_나눈다(self) -> None:
+        rule = {**self.RULE, "tables": {"mode": "first", "split": {"step_k": "5K"}}}
+        parsed = profiles.apply(rule, self.ramp())
+        assert len(parsed.curves) == 1
+        assert any("숫자가 아니라" in one for one in parsed.warnings)
+
+    def test_규칙이_없으면_전처럼_한_곡선(self) -> None:
+        rule = {**self.RULE, "tables": {"mode": "first"}}
+        parsed = profiles.apply(rule, self.ramp())
+        assert len(parsed.all_curves) == 1

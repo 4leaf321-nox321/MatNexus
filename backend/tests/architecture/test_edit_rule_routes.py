@@ -61,6 +61,7 @@ MARKERS = (
     "_require_edit(",
     "_editable_run(",
     "_require_approver(",
+    "_deletable_specimens(",
 )
 
 #: 손잡이 → 그 안에 있어야 하는 판정.
@@ -72,6 +73,8 @@ HELPERS = {
     ("workbench", "_editable_run"): "require_edit(",
     # 선언 물성 승인 — 검토의 뜻이 있는 일이라 카드 확정과 같은 판정(ADR 0049).
     ("materials", "_require_approver"): "require_steward(",
+    # 고른 시편 지우기 — 미리 세기와 지우기가 같은 판정을 지난다(2026-10-20).
+    ("materials", "_deletable_specimens"): "require_edit(",
 }
 
 _만들기 = "만들기 — 누구나 한다. 만든 사람이 그 자료의 등록자다(ADR 0035)"
@@ -129,6 +132,7 @@ EXEMPT: dict[tuple[str, str], str] = {
     ("catalog", "deck_build"): _읽기,
     ("catalog", "create_catalog_material"): _만들기 + " — 문헌 재료",
     ("catalog", "create_catalog_value"): _만들기 + " — 문헌 값",
+    ("catalog", "preview_catalog_value"): _읽기 + " — 넣는 코드를 돌리고 되돌린다",
     (
         "catalog",
         "delete_catalog_material",

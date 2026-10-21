@@ -147,6 +147,61 @@ class Test되살린다:
         ).json()
         assert [one for one in alive if one["id"] == made["specimen"]["id"]]
 
+    def test_따로_먼저_지운_것은_함께_돌아오지_않는다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        """**함께 지운 것만** 돌아온다(2026-10-20 검토). 잘못 올린 시편을 먼저 치우고 나중에
+        재료를 통째로 지웠다 되살리면, 치웠던 시편까지 살아났다 — 「그 아래 지워진 것 전부」 를
+        봤기 때문이다. 영영 지울 때는 아래 전부를 가져가야 한다(남으면 FK 가 막는다)."""
+        made = _tree(client, admin_headers)
+        early = client.post(
+            f"/api/samples/{made['sample']['id']}/specimens",
+            json={"orientation": "TD", "seq_no": 2},
+            headers=admin_headers,
+        ).json()
+        assert client.delete(
+            f"/api/specimens/{early['id']}", headers=admin_headers
+        ).status_code in (
+            200,
+            204,
+        )
+        gone = client.post(
+            f"/api/materials/{made['material']['id']}/delete-cascade",
+            json={"include_test_runs": True},
+            headers=admin_headers,
+        )
+        assert gone.status_code == 200, gone.text
+        material = next(
+            row for row in _trash(client, admin_headers) if row["id"] == made["material"]["id"]
+        )
+        assert material["below"].get("시편") == 1
+
+        back = client.post(
+            f"/api/trash/material/{made['material']['id']}/restore", headers=admin_headers
+        )
+        assert back.status_code == 200, back.text
+        assert back.json()["counts"].get("시편") == 1
+        alive = {
+            one["id"]
+            for one in client.get(
+                f"/api/samples/{made['sample']['id']}/specimens", headers=admin_headers
+            ).json()
+        }
+        assert made["specimen"]["id"] in alive and early["id"] not in alive
+        assert [row for row in _trash(client, admin_headers) if row["id"] == early["id"]]
+
+        # 다시 통째로 지우고 영영 지우면 — 먼저 지운 시편까지 가져간다.
+        client.post(
+            f"/api/materials/{made['material']['id']}/delete-cascade",
+            json={"include_test_runs": True},
+            headers=admin_headers,
+        )
+        purged = client.delete(
+            f"/api/trash/material/{made['material']['id']}?confirm=true", headers=admin_headers
+        )
+        assert purged.status_code == 200, purged.text
+        assert not [row for row in _trash(client, admin_headers) if row["id"] == early["id"]]
+
     def test_이름이_이미_차_있으면_막는다(
         self, client: TestClient, admin_headers: dict[str, str]
     ) -> None:

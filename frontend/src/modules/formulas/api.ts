@@ -55,7 +55,8 @@ export const KINDS: {
     label: '값에서 값을 내는 식',
     purpose: '앞 단계의 값들로 새 값 하나 산출.',
     where: '처리 레시피의 단계 목록 — 레시피에 넣으면 결과에 값이 남는다',
-    inputs: '처리 단계가 내는 값(항복강도·인장강도·탄성계수…) — 목록에서 선택.',
+    inputs:
+      '처리 단계가 내는 값(항복강도·인장강도·탄성계수…)과 그 시험의 시편 치수 · 시험 조건(specimen_ · condition_) — 목록에서 선택.',
     example: 'proof_stress / tensile_strength  — 항복비',
   },
   {
@@ -63,7 +64,8 @@ export const KINDS: {
     label: '곡선에서 열을 내는 식',
     purpose: '곡선의 열들로 새 열 하나 추가.',
     where: '처리 레시피의 단계 목록 — 결과 곡선에 열이 하나 는다',
-    inputs: '원본 파일의 채널(변위·하중…)과 앞 단계가 만든 열(진응력…) — 목록에서 선택.',
+    inputs:
+      '원본 파일의 채널(변위·하중…) · 앞 단계가 만든 열(진응력…), 그리고 그 시험의 시편 치수 · 시험 조건(specimen_ · condition_, 점마다 같은 수) — 목록에서 선택. 예: 3 * force * specimen_span / (2 * specimen_width * specimen_thickness ** 2) — 3점 굽힘 응력.',
     example: 'stress_true * 1e-6  — 진응력을 MPa 로',
   },
 ]

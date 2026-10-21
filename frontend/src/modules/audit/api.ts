@@ -58,6 +58,8 @@ export const ACTION_LABELS: Record<string, string> = {
   'specimens.relocated': '시편을 다른 두께 재료로 옮김',
   'card.deleted': '물성 카드 삭제',
   'material.deleted': '재료 삭제',
+  'sample.deleted': '시료 삭제',
+  'specimen.deleted': '시편 삭제',
   'test_run.deleted': '시험 삭제',
   'account.decided': '가입 결정',
   'account.suspended': '계정 정지',
@@ -91,6 +93,7 @@ export const ACTION_LABELS: Record<string, string> = {
   // 사람만 하던 일을 AI 에게 연 자리(2026-10-14, ADR 0061).
   'results.adopted_by_client': 'AI 가 처리 결과 채택',
   'test_run.uploaded_by_client': 'AI 가 시험 파일 올림',
+  'test_run.reparsed_by_client': 'AI 가 시험 다시 읽음',
   'commission.moved_by_client': 'AI 가 측정 의뢰 상태 변경',
   'commission.assigned_by_client': 'AI 가 측정 의뢰 담당 지정',
   'commission.run_linked_by_client': 'AI 가 측정 의뢰에 시험 연결',

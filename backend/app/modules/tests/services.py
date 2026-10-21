@@ -54,7 +54,7 @@ from app.shared import (
 )
 from app.shared.errors import AppError, NotFound
 from matcore import curves, parsers, readers, registry, units, viscoelastic
-from matcore.parsers import ParsedTest, ParseError
+from matcore.parsers import CURVE_LABEL_MAX, ParsedTest, ParseError, unique_key
 from matcore.readers import profile as profiles
 
 #: 기준정보를 거쳐 들어가는 칸(ADR 0010). 문자열을 그대로 박으면 'Zwick Z100' 과
@@ -554,8 +554,15 @@ def delete_definition(db: Session, key: str) -> None:
 def parse_run(db: Session, run_id: uuid.UUID) -> str:
     """업로드한 원본을 읽어 곡선과 요약값을 만든다. 최종 상태를 돌려준다.
 
-    워커가 부른다. 여기서 나가는 예외는 **인프라 오류뿐**이다 — 그것만 재시도할
-    가치가 있다.
+    워커가 부른다. 여기서 나가는 예외는 **실패를 적는 것조차 못 할 때뿐**이다(DB 가
+    죽었다) — 그것만 재시도할 가치가 있다.
+
+    ## 「읽는 중」 에 남기지 않는다(2026-10-20)
+
+    사용자 보고: 곡선 키가 겹친 시험이 「읽는 중」 에서 끝나지 않았다 — 오류도 없이.
+    「읽는 중」 을 커밋한 뒤 저장에서 난 예외가 그대로 나갔고, 워커는 작업만 실패로
+    두고 시험은 건드리지 않았다. 이제 그 뒤의 예외는 **무엇이든** 되돌린 뒤 실패와
+    이유로 남긴다. 같은 바이트는 다시 읽어도 같은 자리에서 막히므로 재시도할 것도 없다.
     """
     run = db.get(TestRun, run_id)
     if run is None or run.deleted_at is not None:
@@ -572,7 +579,28 @@ def parse_run(db: Session, run_id: uuid.UUID) -> str:
     run.status = "parsing"
     db.commit()
 
-    data = filestore.read_bytes(run.source_path)  # 인프라 오류는 그대로 올린다
+    try:
+        return _read_and_store(db, run, test_type)
+    except Exception as exc:
+        logger.exception("읽은 것을 저장하다 예외 (run=%s)", run_id)
+        # **되돌린 뒤에 적는다.** 막힌 세션에 실패를 적으면 그 커밋도 막힌다.
+        db.rollback()
+        again = db.get(TestRun, run_id)
+        if again is None:
+            raise
+        return _fail(db, again, f"읽은 결과를 저장하지 못했습니다 — {_said(exc)}")
+
+
+def _said(exc: Exception) -> str:
+    """예외를 사람이 읽을 한 줄로. SQL 전문은 화면에 싣지 않는다(로그에 있다)."""
+    text = str(getattr(exc, "orig", None) or exc).strip().splitlines()
+    first = text[0] if text else ""
+    return f"{type(exc).__name__}: {first[:300]}" if first else type(exc).__name__
+
+
+def _read_and_store(db: Session, run: TestRun, test_type: TestType) -> str:
+    """「읽는 중」 다음의 전부 — 읽고, 맞는지 보고, 저장한다. 예외는 `parse_run` 이 받는다."""
+    data = filestore.read_bytes(run.source_path or "")
 
     # **프로파일이 먼저다.** 장비가 늘 때마다 파서를 짜지 않으려고 만든 길이므로,
     # 맞는 프로파일이 있으면 그것을 쓴다. 없을 때만 코드 플러그인으로 내려간다.
@@ -595,7 +623,7 @@ def parse_run(db: Session, run_id: uuid.UUID) -> str:
                 f"만들거나 파서를 등록하세요."
             ),
         )
-    how, source = reader
+    how, source, picked = reader
 
     try:
         parsed: ParsedTest = source(data)
@@ -623,7 +651,7 @@ def parse_run(db: Session, run_id: uuid.UUID) -> str:
             f"프로파일에서 그 열의 단위를 지정하거나 시험 종류 정의를 확인하세요.",
         )
 
-    _store_curves(db, run, parsed, version=how)
+    renamed = _store_curves(db, run, parsed, version=how)
     _store_summary(db, run, parsed)
     run.temperature_step_count = _temperature_steps(parsed)
 
@@ -638,7 +666,13 @@ def parse_run(db: Session, run_id: uuid.UUID) -> str:
     # 장비가 겹쳐 준 표를 마스터커브로 등록하는 것이 여기 걸린다(`parse_hooks`).
     # 훅에서 난 오류는 경고가 될 뿐 읽기를 실패시키지 않는다.
     db.flush()
-    notes = [*parsed.warnings, *filled, *parse_hooks.fire_parsed(db, run)]
+    notes = [
+        *picked,
+        *parsed.warnings,
+        *renamed,
+        *filled,
+        *parse_hooks.fire_parsed(db, run),
+    ]
     if notes:
         # 경고는 실패가 아니지만 사라지면 안 된다. 상세 화면이 그대로 보여 준다.
         run.source_metadata = {
@@ -868,12 +902,15 @@ def _who_could_read(db: Session, run: TestRun, data: bytes) -> str | None:
 
 def _pick_reader(
     db: Session, test_type: TestType, run: TestRun, data: bytes
-) -> tuple[str, Any] | None:
-    """이 파일을 무엇으로 읽을까. (표시용 이름, 읽는 함수).
+) -> tuple[str, Any, list[str]] | None:
+    """이 파일을 무엇으로 읽을까. (표시용 이름, 읽는 함수, 남길 경고).
 
     프로파일을 먼저 본다 — 그것이 배포 없이 장비를 늘리는 길이기 때문이다.
     맞는 것이 여럿이면 `priority` 가 높은 것이 이긴다. 실제로 생긴다: 같은 장비의
     형식이 조금 달라져 프로파일을 하나 더 만들면 지문이 겹친다.
+
+    **여럿 중에 골랐으면 경고로 남긴다**(2026-10-20). 사용자 보고: 자동이 다른 형식을
+    골라 곡선 하나로 읽혔는데, 무엇을 골랐는지 · 후보가 또 있었는지 어디에도 없었다.
     """
     filename = run.source_filename or ""
 
@@ -889,6 +926,7 @@ def _pick_reader(
         return (
             f"profile:{chosen.key}",
             lambda raw, rule=chosen.definition: profiles.apply(rule, raw),
+            [],
         )
 
     candidates = list(
@@ -919,16 +957,33 @@ def _pick_reader(
         except readers.ReadError:
             structure = None
         if structure is not None:
-            for candidate in candidates:
+            # 전부 대 본다 — 첫 번째가 이기지만, 몇 개가 맞았는지를 알아야 말할 수 있다.
+            found = [
+                candidate
+                for candidate in candidates
                 if profiles.matches(
                     candidate.definition, filename=filename, structure=structure
-                ):
-                    return (
-                        f"profile:{candidate.key}",
-                        # 기본 인자로 묶는다. 그냥 닫으면 루프의 마지막 값을
-                        # 잡아, 맞지도 않는 프로파일로 읽는다.
-                        lambda raw, rule=candidate.definition: profiles.apply(rule, raw),
-                    )
+                )
+            ]
+            if found:
+                first = found[0]
+                notes = (
+                    [
+                        f"맞는 형식이 {len(found)}개였습니다 — 우선순위가 높은 "
+                        f"'{first.label}'({first.key}) 로 읽었습니다. 다른 후보: "
+                        f"{', '.join(one.key for one in found[1:])}. 틀렸으면 "
+                        "「다시 읽기」 에서 형식을 고르세요."
+                    ]
+                    if len(found) > 1
+                    else []
+                )
+                return (
+                    f"profile:{first.key}",
+                    # 기본 인자로 묶는다 — 그냥 닫으면 바깥 이름이 바뀔 때 다른 규칙으로
+                    # 읽는다.
+                    lambda raw, rule=first.definition: profiles.apply(rule, raw),
+                    notes,
+                )
 
     if test_type.parser_key:
         parsers.load_builtin()
@@ -936,7 +991,7 @@ def _pick_reader(
             plugin = registry.get(test_type.parser_key)
         except KeyError:
             return None
-        return f"{plugin.id}:{plugin.version}", plugin.fn
+        return f"{plugin.id}:{plugin.version}", plugin.fn, []
 
     return None
 
@@ -1057,8 +1112,8 @@ def _temperature_steps(parsed: ParsedTest) -> int | None:
     return viscoelastic.count_temperature_levels(found)
 
 
-def _store_curves(db: Session, run: TestRun, parsed: ParsedTest, *, version: str) -> None:
-    """곡선을 전부 Parquet 으로 쓰고 Curve 행을 만든다.
+def _store_curves(db: Session, run: TestRun, parsed: ParsedTest, *, version: str) -> list[str]:
+    """곡선을 전부 Parquet 으로 쓰고 Curve 행을 만든다. **키를 바꿔 저장한 것**을 돌려준다.
 
     **한 파일이 곡선을 여럿 낼 수 있다.** 실측: TA DMA850 주파수-온도 스윕은
     `[step]` 블록이 8개고 온도 구간마다 별개 측정이다. 하나로 이으면 서로 다른
@@ -1073,18 +1128,26 @@ def _store_curves(db: Session, run: TestRun, parsed: ParsedTest, *, version: str
         db.delete(existing)
     db.flush()
 
+    # **마지막 문**(2026-10-20) — 어느 파서가 내든 키는 시험 안에서 하나씩, 칸 길이 안으로.
+    # 같은 키가 둘이면 두 번째 파일이 첫 번째를 덮고(같은 파일 이름) 저장은 막힌다.
+    taken: set[str] = set()
+    renamed: list[str] = []
     for curve in parsed.all_curves:
         if not curve.channels:
             continue
+        key = unique_key(curve.key, taken)
+        taken.add(key)
+        if key != curve.key:
+            renamed.append(f"곡선 '{curve.label or curve.key}' 을 '{key}' 로 저장했습니다.")
         payload = curves.to_parquet(curve.channels)
         stored = filestore.write_bytes(
-            payload, relative_dir=directory, filename=f"{curve.key}.parquet"
+            payload, relative_dir=directory, filename=f"{key}.parquet"
         )
         db.add(
             Curve(
                 test_run_id=run.id,
-                key=curve.key,
-                label=curve.label or f"원본 정규화 ({version})",
+                key=key,
+                label=(curve.label or f"원본 정규화 ({version})")[:CURVE_LABEL_MAX],
                 kind=curve.kind,
                 storage_path=stored.relative_path,
                 row_count=len(curve.channels[0].values),
@@ -1093,6 +1156,7 @@ def _store_curves(db: Session, run: TestRun, parsed: ParsedTest, *, version: str
                 channels=[channel.key for channel in curve.channels],
             )
         )
+    return renamed
 
 
 def _store_summary(db: Session, run: TestRun, parsed: ParsedTest) -> None:

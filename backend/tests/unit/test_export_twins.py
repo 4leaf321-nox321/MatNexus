@@ -48,7 +48,16 @@ CARDS: dict[str, dict[str, Any]] = json.loads(
 #: Anand(확장 `anand`) · Garofalo 크리프(확장 `creep`)는 항마다 다른 단위로 와서 덱 단위계로
 #: 옮기는 것이 계산이다(2026-10-08). Norton 크리프(2026-10-12)는 A 에 응력 단위가 n 제곱으로
 #: 들어간다.
-CODE_ONLY = {"json", "zemax_agf", "ansys_anand", "ansys_creep", "ansys_creep_norton"}
+CODE_ONLY = {
+    "json",
+    "zemax_agf",
+    "ansys_anand",
+    "ansys_creep",
+    "ansys_creep_norton",
+    # 폼(2026-10-20, 확장 `compression`) — 응력이 내려가는 곡선을 **거부**한다. 정의판은 그
+    # 검사를 못 해 경질 폼의 봉우리까지 *MAT_LOW_DENSITY_FOAM 으로 내보내게 된다.
+    "dyna_foam",
+}
 
 
 def _seed() -> dict[str, Any]:

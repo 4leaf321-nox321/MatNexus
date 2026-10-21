@@ -234,6 +234,20 @@ describe('확대와 값 읽기', () => {
     expect(screen.queryByRole('button', { name: '전체 보기' })).toBeNull()
   })
 
+  it('축이 바뀌면 전체로 돌아간다', () => {
+    // 옛 범위는 다른 축의 값이다 — 변형률을 확대한 채 X 축을 「시간」 으로 바꾸면 판이 거의
+    // 비었다(2026-10-20 검토).
+    const { container, rerender } = draw()
+    const svg = container.querySelector('svg')!
+    svg.getBoundingClientRect = () =>
+      ({ left: 0, top: 0, width: 760, height: 380 }) as DOMRect
+    fireEvent.wheel(svg, { deltaY: -100 })
+    expect(screen.getByRole('button', { name: '전체 보기' })).toBeInTheDocument()
+
+    rerender(<CurveChart points={MEAN} background={RAW} xLabel="시간" yLabel="응력" />)
+    expect(screen.queryByRole('button', { name: '전체 보기' })).toBeNull()
+  })
+
   it('가리킨 x 에서 곡선을 전부 읽어 준다', () => {
     // **여러 곡선을 깔아 놓고 값은 하나만 보여 주면** 흩어짐이 보이는데
     // 얼마나 벌어졌는지는 못 읽는다.
@@ -311,5 +325,101 @@ describe('눈금 토글 — 모든 곡선에서 선형 ↔ 로그 (2026-09-29)',
     expect(within(yAxis).getByRole('button', { name: '로그' })).toBeDisabled()
     const xAxis = screen.getByRole('group', { name: '가로축 눈금' })
     expect(within(xAxis).getByRole('button', { name: '로그' })).toBeEnabled()
+  })
+})
+
+describe('영역 확대 · 이동 (2026-10-20)', () => {
+  // 사용자 보고: 탄성 구간보다 소성 구간이 긴 재료는 앞 구간의 기울기를 볼 수 없다.
+  const MEAN: [number, number][] = [
+    [0, 0],
+    [1, 100],
+    [2, 200],
+  ]
+  /** jsdom 은 크기를 0 으로 준다 — 판 좌표와 화면 좌표를 같게 둔다(760 × 380). */
+  function sized(container: HTMLElement) {
+    const svg = container.querySelector('svg')!
+    svg.getBoundingClientRect = () => ({ left: 0, top: 0, width: 760, height: 380 }) as DOMRect
+    return svg
+  }
+  /** 세로축 눈금 — 오른쪽으로 붙인 글자들. */
+  function yTicks(container: HTMLElement): string[] {
+    return [...container.querySelectorAll('text[text-anchor="end"]')].map((one) => one.textContent ?? '')
+  }
+  function xRange(): [number, number] {
+    const [from, to] = (screen.getByText(/^x /).textContent ?? '').replace('x ', '').split(' ~ ')
+    return [Number(from), Number(to)]
+  }
+  function dragOn(svg: Element, from: [number, number], to: [number, number]) {
+    fireEvent.mouseDown(svg, { clientX: from[0], clientY: from[1] })
+    fireEvent.mouseMove(svg, { clientX: to[0], clientY: to[1] })
+    fireEvent.mouseUp(svg, { clientX: to[0], clientY: to[1] })
+  }
+
+  it('점이 나중에 와도 휠이 먹는다 — 시험 상세는 빈 점으로 먼저 그린다', () => {
+    // 전에는 처음 그릴 때 판이 없으면 휠이 끝내 안 붙었다 — 확대도, 확대 뒤의 이동도 없었다.
+    const { container, rerender } = render(<CurveChart points={[]} xLabel="변형률" yLabel="응력" />)
+    expect(screen.getByText('그릴 점이 없습니다.')).toBeInTheDocument()
+    rerender(<CurveChart points={MEAN} xLabel="변형률" yLabel="응력" />)
+    fireEvent.wheel(sized(container), { deltaY: -100 })
+    expect(screen.getByRole('button', { name: '전체 보기' })).toBeInTheDocument()
+  })
+
+  it('끌어 그린 사각형으로 가로 · 세로를 함께 편다', () => {
+    const { container } = render(<CurveChart points={MEAN} xLabel="변형률" yLabel="응력" />)
+    const svg = sized(container)
+    expect(yTicks(container)).toContain('200')
+    // 판 안의 (200, 200) ~ (400, 300) — x 약 0.39 ~ 0.99, y 약 25 ~ 94.
+    dragOn(svg, [200, 200], [400, 300])
+    const [from, to] = xRange()
+    expect(from).toBeCloseTo(0.393, 2)
+    expect(to).toBeCloseTo(0.988, 2)
+    expect(yTicks(container)).not.toContain('200')
+    expect(yTicks(container)).toContain('60')
+  })
+
+  it('옆으로만 끌면 가로만 편다 — 세로는 그대로', () => {
+    // 손은 옆으로 끌 때도 조금 흔들린다. 그 흔들림을 세로 확대로 읽으면 곡선이 띠 밖으로 사라진다.
+    const { container } = render(<CurveChart points={MEAN} xLabel="변형률" yLabel="응력" />)
+    const svg = sized(container)
+    fireEvent.mouseDown(svg, { clientX: 68, clientY: 200 })
+    fireEvent.mouseMove(svg, { clientX: 136, clientY: 212 })
+    // 놓기 전에도 펼 모양 그대로 — 판 높이 전체를 덮는 띠로 보인다.
+    expect(screen.getByTestId('zoom-pick').getAttribute('height')).toBe(String(380 - 16 - 44))
+    fireEvent.mouseUp(svg, { clientX: 136, clientY: 212 })
+    const [from, to] = xRange()
+    expect(from).toBeCloseTo(0, 5)
+    expect(to).toBeCloseTo(0.202, 2)
+    expect(yTicks(container)).toContain('200')
+  })
+
+  it('그냥 누르면 확대하지 않는다', () => {
+    const { container } = render(<CurveChart points={MEAN} xLabel="변형률" yLabel="응력" />)
+    dragOn(sized(container), [300, 200], [302, 201])
+    expect(screen.queryByRole('button', { name: '전체 보기' })).toBeNull()
+  })
+
+  it('「이동」 으로 바꾸면 끌어서 옮기고, 두 번 누르면 전체로 돌아간다', () => {
+    const { container } = render(<CurveChart points={MEAN} xLabel="변형률" yLabel="응력" />)
+    const svg = sized(container)
+    dragOn(svg, [200, 50], [400, 300])
+    const [before, end] = xRange()
+
+    fireEvent.click(screen.getByRole('button', { name: '이동' }))
+    expect(screen.getByText(/끌어서 이동/)).toBeInTheDocument()
+    // 오른쪽으로 끌면 **데이터가 손을 따라** 오른쪽으로 — 보는 범위는 왼쪽으로 간다.
+    dragOn(svg, [400, 200], [500, 200])
+    // **판 폭(760 - 68 - 20 = 672)만큼 끌면 범위 한 폭** — 그림 전체 폭(760)으로 나누면
+    // 약 12 % 덜 따라왔다(2026-10-20 검토).
+    expect(xRange()[0]).toBeCloseTo(before - (100 / 672) * (end - before), 2)
+
+    fireEvent.doubleClick(svg)
+    expect(screen.queryByRole('button', { name: '전체 보기' })).toBeNull()
+  })
+
+  it('Shift+휠은 가로만 당긴다', () => {
+    const { container } = render(<CurveChart points={MEAN} xLabel="변형률" yLabel="응력" />)
+    fireEvent.wheel(sized(container), { deltaY: -100, shiftKey: true, clientX: 400, clientY: 200 })
+    expect(xRange()[1]).toBeLessThan(2)
+    expect(yTicks(container)).toContain('200')
   })
 })

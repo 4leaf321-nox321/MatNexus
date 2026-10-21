@@ -360,7 +360,7 @@ class CatalogPropertyCreate(BaseModel):
     slug: str = Field(min_length=2, max_length=60)
     """키의 마지막 조각. 영문 snake_case — flexural_modulus_wet."""
     si_unit: str | None = Field(default=None, max_length=50)
-    """SI 정본 단위(Pa · J/(kg.K) · 1). 수치 물성이면 필수."""
+    """SI 정본 단위(Pa · J/(kg.K) · 1) 또는 눈금(HV · ShoreA · IRHD …). 수치 물성이면 필수."""
     symbol: str | None = Field(default=None, max_length=50)
     value_type: str = "numeric"
     description: str | None = None
@@ -470,6 +470,39 @@ class CatalogValueCreate(BaseModel):
     source_detail: str | None = None
     """출처 안의 위치 — 페이지·표·그림."""
     notes: str | None = None
+
+
+class CatalogPropertyPreviewOut(BaseModel):
+    """만들면 **이렇게 된다** — 만들 때와 같은 검사를 지났다(2026-10-20).
+
+    AI 의 미리보기가 서버에 묻지 않고 입력을 그대로 돌려줘서, 미리보기는 통과하고 실제 생성에서
+    「단위표에 없습니다」 로 거절되는 일이 있었다(사용자 보고). 이 응답은 생성 코드를 그대로
+    돌리고 되돌린 결과다.
+    """
+
+    key: str
+    name: str
+    domain: str
+    si_unit: str | None
+    """정본 표기로 고친 단위 — `irhd` 를 적었으면 `IRHD`."""
+    scale: bool
+    """눈금인가 — 환산하지 않고 그 기호로만 값을 받는다."""
+    symbol: str | None
+
+
+class CatalogValuePreviewOut(BaseModel):
+    """넣으면 **이렇게 저장된다** — 넣을 때와 같은 검사(단위 환산 · 눈금 일치 · 출처)를
+    지났다."""
+
+    property_key: str
+    property_name: str
+    value_num: float | None
+    value_text: str | None
+    unit: str | None
+    """저장될 단위 — 정의의 단위."""
+    uncertainty: float | None
+    converted: str | None = None
+    """환산했으면 그 내역 — "310 MPa → 3.1e+08 Pa"."""
 
 
 class CatalogValueCreatedOut(BaseModel):

@@ -1486,6 +1486,136 @@ class Test읽을_형식_고르기:
         assert pinned["parser_version"] == "profile:ta_dma850"
         assert pinned["parse_profile_key"] == "ta_dma850"
 
+    @staticmethod
+    def twin(client: TestClient, headers: dict[str, str]) -> None:
+        """우선순위가 더 높은 쌍둥이 — 자동은 이쪽을 고른다."""
+        made = client.post(
+            "/api/formats",
+            json={
+                "key": "ta_dma850_hi",
+                "label": "TA DMA850 (우선)",
+                "test_type_key": "dma_sweep",
+                "definition": DMA_PROFILE,
+                "priority": 99,
+            },
+            headers=headers,
+        )
+        assert made.status_code == 201, made.text
+
+    def test_올릴_때_고르면_처음부터_그것으로_읽는다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        dma: None,
+        specimen: dict[str, Any],
+        db: Session,
+    ) -> None:
+        """사용자 보고(2026-10-20): 맞는 형식이 둘 이상인 파일을 자동이 다른 형식으로 골라
+        곡선 하나로 읽혔고, 올릴 때 고를 방법이 없어 잘못 읽힌 뒤에 다시 읽어야 했다."""
+        del dma
+        self.twin(client, admin_headers)
+        response = client.post(
+            "/api/test-runs",
+            data={
+                "specimen_id": specimen["id"],
+                "test_type": "dma_sweep",
+                "conditions": "{}",
+                "profile_key": "ta_dma850",
+            },
+            files={"file": ("Example FreqTemp.csv", FREQ_TEMP.read_bytes())},
+            headers=admin_headers,
+        )
+        assert response.status_code == 202, response.text
+        run = response.json()
+        assert services.parse_run(db, uuid.UUID(run["id"])) == "parsed"
+        detail = client.get(f"/api/test-runs/{run['id']}", headers=admin_headers).json()
+        assert detail["parser_version"] == "profile:ta_dma850"
+        assert detail["parse_profile_key"] == "ta_dma850"
+        # 사람이 골랐으면 「후보가 여럿」 은 할 말이 아니다.
+        assert not any("맞는 형식이" in one for one in detail["warnings"])
+
+    def test_자동이_여럿_중에_골랐으면_경고로_남긴다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        dma: None,
+        specimen: dict[str, Any],
+        db: Session,
+    ) -> None:
+        """무엇을 골랐는지 · 후보가 또 있었는지가 어디에도 없으면, 곡선이 하나로 읽힌 까닭을
+        사람이 찾을 길이 없다."""
+        del dma
+        self.twin(client, admin_headers)
+        run = _upload_dma(client, admin_headers, specimen["id"])
+        assert services.parse_run(db, uuid.UUID(run["id"])) == "parsed"
+        detail = client.get(f"/api/test-runs/{run['id']}", headers=admin_headers).json()
+        said = [one for one in detail["warnings"] if "맞는 형식이 2개" in one]
+        assert len(said) == 1, detail["warnings"]
+        assert "ta_dma850_hi" in said[0] and "다른 후보: ta_dma850" in said[0]
+
+    def test_올릴_때_틀린_형식은_시험도_파일도_남기지_않는다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        dma: None,
+        specimen: dict[str, Any],
+        db: Session,
+    ) -> None:
+        del dma
+        before = db.query(TestRun).count()
+        response = client.post(
+            "/api/test-runs",
+            data={
+                "specimen_id": specimen["id"],
+                "test_type": "dma_sweep",
+                "conditions": "{}",
+                "profile_key": "no_such_format",
+            },
+            files={"file": ("Example FreqTemp.csv", FREQ_TEMP.read_bytes())},
+            headers=admin_headers,
+        )
+        assert response.status_code == 422, response.text
+        assert response.json()["error"]["code"] == "MNX-TESTS-0022"
+        assert db.query(TestRun).count() == before
+
+    def test_사용_중지된_형식은_고를_수_없다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        dma: None,
+        specimen: dict[str, Any],
+        db: Session,
+    ) -> None:
+        """고정해 두면 읽을 때 조용히 막힌다 — 고르는 자리에서 말한다."""
+        del dma
+        run = _upload_dma(client, admin_headers, specimen["id"])
+        profile = db.scalar(select(FormatProfile).where(FormatProfile.key == "ta_dma850"))
+        assert profile is not None
+        profile.is_active = False
+        db.commit()
+        refused = client.post(
+            f"/api/test-runs/{run['id']}/reparse",
+            json={"profile_key": "ta_dma850"},
+            headers=admin_headers,
+        )
+        assert refused.status_code == 422, refused.text
+        assert "사용 중지" in refused.json()["error"]["message"]
+
+    def test_종류_추정이_후보를_전부_말한다(
+        self, client: TestClient, admin_headers: dict[str, str], dma: None
+    ) -> None:
+        """일괄 등록 화면이 「후보 N개」 를 보이고 사람이 고르게 하는 근거다."""
+        del dma
+        self.twin(client, admin_headers)
+        body = client.post(
+            "/api/test-types/detect",
+            files={"file": ("Example.csv", STRAIN_SWEEP.read_bytes())},
+            headers=admin_headers,
+        ).json()
+        assert body["profile_key"] == "ta_dma850_hi"
+        assert body["profile_candidates"] == ["ta_dma850_hi", "ta_dma850"]
+        assert "2개" in body["reason"]
+
     def test_고른_것이_남아서_다음에도_이어진다(
         self,
         client: TestClient,

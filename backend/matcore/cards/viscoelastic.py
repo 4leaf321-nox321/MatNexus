@@ -49,6 +49,15 @@ VISCOELASTIC = register_block(
                 si_unit="K",
                 help="마스터커브를 겹친 온도. **이 카드가 유효한 온도다.**",
             ),
+            # **무엇을 잰 것인가**(2026-10-20). 카드는 늘 E 로 담는다(ADR 0057) — 전단으로 잰
+            # G′ 는 E = 2(1+ν)G 로 옮겨 담고, 덱이 같은 ν 로 G 를 다시 만든다. 그 사실이 칸에
+            # 없으면 덱을 받은 사람이 E 를 G 로 또 옮기는 이중 환산을 한다(사용자 보고).
+            Produced(
+                key="modulus_basis",
+                label="잰 탄성률",
+                si_unit="1",
+                help="E′(인장 · 굽힘) 또는 G′(전단 → E = 2(1+ν)G 로 옮겨 담음).",
+            ),
             Produced(
                 key="normalized_rmse",
                 label="정규화 RMSE",

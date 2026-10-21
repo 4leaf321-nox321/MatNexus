@@ -228,6 +228,66 @@ class Test층마다_제_등록자:
         assert many["deleted"] == 0
         assert "남의 자료" in many["blocked"][0]["reason"]
 
+    def test_남이_붙인_것이_있으면_시료도_통째로_못_지운다(
+        self,
+        client: TestClient,
+        db: Session,
+        people: dict[str, tuple[str, dict[str, str]]],
+    ) -> None:
+        """시료를 통째로 지우는 문(2026-10-20)도 재료와 같은 판단이다 — 시료를 고칠 수 있어도
+        남이 붙인 시편 · 시험까지 지울 수는 없고, 누구의 것인지 말한다."""
+        _, alice = people["alice"]
+        _, bora = people["bora"]
+        material = _material(client, alice)
+        sample = _sample(client, alice, material["id"])
+        specimen = _specimen(client, bora, sample["id"])
+        _run(client, db, bora, specimen["id"])
+
+        blocked = client.post(
+            f"/api/samples/{sample['id']}/delete-cascade",
+            json={"include_test_runs": True},
+            headers=alice,
+        )
+        assert blocked.status_code == 409, blocked.text
+        assert blocked.json()["error"]["code"] == "MNX-MATERIALS-0035"
+        message = blocked.json()["error"]["message"]
+        assert "시편 1건(보라)" in message and "시험 1건(보라)" in message
+        # 막혔으면 그대로다.
+        assert client.get(f"/api/samples/{sample['id']}", headers=alice).status_code == 200
+
+    def test_남의_시험이_매달린_시편은_골라_지워도_남는다(
+        self,
+        client: TestClient,
+        db: Session,
+        people: dict[str, tuple[str, dict[str, str]]],
+    ) -> None:
+        """고른 시편 지우기(2026-10-20)도 같은 판단이다 — 내 시편이어도 남이 붙인 시험까지는
+        못 지우고 누구의 것인지 말한다. 남의 시편은 권한으로 막힌다. 막혀도 나머지는 지운다."""
+        _, alice = people["alice"]
+        _, bora = people["bora"]
+        material = _material(client, alice)
+        sample = _sample(client, alice, material["id"])
+        mine = _specimen(client, alice, sample["id"])
+        _run(client, db, bora, mine["id"])
+        hers = _specimen(client, bora, sample["id"])
+        free = _specimen(client, alice, sample["id"])
+
+        done = client.post(
+            "/api/specimens/delete",
+            json={
+                "specimen_ids": [mine["id"], hers["id"], free["id"]],
+                "include_test_runs": True,
+            },
+            headers=alice,
+        )
+        assert done.status_code == 200, done.text
+        assert done.json()["specimens"] == 1
+        reasons = {row["id"]: row["reason"] for row in done.json()["blocked"]}
+        assert "시험 1건(보라)" in reasons[mine["id"]]
+        assert hers["id"] in reasons
+        assert client.get(f"/api/specimens/{mine['id']}", headers=alice).status_code == 200
+        assert client.get(f"/api/specimens/{free['id']}", headers=alice).status_code == 404
+
 
 class Test편집_부서:
     def test_부서에_주면_그_부서_사람이_고친다(

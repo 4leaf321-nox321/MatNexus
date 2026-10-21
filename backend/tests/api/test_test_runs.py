@@ -113,6 +113,7 @@ class TestDefinitions:
             "stress_relaxation",
             "flexural",
             "compression",
+            "adhesion",
         ]
         dma_type = next(t for t in types if t["key"] == "dma_sweep")
         assert dma_type["parser_key"] is None  # 프로파일이 읽는다
@@ -507,6 +508,77 @@ class TestParsing:
         run = db.get(TestRun, uuid.UUID(created["id"]))
         assert run is not None
         assert "force" in (run.parse_error or "")
+
+    def test_곡선_키가_겹쳐도_멈추지_않고_번호로_가른다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        tensile: None,
+        specimen: dict[str, Any],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """**어느 파서가 내든** 저장 직전에 키를 가른다(2026-10-20). 전에는 같은 키 둘이
+        저장에서 막혀 시험이 「읽는 중」 에 남았다 — 오류도 없이."""
+        from dataclasses import replace
+
+        real = services._pick_reader
+
+        def doubled(*args: Any) -> Any:
+            found = real(*args)
+            assert found is not None
+            how, source, notes = found
+
+            def read(data: bytes) -> Any:
+                parsed = source(data)
+                first = parsed.all_curves[0]
+                return replace(
+                    parsed,
+                    channels=(),
+                    curves=(
+                        replace(first, key="40도", label="-40도"),
+                        replace(first, key="40도", label="40도"),
+                    ),
+                )
+
+            return how, read, notes
+
+        monkeypatch.setattr(services, "_pick_reader", doubled)
+        created = _upload(client, admin_headers, specimen["id"]).json()
+        assert services.parse_run(db, uuid.UUID(created["id"])) == "parsed"
+        keys = sorted(
+            db.scalars(select(Curve.key).where(Curve.test_run_id == uuid.UUID(created["id"])))
+        )
+        assert keys == ["40도", "40도_2"]
+        run = db.get(TestRun, uuid.UUID(created["id"]))
+        assert run is not None
+        assert "40도_2" in (run.source_metadata or {}).get("_warnings", "")
+
+    def test_저장에서_막혀도_읽는_중에_남지_않는다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        tensile: None,
+        specimen: dict[str, Any],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """「읽는 중」 을 커밋한 뒤 난 예외는 **무엇이든** 실패와 이유로 남는다(2026-10-20).
+        전에는 그대로 나가 워커가 작업만 실패로 두고, 시험은 끝나지 않는 「읽는 중」 이었다."""
+
+        def broken(*_: Any) -> None:
+            raise RuntimeError("요약값을 넣다 막혔다")
+
+        monkeypatch.setattr(services, "_store_summary", broken)
+        created = _upload(client, admin_headers, specimen["id"]).json()
+        assert services.parse_run(db, uuid.UUID(created["id"])) == "failed"
+        db.expire_all()
+        run = db.get(TestRun, uuid.UUID(created["id"]))
+        assert run is not None
+        assert run.status == "failed"
+        assert "요약값을 넣다 막혔다" in (run.parse_error or "")
+        # 되돌렸다 — 반쯤 쓴 곡선 행이 남지 않는다.
+        assert db.scalar(select(Curve).where(Curve.test_run_id == run.id)) is None
 
     def test_지워진_시험은_조용히_넘어간다(
         self,

@@ -25,6 +25,7 @@ import { display } from '@/shared/units'
 const runs = vi.fn()
 const facets = vi.fn()
 const standardConditions = vi.fn()
+const removeMany = vi.fn()
 
 vi.mock('@/shared/auth/AuthContext', () => ({
   useAuth: () => ({ user: { id: 'u1', memberships: [] } }),
@@ -37,6 +38,7 @@ vi.mock('@/modules/tests/api', async (importOriginal) => ({
     runs: (...args: unknown[]) => runs(...args),
     runFacets: (...args: unknown[]) => facets(...args),
     standardConditions: () => standardConditions(),
+    removeMany: (...args: unknown[]) => removeMany(...args),
   },
 }))
 
@@ -297,5 +299,42 @@ describe('측정 의뢰에서 왔다 (2026-10-03)', () => {
     await userEvent.click(within(banner).getByRole('button', { name: '풀기' }))
     await waitFor(() => expect(asked().commission).toBeUndefined())
     expect(screen.queryByText('측정 의뢰의 시험만 보는 중입니다.')).not.toBeInTheDocument()
+  })
+})
+
+describe('실패한 시험도 골라 지운다 (2026-10-20)', () => {
+  // 사용자 보고: 잘못된 옵션으로 올려 읽기에 실패한 시험을 **고를 수가 없었다** — 고르는 칸이
+  // 일괄 처리만 생각해 읽힌 시험에만 켜져 있었다. 처리는 여전히 읽힌 것만 된다.
+  const FAILED = {
+    ...RUN,
+    id: 'r2',
+    code: 'T-000204',
+    record_name: 'SECC_1.0__01__MD_01__TEN_02',
+    status: 'failed',
+    result_count: 0,
+    adopted_result_id: null,
+    row_count: null,
+  }
+
+  it('실패한 시험을 골라 지우고, 그때 일괄 처리는 막힌다', async () => {
+    runs.mockResolvedValue({ items: [RUN, FAILED], total: 2, limit: 50, offset: 0 })
+    removeMany.mockResolvedValue({ deleted: 1, blocked: [] })
+    const user = userEvent.setup()
+    show()
+    await screen.findByText('T-000204')
+
+    const pick = screen.getByRole('checkbox', { name: 'SECC_1.0__01__MD_01__TEN_02 선택' })
+    expect(pick).toBeEnabled()
+    await user.click(pick)
+
+    const batch = screen.getByRole('button', { name: /일괄 데이터 처리/ })
+    expect(batch).toBeDisabled()
+    expect(batch).toHaveAttribute('title', expect.stringContaining('읽히지 않은 시험 1건'))
+
+    await user.click(screen.getByRole('button', { name: '삭제' }))
+    const dialog = await screen.findByRole('dialog')
+    expect(dialog).toHaveTextContent('SECC_1.0__01__MD_01__TEN_02')
+    await user.click(within(dialog).getByRole('button', { name: '삭제' }))
+    await waitFor(() => expect(removeMany).toHaveBeenCalledWith(['r2']))
   })
 })

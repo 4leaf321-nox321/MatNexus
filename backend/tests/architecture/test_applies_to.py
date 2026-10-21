@@ -111,6 +111,14 @@ SAME_SHAPE_AS_TENSILE = {
     "compression.engineering",
     "compression.modulus",
     "compression.indices",
+    # 토우 보정(2026-10-20) — 인장의 계산을 굽힘 · 압축 열로. 같은 이유로 키로만 거른다.
+    "flexural.toe_compensation",
+    "compression.toe_compensation",
+    # 폼 압축 곡선 묶음(2026-10-20) — 구성원이 압축 처리의 열이라 같은 이유로 키로만.
+    "compression.foam",
+    # 박리 · 이탈력(2026-10-20) — 하중 · 변위는 인장과 같은 모양이라 키로만 거른다.
+    "adhesion.peel",
+    "adhesion.summary",
 }
 
 

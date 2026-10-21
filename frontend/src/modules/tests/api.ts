@@ -64,6 +64,12 @@ export interface ProfileDefinition {
      * 규칙이 없으면 자동 등록을 안 한다 — 점탄성 화면에서 손으로 가져온다.
      */
     master_curve?: { pattern?: string; unit?: string }
+    /**
+     * 온도 **램프** 곡선을 준등온 구간으로 나눈다(2026-10-20) — HITACHI DMA 7100 처럼 온도를
+     * 올리며 주파수를 번갈아 재는 파일. `step_k` 폭(°C 의 배수 가운데)으로 묶고 구간마다
+     * 주파수별 평균을 낸다. 없으면 나누지 않는다.
+     */
+    split?: { by?: string; step_k?: number }
   }
   /** 열 규칙. **셋이 한 벌이다.**
    *
@@ -167,6 +173,8 @@ export interface UploadInput {
   /** 어느 사업부가 낸 시험인가. 부서(권한)와 다른 축이다. */
   division?: string
   note?: string
+  /** 읽을 형식(프로파일) key. 비우면 서버가 지문으로 자동으로 고른다(2026-10-20). */
+  profileKey?: string
 }
 
 export const testsApi = {
@@ -365,6 +373,7 @@ export const testsApi = {
     instrument,
     division,
     note,
+    profileKey,
   }: UploadInput) => {
     const form = new FormData()
     form.set('specimen_id', specimenId)
@@ -375,6 +384,7 @@ export const testsApi = {
     if (instrument) form.set('instrument', instrument)
     if (division) form.set('division', division)
     if (note) form.set('note', note)
+    if (profileKey) form.set('profile_key', profileKey)
     form.set('file', file)
     return api.postForm<TestRun>('/test-runs', form)
   },

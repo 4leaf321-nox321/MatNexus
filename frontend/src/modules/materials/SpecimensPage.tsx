@@ -33,12 +33,13 @@
  */
 
 import { useEffect, useState } from 'react'
-import { FlaskConical, MoveRight, PencilLine } from 'lucide-react'
+import { FlaskConical, MoveRight, PencilLine, Trash2 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
 import { materialsApi } from '@/modules/materials/api'
 import type { SpecimenRow } from '@/modules/materials/api'
 import { BulkSpecimenDialog } from '@/modules/materials/BulkSpecimenDialog'
+import { DeleteSpecimensDialog } from '@/modules/materials/DeleteSpecimensDialog'
 import { RelocateDialog } from '@/modules/materials/RelocateDialog'
 import {
   ColumnFilter,
@@ -176,6 +177,8 @@ export default function SpecimensPage() {
   const [editing, setEditing] = useState(false)
   // **다른 두께로 옮기기**(2026-09-29) — 두께가 다른 재료에 잘못 넣은 시편을 바로잡는다.
   const [relocating, setRelocating] = useState(false)
+  // **골라 지운다**(2026-10-20) — 잘못된 옵션으로 올린 시험을 시편째 치운다. 시험은 따로 허락.
+  const [removing, setRemoving] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
 
   // **거르면 첫 쪽으로 돌아간다.** 3쪽을 보다 거르면 걸러진 결과의 3쪽이 나오는데,
@@ -273,8 +276,38 @@ export default function SpecimensPage() {
             <MoveRight className="size-4" />
             다른 두께로 옮기기
           </Button>
+          <Button
+            size="sm"
+            variant="destructive"
+            className="ml-auto"
+            onClick={() => {
+              setNotice(null)
+              setRemoving(true)
+            }}
+          >
+            <Trash2 className="size-4" />
+            삭제
+          </Button>
         </div>
       )}
+
+      <DeleteSpecimensDialog
+        specimens={rows.filter((row) => picked.has(row.id))}
+        open={removing}
+        onClose={() => setRemoving(false)}
+        onDeleted={(done) => {
+          setRemoving(false)
+          setNotice(
+            `시편 ${done.specimens}개${
+              done.test_runs > 0 ? `(시험 ${done.test_runs}건)` : ''
+            }를 지웠습니다.` +
+              (done.blocked.length > 0 ? ` 못 지운 것 ${done.blocked.length}개는 남았습니다.` : '')
+          )
+          selection.clear()
+          page.reload()
+          facets.reload()
+        }}
+      />
 
       {notice && (
         <p className="bg-muted/40 rounded-md border px-3 py-2 text-sm">{notice}</p>

@@ -76,6 +76,21 @@ class TestDerived:
         with pytest.raises(ProcessingError):
             run("dma.derived", frame(storage_modulus=[0.0, 500.0], loss_modulus=[1.0, 2.0]))
 
+    @pytest.mark.parametrize(
+        "options",
+        [{}, {"storage": "storage_modulus", "loss": "loss_modulus"}],
+        ids=["열을_비움(API)", "기본값을_채움(화면)"],
+    )
+    def test_전단_채널이면_G_열을_쓴다(self, options: dict[str, str]) -> None:
+        """레오미터 진동(2026-10-20) — 화면은 열 칸의 기본값을 채워 보낸다. 빈 값만 대체하면
+        화면에서는 「저장 탄성률 열이 없습니다」 로 막혔다(검토에서 드러남)."""
+        result = run(
+            "dma.derived",
+            frame(shear_storage_modulus=[1000.0, 500.0], shear_loss_modulus=[100.0, 250.0]),
+            **options,
+        )
+        assert result.frame.columns["tan_delta"] == pytest.approx([0.1, 0.5])
+
 
 class TestFrequency:
     def test_주파수에서_각주파수를_만든다(self) -> None:

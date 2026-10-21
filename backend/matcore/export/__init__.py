@@ -715,7 +715,11 @@ def hyperelastic_terms(deck: Deck) -> tuple[str, dict[str, float]]:
     전단탄성률이 μ 그 자체다. 솔버마다 같은 기호를 다르게 쓰므로(μ/α 규약이면
     G = μα/2) 렌더러가 제 솔버의 규약으로 옮긴다 — 옮긴 식을 덱에 적는다.
     """
-    family = deck.values("hyperelastic").get("family")
+    found = deck.values("hyperelastic")
+    # **식의 이름(`model`)이 먼저다**(2026-10-20) — 단축 압축으로 맞춘 식
+    # (`neo_hookean_compression`)은 같은 식이라 덱으로 옮기는 법도 같다. 적합식의 등록 키는
+    # 데이터의 모드를 담을 뿐이다.
+    family = found.get("model") or found.get("family")
     if not family:
         raise ExportError("초탄성 카드가 아닙니다. 어느 식으로 맞췄는지가 없습니다.")
     names = HYPERELASTIC_PARAMETERS.get(str(family))
@@ -1313,7 +1317,11 @@ def render_abaqus_hyperelastic(deck: Deck) -> Rendered:
     ν 가 없거나 0.5 면 D = 0, **완전 비압축**이고 Abaqus 는 그때 하이브리드 요소를
     요구한다. 지어내지 않고 그 사실을 적는다.
     """
-    family = deck.values("hyperelastic").get("family")
+    # **식의 이름(`model`)이 먼저다** — `hyperelastic_terms` 와 같다. 단축 압축으로 맞춘
+    # 카드는 `family` 가 `neo_hookean_compression` 이라, 이것만 `family` 를 읽어 Abaqus 만
+    # 「매핑이 없는 식」 으로 막혔다(2026-10-20 검토).
+    found = deck.values("hyperelastic")
+    family = found.get("model") or found.get("family")
     density = deck.number("elastic", "density")
     if not family:
         raise ExportError("초탄성 카드가 아닙니다. 어느 식으로 맞췄는지가 없습니다.")

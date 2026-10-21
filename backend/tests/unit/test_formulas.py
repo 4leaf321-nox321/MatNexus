@@ -199,3 +199,75 @@ class Test교체와_보호:
     def test_키_규칙(self) -> None:
         with pytest.raises(formulas.FormulaSpecError, match="snake_case"):
             formulas.validate(formulas.FormulaSpec(**{**RATIO.__dict__, "key": "My Ratio"}))
+
+
+BENDING = formulas.FormulaSpec(
+    key="flex_stress_test",
+    kind="column_step",
+    label="굽힘 응력(식)",
+    expression="3 * force * specimen_span / (2 * specimen_width * specimen_thickness ** 2)",
+    variables=(
+        formulas.Variable("force", "N"),
+        formulas.Variable("specimen_span", "m"),
+        formulas.Variable("specimen_width", "m"),
+        formulas.Variable("specimen_thickness", "m"),
+    ),
+    result=Produced("flex_stress_test", "굽힘 응력", "Pa"),
+)
+
+
+class Test그_시험의_값을_열_식에서:
+    """사용자 보고(2026-10-20): 굽힘 · 압축처럼 시편 치수와 시험 조건이 들어가는 응력 ·
+    변형률을 식으로 만들 수 없었다 — 열 식의 변수는 전부 곡선의 열이어야 했다."""
+
+    def teardown_method(self) -> None:
+        for key in formulas.installed():
+            formulas.uninstall(key)
+
+    def test_치수는_입력으로_서고_채널로_요구하지_않는다(self) -> None:
+        plugin = registry.get(formulas.install(BENDING))
+        # 채널로 요구하면 어느 시험 종류에도 그런 채널이 없어 단계 목록에서 사라진다.
+        assert plugin.requires_channels == (("force",),)
+        assert [(p.name, p.default) for p in plugin.params] == [
+            ("specimen_span", "@specimen_span"),
+            ("specimen_width", "@specimen_width"),
+            ("specimen_thickness", "@specimen_thickness"),
+        ]
+
+    def test_그_시험의_값으로_점마다_계산한다(self) -> None:
+        key = formulas.install(BENDING)
+        frame = Frame({"force": np.array([0.0, 100.0, 200.0])}, {"force": "N"})
+        given = [
+            processing.Scalar("specimen_span", "스팬", 0.064, "m"),
+            processing.Scalar("specimen_width", "폭", 0.010, "m"),
+            processing.Scalar("specimen_thickness", "두께", 0.004, "m"),
+        ]
+        out = processing.apply(
+            [
+                processing.Step(
+                    key,
+                    {
+                        "specimen_span": "@specimen_span",
+                        "specimen_width": "@specimen_width",
+                        "specimen_thickness": "@specimen_thickness",
+                    },
+                )
+            ],
+            frame,
+            given=given,
+        )
+        made = out.stages[-1].frame.columns["flex_stress_test"]
+        # 3FL / 2bh² — 100 N 이면 3·100·0.064 / (2·0.01·0.004²) = 60 MPa.
+        assert made == pytest.approx([0.0, 60e6, 120e6])
+        assert "specimen_span = 0.064" in " ".join(out.stages[-1].notes)
+
+    def test_값이_없으면_만들지_않고_말한다(self) -> None:
+        key = formulas.install(BENDING)
+        fn = registry.get(key).fn
+        frame = Frame({"force": np.ones(2)}, {"force": "N"})
+        out = fn(
+            frame,
+            {"specimen_span": 0.064, "specimen_width": None, "specimen_thickness": 0.004},
+        )
+        assert "flex_stress_test" not in out.frame.columns
+        assert "specimen_width" in " ".join(out.notes)

@@ -60,6 +60,10 @@ const SUMMARY_KEYS: Record<string, { header: string; siUnit?: string }[]> = {
     { header: 'flexural_modulus', siUnit: 'Pa' },
     { header: 'flexural_strength', siUnit: 'Pa' },
   ],
+  adhesion: [
+    { header: 'max_force', siUnit: 'N' },
+    { header: 'peel_strength', siUnit: 'N/m' },
+  ],
 }
 
 const HINTS: Record<string, string> = {
@@ -72,6 +76,9 @@ const HINTS: Record<string, string> = {
   flexural:
     '보고서의 굽힘 탄성률은 flexural_modulus, 굽힘 강도는 flexural_strength 에 적습니다 — ' +
     '「굽힘 등가 탄성률」 묶음이 곡선 없는 시험의 이 값을 씁니다.',
+  adhesion:
+    '보고서의 파단(이탈) 하중은 max_force, 박리 강도는 peel_strength 에 적습니다 — ' +
+    '「와이블 강도 분포」 · 「박리 · 이탈력 묶음」 이 곡선 없는 시험의 이 값을 씁니다.',
 }
 
 /** 종류를 고르면 채우는 기본 열 — 필수 조건, 묶음이 읽는 요약값, 나머지 숫자 조건 순. */

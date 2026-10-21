@@ -329,6 +329,48 @@ class Test바꾼_줄만:
         ]
         assert len(again) == 1
 
+    def test_시편째_지우면_매달린_시험에도_남는다(
+        self,
+        client: TestClient,
+        db: Session,
+        people: dict[str, tuple[str, dict[str, str]]],
+    ) -> None:
+        """시험 목록에서 지우면 시험마다 남는데, 시편을 시험째 지우는 길은 시편에만 남겼다
+        (2026-10-20 검토) — 앨리스는 제 시험이 왜 사라졌는지 볼 데가 없었다."""
+        ensure_builtin_test_types(db)
+        db.commit()
+        _, alice = people["alice"]
+        _, bora = people["bora"]
+        material = _material(client, alice)
+        sample = client.post(
+            f"/api/materials/{material['id']}/samples", json={}, headers=alice
+        ).json()
+        specimen = client.post(
+            f"/api/samples/{sample['id']}/specimens", json={"orientation": "MD"}, headers=alice
+        ).json()
+        run = client.post(
+            "/api/test-runs",
+            data={"specimen_id": specimen["id"], "test_type": "tensile", "conditions": "{}"},
+            files={"file": ("Example.tra", TRA.read_bytes())},
+            headers=alice,
+        ).json()
+        assert test_services.parse_run(db, uuid.UUID(run["id"])) == "parsed"
+
+        gone = client.post(
+            "/api/specimens/delete",
+            json={"specimen_ids": [specimen["id"]], "include_test_runs": True},
+            headers=bora,
+        )
+        assert gone.status_code == 200, gone.text
+        assert gone.json()["test_runs"] == 1
+        seen = {
+            (one["target_table"], one["target_id"])
+            for one in _mine(client, alice)
+            if one["action"] == "data.edited_by_other"
+        }
+        assert ("specimens", specimen["id"]) in seen
+        assert ("test_runs", run["id"]) in seen
+
 
 class Test제_이력:
     def test_남이_지운_것도_제_이력에_선다(

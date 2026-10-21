@@ -379,6 +379,11 @@ export default function FormatProfileEditorPage() {
   /** 처리결과 표를 마스터커브로 **자동 등록**할 규칙. 비우면 자동 등록을 안 한다. */
   const [curveRule, setCurveRule] = useState('')
   const [curveUnit, setCurveUnit] = useState('degC')
+  /** 온도 램프를 나눌 구간 폭(K). 비우면 안 나눈다(2026-10-20, 히타치 DMA 램프). */
+  const [splitStep, setSplitStep] = useState('')
+  /** 나눌 온도 열. 화면은 안 보이고 **읽은 그대로 돌려 쓴다** — API · MCP 로 다른 열을 적은
+   *  정의가 열고 저장만 해도 `temperature` 로 바뀌던 것(2026-10-20). */
+  const [splitBy, setSplitBy] = useState('temperature')
   const [columnMap, setColumnMap] = useState<Record<string, ColumnRule>>({})
   const [metaMap, setMetaMap] = useState<Record<string, MetaRule>>({})
   const [drafts, setDrafts] = useState<DraftChannel[]>([])
@@ -404,7 +409,18 @@ export default function FormatProfileEditorPage() {
   /** 규칙이 바뀌면 이전 시도 결과는 더 이상 그 규칙의 결과가 아니다. */
   useEffect(() => {
     setTried(null)
-  }, [extensions, headerAny, metaAny, headerRows, tableMode, include, derived, columnMap, metaMap])
+  }, [
+    extensions,
+    headerAny,
+    metaAny,
+    headerRows,
+    tableMode,
+    include,
+    derived,
+    splitStep,
+    columnMap,
+    metaMap,
+  ])
 
   /** 들어올 때 한 번만 본다. **말없이 채우지 않는다** — 있다는 것만 알린다. */
   useEffect(() => {
@@ -489,6 +505,8 @@ export default function FormatProfileEditorPage() {
     setDerived(definition.tables?.derived ?? '')
     setCurveRule(definition.tables?.master_curve?.pattern ?? '')
     setCurveUnit(definition.tables?.master_curve?.unit || 'degC')
+    setSplitStep(definition.tables?.split?.step_k ? String(definition.tables.split.step_k) : '')
+    setSplitBy(definition.tables?.split?.by || 'temperature')
     // **단위와 `skip` 까지 읽는다.** 채널만 읽던 때는 열고 저장만 눌러도
     // 그 둘이 사라졌다(`profileColumns.ts` 머리말).
     setColumnMap(readColumnRules(definition.columns))
@@ -984,6 +1002,7 @@ export default function FormatProfileEditorPage() {
       tableMode,
       include,
       derived,
+      splitStep,
       columnMap,
       metaMap,
       drafts,
@@ -1004,6 +1023,7 @@ export default function FormatProfileEditorPage() {
     if (state.tableMode) setTableMode(state.tableMode as 'first' | 'all')
     if (state.include !== undefined) setInclude(state.include as string)
     if (state.derived !== undefined) setDerived(state.derived as string)
+    if (state.splitStep !== undefined) setSplitStep(state.splitStep as string)
     if (state.columnMap) setColumnMap(state.columnMap as Record<string, ColumnRule>)
     if (state.metaMap) setMetaMap(state.metaMap as Record<string, MetaRule>)
     if (state.drafts) setDrafts(state.drafts as DraftChannel[])
@@ -1075,6 +1095,10 @@ export default function FormatProfileEditorPage() {
         // **규칙이 있을 때만 담는다.** 빈 규칙을 넣어 두면 읽는 쪽이 「자동 등록을
         // 켰는데 아무것도 안 된다」 로 읽는다.
         ...(curveRule ? { master_curve: { pattern: curveRule, unit: curveUnit } } : {}),
+        // 숫자일 때만 담는다 — 0 · 빈 칸은 「나누지 않음」 이다.
+        ...(Number(splitStep) > 0
+          ? { split: { by: splitBy, step_k: Number(splitStep) } }
+          : {}),
       },
       columns: columnRules,
       ...(Object.keys(specimen).length ? { specimen } : {}),
@@ -1582,6 +1606,30 @@ export default function FormatProfileEditorPage() {
               <b> 단위는 여기서 정합니다</b>: 이름에 <code>°C</code> 가 보인다고 섭씨로
               단정하면, 다른 뜻의 온도가 이름에 든 파일에서 조용히 틀립니다.
             </p>
+
+            {/* **온도 램프를 등온 구간으로**(2026-10-20) — HITACHI DMA 7100 처럼 온도를 올리며
+                주파수를 번갈아 재는 파일은 등온 단계가 없어 마스터커브를 못 만들었다. */}
+            <div className="mt-3 flex flex-wrap items-end gap-3">
+              <div className="w-56 space-y-1.5">
+                <Label className="text-xs" htmlFor="split-step">
+                  온도 램프 나누기 — 구간 폭 (K)
+                </Label>
+                <Input
+                  id="split-step"
+                  className="h-8 font-mono text-xs"
+                  value={splitStep}
+                  placeholder="비우면 안 나눔"
+                  inputMode="decimal"
+                  onChange={(event) => setSplitStep(event.target.value.trim())}
+                />
+              </div>
+              <p className="text-muted-foreground min-w-64 flex-1 text-xs">
+                온도를 올리며 주파수를 번갈아 잰 곡선을 이 폭으로 묶어(°C 의 배수가 가운데),
+                구간마다 주파수별로 평균한 <b>준등온 곡선</b> 여러 개로 저장합니다 — 그래야 점탄성
+                화면에서 겹칠 수 있습니다. 온도 열(<code>temperature</code>)과 주파수 열이
+                매핑돼 있어야 합니다. 5 K 면 한 점이 ±2.5 K 의 평균입니다.
+              </p>
+            </div>
 
             {preview && (
               <div className="mt-3 space-y-1">

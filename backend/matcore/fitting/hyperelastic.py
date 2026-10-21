@@ -34,6 +34,8 @@ DB 도 HTTP 도 모른다. `tests/architecture` 가 검사한다.
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import numpy as np
 
 from matcore.fitting import Family, register_family
@@ -225,6 +227,21 @@ UNIAXIAL_ONLY = (
     "있습니다. 그 모드로 해석하려면 그 시험 데이터가 필요합니다."
 )
 
+#: 시험 모드 — 블록의 `mode` 에 그대로 적힌다.
+TENSION = "단축 인장"
+COMPRESSION = "단축 압축"
+
+#: 단축 압축 하나로 맞췄다는 사실(2026-10-20). 인장 쪽 거동은 이 계수가 보장하지 않는다.
+COMPRESSION_ONLY = (
+    "단축 압축 하나로 맞춘 계수입니다 — 인장 · 평면 전단 · 등이축에서는 크게 빗나갈 수 "
+    "있습니다. 그 모드로 해석하려면 그 시험 데이터가 필요합니다."
+)
+
+
+def only_note(mode: object) -> str:
+    """카드 근거에 남길 「이 모드 하나로 맞췄다」 문장."""
+    return COMPRESSION_ONLY if mode == COMPRESSION else UNIAXIAL_ONLY
+
 
 def _shear(compute: object) -> object:
     """초기 전단탄성률 μ₀ — **변형이 0 에 가까울 때의 기울기에서 나온다.**
@@ -234,9 +251,59 @@ def _shear(compute: object) -> object:
     """
 
     def extras(parameters: np.ndarray) -> dict[str, object]:
-        return {"shear_modulus": float(compute(parameters)), "mode": "단축 인장"}  # type: ignore[operator]
+        return {"shear_modulus": float(compute(parameters)), "mode": TENSION}  # type: ignore[operator]
 
     return extras
+
+
+def compression(base: Family, *, x_column: str, y_column: str) -> Family:
+    """같은 식을 **단축 압축 데이터**로 맞추는 식(2026-10-20).
+
+    사용자 보고: 압축 시험을 초탄성 카드로 내보낼 경로가 없었다 — 식은 단축 인장 축
+    (`strain_engineering`)에만 걸려 있었고, 압축 처리가 내는 열(압축이 양수)은 그 축이 아니다.
+
+    **식은 그대로다.** 비압축 단축의 공칭 응력 `P(λ)` 는 λ < 1(압축)에서도 성립한다. 압축을
+    양수로 적은 축(εc = -ε, σc = -P)에서 `σc(εc) = -P(-εc)` 로 뒤집어 맞출 뿐이다. 그래서 계수
+    이름 · 단위 · 덱으로 옮기는 법이 인장과 같다 — 덱은 식의 이름(`model`)으로 옮긴다.
+    압축 열의 이름은 그 열을 만드는 쪽(확장)이 준다 — 이 모듈은 그 이름을 모른다.
+    """
+    evaluate = base.evaluate
+    jacobian = base.jacobian
+
+    def evaluate_c(parameters: np.ndarray, strain: np.ndarray) -> np.ndarray:
+        return -np.asarray(evaluate(parameters, -np.asarray(strain, dtype=np.float64)))
+
+    def jacobian_c(parameters: np.ndarray, strain: np.ndarray) -> np.ndarray:
+        return -np.asarray(jacobian(parameters, -np.asarray(strain, dtype=np.float64)))
+
+    def prepare(
+        strain: np.ndarray, stress: np.ndarray
+    ) -> tuple[np.ndarray, np.ndarray, list[str]]:
+        # 인장 쪽 다듬기(신축비 0 이하 · 원점 겹침)를 같은 부호로 돌리고 되돌린다.
+        x, y, notes = positive_stretch(-np.asarray(strain), -np.asarray(stress))
+        return -x, -y, notes
+
+    shear = base.extras
+
+    def extras(parameters: np.ndarray) -> dict[str, object]:
+        found = dict(shear(parameters)) if shear else {}
+        return {**found, "mode": COMPRESSION, "model": base.key}
+
+    return replace(
+        base,
+        key=f"{base.key}_compression",
+        label=f"{base.label} (압축)",
+        describe=f"{base.describe} 단축 압축 데이터로 맞춘다(같은 식, λ < 1).",
+        x_label="압축 공칭 변형률",
+        y_label="압축 공칭 응력",
+        x_column=x_column,
+        y_column=y_column,
+        evaluate=evaluate_c,
+        jacobian=jacobian_c if jacobian is not None else None,
+        prepare=prepare,
+        extras=extras,
+        stability=_monotonic(evaluate_c),
+    )
 
 
 def _family(

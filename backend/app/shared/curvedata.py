@@ -222,6 +222,31 @@ def declared_scalars(db: Session, run: TestRun) -> list[processing.Scalar]:
     return given
 
 
+def measures_shear_channels(db: Session, run: TestRun) -> bool:
+    """이 시험이 **전단 탄성률 채널**(G′)로 쟀는가 — 측정 곡선에 G′ 가 있고 E′ 는 없다.
+
+    변형 모드 조건(`deformation_mode`)은 DMA 에만 있다. 레오미터 진동처럼 채널 이름부터 G 인
+    시험은 조건을 안 적어도 G 다(2026-10-20).
+
+    **판정은 곡선에 실제로 든 채널로 한다.** 점탄성 화면(`viscoelastic.services.sweeps_of`)이
+    곡선마다 열을 보고 E/G 를 고르므로 같은 근거여야 한다. 처음에는 시험 종류의 채널 정의를
+    봤다 — 종류가 두 계열을 다 선언하고 파일이 G′ 로 매핑되면 화면은 「G′ 로 잰 곡선」 이라
+    말하고 카드는 E 로 담아, 덱이 2(1+ν) 로 한 번 더 나눴다(2026-10-20 검토). 채널 목록이 비어
+    있는 옛 곡선만 종류 정의로 본다.
+    """
+    present: set[str] = set()
+    for curve in curves_of(db, run.id):
+        if curve.kind == "measured":
+            present.update(curve.channels or [])
+    if not present:
+        present = set(
+            db.scalars(
+                select(TestChannel.key).where(TestChannel.test_type_id == run.test_type_id)
+            )
+        )
+    return "shear_storage_modulus" in present and "storage_modulus" not in present
+
+
 def specimen_scalars(db: Session, run: TestRun) -> list[processing.Scalar]:
     """시편 치수를 파이프라인이 `@` 로 참조할 수 있게 넘긴다.
 

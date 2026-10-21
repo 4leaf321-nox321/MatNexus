@@ -109,6 +109,7 @@ BUILTIN_LINKS: list[tuple[str, str, str | None]] = [
     ("optical.abbe_number", "optical.abbe_number", None),
     ("optical.emissivity_total", "optical.emissivity_total", None),
     ("interface.peel_strength", "interface.peel_strength", None),
+    ("mechanical.weibull_modulus", "mechanical.weibull_modulus", None),
     ("rheological.viscosity", "rheological.viscosity", None),
 ]
 

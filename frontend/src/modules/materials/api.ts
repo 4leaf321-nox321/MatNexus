@@ -33,6 +33,10 @@ export type MaterialDeleteResult = components['schemas']['MaterialDeleteOut']
  *  세면 사람이 본 숫자와 실제로 지워지는 것이 어긋난다. */
 export type DeletePlan = components['schemas']['DeletePlanOut']
 export type CascadeDeleteResult = components['schemas']['CascadeDeleteOut']
+/** 시료를 지우면 함께 사라지는 것 — 지운 뒤에도 이 모양으로 온다(2026-10-20). */
+export type SampleDeletePlan = components['schemas']['SampleDeletePlanOut']
+/** 고른 시편을 지우면(미리 세기) · 지웠더니 — 같은 판정, 못 지우는 것은 이유와 함께. */
+export type SpecimenDeleteResult = components['schemas']['SpecimenDeleteOut']
 /** 고른 것들을 합쳐 무엇이 사라지는가. **못 지우는 것은 낱개로** 온다. */
 export type BulkDeletePlan = components['schemas']['BulkDeletePlanOut']
 export type BulkRequest = components['schemas']['BulkRequest']
@@ -362,6 +366,13 @@ export const materialsApi = {
   unapproveSampleDeclared: (id: string, item: string) =>
     api.post<Sample>(`/samples/${id}/declared/unapprove`, { item }),
   removeSample: (id: string) => api.delete<void>(`/samples/${id}`),
+  /** 시료를 지우면 **무엇이 함께 사라지는지** — 서버가 센다(2026-10-20). */
+  sampleDeletePlan: (id: string) => api.get<SampleDeletePlan>(`/samples/${id}/delete-plan`),
+  /** 시료를 아래까지 통째로. 시험이 있으면 `includeTestRuns` 를 켜야 한다. */
+  removeSampleCascade: (id: string, includeTestRuns: boolean) =>
+    api.post<SampleDeletePlan>(`/samples/${id}/delete-cascade`, {
+      include_test_runs: includeTestRuns,
+    }),
 
   specimens: (sampleId: string) => api.get<Specimen[]>(`/samples/${sampleId}/specimens`),
   /**
@@ -397,4 +408,16 @@ export const materialsApi = {
     api.put<SpecimenSizes>(`/specimens/${id}/dimensions`, { dimensions }),
 
   removeSpecimen: (id: string) => api.delete<void>(`/specimens/${id}`),
+  /** 고른 시편을 지우면 무엇이 함께 사라지는가 — 시험은 허락했다고 치고 센다(2026-10-20). */
+  specimenDeletePlan: (ids: string[]) =>
+    api.post<SpecimenDeleteResult>('/specimens/delete-plan', { specimen_ids: ids }),
+  /**
+   * 고른 시편을 **매달린 시험까지** 지운다. 시험이 있으면 `includeTestRuns` 를 켜야 한다 —
+   * 안 켜면 그 시편은 이유와 함께 남는다. 하나가 막혀도 나머지는 지운다.
+   */
+  removeSpecimens: (ids: string[], includeTestRuns: boolean) =>
+    api.post<SpecimenDeleteResult>('/specimens/delete', {
+      specimen_ids: ids,
+      include_test_runs: includeTestRuns,
+    }),
 }

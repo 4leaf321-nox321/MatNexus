@@ -186,6 +186,15 @@ describe('마스터커브 상세', () => {
     // 겹치기에 쓴 모델의 계수도 그대로 남는다.
     expect(screen.getByText(/c1/)).toBeInTheDocument()
   })
+
+  it('G′ 로 잰 곡선은 겹칠 스윕이 없어도 축이 G′ 다', async () => {
+    // 가져온 마스터커브만 있는 시험은 스윕 목록이 422 다 — 그것만 보면 G′ 곡선에 E′ 축 이름이
+    // 붙었다(2026-10-20 검토). 곡선이 든 판정을 먼저 본다.
+    sweeps.mockRejectedValue(new Error('겹칠 수 있는 온도 스윕이 1개뿐입니다.'))
+    masterCurves.mockResolvedValue([{ ...CURVE, modulus_basis: 'G' }])
+    show()
+    expect(await screen.findByText('저장 전단 탄성률 G′ (Pa)')).toBeInTheDocument()
+  })
 })
 
 describe('대표 마스터커브', () => {
