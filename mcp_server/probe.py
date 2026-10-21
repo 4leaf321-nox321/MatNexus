@@ -47,6 +47,7 @@ import socket
 import subprocess
 import sys
 import time
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -173,6 +174,34 @@ async def sweep(session: ClientSession) -> None:
             ]
         },
     )
+    # SP 코어(ADR 0063) — 받아 둔 것이 없어도 무해하게 끝나는 길만. 잇기 · 끊기 · 받기는
+    # 미리보기, 없는 타입 · 없는 연결은 서버가 거절해야 맞다.
+    await call(session, "sp_core_status")
+    await call(session, "find_sp_core_objects", {"q": "점검"})
+    await call(
+        session,
+        "match_sp_core",
+        {"sp_type": "없는-타입-점검", "target": "property"},
+        expect_error=True,
+    )
+    await call(
+        session,
+        "link_sp_core",
+        {
+            "items": [
+                {
+                    "sp_type": "없는-타입-점검",
+                    "sp_key": "x",
+                    "target": "property",
+                    "target_ref": "mechanical.yield_strength",
+                }
+            ]
+        },
+        # 없는 타입이라 미리보기가 그 줄을 `status: error` 로 세운다 — 그것이 맞는 답이다.
+        expect_error=True,
+    )
+    await call(session, "unlink_sp_core", {"link_ids": [str(uuid.uuid4())]})
+    await call(session, "sync_sp_core")
     await call(
         session, "find_by_property", {"property": "yield_strength", "unit": "MPa", "min": 100}
     )

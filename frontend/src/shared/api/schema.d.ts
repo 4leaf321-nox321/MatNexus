@@ -5979,6 +5979,142 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/sp-core/links": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Links */
+        get: operations["list_links_api_sp_core_links_get"];
+        put?: never;
+        /**
+         * Create Links
+         * @description 잇는다 — **기본이 미리보기다.** `dry_run: false` 일 때만 잇고, 오류가 한 줄이라도 있으면
+         *     하나도 안 잇는다(422).
+         */
+        post: operations["create_links_api_sp_core_links_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sp-core/links/remove": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Remove Links
+         * @description 끊는다 — 기본이 미리보기다. 없는 id 는 이유와 함께 말한다.
+         */
+        post: operations["remove_links_api_sp_core_links_remove_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sp-core/match": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Match
+         * @description 한 SP 타입을 한 대상과 견준다 — **쓰지 않는다.** 후보는 사람이 보고 잇는다.
+         */
+        get: operations["match_api_sp_core_match_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sp-core/objects": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Objects */
+        get: operations["list_objects_api_sp_core_objects_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sp-core/objects/{type_slug}/{key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Object */
+        get: operations["get_object_api_sp_core_objects__type_slug___key__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sp-core/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Status
+         * @description **지금 무엇을 받아 두었나** — 설정 · 타입마다 받은 수 · 최근 실행 · 연결 수.
+         */
+        get: operations["status_api_sp_core_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sp-core/sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Request Sync
+         * @description 받기를 **지금** 부른다 — 워커가 돈다(보통은 하루 한 번 저절로).
+         */
+        post: operations["request_sync_api_sp_core_sync_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/specimens": {
         parameters: {
             query?: never;
@@ -19592,6 +19728,363 @@ export interface components {
             /** Sha256 */
             sha256: string | null;
         };
+        /** SpCoreLinkItem */
+        SpCoreLinkItem: {
+            /** Sp Key */
+            sp_key: string;
+            /** Sp Type */
+            sp_type: string;
+            /** Target */
+            target: string;
+            /** Target Ref */
+            target_ref: string;
+        };
+        /** SpCoreLinkOut */
+        SpCoreLinkOut: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Created By */
+            created_by?: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Note */
+            note?: string | null;
+            /** Sp Key */
+            sp_key: string;
+            /** Sp Label */
+            sp_label?: string | null;
+            /** Sp Type */
+            sp_type: string;
+            /** Target */
+            target: string;
+            /** Target Label */
+            target_label?: string | null;
+            /** Target Ref */
+            target_ref: string;
+        };
+        /** SpCoreLinkPage */
+        SpCoreLinkPage: {
+            /** Items */
+            items: components["schemas"]["SpCoreLinkOut"][];
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+            /** Total */
+            total: number;
+        };
+        /** SpCoreLinkPlanOut */
+        SpCoreLinkPlanOut: {
+            /** Applied */
+            applied: boolean;
+            /** Errors */
+            errors: number;
+            /** Exists */
+            exists: number;
+            /** New */
+            new: number;
+            /** Rows */
+            rows: {
+                [key: string]: unknown;
+            }[];
+        };
+        /** SpCoreLinkRequest */
+        SpCoreLinkRequest: {
+            /**
+             * Dry Run
+             * @default true
+             */
+            dry_run: boolean;
+            /** Items */
+            items: components["schemas"]["SpCoreLinkItem"][];
+            /** Note */
+            note?: string | null;
+        };
+        /**
+         * SpCoreMatchOut
+         * @description 한 SP 타입을 한 대상과 견준 것 — **후보는 저절로 잇지 않는다.**
+         */
+        SpCoreMatchOut: {
+            /** Ambiguous */
+            ambiguous: {
+                [key: string]: unknown;
+            }[];
+            /** Ambiguous Total */
+            ambiguous_total: number;
+            /** Linked Total */
+            linked_total: number;
+            /** Matched */
+            matched: {
+                [key: string]: unknown;
+            }[];
+            /** Matched Total */
+            matched_total: number;
+            /** Sp Only */
+            sp_only: {
+                [key: string]: unknown;
+            }[];
+            /** Sp Only Total */
+            sp_only_total: number;
+            /** Sp Total */
+            sp_total: number;
+            /** Sp Type */
+            sp_type: string;
+            /** Target */
+            target: string;
+            /** Target Only Total */
+            target_only_total: number;
+            /** Target Total */
+            target_total: number;
+            /** Vocabulary */
+            vocabulary?: string | null;
+        };
+        /** SpCoreObjectDetailOut */
+        SpCoreObjectDetailOut: {
+            /** Deleted */
+            deleted: boolean;
+            /** Hidden */
+            hidden: boolean;
+            /** Incoming */
+            incoming: components["schemas"]["SpCoreRelationOut"][];
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Links */
+            links: components["schemas"]["SpCoreLinkOut"][];
+            /** Merged Into */
+            merged_into?: string | null;
+            /** Outgoing */
+            outgoing: components["schemas"]["SpCoreRelationOut"][];
+            /**
+             * Previous Keys
+             * @default []
+             */
+            previous_keys: string[];
+            /**
+             * Properties
+             * @default {}
+             */
+            properties: {
+                [key: string]: unknown;
+            };
+            /**
+             * Received At
+             * Format: date-time
+             */
+            received_at: string;
+            /** Sp Updated At */
+            sp_updated_at?: string | null;
+            /** Status */
+            status: string;
+            /** Type Slug */
+            type_slug: string;
+        };
+        /** SpCoreObjectOut */
+        SpCoreObjectOut: {
+            /** Deleted */
+            deleted: boolean;
+            /** Hidden */
+            hidden: boolean;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Merged Into */
+            merged_into?: string | null;
+            /**
+             * Previous Keys
+             * @default []
+             */
+            previous_keys: string[];
+            /**
+             * Properties
+             * @default {}
+             */
+            properties: {
+                [key: string]: unknown;
+            };
+            /**
+             * Received At
+             * Format: date-time
+             */
+            received_at: string;
+            /** Sp Updated At */
+            sp_updated_at?: string | null;
+            /** Status */
+            status: string;
+            /** Type Slug */
+            type_slug: string;
+        };
+        /** SpCoreObjectPage */
+        SpCoreObjectPage: {
+            /** Items */
+            items: components["schemas"]["SpCoreObjectOut"][];
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+            /** Total */
+            total: number;
+        };
+        /** SpCoreRelationOut */
+        SpCoreRelationOut: {
+            /** Deleted */
+            deleted: boolean;
+            /** Dst */
+            dst: string;
+            /** Dst Label */
+            dst_label?: string | null;
+            /** Dst Type */
+            dst_type: string;
+            /**
+             * Properties
+             * @default {}
+             */
+            properties: {
+                [key: string]: unknown;
+            };
+            /** Relation */
+            relation: string;
+            /** Src */
+            src: string;
+            /** Src Label */
+            src_label?: string | null;
+            /** Src Type */
+            src_type: string;
+        };
+        /** SpCoreRunOut */
+        SpCoreRunOut: {
+            /**
+             * Counts
+             * @default {}
+             */
+            counts: {
+                [key: string]: unknown;
+            };
+            /** Error */
+            error?: string | null;
+            /** Finished At */
+            finished_at?: string | null;
+            /** Full */
+            full: boolean;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Ok */
+            ok?: boolean | null;
+            /** Revision */
+            revision?: string | null;
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
+            /** System */
+            system?: string | null;
+            /** Trigger */
+            trigger: string;
+            /**
+             * Warnings
+             * @default []
+             */
+            warnings: string[];
+        };
+        /** SpCoreStatusOut */
+        SpCoreStatusOut: {
+            /** Configured */
+            configured: boolean;
+            /** Links */
+            links: number;
+            /** Runs */
+            runs: components["schemas"]["SpCoreRunOut"][];
+            /** Source */
+            source?: string | null;
+            /** Types */
+            types: components["schemas"]["SpCoreTypeOut"][];
+        };
+        /** SpCoreSyncOut */
+        SpCoreSyncOut: {
+            /**
+             * Job Id
+             * Format: uuid
+             */
+            job_id: string;
+            /** Message */
+            message: string;
+            /** Queued */
+            queued: boolean;
+        };
+        /** SpCoreSyncRequest */
+        SpCoreSyncRequest: {
+            /**
+             * Full
+             * @default false
+             */
+            full: boolean;
+        };
+        /** SpCoreTypeOut */
+        SpCoreTypeOut: {
+            /** Deleted */
+            deleted: number;
+            /** Description */
+            description?: string | null;
+            /** Full At */
+            full_at?: string | null;
+            /** Label */
+            label: string;
+            /** Links */
+            links: number;
+            /** Properties */
+            properties: {
+                [key: string]: unknown;
+            }[];
+            /** Published */
+            published: boolean;
+            /** Received */
+            received: number;
+            /** Relation Kinds */
+            relation_kinds: {
+                [key: string]: unknown;
+            }[];
+            /** Relations */
+            relations: number;
+            /** Relations As Of */
+            relations_as_of?: string | null;
+            /** Rows As Of */
+            rows_as_of?: string | null;
+            /** Slug */
+            slug: string;
+            /** Sp Count */
+            sp_count: number;
+        };
+        /** SpCoreUnlinkOut */
+        SpCoreUnlinkOut: {
+            /** Applied */
+            applied: boolean;
+            /** Rows */
+            rows: {
+                [key: string]: unknown;
+            }[];
+        };
+        /** SpCoreUnlinkRequest */
+        SpCoreUnlinkRequest: {
+            /**
+             * Dry Run
+             * @default true
+             */
+            dry_run: boolean;
+            /** Ids */
+            ids: string[];
+        };
         /**
          * SpecGapOut
          * @description 선언한 값과 잰 값. **차이가 큰 것이 위로 온다.**
@@ -31940,6 +32433,264 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["FailedJobOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_links_api_sp_core_links_get: {
+        parameters: {
+            query?: {
+                sp_type?: string | null;
+                target?: string | null;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SpCoreLinkPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_links_api_sp_core_links_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SpCoreLinkRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SpCoreLinkPlanOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_links_api_sp_core_links_remove_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SpCoreUnlinkRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SpCoreUnlinkOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    match_api_sp_core_match_get: {
+        parameters: {
+            query: {
+                /** @description SP 타입 slug */
+                sp_type: string;
+                /** @description term · property · property_group · property_field */
+                target: string;
+                /** @description target=term 이면 기준정보 축 slug */
+                vocabulary?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SpCoreMatchOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_objects_api_sp_core_objects_get: {
+        parameters: {
+            query?: {
+                /** @description SP 타입 slug */
+                type?: string | null;
+                /** @description 이름 · key 에 들어간 글자 */
+                q?: string | null;
+                include_deleted?: boolean;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SpCoreObjectPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_object_api_sp_core_objects__type_slug___key__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                type_slug: string;
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SpCoreObjectDetailOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    status_api_sp_core_status_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SpCoreStatusOut"];
+                };
+            };
+        };
+    };
+    request_sync_api_sp_core_sync_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SpCoreSyncRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SpCoreSyncOut"];
                 };
             };
             /** @description Validation Error */

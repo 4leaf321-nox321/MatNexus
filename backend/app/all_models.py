@@ -69,6 +69,13 @@ from app.modules.processing.models import (
     ProcessingResult,
     ProcessingResultFormula,
 )
+from app.modules.sp_core.models import (
+    SpCoreLink,
+    SpCoreObject,
+    SpCoreRelation,
+    SpCoreRun,
+    SpCoreType,
+)
 from app.modules.statistics.models import EnsembleResult
 from app.modules.tests.models import (
     Curve,
@@ -140,6 +147,11 @@ __all__ = [
     "PropertyLink",
     "RefreshToken",
     "Sample",
+    "SpCoreLink",
+    "SpCoreObject",
+    "SpCoreRelation",
+    "SpCoreRun",
+    "SpCoreType",
     "Specimen",
     "TestChannel",
     "TestConditionField",

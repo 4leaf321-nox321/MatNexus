@@ -135,6 +135,12 @@ PRONY_FITTED_BY_CLIENT = "prony.fitted_by_client"
 #: **AI 가 시험을 다시 읽음**(2026-10-20) — 곡선이 새로 만들어지고 읽을 형식이 고정 · 해제된다.
 #: 「이 시험 누가 다른 형식으로 읽게 했나」 가 물어지는 자리다. 화면에서 한 것은 안 남는다.
 TEST_RUN_REPARSED_BY_CLIENT = "test_run.reparsed_by_client"
+#: **SP 코어 온톨로지 연결**(2026-10-21, ADR 0063) — SP 객체 ↔ 기준정보 값 · 물성 · 분류.
+#: 바깥과 AI 가 읽는 전사 자산의 연결이라 물성 분류처럼 **사람이 해도 남긴다**. 받기를
+#: 손으로 부른 것도.
+SP_CORE_LINKED = "sp_core.linked"
+SP_CORE_UNLINKED = "sp_core.unlinked"
+SP_CORE_SYNC_REQUESTED = "sp_core.sync_requested"
 #: **AI 가 사람에게 말을 거는 셋**(2026-10-16) — 카드 코멘트 · 확정 요청 · 선언 값 승인 요청.
 #: 값은 안 바뀌지만 알림이 사람에게 간다 — 「이 부탁 누가 했나」 가 물어진다.
 CARD_REMARKED_BY_CLIENT = "card.remarked_by_client"

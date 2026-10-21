@@ -29293,6 +29293,939 @@
         "title": "SourceVersionOut",
         "type": "object"
       },
+      "SpCoreLinkItem": {
+        "properties": {
+          "sp_key": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Sp Key",
+            "type": "string"
+          },
+          "sp_type": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Sp Type",
+            "type": "string"
+          },
+          "target": {
+            "maxLength": 30,
+            "minLength": 1,
+            "title": "Target",
+            "type": "string"
+          },
+          "target_ref": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Target Ref",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sp_type",
+          "sp_key",
+          "target",
+          "target_ref"
+        ],
+        "title": "SpCoreLinkItem",
+        "type": "object"
+      },
+      "SpCoreLinkOut": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "sp_key": {
+            "title": "Sp Key",
+            "type": "string"
+          },
+          "sp_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sp Label"
+          },
+          "sp_type": {
+            "title": "Sp Type",
+            "type": "string"
+          },
+          "target": {
+            "title": "Target",
+            "type": "string"
+          },
+          "target_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Label"
+          },
+          "target_ref": {
+            "title": "Target Ref",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "sp_type",
+          "sp_key",
+          "target",
+          "target_ref",
+          "created_at"
+        ],
+        "title": "SpCoreLinkOut",
+        "type": "object"
+      },
+      "SpCoreLinkPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SpCoreLinkOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "SpCoreLinkPage",
+        "type": "object"
+      },
+      "SpCoreLinkPlanOut": {
+        "properties": {
+          "applied": {
+            "title": "Applied",
+            "type": "boolean"
+          },
+          "errors": {
+            "title": "Errors",
+            "type": "integer"
+          },
+          "exists": {
+            "title": "Exists",
+            "type": "integer"
+          },
+          "new": {
+            "title": "New",
+            "type": "integer"
+          },
+          "rows": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Rows",
+            "type": "array"
+          }
+        },
+        "required": [
+          "applied",
+          "new",
+          "exists",
+          "errors",
+          "rows"
+        ],
+        "title": "SpCoreLinkPlanOut",
+        "type": "object"
+      },
+      "SpCoreLinkRequest": {
+        "properties": {
+          "dry_run": {
+            "default": true,
+            "title": "Dry Run",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SpCoreLinkItem"
+            },
+            "maxItems": 500,
+            "minItems": 1,
+            "title": "Items",
+            "type": "array"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "SpCoreLinkRequest",
+        "type": "object"
+      },
+      "SpCoreMatchOut": {
+        "description": "한 SP 타입을 한 대상과 견준 것 — **후보는 저절로 잇지 않는다.**",
+        "properties": {
+          "ambiguous": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Ambiguous",
+            "type": "array"
+          },
+          "ambiguous_total": {
+            "title": "Ambiguous Total",
+            "type": "integer"
+          },
+          "linked_total": {
+            "title": "Linked Total",
+            "type": "integer"
+          },
+          "matched": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Matched",
+            "type": "array"
+          },
+          "matched_total": {
+            "title": "Matched Total",
+            "type": "integer"
+          },
+          "sp_only": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Sp Only",
+            "type": "array"
+          },
+          "sp_only_total": {
+            "title": "Sp Only Total",
+            "type": "integer"
+          },
+          "sp_total": {
+            "title": "Sp Total",
+            "type": "integer"
+          },
+          "sp_type": {
+            "title": "Sp Type",
+            "type": "string"
+          },
+          "target": {
+            "title": "Target",
+            "type": "string"
+          },
+          "target_only_total": {
+            "title": "Target Only Total",
+            "type": "integer"
+          },
+          "target_total": {
+            "title": "Target Total",
+            "type": "integer"
+          },
+          "vocabulary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vocabulary"
+          }
+        },
+        "required": [
+          "sp_type",
+          "target",
+          "sp_total",
+          "target_total",
+          "matched_total",
+          "linked_total",
+          "ambiguous_total",
+          "sp_only_total",
+          "target_only_total",
+          "matched",
+          "ambiguous",
+          "sp_only"
+        ],
+        "title": "SpCoreMatchOut",
+        "type": "object"
+      },
+      "SpCoreObjectDetailOut": {
+        "properties": {
+          "deleted": {
+            "title": "Deleted",
+            "type": "boolean"
+          },
+          "hidden": {
+            "title": "Hidden",
+            "type": "boolean"
+          },
+          "incoming": {
+            "items": {
+              "$ref": "#/components/schemas/SpCoreRelationOut"
+            },
+            "title": "Incoming",
+            "type": "array"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "links": {
+            "items": {
+              "$ref": "#/components/schemas/SpCoreLinkOut"
+            },
+            "title": "Links",
+            "type": "array"
+          },
+          "merged_into": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Merged Into"
+          },
+          "outgoing": {
+            "items": {
+              "$ref": "#/components/schemas/SpCoreRelationOut"
+            },
+            "title": "Outgoing",
+            "type": "array"
+          },
+          "previous_keys": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Previous Keys",
+            "type": "array"
+          },
+          "properties": {
+            "additionalProperties": true,
+            "default": {},
+            "title": "Properties",
+            "type": "object"
+          },
+          "received_at": {
+            "format": "date-time",
+            "title": "Received At",
+            "type": "string"
+          },
+          "sp_updated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sp Updated At"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "type_slug": {
+            "title": "Type Slug",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type_slug",
+          "key",
+          "label",
+          "status",
+          "deleted",
+          "hidden",
+          "received_at",
+          "outgoing",
+          "incoming",
+          "links"
+        ],
+        "title": "SpCoreObjectDetailOut",
+        "type": "object"
+      },
+      "SpCoreObjectOut": {
+        "properties": {
+          "deleted": {
+            "title": "Deleted",
+            "type": "boolean"
+          },
+          "hidden": {
+            "title": "Hidden",
+            "type": "boolean"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "merged_into": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Merged Into"
+          },
+          "previous_keys": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Previous Keys",
+            "type": "array"
+          },
+          "properties": {
+            "additionalProperties": true,
+            "default": {},
+            "title": "Properties",
+            "type": "object"
+          },
+          "received_at": {
+            "format": "date-time",
+            "title": "Received At",
+            "type": "string"
+          },
+          "sp_updated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sp Updated At"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "type_slug": {
+            "title": "Type Slug",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type_slug",
+          "key",
+          "label",
+          "status",
+          "deleted",
+          "hidden",
+          "received_at"
+        ],
+        "title": "SpCoreObjectOut",
+        "type": "object"
+      },
+      "SpCoreObjectPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SpCoreObjectOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "SpCoreObjectPage",
+        "type": "object"
+      },
+      "SpCoreRelationOut": {
+        "properties": {
+          "deleted": {
+            "title": "Deleted",
+            "type": "boolean"
+          },
+          "dst": {
+            "title": "Dst",
+            "type": "string"
+          },
+          "dst_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dst Label"
+          },
+          "dst_type": {
+            "title": "Dst Type",
+            "type": "string"
+          },
+          "properties": {
+            "additionalProperties": true,
+            "default": {},
+            "title": "Properties",
+            "type": "object"
+          },
+          "relation": {
+            "title": "Relation",
+            "type": "string"
+          },
+          "src": {
+            "title": "Src",
+            "type": "string"
+          },
+          "src_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Src Label"
+          },
+          "src_type": {
+            "title": "Src Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "src_type",
+          "src",
+          "relation",
+          "dst_type",
+          "dst",
+          "deleted"
+        ],
+        "title": "SpCoreRelationOut",
+        "type": "object"
+      },
+      "SpCoreRunOut": {
+        "properties": {
+          "counts": {
+            "additionalProperties": true,
+            "default": {},
+            "title": "Counts",
+            "type": "object"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "full": {
+            "title": "Full",
+            "type": "boolean"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "ok": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ok"
+          },
+          "revision": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision"
+          },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          },
+          "system": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "System"
+          },
+          "trigger": {
+            "title": "Trigger",
+            "type": "string"
+          },
+          "warnings": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "trigger",
+          "full",
+          "started_at"
+        ],
+        "title": "SpCoreRunOut",
+        "type": "object"
+      },
+      "SpCoreStatusOut": {
+        "properties": {
+          "configured": {
+            "title": "Configured",
+            "type": "boolean"
+          },
+          "links": {
+            "title": "Links",
+            "type": "integer"
+          },
+          "runs": {
+            "items": {
+              "$ref": "#/components/schemas/SpCoreRunOut"
+            },
+            "title": "Runs",
+            "type": "array"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "types": {
+            "items": {
+              "$ref": "#/components/schemas/SpCoreTypeOut"
+            },
+            "title": "Types",
+            "type": "array"
+          }
+        },
+        "required": [
+          "configured",
+          "types",
+          "runs",
+          "links"
+        ],
+        "title": "SpCoreStatusOut",
+        "type": "object"
+      },
+      "SpCoreSyncOut": {
+        "properties": {
+          "job_id": {
+            "format": "uuid",
+            "title": "Job Id",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "queued": {
+            "title": "Queued",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "queued",
+          "job_id",
+          "message"
+        ],
+        "title": "SpCoreSyncOut",
+        "type": "object"
+      },
+      "SpCoreSyncRequest": {
+        "properties": {
+          "full": {
+            "default": false,
+            "title": "Full",
+            "type": "boolean"
+          }
+        },
+        "title": "SpCoreSyncRequest",
+        "type": "object"
+      },
+      "SpCoreTypeOut": {
+        "properties": {
+          "deleted": {
+            "title": "Deleted",
+            "type": "integer"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "full_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Full At"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "links": {
+            "title": "Links",
+            "type": "integer"
+          },
+          "properties": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Properties",
+            "type": "array"
+          },
+          "published": {
+            "title": "Published",
+            "type": "boolean"
+          },
+          "received": {
+            "title": "Received",
+            "type": "integer"
+          },
+          "relation_kinds": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Relation Kinds",
+            "type": "array"
+          },
+          "relations": {
+            "title": "Relations",
+            "type": "integer"
+          },
+          "relations_as_of": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Relations As Of"
+          },
+          "rows_as_of": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rows As Of"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "sp_count": {
+            "title": "Sp Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "slug",
+          "label",
+          "published",
+          "sp_count",
+          "received",
+          "deleted",
+          "relations",
+          "links",
+          "properties",
+          "relation_kinds"
+        ],
+        "title": "SpCoreTypeOut",
+        "type": "object"
+      },
+      "SpCoreUnlinkOut": {
+        "properties": {
+          "applied": {
+            "title": "Applied",
+            "type": "boolean"
+          },
+          "rows": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Rows",
+            "type": "array"
+          }
+        },
+        "required": [
+          "applied",
+          "rows"
+        ],
+        "title": "SpCoreUnlinkOut",
+        "type": "object"
+      },
+      "SpCoreUnlinkRequest": {
+        "properties": {
+          "dry_run": {
+            "default": true,
+            "title": "Dry Run",
+            "type": "boolean"
+          },
+          "ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 500,
+            "minItems": 1,
+            "title": "Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "ids"
+        ],
+        "title": "SpCoreUnlinkRequest",
+        "type": "object"
+      },
       "SpecGapOut": {
         "description": "선언한 값과 잰 값. **차이가 큰 것이 위로 온다.**",
         "properties": {
@@ -51822,6 +52755,467 @@
         "summary": "Retry",
         "tags": [
           "server"
+        ]
+      }
+    },
+    "/api/sp-core/links": {
+      "get": {
+        "operationId": "list_links_api_sp_core_links_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "sp_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sp Type"
+            }
+          },
+          {
+            "in": "query",
+            "name": "target",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Target"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpCoreLinkPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Links",
+        "tags": [
+          "sp_core"
+        ]
+      },
+      "post": {
+        "description": "잇는다 — **기본이 미리보기다.** `dry_run: false` 일 때만 잇고, 오류가 한 줄이라도 있으면\n하나도 안 잇는다(422).",
+        "operationId": "create_links_api_sp_core_links_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SpCoreLinkRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpCoreLinkPlanOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Links",
+        "tags": [
+          "sp_core"
+        ]
+      }
+    },
+    "/api/sp-core/links/remove": {
+      "post": {
+        "description": "끊는다 — 기본이 미리보기다. 없는 id 는 이유와 함께 말한다.",
+        "operationId": "remove_links_api_sp_core_links_remove_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SpCoreUnlinkRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpCoreUnlinkOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Remove Links",
+        "tags": [
+          "sp_core"
+        ]
+      }
+    },
+    "/api/sp-core/match": {
+      "get": {
+        "description": "한 SP 타입을 한 대상과 견준다 — **쓰지 않는다.** 후보는 사람이 보고 잇는다.",
+        "operationId": "match_api_sp_core_match_get",
+        "parameters": [
+          {
+            "description": "SP 타입 slug",
+            "in": "query",
+            "name": "sp_type",
+            "required": true,
+            "schema": {
+              "description": "SP 타입 slug",
+              "title": "Sp Type",
+              "type": "string"
+            }
+          },
+          {
+            "description": "term · property · property_group · property_field",
+            "in": "query",
+            "name": "target",
+            "required": true,
+            "schema": {
+              "description": "term · property · property_group · property_field",
+              "title": "Target",
+              "type": "string"
+            }
+          },
+          {
+            "description": "target=term 이면 기준정보 축 slug",
+            "in": "query",
+            "name": "vocabulary",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "target=term 이면 기준정보 축 slug",
+              "title": "Vocabulary"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpCoreMatchOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Match",
+        "tags": [
+          "sp_core"
+        ]
+      }
+    },
+    "/api/sp-core/objects": {
+      "get": {
+        "operationId": "list_objects_api_sp_core_objects_get",
+        "parameters": [
+          {
+            "description": "SP 타입 slug",
+            "in": "query",
+            "name": "type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "SP 타입 slug",
+              "title": "Type"
+            }
+          },
+          {
+            "description": "이름 · key 에 들어간 글자",
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "이름 · key 에 들어간 글자",
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "include_deleted",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include Deleted",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpCoreObjectPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Objects",
+        "tags": [
+          "sp_core"
+        ]
+      }
+    },
+    "/api/sp-core/objects/{type_slug}/{key}": {
+      "get": {
+        "operationId": "get_object_api_sp_core_objects__type_slug___key__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "type_slug",
+            "required": true,
+            "schema": {
+              "title": "Type Slug",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "title": "Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpCoreObjectDetailOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Object",
+        "tags": [
+          "sp_core"
+        ]
+      }
+    },
+    "/api/sp-core/status": {
+      "get": {
+        "description": "**지금 무엇을 받아 두었나** — 설정 · 타입마다 받은 수 · 최근 실행 · 연결 수.",
+        "operationId": "status_api_sp_core_status_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpCoreStatusOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Status",
+        "tags": [
+          "sp_core"
+        ]
+      }
+    },
+    "/api/sp-core/sync": {
+      "post": {
+        "description": "받기를 **지금** 부른다 — 워커가 돈다(보통은 하루 한 번 저절로).",
+        "operationId": "request_sync_api_sp_core_sync_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SpCoreSyncRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpCoreSyncOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Request Sync",
+        "tags": [
+          "sp_core"
         ]
       }
     },

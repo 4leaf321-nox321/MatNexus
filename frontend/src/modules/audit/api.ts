@@ -94,6 +94,10 @@ export const ACTION_LABELS: Record<string, string> = {
   'results.adopted_by_client': 'AI 가 처리 결과 채택',
   'test_run.uploaded_by_client': 'AI 가 시험 파일 올림',
   'test_run.reparsed_by_client': 'AI 가 시험 다시 읽음',
+  // SP 코어 온톨로지(2026-10-21, ADR 0063) — 사람이 해도 남는다.
+  'sp_core.linked': 'SP 코어 객체 연결',
+  'sp_core.unlinked': 'SP 코어 객체 연결 끊음',
+  'sp_core.sync_requested': 'SP 코어 받기 요청',
   'commission.moved_by_client': 'AI 가 측정 의뢰 상태 변경',
   'commission.assigned_by_client': 'AI 가 측정 의뢰 담당 지정',
   'commission.run_linked_by_client': 'AI 가 측정 의뢰에 시험 연결',

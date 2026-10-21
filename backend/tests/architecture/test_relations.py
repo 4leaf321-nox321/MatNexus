@@ -185,6 +185,15 @@ EXCLUDED_TABLES: dict[str, str] = {
     "property_group_members": 기준정보
     + " — 물성 → 물성군 소속. 분류는 물성의 칸이다(ADR 0054)",
     "alias_candidates": 기준정보 + " — 못 푼 이름의 큐. 사전이 되기 전 단계라 마디가 아니다",
+    # SP 코어 온톨로지 받기(ADR 0063). **받은 원본은 SP 의 마디를 받아 둔 사본**이다 — 이
+    # 그래프의 마디로 올리면 두 시스템의 관계가 한 그래프에 섞인다. SP 객체를 무엇과 이었는지는
+    # `sp_core_links` 가 들고, 그 연결이 무엇을 바꿀지(잠금 · 덮어쓰기)를 정할 때 다시 본다.
+    "sp_core_types": "SP 코어 받은 원본(타입) — SP 의 마디를 받아 둔 사본이다(ADR 0063)",
+    "sp_core_objects": "SP 코어 받은 원본(객체) — SP 의 마디를 받아 둔 사본이다(ADR 0063)",
+    "sp_core_relations": "SP 코어 받은 원본(선) — SP 의 관계를 받아 둔 사본이다(ADR 0063)",
+    "sp_core_links": "SP 객체 ↔ 기준정보 값 · 물성의 연결 — 사람의 확인 기록이다. 그 효과는 "
+    "아직 정하지 않았다(ADR 0063)",
+    "sp_core_runs": 이력,
     "voc_attachments": 제보,
     "voc_events": 제보,
     "voc_items": 제보,

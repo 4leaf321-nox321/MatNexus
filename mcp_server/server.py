@@ -35,6 +35,7 @@ import uuid
 import zipfile
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 import httpx
 
@@ -4834,6 +4835,130 @@ async def classify_properties(
             " 보이고, 「그대로」 라고 하면 dry_run=False 로 다시 부른다. errors 가 있으면 안 들어간다."
         )
     return out
+
+
+# ── Standard Platform 코어 온톨로지(ADR 0063, 2026-10-21) ──────────────────────
+#
+# SP 의 코어(부서 · 기관 · 장비 · PLM · 물성 …)를 받아 둔 것을 보고, MatNexus 의 기준정보 값 ·
+# 물성 · 분류와 **잇는다.** 어느 타입이 어느 축인지 코드가 정하지 않는다 — 운영 데이터를 보며
+# 사람이 정한다. 그래서 대조는 후보만 내고, 잇기는 미리보기를 사람에게 보인 뒤에 한다.
+
+_SP_TYPE_KEYS = (
+    "slug",
+    "label",
+    "published",
+    "sp_count",
+    "received",
+    "deleted",
+    "relations",
+    "links",
+    "rows_as_of",
+)
+_SP_RUN_KEYS = ("trigger", "full", "ok", "error", "warnings", "revision", "started_at", "finished_at")
+
+
+@mcp.tool()
+async def sp_core_status(ctx: Context) -> dict[str, Any]:
+    """SP(Standard Platform) 코어 온톨로지를 **무엇까지 받아 두었나** — 타입마다 받은 수 ·
+    칸 · 연결 수, 최근 받기의 오류 · 경고, 설정. 잇기 전에 먼저 본다(`get_guide` 의 「SP 코어」)."""
+    got = await _get(ctx, "/sp-core/status")
+    if not isinstance(got, dict) or "error" in got:
+        return got
+    return {
+        "configured": got.get("configured"),
+        "source": got.get("source"),
+        "links": got.get("links"),
+        "types": [
+            {
+                **{key: one.get(key) for key in _SP_TYPE_KEYS},
+                "properties": [p.get("key") for p in one.get("properties") or []],
+            }
+            for one in got.get("types", [])
+        ],
+        "runs": [{key: one.get(key) for key in _SP_RUN_KEYS} for one in got.get("runs", [])[:3]],
+    }
+
+
+@mcp.tool()
+async def find_sp_core_objects(
+    ctx: Context,
+    type: str | None = None,
+    q: str | None = None,
+    key: str | None = None,
+    include_deleted: bool = False,
+    limit: int = 30,
+) -> dict[str, Any]:
+    """받은 SP 코어 객체를 찾는다 — `type`(slug) · `q`(이름 · key 의 글자). `type` 과 `key` 를
+    함께 주면 그 하나를 선(관계) · 연결과 함께 준다."""
+    if key:
+        if not type:
+            return {"error": "key 를 주면 type(SP 타입 slug)도 주세요."}
+        return await _get(ctx, f"/sp-core/objects/{quote(type, safe='')}/{quote(key, safe='')}")
+    return await _get(
+        ctx,
+        "/sp-core/objects",
+        {"type": type, "q": q, "include_deleted": include_deleted, "limit": min(max(limit, 1), 200)},
+    )
+
+
+@mcp.tool()
+async def match_sp_core(
+    ctx: Context, sp_type: str, target: str, vocabulary: str | None = None
+) -> dict[str, Any]:
+    """SP 타입 하나를 MatNexus 대상 하나와 **대조**한다 — 쓰지 않는다. `target`: term(기준정보 값,
+    `vocabulary` 에 축 slug) · property · property_group · property_field. `matched` 는 key · 이름 ·
+    별칭이 하나에만 맞은 후보, `ambiguous` 는 둘 이상. **후보도 사람에게 확인받은 뒤 잇는다.**"""
+    return await _get(
+        ctx, "/sp-core/match", {"sp_type": sp_type, "target": target, "vocabulary": vocabulary}
+    )
+
+
+@mcp.tool()
+async def link_sp_core(
+    ctx: Context, items: list[dict[str, str]], note: str | None = None, dry_run: bool = True
+) -> dict[str, Any]:
+    """★ SP 객체를 MatNexus 대상에 잇는다 — `items` = [{sp_type, sp_key, target, target_ref}]
+    (`match_sp_core` 가 준 그대로). 기본이 미리보기, 오류가 한 줄이라도 있으면 하나도 안 잇는다.
+    연결은 기록일 뿐 값은 안 바뀐다. 자료 관리자의 토큰이어야 한다."""
+    if not items:
+        return {"error": "items 가 비었습니다."}
+    return await _send(
+        ctx, "POST", "/sp-core/links", {"items": items, "note": note, "dry_run": dry_run}
+    )
+
+
+@mcp.tool()
+async def unlink_sp_core(
+    ctx: Context, link_ids: list[str], dry_run: bool = True
+) -> dict[str, Any]:
+    """★ 연결을 끊는다 — `link_ids` 는 `match_sp_core` · `find_sp_core_objects` 가 준 연결 id.
+    기본이 미리보기. 자료 관리자."""
+    if not link_ids:
+        return {"error": "link_ids 가 비었습니다."}
+    return await _send(
+        ctx, "POST", "/sp-core/links/remove", {"ids": link_ids, "dry_run": dry_run}
+    )
+
+
+@mcp.tool()
+async def sync_sp_core(ctx: Context, full: bool = False, dry_run: bool = True) -> dict[str, Any]:
+    """★ SP 코어 받기를 지금 부른다(보통 하루 한 번 저절로) — 워커가 돌고, 결과는
+    `sp_core_status` 의 runs. `full` 이면 처음부터 받아 SP 에서 빠진 것을 사라진 것으로 둔다.
+    기본이 미리보기. 자료 관리자."""
+    if dry_run:
+        status = await _get(ctx, "/sp-core/status")
+        if not isinstance(status, dict) or "error" in status:
+            return status
+        runs = status.get("runs") or []
+        return {
+            "dry_run": True,
+            "configured": status.get("configured"),
+            "source": status.get("source"),
+            "last_run": {key: runs[0].get(key) for key in _SP_RUN_KEYS} if runs else None,
+            "will": f"받기를 큐에 넣는다(full={full}) — 워커가 돈다",
+            "note": "사람에게 확인받은 뒤 dry_run=False 로 다시 부르세요.",
+        }
+    return await _send(ctx, "POST", "/sp-core/sync", {"full": full})
 
 
 @mcp.tool()

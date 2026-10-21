@@ -847,6 +847,28 @@ MCP 도구가 주는 값은 여전히 SI 다. 덱은 `render_card_deck(units=...
 값을 하나씩 환산하면 한 줄을 빠뜨린다.
 
 <!--@ absence -->
+## SP 코어 — 받은 것을 기준정보 · 물성에 잇는다 (ADR 0063)
+
+MatNexus 는 SP(Standard Platform)의 코어 온톨로지(부서 · 기관 · 장비 · PLM 개발모델 · 물성 …)를 하루
+한 번 받아 둔다. **어느 SP 타입이 어느 기준정보 축인지는 정해져 있지 않다** — 그것을 운영 데이터를
+보며 사람과 함께 정하는 것이 이 도구들의 일이다.
+
+1. `sp_core_status()` — 무엇을 받아 두었나(타입 · 건수 · 칸), 최근 받기가 성공했나. `configured` 가
+   거짓이거나 최근 받기가 실패했으면 거기서 멈추고 사람에게 말한다.
+2. `match_sp_core(sp_type, target, vocabulary?)` — 견줄 짝을 고른다. 겹칠 가능성이 큰 것부터: SP 의
+   물성 · 물성군 · 분야 ↔ `property` · `property_group` · `property_field`, 기관 ↔ 제조사 · 거래처 ·
+   장비 제조사(`term` + `manufacturer` · `vendor` · `instrument_maker`), 부서 ↔ 사업부 · 시험실
+   (`division` · `lab`). **짝 자체가 맞는지부터 사람에게 묻는다.**
+3. 결과를 그대로 보인다 — `matched`(하나에만 맞음, `by` 가 key · name · alias), `ambiguous`(둘 이상 —
+   사람이 고른다), `sp_only`(맞는 것 없음 — 잇지 않는다). **후보도 저절로 잇지 않는다.**
+4. 사람이 고른 줄만 `link_sp_core(items)` 미리보기 → 확인 → `dry_run=False`. 오류(지워진 SP 객체 ·
+   없는 대상)가 한 줄이라도 있으면 하나도 안 잇는다 — 그 줄을 빼고 다시 부른다.
+
+- **연결은 기록이다.** 지금은 어떤 값도 잠그거나 덮지 않는다 — 「이었으니 이제 SP 값으로 바뀐다」 고
+  말하지 마라.
+- SP 에서 합쳐진 객체(`merged_into`)에 걸린 연결은 이긴 쪽으로 다시 잇고 옛것을 끊을지 사람에게 묻는다.
+- 받기를 손으로 부르는 것(`sync_sp_core`)은 SP 쪽이 바뀐 것을 바로 봐야 할 때만. 보통은 밤에 돈다.
+
 ## 「없다」 는 어떻게 아나 — `complete` 하나만 본다
 
 목록을 주는 도구는 전부 `complete` 를 단다.

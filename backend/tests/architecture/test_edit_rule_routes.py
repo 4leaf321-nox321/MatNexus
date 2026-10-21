@@ -40,6 +40,9 @@ FILES = {
     "catalog": APP / "catalog" / "routes.py",
     # 물성 분류(ADR 0054) — 분류 고치기는 정의문과 같은 자료 관리자 판정이다.
     "catalog_taxonomy": APP / "catalog" / "taxonomy_routes.py",
+    # SP 코어 연결(ADR 0063) — 바깥 · AI 가 읽는 전사 자산이라 분류와 같은 자료 관리자
+    # 판정이다.
+    "sp_core": APP / "sp_core" / "routes.py",
     "ownership": APP / "ownership" / "routes.py",
     "equipment": APP / "equipment" / "routes.py",
     "workbench": APP / "workbench" / "routes.py",

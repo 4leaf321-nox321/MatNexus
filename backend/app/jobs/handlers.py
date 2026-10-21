@@ -51,5 +51,6 @@ def load_all() -> None:
     from app.modules.pipelines import jobs as _pipeline_jobs  # noqa: F401
     from app.modules.search import jobs as _search_jobs  # noqa: F401
     from app.modules.server import jobs as _server_jobs  # noqa: F401
+    from app.modules.sp_core import jobs as _sp_core_jobs  # noqa: F401
     from app.modules.tests import jobs as _test_jobs  # noqa: F401
     from app.modules.vocabulary import jobs as _vocabulary_jobs  # noqa: F401

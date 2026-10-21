@@ -77,3 +77,7 @@ SEARCH_INDEX_GUIDE = "search.index_guide"
 #: 되는 종류의 값이라, 화면에 적어 두는 것만으로는 아무 일도 안 일어난다 —
 #: 목록을 매일 여는 사람이 없기 때문이다. 하루 한 번 훑어 **맡은 사람에게** 말한다.
 COMMISSIONS_DUE_SOON = "commissions.due_soon"
+
+#: **SP 코어 온톨로지 받기**(2026-10-21, ADR 0063) — Standard Platform 의 코어 API 를 읽어 받은
+#: 원본에 쌓는다. 하루 한 번 저절로, 자료 관리자가 부르면 그때. 설정이 없으면 건너뛴다.
+SP_CORE_PULL = "sp_core.pull"
