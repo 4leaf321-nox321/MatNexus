@@ -21,7 +21,7 @@ ANSYS 의 S-N 명령(FP)은 보관 기능이고, Abaqus·Radioss 는 재료 카�
 
 from __future__ import annotations
 
-from matcore.cards import BlockSpec, register_block
+from matcore.cards import BlockPlot, BlockSpec, PowerLine, register_block
 from matcore.export import Deck, ExportError, Need, Rendered, _header, register_renderer
 from matcore.export import bulk as _bulk
 from matcore.export import dyna as _dyna
@@ -86,6 +86,16 @@ SN_CURVE = register_block(
         kind_priority=3,
         # 점 · 곡선이 본체다 — 적어 둔 값(인장강도 · 녹는점)은 곁칸만 채운다(2026-10-08).
         from_values=False,
+        # **수명선도**(2026-10-22) — 카드의 점과 Basquin 계수로 log-log 그래프를 그린다.
+        # v1.285.0 보고: S-N 카드를 만들었는데 계수로 그래프를 볼 수 없었다.
+        plot=BlockPlot(
+            x="cycles_to_failure",
+            y="stress_amplitude",
+            log_x=True,
+            log_y=True,
+            hollow="runout",
+            line=PowerLine(coefficient="basquin_a", exponent="basquin_b"),
+        ),
     )
 )
 

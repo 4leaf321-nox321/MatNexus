@@ -23,6 +23,9 @@ const importMasterCurve = vi.fn()
 const points = vi.fn()
 const pronyFits = vi.fn()
 const setPrimary = vi.fn()
+const unsetPrimary = vi.fn()
+const removeMasterCurve = vi.fn()
+const removePronyFit = vi.fn()
 
 /** 겹쳐 놓은 마스터커브 하나. 상세 화면(곡선·이동인자·Prony)을 그리게 한다. */
 const CURVE = {
@@ -59,6 +62,10 @@ vi.mock('@/modules/viscoelastic/api', async (importOriginal) => ({
     points: (...args: unknown[]) => points(...args),
     pronyFits: (...args: unknown[]) => pronyFits(...args),
     setPrimary: (...args: unknown[]) => setPrimary(...args),
+    unsetPrimary: (...args: unknown[]) => unsetPrimary(...args),
+    removeMasterCurve: (...args: unknown[]) => removeMasterCurve(...args),
+    removePronyFit: (...args: unknown[]) => removePronyFit(...args),
+    modulusTables: () => Promise.resolve([]),
   },
 }))
 
@@ -232,5 +239,60 @@ describe('대표 마스터커브', () => {
     show()
     await screen.findAllByText('대표')
     expect(screen.queryByRole('button', { name: '고른 것을 대표로' })).toBeNull()
+  })
+})
+
+const FIT = {
+  id: 'fit-1',
+  master_curve_id: 'curve-1',
+  equilibrium_pa: 1e7,
+  instantaneous_pa: 1e9,
+  terms: [
+    { modulus_pa: 5e8, relaxation_time_s: 0.1 },
+    { modulus_pa: 4e8, relaxation_time_s: 10 },
+  ],
+  normalized_rmse: 0.02,
+  bic: -120,
+  at_bound: [],
+  candidates: [],
+  created_at: '2026-08-23T00:00:00Z',
+}
+
+describe('지우기와 대표 해제', () => {
+  // v1.285.0 보고: 마스터커브 · Prony 를 지우거나 대표에서 내릴 길이 없었다.
+  const OTHER = { ...CURVE, id: 'curve-2', reference_temperature_k: 303.15, is_primary: false }
+
+  it('곡선이 하나뿐이어도 대표를 해제할 수 있다', async () => {
+    masterCurves.mockResolvedValue([CURVE])
+    unsetPrimary.mockResolvedValue({ ...CURVE, is_primary: false })
+    show()
+    await userEvent.click(await screen.findByRole('button', { name: '대표 해제' }))
+    await waitFor(() => expect(unsetPrimary).toHaveBeenCalledWith(CURVE.id))
+  })
+
+  it('대표는 지우기를 잠그고, 대표가 아니면 확인 뒤 지운다', async () => {
+    masterCurves.mockResolvedValue([CURVE, OTHER])
+    removeMasterCurve.mockResolvedValue(undefined)
+    show()
+    expect(await screen.findByRole('button', { name: '이 마스터커브 지우기' })).toBeDisabled()
+
+    await userEvent.click(screen.getByRole('button', { name: /30/ }))
+    await userEvent.click(screen.getByRole('button', { name: '이 마스터커브 지우기' }))
+    const dialog = await screen.findByRole('dialog')
+    expect(dialog).toHaveTextContent('Prony 적합을 함께 지웁니다')
+    await userEvent.click(within(dialog).getByRole('button', { name: '삭제' }))
+    await waitFor(() => expect(removeMasterCurve).toHaveBeenCalledWith('curve-2'))
+  })
+
+  it('Prony 적합을 지운다 — 남는 적합이 있으면 그것이 쓰인다고 말한다', async () => {
+    masterCurves.mockResolvedValue([CURVE])
+    pronyFits.mockResolvedValue([FIT, { ...FIT, id: 'fit-old' }])
+    removePronyFit.mockResolvedValue(undefined)
+    show()
+    await userEvent.click(await screen.findByRole('button', { name: '이 적합 지우기' }))
+    const dialog = await screen.findByRole('dialog')
+    expect(dialog).toHaveTextContent('그 앞에 맞춘 적합이 쓰입니다')
+    await userEvent.click(within(dialog).getByRole('button', { name: '삭제' }))
+    await waitFor(() => expect(removePronyFit).toHaveBeenCalledWith(FIT.id))
   })
 })

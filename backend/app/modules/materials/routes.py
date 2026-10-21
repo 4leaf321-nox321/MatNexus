@@ -341,12 +341,34 @@ def _run_tallies(
     }
 
 
+#: 막 만든 것 — 아직 시험이 없다.
+NO_RUNS: RunTally = (0, 0, 0)
+
+
+def _sample_runs(db: Session, sample_id: uuid.UUID) -> RunTally:
+    """시료 하나의 시험 수 — 목록과 **같은 계산**(`_run_tallies`)."""
+    return _run_tallies(
+        db, group_by=Specimen.sample_id, ids=[sample_id], join_specimen=True
+    ).get(sample_id, NO_RUNS)
+
+
+def _specimen_runs(db: Session, specimen_id: uuid.UUID) -> RunTally:
+    """시편 하나의 시험 수 — 목록과 **같은 계산**(`_run_tallies`)."""
+    return _run_tallies(
+        db, group_by=TestRun.specimen_id, ids=[specimen_id], join_specimen=False
+    ).get(specimen_id, NO_RUNS)
+
+
 def _sample_out(
     sample: Sample,
     *,
     specimen_count: int,
     workspace_name: str | None,
-    runs: RunTally = (0, 0, 0),
+    # **기본값이 없다**(2026-10-22). `(0, 0, 0)` 이 기본이던 때 한 건 조회 · 고치기 응답이
+    # 그것을
+    # 그대로 내, 시험이 붙은 시편이 「시험 0」 으로 보였다(v1.285.0 보고) — 빈 시편으로 알고
+    # 지울 위험이 있다. 막 만든 것은 `NO_RUNS` 를 넘긴다.
+    runs: RunTally,
     registered_by: str | None = None,
     access: EditAccessOut | None = None,
 ) -> SampleOut:
@@ -402,7 +424,8 @@ def _brief_sizes(sizes: specimen_size.Sizes | None) -> list[SpecimenBriefSizeOut
 def _specimen_out(
     specimen: Specimen,
     *,
-    runs: RunTally = (0, 0, 0),
+    # 기본값이 없다 — `_sample_out` 의 같은 칸 참고.
+    runs: RunTally,
     sizes: specimen_size.Sizes | None = None,
     registered_by: str | None = None,
     access: EditAccessOut | None = None,
@@ -508,9 +531,14 @@ MATERIAL_SORTS = {
 #: `materials.family` 는 5만 행인데 값은 5가지고, 기준정보 쪽 `family` 축은 5행이다.
 #: 축을 안 좁히고 기준정보 전체(23만)를 훑으면 정규화의 이득을 도로 잃는다
 #: (실측: 2글자 검색어에서 79ms 대 0.02ms).
+#:
+#: **Grade 도 여기다**(2026-10-22). 빠져 있어 Grade 는 이름 글자로만 걸렸다 — `SUS304` 는
+#: 이름에 있어 찾아지는데 그 별칭 `STS304` 로 치면 0건이었다(v1.285.0 보고). 별칭은 「같은
+#: 강종」 이라는 뜻이고, 기준정보 쪽은 별칭까지 본다(`term_ids_matching`).
 _SEARCH_AXES = (
     ("family", Material.family_term_id),
     ("category", Material.category_term_id),
+    ("grade", Material.grade_term_id),
 )
 
 
@@ -2542,6 +2570,7 @@ def create_sample(
     return _sample_out(
         sample,
         specimen_count=0,
+        runs=NO_RUNS,
         workspace_name=workspace.name,
         registered_by=services.registrant_names([sample], db).get(sample.registered_by_id),
         access=access_of(db, user, sample),
@@ -2651,6 +2680,7 @@ def get_sample(
     return _sample_out(
         sample,
         specimen_count=services.specimen_counts(db, [sample.id]).get(sample.id, 0),
+        runs=_sample_runs(db, sample.id),
         workspace_name=names.get(sample.workspace_id),
         registered_by=services.registrant_names([sample], db).get(sample.registered_by_id),
         access=access_of(db, user, sample),
@@ -2715,6 +2745,7 @@ def update_sample(
     return _sample_out(
         sample,
         specimen_count=services.specimen_counts(db, [sample.id]).get(sample.id, 0),
+        runs=_sample_runs(db, sample.id),
         workspace_name=names.get(sample.workspace_id),
         registered_by=services.registrant_names([sample], db).get(sample.registered_by_id),
         access=access_of(db, user, sample),
@@ -2769,6 +2800,7 @@ def _saved_sample(db: Session, user: User, sample: Sample) -> SampleOut:
     return _sample_out(
         sample,
         specimen_count=services.specimen_counts(db, [sample.id]).get(sample.id, 0),
+        runs=_sample_runs(db, sample.id),
         workspace_name=names.get(sample.workspace_id),
         registered_by=services.registrant_names([sample], db).get(sample.registered_by_id),
         access=access_of(db, user, sample),
@@ -2977,6 +3009,7 @@ def create_specimen(
     db.commit()
     return _specimen_out(
         specimen,
+        runs=NO_RUNS,
         registered_by=services.registrant_names([specimen], db).get(specimen.registered_by_id),
         access=access_of(db, user, specimen),
     )
@@ -3593,6 +3626,7 @@ def get_specimen(
     return SpecimenRowOut(
         **_specimen_out(
             one,
+            runs=_specimen_runs(db, one.id),
             sizes=specimen_size.sizes_of(db, one),
             registered_by=services.registrant_names([one], db).get(one.registered_by_id),
             access=access_of(db, user, one),
@@ -3664,6 +3698,7 @@ def update_specimen(
     return SpecimenUpdateOut(
         specimen=_specimen_out(
             specimen,
+            runs=_specimen_runs(db, specimen.id),
             registered_by=services.registrant_names([specimen], db).get(
                 specimen.registered_by_id
             ),

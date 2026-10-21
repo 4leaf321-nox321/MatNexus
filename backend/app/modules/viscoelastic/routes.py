@@ -17,28 +17,33 @@ from __future__ import annotations
 import uuid
 
 import numpy as np
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Response
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.modules.accounts.models import User
+from app.modules.fitting.models import PropertyCard
 from app.modules.tests.models import TestRun
 from app.modules.viscoelastic import services
-from app.modules.viscoelastic.models import MasterCurve, PronyFit
+from app.modules.viscoelastic.models import MasterCurve, ModulusTable, PronyFit
 from app.modules.viscoelastic.schemas import (
     ImportableCurveOut,
     MasterCurveImportRequest,
     MasterCurveOut,
     MasterCurveRequest,
+    ModulusTableOut,
+    ModulusTableRequest,
+    ModulusTableRowOut,
     PronyFitOut,
     PronyRequest,
     ShiftOut,
     SweepListOut,
     SweepOut,
 )
-from app.shared import audit, curvedata
+from app.shared import audit, curvedata, filestore
 from app.shared.auth import current_user
-from app.shared.errors import AppError
+from app.shared.errors import AppError, Conflict, NotFound
 from app.shared.permissions import get_run, require_edit
 
 router = APIRouter(prefix="/viscoelastic", tags=["viscoelastic"])
@@ -270,6 +275,151 @@ def set_primary(
     return _curve_out(curve, _basis(db, run))
 
 
+@router.delete("/master-curves/{master_curve_id}/primary", response_model=MasterCurveOut)
+def unset_primary(
+    master_curve_id: uuid.UUID,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> MasterCurveOut:
+    """**대표에서 내린다** — 그 시험에 대표가 없어진다(2026-10-22, v1.285.0 보고).
+
+    대표가 없는 시험은 재료의 Prony 묶음에 들어가지 않는다(이유를 대고 막는다) — 최신 것을
+    말없이 대신 쓰지 않는다. 채택을 거두는 것과 같은 자리다.
+    """
+    curve = services.curve_or_404(db, master_curve_id)
+    run = get_run(db, user, curve.test_run_id)
+    require_edit(db, user, run, code="MNX-VISCOELASTIC-0009")
+    curve.is_primary = False
+    db.commit()
+    db.refresh(curve)
+    return _curve_out(curve, _basis(db, run))
+
+
+def _require_removal(
+    db: Session, user: User, run: TestRun, created_by_id: uuid.UUID | None
+) -> None:
+    """지울 수 있나 — **만든 사람**이거나 그 시험을 고칠 수 있는 사람(처리 결과와 같은
+    규칙)."""
+    if created_by_id is not None and created_by_id == user.id:
+        return
+    require_edit(db, user, run, code="MNX-VISCOELASTIC-0011")
+
+
+def _cards_using(
+    db: Session, *, master_curve_id: uuid.UUID | None, fit_ids: list[uuid.UUID]
+) -> list[str]:
+    """이 마스터커브 · 적합을 근거로 든 카드 이름. **출처가 JSON 이라 외래키가 못 잡는다** —
+    지우면 그 카드의 계수가 무엇에서 나왔는지 답할 수 없게 된다."""
+    branches = []
+    if master_curve_id is not None:
+        branches.append(
+            PropertyCard.source["master_curve_id"].as_string() == str(master_curve_id)
+        )
+    if fit_ids:
+        branches.append(
+            PropertyCard.source["prony_fit_id"].as_string().in_([str(one) for one in fit_ids])
+        )
+    if not branches:
+        return []
+    return list(db.scalars(select(PropertyCard.label).where(or_(*branches)).limit(6)))
+
+
+def _blocked_by_cards(names: list[str], what: str) -> Conflict:
+    shown = ", ".join(names[:5]) + (" 외" if len(names) > 5 else "")
+    return Conflict(
+        "MNX-VISCOELASTIC-0013",
+        f"카드({shown})가 이 {what}를 근거로 들고 있어 지울 수 없습니다 — 지우면 그 계수가 "
+        f"무엇에서 나왔는지 알 수 없게 됩니다. 카드를 먼저 정리하세요.",
+    )
+
+
+@router.delete("/master-curves/{master_curve_id}", status_code=204)
+def delete_master_curve(
+    master_curve_id: uuid.UUID,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> Response:
+    """마스터커브를 **지운다 — 되돌릴 수 없다.** 그 곡선에 맞춘 Prony 도 함께 사라진다.
+
+    v1.285.0 보고: 잘못 만든 마스터커브 · Prony 를 지울 길이 없었다. 처리 결과 지우기와 같이
+    두 가지는 막는다 — **대표**(재료 묶음이 읽는 것 — 먼저 옮기거나 해제한다)와 **카드가
+    근거로 든 것**. 감사에 남긴다.
+    """
+    curve = services.curve_or_404(db, master_curve_id)
+    run = get_run(db, user, curve.test_run_id)
+    _require_removal(db, user, run, curve.created_by_id)
+    if curve.is_primary:
+        raise Conflict(
+            "MNX-VISCOELASTIC-0012",
+            "대표 마스터커브입니다 — 다른 곡선을 대표로 옮기거나 대표를 해제한 뒤 지우세요.",
+        )
+    fits = services.fits_of(db, curve.id)
+    using = _cards_using(db, master_curve_id=curve.id, fit_ids=[one.id for one in fits])
+    if using:
+        raise _blocked_by_cards(using, "마스터커브")
+    audit.record(
+        db,
+        action=audit.MASTER_CURVE_DELETED,
+        actor=user,
+        target_table="test_runs",
+        target_id=run.id,
+        target_label=run.record_name,
+        workspace_id=run.workspace_id,
+        changes={
+            "master_curve_id": str(curve.id),
+            "reference_temperature_k": curve.reference_temperature_k,
+            "prony_fits": len(fits),
+        },
+    )
+    # **행보다 파일을 먼저 지우지 않는다** — 커밋이 실패하면 행이 남는데 곡선을 못 읽는다.
+    stored = curve.storage_path
+    for fit in fits:
+        db.delete(fit)
+    db.delete(curve)
+    db.commit()
+    filestore.delete_file(stored)
+    return Response(status_code=204)
+
+
+@router.delete("/prony/{fit_id}", status_code=204)
+def delete_prony_fit(
+    fit_id: uuid.UUID,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> Response:
+    """Prony 적합 하나를 지운다. 카드가 근거로 들었으면 막는다.
+
+    재료의 Prony 묶음은 마스터커브마다 **가장 최근 적합**을 쓴다 — 최근 것을 지우면 다음
+    계산부터 그 앞 적합이 쓰인다(화면의 확인 창이 그것을 말한다).
+    """
+    fit = db.get(PronyFit, fit_id)
+    if fit is None:
+        raise NotFound("MNX-VISCOELASTIC-0014", "Prony 적합을 찾을 수 없습니다.")
+    curve = services.curve_or_404(db, fit.master_curve_id)
+    run = get_run(db, user, curve.test_run_id)
+    _require_removal(db, user, run, fit.created_by_id)
+    using = _cards_using(db, master_curve_id=None, fit_ids=[fit.id])
+    if using:
+        raise _blocked_by_cards(using, "Prony 적합")
+    audit.record(
+        db,
+        action=audit.PRONY_DELETED,
+        actor=user,
+        target_table="test_runs",
+        target_id=run.id,
+        target_label=run.record_name,
+        workspace_id=run.workspace_id,
+        changes={
+            "master_curve_id": str(curve.id),
+            "prony_fit_id": str(fit.id),
+            "terms": len(fit.terms),
+        },
+    )
+    db.delete(fit)
+    db.commit()
+    return Response(status_code=204)
+
+
 @router.get("/master-curves/{master_curve_id}/points")
 def master_curve_points(
     master_curve_id: uuid.UUID,
@@ -335,3 +485,85 @@ def create_prony_fit(
     db.commit()
     db.refresh(fit)
     return _fit_out(fit)
+
+
+# ── 주파수 하나에서 본 온도별 탄성률 표 (2026-10-22) ──────────────────────────────
+
+
+def _table_out(row: ModulusTable) -> ModulusTableOut:
+    return ModulusTableOut(
+        id=row.id,
+        test_run_id=row.test_run_id,
+        frequency_hz=row.frequency_hz,
+        modulus_basis=row.modulus_basis,
+        rows=[ModulusTableRowOut(**one) for one in row.rows],
+        source_curve_keys=list(row.source_curve_keys),
+        notes=list(row.notes),
+        created_at=row.created_at,
+    )
+
+
+@router.get("/runs/{test_run_id}/modulus-tables", response_model=list[ModulusTableOut])
+def list_modulus_tables(
+    test_run_id: uuid.UUID,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> list[ModulusTableOut]:
+    run = get_run(db, user, test_run_id)
+    return [_table_out(one) for one in services.modulus_tables_of(db, run.id)]
+
+
+@router.post(
+    "/runs/{test_run_id}/modulus-tables", response_model=ModulusTableOut, status_code=201
+)
+def create_modulus_table(
+    test_run_id: uuid.UUID,
+    payload: ModulusTableRequest,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> ModulusTableOut:
+    """**주파수를 골라 온도별 E′ · E″ · tan δ 표를 만든다**(v1.285.0 보고).
+
+    DMA 온도별 E′ 를 잰 물성으로 넘길 길이 없어 재료에 적어 둔 값(출처 추정)으로만 넣고 있었다.
+    다온도 파일(온도마다 곡선) · 램프를 나눈 곡선 · 1 Hz 온도 스윕 한 곡선을 다 받는다. 그
+    주파수가 스윕 범위 밖인 온도는 외삽하지 않고 빼며, 왜 뺐는지 `notes` 에 남는다.
+    """
+    run = get_run(db, user, test_run_id)
+    table = services.build_modulus_table(db, run, payload.frequency_hz, created_by_id=user.id)
+    db.commit()
+    db.refresh(table)
+    return _table_out(table)
+
+
+@router.delete("/modulus-tables/{table_id}", status_code=204)
+def delete_modulus_table(
+    table_id: uuid.UUID,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> Response:
+    """표를 지운다. 만든 사람이거나 고칠 수 있는 사람 — 카드가 근거로 들었으면 막는다."""
+    table = services.table_or_404(db, table_id)
+    run = get_run(db, user, table.test_run_id)
+    _require_removal(db, user, run, table.created_by_id)
+    using = list(
+        db.scalars(
+            select(PropertyCard.label)
+            .where(PropertyCard.source["modulus_table_id"].as_string() == str(table.id))
+            .limit(6)
+        )
+    )
+    if using:
+        raise _blocked_by_cards(using, "온도별 탄성률 표")
+    audit.record(
+        db,
+        action=audit.MODULUS_TABLE_DELETED,
+        actor=user,
+        target_table="test_runs",
+        target_id=run.id,
+        target_label=run.record_name,
+        workspace_id=run.workspace_id,
+        changes={"modulus_table_id": str(table.id), "frequency_hz": table.frequency_hz},
+    )
+    db.delete(table)
+    db.commit()
+    return Response(status_code=204)

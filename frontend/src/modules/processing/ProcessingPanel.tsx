@@ -683,17 +683,26 @@ export function ProcessingPanel({
             <Play className="size-3.5" />
             미리보기
           </Button>
-          {/* **멈춘 결과는 저장 못 한다.** 서버도 거절하지만, 눌러 놓고 거절당하는
-              것과 처음부터 못 누르는 것은 다르다 — 앞의 것은 「고장」 으로 읽힌다. */}
+          {/* **실패한 단계가 있어도 나온 값은 저장한다**(2026-10-22) — 부분 결과로 남고 실패가
+              함께 기록된다. 전에는 저장을 막아 멀쩡한 인장강도까지 잃었다(v1.285.0 보고). 나온
+              값이 하나도 없으면 서버가 거절하므로 처음부터 잠근다 — 눌러 놓고 거절당하는 것은
+              「고장」 으로 읽힌다. */}
           <Button
             size="sm"
             onClick={save}
             // **저장했으면 잠근다** — 같은 단계로 한 번 더 누르면 같은 결과가 둘 생긴다(이슈 #2).
             // 단계를 고치거나 다시 돌리면 풀린다.
-            disabled={busy || !result || Boolean(result.problem) || saved !== null}
+            disabled={
+              busy ||
+              !result ||
+              (Boolean(result.problem) && result.scalars.length === 0) ||
+              saved !== null
+            }
             title={
               result?.problem
-                ? '멈춘 자리를 고친 뒤 저장할 수 있습니다.'
+                ? result.scalars.length === 0
+                  ? '나온 값이 없어 저장할 수 없습니다 — 실패한 단계를 고쳐 주세요.'
+                  : '부분 결과로 저장됩니다 — 실패한 단계가 결과에 함께 남습니다.'
                 : saved
                   ? '이 단계의 결과는 저장했습니다 — 단계를 고치거나 다시 돌리면 다시 저장할 수 있습니다.'
                   : undefined
@@ -1055,7 +1064,9 @@ export function ProcessingPanel({
               }
 
               const { step, index, plugin } = row
-              const stage = result?.stages[index]
+              // **단계 번호로 찾는다** — 실패해 건너뛴 단계가 있으면 목록의 차례와 번호가 다르다.
+              const stage = result?.stages.find((one) => one.index === index)
+              const failed = result?.failures?.find((one) => one.index === index)
               const trouble = stepBlockers[index] ?? []
               const isOpen = open.has(index)
               const summary = stepSummary(step, byId, inputs)
@@ -1202,6 +1213,12 @@ export function ProcessingPanel({
                             </li>
                           ))}
                         </ul>
+                      )}
+                      {failed && (
+                        <p className="border-destructive text-destructive border-l-2 pl-2 text-xs">
+                          {failed.stopped ? '여기서 멈췄습니다' : '이 단계만 건너뛰었습니다'} —{' '}
+                          {failed.message}
+                        </p>
                       )}
 
                       <div className="flex gap-0.5 pt-1">
@@ -1394,9 +1411,15 @@ export function ProcessingPanel({
                   다만 「다 됐다」 로 읽히면 안 되므로 무엇이 멈췄는지 먼저 적는다. */}
               {result.problem && (
                 <p className="mb-2 rounded-md border border-amber-500/50 bg-amber-500/10 px-2 py-1 text-xs">
-                  <b>여기까지만 돌았습니다.</b> {result.problem}
+                  <b>
+                    {result.failures?.some((one) => one.stopped)
+                      ? '여기까지만 돌았습니다.'
+                      : '실패한 단계를 건너뛰었습니다.'}
+                  </b>{' '}
+                  {result.problem}
                   <br />
-                  아래 그림과 값은 <b>멈추기 전까지</b>의 것입니다 — 저장은 되지 않습니다.
+                  아래 값은 <b>나온 것만</b>입니다 — 저장하면 부분 결과로 남고 실패한 단계가 함께
+                  기록됩니다.
                 </p>
               )}
 
@@ -1407,7 +1430,11 @@ export function ProcessingPanel({
               {result.stage_index !== null && result.stage_index !== undefined && (
                 <p className="mb-2 rounded-md border border-sky-300 bg-sky-50 px-2 py-1 text-xs text-sky-900 dark:bg-sky-950 dark:text-sky-200">
                   <b>
-                    {result.stage_index + 1}. {result.stages[result.stage_index]?.label}
+                    {result.stage_index + 1}.{' '}
+                    {
+                      result.stages.find((one) => one.index === result.stage_index)?.label ??
+                      steps[result.stage_index]?.plugin
+                    }
                   </b>{' '}
                   까지만 돌린 곡선입니다 — 아래 요약값은 <b>전체를 돌린 것</b>입니다.
                 </p>

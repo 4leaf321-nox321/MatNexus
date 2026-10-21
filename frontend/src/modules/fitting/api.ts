@@ -201,6 +201,10 @@ export const fittingApi = {
   createViscoelastic: (body: ViscoelasticCardSaveRequest) =>
     api.post<PropertyCard>('/fitting/cards/viscoelastic', body),
 
+  /** 온도별 저장 탄성률 카드 — 점탄성 탭의 온도별 표 하나에서(2026-10-22). */
+  createDmaTemperature: (body: components['schemas']['DmaTemperatureCardSaveRequest']) =>
+    api.post<PropertyCard>('/fitting/cards/dma-temperature', body),
+
   /**
    * 속도별 묶음(`tensile.rate_family`)에서 속도 의존 소성 카드를 만든다.
    * `table` 에는 기준 속도의 곡선, `rate_table` 에는 속도 전부가 실린다.

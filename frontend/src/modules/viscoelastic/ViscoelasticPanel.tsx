@@ -26,8 +26,10 @@ import type {
   PronyFit,
   Sweep,
 } from '@/modules/viscoelastic/api'
+import { ConfirmDialog } from '@/shared/components/ConfirmDialog'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { Badge } from '@/shared/components/ui/badge'
+import { ModulusTableSection } from '@/modules/viscoelastic/ModulusTableSection'
 import { ViscoelasticCardDialog } from '@/modules/viscoelastic/ViscoelasticCardDialog'
 import { Button } from '@/shared/components/ui/button'
 import { Input } from '@/shared/components/ui/input'
@@ -138,6 +140,35 @@ export function ViscoelasticPanel({
       await reload()
     } catch (caught) {
       setError(caught instanceof Error ? caught : new Error('대표를 옮기지 못했습니다.'))
+    }
+  }
+
+  /** 대표에서 내린다(2026-10-22) — 그 시험은 재료의 Prony 묶음에서 이유와 함께 빠진다. */
+  async function dropPrimary(curve: MasterCurve) {
+    setError(null)
+    try {
+      await viscoelasticApi.unsetPrimary(curve.id)
+      await reload()
+    } catch (caught) {
+      setError(caught instanceof Error ? caught : new Error('대표를 해제하지 못했습니다.'))
+    }
+  }
+
+  const [removing, setRemoving] = useState<MasterCurve | null>(null)
+
+  async function remove(curve: MasterCurve) {
+    setBusy(true)
+    setError(null)
+    try {
+      await viscoelasticApi.removeMasterCurve(curve.id)
+      setRemoving(null)
+      setSelected(null)
+      await reload()
+    } catch (caught) {
+      setRemoving(null)
+      setError(caught instanceof Error ? caught : new Error('지우지 못했습니다.'))
+    } finally {
+      setBusy(false)
     }
   }
 
@@ -252,7 +283,9 @@ export function ViscoelasticPanel({
           )}
         </div>
 
-        {curves.length > 1 && (
+        {/* **하나뿐이어도 보인다**(2026-10-22) — 대표를 해제하거나 지울 자리가 여기뿐이다.
+            전에는 둘 이상일 때만 떠서, 하나뿐인 곡선은 다룰 길이 없었다(v1.285.0 보고). */}
+        {curves.length > 0 && (
           <div className="space-y-1">
             <div className="flex flex-wrap items-center gap-1.5">
               <Label className="w-20 shrink-0 text-xs">만든 것</Label>
@@ -279,7 +312,8 @@ export function ViscoelasticPanel({
                 쓰였다 — 하나 더 만든 순간 재료 쪽 계산이 바뀌는데 그 전환이 화면
                 어디에도 없었다. 처리 결과의 「채택」 과 같은 자리다. */}
             <p className="text-muted-foreground pl-20 text-xs">
-              재료의 <b>글로벌 피팅</b>은 <b>대표</b> 하나를 읽습니다.
+              재료의 <b>글로벌 피팅</b>은 <b>대표</b> 하나를 읽습니다
+              {curves.every((one) => !one.is_primary) && ' — 지금 이 시험에는 대표가 없습니다'}.
               {selected && !selected.is_primary && (
                 <>
                   {' '}
@@ -292,9 +326,48 @@ export function ViscoelasticPanel({
                   </button>
                 </>
               )}
+              {selected?.is_primary && (
+                <>
+                  {' '}
+                  <button
+                    type="button"
+                    className="underline"
+                    onClick={() => void dropPrimary(selected)}
+                  >
+                    대표 해제
+                  </button>
+                </>
+              )}
+              {selected && (
+                <>
+                  {' · '}
+                  <button
+                    type="button"
+                    className="text-destructive underline disabled:opacity-50"
+                    // 대표는 먼저 옮기거나 해제한다 — 재료 묶음이 읽는 것이다(서버도 막는다).
+                    disabled={selected.is_primary || busy}
+                    title={selected.is_primary ? '대표는 먼저 해제하거나 옮긴 뒤 지웁니다.' : undefined}
+                    onClick={() => setRemoving(selected)}
+                  >
+                    이 마스터커브 지우기
+                  </button>
+                </>
+              )}
             </p>
           </div>
         )}
+        <ConfirmDialog
+          open={removing !== null}
+          title="마스터커브 지우기"
+          body={
+            removing
+              ? `${celsius(removing.reference_temperature_k)} · ${removing.method} 마스터커브와 그 곡선에 맞춘 Prony 적합을 함께 지웁니다. 카드가 근거로 든 것이면 서버가 막습니다.`
+              : ''
+          }
+          busy={busy}
+          onConfirm={() => removing && void remove(removing)}
+          onClose={() => setRemoving(null)}
+        />
       </div>
 
       <FromEquipment
@@ -314,6 +387,10 @@ export function ViscoelasticPanel({
           shear={(selected.modulus_basis ?? sweeps.data?.modulus_basis) === 'G'}
         />
       )}
+
+      {/* **온도별 E′ 를 잰 물성으로**(2026-10-22, v1.285.0 보고) — 마스터커브와 같은 자리에서
+          시험의 곡선 여럿을 읽어 주파수 하나의 온도별 표를 낸다. */}
+      <ModulusTableSection testRunId={testRunId} />
     </section>
   )
 }
@@ -582,6 +659,23 @@ function MasterCurveView({
     }
   }
 
+  const [dropping, setDropping] = useState<PronyFit | null>(null)
+
+  async function dropFit(target: PronyFit) {
+    setBusy(true)
+    setError(null)
+    try {
+      await viscoelasticApi.removePronyFit(target.id)
+      setDropping(null)
+      await reload()
+    } catch (caught) {
+      setDropping(null)
+      setError(caught instanceof Error ? caught : new Error('지우지 못했습니다.'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const chart = useMemo<[number, number][]>(() => {
     const frequency = points.data?.frequency ?? []
     const storage = points.data?.storage_modulus ?? []
@@ -712,15 +806,43 @@ function MasterCurveView({
           <ErrorNotice error={error} className="mb-2" />
 
           {latest ? (
-            <PronyView
-              fit={latest}
-              materialId={materialId}
-              busy={busy}
-              onPick={(terms) => void fit(terms)}
-              // **기준 온도가 이름에 든다.** 같은 재료의 카드가 여럿이면 어느
-              // 온도의 것인지가 이름에서 보여야 한다.
-              cardLabel={`점탄성 ${celsius(curve.reference_temperature_k)}`}
-            />
+            <>
+              <PronyView
+                fit={latest}
+                materialId={materialId}
+                busy={busy}
+                onPick={(terms) => void fit(terms)}
+                // **기준 온도가 이름에 든다.** 같은 재료의 카드가 여럿이면 어느
+                // 온도의 것인지가 이름에서 보여야 한다.
+                cardLabel={`점탄성 ${celsius(curve.reference_temperature_k)}`}
+              />
+              {/* **지울 길**(2026-10-22, v1.285.0 보고). 재료의 Prony 묶음은 가장 최근 적합을
+                  쓴다 — 지우면 그다음부터 그 앞 적합이 쓰인다. 카드가 근거로 든 것은 서버가
+                  막는다. */}
+              <p className="text-muted-foreground mt-2 text-xs">
+                맞춘 적합 {fits.length}개 — 화면과 재료 묶음은 가장 최근 것을 씁니다.{' '}
+                <button
+                  type="button"
+                  className="text-destructive underline disabled:opacity-50"
+                  disabled={busy}
+                  onClick={() => setDropping(latest)}
+                >
+                  이 적합 지우기
+                </button>
+              </p>
+              <ConfirmDialog
+                open={dropping !== null}
+                title="Prony 적합 지우기"
+                body={
+                  fits.length > 1
+                    ? `이 적합(${dropping?.terms.length ?? 0}항)을 지웁니다. 다음부터는 그 앞에 맞춘 적합이 쓰입니다.`
+                    : `이 적합(${dropping?.terms.length ?? 0}항)을 지웁니다. 남는 적합이 없어 다시 맞춰야 합니다.`
+                }
+                busy={busy}
+                onConfirm={() => dropping && void dropFit(dropping)}
+                onClose={() => setDropping(null)}
+              />
+            </>
           ) : (
             <p className="text-muted-foreground rounded-md border p-6 text-center text-sm">
               아직 맞춘 계수가 없습니다.

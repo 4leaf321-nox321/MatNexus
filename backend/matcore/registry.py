@@ -205,6 +205,16 @@ class Plugin:
 
     순서는 화면의 사정이 아니라 **계산의 성질**이다 — 공칭 변환 없이는 변형률
     열이 없고, 재샘플을 앞에 두면 그 뒤 계산이 전부 보간된 점으로 돈다."""
+    measures: bool = False
+    """**곡선을 안 바꾸고 값만 잰다** — 받은 프레임을 그대로 돌려준다.
+
+    이런 단계가 실패하면 처리는 **그 단계만 건너뛰고 계속한다**(`processing.apply`). 곡선이
+    그대로라 뒤 단계는 같은 곡선 위에서 돈다 — 틀린 곡선 위에서 도는 일이 없다. 실패한
+    단계의 값을 쓰는 뒤 단계는 그 값이 없어 함께 건너뛴다.
+
+    이것이 없던 때(v1.285.0 보고): 탄성계수가 직선 검사에 걸려 값을 안 내자 그 값을 쓰는
+    항복강도가 멈추고, 처리 전체가 멈춰 **그 뒤의 인장강도까지** 계산조차 안 됐다. 곡선을
+    바꾸는 단계(공칭 변환 · 토우 보정 · 진응력)는 기본(`False`)대로 실패하면 멈춘다."""
     version: str = "1"
     """계산이 바뀌면 올린다. 결과 아티팩트에 기록해 재현 가능성을 남긴다."""
     meta: dict[str, Any] = field(default_factory=dict)
@@ -225,6 +235,7 @@ def register(
     makes_columns: tuple[Produced, ...] = (),
     makes_values: tuple[Produced, ...] = (),
     order: int = 100,
+    measures: bool = False,
     version: str = "1",
     **meta: Any,
 ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
@@ -249,6 +260,7 @@ def register(
             makes_columns=makes_columns,
             makes_values=makes_values,
             order=order,
+            measures=measures,
             version=version,
             meta=meta,
         )

@@ -235,6 +235,29 @@ class Test재료_이름_밖의_말:
         assert _names(_materials(client, admin_headers, q="posco")) == ["SECC_MDOI_1.0"]
         assert _names(_materials(client, admin_headers, maker="POSCO")) == ["SECC_MDOI_1.0"]
 
+    def test_Grade_는_기준정보_별칭으로도_찾는다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        """v1.285.0 보고: `STS304` 를 `SUS304` 의 별칭으로 이어 뒀는데 기본 찾기는 0건이었다 —
+        Grade 는 이름 글자로만 걸렸다."""
+        _material(client, admin_headers, grade="SUS304", details=None)
+        _material(client, admin_headers, grade="AL5052", details=None)
+        assert _materials(client, admin_headers, q="sts304")["total"] == 0
+
+        term = client.get(
+            "/api/vocabularies/grade/terms", params={"q": "SUS304"}, headers=admin_headers
+        ).json()["items"][0]
+        added = client.post(
+            f"/api/vocabularies/grade/terms/{term['id']}/aliases",
+            json={"alias": "STS304"},
+            headers=admin_headers,
+        )
+        assert added.status_code == 201, added.text
+
+        assert _names(_materials(client, admin_headers, q="sts304")) == ["SUS304_-_1.0"]
+        # 다른 낱말과는 AND 다 — 별칭 가지가 조건을 넓히지 않는다.
+        assert _materials(client, admin_headers, q="sts304 AL5052")["total"] == 0
+
     def test_로트로_찾는다(self, client: TestClient, admin_headers: dict[str, str]) -> None:
         steel = _material(client, admin_headers)
         _material(client, admin_headers, grade="AL5052", details=None)

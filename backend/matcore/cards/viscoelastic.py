@@ -17,7 +17,7 @@
 
 from __future__ import annotations
 
-from matcore.cards import BlockSpec, register_block
+from matcore.cards import BlockPlot, BlockSpec, register_block
 from matcore.registry import Produced
 
 VISCOELASTIC = register_block(
@@ -189,5 +189,59 @@ LVE = register_block(
         order=45,
         kind_priority=5,
         from_tests=("dma_sweep",),
+    )
+)
+
+
+DMA_TEMPERATURE = register_block(
+    BlockSpec(
+        key="dma_temperature",
+        label="온도별 저장 탄성률",
+        help=(
+            "DMA 에서 **주파수 하나**로 본 온도별 E′ · E″ · tan δ. 정적 탄성계수와 다르다 — "
+            "그 주파수의 동적 값이다. 다른 주파수의 해석에 쓰면 안 된다."
+        ),
+        produces=(
+            Produced(
+                key="frequency_hz",
+                label="주파수",
+                si_unit="Hz",
+                help="이 표가 본 주파수. **이 주파수에서의 값이다.**",
+            ),
+            Produced(
+                key="modulus_basis",
+                label="잰 것",
+                si_unit="1",
+                help="`E` 인장 · 굽힘으로 잰 E′, `G` 전단 G′ 를 E = 2(1+ν)G 로 옮긴 것.",
+            ),
+            Produced(key="point_count", label="온도 수", si_unit="1"),
+        ),
+        rows=(
+            Produced(key="temperature", label="온도", si_unit="K"),
+            Produced(
+                key="storage_modulus",
+                label="저장 탄성률 E′",
+                si_unit="Pa",
+                property_key="mechanical.storage_modulus",
+            ),
+            Produced(
+                key="loss_modulus",
+                label="손실 탄성률 E″",
+                si_unit="Pa",
+                property_key="mechanical.loss_modulus",
+            ),
+            Produced(
+                key="tan_delta",
+                label="tan δ",
+                si_unit="1",
+                property_key="mechanical.loss_tangent",
+            ),
+        ),
+        order=47,
+        kind_priority=6,
+        from_tests=("dma_sweep",),
+        # 점이 본체다 — 적어 둔 값만으로 서지 않는다.
+        from_values=False,
+        plot=BlockPlot(x="temperature", y="storage_modulus", log_y=True),
     )
 )

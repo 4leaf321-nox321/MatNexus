@@ -142,3 +142,39 @@ class PronyFit(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+
+
+class ModulusTable(Base):
+    """**주파수 하나에서 본 온도별 탄성률 표**(2026-10-22, v1.285.0 보고).
+
+    DMA 온도별 E′ 를 잰 물성으로 넘길 길이 없어, 재료에 「적어 둔 값」 으로 출처를 추정이라
+    적어
+    넣고 있었다. 다온도 파일은 온도마다 곡선이 따로라 곡선 하나를 받는 처리 단계로는 표가 안
+    나온다 — 마스터커브처럼 시험의 곡선 여럿을 읽어 한 벌을 낸다.
+
+    등온 스윕(온도마다 주파수를 훑은 곡선)은 고른 주파수에서 log-log 로 보간하고, 승온 램프 한
+    곡선은 그 주파수의 점을 고른다. **불변이다** — 주파수를 바꾸려면 새로 만든다.
+    """
+
+    __tablename__ = "modulus_tables"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    test_run_id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("test_runs.id", ondelete="CASCADE"), index=True
+    )
+    frequency_hz: Mapped[float] = mapped_column(Float)
+    modulus_basis: Mapped[str] = mapped_column(String(1), default="E", server_default="E")
+    """무엇을 잰 것인가 — `E`(인장 · 굽힘 E′) · `G`(전단 G′). 카드에는 E 로 옮겨 담는다."""
+    rows: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, default=list)
+    """`[{temperature_k, storage_pa, loss_pa, tan_delta}]` — 온도 오름차순."""
+    source_curve_keys: Mapped[list[str]] = mapped_column(JSONB, default=list)
+    notes: Mapped[list[str]] = mapped_column(JSONB, default=list)
+    """빠진 곡선 · 합친 온도 따위. 화면이 그대로 보여 준다."""
+    created_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )

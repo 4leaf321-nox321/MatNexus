@@ -22,6 +22,8 @@ export type PronyFit = components['schemas']['PronyFitOut']
 export type PronyCandidate = components['schemas']['PronyCandidateOut']
 export type PronyTerm = components['schemas']['PronyTermOut']
 export type ImportableCurve = components['schemas']['ImportableCurveOut']
+/** 주파수 하나에서 본 온도별 E′ · E″ · tan δ 표(2026-10-22). 불변이다. */
+export type ModulusTable = components['schemas']['ModulusTableOut']
 
 /** 겹친 곡선의 점. 화면이 그린다. */
 export type MasterCurvePoints = Record<string, (number | null)[]>
@@ -86,6 +88,25 @@ export const viscoelasticApi = {
    */
   setPrimary: (masterCurveId: string) =>
     api.post<MasterCurve>(`/viscoelastic/master-curves/${masterCurveId}/primary`, {}),
+  /** 대표에서 내린다 — 그 시험에 대표가 없어지고, 재료의 Prony 묶음은 그 시험을 막는다. */
+  unsetPrimary: (masterCurveId: string) =>
+    api.delete<MasterCurve>(`/viscoelastic/master-curves/${masterCurveId}/primary`),
+  /** 마스터커브를 지운다(그 곡선의 Prony 도 함께). 대표 · 카드가 근거로 든 것은 서버가 막는다. */
+  removeMasterCurve: (masterCurveId: string) =>
+    api.delete<void>(`/viscoelastic/master-curves/${masterCurveId}`),
+  /** Prony 적합 하나를 지운다. 카드가 근거로 들었으면 서버가 막는다. */
+  removePronyFit: (fitId: string) => api.delete<void>(`/viscoelastic/prony/${fitId}`),
+
+  /** 시험의 온도별 탄성률 표들 — 최근 것이 앞. */
+  modulusTables: (testRunId: string) =>
+    api.get<ModulusTable[]>(`/viscoelastic/runs/${testRunId}/modulus-tables`),
+  /** 고른 주파수(Hz)에서 온도별 표를 만든다. 범위 밖 온도는 서버가 빼고 까닭을 적는다. */
+  createModulusTable: (testRunId: string, frequencyHz: number) =>
+    api.post<ModulusTable>(`/viscoelastic/runs/${testRunId}/modulus-tables`, {
+      frequency_hz: frequencyHz,
+    }),
+  /** 표를 지운다. 카드가 근거로 들었으면 서버가 막는다. */
+  removeModulusTable: (tableId: string) => api.delete<void>(`/viscoelastic/modulus-tables/${tableId}`),
 
   points: (masterCurveId: string) =>
     api.get<MasterCurvePoints>(`/viscoelastic/master-curves/${masterCurveId}/points`),

@@ -188,6 +188,14 @@ class ProcessingResult(Base):
         JSONB, default=list, server_default="[]"
     )
     """`[{key, label, value, si_unit}]`. 탄성계수·항복강도·인장강도."""
+    failures: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSONB, default=list, server_default="[]"
+    )
+    """실패한 단계 `[{index, plugin, label, message, stopped}]`.
+
+    **비어 있지 않으면 부분 결과다**(2026-10-22). 전에는 한 단계라도 실패하면 저장하지
+    않아, 일괄 처리에서 멀쩡히 나온 인장강도까지 잃었다(v1.285.0 보고). 나온 값은 맞지만
+    다 나오지는 않았다는 사실이 여기 남는다 — 화면 · 일괄 채택이 이것을 본다."""
 
     storage_path: Mapped[str] = mapped_column(String(500))
     row_count: Mapped[int] = mapped_column(Integer)

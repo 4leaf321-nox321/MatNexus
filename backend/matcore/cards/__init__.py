@@ -58,6 +58,31 @@ class CardError(Exception):
 
 
 @dataclass(frozen=True)
+class PowerLine:
+    """계수로 그리는 선 `y = values[coefficient] · x ^ values[exponent]` — 키는 `produces` 의
+    것."""
+
+    coefficient: str
+    exponent: str
+
+
+@dataclass(frozen=True)
+class BlockPlot:
+    """이 블록을 **그래프로 보이는 법**(2026-10-22) — 화면은 이 선언대로 그린다.
+
+    v1.285.0 보고: S-N 카드를 만들었는데 피팅 계수로 수명선도를 볼 수 없었다. 점은 `rows` 의
+    `x` · `y` 열, `hollow` 열이 참이면 빈 점(런아웃), `line` 은 `values` 의 계수로 그린 선이다.
+    """
+
+    x: str
+    y: str
+    log_x: bool = False
+    log_y: bool = False
+    hollow: str | None = None
+    line: PowerLine | None = None
+
+
+@dataclass(frozen=True)
 class BlockSpec:
     """카드에 실리는 물성 한 갈래."""
 
@@ -115,6 +140,9 @@ class BlockSpec:
     열물성이 따라 붙으면 그 카드가 무엇의 카드인지 흐려진다. 덱이 안 읽고 카드의 종류도 안
     되는 블록(참고 물성)만 이것을 켠다."""
 
+    plot: BlockPlot | None = None
+    """화면에 그래프로 보이는 법. 없으면 표만 보인다."""
+
     meta: dict[str, Any] = field(default_factory=dict)
 
 
@@ -130,6 +158,21 @@ def register_block(spec: BlockSpec) -> BlockSpec:
     for item in (*spec.produces, *spec.rows):
         if not item.label.strip():
             raise ValueError(f"{spec.key}.{item.key} 에 이름이 없습니다.")
+    if spec.plot is not None:
+        # **그래프가 가리키는 열 · 계수가 선언에 있어야 한다** — 없으면 화면이 빈 그림을 그리고
+        # 그것은 「값이 없다」 로 읽힌다.
+        columns = {item.key for item in spec.rows}
+        values = {item.key for item in spec.produces}
+        wanted = [spec.plot.x, spec.plot.y, *([spec.plot.hollow] if spec.plot.hollow else [])]
+        missing = [one for one in wanted if one not in columns]
+        if spec.plot.line is not None:
+            missing += [
+                one
+                for one in (spec.plot.line.coefficient, spec.plot.line.exponent)
+                if one not in values
+            ]
+        if missing:
+            raise ValueError(f"{spec.key} 의 그래프가 선언에 없는 키를 가리킵니다: {missing}")
     _BLOCKS[spec.key] = spec
     return spec
 

@@ -1196,6 +1196,13 @@ def list_runs(
     status: str | None = Query(
         default=None, pattern="^(uploaded|parsing|parsed|failed|imported)$"
     ),
+    readable: bool = Query(
+        default=False,
+        description=(
+            "읽힌 시험만 — 완료(parsed)와 표로 입력(imported). 곡선이 없는 표 입력 시험도 "
+            "값은 있다(피로 S-N 묶음의 후보)"
+        ),
+    ),
     test_type_key: str | None = Query(default=None),
     orientation: str | None = Query(default=None),
     registered_by: str | None = Query(default=None),
@@ -1309,6 +1316,10 @@ def list_runs(
         )
     if status:
         query = query.where(TestRun.status == status)
+    if readable:
+        # 표 입력 시험은 `imported` 다 — `parsed` 만 받던 묶음 후보에서 26건이 0건이 됐다
+        # (v1.285.0 보고). 화면이 둘을 따로 불러 합치면 상한(limit)이 두 번 잘린다.
+        query = query.where(TestRun.status.in_(("parsed", "imported")))
     # **거르는 일은 서버가 한다.** 한 쪽만 받아 화면에서 거르면 뒤엣것이 없는
     # 시험이 된다 — 목록이 조용히 잘리는 것이 가장 나쁘다(이 화면의 머리말이
     # 그 이야기다).

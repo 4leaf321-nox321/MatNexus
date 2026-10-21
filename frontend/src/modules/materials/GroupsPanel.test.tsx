@@ -523,6 +523,36 @@ describe('후보의 조건은 서버가 말한다', () => {
     expect(screen.queryByText(/마스터커브가 있는 시험만/)).not.toBeInTheDocument()
   })
 
+  it('표로 넣은 시험(imported)도 요약값 묶음의 후보다', async () => {
+    // v1.285.0 보고: 「완료」 만 불러와 표 입력 피로 시험 26건이 S-N 후보에서 0건이었다.
+    kinds.mockResolvedValue([
+      {
+        ...SPEC,
+        id: 'fatigue.sn_curve',
+        label: 'S-N 곡선',
+        applies_to: ['fatigue'],
+        needs: 'summary',
+        params: [],
+        makes_values: [],
+      },
+    ])
+    runs.mockResolvedValue({
+      items: [
+        { id: 'f1', record_name: 'F_01', test_type_key: 'fatigue', status: 'imported' },
+        { id: 'f2', record_name: 'F_02', test_type_key: 'fatigue', status: 'imported' },
+      ],
+      total: 2,
+      limit: 200,
+      offset: 0,
+    })
+    show(<GroupsPanel materialId="m1" />)
+    await userEvent.click(await screen.findByRole('button', { name: '글로벌 피팅' }))
+    expect(await screen.findByLabelText('F_01 선택')).toBeInTheDocument()
+    expect(screen.getByLabelText('F_02 선택')).toBeInTheDocument()
+    expect(runs).toHaveBeenCalledWith(expect.objectContaining({ readable: true }))
+    expect(runs).not.toHaveBeenCalledWith(expect.objectContaining({ status: 'parsed' }))
+  })
+
   it('실수 칸은 숫자로 보낸다', async () => {
     kinds.mockResolvedValue([RATE_SPEC])
     runs.mockResolvedValue({

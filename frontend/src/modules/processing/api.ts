@@ -279,6 +279,8 @@ export const processingApi = {
     recipe_key?: string | null
     adopt: boolean
     dry_run?: boolean
+    /** 어느 곡선 — `first` · `all`(측정 곡선 전부) · 키 목록(2026-10-22). */
+    curves?: components['schemas']['BatchRequest']['curves']
   }) => api.post<BatchOut>('/processing/batch', body),
 
   /**

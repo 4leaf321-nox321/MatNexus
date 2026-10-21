@@ -494,9 +494,11 @@ export function GroupsPanel({
   const kinds = useResource(() => groupsApi.kinds(appliesTo), [appliesTo])
   const rows = useResource(() => groupsApi.ofMaterial(materialId), [materialId])
   // 적합에 쓸 후보는 **채택까지 끝난 것**이 아니라 읽힌 것 전부다 — 마스터커브는
-  // 채택과 무관하게 만든다.
+  // 채택과 무관하게 만든다. **표로 넣은 시험(`imported`)도 읽힌 것이다** — 「완료」 만 받던
+  // 때 피로 시험 26건이 S-N 후보에서 0건이었다(v1.285.0 보고). 곡선이 필요한 묶음은 아래
+  // `needs` 가 거른다(마스터커브 수 · 채택 결과).
   const runs = useResource(
-    () => testsApi.runs({ material_id: materialId, status: 'parsed', limit: 200 }),
+    () => testsApi.runs({ material_id: materialId, readable: true, limit: 200 }),
     [materialId]
   )
 

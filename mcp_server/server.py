@@ -5143,10 +5143,14 @@ async def run_batch_processing(
     # 다시 패턴을 찾아야 한다 — 그 일을 여기서 한다.
     grouped: dict[str, list[str]] = {}
     for item in answer["items"]:
+        name = item.get("record_name") or str(item.get("test_run_id"))
         if item.get("status") == "ok":
+            # 부분 결과 — 저장은 됐지만 빠진 값이 있다. 그 사유도 함께 묶는다.
+            for one in item.get("failures") or []:
+                reason = f"부분 결과 — {(one.get('message') or '').strip()}"
+                grouped.setdefault(reason, []).append(name)
             continue
         reason = (item.get("error") or "이유 없음").strip()
-        name = item.get("record_name") or str(item.get("test_run_id"))
         grouped.setdefault(reason, []).append(name)
 
     answer = dict(answer)
@@ -6995,9 +6999,10 @@ async def run_processing(
 
     ## 결과를 읽을 때
 
-    `problem` 이 있으면 거기까지만 돈 것이다 — 그 앞 단계의 곡선은 멀쩡하다.
-    `notes` 에 경고가 있으면 값은 나왔지만 사람이 봐야 한다는 뜻이다(토우 R² 처럼
-    재료에 따라 진짜로 직선이 아닐 수 있는 것들).
+    `problem`(·`failures`)이 있으면 실패한 단계가 있다 — 값만 재는 단계(탄성계수 · 항복강도 ·
+    인장강도)는 건너뛰고 계속, 곡선을 바꾸는 단계는 거기서 멈춘다. `save=True` 면 나온 값을
+    **부분 결과**로 저장하고 실패가 함께 남는다 — 무엇이 빠졌는지 사람에게 옮겨라. `notes`
+    의 경고는 값은 나왔지만 사람이 봐야 한다는 뜻이다.
     """
     if not steps and not recipe_key:
         return {
@@ -7053,9 +7058,9 @@ async def run_processing(
             "note", "저장하려면 save=True 로 다시 부르세요. 채택은 사람이 합니다."
         )
         return answer
-    if answer.get("problem"):
+    if answer.get("problem") and not answer.get("scalars"):
         return {
-            "error": f"처리가 끝까지 못 돌아 저장하지 않았습니다: {answer['problem']}",
+            "error": f"나온 값이 없어 저장하지 않았습니다: {answer['problem']}",
             "attempts": attempts,
         }
 
@@ -7063,6 +7068,11 @@ async def run_processing(
     saved = await _send(ctx, "POST", "/processing/results", body)
     if isinstance(saved, dict) and len(attempts) > 1:
         saved["attempts"] = attempts
+    if isinstance(saved, dict) and saved.get("failures"):
+        saved["note"] = (
+            "부분 결과로 저장했습니다 — 실패한 단계(`failures`)의 값은 없습니다. 무엇이 왜 "
+            "빠졌는지 사람에게 옮기세요. 채택은 사람이 합니다."
+        )
     return saved
 
 

@@ -626,6 +626,29 @@ class TestHierarchy:
             samples[0]["failed_count"],
         ) == (2, 1, 1)
 
+        # **한 건 조회 · 고치기 응답도 같은 수다**(v1.285.0 보고). 기본값 0 이 그대로 나가
+        # 시험이 붙은 시편이 「시험 0」 으로 보였다 — 빈 시편으로 알고 지울 위험이 있다(MCP 도
+        # 이 응답을 읽는다).
+        def tally(body: dict[str, Any]) -> tuple[int, int, int]:
+            return (body["test_run_count"], body["adopted_count"], body["failed_count"])
+
+        one = client.get(f"/api/specimens/{specimens[0]['id']}", headers=admin_headers)
+        assert tally(one.json()) == (2, 1, 1)
+        edited = client.patch(
+            f"/api/specimens/{specimens[0]['id']}",
+            json={"note": "메모"},
+            headers=admin_headers,
+        )
+        assert edited.status_code == 200, edited.text
+        assert tally(edited.json()["specimen"]) == (2, 1, 1)
+        got = client.get(f"/api/samples/{sample['id']}", headers=admin_headers)
+        assert tally(got.json()) == (2, 1, 1)
+        patched = client.patch(
+            f"/api/samples/{sample['id']}", json={"note": "메모"}, headers=admin_headers
+        )
+        assert patched.status_code == 200, patched.text
+        assert tally(patched.json()) == (2, 1, 1)
+
 
 class TestRename:
     def test_재료_이름이_바뀌면_하위가_따라온다(

@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import math
+from typing import Any
 
 import numpy as np
 import pytest
@@ -233,3 +234,82 @@ class Test마스터커브:
     def test_모르는_방법은_거절한다(self) -> None:
         with pytest.raises(ViscoelasticError, match="모르는 방법"):
             master_curve(SWEEPS, reference_temperature_k=REFERENCE_K, method="magic")
+
+
+class Test온도별_탄성률_표:
+    """주파수 하나에서 본 온도별 E′ · E″ · tan δ(2026-10-22, v1.285.0 보고).
+
+    다온도 파일은 온도마다 곡선(등온 주파수 스윕)이고, 1 Hz 온도 스윕은 한 곡선에 온도축이다.
+    """
+
+    @staticmethod
+    def _sweep(temperature: float, scale: float, low: float = 0.1, high: float = 10.0) -> Any:
+        from matcore.viscoelastic import Segment
+
+        frequency = np.geomspace(low, high, 8)
+        # E′ = scale · f^0.2 — log-log 직선이라 보간이 정확해야 한다.
+        storage = scale * frequency**0.2
+        return Segment(
+            label=f"{temperature} K",
+            temperature_k=np.full(8, temperature) + np.linspace(0, 0.2, 8),
+            frequency_hz=frequency,
+            storage_pa=storage,
+            loss_pa=storage * 0.1,
+        )
+
+    def test_등온_스윕은_그_주파수로_보간한다(self) -> None:
+        from matcore.viscoelastic import modulus_table
+
+        rows, notes = modulus_table(
+            [self._sweep(253.15, 2e9), self._sweep(293.15, 1e9)], frequency_hz=2.0
+        )
+        assert [round(one.temperature_k, 1) for one in rows] == [253.2, 293.2]
+        assert rows[0].storage_pa == pytest.approx(2e9 * 2.0**0.2, rel=1e-9)
+        assert rows[1].loss_pa == pytest.approx(1e8 * 2.0**0.2, rel=1e-9)
+        assert rows[1].tan_delta == pytest.approx(0.1, rel=1e-9)
+        assert notes == []
+
+    def test_스윕_범위_밖_주파수는_그_온도를_뺀다(self) -> None:
+        """외삽하지 않는다 — 범위 밖 값은 그럴듯하지만 잰 것이 아니다."""
+        from matcore.viscoelastic import modulus_table
+
+        rows, notes = modulus_table(
+            [self._sweep(253.15, 2e9), self._sweep(293.15, 1e9, low=5.0, high=50.0)],
+            frequency_hz=2.0,
+        )
+        assert len(rows) == 1
+        assert any("범위 밖" in note for note in notes)
+
+    def test_램프는_그_주파수의_점을_고르고_다른_주파수와_섞지_않는다(self) -> None:
+        from matcore.viscoelastic import Segment, modulus_table
+
+        temperature = np.repeat(np.linspace(230.0, 330.0, 6), 2)
+        frequency = np.tile([1.0, 10.0], 6)
+        storage = np.where(frequency == 1.0, 1e9, 5e9) * np.exp(-(temperature - 230) / 100)
+        rows, _ = modulus_table(
+            [Segment("램프", temperature, frequency * 0.9999, storage, storage * 0.05)],
+            frequency_hz=1.0,
+        )
+        assert len(rows) == 6
+        assert rows[0].storage_pa == pytest.approx(1e9, rel=1e-9)
+        assert all(one.storage_pa < 1.01e9 for one in rows), "10 Hz 점이 섞였다"
+
+    def test_램프에_그_주파수가_없으면_있는_주파수를_댄다(self) -> None:
+        from matcore.viscoelastic import Segment, modulus_table
+
+        temperature = np.linspace(230.0, 330.0, 6)
+        rows, notes = modulus_table(
+            [Segment("램프", temperature, np.full(6, 10.0), np.full(6, 1e9))], frequency_hz=1.0
+        )
+        assert rows == []
+        assert "10 Hz" in notes[0]
+
+    def test_가까운_온도는_한_줄로_합친다(self) -> None:
+        from matcore.viscoelastic import modulus_table
+
+        rows, notes = modulus_table(
+            [self._sweep(293.15, 1e9), self._sweep(293.18, 1.2e9)], frequency_hz=1.0
+        )
+        assert len(rows) == 1
+        assert rows[0].storage_pa == pytest.approx(1.1e9, rel=1e-9)
+        assert any("합쳤습니다" in note for note in notes)

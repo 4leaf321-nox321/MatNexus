@@ -2259,6 +2259,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/fitting/cards/dma-temperature": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Dma Temperature Card
+         * @description **온도별 저장 탄성률 카드** — 점탄성 탭의 표 하나에서(2026-10-22, v1.285.0 보고).
+         *
+         *     DMA 온도별 E′ 를 잰 물성으로 넘길 길이 없어, 재료에 적어 둔 값(출처 추정)으로만 넣고
+         *     있었다.
+         *     **탄성 블록에 싣지 않는다** — 정적 탄성계수와 뜻이 다르다(사용자). 전단(G′)으로 잰 표는
+         *     점탄성 카드와 같은 규칙으로 E = 2(1+ν)G 로 옮긴다 — tan δ 는 그대로다.
+         */
+        post: operations["create_dma_temperature_card_api_fitting_cards_dma_temperature_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/fitting/cards/facets": {
         parameters: {
             query?: never;
@@ -7546,6 +7571,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/viscoelastic/master-curves/{master_curve_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Master Curve
+         * @description 마스터커브를 **지운다 — 되돌릴 수 없다.** 그 곡선에 맞춘 Prony 도 함께 사라진다.
+         *
+         *     v1.285.0 보고: 잘못 만든 마스터커브 · Prony 를 지울 길이 없었다. 처리 결과 지우기와 같이
+         *     두 가지는 막는다 — **대표**(재료 묶음이 읽는 것 — 먼저 옮기거나 해제한다)와 **카드가
+         *     근거로 든 것**. 감사에 남긴다.
+         */
+        delete: operations["delete_master_curve_api_viscoelastic_master_curves__master_curve_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/viscoelastic/master-curves/{master_curve_id}/points": {
         parameters: {
             query?: never;
@@ -7586,7 +7635,14 @@ export interface paths {
          *     처리 결과의 **채택**과 같은 자리다 — 여러 벌 만들고 하나를 고른다.
          */
         post: operations["set_primary_api_viscoelastic_master_curves__master_curve_id__primary_post"];
-        delete?: never;
+        /**
+         * Unset Primary
+         * @description **대표에서 내린다** — 그 시험에 대표가 없어진다(2026-10-22, v1.285.0 보고).
+         *
+         *     대표가 없는 시험은 재료의 Prony 묶음에 들어가지 않는다(이유를 대고 막는다) — 최신 것을
+         *     말없이 대신 쓰지 않는다. 채택을 거두는 것과 같은 자리다.
+         */
+        delete: operations["unset_primary_api_viscoelastic_master_curves__master_curve_id__primary_delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -7611,6 +7667,49 @@ export interface paths {
          */
         post: operations["create_prony_fit_api_viscoelastic_master_curves__master_curve_id__prony_post"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/viscoelastic/modulus-tables/{table_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Modulus Table
+         * @description 표를 지운다. 만든 사람이거나 고칠 수 있는 사람 — 카드가 근거로 들었으면 막는다.
+         */
+        delete: operations["delete_modulus_table_api_viscoelastic_modulus_tables__table_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/viscoelastic/prony/{fit_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Prony Fit
+         * @description Prony 적합 하나를 지운다. 카드가 근거로 들었으면 막는다.
+         *
+         *     재료의 Prony 묶음은 마스터커브마다 **가장 최근 적합**을 쓴다 — 최근 것을 지우면 다음
+         *     계산부터 그 앞 적합이 쓰인다(화면의 확인 창이 그것을 말한다).
+         */
+        delete: operations["delete_prony_fit_api_viscoelastic_prony__fit_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -7682,6 +7781,31 @@ export interface paths {
          *     프로파일이 그 표를 읽어 두기는 해도(`derived`) 행이 되지 않았다.
          */
         post: operations["import_master_curve_api_viscoelastic_runs__test_run_id__master_curves_import_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/viscoelastic/runs/{test_run_id}/modulus-tables": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Modulus Tables */
+        get: operations["list_modulus_tables_api_viscoelastic_runs__test_run_id__modulus_tables_get"];
+        put?: never;
+        /**
+         * Create Modulus Table
+         * @description **주파수를 골라 온도별 E′ · E″ · tan δ 표를 만든다**(v1.285.0 보고).
+         *
+         *     DMA 온도별 E′ 를 잰 물성으로 넘길 길이 없어 재료에 적어 둔 값(출처 추정)으로만 넣고 있었다.
+         *     다온도 파일(온도마다 곡선) · 램프를 나눈 곡선 · 1 Hz 온도 스윕 한 곡선을 다 받는다. 그
+         *     주파수가 스윕 범위 밖인 온도는 외삽하지 않고 빼며, 왜 뺐는지 `notes` 에 남는다.
+         */
+        post: operations["create_modulus_table_api_viscoelastic_runs__test_run_id__modulus_tables_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -9359,8 +9483,17 @@ export interface components {
              * @default false
              */
             adopted: boolean;
+            /** Curve Key */
+            curve_key?: string | null;
+            /** Curve Label */
+            curve_label?: string | null;
             /** Error */
             error?: string | null;
+            /**
+             * Failures
+             * @default []
+             */
+            failures: components["schemas"]["StepFailureOut"][];
             /**
              * Previous
              * @default []
@@ -9384,6 +9517,8 @@ export interface components {
              * Format: uuid
              */
             test_run_id: string;
+            /** Warning */
+            warning?: string | null;
         };
         /** BatchOut */
         BatchOut: {
@@ -9408,6 +9543,11 @@ export interface components {
              * @default true
              */
             adopt: boolean;
+            /**
+             * Curves
+             * @default first
+             */
+            curves: ("first" | "all") | string[];
             /**
              * Dry Run
              * @default false
@@ -9471,6 +9611,30 @@ export interface components {
             items: components["schemas"]["BatchUndoItem"][];
         };
         /**
+         * BlockPlotOut
+         * @description 블록 그래프 선언 — 점은 `rows` 의 `x` · `y`, `hollow` 가 참이면 빈 점, `line` 은 계수
+         *     선.
+         */
+        BlockPlotOut: {
+            /** Hollow */
+            hollow?: string | null;
+            line?: components["schemas"]["PowerLineOut"] | null;
+            /**
+             * Log X
+             * @default false
+             */
+            log_x: boolean;
+            /**
+             * Log Y
+             * @default false
+             */
+            log_y: boolean;
+            /** X */
+            x: string;
+            /** Y */
+            y: string;
+        };
+        /**
          * BlockSpecOut
          * @description 물성 블록 한 갈래의 선언.
          *
@@ -9490,6 +9654,7 @@ export interface components {
             kind_priority?: number | null;
             /** Label */
             label: string;
+            plot?: components["schemas"]["BlockPlotOut"] | null;
             /** Produces */
             produces: components["schemas"]["CardValueOut"][];
             /** Rows */
@@ -13071,6 +13236,26 @@ export interface components {
             /** Specimen Count */
             specimen_count: number;
         };
+        /**
+         * DmaTemperatureCardSaveRequest
+         * @description 온도별 저장 탄성률 카드 — 점탄성 탭의 **온도별 탄성률 표 하나에서**(2026-10-22).
+         *
+         *     v1.285.0 보고: DMA 온도별 E′ 를 잰 물성으로 넘길 길이 없었다. 표가 재료 · 방향은 체인을
+         *     따라간다(표 → 시험 → 시편 → 시료 → 재료).
+         */
+        DmaTemperatureCardSaveRequest: {
+            /** Label */
+            label: string;
+            /**
+             * Modulus Table Id
+             * Format: uuid
+             */
+            modulus_table_id: string;
+            /** Note */
+            note?: string | null;
+            /** Poisson Ratio */
+            poisson_ratio?: number | null;
+        };
         /** DocumentCreate */
         DocumentCreate: {
             /** Key */
@@ -16477,6 +16662,54 @@ export interface components {
             /** Si Unit */
             si_unit: string;
         };
+        /**
+         * ModulusTableOut
+         * @description 주파수 하나에서 본 온도별 탄성률 표(2026-10-22). 불변 — 주파수를 바꾸려면 새로
+         *     만든다.
+         */
+        ModulusTableOut: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Frequency Hz */
+            frequency_hz: number;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Modulus Basis */
+            modulus_basis: string;
+            /** Notes */
+            notes: string[];
+            /** Rows */
+            rows: components["schemas"]["ModulusTableRowOut"][];
+            /** Source Curve Keys */
+            source_curve_keys: string[];
+            /**
+             * Test Run Id
+             * Format: uuid
+             */
+            test_run_id: string;
+        };
+        /** ModulusTableRequest */
+        ModulusTableRequest: {
+            /** Frequency Hz */
+            frequency_hz: number;
+        };
+        /** ModulusTableRowOut */
+        ModulusTableRowOut: {
+            /** Loss Pa */
+            loss_pa?: number | null;
+            /** Storage Pa */
+            storage_pa: number;
+            /** Tan Delta */
+            tan_delta?: number | null;
+            /** Temperature K */
+            temperature_k: number;
+        };
         /** NamePreviewOut */
         NamePreviewOut: {
             /** Record Name */
@@ -17271,6 +17504,16 @@ export interface components {
             /** Tokens Url */
             tokens_url: string;
         };
+        /**
+         * PowerLineOut
+         * @description `y = values[coefficient] · x ^ values[exponent]`.
+         */
+        PowerLineOut: {
+            /** Coefficient */
+            coefficient: string;
+            /** Exponent */
+            exponent: string;
+        };
         /** ProcessOut */
         ProcessOut: {
             /** Pid */
@@ -17305,6 +17548,11 @@ export interface components {
         ProcessingPreviewOut: {
             /** Columns */
             columns: string[];
+            /**
+             * Failures
+             * @default []
+             */
+            failures: components["schemas"]["StepFailureOut"][];
             /** Notes */
             notes: string[];
             /** Points */
@@ -17345,6 +17593,11 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /**
+             * Failures
+             * @default []
+             */
+            failures: components["schemas"]["StepFailureOut"][];
             /**
              * Id
              * Format: uuid
@@ -18966,6 +19219,11 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /**
+             * Failures
+             * @default []
+             */
+            failures: components["schemas"]["StepFailureOut"][];
             /** Has True Stress */
             has_true_stress: boolean;
             /**
@@ -19233,6 +19491,20 @@ export interface components {
             workflow_key: string;
         };
         /**
+         * RunCurveOut
+         * @description 시험의 곡선 하나 — 키 · 이름 · 측정(`measured`)인지 장비 계산(`derived`)인지.
+         */
+        RunCurveOut: {
+            /** Key */
+            key: string;
+            /** Kind */
+            kind: string;
+            /** Label */
+            label?: string | null;
+            /** Row Count */
+            row_count: number;
+        };
+        /**
          * RunDeleteOut
          * @description 무엇이 지워졌고 무엇이 안 지워졌나.
          *
@@ -19412,6 +19684,11 @@ export interface components {
             adopted_result_id?: string | null;
             /** Code */
             code?: string | null;
+            /**
+             * Curves
+             * @default []
+             */
+            curves: components["schemas"]["RunCurveOut"][];
             /** Found */
             found: boolean;
             /** Material Id */
@@ -21127,6 +21404,23 @@ export interface components {
             taken: boolean;
             /** Value */
             value: string;
+        };
+        /**
+         * StepFailureOut
+         * @description 실패한 단계 하나(2026-10-22). **이것이 있으면 부분 결과다** — 나온 값은 맞지만
+         *     다 나오지는 않았다.
+         */
+        StepFailureOut: {
+            /** Index */
+            index: number;
+            /** Label */
+            label: string;
+            /** Message */
+            message: string;
+            /** Plugin */
+            plugin: string;
+            /** Stopped */
+            stopped: boolean;
         };
         /**
          * StepParamOut
@@ -26889,6 +27183,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DeclaredCardPreviewOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_dma_temperature_card_api_fitting_cards_dma_temperature_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DmaTemperatureCardSaveRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PropertyCardOut"];
                 };
             };
             /** @description Validation Error */
@@ -34079,6 +34406,8 @@ export interface operations {
                 /** @description 측정 의뢰 id — 그 의뢰의 항목에 붙은 시험만 */
                 commission?: string | null;
                 status?: string | null;
+                /** @description 읽힌 시험만 — 완료(parsed)와 표로 입력(imported). 곡선이 없는 표 입력 시험도 값은 있다(피로 S-N 묶음의 후보) */
+                readable?: boolean;
                 test_type_key?: string | null;
                 orientation?: string | null;
                 registered_by?: string | null;
@@ -35139,6 +35468,35 @@ export interface operations {
             };
         };
     };
+    delete_master_curve_api_viscoelastic_master_curves__master_curve_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                master_curve_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     master_curve_points_api_viscoelastic_master_curves__master_curve_id__points_get: {
         parameters: {
             query?: never;
@@ -35173,6 +35531,37 @@ export interface operations {
         };
     };
     set_primary_api_viscoelastic_master_curves__master_curve_id__primary_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                master_curve_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MasterCurveOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unset_primary_api_viscoelastic_master_curves__master_curve_id__primary_delete: {
         parameters: {
             query?: never;
             header?: never;
@@ -35257,6 +35646,64 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["PronyFitOut"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_modulus_table_api_viscoelastic_modulus_tables__table_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                table_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_prony_fit_api_viscoelastic_prony__fit_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                fit_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -35388,6 +35835,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MasterCurveOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_modulus_tables_api_viscoelastic_runs__test_run_id__modulus_tables_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                test_run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModulusTableOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_modulus_table_api_viscoelastic_runs__test_run_id__modulus_tables_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                test_run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ModulusTableRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModulusTableOut"];
                 };
             };
             /** @description Validation Error */

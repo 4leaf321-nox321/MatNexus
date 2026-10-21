@@ -63,6 +63,22 @@ def imported(client: TestClient, db: Session, admin_headers: dict[str, str]) -> 
 def test_표로_넣은_피로_시험이_S_N_묶음과_카드가_된다(
     client: TestClient, admin_headers: dict[str, str], imported: dict[str, Any]
 ) -> None:
+    # ⓪ 묶음 화면이 후보를 부르는 그대로 — 「읽힌 시험만」 이 표 입력(imported)을 함께 준다.
+    # 「완료(parsed)」 만 받던 때 26건이 0건이었다(v1.285.0 보고).
+    listed = client.get(
+        "/api/test-runs",
+        params={"material_id": imported["material_id"], "readable": "true"},
+        headers=admin_headers,
+    ).json()
+    assert {one["status"] for one in listed["items"]} == {"imported"}
+    assert listed["total"] == 7
+    only_parsed = client.get(
+        "/api/test-runs",
+        params={"material_id": imported["material_id"], "status": "parsed"},
+        headers=admin_headers,
+    ).json()
+    assert only_parsed["total"] == 0
+
     # ① 묶음 목록이 피로에 S-N 을 주고, 구성원 조건이 「요약값」 이라고 말한다.
     kinds = client.get("/api/groups/kinds?applies_to=fatigue", headers=admin_headers).json()
     found = next(one for one in kinds if one["id"] == "fatigue.sn_curve")
@@ -83,6 +99,19 @@ def test_표로_넣은_피로_시험이_S_N_묶음과_카드가_된다(
     assert body["values"]["runout_count"] == 1
     assert len(body["used"]) == 6
     assert any("런아웃" in one for one in body["warnings"])
+
+    # ②′ 카드 화면이 이 선언대로 **수명선도**를 그린다 — 점(런아웃은 빈 점)과 Basquin 계수 선,
+    # log-log(2026-10-22, v1.285.0 보고: 계수로 그래프를 볼 수 없었다).
+    blocks = client.get("/api/fitting/blocks", headers=admin_headers).json()
+    plot = next(one for one in blocks if one["key"] == "sn_curve")["plot"]
+    assert plot == {
+        "x": "cycles_to_failure",
+        "y": "stress_amplitude",
+        "log_x": True,
+        "log_y": True,
+        "hollow": "runout",
+        "line": {"coefficient": "basquin_a", "exponent": "basquin_b"},
+    }
 
     # ③ 카드 — 공용 길. 탄성계수는 없으니 탄성 블록은 비고, S-N 블록이 실린다.
     card = client.post(

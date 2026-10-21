@@ -62,8 +62,10 @@ from app.modules.processing.schemas import (
     ResultCurveOut,
     ResultGuideOut,
     ResultLineOut,
+    RunCurveOut,
     RunOverviewOut,
     StagePointsOut,
+    StepFailureOut,
     StepParamOut,
 )
 from app.modules.statistics.models import EnsembleResult
@@ -194,16 +196,47 @@ def _run_pipeline(
                 # 탄성계수를 못 재는데, 그 값은 대개 재료에 적혀 있다.
                 *curvedata.declared_scalars(db, run),
             ],
+            # 값만 재는 단계는 실패해도 건너뛰고 계속한다 — 그 뒤의 인장강도를 잃지 않게.
+            keep_going=True,
         )
     except processing.ProcessingError as exc:
+        if exc.done is not None and exc.done.stages:
+            # **여기까지 된 것이 결과다**(2026-10-22) — 멈춘 단계는 `failures` 에 들어 있다.
+            return exc.done, curve
         # **처리 실패는 사용자 오류다.** 500 으로 내면 로그를 뒤져야 알 수 있고,
         # 메시지에는 이미 어느 단계에서 무엇이 어긋났는지 적혀 있다.
-        failure = AppError("MNX-PROCESSING-0004", str(exc), status=422)
-        # 여기까지 된 것을 함께 든다 — 미리보기가 그것을 그린다(저장은 안 쓴다).
-        failure.done = exc.done  # type: ignore[attr-defined]
-        failure.curve = curve  # type: ignore[attr-defined]
-        raise failure from exc
+        raise AppError("MNX-PROCESSING-0004", str(exc), status=422) from exc
     return result, curve
+
+
+def _failure_out(failure: processing.Failure) -> StepFailureOut:
+    return StepFailureOut(
+        index=failure.index,
+        plugin=failure.plugin,
+        label=failure.label,
+        message=failure.message,
+        stopped=failure.stopped,
+    )
+
+
+def _stored_failures(rows: Any) -> list[StepFailureOut]:
+    """저장된 결과의 실패 목록 → 응답 모양."""
+    return [
+        StepFailureOut(
+            index=int(one.get("index", 0)),
+            plugin=str(one.get("plugin", "")),
+            label=str(one.get("label", "")),
+            message=str(one.get("message", "")),
+            stopped=bool(one.get("stopped", False)),
+        )
+        for one in (rows or [])
+        if isinstance(one, dict)
+    ]
+
+
+def _problem(result: processing.PipelineResult) -> str | None:
+    """실패한 단계의 문장을 하나로 — 화면 · 일괄의 한 줄."""
+    return " / ".join(one.message for one in result.failures) or None
 
 
 def _recipe_or_none(db: Session, key: str | None) -> ProcessingRecipe | None:
@@ -261,8 +294,17 @@ def _store(
 
     `db.commit()` 은 호출부가 한다 — 배치는 **건별로** 커밋해야 부분 성공이
     지켜진다.
+
+    **단계가 실패해도 나온 값이 있으면 저장한다**(2026-10-22) — 실패는 `failures` 로 함께
+    남는다. 나온 값이 하나도 없으면 저장할 것이 없으므로 예전처럼 거절한다.
     """
     result, curve = _run_pipeline(db, run, curve_key, steps)
+    if result.failures and not result.scalars:
+        raise AppError(
+            "MNX-PROCESSING-0004",
+            f"나온 값이 없어 저장하지 않았습니다 — {_problem(result)}",
+            status=422,
+        )
     frame = result.frame
     data = curves.to_parquet(
         extra={CONTEXT_KEY: _context_bytes(result.stages)},
@@ -293,6 +335,8 @@ def _store(
         steps_snapshot=steps,
         stages=[
             {
+                # 단계 번호 — 실패해 건너뛴 단계가 있으면 목록의 차례와 다르다.
+                "index": stage.index,
                 "plugin": stage.plugin,
                 "label": stage.label,
                 "version": stage.version,
@@ -310,6 +354,16 @@ def _store(
                 "dimension": s.dimension,
             }
             for s in result.scalars
+        ],
+        failures=[
+            {
+                "index": one.index,
+                "plugin": one.plugin,
+                "label": one.label,
+                "message": one.message,
+                "stopped": one.stopped,
+            }
+            for one in result.failures
         ],
         # **계산이 무엇 위에서 돌았는지.** 플러그인 버전이 "어느 계산" 이라면
         # 이것은 "그 계산이 무엇 위에서" 다 — 둘 다 있어야 재현이 닫힌다.
@@ -510,29 +564,31 @@ def preview(
     말하는 것이라 고른 단계에 따라 달라지면 안 된다.
     """
     run = get_run(db, user, payload.test_run_id)
-    # **미리보기는 멈춰도 여기까지를 보여 준다.** 저장(`/results`)은 그대로 거절한다 —
-    # 반쯤 돈 결과가 채택되면 카드와 덱까지 간다.
-    problem: str | None = None
-    try:
-        result, curve = _run_pipeline(db, run, payload.source_curve_key, payload.steps)
-    except AppError as exc:
-        done = getattr(exc, "done", None)
-        if done is None or not done.stages:
-            raise
-        result, curve = done, exc.curve  # type: ignore[attr-defined]
-        problem = exc.message
+    # **미리보기는 멈춰도 여기까지를 보여 준다**(`_run_pipeline` 이 여기까지를 결과로 준다).
+    # 실패한 단계는 `failures` 로 함께 나간다 — 저장하면 부분 결과가 된다.
+    result, curve = _run_pipeline(db, run, payload.source_curve_key, payload.steps)
+    problem = _problem(result)
 
     shown: int | None = None
     frame = result.frame
     if stage is not None:
-        if stage >= len(result.stages):
+        if stage >= len(payload.steps):
             raise AppError(
                 "MNX-PROCESSING-0009",
-                f"{stage}번째 단계가 없습니다 — 이 구성은 {len(result.stages)}단계입니다.",
+                f"{stage}번째 단계가 없습니다 — 이 구성은 {len(payload.steps)}단계입니다.",
+                status=422,
+            )
+        # **단계 번호로 찾는다** — 실패해 건너뛴 단계가 있으면 목록의 차례와 번호가 어긋난다.
+        # 그 단계가 건너뛰어졌거나 멈춘 뒤면 그 앞까지의 곡선이다(곡선을 안 바꾸는 단계다).
+        before = [one for one in result.stages if one.index <= stage]
+        if not before:
+            raise AppError(
+                "MNX-PROCESSING-0009",
+                f"{stage}번째 단계까지 돈 단계가 없습니다 — 앞 단계의 실패를 먼저 보세요.",
                 status=422,
             )
         shown = stage
-        frame = result.stages[stage].frame
+        frame = before[-1].frame
 
     columns = sorted(frame.columns)
     # **단계마다의 곡선을 함께 준다.** 화면이 골라 겹쳐 보는 데 쓴다 — 켤 때마다
@@ -558,6 +614,7 @@ def preview(
         stage_points=stage_points,
         stage_index=shown,
         problem=problem,
+        failures=[_failure_out(one) for one in result.failures],
     )
 
 
@@ -640,7 +697,9 @@ def _result_out(
         steps=item.steps_snapshot,
         stages=[
             ProcessingStageOut(
-                index=index,
+                # 저장된 단계 번호(2026-10-22 부터) — 그 전 결과는 건너뛴 단계가 없어 차례와
+                # 같다.
+                index=int(stage.get("index", index)),
                 plugin=str(stage.get("plugin", "")),
                 label=str(stage.get("label", "")),
                 version=str(stage.get("version", "")),
@@ -662,6 +721,7 @@ def _result_out(
             )
             for s in item.scalars
         ],
+        failures=_stored_failures(item.failures),
         row_count=item.row_count,
         columns=item.columns,
         runtime={str(k): str(v) for k, v in (item.runtime or {}).items()},
@@ -1467,6 +1527,72 @@ def undo_batch(
     )
 
 
+def _lost_on_adopt(
+    before: list[ProcessingScalarOut], after: Any, failures: Any
+) -> list[ProcessingScalarOut]:
+    """부분 결과를 채택하면 **잃는 값** — 지금 채택된 값 중 새 결과에 없는 것.
+
+    완전한 결과(실패 없음)는 사람이 고른 단계대로 바뀐 것이라 잃는다고 보지 않는다 — 예전과
+    같이 채택한다. 부분 결과만 따진다: 실패로 못 낸 값이 채택을 옮기며 조용히 사라지면 안 된다.
+    """
+    if not failures or not before:
+        return []
+    have = {
+        str(one.key) if isinstance(one, processing.Scalar) else str(one.get("key", ""))
+        for one in after or []
+    }
+    return [one for one in before if one.key not in have]
+
+
+def _keep_adoption_note(lost: list[ProcessingScalarOut]) -> str:
+    names = ", ".join(one.label or one.key for one in lost[:5])
+    more = f" 외 {len(lost) - 5}개" if len(lost) > 5 else ""
+    return (
+        f"부분 결과라 채택은 그대로 두었습니다 — 지금 채택된 값 중 {names}{more} 이(가) 이 "
+        "결과에 "
+        f"없습니다. 결과는 쌓였으니 채택 검토대에서 고르세요."
+    )
+
+
+def _batch_curves(
+    db: Session, run: TestRun, payload: BatchRequest
+) -> list[tuple[str | None, str | None]]:
+    """이 시험에서 돌릴 곡선 `(키, 이름)` — 비면 돌릴 곡선이 없다.
+
+    `first` 는 처리의 첫 곡선(측정 먼저) 하나, `all` 은 측정 곡선 전부, 키 목록은 그 시험에
+    있는 것만. 옛 `source_curve_key` 는 그 키 하나다(없으면 `_run_pipeline` 이 있는 곡선을
+    대며 막는다)."""
+    available = curvedata.curves_of(db, run.id)
+    if payload.source_curve_key and payload.curves == "first":
+        found = next((one for one in available if one.key == payload.source_curve_key), None)
+        return [(payload.source_curve_key, found.label if found else None)]
+    if payload.curves == "first":
+        # 곡선이 없으면 `_run_pipeline` 이 「정규화된 곡선이 아직 없습니다」 로 막는다.
+        return [(available[0].key, available[0].label)] if available else [(None, None)]
+    if payload.curves == "all":
+        return [(one.key, one.label) for one in available if one.kind == "measured"]
+    wanted = set(payload.curves)
+    return [(one.key, one.label) for one in available if one.key in wanted]
+
+
+def _no_curve_message(payload: BatchRequest) -> str:
+    if payload.curves == "all":
+        return "측정 곡선이 없습니다 — 장비가 계산한 곡선만 있거나 아직 읽히지 않았습니다."
+    return f"고른 곡선이 이 시험에 없습니다: {', '.join(payload.curves)}"
+
+
+def _adoption_note(adopt: bool, several: bool, lost: list[ProcessingScalarOut]) -> str | None:
+    """채택을 걸었는데 옮기지 않은 까닭 — 곡선이 여럿이거나 부분 결과가 값을 잃게 할 때."""
+    if not adopt:
+        return None
+    if several:
+        return (
+            "곡선이 여럿이라 채택은 하지 않았습니다 — 어느 곡선의 결과인지 채택 검토대에서 "
+            "고르세요."
+        )
+    return _keep_adoption_note(lost) if lost else None
+
+
 @router.post("/batch", response_model=BatchOut)
 def run_batch(
     payload: BatchRequest,
@@ -1490,6 +1616,25 @@ def run_batch(
             f"나눠서 돌리세요.",
             status=422,
         )
+    if payload.curves != "first":
+        # **곡선까지 센 건수**도 상한 안이어야 한다 — 시험 25건에 곡선이 8벌이면 200건이다.
+        wanted = None if payload.curves == "all" else set(payload.curves)
+        planned = sum(
+            1
+            for key, kind in db.execute(
+                select(Curve.key, Curve.kind).where(
+                    Curve.test_run_id.in_(payload.test_run_ids)
+                )
+            )
+            if (kind == "measured" if wanted is None else key in wanted)
+        )
+        if planned > MAX_BATCH:
+            raise AppError(
+                "MNX-PROCESSING-0012",
+                f"곡선까지 세면 {planned}건입니다 — 한 번에 {MAX_BATCH}건까지입니다. "
+                f"시험을 나눠서 돌리세요.",
+                status=422,
+            )
     recipe = _recipe_or_none(db, payload.recipe_key)
     editor = permissions.editor(db, user)
 
@@ -1534,59 +1679,99 @@ def run_batch(
             )
             continue
 
-        try:
-            if payload.dry_run:
-                # **저장하지 않는다.** 파일도 행도 안 만들고 계산만 한다 —
-                # `_store` 와 같은 `_run_pipeline` 을 지나므로 값이 어긋날 수 없다.
-                computed, _ = _run_pipeline(db, run, payload.source_curve_key, payload.steps)
-                items.append(
-                    BatchItemOut(
-                        test_run_id=run.id,
-                        record_name=run.record_name,
-                        status="ok",
-                        adopted=False,
-                        scalars=[_scalar_out(one) for one in computed.scalars],
-                        previous=before,
-                        previous_adopted_id=was_adopted,
-                    )
-                )
-                continue
-            stored = _store(db, run, payload.source_curve_key, payload.steps, recipe, user)
-            workspaces.append(run.workspace_id)
-        except AppError as exc:
-            db.rollback()
+        keys = _batch_curves(db, run, payload)
+        if not keys:
             items.append(
                 BatchItemOut(
-                    test_run_id=run_id,
+                    test_run_id=run.id,
                     record_name=run.record_name,
                     status="failed",
-                    error=exc.message,
+                    error=_no_curve_message(payload),
                     previous=before,
                     previous_adopted_id=was_adopted,
                 )
             )
             continue
+        # **곡선이 여럿이면 그 시험은 채택하지 않는다** — 채택은 시험당 하나라, 어느 곡선의
+        # 결과를 그 시험의 물성으로 삼을지는 사람이 검토대에서 고른다(2026-10-22).
+        several = len(keys) > 1
+        for key, label in keys:
+            try:
+                if payload.dry_run:
+                    # **저장하지 않는다.** 파일도 행도 안 만들고 계산만 한다 —
+                    # `_store` 와 같은 `_run_pipeline` 을 지나므로 값이 어긋날 수 없다.
+                    computed, curve = _run_pipeline(db, run, key, payload.steps)
+                    if computed.failures and not computed.scalars:
+                        # 저장과 같은 판정 — 나온 값이 없으면 저장도 안 된다.
+                        raise AppError(
+                            "MNX-PROCESSING-0004",
+                            f"나온 값이 없습니다 — {_problem(computed)}",
+                            status=422,
+                        )
+                    lost = _lost_on_adopt(before, computed.scalars, computed.failures)
+                    items.append(
+                        BatchItemOut(
+                            test_run_id=run.id,
+                            record_name=run.record_name,
+                            curve_key=curve.key,
+                            curve_label=curve.label,
+                            status="ok",
+                            adopted=False,
+                            scalars=[_scalar_out(one) for one in computed.scalars],
+                            previous=before,
+                            previous_adopted_id=was_adopted,
+                            failures=[_failure_out(one) for one in computed.failures],
+                            warning=_adoption_note(payload.adopt, several, lost),
+                        )
+                    )
+                    continue
+                stored = _store(db, run, key, payload.steps, recipe, user)
+                workspaces.append(run.workspace_id)
+            except AppError as exc:
+                db.rollback()
+                items.append(
+                    BatchItemOut(
+                        test_run_id=run_id,
+                        record_name=run.record_name,
+                        curve_key=key,
+                        curve_label=label,
+                        status="failed",
+                        error=exc.message,
+                        previous=before,
+                        previous_adopted_id=was_adopted,
+                    )
+                )
+                continue
 
-        adopted = False
-        if payload.adopt:
-            run.adopted_result_id = stored.id
-            _project_summaries(db, run, stored)
-            adopted = True
-            took.append(run)
-        db.commit()
-        db.refresh(stored)
-        items.append(
-            BatchItemOut(
-                test_run_id=run.id,
-                record_name=run.record_name,
-                status="ok",
-                result_id=stored.id,
-                adopted=adopted,
-                scalars=_batch_scalars(stored.scalars),
-                previous=before,
-                previous_adopted_id=was_adopted,
+            adopted = False
+            failures = _stored_failures(stored.failures)
+            lost = _lost_on_adopt(before, stored.scalars, failures)
+            # **부분 결과가 지금 채택된 값을 덮어 잃게 하지 않는다**(2026-10-22). 처음 처리하는
+            # 시험은 잃을 것이 없으니 채택한다 — 인장강도라도 물성으로 선다. 이미 채택된
+            # 값(항복강도 등)이 이 결과에 없으면 채택은 그대로 두고 결과만 쌓는다.
+            if payload.adopt and not several and not lost:
+                run.adopted_result_id = stored.id
+                _project_summaries(db, run, stored)
+                adopted = True
+                took.append(run)
+            db.commit()
+            db.refresh(stored)
+            items.append(
+                BatchItemOut(
+                    test_run_id=run.id,
+                    record_name=run.record_name,
+                    curve_key=stored.source_curve_key,
+                    curve_label=label,
+                    status="ok",
+                    result_id=stored.id,
+                    adopted=adopted,
+                    scalars=_batch_scalars(stored.scalars),
+                    previous=before,
+                    previous_adopted_id=was_adopted,
+                    failures=failures,
+                    warning=_adoption_note(payload.adopt, several, lost),
+                )
             )
-        )
 
     succeeded = sum(1 for item in items if item.status == "ok")
     # **배치는 한 줄로 남긴다.** 건별로 남기면 한 번 돌린 것이 감사 표 50줄이 되고,
@@ -1646,6 +1831,7 @@ def _brief(item: ProcessingResult, run: TestRun) -> ResultBriefOut:
         stale=_stale(item, run),
         is_adopted=item.id == run.adopted_result_id,
         scalars=_batch_scalars(item.scalars),
+        failures=_stored_failures(item.failures),
     )
 
 
@@ -1688,6 +1874,11 @@ def overview(
             .order_by(ProcessingResult.created_at.desc())
         ):
             results.setdefault(item.test_run_id, []).append(item)
+    # 곡선도 한 번에 — 일괄 처리가 「어느 곡선을 돌리나」 를 고른다(2026-10-22).
+    curve_rows: dict[uuid.UUID, list[Curve]] = {}
+    if runs:
+        for curve in db.scalars(select(Curve).where(Curve.test_run_id.in_(list(runs)))):
+            curve_rows.setdefault(curve.test_run_id, []).append(curve)
     book = AccessBook(db, user).prime(runs.values())
 
     out: list[RunOverviewOut] = []
@@ -1712,6 +1903,15 @@ def overview(
                 orientation=specimen.orientation if specimen else None,
                 adopted_result_id=run.adopted_result_id,
                 access=book.of(run),
+                curves=[
+                    RunCurveOut(
+                        key=curve.key,
+                        label=curve.label,
+                        kind=curve.kind,
+                        row_count=curve.row_count,
+                    )
+                    for curve in sorted(curve_rows.get(run.id, []), key=curvedata.curve_order)
+                ],
                 results=[_brief(item, run) for item in results.get(run.id, [])],
             )
         )

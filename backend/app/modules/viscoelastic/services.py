@@ -25,7 +25,7 @@ from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from app.modules.tests.models import Curve, TestRun
-from app.modules.viscoelastic.models import MasterCurve, PronyFit
+from app.modules.viscoelastic.models import MasterCurve, ModulusTable, PronyFit
 from app.shared import curvedata, filestore
 from app.shared.errors import AppError, NotFound
 from matcore import curves as curvekit
@@ -407,6 +407,9 @@ def _first_becomes_primary(db: Session, curve: MasterCurve) -> None:
     고를 것이 하나뿐인데 고르라고 하면 그것은 일이 아니라 절차다. 둘째부터는
     사람이 옮긴다 — 새로 만든 것이 자동으로 대표가 되면 「최근 것이 대표」 라는
     옛 동작이 이름만 바꿔 그대로 남는다.
+
+    **그 시험의 첫 곡선일 때만**(2026-10-22). 「다른 대표가 없으면」 으로 두면, 사람이 대표를
+    해제해 둔 시험에서 새로 만든 곡선이 저절로 대표가 된다 — 해제가 안 지켜진다.
     """
     exists = db.scalar(
         select(func.count())
@@ -414,7 +417,6 @@ def _first_becomes_primary(db: Session, curve: MasterCurve) -> None:
         .where(
             MasterCurve.test_run_id == curve.test_run_id,
             MasterCurve.id != curve.id,
-            MasterCurve.is_primary.is_(True),
         )
     )
     if not exists:
@@ -564,3 +566,130 @@ def _first_column(frame: processing.Frame, names: tuple[str, ...]) -> np.ndarray
         if name in frame.columns:
             return np.asarray(frame.columns[name], dtype=float)
     return None
+
+
+# ── 주파수 하나에서 본 온도별 탄성률 표 (2026-10-22) ──────────────────────────────
+
+
+def segments_of(
+    db: Session, run: TestRun
+) -> tuple[list[viscoelastic.Segment], list[str], list[str], str]:
+    """측정 곡선 → 구간. `(구간, 쓴 곡선 키, 경고, 탄성률 기준 E|G)`.
+
+    `sweeps_of` 와 같은 채널 규칙(온도 · 주파수 또는 각주파수 · E′ 또는 G′)이지만 **온도를
+    중앙값 하나로 줄이지 않는다** — 램프 곡선은 점마다 온도가 다르다. 곡선 하나여도 된다.
+    """
+    available = curvedata.curves_of(db, run.id)
+    if not available:
+        raise NotFound(
+            "MNX-VISCOELASTIC-0001",
+            "정규화된 곡선이 아직 없습니다. 파일이 읽히기를 기다리세요.",
+        )
+    segments: list[viscoelastic.Segment] = []
+    used: list[str] = []
+    warnings: list[str] = []
+    bases: set[str] = set()
+    for curve in (item for item in available if item.kind == "measured"):
+        frame, _ = curvedata.load_frame(db, run, curve.key)
+        columns = frame.columns
+        name = curve.label or curve.key
+        temperature = _channel(columns, "temperature")
+        storage = loss = None
+        basis = ""
+        for storage_key, loss_key, kind in viscoelastic.MODULUS_PAIRS:
+            storage = _channel(columns, storage_key)
+            if storage is not None:
+                loss = _channel(columns, loss_key)
+                basis = kind
+                break
+        if temperature is None or storage is None:
+            warnings.append(f"'{name}' 에 온도나 저장 탄성률(E′ 또는 G′)이 없어 뺐습니다.")
+            continue
+        frequency = _channel(columns, "frequency")
+        if frequency is None:
+            angular = _channel(columns, "angular_frequency")
+            if angular is None:
+                warnings.append(f"'{name}' 에 주파수가 없어 뺐습니다.")
+                continue
+            frequency = angular / (2.0 * np.pi)
+        bases.add(basis)
+        segments.append(
+            viscoelastic.Segment(
+                label=name,
+                temperature_k=temperature,
+                frequency_hz=frequency,
+                storage_pa=storage,
+                loss_pa=loss,
+            )
+        )
+        used.append(curve.key)
+    if len(bases) > 1:
+        raise AppError(
+            "MNX-VISCOELASTIC-0010",
+            "한 시험에 E′(인장 · 굽힘) 곡선과 G′(전단) 곡선이 섞여 있습니다 — 한 표로 묶으면 "
+            "어느 쪽도 아닙니다. 형식 정의의 열 매핑을 확인하세요.",
+            status=422,
+        )
+    return segments, used, warnings, (bases.pop() if bases else "E")
+
+
+def build_modulus_table(
+    db: Session, run: TestRun, frequency_hz: float, *, created_by_id: uuid.UUID | None
+) -> ModulusTable:
+    """고른 주파수에서 온도별 E′ · E″ · tan δ 표를 만든다. **줄이 하나도 없으면 까닭을
+    댄다.**"""
+    segments, used, warnings, basis = segments_of(db, run)
+    if not segments:
+        raise AppError(
+            "MNX-VISCOELASTIC-0015",
+            "온도 · 주파수 · 저장 탄성률이 함께 있는 측정 곡선이 없습니다. "
+            + " ".join(warnings[:3]),
+            status=422,
+        )
+    try:
+        rows, notes = viscoelastic.modulus_table(segments, frequency_hz)
+    except viscoelastic.ViscoelasticError as exc:
+        raise AppError("MNX-VISCOELASTIC-0015", str(exc), status=422) from exc
+    if not rows:
+        raise AppError(
+            "MNX-VISCOELASTIC-0016",
+            f"{frequency_hz:g} Hz 에서 낸 온도가 하나도 없습니다. " + " ".join(notes[:3]),
+            status=422,
+        )
+    table = ModulusTable(
+        test_run_id=run.id,
+        frequency_hz=float(frequency_hz),
+        modulus_basis=basis,
+        rows=[
+            {
+                "temperature_k": one.temperature_k,
+                "storage_pa": one.storage_pa,
+                "loss_pa": one.loss_pa,
+                "tan_delta": one.tan_delta,
+            }
+            for one in rows
+        ],
+        source_curve_keys=used,
+        notes=[*warnings, *notes],
+        created_by_id=created_by_id,
+    )
+    db.add(table)
+    db.flush()
+    return table
+
+
+def modulus_tables_of(db: Session, run_id: uuid.UUID) -> list[ModulusTable]:
+    return list(
+        db.scalars(
+            select(ModulusTable)
+            .where(ModulusTable.test_run_id == run_id)
+            .order_by(ModulusTable.created_at.desc())
+        )
+    )
+
+
+def table_or_404(db: Session, table_id: uuid.UUID) -> ModulusTable:
+    row = db.get(ModulusTable, table_id)
+    if row is None:
+        raise NotFound("MNX-VISCOELASTIC-0017", "온도별 탄성률 표를 찾을 수 없습니다.")
+    return row

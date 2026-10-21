@@ -786,24 +786,86 @@ class Test토우보정:
         expected = E_TRUE * (YIELD_TRUE / (E_TRUE - HARDENING))
         assert scalar(result, "proof_stress") == pytest.approx(expected, rel=2e-3)
 
-    def test_보정_안_하면_뒤_단계가_멈춘다(self) -> None:
-        """**조용한 0.3% 오차가 시끄러운 정지로 바뀌었다.**
+    def test_보정_안_하면_항복강도는_실패로_남고_인장강도는_나온다(self) -> None:
+        """**조용한 0.3% 오차가 시끄러운 실패로 바뀌었다.**
 
         전에는 보정 없이도 항복강도가 나왔고 정답과 0.3% 밖에 안 달랐다(경화가
         평탄해서 교점이 항복 근처에 붙박인다). 그럴듯해서 아무도 안 봤다.
 
-        이제 탄성계수가 안 나오므로 `@youngs_modulus` 를 쓰는 뒤 단계가 멈춘다.
-        **값이 조금 틀린 것보다 멈추는 편이 낫다** — 멈추면 토우 보정을 넣게 된다.
+        이제 탄성계수가 안 나오므로 `@youngs_modulus` 를 쓰는 항복강도가 실패한다.
+        **그 실패가 인장강도까지 잃게 하지 않는다**(2026-10-22, v1.285.0 보고) — 항복강도는
+        값만 재는 단계라 건너뛰고, 뒤의 인장강도는 같은 곡선 위에서 그대로 잰다. 전에는
+        처리 전체가 멈춰 인장강도가 계산조차 안 됐다.
         """
-        with pytest.raises(ProcessingError) as caught:
-            processing.apply(
-                [
-                    Step("tensile.elastic_modulus", dict(ELASTIC_WINDOW)),
-                    Step("tensile.proof_stress", {"youngs_modulus": "@youngs_modulus"}),
-                ],
-                synthetic_with_toe(),
+        result = processing.apply(
+            [
+                Step("tensile.elastic_modulus", dict(ELASTIC_WINDOW)),
+                Step("tensile.proof_stress", {"youngs_modulus": "@youngs_modulus"}),
+                Step("tensile.strength", {}),
+            ],
+            synthetic_with_toe(),
+            keep_going=True,
+        )
+        keys = {item.key for item in result.scalars}
+        assert "proof_stress" not in keys and "youngs_modulus" not in keys
+        assert scalar(result, "tensile_strength") == pytest.approx(
+            float(np.max(synthetic().columns["stress_engineering"])), rel=1e-9
+        )
+        assert [(one.label, one.stopped) for one in result.failures] == [
+            ("오프셋 항복강도", False)
+        ]
+        # 왜 실패했는지 — 탄성계수 단계가 남긴 말까지 옮긴다.
+        assert "@youngs_modulus" in result.failures[0].message
+        assert "탄성계수를 내지 않았습니다" in result.failures[0].message
+
+    def test_할선_현은_직선_검사로_거르지_않고_경고만_한다(self) -> None:
+        """v1.285.0 보고: 할선 · 현에도 R² 0.98 이 걸려 27건 중 1건만 값이 나왔다.
+
+        두 점으로 정하는 값이라 그 선의 R² 는 「구간이 직선인가」 를 말하지 못한다(원점을
+        지나는
+        할선은 토우가 조금만 있어도 떨어진다). 값은 내고, 구간 점들의 직선다움을 경고로 남긴다.
+        회귀는 그대로 거른다."""
+        frame = synthetic_with_toe()
+        for method in ("chord", "secant"):
+            result = processing.apply(
+                [Step("tensile.elastic_modulus", {"method": method, **ELASTIC_WINDOW})], frame
             )
-        assert "@youngs_modulus" in str(caught.value)
+            assert scalar(result, "youngs_modulus") > 0, method
+            linearity = scalar(result, "elastic_r_squared")
+            assert 0.0 <= linearity < 0.98, method
+            assert any("직선이 아닙니다" in note for note in result.notes), method
+        regression = processing.apply(
+            [
+                Step(
+                    "tensile.elastic_modulus",
+                    {"method": "linear_regression", **ELASTIC_WINDOW},
+                )
+            ],
+            frame,
+        )
+        assert "youngs_modulus" not in {one.key for one in regression.scalars}
+
+    def test_할선_현도_점이_모자라면_거른다(self) -> None:
+        """점 수 검사는 그대로다 — 두 점을 지나는 선은 언제나 그럴듯하다."""
+        sparse = Frame(
+            {
+                "strain_engineering": np.array([0.0, 0.0005, 0.001, 0.0015, 0.01]),
+                "stress_engineering": np.array([0.0, 1e8, 2e8, 3e8, 4e8]),
+            },
+            {"strain_engineering": "1", "stress_engineering": "Pa"},
+        )
+        for method in ("chord", "secant"):
+            result = processing.apply(
+                [
+                    Step(
+                        "tensile.elastic_modulus",
+                        {"method": method, "minimum_strain": 0.0004, "maximum_strain": 0.0016},
+                    )
+                ],
+                sparse,
+            )
+            assert "youngs_modulus" not in {one.key for one in result.scalars}, method
+            assert any("점밖에 없어" in note for note in result.notes), method
 
     def test_보정하고_나면_항복강도가_정답에_붙는다(self) -> None:
         """**재 보고 적는다.** 보정을 넣으면 그 뒤가 다 맞는다 — 위 시험이 「멈춘다」
@@ -1538,3 +1600,84 @@ class Test앞이_잘리기_전:
         assert (
             processing.front_intact_stage(result.stages, "strain_true", "stress_true") is None
         )
+
+
+class Test실패한_단계:
+    """**값만 재는 단계가 실패해도 나머지는 돈다 — 곡선을 바꾸는 단계는 멈춘다**(2026-10-22).
+
+    v1.285.0 보고: 일괄 처리에서 한 단계가 걸리면 멀쩡히 나올 인장강도까지 저장되지 않았다.
+    """
+
+    #: 점이 하나도 없는 창 — 탄성계수 단계가 실패(예외)한다.
+    EMPTY: ClassVar[dict[str, float]] = {"minimum_strain": 0.5, "maximum_strain": 0.6}
+
+    def test_곡선을_바꾸는_단계가_실패하면_멈추고_여기까지를_든다(self) -> None:
+        with pytest.raises(ProcessingError) as caught:
+            processing.apply(
+                [
+                    Step("tensile.elastic_modulus", dict(ELASTIC_WINDOW)),
+                    Step("tensile.strength", {}),
+                    Step("tensile.true_plastic", {"youngs_modulus": "@youngs_modulus"}),
+                ],
+                synthetic_with_toe(),
+                keep_going=True,
+            )
+        done = caught.value.done
+        assert done is not None
+        assert [one.plugin for one in done.stages] == [
+            "tensile.elastic_modulus",
+            "tensile.strength",
+        ]
+        assert "tensile_strength" in {one.key for one in done.scalars}
+        assert [(one.plugin, one.stopped) for one in done.failures] == [
+            ("tensile.true_plastic", True)
+        ]
+
+    def test_실패한_단계의_값은_있으면_쓰는_참조로도_비우지_않는다(self) -> None:
+        """`@?` 의 「없음」 은 뜻이 있는 칸에 쓴다 — 실패로 못 낸 것을 「없음」 으로 읽으면
+        다른 식으로 조용히 계산된다."""
+        result = processing.apply(
+            [
+                Step("tensile.elastic_modulus", dict(self.EMPTY)),
+                Step("tensile.proof_stress", {"youngs_modulus": "@?youngs_modulus"}),
+            ],
+            synthetic(),
+            keep_going=True,
+        )
+        assert [one.plugin for one in result.failures] == [
+            "tensile.elastic_modulus",
+            "tensile.proof_stress",
+        ]
+        assert "실패해 그 값이 없습니다" in result.failures[1].message
+
+    def test_다시_재다_실패하면_앞의_값으로_뒤를_계산하지_않는다(self) -> None:
+        """방법을 바꿔 다시 재는 단계가 실패했는데 옛 값으로 항복강도를 내면 사람이 고른 방법과
+        다른 값이 된다."""
+        result = processing.apply(
+            [
+                Step(
+                    "tensile.elastic_modulus",
+                    {"minimum_strain": 0.0002, "maximum_strain": 0.0015},
+                ),
+                Step("tensile.elastic_modulus", dict(self.EMPTY)),
+                Step("tensile.proof_stress", {"youngs_modulus": "@youngs_modulus"}),
+            ],
+            synthetic(),
+            keep_going=True,
+        )
+        assert "proof_stress" not in {one.key for one in result.scalars}
+        assert result.failures[-1].plugin == "tensile.proof_stress"
+
+    def test_다_되면_실패가_없다(self) -> None:
+        result = processing.apply(
+            [
+                Step(
+                    "tensile.elastic_modulus",
+                    {"minimum_strain": 0.0002, "maximum_strain": 0.0015},
+                ),
+                Step("tensile.proof_stress", {"youngs_modulus": "@youngs_modulus"}),
+            ],
+            synthetic(),
+            keep_going=True,
+        )
+        assert result.failures == ()

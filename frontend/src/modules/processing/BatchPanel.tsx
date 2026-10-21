@@ -45,8 +45,15 @@ import { useState } from 'react'
 import { AlertTriangle, ArrowRight, Check, Layers, Undo2 } from 'lucide-react'
 
 import { processingApi } from '@/modules/processing/api'
-import { changesOf, runInChunks, shifted, undoInChunks } from '@/modules/processing/batchRun'
-import type { Change } from '@/modules/processing/batchRun'
+import {
+  changesOf,
+  curveOptions,
+  plannedCount,
+  runInChunks,
+  shifted,
+  undoInChunks,
+} from '@/modules/processing/batchRun'
+import type { Change, CurveChoice } from '@/modules/processing/batchRun'
 import { formatScalar } from '@/shared/units'
 import { RecipePicker } from '@/modules/processing/RecipePicker'
 import type { BatchItem, BatchOut, RecipeStep, RunOverview } from '@/modules/processing/api'
@@ -75,6 +82,8 @@ export interface BatchPanelProps {
    * 다음 단계가 채택 검토대라, 바로 채택하면 견주어 볼 자리를 건너뛴다(ADR 0058).
    */
   adoptByDefault?: boolean
+  /** 그 시험들(곡선 목록 포함). 이미 받아 둔 쪽이 넘긴다 — 없으면 여기서 받는다. */
+  runs?: RunOverview[]
   onDone: () => void
 }
 
@@ -85,12 +94,28 @@ export function BatchPanel({
   stepsLabel,
   onClose,
   adoptByDefault = true,
+  runs: givenRuns,
   onDone,
 }: BatchPanelProps) {
   const recipes = useResource(
     () => (given ? Promise.resolve([]) : processingApi.recipes(testTypeKey ?? undefined)),
     [testTypeKey, Boolean(given)]
   )
+  // **곡선 목록** — 다온도 시험은 곡선이 여럿이라 어느 것을 돌릴지 고른다(v1.285.0 보고).
+  const fetched = useResource(
+    () =>
+      givenRuns || testRunIds.length === 0
+        ? Promise.resolve([] as RunOverview[])
+        : processingApi.overview(testRunIds),
+    [Boolean(givenRuns), testRunIds.join(',')]
+  )
+  const runs = givenRuns ?? fetched.data ?? []
+  const { several, options } = curveOptions(runs)
+  const [curveMode, setCurveMode] = useState<'first' | 'all' | 'pick'>('first')
+  const [pickedCurves, setPickedCurves] = useState<Set<string>>(new Set())
+  const curves: CurveChoice =
+    curveMode === 'pick' ? [...pickedCurves] : curveMode === 'all' ? 'all' : 'first'
+  const planned = plannedCount(runs, curves)
   const [recipeKey, setRecipeKey] = useState('')
   const [adopt, setAdopt] = useState(adoptByDefault)
   const [preview, setPreview] = useState<BatchOut | null>(null)
@@ -112,7 +137,7 @@ export function BatchPanel({
     setProgress([0, testRunIds.length])
     try {
       const got = await runInChunks(
-        { testRunIds, steps, recipeKey: recipe?.key ?? null, adopt, dryRun },
+        { testRunIds, steps, recipeKey: recipe?.key ?? null, adopt, dryRun, curves },
         (done, total) => setProgress([done, total])
       )
       if (dryRun) setPreview(got)
@@ -232,6 +257,69 @@ export function BatchPanel({
             </div>
           )}
 
+          {/* **곡선이 여럿인 시험이 있으면 고른다**(2026-10-22). 고르지 않으면 첫 곡선만 돈다 —
+              다온도 시험에서 그 사실을 몰라 나머지 온도가 처리되지 않았다(v1.285.0 보고). */}
+          {several && (
+            <fieldset className="space-y-1.5 rounded-md border p-3 text-sm">
+              <legend className="px-1 font-medium">돌릴 곡선</legend>
+              <label className="flex items-center gap-2">
+                <input
+                  type="radio"
+                  name="batch-curves"
+                  checked={curveMode === 'first'}
+                  onChange={() => setCurveMode('first')}
+                />
+                시험마다 첫 곡선만
+              </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="radio"
+                  name="batch-curves"
+                  checked={curveMode === 'all'}
+                  onChange={() => setCurveMode('all')}
+                />
+                측정 곡선 전부 ({plannedCount(runs, 'all')}개)
+              </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="radio"
+                  name="batch-curves"
+                  checked={curveMode === 'pick'}
+                  onChange={() => setCurveMode('pick')}
+                />
+                곡선 고르기
+              </label>
+              {curveMode === 'pick' && (
+                <div className="ml-6 flex flex-wrap gap-x-4 gap-y-1">
+                  {options.map((one) => (
+                    <label key={one.key} className="flex items-center gap-1.5">
+                      <input
+                        type="checkbox"
+                        aria-label={`${one.label} 곡선`}
+                        checked={pickedCurves.has(one.key)}
+                        onChange={(event) => {
+                          const next = new Set(pickedCurves)
+                          if (event.target.checked) next.add(one.key)
+                          else next.delete(one.key)
+                          setPickedCurves(next)
+                        }}
+                      />
+                      {one.label}
+                      <span className="text-muted-foreground">({one.count}건)</span>
+                    </label>
+                  ))}
+                </div>
+              )}
+              {curveMode !== 'first' && (
+                <p className="text-muted-foreground text-xs">
+                  한 시험에서 곡선을 둘 이상 돌리면 그 시험은 <b>채택하지 않습니다</b> — 채택은
+                  시험당 하나라, 어느 곡선의 결과로 할지 채택 검토대에서 고릅니다. 장비가 계산한
+                  곡선은 돌리지 않습니다.
+                </p>
+              )}
+            </fieldset>
+          )}
+
           <label className="flex items-start gap-2 text-sm">
             <input
               type="checkbox"
@@ -276,9 +364,16 @@ export function BatchPanel({
             </Button>
           </>
         ) : (
-          <Button onClick={() => go(true)} disabled={busy || !steps}>
+          <Button
+            onClick={() => go(true)}
+            disabled={busy || !steps || (curveMode === 'pick' && pickedCurves.size === 0)}
+          >
             <ArrowRight className="size-3.5" />
-            {busy ? '돌려 보는 중…' : `${testRunIds.length}건 미리보기`}
+            {busy
+              ? '돌려 보는 중…'
+              : curves === 'first'
+                ? `${testRunIds.length}건 미리보기`
+                : `시험 ${testRunIds.length}건 · 곡선 ${planned}개 미리보기`}
           </Button>
         )}
       </div>
@@ -366,6 +461,7 @@ export function BatchByType({
             key={type}
             testRunIds={group.ids}
             testTypeKey={type}
+            runs={ready.filter((run) => group.ids.includes(run.test_run_id))}
             // 다음 단계가 채택 검토대다 — 저장하고 바로 채택하면 견주어 볼 자리를 건너뛴다.
             adoptByDefault={false}
             onDone={() => {
@@ -426,7 +522,8 @@ function Outcome({ shown, saved }: { shown: BatchOut; saved: boolean }) {
 
       <div className="max-h-[22rem] space-y-1 overflow-y-auto">
         {items.map((item) => (
-          <Row key={item.test_run_id} item={item} />
+          // 곡선 여럿을 돌리면 한 시험이 여러 줄이다 — 시험 id 만으로는 줄이 겹친다.
+          <BatchResultRow key={`${item.test_run_id}-${item.curve_key ?? ''}`} item={item} />
         ))}
       </div>
 
@@ -445,7 +542,8 @@ function rank(item: BatchItem): number {
   return shifted(item) ? 1 : 2
 }
 
-function Row({ item }: { item: BatchItem }) {
+/** 일괄 결과 한 줄 — 전 → 후, 부분 결과면 무엇이 빠졌는지. */
+export function BatchResultRow({ item }: { item: BatchItem }) {
   const changes = changesOf(item).slice(0, 4)
   return (
     <div
@@ -460,6 +558,11 @@ function Row({ item }: { item: BatchItem }) {
           <AlertTriangle className="text-destructive size-3.5" />
         )}
         <span className="font-mono">{item.record_name}</span>
+        {item.curve_key && item.curve_key !== 'raw' && (
+          <Badge variant="outline" className="text-xs">
+            {item.curve_label ?? item.curve_key}
+          </Badge>
+        )}
         {item.adopted && (
           <Badge variant="outline" className="text-xs">
             채택됨
@@ -468,7 +571,26 @@ function Row({ item }: { item: BatchItem }) {
         {item.status === 'ok' && !shifted(item) && (
           <span className="text-muted-foreground">값이 거의 같습니다</span>
         )}
+        {(item.failures?.length ?? 0) > 0 && (
+          <Badge
+            variant="outline"
+            className="border-amber-500/60 text-xs text-amber-700 dark:text-amber-400"
+          >
+            부분 결과 · 실패 {item.failures?.length}단계
+          </Badge>
+        )}
       </div>
+
+      {/* **무엇이 빠졌는지 그 줄에서 말한다**(2026-10-22). 나온 값은 저장되지만, 실패한 단계의
+          값은 없다 — 「다 됐다」 로 읽히면 안 된다. */}
+      {item.failures?.map((one) => (
+        <p key={one.index} className="mt-1 text-amber-800 dark:text-amber-300">
+          {one.stopped ? '멈춤' : '건너뜀'} — {one.message}
+        </p>
+      ))}
+      {item.warning && (
+        <p className="mt-1 font-medium text-amber-800 dark:text-amber-300">{item.warning}</p>
+      )}
 
       {/* **전 → 후를 나란히.** 「그래서 뭐가 달라지나」 가 이 표의 전부다. */}
       {changes.length > 0 && (

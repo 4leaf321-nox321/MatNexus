@@ -207,6 +207,17 @@ export function ResultsPanel({ testRunId, onAdoptChange }: Props) {
                       옛 원본의 결과
                     </Badge>
                   )}
+                  {/* **부분 결과**(2026-10-22) — 실패한 단계가 있었다. 나온 값은 맞지만 다 나오지는
+                      않았다 — 채택하기 전에 무엇이 빠졌는지 보이게 한다. */}
+                  {(item.failures?.length ?? 0) > 0 && (
+                    <Badge
+                      variant="outline"
+                      className="border-amber-500/60 text-amber-700 dark:text-amber-400"
+                      title={item.failures?.map((one) => one.message).join('\n')}
+                    >
+                      부분 결과 · 실패 {item.failures?.length}단계
+                    </Badge>
+                  )}
                   <span className="text-muted-foreground text-xs">
                     {when(item.created_at)}
                   </span>

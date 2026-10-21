@@ -53,6 +53,22 @@ class TestDeclaration:
                 )
             )
 
+    def test_그래프가_선언에_없는_키를_가리키면_거절한다(self, sandbox: Any) -> None:
+        """빈 그림은 「값이 없다」 로 읽힌다 — 열 · 계수 이름을 등록할 때 맞춰 본다."""
+        with pytest.raises(ValueError, match="선언에 없는 키"):
+            cards.register_block(
+                cards.BlockSpec(
+                    key="plotted",
+                    label="그래프 블록",
+                    help="시험용",
+                    produces=(Produced(key="a", label="계수"),),
+                    rows=(Produced(key="x", label="x"), Produced(key="y", label="y")),
+                    plot=cards.BlockPlot(
+                        x="x", y="y", line=cards.PowerLine(coefficient="a", exponent="없음")
+                    ),
+                )
+            )
+
     def test_같은_key_는_두_번_못_넣는다(self, sandbox: Any) -> None:
         with pytest.raises(ValueError, match="중복"):
             cards.register_block(

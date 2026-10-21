@@ -53,8 +53,10 @@ class ProcessingError(Exception):
     그것을 버리면 사람은 실패 메시지만 보고 어디가 어긋났는지 눈으로 못 본다 —
     단계를 하나씩 지워 가며 다시 돌리게 된다(실사용에서 나왔다, 2026-09-02).
 
-    **저장은 여전히 막는다.** 반쯤 돈 결과를 저장하면 그것이 채택되고 카드까지
-    간다. 여기 실린 것은 **보여 주기 위한 것**이다.
+    **나온 값은 부분 결과로 저장한다**(2026-10-22, v1.285.0 보고로 바꿨다). 전에는 저장을
+    막았는데, 그러면 일괄 처리에서 한 단계가 걸린 시험은 멀쩡히 나온 인장강도까지 잃었다.
+    지금은 실패가 결과와 함께 남고(`PipelineResult.failures`), 일괄 채택은 지금 채택된 값을
+    잃게 되면 채택을 옮기지 않는다(앱의 `run_batch`).
     """
 
     def __init__(self, message: str, *, done: PipelineResult | None = None) -> None:
@@ -168,8 +170,24 @@ class Stage:
 
 
 @dataclass(frozen=True)
+class Failure:
+    """실패한 단계 하나 — 어디서 왜. **결과와 함께 남는다**(2026-10-22).
+
+    `stopped` 면 거기서 멈췄다(곡선을 바꾸는 단계라 뒤 단계를 돌릴 곡선이 없다). 아니면 값만
+    재는 단계(`Plugin.measures`)라 그 단계만 건너뛰고 계속했다."""
+
+    index: int
+    plugin: str
+    label: str
+    message: str
+    stopped: bool
+
+
+@dataclass(frozen=True)
 class PipelineResult:
     stages: tuple[Stage, ...]
+    failures: tuple[Failure, ...] = ()
+    """실패한 단계. **비어 있지 않으면 부분 결과다** — 나온 값은 맞지만 다 나오지는 않았다."""
 
     @property
     def frame(self) -> Frame:
@@ -193,14 +211,27 @@ class PipelineResult:
         return tuple(note for stage in self.stages for note in stage.notes)
 
 
-def apply(steps: list[Step], frame: Frame, *, given: Sequence[Scalar] = ()) -> PipelineResult:
+def apply(
+    steps: list[Step],
+    frame: Frame,
+    *,
+    given: Sequence[Scalar] = (),
+    keep_going: bool = False,
+) -> PipelineResult:
     """레시피를 순서대로 적용한다.
 
-    **실패하면 거기서 멈춘다.** 남은 단계를 건너뛰고 계속하지 않는다 — 뒤 단계는
-    앞 단계의 결과를 전제로 하므로, 하나가 빠진 채로 나온 값은 틀린 값이면서
-    틀린 티가 안 난다.
+    **곡선을 바꾸는 단계가 실패하면 거기서 멈춘다.** 남은 단계를 건너뛰고 계속하지 않는다
+    — 뒤 단계는 앞 단계의 곡선을 전제로 하므로, 하나가 빠진 곡선 위에서 나온 값은 틀린
+    값이면서 틀린 티가 안 난다. 어느 단계에서 왜 멈췄는지는 예외 메시지에 단계 번호와 함께
+    남고, 여기까지 된 것이 `done` 에 실린다.
 
-    어느 단계에서 왜 멈췄는지는 예외 메시지에 단계 번호와 함께 남는다.
+    **`keep_going` 이면 값만 재는 단계(`Plugin.measures`)는 실패해도 건너뛰고 계속한다**
+    (2026-10-22 — 앱의 처리 · 일괄 처리가 켠다. 기본은 끄고, 그때는 어느 단계든 실패하면
+    멈춘다). 곡선을 안 바꾸므로 뒤 단계는 같은 곡선 위에서 돈다. 그 단계가 내기로 한 값은
+    「잃은 값」 이 되어, 그것을 가리키는 뒤 단계도 같은 이유로 실패한다(`@?` 로 가리켜도 —
+    「없음」 이 아니라 「못 냄」 이다). 실패는 `PipelineResult.failures` 에 남는다. v1.285.0
+    보고: 탄성계수가 안 나오자 항복강도가 멈추고 처리 전체가 멈춰, 그 뒤 인장강도까지 계산되지
+    않았다.
 
     `given` 은 **바깥에서 들어오는 값**이다. 시편 치수(게이지 길이·단면적)가
     대표적이다 — 곡선에 없고 시편 기록에 있다. `matcore` 는 DB 를 모르므로
@@ -209,29 +240,53 @@ def apply(steps: list[Step], frame: Frame, *, given: Sequence[Scalar] = ()) -> P
     것이 어느 쪽인지 외워야 한다.
     """
     stages: list[Stage] = []
+    failures: list[Failure] = []
     current = frame
     carried: dict[str, Scalar] = {item.key: item for item in given}
+    #: 실패한 단계가 내기로 한 값 → 그 단계 이름.
+    lost: dict[str, str] = {}
     for index, step in enumerate(steps):
         plugin = _plugin(step.plugin)
         try:
-            options = _resolve_references(step.options, carried, index, stages)
+            try:
+                options = _resolve_references(step.options, carried, index, stages, lost)
+            except ProcessingError as exc:
+                # 참조 오류는 이미 「N단계: …」 로 적혀 있다.
+                raise ProcessingError(str(exc)) from exc
+            try:
+                result = plugin.fn(current, options)
+            except ProcessingError as exc:
+                raise ProcessingError(f"{index + 1}단계 '{plugin.label}': {exc}") from exc
         except ProcessingError as exc:
-            raise ProcessingError(str(exc), done=PipelineResult(tuple(stages))) from exc
-        try:
-            result = plugin.fn(current, options)
-        except ProcessingError as exc:
-            # **여기까지 된 것을 들려 보낸다.** 앞 단계들의 곡선은 멀쩡히 나와 있다.
-            raise ProcessingError(
-                f"{index + 1}단계 '{plugin.label}': {exc}", done=PipelineResult(tuple(stages))
-            ) from exc
+            failure = Failure(
+                index=index,
+                plugin=plugin.id,
+                label=plugin.label,
+                message=str(exc),
+                stopped=not (keep_going and plugin.measures),
+            )
+            failures.append(failure)
+            if failure.stopped:
+                # **여기까지 된 것을 들려 보낸다.** 앞 단계들의 곡선은 멀쩡히 나와 있다.
+                raise ProcessingError(
+                    str(exc), done=PipelineResult(tuple(stages), tuple(failures))
+                ) from exc
+            for produced in plugin.makes_values:
+                # 앞에서 다른 방법으로 잰 값이 `carried` 에 남아 있어도 뒤 단계는 못 쓴다 —
+                # 참조를 풀 때 「잃은 값」 을 먼저 본다(`_resolve_references`). 다시 재려던
+                # 것이 실패했는데 옛 값으로 뒤를 계산하면 사람이 고른 방법과 다른 값이 된다.
+                lost[produced.key] = plugin.label
+            continue
         too_long = [s.key for s in result.scalars if len(s.key) > SCALAR_KEY_MAX]
         if too_long:
-            raise ProcessingError(
+            message = (
                 f"{index + 1}단계 '{plugin.label}' 가 낸 값의 이름이 {SCALAR_KEY_MAX}자를 "
                 f"넘습니다: {', '.join(too_long)}. 저장해도 채택할 수 없으므로 여기서 "
-                f"멈춥니다 — 그 계산을 만든 사람에게 이름을 줄여 달라고 하세요.",
-                done=PipelineResult(tuple(stages)),
+                f"멈춥니다 — 그 계산을 만든 사람에게 이름을 줄여 달라고 하세요."
             )
+            # 실패 목록에도 넣는다 — 빠지면 여기까지의 결과가 완전한 결과로 보인다.
+            failures.append(Failure(index, plugin.id, plugin.label, message, stopped=True))
+            raise ProcessingError(message, done=PipelineResult(tuple(stages), tuple(failures)))
         stages.append(
             Stage(
                 index=index,
@@ -246,8 +301,9 @@ def apply(steps: list[Step], frame: Frame, *, given: Sequence[Scalar] = ()) -> P
         )
         for scalar in result.scalars:
             carried[scalar.key] = scalar
+            lost.pop(scalar.key, None)
         current = result.frame
-    return PipelineResult(tuple(stages))
+    return PipelineResult(tuple(stages), tuple(failures))
 
 
 def front_intact_stage(stages: Sequence[Stage], x: str, y: str) -> Stage | None:
@@ -308,6 +364,7 @@ def _resolve_references(
     carried: dict[str, Scalar],
     index: int,
     stages: Sequence[Stage] = (),
+    lost: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """`"@youngs_modulus"` 를 앞 단계가 낸 값으로 바꾼다.
 
@@ -325,6 +382,15 @@ def _resolve_references(
         if not isinstance(value, str) or not value.startswith(REFERENCE_PREFIX):
             resolved[key] = value
             continue
+        # **실패한 단계가 내기로 한 값이면 `@?` 여도 멈춘다.** `@?` 의 「없음」 은 그 자체로
+        # 뜻이 있는 칸(비면 3점 굽힘)에 쓰는 것이다 — 단계가 실패해 못 낸 것을 「없음」 으로
+        # 읽으면 다른 식으로 조용히 계산된다.
+        name = value.removeprefix(OPTIONAL_PREFIX).removeprefix(REFERENCE_PREFIX)
+        if lost and name in lost:
+            raise ProcessingError(
+                f"{index + 1}단계: '{value}' 를 낼 '{lost[name]}' 단계가 실패해 그 값이 "
+                f"없습니다 — 그 단계의 실패 이유를 먼저 보세요."
+            )
         if value.startswith(OPTIONAL_PREFIX):
             found = carried.get(value[len(OPTIONAL_PREFIX) :])
             resolved[key] = found.value if found is not None else None

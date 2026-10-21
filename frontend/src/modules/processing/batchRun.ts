@@ -21,10 +21,22 @@
  */
 
 import { processingApi } from '@/modules/processing/api'
-import type { BatchItem, BatchOut, BatchUndoOut, RecipeStep } from '@/modules/processing/api'
+import type {
+  BatchItem,
+  BatchOut,
+  BatchUndoOut,
+  RecipeStep,
+  RunOverview,
+} from '@/modules/processing/api'
 
 /** 한 번에 보내는 건수. 위 주석의 근거로 정한 값이다. */
 export const CHUNK = 25
+
+/**
+ * 어느 곡선을 돌리나 — `first` 시험마다 첫 곡선, `all` 측정 곡선 전부, 키 목록은 그 키들.
+ * 다온도 시험은 한 파일에 곡선이 여럿인데 고를 길이 없어 첫 곡선만 처리됐다(v1.285.0 보고).
+ */
+export type CurveChoice = 'first' | 'all' | string[]
 
 export interface BatchAsk {
   testRunIds: string[]
@@ -32,6 +44,48 @@ export interface BatchAsk {
   recipeKey?: string | null
   adopt: boolean
   dryRun: boolean
+  curves?: CurveChoice
+}
+
+export interface CurveOption {
+  key: string
+  label: string
+  /** 이 곡선이 있는 시험 수. */
+  count: number
+}
+
+/**
+ * 시험들의 **측정 곡선**(장비가 계산한 곡선은 빼고) — 키마다 몇 건에 있나.
+ *
+ * `several` 이 거짓이면 시험마다 측정 곡선이 하나뿐이라 고를 것이 없다.
+ */
+export function curveOptions(runs: RunOverview[]): { several: boolean; options: CurveOption[] } {
+  const found = new Map<string, CurveOption>()
+  let several = false
+  for (const run of runs) {
+    const measured = (run.curves ?? []).filter((one) => one.kind === 'measured')
+    if (measured.length > 1) several = true
+    for (const curve of measured) {
+      const seen = found.get(curve.key)
+      if (seen) seen.count += 1
+      else found.set(curve.key, { key: curve.key, label: curve.label ?? curve.key, count: 1 })
+    }
+  }
+  return { several, options: [...found.values()] }
+}
+
+/** 고른 대로 돌리면 몇 건이 되나 — 시험 × 곡선. */
+export function plannedCount(runs: RunOverview[], choice: CurveChoice): number {
+  if (choice === 'first') return runs.length
+  const wanted = choice === 'all' ? null : new Set(choice)
+  return runs.reduce(
+    (sum, run) =>
+      sum +
+      (run.curves ?? []).filter(
+        (one) => one.kind === 'measured' && (wanted === null || wanted.has(one.key))
+      ).length,
+    0
+  )
 }
 
 /** 진행. `done`/`total` 은 **건수**다 — 조각 수로 세면 사람이 못 읽는다. */
@@ -58,6 +112,7 @@ export async function runInChunks(ask: BatchAsk, onProgress?: OnProgress): Promi
         recipe_key: ask.recipeKey ?? null,
         adopt: ask.adopt,
         dry_run: ask.dryRun,
+        curves: ask.curves ?? 'first',
       })
       items.push(...got.items)
     } catch (caught) {

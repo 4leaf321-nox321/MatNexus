@@ -196,3 +196,65 @@ describe('물성 카드 내용', () => {
     expect(screen.getByText(/모르는 물성 블록입니다/)).toBeInTheDocument()
   })
 })
+
+describe('블록 그래프 — 선언대로 그린다', () => {
+  // v1.285.0 보고: S-N 카드를 만들었는데 계수로 수명선도를 볼 수 없었다. 이 시험도 지어낸
+  // 블록을 쓴다 — 이름을 아는 코드가 생겨도 잡히게.
+  const PLOTTED: BlockSpec = {
+    key: 'imaginary_curve',
+    label: '지어낸 곡선',
+    help: '점과 멱법칙 계수.',
+    in_deck: true,
+    produces: [
+      { key: 'coef', label: '계수', si_unit: 'Pa', help: null },
+      { key: 'power', label: '지수', si_unit: '1', help: null },
+    ],
+    rows: [
+      { key: 'life', label: '수명', si_unit: '1', help: null },
+      { key: 'level', label: '진폭', si_unit: 'Pa', help: null },
+      { key: 'stopped', label: '멈춤', si_unit: '1', help: null },
+    ],
+    plot: {
+      x: 'life',
+      y: 'level',
+      log_x: true,
+      log_y: true,
+      hollow: 'stopped',
+      line: { coefficient: 'coef', exponent: 'power' },
+    },
+  } as unknown as BlockSpec
+
+  it('누르면 점 · 빈 점 · 계수 선을 그리고 축 단위는 표에서 읽는다', async () => {
+    const user = (await import('@testing-library/user-event')).default.setup()
+    render(
+      <CardBlocks
+        specs={[PLOTTED]}
+        card={card({
+          imaginary_curve: {
+            values: { coef: 1e9, power: -0.1 },
+            rows: [
+              { life: 1e4, level: 4e8, stopped: 0 },
+              { life: 1e5, level: 3.2e8, stopped: 0 },
+              { life: 1e7, level: 2.4e8, stopped: 1 },
+            ],
+          },
+        })}
+      />
+    )
+    // 접혀 있다 — 카드가 화면을 덜 먹게.
+    expect(screen.queryByTestId('chart-dots')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '그래프 보기' }))
+    const groups = screen.getAllByTestId('chart-dots')
+    expect(groups.map((one) => one.getAttribute('aria-label'))).toEqual(['점', '멈춤'])
+    expect(groups[0].querySelectorAll('circle')).toHaveLength(2)
+    expect(groups[1].querySelectorAll('circle')).toHaveLength(1)
+    // 계수 선 하나 — 축 라벨의 단위는 표(`shared/units`)에서 온다(Pa → MPa).
+    expect(screen.getByText('진폭 (MPa)')).toBeInTheDocument()
+    expect(screen.getByText('계수로 그린 선')).toBeInTheDocument()
+  })
+
+  it('그래프 선언이 없는 블록에는 단추가 없다', () => {
+    render(<CardBlocks specs={SPECS} card={card({ imaginary: { values: { strength: 1 } } })} />)
+    expect(screen.queryByRole('button', { name: '그래프 보기' })).not.toBeInTheDocument()
+  })
+})

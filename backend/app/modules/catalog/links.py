@@ -51,6 +51,10 @@ from matcore import units
 BUILTIN_LINKS: list[tuple[str, str, str | None]] = [
     ("mechanical.youngs_modulus", "mechanical.youngs_modulus", None),
     ("mechanical.shear_modulus", "mechanical.shear_modulus", None),
+    # 동적 물성(2026-10-22) — 문헌 카탈로그에 같은 키가 있다(주파수 · 온도 조건이 붙은 값).
+    ("mechanical.storage_modulus", "mechanical.storage_modulus", None),
+    ("mechanical.loss_modulus", "mechanical.loss_modulus", None),
+    ("mechanical.loss_tangent", "mechanical.loss_tangent", None),
     ("thermal.expansion_linear", "thermal.expansion_linear", None),
     ("thermal.specific_heat", "thermal.specific_heat", None),
     ("thermal.conductivity", "thermal.conductivity", None),

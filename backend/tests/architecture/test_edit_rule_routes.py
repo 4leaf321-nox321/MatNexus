@@ -67,6 +67,7 @@ MARKERS = (
     "_editable_run(",
     "_require_approver(",
     "_deletable_specimens(",
+    "_require_removal(",
 )
 
 #: 손잡이 → 그 안에 있어야 하는 판정.
@@ -74,6 +75,8 @@ HELPERS = {
     ("fitting", "_require_publisher"): "require_steward(",
     ("grouping", "_editable"): "require_edit(",
     ("processing", "_require_result_removal"): "require_edit(",
+    # 마스터커브 · Prony 지우기 — 만든 사람이거나 고칠 수 있는 사람(처리 결과와 같은 규칙).
+    ("viscoelastic", "_require_removal"): "require_edit(",
     ("equipment", "_require_edit"): "require_edit(",
     ("workbench", "_editable_run"): "require_edit(",
     # 선언 물성 승인 — 검토의 뜻이 있는 일이라 카드 확정과 같은 판정(ADR 0049).
@@ -118,6 +121,7 @@ EXEMPT: dict[tuple[str, str], str] = {
     ("fitting", "create_card"): _만들기 + " — 카드는 초안으로 생긴다",
     ("fitting", "create_declared_card"): _만들기,
     ("fitting", "create_viscoelastic_card"): _만들기,
+    ("fitting", "create_dma_temperature_card"): _만들기,
     ("fitting", "create_rate_card"): _만들기,
     ("fitting", "create_card_from_group"): _만들기,
     ("fitting", "create_lve_card"): _만들기,
@@ -136,6 +140,7 @@ EXEMPT: dict[tuple[str, str], str] = {
     ("viscoelastic", "create_master_curve"): _만들기 + " — 시험에서 나온 파생 자료다",
     ("viscoelastic", "import_master_curve"): _만들기 + " — 시험에서 나온 파생 자료다",
     ("viscoelastic", "create_prony_fit"): _만들기 + " — 파생 자료다. 대표 고르기는 막는다",
+    ("viscoelastic", "create_modulus_table"): _만들기 + " — 시험에서 나온 파생 자료다",
     ("catalog", "add_property_alias"): _만들기 + " — 별칭 하나. 지우기는 넣은 사람·관리자",
     ("catalog", "deck_match"): _읽기,
     ("catalog", "deck_build"): _읽기,

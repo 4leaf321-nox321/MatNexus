@@ -138,3 +138,31 @@ class PronyFitOut(BaseModel):
     candidates: list[PronyCandidateOut]
     """재 본 것 전부. 고른 것만 주면 사람이 다시 고를 수 없다."""
     created_at: datetime
+
+
+class ModulusTableRequest(BaseModel):
+    frequency_hz: float = Field(gt=0, le=1e6)
+    """어느 주파수에서 볼까(Hz). 등온 스윕은 그 주파수로 보간하고, 램프는 그 주파수의 점을
+    고른다."""
+
+
+class ModulusTableRowOut(BaseModel):
+    temperature_k: float
+    storage_pa: float
+    loss_pa: float | None = None
+    tan_delta: float | None = None
+
+
+class ModulusTableOut(BaseModel):
+    """주파수 하나에서 본 온도별 탄성률 표(2026-10-22). 불변 — 주파수를 바꾸려면 새로
+    만든다."""
+
+    id: uuid.UUID
+    test_run_id: uuid.UUID
+    frequency_hz: float
+    modulus_basis: str
+    """`E`(인장 · 굽힘 E′) · `G`(전단 G′). 카드에는 E 로 옮겨 담는다."""
+    rows: list[ModulusTableRowOut]
+    source_curve_keys: list[str]
+    notes: list[str]
+    created_at: datetime

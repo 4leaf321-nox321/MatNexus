@@ -42,6 +42,7 @@ from app.modules.fitting.models import (
     UnitSystemDef,
 )
 from app.modules.fitting.schemas import (
+    BlockPlotOut,
     BlockSpecOut,
     BomDeckIn,
     BomDeckOut,
@@ -78,6 +79,7 @@ from app.modules.fitting.schemas import (
     DeclaredCardPreviewOut,
     DeclaredCardSaveRequest,
     DeclaredSlotOut,
+    DmaTemperatureCardSaveRequest,
     ExportFormatOut,
     ExportProfileActiveRequest,
     ExportProfileCreateRequest,
@@ -95,6 +97,7 @@ from app.modules.fitting.schemas import (
     LveCardSaveRequest,
     MemberCurveOut,
     PairedFormatsOut,
+    PowerLineOut,
     PropertyCardOut,
     PropertyCardSaveRequest,
     PropertyCardUpdateRequest,
@@ -116,7 +119,7 @@ from app.modules.materials.models import Material, MaterialParameterSet, Sample,
 from app.modules.processing.models import ProcessingResult
 from app.modules.statistics import services as statistics_services
 from app.modules.tests.models import TestRun, TestType
-from app.modules.viscoelastic.models import MasterCurve, PronyFit
+from app.modules.viscoelastic.models import MasterCurve, ModulusTable, PronyFit
 from app.modules.workspaces.models import Workspace
 from app.shared import (
     audit,
@@ -249,6 +252,25 @@ def list_blocks(user: User = Depends(current_user)) -> list[BlockSpecOut]:
             in_deck=spec.key in in_decks,
             curve=list(spec.curve) if spec.curve else None,
             kind_priority=spec.kind_priority,
+            plot=(
+                BlockPlotOut(
+                    x=spec.plot.x,
+                    y=spec.plot.y,
+                    log_x=spec.plot.log_x,
+                    log_y=spec.plot.log_y,
+                    hollow=spec.plot.hollow,
+                    line=(
+                        PowerLineOut(
+                            coefficient=spec.plot.line.coefficient,
+                            exponent=spec.plot.line.exponent,
+                        )
+                        if spec.plot.line
+                        else None
+                    ),
+                )
+                if spec.plot
+                else None
+            ),
         )
         for spec in cards.list_blocks()
     ]
@@ -2263,6 +2285,101 @@ def create_viscoelastic_card(
                 ],
                 "notes": list(source.curve_notes),
             },
+        },
+        point_count=0,
+        note=payload.note,
+        created_by_id=user.id,
+    )
+    return _save_card(db, user, item)
+
+
+@router.post("/cards/dma-temperature", response_model=PropertyCardOut, status_code=201)
+def create_dma_temperature_card(
+    payload: DmaTemperatureCardSaveRequest,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> PropertyCardOut:
+    """**온도별 저장 탄성률 카드** — 점탄성 탭의 표 하나에서(2026-10-22, v1.285.0 보고).
+
+    DMA 온도별 E′ 를 잰 물성으로 넘길 길이 없어, 재료에 적어 둔 값(출처 추정)으로만 넣고
+    있었다.
+    **탄성 블록에 싣지 않는다** — 정적 탄성계수와 뜻이 다르다(사용자). 전단(G′)으로 잰 표는
+    점탄성 카드와 같은 규칙으로 E = 2(1+ν)G 로 옮긴다 — tan δ 는 그대로다.
+    """
+    cards.load_builtin()
+    table = db.get(ModulusTable, payload.modulus_table_id)
+    if table is None:
+        raise NotFound("MNX-FITTING-0011", "온도별 탄성률 표를 찾을 수 없습니다.")
+    run = permissions.get_run(db, user, table.test_run_id)  # 볼 권한이 있는가
+    specimen = db.get(Specimen, run.specimen_id)
+    sample = db.get(Sample, specimen.sample_id) if specimen else None
+    material = db.get(Material, sample.material_id) if sample else None
+    if specimen is None or sample is None or material is None:
+        raise NotFound("MNX-FITTING-0011", "이 표가 어느 재료의 것인지 따라갈 수 없습니다.")
+    poisson = _inherit_poisson(material, payload.poisson_ratio)
+    factor = 1.0
+    basis_note = "인장 · 굽힘으로 잰 E′ 입니다."
+    if table.modulus_basis == "G":
+        if poisson.value is None:
+            raise AppError(
+                "MNX-FITTING-0045",
+                "전단(G′)으로 잰 표를 E 로 옮기려면 푸아송비가 필요합니다 — 재료에 적거나 "
+                "카드를 "
+                "만들 때 넣으세요.",
+                status=422,
+            )
+        factor = viscoelastic.youngs_from_shear(poisson.value)
+        basis_note = (
+            f"전단(G′)으로 잰 값을 E = 2(1+ν)G 로 옮겼습니다(ν = {poisson.value:g}, "
+            f"{poisson.detail or '입력'})."
+        )
+    rows = [
+        {
+            "temperature": float(one["temperature_k"]),
+            "storage_modulus": float(one["storage_pa"]) * factor,
+            **(
+                {"loss_modulus": float(one["loss_pa"]) * factor}
+                if one.get("loss_pa") is not None
+                else {}
+            ),
+            **(
+                {"tan_delta": float(one["tan_delta"])}
+                if one.get("tan_delta") is not None
+                else {}
+            ),
+        }
+        for one in table.rows
+    ]
+    item = PropertyCard(
+        material_id=material.id,
+        test_type_id=run.test_type_id,
+        orientation=specimen.orientation,
+        label=payload.label,
+        status="draft",
+        # 표를 외래키로 잡지 않는다 — 카드는 자기 근거를 든 스냅샷이다(점탄성 카드와 같다).
+        source={
+            "sample_count": 1,
+            "test_run_ids": [str(run.id)],
+            "record_names": [run.record_name],
+            "modulus_table_id": str(table.id),
+            "notes": [
+                f"시편 {specimen.record_name} 한 건에서 {table.frequency_hz:g} Hz 로 본 "
+                f"온도별 값입니다 — 재료의 대푯값이 아니라 그 시편의 값입니다.",
+                basis_note,
+                *table.notes,
+            ],
+            "runtime": runtime.manifest(),
+        },
+        blocks={
+            "dma_temperature": {
+                "values": {
+                    "frequency_hz": table.frequency_hz,
+                    "modulus_basis": table.modulus_basis,
+                    "point_count": len(rows),
+                },
+                "rows": rows,
+                "notes": [basis_note],
+            }
         },
         point_count=0,
         note=payload.note,

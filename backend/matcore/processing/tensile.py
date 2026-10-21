@@ -728,8 +728,10 @@ def _auto_window(
             label="탄성 구간 R²",
             si_unit="1",
             help=(
-                "그 구간이 실제로 직선이었는가. **0.98 미만이면 탄성계수를 내지 "
-                "않습니다** — 직선이 아닌 구간의 기울기는 탄성계수가 아닙니다."
+                "그 구간이 실제로 직선이었는가(구간 점들의 회귀 R²). 최소제곱 회귀 · 자동은 "
+                "**0.98 미만이면 탄성계수를 내지 않습니다** — 직선이 아닌 구간의 기울기는 "
+                "탄성계수가 아닙니다. 할선 · 현은 두 점으로 정하는 값이라 거르지 않고 경고만 "
+                "남깁니다."
             ),
         ),
         Produced(
@@ -768,7 +770,10 @@ def _auto_window(
         ),
     ),
     order=50,
-    version="1",
+    measures=True,
+    # 2 — 할선 · 현을 직선 검사로 거르지 않고, 그 R² 를 구간 점들의 회귀 R² 로
+    # 낸다(2026-10-22).
+    version="2",
 )
 def elastic_modulus(frame: Frame, options: dict[str, Any]) -> StepResult:
     """지정 구간에서 탄성계수를 잰다. 곡선은 안 바뀐다.
@@ -869,7 +874,16 @@ def elastic_modulus(frame: Frame, options: dict[str, Any]) -> StepResult:
             if high <= 0:
                 raise ProcessingError("할선 탄성계수는 구간 끝이 양수여야 합니다.")
             modulus = float(np.interp(high, strain, stress)) / high
-        r_squared = _r_squared(selected_x, selected_y, modulus, intercept)
+        if method == "linear_regression":
+            r_squared = _r_squared(selected_x, selected_y, modulus, intercept)
+        else:
+            # **할선 · 현은 맞춘 직선이 아니다** — 두 점으로 기울기를 정한다. 그 선으로 R² 를
+            # 재면 「구간이 직선인가」 가 아니라 「두 점의 선이 다른 점을 지나나」 가 되고,
+            # 원점을
+            # 지나는 할선은 토우가 조금만 있어도 0.98 아래로 떨어졌다(v1.285.0 보고: 27건 중
+            # 1건만
+            # 값이 나옴). 여기 R² 는 **구간 점들의 직선다움**(회귀의 R²)이고 참고로만 쓴다.
+            r_squared = _window_linearity(selected_x, selected_y)
 
     if not math.isfinite(modulus) or modulus <= 0:
         raise ProcessingError(
@@ -917,10 +931,17 @@ def elastic_modulus(frame: Frame, options: dict[str, Any]) -> StepResult:
                 f"그 구간의 기울기는 **{modulus / 1e9:.4g} GPa** 입니다 — 참고값입니다. "
                 f"{observed}{grid_note}"
             )
-        elif math.isfinite(r_squared) and r_squared < MIN_TRUSTWORTHY_R_SQUARED:
+        elif (
+            method == "linear_regression"
+            and math.isfinite(r_squared)
+            and r_squared < MIN_TRUSTWORTHY_R_SQUARED
+        ):
             # **점을 채우려고 창을 넓힌 경우가 여기 걸린다.** 5점은 들어왔는데 그
             # 구간이 항복 뒤까지 걸쳐 직선이 아니다 — 기울기는 나오지만 그것은
             # 탄성계수가 아니다.
+            #
+            # **최소제곱 회귀(자동 포함)만** 거른다(2026-10-22). 할선 · 현은 규격이 두 점으로
+            # 정의한 값이라 구간이 직선이 아니어도 그 정의대로의 값이다 — 점 수 검사만 건다.
             refused = (
                 f"{window}의 {count}점이 직선이 아닙니다(R²={r_squared:.4f}) — "
                 f"**탄성계수를 내지 않았습니다.** 기울기 {modulus / 1e9:.4g} GPa 는 나왔지만 "
@@ -986,7 +1007,14 @@ def elastic_modulus(frame: Frame, options: dict[str, Any]) -> StepResult:
         on_grid = _uniform_grid(strain)
         if on_grid:
             notes.append(GRID_NOTE.format(count=on_grid))
-    if math.isfinite(r_squared) and r_squared < 0.995:
+    if math.isfinite(r_squared) and r_squared < MIN_TRUSTWORTHY_R_SQUARED:
+        # 여기 닿는 것은 할선 · 현뿐이다(회귀는 위에서 거절했다). **값은 냈고 경고만 한다.**
+        notes.append(
+            f"구간의 점이 직선이 아닙니다(구간 R²={r_squared:.4f}). 할선 · 현은 두 점으로 "
+            f"기울기를 정하므로 직선 검사로 거르지 않았습니다 — 구간이 항복 뒤나 초기 토우에 "
+            f"걸쳤는지 곡선에서 확인하세요."
+        )
+    elif math.isfinite(r_squared) and r_squared < 0.995:
         # **경고이지 실패가 아니다.** 0.98 미만은 위에서 이미 막았다 — 여기는 그
         # 문턱을 넘었지만 완전하지는 않은 자리로, 토우가 조금 섞였을 때 걸린다.
         notes.append(
@@ -994,6 +1022,16 @@ def elastic_modulus(frame: Frame, options: dict[str, Any]) -> StepResult:
             f"확인하세요. 토우 보정 단계를 앞에 두면 좋아집니다."
         )
     return StepResult(frame, notes=tuple(notes), scalars=tuple(scalars))
+
+
+def _window_linearity(x: np.ndarray, y: np.ndarray) -> float:
+    """구간 점들의 직선다움 — 최소제곱 회귀의 R²(= 상관계수²). 퇴화하면 NaN.
+
+    할선 · 현처럼 맞추지 않은 선의 R² 는 음수까지 나와 「직선인가」 를 말하지 못한다."""
+    if len(x) < 2 or float(np.ptp(x)) == 0.0 or float(np.ptp(y)) == 0.0:
+        return float("nan")
+    correlation = float(np.corrcoef(x, y)[0, 1])
+    return correlation * correlation if math.isfinite(correlation) else float("nan")
 
 
 def _fit_line(x: np.ndarray, y: np.ndarray, *, what: str) -> tuple[float, float]:
@@ -1109,6 +1147,7 @@ def _r_squared(x: np.ndarray, y: np.ndarray, slope: float, intercept: float) -> 
         ),
     ),
     order=60,
+    measures=True,
     version="1",
 )
 def proof_stress(frame: Frame, options: dict[str, Any]) -> StepResult:
@@ -1216,6 +1255,7 @@ def proof_stress(frame: Frame, options: dict[str, Any]) -> StepResult:
         ),
     ),
     order=70,
+    measures=True,
     version="1",
 )
 def strength(frame: Frame, options: dict[str, Any]) -> StepResult:
@@ -1269,6 +1309,7 @@ def strength(frame: Frame, options: dict[str, Any]) -> StepResult:
         Produced(key="necking_candidate_stress", label="네킹 후보 응력", si_unit="Pa"),
     ),
     order=80,
+    measures=True,
     version="1",
 )
 def necking_candidate(frame: Frame, options: dict[str, Any]) -> StepResult:

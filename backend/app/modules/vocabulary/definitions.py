@@ -369,6 +369,20 @@ BUILTIN_SPECIMEN_CATEGORIES: list[tuple[str, list[dict[str, Any]]]] = [
 BUILTIN_PROPERTY_ITEMS: list[tuple[str, str, str, str, str | None, str | None, str]] = [
     ("탄성계수", "stress", "E", "재료", None, None, "mechanical.youngs_modulus"),
     ("전단탄성계수", "stress", "G", "재료", None, None, "mechanical.shear_modulus"),
+    # **동적 물성은 따로 선다**(2026-10-22, v1.285.0 보고). 탄성계수는 정적 인장 기준이라
+    # DMA 의 저장 탄성률 E′ 와 뜻이 다르다 — 그 칸에 적으면 정적 해석이 동적 값을 읽는다.
+    # 온도 · 주파수에 따라 변하는 값이고, 조건 축은 온도다(주파수는 그 측정의 고정 조건).
+    ("저장 탄성률", "stress", "E'", "재료", None, None, "mechanical.storage_modulus"),
+    ("손실 탄성률", "stress", "E''", "재료", None, None, "mechanical.loss_modulus"),
+    (
+        "손실계수(tan δ)",
+        "dimensionless",
+        "tan δ",
+        "재료",
+        None,
+        None,
+        "mechanical.loss_tangent",
+    ),
     (
         "선팽창계수(CTE)",
         "inverse_temperature",

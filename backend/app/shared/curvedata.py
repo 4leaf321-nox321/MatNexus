@@ -40,9 +40,18 @@ def curves_of(db: Session, run_id: object) -> list[Curve]:
     이름의 slug 이고 `raw` 는 아예 없다 — `raw` 만 찾던 화면들이 저장된 곡선을
     하나도 못 봤다. `raw` 를 맨 앞에 두어 표가 하나뿐인 파일에서 예전과 같은
     것이 기본이 되게 한다.
+
+    **측정 곡선이 장비가 계산한 곡선(`derived`)보다 앞이다**(2026-10-22) — 시험 모듈의
+    `curves_of` 와 같은 차례. 키 글자순만 보면 `TTS - master curve` 같은 계산 곡선이 처리의
+    기본 곡선이 될 수 있었다.
     """
     rows = list(db.scalars(select(Curve).where(Curve.test_run_id == run_id)))
-    return sorted(rows, key=lambda c: (c.key != RAW_CURVE, c.key))
+    return sorted(rows, key=curve_order)
+
+
+def curve_order(curve: Curve) -> tuple[bool, bool, str]:
+    """처리의 곡선 차례 — 측정 곡선 먼저, `raw` 먼저, 그다음 키 차례."""
+    return (curve.kind != "measured", curve.key != RAW_CURVE, curve.key)
 
 
 def channel_units(db: Session, test_type_id: object) -> dict[str, str]:

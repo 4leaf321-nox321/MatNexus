@@ -15,11 +15,14 @@
  * 감췄는지 말한다** — 조용히 자르면 그것이 전부인 줄 안다.
  */
 
+import { useState } from 'react'
+
 import { CardRemarks } from '@/modules/fitting/CardRemarks'
 import type { Remark } from '@/modules/fitting/CardRemarks'
 import type { BlockSpec, Produced, PropertyCard } from '@/modules/fitting/api'
+import { CurveChart } from '@/modules/tests/CurveChart'
 import { Badge } from '@/shared/components/ui/badge'
-import { formatScalar } from '@/shared/units'
+import { axisLabel, formatScalar, toDisplay } from '@/shared/units'
 
 /** 표를 이만큼만 편다. 나머지는 몇 행인지 말한다. */
 const ROW_LIMIT = 6
@@ -163,6 +166,101 @@ function Rows({ columns, rows }: { columns: Produced[]; rows: Record<string, unk
   )
 }
 
+/** 계수 선을 몇 점으로 그리나. 로그 축에서 자릿수마다 고르게. */
+const LINE_POINTS = 60
+
+/**
+ * 블록의 **그래프**(2026-10-22) — 선언(`spec.plot`)대로 점과 계수 선을 그린다. 블록 이름은 모른다.
+ *
+ * v1.285.0 보고: S-N 카드를 만들었는데 피팅 계수로 수명선도를 볼 수 없었다. 이미 만든 카드도
+ * 점(`rows`)과 계수(`values`)만으로 그린다 — 서버에 다시 묻지 않는다. 선은 점이 있는 범위만
+ * 그린다(외삽하지 않는다). 펴 둔 표가 그렇듯 그래프도 눌러야 펴진다 — 카드가 화면을 덜 먹게.
+ */
+function BlockPlotView({
+  spec,
+  values,
+  rows,
+}: {
+  spec: BlockSpec
+  values: Record<string, unknown>
+  rows: Record<string, unknown>[]
+}) {
+  const [open, setOpen] = useState(false)
+  const plot = spec.plot
+  if (!plot) return null
+  const xColumn = spec.rows.find((one) => one.key === plot.x)
+  const yColumn = spec.rows.find((one) => one.key === plot.y)
+  const hollowColumn = plot.hollow ? spec.rows.find((one) => one.key === plot.hollow) : undefined
+  const points = rows
+    .map((row) => ({
+      x: Number(row[plot.x]),
+      y: Number(row[plot.y]),
+      hollow: plot.hollow ? Number(row[plot.hollow]) === 1 : false,
+    }))
+    .filter((one) => Number.isFinite(one.x) && Number.isFinite(one.y))
+  if (points.length === 0) return null
+
+  const shown = (x: number, y: number): [number, number] => [
+    toDisplay(x, xColumn?.si_unit),
+    toDisplay(y, yColumn?.si_unit),
+  ]
+  const solid = points.filter((one) => !one.hollow).map((one) => shown(one.x, one.y))
+  const hollow = points.filter((one) => one.hollow).map((one) => shown(one.x, one.y))
+
+  // 계수 선 — 점(빈 점을 빼고, 없으면 전부)이 있는 x 범위에서만.
+  const line: [number, number][] = []
+  const coefficient = plot.line ? Number(values[plot.line.coefficient]) : NaN
+  const exponent = plot.line ? Number(values[plot.line.exponent]) : NaN
+  if (Number.isFinite(coefficient) && Number.isFinite(exponent)) {
+    const span = (points.some((one) => !one.hollow) ? points.filter((one) => !one.hollow) : points)
+      .map((one) => one.x)
+      .filter((x) => !plot.log_x || x > 0)
+    if (span.length > 0) {
+      const low = Math.min(...span)
+      const high = Math.max(...span)
+      for (let index = 0; index < LINE_POINTS; index += 1) {
+        const share = index / (LINE_POINTS - 1)
+        const x = plot.log_x
+          ? 10 ** (Math.log10(low) + (Math.log10(high) - Math.log10(low)) * share)
+          : low + (high - low) * share
+        line.push(shown(x, coefficient * x ** exponent))
+      }
+    }
+  }
+
+  return (
+    <div className="my-2">
+      <button
+        type="button"
+        className="text-primary text-xs underline-offset-2 hover:underline"
+        aria-expanded={open}
+        onClick={() => setOpen((current) => !current)}
+      >
+        {open ? '그래프 접기' : '그래프 보기'}
+      </button>
+      {open && (
+        <div className="mt-1">
+          <CurveChart
+            points={line}
+            pointsLabel="계수로 그린 선"
+            dots={[
+              { points: solid, label: '점' },
+              ...(hollow.length > 0
+                ? [{ points: hollow, label: hollowColumn?.label ?? '빈 점', hollow: true }]
+                : []),
+            ]}
+            xLabel={axisLabel(xColumn?.label ?? plot.x, xColumn?.si_unit)}
+            yLabel={axisLabel(yColumn?.label ?? plot.y, yColumn?.si_unit)}
+            logX={plot.log_x}
+            logY={plot.log_y}
+            height={300}
+          />
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function CardBlocks({
   specs,
   card,
@@ -207,6 +305,7 @@ export function CardBlocks({
               )}
             </div>
             <Values spec={spec} values={values} />
+            {spec.plot && <BlockPlotView spec={spec} values={values} rows={rows} />}
             <Rows columns={spec.rows} rows={rows} />
             {notes.map((note, index) => (
               <p key={index} className="text-muted-foreground mt-1 text-xs">

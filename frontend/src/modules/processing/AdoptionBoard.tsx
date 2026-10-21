@@ -81,6 +81,8 @@ function resultName(result: ResultBrief): string {
     `${result.step_count}단계`,
   ]
   if (result.has_true_stress) parts.push('진응력 포함')
+  // 실패한 단계가 있었던 결과 — 고르기 전에 빠진 값이 있다는 것을 안다(2026-10-22).
+  if ((result.failures?.length ?? 0) > 0) parts.push(`부분 결과(실패 ${result.failures?.length})`)
   if (result.stale) parts.push('옛 원본')
   if (result.is_adopted) parts.push('지금 채택')
   return parts.join(' · ')

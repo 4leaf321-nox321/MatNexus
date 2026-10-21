@@ -465,18 +465,28 @@ def _prony_members(db: Session, runs: list[TestRun]) -> list[groups.Member]:
     바뀌는데 화면 어디에도 그 전환이 안 보인다. 처리 결과를 **채택**하는 것과 같은
     문법으로 맞췄다.
 
-    정렬에 `created_at` 을 남겨 둔다 — 대표가 없는 옛 데이터(마이그레이션 전에
-    만들어진 것)에서도 무언가는 나와야 한다.
+    **대표가 없으면 막는다**(2026-10-22). 전에는 대표가 없으면 최신 것을 말없이 썼다 —
+    대표를 해제할 수 있게 되자 그것이 곧 「최근 것이 대표」 로 되돌아가는 길이 됐다.
+    옛 데이터는 마이그레이션(`bc089102090d`)이 대표를 채워 두었다.
     """
     members: list[groups.Member] = []
     for run in runs:
         curve = db.scalar(
-            select(MasterCurve)
-            .where(MasterCurve.test_run_id == run.id)
-            .order_by(MasterCurve.is_primary.desc(), MasterCurve.created_at.desc())
-            .limit(1)
+            select(MasterCurve).where(
+                MasterCurve.test_run_id == run.id, MasterCurve.is_primary.is_(True)
+            )
         )
         if curve is None:
+            any_curve = db.scalar(
+                select(MasterCurve.id).where(MasterCurve.test_run_id == run.id).limit(1)
+            )
+            if any_curve is not None:
+                raise AppError(
+                    "MNX-GROUPING-0014",
+                    f"{run.record_name} 에 대표 마스터커브가 없습니다 — 그 시험의 점탄성 "
+                    "탭에서 대표를 고르거나 이 시험을 빼세요.",
+                    status=422,
+                )
             raise AppError(
                 "MNX-GROUPING-0002",
                 f"{run.record_name} 에 마스터커브가 없습니다. 먼저 겹치세요.",

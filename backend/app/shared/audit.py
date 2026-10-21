@@ -132,6 +132,11 @@ VOCABULARY_ALIAS_ADDED_BY_CLIENT = "vocabulary.alias_added_by_client"
 TEST_RUNS_IMPORTED_BY_CLIENT = "test_runs.imported_by_client"
 MASTER_CURVE_BUILT_BY_CLIENT = "master_curve.built_by_client"
 PRONY_FITTED_BY_CLIENT = "prony.fitted_by_client"
+#: 마스터커브 · Prony 적합을 **실제로 지운** 일(2026-10-22). 되살릴 수 없고, 그 계수가 이미
+#: 카드 · 보고서에 실렸을 수 있다 — 처리 결과 지우기와 같은 까닭으로 남긴다.
+MASTER_CURVE_DELETED = "master_curve.deleted"
+PRONY_DELETED = "prony.deleted"
+MODULUS_TABLE_DELETED = "modulus_table.deleted"
 #: **AI 가 시험을 다시 읽음**(2026-10-20) — 곡선이 새로 만들어지고 읽을 형식이 고정 · 해제된다.
 #: 「이 시험 누가 다른 형식으로 읽게 했나」 가 물어지는 자리다. 화면에서 한 것은 안 남는다.
 TEST_RUN_REPARSED_BY_CLIENT = "test_run.reparsed_by_client"

@@ -1321,6 +1321,42 @@ class Test전단_채널로_잰_시험:
         basis = card["blocks"]["viscoelastic"]["values"]["modulus_basis"]
         assert basis.startswith("G′ (전단, 전단 채널(G′))") and "ν = 0.49" in basis
 
+    def test_온도별_표_카드도_E_로_옮기고_tan_delta_는_그대로다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str]
+    ) -> None:
+        """온도별 탄성률 표(2026-10-22)도 점탄성 카드와 같은 규칙 — 옮기지 않으면 덱 쪽에서
+        G′ 를 E 로 읽어 약 3 배 무르게 나간다. 비(tan δ)는 환산과 무관하다."""
+        run = self.shear_run(client, db, admin_headers)
+        sweeps = client.get(
+            f"/api/viscoelastic/runs/{run['id']}/sweeps", headers=admin_headers
+        ).json()["items"]
+        low = max(one["minimum_frequency_hz"] for one in sweeps)
+        high = min(one["maximum_frequency_hz"] for one in sweeps)
+        table = client.post(
+            f"/api/viscoelastic/runs/{run['id']}/modulus-tables",
+            json={"frequency_hz": (low * high) ** 0.5},
+            headers=admin_headers,
+        ).json()
+        assert table["modulus_basis"] == "G"
+        refused = client.post(
+            "/api/fitting/cards/dma-temperature",
+            json={"modulus_table_id": table["id"], "label": "겔 G′(T)"},
+            headers=admin_headers,
+        )
+        assert refused.status_code == 422, refused.text
+        made = client.post(
+            "/api/fitting/cards/dma-temperature",
+            json={"modulus_table_id": table["id"], "label": "겔 G′(T)", "poisson_ratio": 0.49},
+            headers=admin_headers,
+        )
+        assert made.status_code == 201, made.text
+        row = made.json()["blocks"]["dma_temperature"]["rows"][0]
+        assert row["storage_modulus"] == pytest.approx(
+            table["rows"][0]["storage_pa"] * 2 * (1 + 0.49)
+        )
+        if table["rows"][0]["tan_delta"] is not None:
+            assert row["tan_delta"] == pytest.approx(table["rows"][0]["tan_delta"])
+
     def test_푸아송비_없이는_옮기지_않는다(
         self, client: TestClient, db: Session, admin_headers: dict[str, str]
     ) -> None:
@@ -1445,3 +1481,221 @@ class Test온도_램프_파일:
         )
         assert refused.status_code == 422, refused.text
         assert "tables.split" in refused.json()["error"]["message"]
+
+
+class Test지우기와_대표_해제:
+    """v1.285.0 보고: 마스터커브 · Prony 를 지우거나 대표에서 내릴 수 없었다(2026-10-22).
+
+    처리 결과 지우기와 같은 문법 — 대표(재료 묶음이 읽는 것)와 카드가 근거로 든 것은 막는다.
+    """
+
+    def _curves(self, client: TestClient, headers: dict[str, str], run_id: str) -> Any:
+        return client.get(
+            f"/api/viscoelastic/runs/{run_id}/master-curves", headers=headers
+        ).json()
+
+    def test_대표는_못_지우고_해제하면_지운다_Prony_도_함께(
+        self, client: TestClient, admin_headers: dict[str, str], dma_run_plain: dict[str, Any]
+    ) -> None:
+        curve = Test마스터커브._make(client, admin_headers, dma_run_plain)
+        assert curve["is_primary"] is True, "첫 곡선은 만들면서 대표다"
+        fit = client.post(
+            f"/api/viscoelastic/master-curves/{curve['id']}/prony",
+            json={"terms": 2},
+            headers=admin_headers,
+        ).json()
+        refused = client.delete(
+            f"/api/viscoelastic/master-curves/{curve['id']}", headers=admin_headers
+        )
+        assert refused.status_code == 409, refused.text
+        assert refused.json()["error"]["code"] == "MNX-VISCOELASTIC-0012"
+
+        unset = client.delete(
+            f"/api/viscoelastic/master-curves/{curve['id']}/primary", headers=admin_headers
+        )
+        assert unset.status_code == 200, unset.text
+        assert unset.json()["is_primary"] is False
+        gone = client.delete(
+            f"/api/viscoelastic/master-curves/{curve['id']}", headers=admin_headers
+        )
+        assert gone.status_code == 204, gone.text
+        assert self._curves(client, admin_headers, dma_run_plain["id"]) == []
+        assert (
+            client.delete(
+                f"/api/viscoelastic/prony/{fit['id']}", headers=admin_headers
+            ).status_code
+            == 404
+        ), "마스터커브와 함께 사라져야 한다"
+        logged = client.get(
+            "/api/audit", params={"action": "master_curve.deleted"}, headers=admin_headers
+        ).json()
+        assert len(logged) == 1
+
+    def test_대표를_해제한_시험에_새로_만든_곡선은_저절로_대표가_안_된다(
+        self, client: TestClient, admin_headers: dict[str, str], dma_run_plain: dict[str, Any]
+    ) -> None:
+        """「다른 대표가 없으면 대표」 로 두면 해제가 안 지켜진다 — 최근 것이 대표로
+        돌아간다."""
+        first = Test마스터커브._make(client, admin_headers, dma_run_plain)
+        client.delete(
+            f"/api/viscoelastic/master-curves/{first['id']}/primary", headers=admin_headers
+        )
+        second = Test마스터커브._make(client, admin_headers, dma_run_plain)
+        assert second["is_primary"] is False
+
+    def test_대표가_없으면_Prony_묶음이_최신을_대신_쓰지_않는다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        dma_run_plain: dict[str, Any],
+    ) -> None:
+        """전에는 대표가 없으면 최신을 말없이 썼다 — 해제가 「최근 것이 대표」 로 되돌아갔다.
+        묶음은 같은 재료의 시험 둘 이상이 필요해, 구성원을 모으는 자리를 바로 부른다."""
+        from app.modules.grouping import services as grouping_services
+        from app.modules.tests.models import TestRun
+        from app.shared.errors import AppError
+
+        curve = Test마스터커브._make(client, admin_headers, dma_run_plain)
+        run = db.get(TestRun, uuid.UUID(dma_run_plain["id"]))
+        assert run is not None
+        assert len(grouping_services._prony_members(db, [run])) == 1
+        client.delete(
+            f"/api/viscoelastic/master-curves/{curve['id']}/primary", headers=admin_headers
+        )
+        db.expire_all()
+        with pytest.raises(AppError) as caught:
+            grouping_services._prony_members(db, [run])
+        assert caught.value.code == "MNX-GROUPING-0014"
+
+    def test_카드가_근거로_든_것은_못_지운다(
+        self, client: TestClient, admin_headers: dict[str, str], dma_run: dict[str, Any]
+    ) -> None:
+        fit = Test점탄성카드._fit(client, admin_headers, dma_run)
+        card = client.post(
+            "/api/fitting/cards/viscoelastic",
+            json={"prony_fit_id": fit["id"], "label": "근거 카드", "poisson_ratio": 0.45},
+            headers=admin_headers,
+        )
+        assert card.status_code == 201, card.text
+        refused = client.delete(f"/api/viscoelastic/prony/{fit['id']}", headers=admin_headers)
+        assert refused.status_code == 409, refused.text
+        assert "근거 카드" in refused.json()["error"]["message"]
+        curve_id = fit["master_curve_id"]
+        client.delete(
+            f"/api/viscoelastic/master-curves/{curve_id}/primary", headers=admin_headers
+        )
+        blocked = client.delete(
+            f"/api/viscoelastic/master-curves/{curve_id}", headers=admin_headers
+        )
+        assert blocked.status_code == 409, blocked.text
+        assert blocked.json()["error"]["code"] == "MNX-VISCOELASTIC-0013"
+
+    def test_Prony_적합을_지운다(
+        self, client: TestClient, admin_headers: dict[str, str], dma_run: dict[str, Any]
+    ) -> None:
+        curve = Test마스터커브._make(client, admin_headers, dma_run)
+        fit = client.post(
+            f"/api/viscoelastic/master-curves/{curve['id']}/prony",
+            json={"terms": 2},
+            headers=admin_headers,
+        ).json()
+        gone = client.delete(f"/api/viscoelastic/prony/{fit['id']}", headers=admin_headers)
+        assert gone.status_code == 204, gone.text
+        assert (
+            client.get(
+                f"/api/viscoelastic/master-curves/{curve['id']}/prony", headers=admin_headers
+            ).json()
+            == []
+        )
+
+
+class Test온도별_탄성률_표:
+    """DMA 온도별 E′ 를 잰 물성으로 · 카드로(2026-10-22, v1.285.0 보고).
+
+    전에는 재료에 적어 둔 값(출처 추정)으로만 넣을 수 있었다. 다온도 파일은 온도마다 곡선이
+    따로라 처리 단계로는 표가 안 나와, 마스터커브처럼 점탄성 탭에서 만든다.
+    """
+
+    def _make(self, client: TestClient, headers: dict[str, str], run_id: str) -> Any:
+        sweeps = client.get(f"/api/viscoelastic/runs/{run_id}/sweeps", headers=headers).json()[
+            "items"
+        ]
+        # 모든 스윕이 잰 범위 안의 주파수 — 온도마다 한 줄이 나와야 한다.
+        low = max(one["minimum_frequency_hz"] for one in sweeps)
+        high = min(one["maximum_frequency_hz"] for one in sweeps)
+        frequency = (low * high) ** 0.5
+        made = client.post(
+            f"/api/viscoelastic/runs/{run_id}/modulus-tables",
+            json={"frequency_hz": frequency},
+            headers=headers,
+        )
+        assert made.status_code == 201, made.text
+        return made.json(), len(sweeps)
+
+    def test_온도마다_한_줄이_서고_목록에_남는다(
+        self, client: TestClient, admin_headers: dict[str, str], dma_run: dict[str, Any]
+    ) -> None:
+        table, count = self._make(client, admin_headers, dma_run["id"])
+        assert len(table["rows"]) == count
+        temperatures = [one["temperature_k"] for one in table["rows"]]
+        assert temperatures == sorted(temperatures)
+        assert all(one["storage_pa"] > 0 for one in table["rows"])
+        listed = client.get(
+            f"/api/viscoelastic/runs/{dma_run['id']}/modulus-tables", headers=admin_headers
+        ).json()
+        assert [one["id"] for one in listed] == [table["id"]]
+
+    def test_범위_밖_주파수면_까닭을_대고_거절한다(
+        self, client: TestClient, admin_headers: dict[str, str], dma_run: dict[str, Any]
+    ) -> None:
+        refused = client.post(
+            f"/api/viscoelastic/runs/{dma_run['id']}/modulus-tables",
+            json={"frequency_hz": 1e5},
+            headers=admin_headers,
+        )
+        assert refused.status_code == 422, refused.text
+        assert refused.json()["error"]["code"] == "MNX-VISCOELASTIC-0016"
+        assert "범위 밖" in refused.json()["error"]["message"]
+
+    def test_표에서_카드를_만들고_카드가_든_표는_못_지운다(
+        self, client: TestClient, admin_headers: dict[str, str], dma_run: dict[str, Any]
+    ) -> None:
+        table, count = self._make(client, admin_headers, dma_run["id"])
+        card = client.post(
+            "/api/fitting/cards/dma-temperature",
+            json={"modulus_table_id": table["id"], "label": "EPDM E′(T)"},
+            headers=admin_headers,
+        )
+        assert card.status_code == 201, card.text
+        body = card.json()
+        block = body["blocks"]["dma_temperature"]
+        assert block["values"]["frequency_hz"] == pytest.approx(table["frequency_hz"])
+        assert len(block["rows"]) == count
+        assert block["rows"][0]["storage_modulus"] == pytest.approx(
+            table["rows"][0]["storage_pa"]
+        )
+        # **탄성 블록에 싣지 않는다** — 정적 탄성계수와 뜻이 다르다(사용자).
+        assert "elastic" not in body["blocks"]
+        assert body["source"]["modulus_table_id"] == table["id"]
+
+        refused = client.delete(
+            f"/api/viscoelastic/modulus-tables/{table['id']}", headers=admin_headers
+        )
+        assert refused.status_code == 409, refused.text
+        assert "EPDM E′(T)" in refused.json()["error"]["message"]
+
+    def test_카드가_없으면_지운다(
+        self, client: TestClient, admin_headers: dict[str, str], dma_run: dict[str, Any]
+    ) -> None:
+        table, _ = self._make(client, admin_headers, dma_run["id"])
+        gone = client.delete(
+            f"/api/viscoelastic/modulus-tables/{table['id']}", headers=admin_headers
+        )
+        assert gone.status_code == 204, gone.text
+        assert (
+            client.get(
+                f"/api/viscoelastic/runs/{dma_run['id']}/modulus-tables", headers=admin_headers
+            ).json()
+            == []
+        )

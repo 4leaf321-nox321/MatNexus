@@ -689,3 +689,148 @@ def pooled_shift_values(
         for temperature, model, observed in zip(temperatures, fitted, targets, strict=True)
     ]
     return shift_card_values(method, parameters, shifts)
+
+
+# ── 주파수 하나에서 본 온도별 탄성률 표 (2026-10-22) ──────────────────────────────
+#
+# DMA 온도별 E′ 를 잰 물성으로 넘길 길이 없었다(v1.285.0 보고). 다온도 파일은 온도마다 곡선이
+# 따로(등온 주파수 스윕)이고, 1 Hz 온도 스윕은 한 곡선에 온도축이 있다 — 둘 다 받는다.
+
+#: 램프 곡선에서 「그 주파수의 점」 으로 보는 상대 차이. 장비가 1 Hz 를 0.9999 로 적는다.
+FREQUENCY_MATCH = 0.01
+
+#: 이보다 가까운 온도는 한 줄로 합친다(K) — 같은 온도를 두 번 잰 것을 둘로 세지 않는다.
+TEMPERATURE_MERGE_K = 0.1
+
+
+@dataclass(frozen=True)
+class Segment:
+    """곡선 하나 — 온도 · 주파수 · 저장(· 손실) 탄성률. 온도가 흔들리면 램프, 아니면 등온
+    스윕."""
+
+    label: str
+    temperature_k: np.ndarray
+    frequency_hz: np.ndarray
+    storage_pa: np.ndarray
+    loss_pa: np.ndarray | None = None
+
+
+@dataclass(frozen=True)
+class TableRow:
+    temperature_k: float
+    storage_pa: float
+    loss_pa: float | None
+    tan_delta: float | None
+
+
+def _row(temperature_k: float, storage: float, loss: float | None) -> TableRow:
+    tan = loss / storage if loss is not None and storage > 0 else None
+    return TableRow(temperature_k, storage, loss, tan)
+
+
+def modulus_table(
+    segments: Sequence[Segment],
+    frequency_hz: float,
+    *,
+    spread_limit_k: float = 1.0,
+) -> tuple[list[TableRow], list[str]]:
+    """고른 주파수에서 **온도별** 저장 · 손실 탄성률과 tan δ. `(줄, 메모)`.
+
+    - **등온 스윕**(곡선 안 온도 흔들림 ≤ `spread_limit_k`): 온도는 중앙값, 값은 log f 대 log E
+      로 보간한다. 그 주파수가 스윕 범위 밖이면 **그 온도는 뺀다** — 외삽하지 않는다.
+    - **램프**(흔들림이 크다): 그 주파수(상대 1%)의 점을 고른다. 주파수 사이를 보간하지 않는다
+    —
+      램프에서는 이웃 점이 다른 온도라, 보간하면 두 온도를 섞는다.
+
+    가까운 온도(≤ 0.1 K)는 한 줄로 합친다. 줄이 하나도 없으면 빈 목록과 까닭을 돌려준다.
+    """
+    if not math.isfinite(frequency_hz) or frequency_hz <= 0:
+        raise ViscoelasticError(f"주파수가 양수가 아닙니다: {frequency_hz}")
+    target = math.log10(frequency_hz)
+    rows: list[TableRow] = []
+    notes: list[str] = []
+    for segment in segments:
+        temperature = np.asarray(segment.temperature_k, dtype=np.float64)
+        frequency = np.asarray(segment.frequency_hz, dtype=np.float64)
+        storage = np.asarray(segment.storage_pa, dtype=np.float64)
+        loss = (
+            np.asarray(segment.loss_pa, dtype=np.float64)
+            if segment.loss_pa is not None
+            else None
+        )
+        usable = (
+            np.isfinite(temperature)
+            & np.isfinite(frequency)
+            & np.isfinite(storage)
+            & (frequency > 0)
+            & (storage > 0)
+        )
+        if not usable.any():
+            notes.append(f"'{segment.label}' 에 쓸 점이 없어 뺐습니다.")
+            continue
+        spread = float(np.ptp(temperature[usable]))
+        if spread <= spread_limit_k:
+            log_f = np.log10(frequency[usable])
+            order = np.argsort(log_f)
+            log_f = log_f[order]
+            if target < log_f[0] - 1e-12 or target > log_f[-1] + 1e-12:
+                notes.append(
+                    f"'{segment.label}' 은 {10 ** log_f[0]:.4g}~{10 ** log_f[-1]:.4g} Hz 를 "
+                    "쟀습니다 "
+                    f"— {frequency_hz:g} Hz 가 범위 밖이라 그 온도를 뺐습니다(외삽하지 "
+                    "않습니다)."
+                )
+                continue
+            log_e = np.log10(storage[usable][order])
+            value = float(10 ** np.interp(target, log_f, log_e))
+            loss_value = None
+            if loss is not None:
+                lossy = loss[usable][order]
+                if np.all(np.isfinite(lossy)) and np.all(lossy > 0):
+                    loss_value = float(10 ** np.interp(target, log_f, np.log10(lossy)))
+            rows.append(_row(float(np.median(temperature[usable])), value, loss_value))
+            continue
+        near = usable & (np.abs(frequency - frequency_hz) <= FREQUENCY_MATCH * frequency_hz)
+        if not near.any():
+            measured = sorted({float(f"{one:.4g}") for one in frequency[usable]})[:8]
+            notes.append(
+                f"'{segment.label}' 은 온도를 올리며 잰 곡선인데 {frequency_hz:g} Hz 점이 "
+                "없습니다 "
+                f"(있는 주파수: {', '.join(f'{one:g}' for one in measured)} Hz)."
+            )
+            continue
+        for index in np.flatnonzero(near):
+            loss_value = None
+            if loss is not None and math.isfinite(float(loss[index])) and loss[index] > 0:
+                loss_value = float(loss[index])
+            rows.append(_row(float(temperature[index]), float(storage[index]), loss_value))
+
+    rows.sort(key=lambda one: one.temperature_k)
+    merged: list[TableRow] = []
+    bunch: list[TableRow] = []
+    joined = 0
+
+    def flush() -> None:
+        nonlocal joined
+        if not bunch:
+            return
+        if len(bunch) > 1:
+            joined += len(bunch) - 1
+        losses = [one.loss_pa for one in bunch if one.loss_pa is not None]
+        merged.append(
+            _row(
+                float(np.mean([one.temperature_k for one in bunch])),
+                float(np.mean([one.storage_pa for one in bunch])),
+                float(np.mean(losses)) if len(losses) == len(bunch) else None,
+            )
+        )
+        bunch.clear()
+
+    for row in rows:
+        if bunch and row.temperature_k - bunch[0].temperature_k > TEMPERATURE_MERGE_K:
+            flush()
+        bunch.append(row)
+    flush()
+    if joined:
+        notes.append(f"{TEMPERATURE_MERGE_K} K 안의 같은 온도 {joined}점을 평균해 합쳤습니다.")
+    return merged, notes

@@ -129,6 +129,19 @@ class ProcessingScalarOut(BaseModel):
     맞느냐" 에 답할 수 없다. 단면적처럼 계산된 값은 비어 있다."""
 
 
+class StepFailureOut(BaseModel):
+    """실패한 단계 하나(2026-10-22). **이것이 있으면 부분 결과다** — 나온 값은 맞지만
+    다 나오지는 않았다."""
+
+    index: int
+    plugin: str
+    label: str
+    message: str
+    stopped: bool
+    """여기서 멈췄나(곡선을 바꾸는 단계). 아니면 그 단계만 건너뛰고 계속했다(값만 재는
+    단계)."""
+
+
 class ProcessingStageOut(BaseModel):
     """단계 하나가 끝난 시점. **근거가 여기 산다.**
 
@@ -192,13 +205,15 @@ class ProcessingPreviewOut(BaseModel):
     느려지면 아무도 안 쓴다. 대신 뒤에 깔릴 선이라 더 성기게 솎는다."""
 
     problem: str | None = None
-    """**멈춘 자리.** 값이 있으면 이 미리보기는 거기까지만 돈 것이다.
+    """**실패한 자리**(`failures` 의 문장을 이은 것). 값이 있으면 다 돈 미리보기가 아니다.
 
     다섯 중 넷이 돌고 다섯째가 멈추면 그 넷의 곡선은 멀쩡히 나와 있다. 그것을
     버리고 오류만 돌려주면 사람은 어디가 어긋났는지 **눈으로 못 보고** 단계를
     하나씩 지워 가며 다시 돌린다(실사용, 2026-09-02).
 
-    **저장은 여전히 막는다** — 반쯤 돈 결과가 채택되면 카드까지 간다."""
+    **저장하면 부분 결과로 남는다**(2026-10-22) — 실패가 결과와 함께 남는다. 전에는 저장을
+    막아 일괄 처리에서 멀쩡한 인장강도까지 잃었다(v1.285.0 보고)."""
+    failures: list[StepFailureOut] = []
 
     stage_index: int | None = None
     """`points`·`columns`·`units` 가 **어느 단계의 것인가.** `None` 이면 마지막.
@@ -223,6 +238,8 @@ class ProcessingResultOut(BaseModel):
     """**그때의 단계 그대로다.** 레시피가 나중에 바뀌어도 이 값은 안 바뀐다."""
     stages: list[ProcessingStageOut]
     scalars: list[ProcessingScalarOut]
+    failures: list[StepFailureOut] = []
+    """실패한 단계 — **비어 있지 않으면 부분 결과다.**"""
     row_count: int
     columns: list[str]
     runtime: dict[str, str] = {}
@@ -289,6 +306,15 @@ class RecipeOut(BaseModel):
 class BatchRequest(BaseModel):
     test_run_ids: list[uuid.UUID] = Field(min_length=1)
     source_curve_key: str | None = None
+    """옛 칸 — 곡선 하나. 있으면 `curves=[이 키]` 로 읽는다."""
+    curves: Literal["first", "all"] | list[str] = "first"
+    """**어느 곡선을 돌리나**(2026-10-22). `first` 는 시험마다 첫 곡선(측정 곡선 먼저 · `raw` ·
+    키 차례), `all` 은 그 시험의 **측정 곡선 전부**(장비가 계산한 곡선은 빼고), 키 목록은
+    그 키들(시험에 없는 키는 넘긴다).
+
+    다온도 시험은 한 파일에 곡선이 여럿인데, 고를 길이 없어 첫 곡선 하나만 처리됐다
+    (v1.285.0 보고). 곡선이 여럿이면 한 시험에 결과가 여럿 생기므로 **그 시험은 채택하지
+    않는다** — 채택은 시험당 하나라 어느 곡선의 것인지는 사람이 검토대에서 고른다."""
     steps: list[dict[str, Any]]
     recipe_key: str | None = None
     adopt: bool = True
@@ -306,6 +332,9 @@ class BatchRequest(BaseModel):
 class BatchItemOut(BaseModel):
     test_run_id: uuid.UUID
     record_name: str
+    curve_key: str | None = None
+    """어느 곡선을 돌렸나. 곡선 여럿을 돌리면 한 시험이 곡선 수만큼 줄이 된다."""
+    curve_label: str | None = None
     status: str
     """`ok` | `failed`."""
     result_id: uuid.UUID | None = None
@@ -323,6 +352,10 @@ class BatchItemOut(BaseModel):
     previous_adopted_id: uuid.UUID | None = None
     """되돌릴 때 **원래 채택으로 돌려놓기 위한** 값. 배치가 채택을 옮겼는데
     되돌리기가 그냥 풀어 버리면, 원래 있던 값까지 사라진다."""
+    failures: list[StepFailureOut] = []
+    """실패한 단계 — 비어 있지 않으면 **부분 결과로 저장했다**(`status` 는 `ok`)."""
+    warning: str | None = None
+    """부분 결과라 채택을 옮기지 않았을 때 그 이유 — 지금 채택된 값 중 이 결과에 없는 것."""
 
 
 class BatchOut(BaseModel):
@@ -448,6 +481,17 @@ class ResultBriefOut(BaseModel):
     """원본을 바꾸기 전의 결과인가."""
     is_adopted: bool
     scalars: list[ProcessingScalarOut]
+    failures: list[StepFailureOut] = []
+    """실패한 단계 — 비어 있지 않으면 부분 결과다."""
+
+
+class RunCurveOut(BaseModel):
+    """시험의 곡선 하나 — 키 · 이름 · 측정(`measured`)인지 장비 계산(`derived`)인지."""
+
+    key: str
+    label: str | None = None
+    kind: str
+    row_count: int
 
 
 class RunOverviewOut(BaseModel):
@@ -468,6 +512,8 @@ class RunOverviewOut(BaseModel):
     adopted_result_id: uuid.UUID | None = None
     access: EditAccessOut | None = None
     """이 사람이 채택을 바꿀 수 있나 — 못 하면 누구에게 물을지."""
+    curves: list[RunCurveOut] = []
+    """그 시험의 곡선 — 처리 기본 차례(측정 먼저). 일괄 처리가 곡선을 고르는 데 쓴다."""
     results: list[ResultBriefOut]
     """최근 것이 앞에. 기본값을 안 둔다 — 두면 화면 타입이 「없을 수도 있다」 로 나온다."""
 

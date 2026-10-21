@@ -542,10 +542,10 @@ describe('돌려 보기가 막힐 때', () => {
     expect(screen.getByText(/에서\s*생겼습니다/)).toBeInTheDocument()
   })
 
-  it('멈춰도 여기까지의 곡선을 보여 주고, 저장은 막는다', async () => {
+  it('멈춰도 여기까지의 곡선을 보여 주고, 나온 값이 없으면 저장은 막는다', async () => {
     // **그 곡선이 없으면 사람은 단계를 하나씩 지워 가며 다시 돌린다** — 실제로
     // 그렇게 했다(2026-09-02). 다만 「다 됐다」 로 읽히면 안 되므로 무엇이
-    // 멈췄는지 먼저 적고, 반쯤 돈 것은 저장하지 못하게 한다.
+    // 멈췄는지 먼저 적는다. 나온 값이 있으면 부분 결과로 저장된다(2026-10-22, 아래 시험).
     preview.mockResolvedValue({
       source_curve_key: 'curve-1',
       source_row_count: 100,
@@ -569,6 +569,15 @@ describe('돌려 보기가 막힐 때', () => {
       notes: [],
       points: [[0, 0]],
       problem: "4단계 '탄성계수': 구간 [9, 10] 안에 0점이 있습니다.",
+      failures: [
+        {
+          index: 3,
+          plugin: 'tensile.elastic_modulus',
+          label: '탄성계수',
+          message: "4단계 '탄성계수': 구간 [9, 10] 안에 0점이 있습니다.",
+          stopped: true,
+        },
+      ],
     })
     const user = userEvent.setup()
     show()
@@ -576,8 +585,55 @@ describe('돌려 보기가 막힐 때', () => {
     await user.click(screen.getByRole('button', { name: /미리보기/ }))
 
     expect(await screen.findByText(/여기까지만 돌았습니다/)).toBeInTheDocument()
-    expect(screen.getByText(/구간 \[9, 10\] 안에 0점/)).toBeInTheDocument()
+    expect(screen.getAllByText(/구간 \[9, 10\] 안에 0점/).length).toBeGreaterThan(0)
+    // 나온 값이 하나도 없으면 저장할 것이 없다 — 서버도 거절한다.
     expect(screen.getByRole('button', { name: /저장/ })).toBeDisabled()
+  })
+
+  it('실패한 단계가 있어도 나온 값이 있으면 부분 결과로 저장할 수 있다', async () => {
+    // v1.285.0 보고: 한 단계가 걸리면 멀쩡한 인장강도까지 저장되지 않았다.
+    preview.mockResolvedValueOnce({
+      source_curve_key: 'raw',
+      source_row_count: 100,
+      row_count: 100,
+      columns: ['strain_engineering', 'stress_engineering'],
+      units: { strain_engineering: '1', stress_engineering: 'Pa' },
+      stages: [
+        {
+          index: 0,
+          plugin: 'tensile.engineering',
+          label: '공칭 응력-변형률',
+          version: '1',
+          options: {},
+          notes: [],
+          row_count: 100,
+          columns: ['strain_engineering'],
+          scalars: [],
+        },
+      ],
+      scalars: [{ key: 'tensile_strength', label: '인장강도', value: 3e8, si_unit: 'Pa' }],
+      notes: [],
+      points: [[0, 0]],
+      problem: "2단계: '@youngs_modulus' 가 가리키는 값을 앞 단계가 내지 않았습니다.",
+      failures: [
+        {
+          index: 1,
+          plugin: 'tensile.proof_stress',
+          label: '오프셋 항복강도',
+          message: "2단계: '@youngs_modulus' 가 가리키는 값을 앞 단계가 내지 않았습니다.",
+          stopped: false,
+        },
+      ],
+    })
+    const user = userEvent.setup()
+    show()
+    await clickStep(user, '공칭 응력-변형률')
+    await user.click(screen.getByRole('button', { name: /미리보기/ }))
+
+    expect(await screen.findByText(/실패한 단계를 건너뛰었습니다/)).toBeInTheDocument()
+    const save = screen.getByRole('button', { name: /저장/ })
+    expect(save).toBeEnabled()
+    expect(save).toHaveAttribute('title', expect.stringMatching(/부분 결과로 저장/))
   })
 
   it('누르기 전에는 조용하다', async () => {

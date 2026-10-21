@@ -140,6 +140,8 @@ export interface RunQuery extends Record<string, unknown> {
   /** 측정 의뢰 id — 그 의뢰의 항목에 붙은 시험만(의뢰 상세의 「이 의뢰의 시험」). */
   commission?: string
   status?: 'uploaded' | 'parsing' | 'parsed' | 'failed' | 'imported'
+  /** 읽힌 시험만 — 완료(parsed)와 표로 입력(imported). 서버가 함께 거른다. */
+  readable?: boolean
   /**
    * 채택된 처리 결과가 있는가. **"올렸는데 아직 아무것도 안 한 것"** 을 세려면
    * `false`. 목록을 받아 화면이 세면 상한에 걸린 순간 숫자가 조용히 틀린다.

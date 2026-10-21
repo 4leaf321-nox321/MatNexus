@@ -733,6 +733,25 @@ class CardValueOut(BaseModel):
     """이 값이 문헌 물성으로 치면 무엇인가. `ProducedOut.property_key` 와 같다."""
 
 
+class PowerLineOut(BaseModel):
+    """`y = values[coefficient] · x ^ values[exponent]`."""
+
+    coefficient: str
+    exponent: str
+
+
+class BlockPlotOut(BaseModel):
+    """블록 그래프 선언 — 점은 `rows` 의 `x` · `y`, `hollow` 가 참이면 빈 점, `line` 은 계수
+    선."""
+
+    x: str
+    y: str
+    log_x: bool = False
+    log_y: bool = False
+    hollow: str | None = None
+    line: PowerLineOut | None = None
+
+
 class BlockSpecOut(BaseModel):
     """물성 블록 한 갈래의 선언.
 
@@ -753,6 +772,8 @@ class BlockSpecOut(BaseModel):
     kind_priority: int | None = None
     """이 블록이 들어 있으면 카드의 종류가 되는가 — 작을수록 먼저, `None` 은 종류가 아님.
     화면이 이것으로 카드 목록을 가른다(블록 이름을 화면에 박지 않는다)."""
+    plot: BlockPlotOut | None = None
+    """그래프로 보이는 법(2026-10-22) — 있으면 화면이 이 선언대로 점과 계수 선을 그린다."""
 
 
 class CardRemarkOut(BaseModel):
@@ -1060,6 +1081,20 @@ class ViscoelasticCardSaveRequest(BaseModel):
     """**DMA 는 이것을 재지 않는다.** 재료에서 물려받거나 사람이 넣는다 —
     없으면 없는 채로 두고, `*ELASTIC` 을 못 쓴다고 그때 말한다."""
     density: float | None = Field(default=None, gt=0)
+    note: str | None = None
+
+
+class DmaTemperatureCardSaveRequest(BaseModel):
+    """온도별 저장 탄성률 카드 — 점탄성 탭의 **온도별 탄성률 표 하나에서**(2026-10-22).
+
+    v1.285.0 보고: DMA 온도별 E′ 를 잰 물성으로 넘길 길이 없었다. 표가 재료 · 방향은 체인을
+    따라간다(표 → 시험 → 시편 → 시료 → 재료).
+    """
+
+    modulus_table_id: uuid.UUID
+    label: str = Field(min_length=1, max_length=120)
+    poisson_ratio: float | None = Field(default=None, gt=0, lt=0.5)
+    """전단(G′)으로 잰 표를 E 로 옮길 때만 쓴다. 비우면 재료에서 물려받는다."""
     note: str | None = None
 
 

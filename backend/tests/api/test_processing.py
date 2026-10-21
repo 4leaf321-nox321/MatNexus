@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import uuid
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 import pytest
 from fastapi.testclient import TestClient
@@ -125,11 +125,12 @@ class Test멈춰도_거기까지는_본다:
         assert len(body["stages"]) == len(STEPS)
         assert any(one["key"] == "tensile_strength" for one in body["scalars"])
 
-    def test_저장은_그래도_거절한다(
+    def test_저장하면_부분_결과로_남고_실패가_함께_남는다(
         self, client: TestClient, admin_headers: dict[str, str], run_id: str
     ) -> None:
-        """**반쯤 돈 결과가 채택되면 카드와 덱까지 간다.**"""
-        refused = client.post(
+        """전에는 저장을 거절했다 — 일괄 처리에서 멀쩡한 인장강도까지 잃었다(v1.285.0 보고).
+        이제 나온 값은 저장하고, **부분 결과라는 사실**이 결과와 함께 남는다."""
+        saved = client.post(
             "/api/processing/results",
             json={
                 "test_run_id": run_id,
@@ -143,7 +144,59 @@ class Test멈춰도_거기까지는_본다:
             },
             headers=admin_headers,
         )
+        assert saved.status_code == 201, saved.text
+        body = saved.json()
+        assert any(one["key"] == "tensile_strength" for one in body["scalars"])
+        assert [(one["plugin"], one["stopped"]) for one in body["failures"]] == [
+            ("tensile.proof_stress", False)
+        ]
+        assert "없는값" in body["failures"][0]["message"]
+        listed = client.get(
+            "/api/processing/results", params={"test_run_id": run_id}, headers=admin_headers
+        ).json()
+        assert listed[0]["failures"] == body["failures"]
+
+    def test_곡선을_바꾸는_단계가_멈추면_거기까지를_저장한다(
+        self, client: TestClient, admin_headers: dict[str, str], run_id: str
+    ) -> None:
+        saved = client.post(
+            "/api/processing/results",
+            json={
+                "test_run_id": run_id,
+                "steps": [
+                    *STEPS,
+                    {
+                        "plugin": "tensile.true_plastic",
+                        "options": {"youngs_modulus": "@없는값"},
+                    },
+                ],
+            },
+            headers=admin_headers,
+        )
+        assert saved.status_code == 201, saved.text
+        body = saved.json()
+        assert body["failures"][-1]["stopped"] is True
+        assert [one["index"] for one in body["stages"]] == [0, 1, 2]
+
+    def test_나온_값이_없으면_저장하지_않는다(
+        self, client: TestClient, admin_headers: dict[str, str], run_id: str
+    ) -> None:
+        refused = client.post(
+            "/api/processing/results",
+            json={
+                "test_run_id": run_id,
+                "steps": [
+                    STEPS[0],
+                    {
+                        "plugin": "tensile.proof_stress",
+                        "options": {"youngs_modulus": "@없는값"},
+                    },
+                ],
+            },
+            headers=admin_headers,
+        )
         assert refused.status_code == 422, refused.text
+        assert "나온 값이 없어" in refused.json()["error"]["message"]
 
     def test_첫_단계가_멈추면_그릴_것이_없다(
         self, client: TestClient, admin_headers: dict[str, str], run_id: str
@@ -284,8 +337,11 @@ class Test재료에_적은_값으로_돈다:
         self, client: TestClient, admin_headers: dict[str, str], run_id: str
     ) -> None:
         """**0 이 조용히 섞이는 것보다 실패가 낫다.** 탄성계수가 0 이면 항복선의
-        기울기가 0 이 되고, 그 결과는 숫자로만 보면 그럴듯하다."""
-        refused = client.post(
+        기울기가 0 이 되고, 그 결과는 숫자로만 보면 그럴듯하다.
+
+        탄성계수는 값만 재는 단계라 그 단계만 실패로 남고(2026-10-22), 앞의 인장강도는 저장된다
+        — 탄성계수 칸은 비어 있다(0 이 아니다)."""
+        saved = client.post(
             "/api/processing/results",
             json={
                 "test_run_id": run_id,
@@ -302,7 +358,11 @@ class Test재료에_적은_값으로_돈다:
             },
             headers=admin_headers,
         )
-        assert refused.status_code == 422, refused.text
+        assert saved.status_code == 201, saved.text
+        body = saved.json()
+        assert "youngs_modulus" not in {one["key"] for one in body["scalars"]}
+        assert body["failures"][0]["plugin"] == "tensile.elastic_modulus"
+        assert "declared_youngs_modulus" in body["failures"][0]["message"]
 
 
 class Test단계목록:
@@ -988,6 +1048,51 @@ class Test배치_미리보기와_되돌리기:
         got = client.post("/api/processing/batch", json=body, headers=headers)
         assert got.status_code == 200, got.text
         return got.json()
+
+    #: 탄성계수를 낼 수 없는 구성 — 항복강도가 실패하고 그 뒤 인장강도는 나온다(v1.285.0
+    #: 보고의 모양).
+    PARTIAL: ClassVar[list[dict[str, Any]]] = [
+        STEPS[0],
+        STEPS[1],
+        {"plugin": "tensile.proof_stress", "options": {"youngs_modulus": "@없는값"}},
+        {"plugin": "tensile.strength", "options": {}},
+    ]
+
+    def test_단계가_실패해도_인장강도는_저장되고_처음이면_채택된다(
+        self, client: TestClient, admin_headers: dict[str, str], run_id: str
+    ) -> None:
+        """잃을 값이 없으면 부분 결과도 채택한다 — 인장강도라도 물성으로 선다."""
+        got = self._batch(client, admin_headers, run_id, steps=self.PARTIAL, adopt=True)
+        item = got["items"][0]
+        assert item["status"] == "ok" and item["adopted"] is True, item
+        assert any(one["key"] == "tensile_strength" for one in item["scalars"])
+        assert [one["plugin"] for one in item["failures"]] == ["tensile.proof_stress"]
+        assert item["warning"] is None
+
+    def test_부분_결과가_채택된_값을_잃게_하면_채택을_옮기지_않는다(
+        self, client: TestClient, admin_headers: dict[str, str], run_id: str
+    ) -> None:
+        """이미 채택된 결과에 있는 값(여기서는 공칭 변환의 값들)이 부분 결과에 없으면 채택은
+        그대로 두고 결과만 쌓는다 — 실패로 못 낸 값이 채택을 옮기며 조용히 사라지면 안 된다."""
+        full = [*STEPS, {"plugin": "tensile.necking_candidate", "options": {}}]
+        first = self._batch(client, admin_headers, run_id, steps=full, adopt=True)
+        kept = first["items"][0]["result_id"]
+        assert first["items"][0]["adopted"] is True
+
+        broken = [
+            *STEPS,
+            {"plugin": "tensile.necking_candidate", "options": {"strain": "없는열"}},
+        ]
+        preview = self._batch(
+            client, admin_headers, run_id, steps=broken, adopt=True, dry_run=True
+        )
+        assert preview["items"][0]["warning"], "미리보기에서 먼저 말해야 한다"
+        second = self._batch(client, admin_headers, run_id, steps=broken, adopt=True)
+        item = second["items"][0]
+        assert item["status"] == "ok" and item["result_id"] and item["adopted"] is False
+        assert "채택은 그대로" in item["warning"]
+        run = client.get(f"/api/test-runs/{run_id}", headers=admin_headers).json()
+        assert run["adopted_result_id"] == kept
 
     def test_미리보기는_아무것도_안_남긴다(
         self, client: TestClient, admin_headers: dict[str, str], run_id: str
@@ -2130,3 +2235,98 @@ class Test처리로_거르기:
         assert steps.get(STEPS[0]["plugin"], 0) >= 1
         # 재료는 이름이 아니라 식별자로 거른다 — 이름은 개명을 따라 바뀐다.
         assert body["materials"] and body["materials"][0]["key"]
+
+
+class Test일괄_다곡선:
+    """**다온도 시험은 곡선이 여럿이다** — 고르지 않으면 첫 곡선만 처리됐다(v1.285.0 보고).
+
+    곡선을 「첫 곡선 · 측정 곡선 전부 · 고른 키」 로 고른다. 곡선이 여럿이면 한 시험에 결과가
+    여럿 생기므로 채택은 하지 않는다(채택은 시험당 하나 — 사람이 검토대에서 고른다).
+    """
+
+    @staticmethod
+    def _more_curves(db: Session, run_id: str) -> None:
+        """원본 곡선을 복사해 측정 곡선 하나(`b_second`)와 장비 계산 곡선 하나(`a_calc`)를
+        붙인다."""
+        from app.modules.tests.models import Curve
+
+        raw = db.scalar(select(Curve).where(Curve.test_run_id == uuid.UUID(run_id)))
+        assert raw is not None
+        for key, kind in (("b_second", "measured"), ("a_calc", "derived")):
+            db.add(
+                Curve(
+                    test_run_id=raw.test_run_id,
+                    key=key,
+                    label=f"{key} 곡선",
+                    kind=kind,
+                    storage_path=raw.storage_path,
+                    row_count=raw.row_count,
+                    sha256=raw.sha256,
+                    byte_size=raw.byte_size,
+                    channels=list(raw.channels),
+                )
+            )
+        db.commit()
+
+    def _batch(self, client: TestClient, headers: dict[str, str], **body: Any) -> Any:
+        got = client.post(
+            "/api/processing/batch", json={"steps": STEPS, **body}, headers=headers
+        )
+        assert got.status_code == 200, got.text
+        return got.json()
+
+    def test_곡선_목록은_측정_먼저이고_첫_곡선이_기본이다(
+        self, client: TestClient, admin_headers: dict[str, str], db: Session, run_id: str
+    ) -> None:
+        self._more_curves(db, run_id)
+        listed = client.post(
+            "/api/processing/overview", json={"test_run_ids": [run_id]}, headers=admin_headers
+        ).json()
+        # 계산 곡선은 키 글자순으로 앞(`a_calc`)이어도 뒤에 선다 — 처리의 기본이 되면 안 된다.
+        assert [(one["key"], one["kind"]) for one in listed[0]["curves"]] == [
+            ("raw", "measured"),
+            ("b_second", "measured"),
+            ("a_calc", "derived"),
+        ]
+        first = self._batch(client, admin_headers, test_run_ids=[run_id], dry_run=True)
+        assert [one["curve_key"] for one in first["items"]] == ["raw"]
+
+    def test_측정_곡선_전부를_돌리고_채택은_하지_않는다(
+        self, client: TestClient, admin_headers: dict[str, str], db: Session, run_id: str
+    ) -> None:
+        self._more_curves(db, run_id)
+        got = self._batch(
+            client, admin_headers, test_run_ids=[run_id], curves="all", adopt=True
+        )
+        assert [(one["curve_key"], one["status"]) for one in got["items"]] == [
+            ("raw", "ok"),
+            ("b_second", "ok"),
+        ]
+        assert all(one["result_id"] and not one["adopted"] for one in got["items"])
+        assert "곡선이 여럿이라" in got["items"][0]["warning"]
+        run = client.get(f"/api/test-runs/{run_id}", headers=admin_headers).json()
+        assert run["adopted_result_id"] is None
+        stored = client.get(
+            "/api/processing/results", params={"test_run_id": run_id}, headers=admin_headers
+        ).json()
+        assert sorted(one["source_curve_key"] for one in stored) == ["b_second", "raw"]
+
+    def test_고른_곡선만_돌리고_하나면_채택한다(
+        self, client: TestClient, admin_headers: dict[str, str], db: Session, run_id: str
+    ) -> None:
+        self._more_curves(db, run_id)
+        got = self._batch(
+            client,
+            admin_headers,
+            test_run_ids=[run_id],
+            curves=["b_second", "없는키"],
+            adopt=True,
+        )
+        assert [(one["curve_key"], one["adopted"]) for one in got["items"]] == [
+            ("b_second", True)
+        ]
+        missing = self._batch(
+            client, admin_headers, test_run_ids=[run_id], curves=["없는키"], dry_run=True
+        )
+        assert missing["items"][0]["status"] == "failed"
+        assert "고른 곡선이 이 시험에 없습니다" in missing["items"][0]["error"]

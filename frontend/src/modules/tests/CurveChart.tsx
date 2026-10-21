@@ -85,6 +85,12 @@ export interface CurveChartProps {
    */
   background?: { points: [number, number][]; label: string; tone?: string; dashed?: boolean }[]
   /**
+   * **선으로 잇지 않는 점**(2026-10-22) — 시편마다 하나인 S-N 점처럼, 이으면 지그재그가 돼
+   * 뜻이 없어지는 것. `hollow` 면 빈 점이다(런아웃처럼 「여기서도 안 끝났다」 는 하한).
+   * 축 범위에 함께 넣는다.
+   */
+  dots?: { points: [number, number][]; label: string; hollow?: boolean }[]
+  /**
    * `tone` 은 그 선의 색(Tailwind `stroke-*` 클래스). **안 주면 전부 같은
    * 파랑**이고, 그것이 시편 원곡선에는 맞다 — 서로 구별할 것이 아니라 흩어짐을
    * 보는 것이라서다.
@@ -298,6 +304,7 @@ export function CurveChart({
   logX: initialLogX = false,
   logY: initialLogY = false,
   marker,
+  dots,
 }: CurveChartProps) {
   const [hover, setHover] = useState<number | null>(null)
   // **받은 로그 여부는 처음 축일 뿐** — 사람이 차트 위에서 바꾼다. 부르는 쪽이 바꾸면
@@ -381,13 +388,15 @@ export function CurveChart({
   }, [empty])
 
   const scale = useMemo(() => {
-    if (points.length === 0) return null
+    const dotted = (dots ?? []).flatMap((one) => one.points)
+    if (points.length === 0 && dotted.length === 0) return null
     // 겹쳐 그리는 선도 축 범위에 넣는다. 안 넣으면 적합 곡선이 판을 벗어나
     // 잘려 보이고, 잘린 그림으로는 잘 맞는지 알 수 없다.
     const every = [
       ...points,
       ...(overlay?.points ?? []),
       ...(background ?? []).flatMap((one) => one.points),
+      ...dotted,
     ]
     // 로그 축에 0 이하 점은 없다 — 넣으면 log10(0) 이 축을 수백 자릿수로 늘린다.
     const drawn = every.filter((point) => drawable(point, logX, logY))
@@ -435,7 +444,7 @@ export function CurveChart({
       positiveX: every.some((point) => point[0] > 0),
       positiveY: every.some((point) => point[1] > 0),
     }
-  }, [points, overlay, background, height, logX, logY, view])
+  }, [points, overlay, background, dots, height, logX, logY, view])
 
   if (!scale) {
     return (
@@ -636,7 +645,8 @@ export function CurveChart({
               best = index
             }
           })
-          setHover(best)
+          // 선이 없고 점 묶음만 있으면 읽어 줄 선이 없다.
+          setHover(bestDistance === Infinity ? null : best)
         }}
       >
         {yTicks.map((value) => (
@@ -733,6 +743,29 @@ export function CurveChart({
           />
         )}
 
+        {(dots ?? []).map((set) => (
+          <g key={set.label} data-testid="chart-dots" aria-label={set.label}>
+            {set.points.filter(ok).map((point, index) => (
+              <circle
+                key={index}
+                cx={scale.toX(point[0])}
+                cy={scale.toY(point[1])}
+                r={3.5}
+                strokeWidth={1.5}
+                className={
+                  set.hollow
+                    ? 'fill-background stroke-amber-600 dark:stroke-amber-500'
+                    : 'fill-sky-600 stroke-sky-600 dark:fill-sky-400 dark:stroke-sky-400'
+                }
+              >
+                <title>
+                  {set.label} — {format(point[0])} , {format(point[1])}
+                </title>
+              </circle>
+            ))}
+          </g>
+        ))}
+
         {(() => {
           // 놓으면 펼 모양 그대로 보인다 — 얇게 끌면 판 높이 전체(가로만)로.
           const shape = pick ? pickShape(pick, height) : null
@@ -828,6 +861,31 @@ export function CurveChart({
             <span className="inline-block h-0.5 w-5 border-t-2 border-dashed border-amber-600 dark:border-amber-500" />
             {overlay.label}
           </span>
+        </div>
+      )}
+      {/* 점 묶음의 범례 — 빈 점이 무엇인지 그림만으로는 모른다. */}
+      {!overlay && (dots ?? []).some((set) => set.points.length > 0) && (
+        <div className="flex flex-wrap items-center justify-center gap-4 pb-1 text-xs">
+          {points.length > 0 && (
+            <span className="flex items-center gap-1.5">
+              <span className="bg-primary inline-block h-0.5 w-5" />
+              {pointsLabel ?? '데이터'}
+            </span>
+          )}
+          {(dots ?? [])
+            .filter((set) => set.points.length > 0)
+            .map((set) => (
+              <span key={set.label} className="flex items-center gap-1.5">
+                <span
+                  className={`inline-block size-2.5 rounded-full border-2 ${
+                    set.hollow
+                      ? 'border-amber-600 dark:border-amber-500'
+                      : 'border-sky-600 bg-sky-600 dark:border-sky-400 dark:bg-sky-400'
+                  }`}
+                />
+                {set.label} {set.points.length}
+              </span>
+            ))}
         </div>
       )}
     </div>
