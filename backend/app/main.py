@@ -34,6 +34,7 @@ from app.modules.formulas import services as formulas_services
 from app.modules.graph import routes as graph_routes
 from app.modules.grouping import routes as grouping_routes
 from app.modules.guide import routes as guide_routes
+from app.modules.materials import parts_routes as materials_parts_routes
 from app.modules.materials import routes as materials_routes
 from app.modules.metrology import routes as metrology_routes
 from app.modules.notices import routes as notices_routes
@@ -123,6 +124,9 @@ def _api_router() -> APIRouter:
     router.include_router(catalog_taxonomy_routes.router)
     router.include_router(catalog_taxonomy_routes.feed_router)
     router.include_router(metrology_routes.router)
+    # 적용 부품(ADR 0064) — `/materials/parts/bom` 이 `/materials/{id}` 보다 먼저 걸리게 앞에
+    # 둔다.
+    router.include_router(materials_parts_routes.router)
     router.include_router(materials_routes.router)
     router.include_router(materials_routes.samples_router)
     router.include_router(materials_routes.specimens_router)

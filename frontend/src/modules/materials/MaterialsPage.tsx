@@ -12,6 +12,7 @@ import {
   Boxes,
   ChevronLeft,
   ChevronRight,
+  FileSpreadsheet,
   Plus,
   Search,
   SlidersHorizontal,
@@ -292,6 +293,14 @@ export default function MaterialsPage() {
             <Button variant="secondary" onClick={() => setBulk(true)}>
               <Plus className="size-4" />
               여러 개 등록
+            </Button>
+            {/* **부품 정보는 BOM 에서 온다**(ADR 0064) — 한 장에 재료가 여럿이라 재료 화면이 아니라
+                여기서 연다. 재질로 재료를 찾아 나눠 넣는다. */}
+            <Button variant="outline" asChild>
+              <Link to="/materials/parts-import">
+                <FileSpreadsheet className="size-4" />
+                BOM 가져오기
+              </Link>
             </Button>
             {/* **지금 거른 것을 그대로 받는다.** 화면과 다른 것이 내려오면
                 사람은 그 사실을 모른 채 그 파일로 계산한다. */}

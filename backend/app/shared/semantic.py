@@ -324,8 +324,13 @@ def _material_chunks(db: Session, *, ids: Iterable[str] | None = None) -> list[C
         text(f"""
         SELECT m.id::text, m.record_name, m.alias, m.family, m.category, m.grade,
                m.details, m.note,
-               (SELECT string_agg(u.value, ', ' ORDER BY u.axis, u.position)
-                  FROM material_uses u WHERE u.material_id = m.id) AS uses
+               (SELECT string_agg(DISTINCT n.name, ', ')
+                  FROM (SELECT p.product_name AS name FROM material_parts p
+                         WHERE p.material_id = m.id AND p.product_name IS NOT NULL
+                        UNION
+                        SELECT p.part_name FROM material_parts p
+                         WHERE p.material_id = m.id AND p.part_name IS NOT NULL) AS n
+               ) AS uses
         FROM materials m
         WHERE m.deleted_at IS NULL
         {"AND m.id::text = ANY(:ids)" if only is not None else ""}

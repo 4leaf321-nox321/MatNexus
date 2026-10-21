@@ -52,7 +52,7 @@ from app.modules.materials.models import (
     Material,
     MaterialApprovalRequest,
     MaterialParameterSet,
-    MaterialUse,
+    MaterialPart,
     Sample,
     Specimen,
 )
@@ -125,7 +125,7 @@ __all__ = [
     "Material",
     "MaterialApprovalRequest",
     "MaterialParameterSet",
-    "MaterialUse",
+    "MaterialPart",
     "McpToolDaily",
     "Notice",
     "NoticeRead",

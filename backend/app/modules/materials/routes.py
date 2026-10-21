@@ -31,7 +31,7 @@ from app.modules.materials.models import (
     Material,
     MaterialApprovalRequest,
     MaterialParameterSet,
-    MaterialUse,
+    MaterialPart,
     Sample,
     Specimen,
 )
@@ -161,6 +161,7 @@ def _material_out(
     sample_count: int,
     workspace_name: str | None,
     uses: dict[str, list[str]] | None = None,
+    part_count: int = 0,
     access: EditAccessOut | None = None,
     matched: str | None = None,
 ) -> MaterialOut:
@@ -184,6 +185,7 @@ def _material_out(
         spec_thickness_unit=SI_LENGTH,
         applied_products=(uses or {}).get("product", []),
         applied_parts=(uses or {}).get("part", []),
+        part_count=part_count,
         density=material.density_si,
         density_unit=SI_DENSITY,
         poisson_ratio=material.poisson_ratio,
@@ -512,7 +514,7 @@ _SEARCH_AXES = (
 )
 
 
-#: 용도 축 — 재료의 칸이 아니라 `material_uses` 의 줄이다(v1.89.0).
+#: 용도 축 — 재료의 칸이 아니라 적용 부품(`material_parts`)의 줄이다(v1.89.0 · ADR 0064).
 _USE_AXES = ("product", "part")
 #: 시료의 회사 축 — 제조사, 그리고 유통사·주 벤더가 한 축(`vendor`)을 함께 쓴다.
 _MAKER_AXES = ("manufacturer", "vendor")
@@ -533,7 +535,23 @@ def _materials_beside(db: Session, word: str) -> list[uuid.UUID]:
     uses = vocabulary_services.term_ids_matching(db, _USE_AXES, word)
     if uses:
         found.update(
-            db.scalars(select(MaterialUse.material_id).where(MaterialUse.term_id.in_(uses)))
+            db.scalars(
+                select(MaterialPart.material_id).where(
+                    or_(
+                        MaterialPart.part_term_id.in_(uses),
+                        MaterialPart.product_term_id.in_(uses),
+                    )
+                )
+            )
+        )
+    # 부품코드로도 찾는다(ADR 0064) — BOM 을 들고 「이 품번 무슨 재료지」 를 묻는다.
+    if len(word.strip()) >= 3:
+        found.update(
+            db.scalars(
+                select(MaterialPart.material_id).where(
+                    MaterialPart.part_code.ilike(f"%{word.strip()}%")
+                )
+            )
         )
     makers = vocabulary_services.term_ids_matching(db, _MAKER_AXES, word)
     beside: list[Any] = [Sample.lot_no.ilike(f"%{word}%")]
@@ -980,6 +998,7 @@ def export_materials(
     counts = services.sample_counts(db, [one.id for one in rows])
     names = services.workspace_names(db, [one.owner_workspace_id for one in rows])
     uses = services.uses_of(db, [one.id for one in rows])
+    counts = services.part_counts(db, [one.id for one in rows])
     sets: dict[uuid.UUID, list[MaterialParameterSet]] = {}
     for row in db.scalars(
         select(MaterialParameterSet).where(
@@ -1012,6 +1031,7 @@ def export_materials(
                             else None
                         ),
                         uses=uses.get(one.id),
+                        part_count=counts.get(one.id, 0),
                     ).model_dump(mode="json", exclude={"access"}),
                     system,
                     kept,
@@ -1191,11 +1211,17 @@ def _narrowed(
     live_samples = Sample.deleted_at.is_(None)
     if filters.use:
         terms = vocabulary_services.term_ids_matching(db, _USE_AXES, filters.use)
+        word = filters.use.strip()
+        # 부품코드로도(ADR 0064) — 찾기 상자(`_materials_beside`)와 같은 규칙, 세 글자부터.
+        hits: list[Any] = [MaterialPart.part_code.ilike(f"%{word}%")] if len(word) >= 3 else []
+        if terms:
+            hits += [
+                MaterialPart.part_term_id.in_(terms),
+                MaterialPart.product_term_id.in_(terms),
+            ]
         query = query.where(
-            Material.id.in_(
-                select(MaterialUse.material_id).where(MaterialUse.term_id.in_(terms))
-            )
-            if terms
+            Material.id.in_(select(MaterialPart.material_id).where(or_(*hits)))
+            if hits
             else false()
         )
     if filters.maker:
@@ -1316,6 +1342,7 @@ def list_materials(
     names = services.workspace_names(db, [m.owner_workspace_id for m in rows])
     # **한 번에 읽는다.** 재료마다 물으면 200건짜리 화면에서 200번이 된다.
     uses = services.uses_of(db, [m.id for m in rows])
+    counts = services.part_counts(db, [m.id for m in rows])
     book = AccessBook(db, user).prime(rows)
     return Page(
         items=[
@@ -1326,6 +1353,7 @@ def list_materials(
                     names.get(m.owner_workspace_id) if m.owner_workspace_id else None
                 ),
                 uses=uses.get(m.id),
+                part_count=counts.get(m.id, 0),
                 access=book.of(m),
                 matched=reasons.get(m.id),
             )
@@ -1354,6 +1382,7 @@ def create_material(
         sample_count=0,
         workspace_name=workspace.name,
         uses=services.uses_of(db, [material.id]).get(material.id),
+        part_count=services.part_counts(db, [material.id]).get(material.id, 0),
         access=access_of(db, user, material),
     )
 
@@ -1676,6 +1705,7 @@ def get_material(
             names.get(material.owner_workspace_id) if material.owner_workspace_id else None
         ),
         uses=services.uses_of(db, [material.id]).get(material.id),
+        part_count=services.part_counts(db, [material.id]).get(material.id, 0),
         access=access_of(db, user, material),
     )
 
@@ -1986,6 +2016,7 @@ def update_material(
             names.get(material.owner_workspace_id) if material.owner_workspace_id else None
         ),
         uses=services.uses_of(db, [material.id]).get(material.id),
+        part_count=services.part_counts(db, [material.id]).get(material.id, 0),
         access=access_of(db, user, material),
     )
 
@@ -2277,6 +2308,7 @@ def _saved_material(db: Session, user: User, material: Material) -> MaterialOut:
             names.get(material.owner_workspace_id) if material.owner_workspace_id else None
         ),
         uses=services.uses_of(db, [material.id]).get(material.id),
+        part_count=services.part_counts(db, [material.id]).get(material.id, 0),
         access=access_of(db, user, material),
     )
 

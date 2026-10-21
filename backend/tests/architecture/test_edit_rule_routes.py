@@ -31,6 +31,8 @@ APP = Path(__file__).resolve().parents[2] / "app" / "modules"
 #: 장비 파일 정의(`formats.py`)는 2단계 동안 **이 목록에 없어서** 아무도 안 봤다.
 FILES = {
     "materials": APP / "materials" / "routes.py",
+    # 적용 부품(ADR 0064) — 재료를 고칠 수 있는 사람이 넣고 고친다.
+    "materials_parts": APP / "materials" / "parts_routes.py",
     "tests": APP / "tests" / "routes.py",
     "formats": APP / "tests" / "formats.py",
     "processing": APP / "processing" / "routes.py",
@@ -87,6 +89,10 @@ _정의 = _만들기 + " — 정의도 누구나 만든다(3단계). 등록 부�
 #: (모듈, 함수) → 판정이 없는 까닭.
 EXEMPT: dict[tuple[str, str], str] = {
     ("materials", "preview_name"): _읽기,
+    ("materials_parts", "import_bom"): (
+        "BOM 가져오기 — 줄이 여러 재료에 걸려 `parts.plan_bom` 이 줄마다 `editor.allows` 로"
+        " 본다(일괄 수정과 같은 규칙). 못 고치는 재료의 줄은 이유와 함께 남는다"
+    ),
     ("materials", "create_material"): _만들기,
     ("materials", "create_bulk"): _만들기 + " — 있는 재료 아래에 붙이는 것도 만들기다",
     ("materials", "create_sample"): _만들기,

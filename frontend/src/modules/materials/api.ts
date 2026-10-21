@@ -80,6 +80,30 @@ export type DeclaredPropertyIn = components['schemas']['DeclaredPropertyIn']
 export type MillCheck = components['schemas']['MillCheckOut']
 /** 넣을 수 있는 물성 항목. **목록은 기준정보가 정한다**(D7). */
 export type PropertyItem = components['schemas']['PropertyItemOut']
+/** 적용 부품 한 줄 — 파트명 · 제품 · 부품코드 · 사업부 · 출처(ADR 0064). */
+export type MaterialPart = components['schemas']['MaterialPartOut']
+export type MaterialPartPage = components['schemas']['MaterialPartPage']
+export type MaterialPartLine = components['schemas']['MaterialPartLineIn']
+/** 넣으려는 줄의 판정(`new` · `exists` · `error`) — 미리보기와 넣은 결과가 같은 모양이다. */
+export type MaterialPartPlan = components['schemas']['MaterialPartPlanOut']
+export type MaterialPartPlanRow = components['schemas']['MaterialPartPlanRowOut']
+/** **보낸 칸만** 고친다 — 안 보낸 칸은 빼고, 비우려면 `null`. */
+export type MaterialPartUpdate = components['schemas']['MaterialPartUpdate']
+export type MaterialPartRemoved = components['schemas']['MaterialPartRemoveOut']
+export type BomPartRowIn = components['schemas']['BomPartRowIn']
+export type BomPartImportRequest = components['schemas']['BomPartImportRequest']
+/** BOM 가져오기 결과 — 줄마다 어느 재료로 가는지, 못 가면 왜인지. */
+export type BomPartImport = components['schemas']['BomPartImportOut']
+export type BomPartRow = components['schemas']['BomPartRowOut']
+
+export interface MaterialPartQuery {
+  /** 파트명 · 부품코드 · 제품 · 비고의 글자. */
+  q?: string
+  division?: string
+  product?: string
+  limit?: number
+  offset?: number
+}
 
 /**
  * 시편 방향. **서버의 `ORIENTATIONS` 와 같은 목록이다.**
@@ -177,7 +201,7 @@ export interface SpecimenQuery {
   offset?: number
 }
 
-function search(query: MaterialQuery | SpecimenQuery): string {
+function search(query: MaterialQuery | SpecimenQuery | MaterialPartQuery): string {
   const params = new URLSearchParams()
   for (const [key, value] of Object.entries(query)) {
     if (value !== undefined && value !== '') params.set(key, String(value))
@@ -254,6 +278,27 @@ export const materialsApi = {
   get: (id: string) => api.get<Material>(`/materials/${id}`),
   create: (payload: MaterialCreate) => api.post<Material>('/materials', payload),
   update: (id: string, payload: MaterialUpdate) => api.patch<Material>(`/materials/${id}`, payload),
+  /** 적용 부품 줄 — 서버가 찾고 거르고 쪽을 나눈다(부품 수백 개를 한 번에 받지 않는다). */
+  parts: (id: string, query: MaterialPartQuery = {}) =>
+    api.get<MaterialPartPage>(`/materials/${id}/parts${search(query)}`),
+  /** 줄 넣기. **`dryRun` 이 기본** — 무엇이 새로 들어가고 무엇이 이미 있는지 먼저 본다. */
+  addParts: (
+    id: string,
+    lines: MaterialPartLine[],
+    options: { dryRun: boolean; sourceRef?: string | null }
+  ) =>
+    api.post<MaterialPartPlan>(`/materials/${id}/parts`, {
+      lines,
+      dry_run: options.dryRun,
+      source_ref: options.sourceRef ?? null,
+    }),
+  updatePart: (id: string, partId: string, changes: MaterialPartUpdate) =>
+    api.patch<MaterialPart>(`/materials/${id}/parts/${partId}`, changes),
+  removeParts: (id: string, ids: string[]) =>
+    api.post<MaterialPartRemoved>(`/materials/${id}/parts/remove`, { ids }),
+  /** BOM 표 → 재질로 재료를 찾아 재료마다 줄. 기본이 미리보기(`dry_run`). */
+  importBomParts: (body: BomPartImportRequest) =>
+    api.post<BomPartImport>('/materials/parts/bom', body),
   /**
    * 적어 둔 값 하나를 승인하거나 거둔다 — **자료 관리자만**(ADR 0049). 승인된 값은 등급이 한
    * 단계 오르고, 값을 고치면 저절로 풀린다. 등급은 서버가 응답의 `quality_tier` 로 준다.

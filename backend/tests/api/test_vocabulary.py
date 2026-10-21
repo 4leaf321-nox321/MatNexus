@@ -25,6 +25,7 @@ from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from app.jobs import handlers, worker
+from app.modules.materials.schemas import MAX_USES
 from app.modules.tests.definitions import ensure_builtin_test_types
 from app.modules.vocabulary import services
 from app.modules.vocabulary.models import (
@@ -725,17 +726,31 @@ class Test용도:
         ).json()["items"]
         assert found[0]["usage_count"] == 1
 
-    def test_스무_개까지만_받는다(
+    def test_예전_칸도_부품_50개를_받고_상한은_지킨다(
         self, client: TestClient, admin_headers: dict[str, str], db: Session
     ) -> None:
-        """스무 개가 넘으면 그건 분류가 아니라 메모다."""
-        response = client.post(
+        """처음 상한은 스물이었다(「넘으면 분류가 아니라 메모다」). 한 재료가 부품 50개에
+        들어가자(2026-10-21) 그 가정이 틀렸다 — 줄은 적용 부품 표로 옮겼고(ADR 0064) 예전
+        칸은 `MAX_USES` 까지 받는다. 상한이 없으면 한 요청이 기준정보를 수천 개 세운다."""
+        many = client.post(
             "/api/materials",
             json={
                 "family": "Metal",
                 "category": "Steel",
                 "grade": "USE55",
-                "applied_products": [f"제품{index}" for index in range(21)],
+                "applied_parts": [f"파트{index}" for index in range(50)],
+            },
+            headers=admin_headers,
+        )
+        assert many.status_code == 201, many.text
+        assert len(many.json()["applied_parts"]) == 50
+        response = client.post(
+            "/api/materials",
+            json={
+                "family": "Metal",
+                "category": "Steel",
+                "grade": "USE57",
+                "applied_products": [f"제품{index}" for index in range(MAX_USES + 1)],
             },
             headers=admin_headers,
         )
@@ -744,16 +759,22 @@ class Test용도:
     def test_어긋남을_한_번만_센다(
         self, client: TestClient, admin_headers: dict[str, str], db: Session
     ) -> None:
-        """용도 표는 두 축이 같은 칸을 가리킨다(`value`·`term_id`). 그대로 두면
-        **같은 어긋남이 두 번 실려** 목록의 수를 믿을 수 없게 된다."""
-        self._material(client, admin_headers, "USE56", product="도어")
-        db.execute(text("UPDATE material_uses SET value = '어긋난값' WHERE axis = 'product'"))
+        """예전 용도 표는 두 축이 같은 칸(`value`·`term_id`)을 가리켜 **같은 어긋남이 두 번
+        실렸다**. 적용 부품 줄(ADR 0064)은 축마다 칸이 따로다 — 제품 칸의 어긋남이 파트 ·
+        사업부 축에서 다시 세어지면 안 된다."""
+        self._material(client, admin_headers, "USE56", product="도어", part="이너 패널")
+        db.execute(
+            text(
+                "UPDATE material_parts SET product_name = '어긋난값'"
+                " WHERE product_name IS NOT NULL"
+            )
+        )
         db.commit()
 
         report = client.get("/api/vocabularies/drift", headers=admin_headers).json()
-        uses = [row for row in report["items"] if row["table"] == "material_uses"]
+        uses = [row for row in report["items"] if row["table"] == "material_parts"]
         assert len(uses) == 1, f"같은 어긋남이 여러 번 실렸다: {uses}"
-        assert uses[0]["count"] == 1
+        assert (uses[0]["field"], uses[0]["count"]) == ("product_name", 1)
 
     def test_부위는_제품_아래에_안_매달린다(
         self, client: TestClient, admin_headers: dict[str, str], db: Session

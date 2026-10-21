@@ -28,8 +28,13 @@ from matcore import units
 SI_DENSITY = units.SI_UNITS["density"]
 SI_LENGTH = units.SI_UNITS["length"]
 
-MAX_USES = 20
-"""한 재료에 붙일 수 있는 용도 수. 스무 개가 넘으면 그건 분류가 아니라 메모다."""
+MAX_USES = 500
+"""예전 칸(`applied_products` · `applied_parts`)으로 한 번에 보내는 이름 수.
+
+처음에는 스물이었다(「넘으면 분류가 아니라 메모다」). 한 재료가 부품 50개에
+들어가자(2026-10-21)
+그 가정이 틀렸고, 줄은 적용 부품 표로 옮겼다(ADR 0064) — 이 칸은 이름만 있는 줄을 갈아
+끼운다."""
 
 MAX_BULK = 2000
 """한 번에 받는 줄 수의 상한.
@@ -342,6 +347,9 @@ class MaterialOut(BaseModel):
     applied_parts: list[str] = Field(default_factory=list)
     """이 재료를 어디에 쓰는가. **여러 개다**(v1.89.0) — 한 재료가 여러 제품에
     들어간다. 적은 순서를 지킨다: 첫 번째가 대표값처럼 읽힌다."""
+    part_count: int = 0
+    """적용 부품 줄 수(ADR 0064). 두 이름 목록은 그 줄들에서 뽑은 것이다 — 줄 자체(부품코드 ·
+    사업부 · 출처)는 `GET /materials/{id}/parts`."""
     """이 재료를 어디에 쓰는가. **재료의 용도이지 로트의 행선지가 아니다.**"""
 
     density: float | None
@@ -1230,3 +1238,154 @@ class RelocateOut(BaseModel):
     cards_noted: int
     cards_deprecated: int
     blocked: list[str]
+
+
+# --- 적용 부품 (ADR 0064) ---------------------------------------------------
+
+#: 한 번에 넣는 줄 수 — `parts.LINES_MAX` 와 같다. BOM 하나가 수백 줄이다.
+PART_LINES_MAX = 2000
+
+
+class MaterialPartOut(BaseModel):
+    id: uuid.UUID
+    part: str | None
+    product: str | None
+    part_code: str | None
+    division: str | None
+    source: str
+    """`manual` · `bom` · `legacy`(예전 칩에서 옮김)."""
+    source_ref: str | None = None
+    note: str | None = None
+    position: int
+    created_by: str | None = None
+    created_at: datetime
+
+
+class PartFacetOut(BaseModel):
+    value: str
+    count: int
+
+
+class MaterialPartPage(BaseModel):
+    items: list[MaterialPartOut]
+    total: int
+    limit: int
+    offset: int
+    divisions: list[PartFacetOut]
+    """거르기 전 그 재료 전체의 사업부 — 고르면 다른 선택지가 사라지지 않게."""
+    products: list[PartFacetOut]
+
+
+class MaterialPartLineIn(BaseModel):
+    part: str | None = Field(default=None, max_length=200)
+    product: str | None = Field(default=None, max_length=200)
+    part_code: str | None = Field(default=None, max_length=100)
+    division: str | None = Field(default=None, max_length=200)
+    note: str | None = Field(default=None, max_length=1000)
+
+
+class MaterialPartAddRequest(BaseModel):
+    lines: list[MaterialPartLineIn] = Field(min_length=1, max_length=PART_LINES_MAX)
+    source: Literal["manual", "bom"] = "manual"
+    source_ref: str | None = Field(default=None, max_length=200)
+    """어느 BOM · 표에서 왔나 — 사람이 적는 이름."""
+    dry_run: bool = True
+    """기본이 미리보기다. `false` 면 `new` 줄만 넣는다."""
+
+
+class MaterialPartPlanRowOut(BaseModel):
+    """넣으려는 한 줄과 판정 — 붙여넣은 차례(`index`)대로."""
+
+    index: int
+    part: str | None
+    product: str | None
+    part_code: str | None
+    division: str | None
+    note: str | None = None
+    status: Literal["new", "exists", "error"]
+    reason: str | None = None
+    id: uuid.UUID | None = None
+    """넣었으면 그 줄의 id."""
+
+
+class MaterialPartPlanOut(BaseModel):
+    applied: bool
+    new: int
+    exists: int
+    errors: int
+    rows: list[MaterialPartPlanRowOut]
+
+
+class MaterialPartUpdate(BaseModel):
+    """**보낸 칸만** 고친다 — 안 보낸 것과 비운 것(`null`)을 가른다."""
+
+    part: str | None = Field(default=None, max_length=200)
+    product: str | None = Field(default=None, max_length=200)
+    part_code: str | None = Field(default=None, max_length=100)
+    division: str | None = Field(default=None, max_length=200)
+    note: str | None = Field(default=None, max_length=1000)
+
+
+class MaterialPartRemoveRequest(BaseModel):
+    ids: list[uuid.UUID] = Field(min_length=1, max_length=PART_LINES_MAX)
+
+
+class MaterialPartRemoveOut(BaseModel):
+    removed: int
+
+
+class BomPartRowIn(BaseModel):
+    material: str | None = Field(default=None, max_length=200)
+    """BOM 의 재질 글자 — 재료 이름 · 별칭 · Grade · BOM 덱이 기억한 짝으로 찾는다."""
+    part: str | None = Field(default=None, max_length=200)
+    product: str | None = Field(default=None, max_length=200)
+    part_code: str | None = Field(default=None, max_length=100)
+    division: str | None = Field(default=None, max_length=200)
+
+
+class BomPartImportRequest(BaseModel):
+    rows: list[BomPartRowIn] = Field(min_length=1, max_length=PART_LINES_MAX)
+    division: str | None = Field(default=None, max_length=200)
+    """사업부 열이 없는 BOM 에 한꺼번에 줄 사업부."""
+    source_ref: str | None = Field(default=None, max_length=200)
+    choices: dict[str, uuid.UUID] = Field(default_factory=dict)
+    """사람이 고른 짝 — {재질 글자: 재료 id}. 못 찾았거나 여럿에 맞은 재질."""
+    dry_run: bool = True
+
+
+class BomPartMaterialOut(BaseModel):
+    id: uuid.UUID
+    name: str
+    new: int
+
+
+class BomPartCandidateOut(BaseModel):
+    id: uuid.UUID
+    name: str
+
+
+class BomPartRowOut(BaseModel):
+    """BOM 한 줄과 판정 — 어느 재료로 가는지, 못 가면 왜인지."""
+
+    index: int
+    material: str
+    """BOM 의 재질 글자 그대로."""
+    part: str | None
+    product: str | None
+    part_code: str | None
+    division: str | None
+    status: Literal["new", "exists", "unmatched", "ambiguous", "blocked", "error"]
+    reason: str | None = None
+    material_id: uuid.UUID | None = None
+    material_name: str | None = None
+    candidates: list[BomPartCandidateOut] = Field(default_factory=list)
+    """`ambiguous` 일 때 재질에 맞은 재료들."""
+
+
+class BomPartImportOut(BaseModel):
+    applied: bool
+    counts: dict[str, int]
+    """`new` · `exists` · `unmatched` · `ambiguous` · `blocked` · `error`."""
+    materials: list[BomPartMaterialOut]
+    """줄이 들어갈(들어간) 재료와 그 수."""
+    rows: list[BomPartRowOut]

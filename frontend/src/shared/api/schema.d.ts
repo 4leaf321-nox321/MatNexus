@@ -4126,6 +4126,33 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/materials/parts/bom": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Import Bom
+         * @description BOM 표 → 재료마다 적용 부품 줄. **기본이 미리보기다.**
+         *
+         *     재질 글자로 재료를 찾는다(BOM 덱이 기억한 짝 → 이름 → 별칭 → Grade). 못 찾았거나 여럿에
+         *     맞은
+         *     재질은 그 줄을 이유와 함께 남긴다 — 사람이 고른 짝(`choices`)을 실어 다시 부른다. 고칠
+         *     권한이
+         *     없는 재료의 줄도 남긴다. **나머지는 넣는다** — 300줄 BOM 의 재질 하나 때문에 전부를 다시
+         *     고르게 하지 않는다. 판정은 줄마다 `editor.allows`(재료를 고칠 수 있는 사람).
+         */
+        post: operations["import_bom_api_materials_parts_bom_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/materials/preview-name": {
         parameters: {
             query?: never;
@@ -4408,6 +4435,62 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/materials/{material_id}/parts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Parts */
+        get: operations["list_parts_api_materials__material_id__parts_get"];
+        put?: never;
+        /**
+         * Add Parts
+         * @description 넣는다 — **기본이 미리보기다.** 줄마다 `new` · `exists` · `error`, 넣는 것은 `new`
+         *     만.
+         */
+        post: operations["add_parts_api_materials__material_id__parts_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/materials/{material_id}/parts/remove": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Remove Parts */
+        post: operations["remove_parts_api_materials__material_id__parts_remove_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/materials/{material_id}/parts/{part_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Part */
+        patch: operations["update_part_api_materials__material_id__parts__part_id__patch"];
         trace?: never;
     };
     "/api/materials/{material_id}/property-coverage": {
@@ -9637,6 +9720,103 @@ export interface components {
             name: string;
             /** Why */
             why: string;
+        };
+        /** BomPartCandidateOut */
+        BomPartCandidateOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+        };
+        /** BomPartImportOut */
+        BomPartImportOut: {
+            /** Applied */
+            applied: boolean;
+            /** Counts */
+            counts: {
+                [key: string]: number;
+            };
+            /** Materials */
+            materials: components["schemas"]["BomPartMaterialOut"][];
+            /** Rows */
+            rows: components["schemas"]["BomPartRowOut"][];
+        };
+        /** BomPartImportRequest */
+        BomPartImportRequest: {
+            /** Choices */
+            choices?: {
+                [key: string]: string;
+            };
+            /** Division */
+            division?: string | null;
+            /**
+             * Dry Run
+             * @default true
+             */
+            dry_run: boolean;
+            /** Rows */
+            rows: components["schemas"]["BomPartRowIn"][];
+            /** Source Ref */
+            source_ref?: string | null;
+        };
+        /** BomPartMaterialOut */
+        BomPartMaterialOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /** New */
+            new: number;
+        };
+        /** BomPartRowIn */
+        BomPartRowIn: {
+            /** Division */
+            division?: string | null;
+            /** Material */
+            material?: string | null;
+            /** Part */
+            part?: string | null;
+            /** Part Code */
+            part_code?: string | null;
+            /** Product */
+            product?: string | null;
+        };
+        /**
+         * BomPartRowOut
+         * @description BOM 한 줄과 판정 — 어느 재료로 가는지, 못 가면 왜인지.
+         */
+        BomPartRowOut: {
+            /** Candidates */
+            candidates?: components["schemas"]["BomPartCandidateOut"][];
+            /** Division */
+            division: string | null;
+            /** Index */
+            index: number;
+            /** Material */
+            material: string;
+            /** Material Id */
+            material_id?: string | null;
+            /** Material Name */
+            material_name?: string | null;
+            /** Part */
+            part: string | null;
+            /** Part Code */
+            part_code: string | null;
+            /** Product */
+            product: string | null;
+            /** Reason */
+            reason?: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "new" | "exists" | "unmatched" | "ambiguous" | "blocked" | "error";
         };
         /**
          * BuiltinFormatOut
@@ -15775,6 +15955,11 @@ export interface components {
             owner_workspace_id: string | null;
             /** Owner Workspace Name */
             owner_workspace_name: string | null;
+            /**
+             * Part Count
+             * @default 0
+             */
+            part_count: number;
             /** Poisson Ratio */
             poisson_ratio: number | null;
             /** Record Name */
@@ -15793,6 +15978,149 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+        };
+        /** MaterialPartAddRequest */
+        MaterialPartAddRequest: {
+            /**
+             * Dry Run
+             * @default true
+             */
+            dry_run: boolean;
+            /** Lines */
+            lines: components["schemas"]["MaterialPartLineIn"][];
+            /**
+             * Source
+             * @default manual
+             * @enum {string}
+             */
+            source: "manual" | "bom";
+            /** Source Ref */
+            source_ref?: string | null;
+        };
+        /** MaterialPartLineIn */
+        MaterialPartLineIn: {
+            /** Division */
+            division?: string | null;
+            /** Note */
+            note?: string | null;
+            /** Part */
+            part?: string | null;
+            /** Part Code */
+            part_code?: string | null;
+            /** Product */
+            product?: string | null;
+        };
+        /** MaterialPartOut */
+        MaterialPartOut: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Created By */
+            created_by?: string | null;
+            /** Division */
+            division: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Note */
+            note?: string | null;
+            /** Part */
+            part: string | null;
+            /** Part Code */
+            part_code: string | null;
+            /** Position */
+            position: number;
+            /** Product */
+            product: string | null;
+            /** Source */
+            source: string;
+            /** Source Ref */
+            source_ref?: string | null;
+        };
+        /** MaterialPartPage */
+        MaterialPartPage: {
+            /** Divisions */
+            divisions: components["schemas"]["PartFacetOut"][];
+            /** Items */
+            items: components["schemas"]["MaterialPartOut"][];
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+            /** Products */
+            products: components["schemas"]["PartFacetOut"][];
+            /** Total */
+            total: number;
+        };
+        /** MaterialPartPlanOut */
+        MaterialPartPlanOut: {
+            /** Applied */
+            applied: boolean;
+            /** Errors */
+            errors: number;
+            /** Exists */
+            exists: number;
+            /** New */
+            new: number;
+            /** Rows */
+            rows: components["schemas"]["MaterialPartPlanRowOut"][];
+        };
+        /**
+         * MaterialPartPlanRowOut
+         * @description 넣으려는 한 줄과 판정 — 붙여넣은 차례(`index`)대로.
+         */
+        MaterialPartPlanRowOut: {
+            /** Division */
+            division: string | null;
+            /** Id */
+            id?: string | null;
+            /** Index */
+            index: number;
+            /** Note */
+            note?: string | null;
+            /** Part */
+            part: string | null;
+            /** Part Code */
+            part_code: string | null;
+            /** Product */
+            product: string | null;
+            /** Reason */
+            reason?: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "new" | "exists" | "error";
+        };
+        /** MaterialPartRemoveOut */
+        MaterialPartRemoveOut: {
+            /** Removed */
+            removed: number;
+        };
+        /** MaterialPartRemoveRequest */
+        MaterialPartRemoveRequest: {
+            /** Ids */
+            ids: string[];
+        };
+        /**
+         * MaterialPartUpdate
+         * @description **보낸 칸만** 고친다 — 안 보낸 것과 비운 것(`null`)을 가른다.
+         */
+        MaterialPartUpdate: {
+            /** Division */
+            division?: string | null;
+            /** Note */
+            note?: string | null;
+            /** Part */
+            part?: string | null;
+            /** Part Code */
+            part_code?: string | null;
+            /** Product */
+            product?: string | null;
         };
         /** MaterialStatisticsOut */
         MaterialStatisticsOut: {
@@ -16817,6 +17145,13 @@ export interface components {
             label: string;
             /** Version */
             version: string;
+        };
+        /** PartFacetOut */
+        PartFacetOut: {
+            /** Count */
+            count: number;
+            /** Value */
+            value: string;
         };
         /** PatCreateRequest */
         PatCreateRequest: {
@@ -29518,6 +29853,39 @@ export interface operations {
             };
         };
     };
+    import_bom_api_materials_parts_bom_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BomPartImportRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BomPartImportOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     preview_name_api_materials_preview_name_post: {
         parameters: {
             query?: {
@@ -29965,6 +30333,150 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_parts_api_materials__material_id__parts_get: {
+        parameters: {
+            query?: {
+                /** @description 파트명 · 부품코드 · 제품 · 비고의 글자 */
+                q?: string | null;
+                division?: string | null;
+                product?: string | null;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path: {
+                material_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MaterialPartPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_parts_api_materials__material_id__parts_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                material_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MaterialPartAddRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MaterialPartPlanOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_parts_api_materials__material_id__parts_remove_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                material_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MaterialPartRemoveRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MaterialPartRemoveOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_part_api_materials__material_id__parts__part_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                material_id: string;
+                part_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MaterialPartUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MaterialPartOut"];
+                };
             };
             /** @description Validation Error */
             422: {

@@ -2329,6 +2329,328 @@
         "title": "BomDeckSkippedOut",
         "type": "object"
       },
+      "BomPartCandidateOut": {
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "BomPartCandidateOut",
+        "type": "object"
+      },
+      "BomPartImportOut": {
+        "properties": {
+          "applied": {
+            "title": "Applied",
+            "type": "boolean"
+          },
+          "counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Counts",
+            "type": "object"
+          },
+          "materials": {
+            "items": {
+              "$ref": "#/components/schemas/BomPartMaterialOut"
+            },
+            "title": "Materials",
+            "type": "array"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/BomPartRowOut"
+            },
+            "title": "Rows",
+            "type": "array"
+          }
+        },
+        "required": [
+          "applied",
+          "counts",
+          "materials",
+          "rows"
+        ],
+        "title": "BomPartImportOut",
+        "type": "object"
+      },
+      "BomPartImportRequest": {
+        "properties": {
+          "choices": {
+            "additionalProperties": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Choices",
+            "type": "object"
+          },
+          "division": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Division"
+          },
+          "dry_run": {
+            "default": true,
+            "title": "Dry Run",
+            "type": "boolean"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/BomPartRowIn"
+            },
+            "maxItems": 2000,
+            "minItems": 1,
+            "title": "Rows",
+            "type": "array"
+          },
+          "source_ref": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Ref"
+          }
+        },
+        "required": [
+          "rows"
+        ],
+        "title": "BomPartImportRequest",
+        "type": "object"
+      },
+      "BomPartMaterialOut": {
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "new": {
+            "title": "New",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "new"
+        ],
+        "title": "BomPartMaterialOut",
+        "type": "object"
+      },
+      "BomPartRowIn": {
+        "properties": {
+          "division": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Division"
+          },
+          "material": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Material"
+          },
+          "part": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Part"
+          },
+          "part_code": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Part Code"
+          },
+          "product": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Product"
+          }
+        },
+        "title": "BomPartRowIn",
+        "type": "object"
+      },
+      "BomPartRowOut": {
+        "description": "BOM 한 줄과 판정 — 어느 재료로 가는지, 못 가면 왜인지.",
+        "properties": {
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/BomPartCandidateOut"
+            },
+            "title": "Candidates",
+            "type": "array"
+          },
+          "division": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Division"
+          },
+          "index": {
+            "title": "Index",
+            "type": "integer"
+          },
+          "material": {
+            "title": "Material",
+            "type": "string"
+          },
+          "material_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Material Id"
+          },
+          "material_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Material Name"
+          },
+          "part": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Part"
+          },
+          "part_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Part Code"
+          },
+          "product": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Product"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "status": {
+            "enum": [
+              "new",
+              "exists",
+              "unmatched",
+              "ambiguous",
+              "blocked",
+              "error"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "index",
+          "material",
+          "part",
+          "product",
+          "part_code",
+          "division",
+          "status"
+        ],
+        "title": "BomPartRowOut",
+        "type": "object"
+      },
       "BuiltinFormatOut": {
         "description": "기본 제공 형식(코드 렌더러) 하나 — **멈춘 것도 보인다.**\n\n내보내기 형식 목록(`/fitting/formats`)은 멈춘 것을 뺀다. 그런데 다시 쓰게 하려면\n멈춘 것이 어딘가에 보여야 한다 — 이 목록이 그 자리다.",
         "properties": {
@@ -2598,7 +2920,7 @@
             "items": {
               "type": "string"
             },
-            "maxItems": 20,
+            "maxItems": 500,
             "title": "Applied Parts",
             "type": "array"
           },
@@ -2606,7 +2928,7 @@
             "items": {
               "type": "string"
             },
-            "maxItems": 20,
+            "maxItems": 500,
             "title": "Applied Products",
             "type": "array"
           },
@@ -18683,7 +19005,7 @@
             "items": {
               "type": "string"
             },
-            "maxItems": 20,
+            "maxItems": 500,
             "title": "Applied Parts",
             "type": "array"
           },
@@ -18691,7 +19013,7 @@
             "items": {
               "type": "string"
             },
-            "maxItems": 20,
+            "maxItems": 500,
             "title": "Applied Products",
             "type": "array"
           },
@@ -19098,6 +19420,11 @@
             ],
             "title": "Owner Workspace Name"
           },
+          "part_count": {
+            "default": 0,
+            "title": "Part Count",
+            "type": "integer"
+          },
           "poisson_ratio": {
             "anyOf": [
               {
@@ -19160,6 +19487,515 @@
           "updated_at"
         ],
         "title": "MaterialOut",
+        "type": "object"
+      },
+      "MaterialPartAddRequest": {
+        "properties": {
+          "dry_run": {
+            "default": true,
+            "title": "Dry Run",
+            "type": "boolean"
+          },
+          "lines": {
+            "items": {
+              "$ref": "#/components/schemas/MaterialPartLineIn"
+            },
+            "maxItems": 2000,
+            "minItems": 1,
+            "title": "Lines",
+            "type": "array"
+          },
+          "source": {
+            "default": "manual",
+            "enum": [
+              "manual",
+              "bom"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "source_ref": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Ref"
+          }
+        },
+        "required": [
+          "lines"
+        ],
+        "title": "MaterialPartAddRequest",
+        "type": "object"
+      },
+      "MaterialPartLineIn": {
+        "properties": {
+          "division": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Division"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "part": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Part"
+          },
+          "part_code": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Part Code"
+          },
+          "product": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Product"
+          }
+        },
+        "title": "MaterialPartLineIn",
+        "type": "object"
+      },
+      "MaterialPartOut": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By"
+          },
+          "division": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Division"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "part": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Part"
+          },
+          "part_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Part Code"
+          },
+          "position": {
+            "title": "Position",
+            "type": "integer"
+          },
+          "product": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Product"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "source_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Ref"
+          }
+        },
+        "required": [
+          "id",
+          "part",
+          "product",
+          "part_code",
+          "division",
+          "source",
+          "position",
+          "created_at"
+        ],
+        "title": "MaterialPartOut",
+        "type": "object"
+      },
+      "MaterialPartPage": {
+        "properties": {
+          "divisions": {
+            "items": {
+              "$ref": "#/components/schemas/PartFacetOut"
+            },
+            "title": "Divisions",
+            "type": "array"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/MaterialPartOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "products": {
+            "items": {
+              "$ref": "#/components/schemas/PartFacetOut"
+            },
+            "title": "Products",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset",
+          "divisions",
+          "products"
+        ],
+        "title": "MaterialPartPage",
+        "type": "object"
+      },
+      "MaterialPartPlanOut": {
+        "properties": {
+          "applied": {
+            "title": "Applied",
+            "type": "boolean"
+          },
+          "errors": {
+            "title": "Errors",
+            "type": "integer"
+          },
+          "exists": {
+            "title": "Exists",
+            "type": "integer"
+          },
+          "new": {
+            "title": "New",
+            "type": "integer"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/MaterialPartPlanRowOut"
+            },
+            "title": "Rows",
+            "type": "array"
+          }
+        },
+        "required": [
+          "applied",
+          "new",
+          "exists",
+          "errors",
+          "rows"
+        ],
+        "title": "MaterialPartPlanOut",
+        "type": "object"
+      },
+      "MaterialPartPlanRowOut": {
+        "description": "넣으려는 한 줄과 판정 — 붙여넣은 차례(`index`)대로.",
+        "properties": {
+          "division": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Division"
+          },
+          "id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "index": {
+            "title": "Index",
+            "type": "integer"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "part": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Part"
+          },
+          "part_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Part Code"
+          },
+          "product": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Product"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "status": {
+            "enum": [
+              "new",
+              "exists",
+              "error"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "index",
+          "part",
+          "product",
+          "part_code",
+          "division",
+          "status"
+        ],
+        "title": "MaterialPartPlanRowOut",
+        "type": "object"
+      },
+      "MaterialPartRemoveOut": {
+        "properties": {
+          "removed": {
+            "title": "Removed",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "removed"
+        ],
+        "title": "MaterialPartRemoveOut",
+        "type": "object"
+      },
+      "MaterialPartRemoveRequest": {
+        "properties": {
+          "ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 2000,
+            "minItems": 1,
+            "title": "Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "ids"
+        ],
+        "title": "MaterialPartRemoveRequest",
+        "type": "object"
+      },
+      "MaterialPartUpdate": {
+        "description": "**보낸 칸만** 고친다 — 안 보낸 것과 비운 것(`null`)을 가른다.",
+        "properties": {
+          "division": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Division"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "part": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Part"
+          },
+          "part_code": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Part Code"
+          },
+          "product": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Product"
+          }
+        },
+        "title": "MaterialPartUpdate",
         "type": "object"
       },
       "MaterialStatisticsOut": {
@@ -19238,7 +20074,7 @@
                 "items": {
                   "type": "string"
                 },
-                "maxItems": 20,
+                "maxItems": 500,
                 "type": "array"
               },
               {
@@ -19253,7 +20089,7 @@
                 "items": {
                   "type": "string"
                 },
-                "maxItems": 20,
+                "maxItems": 500,
                 "type": "array"
               },
               {
@@ -21814,6 +22650,24 @@
           "applies_to"
         ],
         "title": "ParserOut",
+        "type": "object"
+      },
+      "PartFacetOut": {
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "value": {
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "value",
+          "count"
+        ],
+        "title": "PartFacetOut",
         "type": "object"
       },
       "PatCreateRequest": {
@@ -48358,6 +49212,48 @@
         ]
       }
     },
+    "/api/materials/parts/bom": {
+      "post": {
+        "description": "BOM 표 → 재료마다 적용 부품 줄. **기본이 미리보기다.**\n\n재질 글자로 재료를 찾는다(BOM 덱이 기억한 짝 → 이름 → 별칭 → Grade). 못 찾았거나 여럿에\n맞은\n재질은 그 줄을 이유와 함께 남긴다 — 사람이 고른 짝(`choices`)을 실어 다시 부른다. 고칠\n권한이\n없는 재료의 줄도 남긴다. **나머지는 넣는다** — 300줄 BOM 의 재질 하나 때문에 전부를 다시\n고르게 하지 않는다. 판정은 줄마다 `editor.allows`(재료를 고칠 수 있는 사람).",
+        "operationId": "import_bom_api_materials_parts_bom_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BomPartImportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BomPartImportOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Import Bom",
+        "tags": [
+          "materials"
+        ]
+      }
+    },
     "/api/materials/preview-name": {
       "post": {
         "description": "등록 폼이 입력 중에 부른다.\n\n이름을 만드는 곳은 서버 하나다. 화면이 같은 규칙을 다시 구현하면 두 구현이\n갈라지고, 그때 화면이 보여 준 이름과 저장된 이름이 달라진다.",
@@ -49045,6 +49941,290 @@
           }
         },
         "summary": "Drop Parameter Set",
+        "tags": [
+          "materials"
+        ]
+      }
+    },
+    "/api/materials/{material_id}/parts": {
+      "get": {
+        "operationId": "list_parts_api_materials__material_id__parts_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "material_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Material Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "파트명 · 부품코드 · 제품 · 비고의 글자",
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "파트명 · 부품코드 · 제품 · 비고의 글자",
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "division",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Division"
+            }
+          },
+          {
+            "in": "query",
+            "name": "product",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Product"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MaterialPartPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Parts",
+        "tags": [
+          "materials"
+        ]
+      },
+      "post": {
+        "description": "넣는다 — **기본이 미리보기다.** 줄마다 `new` · `exists` · `error`, 넣는 것은 `new`\n만.",
+        "operationId": "add_parts_api_materials__material_id__parts_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "material_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Material Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MaterialPartAddRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MaterialPartPlanOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Add Parts",
+        "tags": [
+          "materials"
+        ]
+      }
+    },
+    "/api/materials/{material_id}/parts/remove": {
+      "post": {
+        "operationId": "remove_parts_api_materials__material_id__parts_remove_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "material_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Material Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MaterialPartRemoveRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MaterialPartRemoveOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Remove Parts",
+        "tags": [
+          "materials"
+        ]
+      }
+    },
+    "/api/materials/{material_id}/parts/{part_id}": {
+      "patch": {
+        "operationId": "update_part_api_materials__material_id__parts__part_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "material_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Material Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "part_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Part Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MaterialPartUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MaterialPartOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Part",
         "tags": [
           "materials"
         ]

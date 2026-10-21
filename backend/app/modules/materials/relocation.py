@@ -50,7 +50,7 @@ from sqlalchemy.orm import Session
 from app.modules.accounts.models import User
 from app.modules.fitting.models import PropertyCard, PropertyCardRemark
 from app.modules.grouping.models import GroupResult
-from app.modules.materials import services
+from app.modules.materials import parts, services
 from app.modules.materials.models import (
     Material,
     MaterialParameterSet,
@@ -467,7 +467,6 @@ def execute(
 def _copy_material(db: Session, user: User, target: Target, plan: Plan) -> Material:
     """원 재료를 복사해 **두께만 다른** 재료를 만든다 — 등록과 같은 길(`make_material`)로."""
     source = target.source
-    uses = services.uses_of(db, [source.id]).get(source.id) or {}
     workspace = (
         db.get(Workspace, source.owner_workspace_id) if source.owner_workspace_id else None
     )
@@ -485,8 +484,6 @@ def _copy_material(db: Session, user: User, target: Target, plan: Plan) -> Mater
         details=source.details,
         spec_thickness=units.from_si(plan.thickness_m, plan.unit),
         spec_thickness_unit=plan.unit,
-        applied_products=list(uses.get("product", [])),
-        applied_parts=list(uses.get("part", [])),
         density=source.density_si,
         density_unit=SI_DENSITY,
         poisson_ratio=source.poisson_ratio,
@@ -498,6 +495,9 @@ def _copy_material(db: Session, user: User, target: Target, plan: Plan) -> Mater
     made.declared_properties = copy.deepcopy(source.declared_properties or [])
     made.input_units = {**(source.input_units or {}), "spec_thickness": plan.unit}
     made.edit_workspace_id = source.edit_workspace_id
+    # 적용 부품은 **줄째로** — 이름 목록만 넘기면 부품코드 · 사업부 · 출처가 사라진다(ADR
+    # 0064).
+    parts.copy_all(db, source, made, created_by_id=user.id)
     for one in db.scalars(
         select(MaterialParameterSet).where(MaterialParameterSet.material_id == source.id)
     ):

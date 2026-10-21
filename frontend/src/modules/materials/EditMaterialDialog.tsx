@@ -19,7 +19,6 @@ import { ArrowRight } from 'lucide-react'
 
 import { DENSITY_UNIT, LENGTH_UNIT, materialsApi } from '@/modules/materials/api'
 import { VocabularyField } from '@/modules/vocabulary/VocabularyField'
-import { VocabularyMultiField } from '@/modules/vocabulary/VocabularyMultiField'
 import type { Material, NamePreview } from '@/modules/materials/api'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { Button } from '@/shared/components/ui/button'
@@ -65,8 +64,6 @@ const DENSITY_SYMBOL = display('kg/m3').unit
 
 export function EditMaterialDialog({ material, open, onClose, onDone }: Props) {
   const [form, setForm] = useState(() => initial(material))
-  const [products, setProducts] = useState<string[]>(material.applied_products ?? [])
-  const [parts, setParts] = useState<string[]>(material.applied_parts ?? [])
   const [preview, setPreview] = useState<NamePreview | null>(null)
   const [error, setError] = useState<Error | null>(null)
   const [saving, setSaving] = useState(false)
@@ -76,8 +73,6 @@ export function EditMaterialDialog({ material, open, onClose, onDone }: Props) {
   useEffect(() => {
     if (open) {
       setForm(initial(material))
-      setProducts(material.applied_products ?? [])
-      setParts(material.applied_parts ?? [])
       setPreview(null)
       setError(null)
     }
@@ -122,8 +117,8 @@ export function EditMaterialDialog({ material, open, onClose, onDone }: Props) {
         details: form.details || null,
         spec_thickness: thickness,
         spec_thickness_unit: LENGTH_UNIT,
-        applied_products: products,
-        applied_parts: parts,
+        // 적용 제품 · 파트는 안 보낸다 — 「적용 부품」 탭이 줄로 고친다(ADR 0064). 보내면
+        // 서버가 이름만 있는 줄을 이 목록으로 갈아 끼운다.
         density: form.density === '' ? null : Number(form.density),
         density_unit: DENSITY_UNIT,
         poisson_ratio: form.poisson_ratio === '' ? null : Number(form.poisson_ratio),
@@ -193,24 +188,13 @@ export function EditMaterialDialog({ material, open, onClose, onDone }: Props) {
 
             밀도는 여기가 '공칭' 이다. 로트에서 잰 값이 있으면 시료에 넣고,
             카드는 그쪽을 먼저 쓴다. */}
-        {/* **용도는 재료의 성질이다.** 시료에 있었을 때는 "도어 이너용 재료가
-            뭐가 있나" 를 물으려면 로트를 전부 뒤져야 했고, 같은 재료의 로트
-            다섯 개에 같은 용도를 다섯 번 적어야 했다. */}
-        <div className="grid grid-cols-2 gap-3">
-          {/* **여러 개 고를 수 있다**(v1.89.0). 한 재료가 여러 제품에 들어간다. */}
-          <VocabularyMultiField
-            slug="product"
-            label="적용 제품"
-            values={products}
-            onChange={setProducts}
-          />
-          <VocabularyMultiField
-            slug="part"
-            label="적용 파트"
-            values={parts}
-            onChange={setParts}
-          />
-        </div>
+        {/* **적용 제품 · 파트는 여기서 안 고친다**(ADR 0064, 2026-10-21). 칩 스무 개로는 부품
+            50개를 담을 수 없었고, 부품코드 · 사업부를 적을 자리도 없었다. 줄로 옮겼다 — 이 창에
+            칩을 남기면 표의 줄과 두 군데서 고치게 된다. */}
+        <p className="text-muted-foreground rounded-md border border-dashed p-2.5 text-xs">
+          적용 제품 · 파트는 재료 화면의 「적용 부품」 탭에서 줄로 고칩니다 — 부품코드 · 사업부와
+          함께, 엑셀에서 붙여넣어 여러 줄을 한 번에.
+        </p>
 
         <div className="rounded-md border p-3">
           <p className="mb-2 text-sm font-medium">CAE 물성</p>

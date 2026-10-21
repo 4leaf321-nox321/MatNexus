@@ -46,6 +46,7 @@ const AccountsAdminPage = lazy(() => import('@/modules/accounts/AccountsAdminPag
 const UsagePage = lazy(() => import('@/modules/usage/UsagePage'))
 const WorkbenchPage = lazy(() => import('@/modules/workbench/WorkbenchPage'))
 const BomDeckPage = lazy(() => import('@/modules/fitting/BomDeckPage'))
+const BomPartsImportPage = lazy(() => import('@/modules/materials/BomPartsImportPage'))
 const AuditPage = lazy(() => import('@/modules/audit/AuditPage'))
 const MyDataHistoryPage = lazy(() => import('@/modules/audit/MyDataHistoryPage'))
 const SearchPage = lazy(() => import('@/modules/search/SearchPage'))
@@ -171,6 +172,8 @@ export const router = createBrowserRouter([
           { path: 'graph', element: <GraphPage /> },
           { path: 'materials', element: <MaterialsPage /> },
           { path: 'materials/declared-review', element: <DeclaredReviewPage /> },
+          // BOM 한 장 → 재질로 재료를 찾아 재료마다 적용 부품 줄(ADR 0064).
+          { path: 'materials/parts-import', element: <BomPartsImportPage /> },
           // **재료를 거치지 않고 시편을 찾는다.** `/cards` 가 있는 이유와 같다.
           { path: 'specimens', element: <SpecimensPage /> },
           // 시편 하나를 가리키는 주소. 제 화면은 없고 재료 상세의 그 자리로

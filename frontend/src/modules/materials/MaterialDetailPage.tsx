@@ -22,6 +22,7 @@ import { materialsApi } from '@/modules/materials/api'
 import { FittingPanel } from '@/modules/fitting/FittingPanel'
 import { EditMaterialDialog } from '@/modules/materials/EditMaterialDialog'
 import { MaterialListPanel } from '@/modules/materials/MaterialListPanel'
+import { MaterialPartsTab } from '@/modules/materials/MaterialPartsTab'
 import { SampleExplorer } from '@/modules/materials/SampleExplorer'
 import { NewSampleDialog } from '@/modules/materials/NewSampleDialog'
 import { PropertiesPanel } from '@/modules/statistics/PropertiesPanel'
@@ -241,10 +242,23 @@ export default function MaterialDetailPage() {
             한 칸에 넣으면 줄바꿈으로 옆 칸의 짝을 밀어낸다.
 
             **재료의 성질이다.** 시료에 있을 때는 로트를 전부 뒤져야 「이 재료
-            어디에 쓰나」 를 알 수 있었다. */}
+            어디에 쓰나」 를 알 수 있었다.
+
+            **여기는 요약이다**(ADR 0064). 부품 50개가 칩으로 늘어서면 머리가 화면을 다
+            먹는다 — 앞의 몇 개와 수만 보이고 줄은 「적용 부품」 탭이 든다. */}
         <dl className="space-y-3 rounded-md border p-4 text-sm">
           <Field label="적용 제품" value={<Uses items={item.applied_products} />} />
           <Field label="적용 파트" value={<Uses items={item.applied_parts} />} />
+          {item.part_count > 0 && (
+            <Button
+              size="sm"
+              variant="link"
+              className="h-auto p-0"
+              onClick={() => setTab('parts')}
+            >
+              적용 부품 {item.part_count.toLocaleString('ko-KR')}줄 보기
+            </Button>
+          )}
         </dl>
         </div>
       )}
@@ -266,6 +280,14 @@ export default function MaterialDetailPage() {
             <TabsTrigger value="properties">물성</TabsTrigger>
             <TabsTrigger value="coverage">물성 지도</TabsTrigger>
             <TabsTrigger value="cards">CAE 카드</TabsTrigger>
+            <TabsTrigger value="parts">
+              적용 부품
+              {item && item.part_count > 0 && (
+                <Badge variant="secondary" className="ml-1.5 px-1.5 font-normal tabular-nums">
+                  {item.part_count}
+                </Badge>
+              )}
+            </TabsTrigger>
           </TabsList>
       {/* **계층을 한 줄로.** 시료 ▸ 시편 ▸ 시험이 아코디언 3단이라, 펼치기
           전에는 무엇이 얼마나 있는지 알 수 없었다 — 「구조가 한눈에 안 들어온다」
@@ -376,6 +398,18 @@ export default function MaterialDetailPage() {
           {id && <PropertyCoverageTable materialId={id} />}
         </TabsContent>
 
+        {/* 「어디에 쓰나」 의 줄 — 파트 · 제품 · 부품코드 · 사업부 · 출처(ADR 0064). */}
+        <TabsContent value="parts" className="mt-2 min-h-0 flex-1 overflow-y-auto pr-2">
+          {item && (
+            <MaterialPartsTab
+              materialId={item.id}
+              editable={canEdit(item.access)}
+              lockedTitle={lockedTitle(item.access)}
+              onChanged={material.reload}
+            />
+          )}
+        </TabsContent>
+
         <TabsContent value="samples" className="mt-2 min-h-0 flex-1 overflow-y-auto pr-2">
       {/* **층 이름만으로는 무엇인지 알 수 없다.** 실제로 "시료와 시편과 시험이
           각각 뭐냐" 는 질문이 나왔다. 나눠 둔 이유가 층마다 거기에만 붙는 것이
@@ -456,17 +490,26 @@ export default function MaterialDetailPage() {
  * **쉼표로 이으면 어디까지가 한 항목인지 안 보인다.** 「이너 패널, 아우터 패널,
  * 리인포스먼트…」 가 열 개쯤 이어지면 눈이 쉼표를 세게 되고, 값 자체에 띄어쓰기가
  * 있어서 더 그렇다 — 배지는 그 경계를 자리로 말한다.
+ *
+ * **앞의 몇 개만**(ADR 0064). 부품 50개가 배지로 늘어서면 머리가 화면을 다 먹는다 — 나머지는
+ * 수로 말하고 줄은 「적용 부품」 탭이 든다.
  */
-export function Uses({ items }: { items?: string[] | null }) {
+export function Uses({ items, max = 8 }: { items?: string[] | null; max?: number }) {
   const rows = items ?? []
   if (rows.length === 0) return <span className="text-muted-foreground">—</span>
+  const rest = rows.length - max
   return (
     <span className="flex flex-wrap gap-1">
-      {rows.map((one) => (
+      {rows.slice(0, max).map((one) => (
         <Badge key={one} variant="secondary" className="font-normal">
           {one}
         </Badge>
       ))}
+      {rest > 0 && (
+        <Badge variant="outline" className="font-normal" title={rows.slice(max).join(', ')}>
+          외 {rest}개
+        </Badge>
+      )}
     </span>
   )
 }

@@ -11,6 +11,8 @@ describe('주소가 지목한 탭', () => {
     // 워크벤치가 「그 재료의 CAE 카드로」 로 보낼 때 쓰는 이름이다.
     expect(tabOf('cards')).toBe('cards')
     expect(tabOf('properties')).toBe('properties')
+    // BOM 가져오기가 넣은 뒤 「그 재료의 적용 부품으로」 보낸다(ADR 0064).
+    expect(tabOf('parts')).toBe('parts')
   })
 
   it('모르는 이름·빈 값은 첫 탭으로 돌린다', () => {

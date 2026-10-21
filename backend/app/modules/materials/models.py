@@ -187,8 +187,9 @@ class Material(Base):
     쓰는 것은 시편의 실측 두께(`Specimen.thickness_m`)다. 1.0t 판재를 재면
     0.98 이 나오는데, 둘을 합치면 규격이 흔들리거나 계산이 틀린다."""
 
-    # 용도(적용 제품·부위)는 `material_uses` 에 있다. 한 재료가 여러 제품에
-    # 들어가는 것이 보통이라 칸 하나로는 못 담는다 — v1.89.0 에 옮겼다.
+    # 용도(적용 제품·부위)는 적용 부품(`material_parts`) 줄에 있다. 한 재료가 여러 부품에
+    # 들어가는 것이 보통이라 칸 하나로는 못 담는다 — v1.89.0 에 칸에서 옮겼고, ADR 0064 에서
+    # 부품코드 · 사업부 · 출처를 함께 담는 줄이 됐다.
 
     density_si: Mapped[float | None] = mapped_column(Float, nullable=True)
     """공칭 밀도 SI(kg/m³). 문헌값·등급값이다.
@@ -279,33 +280,44 @@ class Material(Base):
 USE_AXES = ("product", "part")
 
 
-class MaterialUse(Base):
-    """재료의 용도 한 줄 — 적용 제품 또는 적용 파트.
+#: 적용 부품의 출처 — 직접 입력 · BOM 가져오기 · 예전 「적용 제품 · 파트」 칸에서 옮겨 온 것.
+PART_SOURCES = ("manual", "bom", "legacy")
 
-    ## 왜 칸이 아니라 표인가
 
-    한 재료가 여러 제품에 들어간다. 도어 이너용 강판이 후드 이너에도 쓰이고,
-    부위도 마찬가지다. 칸 하나로 받던 동안 사람들은 `도어이너/후드이너` 처럼
-    **한 칸에 두 값을 밀어 넣었고**, 그러면 기준정보가 그 덩어리를 새 용어로
-    만든다 — 「도어 이너」 로는 검색이 안 되고 「쓰는 곳」 도 갈라진다.
+class MaterialPart(Base):
+    """재료가 쓰이는 **부품 한 줄** — 파트명 · 제품 · 부품코드 · 사업부 · 출처(ADR 0064).
+
+    ## 왜 칩이 아니라 줄인가
+
+    처음에는 「적용 제품」 · 「적용 파트」 를 따로 칩으로 받았다(`material_uses`, v1.89.0 —
+    한 칸에 `도어이너/후드이너` 를 밀어 넣던 것을 막으려고). 그런데 한 재료가 **부품 50개**에
+    들어가자(2026-10-21 사용자 보고) 칩 스무 개 상한에 걸렸고, 무엇보다 「어느 제품의 어느
+    파트인지」 · 부품코드 · 사업부를 담을 자리가 없었다. BOM 에서 오는 것은 이 넷이 한 줄이다.
+
+    ## 이름 셋은 기준정보다
+
+    파트명 · 제품 · 사업부는 기준정보 값(축 `part` · `product` · `division`)을 가리킨다(ADR
+    0010) — 이름을 고치거나 합치면 여기도 따라오고, 「쓰는 곳」 을
+    센다(`vocabulary._COUNT_SOURCES`).
+    **부품코드는 글자 그대로다** — 사업부 · BOM 마다 체계가 달라 기준정보로 묶을 것이 아니다.
+
+    ## 같은 줄은 서비스가 가린다
+
+    같은 BOM 을 두 번 붙여넣는 것이 가장 흔하다 — 파트 · 제품 · 부품코드 · 사업부의 비교키가
+    같으면
+    같은 줄이다(`parts._row_key`). 열쇠를 칸으로 저장하지 않는다: 기준정보 이름을 고치거나
+    합치면
+    이 표의 이름이 SQL 로 바뀌는데(`vocabulary.rename` · `merge`) 저장해 둔 열쇠는 그대로
+    남는다.
 
     ## 이름에는 안 들어간다
 
-    Grade 와 달리 용도를 고쳐도 재료 이름이 안 바뀐다(ADR 0004). 그래서 연쇄
-    변경 훅이 필요 없고, 여기서 값을 늘리거나 줄여도 하위 이름이 흔들리지 않는다.
-
-    ## 문자열과 term 을 함께 든다
-
-    나머지 축과 같은 Expand 단계다(ADR 0010) — 읽는 쪽이 아직 문자열을 본다.
-    어긋남은 `vocabulary.drift` 가 이 표까지 센다.
+    Grade 와 달리 고쳐도 재료 이름이 안 바뀐다(ADR 0004). 재료 응답의 `applied_products` ·
+    `applied_parts` 는 이 줄들에서 뽑은 이름 목록이다(`parts.summary`) — 목록 · 검색 · MCP 가
+    그대로 읽는다.
     """
 
-    __tablename__ = "material_uses"
-    __table_args__ = (
-        # 같은 재료에 같은 용도를 두 번 적을 이유가 없다. 목록에 같은 칩이 둘
-        # 보이면 사람은 둘 중 하나가 다른 뜻이라고 읽는다.
-        UniqueConstraint("material_id", "axis", "term_id", name="uq_material_uses_axis_term"),
-    )
+    __tablename__ = "material_parts"
 
     id: Mapped[uuid.UUID] = mapped_column(
         PgUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
@@ -313,15 +325,36 @@ class MaterialUse(Base):
     material_id: Mapped[uuid.UUID] = mapped_column(
         PgUUID(as_uuid=True), ForeignKey("materials.id"), index=True
     )
-    axis: Mapped[str] = mapped_column(String(20), index=True)
-    """`product` 또는 `part`. `USE_AXES` 를 본다."""
-
-    term_id: Mapped[uuid.UUID] = mapped_column(
+    part_term_id: Mapped[uuid.UUID | None] = mapped_column(
         PgUUID(as_uuid=True), ForeignKey("vocabulary_terms.id"), index=True
     )
-    value: Mapped[str] = mapped_column(String(100))
-    position: Mapped[int] = mapped_column(Integer, default=0)
-    """사람이 적은 순서. 첫 번째가 대표값처럼 읽히므로 흔들리면 안 된다."""
+    part_name: Mapped[str | None] = mapped_column(String(200))
+    product_term_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("vocabulary_terms.id"), index=True
+    )
+    product_name: Mapped[str | None] = mapped_column(String(200))
+    part_code: Mapped[str | None] = mapped_column(String(100), index=True)
+    """부품코드(품번) — 글자 그대로. 사업부마다 체계가 달라 기준정보가 아니다."""
+    division_term_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("vocabulary_terms.id"), index=True
+    )
+    division_name: Mapped[str | None] = mapped_column(String(200))
+    source: Mapped[str] = mapped_column(String(20), default="manual", server_default="manual")
+    """`manual` · `bom` · `legacy`(예전 칩에서 옮김)."""
+    source_ref: Mapped[str | None] = mapped_column(String(200))
+    """어느 BOM 에서 왔나 — 사람이 적은 이름(파일명 · 모델명)."""
+    note: Mapped[str | None] = mapped_column(Text)
+    position: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    """사람이 적은 순서. 이름 목록(`applied_*`)이 이 차례로 선다."""
+    created_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("users.id")
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
 
 
 class Sample(Base):

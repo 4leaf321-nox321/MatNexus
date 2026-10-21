@@ -20,7 +20,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.modules.accounts.models import User
-from app.modules.materials.models import USE_AXES, Material, MaterialUse, Sample, Specimen
+from app.modules.materials import parts
+from app.modules.materials.models import Material, MaterialPart, Sample, Specimen
 from app.modules.materials.schemas import MaterialCreateRequest
 from app.modules.tests.models import TestRun, TestType
 from app.modules.vocabulary import services as vocabulary_services
@@ -500,23 +501,21 @@ def next_specimen_seq(db: Session, sample_id: uuid.UUID, orientation: str) -> in
 def uses_of(
     db: Session, material_ids: Sequence[uuid.UUID]
 ) -> dict[uuid.UUID, dict[str, list[str]]]:
-    """재료들의 용도를 **한 번에** 읽는다.
+    """재료들의 **이름 목록**(적용 제품 · 파트)을 한 번에 — 적용 부품 줄에서 뽑는다(ADR
+    0064)."""
+    return parts.summary(db, material_ids)
 
-    목록이 재료마다 물으면 N+1 이다. 200건짜리 화면에서 그것이 200번이 된다.
-    """
-    empty: dict[str, list[str]] = {axis: [] for axis in USE_AXES}
+
+def part_counts(db: Session, material_ids: Sequence[uuid.UUID]) -> dict[uuid.UUID, int]:
+    """재료들의 적용 부품 줄 수 — 목록 한 번에(N+1 을 피한다)."""
     if not material_ids:
         return {}
-    found: dict[uuid.UUID, dict[str, list[str]]] = {}
-    rows = db.scalars(
-        select(MaterialUse)
-        .where(MaterialUse.material_id.in_(material_ids))
-        .order_by(MaterialUse.axis, MaterialUse.position, MaterialUse.value)
+    rows = db.execute(
+        select(MaterialPart.material_id, func.count())
+        .where(MaterialPart.material_id.in_(list(material_ids)))
+        .group_by(MaterialPart.material_id)
     )
-    for row in rows:
-        found.setdefault(row.material_id, {axis: [] for axis in USE_AXES})
-        found[row.material_id].setdefault(row.axis, []).append(row.value)
-    return {mid: found.get(mid, dict(empty)) for mid in material_ids}
+    return {material_id: int(count) for material_id, count in rows}
 
 
 def set_uses(
@@ -527,64 +526,14 @@ def set_uses(
     *,
     created_by_id: uuid.UUID | None = None,
 ) -> None:
-    """한 축의 용도를 **통째로 갈아 끼운다.**
-
-    줄 하나를 지운 것과 안 보낸 것을 구별할 방법이 없어서다 — 선언 물성과 같은
-    규칙이다. 안 보내면 이 함수를 아예 안 부른다.
-
-    기준정보를 거친다(ADR 0010). 값마다 용어를 찾거나 만들고 `usage_count` 를
-    옮긴다 — **여기서 안 옮기면** 피커에 「쓰이지 않는 값」 이 남고 관리 화면의
-    「쓰는 곳」 이 거짓말을 한다.
-    """
-    if axis not in USE_AXES:
-        raise AppError("MNX-MATERIALS-0014", f"모르는 용도 축입니다: {axis}", status=422)
-
-    before = list(
-        db.scalars(
-            select(MaterialUse).where(
-                MaterialUse.material_id == material.id, MaterialUse.axis == axis
-            )
-        )
-    )
-    for row in before:
-        vocabulary_services.bump_usage(db, row.term_id, -1)
-        db.delete(row)
-    # 지운 줄이 아직 세션에 남아 있으면 유일 제약에 걸린다 — 같은 값을 다시
-    # 넣는 것이 가장 흔한 경우다(하나만 더 붙이는 수정).
-    db.flush()
-
-    vocabulary = vocabulary_services.get_vocabulary(db, axis)
-    seen: set[uuid.UUID] = set()
-    for position, raw in enumerate(values):
-        term = vocabulary_services.resolve_or_create(
-            db, vocabulary, raw, created_by_id=created_by_id
-        )
-        if term is None or term.id in seen:
-            # 빈 값과 **같은 값 두 번**은 넘긴다. 목록에 같은 칩이 둘 보이면
-            # 사람은 둘 중 하나가 다른 뜻이라고 읽는다.
-            continue
-        seen.add(term.id)
-        db.add(
-            MaterialUse(
-                material_id=material.id,
-                axis=axis,
-                term_id=term.id,
-                value=term.value,
-                position=position,
-            )
-        )
-        vocabulary_services.bump_usage(db, term.id, 1)
-    db.flush()
+    """예전 칸(`applied_products` · `applied_parts`)으로 저장한 것 — **이름만 있는 줄**만 갈아
+    끼운다(`parts.set_names`). 부품코드 · 제품 · 사업부가 붙은 줄은 표에서만 고친다."""
+    parts.set_names(db, material, axis, values, created_by_id=created_by_id)
 
 
 def release_uses(db: Session, material: Material) -> None:
-    """재료가 사라질 때 용도의 `usage_count` 를 되돌린다.
-
-    줄은 남긴다 — 재료가 소프트 삭제라 되살릴 수 있어야 하고, 세는 쪽은 이미
-    지워진 재료를 빼고 센다(`vocabulary._COUNT_SOURCES`).
-    """
-    for row in db.scalars(select(MaterialUse).where(MaterialUse.material_id == material.id)):
-        vocabulary_services.bump_usage(db, row.term_id, -1)
+    """재료가 사라질 때 적용 부품의 `usage_count` 를 되돌린다. 줄은 남긴다(되살릴 수 있다)."""
+    parts.release_all(db, material)
 
 
 def registrant_names(rows: Sequence[Any], db: Session) -> dict[uuid.UUID | None, str]:

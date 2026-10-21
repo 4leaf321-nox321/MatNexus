@@ -232,8 +232,9 @@ EXCLUDED_TABLES: dict[str, str] = {
     "ensemble_results": "묶음 처리의 앙상블(1) — 같다",
     "guide_assets": "핸드북에 붙은 그림·파일(75) — 절 마디를 집으면 본문과 함께 온다",
     "equipment_parts": "보유 장비의 부품(4) — 장비 마디에 딸린 목록이다",
-    "material_uses": (
-        "재료의 용도 줄(34) — 재료의 칸이다. 용도로 찾는 것은 `search_materials` 의 일"
+    "material_parts": (
+        "재료의 적용 부품 줄(파트 · 제품 · 부품코드 · 사업부, ADR 0064) — 재료의 칸이다."
+        " 파트 · 제품 · 부품코드로 찾는 것은 `search_materials` 의 일"
     ),
     "property_card_remarks": (
         "카드에 붙는 코멘트(근거 시험이 다른 두께로 옮겨짐 등) — 카드의 칸이다."

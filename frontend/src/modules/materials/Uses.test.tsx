@@ -25,6 +25,14 @@ describe('용도 목록', () => {
     expect(screen.getByText('—')).toBeInTheDocument()
   })
 
+  it('많으면 앞의 몇 개와 나머지 수만 보인다', () => {
+    // 부품 50개가 배지로 늘어서면 재료 머리가 화면을 다 먹는다(ADR 0064).
+    render(<Uses items={Array.from({ length: 50 }, (_, index) => `파트 ${index}`)} max={8} />)
+    expect(screen.getByText('파트 7')).toBeInTheDocument()
+    expect(screen.queryByText('파트 8')).not.toBeInTheDocument()
+    expect(screen.getByText('외 42개')).toBeInTheDocument()
+  })
+
   it('값이 없어도 터지지 않는다', () => {
     render(<Uses />)
     expect(screen.getByText('—')).toBeInTheDocument()

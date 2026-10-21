@@ -58,7 +58,7 @@ export function MaterialSearchFields({
 
   return (
     <div className="bg-muted/30 grid gap-3 rounded-md border p-3 sm:grid-cols-2 lg:grid-cols-4">
-      <Field id="find-use" label="용도(적용 제품·부위)">
+      <Field id="find-use" label="용도(적용 제품·파트·부품코드)">
         <Input
           id="find-use"
           className="h-8"

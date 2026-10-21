@@ -332,7 +332,10 @@ describe('찾기 — 방식과 상세 조건 (2026-09-29)', () => {
     await screen.findByRole('link', { name: 'SPCC_-_1.2' })
 
     await user.click(screen.getByRole('button', { name: /상세 조건/ }))
-    await user.type(screen.getByRole('textbox', { name: '용도(적용 제품·부위)' }), '범퍼')
+    await user.type(
+      screen.getByRole('textbox', { name: '용도(적용 제품·파트·부품코드)' }),
+      '범퍼'
+    )
     await user.type(screen.getByRole('spinbutton', { name: '두께 하한' }), '1')
     await user.type(screen.getByRole('spinbutton', { name: '두께 상한' }), '1.2')
     // 선택지는 서버가 준다 — 그려진 뒤에 고른다.
