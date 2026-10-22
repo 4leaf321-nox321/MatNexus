@@ -166,3 +166,17 @@ class ModulusTableOut(BaseModel):
     source_curve_keys: list[str]
     notes: list[str]
     created_at: datetime
+
+
+class ModulusCompanionOut(BaseModel):
+    """시편 평균 카드에 같이 넣을 수 있는 **다른 시험**의 표(2026-10-22). 같은 재료 · 시험
+    종류 · 방향 · 잰 것 · 주파수, 시험마다 가장 최근 표 하나."""
+
+    id: uuid.UUID
+    test_run_id: uuid.UUID
+    record_name: str
+    specimen_name: str
+    row_count: int
+    temperature_min_k: float | None = None
+    temperature_max_k: float | None = None
+    created_at: datetime

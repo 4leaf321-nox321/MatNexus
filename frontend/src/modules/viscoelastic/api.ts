@@ -24,6 +24,8 @@ export type PronyTerm = components['schemas']['PronyTermOut']
 export type ImportableCurve = components['schemas']['ImportableCurveOut']
 /** 주파수 하나에서 본 온도별 E′ · E″ · tan δ 표(2026-10-22). 불변이다. */
 export type ModulusTable = components['schemas']['ModulusTableOut']
+/** 시편 평균 카드에 같이 넣을 수 있는 다른 시험의 표 — 같은 재료 · 방향 · 주파수 · 잰 것. */
+export type ModulusCompanion = components['schemas']['ModulusCompanionOut']
 
 /** 겹친 곡선의 점. 화면이 그린다. */
 export type MasterCurvePoints = Record<string, (number | null)[]>
@@ -107,6 +109,9 @@ export const viscoelasticApi = {
     }),
   /** 표를 지운다. 카드가 근거로 들었으면 서버가 막는다. */
   removeModulusTable: (tableId: string) => api.delete<void>(`/viscoelastic/modulus-tables/${tableId}`),
+  /** 이 표와 시편 평균을 낼 수 있는 다른 시험의 표(시험마다 최근 것 하나). */
+  companionTables: (tableId: string) =>
+    api.get<ModulusCompanion[]>(`/viscoelastic/modulus-tables/${tableId}/companions`),
 
   points: (masterCurveId: string) =>
     api.get<MasterCurvePoints>(`/viscoelastic/master-curves/${masterCurveId}/points`),

@@ -4,6 +4,10 @@
  * 전에는 재료에 「적어 둔 값」 으로 출처를 추정이라 적어 넣을 수밖에 없었다. 다온도 파일은 온도마다
  * 곡선이 따로라 처리 단계로는 표가 안 나와, 마스터커브처럼 시험의 곡선 여럿을 읽는다(서버).
  * 표에서 카드(「온도별 저장 탄성률」 블록)를 만든다 — 정적 탄성계수 칸에는 넣지 않는다.
+ *
+ * **다른 시편의 표와 평균해 카드를 만들 수 있다**(2026-10-22). 시편 하나의 카드는 「그 시편의
+ * 값」 이라, 같은 재료 · 방향 · 주파수로 만든 다른 시험의 표를 서버가 찾아 주고 사람이 고른다.
+ * 평균은 서버가 낸다 — 모든 시편에 있는 온도만, 줄마다 E′ 변동계수와 함께.
  */
 
 import { useCallback, useEffect, useState } from 'react'
@@ -11,7 +15,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { fittingApi } from '@/modules/fitting/api'
 import { CurveChart } from '@/modules/tests/CurveChart'
 import { viscoelasticApi } from '@/modules/viscoelastic/api'
-import type { ModulusTable } from '@/modules/viscoelastic/api'
+import type { ModulusCompanion, ModulusTable } from '@/modules/viscoelastic/api'
 import { ConfirmDialog } from '@/shared/components/ConfirmDialog'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { Badge } from '@/shared/components/ui/badge'
@@ -40,6 +44,9 @@ export function ModulusTableSection({ testRunId }: { testRunId: string }) {
   const [error, setError] = useState<Error | null>(null)
   const [done, setDone] = useState<string | null>(null)
   const [removing, setRemoving] = useState<ModulusTable | null>(null)
+  /** 같이 평균할 수 있는 다른 시험의 표와, 그중 고른 것. 표를 바꾸면 비운다. */
+  const [companions, setCompanions] = useState<ModulusCompanion[]>([])
+  const [picked, setPicked] = useState<string[]>([])
 
   const reload = useCallback(async () => {
     const found = await viscoelasticApi.modulusTables(testRunId)
@@ -52,6 +59,26 @@ export function ModulusTableSection({ testRunId }: { testRunId: string }) {
       setError(caught instanceof Error ? caught : new Error('불러오지 못했습니다.'))
     )
   }, [reload])
+
+  const selectedId = selected?.id
+  useEffect(() => {
+    setCompanions([])
+    setPicked([])
+    if (!selectedId) return
+    let cancelled = false
+    viscoelasticApi
+      .companionTables(selectedId)
+      .then((found) => {
+        if (!cancelled) setCompanions(found)
+      })
+      .catch((caught: unknown) => {
+        if (!cancelled)
+          setError(caught instanceof Error ? caught : new Error('같이 평균할 표를 불러오지 못했습니다.'))
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [selectedId])
 
   async function build() {
     const value = Number(frequency)
@@ -79,8 +106,8 @@ export function ModulusTableSection({ testRunId }: { testRunId: string }) {
     setDone(null)
     try {
       const card = await fittingApi.createDmaTemperature({
-        modulus_table_id: table.id,
-        label: label.trim() || `저장 탄성률 ${table.frequency_hz} ${FREQUENCY_UNIT}`,
+        modulus_table_ids: [table.id, ...picked],
+        label: label.trim() || defaultLabel(table),
       })
       setDone(`카드 「${card.label}」 를 만들었습니다 — 재료의 CAE 카드 탭에 있습니다.`)
     } catch (caught) {
@@ -104,6 +131,11 @@ export function ModulusTableSection({ testRunId }: { testRunId: string }) {
     } finally {
       setBusy(false)
     }
+  }
+
+  function defaultLabel(table: ModulusTable): string {
+    const head = `저장 탄성률 ${table.frequency_hz} ${FREQUENCY_UNIT}`
+    return picked.length > 0 ? `${head} · 시편 ${picked.length + 1}개 평균` : head
   }
 
   const points: [number, number][] = (selected?.rows ?? []).map((one) => [
@@ -209,6 +241,48 @@ export function ModulusTableSection({ testRunId }: { testRunId: string }) {
               ))}
             </ul>
           )}
+          <fieldset className="space-y-1">
+            <legend className="text-xs font-medium">같이 평균할 다른 시편의 표</legend>
+            {companions.length === 0 ? (
+              <p className="text-muted-foreground text-xs">
+                같은 재료 · 방향 · 주파수({selected.frequency_hz} {FREQUENCY_UNIT})로 만든 다른 시험의
+                표가 없습니다. 다른 시편의 시험에서 같은 주파수로 표를 만들면 여기서 골라 평균할 수
+                있습니다.
+              </p>
+            ) : (
+              <>
+                {companions.map((one) => (
+                  <label key={one.id} className="flex items-center gap-2 text-xs">
+                    <input
+                      type="checkbox"
+                      checked={picked.includes(one.id)}
+                      onChange={(event) =>
+                        setPicked((current) =>
+                          event.target.checked
+                            ? [...current, one.id]
+                            : current.filter((id) => id !== one.id)
+                        )
+                      }
+                    />
+                    <span>
+                      {one.specimen_name} · {one.record_name} · {one.row_count}온도
+                      {one.temperature_min_k != null && one.temperature_max_k != null && (
+                        <span className="text-muted-foreground">
+                          {' '}
+                          ({formatScalar(one.temperature_min_k, 'K')} ~{' '}
+                          {formatScalar(one.temperature_max_k, 'K')})
+                        </span>
+                      )}
+                    </span>
+                  </label>
+                ))}
+                <p className="text-muted-foreground text-xs">
+                  고르면 온도마다 평균한 카드가 됩니다. 모든 시편에 있는 온도(±0.5 K)만 남기고,
+                  줄마다 E′ 변동계수를 함께 둡니다.
+                </p>
+              </>
+            )}
+          </fieldset>
           <div className="flex flex-wrap items-end gap-2">
             <div className="space-y-1">
               <Label htmlFor="modulus-card-label" className="text-xs">
@@ -217,13 +291,13 @@ export function ModulusTableSection({ testRunId }: { testRunId: string }) {
               <Input
                 id="modulus-card-label"
                 className="h-8 w-64"
-                placeholder={`저장 탄성률 ${selected.frequency_hz} ${FREQUENCY_UNIT}`}
+                placeholder={defaultLabel(selected)}
                 value={label}
                 onChange={(event) => setLabel(event.target.value)}
               />
             </div>
             <Button size="sm" className="h-8" disabled={busy} onClick={() => void makeCard(selected)}>
-              이 표로 카드 만들기
+              {picked.length > 0 ? `시편 ${picked.length + 1}개 평균으로 카드 만들기` : '이 표로 카드 만들기'}
             </Button>
             <Button
               size="sm"

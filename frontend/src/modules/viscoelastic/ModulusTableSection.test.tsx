@@ -4,6 +4,7 @@
  *   주파수를 넣어 표를 만든다          서버가 곡선 여럿을 읽는다
  *   표에서 카드를 만든다              이름을 비우면 주파수가 든 이름
  *   표를 지운다                       확인 창을 거친다
+ *   다른 시편의 표와 평균한다          서버가 찾아 준 표를 사람이 고른다
  */
 
 import { render, screen, waitFor, within } from '@testing-library/react'
@@ -16,6 +17,7 @@ const modulusTables = vi.fn()
 const createModulusTable = vi.fn()
 const removeModulusTable = vi.fn()
 const createDmaTemperature = vi.fn()
+const companionTables = vi.fn()
 
 vi.mock('@/modules/viscoelastic/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/modules/viscoelastic/api')>()),
@@ -23,6 +25,7 @@ vi.mock('@/modules/viscoelastic/api', async (importOriginal) => ({
     modulusTables: (...args: unknown[]) => modulusTables(...args),
     createModulusTable: (...args: unknown[]) => createModulusTable(...args),
     removeModulusTable: (...args: unknown[]) => removeModulusTable(...args),
+    companionTables: (...args: unknown[]) => companionTables(...args),
   },
 }))
 
@@ -48,6 +51,7 @@ const TABLE = {
 beforeEach(() => {
   vi.clearAllMocks()
   modulusTables.mockResolvedValue([])
+  companionTables.mockResolvedValue([])
 })
 
 describe('주파수 지정 온도별 E′ 표', () => {
@@ -76,7 +80,7 @@ describe('주파수 지정 온도별 E′ 표', () => {
     await user.click(await screen.findByRole('button', { name: '이 표로 카드 만들기' }))
     await waitFor(() =>
       expect(createDmaTemperature).toHaveBeenCalledWith({
-        modulus_table_id: 'table-1',
+        modulus_table_ids: ['table-1'],
         label: '저장 탄성률 1 Hz',
       })
     )
@@ -93,5 +97,40 @@ describe('주파수 지정 온도별 E′ 표', () => {
     expect(dialog).toHaveTextContent('카드가 근거로 든 표면 서버가 막습니다')
     await user.click(within(dialog).getByRole('button', { name: '삭제' }))
     await waitFor(() => expect(removeModulusTable).toHaveBeenCalledWith('table-1'))
+  })
+
+  it('다른 시편의 표를 고르면 평균 카드를 만든다 — 고른 표가 근거로 같이 간다', async () => {
+    const user = userEvent.setup()
+    modulusTables.mockResolvedValue([TABLE])
+    companionTables.mockResolvedValue([
+      {
+        id: 'table-2',
+        test_run_id: 'run-2',
+        record_name: 'EPDM_02__DMA_01',
+        specimen_name: 'EPDM_02',
+        row_count: 2,
+        temperature_min_k: 253.15,
+        temperature_max_k: 293.15,
+        created_at: '2026-10-22T00:00:00Z',
+      },
+    ])
+    createDmaTemperature.mockResolvedValue({ label: '저장 탄성률 1 Hz · 시편 2개 평균' })
+    render(<ModulusTableSection testRunId="run-1" />)
+    await user.click(await screen.findByRole('checkbox', { name: /EPDM_02 · EPDM_02__DMA_01/ }))
+    expect(companionTables).toHaveBeenCalledWith('table-1')
+    await user.click(screen.getByRole('button', { name: '시편 2개 평균으로 카드 만들기' }))
+    await waitFor(() =>
+      expect(createDmaTemperature).toHaveBeenCalledWith({
+        modulus_table_ids: ['table-1', 'table-2'],
+        label: '저장 탄성률 1 Hz · 시편 2개 평균',
+      })
+    )
+  })
+
+  it('같이 평균할 표가 없으면 어떻게 생기는지 말한다', async () => {
+    modulusTables.mockResolvedValue([TABLE])
+    render(<ModulusTableSection testRunId="run-1" />)
+    expect(await screen.findByText(/같은 주파수로 표를 만들면 여기서 골라 평균할 수/)).toBeInTheDocument()
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument()
   })
 })

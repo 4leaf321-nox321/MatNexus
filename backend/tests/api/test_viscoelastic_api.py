@@ -28,6 +28,7 @@ from app.modules.tests.definitions import ensure_builtin_test_types
 from app.modules.tests.legacy_profiles import ensure_builtin_format_profiles
 from app.modules.tests.models import FormatProfile
 from app.modules.viscoelastic import services
+from app.modules.viscoelastic.models import ModulusTable
 from matcore import cards, export
 from matcore.registry import Produced
 
@@ -1340,13 +1341,17 @@ class Test전단_채널로_잰_시험:
         assert table["modulus_basis"] == "G"
         refused = client.post(
             "/api/fitting/cards/dma-temperature",
-            json={"modulus_table_id": table["id"], "label": "겔 G′(T)"},
+            json={"modulus_table_ids": [table["id"]], "label": "겔 G′(T)"},
             headers=admin_headers,
         )
         assert refused.status_code == 422, refused.text
         made = client.post(
             "/api/fitting/cards/dma-temperature",
-            json={"modulus_table_id": table["id"], "label": "겔 G′(T)", "poisson_ratio": 0.49},
+            json={
+                "modulus_table_ids": [table["id"]],
+                "label": "겔 G′(T)",
+                "poisson_ratio": 0.49,
+            },
             headers=admin_headers,
         )
         assert made.status_code == 201, made.text
@@ -1664,7 +1669,7 @@ class Test온도별_탄성률_표:
         table, count = self._make(client, admin_headers, dma_run["id"])
         card = client.post(
             "/api/fitting/cards/dma-temperature",
-            json={"modulus_table_id": table["id"], "label": "EPDM E′(T)"},
+            json={"modulus_table_ids": [table["id"]], "label": "EPDM E′(T)"},
             headers=admin_headers,
         )
         assert card.status_code == 201, card.text
@@ -1677,7 +1682,7 @@ class Test온도별_탄성률_표:
         )
         # **탄성 블록에 싣지 않는다** — 정적 탄성계수와 뜻이 다르다(사용자).
         assert "elastic" not in body["blocks"]
-        assert body["source"]["modulus_table_id"] == table["id"]
+        assert body["source"]["modulus_table_ids"] == [table["id"]]
 
         refused = client.delete(
             f"/api/viscoelastic/modulus-tables/{table['id']}", headers=admin_headers
@@ -1699,3 +1704,180 @@ class Test온도별_탄성률_표:
             ).json()
             == []
         )
+
+
+def _sibling_run(
+    client: TestClient,
+    db: Session,
+    headers: dict[str, str],
+    material_id: str,
+    *,
+    orientation: str = "MD",
+) -> dict[str, Any]:
+    """**같은 재료**의 다른 시편에 같은 파일을 올려 읽힌 시험 — 시편 평균을 보려고."""
+    sample = client.post(
+        f"/api/materials/{material_id}/samples", json={}, headers=headers
+    ).json()
+    specimen = client.post(
+        f"/api/samples/{sample['id']}/specimens",
+        json={"orientation": orientation},
+        headers=headers,
+    ).json()
+    created = client.post(
+        "/api/test-runs",
+        data={"specimen_id": specimen["id"], "test_type": "dma_sweep", "conditions": "{}"},
+        files={"file": ("Example FreqTemp2.csv", FREQ_TEMP.read_bytes())},
+        headers=headers,
+    ).json()
+    assert test_services.parse_run(db, uuid.UUID(created["id"])) == "parsed"
+    run: dict[str, Any] = created
+    return run
+
+
+def _material_of(client: TestClient, headers: dict[str, str], run: dict[str, Any]) -> str:
+    material_id: str = client.get(f"/api/test-runs/{run['id']}", headers=headers).json()[
+        "material_id"
+    ]
+    return material_id
+
+
+class Test시편_평균_카드:
+    """**여러 시편의 온도별 E′ 를 평균해 카드로**(2026-10-22, v1.296.0 다음 할 일).
+
+    시편 하나의 표로 만든 카드는 「그 시편의 값」 이라 재료의 대푯값이 아니었다. 같은 재료 ·
+    방향 · 주파수의 표를 모아 온도마다 평균하고, 줄마다 E′ 변동계수를 단다.
+    """
+
+    def _table(
+        self, client: TestClient, headers: dict[str, str], run_id: str, frequency: float
+    ) -> dict[str, Any]:
+        made = client.post(
+            f"/api/viscoelastic/runs/{run_id}/modulus-tables",
+            json={"frequency_hz": frequency},
+            headers=headers,
+        )
+        assert made.status_code == 201, made.text
+        table: dict[str, Any] = made.json()
+        return table
+
+    def _frequency(self, client: TestClient, headers: dict[str, str], run_id: str) -> float:
+        sweeps = client.get(f"/api/viscoelastic/runs/{run_id}/sweeps", headers=headers).json()[
+            "items"
+        ]
+        low = max(one["minimum_frequency_hz"] for one in sweeps)
+        high = min(one["maximum_frequency_hz"] for one in sweeps)
+        return float((low * high) ** 0.5)
+
+    def test_같은_재료_다른_시편의_표를_고르게_하고_평균해_카드로(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        dma_run: dict[str, Any],
+    ) -> None:
+        frequency = self._frequency(client, admin_headers, dma_run["id"])
+        material_id = _material_of(client, admin_headers, dma_run)
+        other = _sibling_run(client, db, admin_headers, material_id)
+        across = _sibling_run(client, db, admin_headers, material_id, orientation="TD")
+        first = self._table(client, admin_headers, dma_run["id"], frequency)
+        second = self._table(client, admin_headers, other["id"], frequency)
+        self._table(client, admin_headers, across["id"], frequency)  # 방향이 다르다
+        self._table(client, admin_headers, other["id"], frequency * 1.5)  # 주파수가 다르다
+
+        # 같은 파일이라 값이 같다 — 둘째 시편의 E′ 를 1.2 배로 바꿔 평균이 보이게 한다.
+        stored = db.get(ModulusTable, uuid.UUID(second["id"]))
+        assert stored is not None
+        stored.rows = [{**one, "storage_pa": one["storage_pa"] * 1.2} for one in stored.rows]
+        db.commit()
+
+        companions = client.get(
+            f"/api/viscoelastic/modulus-tables/{first['id']}/companions", headers=admin_headers
+        )
+        assert companions.status_code == 200, companions.text
+        # **같은 방향 · 같은 주파수의 다른 시험만** — 자기 시험 · TD · 다른 주파수는 빠진다.
+        assert [one["id"] for one in companions.json()] == [second["id"]]
+        assert companions.json()[0]["row_count"] == len(first["rows"])
+
+        card = client.post(
+            "/api/fitting/cards/dma-temperature",
+            json={
+                "modulus_table_ids": [first["id"], second["id"]],
+                "label": "EPDM E′(T) 평균",
+            },
+            headers=admin_headers,
+        )
+        assert card.status_code == 201, card.text
+        body = card.json()
+        rows = body["blocks"]["dma_temperature"]["rows"]
+        assert len(rows) == len(first["rows"])
+        for row, mine in zip(rows, first["rows"], strict=True):
+            # 평균 = (1 + 1.2) / 2 = 1.1 배, 변동계수 = 표준편차 0.1·√2 ÷ 1.1.
+            assert row["storage_modulus"] == pytest.approx(mine["storage_pa"] * 1.1)
+            assert row["storage_cv"] == pytest.approx(0.1 * math.sqrt(2) / 1.1)
+            assert row["temperature"] == pytest.approx(mine["temperature_k"])
+        assert body["source"]["sample_count"] == 2
+        assert body["source"]["modulus_table_ids"] == [first["id"], second["id"]]
+        assert "평균" in body["source"]["notes"][0]
+
+        # 평균 카드가 든 **둘째** 표도 못 지운다 — 근거가 사라진다.
+        refused = client.delete(
+            f"/api/viscoelastic/modulus-tables/{second['id']}", headers=admin_headers
+        )
+        assert refused.status_code == 409, refused.text
+
+    def test_섞이면_까닭을_대고_거절한다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        dma_run: dict[str, Any],
+    ) -> None:
+        frequency = self._frequency(client, admin_headers, dma_run["id"])
+        material_id = _material_of(client, admin_headers, dma_run)
+        across = _sibling_run(client, db, admin_headers, material_id, orientation="TD")
+        other = _sibling_run(client, db, admin_headers, material_id)
+        first = self._table(client, admin_headers, dma_run["id"], frequency)
+        again = self._table(client, admin_headers, dma_run["id"], frequency)
+        turned = self._table(client, admin_headers, across["id"], frequency)
+        faster = self._table(client, admin_headers, other["id"], frequency * 1.5)
+
+        for ids, words in (
+            ([first["id"], again["id"]], "한 시험의 표가 둘"),
+            ([first["id"], turned["id"]], "방향이"),
+            ([first["id"], faster["id"]], "주파수가 섞여"),
+        ):
+            refused = client.post(
+                "/api/fitting/cards/dma-temperature",
+                json={"modulus_table_ids": ids, "label": "섞임"},
+                headers=admin_headers,
+            )
+            assert refused.status_code == 422, refused.text
+            assert refused.json()["error"]["code"] == "MNX-FITTING-0013"
+            assert words in refused.json()["error"]["message"]
+
+    def test_모든_시편에_있는_온도가_없으면_거절한다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        dma_run: dict[str, Any],
+    ) -> None:
+        frequency = self._frequency(client, admin_headers, dma_run["id"])
+        material_id = _material_of(client, admin_headers, dma_run)
+        other = _sibling_run(client, db, admin_headers, material_id)
+        first = self._table(client, admin_headers, dma_run["id"], frequency)
+        second = self._table(client, admin_headers, other["id"], frequency)
+        stored = db.get(ModulusTable, uuid.UUID(second["id"]))
+        assert stored is not None
+        # 온도를 모두 5 K 옮긴다 — ±0.5 K 안에 짝이 없다.
+        stored.rows = [
+            {**one, "temperature_k": one["temperature_k"] + 5} for one in stored.rows
+        ]
+        db.commit()
+        refused = client.post(
+            "/api/fitting/cards/dma-temperature",
+            json={"modulus_table_ids": [first["id"], second["id"]], "label": "어긋남"},
+            headers=admin_headers,
+        )
+        assert refused.status_code == 422, refused.text
+        assert refused.json()["error"]["code"] == "MNX-FITTING-0053"

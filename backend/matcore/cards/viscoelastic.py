@@ -199,7 +199,8 @@ DMA_TEMPERATURE = register_block(
         label="온도별 저장 탄성률",
         help=(
             "DMA 에서 **주파수 하나**로 본 온도별 E′ · E″ · tan δ. 정적 탄성계수와 다르다 — "
-            "그 주파수의 동적 값이다. 다른 주파수의 해석에 쓰면 안 된다."
+            "그 주파수의 동적 값이다. 다른 주파수의 해석에 쓰면 안 된다. 시편 여럿의 표로 "
+            "만들면 모든 시편에 있는 온도에서 평균한다."
         ),
         produces=(
             Produced(
@@ -235,6 +236,12 @@ DMA_TEMPERATURE = register_block(
                 label="tan δ",
                 si_unit="1",
                 property_key="mechanical.loss_tangent",
+            ),
+            Produced(
+                key="storage_cv",
+                label="E′ 변동계수",
+                si_unit="1",
+                help="시편 여럿을 평균한 카드에서만 — 그 온도 E′ 의 표준편차 ÷ 평균.",
             ),
         ),
         order=47,

@@ -32,6 +32,7 @@ from app.modules.viscoelastic.schemas import (
     MasterCurveImportRequest,
     MasterCurveOut,
     MasterCurveRequest,
+    ModulusCompanionOut,
     ModulusTableOut,
     ModulusTableRequest,
     ModulusTableRowOut,
@@ -44,7 +45,7 @@ from app.modules.viscoelastic.schemas import (
 from app.shared import audit, curvedata, filestore
 from app.shared.auth import current_user
 from app.shared.errors import AppError, Conflict, NotFound
-from app.shared.permissions import get_run, require_edit
+from app.shared.permissions import get_run, require_edit, visible_runs
 
 router = APIRouter(prefix="/viscoelastic", tags=["viscoelastic"])
 
@@ -535,6 +536,33 @@ def create_modulus_table(
     return _table_out(table)
 
 
+@router.get("/modulus-tables/{table_id}/companions", response_model=list[ModulusCompanionOut])
+def list_companion_tables(
+    table_id: uuid.UUID,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> list[ModulusCompanionOut]:
+    """이 표와 **시편 평균**을 낼 수 있는 다른 시험의 표 — 카드 만들기 창이 고르게 한다."""
+    table = services.table_or_404(db, table_id)
+    get_run(db, user, table.test_run_id)
+    out: list[ModulusCompanionOut] = []
+    for found, run, specimen in services.companion_tables(db, table, visible_runs(db, user)):
+        temperatures = [float(one["temperature_k"]) for one in found.rows]
+        out.append(
+            ModulusCompanionOut(
+                id=found.id,
+                test_run_id=run.id,
+                record_name=run.record_name,
+                specimen_name=specimen.record_name,
+                row_count=len(found.rows),
+                temperature_min_k=min(temperatures) if temperatures else None,
+                temperature_max_k=max(temperatures) if temperatures else None,
+                created_at=found.created_at,
+            )
+        )
+    return out
+
+
 @router.delete("/modulus-tables/{table_id}", status_code=204)
 def delete_modulus_table(
     table_id: uuid.UUID,
@@ -545,10 +573,16 @@ def delete_modulus_table(
     table = services.table_or_404(db, table_id)
     run = get_run(db, user, table.test_run_id)
     _require_removal(db, user, run, table.created_by_id)
+    # 시편 평균 카드는 표 여럿을 든다(`modulus_table_ids`). 하나만 들던 첫 모양도 본다.
     using = list(
         db.scalars(
             select(PropertyCard.label)
-            .where(PropertyCard.source["modulus_table_id"].as_string() == str(table.id))
+            .where(
+                or_(
+                    PropertyCard.source["modulus_table_ids"].contains([str(table.id)]),
+                    PropertyCard.source["modulus_table_id"].as_string() == str(table.id),
+                )
+            )
             .limit(6)
         )
     )

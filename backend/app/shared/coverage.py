@@ -8,6 +8,7 @@
 세 세계를 **같은 줄 모양**으로 편다 — 물성 키 · 출처 · 등급 · 값(SI) · 표준 조건:
 
     measured   채택된 처리 결과의 스칼라 (재료·물성·방법·조건별로 묶어 평균·표본 수)
+               · 묶음 결과 · DMA 온도별 탄성률 표(온도 · 주파수가 조건)
     internal   선언 물성의 점 (재료 층 + 시료 층)
     catalog    이어진 문헌 재료(`catalog_links`)의 값
 
@@ -43,6 +44,7 @@ from app.modules.grouping.models import GroupResult
 from app.modules.materials.models import Material, Sample, Specimen
 from app.modules.processing.models import ProcessingResult
 from app.modules.tests.models import TestConditionField, TestRun
+from app.modules.viscoelastic.models import ModulusTable
 from app.modules.vocabulary.models import VocabularyTerm
 from app.shared import declared_approval, declared_conditions, standard_conditions, tiers
 from matcore import registry
@@ -92,10 +94,11 @@ class Counts:
     specimens: int
     test_runs: int
     adopted_results: int
-    """채택된 결과. **여기가 0 이면 잰 값은 없다** — 시험이 있어도 채택이 없으면
-    통계에도 카드에도 안 실린다(그 판단은 사람만 한다)."""
+    """채택된 결과. 시험이 있어도 채택이 없으면 처리 결과의 값은 통계에도 카드에도 안
+    실린다(그 판단은 사람만 한다)."""
     measured: int
-    """`origin == "measured"` 인 줄 수."""
+    """`origin == "measured"` 인 줄 수. **여기가 0 이면 잰 값은 없다** — 채택된 처리 결과 ·
+    묶음 결과 · 온도별 탄성률 표가 모두 여기로 센다(채택이 0 이어도 표는 설 수 있다)."""
     internal: int
     """선언 물성에서 온 줄 수."""
     catalog: int
@@ -201,10 +204,12 @@ def _catalog_condition(conditions: dict[str, Any] | None) -> dict[str, float]:
 def measured_entries(
     db: Session, material_id: uuid.UUID
 ) -> tuple[dict[str, list[Entry]], list[str]]:
-    """시험으로 잰 값을 물성별로 — 채택된 처리 결과와 **묶음 결과**. 이어지지 않은 스칼라 키는
-    따로 돌려준다."""
+    """시험으로 잰 값을 물성별로 — 채택된 처리 결과 · **묶음 결과** · **온도별 탄성률 표**.
+    이어지지 않은 스칼라 키는 따로 돌려준다."""
     scalar_map = _scalar_property_map()
     grouped = group_entries(db, material_id)
+    for table_key, entries in modulus_table_entries(db, material_id).items():
+        grouped.setdefault(table_key, []).extend(entries)
     rows = db.execute(
         select(TestRun, ProcessingResult)
         .join(ProcessingResult, ProcessingResult.id == TestRun.adopted_result_id)
@@ -252,6 +257,17 @@ def measured_entries(
                 (float(value), run)
             )
 
+    made = _bucket_entries(bucket)
+    for property_key, entries in grouped.items():
+        made[property_key].extend(entries)
+    return made, sorted(unmapped)
+
+
+_Bucket = dict[tuple[str, str, tuple[tuple[str, float], ...]], list[tuple[float, TestRun]]]
+
+
+def _bucket_entries(bucket: _Bucket) -> dict[str, list[Entry]]:
+    """(물성 · 방법 · 조건) 묶음마다 한 줄 — 평균 · 표본 수 · 표준편차."""
     made: dict[str, list[Entry]] = defaultdict(list)
     for (property_key, method, cond_key), values in bucket.items():
         numbers = [one for one, _ in values]
@@ -276,9 +292,73 @@ def measured_entries(
                 ref_label=first.record_name,
             )
         )
-    for property_key, entries in grouped.items():
-        made[property_key].extend(entries)
-    return made, sorted(unmapped)
+    return made
+
+
+#: 온도별 표 하나가 지도에 세우는 온도 수. 승온 램프의 표는 수백 줄이라 다 세우면 지도가
+#: 그 표로 덮인다 — 고르게 솎고 방법 칸에 솎았다고 적는다. 줄 전부는 점탄성 탭 · 카드에 있다.
+TABLE_ROWS_ON_MAP = 20
+
+#: 표의 열 → 문헌 물성 키. 카드 블록 `dma_temperature` 의 행과 같은 짝이다.
+_TABLE_PROPERTIES = (
+    ("storage_pa", "mechanical.storage_modulus"),
+    ("loss_pa", "mechanical.loss_modulus"),
+    ("tan_delta", "mechanical.loss_tangent"),
+)
+
+
+def _thin(rows: list[dict[str, Any]], limit: int) -> list[dict[str, Any]]:
+    """양 끝을 남기고 고르게 `limit` 줄 — 온도 범위가 지도에서 줄지 않게."""
+    if len(rows) <= limit:
+        return rows
+    picked = sorted({round(index * (len(rows) - 1) / (limit - 1)) for index in range(limit)})
+    return [rows[index] for index in picked]
+
+
+def modulus_table_entries(db: Session, material_id: uuid.UUID) -> dict[str, list[Entry]]:
+    """**온도별 탄성률 표**(점탄성 탭, ADR 0066)의 E′ · E″ · tan δ — 온도 · 주파수를
+    조건으로(2026-10-22).
+
+    시험마다 · 주파수마다 가장 최근 표 하나다(같은 주파수로 두 번 만든 표를 둘로 세지 않는다).
+    같은 온도(0.1 K) · 주파수의 값은 시편끼리 평균한다 — 처리 결과와 같은 묶음이다.
+    **전단(G′)으로 잰 표의 G′ · G″ 는 세우지 않는다** — E′ 로 옮기려면 푸아송비가 있어야 하고
+    그 판단은 카드가 한다. tan δ 는 E 든 G 든 같아 세운다.
+    """
+    rows = db.execute(
+        select(ModulusTable, TestRun)
+        .join(TestRun, TestRun.id == ModulusTable.test_run_id)
+        .join(Specimen, Specimen.id == TestRun.specimen_id)
+        .join(Sample, Sample.id == Specimen.sample_id)
+        .where(
+            Sample.material_id == material_id,
+            TestRun.deleted_at.is_(None),
+            Specimen.deleted_at.is_(None),
+        )
+        .order_by(ModulusTable.created_at.desc())
+    ).all()
+    latest: dict[tuple[uuid.UUID, float, str], tuple[ModulusTable, TestRun]] = {}
+    for table, run in rows:
+        key = (run.id, float(f"{table.frequency_hz:.6g}"), table.modulus_basis)
+        latest.setdefault(key, (table, run))
+
+    bucket: _Bucket = defaultdict(list)
+    for table, run in latest.values():
+        picked = _thin(list(table.rows or []), TABLE_ROWS_ON_MAP)
+        method = "온도별 탄성률 표"
+        if len(picked) < len(table.rows):
+            method += f" · {len(table.rows)}줄 중 {len(picked)}줄"
+        for row in picked:
+            conditions = _round_conditions(
+                {"temperature": float(row["temperature_k"]), "frequency": table.frequency_hz}
+            )
+            for column, property_key in _TABLE_PROPERTIES:
+                if table.modulus_basis == "G" and column != "tan_delta":
+                    continue
+                value = row.get(column)
+                if not isinstance(value, int | float) or isinstance(value, bool):
+                    continue
+                bucket[(property_key, method, conditions)].append((float(value), run))
+    return _bucket_entries(bucket)
 
 
 def group_entries(db: Session, material_id: uuid.UUID) -> dict[str, list[Entry]]:

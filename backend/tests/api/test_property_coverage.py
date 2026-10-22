@@ -9,8 +9,10 @@
 
 from __future__ import annotations
 
+import uuid
 from typing import Any
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -18,10 +20,13 @@ from test_condition_search import KEY, _catalog, _measured
 from test_condition_search import (
     yield_def as yield_def,
 )
+from test_viscoelastic_api import _dma_run, _sibling_run
 
 from app.modules.catalog.models import CatalogDefinition, CatalogLink, CatalogMaterial
 from app.modules.materials.models import Material
+from app.modules.viscoelastic.models import ModulusTable
 from app.modules.workspaces.models import Workspace
+from app.shared.coverage import TABLE_ROWS_ON_MAP
 
 
 def _fetch(client: TestClient, headers: dict[str, str], material_id: Any) -> dict[str, Any]:
@@ -101,3 +106,103 @@ def test_아무것도_없는_재료는_빈_지도를_준다(
         "internal": 0,
         "catalog": 0,
     }
+
+
+class Test온도별_탄성률_표:
+    """**DMA 온도별 E′ 가 지도에 선다**(2026-10-22) — 온도 · 주파수가 조건이다.
+
+    v1.285.0 보고로 점탄성 탭에 표를 만들었는데, 그 값이 물성 지도에는 안 섰다 — 지도만 보면
+    E′ 를 잰 적이 없는 재료였다.
+    """
+
+    def _tables(
+        self, client: TestClient, db: Session, headers: dict[str, str], count: int
+    ) -> tuple[str, float, list[dict[str, Any]]]:
+        first = _dma_run(client, db, headers, grade="MAPVE")
+        material_id = client.get(f"/api/test-runs/{first['id']}", headers=headers).json()[
+            "material_id"
+        ]
+        runs = [
+            first,
+            *(_sibling_run(client, db, headers, material_id) for _ in range(count - 1)),
+        ]
+        sweeps = client.get(
+            f"/api/viscoelastic/runs/{first['id']}/sweeps", headers=headers
+        ).json()["items"]
+        low = max(one["minimum_frequency_hz"] for one in sweeps)
+        high = min(one["maximum_frequency_hz"] for one in sweeps)
+        frequency = float((low * high) ** 0.5)
+        tables = []
+        for run in runs:
+            made = client.post(
+                f"/api/viscoelastic/runs/{run['id']}/modulus-tables",
+                json={"frequency_hz": frequency},
+                headers=headers,
+            )
+            assert made.status_code == 201, made.text
+            tables.append(made.json())
+        return material_id, frequency, tables
+
+    def test_시편끼리_온도마다_평균해_조건과_함께_선다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str]
+    ) -> None:
+        material_id, frequency, tables = self._tables(client, db, admin_headers, 3)
+        # 첫 시험에 같은 주파수의 표를 한 번 더 — **시험마다 가장 최근 표 하나**만 센다.
+        again = client.post(
+            f"/api/viscoelastic/runs/{tables[0]['test_run_id']}/modulus-tables",
+            json={"frequency_hz": frequency},
+            headers=admin_headers,
+        )
+        assert again.status_code == 201, again.text
+        # 둘째 시편의 E′ 를 1.2 배로 — 평균이 보이게. 셋째는 전단(G′)으로 잰 표로 바꾼다.
+        second = db.get(ModulusTable, uuid.UUID(tables[1]["id"]))
+        third = db.get(ModulusTable, uuid.UUID(tables[2]["id"]))
+        assert second is not None and third is not None
+        second.rows = [{**one, "storage_pa": one["storage_pa"] * 1.2} for one in second.rows]
+        third.modulus_basis = "G"
+        db.commit()
+
+        body = _fetch(client, admin_headers, material_id)
+        rows = {one["key"]: one for one in body["properties"]}
+        storage = rows["mechanical.storage_modulus"]["entries"]
+        mine = tables[0]["rows"]
+        assert len(storage) == len(mine)
+        coldest = min(storage, key=lambda one: one["conditions"]["temperature"])
+        # 시편 둘(같은 시험의 두 표를 둘로 세지 않고, G′ 는 E′ 로 세지 않는다).
+        assert coldest["count"] == 2
+        assert coldest["value_si"] == pytest.approx(mine[0]["storage_pa"] * 1.1)
+        assert coldest["conditions"]["temperature"] == pytest.approx(
+            mine[0]["temperature_k"], abs=0.05
+        )
+        assert coldest["conditions"]["frequency"] == pytest.approx(frequency, rel=1e-2)
+        assert coldest["origin"] == "measured" and coldest["ref_kind"] == "test_run"
+        assert coldest["method"] == "온도별 탄성률 표"
+        # tan δ 는 E 든 G 든 같다 — 셋 다 센다.
+        tangent = rows["mechanical.loss_tangent"]["entries"]
+        assert max(one["count"] for one in tangent) == 3
+        # **채택이 없어도 잰 값이 있다** — 「없다」 는 measured 가 답한다.
+        assert body["counts"]["adopted_results"] == 0
+        assert body["counts"]["measured"] > 0
+
+    def test_긴_표는_양끝을_남기고_솎는다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str]
+    ) -> None:
+        material_id, _, tables = self._tables(client, db, admin_headers, 1)
+        stored = db.get(ModulusTable, uuid.UUID(tables[0]["id"]))
+        assert stored is not None
+        # 승온 램프처럼 50줄 — 지도에는 20줄만, 양 끝 온도는 남는다.
+        stored.rows = [
+            {"temperature_k": 250.0 + index, "storage_pa": 1e9 - index * 1e7, "loss_pa": None}
+            for index in range(50)
+        ]
+        db.commit()
+        body = _fetch(client, admin_headers, material_id)
+        storage = {one["key"]: one for one in body["properties"]}[
+            "mechanical.storage_modulus"
+        ]["entries"]
+        assert len(storage) == TABLE_ROWS_ON_MAP
+        temperatures = sorted(one["conditions"]["temperature"] for one in storage)
+        assert temperatures[0] == pytest.approx(250.0) and temperatures[-1] == pytest.approx(
+            299.0
+        )
+        assert storage[0]["method"] == f"온도별 탄성률 표 · 50줄 중 {TABLE_ROWS_ON_MAP}줄"

@@ -313,3 +313,74 @@ class Test온도별_탄성률_표:
         assert len(rows) == 1
         assert rows[0].storage_pa == pytest.approx(1.1e9, rel=1e-9)
         assert any("합쳤습니다" in note for note in notes)
+
+
+class Test시편_평균:
+    """여러 시편의 온도별 표를 **온도마다** 평균한다(2026-10-22). 조용히 틀리면 카드에
+    남는다."""
+
+    @staticmethod
+    def _table(*pairs: tuple[float, float], loss: bool = True) -> list[Any]:
+        from matcore.viscoelastic import TableRow
+
+        return [
+            TableRow(t, e, e * 0.1 if loss else None, 0.1 if loss else None) for t, e in pairs
+        ]
+
+    def test_모든_표에_있는_온도만_평균한다(self) -> None:
+        from matcore.viscoelastic import average_tables
+
+        rows, notes = average_tables(
+            [
+                self._table((293.15, 1.0e9), (313.15, 5.0e8), (333.15, 1.0e8)),
+                self._table((293.40, 1.2e9), (313.00, 7.0e8)),
+            ]
+        )
+        assert [round(one.temperature_k, 3) for one in rows] == [293.275, 313.075]
+        assert rows[0].storage_pa == pytest.approx(1.1e9)
+        assert rows[1].storage_pa == pytest.approx(6.0e8)
+        assert rows[0].storage_cv == pytest.approx(np.std([1.0e9, 1.2e9], ddof=1) / 1.1e9)
+        assert rows[0].count == 2
+        # 333.15 K 는 한 시편에만 있다 — 빼고, 뺐다고 말한다.
+        assert any("60.0 °C" in note for note in notes)
+
+    def test_짝은_가장_가까운_줄_하나이고_두_번_쓰지_않는다(self) -> None:
+        from matcore.viscoelastic import average_tables
+
+        rows, notes = average_tables(
+            [
+                self._table((300.0, 1.0e9), (300.3, 2.0e9)),
+                self._table((300.25, 3.0e9)),
+            ]
+        )
+        # 300.25 의 짝은 더 가까운 300.3 이다 — 첫 표의 차례대로 정하면 300.0 이 가로챈다.
+        # 짝을 잃은 300.0 은 빠지고, 뺐다고 말한다.
+        assert len(rows) == 1
+        assert rows[0].temperature_k == pytest.approx(300.275)
+        assert rows[0].storage_pa == pytest.approx(2.5e9)
+        assert any("26.9 °C" in note for note in notes)
+
+    def test_어긋남이_문턱을_넘으면_짝이_아니다(self) -> None:
+        from matcore.viscoelastic import average_tables
+
+        rows, _ = average_tables(
+            [self._table((300.0, 1.0e9)), self._table((300.6, 1.0e9))], match_k=0.5
+        )
+        assert rows == []
+
+    def test_손실이_한_표라도_없으면_비운다(self) -> None:
+        from matcore.viscoelastic import average_tables
+
+        rows, _ = average_tables(
+            [self._table((300.0, 1.0e9)), self._table((300.0, 1.0e9), loss=False)]
+        )
+        assert rows[0].loss_pa is None and rows[0].tan_delta is None
+
+    def test_표가_하나면_그대로이고_변동계수가_없다(self) -> None:
+        from matcore.viscoelastic import average_tables
+
+        table = self._table((300.0, 1.0e9), (320.0, 5.0e8))
+        rows, notes = average_tables([table])
+        assert [one.storage_pa for one in rows] == [1.0e9, 5.0e8]
+        assert all(one.storage_cv is None and one.count == 1 for one in rows)
+        assert notes == []

@@ -21,9 +21,10 @@ import uuid
 from typing import Any
 
 import numpy as np
-from sqlalchemy import func, select, update
+from sqlalchemy import Select, func, select, update
 from sqlalchemy.orm import Session
 
+from app.modules.materials.models import Sample, Specimen
 from app.modules.tests.models import Curve, TestRun
 from app.modules.viscoelastic.models import MasterCurve, ModulusTable, PronyFit
 from app.shared import curvedata, filestore
@@ -693,3 +694,48 @@ def table_or_404(db: Session, table_id: uuid.UUID) -> ModulusTable:
     if row is None:
         raise NotFound("MNX-VISCOELASTIC-0017", "온도별 탄성률 표를 찾을 수 없습니다.")
     return row
+
+
+#: 같이 평균할 표를 몇 개까지 내놓나. 한 재료 · 한 방향의 DMA 가 이보다 많으면 화면에서
+#: 고르기 어렵다.
+COMPANION_LIMIT = 50
+
+
+def companion_tables(
+    db: Session, table: ModulusTable, visible: Select[tuple[TestRun]]
+) -> list[tuple[ModulusTable, TestRun, Specimen]]:
+    """**시편 평균에 같이 넣을 수 있는 표** — 같은 재료 · 시험 종류 · 방향 · 잰 것(E/G) ·
+    주파수인 **다른 시험**의 표.
+
+    시험마다 가장 최근 표 하나다 — 같은 주파수로 두 번 만든 표를 둘로 세면 평균이 그 시편
+    쪽으로 기운다. 카드 만들기(`fitting` 의 온도별 카드)가 같은 조건을 다시 본다.
+    """
+    run = db.get(TestRun, table.test_run_id)
+    specimen = db.get(Specimen, run.specimen_id) if run else None
+    sample = db.get(Sample, specimen.sample_id) if specimen else None
+    if run is None or specimen is None or sample is None:
+        return []
+    rows = db.execute(
+        select(ModulusTable, TestRun, Specimen)
+        .join(TestRun, TestRun.id == ModulusTable.test_run_id)
+        .join(Specimen, Specimen.id == TestRun.specimen_id)
+        .join(Sample, Sample.id == Specimen.sample_id)
+        .where(
+            Sample.material_id == sample.material_id,
+            TestRun.test_type_id == run.test_type_id,
+            Specimen.orientation == specimen.orientation,
+            Specimen.deleted_at.is_(None),
+            ModulusTable.modulus_basis == table.modulus_basis,
+            ModulusTable.frequency_hz.between(
+                table.frequency_hz * (1 - 1e-6), table.frequency_hz * (1 + 1e-6)
+            ),
+            ModulusTable.test_run_id != run.id,
+            TestRun.id.in_(visible.with_only_columns(TestRun.id)),
+        )
+        .order_by(ModulusTable.created_at.desc())
+        .limit(COMPANION_LIMIT * 4)
+    ).all()
+    latest: dict[uuid.UUID, tuple[ModulusTable, TestRun, Specimen]] = {}
+    for found, found_run, found_specimen in rows:
+        latest.setdefault(found_run.id, (found, found_run, found_specimen))
+    return sorted(latest.values(), key=lambda one: one[1].record_name)[:COMPANION_LIMIT]

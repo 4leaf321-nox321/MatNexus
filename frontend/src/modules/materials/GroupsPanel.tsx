@@ -38,8 +38,10 @@
 import { useState } from 'react'
 import { Check, FileDown, Layers, Pencil, RefreshCw, Trash2, X } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
+import { BlockPlotView } from '@/modules/fitting/CardBlocks'
 import { CardFromDialog } from '@/modules/fitting/CardFromDialog'
 import { fittingApi } from '@/modules/fitting/api'
+import type { BlockSpec } from '@/modules/fitting/api'
 
 import { groupsApi } from '@/modules/materials/api.groups'
 import { masterCurveGap } from '@/shared/masterCurveGap'
@@ -86,6 +88,7 @@ interface RateBin {
 function GroupCard({
   row,
   spec,
+  plots = [],
   onCardMade,
   onChanged,
   onError,
@@ -93,6 +96,8 @@ function GroupCard({
 }: {
   row: GroupResult
   spec?: GroupingSpec
+  /** 그래프를 선언한 카드 블록들 — 결과의 점이 그 x · y 키를 들고 있으면 그 선언대로 그린다. */
+  plots?: BlockSpec[]
   /** 카드를 만든 뒤. CAE 카드 탭 안에 있으면 목록을 다시 읽고, 없으면 그 탭으로 간다. */
   onCardMade?: () => void
   /** 메모를 고치거나 지운 뒤 — 목록을 다시 읽는다. */
@@ -143,6 +148,17 @@ function GroupCard({
   const pronyPath = terms.length > 0 && !declaresCard
   const shiftMethod = row.detail?.shift_method ? String(row.detail.shift_method) : ''
   const makes = (spec?.makes_values ?? []).filter((one) => row.values[one.key] != null)
+  // **그래프도 결과의 모양이 고른다**(2026-10-22). S-N 묶음의 점(`detail.points`)은 S-N 카드
+  // 블록의 행과 같은 키(응력 진폭 · 파단 수명 · 런아웃)를 든다 — 플러그인 id 를 외우지 않고,
+  // 점이 x · y 키를 다 든 블록 선언을 찾아 그 선언대로 그린다. 계수 선은 결과의 값에서.
+  const points = (row.detail?.points as Record<string, unknown>[] | undefined) ?? []
+  const plotted =
+    points.length > 0
+      ? plots.find((one) => {
+          const plot = one.plot
+          return plot != null && points.every((point) => plot.x in point && plot.y in point)
+        })
+      : undefined
 
   return (
     <div className="rounded-md border p-3">
@@ -402,6 +418,8 @@ function GroupCard({
         ))}
       </dl>
 
+      {plotted && <BlockPlotView spec={plotted} values={row.values} rows={points} />}
+
       <p className="text-muted-foreground mt-2 font-mono text-xs break-all">
         {row.used.join(' · ')}
       </p>
@@ -493,6 +511,9 @@ export function GroupsPanel({
 
   const kinds = useResource(() => groupsApi.kinds(appliesTo), [appliesTo])
   const rows = useResource(() => groupsApi.ofMaterial(materialId), [materialId])
+  // 그래프 선언은 카드 블록이 갖는다 — 묶음 결과도 같은 선언으로 그린다(못 받으면 그래프만 빠진다).
+  const blocks = useResource(() => fittingApi.blocks(), [])
+  const plots = (blocks.data ?? []).filter((one) => one.plot != null)
   // 적합에 쓸 후보는 **채택까지 끝난 것**이 아니라 읽힌 것 전부다 — 마스터커브는
   // 채택과 무관하게 만든다. **표로 넣은 시험(`imported`)도 읽힌 것이다** — 「완료」 만 받던
   // 때 피로 시험 26건이 S-N 후보에서 0건이었다(v1.285.0 보고). 곡선이 필요한 묶음은 아래
@@ -663,6 +684,7 @@ export function GroupsPanel({
               key={row.id}
               row={row}
               spec={specs.find((s) => s.id === row.plugin_id)}
+              plots={plots}
               onCardMade={onCardMade}
               onChanged={() => rows.reload()}
               onError={setFailed}

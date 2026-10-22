@@ -11318,7 +11318,7 @@
         "type": "object"
       },
       "DmaTemperatureCardSaveRequest": {
-        "description": "온도별 저장 탄성률 카드 — 점탄성 탭의 **온도별 탄성률 표 하나에서**(2026-10-22).\n\nv1.285.0 보고: DMA 온도별 E′ 를 잰 물성으로 넘길 길이 없었다. 표가 재료 · 방향은 체인을\n따라간다(표 → 시험 → 시편 → 시료 → 재료).",
+        "description": "온도별 저장 탄성률 카드 — 점탄성 탭의 **온도별 탄성률 표에서**(2026-10-22).\n\nv1.285.0 보고: DMA 온도별 E′ 를 잰 물성으로 넘길 길이 없었다. 표가 재료 · 방향은 체인을\n따라간다(표 → 시험 → 시편 → 시료 → 재료). **표 여럿이면 시편 평균이다** — 같은 재료 ·\n시험 종류 · 방향 · 주파수 · 잰 것(E/G)이고 시험 하나에 표 하나여야 한다.",
         "properties": {
           "label": {
             "maxLength": 120,
@@ -11326,10 +11326,15 @@
             "title": "Label",
             "type": "string"
           },
-          "modulus_table_id": {
-            "format": "uuid",
-            "title": "Modulus Table Id",
-            "type": "string"
+          "modulus_table_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 50,
+            "minItems": 1,
+            "title": "Modulus Table Ids",
+            "type": "array"
           },
           "note": {
             "anyOf": [
@@ -11357,7 +11362,7 @@
           }
         },
         "required": [
-          "modulus_table_id",
+          "modulus_table_ids",
           "label"
         ],
         "title": "DmaTemperatureCardSaveRequest",
@@ -21255,6 +21260,70 @@
           "si_unit"
         ],
         "title": "MillCheckRowOut",
+        "type": "object"
+      },
+      "ModulusCompanionOut": {
+        "description": "시편 평균 카드에 같이 넣을 수 있는 **다른 시험**의 표(2026-10-22). 같은 재료 · 시험\n종류 · 방향 · 잰 것 · 주파수, 시험마다 가장 최근 표 하나.",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "record_name": {
+            "title": "Record Name",
+            "type": "string"
+          },
+          "row_count": {
+            "title": "Row Count",
+            "type": "integer"
+          },
+          "specimen_name": {
+            "title": "Specimen Name",
+            "type": "string"
+          },
+          "temperature_max_k": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Temperature Max K"
+          },
+          "temperature_min_k": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Temperature Min K"
+          },
+          "test_run_id": {
+            "format": "uuid",
+            "title": "Test Run Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "test_run_id",
+          "record_name",
+          "specimen_name",
+          "row_count",
+          "created_at"
+        ],
+        "title": "ModulusCompanionOut",
         "type": "object"
       },
       "ModulusTableOut": {
@@ -44542,7 +44611,7 @@
     },
     "/api/fitting/cards/dma-temperature": {
       "post": {
-        "description": "**온도별 저장 탄성률 카드** — 점탄성 탭의 표 하나에서(2026-10-22, v1.285.0 보고).\n\nDMA 온도별 E′ 를 잰 물성으로 넘길 길이 없어, 재료에 적어 둔 값(출처 추정)으로만 넣고\n있었다.\n**탄성 블록에 싣지 않는다** — 정적 탄성계수와 뜻이 다르다(사용자). 전단(G′)으로 잰 표는\n점탄성 카드와 같은 규칙으로 E = 2(1+ν)G 로 옮긴다 — tan δ 는 그대로다.",
+        "description": "**온도별 저장 탄성률 카드** — 점탄성 탭의 표에서(2026-10-22, v1.285.0 보고).\n\nDMA 온도별 E′ 를 잰 물성으로 넘길 길이 없어, 재료에 적어 둔 값(출처 추정)으로만 넣고\n있었다. **탄성 블록에 싣지 않는다** — 정적 탄성계수와 뜻이 다르다(사용자). 전단(G′)으로\n잰 표는 점탄성 카드와 같은 규칙으로 E = 2(1+ν)G 로 옮긴다 — tan δ 는 그대로다.\n\n표가 여럿이면 **시편 평균**이다(`viscoelastic.average_tables`) — 모든 시편에 있는 온도만\n남기고 줄마다 E′ 변동계수를 단다. 같은 재료 · 시험 종류 · 방향 · 주파수 · 잰 것이어야 하고\n시험 하나에 표 하나다.",
         "operationId": "create_dma_temperature_card_api_fitting_cards_dma_temperature_post",
         "requestBody": {
           "content": {
@@ -58686,6 +58755,54 @@
           }
         },
         "summary": "Delete Modulus Table",
+        "tags": [
+          "viscoelastic"
+        ]
+      }
+    },
+    "/api/viscoelastic/modulus-tables/{table_id}/companions": {
+      "get": {
+        "description": "이 표와 **시편 평균**을 낼 수 있는 다른 시험의 표 — 카드 만들기 창이 고르게 한다.",
+        "operationId": "list_companion_tables_api_viscoelastic_modulus_tables__table_id__companions_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "table_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Table Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ModulusCompanionOut"
+                  },
+                  "title": "Response List Companion Tables Api Viscoelastic Modulus Tables  Table Id  Companions Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Companion Tables",
         "tags": [
           "viscoelastic"
         ]

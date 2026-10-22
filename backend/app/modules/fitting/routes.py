@@ -16,6 +16,7 @@ import math
 import re
 import uuid
 import zipfile
+from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
@@ -2293,39 +2294,96 @@ def create_viscoelastic_card(
     return _save_card(db, user, item)
 
 
+#: 온도별 카드의 근거 한 줄 — 표 · 시험 · 시편 · 시료.
+_DmaChain = tuple[ModulusTable, TestRun, Specimen, Sample]
+
+
+def _dma_tables_mixed(chain: Sequence[_DmaChain]) -> str | None:
+    """시편 평균이 될 수 있는 표들인가 — 아니면 그 까닭."""
+    if len({sample.material_id for *_, sample in chain}) > 1:
+        return "재료가 다른 표가 섞여 있습니다 — 카드는 재료 하나의 물성입니다."
+    if len({run.test_type_id for _, run, *_ in chain}) > 1:
+        return "시험 종류가 섞여 있습니다."
+    orientations = sorted({str(specimen.orientation) for _, _, specimen, _ in chain})
+    if len(orientations) > 1:
+        return (
+            f"방향이 {len(orientations)}가지 섞여 있습니다({', '.join(orientations)}). "
+            "카드는 방향 하나의 물성입니다."
+        )
+    frequencies = sorted({table.frequency_hz for table, *_ in chain})
+    if frequencies[-1] - frequencies[0] > 1e-6 * frequencies[-1]:
+        shown = ", ".join(f"{one:g}" for one in frequencies)
+        return f"주파수가 섞여 있습니다({shown} Hz) — 다른 주파수의 값은 평균하지 않습니다."
+    if len({table.modulus_basis for table, *_ in chain}) > 1:
+        return "인장 · 굽힘(E′)으로 잰 표와 전단(G′)으로 잰 표가 섞여 있습니다."
+    counted = Counter(run.id for _, run, *_ in chain)
+    twice = sorted({run.record_name for _, run, *_ in chain if counted[run.id] > 1})
+    if twice:
+        return (
+            f"한 시험의 표가 둘 이상입니다({', '.join(twice)}) — 한 시편을 두 번 세면 평균이 "
+            "그 시편 쪽으로 기웁니다. 시험마다 표 하나를 고르세요."
+        )
+    return None
+
+
+def _table_rows(table: ModulusTable) -> list[viscoelastic.TableRow]:
+    return [
+        viscoelastic.TableRow(
+            temperature_k=float(one["temperature_k"]),
+            storage_pa=float(one["storage_pa"]),
+            loss_pa=float(one["loss_pa"]) if one.get("loss_pa") is not None else None,
+            tan_delta=float(one["tan_delta"]) if one.get("tan_delta") is not None else None,
+        )
+        for one in table.rows
+    ]
+
+
 @router.post("/cards/dma-temperature", response_model=PropertyCardOut, status_code=201)
 def create_dma_temperature_card(
     payload: DmaTemperatureCardSaveRequest,
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> PropertyCardOut:
-    """**온도별 저장 탄성률 카드** — 점탄성 탭의 표 하나에서(2026-10-22, v1.285.0 보고).
+    """**온도별 저장 탄성률 카드** — 점탄성 탭의 표에서(2026-10-22, v1.285.0 보고).
 
     DMA 온도별 E′ 를 잰 물성으로 넘길 길이 없어, 재료에 적어 둔 값(출처 추정)으로만 넣고
-    있었다.
-    **탄성 블록에 싣지 않는다** — 정적 탄성계수와 뜻이 다르다(사용자). 전단(G′)으로 잰 표는
-    점탄성 카드와 같은 규칙으로 E = 2(1+ν)G 로 옮긴다 — tan δ 는 그대로다.
+    있었다. **탄성 블록에 싣지 않는다** — 정적 탄성계수와 뜻이 다르다(사용자). 전단(G′)으로
+    잰 표는 점탄성 카드와 같은 규칙으로 E = 2(1+ν)G 로 옮긴다 — tan δ 는 그대로다.
+
+    표가 여럿이면 **시편 평균**이다(`viscoelastic.average_tables`) — 모든 시편에 있는 온도만
+    남기고 줄마다 E′ 변동계수를 단다. 같은 재료 · 시험 종류 · 방향 · 주파수 · 잰 것이어야 하고
+    시험 하나에 표 하나다.
     """
     cards.load_builtin()
-    table = db.get(ModulusTable, payload.modulus_table_id)
-    if table is None:
-        raise NotFound("MNX-FITTING-0011", "온도별 탄성률 표를 찾을 수 없습니다.")
-    run = permissions.get_run(db, user, table.test_run_id)  # 볼 권한이 있는가
-    specimen = db.get(Specimen, run.specimen_id)
-    sample = db.get(Sample, specimen.sample_id) if specimen else None
-    material = db.get(Material, sample.material_id) if sample else None
-    if specimen is None or sample is None or material is None:
+    chain: list[_DmaChain] = []
+    for table_id in dict.fromkeys(payload.modulus_table_ids):
+        table = db.get(ModulusTable, table_id)
+        if table is None:
+            raise NotFound("MNX-FITTING-0011", "온도별 탄성률 표를 찾을 수 없습니다.")
+        run = permissions.get_run(db, user, table.test_run_id)  # 볼 권한이 있는가
+        specimen = db.get(Specimen, run.specimen_id)
+        sample = db.get(Sample, specimen.sample_id) if specimen else None
+        if specimen is None or sample is None:
+            raise NotFound(
+                "MNX-FITTING-0011", "이 표가 어느 재료의 것인지 따라갈 수 없습니다."
+            )
+        chain.append((table, run, specimen, sample))
+    mixed = _dma_tables_mixed(chain)
+    if mixed:
+        raise AppError("MNX-FITTING-0013", mixed, status=422)
+    first_table, first_run, first_specimen, first_sample = chain[0]
+    material = db.get(Material, first_sample.material_id)
+    if material is None:
         raise NotFound("MNX-FITTING-0011", "이 표가 어느 재료의 것인지 따라갈 수 없습니다.")
     poisson = _inherit_poisson(material, payload.poisson_ratio)
     factor = 1.0
     basis_note = "인장 · 굽힘으로 잰 E′ 입니다."
-    if table.modulus_basis == "G":
+    if first_table.modulus_basis == "G":
         if poisson.value is None:
             raise AppError(
                 "MNX-FITTING-0045",
                 "전단(G′)으로 잰 표를 E 로 옮기려면 푸아송비가 필요합니다 — 재료에 적거나 "
-                "카드를 "
-                "만들 때 넣으세요.",
+                "카드를 만들 때 넣으세요.",
                 status=422,
             )
         factor = viscoelastic.youngs_from_shear(poisson.value)
@@ -2333,48 +2391,63 @@ def create_dma_temperature_card(
             f"전단(G′)으로 잰 값을 E = 2(1+ν)G 로 옮겼습니다(ν = {poisson.value:g}, "
             f"{poisson.detail or '입력'})."
         )
+    averaged, average_notes = viscoelastic.average_tables(
+        [_table_rows(table) for table, *_ in chain]
+    )
+    if not averaged:
+        raise AppError(
+            "MNX-FITTING-0053",
+            "모든 시편에 있는 온도가 하나도 없습니다. " + " ".join(average_notes),
+            status=422,
+        )
     rows = [
         {
-            "temperature": float(one["temperature_k"]),
-            "storage_modulus": float(one["storage_pa"]) * factor,
-            **(
-                {"loss_modulus": float(one["loss_pa"]) * factor}
-                if one.get("loss_pa") is not None
-                else {}
-            ),
-            **(
-                {"tan_delta": float(one["tan_delta"])}
-                if one.get("tan_delta") is not None
-                else {}
-            ),
+            "temperature": one.temperature_k,
+            "storage_modulus": one.storage_pa * factor,
+            **({"loss_modulus": one.loss_pa * factor} if one.loss_pa is not None else {}),
+            **({"tan_delta": one.tan_delta} if one.tan_delta is not None else {}),
+            # 변동계수는 배수에 무관하다 — G′ 를 E 로 옮겨도 그대로다.
+            **({"storage_cv": one.storage_cv} if one.storage_cv is not None else {}),
         }
-        for one in table.rows
+        for one in averaged
     ]
+    frequency = first_table.frequency_hz
+    if len(chain) == 1:
+        head = (
+            f"시편 {first_specimen.record_name} 한 건에서 {frequency:g} Hz 로 본 온도별 "
+            "값입니다 — 재료의 대푯값이 아니라 그 시편의 값입니다."
+        )
+        table_notes = list(first_table.notes)
+    else:
+        names = ", ".join(specimen.record_name for _, _, specimen, _ in chain[:5])
+        more = f" 외 {len(chain) - 5}개" if len(chain) > 5 else ""
+        head = (
+            f"시편 {len(chain)}개({names}{more})의 {frequency:g} Hz 표를 온도마다 "
+            "평균했습니다. 줄마다 E′ 변동계수를 함께 둡니다."
+        )
+        table_notes = [
+            f"{run.record_name}: {note}" for table, run, *_ in chain for note in table.notes
+        ]
     item = PropertyCard(
         material_id=material.id,
-        test_type_id=run.test_type_id,
-        orientation=specimen.orientation,
+        test_type_id=first_run.test_type_id,
+        orientation=first_specimen.orientation,
         label=payload.label,
         status="draft",
         # 표를 외래키로 잡지 않는다 — 카드는 자기 근거를 든 스냅샷이다(점탄성 카드와 같다).
         source={
-            "sample_count": 1,
-            "test_run_ids": [str(run.id)],
-            "record_names": [run.record_name],
-            "modulus_table_id": str(table.id),
-            "notes": [
-                f"시편 {specimen.record_name} 한 건에서 {table.frequency_hz:g} Hz 로 본 "
-                f"온도별 값입니다 — 재료의 대푯값이 아니라 그 시편의 값입니다.",
-                basis_note,
-                *table.notes,
-            ],
+            "sample_count": len(chain),
+            "test_run_ids": [str(run.id) for _, run, *_ in chain],
+            "record_names": [run.record_name for _, run, *_ in chain],
+            "modulus_table_ids": [str(table.id) for table, *_ in chain],
+            "notes": [head, basis_note, *average_notes, *table_notes],
             "runtime": runtime.manifest(),
         },
         blocks={
             "dma_temperature": {
                 "values": {
-                    "frequency_hz": table.frequency_hz,
-                    "modulus_basis": table.modulus_basis,
+                    "frequency_hz": frequency,
+                    "modulus_basis": first_table.modulus_basis,
                     "point_count": len(rows),
                 },
                 "rows": rows,

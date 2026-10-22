@@ -39,6 +39,7 @@ vi.mock('@/modules/materials/api.groups', () => ({
 const createRateCard = vi.fn()
 const createViscoelastic = vi.fn()
 const createCardFromGroup = vi.fn()
+const blocks = vi.fn()
 vi.mock('@/modules/fitting/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/modules/fitting/api')>()),
   fittingApi: {
@@ -47,6 +48,8 @@ vi.mock('@/modules/fitting/api', async (importOriginal) => ({
     createCardFromGroup: (...args: unknown[]) => createCardFromGroup(...args),
     // 카드 대화상자가 물려받을 밀도·푸아송비를 묻는다.
     inherited: () => Promise.resolve([]),
+    // 그래프 선언은 카드 블록이 갖는다 — 묶음 결과도 그 선언으로 그린다.
+    blocks: () => blocks(),
   },
 }))
 
@@ -147,6 +150,8 @@ beforeEach(() => {
   ofMaterial.mockResolvedValue([ROW])
   runs.mockResolvedValue(RUNS)
   create.mockResolvedValue(ROW)
+  blocks.mockReset()
+  blocks.mockResolvedValue([])
 })
 
 describe('묶음 목록', () => {
@@ -787,5 +792,77 @@ describe('후보의 조건은 서버가 말한다', () => {
         expect.objectContaining({ group_result_id: 'g2', poisson_ratio: null, density: null })
       )
     )
+  })
+})
+
+describe('묶음 결과의 그래프', () => {
+  // v1.296.0 다음 할 일: S-N 카드에는 「그래프 보기」 가 섰는데, 재료 화면의 묶음 결과에서는
+  // 점과 Basquin 계수를 숫자로만 봤다. 블록 이름도 플러그인 id 도 지어낸 것이다 — 화면이 S-N 을
+  // 외우면 이 시험이 못 그린다.
+  const PLOTTED = {
+    key: 'imaginary_curve',
+    label: '지어낸 곡선',
+    help: '점과 멱법칙 계수.',
+    in_deck: false,
+    produces: [
+      { key: 'coef', label: '계수', si_unit: 'Pa', help: null },
+      { key: 'power', label: '지수', si_unit: '1', help: null },
+    ],
+    rows: [
+      { key: 'life', label: '수명', si_unit: '1', help: null },
+      { key: 'level', label: '진폭', si_unit: 'Pa', help: null },
+      { key: 'stopped', label: '멈춤', si_unit: '1', help: null },
+    ],
+    plot: {
+      x: 'life',
+      y: 'level',
+      log_x: true,
+      log_y: true,
+      hollow: 'stopped',
+      line: { coefficient: 'coef', exponent: 'power' },
+    },
+  }
+  const POINTS = [
+    { member: 'A', life: 1e4, level: 4e8, stopped: false },
+    { member: 'B', life: 1e5, level: 3.2e8, stopped: false },
+    { member: 'C', life: 1e7, level: 2.4e8, stopped: true },
+  ]
+
+  it('점이 블록 그래프 선언의 키를 들면 그 선언대로 점 · 빈 점 · 계수 선을 그린다', async () => {
+    ofMaterial.mockResolvedValue([
+      {
+        ...ROW,
+        id: 'g7',
+        plugin_id: 'imaginary.group',
+        options: {},
+        used: ['A', 'B'],
+        values: { coef: 1e9, power: -0.1 },
+        detail: { points: POINTS },
+        warnings: [],
+      },
+    ])
+    blocks.mockResolvedValue([PLOTTED, { ...PLOTTED, key: 'no_plot', plot: null }])
+    show(<GroupsPanel materialId="m1" />)
+
+    await userEvent.click(await screen.findByRole('button', { name: '그래프 보기' }))
+    const groups = screen.getAllByTestId('chart-dots')
+    expect(groups.map((one) => one.getAttribute('aria-label'))).toEqual(['점', '멈춤'])
+    expect(groups[0].querySelectorAll('circle')).toHaveLength(2)
+    expect(groups[1].querySelectorAll('circle')).toHaveLength(1)
+    expect(screen.getByText('계수로 그린 선')).toBeInTheDocument()
+    expect(screen.getByText('진폭 (MPa)')).toBeInTheDocument()
+  })
+
+  it('점이 없거나 선언의 키를 안 들면 그래프 단추가 없다', async () => {
+    ofMaterial.mockResolvedValue([
+      { ...ROW, id: 'g8', detail: { points: [{ member: 'A', other: 1 }] } },
+      { ...ROW, id: 'g9', detail: { method: 'representative' } },
+      { ...ROW, id: 'g10', values: { coef: 1e9, power: -0.1 }, detail: { points: POINTS } },
+    ])
+    blocks.mockResolvedValue([PLOTTED])
+    show(<GroupsPanel materialId="m1" />)
+    // 그려지는 하나가 선 뒤에 센다 — 블록이 오기 전의 빈 화면에서 틀린 이유로 통과하지 않게.
+    await screen.findByRole('button', { name: '그래프 보기' })
+    expect(screen.getAllByRole('button', { name: '그래프 보기' })).toHaveLength(1)
   })
 })

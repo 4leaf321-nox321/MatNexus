@@ -1085,13 +1085,14 @@ class ViscoelasticCardSaveRequest(BaseModel):
 
 
 class DmaTemperatureCardSaveRequest(BaseModel):
-    """온도별 저장 탄성률 카드 — 점탄성 탭의 **온도별 탄성률 표 하나에서**(2026-10-22).
+    """온도별 저장 탄성률 카드 — 점탄성 탭의 **온도별 탄성률 표에서**(2026-10-22).
 
     v1.285.0 보고: DMA 온도별 E′ 를 잰 물성으로 넘길 길이 없었다. 표가 재료 · 방향은 체인을
-    따라간다(표 → 시험 → 시편 → 시료 → 재료).
+    따라간다(표 → 시험 → 시편 → 시료 → 재료). **표 여럿이면 시편 평균이다** — 같은 재료 ·
+    시험 종류 · 방향 · 주파수 · 잰 것(E/G)이고 시험 하나에 표 하나여야 한다.
     """
 
-    modulus_table_id: uuid.UUID
+    modulus_table_ids: list[uuid.UUID] = Field(min_length=1, max_length=50)
     label: str = Field(min_length=1, max_length=120)
     poisson_ratio: float | None = Field(default=None, gt=0, lt=0.5)
     """전단(G′)으로 잰 표를 E 로 옮길 때만 쓴다. 비우면 재료에서 물려받는다."""

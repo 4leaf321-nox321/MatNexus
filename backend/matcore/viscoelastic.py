@@ -738,9 +738,8 @@ def modulus_table(
 
     - **등온 스윕**(곡선 안 온도 흔들림 ≤ `spread_limit_k`): 온도는 중앙값, 값은 log f 대 log E
       로 보간한다. 그 주파수가 스윕 범위 밖이면 **그 온도는 뺀다** — 외삽하지 않는다.
-    - **램프**(흔들림이 크다): 그 주파수(상대 1%)의 점을 고른다. 주파수 사이를 보간하지 않는다
-    —
-      램프에서는 이웃 점이 다른 온도라, 보간하면 두 온도를 섞는다.
+    - **램프**(흔들림이 크다): 그 주파수(상대 1%)의 점을 고른다. 주파수 사이를 보간하지
+      않는다 — 램프에서는 이웃 점이 다른 온도라, 보간하면 두 온도를 섞는다.
 
     가까운 온도(≤ 0.1 K)는 한 줄로 합친다. 줄이 하나도 없으면 빈 목록과 까닭을 돌려준다.
     """
@@ -834,3 +833,93 @@ def modulus_table(
     if joined:
         notes.append(f"{TEMPERATURE_MERGE_K} K 안의 같은 온도 {joined}점을 평균해 합쳤습니다.")
     return merged, notes
+
+
+#: 시편 여럿의 표에서 **같은 온도**로 보는 어긋남(K). 등온 단의 실제 온도는 시편마다 이만큼
+#: 흔들린다 — 넓히면 전이 구간에서 다른 온도의 값을 섞는다(E′ 가 몇 K 에 열 배 변한다).
+AVERAGE_MATCH_K = 0.5
+
+
+@dataclass(frozen=True)
+class AveragedRow:
+    temperature_k: float
+    storage_pa: float
+    loss_pa: float | None
+    tan_delta: float | None
+    storage_cv: float | None
+    """E′ 의 변동계수(표준편차 ÷ 평균). 표가 하나면 없다."""
+    count: int
+
+
+def average_tables(
+    tables: Sequence[Sequence[TableRow]], *, match_k: float = AVERAGE_MATCH_K
+) -> tuple[list[AveragedRow], list[str]]:
+    """시편 여럿의 온도별 표를 **온도마다 평균**한다. `(줄, 메모)`.
+
+    첫 표의 줄과 다른 표의 줄을 ±`match_k` 안에서 짝짓는다 — 표마다 **어긋남이 작은 짝부터**
+    정하고 한 줄은 한 번만 쓴다(첫 표의 차례대로 정하면 앞 줄이 옆 줄의 더 가까운 짝을
+    가로챈다). **모든 표에 짝이 있는 온도만 남긴다** — 한 시편에만 있는 온도를 남기면 그
+    시편의 값이 평균 행세를 한다. 온도 · E′ · E″ · tan δ 는 열마다 산술 평균이고, E″ · tan δ 는
+    한 표라도 없으면 비운다. 표가 하나면 그 표 그대로다.
+    """
+    if not tables:
+        raise ViscoelasticError("평균할 표가 없습니다.")
+    reference, *others = [sorted(one, key=lambda row: row.temperature_k) for one in tables]
+    partner: list[dict[int, int]] = []
+    for table in others:
+        pairs = sorted(
+            (abs(row.temperature_k - anchor.temperature_k), mine, index)
+            for mine, anchor in enumerate(reference)
+            for index, row in enumerate(table)
+            if abs(row.temperature_k - anchor.temperature_k) <= match_k
+        )
+        found: dict[int, int] = {}
+        taken: set[int] = set()
+        for _, mine, index in pairs:
+            if mine in found or index in taken:
+                continue
+            found[mine] = index
+            taken.add(index)
+        partner.append(found)
+    rows: list[AveragedRow] = []
+    dropped: list[float] = []
+    used: list[set[int]] = [set() for _ in others]
+    for mine, anchor in enumerate(reference):
+        if any(mine not in found for found in partner):
+            dropped.append(anchor.temperature_k)
+            continue
+        for position, found in enumerate(partner):
+            used[position].add(found[mine])
+        bunch = [
+            anchor,
+            *(others[position][found[mine]] for position, found in enumerate(partner)),
+        ]
+        storage = np.array([one.storage_pa for one in bunch])
+        losses = [one.loss_pa for one in bunch if one.loss_pa is not None]
+        tans = [one.tan_delta for one in bunch if one.tan_delta is not None]
+        rows.append(
+            AveragedRow(
+                temperature_k=float(np.mean([one.temperature_k for one in bunch])),
+                storage_pa=float(np.mean(storage)),
+                loss_pa=float(np.mean(losses)) if len(losses) == len(bunch) else None,
+                tan_delta=float(np.mean(tans)) if len(tans) == len(bunch) else None,
+                storage_cv=(
+                    float(np.std(storage, ddof=1) / np.mean(storage))
+                    if len(bunch) > 1
+                    else None
+                ),
+                count=len(bunch),
+            )
+        )
+    notes: list[str] = []
+    if dropped:
+        shown = ", ".join(f"{one - 273.15:.1f}" for one in dropped[:8])
+        more = f" 외 {len(dropped) - 8}개" if len(dropped) > 8 else ""
+        notes.append(
+            f"시편 {len(tables)}개 모두에 ±{match_k:g} K 안으로 있지 않은 온도 "
+            f"{len(dropped)}개를 뺐습니다({shown} °C{more})."
+        )
+    extra = sum(len(table) - len(used[position]) for position, table in enumerate(others))
+    if extra:
+        notes.append(f"다른 시편의 줄 중 모든 시편과 짝이 맞지 않은 {extra}개도 뺐습니다.")
+    return rows, notes

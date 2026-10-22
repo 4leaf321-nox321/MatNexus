@@ -128,9 +128,12 @@ function Values({ spec, values }: { spec: BlockSpec; values: Record<string, unkn
   )
 }
 
-function Rows({ columns, rows }: { columns: Produced[]; rows: Record<string, unknown>[] }) {
+function Rows({ columns: declared, rows }: { columns: Produced[]; rows: Record<string, unknown>[] }) {
   if (rows.length === 0) return null
   const shown = rows.slice(0, ROW_LIMIT)
+  // **어느 행에도 없는 열은 세우지 않는다** — 시편 하나로 만든 온도별 카드에 「E′ 변동계수」
+  // 칸이 줄마다 비어 서면 값이 빠진 것처럼 읽힌다.
+  const columns = declared.filter((one) => rows.some((row) => row[one.key] != null))
   return (
     <div className="mt-2 overflow-x-auto">
       <table className="text-xs">
@@ -175,8 +178,10 @@ const LINE_POINTS = 60
  * v1.285.0 보고: S-N 카드를 만들었는데 피팅 계수로 수명선도를 볼 수 없었다. 이미 만든 카드도
  * 점(`rows`)과 계수(`values`)만으로 그린다 — 서버에 다시 묻지 않는다. 선은 점이 있는 범위만
  * 그린다(외삽하지 않는다). 펴 둔 표가 그렇듯 그래프도 눌러야 펴진다 — 카드가 화면을 덜 먹게.
+ *
+ * 묶음 결과(재료 화면의 글로벌 피팅)도 이것으로 그린다 — 점이 같은 키를 들고 있으면 같은 그림이다.
  */
-function BlockPlotView({
+export function BlockPlotView({
   spec,
   values,
   rows,

@@ -2601,8 +2601,9 @@ async def property_coverage(ctx: Context, material_id: str) -> dict[str, Any]:
 
     ## 「없다」 는 `counts` 가 답한다 — **다시 뒤지지 마라**
 
-    `counts.adopted_results` 가 0 이면 **잰 값은 없다.** `specimens` 가 0 이면 시편부터
-    없는 것이다. 그 줄을 보고도 `list_test_runs`·`get_statistics`·`get_material` 로
+    `counts.measured` 가 0 이면 **잰 값은 없다**(채택된 처리 결과 · 묶음 결과 · DMA 온도별
+    탄성률 표가 모두 여기로 센다). `specimens` 가 0 이면 시편부터 없는 것이다. 그 줄을
+    보고도 `list_test_runs`·`get_statistics`·`get_material` 로
     한 번 더 확인하지 마라 — 같은 사실을 세 번 묻는 것이고, 답은 이미 여기 있다
     (기준선 4차에서 실제로 그렇게 다섯 번을 더 불렀다).
 
