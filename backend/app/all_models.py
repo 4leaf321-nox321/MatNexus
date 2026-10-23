@@ -18,6 +18,7 @@ from app.modules.catalog.models import (
     CatalogDefinition,
     CatalogLink,
     CatalogMaterial,
+    CatalogSeries,
     CatalogSource,
     CatalogValue,
 )
@@ -100,6 +101,7 @@ __all__ = [
     "CatalogDefinition",
     "CatalogLink",
     "CatalogMaterial",
+    "CatalogSeries",
     "CatalogSource",
     "CatalogValue",
     "Commission",

@@ -964,6 +964,49 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/catalog/materials/{material_id}/series": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Catalog Series
+         * @description **이어진 값 한 벌**을 넣는다(ADR 0067) — 곡선 · 표(축 하나 + 물성 열) 또는 계수 묶음.
+         *
+         *     점마다 문헌 값 한 줄이 생기고 묶음 칸으로 머리에 이어진다 — 값 검색 · 물성 지도 · 사내
+         *     재료 반영 · 덱은 그 점을 낱값처럼 읽는다. 출처 · 등급 · 방법은 벌 전체가 하나다.
+         */
+        post: operations["create_catalog_series_api_catalog_materials__material_id__series_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/catalog/materials/{material_id}/series/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Preview Catalog Series
+         * @description 넣기 전에 **넣을 때와 같은 검사**를 돌린다 — 넣는 코드를 그대로 돌리고 되돌린다.
+         */
+        post: operations["preview_catalog_series_api_catalog_materials__material_id__series_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/catalog/materials/{material_id}/synthetic-curve": {
         parameters: {
             query?: never;
@@ -1448,6 +1491,27 @@ export interface paths {
          */
         post: operations["migrate_property_api_catalog_properties__property_key__migrate_post"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/catalog/series/{series_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Catalog Series
+         * @description 벌을 점과 함께 지운다 — 넣은 사람 · 관리자만. **사람이 해도 남긴다**(값 지우기와
+         *     같다).
+         */
+        delete: operations["delete_catalog_series_api_catalog_series__series_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -10988,6 +11052,8 @@ export interface components {
             origin: string;
             /** Role */
             role: string | null;
+            /** Series */
+            series?: components["schemas"]["CatalogSeriesOut"][];
             /** Source Missing At */
             source_missing_at?: string | null;
             /** Subsystem */
@@ -11200,6 +11266,148 @@ export interface components {
             /** Description */
             description?: string | null;
         };
+        /** CatalogSeriesColumnIn */
+        CatalogSeriesColumnIn: {
+            /** Property Key */
+            property_key: string;
+            /** Unit */
+            unit?: string | null;
+        };
+        /** CatalogSeriesColumnOut */
+        CatalogSeriesColumnOut: {
+            /** Property Key */
+            property_key: string;
+            /** Property Name */
+            property_name: string;
+            /** Unit */
+            unit: string | null;
+        };
+        /**
+         * CatalogSeriesCreate
+         * @description **이어진 값 한 벌**을 한 번에 넣는다(ADR 0067) — 점마다 값 하나를 넣을 때와 같은 검사.
+         *
+         *     곡선(`curve`): `x_key`(정의의 조건축) · `columns`(물성 열) · `rows`(`[x, y1, y2 …]`, 빈
+         *     칸은 null). 계수 묶음(`parameter_set`): `model` · `property_key` · `terms`. 출처 · 등급 ·
+         *     방법 · 조건은 벌 전체가 하나다.
+         */
+        CatalogSeriesCreate: {
+            /** Columns */
+            columns?: components["schemas"]["CatalogSeriesColumnIn"][];
+            /** Conditions */
+            conditions?: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "curve" | "parameter_set";
+            /** Label */
+            label: string;
+            /**
+             * Method
+             * @default handbook
+             */
+            method: string;
+            /** Model */
+            model?: string | null;
+            /** Notes */
+            notes?: string | null;
+            /** Property Key */
+            property_key?: string | null;
+            /** Quality Tier */
+            quality_tier: number;
+            /** Rows */
+            rows?: (number | null)[][];
+            source: components["schemas"]["CatalogSourceIn"];
+            /** Source Detail */
+            source_detail?: string | null;
+            /** Terms */
+            terms?: components["schemas"]["CatalogSeriesTermIn"][];
+            /** X Key */
+            x_key?: string | null;
+            /** X Unit */
+            x_unit?: string | null;
+        };
+        /** CatalogSeriesCreatedOut */
+        CatalogSeriesCreatedOut: {
+            /** Converted */
+            converted?: string[];
+            /** Points */
+            points: components["schemas"]["CatalogSeriesPointOut"][];
+            series: components["schemas"]["CatalogSeriesOut"];
+        };
+        /**
+         * CatalogSeriesOut
+         * @description 이어진 값 한 벌의 머리(ADR 0067) — 곡선 · 표 또는 계수 묶음.
+         */
+        CatalogSeriesOut: {
+            /** Columns */
+            columns: components["schemas"]["CatalogSeriesColumnOut"][];
+            /** Conditions */
+            conditions: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Created By */
+            created_by?: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Kind */
+            kind: string;
+            /** Label */
+            label: string;
+            /** Method */
+            method: string;
+            /** Model */
+            model: string | null;
+            /** Notes */
+            notes: string | null;
+            /** Point Count */
+            point_count: number;
+            /** Quality Tier */
+            quality_tier: number;
+            source: components["schemas"]["CatalogSourceOut"] | null;
+            /** Source Detail */
+            source_detail: string | null;
+            /** X Key */
+            x_key: string | null;
+            /** X Unit */
+            x_unit?: string | null;
+        };
+        /** CatalogSeriesPointOut */
+        CatalogSeriesPointOut: {
+            /** Property Key */
+            property_key: string;
+            /** Term */
+            term?: string | null;
+            /** Term Unit */
+            term_unit?: string | null;
+            /** Unit */
+            unit: string | null;
+            /** Value */
+            value: number;
+            /** X */
+            x?: number | null;
+        };
+        /** CatalogSeriesTermIn */
+        CatalogSeriesTermIn: {
+            /** Property Key */
+            property_key?: string | null;
+            /** Term */
+            term: string;
+            /** Unit */
+            unit?: string | null;
+            /** Value */
+            value: number;
+        };
         /**
          * CatalogSourceIn
          * @description 값의 출처. **제목·DOI·URL 중 하나는 있어야 한다** — 출처 없는 값은 안 받는다.
@@ -11366,6 +11574,8 @@ export interface components {
             representative: boolean;
             /** Separated By */
             separated_by?: string | null;
+            /** Series Id */
+            series_id?: string | null;
             source: components["schemas"]["CatalogSourceOut"] | null;
             /** Source Detail */
             source_detail: string | null;
@@ -18104,6 +18314,11 @@ export interface components {
          *     `2.68e-09 kg/m3` 로 나간 적이 있다 — 이름에 단위를 박은 탓이었다.
          */
         PropertyCandidateOut: {
+            /**
+             * Condition Axes
+             * @default []
+             */
+            condition_axes: string[];
             /**
              * Deprecated
              * @default false
@@ -25021,6 +25236,76 @@ export interface operations {
             };
         };
     };
+    create_catalog_series_api_catalog_materials__material_id__series_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                material_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CatalogSeriesCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CatalogSeriesCreatedOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_catalog_series_api_catalog_materials__material_id__series_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                material_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CatalogSeriesCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CatalogSeriesCreatedOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     synthetic_curve_preview_api_catalog_materials__material_id__synthetic_curve_get: {
         parameters: {
             query?: never;
@@ -25766,6 +26051,35 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["CatalogPropertyMigrateOut"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_catalog_series_api_catalog_series__series_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                series_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

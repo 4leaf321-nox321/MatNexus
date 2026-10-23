@@ -4486,6 +4486,100 @@ async def delete_catalog_value(ctx: Context, value_id: str) -> dict[str, Any]:
 
 
 @mcp.tool()
+async def add_catalog_series(
+    ctx: Context,
+    catalog_material_id: str,
+    kind: str,
+    label: str,
+    quality_tier: int,
+    source_kind: str,
+    source_title: str | None = None,
+    source_year: int | None = None,
+    source_doi: str | None = None,
+    source_url: str | None = None,
+    source_detail: str | None = None,
+    method: str = "handbook",
+    x_key: str | None = None,
+    x_unit: str | None = None,
+    columns: list[dict[str, Any]] | None = None,
+    rows: list[list[float | None]] | None = None,
+    model: str | None = None,
+    property_key: str | None = None,
+    terms: list[dict[str, Any]] | None = None,
+    conditions: dict[str, Any] | None = None,
+    notes: str | None = None,
+    dry_run: bool = True,
+) -> dict[str, Any]:
+    """**이어진 값 한 벌**(곡선 · 표 · 계수 묶음)을 한 번에 카탈로그 재료에 단다 — 점마다
+    `add_catalog_value` 와 같은 검사. 출처 · 등급 · 방법은 벌 전체가 하나다. 기본은 미리보기.
+
+    - `kind="curve"`: `x_key` 는 정의의 조건축(`temperature_k` · `strain_pct` …),
+      `x_unit` 은 축 값 단위(°C 면 K 로 바꿔 저장). `columns=[{"property_key", "unit"}]`,
+      `rows=[[x, y1, …], …]`(빈 칸 null). 점 2개 이상, 같은 x 는 한 번.
+    - `kind="parameter_set"`: `model`(anand · prony) · `property_key` ·
+      `terms=[{"term", "value", "unit", "property_key"?}]`. 무차원 키의 항은 단위 그대로.
+
+    값을 낱개로 수십 번 넣지 말고 이것으로 넣는다 — 한 곡선이라는 사실이 남는다.
+    """
+    body: dict[str, Any] = {
+        "kind": kind,
+        "label": label,
+        "x_key": x_key,
+        "x_unit": x_unit,
+        "columns": columns or [],
+        "rows": rows or [],
+        "model": model,
+        "property_key": property_key,
+        "terms": terms or [],
+        "conditions": conditions,
+        "method": method,
+        "quality_tier": quality_tier,
+        "source": {
+            "kind": source_kind,
+            "title": source_title,
+            "year": source_year,
+            "doi": source_doi,
+            "url": source_url,
+        },
+        "source_detail": source_detail,
+        "notes": notes,
+    }
+    if dry_run:
+        shown = await _send(
+            ctx, "POST", f"/catalog/materials/{catalog_material_id}/series/preview", body
+        )
+        if "error" in shown:
+            return shown
+        return {
+            "dry_run": True,
+            "series": shown.get("series"),
+            "points": (shown.get("points") or [])[:12],
+            "point_count": len(shown.get("points") or []),
+            "converted": shown.get("converted"),
+            "note": "이대로 넣으려면 dry_run=False 로 다시 부르세요.",
+        }
+    got = await _send(ctx, "POST", f"/catalog/materials/{catalog_material_id}/series", body)
+    if "error" in got:
+        return got
+    series = got.get("series") or {}
+    return {
+        "series_id": series.get("id"),
+        "point_count": series.get("point_count"),
+        "converted": got.get("converted"),
+        "note": "넣었습니다. 잘못 넣었으면 delete_catalog_series 로 점과 함께 지웁니다.",
+    }
+
+
+@mcp.tool()
+async def delete_catalog_series(ctx: Context, series_id: str) -> dict[str, Any]:
+    """직접 넣은 이어진 값 한 벌을 점과 함께 지운다 — 넣은 사람이거나 관리자만."""
+    got = await _send(ctx, "DELETE", f"/catalog/series/{series_id}")
+    if "error" in got:
+        return got
+    return {"ok": True, "deleted": series_id}
+
+
+@mcp.tool()
 async def compare_catalog_materials(
     ctx: Context, catalog_material_ids: list[str]
 ) -> dict[str, Any]:

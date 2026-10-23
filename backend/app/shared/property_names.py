@@ -89,6 +89,9 @@ class Candidate:
     description: str | None = None
     #: 대표 시험 규격 — 정의문과 함께 「어떻게 잰 값인가」 를 말한다.
     test_standard: str | None = None
+    #: **조건축** — 이 물성의 값이 무엇을 따라 갈리나(temperature_k · strain_pct …). 곡선을
+    #: 넣을 때 축이 이 가운데 하나여야 한다(ADR 0067).
+    condition_axes: tuple[str, ...] = ()
     score: float = 0.0
     notes: tuple[str, ...] = field(default=())
 
@@ -251,6 +254,7 @@ def resolve(db: Session, text: str, *, limit: int = MAX_CANDIDATES) -> list[Cand
                 superseded_by=one.superseded_by if retired else None,
                 description=one.description or None,
                 test_standard=one.test_standard or None,
+                condition_axes=tuple(str(axis) for axis in one.condition_axes or []),
                 # 사내에서 쓰는 물성이면 올린다. 값 개수는 로그로 눌러 — 486건과
                 # 9건의 차이는 중요하지만 486 대 4가 50배 차이로 벌어지면 안 된다.
                 # **폐기된 키는 뒤로** — 이름이 똑같이 맞아도 후속 키가 위에 서야 한다.
@@ -333,6 +337,7 @@ def _meaning_candidates(db: Session, text: str, *, exclude: set[str]) -> list[Ca
                 # 「정의문 없음」 으로 답했다).
                 description=one.description or None,
                 test_standard=one.test_standard or None,
+                condition_axes=tuple(str(axis) for axis in one.condition_axes or []),
                 # **가장 낮은 자리다.** 부분 일치(30)보다도 아래 — 짐작이기 때문이다.
                 # 등수로 조금씩 낮춰 뜻이 더 가까운 것이 위에 선다.
                 score=20.0 - rank,
@@ -390,6 +395,7 @@ def describe(candidates: list[Candidate]) -> dict[str, Any]:
                 "superseded_by": one.superseded_by,
                 "description": one.description,
                 "test_standard": one.test_standard,
+                "condition_axes": list(one.condition_axes),
                 "notes": list(one.notes),
             }
             for one in candidates

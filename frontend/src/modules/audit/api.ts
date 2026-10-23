@@ -88,6 +88,7 @@ export const ACTION_LABELS: Record<string, string> = {
   'catalog_property.deprecated_by_client': 'AI 가 문헌 물성 정의 폐기',
   'catalog_material.created_by_client': 'AI 가 문헌 재료 추가',
   'catalog_value.added_by_client': 'AI 가 문헌 값 추가',
+  'catalog_series.added_by_client': 'AI 가 문헌 곡선 · 계수 묶음 추가',
   'commission.created_by_client': 'AI 가 측정 의뢰 작성',
   'catalog_link.set_by_client': 'AI 가 사내 재료를 문헌 재료에 연결',
   // 사람만 하던 일을 AI 에게 연 자리(2026-10-14, ADR 0061).
@@ -113,6 +114,7 @@ export const ACTION_LABELS: Record<string, string> = {
   'declared.approval_requested_by_client': 'AI 가 선언 값 승인 요청',
   // 이 둘은 **사람이 해도 남는다** — 되돌릴 수 없다.
   'catalog_value.deleted': '문헌 값 삭제',
+  'catalog_series.deleted': '문헌 곡선 · 계수 묶음 삭제',
   'catalog_property.migrated': '문헌 물성 키 이관',
   // **이름이 없으면 코드 그대로 뜨고 「행위로 필터」 에서 고를 수도 없다.** 아래는 이름표가
   // 없던 것들이다(2026-09-24, 36가지 중 18가지) — 배포 뒤 「열람 제한이 켜져 있던 부서」 를

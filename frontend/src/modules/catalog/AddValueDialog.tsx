@@ -14,6 +14,7 @@ import { Loader2 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 
 import { TIER_LABELS, catalogApi } from '@/modules/catalog/api'
+import { METHODS, SELECT, SOURCE_KINDS, UNGROUNDED } from '@/modules/catalog/catalogForms'
 import type { CatalogMaterialDetail, CatalogValueCreate, PropertyCandidate } from '@/modules/catalog/api'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { Button } from '@/shared/components/ui/button'
@@ -28,27 +29,6 @@ import {
 import { Input } from '@/shared/components/ui/input'
 import { Label } from '@/shared/components/ui/label'
 import { display, fromDisplay } from '@/shared/units'
-
-const METHODS: [string, string][] = [
-  ['handbook', '핸드북·규격'],
-  ['measured', '실측(문서에 인쇄된)'],
-  ['digitized', '그래프 판독'],
-  ['computed', '계산'],
-  ['estimated', '추정'],
-]
-const SOURCE_KINDS: [string, string][] = [
-  ['datasheet', '데이터시트'],
-  ['journal', '논문'],
-  ['book', '책·핸드북'],
-  ['standard', '규격'],
-  ['database', '데이터베이스'],
-  ['web', '웹'],
-  ['other', '기타'],
-]
-/** 근거 없는 방법 — tier 4 여야 서버가 받는다. */
-const UNGROUNDED = new Set(['computed', 'estimated'])
-
-const SELECT = 'border-input bg-background h-9 w-full rounded-md border px-2 text-sm'
 
 export function AddValueDialog({
   detail,

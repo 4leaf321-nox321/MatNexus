@@ -288,6 +288,14 @@ class CatalogValue(Base):
     property_key: Mapped[str] = mapped_column(
         String(100), ForeignKey("catalog_definitions.key"), index=True
     )
+    series_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("catalog_series.id", ondelete="CASCADE"),
+        index=True,
+        nullable=True,
+    )
+    """**이어진 값 한 벌**의 점이면 그 벌(`CatalogSeries`, ADR 0067). 낱값 · 이관해 온
+    값은 비어 있다 — 이관은 이 칸을 모른다(`mt_import.upsert` 는 원본 칸만 덮는다)."""
 
     value_num: Mapped[float | None] = mapped_column(Float)
     value_text: Mapped[str | None] = mapped_column(Text)
@@ -317,3 +325,60 @@ class CatalogValue(Base):
     물성 · 카드가 이 줄을 근거로 쥐고 있을 수 있다. 대신 표시해 두고 대표값 · 값 검색 ·
     커버리지가 고르지 않게 한다(`mt_import.mark_missing`). 원본에 다시 나타나면 비운다.
     직접 넣은 줄(`mt_id` 없음)은 늘 비어 있다."""
+
+
+class CatalogSeries(Base):
+    """**이어진 값 한 벌** — 곡선 · 표(조건축 하나를 따라 이어진 값) 또는 계수 묶음
+    (2026-10-22, ADR 0067).
+
+    전에는 문헌 값이 낱값뿐이라, 온도별 영률 여섯 점이 한 곡선이라는 사실이 어디에도
+    없었다 — 「재료 · 키 · 출처 · 나머지 조건이 같으면 한 곡선」 이라 추정할 수밖에 없었고,
+    응력-변형률 곡선은 넣을 길이 없었다. **점은 지금처럼 문헌 값 한 줄씩이다**
+    (`CatalogValue.series_id`) — 값 검색 · 물성 지도 · 사내 재료 반영 · 덱이 고치지 않고 그
+    점을 읽는다. 여기는 그 벌의 머리다: 무엇이 축이고 어느 열이 어느 물성인가. 출처 · 등급 ·
+    방법은 벌 전체가 하나다.
+
+        curve           x 축(`x_key` — 정의의 조건축, 예: temperature_k · strain_pct)
+                        + 물성 열 하나 이상(`columns`). 점의 조건에 x 값이 그 키로 든다.
+        parameter_set   식 하나의 계수(`model`) — 점마다 `term` · 단위가 다를 수 있다
+                        (ADR 0029). 점의 조건에 `set_id` 를 이 벌로 적어, 기존 계수 묶음
+                        읽기가 그대로 묶는다.
+
+    **직접 넣은 것만 있다** — 이관해 온 값은 화면이 조건으로 이어 그린다(자동 묶음, 저장
+    안 함).
+    """
+
+    __tablename__ = "catalog_series"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    material_id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True),
+        ForeignKey("catalog_materials.id", ondelete="CASCADE"),
+        index=True,
+    )
+    kind: Mapped[str] = mapped_column(String(20))
+    """`curve` · `parameter_set`."""
+    label: Mapped[str] = mapped_column(String(200))
+    x_key: Mapped[str | None] = mapped_column(String(100))
+    """곡선의 축 — 점의 조건 칸 이름. 계수 묶음은 비어 있다."""
+    columns: Mapped[list[str]] = mapped_column(JSONB, default=list)
+    """곡선의 물성 열(정의 키) 차례. 계수 묶음은 점들이 쓴 키."""
+    model: Mapped[str | None] = mapped_column(String(50))
+    """계수 묶음의 식 이름 — anand · prony …"""
+    conditions: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    """벌 전체가 함께 가진 조건(노화 · 주파수 · 시편 …) — 점마다 같이 들어간다."""
+    method: Mapped[str] = mapped_column(String(20))
+    quality_tier: Mapped[int] = mapped_column(SmallInteger)
+    source_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("catalog_sources.id", ondelete="SET NULL")
+    )
+    source_detail: Mapped[str | None] = mapped_column(Text)
+    notes: Mapped[str | None] = mapped_column(Text)
+    created_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )

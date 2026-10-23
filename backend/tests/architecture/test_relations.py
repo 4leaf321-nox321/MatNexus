@@ -229,6 +229,10 @@ EXCLUDED_TABLES: dict[str, str] = {
     "master_curves": "처리 결과의 중간 산출물(17) — 카드의 `viscoelastic` 블록으로 닿는다",
     "prony_fits": "마스터커브 적합 결과(17) — 같은 블록으로 닿는다(`list_card_blocks`)",
     "modulus_tables": "DMA 온도별 탄성률 표 — 카드의 `dma_temperature` 블록으로 닿는다",
+    "catalog_series": (
+        "문헌 값의 이어진 한 벌(곡선 · 계수 묶음, ADR 0067)의 머리 — 문헌 재료에 딸린다."
+        " 점은 문헌 값이고 `get_catalog_material` 이 머리와 함께 준다"
+    ),
     "group_results": "여러 시험을 묶은 처리 결과(14) — 처리결과 마디에 딸린다",
     "ensemble_results": "묶음 처리의 앙상블(1) — 같다",
     "guide_assets": "핸드북에 붙은 그림·파일(75) — 절 마디를 집으면 본문과 함께 온다",

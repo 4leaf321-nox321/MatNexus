@@ -25,6 +25,7 @@
 
 from __future__ import annotations
 
+import math
 import re
 import uuid
 from collections.abc import Callable
@@ -32,13 +33,15 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from app.modules.accounts.models import User
+from app.modules.catalog import parameters
 from app.modules.catalog.models import (
     CatalogDefinition,
     CatalogMaterial,
+    CatalogSeries,
     CatalogSource,
     CatalogValue,
 )
@@ -46,6 +49,7 @@ from app.modules.catalog.ontology_models import PropertyAlias, PropertyLink
 from app.modules.catalog.schemas import (
     CatalogMaterialCreate,
     CatalogPropertyCreate,
+    CatalogSeriesCreate,
     CatalogSourceIn,
     CatalogValueCreate,
 )
@@ -599,21 +603,13 @@ def _spread(
     return convert(base + spread) - convert(base)
 
 
-def create_value(
-    db: Session, material_id: uuid.UUID, payload: CatalogValueCreate, user: User
-) -> tuple[CatalogValue, str | None]:
-    """값 하나를 넣는다. `(값, 환산 설명 | None)`."""
-    material = db.get(CatalogMaterial, material_id)
-    if material is None:
-        raise NotFound("MNX-CATALOG-0001", "카탈로그에 없는 재료입니다.")
-    definition = db.scalar(
-        select(CatalogDefinition).where(CatalogDefinition.key == payload.property_key)
-    )
+def _definition(db: Session, key: str) -> CatalogDefinition:
+    """값을 달 수 있는 정의 — 없거나 폐기된 키면 까닭을 대고 거절한다."""
+    definition = db.scalar(select(CatalogDefinition).where(CatalogDefinition.key == key))
     if definition is None:
         raise NotFound(
             "MNX-CATALOG-0038",
-            f"없는 물성 키입니다: {payload.property_key} — "
-            "resolve_property 로 키를 먼저 찾으세요.",
+            f"없는 물성 키입니다: {key} — resolve_property 로 키를 먼저 찾으세요.",
         )
     if definition.deprecated:
         raise AppError(
@@ -627,18 +623,34 @@ def create_value(
             status=422,
             details={"superseded_by": definition.superseded_by},
         )
-    method = payload.method.strip().lower()
+    return definition
+
+
+def _method(given: str, tier: int) -> str:
+    method = given.strip().lower()
     if method not in METHODS:
         raise AppError(
             "MNX-CATALOG-0045", f"method 는 {' · '.join(METHODS)} 중 하나.", status=422
         )
-    tier = payload.quality_tier
     if method in ("computed", "estimated") and tier != 4:
         raise AppError(
             "MNX-CATALOG-0045",
             f"{method} 값은 근거 없는 값이라 quality_tier 4 여야 합니다.",
             status=422,
         )
+    return method
+
+
+def create_value(
+    db: Session, material_id: uuid.UUID, payload: CatalogValueCreate, user: User
+) -> tuple[CatalogValue, str | None]:
+    """값 하나를 넣는다. `(값, 환산 설명 | None)`."""
+    material = db.get(CatalogMaterial, material_id)
+    if material is None:
+        raise NotFound("MNX-CATALOG-0001", "카탈로그에 없는 재료입니다.")
+    definition = _definition(db, payload.property_key)
+    tier = payload.quality_tier
+    method = _method(payload.method, tier)
 
     value_num = payload.value_num
     value_text = clean(payload.value_text or "") or None
@@ -725,6 +737,345 @@ def _drop_orphan_source(db: Session, source_id: uuid.UUID | None) -> None:
         return
     db.delete(source)
     db.flush()
+
+
+# --- 이어진 값 한 벌 (ADR 0067) ------------------------------------------------
+
+#: 곡선 축의 단위 — 키가 단위를 말한다. 여기 있는 축만 `x_unit` 으로 환산해 받는다(°C → K).
+X_AXIS_UNITS = {
+    "temperature_k": "K",
+    "temperature_c": "°C",
+    "strain_pct": "%",
+    "strain": "1",
+    "strain_rate_s": "1/s",
+    "frequency_hz": "Hz",
+    "time_s": "s",
+    "duration_h": "h",
+    "wavelength_nm": "nm",
+    "wavelength_m": "m",
+    "humidity_pct": "%",
+    "thickness_m": "m",
+    "depth_um": "µm",
+    "load_n": "N",
+}
+
+#: 축 키의 모양 — 조건 칸 이름이 된다.
+_AXIS_KEY = re.compile(r"^[a-z][a-z0-9_]*$")
+
+#: 한 곡선의 점 수 하한. 점 하나는 곡선이 아니다 — 낱값으로 넣는다.
+MIN_CURVE_ROWS = 2
+
+
+@dataclass(frozen=True)
+class SeriesMade:
+    series: CatalogSeries
+    points: list[CatalogValue]
+    converted: list[str]
+
+
+def _axis_value(value: float, given: str | None, x_key: str) -> float:
+    """축 값을 키의 단위로. 단위를 모르는 축이면 그대로 받는다(단위를 적었으면 거절)."""
+    unit = clean(given or "") or None
+    target = X_AXIS_UNITS.get(x_key)
+    if unit is None:
+        return value
+    if target is None:
+        raise AppError(
+            "MNX-CATALOG-0070",
+            f"'{x_key}' 축은 단위를 모릅니다 — 값을 그 키의 단위로 적고 x_unit 을 비우세요.",
+            status=422,
+        )
+    given_c = units.canonical(unit)
+    target_c = units.canonical(target)
+    if (
+        given_c is None
+        or target_c is None
+        or not units.same_dimension(
+            units.unit_of(given_c).dimension, units.unit_of(target_c).dimension
+        )
+    ):
+        raise AppError(
+            "MNX-CATALOG-0070",
+            f"축 단위 '{unit}' 를 '{x_key}'({target}) 로 옮길 수 없습니다.",
+            status=422,
+        )
+    return units.from_si(units.to_si(value, given_c), target_c)
+
+
+def _curve_axis(x_key: str | None, definitions: list[CatalogDefinition]) -> str:
+    """곡선의 축 — **정의가 말한 조건축**이어야 한다. 같은 온도를 `temperature_c` ·
+    `temperature_k` 둘로 적으면 지도 · 검색에서 한 축으로 안 모인다."""
+    key = clean(x_key or "") or None
+    if key is None or not _AXIS_KEY.match(key):
+        raise AppError(
+            "MNX-CATALOG-0070",
+            "곡선의 축(x_key)이 비었거나 모양이 틀립니다 — 예: temperature_k · strain_pct.",
+            status=422,
+        )
+    for definition in definitions:
+        axes = [str(one) for one in definition.condition_axes or []]
+        if axes and key not in axes:
+            raise AppError(
+                "MNX-CATALOG-0070",
+                f"'{definition.name}' 의 조건축에 '{key}' 가 없습니다 — "
+                f"{', '.join(axes)} 중 하나로 적으세요.",
+                status=422,
+                details={"axes": axes},
+            )
+    return key
+
+
+def _term_value(
+    value: float, given: str | None, definition: CatalogDefinition
+) -> tuple[float, str | None, str | None, str | None]:
+    """계수 하나를 저장할 모양으로. `(값, 단위, 항 단위, 환산 설명)`.
+
+    정의가 무차원(`1`)인 계수 묶음 키(Anand 상수 …)는 항마다 단위가 달라 **환산하지 않고**
+    그 항의 단위를 `unit_of_term` 으로 남긴다(ADR 0029 D2). 그 밖은 값 하나와 같이 환산한다.
+    """
+    unit = _dimensionless_default(given, definition)
+    if (
+        definition.si_unit is not None
+        and units.canonical(definition.si_unit) == "1"
+        and unit is not None
+        and units.canonical(unit) != "1"
+    ):
+        return value, definition.si_unit, unit, None
+    converted, stored, note = _to_definition_unit(value, unit, definition)
+    return converted, stored, None, note
+
+
+def _dimensionless_default(given: str | None, definition: CatalogDefinition) -> str | None:
+    """한 벌의 무차원 열 · 항(tan δ · 상대 탄성률)은 단위를 비워도 `1` 로 본다 — 수십 칸에
+    「1」 을 적게 하지 않는다. 차원이 있는 열은 비우면 그대로 거절된다(값 하나와 같다)."""
+    unit = clean(given or "") or None
+    if unit is None and definition.si_unit and units.canonical(definition.si_unit) == "1":
+        return "1"
+    return unit
+
+
+def create_series(
+    db: Session, material_id: uuid.UUID, payload: CatalogSeriesCreate, user: User
+) -> SeriesMade:
+    """**이어진 값 한 벌**을 넣는다 — 머리 하나와 점마다 문헌 값 한 줄(ADR 0067).
+
+    점마다 값 하나를 넣을 때와 같은 검사(정의 · 폐기 · 방법 · 등급 · 단위 환산 · 출처)를
+    거친다. 출처는 한 번만 찾는다. 축 값이 겹치면 거절한다 — 한 곡선에 같은 온도가 둘이면
+    어느 쪽이 그 곡선인지 모른다.
+    """
+    material = db.get(CatalogMaterial, material_id)
+    if material is None:
+        raise NotFound("MNX-CATALOG-0001", "카탈로그에 없는 재료입니다.")
+    tier = payload.quality_tier
+    method = _method(payload.method, tier)
+    shared: dict[str, Any] = dict(payload.conditions or {})
+    if tier == 4:
+        shared.setdefault("assumption", True)
+    label = clean(payload.label) or ""
+    if not label:
+        raise AppError("MNX-CATALOG-0070", "묶음 이름이 비었습니다.", status=422)
+
+    if payload.kind == "curve":
+        plan = _curve_points(db, payload, shared)
+    else:
+        plan = _term_points(db, payload, shared)
+    keys, x_key, model, rows, converted = plan
+
+    source = _find_or_make_source(db, payload.source, user)
+    series = CatalogSeries(
+        material_id=material.id,
+        kind=payload.kind,
+        label=label,
+        x_key=x_key,
+        columns=keys,
+        model=model,
+        conditions=shared or None,
+        method=method,
+        quality_tier=tier,
+        source_id=source.id,
+        source_detail=clean(payload.source_detail or "") or None,
+        notes=clean(payload.notes or "") or None,
+        created_by_id=user.id,
+    )
+    db.add(series)
+    db.flush()
+    points: list[CatalogValue] = []
+    for key, value, unit, conditions in rows:
+        if payload.kind == "parameter_set":
+            # 계수 묶음 읽기(`catalog.parameters`)가 이 칸으로 한 벌을 가른다.
+            conditions = {**conditions, parameters.SET_ID: f"series-{series.id}"}
+        point = CatalogValue(
+            mt_id=None,
+            created_by_id=user.id,
+            material_id=material.id,
+            property_key=key,
+            value_num=value,
+            unit=unit,
+            conditions=conditions or None,
+            method=method,
+            quality_tier=tier,
+            source_id=source.id,
+            source_detail=series.source_detail,
+            series_id=series.id,
+        )
+        db.add(point)
+        points.append(point)
+    db.flush()
+    return SeriesMade(series=series, points=points, converted=converted)
+
+
+#: `(물성 키, 값, 단위, 조건)` — 점 하나.
+_Point = tuple[str, float, str | None, dict[str, Any]]
+
+
+def _curve_points(
+    db: Session, payload: CatalogSeriesCreate, shared: dict[str, Any]
+) -> tuple[list[str], str | None, str | None, list[_Point], list[str]]:
+    if not payload.columns:
+        raise AppError("MNX-CATALOG-0070", "곡선의 물성 열(columns)이 비었습니다.", status=422)
+    definitions = [_definition(db, one.property_key) for one in payload.columns]
+    keys = [one.key for one in definitions]
+    if len(set(keys)) != len(keys):
+        raise AppError("MNX-CATALOG-0070", "같은 물성 열이 둘입니다.", status=422)
+    for definition in definitions:
+        if definition.value_type != "numeric":
+            raise AppError(
+                "MNX-CATALOG-0070",
+                f"'{definition.name}' 은 수치 물성이 아니라 곡선의 열이 될 수 없습니다.",
+                status=422,
+            )
+    x_key = _curve_axis(payload.x_key, definitions)
+    if x_key in shared:
+        raise AppError(
+            "MNX-CATALOG-0070",
+            f"공통 조건에 축 '{x_key}' 가 있습니다 — 축 값은 줄마다 적습니다.",
+            status=422,
+        )
+    if len(payload.rows) < MIN_CURVE_ROWS:
+        raise AppError(
+            "MNX-CATALOG-0070",
+            f"곡선은 점이 {MIN_CURVE_ROWS}개 이상이어야 합니다 — 하나면 낱값으로 넣으세요.",
+            status=422,
+        )
+    width = 1 + len(definitions)
+    seen: set[float] = set()
+    rows: list[tuple[float, list[float | None]]] = []
+    for number, row in enumerate(payload.rows, start=1):
+        if len(row) != width:
+            raise AppError(
+                "MNX-CATALOG-0070",
+                f"{number}번째 줄의 칸이 {len(row)}개입니다 — 축 하나와 열 "
+                f"{len(definitions)}개, 모두 {width}칸이어야 합니다.",
+                status=422,
+            )
+        raw_x, *ys = row
+        if raw_x is None or not math.isfinite(raw_x):
+            raise AppError(
+                "MNX-CATALOG-0070", f"{number}번째 줄의 축 값이 비었습니다.", status=422
+            )
+        x = _axis_value(float(raw_x), payload.x_unit, x_key)
+        if all(one is None for one in ys):
+            raise AppError(
+                "MNX-CATALOG-0070", f"{number}번째 줄에 값이 하나도 없습니다.", status=422
+            )
+        if any(one is not None and not math.isfinite(one) for one in ys):
+            raise AppError(
+                "MNX-CATALOG-0070", f"{number}번째 줄에 수가 아닌 값이 있습니다.", status=422
+            )
+        rounded = float(f"{x:.9g}")
+        if rounded in seen:
+            raise AppError(
+                "MNX-CATALOG-0070",
+                f"축 값 {x:g} 가 두 번 나옵니다 — 한 곡선에 같은 {x_key} 는 하나입니다.",
+                status=422,
+            )
+        seen.add(rounded)
+        rows.append((x, ys))
+    rows.sort(key=lambda one: one[0])
+
+    points: list[_Point] = []
+    converted: list[str] = []
+    for column, (given, definition) in enumerate(
+        zip(payload.columns, definitions, strict=True)
+    ):
+        count = 0
+        note: str | None = None
+        for x, ys in rows:
+            value = ys[column]
+            if value is None:
+                continue
+            stored, unit, said = _to_definition_unit(
+                float(value), _dimensionless_default(given.unit, definition), definition
+            )
+            note = note or said
+            count += 1
+            points.append((definition.key, stored, unit, {**shared, x_key: x}))
+        if note:
+            converted.append(
+                f"{definition.name}: {given.unit} → {definition.si_unit} ({count}점)"
+            )
+    return keys, x_key, None, points, converted
+
+
+def _term_points(
+    db: Session, payload: CatalogSeriesCreate, shared: dict[str, Any]
+) -> tuple[list[str], str | None, str | None, list[_Point], list[str]]:
+    model = clean(payload.model or "") or None
+    if model is None:
+        raise AppError(
+            "MNX-CATALOG-0070",
+            "계수 묶음에는 식 이름(model)이 필요합니다 — 예: anand · prony.",
+            status=422,
+        )
+    if not payload.terms:
+        raise AppError("MNX-CATALOG-0070", "계수 묶음의 항(terms)이 비었습니다.", status=422)
+    definitions: dict[str, CatalogDefinition] = {}
+    seen: set[tuple[str, str]] = set()
+    points: list[_Point] = []
+    converted: list[str] = []
+    for one in payload.terms:
+        key = clean(one.property_key or payload.property_key or "")
+        if not key:
+            raise AppError(
+                "MNX-CATALOG-0070",
+                f"항 '{one.term}' 의 물성 키가 없습니다 — property_key 를 적으세요.",
+                status=422,
+            )
+        definition = definitions.get(key) or _definition(db, key)
+        definitions[key] = definition
+        term = clean(one.term) or ""
+        if not term:
+            raise AppError("MNX-CATALOG-0070", "항 이름(term)이 비었습니다.", status=422)
+        # 대소문자를 가른다 — Anand 의 a 와 A 는 다른 상수다.
+        if (definition.key, term) in seen:
+            raise AppError("MNX-CATALOG-0070", f"항 '{term}' 이 두 번 나옵니다.", status=422)
+        seen.add((definition.key, term))
+        if not math.isfinite(one.value):
+            raise AppError(
+                "MNX-CATALOG-0070", f"항 '{term}' 의 값이 수가 아닙니다.", status=422
+            )
+        value, unit, term_unit, said = _term_value(one.value, one.unit, definition)
+        if said:
+            converted.append(f"{term}: {said}")
+        conditions = {**shared, "model": model, "term": term}
+        if term_unit is not None:
+            conditions["unit_of_term"] = term_unit
+        points.append((definition.key, value, unit, conditions))
+    return list(definitions), None, model, points, converted
+
+
+def delete_series(db: Session, series_id: uuid.UUID, user: User) -> CatalogSeries:
+    """벌을 점과 함께 지운다 — 넣은 사람 · 관리자만. 지운 머리를 돌려준다(감사 이름용)."""
+    series = db.get(CatalogSeries, series_id)
+    if series is None:
+        raise NotFound("MNX-CATALOG-0071", "없는 묶음입니다.")
+    require_contributor(series.created_by_id, user)
+    source_id = series.source_id
+    db.execute(delete(CatalogValue).where(CatalogValue.series_id == series.id))
+    db.delete(series)
+    db.flush()
+    _drop_orphan_source(db, source_id)
+    return series
 
 
 def require_contributor(created_by_id: uuid.UUID | None, user: User) -> None:

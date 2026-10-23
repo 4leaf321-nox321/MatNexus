@@ -6,6 +6,7 @@
  *   가정값은 가정이라고 말한다      tier4 + assumption → 「가정」 배지 (제외는 안 한다)
  *   출처가 값 옆에 산다            제목·연도·DOI 링크
  *   직접 넣은 값은 그렇게 보인다     「직접 넣음 · 누구」, 넣은 사람만 지우기 단추
+ *   요약 + 탭(2026-10-22)            물성 하나에 한 줄 · 곡선 · 출처 — 값 줄은 「전체 값」 탭
  */
 
 import { render, screen, within } from '@testing-library/react'
@@ -16,6 +17,7 @@ import CatalogMaterialPage from '@/modules/catalog/CatalogMaterialPage'
 
 const material = vi.fn()
 const deleteValue = vi.fn()
+const deleteSeries = vi.fn()
 
 vi.mock('@/modules/catalog/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/modules/catalog/api')>()),
@@ -24,6 +26,7 @@ vi.mock('@/modules/catalog/api', async (importOriginal) => ({
     materials: vi.fn(),
     material: (...args: unknown[]) => material(...args),
     deleteValue: (...args: unknown[]) => deleteValue(...args),
+    deleteSeries: (...args: unknown[]) => deleteSeries(...args),
   },
 }))
 
@@ -152,9 +155,11 @@ beforeEach(() => {
   localStorage.clear()
 })
 
-function show() {
+/** 값 줄을 보는 시험은 「전체 값」 탭에서 — 기본 탭은 물성 요약이다(2026-10-22). */
+function show(tab = 'values') {
+  const query = tab ? `?tab=${tab}` : ''
   render(
-    <MemoryRouter initialEntries={['/catalog/11111111-1111-1111-1111-111111111111']}>
+    <MemoryRouter initialEntries={[`/catalog/11111111-1111-1111-1111-111111111111${query}`]}>
       <Routes>
         <Route path="/catalog/:id" element={<CatalogMaterialPage />} />
       </Routes>
@@ -294,5 +299,126 @@ describe('CatalogMaterialPage — 후보를 가르는 조건', () => {
     show()
     await screen.findByText(/직접 넣음 · 홍길동/)
     expect(screen.queryByRole('button', { name: '열전도율 값 삭제' })).toBeNull()
+  })
+})
+
+describe('요약 + 탭 (2026-10-22)', () => {
+  // 값이 366건인 재료(SAC-Q)는 같은 물성 이름이 수십 줄 섰다 — 물성 하나에 한 줄로 접고,
+  // 곡선 · 출처를 탭으로 가른다(사용자 결정).
+  const CURVE_SOURCE = { ...SOURCE, id: '88888888-8888-8888-8888-888888888888', title: '고온 논문' }
+  const conductivity = (id: string, t: number, k: number) => ({
+    ...DETAIL.values[3],
+    id,
+    value_num: k,
+    origin: 'catalog',
+    created_by: null,
+    source: CURVE_SOURCE,
+    conditions: { temperature_k: t },
+    representative: false,
+  })
+  const storage = (id: string, t: number, e: number) => ({
+    ...DETAIL.values[0],
+    id,
+    property_key: 'mechanical.storage_modulus',
+    property_name: '저장 탄성률',
+    value_num: e,
+    conditions: { temperature_k: t },
+    distinguishing: {},
+    series_id: 'ssssssss-0000-0000-0000-000000000001',
+    origin: 'local',
+    created_by: '홍길동',
+  })
+  const WITH_CURVES = {
+    ...DETAIL,
+    values: [
+      ...DETAIL.values,
+      conductivity('cccccccc-0000-0000-0000-000000000001', 300, 15),
+      conductivity('cccccccc-0000-0000-0000-000000000002', 350, 16),
+      conductivity('cccccccc-0000-0000-0000-000000000003', 400, 17),
+      storage('dddddddd-0000-0000-0000-000000000001', 250, 2e9),
+      storage('dddddddd-0000-0000-0000-000000000002', 300, 1e9),
+    ],
+    series: [
+      {
+        id: 'ssssssss-0000-0000-0000-000000000001',
+        kind: 'curve',
+        label: 'DMA 1 Hz 표',
+        x_key: 'temperature_k',
+        x_unit: 'K',
+        columns: [
+          { property_key: 'mechanical.storage_modulus', property_name: '저장 탄성률', unit: 'Pa' },
+        ],
+        model: null,
+        point_count: 2,
+        conditions: { frequency_hz: 1 },
+        method: 'digitized',
+        quality_tier: 2,
+        source: SOURCE,
+        source_detail: 'Fig. 3',
+        notes: null,
+        created_by: '홍길동',
+        created_at: '2026-10-22T00:00:00Z',
+      },
+    ],
+  }
+
+  it('기본은 물성 요약 — 물성 하나에 한 줄이고, 펼치면 후보가 선다', async () => {
+    show('')
+    expect(await screen.findByRole('button', { name: '영률 펼치기' })).toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: /펼치기$/ })).toHaveLength(3)
+    const summary = screen.getByLabelText('문헌 재료 요약')
+    expect(summary).toHaveTextContent('값 4')
+    expect(summary).toHaveTextContent('물성 3')
+    // 접혀 있을 때는 후보 줄이 없다.
+    expect(screen.queryByText(/대표값 · 후보 2/)).not.toBeInTheDocument()
+    const { fireEvent } = await import('@testing-library/react')
+    fireEvent.click(screen.getByRole('button', { name: '영률 펼치기' }))
+    expect(await screen.findByText(/대표값 · 후보 2/)).toBeInTheDocument()
+    expect(screen.getByText(/대안 · 등급/)).toBeInTheDocument()
+  })
+
+  it('곡선 · 표 — 직접 넣은 한 벌과 화면이 이은 선을 다른 이름으로 세우고, 넣은 사람이 벌째 지운다', async () => {
+    material.mockResolvedValue(WITH_CURVES)
+    deleteSeries.mockResolvedValue(undefined)
+    show('curves')
+    expect(await screen.findByText('DMA 1 Hz 표')).toBeInTheDocument()
+    expect(screen.getByText('조건별 값을 이어 그림 (자동)')).toBeInTheDocument()
+    // 열전도율 세 점(같은 출처 · 온도만 다름)이 화면이 이은 선 하나다.
+    expect(screen.getByText('축 온도 · 선 1')).toBeInTheDocument()
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    const { fireEvent, waitFor } = await import('@testing-library/react')
+    fireEvent.click(screen.getByRole('button', { name: 'DMA 1 Hz 표 묶음 삭제' }))
+    await waitFor(() =>
+      expect(deleteSeries).toHaveBeenCalledWith('ssssssss-0000-0000-0000-000000000001')
+    )
+  })
+
+  it('한 벌의 점은 낱개로 안 지운다 — 「묶음의 점」 으로 서고 지우기 단추가 없다', async () => {
+    material.mockResolvedValue(WITH_CURVES)
+    show('values')
+    expect((await screen.findAllByText('묶음의 점')).length).toBe(2)
+    expect(screen.queryByRole('button', { name: '저장 탄성률 값 삭제' })).toBeNull()
+  })
+
+  it('출처 — 출처 하나에 한 줄, 값 수와 함께', async () => {
+    show('sources')
+    const link = await screen.findByRole('link', { name: '어느 논문' })
+    const row = link.closest('tr')
+    expect(row).not.toBeNull()
+    // 값 3 · 물성 3(영률 · 유리전이온도 · 열전도율).
+    const cells = within(row as HTMLElement).getAllByRole('cell')
+    expect(cells[2]).toHaveTextContent('3')
+    expect(cells[3]).toHaveTextContent('3')
+    // 출처 없는 추정값도 한 줄로 선다(값 1).
+    expect(screen.getAllByRole('row')).toHaveLength(3)
+  })
+
+  it('전체 값 탭은 물성 이름으로 거른다', async () => {
+    show('values')
+    await screen.findByText(/T 296\.15 K/)
+    const { fireEvent } = await import('@testing-library/react')
+    fireEvent.change(screen.getByLabelText('물성 찾기'), { target: { value: '열전도' } })
+    expect(await screen.findByText('4건 중 1건')).toBeInTheDocument()
+    expect(screen.queryByText(/T 296\.15 K/)).not.toBeInTheDocument()
   })
 })

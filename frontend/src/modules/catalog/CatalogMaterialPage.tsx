@@ -1,115 +1,63 @@
 /**
- * 문헌 재료 상세 — **물성·값·등급·조건·출처가 한 줄이고, 진 후보를 숨기지 않는다.**
+ * 문헌 재료 상세 — **요약 + 탭**(2026-10-22, ADR 0067 · 사용자 결정).
  *
- * 같은 물성에 값이 여럿이면 서버가 대표를 골라 먼저 세우되(고체상→등급→기준온도
- * 근접), 밀린 후보도 **밀린 자리와 함께** 그대로 보여 준다 — 「선택기가 N개 중
- * 하나를 골랐다」 는 것 자체가 사용자가 알아야 할 정보다(MaterialTwin UX).
+ *   물성 요약   물성 하나에 한 줄 — 대표값 · 등급 · 값 수 · 조건 범위. 펼치면 후보 전부
+ *   곡선 · 표   직접 넣은 한 벌(저장된 묶음)과 화면이 조건축을 따라 이은 선 — 둘을 다른 이름으로
+ *   계수 묶음   Anand · Prony 같은 식의 계수 한 벌(ADR 0029)
+ *   출처        출처 하나에 한 줄 — 값 수 · 물성 수 · 등급
+ *   전체 값     값 하나가 한 줄 — 진 후보를 숨기지 않는다(대표 먼저, 밀린 자리와 함께) + 거르개
  *
- * tier4(추정·가정)도 똑같이 선다 — 배지로 구별만 한다. 추정값도 쓰라고 모은
- * 데이터다(2026-09-06 사용자 결정).
+ * 전에는 「전체 값」 하나뿐이라 값이 366건인 재료(SAC-Q)는 같은 물성 이름이 수십 줄 섰고, 그것이
+ * 온도를 따라 이어진 한 곡선이라는 것은 조건 칸을 눈으로 대조해야 알았다. 탭은 주소(`?tab=`)에
+ * 남는다 — 링크로 건넨 사람이 같은 탭을 본다.
  *
- * **직접 넣은 값**(MCP·API 로, 2026-09-12)은 이관해 온 값과 나란히 서되 「직접 넣음 ·
- * 누구」 로 구별되고, 넣은 사람과 관리자만 지울 수 있다. 이관해 온 값은 원본이
- * 정본이라 여기서 못 지운다.
+ * tier4(추정·가정)도 똑같이 선다 — 배지로 구별만 한다(2026-09-06 사용자 결정). **직접 넣은 값**
+ * (MCP·API·화면, 2026-09-12)은 「직접 넣음 · 누구」 로 구별되고, 넣은 사람과 관리자만 지운다.
  */
 
-import { FilePlus2, PackagePlus, Plus, Trash2 } from 'lucide-react'
-import { useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { FilePlus2, LineChart, PackagePlus, Plus } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { useParams, useSearchParams } from 'react-router-dom'
 
 import { AddValueDialog } from '@/modules/catalog/AddValueDialog'
 import { AdoptDialog } from '@/modules/catalog/AdoptDialog'
-import { ParameterSetsSection } from '@/modules/catalog/ParameterSetsSection'
-import { SyntheticCurveSection } from '@/modules/catalog/SyntheticCurveSection'
+import { CatalogValueTable, MissingBadge, TierBadge } from '@/modules/catalog/CatalogValueTable'
 import { CreateMaterialDialog } from '@/modules/catalog/CreateMaterialDialog'
-
+import { CurvesPanel, SeriesCard } from '@/modules/catalog/CurvesPanel'
+import { ParameterSetsSection } from '@/modules/catalog/ParameterSetsSection'
+import { PropertySummary } from '@/modules/catalog/PropertySummary'
+import type { CatalogTab } from '@/modules/catalog/PropertySummary'
+import { SeriesDialog } from '@/modules/catalog/SeriesDialog'
+import { SourcesTable } from '@/modules/catalog/SourcesTable'
+import { SyntheticCurveSection } from '@/modules/catalog/SyntheticCurveSection'
+import { CATEGORY_LABELS, catalogApi } from '@/modules/catalog/api'
+import type { CatalogSeries, CatalogValue } from '@/modules/catalog/api'
 import {
-  CATEGORY_LABELS,
-  DOMAIN_LABELS,
-  TIER_LABELS,
-  catalogApi,
-  fmtDistinguishing,
-  fmtRestConditions,
-  fmtValueAs,
-} from '@/modules/catalog/api'
+  autoCurves,
+  propertyGroups,
+  seriesCurves,
+  sourceRows,
+  tierCounts,
+} from '@/modules/catalog/catalogShape'
 import { UnitModeToggle, useUnitMode } from '@/modules/catalog/unitMode'
-import type { CatalogValue } from '@/modules/catalog/api'
 import { useAuth } from '@/shared/auth/AuthContext'
 import { isSystemAdmin } from '@/shared/auth/roles'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { PageHeader } from '@/shared/components/PageHeader'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/shared/components/ui/table'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/shared/components/ui/tabs'
 import { useResource } from '@/shared/hooks/useResource'
-
-/**
- * 값 표의 칸 — **접는다.** 표 칸의 기본값은 `whitespace-nowrap` 인데, 이 표는 열
- * 폭을 박아 두어(`table-fixed`) 안 접힌 글이 옆 칸 위로 넘친다. 띄어 쓰지 않은
- * 긴 토막(DOI · 식 · 단위)도 칸 안에서 끊는다.
- */
-const CELL = 'align-top whitespace-normal wrap-anywhere'
 
 /** 합성 곡선의 강도 입력 — 서버 `declared_card.SYNTH_KEYS` 의 앞 둘. */
 const SYNTH_STRENGTHS = new Set(['mechanical.yield_strength', 'mechanical.tensile_strength'])
 
-/** tier 배지 — 낮을수록 신뢰가 실린 표기. 4는 가정 표지가 있으면 「가정」. */
-function TierBadge({ value }: { value: CatalogValue }) {
-  const assumed = value.quality_tier === 4 && value.conditions?.['assumption'] === true
-  const label = assumed ? '가정' : (TIER_LABELS[value.quality_tier] ?? `t${value.quality_tier}`)
-  if (value.quality_tier === 1) return <Badge>{label}</Badge>
-  if (value.quality_tier === 2) return <Badge variant="secondary">{label}</Badge>
-  if (value.quality_tier === 3) return <Badge variant="outline">{label}</Badge>
-  return (
-    <Badge variant="outline" className="border-amber-500 text-amber-700 dark:text-amber-500">
-      {label}
-    </Badge>
-  )
-}
-
-function SourceCell({ value }: { value: CatalogValue }) {
-  const source = value.source
-  if (!source) return <span className="text-muted-foreground">—</span>
-  const href = source.doi ? `https://doi.org/${source.doi}` : (source.url ?? undefined)
-  const label = source.title ?? source.publisher ?? source.kind
-  return (
-    <div className="text-xs">
-      {href ? (
-        <a className="hover:underline" href={href} target="_blank" rel="noreferrer">
-          {label}
-        </a>
-      ) : (
-        <span>{label}</span>
-      )}
-      <span className="text-muted-foreground">
-        {source.year ? ` · ${source.year}` : ''}
-        {value.source_detail ? ` · ${value.source_detail}` : ''}
-      </span>
-    </div>
-  )
-}
+const TABS: CatalogTab[] = ['summary', 'curves', 'sets', 'sources', 'values']
 
 //: 재료 상세는 UUID 만 받는다. UUID 가 아닌 주소가 여기 닿는 것은 **옛 번들**이
 //: /catalog/compare 같은 새 경로를 :id 로 잘못 잡은 것이다(2026-09-06 실측 두 번).
 //: API 를 불러 422 를 보여 주면 사람은 데이터 문제로 읽는다 — 여기서 말한다.
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-
-/** `bound: lower/upper` 를 사람 말로. 원본이 긴 설명을 적어 둔 경우도 있어 앞만 본다. */
-function boundLabel(value: { distinguishing?: Record<string, unknown> | null }): string | null {
-  const raw = value.distinguishing?.['bound']
-  if (typeof raw !== 'string') return null
-  const head = raw.toLowerCase()
-  if (head.startsWith('lower') || head.startsWith('min')) return '범위 하한'
-  if (head.startsWith('upper') || head.startsWith('max')) return '범위 상한'
-  return null
-}
 
 export default function CatalogMaterialPage() {
   const { id = '' } = useParams()
@@ -122,15 +70,46 @@ export default function CatalogMaterialPage() {
   const [adopting, setAdopting] = useState(false)
   const [creating, setCreating] = useState(false)
   const [adding, setAdding] = useState(false)
+  const [addingSeries, setAddingSeries] = useState(false)
   const [added, setAdded] = useState<string | null>(null)
   const [units, setUnits] = useUnitMode()
   const { user } = useAuth()
   const [removeError, setRemoveError] = useState<Error | null>(null)
+  const [params, setParams] = useSearchParams()
+  const asked = params.get('tab') as CatalogTab | null
+  const tab: CatalogTab = asked && TABS.includes(asked) ? asked : 'summary'
 
-  /** 직접 넣은 값을 넣은 사람이거나 관리자면 지울 수 있다 — 서버가 다시 확인한다. */
+  function openTab(next: CatalogTab) {
+    setParams(
+      (current) => {
+        const copy = new URLSearchParams(current)
+        copy.set('tab', next)
+        return copy
+      },
+      { replace: true }
+    )
+  }
+
+  const values = useMemo(() => item?.values ?? [], [item])
+  const series = useMemo(() => item?.series ?? [], [item])
+  const seriesLines = useMemo(() => seriesCurves(series, values), [series, values])
+  const autoLines = useMemo(() => autoCurves(values), [values])
+  const groups = useMemo(
+    () => propertyGroups(values, [...seriesLines, ...autoLines]),
+    [values, seriesLines, autoLines]
+  )
+  const tiers = tierCounts(values)
+  const sourceCount = sourceRows(values).length
+
+  /** 직접 넣은 낱값을 넣은 사람이거나 관리자면 지울 수 있다 — 서버가 다시 확인한다. 한 벌의 점은
+   *  낱개로 안 지운다(벌째 지운다). */
   function canRemove(value: CatalogValue): boolean {
-    if (value.origin !== 'local') return false
+    if (value.origin !== 'local' || value.series_id) return false
     return isSystemAdmin(user) || (value.created_by != null && value.created_by === user?.display_name)
+  }
+
+  function canRemoveSeries(one: CatalogSeries): boolean {
+    return isSystemAdmin(user) || (one.created_by != null && one.created_by === user?.display_name)
   }
 
   async function remove(value: CatalogValue) {
@@ -138,6 +117,19 @@ export default function CatalogMaterialPage() {
     setRemoveError(null)
     try {
       await catalogApi.deleteValue(value.id)
+      detail.reload()
+    } catch (caught) {
+      setRemoveError(caught instanceof Error ? caught : new Error('지우지 못했습니다.'))
+    }
+  }
+
+  async function removeSeries(one: CatalogSeries) {
+    if (!window.confirm(`'${one.label}' 한 벌(점 ${one.point_count}개)을 지울까요? 되돌릴 수 없습니다.`)) {
+      return
+    }
+    setRemoveError(null)
+    try {
+      await catalogApi.deleteSeries(one.id)
       detail.reload()
     } catch (caught) {
       setRemoveError(caught instanceof Error ? caught : new Error('지우지 못했습니다.'))
@@ -153,12 +145,8 @@ export default function CatalogMaterialPage() {
     )
   }
 
-  const byDomain = new Map<string, CatalogValue[]>()
-  for (const value of item?.values ?? []) {
-    const list = byDomain.get(value.domain) ?? []
-    list.push(value)
-    byDomain.set(value.domain, list)
-  }
+  const curveSets = series.filter((one) => one.kind === 'curve').length
+  const parameterSets = series.filter((one) => one.kind === 'parameter_set')
 
   return (
     <div className="space-y-4">
@@ -184,6 +172,10 @@ export default function CatalogMaterialPage() {
             <Plus className="size-4" />
             값 입력
           </Button>
+          <Button size="sm" variant="outline" onClick={() => setAddingSeries(true)}>
+            <LineChart className="size-4" />
+            곡선 입력
+          </Button>
           <Badge variant="outline">{CATEGORY_LABELS[item.category] ?? item.category}</Badge>
           <Badge variant="outline">{item.subsystem ?? '미분류'}</Badge>
           {item.source_missing_at && <MissingBadge at={item.source_missing_at} what="재료" />}
@@ -203,6 +195,36 @@ export default function CatalogMaterialPage() {
         </div>
       )}
       {item?.description && <p className="text-muted-foreground text-sm">{item.description}</p>}
+
+      {/* **한눈에 무엇이 얼마나 있나** — 값 · 물성 · 곡선 · 출처 수와 등급 분포. */}
+      {item && item.values.length > 0 && (
+        <div aria-label="문헌 재료 요약" className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+          <span>
+            값 <b className="tabular-nums">{values.length}</b>
+          </span>
+          <span>
+            물성 <b className="tabular-nums">{groups.length}</b>
+          </span>
+          <span>
+            곡선 <b className="tabular-nums">{seriesLines.length + autoLines.length}</b>
+            <span className="text-muted-foreground">
+              {' '}
+              (입력 {curveSets}벌 · 자동 {autoLines.length})
+            </span>
+          </span>
+          <span>
+            출처 <b className="tabular-nums">{sourceCount}</b>
+          </span>
+          <span className="flex items-center gap-1">
+            {[...tiers.entries()].map(([tier, count]) => (
+              <span key={tier} className="flex items-center gap-0.5">
+                <TierBadge tier={tier} />
+                <span className="tabular-nums">{count}</span>
+              </span>
+            ))}
+          </span>
+        </div>
+      )}
       {added && (
         <p className="rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm dark:border-emerald-800 dark:bg-emerald-950">
           {added}
@@ -215,168 +237,66 @@ export default function CatalogMaterialPage() {
         </div>
       )}
 
-      {[...byDomain.entries()].map(([domain, values]) => (
-        <section key={domain} className="space-y-2">
-          <h2 className="text-sm font-semibold">
-            {DOMAIN_LABELS[domain] ?? domain}
-            <span className="text-muted-foreground ml-2 text-xs font-normal">
-              {values.length}건
-            </span>
-          </h2>
-          {/* **폭을 열마다 못 박는다.** 안 박으면 값 열이 남는 폭을 다 먹고
-              조건·등급·출처가 서로 겹친다 — 표가 자동으로 나누는 폭은 가장 긴
-              한 줄을 따라가는데, 여기서 가장 긴 것이 대개 값이기 때문이다.
-              값은 숫자와 단위라 넓을 이유가 없고, 조건이 길다.
-
-              **폭을 박았으면 접기도 켠다**(`CELL`). 표 칸의 기본값이
-              `whitespace-nowrap` 이라, 폭만 박아 두었을 때는 긴 조건·출처가 안
-              접히고 옆 칸 위로 넘쳐 글자가 겹쳤다(2026-10-04 지적, 모든 열).
-              좁은 창에서는 칸을 짓누르지 않고 가로로 넘긴다(`min-w`).
-
-              등급은 배지 하나라 **비율이 아니라 고정 폭**이다 — 「2차 인용」 이
-              칸 여백까지 77px. 비율로 주면 넓은 화면에서 200px 넘게 벌어졌다.
-              조건은 폭을 안 적어 남는 폭을 다 받는다. */}
-          <div className="overflow-x-auto rounded-md border">
-            <Table className="min-w-[50rem] table-fixed">
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-[24%]">물성</TableHead>
-                  <TableHead className="w-[14%]">값</TableHead>
-                  <TableHead className="w-20">등급</TableHead>
-                  <TableHead>조건</TableHead>
-                  <TableHead className="w-[22%]">출처</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {values.map((value) => (
-                  <TableRow key={value.id} className={value.representative ? '' : 'opacity-80'}>
-                    <TableCell className={CELL}>
-                      {/* 이름 뒤 배지는 **한 덩이로 줄을 바꾼다** — 글 사이에 섞어
-                          흘리면 배지가 줄 끝에서 잘리거나 옆 칸으로 넘친다. */}
-                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                        <span>
-                          {value.property_name}
-                          {/* **한 이름에 변수가 여럿인 물성이 있다**(ADR 0029). Anand
-                              하나에 9개 상수가 들어 있어서, 이름만 적으면 표에 같은
-                              줄이 아홉 번 서고 무엇이 무엇인지 알 수 없다. */}
-                          {value.term && <span className="ml-1 font-medium">· {value.term}</span>}
-                          {value.symbol && !value.term && (
-                            <span className="text-muted-foreground ml-1 text-xs">{value.symbol}</span>
-                          )}
-                        </span>
-                        {value.n_candidates > 1 && value.representative && (
-                          <Badge variant="secondary">대표값 · 후보 {value.n_candidates}</Badge>
-                        )}
-                        {/* **범위의 한쪽이라는 것을 말한다.** 경쟁하는 두 측정이
-                            아니라 한 범위의 양끝인데, 지금까지는 대표값 규칙이 둘 중
-                            하나를 이기게 해 놓고 그 사실을 안 알렸다. */}
-                        {boundLabel(value) && <Badge variant="outline">{boundLabel(value)}</Badge>}
-                        {/* 원본에서 빠진 값은 「대안」 이 아니다 — 대표 후보에서 아예 빠졌다. */}
-                        {value.source_missing_at ? (
-                          <MissingBadge at={value.source_missing_at} what="값" />
-                        ) : (
-                          !value.representative && (
-                            <Badge variant="outline" className="text-muted-foreground">
-                              대안 · {value.separated_by}
-                            </Badge>
-                          )
-                        )}
-                        {value.origin === 'local' && (
-                          <Badge variant="outline" title="MatNexus 에서 직접 넣은 값">
-                            직접 넣음{value.created_by ? ` · ${value.created_by}` : ''}
-                          </Badge>
-                        )}
-                        {canRemove(value) && (
-                          <button
-                            type="button"
-                            aria-label={`${value.property_name} 값 삭제`}
-                            className="text-muted-foreground hover:text-destructive rounded p-0.5"
-                            onClick={() => remove(value)}
-                          >
-                            <Trash2 className="size-3.5" />
-                          </button>
-                        )}
-                        {value.representative && (
-                          <Link
-                            to={`/metrology?key=${encodeURIComponent(value.property_key)}`}
-                            className="text-muted-foreground hover:text-foreground text-xs underline"
-                            title="이 물성을 재는 기법과 장비"
-                          >
-                            측정법
-                          </Link>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell className={`${CELL} tabular-nums`}>
-                      {/* **변수마다 단위가 다르다.** 정의는 대개 `1`(무차원)이라고
-                          적혀 있는데 실제로는 `MPa`·`1/s`·`K` 다. 그 값은 SI 로
-                          저장돼 있지도 않아서 환산하지 않고 그대로 보여 준다 —
-                          환산하면 150000 MPa 가 엉뚱한 수가 된다(ADR 0029 D2). */}
-                      {value.value_num === null || value.value_num === undefined ? (
-                        (value.value_text ?? '—')
-                      ) : value.term_unit ? (
-                        <>
-                          {value.value_num}
-                          <span className="text-muted-foreground ml-1 text-xs">
-                            {value.term_unit === '1' ? '' : value.term_unit}
-                          </span>
-                        </>
-                      ) : (
-                        fmtValueAs(units, value.value_num, value.unit)
-                      )}
-                    </TableCell>
-                    <TableCell className={CELL}>
-                      <TierBadge value={value} />
-                    </TableCell>
-                    {/* **갈리는 조건이 먼저, 굵게.** 후보가 넷이면 사람이 넷을
-                        눈으로 대조해서 무엇이 다른지 찾아야 했다 — 서버가 그 대조를
-                        대신하고(`distinguishing`), 겹치는 조건은 뒤로 흐린다. */}
-                    <TableCell className={CELL}>
-                      {(() => {
-                        const varying = fmtDistinguishing(
-                          value.distinguishing as Record<string, unknown> | null
-                        )
-                        const rest = fmtRestConditions(
-                          value.conditions as Record<string, unknown> | null,
-                          value.distinguishing as Record<string, unknown> | null
-                        )
-                        if (varying.length === 0 && !rest) return <span className="text-muted-foreground">—</span>
-                        return (
-                          <>
-                            {varying.length > 0 && (
-                              <span className="text-foreground font-medium">
-                                {varying.join(' · ')}
-                              </span>
-                            )}
-                            {rest && (
-                              <span className="text-muted-foreground">
-                                {varying.length > 0 ? ' · ' : ''}
-                                {rest}
-                              </span>
-                            )}
-                          </>
-                        )
-                      })()}
-                    </TableCell>
-                    <TableCell className={CELL}>
-                      <SourceCell value={value} />
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        </section>
-      ))}
-
-      {/* **묶음은 표 아래에 따로 선다.** 값 표에 낱개로 섞어 두면 같은 이름이
-          아홉 번 서고, 무엇이 한 벌인지 안 보인다(ADR 0029). */}
-      {id && <ParameterSetsSection materialId={id} />}
-
-      {/* 항복이나 인장강도가 있어야 곡선을 지을 수 있다 — 없으면 단추를 세우지 않는다
-          (누르고 「모자랍니다」 만 보게 하지 않는다). 정확한 판정은 서버가 한다. */}
-      {id && item?.values.some((value) => SYNTH_STRENGTHS.has(value.property_key)) && (
-        <SyntheticCurveSection materialId={id} />
+      {item && item.values.length > 0 && (
+        <Tabs value={tab} onValueChange={(next) => openTab(next as CatalogTab)}>
+          <TabsList>
+            <TabsTrigger value="summary">물성 요약 {groups.length}</TabsTrigger>
+            <TabsTrigger value="curves">곡선 · 표 {seriesLines.length + autoLines.length}</TabsTrigger>
+            <TabsTrigger value="sets">계수 묶음</TabsTrigger>
+            <TabsTrigger value="sources">출처 {sourceCount}</TabsTrigger>
+            <TabsTrigger value="values">전체 값 {values.length}</TabsTrigger>
+          </TabsList>
+          <TabsContent value="summary" className="mt-3">
+            <PropertySummary
+              groups={groups}
+              units={units}
+              canRemove={canRemove}
+              onRemove={(value) => void remove(value)}
+              onOpenTab={openTab}
+            />
+          </TabsContent>
+          <TabsContent value="curves" className="mt-3 space-y-6">
+            <CurvesPanel
+              series={series}
+              values={values}
+              seriesLines={seriesLines}
+              autoLines={autoLines}
+              canRemove={canRemoveSeries}
+              onRemove={(one) => void removeSeries(one)}
+            />
+            {/* 항복이나 인장강도가 있어야 곡선을 지을 수 있다 — 없으면 단추를 세우지 않는다
+                (누르고 「모자랍니다」 만 보게 하지 않는다). 정확한 판정은 서버가 한다. */}
+            {values.some((value) => SYNTH_STRENGTHS.has(value.property_key)) && (
+              <SyntheticCurveSection materialId={id} />
+            )}
+          </TabsContent>
+          <TabsContent value="sets" className="mt-3 space-y-3">
+            {/* **직접 넣은 계수 묶음**은 머리째 보이고 지울 수 있다. 아래 목록은 이관해 온 것까지
+                값의 `set_id` 로 묶은 것이라 같은 벌이 거기에도 선다. */}
+            {parameterSets.map((one) => (
+              <SeriesCard
+                key={one.id}
+                series={one}
+                values={values}
+                lines={[]}
+                canRemove={canRemoveSeries(one)}
+                onRemove={(target) => void removeSeries(target)}
+              />
+            ))}
+            <ParameterSetsSection materialId={id} />
+          </TabsContent>
+          <TabsContent value="sources" className="mt-3">
+            <SourcesTable values={values} />
+          </TabsContent>
+          <TabsContent value="values" className="mt-3">
+            <CatalogValueTable
+              values={values}
+              units={units}
+              canRemove={canRemove}
+              onRemove={(value) => void remove(value)}
+            />
+          </TabsContent>
+        </Tabs>
       )}
 
       {item && <AdoptDialog detail={item} open={adopting} onClose={() => setAdopting(false)} />}
@@ -393,25 +313,21 @@ export default function CatalogMaterialPage() {
         />
       )}
       {item && (
+        <SeriesDialog
+          detail={item}
+          open={addingSeries}
+          onClose={() => setAddingSeries(false)}
+          onDone={(message) => {
+            setAddingSeries(false)
+            setAdded(message)
+            detail.reload()
+            openTab('curves')
+          }}
+        />
+      )}
+      {item && (
         <CreateMaterialDialog detail={item} open={creating} onClose={() => setCreating(false)} />
       )}
     </div>
-  )
-}
-
-/**
- * **원본에서 빠진 것**(2026-10-04) — 원본(MaterialTwin) 스냅샷이 이 줄을 지웠다. 이관은 지우지 않고
- * 표시만 한다(선언 물성 · 카드가 근거로 쥐고 있을 수 있다). 대표값 · 값 검색 · 덱에는 쓰이지 않는다.
- */
-function MissingBadge({ at, what, className = '' }: { at: string; what: string; className?: string }) {
-  const when = new Date(at).toLocaleDateString('ko-KR')
-  return (
-    <Badge
-      variant="outline"
-      className={`border-amber-500/60 text-amber-700 dark:text-amber-400 ${className}`}
-      title={`원본(MaterialTwin) 스냅샷에서 ${when} 에 빠진 ${what}입니다. 지우지 않고 남겨 두었고, 대표값 · 값 검색 · 덱에는 쓰지 않습니다.`}
-    >
-      원본에서 빠짐
-    </Badge>
   )
 }

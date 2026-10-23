@@ -5416,6 +5416,13 @@
             ],
             "title": "Role"
           },
+          "series": {
+            "items": {
+              "$ref": "#/components/schemas/CatalogSeriesOut"
+            },
+            "title": "Series",
+            "type": "array"
+          },
           "source_missing_at": {
             "anyOf": [
               {
@@ -6017,6 +6024,502 @@
         "title": "CatalogPropertyUpdate",
         "type": "object"
       },
+      "CatalogSeriesColumnIn": {
+        "properties": {
+          "property_key": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Property Key",
+            "type": "string"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "maxLength": 50,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit"
+          }
+        },
+        "required": [
+          "property_key"
+        ],
+        "title": "CatalogSeriesColumnIn",
+        "type": "object"
+      },
+      "CatalogSeriesColumnOut": {
+        "properties": {
+          "property_key": {
+            "title": "Property Key",
+            "type": "string"
+          },
+          "property_name": {
+            "title": "Property Name",
+            "type": "string"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit"
+          }
+        },
+        "required": [
+          "property_key",
+          "property_name",
+          "unit"
+        ],
+        "title": "CatalogSeriesColumnOut",
+        "type": "object"
+      },
+      "CatalogSeriesCreate": {
+        "description": "**이어진 값 한 벌**을 한 번에 넣는다(ADR 0067) — 점마다 값 하나를 넣을 때와 같은 검사.\n\n곡선(`curve`): `x_key`(정의의 조건축) · `columns`(물성 열) · `rows`(`[x, y1, y2 …]`, 빈\n칸은 null). 계수 묶음(`parameter_set`): `model` · `property_key` · `terms`. 출처 · 등급 ·\n방법 · 조건은 벌 전체가 하나다.",
+        "properties": {
+          "columns": {
+            "items": {
+              "$ref": "#/components/schemas/CatalogSeriesColumnIn"
+            },
+            "maxItems": 8,
+            "title": "Columns",
+            "type": "array"
+          },
+          "conditions": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conditions"
+          },
+          "kind": {
+            "enum": [
+              "curve",
+              "parameter_set"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          },
+          "method": {
+            "default": "handbook",
+            "title": "Method",
+            "type": "string"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "maxLength": 50,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "property_key": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Property Key"
+          },
+          "quality_tier": {
+            "maximum": 4.0,
+            "minimum": 1.0,
+            "title": "Quality Tier",
+            "type": "integer"
+          },
+          "rows": {
+            "items": {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            "maxItems": 5000,
+            "title": "Rows",
+            "type": "array"
+          },
+          "source": {
+            "$ref": "#/components/schemas/CatalogSourceIn"
+          },
+          "source_detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Detail"
+          },
+          "terms": {
+            "items": {
+              "$ref": "#/components/schemas/CatalogSeriesTermIn"
+            },
+            "maxItems": 500,
+            "title": "Terms",
+            "type": "array"
+          },
+          "x_key": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "X Key"
+          },
+          "x_unit": {
+            "anyOf": [
+              {
+                "maxLength": 50,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "X Unit"
+          }
+        },
+        "required": [
+          "kind",
+          "label",
+          "quality_tier",
+          "source"
+        ],
+        "title": "CatalogSeriesCreate",
+        "type": "object"
+      },
+      "CatalogSeriesCreatedOut": {
+        "properties": {
+          "converted": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Converted",
+            "type": "array"
+          },
+          "points": {
+            "items": {
+              "$ref": "#/components/schemas/CatalogSeriesPointOut"
+            },
+            "title": "Points",
+            "type": "array"
+          },
+          "series": {
+            "$ref": "#/components/schemas/CatalogSeriesOut"
+          }
+        },
+        "required": [
+          "series",
+          "points"
+        ],
+        "title": "CatalogSeriesCreatedOut",
+        "type": "object"
+      },
+      "CatalogSeriesOut": {
+        "description": "이어진 값 한 벌의 머리(ADR 0067) — 곡선 · 표 또는 계수 묶음.",
+        "properties": {
+          "columns": {
+            "items": {
+              "$ref": "#/components/schemas/CatalogSeriesColumnOut"
+            },
+            "title": "Columns",
+            "type": "array"
+          },
+          "conditions": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conditions"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "method": {
+            "title": "Method",
+            "type": "string"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "point_count": {
+            "title": "Point Count",
+            "type": "integer"
+          },
+          "quality_tier": {
+            "title": "Quality Tier",
+            "type": "integer"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CatalogSourceOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source_detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Detail"
+          },
+          "x_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "X Key"
+          },
+          "x_unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "X Unit"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "label",
+          "x_key",
+          "columns",
+          "model",
+          "point_count",
+          "conditions",
+          "method",
+          "quality_tier",
+          "source",
+          "source_detail",
+          "notes",
+          "created_at"
+        ],
+        "title": "CatalogSeriesOut",
+        "type": "object"
+      },
+      "CatalogSeriesPointOut": {
+        "properties": {
+          "property_key": {
+            "title": "Property Key",
+            "type": "string"
+          },
+          "term": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Term"
+          },
+          "term_unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Term Unit"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit"
+          },
+          "value": {
+            "title": "Value",
+            "type": "number"
+          },
+          "x": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "X"
+          }
+        },
+        "required": [
+          "property_key",
+          "value",
+          "unit"
+        ],
+        "title": "CatalogSeriesPointOut",
+        "type": "object"
+      },
+      "CatalogSeriesTermIn": {
+        "properties": {
+          "property_key": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Property Key"
+          },
+          "term": {
+            "maxLength": 50,
+            "minLength": 1,
+            "title": "Term",
+            "type": "string"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "maxLength": 50,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit"
+          },
+          "value": {
+            "title": "Value",
+            "type": "number"
+          }
+        },
+        "required": [
+          "term",
+          "value"
+        ],
+        "title": "CatalogSeriesTermIn",
+        "type": "object"
+      },
       "CatalogSourceIn": {
         "description": "값의 출처. **제목·DOI·URL 중 하나는 있어야 한다** — 출처 없는 값은 안 받는다.",
         "properties": {
@@ -6505,6 +7008,18 @@
               }
             ],
             "title": "Separated By"
+          },
+          "series_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Series Id"
           },
           "source": {
             "anyOf": [
@@ -24469,6 +24984,14 @@
       "PropertyCandidateOut": {
         "description": "물성 후보 하나 — **값을 묻기 전에 필요한 것을 다 들고 있다.**\n\n단위를 필드 이름에 박지 않고 값으로 싣는다(`si_unit`). 알루미늄 밀도가\n`2.68e-09 kg/m3` 로 나간 적이 있다 — 이름에 단위를 박은 탓이었다.",
         "properties": {
+          "condition_axes": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Condition Axes",
+            "type": "array"
+          },
           "deprecated": {
             "default": false,
             "title": "Deprecated",
@@ -41007,6 +41530,114 @@
         ]
       }
     },
+    "/api/catalog/materials/{material_id}/series": {
+      "post": {
+        "description": "**이어진 값 한 벌**을 넣는다(ADR 0067) — 곡선 · 표(축 하나 + 물성 열) 또는 계수 묶음.\n\n점마다 문헌 값 한 줄이 생기고 묶음 칸으로 머리에 이어진다 — 값 검색 · 물성 지도 · 사내\n재료 반영 · 덱은 그 점을 낱값처럼 읽는다. 출처 · 등급 · 방법은 벌 전체가 하나다.",
+        "operationId": "create_catalog_series_api_catalog_materials__material_id__series_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "material_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Material Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CatalogSeriesCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogSeriesCreatedOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Catalog Series",
+        "tags": [
+          "catalog"
+        ]
+      }
+    },
+    "/api/catalog/materials/{material_id}/series/preview": {
+      "post": {
+        "description": "넣기 전에 **넣을 때와 같은 검사**를 돌린다 — 넣는 코드를 그대로 돌리고 되돌린다.",
+        "operationId": "preview_catalog_series_api_catalog_materials__material_id__series_preview_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "material_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Material Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CatalogSeriesCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogSeriesCreatedOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Preview Catalog Series",
+        "tags": [
+          "catalog"
+        ]
+      }
+    },
     "/api/catalog/materials/{material_id}/synthetic-curve": {
       "get": {
         "description": "문헌 스칼라로 지은 σ-ε 곡선 — **덱의 「곡선 합성」 과 같은 계산**(2026-10-03).\n\n문헌에는 곡선이 없다. 덱은 스칼라(E · 항복 · 인장 · 연신율)로 곡선을 지어 *MAT_024 에\n싣는데, 덱 파일을 열기 전에는 어떤 곡선인지 볼 길이 없었다. 지어 보고 못 지으면 그\n이유를 200 으로 돌려준다 — 못 짓는 것은 오류가 아니라 이 재료의 사실이다.",
@@ -42287,6 +42918,43 @@
           }
         },
         "summary": "Migrate Property",
+        "tags": [
+          "catalog"
+        ]
+      }
+    },
+    "/api/catalog/series/{series_id}": {
+      "delete": {
+        "description": "벌을 점과 함께 지운다 — 넣은 사람 · 관리자만. **사람이 해도 남긴다**(값 지우기와\n같다).",
+        "operationId": "delete_catalog_series_api_catalog_series__series_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "series_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Series Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Catalog Series",
         "tags": [
           "catalog"
         ]

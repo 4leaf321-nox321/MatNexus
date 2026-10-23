@@ -147,6 +147,12 @@ EXEMPT: dict[tuple[str, str], str] = {
     ("catalog", "create_catalog_material"): _만들기 + " — 문헌 재료",
     ("catalog", "create_catalog_value"): _만들기 + " — 문헌 값",
     ("catalog", "preview_catalog_value"): _읽기 + " — 넣는 코드를 돌리고 되돌린다",
+    ("catalog", "create_catalog_series"): _만들기 + " — 문헌 곡선 · 계수 묶음",
+    ("catalog", "preview_catalog_series"): _읽기 + " — 넣는 코드를 돌리고 되돌린다",
+    (
+        "catalog",
+        "delete_catalog_series",
+    ): "문헌 — `contribute.require_contributor` 가 안에서 본다",
     (
         "catalog",
         "delete_catalog_material",

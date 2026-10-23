@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -147,6 +147,9 @@ class CatalogValueOut(BaseModel):
     표시만 하며, 빠진 값은 대표값 · 값 검색 · 커버리지에서 빠진다(2026-10-04)."""
     created_by: str | None = None
     """직접 넣은 값이면 넣은 사람."""
+    series_id: uuid.UUID | None = None
+    """이어진 값 한 벌(곡선 · 계수 묶음)의 점이면 그 벌(ADR 0067). 상세의 `series` 에 머리가
+    있다."""
     """같은 물성의 후보 중 대표로 뽑힌 값인가. **진 후보도 함께 온다** — 화면이
     이유와 같이 보여 준다."""
     n_candidates: int = 1
@@ -327,6 +330,37 @@ class CatalogCoverageOut(BaseModel):
     """subsystem → domain → 값 수."""
 
 
+class CatalogSeriesColumnOut(BaseModel):
+    property_key: str
+    property_name: str
+    unit: str | None
+    """저장된 단위 — 정의의 단위."""
+
+
+class CatalogSeriesOut(BaseModel):
+    """이어진 값 한 벌의 머리(ADR 0067) — 곡선 · 표 또는 계수 묶음."""
+
+    id: uuid.UUID
+    kind: str
+    """`curve` · `parameter_set`."""
+    label: str
+    x_key: str | None
+    """곡선의 축 — 점의 조건 칸 이름(예: temperature_k · strain_pct)."""
+    x_unit: str | None = None
+    """축의 단위 — 키에서 안다(temperature_k → K). 모르는 축이면 비어 있다."""
+    columns: list[CatalogSeriesColumnOut]
+    model: str | None
+    point_count: int
+    conditions: dict[str, Any] | None
+    method: str
+    quality_tier: int
+    source: CatalogSourceOut | None
+    source_detail: str | None
+    notes: str | None
+    created_by: str | None = None
+    created_at: datetime
+
+
 class CatalogMaterialDetailOut(BaseModel):
     id: uuid.UUID
     name: str
@@ -345,6 +379,9 @@ class CatalogMaterialDetailOut(BaseModel):
     표시만 하며, 빠진 값은 대표값 · 값 검색 · 커버리지에서 빠진다(2026-10-04)."""
     created_by: str | None = None
     values: list[CatalogValueOut]
+    series: list[CatalogSeriesOut] = Field(default_factory=list)
+    """직접 넣은 **이어진 값 한 벌**들(ADR 0067). 점은 `values` 에 `series_id` 로 섞여 온다 —
+    값 검색 · 대표값이 그 점을 낱값처럼 읽는다."""
 
 
 # --- 직접 넣기 (contribute.py) ------------------------------------------------
@@ -472,6 +509,66 @@ class CatalogValueCreate(BaseModel):
     notes: str | None = None
 
 
+class CatalogSeriesColumnIn(BaseModel):
+    property_key: str = Field(min_length=1, max_length=100)
+    unit: str | None = Field(default=None, max_length=50)
+    """이 열 값의 단위. 정의 단위와 같은 차원이면 서버가 정의 단위로 환산한다."""
+
+
+class CatalogSeriesTermIn(BaseModel):
+    term: str = Field(min_length=1, max_length=50)
+    value: float
+    unit: str | None = Field(default=None, max_length=50)
+    """항의 단위. 정의가 무차원(`1`)인 계수 묶음 키면 환산하지 않고 그대로 둔다(ADR 0029)."""
+    property_key: str | None = Field(default=None, max_length=100)
+    """비우면 벌의 `property_key`. Prony 처럼 두 키에 걸친 벌이면 항마다 적는다."""
+
+
+class CatalogSeriesCreate(BaseModel):
+    """**이어진 값 한 벌**을 한 번에 넣는다(ADR 0067) — 점마다 값 하나를 넣을 때와 같은 검사.
+
+    곡선(`curve`): `x_key`(정의의 조건축) · `columns`(물성 열) · `rows`(`[x, y1, y2 …]`, 빈
+    칸은 null). 계수 묶음(`parameter_set`): `model` · `property_key` · `terms`. 출처 · 등급 ·
+    방법 · 조건은 벌 전체가 하나다.
+    """
+
+    kind: Literal["curve", "parameter_set"]
+    label: str = Field(min_length=1, max_length=200)
+    x_key: str | None = Field(default=None, max_length=100)
+    x_unit: str | None = Field(default=None, max_length=50)
+    """축 값의 단위. 비우면 키의 단위로 적은 것으로 본다(temperature_k 면 K)."""
+    columns: list[CatalogSeriesColumnIn] = Field(default_factory=list, max_length=8)
+    rows: list[list[float | None]] = Field(default_factory=list, max_length=5000)
+    model: str | None = Field(default=None, max_length=50)
+    property_key: str | None = Field(default=None, max_length=100)
+    terms: list[CatalogSeriesTermIn] = Field(default_factory=list, max_length=500)
+    conditions: dict[str, Any] | None = None
+    """벌 전체가 함께 가진 조건 — 점마다 같이 들어간다."""
+    method: str = "handbook"
+    quality_tier: int = Field(ge=1, le=4)
+    source: CatalogSourceIn
+    source_detail: str | None = None
+    notes: str | None = None
+
+
+class CatalogSeriesPointOut(BaseModel):
+    property_key: str
+    value: float
+    unit: str | None
+    x: float | None = None
+    """곡선의 축 값(축 단위)."""
+    term: str | None = None
+    term_unit: str | None = None
+
+
+class CatalogSeriesCreatedOut(BaseModel):
+    series: CatalogSeriesOut
+    points: list[CatalogSeriesPointOut]
+    """저장된(미리보기면 저장될) 점 — 정의 단위로 환산한 값."""
+    converted: list[str] = Field(default_factory=list)
+    """열마다 환산 내역 — "MPa → Pa(12점)"."""
+
+
 class CatalogPropertyPreviewOut(BaseModel):
     """만들면 **이렇게 된다** — 만들 때와 같은 검사를 지났다(2026-10-20).
 
@@ -544,6 +641,8 @@ class PropertyCandidateOut(BaseModel):
     """`alias` · `name` · `symbol` · `key` · `alias_partial` · `partial`."""
     matched_text: str | None
     notes: list[str]
+    condition_axes: list[str] = []
+    """이 물성의 값이 무엇을 따라 갈리나 — 곡선을 넣을 때 축 후보(ADR 0067)."""
 
 
 class PropertyResolveOut(BaseModel):

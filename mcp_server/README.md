@@ -102,7 +102,7 @@ ms)를 알린다 — 「관리 → 사용 현황」 의 MCP 숫자가 여기서 
 도구의 답은 그대로 나간다. 도구 하나가 백엔드를 여러 번 부르므로 API 요청 수(`X-Client: mcp`)와
 도구 수는 다르다 — 둘 다 그 화면에 있다.
 
-## 5. 지금 있는 것 (도구 121개)
+## 5. 지금 있는 것 (도구 123개)
 
 **전부 한 번에 불러 보려면 `probe.py` 를 돌린다** — 진짜 MCP 클라이언트로 한 바퀴
 돈다(아래 「실측으로 잡은 것」 참조). 화면이나 curl 로는 안 보이는 층이 있다.
@@ -194,6 +194,8 @@ Family·Category·Grade·제조사·유통사·시편 규격은 **기준정보**
     ★ add_catalog_material(...)        카탈로그에 없는 문헌 재료
     ★ add_catalog_value(...)           값 + 단위 + 조건 + 방법 + 등급 + 출처 (미리보기 기본)
     ★ delete_catalog_value(id)         직접 넣은 값만 (넣은 사람·관리자)
+    ★ add_catalog_series(...)          곡선 · 표 · 계수 묶음 한 벌을 한 번에 (미리보기 기본, ADR 0067)
+    ★ delete_catalog_series(id)        직접 넣은 한 벌을 점과 함께 (넣은 사람·관리자)
     ★ deprecate_catalog_property(...)  키를 지우지 않고 폐기 — 후속 키를 가리킨다 (관리자)
     ★ migrate_catalog_property(...)    폐기된 키의 값·매핑·별칭을 후속 키로 (미리보기 기본, 관리자)
 

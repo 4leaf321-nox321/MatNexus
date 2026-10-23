@@ -381,6 +381,13 @@ export const catalogApi = {
   createValue: (materialId: string, payload: CatalogValueCreate) =>
     api.post<CatalogValueCreated>(`/catalog/materials/${materialId}/values`, payload),
   deleteValue: (valueId: string) => api.delete<void>(`/catalog/values/${valueId}`),
+  /** 이어진 값 한 벌(곡선 · 계수 묶음, ADR 0067) — 넣을 때와 같은 검사를 돌리고 되돌린다. */
+  previewSeries: (materialId: string, payload: CatalogSeriesCreate) =>
+    api.post<CatalogSeriesCreated>(`/catalog/materials/${materialId}/series/preview`, payload),
+  createSeries: (materialId: string, payload: CatalogSeriesCreate) =>
+    api.post<CatalogSeriesCreated>(`/catalog/materials/${materialId}/series`, payload),
+  /** 직접 넣은 한 벌을 점과 함께 지운다 — 넣은 사람 · 관리자만. */
+  deleteSeries: (seriesId: string) => api.delete<void>(`/catalog/series/${seriesId}`),
 }
 
 export type CatalogPropertyCreate = components['schemas']['CatalogPropertyCreate']
@@ -393,6 +400,9 @@ export type CatalogPropertyMigrated = components['schemas']['CatalogPropertyMigr
 export type CatalogMaterialCreate = components['schemas']['CatalogMaterialCreate']
 export type CatalogValueCreate = components['schemas']['CatalogValueCreate']
 export type CatalogValueCreated = components['schemas']['CatalogValueCreatedOut']
+export type CatalogSeries = components['schemas']['CatalogSeriesOut']
+export type CatalogSeriesCreate = components['schemas']['CatalogSeriesCreate']
+export type CatalogSeriesCreated = components['schemas']['CatalogSeriesCreatedOut']
 export type PropertyResolve = components['schemas']['PropertyResolveOut']
 export type AliasCandidate = components['schemas']['AliasCandidateOut']
 export type PropertyCandidate = components['schemas']['PropertyCandidateOut']

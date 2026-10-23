@@ -24,6 +24,7 @@ from app.modules.catalog.models import (
     CatalogDefinition,
     CatalogLink,
     CatalogMaterial,
+    CatalogSeries,
     CatalogSource,
     CatalogValue,
 )
@@ -61,6 +62,11 @@ from app.modules.catalog.schemas import (
     CatalogPropertyMigrateOut,
     CatalogPropertyPreviewOut,
     CatalogPropertyUpdate,
+    CatalogSeriesColumnOut,
+    CatalogSeriesCreate,
+    CatalogSeriesCreatedOut,
+    CatalogSeriesOut,
+    CatalogSeriesPointOut,
     CatalogSourceOut,
     CatalogSummaryOut,
     CatalogValueCreate,
@@ -1102,6 +1108,7 @@ def _values_out(
             created_by=(creators or {}).get(value.created_by_id)
             if value.created_by_id
             else None,
+            series_id=value.series_id,
         )
         for value, definition, source in rows
     ]
@@ -1131,10 +1138,18 @@ def get_material(
         .order_by(CatalogDefinition.domain, CatalogDefinition.key, CatalogValue.mt_id)
     ).all()
 
+    series = list(
+        db.scalars(
+            select(CatalogSeries)
+            .where(CatalogSeries.material_id == item.id)
+            .order_by(CatalogSeries.created_at)
+        )
+    )
     creators = contribute.creator_names(
         db,
         {value.created_by_id for value, _, _ in rows if value.created_by_id}
-        | ({item.created_by_id} if item.created_by_id else set()),
+        | ({item.created_by_id} if item.created_by_id else set())
+        | {one.created_by_id for one in series if one.created_by_id},
     )
     values = _values_out(rows, creators)
     return CatalogMaterialDetailOut(
@@ -1153,6 +1168,7 @@ def get_material(
         source_missing_at=item.source_missing_at,
         created_by=creators.get(item.created_by_id) if item.created_by_id else None,
         values=values,
+        series=_series_out(db, series, creators),
     )
 
 
@@ -1509,6 +1525,190 @@ def delete_catalog_value(
         changes=before,
     )
     db.commit()
+    return Response(status_code=204)
+
+
+# --- 이어진 값 한 벌 (ADR 0067) -------------------------------------------------
+
+
+def _series_out(
+    db: Session, rows: Sequence[CatalogSeries], creators: dict[uuid.UUID, str] | None = None
+) -> list[CatalogSeriesOut]:
+    """묶음 머리들 — 열의 이름 · 단위와 점 수까지."""
+    if not rows:
+        return []
+    keys = {key for row in rows for key in row.columns or []}
+    definitions = {
+        one.key: one
+        for one in db.scalars(select(CatalogDefinition).where(CatalogDefinition.key.in_(keys)))
+    }
+    sources = {
+        one.id: one
+        for one in db.scalars(
+            select(CatalogSource).where(
+                CatalogSource.id.in_({row.source_id for row in rows if row.source_id})
+            )
+        )
+    }
+    counts: dict[uuid.UUID, int] = {
+        series_id: int(count)
+        for series_id, count in db.execute(
+            select(CatalogValue.series_id, func.count())
+            .where(CatalogValue.series_id.in_([row.id for row in rows]))
+            .group_by(CatalogValue.series_id)
+        ).all()
+        if series_id is not None
+    }
+    out: list[CatalogSeriesOut] = []
+    for row in rows:
+        source = sources.get(row.source_id) if row.source_id else None
+        out.append(
+            CatalogSeriesOut(
+                id=row.id,
+                kind=row.kind,
+                label=row.label,
+                x_key=row.x_key,
+                x_unit=contribute.X_AXIS_UNITS.get(row.x_key or ""),
+                columns=[
+                    CatalogSeriesColumnOut(
+                        property_key=key,
+                        property_name=definitions[key].name if key in definitions else key,
+                        unit=definitions[key].si_unit if key in definitions else None,
+                    )
+                    for key in row.columns or []
+                ],
+                model=row.model,
+                point_count=int(counts.get(row.id, 0)),
+                conditions=row.conditions,
+                method=row.method,
+                quality_tier=row.quality_tier,
+                source=(
+                    CatalogSourceOut.model_validate(source, from_attributes=True)
+                    if source is not None
+                    else None
+                ),
+                source_detail=row.source_detail,
+                notes=row.notes,
+                created_by=(creators or {}).get(row.created_by_id)
+                if row.created_by_id
+                else None,
+                created_at=row.created_at,
+            )
+        )
+    return out
+
+
+def _series_made_out(
+    db: Session, made: contribute.SeriesMade, user: User
+) -> CatalogSeriesCreatedOut:
+    series = made.series
+    if series.created_at is None:  # 미리보기 — 아직 DB 시각이 없다
+        series.created_at = datetime.now(UTC)
+    creators = contribute.creator_names(db, {user.id})
+    return CatalogSeriesCreatedOut(
+        series=_series_out(db, [series], creators)[0],
+        points=[
+            CatalogSeriesPointOut(
+                property_key=point.property_key,
+                value=float(point.value_num or 0.0),
+                unit=point.unit,
+                x=_number((point.conditions or {}).get(series.x_key or "")),
+                term=(point.conditions or {}).get(parameters.TERM),
+                term_unit=(point.conditions or {}).get(parameters.UNIT_OF_TERM),
+            )
+            for point in made.points
+        ],
+        converted=made.converted,
+    )
+
+
+def _number(raw: Any) -> float | None:
+    if isinstance(raw, int | float) and not isinstance(raw, bool):
+        return float(raw)
+    return None
+
+
+@router.post("/materials/{material_id}/series/preview", response_model=CatalogSeriesCreatedOut)
+def preview_catalog_series(
+    material_id: uuid.UUID,
+    payload: CatalogSeriesCreate,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> CatalogSeriesCreatedOut:
+    """넣기 전에 **넣을 때와 같은 검사**를 돌린다 — 넣는 코드를 그대로 돌리고 되돌린다."""
+    try:
+        made = contribute.create_series(db, material_id, payload, user)
+        return _series_made_out(db, made, user)
+    finally:
+        db.rollback()
+
+
+@router.post(
+    "/materials/{material_id}/series", response_model=CatalogSeriesCreatedOut, status_code=201
+)
+def create_catalog_series(
+    material_id: uuid.UUID,
+    payload: CatalogSeriesCreate,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> CatalogSeriesCreatedOut:
+    """**이어진 값 한 벌**을 넣는다(ADR 0067) — 곡선 · 표(축 하나 + 물성 열) 또는 계수 묶음.
+
+    점마다 문헌 값 한 줄이 생기고 묶음 칸으로 머리에 이어진다 — 값 검색 · 물성 지도 · 사내
+    재료 반영 · 덱은 그 점을 낱값처럼 읽는다. 출처 · 등급 · 방법은 벌 전체가 하나다.
+    """
+    made = contribute.create_series(db, material_id, payload, user)
+    material = db.get(CatalogMaterial, material_id)
+    audit.record_by_client(
+        db,
+        action=audit.CATALOG_SERIES_ADDED_BY_CLIENT,
+        actor=user,
+        target_table="catalog_series",
+        target_id=made.series.id,
+        target_label=f"{material.name if material else material_id} · {made.series.label}",
+        changes={
+            "kind": made.series.kind,
+            "points": len(made.points),
+            "tier": made.series.quality_tier,
+            "method": made.series.method,
+        },
+    )
+    db.commit()
+    if made.series.kind == "parameter_set":
+        # 「이 키가 계수 묶음형인가」 는 프로세스 캐시다 — 새 키가 처음 묶음이 됐을 수 있다.
+        parameters.forget()
+    db.refresh(made.series)
+    return _series_made_out(db, made, user)
+
+
+@router.delete("/series/{series_id}", status_code=204)
+def delete_catalog_series(
+    series_id: uuid.UUID,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> Response:
+    """벌을 점과 함께 지운다 — 넣은 사람 · 관리자만. **사람이 해도 남긴다**(값 지우기와
+    같다)."""
+    series = db.get(CatalogSeries, series_id)
+    material = db.get(CatalogMaterial, series.material_id) if series is not None else None
+    label = (
+        f"{material.name if material else ''} · {series.label}"
+        if series is not None
+        else str(series_id)
+    )
+    removed = contribute.delete_series(db, series_id, user)
+    audit.record(
+        db,
+        action=audit.CATALOG_SERIES_DELETED,
+        actor=user,
+        target_table="catalog_series",
+        target_id=series_id,
+        target_label=label,
+        changes={"kind": removed.kind, "columns": list(removed.columns or [])},
+    )
+    db.commit()
+    if removed.kind == "parameter_set":
+        parameters.forget()
     return Response(status_code=204)
 
 

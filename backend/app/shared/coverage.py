@@ -37,6 +37,7 @@ from app.modules.catalog.models import (
     CatalogDefinition,
     CatalogLink,
     CatalogMaterial,
+    CatalogSeries,
     CatalogValue,
 )
 from app.modules.catalog.ontology_models import PropertyLink
@@ -405,6 +406,46 @@ def group_entries(db: Session, material_id: uuid.UUID) -> dict[str, list[Entry]]
     return made
 
 
+def _thin_catalog_series(
+    db: Session, values: list[CatalogValue]
+) -> tuple[set[uuid.UUID], dict[uuid.UUID, str]]:
+    """문헌의 **이어진 한 벌**(ADR 0067)은 물성마다 지도에 `TABLE_ROWS_ON_MAP` 점까지.
+
+    응력-변형률 곡선 한 벌이 수백 점이라 다 세우면 지도가 그 곡선으로 덮인다 — 온도별 표와
+    같은 규칙으로 축을 따라 양 끝을 남기고 고르게 솎는다. `(남길 값 id, 벌 → 솎은 내역)`.
+    """
+    kept = {value.id for value in values if value.series_id is None}
+    grouped: dict[tuple[uuid.UUID, str], list[CatalogValue]] = defaultdict(list)
+    for value in values:
+        if value.series_id is not None:
+            grouped[(value.series_id, value.property_key)].append(value)
+    if not grouped:
+        return kept, {}
+    axes = {
+        series.id: series.x_key
+        for series in db.scalars(
+            select(CatalogSeries).where(
+                CatalogSeries.id.in_({series_id for series_id, _ in grouped})
+            )
+        )
+    }
+    thinned: dict[uuid.UUID, str] = {}
+    for (series_id, _), points in grouped.items():
+        axis = axes.get(series_id)
+
+        def at(value: CatalogValue, axis: str | None = axis) -> float:
+            raw = (value.conditions or {}).get(axis or "")
+            return float(raw) if isinstance(raw, int | float) else 0.0
+
+        points.sort(key=at)
+        rows = [{"id": one.id} for one in points]
+        picked = _thin(rows, TABLE_ROWS_ON_MAP)
+        kept.update(row["id"] for row in picked)
+        if len(picked) < len(rows):
+            thinned[series_id] = f"곡선 {len(rows)}점 중 {len(picked)}점"
+    return kept, thinned
+
+
 def collect(db: Session, material_id: uuid.UUID) -> Coverage:
     """세 세계를 물성별로 모아 한 장으로."""
     by_property: dict[str, list[Entry]] = defaultdict(list)
@@ -487,7 +528,7 @@ def collect(db: Session, material_id: uuid.UUID) -> Coverage:
     linked = select(CatalogLink.catalog_material_id).where(
         CatalogLink.material_id == material_id
     )
-    for value, catalog_material in db.execute(
+    catalog_rows = db.execute(
         select(CatalogValue, CatalogMaterial)
         .join(CatalogMaterial, CatalogMaterial.id == CatalogValue.material_id)
         .where(
@@ -496,7 +537,15 @@ def collect(db: Session, material_id: uuid.UUID) -> Coverage:
             # 원본에서 빠진 값은 「문헌이 채운다」 의 근거가 아니다(`mt_import.mark_missing`).
             CatalogValue.source_missing_at.is_(None),
         )
-    ).all():
+    ).all()
+    kept, thinned = _thin_catalog_series(db, [value for value, _ in catalog_rows])
+    for value, catalog_material in catalog_rows:
+        if value.id not in kept:
+            continue
+        method = value.source_detail or None
+        if value.series_id is not None and value.series_id in thinned:
+            said = thinned[value.series_id]
+            method = f"{method} · {said}" if method else said
         by_property[value.property_key].append(
             Entry(
                 origin="catalog",
@@ -505,7 +554,7 @@ def collect(db: Session, material_id: uuid.UUID) -> Coverage:
                 count=1,
                 spread_si=None,
                 conditions=_catalog_condition(value.conditions),
-                method=value.source_detail or None,
+                method=method,
                 ref_kind="catalog_value",
                 ref_id=str(value.id),
                 ref_label=catalog_material.name,
