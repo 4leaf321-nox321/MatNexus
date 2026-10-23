@@ -50,7 +50,12 @@ from sqlalchemy.dialects.postgresql import JSONB, JSONPATH
 from sqlalchemy.orm import Session
 
 from app.modules.catalog import parameters
-from app.modules.catalog.models import CatalogDefinition, CatalogMaterial, CatalogValue
+from app.modules.catalog.models import (
+    CatalogDefinition,
+    CatalogMaterial,
+    CatalogSeries,
+    CatalogValue,
+)
 from app.modules.catalog.ontology_models import PropertyLink
 from app.modules.grouping.models import GroupResult
 from app.modules.materials.models import Material, Sample, Specimen
@@ -171,6 +176,11 @@ class Hit:
     """어떻게 쟀나 — 「항복강도 · 오프셋 0.002」. **같은 키로 묶였어도 방법이 다르면
     값이 다르다**(Tg 는 DSC·DMA 가 다르고, 항복은 오프셋마다 다르다). 그 사실이
     보이지 않으면 사람은 「왜 같은 재료가 값이 셋이지」 가 된다."""
+    low_shown: float | None = None
+    high_shown: float | None = None
+    """묶인 값의 범위(물어본 단위). 문헌 벌의 점을 한 줄로 묶었을 때만(ADR 0072)."""
+    series_label: str | None = None
+    """문헌 벌(곡선 · 산점)의 점을 묶은 줄이면 그 벌의 이름."""
 
 
 def bounds(
@@ -296,18 +306,46 @@ def catalog_hits(
 
     조건은 `conditions` JSON 의 별칭으로 푼다 — 온도는 `temperature_k` 또는
     `temperature_c`(+273.15). 그 키가 없는 값은 **그 조건에서 잰 것이 아니라** 안 걸린다.
+
+    **한 벌(곡선 · 산점)의 점은 한 줄로 묶는다**(ADR 0072) — 점 수와 범위, 값은 가장 가까운
+    점. 낱값처럼 내면 S-N 점이 많은 재료 하나가 50줄 창을 채웠다(2026-10-24 실측: 「피로한도」
+    50줄이 15개 재료, 한 재료가 12줄).
     """
-    query: Select[Any] = (
+    filters: list[ColumnElement[bool]] = [
+        CatalogValue.property_key == property_key,
+        CatalogValue.value_num.is_not(None),
+        # 원본 스냅샷에서 빠진 값은 찾아 주지 않는다(`mt_import.mark_missing`).
+        CatalogValue.source_missing_at.is_(None),
+        CatalogValue.value_num >= low,
+        CatalogValue.value_num <= high,
+    ]
+    if term:
+        filters.append(CatalogValue.conditions[parameters.TERM].astext == term)
+    else:
+        # **변수 달린 값은 스칼라가 아니다.** 영률 키에 Prony 급수의 E0 가 몇 건 섞여 있다 —
+        # 그 값은 「영률」 이 아니라 「그 식의 E0」 다. 같은 범위에 넣으면 조용히 섞인다.
+        # 무엇이 변수인지는 대표값과 같은 규칙이다(`representative.term_clause`) — `term` 이
+        # 구분으로만 쓰인 값(최고 사용온도 short · long)은 그 물성의 값이라 걸린다.
+        filters.append(
+            or_(
+                CatalogValue.conditions.is_(None),
+                ~representative.term_clause(CatalogValue.conditions),
+            )
+        )
+    if min_tier is not None:
+        filters.append(CatalogValue.quality_tier <= min_tier)
+    if condition is not None:
+        filters.append(
+            _catalog_condition_si(condition.key).between(condition.low, condition.high)
+        )
+
+    def shown(si: float) -> float:
+        return float(si) if not convert else units.from_si(si, unit)
+
+    singles: Select[Any] = (
         select(CatalogValue, CatalogMaterial)
         .join(CatalogMaterial, CatalogMaterial.id == CatalogValue.material_id)
-        .where(
-            CatalogValue.property_key == property_key,
-            CatalogValue.value_num.is_not(None),
-            # 원본 스냅샷에서 빠진 값은 찾아 주지 않는다(`mt_import.mark_missing`).
-            CatalogValue.source_missing_at.is_(None),
-            CatalogValue.value_num >= low,
-            CatalogValue.value_num <= high,
-        )
+        .where(*filters, CatalogValue.series_id.is_(None))
         .order_by(
             # **동점에 앞뒤를 준다.** 기준 200 에 190 과 210 은 똑같이 10 만큼 멀다 —
             # 거리만으로 줄 세우면 둘의 순서가 DB 마음이라 같은 요청이 매번 다른 답을
@@ -320,43 +358,101 @@ def catalog_hits(
         )
         .limit(limit)
     )
-    if term:
-        query = query.where(CatalogValue.conditions[parameters.TERM].astext == term)
-    else:
-        # **변수 달린 값은 스칼라가 아니다.** 영률 키에 Prony 급수의 E0 가 몇 건 섞여 있다 —
-        # 그 값은 「영률」 이 아니라 「그 식의 E0」 다. 같은 범위에 넣으면 조용히 섞인다.
-        # 무엇이 변수인지는 대표값과 같은 규칙이다(`representative.term_clause`) — `term` 이
-        # 구분으로만 쓰인 값(최고 사용온도 short · long)은 그 물성의 값이라 걸린다.
-        query = query.where(
-            or_(
-                CatalogValue.conditions.is_(None),
-                ~representative.term_clause(CatalogValue.conditions),
-            )
-        )
-    if min_tier is not None:
-        query = query.where(CatalogValue.quality_tier <= min_tier)
-    if condition is not None:
-        query = query.where(
-            _catalog_condition_si(condition.key).between(condition.low, condition.high)
-        )
     made: list[Hit] = []
-    for value, material in db.execute(query).all():
+    for value, material in db.execute(singles).all():
         made.append(
             Hit(
                 world="catalog",
                 material_id=material.id,
                 material_name=material.name,
                 value_si=float(value.value_num),
-                value_shown=float(value.value_num)
-                if not convert
-                else units.from_si(value.value_num, unit),
+                value_shown=shown(value.value_num),
                 unit_shown=unit,
                 quality_tier=value.quality_tier,
                 source_detail=value.source_detail,
                 category=material.category,
             )
         )
-    return made
+
+    number = CatalogValue.value_num
+    # 가장 가까운 점 — 기준 아래의 가장 큰 값과 위의 가장 작은 값 중 가까운 쪽(동점이면
+    # 작은 쪽, `rank` 와 같다). 기준이 없으면 가장 작은 값.
+    below = (
+        func.max(number).filter(number <= center) if center is not None else func.min(number)
+    )
+    above = (
+        func.min(number).filter(number >= center) if center is not None else func.min(number)
+    )
+    grouped: Select[Any] = (
+        select(
+            CatalogMaterial.id,
+            CatalogMaterial.name,
+            CatalogMaterial.category,
+            CatalogSeries.label,
+            CatalogSeries.quality_tier,
+            CatalogSeries.source_detail,
+            func.count(),
+            func.min(number),
+            func.max(number),
+            below,
+            above,
+        )
+        .join(CatalogMaterial, CatalogMaterial.id == CatalogValue.material_id)
+        .join(CatalogSeries, CatalogSeries.id == CatalogValue.series_id)
+        .where(*filters)
+        .group_by(
+            CatalogSeries.id,
+            CatalogMaterial.id,
+            CatalogMaterial.name,
+            CatalogMaterial.category,
+            CatalogSeries.label,
+            CatalogSeries.quality_tier,
+            CatalogSeries.source_detail,
+        )
+        .order_by(
+            func.min(func.abs(number - center)) if center is not None else func.min(number),
+            CatalogSeries.id,
+        )
+        .limit(limit)
+    )
+    for (
+        material_id,
+        name,
+        category,
+        label,
+        tier,
+        detail,
+        count,
+        smallest,
+        largest,
+        under,
+        over,
+    ) in db.execute(grouped).all():
+        if center is None or over is None:
+            closest = under
+        elif under is None:
+            closest = over
+        else:
+            closest = under if center - under <= over - center else over
+        made.append(
+            Hit(
+                world="catalog",
+                material_id=material_id,
+                material_name=name,
+                value_si=float(closest),
+                value_shown=shown(closest),
+                unit_shown=unit,
+                quality_tier=tier,
+                source_detail=detail,
+                category=category,
+                count=int(count),
+                low_shown=shown(smallest) if count > 1 else None,
+                high_shown=shown(largest) if count > 1 else None,
+                series_label=label,
+            )
+        )
+    made.sort(key=rank(center))
+    return made[:limit]
 
 
 def _json_number(element: Any) -> Any:

@@ -870,6 +870,8 @@ X_AXIS_UNITS = {
     "thickness_m": "m",
     "depth_um": "µm",
     "load_n": "N",
+    # 균열 성장률의 ΔK(ADR 0071) — MPa·m^0.5 로 적으면 Pa·m^0.5 로 옮긴다.
+    "delta_k_pa_sqrt_m": "Pa·m^0.5",
 }
 
 #: 축 키의 모양 — 조건 칸 이름이 된다.
@@ -877,6 +879,8 @@ _AXIS_KEY = re.compile(r"^[a-z][a-z0-9_]*$")
 
 #: 한 곡선의 점 수 하한. 점 하나는 곡선이 아니다 — 낱값으로 넣는다.
 MIN_CURVE_ROWS = 2
+#: 산점은 시편 하나의 점도 한 벌이다(런아웃 하나만 보고한 논문이 있다).
+MIN_SCATTER_ROWS = 1
 
 
 @dataclass(frozen=True)
@@ -1072,14 +1076,16 @@ def _curve_points(
             f"공통 조건에 축 '{x_key}' 가 있습니다 — 축 값은 줄마다 적습니다.",
             status=422,
         )
-    if len(payload.rows) < MIN_CURVE_ROWS:
+    scatter = payload.kind == "scatter"
+    # **산점은 점 하나도 받는다**(2026-10-24, 수집기 요청 — 274벌). 산점의 점은 대표값에서
+    # 빠지므로 1점이어도 피로한도 대표에 섞이지 않는다. 낱값으로 넣으면 섞인다.
+    if len(payload.rows) < (MIN_SCATTER_ROWS if scatter else MIN_CURVE_ROWS):
         raise AppError(
             "MNX-CATALOG-0070",
             f"곡선은 점이 {MIN_CURVE_ROWS}개 이상이어야 합니다 — 하나면 낱값으로 넣으세요.",
             status=422,
         )
     width = 1 + len(definitions)
-    scatter = payload.kind == "scatter"
     extras = _row_conditions(payload.row_conditions, len(payload.rows), x_key, shared)
     seen: set[float] = set()
     rows: list[tuple[float, list[float | None], dict[str, Any]]] = []

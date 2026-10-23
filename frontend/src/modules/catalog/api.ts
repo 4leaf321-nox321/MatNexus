@@ -388,6 +388,9 @@ export const catalogApi = {
     api.post<CatalogSeriesCreated>(`/catalog/materials/${materialId}/series`, payload),
   /** 직접 넣은 한 벌을 점과 함께 지운다 — 넣은 사람 · 관리자만. */
   deleteSeries: (seriesId: string) => api.delete<void>(`/catalog/series/${seriesId}`),
+  /** 한 벌의 점 — 재료 상세에는 안 실린다(ADR 0072). 그 벌을 펼칠 때 받는다. */
+  seriesPoints: (seriesId: string) =>
+    api.get<CatalogSeriesPoints>(`/catalog/series/${seriesId}/points`),
 }
 
 export type CatalogPropertyCreate = components['schemas']['CatalogPropertyCreate']
@@ -403,6 +406,8 @@ export type CatalogValueCreated = components['schemas']['CatalogValueCreatedOut'
 export type CatalogSeries = components['schemas']['CatalogSeriesOut']
 export type CatalogSeriesCreate = components['schemas']['CatalogSeriesCreate']
 export type CatalogSeriesCreated = components['schemas']['CatalogSeriesCreatedOut']
+export type CatalogSeriesPoint = components['schemas']['CatalogSeriesPointOut']
+export type CatalogSeriesPoints = components['schemas']['CatalogSeriesPointsOut']
 export type PropertyResolve = components['schemas']['PropertyResolveOut']
 export type AliasCandidate = components['schemas']['AliasCandidateOut']
 export type PropertyCandidate = components['schemas']['PropertyCandidateOut']

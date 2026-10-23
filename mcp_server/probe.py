@@ -375,6 +375,14 @@ async def sweep(session: ClientSession) -> None:
                 adoptable = one["property_key"]
                 adoptable_unit = one.get("unit")
                 break
+    # **곡선 · 산점의 점은 상세에 없다**(ADR 0072) — 벌 하나를 따로 받는다. 적층 재료에 S-N 이 있다.
+    with_series = await call(session, "search_catalog", {"query": "L-PBF", "limit": 3})
+    for one in (with_series.get("materials") or []) if isinstance(with_series, dict) else []:
+        shown = await call(session, "get_catalog_material", {"catalog_material_id": one["id"]})
+        series = (shown.get("series") or []) if isinstance(shown, dict) else []
+        if series:
+            await call(session, "get_catalog_series", {"series_id": series[0]["id"]})
+            break
     if len(catalog_ids) >= 2:
         await call(session, "compare_catalog_materials", {"catalog_material_ids": catalog_ids})
     await call(session, "match_bom", {"text": "브래킷\tSPCC\n볼트\tSCM435"})

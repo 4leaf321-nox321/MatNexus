@@ -63,3 +63,70 @@ def ensure_local_definitions(
     if made:
         db.flush()
     return made
+
+
+# --- 이관 정의에 축 덧붙이기 (2026-10-24, ADR 0071) ------------------------------------
+#
+# 원본(MaterialTwin) 정의의 조건축은 원본이 정한다 — 그런데 반입 묶음이 쓸 축이 원본에 없을
+# 때가 있다(균열 성장률에 ΔK). DB 의 칸만 고치면 **배포마다 도는 이관이 원본 축으로 덮어**
+# 조용히 되돌아간다. 그래서 덧붙일 축을 씨앗(`axis-extensions.json`)으로 두고 이관기와 씨앗
+# 맞추기가 둘 다 붙인다 — 이관이 덮는 틈에도 빠지지 않게. 원본 축은 지우지도 바꾸지도 않고
+# **뒤에 덧붙이기만** 한다.
+
+AXIS_SEED = SEED.with_name("axis-extensions.json")
+
+
+def axis_extensions(path: Path = AXIS_SEED) -> dict[str, list[str]]:
+    """키 → 덧붙일 축."""
+    rows: list[dict[str, Any]] = json.loads(path.read_text(encoding="utf-8"))
+    return {str(row["key"]): [str(one) for one in row["axes"]] for row in rows}
+
+
+def extended_axes(
+    key: str, axes: list[str] | None, extra: dict[str, list[str]] | None = None
+) -> list[str] | None:
+    """원본 축 뒤에 덧붙일 축을 — 이미 있는 것은 건너뛴다. 덧붙일 것이 없으면 그대로."""
+    wanted = (axis_extensions() if extra is None else extra).get(key)
+    if not wanted:
+        return axes
+    merged = list(axes or [])
+    merged.extend(one for one in wanted if one not in merged)
+    return merged
+
+
+def ensure_axis_extensions(
+    db: Session, extra: dict[str, list[str]] | None = None
+) -> list[str]:
+    """씨앗의 축이 빠진 정의에 덧붙인다. 바꾼 키를 돌려준다(정의가 없으면 건너뛴다)."""
+    table = axis_extensions() if extra is None else extra
+    changed: list[str] = []
+    for key in table:
+        found = db.scalar(select(CatalogDefinition).where(CatalogDefinition.key == key))
+        if found is None:
+            continue
+        merged = extended_axes(key, found.condition_axes, table)
+        if merged != (found.condition_axes or []):
+            found.condition_axes = merged
+            changed.append(key)
+    if changed:
+        db.flush()
+    return changed
+
+
+# --- 문헌 조건 칸 목록 (2026-10-24, ADR 0071) -----------------------------------------
+#
+# 조건은 자유 칸이라 서버가 무엇이든 받는다 — 그러면 같은 뜻이 `aging_hours` · `aging_weeks`
+# 처럼 둘로 갈리고, 검색 · 비교에서 서로를 못 찾는다. 반입하는 쪽(수집기)이 「공통 칸」 을 제
+# 쪽에 따로 들고 있었는데 정본은 여기다. 정의의 조건축 밖이어도 이 목록의 이름이면 경고하지
+# 않는다.
+
+FIELD_SEED = SEED.with_name("condition-fields.json")
+
+
+def condition_fields(path: Path = FIELD_SEED) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = json.loads(path.read_text(encoding="utf-8"))
+    return rows
+
+
+def condition_keys() -> set[str]:
+    return {str(one["key"]) for one in condition_fields()}

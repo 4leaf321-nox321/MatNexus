@@ -8,12 +8,12 @@
 from __future__ import annotations
 
 import uuid
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query, Response
-from sqlalchemy import ColumnElement, Row, exists, func, or_, select
+from sqlalchemy import ColumnElement, Float, Row, case, cast, exists, func, or_, select
 from sqlalchemy.orm import Session
 
 from app import version
@@ -23,6 +23,7 @@ from app.modules.catalog import (
     batches,
     contribute,
     links,
+    local_definitions,
     mapping,
     material_links,
     parameters,
@@ -58,6 +59,7 @@ from app.modules.catalog.schemas import (
     CatalogCompareCellOut,
     CatalogCompareOut,
     CatalogCompareRowOut,
+    CatalogConditionFieldOut,
     CatalogCoverageOut,
     CatalogDefinitionOut,
     CatalogLinkIn,
@@ -81,6 +83,7 @@ from app.modules.catalog.schemas import (
     CatalogSeriesCreatedOut,
     CatalogSeriesOut,
     CatalogSeriesPointOut,
+    CatalogSeriesPointsOut,
     CatalogSourceOut,
     CatalogSummaryOut,
     CatalogValueCreate,
@@ -721,8 +724,13 @@ def _representative_values(
 
     한 쿼리로 값을 다 받아 재료 단위로 갈라 대표를 고른다 — 재료마다 쿼리를
     치면 Ashby(2,663종)에서 N+1 이 된다.
+
+    산점의 점은 안 읽고 곡선 점은 벌마다 앞선 하나만 넘긴다 — 대표는 같고(ADR 0072), S-N 점
+    수천 개 때문에 비교 · Ashby 피로축이 1 초를 넘었다(2026-10-24 실측).
     """
-    query = select(CatalogValue).where(CatalogValue.material_id.in_(material_ids))
+    query = select(CatalogValue).where(
+        CatalogValue.material_id.in_(material_ids), CatalogValue.scatter_point.is_(False)
+    )
     if keys is not None:
         query = query.where(CatalogValue.property_key.in_(keys))
     by_material: dict[uuid.UUID, list[CatalogValue]] = {}
@@ -730,6 +738,8 @@ def _representative_values(
         by_material.setdefault(value.material_id, []).append(value)
     out: dict[tuple[uuid.UUID, str], CatalogValue] = {}
     for material_id, values in by_material.items():
+        # 낱값은 저마다 한 칸(제 id)이라 그대로 남는다.
+        values = representative.leaders(values, lambda one: one.series_id or one.id)
         marks = representative.annotate(values)
         for value in values:
             # 변수 값은 항마다 따로 대표가 선다 — 「그 물성의 값」 자리에는 스칼라만.
@@ -745,10 +755,14 @@ def _candidate_counts(
         select(
             CatalogValue.material_id,
             CatalogValue.property_key,
-            func.count(),
+            # 곡선 한 벌은 후보 하나로 — 상세가 벌마다 앞선 점 하나로 고르는 것과 같다
+            # (ADR 0072).
+            func.count(func.distinct(func.coalesce(CatalogValue.series_id, CatalogValue.id))),
         )
         .where(
             CatalogValue.material_id.in_(material_ids),
+            # 산점의 점은 대표 후보가 아니다(ADR 0068).
+            CatalogValue.scatter_point.is_(False),
             # 대표값과 같은 무리만 센다 — 식의 변수 값은 그 칸의 후보가 아니다
             # (`representative.is_term` 의 SQL: `term` 과 한 벌의 표지가 함께 있을 때).
             or_(
@@ -1078,15 +1092,28 @@ def _term_name(raw: object) -> str | None:
 def _values_out(
     rows: Sequence[Row[tuple[CatalogValue, CatalogDefinition, CatalogSource]]],
     creators: dict[uuid.UUID, str] | None = None,
+    *,
+    hide_points_of: Collection[uuid.UUID] = (),
 ) -> list[CatalogValueOut]:
     """문헌 값들을 **대표 표시까지 붙여** 낸다. 상세와 내보내기가 한 벌로 쓴다.
 
     대표 표시를 빼고 값만 내보내면, 받은 사람은 같은 물성의 값 여럿 중에서
     **아무거나 고르게 된다** — 이 카탈로그가 `representative` 를 두는 이유가
     바로 그것을 막는 것이다.
+
+    `hide_points_of` 의 벌에 든 점은 **대표를 고르는 데는 쓰고 내지는 않는다** — 대표로 뽑힌
+    점만 낸다(ADR 0072). 빼고 고르면 상세의 대표가 비교 · 덱의 대표와 갈린다. 상세는 벌마다
+    앞선 점 하나만 넘긴다(`representative.leaders`).
     """
     # 같은 물성의 후보들 중 대표를 고르고 — 진 후보는 이유와 함께 그대로 낸다.
     marks = representative.annotate([value for value, _, _ in rows])
+    if hide_points_of:
+        hidden = set(hide_points_of)
+        rows = [
+            row
+            for row in rows
+            if row[0].series_id not in hidden or marks[row[0].id].representative
+        ]
     # 무리 안에서 대표가 먼저 서도록 정렬만 바꾼다(도메인·키 차례는 유지).
     rows = sorted(
         rows,
@@ -1150,18 +1177,14 @@ def get_material(
 
     **후보를 숨기지 않는다.** 같은 물성에 값이 여럿이면 전부 준다 — 어느 것을
     대표로 볼지는 화면(다음 단계)이 이유와 함께 보여 준다.
+
+    **곡선 · 산점의 점은 싣지 않는다**(ADR 0072) — 대표로 뽑힌 곡선 점만 온다. 점마다
+    출처 · 조건 · 갈리는 조건을 되풀이해 실어, 점 9,105개인 재료(Ti-6Al-4V L-PBF)가
+    16 MB · 1.6 초였다(2026-10-24 실측). 점은 `GET /catalog/series/{id}/points`.
     """
     item = db.get(CatalogMaterial, material_id)
     if item is None:
         raise NotFound("MNX-CATALOG-0001", "카탈로그에 없는 재료입니다.")
-
-    rows = db.execute(
-        select(CatalogValue, CatalogDefinition, CatalogSource)
-        .join(CatalogDefinition, CatalogDefinition.key == CatalogValue.property_key)
-        .outerjoin(CatalogSource, CatalogSource.id == CatalogValue.source_id)
-        .where(CatalogValue.material_id == item.id)
-        .order_by(CatalogDefinition.domain, CatalogDefinition.key, CatalogValue.mt_id)
-    ).all()
 
     series = list(
         db.scalars(
@@ -1170,13 +1193,51 @@ def get_material(
             .order_by(CatalogSeries.created_at)
         )
     )
+    curves = [one.id for one in series if one.kind == "curve"]
+    joined = (
+        select(CatalogValue, CatalogDefinition, CatalogSource)
+        .join(CatalogDefinition, CatalogDefinition.key == CatalogValue.property_key)
+        .outerjoin(CatalogSource, CatalogSource.id == CatalogValue.source_id)
+    )
+    rows = list(
+        db.execute(
+            joined.outerjoin(CatalogSeries, CatalogSeries.id == CatalogValue.series_id)
+            .where(
+                CatalogValue.material_id == item.id,
+                # 낱값과 계수 묶음의 항만 — 곡선 · 산점의 점은 아래에서.
+                or_(CatalogSeries.kind.is_(None), CatalogSeries.kind == "parameter_set"),
+            )
+            .order_by(CatalogDefinition.domain, CatalogDefinition.key, CatalogValue.mt_id)
+        ).all()
+    )
+    if curves:
+        # **곡선 점은 벌마다 앞선 점 하나만 대표 후보로** — 그 점이 대표면 그것만 실린다.
+        # 순위에 드는 칸만 읽는다(점 5,051개를 ORM 으로 지으면 그것이 시간의 절반이었다).
+        # 산점의 점은 대표가 될 수 없어(ADR 0068) 아예 안 읽는다.
+        ahead = representative.leaders(
+            db.execute(
+                select(
+                    CatalogValue.id,
+                    CatalogValue.series_id,
+                    CatalogValue.property_key,
+                    CatalogValue.conditions,
+                    CatalogValue.quality_tier,
+                    CatalogValue.value_num,
+                    CatalogValue.mt_id,
+                    CatalogValue.source_missing_at,
+                    CatalogValue.scatter_point,
+                ).where(CatalogValue.series_id.in_(curves))
+            ).all(),
+            lambda one: one.series_id,
+        )
+        rows += db.execute(joined.where(CatalogValue.id.in_([one.id for one in ahead]))).all()
     creators = contribute.creator_names(
         db,
         {value.created_by_id for value, _, _ in rows if value.created_by_id}
         | ({item.created_by_id} if item.created_by_id else set())
         | {one.created_by_id for one in series if one.created_by_id},
     )
-    values = _values_out(rows, creators)
+    values = _values_out(rows, creators, hide_points_of=curves)
     return CatalogMaterialDetailOut(
         id=item.id,
         name=item.name,
@@ -1597,7 +1658,10 @@ def delete_catalog_value(
 def _series_out(
     db: Session, rows: Sequence[CatalogSeries], creators: dict[uuid.UUID, str] | None = None
 ) -> list[CatalogSeriesOut]:
-    """묶음 머리들 — 열의 이름 · 단위와 점 수까지."""
+    """묶음 머리들 — 열의 이름 · 단위와 열마다 점 수 · 값 범위, 축 범위까지.
+
+    점은 상세에 안 실리므로(ADR 0072) 요약 화면이 쓸 수 · 범위를 여기서 센다.
+    """
     if not rows:
         return []
     keys = {key for row in rows for key in row.columns or []}
@@ -1621,18 +1685,55 @@ def _series_out(
             )
         )
     }
-    counts: dict[uuid.UUID, int] = {
-        series_id: int(count)
-        for series_id, count in db.execute(
-            select(CatalogValue.series_id, func.count())
-            .where(CatalogValue.series_id.in_([row.id for row in rows]))
-            .group_by(CatalogValue.series_id)
-        ).all()
-        if series_id is not None
-    }
+    # 축 값은 점의 조건 칸에 있고 칸 이름(x_key)은 벌마다 다르다 — 벌을 이어 그 칸을 읽는다.
+    # 숫자가 아닌 축 값은 NULL 로 — 캐스트가 터지지 않게 `CASE` 로 먼저 본다.
+    x = case(
+        (
+            func.jsonb_typeof(CatalogValue.conditions.op("->")(CatalogSeries.x_key))
+            == "number",
+            cast(CatalogValue.conditions.op("->>")(CatalogSeries.x_key), Float),
+        ),
+        else_=None,
+    )
+    #: 벌 → 열 → (점 수, 값 최소, 값 최대, 축 최소, 축 최대)
+    stats: dict[uuid.UUID, dict[str, tuple[int, Any, Any, Any, Any]]] = {}
+    for series_id, key, count, low, high, x_low, x_high in db.execute(
+        select(
+            CatalogValue.series_id,
+            CatalogValue.property_key,
+            func.count(),
+            func.min(CatalogValue.value_num),
+            func.max(CatalogValue.value_num),
+            func.min(x),
+            func.max(x),
+        )
+        .join(CatalogSeries, CatalogSeries.id == CatalogValue.series_id)
+        .where(CatalogValue.series_id.in_([row.id for row in rows]))
+        .group_by(CatalogValue.series_id, CatalogValue.property_key)
+    ).all():
+        stats.setdefault(series_id, {})[key] = (int(count), low, high, x_low, x_high)
     out: list[CatalogSeriesOut] = []
     for row in rows:
         source = sources.get(row.source_id) if row.source_id else None
+        mine = stats.get(row.id, {})
+        x_lows = [one[3] for one in mine.values() if one[3] is not None]
+        x_highs = [one[4] for one in mine.values() if one[4] is not None]
+        columns = []
+        for key in row.columns or []:
+            definition = definitions.get(key)
+            count, low, high, _, _ = mine.get(key, (0, None, None, None, None))
+            columns.append(
+                CatalogSeriesColumnOut(
+                    property_key=key,
+                    property_name=definition.name if definition else key,
+                    unit=definition.si_unit if definition else None,
+                    domain=definition.domain if definition else None,
+                    symbol=definition.symbol if definition else None,
+                    count=count,
+                    low=low,
+                    high=high,
+                )
+            )
         out.append(
             CatalogSeriesOut(
                 id=row.id,
@@ -1640,16 +1741,11 @@ def _series_out(
                 label=row.label,
                 x_key=row.x_key,
                 x_unit=contribute.X_AXIS_UNITS.get(row.x_key or ""),
-                columns=[
-                    CatalogSeriesColumnOut(
-                        property_key=key,
-                        property_name=definitions[key].name if key in definitions else key,
-                        unit=definitions[key].si_unit if key in definitions else None,
-                    )
-                    for key in row.columns or []
-                ],
+                x_min=min(x_lows) if x_lows else None,
+                x_max=max(x_highs) if x_highs else None,
+                columns=columns,
                 model=row.model,
-                point_count=int(counts.get(row.id, 0)),
+                point_count=sum(one[0] for one in mine.values()),
                 conditions=row.conditions,
                 method=row.method,
                 quality_tier=row.quality_tier,
@@ -1679,18 +1775,22 @@ def _series_made_out(
     creators = contribute.creator_names(db, {user.id})
     return CatalogSeriesCreatedOut(
         series=_series_out(db, [series], creators)[0],
-        points=[
-            CatalogSeriesPointOut(
-                property_key=point.property_key,
-                value=float(point.value_num or 0.0),
-                unit=point.unit,
-                x=_number((point.conditions or {}).get(series.x_key or "")),
-                term=(point.conditions or {}).get(parameters.TERM),
-                term_unit=(point.conditions or {}).get(parameters.UNIT_OF_TERM),
-            )
-            for point in made.points
-        ],
+        points=[_point_out(point, series.x_key) for point in made.points],
         converted=made.converted,
+    )
+
+
+def _point_out(point: CatalogValue, x_key: str | None) -> CatalogSeriesPointOut:
+    conditions = point.conditions or {}
+    row = {key: conditions[key] for key in contribute.ROW_CONDITIONS if key in conditions}
+    return CatalogSeriesPointOut(
+        property_key=point.property_key,
+        value=float(point.value_num or 0.0),
+        unit=point.unit,
+        x=_number(conditions.get(x_key or "")),
+        term=conditions.get(parameters.TERM),
+        term_unit=conditions.get(parameters.UNIT_OF_TERM),
+        row_conditions=row or None,
     )
 
 
@@ -1753,6 +1853,41 @@ def create_catalog_series(
     return _series_made_out(db, made, user)
 
 
+@router.get("/series/{series_id}/points", response_model=CatalogSeriesPointsOut)
+def catalog_series_points(
+    series_id: uuid.UUID,
+    _user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> CatalogSeriesPointsOut:
+    """벌 하나의 점 — 머리와 함께, 축 차례로(ADR 0072).
+
+    재료 상세는 점을 싣지 않는다. 화면은 그 벌을 펼칠 때 이것을 부른다. 점마다 출처 · 등급 ·
+    방법을 되풀이하지 않는다 — 벌 전체가 하나다.
+    """
+    series = db.get(CatalogSeries, series_id)
+    if series is None:
+        raise NotFound("MNX-CATALOG-0071", "없는 묶음입니다.")
+    points = list(
+        db.scalars(
+            select(CatalogValue)
+            .where(CatalogValue.series_id == series.id)
+            .order_by(
+                CatalogValue.property_key,
+                CatalogValue.conditions[parameters.TERM].astext,
+                CatalogValue.id,
+            )
+        )
+    )
+    shaped = sorted(
+        (_point_out(point, series.x_key) for point in points),
+        key=lambda one: (one.x is None, one.x if one.x is not None else 0.0),
+    )
+    creators = contribute.creator_names(
+        db, {series.created_by_id} if series.created_by_id else set()
+    )
+    return CatalogSeriesPointsOut(series=_series_out(db, [series], creators)[0], points=shaped)
+
+
 @router.delete("/series/{series_id}", status_code=204)
 def delete_catalog_series(
     series_id: uuid.UUID,
@@ -1785,6 +1920,18 @@ def delete_catalog_series(
 
 
 # --- 반입 묶음 (ADR 0068) ---------------------------------------------------------
+
+
+@router.get("/condition-fields", response_model=list[CatalogConditionFieldOut])
+def list_condition_fields(
+    _user: User = Depends(current_user),
+) -> list[CatalogConditionFieldOut]:
+    """**문헌 조건 칸 목록** — 낱값 · 반입 묶음의 조건에 쓰는 이름(ADR 0071).
+
+    정의의 조건축 밖이어도 이 이름이면 반입 미리보기가 경고하지 않는다. 같은 뜻을 같은 이름으로
+    적어야 검색 · 비교에서 서로를 찾는다.
+    """
+    return [CatalogConditionFieldOut(**one) for one in local_definitions.condition_fields()]
 
 
 @router.post("/batches/import", response_model=CatalogBatchImportOut)
@@ -2704,6 +2851,9 @@ def search_by_property(
                     else one.spread_si
                 ),
                 method=one.method,
+                low=one.low_shown,
+                high=one.high_shown,
+                series=one.series_label,
             )
             for one in hits[:limit]
         ],

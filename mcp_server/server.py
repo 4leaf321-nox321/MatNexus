@@ -983,6 +983,8 @@ async def get_catalog_material(
     **파라미터 벌(Anand·Prony 같은 것)은 여기서 찾지 마라.** 낱개로 흩어져 보이는
     데다 개수가 많다 — `get_catalog_parameter_sets` 가 벌로 묶어 준다.
 
+    **곡선 · 산점의 점은 `values` 에 없다**(대표 점만) — `get_catalog_series(series_id)`.
+
     **tier 4 는 추정·가정이다.** `caveat` 가 붙은 값을 실측처럼 옮기지 않는다.
     """
     got = await _get(ctx, f"/catalog/materials/{catalog_material_id}")
@@ -1005,6 +1007,16 @@ async def get_catalog_material(
     for one in values:
         key = f"tier{one['quality_tier']}"
         tiers[key] = tiers.get(key, 0) + 1
+    # 벌이 555개인 재료가 있다(2026-10-24) — 좁혔으면 그 물성의 벌만, 그래도 앞의 것만.
+    series = [
+        one
+        for one in got.get("series") or []
+        if (not domain or any(c.get("domain") == domain for c in one.get("columns") or []))
+        and (
+            not wanted
+            or any(str(c.get("property_key", "")).lower() in wanted for c in one.get("columns") or [])
+        )
+    ]
     return {
         "id": got["id"],
         "name": got.get("name"),
@@ -1021,6 +1033,7 @@ async def get_catalog_material(
         "complete": total <= len(values),
         "tier_counts": tiers,
         "values": values,
+        "series_total": len(series),
         "series": [
             {
                 "id": one.get("id"),
@@ -1032,7 +1045,7 @@ async def get_catalog_material(
                 "source": (one.get("source") or {}).get("title"),
                 "batch_key": one.get("batch_key"),
             }
-            for one in got.get("series") or []
+            for one in series[:SERIES_SHOWN]
         ],
         **(
             {
@@ -1045,6 +1058,72 @@ async def get_catalog_material(
             if total > len(values)
             else {}
         ),
+        **(
+            {
+                "series_hint": (
+                    f"벌 {len(series) - SERIES_SHOWN}개를 안 보였습니다 — `property_keys` 로 "
+                    "좁히세요."
+                )
+            }
+            if len(series) > SERIES_SHOWN
+            else {}
+        ),
+    }
+
+
+#: `get_catalog_material` 이 싣는 벌 머리 수.
+SERIES_SHOWN = 30
+
+#: `get_catalog_series` 가 싣는 점 수.
+POINTS_SHOWN = 200
+
+
+@mcp.tool()
+async def get_catalog_series(ctx: Context, series_id: str) -> dict[str, Any]:
+    """문헌 곡선 · 산점 한 벌의 점(`get_catalog_material` 의 `series[].id`).
+
+    출처 · 등급 · 조건은 벌에 하나, 점에는 x · 값 · 줄 조건(런아웃)만. 값은 `columns[].unit`,
+    x 는 `x_unit`. 200점까지.
+    """
+    got = await _get(ctx, f"/catalog/series/{series_id}/points")
+    if "error" in got:
+        return got
+    head = got.get("series") or {}
+    points = got.get("points") or []
+    return {
+        "id": head.get("id"),
+        "kind": head.get("kind"),
+        "label": head.get("label"),
+        "x_key": head.get("x_key"),
+        "x_unit": head.get("x_unit"),
+        "columns": [
+            {
+                "property_key": one.get("property_key"),
+                "unit": one.get("unit"),
+                "count": one.get("count"),
+                "low": one.get("low"),
+                "high": one.get("high"),
+            }
+            for one in head.get("columns") or []
+        ],
+        "conditions": head.get("conditions"),
+        "method": head.get("method"),
+        "quality_tier": head.get("quality_tier"),
+        "source": head.get("source"),
+        "source_detail": head.get("source_detail"),
+        "batch_key": head.get("batch_key"),
+        "point_count": len(points),
+        "points": [
+            {
+                "x": one.get("x"),
+                "property_key": one.get("property_key"),
+                "value": one.get("value"),
+                **({"term": one["term"]} if one.get("term") else {}),
+                **({"row": one["row_conditions"]} if one.get("row_conditions") else {}),
+            }
+            for one in points[:POINTS_SHOWN]
+        ],
+        "omitted": max(0, len(points) - POINTS_SHOWN),
     }
 
 
@@ -4618,6 +4697,8 @@ async def import_catalog_batch(ctx: Context, path: str, dry_run: bool = True) ->
         },
         # 있던 재료에 붙는 항목 — 원본 번호가 하나 어긋나면 이웃 재료에 붙으니 이름을 대 본다.
         "attached": got.get("attached") or [],
+        # 막지 않는 경고 — 문헌 조건 칸 목록 밖의 조건 칸 이름(GET /catalog/condition-fields).
+        "warnings": (got.get("warnings") or [])[:20],
         "problems": problems[:30],
         **({"more_problems": len(problems) - 30} if len(problems) > 30 else {}),
         "note": (
@@ -5185,9 +5266,9 @@ async def find_by_property(
     잰 값은 **재료·방법별로 묶여** 온다: `count` 가 시편 수, `spread` 가 표준편차,
     `method` 가 어떻게 쟀는지(「항복강도 · offset_strain=0.002」). **방법이 다르면
     같은 물성이라도 값이 다르다** — Tg 는 DSC 와 DMA 가, 항복은 오프셋마다 다르다.
-    답할 때 방법을 함께 말해라. `quality_tier` 는 문헌값의 등급이고 **tier4 도 걸러 내지 않는다**(추정·가정값도
-    필요해서 모은 것이다) — 다만 답할 때 등급을 함께 말해라.
-    `range_si` 로 실제로 건 범위를 되짚을 수 있다.
+    답할 때 방법을 함께 말해라. **tier4 도 걸러 내지 않는다**(추정·가정값도 필요해서 모은 것이다).
+    문헌 곡선 · 산점(S-N)의 점은 **벌마다 한 줄** — `series`(벌) · `count`(든 점) · `low`~`high`.
+    `range_si` 가 실제로 건 범위다.
     """
     params: dict[str, Any] = {
         "q": property,

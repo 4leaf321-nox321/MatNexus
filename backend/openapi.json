@@ -4993,6 +4993,13 @@
           },
           "values": {
             "$ref": "#/components/schemas/CatalogBatchCountOut"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/CatalogBatchWarningOut"
+            },
+            "title": "Warnings",
+            "type": "array"
           }
         },
         "required": [
@@ -5755,6 +5762,35 @@
         "title": "CatalogBatchValueIn",
         "type": "object"
       },
+      "CatalogBatchWarningOut": {
+        "description": "막지는 않는 것 — 정의의 조건축 · 문헌 조건 칸 목록에 없는 조건 칸(ADR 0071).",
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "example": {
+            "title": "Example",
+            "type": "string"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "count",
+          "example",
+          "message"
+        ],
+        "title": "CatalogBatchWarningOut",
+        "type": "object"
+      },
       "CatalogCompareCellOut": {
         "description": "비교 표의 칸 하나 — 그 재료의 그 물성 대표값. 없으면 None 칸.",
         "properties": {
@@ -5889,6 +5925,59 @@
           "cells"
         ],
         "title": "CatalogCompareRowOut",
+        "type": "object"
+      },
+      "CatalogConditionFieldOut": {
+        "description": "문헌 조건 칸 하나 — 반입 묶음 · 낱값의 조건에 쓰는 이름(ADR 0071).",
+        "properties": {
+          "group": {
+            "title": "Group",
+            "type": "string"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit"
+          },
+          "values": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Values",
+            "type": "array"
+          }
+        },
+        "required": [
+          "key",
+          "group",
+          "label"
+        ],
+        "title": "CatalogConditionFieldOut",
         "type": "object"
       },
       "CatalogCoverageOut": {
@@ -7054,6 +7143,44 @@
       },
       "CatalogSeriesColumnOut": {
         "properties": {
+          "count": {
+            "default": 0,
+            "title": "Count",
+            "type": "integer"
+          },
+          "domain": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Domain"
+          },
+          "high": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "High"
+          },
+          "low": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Low"
+          },
           "property_key": {
             "title": "Property Key",
             "type": "string"
@@ -7061,6 +7188,17 @@
           "property_name": {
             "title": "Property Name",
             "type": "string"
+          },
+          "symbol": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Symbol"
           },
           "unit": {
             "anyOf": [
@@ -7410,6 +7548,28 @@
             ],
             "title": "X Key"
           },
+          "x_max": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "X Max"
+          },
+          "x_min": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "X Min"
+          },
           "x_unit": {
             "anyOf": [
               {
@@ -7446,6 +7606,18 @@
           "property_key": {
             "title": "Property Key",
             "type": "string"
+          },
+          "row_conditions": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Row Conditions"
           },
           "term": {
             "anyOf": [
@@ -7502,6 +7674,27 @@
           "unit"
         ],
         "title": "CatalogSeriesPointOut",
+        "type": "object"
+      },
+      "CatalogSeriesPointsOut": {
+        "description": "벌 하나의 점 — 상세에 안 싣고 화면이 그 벌을 열 때 받는다(ADR 0072).",
+        "properties": {
+          "points": {
+            "items": {
+              "$ref": "#/components/schemas/CatalogSeriesPointOut"
+            },
+            "title": "Points",
+            "type": "array"
+          },
+          "series": {
+            "$ref": "#/components/schemas/CatalogSeriesOut"
+          }
+        },
+        "required": [
+          "series",
+          "points"
+        ],
+        "title": "CatalogSeriesPointsOut",
         "type": "object"
       },
       "CatalogSeriesTermIn": {
@@ -25828,6 +26021,28 @@
             "title": "Count",
             "type": "integer"
           },
+          "high": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "High"
+          },
+          "low": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Low"
+          },
           "material_id": {
             "format": "uuid",
             "title": "Material Id",
@@ -25858,6 +26073,17 @@
               }
             ],
             "title": "Quality Tier"
+          },
+          "series": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Series"
           },
           "source_detail": {
             "anyOf": [
@@ -40441,6 +40667,32 @@
         ]
       }
     },
+    "/api/catalog/condition-fields": {
+      "get": {
+        "description": "**문헌 조건 칸 목록** — 낱값 · 반입 묶음의 조건에 쓰는 이름(ADR 0071).\n\n정의의 조건축 밖이어도 이 이름이면 반입 미리보기가 경고하지 않는다. 같은 뜻을 같은 이름으로\n적어야 검색 · 비교에서 서로를 찾는다.",
+        "operationId": "list_condition_fields_api_catalog_condition_fields_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CatalogConditionFieldOut"
+                  },
+                  "title": "Response List Condition Fields Api Catalog Condition Fields Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Condition Fields",
+        "tags": [
+          "catalog"
+        ]
+      }
+    },
     "/api/catalog/coverage": {
       "get": {
         "description": "계통-도메인 값 수 격자 — 이 카탈로그가 어디에 두껍고 어디가 비었나.",
@@ -41494,7 +41746,7 @@
         ]
       },
       "get": {
-        "description": "재료 하나의 모든 물성값 — 값·조건·등급·출처가 한 줄이다.\n\n**후보를 숨기지 않는다.** 같은 물성에 값이 여럿이면 전부 준다 — 어느 것을\n대표로 볼지는 화면(다음 단계)이 이유와 함께 보여 준다.",
+        "description": "재료 하나의 모든 물성값 — 값·조건·등급·출처가 한 줄이다.\n\n**후보를 숨기지 않는다.** 같은 물성에 값이 여럿이면 전부 준다 — 어느 것을\n대표로 볼지는 화면(다음 단계)이 이유와 함께 보여 준다.\n\n**곡선 · 산점의 점은 싣지 않는다**(ADR 0072) — 대표로 뽑힌 곡선 점만 온다. 점마다\n출처 · 조건 · 갈리는 조건을 되풀이해 실어, 점 9,105개인 재료(Ti-6Al-4V L-PBF)가\n16 MB · 1.6 초였다(2026-10-24 실측). 점은 `GET /catalog/series/{id}/points`.",
         "operationId": "get_material_api_catalog_materials__material_id__get",
         "parameters": [
           {
@@ -43009,6 +43261,50 @@
           }
         },
         "summary": "Delete Catalog Series",
+        "tags": [
+          "catalog"
+        ]
+      }
+    },
+    "/api/catalog/series/{series_id}/points": {
+      "get": {
+        "description": "벌 하나의 점 — 머리와 함께, 축 차례로(ADR 0072).\n\n재료 상세는 점을 싣지 않는다. 화면은 그 벌을 펼칠 때 이것을 부른다. 점마다 출처 · 등급 ·\n방법을 되풀이하지 않는다 — 벌 전체가 하나다.",
+        "operationId": "catalog_series_points_api_catalog_series__series_id__points_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "series_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Series Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogSeriesPointsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Catalog Series Points",
         "tags": [
           "catalog"
         ]

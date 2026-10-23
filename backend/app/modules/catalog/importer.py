@@ -28,6 +28,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.modules.catalog import descriptions
+from app.modules.catalog.local_definitions import axis_extensions, extended_axes
 from app.modules.catalog.models import (
     QUALITY_TIERS,
     CatalogDefinition,
@@ -181,6 +182,8 @@ def run(db: Session, sqlite_path: str | Path) -> Report:
 
         defs = report.tables.setdefault("정의", TableReport())
         def_cache = existing(db, CatalogDefinition)
+        # 원본 축 뒤에 MatNexus 가 덧붙인 축(ADR 0071) — 덮어 쓰면 배포마다 사라진다.
+        extra = axis_extensions()
         seen: set[int] = set()
         for row in con.execute("select * from property_definition"):
             seen.add(row["id"])
@@ -199,7 +202,9 @@ def run(db: Session, sqlite_path: str | Path) -> Report:
                     # 원본 정의문은 **따로 든다** — 정의문 칸은 `_fill_description` 이 정한다.
                     "source_description": (row["description"] or "").strip() or None,
                     "test_standard": row["test_standard"],
-                    "condition_axes": parse_json(row["condition_axes"]),
+                    "condition_axes": extended_axes(
+                        row["key"], parse_json(row["condition_axes"]), extra
+                    ),
                     "source_created_at": parse_dt(row["created_at"]),
                 },
                 defs,

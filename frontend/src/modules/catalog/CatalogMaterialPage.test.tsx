@@ -18,6 +18,7 @@ import CatalogMaterialPage from '@/modules/catalog/CatalogMaterialPage'
 const material = vi.fn()
 const deleteValue = vi.fn()
 const deleteSeries = vi.fn()
+const seriesPoints = vi.fn()
 
 vi.mock('@/modules/catalog/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/modules/catalog/api')>()),
@@ -27,6 +28,7 @@ vi.mock('@/modules/catalog/api', async (importOriginal) => ({
     material: (...args: unknown[]) => material(...args),
     deleteValue: (...args: unknown[]) => deleteValue(...args),
     deleteSeries: (...args: unknown[]) => deleteSeries(...args),
+    seriesPoints: (...args: unknown[]) => seriesPoints(...args),
   },
 }))
 
@@ -150,7 +152,8 @@ beforeEach(() => {
   vi.clearAllMocks()
   material.mockResolvedValue(DETAIL)
   deleteValue.mockResolvedValue(undefined)
-  me = { id: 'u1', email: 'hong', display_name: '홍길동', is_system_admin: false, memberships: [] }
+  seriesPoints.mockResolvedValue({ series: null, points: [] })
+  me ={ id: 'u1', email: 'hong', display_name: '홍길동', is_system_admin: false, memberships: [] }
   // 단위 모드가 브라우저에 남는다 — 시험끼리 새지 않게 지운다.
   localStorage.clear()
 })
@@ -316,6 +319,7 @@ describe('요약 + 탭 (2026-10-22)', () => {
     conditions: { temperature_k: t },
     representative: false,
   })
+  // 곡선 점은 대표로 뽑힌 것(300 K)만 상세에 실린다(ADR 0072) — 나머지는 벌을 펼칠 때 받는다.
   const storage = (id: string, t: number, e: number) => ({
     ...DETAIL.values[0],
     id,
@@ -324,6 +328,8 @@ describe('요약 + 탭 (2026-10-22)', () => {
     value_num: e,
     conditions: { temperature_k: t },
     distinguishing: {},
+    representative: true,
+    n_candidates: 1,
     series_id: 'ssssssss-0000-0000-0000-000000000001',
     origin: 'local',
     created_by: '홍길동',
@@ -335,7 +341,6 @@ describe('요약 + 탭 (2026-10-22)', () => {
       conductivity('cccccccc-0000-0000-0000-000000000001', 300, 15),
       conductivity('cccccccc-0000-0000-0000-000000000002', 350, 16),
       conductivity('cccccccc-0000-0000-0000-000000000003', 400, 17),
-      storage('dddddddd-0000-0000-0000-000000000001', 250, 2e9),
       storage('dddddddd-0000-0000-0000-000000000002', 300, 1e9),
     ],
     series: [
@@ -345,8 +350,18 @@ describe('요약 + 탭 (2026-10-22)', () => {
         label: 'DMA 1 Hz 표',
         x_key: 'temperature_k',
         x_unit: 'K',
+        x_min: 250,
+        x_max: 300,
         columns: [
-          { property_key: 'mechanical.storage_modulus', property_name: '저장 탄성률', unit: 'Pa' },
+          {
+            property_key: 'mechanical.storage_modulus',
+            property_name: '저장 탄성률',
+            unit: 'Pa',
+            domain: 'mechanical',
+            count: 2,
+            low: 1e9,
+            high: 2e9,
+          },
         ],
         model: null,
         point_count: 2,
@@ -380,24 +395,49 @@ describe('요약 + 탭 (2026-10-22)', () => {
   it('곡선 · 표 — 직접 넣은 한 벌과 화면이 이은 선을 다른 이름으로 세우고, 넣은 사람이 벌째 지운다', async () => {
     material.mockResolvedValue(WITH_CURVES)
     deleteSeries.mockResolvedValue(undefined)
+    seriesPoints.mockResolvedValue({
+      series: WITH_CURVES.series[0],
+      points: [
+        { property_key: 'mechanical.storage_modulus', value: 2e9, unit: 'Pa', x: 250 },
+        { property_key: 'mechanical.storage_modulus', value: 1e9, unit: 'Pa', x: 300 },
+      ],
+    })
+    const { fireEvent, waitFor } = await import('@testing-library/react')
     show('curves')
     expect(await screen.findByText('DMA 1 Hz 표')).toBeInTheDocument()
     expect(screen.getByText('조건별 값을 이어 그림 (자동)')).toBeInTheDocument()
+    // 점은 상세가 아니라 그 벌에서 받는다 — 받은 점으로 표가 선다.
+    expect(seriesPoints).toHaveBeenCalledWith('ssssssss-0000-0000-0000-000000000001')
+    fireEvent.click(await screen.findByRole('button', { name: '표 보기' }))
+    const rows = within(screen.getAllByRole('table').at(-1) as HTMLElement).getAllByRole('row')
+    expect(rows).toHaveLength(3)
     // 열전도율 세 점(같은 출처 · 온도만 다름)이 화면이 이은 선 하나다.
     expect(screen.getByText('축 온도 · 선 1')).toBeInTheDocument()
     vi.spyOn(window, 'confirm').mockReturnValue(true)
-    const { fireEvent, waitFor } = await import('@testing-library/react')
     fireEvent.click(screen.getByRole('button', { name: 'DMA 1 Hz 표 묶음 삭제' }))
     await waitFor(() =>
       expect(deleteSeries).toHaveBeenCalledWith('ssssssss-0000-0000-0000-000000000001')
     )
   })
 
-  it('한 벌의 점은 낱개로 안 지운다 — 「묶음의 점」 으로 서고 지우기 단추가 없다', async () => {
+  it('한 벌의 점은 낱개로 안 지운다 — 대표로 실린 점은 「묶음의 점」 으로 서고 지우기 단추가 없다', async () => {
     material.mockResolvedValue(WITH_CURVES)
     show('values')
-    expect((await screen.findAllByText('묶음의 점')).length).toBe(2)
+    expect((await screen.findAllByText('묶음의 점')).length).toBe(1)
     expect(screen.queryByRole('button', { name: '저장 탄성률 값 삭제' })).toBeNull()
+    // 나머지 점은 여기 없다고 말한다.
+    expect(screen.getByText(/곡선 · 산점의 점 2개는 여기 없습니다/)).toBeInTheDocument()
+  })
+
+  it('요약의 값 수는 벌 머리의 점까지 — 대표로 실린 점을 두 번 세지 않는다', async () => {
+    material.mockResolvedValue(WITH_CURVES)
+    show('')
+    const summary = await screen.findByLabelText('문헌 재료 요약')
+    // 낱값 4 + 열전도율 3 + 곡선 점 2(대표로 실린 점 하나는 거기 든다).
+    expect(summary).toHaveTextContent('값 9')
+    expect(summary).toHaveTextContent('그중 곡선 · 산점의 점 2')
+    const row = screen.getByRole('button', { name: '저장 탄성률 펼치기' }).closest('tr') as HTMLElement
+    expect(within(row).getAllByRole('cell')[3]).toHaveTextContent('2')
   })
 
   it('출처 — 출처 하나에 한 줄, 값 수와 함께', async () => {
@@ -427,53 +467,78 @@ describe('요약 + 탭 (2026-10-22)', () => {
     expect(cell).toHaveAttribute('title', 'Kim (2020), CC BY 4.0')
   })
 
+  const scatter = (id: string, label: string) => ({
+    id,
+    kind: 'scatter',
+    label,
+    x_key: 'cycles',
+    x_unit: null,
+    x_min: 1.2e5,
+    x_max: 1e7,
+    columns: [
+      {
+        property_key: 'mechanical.fatigue_strength',
+        property_name: '피로강도',
+        unit: 'Pa',
+        domain: 'mechanical',
+        count: 2,
+        low: 2.5e8,
+        high: 4e8,
+      },
+    ],
+    model: null,
+    point_count: 2,
+    conditions: null,
+    method: 'digitized',
+    quality_tier: 3,
+    source: SOURCE,
+    source_detail: 'Fig. 5',
+    notes: null,
+    created_by: null,
+    created_at: '2026-10-23T00:00:00Z',
+    batch_key: 'materialcollector/fatigue-literature/2026-10-23',
+  })
+  const SN_POINTS = [
+    { property_key: 'mechanical.fatigue_strength', value: 4e8, unit: 'Pa', x: 1.2e5, row_conditions: null },
+    { property_key: 'mechanical.fatigue_strength', value: 2.5e8, unit: 'Pa', x: 1e7, row_conditions: { runout: true } },
+  ]
+
   it('산점 한 벌은 점으로 — 런아웃은 빈 점, 반입 묶음이면 묶음 키(ADR 0068)', async () => {
-    const point = (id: string, cycles: number, stress: number, runout = false) => ({
-      ...DETAIL.values[0],
-      id,
-      property_key: 'mechanical.fatigue_strength',
-      property_name: '피로강도',
-      value_num: stress,
-      conditions: { cycles, ...(runout ? { runout: true } : {}) },
-      distinguishing: {},
-      representative: false,
-      separated_by: '산점의 점',
-      series_id: 'scatter-1',
-    })
-    material.mockResolvedValue({
-      ...DETAIL,
-      values: [
-        ...DETAIL.values,
-        point('eeeeeeee-0000-0000-0000-000000000001', 1.2e5, 4e8),
-        point('eeeeeeee-0000-0000-0000-000000000002', 1e7, 2.5e8, true),
-      ],
-      series: [
-        {
-          id: 'scatter-1',
-          kind: 'scatter',
-          label: 'S-N R=-1',
-          x_key: 'cycles',
-          x_unit: null,
-          columns: [{ property_key: 'mechanical.fatigue_strength', property_name: '피로강도', unit: 'Pa' }],
-          model: null,
-          point_count: 2,
-          conditions: null,
-          method: 'digitized',
-          quality_tier: 3,
-          source: SOURCE,
-          source_detail: 'Fig. 5',
-          notes: null,
-          created_by: null,
-          created_at: '2026-10-23T00:00:00Z',
-          batch_key: 'materialcollector/fatigue-literature/2026-10-23',
-        },
-      ],
-    })
+    // 산점의 점은 상세에 하나도 안 실린다 — 벌을 펼칠 때 받는다(ADR 0072).
+    material.mockResolvedValue({ ...DETAIL, series: [scatter('scatter-1', 'S-N R=-1')] })
+    seriesPoints.mockResolvedValue({ series: null, points: SN_POINTS })
     show('curves')
     expect(await screen.findByText('S-N R=-1')).toBeInTheDocument()
     expect(screen.getByText(/반입 · materialcollector\/fatigue-literature/)).toBeInTheDocument()
-    const groups = screen.getAllByTestId('chart-dots')
+    const groups = await screen.findAllByTestId('chart-dots')
     expect(groups.map((one) => one.getAttribute('aria-label'))).toEqual(['파단', '런아웃'])
+  })
+
+  it('산점만 있는 물성도 요약에 선다 — 대표 없이, 수 · 축 범위는 벌 머리에서', async () => {
+    material.mockResolvedValue({ ...DETAIL, series: [scatter('scatter-1', 'S-N R=-1')] })
+    show('')
+    const button = await screen.findByRole('button', { name: '대표 없음 · 산점 1벌' })
+    const row = button.closest('tr') as HTMLElement
+    const cells = within(row).getAllByRole('cell')
+    expect(cells[0]).toHaveTextContent('피로강도')
+    expect(cells[3]).toHaveTextContent('2')
+    expect(cells[4]).toHaveTextContent(/수명\(반복수\)/)
+    // 요약 화면은 점을 받지 않는다.
+    expect(seriesPoints).not.toHaveBeenCalled()
+  })
+
+  it('벌이 많으면 앞의 넷만 점을 받고, 나머지는 펼칠 때 받는다', async () => {
+    const many = Array.from({ length: 6 }, (_, index) => scatter(`sn-${index}`, `S-N 벌 ${index}`))
+    material.mockResolvedValue({ ...DETAIL, series: many })
+    seriesPoints.mockResolvedValue({ series: null, points: SN_POINTS })
+    show('curves')
+    await screen.findByText('S-N 벌 5')
+    const { fireEvent, waitFor } = await import('@testing-library/react')
+    await waitFor(() => expect(seriesPoints).toHaveBeenCalledTimes(4))
+    expect(seriesPoints).not.toHaveBeenCalledWith('sn-4')
+    fireEvent.click(screen.getByRole('button', { name: 'S-N 벌 4 펼치기' }))
+    await waitFor(() => expect(seriesPoints).toHaveBeenCalledWith('sn-4'))
+    expect(seriesPoints).toHaveBeenCalledTimes(5)
   })
 
   it('전체 값 탭은 물성 이름으로 거른다', async () => {

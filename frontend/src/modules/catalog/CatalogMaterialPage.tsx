@@ -34,10 +34,12 @@ import { CATEGORY_LABELS, catalogApi } from '@/modules/catalog/api'
 import type { CatalogSeries, CatalogValue } from '@/modules/catalog/api'
 import {
   autoCurves,
+  pointSets,
   propertyGroups,
-  seriesCurves,
+  seriesLineCount,
   sourceRows,
   tierCounts,
+  valueTotal,
 } from '@/modules/catalog/catalogShape'
 import { UnitModeToggle, useUnitMode } from '@/modules/catalog/unitMode'
 import { useAuth } from '@/shared/auth/AuthContext'
@@ -92,14 +94,16 @@ export default function CatalogMaterialPage() {
 
   const values = useMemo(() => item?.values ?? [], [item])
   const series = useMemo(() => item?.series ?? [], [item])
-  const seriesLines = useMemo(() => seriesCurves(series, values), [series, values])
   const autoLines = useMemo(() => autoCurves(values), [values])
-  const groups = useMemo(
-    () => propertyGroups(values, [...seriesLines, ...autoLines]),
-    [values, seriesLines, autoLines]
-  )
-  const tiers = tierCounts(values)
-  const sourceCount = sourceRows(values).length
+  const groups = useMemo(() => propertyGroups(values, autoLines, series), [values, autoLines, series])
+  const tiers = tierCounts(values, series)
+  const sourceCount = sourceRows(values, series).length
+  // 곡선 · 산점의 점은 상세에 안 실린다(ADR 0072) — 수는 벌 머리에서.
+  const total = valueTotal(values, series)
+  const pointCount = pointSets(series).reduce((sum, one) => sum + one.point_count, 0)
+  const lineCount = seriesLineCount(series) + autoLines.length
+  const scatterCount = series.filter((one) => one.kind === 'scatter').length
+  const hasAny = values.length > 0 || series.length > 0
 
   /** 직접 넣은 낱값을 넣은 사람이거나 관리자면 지울 수 있다 — 서버가 다시 확인한다. 한 벌의 점은
    *  낱개로 안 지운다(벌째 지운다). */
@@ -197,16 +201,19 @@ export default function CatalogMaterialPage() {
       {item?.description && <p className="text-muted-foreground text-sm">{item.description}</p>}
 
       {/* **한눈에 무엇이 얼마나 있나** — 값 · 물성 · 곡선 · 출처 수와 등급 분포. */}
-      {item && item.values.length > 0 && (
+      {item && hasAny && (
         <div aria-label="문헌 재료 요약" className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
           <span>
-            값 <b className="tabular-nums">{values.length}</b>
+            값 <b className="tabular-nums">{total}</b>
+            {pointCount > 0 && (
+              <span className="text-muted-foreground"> (그중 곡선 · 산점의 점 {pointCount})</span>
+            )}
           </span>
           <span>
             물성 <b className="tabular-nums">{groups.length}</b>
           </span>
           <span>
-            곡선 <b className="tabular-nums">{seriesLines.length + autoLines.length}</b>
+            곡선 <b className="tabular-nums">{lineCount}</b>
             <span className="text-muted-foreground">
               {' '}
               (입력 {curveSets}벌 · 자동 {autoLines.length})
@@ -231,17 +238,17 @@ export default function CatalogMaterialPage() {
         </p>
       )}
 
-      {item && item.values.length === 0 && (
+      {item && !hasAny && (
         <div className="text-muted-foreground rounded-md border py-12 text-center text-sm">
           이 재료에 등록된 물성값이 없습니다.
         </div>
       )}
 
-      {item && item.values.length > 0 && (
+      {item && hasAny && (
         <Tabs value={tab} onValueChange={(next) => openTab(next as CatalogTab)}>
           <TabsList>
             <TabsTrigger value="summary">물성 요약 {groups.length}</TabsTrigger>
-            <TabsTrigger value="curves">곡선 · 표 {seriesLines.length + autoLines.length}</TabsTrigger>
+            <TabsTrigger value="curves">곡선 · 표 {lineCount + scatterCount}</TabsTrigger>
             <TabsTrigger value="sets">계수 묶음</TabsTrigger>
             <TabsTrigger value="sources">출처 {sourceCount}</TabsTrigger>
             <TabsTrigger value="values">전체 값 {values.length}</TabsTrigger>
@@ -258,8 +265,6 @@ export default function CatalogMaterialPage() {
           <TabsContent value="curves" className="mt-3 space-y-6">
             <CurvesPanel
               series={series}
-              values={values}
-              seriesLines={seriesLines}
               autoLines={autoLines}
               canRemove={canRemoveSeries}
               onRemove={(one) => void removeSeries(one)}
@@ -277,8 +282,6 @@ export default function CatalogMaterialPage() {
               <SeriesCard
                 key={one.id}
                 series={one}
-                values={values}
-                lines={[]}
                 canRemove={canRemoveSeries(one)}
                 onRemove={(target) => void removeSeries(target)}
               />
@@ -286,9 +289,15 @@ export default function CatalogMaterialPage() {
             <ParameterSetsSection materialId={id} />
           </TabsContent>
           <TabsContent value="sources" className="mt-3">
-            <SourcesTable values={values} />
+            <SourcesTable values={values} series={series} />
           </TabsContent>
-          <TabsContent value="values" className="mt-3">
+          <TabsContent value="values" className="mt-3 space-y-2">
+            {pointCount > 0 && (
+              <p className="text-muted-foreground text-xs">
+                곡선 · 산점의 점 {pointCount}개는 여기 없습니다 — 대표로 뽑힌 점만 서고, 나머지는 「곡선 ·
+                표」 탭에서 벌마다 봅니다.
+              </p>
+            )}
             <CatalogValueTable
               values={values}
               units={units}

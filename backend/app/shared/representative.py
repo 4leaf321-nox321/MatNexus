@@ -20,6 +20,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -244,6 +245,23 @@ def group(value: Any) -> tuple[str, str | None, str | None]:
         str(conditions.get("term")),
         str(conditions.get("unit_of_term") or ""),
     )
+
+
+def leaders(values: Iterable[Any], within: Callable[[Any], Any]) -> list[Any]:
+    """`within` 이 같은 값끼리 무리(`group`)마다 **순위가 가장 앞선 하나**만 — 후보를 줄인다.
+
+    한 벌(곡선)의 점처럼 출처 · 등급 · 방법이 같은 값은, 그 안에서 앞서지 못한 점이 무리
+    전체에서 이길 수 없다(순위는 차례 비교라 옮아간다). 앞선 점만 `annotate` 에 넣어도 대표가
+    같다 — 점 5,051개를 다 넣던 상세가 그 계산에 시간의 절반을 썼다(ADR 0072).
+    """
+    best: dict[Any, tuple[tuple[float, ...], Any]] = {}
+    for one in values:
+        slot = (within(one), group(one))
+        ranked = _rank(one)
+        # 동률이면 먼저 온 것 — `annotate` 의 안정 정렬과 같다.
+        if slot not in best or ranked < best[slot][0]:
+            best[slot] = (ranked, one)
+    return [one for _, one in best.values()]
 
 
 def annotate(values: list[Any]) -> dict[Any, Annotation]:

@@ -5,6 +5,7 @@
  *   나머지 조건이 다르면 다른 선                   노화 조건 · 범위 하한/상한이 섞이면 거짓 곡선
  *   한 값은 한 선에만                              온도로도 속도로도 이을 수 있으면 긴 쪽
  *   직접 넣은 한 벌 · 계수 항 · 원본에서 빠진 값은 안 잇는다
+ *   벌의 점은 머리로 센다(ADR 0072)               대표로 실린 곡선 점을 두 번 세지 않는다
  */
 
 import { describe, expect, it } from 'vitest'
@@ -13,11 +14,12 @@ import {
   autoCurves,
   propertyGroups,
   scatterSets,
-  seriesCurves,
+  seriesLines,
   sourceRows,
   tierCounts,
+  valueTotal,
 } from '@/modules/catalog/catalogShape'
-import type { CatalogSeries, CatalogValue } from '@/modules/catalog/api'
+import type { CatalogSeries, CatalogSeriesPoint, CatalogValue } from '@/modules/catalog/api'
 
 const SOURCE = {
   id: 's1',
@@ -135,34 +137,46 @@ describe('화면이 이은 선', () => {
   })
 })
 
+function point(propertyKey: string, x: number, y: number, row?: Record<string, unknown>): CatalogSeriesPoint {
+  return { property_key: propertyKey, value: y, unit: 'Pa', x, row_conditions: row ?? null }
+}
+
+const DMA = {
+  id: 'c1',
+  kind: 'curve',
+  label: 'DMA 1 Hz',
+  x_key: 'temperature_k',
+  x_min: 250,
+  x_max: 300,
+  columns: [
+    { property_key: 'mechanical.storage_modulus', property_name: '저장 탄성률', unit: 'Pa', count: 2 },
+    { property_key: 'mechanical.loss_tangent', property_name: '손실계수', unit: '1', count: 2 },
+  ],
+  point_count: 4,
+  quality_tier: 2,
+  method: 'digitized',
+  source: SOURCE,
+} as unknown as CatalogSeries
+
 describe('직접 넣은 한 벌', () => {
-  it('곡선의 열마다 선 하나, 계수 묶음은 선이 아니다', () => {
-    const series = [
-      {
-        id: 'c1',
-        kind: 'curve',
-        label: 'DMA 1 Hz',
-        x_key: 'temperature_k',
-        columns: [
-          { property_key: 'mechanical.storage_modulus', property_name: '저장 탄성률', unit: 'Pa' },
-          { property_key: 'mechanical.loss_tangent', property_name: '손실계수', unit: '1' },
-        ],
-      },
-      { id: 'p1', kind: 'parameter_set', label: 'Anand', x_key: null, columns: [] },
-    ] as unknown as CatalogSeries[]
-    const values = [250, 300].flatMap((t) => [
-      value({
-        property_key: 'mechanical.storage_modulus',
-        series_id: 'c1',
-        conditions: { temperature_k: t },
-      }),
-      value({ property_key: 'mechanical.loss_tangent', series_id: 'c1', conditions: { temperature_k: t } }),
+  it('곡선의 열마다 선 하나 — 받은 점으로, 축 차례로', () => {
+    const points = [300, 250].flatMap((t) => [
+      point('mechanical.storage_modulus', t, t * 1e6),
+      point('mechanical.loss_tangent', t, 0.1),
     ])
-    const lines = seriesCurves(series, values)
-    expect(lines.map((line) => [line.propertyKey, line.points.length, line.seriesId])).toEqual([
-      ['mechanical.storage_modulus', 2, 'c1'],
-      ['mechanical.loss_tangent', 2, 'c1'],
+    const lines = seriesLines(DMA, points)
+    expect(lines.map((line) => [line.propertyKey, line.points, line.seriesId, line.tier])).toEqual([
+      ['mechanical.storage_modulus', [[250, 2.5e8], [300, 3e8]], 'c1', 2],
+      ['mechanical.loss_tangent', [[250, 0.1], [300, 0.1]], 'c1', 2],
     ])
+  })
+
+  it('계수 묶음 · 산점은 선이 아니다', () => {
+    const anand = { ...DMA, id: 'p1', kind: 'parameter_set', x_key: null } as CatalogSeries
+    const sn = { ...DMA, id: 's1', kind: 'scatter' } as CatalogSeries
+    const points = [point('mechanical.storage_modulus', 1, 1)]
+    expect(seriesLines(anand, points)).toEqual([])
+    expect(seriesLines(sn, points)).toEqual([])
   })
 })
 
@@ -183,11 +197,73 @@ describe('물성 요약 · 출처', () => {
       'mechanical.youngs_modulus',
       'mechanical.anand_constant',
     ])
-    expect(groups[0].head.value_num).toBe(2e11)
+    expect(groups[0].head?.value_num).toBe(2e11)
     expect(groups[0].tiers).toEqual([1, 3])
     expect(groups[0].ranges).toEqual([{ key: 'temperature_k', min: 298, max: 573 }])
     expect(groups[0].parameterized).toBe(false)
     expect(groups[1].parameterized).toBe(true)
+  })
+
+  it('벌의 점은 머리로 센다 — 대표로 실린 곡선 점을 두 번 세지 않고, 산점만 있는 물성도 선다', () => {
+    const sn = {
+      ...DMA,
+      id: 's1',
+      kind: 'scatter',
+      label: 'S-N',
+      x_key: 'cycles',
+      x_min: 1e5,
+      x_max: 1e7,
+      columns: [
+        {
+          property_key: 'mechanical.fatigue_strength',
+          property_name: '피로강도',
+          domain: 'mechanical',
+          unit: 'Pa',
+          count: 12,
+        },
+      ],
+      point_count: 12,
+      quality_tier: 3,
+    } as unknown as CatalogSeries
+    // 곡선 DMA 의 저장 탄성률 점 하나가 대표로 실렸다 — 나머지 점 셋은 상세에 없다.
+    const values = [
+      value({
+        property_key: 'mechanical.storage_modulus',
+        property_name: '저장 탄성률',
+        representative: true,
+        series_id: 'c1',
+        quality_tier: 2,
+        conditions: { temperature_k: 250 },
+      }),
+      value({ value_num: 2e11, representative: true }),
+    ]
+    const series = [DMA, sn]
+    const groups = propertyGroups(values, [], series)
+    const byKey = Object.fromEntries(groups.map((one) => [one.propertyKey, one]))
+    // 점 2(벌 머리) — 실린 대표 점을 또 세면 3 이다.
+    expect(byKey['mechanical.storage_modulus'].count).toBe(2)
+    expect(byKey['mechanical.storage_modulus'].curves).toBe(1)
+    expect(byKey['mechanical.loss_tangent'].head).toBeNull()
+    // 산점만 있는 물성 — 대표가 없고, 수 · 등급 · 축 범위는 머리에서.
+    const fatigue = byKey['mechanical.fatigue_strength']
+    expect([fatigue.head, fatigue.count, fatigue.points, fatigue.scatters, fatigue.curves]).toEqual([
+      null,
+      12,
+      12,
+      1,
+      0,
+    ])
+    expect(fatigue.name).toBe('피로강도')
+    expect(fatigue.tiers).toEqual([3])
+    expect(fatigue.ranges).toEqual([{ key: 'cycles', min: 1e5, max: 1e7 }])
+    // 값 수 · 등급 · 출처도 같은 규칙 — 낱값 1 + 점 4 + 점 12.
+    expect(valueTotal(values, series)).toBe(17)
+    expect([...tierCounts(values, series)]).toEqual([
+      [1, 1],
+      [2, 4],
+      [3, 12],
+    ])
+    expect(sourceRows(values, series).map((row) => [row.count, row.properties])).toEqual([[17, 4]])
   })
 
   it('출처마다 값 수 · 물성 수 · 등급, 값이 많은 출처부터', () => {
@@ -217,16 +293,15 @@ describe('산점 한 벌 (ADR 0068)', () => {
       x_key: 'cycles',
       columns: [{ property_key: 'mechanical.fatigue_strength', property_name: '피로강도', unit: 'Pa' }],
     } as unknown as CatalogSeries
-    const values = [
-      value({ property_key: 'mechanical.fatigue_strength', series_id: 'sn1', value_num: 2.5e8, conditions: { cycles: 1e7, runout: true } }),
-      value({ property_key: 'mechanical.fatigue_strength', series_id: 'sn1', value_num: 4e8, conditions: { cycles: 1.2e5 } }),
-      value({ property_key: 'mechanical.fatigue_strength', series_id: 'sn1', value_num: 2.45e8, conditions: { cycles: 1e7, runout: true } }),
+    const points = [
+      point('mechanical.fatigue_strength', 1e7, 2.5e8, { runout: true }),
+      point('mechanical.fatigue_strength', 1.2e5, 4e8),
+      point('mechanical.fatigue_strength', 1e7, 2.45e8, { runout: true, specimen: 'S7' }),
     ]
-    const [set] = scatterSets(series, values)
+    const [set] = scatterSets(series, points)
     expect(set.solid).toEqual([[1.2e5, 4e8]])
     expect(set.hollow).toHaveLength(2)
-    // 산점은 자동 선 · 곡선 선에 끼지 않는다.
-    expect(seriesCurves([series], values)).toEqual([])
-    expect(autoCurves(values)).toEqual([])
+    // 산점은 곡선 선에 끼지 않는다.
+    expect(seriesLines(series, points)).toEqual([])
   })
 })

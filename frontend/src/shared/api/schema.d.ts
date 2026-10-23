@@ -686,6 +686,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/catalog/condition-fields": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Condition Fields
+         * @description **문헌 조건 칸 목록** — 낱값 · 반입 묶음의 조건에 쓰는 이름(ADR 0071).
+         *
+         *     정의의 조건축 밖이어도 이 이름이면 반입 미리보기가 경고하지 않는다. 같은 뜻을 같은 이름으로
+         *     적어야 검색 · 비교에서 서로를 찾는다.
+         */
+        get: operations["list_condition_fields_api_catalog_condition_fields_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/catalog/coverage": {
         parameters: {
             query?: never;
@@ -1014,6 +1037,10 @@ export interface paths {
          *
          *     **후보를 숨기지 않는다.** 같은 물성에 값이 여럿이면 전부 준다 — 어느 것을
          *     대표로 볼지는 화면(다음 단계)이 이유와 함께 보여 준다.
+         *
+         *     **곡선 · 산점의 점은 싣지 않는다**(ADR 0072) — 대표로 뽑힌 곡선 점만 온다. 점마다
+         *     출처 · 조건 · 갈리는 조건을 되풀이해 실어, 점 9,105개인 재료(Ti-6Al-4V L-PBF)가
+         *     16 MB · 1.6 초였다(2026-10-24 실측). 점은 `GET /catalog/series/{id}/points`.
          */
         get: operations["get_material_api_catalog_materials__material_id__get"];
         put?: never;
@@ -1599,6 +1626,29 @@ export interface paths {
          *     같다).
          */
         delete: operations["delete_catalog_series_api_catalog_series__series_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/catalog/series/{series_id}/points": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Catalog Series Points
+         * @description 벌 하나의 점 — 머리와 함께, 축 차례로(ADR 0072).
+         *
+         *     재료 상세는 점을 싣지 않는다. 화면은 그 벌을 펼칠 때 이것을 부른다. 점마다 출처 · 등급 ·
+         *     방법을 되풀이하지 않는다 — 벌 전체가 하나다.
+         */
+        get: operations["catalog_series_points_api_catalog_series__series_id__points_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -10968,6 +11018,8 @@ export interface components {
             series: components["schemas"]["CatalogBatchCountOut"];
             sources: components["schemas"]["CatalogBatchCountOut"];
             values: components["schemas"]["CatalogBatchCountOut"];
+            /** Warnings */
+            warnings?: components["schemas"]["CatalogBatchWarningOut"][];
         };
         /**
          * CatalogBatchMaterialIn
@@ -11171,6 +11223,20 @@ export interface components {
             value_text?: string | null;
         };
         /**
+         * CatalogBatchWarningOut
+         * @description 막지는 않는 것 — 정의의 조건축 · 문헌 조건 칸 목록에 없는 조건 칸(ADR 0071).
+         */
+        CatalogBatchWarningOut: {
+            /** Count */
+            count: number;
+            /** Example */
+            example: string;
+            /** Key */
+            key: string;
+            /** Message */
+            message: string;
+        };
+        /**
          * CatalogCompareCellOut
          * @description 비교 표의 칸 하나 — 그 재료의 그 물성 대표값. 없으면 None 칸.
          */
@@ -11212,6 +11278,24 @@ export interface components {
             symbol: string | null;
             /** Unit */
             unit: string | null;
+        };
+        /**
+         * CatalogConditionFieldOut
+         * @description 문헌 조건 칸 하나 — 반입 묶음 · 낱값의 조건에 쓰는 이름(ADR 0071).
+         */
+        CatalogConditionFieldOut: {
+            /** Group */
+            group: string;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Note */
+            note?: string | null;
+            /** Unit */
+            unit?: string | null;
+            /** Values */
+            values?: string[];
         };
         /**
          * CatalogCoverageOut
@@ -11606,10 +11690,23 @@ export interface components {
         };
         /** CatalogSeriesColumnOut */
         CatalogSeriesColumnOut: {
+            /**
+             * Count
+             * @default 0
+             */
+            count: number;
+            /** Domain */
+            domain?: string | null;
+            /** High */
+            high?: number | null;
+            /** Low */
+            low?: number | null;
             /** Property Key */
             property_key: string;
             /** Property Name */
             property_name: string;
+            /** Symbol */
+            symbol?: string | null;
             /** Unit */
             unit: string | null;
         };
@@ -11716,6 +11813,10 @@ export interface components {
             source_detail: string | null;
             /** X Key */
             x_key: string | null;
+            /** X Max */
+            x_max?: number | null;
+            /** X Min */
+            x_min?: number | null;
             /** X Unit */
             x_unit?: string | null;
         };
@@ -11723,6 +11824,10 @@ export interface components {
         CatalogSeriesPointOut: {
             /** Property Key */
             property_key: string;
+            /** Row Conditions */
+            row_conditions?: {
+                [key: string]: unknown;
+            } | null;
             /** Term */
             term?: string | null;
             /** Term Unit */
@@ -11733,6 +11838,15 @@ export interface components {
             value: number;
             /** X */
             x?: number | null;
+        };
+        /**
+         * CatalogSeriesPointsOut
+         * @description 벌 하나의 점 — 상세에 안 싣고 화면이 그 벌을 열 때 받는다(ADR 0072).
+         */
+        CatalogSeriesPointsOut: {
+            /** Points */
+            points: components["schemas"]["CatalogSeriesPointOut"][];
+            series: components["schemas"]["CatalogSeriesOut"];
         };
         /** CatalogSeriesTermIn */
         CatalogSeriesTermIn: {
@@ -18701,6 +18815,10 @@ export interface components {
              * @default 1
              */
             count: number;
+            /** High */
+            high?: number | null;
+            /** Low */
+            low?: number | null;
             /**
              * Material Id
              * Format: uuid
@@ -18712,6 +18830,8 @@ export interface components {
             method?: string | null;
             /** Quality Tier */
             quality_tier?: number | null;
+            /** Series */
+            series?: string | null;
             /** Source Detail */
             source_detail?: string | null;
             /** Spread */
@@ -24835,6 +24955,26 @@ export interface operations {
             };
         };
     };
+    list_condition_fields_api_catalog_condition_fields_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CatalogConditionFieldOut"][];
+                };
+            };
+        };
+    };
     coverage_api_catalog_coverage_get: {
         parameters: {
             query?: never;
@@ -26281,6 +26421,37 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    catalog_series_points_api_catalog_series__series_id__points_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                series_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CatalogSeriesPointsOut"];
+                };
             };
             /** @description Validation Error */
             422: {

@@ -7,17 +7,29 @@
  *
  * 둘을 **다른 이름으로 세운다** — 화면이 이은 선을 저장된 곡선처럼 보이면, 숨은 조건(노화 · 시편)
  * 으로 갈렸어야 할 값이 한 선이라고 믿게 된다.
+ *
+ * **점은 벌을 펼칠 때 받는다**(ADR 0072). 재료 상세가 점을 다 실으면 벌 555개 · 점 9,105개인
+ * 재료가 16 MB 였다. 앞의 몇 벌만 펼쳐 두고, 벌은 20개씩 세운다.
  */
 
-import { Trash2 } from 'lucide-react'
+import { ChevronDown, ChevronRight, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 
-import type { CatalogSeries, CatalogValue } from '@/modules/catalog/api'
+import { catalogApi } from '@/modules/catalog/api'
+import type { CatalogSeries, CatalogSeriesPoint } from '@/modules/catalog/api'
 import { SourceLabel, TierBadge } from '@/modules/catalog/CatalogValueTable'
 import { METHOD_LABELS } from '@/modules/catalog/catalogForms'
-import { LOG_AXES, axisName, axisUnit, scatterSets } from '@/modules/catalog/catalogShape'
+import {
+  LOG_AXES,
+  axisName,
+  axisUnit,
+  pointSets,
+  scatterSets,
+  seriesLines,
+} from '@/modules/catalog/catalogShape'
 import type { CurveLine } from '@/modules/catalog/catalogShape'
 import { CurveChart } from '@/modules/tests/CurveChart'
+import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
 import {
@@ -28,10 +40,17 @@ import {
   TableHeader,
   TableRow,
 } from '@/shared/components/ui/table'
+import { useResource } from '@/shared/hooks/useResource'
 import { axisLabel, formatScalar, toDisplay } from '@/shared/units'
 
 /** 한 그래프에 겹칠 선의 상한 — 넘으면 앞의 것만 그리고 그렇다고 말한다. */
 const MAX_LINES = 12
+
+/** 처음부터 펼쳐 둘 벌 수 — 나머지는 머리만 서고, 펼치면 그때 점을 받는다. */
+const OPEN_FIRST = 4
+
+/** 한 번에 세울 벌 수 — 벌이 555개인 재료가 있다(2026-10-24). */
+const PAGE = 20
 
 /** 겹친 선의 색 — 첫 선은 그래프의 기본색, 나머지는 이 차례로. 범례의 칸도 같은 색이다. */
 const TONES = [
@@ -97,11 +116,11 @@ const KIND_LABELS: Record<string, string> = { curve: '곡선 · 표', scatter: '
  * **산점 한 벌**(S-N · ε-N) — 점을 잇지 않고, 런아웃은 빈 점으로(ADR 0068). 수명 축이면
  * 자릿수로 펼친다(log-log). 점 목록은 같은 x 가 여럿이라 줄마다 하나씩 보인다.
  */
-function ScatterView({ series, values }: { series: CatalogSeries; values: CatalogValue[] }) {
+function ScatterView({ series, points }: { series: CatalogSeries; points: CatalogSeriesPoint[] }) {
   const [table, setTable] = useState(false)
   const axis = series.x_key ?? ''
   const xUnit = axisUnit(axis)
-  const sets = scatterSets(series, values)
+  const sets = scatterSets(series, points)
   const log = LOG_AXES.has(axis)
   return (
     <div className="space-y-2">
@@ -178,42 +197,54 @@ function ScatterView({ series, values }: { series: CatalogSeries; values: Catalo
   )
 }
 
-/** 직접 넣은 한 벌 — 머리 · 그래프(곡선이면) · 펼치는 표 · 지우기. */
+/**
+ * 직접 넣은 한 벌 — 머리 · 그래프(곡선이면) · 펼치는 표 · 지우기. 점은 펼칠 때 받는다(ADR 0072) —
+ * 한 번 받으면 접었다 펴도 다시 받지 않는다.
+ */
 export function SeriesCard({
   series,
-  values,
-  lines,
   canRemove,
   onRemove,
+  initiallyOpen = true,
 }: {
   series: CatalogSeries
-  values: CatalogValue[]
-  lines: CurveLine[]
   canRemove: boolean
   onRemove: (series: CatalogSeries) => void
+  initiallyOpen?: boolean
 }) {
+  const [open, setOpen] = useState(initiallyOpen)
+  const [wanted, setWanted] = useState(initiallyOpen)
   const [table, setTable] = useState(false)
-  const mine = values.filter((value) => value.series_id === series.id)
+  const loaded = useResource(
+    () => (wanted ? catalogApi.seriesPoints(series.id) : Promise.resolve(null)),
+    [series.id, wanted]
+  )
+  const points = loaded.data?.points ?? []
+  const lines = seriesLines(series, points)
   const xUnit = series.x_key ? axisUnit(series.x_key) : null
-  const xs = series.x_key
-    ? [
-        ...new Set(
-          mine
-            .map((value) => (value.conditions as Record<string, unknown> | null)?.[series.x_key ?? ''])
-            .filter((x): x is number => typeof x === 'number')
-        ),
-      ].sort((left, right) => left - right)
-    : []
-  const at = (x: number, key: string) =>
-    mine.find(
-      (value) =>
-        value.property_key === key &&
-        (value.conditions as Record<string, unknown> | null)?.[series.x_key ?? ''] === x
-    )
+  const xs = [...new Set(points.map((point) => point.x).filter((x): x is number => x != null))].sort(
+    (left, right) => left - right
+  )
+  const at = (x: number, key: string) => points.find((point) => point.property_key === key && point.x === x)
+
+  function toggle() {
+    setOpen((current) => !current)
+    setWanted(true)
+  }
+
   return (
     <div className="space-y-2 rounded-md border p-3">
       <div className="flex flex-wrap items-center gap-2">
-        <h3 className="font-medium">{series.label}</h3>
+        <button
+          type="button"
+          className="flex items-center gap-1 text-left font-medium hover:underline"
+          aria-expanded={open}
+          aria-label={`${series.label} ${open ? '접기' : '펼치기'}`}
+          onClick={toggle}
+        >
+          {open ? <ChevronDown className="size-3.5 shrink-0" /> : <ChevronRight className="size-3.5 shrink-0" />}
+          <h3>{series.label}</h3>
+        </button>
         <Badge variant="secondary">
           {KIND_LABELS[series.kind] ?? `계수 묶음 · ${series.model ?? ''}`}
         </Badge>
@@ -242,88 +273,95 @@ export function SeriesCard({
         )}
       </div>
       <SourceLabel source={series.source ?? null} detail={series.source_detail} />
-      {series.kind === 'scatter' && <ScatterView series={series} values={values} />}
-      {lines.length > 0 && (
-        <div className="grid gap-3 lg:grid-cols-2">
-          {lines.map((line) => (
-            <LinesChart key={line.id} lines={[{ ...line, label: line.name }]} />
-          ))}
-        </div>
-      )}
-      {series.kind === 'curve' && series.x_key && (
-        <>
-          <button
-            type="button"
-            className="text-primary text-xs underline-offset-2 hover:underline"
-            aria-expanded={table}
-            onClick={() => setTable((current) => !current)}
-          >
-            {table ? '표 접기' : '표 보기'}
-          </button>
-          {table && (
-            <div className="max-h-80 overflow-auto rounded-md border">
-              <Table className="text-sm">
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>{axisLabel(axisName(series.x_key), xUnit)}</TableHead>
-                    {series.columns.map((column) => (
-                      <TableHead key={column.property_key} className="text-right">
-                        {axisLabel(column.property_name, column.unit)}
-                      </TableHead>
-                    ))}
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {xs.map((x) => (
-                    <TableRow key={x}>
-                      <TableCell className="tabular-nums">{formatScalar(x, xUnit ?? undefined)}</TableCell>
-                      {series.columns.map((column) => {
-                        const point = at(x, column.property_key)
-                        return (
-                          <TableCell key={column.property_key} className="text-right tabular-nums">
-                            {point?.value_num == null ? '—' : formatScalar(point.value_num, column.unit ?? undefined)}
-                          </TableCell>
-                        )
-                      })}
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </>
-      )}
-      {series.kind === 'parameter_set' && (
-        <ul className="grid gap-x-6 gap-y-0.5 text-sm sm:grid-cols-3">
-          {mine.map((value) => (
-            <li key={value.id} className="tabular-nums">
-              <span className="font-medium">{value.term ?? value.property_name}</span> = {value.value_num}
-              {value.term_unit && value.term_unit !== '1' ? ` ${value.term_unit}` : ''}
-              {!value.term_unit && value.unit && value.unit !== '1' ? ` ${value.unit}` : ''}
-            </li>
-          ))}
-        </ul>
-      )}
+      {open && body()}
     </div>
   )
+
+  function body() {
+    if (loaded.error) return <ErrorNotice error={loaded.error} />
+    if (!loaded.data) return <p className="text-muted-foreground text-xs">점을 받는 중…</p>
+    return (
+      <>
+        {series.kind === 'scatter' && <ScatterView series={series} points={points} />}
+        {lines.length > 0 && (
+          <div className="grid gap-3 lg:grid-cols-2">
+            {lines.map((line) => (
+              <LinesChart key={line.id} lines={[{ ...line, label: line.name }]} />
+            ))}
+          </div>
+        )}
+        {series.kind === 'curve' && series.x_key && (
+          <>
+            <button
+              type="button"
+              className="text-primary text-xs underline-offset-2 hover:underline"
+              aria-expanded={table}
+              onClick={() => setTable((current) => !current)}
+            >
+              {table ? '표 접기' : '표 보기'}
+            </button>
+            {table && (
+              <div className="max-h-80 overflow-auto rounded-md border">
+                <Table className="text-sm">
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>{axisLabel(axisName(series.x_key), xUnit)}</TableHead>
+                      {series.columns.map((column) => (
+                        <TableHead key={column.property_key} className="text-right">
+                          {axisLabel(column.property_name, column.unit)}
+                        </TableHead>
+                      ))}
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {xs.map((x) => (
+                      <TableRow key={x}>
+                        <TableCell className="tabular-nums">{formatScalar(x, xUnit ?? undefined)}</TableCell>
+                        {series.columns.map((column) => {
+                          const point = at(x, column.property_key)
+                          return (
+                            <TableCell key={column.property_key} className="text-right tabular-nums">
+                              {point ? formatScalar(point.value, column.unit ?? undefined) : '—'}
+                            </TableCell>
+                          )
+                        })}
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </>
+        )}
+        {series.kind === 'parameter_set' && (
+          <ul className="grid gap-x-6 gap-y-0.5 text-sm sm:grid-cols-3">
+            {points.map((point, index) => (
+              <li key={`${point.property_key}-${point.term ?? index}`} className="tabular-nums">
+                <span className="font-medium">{point.term ?? point.property_key}</span> = {point.value}
+                {point.term_unit && point.term_unit !== '1' ? ` ${point.term_unit}` : ''}
+                {!point.term_unit && point.unit && point.unit !== '1' ? ` ${point.unit}` : ''}
+              </li>
+            ))}
+          </ul>
+        )}
+      </>
+    )
+  }
 }
 
 export function CurvesPanel({
   series,
-  values,
-  seriesLines,
   autoLines,
   canRemove,
   onRemove,
 }: {
   series: CatalogSeries[]
-  values: CatalogValue[]
-  seriesLines: CurveLine[]
   autoLines: CurveLine[]
   canRemove: (series: CatalogSeries) => boolean
   onRemove: (series: CatalogSeries) => void
 }) {
-  const curves = series.filter((one) => one.kind === 'curve' || one.kind === 'scatter')
+  const curves = pointSets(series)
+  const [shown, setShown] = useState(PAGE)
   // 화면이 이은 선은 물성 · 축마다 한 판에.
   const panels = new Map<string, CurveLine[]>()
   for (const line of autoLines) {
@@ -344,16 +382,27 @@ export function CurvesPanel({
             아직 없습니다. 「곡선 입력」 으로 문헌의 곡선 · 표를 한 벌로 넣을 수 있습니다.
           </p>
         ) : (
-          curves.map((one) => (
-            <SeriesCard
-              key={one.id}
-              series={one}
-              values={values}
-              lines={seriesLines.filter((line) => line.seriesId === one.id)}
-              canRemove={canRemove(one)}
-              onRemove={onRemove}
-            />
-          ))
+          <>
+            {curves.length > OPEN_FIRST && (
+              <p className="text-muted-foreground text-xs">
+                앞의 {OPEN_FIRST}벌만 펼쳐 두었습니다 — 나머지는 이름을 누르면 점을 받아 그립니다.
+              </p>
+            )}
+            {curves.slice(0, shown).map((one, index) => (
+              <SeriesCard
+                key={one.id}
+                series={one}
+                canRemove={canRemove(one)}
+                onRemove={onRemove}
+                initiallyOpen={index < OPEN_FIRST}
+              />
+            ))}
+            {curves.length > shown && (
+              <Button size="sm" variant="outline" onClick={() => setShown((current) => current + PAGE)}>
+                더 보기 (남은 {curves.length - shown}벌)
+              </Button>
+            )}
+          </>
         )}
       </section>
 

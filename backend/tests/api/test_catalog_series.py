@@ -100,13 +100,14 @@ class Test곡선:
         series = body["series"]
         assert series["kind"] == "curve" and series["point_count"] == 3
         assert series["x_key"] == "temperature_k" and series["x_unit"] == "K"
-        assert series["columns"] == [
-            {
-                "property_key": "mechanical.youngs_modulus",
-                "property_name": "탄성계수",
-                "unit": "Pa",
-            }
-        ]
+        assert [
+            (one["property_key"], one["property_name"], one["unit"], one["count"])
+            for one in series["columns"]
+        ] == [("mechanical.youngs_modulus", "탄성계수", "Pa", 3)]
+        # 요약 화면이 점 없이 쓸 범위 — 값은 저장 단위, 축은 축 단위(ADR 0072).
+        column = series["columns"][0]
+        assert (column["low"], column["high"]) == pytest.approx((4.0e10, 5.0e10))
+        assert (series["x_min"], series["x_max"]) == pytest.approx((298.15, 423.15))
         # 축은 °C → K, 값은 GPa → Pa, 축 차례로.
         assert [one["x"] for one in body["points"]] == pytest.approx([298.15, 373.15, 423.15])
         assert [one["value"] for one in body["points"]] == pytest.approx(
@@ -127,7 +128,22 @@ class Test곡선:
         detail = client.get(f"/api/catalog/materials/{lit.id}", headers=admin_headers).json()
         assert [one["id"] for one in detail["series"]] == [series["id"]]
         assert detail["series"][0]["source"]["title"] == SOURCE["title"]
-        assert sum(1 for one in detail["values"] if one["series_id"] == series["id"]) == 3
+        # **상세에는 점이 안 실린다** — 대표로 뽑힌 점(실온) 하나만(ADR 0072).
+        mine = [one for one in detail["values"] if one["series_id"] == series["id"]]
+        assert [(one["value_num"], one["representative"]) for one in mine] == [
+            (pytest.approx(5.0e10), True)
+        ]
+        # 점은 벌마다 따로, 축 차례로.
+        points = client.get(
+            f"/api/catalog/series/{series['id']}/points", headers=admin_headers
+        ).json()
+        assert points["series"]["point_count"] == 3
+        assert [one["x"] for one in points["points"]] == pytest.approx(
+            [298.15, 373.15, 423.15]
+        )
+        assert [one["value"] for one in points["points"]] == pytest.approx(
+            [5.0e10, 4.5e10, 4.0e10]
+        )
 
     def test_미리보기는_같은_검사를_하고_남기지_않는다(
         self,
@@ -296,17 +312,12 @@ class Test계수_묶음:
         points = {one["term"]: one for one in made.json()["points"]}
         assert points["tau1"]["value"] == pytest.approx(0.01)
         assert points["tau1"]["unit"] == "s"
-        assert made.json()["series"]["columns"] == [
-            {
-                "property_key": "mechanical.prony_relative_modulus",
-                "property_name": "Prony 상대 탄성률",
-                "unit": "1",
-            },
-            {
-                "property_key": "mechanical.prony_relaxation_time",
-                "property_name": "Prony 완화시간",
-                "unit": "s",
-            },
+        assert [
+            (one["property_key"], one["property_name"], one["unit"], one["count"])
+            for one in made.json()["series"]["columns"]
+        ] == [
+            ("mechanical.prony_relative_modulus", "Prony 상대 탄성률", "1", 1),
+            ("mechanical.prony_relaxation_time", "Prony 완화시간", "s", 1),
         ]
 
 

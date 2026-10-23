@@ -25,13 +25,15 @@ from datetime import UTC, datetime
 from typing import Any
 
 from pydantic import BaseModel
-from sqlalchemy import Text, cast, delete, func, select, update
+from sqlalchemy import Text, and_, cast, delete, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.modules.accounts.models import User
 from app.modules.catalog import contribute, parameters
+from app.modules.catalog.local_definitions import condition_keys
 from app.modules.catalog.models import (
     CatalogBatch,
+    CatalogDefinition,
     CatalogLink,
     CatalogMaterial,
     CatalogSeries,
@@ -47,13 +49,14 @@ from app.modules.catalog.schemas import (
     CatalogBatchMaterialIn,
     CatalogBatchOut,
     CatalogBatchProblemOut,
+    CatalogBatchWarningOut,
     CatalogMaterialCreate,
     CatalogSeriesCreate,
     CatalogSourceIn,
     CatalogValueCreate,
 )
 from app.modules.materials.models import Material, Sample
-from app.shared import audit, declared_approval, permissions
+from app.shared import audit, declared_approval, permissions, representative
 from app.shared.errors import AppError, Conflict, NotFound
 
 #: 보고서에 실을 문제의 상한 — 넘으면 앞의 것만 싣고 수를 말한다.
@@ -165,6 +168,63 @@ def _duplicate_keys(bundle: CatalogBatchBundleIn, run: _Run) -> None:
                 )
 
 
+def _condition_warnings(
+    db: Session, bundle: CatalogBatchBundleIn
+) -> list[CatalogBatchWarningOut]:
+    """정의의 조건축에도 문헌 조건 칸 목록에도 없는 조건 칸(ADR 0071) — 막지 않고 센다.
+
+    서버는 자유 칸이라 받지만, 같은 뜻이 다른 이름으로 들어오면 검색 · 비교에서 갈린다.
+    """
+    known = condition_keys()
+    axes: dict[str, set[str]] = {}
+
+    def allowed(keys: list[str]) -> set[str]:
+        out: set[str] = set(known)
+        for key in keys:
+            if key not in axes:
+                found = db.scalar(
+                    select(CatalogDefinition.condition_axes).where(
+                        CatalogDefinition.key == key
+                    )
+                )
+                axes[key] = set(found or [])
+            out |= axes[key]
+        return out
+
+    counts: Counter[str] = Counter()
+    example: dict[str, str] = {}
+    items: list[tuple[str, list[str], dict[str, Any]]] = [
+        (one.key, [one.property_key], one.conditions or {}) for one in bundle.values
+    ]
+    items += [
+        (
+            one.key,
+            [column.property_key for column in one.columns]
+            + ([one.property_key] if one.property_key else []),
+            one.conditions or {},
+        )
+        for one in bundle.series
+    ]
+    for key, properties, conditions in items:
+        fine = allowed(properties)
+        for name in conditions:
+            if name in fine or representative.is_bookkeeping(name):
+                continue
+            counts[name] += 1
+            example.setdefault(name, key)
+    return [
+        CatalogBatchWarningOut(
+            key=name,
+            count=count,
+            example=example[name],
+            message=f"조건 칸 '{name}' 은 정의의 축 · 문헌 조건 칸 목록에 없습니다 — "
+            "받지만 같은 뜻의 다른 이름과 검색 · 비교에서 갈립니다"
+            "(GET /catalog/condition-fields).",
+        )
+        for name, count in counts.most_common(MAX_PROBLEMS)
+    ]
+
+
 def import_bundle(
     db: Session, bundle: CatalogBatchBundleIn, user: User, *, dry_run: bool
 ) -> CatalogBatchImportOut:
@@ -195,6 +255,7 @@ def import_bundle(
         licenses=dict(sorted(licenses.items())),
         attached=run.attached,
         problems=run.problems,
+        warnings=_condition_warnings(db, bundle),
     )
     if not applied:
         db.rollback()
@@ -547,11 +608,32 @@ def delete_batch(db: Session, key: str, user: User, *, dry_run: bool) -> Catalog
             details={"linked": linked},
         )
     series_count = _count(db, CatalogSeries, batch)
+    # **이 묶음 값이 쓰던 출처**도 본다. 같은 DOI 를 여러 묶음이 쓰면 출처는 첫 묶음이
+    # 만들고 뒤 묶음은 그것을 다시 쓴다 — 첫 묶음을 먼저 지워도 출처는 남아야 하고(아직
+    # 쓰인다), 마지막 묶음을 지울 때는 함께 사라져야 한다(2026-10-24, 수집기 확인 요청).
+    # 전에는 첫 묶음이 표지를 걷어 버려 마지막 묶음이 그 출처를 몰랐고, 값 없는 출처가
+    # 남았다.
+    borrowed = set(
+        db.scalars(
+            select(CatalogValue.source_id)
+            .where(CatalogValue.batch_id == batch.id, CatalogValue.source_id.is_not(None))
+            .distinct()
+        )
+    )
     db.execute(delete(CatalogValue).where(CatalogValue.batch_id == batch.id))
     db.execute(delete(CatalogSeries).where(CatalogSeries.batch_id == batch.id))
     db.flush()
     sources = 0
-    for source in db.scalars(select(CatalogSource).where(CatalogSource.batch_id == batch.id)):
+    # 묶음이 만든 출처만 지운다(`batch_id` 가 있는 것) — 손으로 넣었거나 이관해 온 출처는 값이
+    # 없어져도 남긴다.
+    for source in db.scalars(
+        select(CatalogSource).where(
+            or_(
+                CatalogSource.batch_id == batch.id,
+                and_(CatalogSource.id.in_(borrowed), CatalogSource.batch_id.is_not(None)),
+            )
+        )
+    ):
         used = db.scalar(
             select(func.count())
             .select_from(CatalogValue)
@@ -577,11 +659,8 @@ def delete_batch(db: Session, key: str, user: User, *, dry_run: bool) -> Catalog
             material.batch_id = None
             material.external_key = None
             material.external_hash = None
-    db.execute(
-        update(CatalogSource)
-        .where(CatalogSource.batch_id == batch.id)
-        .values(batch_id=None, external_key=None, external_hash=None)
-    )
+    # 아직 쓰이는 출처는 **표지를 남긴다** — 그 출처를 마지막에 쓰는 묶음이 지워질 때 찾을 수
+    # 있어야 하고, 이 묶음을 다시 들이면 같은 외부 키로 그 출처를 다시 잡는다.
     out = CatalogBatchDeleteOut(
         batch_key=batch.key,
         dry_run=dry_run,

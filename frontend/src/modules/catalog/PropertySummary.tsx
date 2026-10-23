@@ -119,8 +119,17 @@ export function PropertySummary({
                             >
                               계수 묶음 · 항 {group.values.length}
                             </button>
-                          ) : (
+                          ) : group.head ? (
                             <ValueText value={group.head} units={units} />
+                          ) : (
+                            // 산점의 점만 있는 물성 — 점은 대표가 아니다(ADR 0068).
+                            <button
+                              type="button"
+                              className="text-primary hover:underline"
+                              onClick={() => onOpenTab('curves')}
+                            >
+                              대표 없음 · 산점 {group.scatters}벌
+                            </button>
                           )}
                         </TableCell>
                         <TableCell>
@@ -136,7 +145,7 @@ export function PropertySummary({
                             ))}
                           </div>
                         </TableCell>
-                        <TableCell className="text-right tabular-nums">{group.values.length}</TableCell>
+                        <TableCell className="text-right tabular-nums">{group.count}</TableCell>
                         <TableCell>
                           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                             {group.ranges.length === 0 ? (
@@ -156,20 +165,36 @@ export function PropertySummary({
                                 곡선 {group.curves}
                               </button>
                             )}
+                            {group.scatters > 0 && group.head && (
+                              <button
+                                type="button"
+                                className="text-primary hover:underline"
+                                onClick={() => onOpenTab('curves')}
+                              >
+                                산점 {group.scatters}벌
+                              </button>
+                            )}
                           </div>
                         </TableCell>
                       </TableRow>
                       {expanded && (
                         <TableRow>
-                          <TableCell colSpan={5} className="bg-muted/30">
-                            <ValueTableFrame>
-                              <ValueRows
-                                values={group.values}
-                                units={units}
-                                canRemove={canRemove}
-                                onRemove={onRemove}
-                              />
-                            </ValueTableFrame>
+                          <TableCell colSpan={5} className="bg-muted/30 space-y-1">
+                            {group.values.length > 0 && (
+                              <ValueTableFrame>
+                                <ValueRows
+                                  values={group.values}
+                                  units={units}
+                                  canRemove={canRemove}
+                                  onRemove={onRemove}
+                                />
+                              </ValueTableFrame>
+                            )}
+                            {group.points > 0 && (
+                              <p className="text-muted-foreground text-xs">
+                                곡선 · 산점의 점 {group.points}개는 「곡선 · 표」 탭에서 벌마다 봅니다.
+                              </p>
+                            )}
                           </TableCell>
                         </TableRow>
                       )}

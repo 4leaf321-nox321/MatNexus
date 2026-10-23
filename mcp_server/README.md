@@ -102,7 +102,7 @@ ms)를 알린다 — 「관리 → 사용 현황」 의 MCP 숫자가 여기서 
 도구의 답은 그대로 나간다. 도구 하나가 백엔드를 여러 번 부르므로 API 요청 수(`X-Client: mcp`)와
 도구 수는 다르다 — 둘 다 그 화면에 있다.
 
-## 5. 지금 있는 것 (도구 124개)
+## 5. 지금 있는 것 (도구 125개)
 
 **전부 한 번에 불러 보려면 `probe.py` 를 돌린다** — 진짜 MCP 클라이언트로 한 바퀴
 돈다(아래 「실측으로 잡은 것」 참조). 화면이나 curl 로는 안 보이는 층이 있다.
@@ -175,7 +175,8 @@ Family·Category·Grade·제조사·유통사·시편 규격은 **기준정보**
 ### 문헌 카탈로그 → 사내로 받아 오기
 
     search_catalog(query, category?)   문헌 재료 찾기 (출처·등급이 붙는다)
-    get_catalog_material(id, domain?)  물성 전부 — 값·조건·등급·출처
+    get_catalog_material(id, domain?)  물성 전부 — 값·조건·등급·출처. 곡선 · 산점은 벌 머리만
+    get_catalog_series(series_id)      곡선 · 산점 한 벌의 점(ADR 0072 — 상세에는 안 실린다)
     get_catalog_parameter_sets(id)     받아 갈 파라미터 벌 후보
     compare_catalog_materials(ids)     여럿을 한 표로 (최대 8종)
     match_bom(text)                    부품표를 붙여 후보를 찾는다

@@ -1,0 +1,13 @@
+[
+  {
+    "key": "mechanical.crack_growth_rate",
+    "axes": [
+      "delta_k_pa_sqrt_m",
+      "stress_ratio_R",
+      "temperature_k",
+      "frequency_hz",
+      "environment"
+    ],
+    "why": "da/dN-ΔK 곡선을 한 벌로 받으려면 ΔK 가 축이어야 한다 — 원본의 축은 솔더 열피로용(thermal_cycle_profile · statistic · solder_alloy)뿐이다(2026-10-24, ADR 0071)."
+  }
+]

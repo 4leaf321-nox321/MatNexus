@@ -337,6 +337,13 @@ class CatalogSeriesColumnOut(BaseModel):
     property_name: str
     unit: str | None
     """저장된 단위 — 정의의 단위."""
+    domain: str | None = None
+    symbol: str | None = None
+    count: int = 0
+    """이 열의 점 수. 점 자체는 상세에 안 실린다 — `GET /catalog/series/{id}/points`."""
+    low: float | None = None
+    high: float | None = None
+    """이 열의 값 범위(저장 단위). 요약 화면이 점을 받지 않고 「몇 ~ 몇」 을 쓴다."""
 
 
 class CatalogSeriesOut(BaseModel):
@@ -350,6 +357,9 @@ class CatalogSeriesOut(BaseModel):
     """곡선의 축 — 점의 조건 칸 이름(예: temperature_k · strain_pct)."""
     x_unit: str | None = None
     """축의 단위 — 키에서 안다(temperature_k → K). 모르는 축이면 비어 있다."""
+    x_min: float | None = None
+    x_max: float | None = None
+    """점들의 축 범위(축 단위)."""
     columns: list[CatalogSeriesColumnOut]
     model: str | None
     point_count: int
@@ -383,9 +393,11 @@ class CatalogMaterialDetailOut(BaseModel):
     표시만 하며, 빠진 값은 대표값 · 값 검색 · 커버리지에서 빠진다(2026-10-04)."""
     created_by: str | None = None
     values: list[CatalogValueOut]
+    """낱값과 계수 묶음의 항. **곡선 · 산점의 점은 대표값으로 뽑힌 것만** 온다(ADR 0072) —
+    벌의 점은 `GET /catalog/series/{id}/points` 로 따로 받는다."""
     series: list[CatalogSeriesOut] = Field(default_factory=list)
-    """직접 넣은 **이어진 값 한 벌**들(ADR 0067). 점은 `values` 에 `series_id` 로 섞여 온다 —
-    값 검색 · 대표값이 그 점을 낱값처럼 읽는다."""
+    """직접 넣은 **이어진 값 한 벌**들(ADR 0067). 점 수 · 값 범위는 머리에 있다. 값 검색 ·
+    대표값은 여전히 그 점을 낱값처럼 읽는다."""
 
 
 # --- 직접 넣기 (contribute.py) ------------------------------------------------
@@ -573,6 +585,17 @@ class CatalogSeriesPointOut(BaseModel):
     """곡선의 축 값(축 단위)."""
     term: str | None = None
     term_unit: str | None = None
+    row_conditions: dict[str, Any] | None = None
+    """줄마다 붙은 조건 — `runout` · `specimen` · `failure_mode`(ADR 0068). 벌 공통 조건은
+    머리에 있다."""
+
+
+class CatalogSeriesPointsOut(BaseModel):
+    """벌 하나의 점 — 상세에 안 싣고 화면이 그 벌을 열 때 받는다(ADR 0072)."""
+
+    series: CatalogSeriesOut
+    points: list[CatalogSeriesPointOut]
+    """축 차례. 출처 · 등급 · 방법은 벌 전체가 하나라 점마다 되풀이하지 않는다."""
 
 
 class CatalogSeriesCreatedOut(BaseModel):
@@ -900,6 +923,13 @@ class PropertyHitOut(BaseModel):
     method: str | None = None
     """`measured` 가 어떻게 쟀나 — 「항복강도 · offset_strain=0.002」. 같은 물성이라도
     방법이 다르면 값이 다르다."""
+    low: float | None = None
+    high: float | None = None
+    """묶인 값의 범위(**물어본 단위**). 문헌 벌의 점을 한 줄로 묶었을 때만(ADR 0072) —
+    `value` 는 그중 기준에 가장 가까운 점이다."""
+    series: str | None = None
+    """문헌 벌(곡선 · 산점)의 점을 묶은 줄이면 그 벌의 이름. `count` 가 그 벌에서 창에 든
+    점 수다."""
 
 
 class PropertySearchOut(BaseModel):
@@ -1089,6 +1119,16 @@ class CatalogBatchAttachedOut(BaseModel):
     name: str
 
 
+class CatalogBatchWarningOut(BaseModel):
+    """막지는 않는 것 — 정의의 조건축 · 문헌 조건 칸 목록에 없는 조건 칸(ADR 0071)."""
+
+    key: str
+    count: int
+    example: str
+    """처음 본 항목 키."""
+    message: str
+
+
 class CatalogBatchImportOut(BaseModel):
     """들이기의 결과 — 미리보기면 **들였을 때의 결과**이고 아무것도 남지 않는다."""
 
@@ -1108,6 +1148,8 @@ class CatalogBatchImportOut(BaseModel):
     """이미 있는 재료에 붙는 항목과 그 재료 이름. 번호가 하나 어긋나면(SUS304 ↔ SUS304L)
     남의 재료에 조용히 붙으므로 미리보기에서 이름을 대 본다."""
     problems: list[CatalogBatchProblemOut]
+    warnings: list[CatalogBatchWarningOut] = Field(default_factory=list)
+    """막지 않는 경고 — 조건 칸 이름이 정의의 축 · 문헌 조건 칸 목록 밖이다."""
 
 
 class CatalogBatchOut(BaseModel):
@@ -1134,3 +1176,14 @@ class CatalogBatchDeleteOut(BaseModel):
     values: int
     sources: int
     materials: int
+
+
+class CatalogConditionFieldOut(BaseModel):
+    """문헌 조건 칸 하나 — 반입 묶음 · 낱값의 조건에 쓰는 이름(ADR 0071)."""
+
+    key: str
+    group: str
+    label: str
+    unit: str | None = None
+    values: list[str] = Field(default_factory=list)
+    note: str | None = None

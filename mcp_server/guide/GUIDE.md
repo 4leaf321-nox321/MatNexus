@@ -216,10 +216,13 @@ origin `declared:literature+catalog1`). `adopt_catalog_values` 가 어느 문헌
 5. **미리보기(dry_run) 를 사람에게 보이고 나서 넣는다.**
 6. **곡선 · 표 · 계수 묶음은 한 벌로**(`add_catalog_series`, ADR 0067) — 점을 낱값으로 수십 번
    넣지 않는다. S-N 처럼 같은 x 가 여럿이면 `kind="scatter"` 와 줄마다 `runout`(ADR 0068).
+   넣은 점은 `get_catalog_material` 의 `values` 에 안 실린다(대표 점만, ADR 0072) — 확인은
+   `get_catalog_series(series_id)`. 값 검색에서도 한 벌의 점은 한 줄(`series` · `count`)이다.
 7. **공개 데이터셋은 라이선스를 적는다** — `source_license`(SPDX, 예 `CC-BY-4.0`) ·
    `source_attribution`. NC 라이선스는 서버가 거절한다. 수백 건이면 하나씩 넣지 말고 묶음 파일을
    `import_catalog_batch(path)` 로 한 번에(자료 관리자) — 다시 불러도 중복이 생기지 않는다.
    있던 재료는 원본 번호(`existing_mt_id`)로 가리키고, 미리보기의 `attached` 이름을 사람에게 보인다.
+   미리보기의 `warnings` 는 문헌 조건 칸 목록 밖의 이름이다 — 같은 뜻이 다른 이름으로 갈린다.
 
 직접 넣은 것은 `origin: local` 로 보이고, 넣은 사람과 관리자만 지울 수 있다. 이관해 온
 값은 원본(MaterialTwin)이 정본이라 못 지운다. 물성 키가 `local.` 으로 시작하면 MatNexus

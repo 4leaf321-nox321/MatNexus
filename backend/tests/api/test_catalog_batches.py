@@ -386,9 +386,24 @@ class Test산점:
         heads = [one for one in fatigue if one["representative"]]
         # 피로한도 낱값(240 MPa)이 대표 — S-N 점 넷은 대표 후보가 아니다.
         assert [one["value_num"] for one in heads] == [pytest.approx(2.4e8)]
-        assert {one["separated_by"] for one in fatigue if one["series_id"]} == {"산점의 점"}
-        assert detail["series"][0]["kind"] == "scatter"
-        assert detail["series"][0]["batch_key"] == KEY
+        # 산점의 점은 상세에 안 실린다(ADR 0072) — 머리에 점 수 · 범위가 있다.
+        assert [one for one in fatigue if one["series_id"]] == []
+        head = detail["series"][0]
+        assert (head["kind"], head["batch_key"], head["point_count"]) == ("scatter", KEY, 4)
+        assert (head["columns"][0]["low"], head["columns"][0]["high"]) == pytest.approx(
+            (2.45e8, 4.0e8)
+        )
+        assert (head["x_min"], head["x_max"]) == pytest.approx((1.2e5, 1e7))
+        points = client.get(
+            f"/api/catalog/series/{head['id']}/points", headers=admin_headers
+        ).json()["points"]
+        assert [one["x"] for one in points] == pytest.approx([1.2e5, 8.0e5, 1e7, 1e7])
+        # 줄마다 붙은 조건(런아웃 · 시편)만 점에 — 벌 공통 조건(R)은 머리에 있다.
+        assert [one["row_conditions"] for one in points[2:]] in (
+            [{"runout": True}, {"runout": True, "specimen": "S7"}],
+            [{"runout": True, "specimen": "S7"}, {"runout": True}],
+        )
+        assert points[0]["row_conditions"] is None
 
 
 class Test출처_라이선스:
