@@ -219,6 +219,7 @@ origin `declared:literature+catalog1`). `adopt_catalog_values` 가 어느 문헌
 7. **공개 데이터셋은 라이선스를 적는다** — `source_license`(SPDX, 예 `CC-BY-4.0`) ·
    `source_attribution`. NC 라이선스는 서버가 거절한다. 수백 건이면 하나씩 넣지 말고 묶음 파일을
    `import_catalog_batch(path)` 로 한 번에(자료 관리자) — 다시 불러도 중복이 생기지 않는다.
+   있던 재료는 원본 번호(`existing_mt_id`)로 가리키고, 미리보기의 `attached` 이름을 사람에게 보인다.
 
 직접 넣은 것은 `origin: local` 로 보이고, 넣은 사람과 관리자만 지울 수 있다. 이관해 온
 값은 원본(MaterialTwin)이 정본이라 못 지운다. 물성 키가 `local.` 으로 시작하면 MatNexus

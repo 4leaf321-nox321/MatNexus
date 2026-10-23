@@ -992,11 +992,16 @@ class CatalogBatchSourceIn(CatalogSourceIn):
 
 
 class CatalogBatchMaterialIn(BaseModel):
-    """새 문헌 재료, 또는 **이미 있는 문헌 재료**(`existing_id`)를 가리킨다 — 둘 중 하나."""
+    """새 문헌 재료, 또는 **이미 있는 문헌 재료**(`existing_mt_id` · `existing_id`)를 가리킨다
+    — 둘 중 하나."""
 
     key: str = Field(pattern=_ITEM_KEY)
     existing_id: uuid.UUID | None = None
-    """이미 있는 문헌 재료에 붙일 때. 그 재료는 묶음의 것이 아니라 묶음을 지워도 남는다."""
+    """이미 있는 문헌 재료에 붙일 때. 그 재료는 묶음의 것이 아니라 묶음을 지워도 남는다.
+    uuid 는 서버마다 달라 개발에서 만든 파일이 운영에서는 「없는 재료」 가 된다."""
+    existing_mt_id: int | None = Field(default=None, ge=1)
+    """이관 원본 번호(`mt_id`)로 가리킨다 — 개발 · 운영이 같은 원본을 들여 같은 번호다.
+    같은 파일을 두 서버에 쓰려면 이쪽을 쓴다."""
     name: str | None = Field(default=None, max_length=300)
     category: str | None = Field(default=None, max_length=30)
     material_code: str | None = Field(default=None, max_length=100)
@@ -1075,6 +1080,15 @@ class CatalogBatchProblemOut(BaseModel):
     message: str
 
 
+class CatalogBatchAttachedOut(BaseModel):
+    """이미 있는 문헌 재료를 가리킨 항목이 어느 재료로 풀렸나."""
+
+    key: str
+    id: uuid.UUID
+    mt_id: int | None
+    name: str
+
+
 class CatalogBatchImportOut(BaseModel):
     """들이기의 결과 — 미리보기면 **들였을 때의 결과**이고 아무것도 남지 않는다."""
 
@@ -1090,6 +1104,9 @@ class CatalogBatchImportOut(BaseModel):
     """새로 생긴 벌의 점 수."""
     licenses: dict[str, int]
     """이 묶음 출처의 라이선스별 수 — 빈 것은 `(없음)`."""
+    attached: list[CatalogBatchAttachedOut] = Field(default_factory=list)
+    """이미 있는 재료에 붙는 항목과 그 재료 이름. 번호가 하나 어긋나면(SUS304 ↔ SUS304L)
+    남의 재료에 조용히 붙으므로 미리보기에서 이름을 대 본다."""
     problems: list[CatalogBatchProblemOut]
 
 

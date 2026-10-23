@@ -298,6 +298,70 @@ class Test들이기:
         assert refused.json()["error"]["code"] == "MNX-CATALOG-0075"
 
 
+class Test있던_재료에_붙이기:
+    """uuid 는 서버마다 달라 원본 번호(`existing_mt_id`)로도 가리킨다 — 한 파일을 두 서버에."""
+
+    def _eco(self, **ref: Any) -> dict[str, Any]:
+        body = bundle()
+        body["materials"].append({"key": "mat-eco", **ref})
+        body["values"].append(
+            {
+                "key": "v-eco-e",
+                "material": "mat-eco",
+                "source": "src-smith",
+                "property_key": "mechanical.youngs_modulus",
+                "value_num": 0.07,
+                "unit": "MPa",
+                "method": "measured",
+                "quality_tier": 2,
+            }
+        )
+        return body
+
+    def test_원본_번호로_붙고_미리보기가_그_이름을_보여_준다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        defs: CatalogMaterial,
+    ) -> None:
+        # 번호가 하나 어긋나면 이웃 재료에 붙는다 — 그 이웃이 있어야 시험이 그것을 가린다.
+        db.add(CatalogMaterial(mt_id=920002, name="Ecoflex 00-50", category="rubber"))
+        db.commit()
+        shown = _import(client, admin_headers, self._eco(existing_mt_id=920001), apply=False)
+        assert shown.status_code == 200, shown.text
+        assert shown.json()["attached"] == [
+            {"key": "mat-eco", "id": str(defs.id), "mt_id": 920001, "name": defs.name}
+        ]
+        applied = _import(client, admin_headers, self._eco(existing_mt_id=920001), apply=True)
+        assert applied.status_code == 200, applied.text
+        stored = db.scalar(
+            select(CatalogValue).where(CatalogValue.external_key == f"{KEY}:v-eco-e")
+        )
+        assert stored is not None and stored.material_id == defs.id
+        # 붙인 재료는 묶음의 것이 아니다 — 표지가 붙지 않는다.
+        db.refresh(defs)
+        assert defs.batch_id is None and defs.external_key is None
+
+    def test_없는_번호와_둘_다_적은_것은_문제로_낸다(
+        self, client: TestClient, admin_headers: dict[str, str], defs: CatalogMaterial
+    ) -> None:
+        missing = _import(
+            client, admin_headers, self._eco(existing_mt_id=999999), apply=False
+        ).json()
+        first = missing["problems"][0]
+        assert (first["key"], first["code"]) == ("mat-eco", "MNX-CATALOG-0001")
+        assert missing["attached"] == []
+        both = _import(
+            client,
+            admin_headers,
+            self._eco(existing_mt_id=920001, existing_id=str(defs.id)),
+            apply=False,
+        ).json()
+        assert both["problems"][0]["key"] == "mat-eco"
+        assert "하나만" in both["problems"][0]["message"]
+
+
 class Test산점:
     def test_산점의_점은_대표값에서_빠지고_낱값이_대표다(
         self,

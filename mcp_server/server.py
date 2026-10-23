@@ -4652,6 +4652,8 @@ async def import_catalog_batch(ctx: Context, path: str, dry_run: bool = True) ->
         "counts": {
             kind: got.get(kind) for kind in ("sources", "materials", "values", "series")
         },
+        # 있던 재료에 붙는 항목 — 원본 번호가 하나 어긋나면 이웃 재료에 붙으니 이름을 대 본다.
+        "attached": got.get("attached") or [],
         "problems": problems[:30],
         **({"more_problems": len(problems) - 30} if len(problems) > 30 else {}),
         "note": (

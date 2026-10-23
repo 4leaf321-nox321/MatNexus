@@ -10948,6 +10948,23 @@ export interface components {
             include_test_runs: boolean;
         };
         /**
+         * CatalogBatchAttachedOut
+         * @description 이미 있는 문헌 재료를 가리킨 항목이 어느 재료로 풀렸나.
+         */
+        CatalogBatchAttachedOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Key */
+            key: string;
+            /** Mt Id */
+            mt_id: number | null;
+            /** Name */
+            name: string;
+        };
+        /**
          * CatalogBatchBundleIn
          * @description **묶음 파일 하나**(ADR 0068) — 서버가 한 번에 받아 전부 되거나 전부 안 된다.
          */
@@ -10997,6 +11014,8 @@ export interface components {
         CatalogBatchImportOut: {
             /** Applied */
             applied: boolean;
+            /** Attached */
+            attached?: components["schemas"]["CatalogBatchAttachedOut"][];
             /** Batch Key */
             batch_key: string;
             /** Dry Run */
@@ -11016,7 +11035,8 @@ export interface components {
         };
         /**
          * CatalogBatchMaterialIn
-         * @description 새 문헌 재료, 또는 **이미 있는 문헌 재료**(`existing_id`)를 가리킨다 — 둘 중 하나.
+         * @description 새 문헌 재료, 또는 **이미 있는 문헌 재료**(`existing_mt_id` · `existing_id`)를 가리킨다
+         *     — 둘 중 하나.
          */
         CatalogBatchMaterialIn: {
             /** Attributes */
@@ -11029,6 +11049,8 @@ export interface components {
             description?: string | null;
             /** Existing Id */
             existing_id?: string | null;
+            /** Existing Mt Id */
+            existing_mt_id?: number | null;
             /** Grade */
             grade?: string | null;
             /** Key */

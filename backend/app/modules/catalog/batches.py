@@ -39,10 +39,12 @@ from app.modules.catalog.models import (
     CatalogValue,
 )
 from app.modules.catalog.schemas import (
+    CatalogBatchAttachedOut,
     CatalogBatchBundleIn,
     CatalogBatchCountOut,
     CatalogBatchDeleteOut,
     CatalogBatchImportOut,
+    CatalogBatchMaterialIn,
     CatalogBatchOut,
     CatalogBatchProblemOut,
     CatalogMaterialCreate,
@@ -83,6 +85,7 @@ class _Run:
         }
     )
     points: int = 0
+    attached: list[CatalogBatchAttachedOut] = field(default_factory=list)
     problems: list[CatalogBatchProblemOut] = field(default_factory=list)
     hidden: int = 0
     parameter_sets: bool = False
@@ -190,6 +193,7 @@ def import_bundle(
         series=run.counts["series"],
         points=run.points,
         licenses=dict(sorted(licenses.items())),
+        attached=run.attached,
         problems=run.problems,
     )
     if not applied:
@@ -255,21 +259,41 @@ def _import_sources(
     return made
 
 
+def _attach(db: Session, item: CatalogBatchMaterialIn, run: _Run) -> CatalogMaterial | None:
+    """이미 있는 문헌 재료를 찾는다 — `existing_mt_id`(서버마다 같다) 또는 `existing_id`."""
+    if item.existing_id is not None and item.existing_mt_id is not None:
+        run.problem(
+            "material",
+            item.key,
+            "MNX-CATALOG-0077",
+            "existing_id 와 existing_mt_id 는 하나만 적습니다.",
+        )
+        return None
+    if item.existing_mt_id is not None:
+        found = db.scalar(
+            select(CatalogMaterial).where(CatalogMaterial.mt_id == item.existing_mt_id)
+        )
+        missing = f"existing_mt_id {item.existing_mt_id} 는 카탈로그에 없는 재료입니다."
+    else:
+        found = db.get(CatalogMaterial, item.existing_id)
+        missing = f"existing_id {item.existing_id} 는 카탈로그에 없는 재료입니다."
+    if found is None:
+        run.problem("material", item.key, "MNX-CATALOG-0001", missing)
+        return None
+    run.attached.append(
+        CatalogBatchAttachedOut(key=item.key, id=found.id, mt_id=found.mt_id, name=found.name)
+    )
+    return found
+
+
 def _import_materials(
     db: Session, bundle: CatalogBatchBundleIn, user: User, run: _Run
 ) -> dict[str, CatalogMaterial]:
     made: dict[str, CatalogMaterial] = {}
     for item in bundle.materials:
-        if item.existing_id is not None:
-            existing = db.get(CatalogMaterial, item.existing_id)
-            if existing is None:
-                run.problem(
-                    "material",
-                    item.key,
-                    "MNX-CATALOG-0001",
-                    f"existing_id {item.existing_id} 는 카탈로그에 없는 재료입니다.",
-                )
-            else:
+        if item.existing_id is not None or item.existing_mt_id is not None:
+            existing = _attach(db, item, run)
+            if existing is not None:
                 made[item.key] = existing
                 run.counts["materials"].existing += 1
             continue
@@ -286,7 +310,9 @@ def _import_materials(
                         run.counts["materials"].existing += 1
                     continue
                 payload = CatalogMaterialCreate(
-                    **item.model_dump(exclude={"key", "existing_id"}, exclude_none=True)
+                    **item.model_dump(
+                        exclude={"key", "existing_id", "existing_mt_id"}, exclude_none=True
+                    )
                 )
                 material = contribute.create_material(db, payload, user)
                 _tag(material, run.batch, external, digest)

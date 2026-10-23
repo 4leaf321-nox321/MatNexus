@@ -4806,6 +4806,43 @@
         "title": "CascadeDeleteRequest",
         "type": "object"
       },
+      "CatalogBatchAttachedOut": {
+        "description": "이미 있는 문헌 재료를 가리킨 항목이 어느 재료로 풀렸나.",
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "mt_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mt Id"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "id",
+          "mt_id",
+          "name"
+        ],
+        "title": "CatalogBatchAttachedOut",
+        "type": "object"
+      },
       "CatalogBatchBundleIn": {
         "description": "**묶음 파일 하나**(ADR 0068) — 서버가 한 번에 받아 전부 되거나 전부 안 된다.",
         "properties": {
@@ -4912,6 +4949,13 @@
             "title": "Applied",
             "type": "boolean"
           },
+          "attached": {
+            "items": {
+              "$ref": "#/components/schemas/CatalogBatchAttachedOut"
+            },
+            "title": "Attached",
+            "type": "array"
+          },
           "batch_key": {
             "title": "Batch Key",
             "type": "string"
@@ -4967,7 +5011,7 @@
         "type": "object"
       },
       "CatalogBatchMaterialIn": {
-        "description": "새 문헌 재료, 또는 **이미 있는 문헌 재료**(`existing_id`)를 가리킨다 — 둘 중 하나.",
+        "description": "새 문헌 재료, 또는 **이미 있는 문헌 재료**(`existing_mt_id` · `existing_id`)를 가리킨다\n— 둘 중 하나.",
         "properties": {
           "attributes": {
             "anyOf": [
@@ -5015,6 +5059,18 @@
               }
             ],
             "title": "Existing Id"
+          },
+          "existing_mt_id": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Existing Mt Id"
           },
           "grade": {
             "anyOf": [
