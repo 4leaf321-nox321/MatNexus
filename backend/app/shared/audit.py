@@ -158,6 +158,10 @@ DECLARED_APPROVAL_REQUESTED_BY_CLIENT = "declared.approval_requested_by_client"
 #: 덱에 실렸을 수 있고, 옮긴 값은 원래 어느 키에 있었는지가 이 기록에만 남는다.
 CATALOG_VALUE_DELETED = "catalog_value.deleted"
 CATALOG_SERIES_DELETED = "catalog_series.deleted"
+#: 반입 묶음(ADR 0068) — 묶음 파일 하나로 수백 줄이 한 번에 들어오고 나간다. 사람이 해도
+#: 남긴다.
+CATALOG_BATCH_IMPORTED = "catalog_batch.imported"
+CATALOG_BATCH_DELETED = "catalog_batch.deleted"
 CATALOG_PROPERTY_MIGRATED = "catalog_property.migrated"
 LOGIN_THROTTLED = "auth.login_throttled"
 """같은 계정의 실패가 문턱을 넘어 응답을 늦추기 시작했다. 실패마다 남기면 넘치므로

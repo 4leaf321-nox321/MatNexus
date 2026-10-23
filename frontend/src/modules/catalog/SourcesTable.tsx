@@ -31,7 +31,7 @@ export function SourcesTable({ values }: { values: CatalogValue[] }) {
   const rows = sourceRows(values)
   return (
     <div className="overflow-x-auto rounded-md border">
-      <Table className="min-w-[40rem]">
+      <Table className="min-w-[44rem]">
         <TableHeader>
           <TableRow>
             <TableHead className="w-[45%]">출처</TableHead>
@@ -40,6 +40,7 @@ export function SourcesTable({ values }: { values: CatalogValue[] }) {
             <TableHead className="text-right">물성</TableHead>
             <TableHead>등급</TableHead>
             <TableHead>방법</TableHead>
+            <TableHead>라이선스</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -59,6 +60,11 @@ export function SourcesTable({ values }: { values: CatalogValue[] }) {
                 </div>
               </TableCell>
               <TableCell>{row.methods.map((one) => METHOD_LABELS[one] ?? one).join(' · ') || '—'}</TableCell>
+              {/* **라이선스 · 귀속**(ADR 0068) — 공개 데이터는 귀속 표기가 조건이다. 이관해 온 출처는
+                  대개 비어 있다(빈칸은 「모른다」 이지 「자유」 가 아니다). */}
+              <TableCell className="whitespace-normal" title={row.source?.attribution ?? undefined}>
+                {row.source?.license ?? '—'}
+              </TableCell>
             </TableRow>
           ))}
         </TableBody>

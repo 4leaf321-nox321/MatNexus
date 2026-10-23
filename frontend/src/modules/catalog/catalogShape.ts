@@ -47,10 +47,11 @@ export const AXIS_META: Record<string, [string, string | null]> = {
   thickness_um: ['두께', 'µm'],
   depth_um: ['깊이', 'µm'],
   load_n: ['하중', 'N'],
+  cycles: ['수명(반복수)', null],
 }
 
 /** 자릿수로 펼쳐 보는 축 — 속도 · 주파수 · 시간은 몇 자리에 걸쳐 잰다. */
-export const LOG_AXES = new Set(['strain_rate_s', 'strain_rate_1_s', 'frequency_hz', 'time_s'])
+export const LOG_AXES = new Set(['strain_rate_s', 'strain_rate_1_s', 'frequency_hz', 'time_s', 'cycles'])
 
 export function axisName(key: string): string {
   return AXIS_META[key]?.[0] ?? key
@@ -278,6 +279,45 @@ export function seriesCurves(series: CatalogSeries[], values: CatalogValue[]): C
     }
   }
   return lines
+}
+
+export interface ScatterSet {
+  propertyKey: string
+  name: string
+  unit: string | null
+  /** 파단 점 `[x(축 단위), y(SI)]`. */
+  solid: [number, number][]
+  /** 런아웃(멈춘 점) — 빈 점으로 그린다. 「여기서도 안 끝났다」 는 하한이다. */
+  hollow: [number, number][]
+}
+
+/**
+ * 직접 넣은 **산점 한 벌**(S-N · ε-N, ADR 0068)의 열마다 점 — 런아웃은 따로. 산점은 함수가 아니라
+ * 잇지 않는다(이으면 지그재그가 돼 뜻이 없다).
+ */
+export function scatterSets(series: CatalogSeries, values: CatalogValue[]): ScatterSet[] {
+  if (series.kind !== 'scatter' || !series.x_key) return []
+  const axis = series.x_key
+  const mine = values.filter((value) => value.series_id === series.id)
+  return series.columns.map((column) => {
+    const solid: [number, number][] = []
+    const hollow: [number, number][] = []
+    for (const value of mine) {
+      if (value.property_key !== column.property_key || value.value_num == null) continue
+      const x = numberAt(value, axis)
+      if (x === null) continue
+      const runout = (value.conditions as Record<string, unknown> | null)?.['runout'] === true
+      ;(runout ? hollow : solid).push([x, value.value_num])
+    }
+    const byX = (left: [number, number], right: [number, number]) => left[0] - right[0]
+    return {
+      propertyKey: column.property_key,
+      name: column.property_name,
+      unit: column.unit ?? null,
+      solid: solid.sort(byX),
+      hollow: hollow.sort(byX),
+    }
+  })
 }
 
 export interface SourceRow {

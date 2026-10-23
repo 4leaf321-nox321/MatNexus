@@ -137,6 +137,33 @@ describe('곡선 · 표 입력', () => {
   })
 })
 
+describe('산점 · 라이선스 (ADR 0068)', () => {
+  it('산점이면 같은 x 를 그대로 보내고 줄 끝 칸 1 을 런아웃으로, 라이선스를 출처에 싣는다', async () => {
+    render(<SeriesDialog detail={DETAIL} open onClose={vi.fn()} onDone={vi.fn()} />)
+    fireEvent.change(screen.getByLabelText('곡선 물성 찾기'), { target: { value: '탄성' } })
+    fireEvent.click(await screen.findByRole('button', { name: /탄성계수/ }))
+    fireEvent.click(screen.getByLabelText(/산점/))
+    fireEvent.change(screen.getByLabelText(/값 붙여넣기/), {
+      target: { value: '25\t50\n100\t45\n100\t44\t1' },
+    })
+    fireEvent.change(screen.getByLabelText('출처 제목'), { target: { value: '논문' } })
+    fireEvent.change(screen.getByLabelText('라이선스'), { target: { value: 'CC-BY-4.0' } })
+    fireEvent.click(screen.getByRole('button', { name: '미리보기' }))
+    await waitFor(() => expect(previewSeries).toHaveBeenCalledTimes(1))
+    const [, payload] = previewSeries.mock.calls[0]
+    expect(payload).toMatchObject({
+      kind: 'scatter',
+      rows: [
+        [25, 50],
+        [100, 45],
+        [100, 44],
+      ],
+      row_conditions: [{}, {}, { runout: true }],
+      source: { title: '논문', license: 'CC-BY-4.0' },
+    })
+  })
+})
+
 describe('붙여넣기 읽기', () => {
   it('탭 · 쉼표 · 공백으로 가르고, 머리 줄을 건너뛰고, 빈 칸은 null', () => {
     expect(parseRows('T\tE\n25\t200\n100\t\n200,180')).toEqual([

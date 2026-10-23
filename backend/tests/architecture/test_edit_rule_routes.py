@@ -153,6 +153,15 @@ EXEMPT: dict[tuple[str, str], str] = {
         "catalog",
         "delete_catalog_series",
     ): "문헌 — `contribute.require_contributor` 가 안에서 본다",
+    ("catalog", "preview_catalog_material"): _읽기 + " — 만드는 코드를 돌리고 되돌린다",
+    (
+        "catalog",
+        "import_catalog_batch",
+    ): "문헌 반입 묶음 — 자료 관리자(`permissions.require_steward`)를 안에서 본다",
+    (
+        "catalog",
+        "delete_catalog_batch",
+    ): "문헌 반입 묶음 — 자료 관리자(`permissions.require_steward`)를 안에서 본다",
     (
         "catalog",
         "delete_catalog_material",

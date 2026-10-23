@@ -33,7 +33,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.modules.accounts.models import User
@@ -79,6 +79,21 @@ DOMAINS = (
 )
 SOURCE_KINDS = ("journal", "book", "database", "datasheet", "standard", "web", "other")
 METHODS = ("measured", "handbook", "digitized", "computed", "estimated")
+
+#: 문헌 재료의 정체를 적는 속성 칸(ADR 0068) — 이 밖의 칸은 거절한다. 규격명(`EN 1.4301`) ·
+#: 형태(sheet · bar) · 상태(열처리) · 두께 · 화학식 · 외부 DB id(`{"mp": "mp-149"}`) · 조성.
+MATERIAL_ATTRIBUTES = (
+    "designation",
+    "product_form",
+    "condition",
+    "thickness_mm",
+    "formula",
+    "external_ids",
+    "composition",
+)
+
+#: 상업 이용이 안 되는 라이선스 — SPDX 의 `-NC-` 토막(CC-BY-NC-4.0 · CC-BY-NC-SA-4.0 …).
+_NONCOMMERCIAL = re.compile(r"(^|[-_])NC([-_]|$)", re.IGNORECASE)
 VALUE_TYPES = ("numeric", "categorical")
 
 _SLUG = re.compile(r"^[a-z][a-z0-9_]{1,60}$")
@@ -455,11 +470,50 @@ def create_material(
         material_class=clean(payload.material_class or "") or None,
         grade=clean(payload.grade or "") or None,
         subsystem=clean(payload.subsystem or "") or None,
-        attributes={"origin": "local"},
+        attributes={**_material_attributes(payload.attributes), "origin": "local"},
     )
     db.add(material)
     db.flush()
     return material
+
+
+def _material_attributes(given: dict[str, Any] | None) -> dict[str, Any]:
+    """정해진 칸만 — 모르는 칸은 까닭을 대고 거절한다."""
+    if not given:
+        return {}
+    unknown = sorted(set(given) - set(MATERIAL_ATTRIBUTES))
+    if unknown:
+        raise AppError(
+            "MNX-CATALOG-0072",
+            f"재료 속성에 모르는 칸이 있습니다: {', '.join(unknown)} — "
+            f"{', '.join(MATERIAL_ATTRIBUTES)} 만 받습니다.",
+            status=422,
+            details={"unknown": unknown},
+        )
+    return {key: value for key, value in given.items() if value not in (None, "", [], {})}
+
+
+#: 비슷한 재료를 찾을 때 거들떠보지 않는 낱말 — 너무 흔해 같은 재료라는 뜻이 없다.
+_COMMON_WORDS = frozenset({"steel", "alloy", "sheet", "film", "the", "and", "of", "for"})
+
+
+def similar_materials(db: Session, name: str, limit: int = 10) -> list[CatalogMaterial]:
+    """이름 낱말이 겹치는 기존 문헌 재료 — 많이 겹치는 것부터. 같은 재료를 또 만들지 않게."""
+    words = {
+        one
+        for one in re.split(r"[^0-9A-Za-z가-힣]+", name.lower())
+        if len(one) >= 2 and one not in _COMMON_WORDS
+    }
+    if not words:
+        return []
+    clauses = [CatalogMaterial.name.ilike(f"%{one}%") for one in sorted(words)[:8]]
+    rows = db.scalars(select(CatalogMaterial).where(or_(*clauses)).limit(200)).all()
+
+    def overlap(row: CatalogMaterial) -> int:
+        mine = set(re.split(r"[^0-9A-Za-z가-힣]+", row.name.lower()))
+        return len(words & mine)
+
+    return sorted(rows, key=lambda row: (-overlap(row), row.name))[:limit]
 
 
 def delete_material(db: Session, material_id: uuid.UUID, user: User) -> None:
@@ -492,6 +546,14 @@ def delete_material(db: Session, material_id: uuid.UUID, user: User) -> None:
 
 def _find_or_make_source(db: Session, given: CatalogSourceIn, user: User) -> CatalogSource:
     """DOI 가 같으면 그 출처, 아니면 제목+연도가 같은 것, 없으면 새로."""
+    return find_or_make_source(db, given, user)[0]
+
+
+def find_or_make_source(
+    db: Session, given: CatalogSourceIn, user: User
+) -> tuple[CatalogSource, bool]:
+    """`(출처, 새로 만들었나)` — 반입 묶음은 새로 만든 출처에만 묶음 표지를 단다(ADR 0068).
+    있던 출처는 여러 값이 나눠 쓰는 것이라 묶음의 것이 아니다."""
     kind = given.kind.strip().lower()
     if kind not in SOURCE_KINDS:
         raise AppError(
@@ -509,6 +571,15 @@ def _find_or_make_source(db: Session, given: CatalogSourceIn, user: User) -> Cat
             "출처 없는 값은 안 받습니다.",
             status=422,
         )
+    license = clean(given.license or "") or None
+    attribution = clean(given.attribution or "") or None
+    if license and _NONCOMMERCIAL.search(license):
+        raise AppError(
+            "MNX-CATALOG-0073",
+            f"라이선스 '{license}' 는 상업 이용이 안 됩니다(NC) — 사내에서 쓰는 카탈로그라 "
+            "받지 않습니다(ADR 0068).",
+            status=422,
+        )
     found: CatalogSource | None = None
     if doi:
         found = db.scalar(
@@ -523,7 +594,8 @@ def _find_or_make_source(db: Session, given: CatalogSourceIn, user: User) -> Cat
         )
         found = db.scalar(query)
     if found is not None:
-        return found
+        _fill_source(found, given, license, attribution, url)
+        return found, False
     source = CatalogSource(
         mt_id=None,
         created_by_id=user.id,
@@ -534,10 +606,45 @@ def _find_or_make_source(db: Session, given: CatalogSourceIn, user: User) -> Cat
         authors=clean(given.authors or "") or None,
         year=given.year,
         publisher=clean(given.publisher or "") or None,
+        license=license,
+        attribution=attribution,
     )
     db.add(source)
     db.flush()
-    return source
+    return source, True
+
+
+def _fill_source(
+    found: CatalogSource,
+    given: CatalogSourceIn,
+    license: str | None,
+    attribution: str | None,
+    url: str | None,
+) -> None:
+    """같은 출처를 다시 쓰면 **빈 칸만 채운다** — 라이선스가 이미 적혀 있고 다르면 거절한다.
+
+    이관해 온 출처(`mt_id`)는 원본이 정본이라 채우지 않는다 — 다음 이관이 원본 값(빈칸)으로
+    되돌린다.
+    """
+    if found.license and license and found.license.lower() != license.lower():
+        raise AppError(
+            "MNX-CATALOG-0074",
+            f"같은 출처에 라이선스가 이미 '{found.license}' 로 적혀 있습니다 — '{license}' 와 "
+            "다릅니다. 출처 쪽을 먼저 확인하세요.",
+            status=409,
+            details={"source_id": str(found.id), "license": found.license},
+        )
+    if not is_local(found):
+        return
+    if license and not found.license:
+        found.license = license
+    if attribution and not found.attribution:
+        found.attribution = attribution
+    if url and not found.url:
+        found.url = url
+    authors = clean(given.authors or "") or None
+    if authors and not found.authors:
+        found.authors = authors
 
 
 def _to_definition_unit(
@@ -642,7 +749,12 @@ def _method(given: str, tier: int) -> str:
 
 
 def create_value(
-    db: Session, material_id: uuid.UUID, payload: CatalogValueCreate, user: User
+    db: Session,
+    material_id: uuid.UUID,
+    payload: CatalogValueCreate,
+    user: User,
+    *,
+    source: CatalogSource | None = None,
 ) -> tuple[CatalogValue, str | None]:
     """값 하나를 넣는다. `(값, 환산 설명 | None)`."""
     material = db.get(CatalogMaterial, material_id)
@@ -676,7 +788,8 @@ def create_value(
     conditions: dict[str, Any] = dict(payload.conditions or {})
     if tier == 4:
         conditions.setdefault("assumption", True)
-    source = _find_or_make_source(db, payload.source, user)
+    # 묶음은 출처를 먼저 정해 넘긴다(ADR 0068) — 값마다 다시 찾지 않는다.
+    source = source or _find_or_make_source(db, payload.source, user)
 
     row = CatalogValue(
         mt_id=None,
@@ -855,7 +968,12 @@ def _dimensionless_default(given: str | None, definition: CatalogDefinition) -> 
 
 
 def create_series(
-    db: Session, material_id: uuid.UUID, payload: CatalogSeriesCreate, user: User
+    db: Session,
+    material_id: uuid.UUID,
+    payload: CatalogSeriesCreate,
+    user: User,
+    *,
+    source: CatalogSource | None = None,
 ) -> SeriesMade:
     """**이어진 값 한 벌**을 넣는다 — 머리 하나와 점마다 문헌 값 한 줄(ADR 0067).
 
@@ -875,13 +993,13 @@ def create_series(
     if not label:
         raise AppError("MNX-CATALOG-0070", "묶음 이름이 비었습니다.", status=422)
 
-    if payload.kind == "curve":
+    if payload.kind in ("curve", "scatter"):
         plan = _curve_points(db, payload, shared)
     else:
         plan = _term_points(db, payload, shared)
     keys, x_key, model, rows, converted = plan
 
-    source = _find_or_make_source(db, payload.source, user)
+    source = source or _find_or_make_source(db, payload.source, user)
     series = CatalogSeries(
         material_id=material.id,
         kind=payload.kind,
@@ -917,6 +1035,9 @@ def create_series(
             source_id=source.id,
             source_detail=series.source_detail,
             series_id=series.id,
+            # 산점의 점은 대표값 후보에서 빠진다(ADR 0068) — S-N 점이 피로한도 대표로
+            # 서지 않게.
+            scatter_point=payload.kind == "scatter",
         )
         db.add(point)
         points.append(point)
@@ -958,8 +1079,10 @@ def _curve_points(
             status=422,
         )
     width = 1 + len(definitions)
+    scatter = payload.kind == "scatter"
+    extras = _row_conditions(payload.row_conditions, len(payload.rows), x_key, shared)
     seen: set[float] = set()
-    rows: list[tuple[float, list[float | None]]] = []
+    rows: list[tuple[float, list[float | None], dict[str, Any]]] = []
     for number, row in enumerate(payload.rows, start=1):
         if len(row) != width:
             raise AppError(
@@ -983,14 +1106,15 @@ def _curve_points(
                 "MNX-CATALOG-0070", f"{number}번째 줄에 수가 아닌 값이 있습니다.", status=422
             )
         rounded = float(f"{x:.9g}")
-        if rounded in seen:
+        # **산점은 같은 x 가 여럿이다** — 10⁷ 에서 멈춘 런아웃 · 같은 응력 수준의 반복 시편.
+        if rounded in seen and not scatter:
             raise AppError(
                 "MNX-CATALOG-0070",
                 f"축 값 {x:g} 가 두 번 나옵니다 — 한 곡선에 같은 {x_key} 는 하나입니다.",
                 status=422,
             )
         seen.add(rounded)
-        rows.append((x, ys))
+        rows.append((x, ys, extras[number - 1]))
     rows.sort(key=lambda one: one[0])
 
     points: list[_Point] = []
@@ -1000,7 +1124,7 @@ def _curve_points(
     ):
         count = 0
         note: str | None = None
-        for x, ys in rows:
+        for x, ys, extra in rows:
             value = ys[column]
             if value is None:
                 continue
@@ -1009,12 +1133,54 @@ def _curve_points(
             )
             note = note or said
             count += 1
-            points.append((definition.key, stored, unit, {**shared, x_key: x}))
+            points.append((definition.key, stored, unit, {**shared, **extra, x_key: x}))
         if note:
             converted.append(
                 f"{definition.name}: {given.unit} → {definition.si_unit} ({count}점)"
             )
     return keys, x_key, None, points, converted
+
+
+#: 줄마다 점에 더할 수 있는 조건(ADR 0068) — 그 밖은 거절한다. 아무 칸이나 받으면 축이 갈린다.
+ROW_CONDITIONS: dict[str, type] = {"runout": bool, "specimen": str, "failure_mode": str}
+
+
+def _row_conditions(
+    given: list[dict[str, Any]] | None, count: int, x_key: str, shared: dict[str, Any]
+) -> list[dict[str, Any]]:
+    """줄마다 조건 — `rows` 와 같은 길이, 정해진 칸 · 형만."""
+    if not given:
+        return [{} for _ in range(count)]
+    if len(given) != count:
+        raise AppError(
+            "MNX-CATALOG-0070",
+            f"줄마다 조건(row_conditions)이 {len(given)}개인데 줄은 {count}개입니다 — "
+            "같아야 합니다.",
+            status=422,
+        )
+    out: list[dict[str, Any]] = []
+    for number, one in enumerate(given, start=1):
+        extra: dict[str, Any] = {}
+        for key, value in (one or {}).items():
+            kind = ROW_CONDITIONS.get(key)
+            if kind is None or key == x_key or key in shared:
+                raise AppError(
+                    "MNX-CATALOG-0070",
+                    f"{number}번째 줄의 조건 '{key}' 는 받지 않습니다 — "
+                    f"{', '.join(ROW_CONDITIONS)} 만(공통 조건 · 축과 겹치지 않게).",
+                    status=422,
+                )
+            if value is None:
+                continue
+            if not isinstance(value, kind):
+                raise AppError(
+                    "MNX-CATALOG-0070",
+                    f"{number}번째 줄의 '{key}' 는 {kind.__name__} 여야 합니다.",
+                    status=422,
+                )
+            extra[key] = value
+        out.append(extra)
+    return out
 
 
 def _term_points(

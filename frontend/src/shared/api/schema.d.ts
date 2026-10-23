@@ -597,6 +597,72 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/catalog/batches": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Catalog Batches
+         * @description 반입 묶음 목록 — 최근 것부터. 줄 수 · 라이선스 · 사내가 받아 간 값 수.
+         */
+        get: operations["list_catalog_batches_api_catalog_batches_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/catalog/batches/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Import Catalog Batch
+         * @description **묶음 파일 하나를 한 번에 들인다**(자료 관리자) — 전부 되거나 전부 안 된다.
+         *
+         *     같은 외부 키 · 같은 내용이면 그대로 두고(`existing`), 내용이 다르면 문제로 낸다. 적용에서
+         *     문제가 하나라도 있으면 422 와 함께 보고서(`details`)를 돌려주고 아무것도 적지 않는다.
+         *     감사는 `batches.import_bundle` 이 남긴다.
+         */
+        post: operations["import_catalog_batch_api_catalog_batches_import_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/catalog/batches/{key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Catalog Batch */
+        get: operations["get_catalog_batch_api_catalog_batches__key__get"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete Catalog Batch
+         * @description 묶음째 지운다(자료 관리자). 사내가 받아 간 값 · 사내와 이은 재료가 있으면 막는다(409).
+         *     감사는 `batches.delete_batch` 가 남긴다.
+         */
+        delete: operations["delete_catalog_batch_api_catalog_batches__key__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/catalog/compare": {
         parameters: {
             query?: never;
@@ -908,6 +974,27 @@ export interface paths {
          *     같은 이름이 이미 있으면 그 id 를 알려 주고 거절한다(409) — 값은 그 재료에 더한다.
          */
         post: operations["create_catalog_material_api_catalog_materials_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/catalog/materials/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Preview Catalog Material
+         * @description 재료를 만들기 전에 **만들 때와 같은 검사**를 돌리고 되돌린다(ADR 0068). 이름 낱말이
+         *     겹치는 기존 재료를 함께 준다 — 운영에서 잘못 만든 재료는 MCP 로 못 지운다.
+         */
+        post: operations["preview_catalog_material_api_catalog_materials_preview_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -10861,6 +10948,271 @@ export interface components {
             include_test_runs: boolean;
         };
         /**
+         * CatalogBatchBundleIn
+         * @description **묶음 파일 하나**(ADR 0068) — 서버가 한 번에 받아 전부 되거나 전부 안 된다.
+         */
+        CatalogBatchBundleIn: {
+            batch: components["schemas"]["CatalogBatchMetaIn"];
+            /** Materials */
+            materials?: components["schemas"]["CatalogBatchMaterialIn"][];
+            /** Series */
+            series?: components["schemas"]["CatalogBatchSeriesIn"][];
+            /** Sources */
+            sources?: components["schemas"]["CatalogBatchSourceIn"][];
+            /** Values */
+            values?: components["schemas"]["CatalogBatchValueIn"][];
+        };
+        /** CatalogBatchCountOut */
+        CatalogBatchCountOut: {
+            /**
+             * Created
+             * @default 0
+             */
+            created: number;
+            /**
+             * Existing
+             * @default 0
+             */
+            existing: number;
+        };
+        /** CatalogBatchDeleteOut */
+        CatalogBatchDeleteOut: {
+            /** Batch Key */
+            batch_key: string;
+            /** Dry Run */
+            dry_run: boolean;
+            /** Materials */
+            materials: number;
+            /** Series */
+            series: number;
+            /** Sources */
+            sources: number;
+            /** Values */
+            values: number;
+        };
+        /**
+         * CatalogBatchImportOut
+         * @description 들이기의 결과 — 미리보기면 **들였을 때의 결과**이고 아무것도 남지 않는다.
+         */
+        CatalogBatchImportOut: {
+            /** Applied */
+            applied: boolean;
+            /** Batch Key */
+            batch_key: string;
+            /** Dry Run */
+            dry_run: boolean;
+            /** Licenses */
+            licenses: {
+                [key: string]: number;
+            };
+            materials: components["schemas"]["CatalogBatchCountOut"];
+            /** Points */
+            points: number;
+            /** Problems */
+            problems: components["schemas"]["CatalogBatchProblemOut"][];
+            series: components["schemas"]["CatalogBatchCountOut"];
+            sources: components["schemas"]["CatalogBatchCountOut"];
+            values: components["schemas"]["CatalogBatchCountOut"];
+        };
+        /**
+         * CatalogBatchMaterialIn
+         * @description 새 문헌 재료, 또는 **이미 있는 문헌 재료**(`existing_id`)를 가리킨다 — 둘 중 하나.
+         */
+        CatalogBatchMaterialIn: {
+            /** Attributes */
+            attributes?: {
+                [key: string]: unknown;
+            } | null;
+            /** Category */
+            category?: string | null;
+            /** Description */
+            description?: string | null;
+            /** Existing Id */
+            existing_id?: string | null;
+            /** Grade */
+            grade?: string | null;
+            /** Key */
+            key: string;
+            /** Manufacturer */
+            manufacturer?: string | null;
+            /** Material Class */
+            material_class?: string | null;
+            /** Material Code */
+            material_code?: string | null;
+            /** Name */
+            name?: string | null;
+            /** Subsystem */
+            subsystem?: string | null;
+        };
+        /** CatalogBatchMetaIn */
+        CatalogBatchMetaIn: {
+            /** Description */
+            description?: string | null;
+            /** Key */
+            key: string;
+            /** Manifest Sha256 */
+            manifest_sha256?: string | null;
+            /** Title */
+            title: string;
+        };
+        /** CatalogBatchOut */
+        CatalogBatchOut: {
+            /** Adopted */
+            adopted: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Created By */
+            created_by: string | null;
+            /** Description */
+            description: string | null;
+            /** Key */
+            key: string;
+            /** Licenses */
+            licenses: {
+                [key: string]: number;
+            };
+            /** Manifest Sha256 */
+            manifest_sha256: string | null;
+            /** Materials */
+            materials: number;
+            /** Retired At */
+            retired_at: string | null;
+            /** Series */
+            series: number;
+            /** Sources */
+            sources: number;
+            /** Title */
+            title: string;
+            /** Values */
+            values: number;
+        };
+        /** CatalogBatchProblemOut */
+        CatalogBatchProblemOut: {
+            /** Code */
+            code: string;
+            /** Key */
+            key: string;
+            /** Kind */
+            kind: string;
+            /** Message */
+            message: string;
+        };
+        /**
+         * CatalogBatchSeriesIn
+         * @description 이어진 값 한 벌(ADR 0067) — 출처는 묶음의 출처 키로.
+         */
+        CatalogBatchSeriesIn: {
+            /** Columns */
+            columns?: components["schemas"]["CatalogSeriesColumnIn"][];
+            /** Conditions */
+            conditions?: {
+                [key: string]: unknown;
+            } | null;
+            /** Key */
+            key: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "curve" | "scatter" | "parameter_set";
+            /** Label */
+            label: string;
+            /** Material */
+            material: string;
+            /**
+             * Method
+             * @default handbook
+             */
+            method: string;
+            /** Model */
+            model?: string | null;
+            /** Notes */
+            notes?: string | null;
+            /** Property Key */
+            property_key?: string | null;
+            /** Quality Tier */
+            quality_tier: number;
+            /** Row Conditions */
+            row_conditions?: {
+                [key: string]: unknown;
+            }[] | null;
+            /** Rows */
+            rows?: (number | null)[][];
+            /** Source */
+            source: string;
+            /** Source Detail */
+            source_detail?: string | null;
+            /** Terms */
+            terms?: components["schemas"]["CatalogSeriesTermIn"][];
+            /** X Key */
+            x_key?: string | null;
+            /** X Unit */
+            x_unit?: string | null;
+        };
+        /** CatalogBatchSourceIn */
+        CatalogBatchSourceIn: {
+            /** Attribution */
+            attribution?: string | null;
+            /** Authors */
+            authors?: string | null;
+            /** Doi */
+            doi?: string | null;
+            /** Key */
+            key: string;
+            /** Kind */
+            kind: string;
+            /** License */
+            license?: string | null;
+            /** Publisher */
+            publisher?: string | null;
+            /** Title */
+            title?: string | null;
+            /** Url */
+            url?: string | null;
+            /** Year */
+            year?: number | null;
+        };
+        /**
+         * CatalogBatchValueIn
+         * @description 낱값 하나 — 출처는 묶음의 출처 키로 가리킨다.
+         */
+        CatalogBatchValueIn: {
+            /** Conditions */
+            conditions?: {
+                [key: string]: unknown;
+            } | null;
+            /** Key */
+            key: string;
+            /** Material */
+            material: string;
+            /**
+             * Method
+             * @default handbook
+             */
+            method: string;
+            /** Notes */
+            notes?: string | null;
+            /** Property Key */
+            property_key: string;
+            /** Quality Tier */
+            quality_tier: number;
+            /** Source */
+            source: string;
+            /** Source Detail */
+            source_detail?: string | null;
+            /** Uncertainty */
+            uncertainty?: number | null;
+            /** Unit */
+            unit?: string | null;
+            /** Value Num */
+            value_num?: number | null;
+            /** Value Text */
+            value_text?: string | null;
+        };
+        /**
          * CatalogCompareCellOut
          * @description 비교 표의 칸 하나 — 그 재료의 그 물성 대표값. 없으면 None 칸.
          */
@@ -11001,6 +11353,10 @@ export interface components {
         };
         /** CatalogMaterialCreate */
         CatalogMaterialCreate: {
+            /** Attributes */
+            attributes?: {
+                [key: string]: unknown;
+            } | null;
             /** Category */
             category: string;
             /** Description */
@@ -11108,6 +11464,23 @@ export interface components {
             offset: number;
             /** Total */
             total: number;
+        };
+        /**
+         * CatalogMaterialPreviewOut
+         * @description 재료를 만들면 **이렇게 된다** — 만들 때와 같은 검사를 지났다. 비슷한 기존 재료를
+         *     함께 준다.
+         */
+        CatalogMaterialPreviewOut: {
+            /** Attributes */
+            attributes: {
+                [key: string]: unknown;
+            } | null;
+            /** Category */
+            category: string;
+            /** Name */
+            name: string;
+            /** Similar */
+            similar: components["schemas"]["CatalogMaterialOut"][];
         };
         /**
          * CatalogParameterSetOut
@@ -11301,7 +11674,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "curve" | "parameter_set";
+            kind: "curve" | "scatter" | "parameter_set";
             /** Label */
             label: string;
             /**
@@ -11317,6 +11690,10 @@ export interface components {
             property_key?: string | null;
             /** Quality Tier */
             quality_tier: number;
+            /** Row Conditions */
+            row_conditions?: {
+                [key: string]: unknown;
+            }[] | null;
             /** Rows */
             rows?: (number | null)[][];
             source: components["schemas"]["CatalogSourceIn"];
@@ -11342,6 +11719,8 @@ export interface components {
          * @description 이어진 값 한 벌의 머리(ADR 0067) — 곡선 · 표 또는 계수 묶음.
          */
         CatalogSeriesOut: {
+            /** Batch Key */
+            batch_key?: string | null;
             /** Columns */
             columns: components["schemas"]["CatalogSeriesColumnOut"][];
             /** Conditions */
@@ -11413,12 +11792,16 @@ export interface components {
          * @description 값의 출처. **제목·DOI·URL 중 하나는 있어야 한다** — 출처 없는 값은 안 받는다.
          */
         CatalogSourceIn: {
+            /** Attribution */
+            attribution?: string | null;
             /** Authors */
             authors?: string | null;
             /** Doi */
             doi?: string | null;
             /** Kind */
             kind: string;
+            /** License */
+            license?: string | null;
             /** Publisher */
             publisher?: string | null;
             /** Title */
@@ -11430,6 +11813,8 @@ export interface components {
         };
         /** CatalogSourceOut */
         CatalogSourceOut: {
+            /** Attribution */
+            attribution?: string | null;
             /** Doi */
             doi: string | null;
             /**
@@ -24635,6 +25020,127 @@ export interface operations {
             };
         };
     };
+    list_catalog_batches_api_catalog_batches_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CatalogBatchOut"][];
+                };
+            };
+        };
+    };
+    import_catalog_batch_api_catalog_batches_import_post: {
+        parameters: {
+            query?: {
+                /** @description 기본은 미리보기 — 아무것도 남기지 않는다 */
+                dry_run?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CatalogBatchBundleIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CatalogBatchImportOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_catalog_batch_api_catalog_batches__key__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CatalogBatchOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_catalog_batch_api_catalog_batches__key__delete: {
+        parameters: {
+            query?: {
+                /** @description 기본은 미리보기 — 지울 수만 센다 */
+                dry_run?: boolean;
+            };
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CatalogBatchDeleteOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     compare_api_catalog_compare_get: {
         parameters: {
             query: {
@@ -25132,6 +25638,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CatalogMaterialOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_catalog_material_api_catalog_materials_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CatalogMaterialCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CatalogMaterialPreviewOut"];
                 };
             };
             /** @description Validation Error */

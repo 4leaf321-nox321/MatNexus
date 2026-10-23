@@ -887,6 +887,9 @@ def _catalog_value(row: dict[str, Any]) -> dict[str, Any]:
     if not row.get("representative"):
         caveats.append(f"대표값이 아니다(밀린 자리: {row.get('separated_by')})")
     return {
+        # 넣은 것을 확인하고 지울 대상을 찾으려면 id 가 있어야 한다(ADR 0068).
+        "id": row.get("id"),
+        **({"series_id": row["series_id"]} if row.get("series_id") else {}),
         "property": row.get("property_name"),
         "property_key": row.get("property_key"),
         "domain": row.get("domain"),
@@ -1018,6 +1021,19 @@ async def get_catalog_material(
         "complete": total <= len(values),
         "tier_counts": tiers,
         "values": values,
+        "series": [
+            {
+                "id": one.get("id"),
+                "kind": one.get("kind"),
+                "label": one.get("label"),
+                "x_key": one.get("x_key"),
+                "columns": [column.get("property_key") for column in one.get("columns") or []],
+                "point_count": one.get("point_count"),
+                "source": (one.get("source") or {}).get("title"),
+                "batch_key": one.get("batch_key"),
+            }
+            for one in got.get("series") or []
+        ],
         **(
             {
                 "hint": (
@@ -4282,6 +4298,9 @@ async def add_catalog_material(
     material_code: str | None = None,
     material_class: str | None = None,
     description: str | None = None,
+    subsystem: str | None = None,
+    attributes: dict[str, Any] | None = None,
+    dry_run: bool = True,
 ) -> dict[str, Any]:
     """문헌 카탈로그에 **재료를 만든다** — 문헌상의 등급·제품이지 사내 lot 이 아니다.
 
@@ -4290,7 +4309,9 @@ async def add_catalog_material(
 
     - `category`: metal · polymer · ceramic · composite · foam · rubber · molecular
 
-    사내 재료를 만들려는 것이면 이 도구가 아니다(`create_material`).
+    사내 재료를 만들려는 것이면 이 도구가 아니다(`create_material`). 기본은 미리보기 —
+    `similar` 를 보고 `dry_run=False`(만든 재료는 MCP 로 못 지운다). `attributes`:
+    designation · product_form · condition · thickness_mm · formula · external_ids.
     """
     body = {
         "name": name,
@@ -4300,7 +4321,18 @@ async def add_catalog_material(
         "material_code": material_code,
         "material_class": material_class,
         "description": description,
+        "subsystem": subsystem,
+        "attributes": attributes,
     }
+    if dry_run:
+        shown = await _send(ctx, "POST", "/catalog/materials/preview", body)
+        if "error" in shown:
+            return shown
+        return {
+            "dry_run": True,
+            **shown,
+            "note": "비슷한 재료가 같은 것이면 그 재료에 값을 다세요. 아니면 dry_run=False.",
+        }
     got = await _send(ctx, "POST", "/catalog/materials", body)
     if "error" in got:
         return got
@@ -4322,6 +4354,8 @@ async def add_catalog_value(
     source_url: str | None = None,
     source_authors: str | None = None,
     source_detail: str | None = None,
+    source_license: str | None = None,
+    source_attribution: str | None = None,
     method: str = "handbook",
     conditions: dict[str, Any] | None = None,
     uncertainty: float | None = None,
@@ -4366,6 +4400,8 @@ async def add_catalog_value(
             "doi": source_doi,
             "url": source_url,
             "authors": source_authors,
+            "license": source_license,
+            "attribution": source_attribution,
         },
         "source_detail": source_detail,
         "notes": notes,
@@ -4498,11 +4534,14 @@ async def add_catalog_series(
     source_doi: str | None = None,
     source_url: str | None = None,
     source_detail: str | None = None,
+    source_license: str | None = None,
+    source_attribution: str | None = None,
     method: str = "handbook",
     x_key: str | None = None,
     x_unit: str | None = None,
     columns: list[dict[str, Any]] | None = None,
     rows: list[list[float | None]] | None = None,
+    row_conditions: list[dict[str, Any]] | None = None,
     model: str | None = None,
     property_key: str | None = None,
     terms: list[dict[str, Any]] | None = None,
@@ -4516,6 +4555,7 @@ async def add_catalog_series(
     - `kind="curve"`: `x_key` 는 정의의 조건축(`temperature_k` · `strain_pct` …),
       `x_unit` 은 축 값 단위(°C 면 K 로 바꿔 저장). `columns=[{"property_key", "unit"}]`,
       `rows=[[x, y1, …], …]`(빈 칸 null). 점 2개 이상, 같은 x 는 한 번.
+    - `kind="scatter"`: S-N 처럼 같은 x 가 여럿. `row_conditions` 로 줄마다 `runout`.
     - `kind="parameter_set"`: `model`(anand · prony) · `property_key` ·
       `terms=[{"term", "value", "unit", "property_key"?}]`. 무차원 키의 항은 단위 그대로.
 
@@ -4528,6 +4568,7 @@ async def add_catalog_series(
         "x_unit": x_unit,
         "columns": columns or [],
         "rows": rows or [],
+        "row_conditions": row_conditions,
         "model": model,
         "property_key": property_key,
         "terms": terms or [],
@@ -4540,6 +4581,8 @@ async def add_catalog_series(
             "year": source_year,
             "doi": source_doi,
             "url": source_url,
+            "license": source_license,
+            "attribution": source_attribution,
         },
         "source_detail": source_detail,
         "notes": notes,
@@ -4577,6 +4620,54 @@ async def delete_catalog_series(ctx: Context, series_id: str) -> dict[str, Any]:
     if "error" in got:
         return got
     return {"ok": True, "deleted": series_id}
+
+
+#: 반입 묶음 파일의 상한 — 이보다 크면 묶음을 나눈다(한 요청 · 한 트랜잭션).
+BATCH_FILE_MAX = 20 * 1024 * 1024
+
+
+@mcp.tool()
+async def import_catalog_batch(ctx: Context, path: str, dry_run: bool = True) -> dict[str, Any]:
+    """**반입 묶음 파일**(JSON, `path`)을 문헌 카탈로그에 한 번에 들인다(자료 관리자, ADR 0068).
+
+    전부 되거나 전부 안 되고, 같은 외부 키 · 내용은 그대로 둔다(다시 불러도 안전). 기본은
+    미리보기 — `problems` 가 비면 `dry_run=False`. 값을 낱개로 수백 번 넣지 않는다.
+    """
+    file = Path(path).expanduser()
+    if file.suffix.lower() != ".json" or not file.is_file():
+        return {"error": f"묶음 파일(.json)이 아닙니다: {path}"}
+    if file.stat().st_size > BATCH_FILE_MAX:
+        return {"error": "묶음 파일이 20 MB 를 넘습니다 — 묶음을 나누세요."}
+    try:
+        bundle = json.loads(file.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        return {"error": f"묶음 파일을 읽지 못했습니다: {exc}"}
+    query = "true" if dry_run else "false"
+    got = await _send(ctx, "POST", f"/catalog/batches/import?dry_run={query}", bundle)
+    if "error" in got:
+        return got
+    problems = got.get("problems") or []
+    return {
+        **{key: got.get(key) for key in ("batch_key", "dry_run", "applied", "points", "licenses")},
+        "counts": {
+            kind: got.get(kind) for kind in ("sources", "materials", "values", "series")
+        },
+        "problems": problems[:30],
+        **({"more_problems": len(problems) - 30} if len(problems) > 30 else {}),
+        "note": (
+            "미리보기입니다 — 문제가 없으면 dry_run=False 로 다시 부르세요."
+            if dry_run
+            else "들였습니다. get_catalog_batch 로 줄 수 · 라이선스를 확인하세요."
+        ),
+    }
+
+
+@mcp.tool()
+async def get_catalog_batch(ctx: Context, key: str | None = None) -> dict[str, Any]:
+    """반입 묶음 하나(또는 `key` 없이 목록) — 줄 수 · 라이선스 집계 · 사내가 받아 간 값 수."""
+    if key:
+        return await _get(ctx, f"/catalog/batches/{key}")
+    return {"batches": await _get(ctx, "/catalog/batches")}
 
 
 @mcp.tool()

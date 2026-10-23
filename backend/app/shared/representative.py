@@ -46,7 +46,7 @@ _REFERENCE_K = 296.15
 _UNKNOWN_TEMPERATURE_PENALTY = 5.0
 
 #: 순위 자리 이름 — `separated_by` 가 이 말로 밀린 이유를 말한다.
-_SLOTS = ("원본에서 빠짐", "상태", "등급", "수치", "온도", "조건 수", "입력 순서")
+_SLOTS = ("원본에서 빠짐", "산점의 점", "상태", "등급", "수치", "온도", "조건 수", "입력 순서")
 
 
 def is_bookkeeping(key: str) -> bool:
@@ -148,11 +148,21 @@ def is_missing(value: Any) -> bool:
     return getattr(value, "source_missing_at", None) is not None
 
 
+def is_scatter(value: Any) -> bool:
+    """산점 벌(S-N 처럼 함수가 아닌 점들)의 점인가 — 대표값 후보가 아니다(ADR 0068).
+
+    S-N 점 하나가 「피로한도」 · 「피로강도」 의 대표로 서면, 그 재료의 피로 물성이 시편 하나의
+    값이 된다. 값 검색 · 물성 지도에는 남긴다 — 거기서는 점 하나하나가 정보다.
+    """
+    return bool(getattr(value, "scatter_point", False))
+
+
 def _rank(value: Any) -> tuple[float, ...]:
     conditions = semantic_conditions(value.conditions)
     state = str(conditions.get("state", "")).lower()
     return (
         1.0 if is_missing(value) else 0.0,
+        1.0 if is_scatter(value) else 0.0,
         1.0 if any(word in state for word in _NOT_SOLID) else 0.0,
         float(value.quality_tier),
         0.0 if value.value_num is not None else 1.0,
@@ -256,21 +266,25 @@ def annotate(values: list[Any]) -> dict[Any, Annotation]:
         winner = ranked[0]
         winner_rank = _rank(winner)
         varying = _distinguishing(members)
-        if is_missing(winner):
-            # **무리가 전부 원본에서 빠졌다** — 대표를 세우지 않는다. 남겨 둔 것은 근거를 쥔
-            # 자리를 위해서지, 덱 · 비교 · Ashby 에 그 값을 계속 내려고가 아니다.
+        if is_missing(winner) or is_scatter(winner):
+            # **무리가 전부 원본에서 빠졌거나 산점의 점이다** — 대표를 세우지 않는다. 남겨
+            # 둔 것은 근거를 쥔 자리를 위해서지, 덱 · 비교 · Ashby 에 그 값을 계속 내려고가
+            # 아니다.
+            # 산점만 있는 물성(S-N 점만 있는 피로강도)도 점 하나를 대표로 세우지 않는다.
             for one in ranked:
                 out[one.id] = Annotation(
                     representative=False,
                     n_candidates=len(members),
-                    separated_by=_SLOTS[0],
+                    separated_by=_SLOTS[0] if is_missing(one) else _SLOTS[1],
                     distinguishing=varying.get(one.id, {}),
                 )
             continue
         # **대표 줄에만 싣는다.** 줄마다 같은 종합을 되풀이하면 「값이 여럿이다」 가
         # 아니라 「종합이 여럿이다」 로 읽힌다.
         # 종합도 원본에 있는 값끼리만 — 빠진 값이 중앙값을 끌면 안 된다.
-        summary = _summary([one for one in members if not is_missing(one)], varying)
+        summary = _summary(
+            [one for one in members if not is_missing(one) and not is_scatter(one)], varying
+        )
         out[winner.id] = Annotation(
             representative=True,
             n_candidates=len(members),

@@ -12,6 +12,7 @@ import { describe, expect, it } from 'vitest'
 import {
   autoCurves,
   propertyGroups,
+  scatterSets,
   seriesCurves,
   sourceRows,
   tierCounts,
@@ -204,5 +205,28 @@ describe('물성 요약 · 출처', () => {
       [1, 1],
       [4, 1],
     ])
+  })
+})
+
+describe('산점 한 벌 (ADR 0068)', () => {
+  it('파단 점과 런아웃을 갈라 x 차례로 — 곡선으로 잇지 않는다', () => {
+    const series = {
+      id: 'sn1',
+      kind: 'scatter',
+      label: 'S-N',
+      x_key: 'cycles',
+      columns: [{ property_key: 'mechanical.fatigue_strength', property_name: '피로강도', unit: 'Pa' }],
+    } as unknown as CatalogSeries
+    const values = [
+      value({ property_key: 'mechanical.fatigue_strength', series_id: 'sn1', value_num: 2.5e8, conditions: { cycles: 1e7, runout: true } }),
+      value({ property_key: 'mechanical.fatigue_strength', series_id: 'sn1', value_num: 4e8, conditions: { cycles: 1.2e5 } }),
+      value({ property_key: 'mechanical.fatigue_strength', series_id: 'sn1', value_num: 2.45e8, conditions: { cycles: 1e7, runout: true } }),
+    ]
+    const [set] = scatterSets(series, values)
+    expect(set.solid).toEqual([[1.2e5, 4e8]])
+    expect(set.hollow).toHaveLength(2)
+    // 산점은 자동 선 · 곡선 선에 끼지 않는다.
+    expect(seriesCurves([series], values)).toEqual([])
+    expect(autoCurves(values)).toEqual([])
   })
 })

@@ -34,6 +34,7 @@ from datetime import datetime
 from typing import Any
 
 from sqlalchemy import (
+    Boolean,
     DateTime,
     Float,
     ForeignKey,
@@ -43,10 +44,11 @@ from sqlalchemy import (
     String,
     Text,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PgUUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, declared_attr, mapped_column
 
 from app.database import Base
 
@@ -60,10 +62,71 @@ QUALITY_TIERS = {
 }
 
 
-class CatalogMaterial(Base):
+class Batched:
+    """**반입 묶음의 표지**(ADR 0068) — 외부 공개 데이터를 묶음 파일로 들일 때 줄마다 남는다.
+
+    같은 묶음을 다시 들이면 `external_key` 로 그 줄을 찾아 **그대로 돌려주고**(내용 지문
+    `external_hash` 가 같을 때), 다르면 거절한다 — 다시 돌려도 중복이 생기지 않는다.
+    이관해 온 줄 · 화면 · MCP 로 하나씩 넣은 줄은 셋 다 비어 있다.
+    """
+
+    @declared_attr
+    def batch_id(cls) -> Mapped[uuid.UUID | None]:
+        return mapped_column(
+            PgUUID(as_uuid=True),
+            ForeignKey("catalog_batches.id", ondelete="RESTRICT"),
+            index=True,
+            nullable=True,
+        )
+
+    external_key: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    """`{묶음 키}:{묶음 안의 키}` — 표마다 유일(비어 있으면 제외)."""
+    external_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    """묶음 파일의 그 항목(키 제외)을 정렬한 JSON 의 sha256."""
+
+
+class CatalogBatch(Base):
+    """**외부 공개 데이터의 반입 묶음**(2026-10-23, ADR 0068).
+
+    수집기(MaterialCollector)가 라이선스를 확인한 공개 데이터를 묶음 파일 하나로 낸다.
+    서버는 그 파일을 한 번에 받아 미리보기 · 적용한다 — 전부 되거나 전부 안 된다. 묶음의
+    정본은 파일이고,
+    운영 DB 를 다시 만들어도 같은 파일로 같은 결과가 나와야 한다. 지운 묶음은 줄을 남기고
+    `retired_at` 만 찍는다.
+    """
+
+    __tablename__ = "catalog_batches"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    key: Mapped[str] = mapped_column(String(160), unique=True, index=True)
+    """`materialcollector/fatigue-literature/2026-10-23` 꼴."""
+    title: Mapped[str] = mapped_column(String(300))
+    description: Mapped[str | None] = mapped_column(Text)
+    manifest_sha256: Mapped[str | None] = mapped_column(String(64))
+    """묶음 파일을 만든 쪽이 준 지문 — 폐쇄망 반입 때 같은 파일인지 대 본다."""
+    created_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    retired_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class CatalogMaterial(Batched, Base):
     """카탈로그 재료 — 문헌상의 등급/제품. 사내 재료와 다른 것이다."""
 
     __tablename__ = "catalog_materials"
+    __table_args__ = (
+        Index(
+            "uq_catalog_materials_external_key",
+            "external_key",
+            unique=True,
+            postgresql_where=text("external_key IS NOT NULL"),
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         PgUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
@@ -140,10 +203,18 @@ class CatalogLink(Base):
     )
 
 
-class CatalogSource(Base):
+class CatalogSource(Batched, Base):
     """출처 — 논문·데이터시트·핸드북. **출처 없는 값은 원본에 0건이다.**"""
 
     __tablename__ = "catalog_sources"
+    __table_args__ = (
+        Index(
+            "uq_catalog_sources_external_key",
+            "external_key",
+            unique=True,
+            postgresql_where=text("external_key IS NOT NULL"),
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         PgUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
@@ -164,6 +235,9 @@ class CatalogSource(Base):
     year: Mapped[int | None] = mapped_column(Integer)
     publisher: Mapped[str | None] = mapped_column(String(300))
     license: Mapped[str | None] = mapped_column(String(100))
+    attribution: Mapped[str | None] = mapped_column(Text)
+    """귀속 문구 — CC BY 처럼 표기를 조건으로 하는 라이선스가 요구하는 글(ADR 0068). 이관해 온
+    출처는 비어 있다."""
     local_path: Mapped[str | None] = mapped_column(Text)
     """원본 수집 환경의 파일 경로 — **여기서는 참고 문자열이다.** 원문 파일은
     스냅샷에 없고, 재배포 라이선스가 불명이라 원본도 경로만 기록했다."""
@@ -255,7 +329,7 @@ class CatalogDefinition(Base):
         return self.deprecated_at is not None
 
 
-class CatalogValue(Base):
+class CatalogValue(Batched, Base):
     """물성값 하나 — 값 + 조건 + 방법 + 등급 + 출처가 한 몸이다.
 
     `conditions` 안에 정정 이력(`*_before_correction`)·판정(`verdict_*`)이
@@ -269,6 +343,12 @@ class CatalogValue(Base):
         # 좁힌 뒤 값의 범위를 훑는다 — 키 하나짜리 색인만 있으면 그 키의 값을 전부 읽고
         # 거른다(2026-10-03, [계획] 온톨로지 에 적혀 있던 남은 것).
         Index("ix_catalog_values_key_value", "property_key", "value_num"),
+        Index(
+            "uq_catalog_values_external_key",
+            "external_key",
+            unique=True,
+            postgresql_where=text("external_key IS NOT NULL"),
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -296,6 +376,11 @@ class CatalogValue(Base):
     )
     """**이어진 값 한 벌**의 점이면 그 벌(`CatalogSeries`, ADR 0067). 낱값 · 이관해 온
     값은 비어 있다 — 이관은 이 칸을 모른다(`mt_import.upsert` 는 원본 칸만 덮는다)."""
+    scatter_point: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=text("false")
+    )
+    """**산점 벌**(S-N 처럼 함수가 아닌 점들)의 점 — 그 물성의 대표값 후보에서 빠진다
+    (ADR 0068). 값 검색 · 물성 지도에는 남는다. S-N 점이 「피로한도」 대표로 서면 안 된다."""
 
     value_num: Mapped[float | None] = mapped_column(Float)
     value_text: Mapped[str | None] = mapped_column(Text)
@@ -327,7 +412,7 @@ class CatalogValue(Base):
     직접 넣은 줄(`mt_id` 없음)은 늘 비어 있다."""
 
 
-class CatalogSeries(Base):
+class CatalogSeries(Batched, Base):
     """**이어진 값 한 벌** — 곡선 · 표(조건축 하나를 따라 이어진 값) 또는 계수 묶음
     (2026-10-22, ADR 0067).
 
@@ -338,6 +423,9 @@ class CatalogSeries(Base):
     점을 읽는다. 여기는 그 벌의 머리다: 무엇이 축이고 어느 열이 어느 물성인가. 출처 · 등급 ·
     방법은 벌 전체가 하나다.
 
+        scatter         곡선과 같은 모양이되 **함수가 아닌 점들**(S-N · ε-N). 같은 x 가
+                        여럿일 수 있고 점마다 조건(런아웃 · 시편)을 둔다. 점은 대표값
+                        후보에서 빠진다.
         curve           x 축(`x_key` — 정의의 조건축, 예: temperature_k · strain_pct)
                         + 물성 열 하나 이상(`columns`). 점의 조건에 x 값이 그 키로 든다.
         parameter_set   식 하나의 계수(`model`) — 점마다 `term` · 단위가 다를 수 있다
@@ -349,6 +437,14 @@ class CatalogSeries(Base):
     """
 
     __tablename__ = "catalog_series"
+    __table_args__ = (
+        Index(
+            "uq_catalog_series_external_key",
+            "external_key",
+            unique=True,
+            postgresql_where=text("external_key IS NOT NULL"),
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         PgUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
@@ -359,7 +455,7 @@ class CatalogSeries(Base):
         index=True,
     )
     kind: Mapped[str] = mapped_column(String(20))
-    """`curve` · `parameter_set`."""
+    """`curve` · `scatter` · `parameter_set`."""
     label: Mapped[str] = mapped_column(String(200))
     x_key: Mapped[str | None] = mapped_column(String(100))
     """곡선의 축 — 점의 조건 칸 이름. 계수 묶음은 비어 있다."""

@@ -1,0 +1,24 @@
+[
+  {
+    "key": "local.mechanical.compressive_stress_at_strain",
+    "domain": "mechanical",
+    "name": "압축 변형률별 공칭 응력",
+    "symbol": "σc(ε)",
+    "si_unit": "Pa",
+    "value_type": "numeric",
+    "test_standard": "ISO 7743 · ASTM D575",
+    "condition_axes": ["strain_pct", "temperature_k", "test_standard", "specimen", "strain_rate_s"],
+    "description": "단축 압축 시험에서 어느 압축 변형률(양수 %)일 때의 공칭 응력. 고무 · 실리콘 · 폼의 압축 응력-변형률 곡선을 한 벌로 넣을 때 점마다 이 키를 쓴다(ADR 0068). 인장의 「변형률별 인장응력」 과 짝이다."
+  },
+  {
+    "key": "local.mechanical.fatigue_strain_amplitude",
+    "domain": "mechanical",
+    "name": "피로 변형률 진폭 (ε-N)",
+    "symbol": "εa",
+    "si_unit": "1",
+    "value_type": "numeric",
+    "test_standard": "ASTM E606",
+    "condition_axes": ["cycles", "loading_mode", "strain_ratio_R", "temperature_k"],
+    "description": "변형률 제어 저주기 피로 시험의 변형률 진폭(무차원, 0.005 = 0.5 %). 수명(cycles)을 축으로 한 산점 한 벌의 점이다 — 응력 제어 S-N 의 「피로강도」 와 갈린다(ADR 0068)."
+  }
+]

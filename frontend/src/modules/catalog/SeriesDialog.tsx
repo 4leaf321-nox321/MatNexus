@@ -142,6 +142,10 @@ export function SeriesDialog({
   const [doi, setDoi] = useState('')
   const [url, setUrl] = useState('')
   const [where, setWhere] = useState('')
+  /** 산점(S-N · ε-N 처럼 같은 x 가 여럿) — 줄 끝 칸 하나를 런아웃(1)으로 읽는다(ADR 0068). */
+  const [scatter, setScatter] = useState(false)
+  const [license, setLicense] = useState('')
+  const [attribution, setAttribution] = useState('')
   const [preview, setPreview] = useState<CatalogSeriesCreated | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<Error | null>(null)
@@ -170,13 +174,18 @@ export function SeriesDialog({
 
   const payload = useMemo<CatalogSeriesCreate | null>(() => {
     if (columns.length === 0 || !xKey.trim()) return null
+    // 산점이면 줄 끝의 칸 하나가 더 있을 수 있다 — 런아웃(1 · 0). 없으면 파단 점이다.
+    const width = 1 + columns.length
+    const runouts = scatter ? parsed.rows.map((row) => (row.length > width ? row[width] === 1 : false)) : []
+    const rows = scatter ? parsed.rows.map((row) => row.slice(0, width)) : parsed.rows
     return {
-      kind: 'curve',
+      kind: scatter ? 'scatter' : 'curve',
       label: label.trim() || `${columns[0].property.name} — ${axisName(xKey)}별`,
       x_key: xKey.trim(),
       x_unit: xUnit.trim() || null,
       columns: columns.map((one) => ({ property_key: one.property.key, unit: one.unit.trim() || null })),
-      rows: parsed.rows,
+      rows,
+      row_conditions: scatter && runouts.some(Boolean) ? runouts.map((runout) => (runout ? { runout: true } : {})) : null,
       conditions: shared.trim() ? parseConditions(shared) : null,
       method,
       quality_tier: tier,
@@ -186,10 +195,30 @@ export function SeriesDialog({
         year: year.trim() ? Number(year) : null,
         doi: doi.trim() || null,
         url: url.trim() || null,
+        license: license.trim() || null,
+        attribution: attribution.trim() || null,
       },
       source_detail: where.trim() || null,
     }
-  }, [columns, xKey, xUnit, label, parsed.rows, shared, method, tier, sourceKind, title, year, doi, url, where])
+  }, [
+    columns,
+    xKey,
+    xUnit,
+    label,
+    parsed.rows,
+    scatter,
+    shared,
+    method,
+    tier,
+    sourceKind,
+    title,
+    year,
+    doi,
+    url,
+    license,
+    attribution,
+    where,
+  ])
 
   // 칸을 바꾸면 미리보기는 낡는다 — 낡은 그림을 보고 저장하지 않게 지운다.
   useEffect(() => setPreview(null), [payload])
@@ -212,6 +241,9 @@ export function SeriesDialog({
     setDoi('')
     setUrl('')
     setWhere('')
+    setScatter(false)
+    setLicense('')
+    setAttribution('')
     setPreview(null)
     setError(null)
   }
@@ -353,6 +385,10 @@ export function SeriesDialog({
             </div>
           </div>
 
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={scatter} onChange={(event) => setScatter(event.target.checked)} />
+            산점(S-N · ε-N 처럼 같은 x 가 여럿인 점) — 줄 끝에 런아웃 칸(1)을 더할 수 있음
+          </label>
           <div className="grid gap-1">
             <Label htmlFor="series-rows">값 붙여넣기 — 축, {columns.map((one) => one.property.name).join(', ') || '물성'} 차례</Label>
             <Textarea
@@ -424,6 +460,23 @@ export function SeriesDialog({
               <Input aria-label="DOI" placeholder="DOI" value={doi} onChange={(event) => setDoi(event.target.value)} />
               <Input aria-label="URL" placeholder="URL" value={url} onChange={(event) => setUrl(event.target.value)} />
               <Input aria-label="출처 안의 위치" placeholder="Fig. 4 · 표 3" value={where} onChange={(event) => setWhere(event.target.value)} />
+            </div>
+            {/* **라이선스 · 귀속**(ADR 0068) — 공개 데이터는 귀속 표기가 조건이다. 상업 이용이 안 되는
+                라이선스(NC)는 서버가 거절한다. */}
+            <div className="grid grid-cols-[10rem_1fr] gap-2">
+              <Input
+                aria-label="라이선스"
+                className="font-mono"
+                placeholder="CC-BY-4.0"
+                value={license}
+                onChange={(event) => setLicense(event.target.value)}
+              />
+              <Input
+                aria-label="귀속 문구"
+                placeholder="Smith et al. (2020), CC BY 4.0"
+                value={attribution}
+                onChange={(event) => setAttribution(event.target.value)}
+              />
             </div>
           </fieldset>
 

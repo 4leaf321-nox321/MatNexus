@@ -15,7 +15,7 @@ import { useState } from 'react'
 import type { CatalogSeries, CatalogValue } from '@/modules/catalog/api'
 import { SourceLabel, TierBadge } from '@/modules/catalog/CatalogValueTable'
 import { METHOD_LABELS } from '@/modules/catalog/catalogForms'
-import { LOG_AXES, axisName, axisUnit } from '@/modules/catalog/catalogShape'
+import { LOG_AXES, axisName, axisUnit, scatterSets } from '@/modules/catalog/catalogShape'
 import type { CurveLine } from '@/modules/catalog/catalogShape'
 import { CurveChart } from '@/modules/tests/CurveChart'
 import { Badge } from '@/shared/components/ui/badge'
@@ -91,6 +91,93 @@ function LinesChart({ lines }: { lines: CurveLine[] }) {
   )
 }
 
+const KIND_LABELS: Record<string, string> = { curve: '곡선 · 표', scatter: '산점' }
+
+/**
+ * **산점 한 벌**(S-N · ε-N) — 점을 잇지 않고, 런아웃은 빈 점으로(ADR 0068). 수명 축이면
+ * 자릿수로 펼친다(log-log). 점 목록은 같은 x 가 여럿이라 줄마다 하나씩 보인다.
+ */
+function ScatterView({ series, values }: { series: CatalogSeries; values: CatalogValue[] }) {
+  const [table, setTable] = useState(false)
+  const axis = series.x_key ?? ''
+  const xUnit = axisUnit(axis)
+  const sets = scatterSets(series, values)
+  const log = LOG_AXES.has(axis)
+  return (
+    <div className="space-y-2">
+      <div className="grid gap-3 lg:grid-cols-2">
+        {sets.map((set) => {
+          const shown = (point: [number, number]): [number, number] => [
+            toDisplay(point[0], xUnit),
+            toDisplay(point[1], set.unit),
+          ]
+          return (
+            <CurveChart
+              key={set.propertyKey}
+              points={[]}
+              pointsLabel={set.name}
+              dots={[
+                { points: set.solid.map(shown), label: '파단' },
+                ...(set.hollow.length > 0
+                  ? [{ points: set.hollow.map(shown), label: '런아웃', hollow: true }]
+                  : []),
+              ]}
+              xLabel={axisLabel(axisName(axis), xUnit)}
+              yLabel={axisLabel(set.name, set.unit)}
+              logX={log}
+              logY={log}
+              height={260}
+            />
+          )
+        })}
+      </div>
+      <button
+        type="button"
+        className="text-primary text-xs underline-offset-2 hover:underline"
+        aria-expanded={table}
+        onClick={() => setTable((current) => !current)}
+      >
+        {table ? '점 목록 접기' : '점 목록 보기'}
+      </button>
+      {table && (
+        <div className="max-h-80 overflow-auto rounded-md border">
+          <Table className="text-sm">
+            <TableHeader>
+              <TableRow>
+                <TableHead>{axisLabel(axisName(axis), xUnit)}</TableHead>
+                <TableHead>물성</TableHead>
+                <TableHead className="text-right">값</TableHead>
+                <TableHead>런아웃</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {sets.flatMap((set) =>
+                [
+                  ...set.solid.map((point) => ({ point, runout: false })),
+                  ...set.hollow.map((point) => ({ point, runout: true })),
+                ]
+                  .sort((left, right) => left.point[0] - right.point[0])
+                  .map(({ point, runout }, index) => (
+                    <TableRow key={`${set.propertyKey}-${index}`}>
+                      <TableCell className="tabular-nums">
+                        {formatScalar(point[0], xUnit ?? undefined)}
+                      </TableCell>
+                      <TableCell>{set.name}</TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {formatScalar(point[1], set.unit ?? undefined)}
+                      </TableCell>
+                      <TableCell>{runout ? '런아웃' : ''}</TableCell>
+                    </TableRow>
+                  ))
+              )}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+    </div>
+  )
+}
+
 /** 직접 넣은 한 벌 — 머리 · 그래프(곡선이면) · 펼치는 표 · 지우기. */
 export function SeriesCard({
   series,
@@ -127,7 +214,14 @@ export function SeriesCard({
     <div className="space-y-2 rounded-md border p-3">
       <div className="flex flex-wrap items-center gap-2">
         <h3 className="font-medium">{series.label}</h3>
-        <Badge variant="secondary">{series.kind === 'curve' ? '곡선 · 표' : `계수 묶음 · ${series.model ?? ''}`}</Badge>
+        <Badge variant="secondary">
+          {KIND_LABELS[series.kind] ?? `계수 묶음 · ${series.model ?? ''}`}
+        </Badge>
+        {series.batch_key && (
+          <Badge variant="outline" title="외부 공개 데이터 반입 묶음으로 들어온 한 벌입니다">
+            반입 · {series.batch_key}
+          </Badge>
+        )}
         <TierBadge tier={series.quality_tier} />
         <Badge variant="outline">{METHOD_LABELS[series.method] ?? series.method}</Badge>
         <span className="text-muted-foreground text-xs">
@@ -148,6 +242,7 @@ export function SeriesCard({
         )}
       </div>
       <SourceLabel source={series.source ?? null} detail={series.source_detail} />
+      {series.kind === 'scatter' && <ScatterView series={series} values={values} />}
       {lines.length > 0 && (
         <div className="grid gap-3 lg:grid-cols-2">
           {lines.map((line) => (
@@ -228,7 +323,7 @@ export function CurvesPanel({
   canRemove: (series: CatalogSeries) => boolean
   onRemove: (series: CatalogSeries) => void
 }) {
-  const curves = series.filter((one) => one.kind === 'curve')
+  const curves = series.filter((one) => one.kind === 'curve' || one.kind === 'scatter')
   // 화면이 이은 선은 물성 · 축마다 한 판에.
   const panels = new Map<string, CurveLine[]>()
   for (const line of autoLines) {
@@ -241,7 +336,7 @@ export function CurvesPanel({
     <div className="space-y-6">
       <section className="space-y-2">
         <h2 className="text-sm font-semibold">
-          직접 넣은 곡선 · 표
+          직접 넣은 곡선 · 표 · 산점
           <span className="text-muted-foreground ml-2 text-xs font-normal">{curves.length}벌</span>
         </h2>
         {curves.length === 0 ? (

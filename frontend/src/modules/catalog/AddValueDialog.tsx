@@ -54,6 +54,7 @@ export function AddValueDialog({
   const [year, setYear] = useState('')
   const [doi, setDoi] = useState('')
   const [url, setUrl] = useState('')
+  const [license, setLicense] = useState('')
   const [detailWhere, setDetailWhere] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<Error | null>(null)
@@ -107,6 +108,7 @@ export function AddValueDialog({
     setYear('')
     setDoi('')
     setUrl('')
+    setLicense('')
     setDetailWhere('')
     setError(null)
   }
@@ -134,10 +136,11 @@ export function AddValueDialog({
         year: year.trim() ? Number(year) : null,
         doi: doi.trim() || null,
         url: url.trim() || null,
+        license: license.trim() || null,
       },
       source_detail: detailWhere.trim() || null,
     }
-  }, [property, value, unit, temperature, method, tier, sourceKind, title, year, doi, url, detailWhere])
+  }, [property, value, unit, temperature, method, tier, sourceKind, title, year, doi, url, license, detailWhere])
 
   async function submit() {
     if (!payload) return
@@ -324,6 +327,15 @@ export function AddValueDialog({
                 <Label htmlFor="new-source-url">URL</Label>
                 <Input id="new-source-url" value={url} onChange={(event) => setUrl(event.target.value)} />
               </div>
+            </div>
+            <div className="grid gap-1">
+              <Label htmlFor="new-source-license">라이선스 (선택 — 예: CC-BY-4.0, 상업 이용 불가 NC 는 거절)</Label>
+              <Input
+                id="new-source-license"
+                className="font-mono"
+                value={license}
+                onChange={(event) => setLicense(event.target.value)}
+              />
             </div>
             <div className="grid gap-1">
               <Label htmlFor="new-source-detail">출처 안의 위치</Label>

@@ -115,6 +115,8 @@ export const ACTION_LABELS: Record<string, string> = {
   // 이 둘은 **사람이 해도 남는다** — 되돌릴 수 없다.
   'catalog_value.deleted': '문헌 값 삭제',
   'catalog_series.deleted': '문헌 곡선 · 계수 묶음 삭제',
+  'catalog_batch.imported': '문헌 반입 묶음 들이기',
+  'catalog_batch.deleted': '문헌 반입 묶음 삭제',
   'catalog_property.migrated': '문헌 물성 키 이관',
   // **이름이 없으면 코드 그대로 뜨고 「행위로 필터」 에서 고를 수도 없다.** 아래는 이름표가
   // 없던 것들이다(2026-09-24, 36가지 중 18가지) — 배포 뒤 「열람 제한이 켜져 있던 부서」 를

@@ -15,6 +15,7 @@ from app.modules.accounts.models import User
 from app.modules.audit.models import AccessLog
 from app.modules.auth.models import PersonalAccessToken, RefreshToken
 from app.modules.catalog.models import (
+    CatalogBatch,
     CatalogDefinition,
     CatalogLink,
     CatalogMaterial,
@@ -98,6 +99,7 @@ __all__ = [
     "Base",
     "BomAlias",
     "CardBlock",
+    "CatalogBatch",
     "CatalogDefinition",
     "CatalogLink",
     "CatalogMaterial",

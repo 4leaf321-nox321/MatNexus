@@ -19,8 +19,17 @@ from sqlalchemy.orm import Session
 from app import version
 from app.database import get_db
 from app.modules.accounts.models import User
-from app.modules.catalog import contribute, links, mapping, material_links, parameters, spans
+from app.modules.catalog import (
+    batches,
+    contribute,
+    links,
+    mapping,
+    material_links,
+    parameters,
+    spans,
+)
 from app.modules.catalog.models import (
+    CatalogBatch,
     CatalogDefinition,
     CatalogLink,
     CatalogMaterial,
@@ -42,6 +51,10 @@ from app.modules.catalog.schemas import (
     AshbyAxisOut,
     AshbyOut,
     AshbyPointOut,
+    CatalogBatchBundleIn,
+    CatalogBatchDeleteOut,
+    CatalogBatchImportOut,
+    CatalogBatchOut,
     CatalogCompareCellOut,
     CatalogCompareOut,
     CatalogCompareRowOut,
@@ -54,6 +67,7 @@ from app.modules.catalog.schemas import (
     CatalogMaterialDetailOut,
     CatalogMaterialOut,
     CatalogMaterialPage,
+    CatalogMaterialPreviewOut,
     CatalogParameterSetOut,
     CatalogParameterTermOut,
     CatalogPropertyCreate,
@@ -385,7 +399,18 @@ def _catalog_filters(
     """
     conditions: list[ColumnElement[bool]] = []
     if q:
-        conditions.append(CatalogMaterial.name.ilike(f"%{q}%"))
+        # **이름만 보면 긴 이름을 못 찾는다** — 「Ecoflex 00-30 (Smooth-On silicone)」 을
+        # 등급 · 제조사로 찾지 못했다(ADR 0068). 등급 · 코드 · 제조사 · 규격명(속성)도 본다.
+        pattern = f"%{q}%"
+        conditions.append(
+            or_(
+                CatalogMaterial.name.ilike(pattern),
+                CatalogMaterial.grade.ilike(pattern),
+                CatalogMaterial.material_code.ilike(pattern),
+                CatalogMaterial.manufacturer.ilike(pattern),
+                CatalogMaterial.attributes["designation"].astext.ilike(pattern),
+            )
+        )
     if subsystem is not None:
         # 빈 문자열은 「미분류」 를 뜻한다 — 분류 안 된 것을 찾는 것도 일이다.
         conditions.append(
@@ -1419,6 +1444,44 @@ def create_catalog_material(
     )
 
 
+@router.post("/materials/preview", response_model=CatalogMaterialPreviewOut)
+def preview_catalog_material(
+    payload: CatalogMaterialCreate,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> CatalogMaterialPreviewOut:
+    """재료를 만들기 전에 **만들 때와 같은 검사**를 돌리고 되돌린다(ADR 0068). 이름 낱말이
+    겹치는 기존 재료를 함께 준다 — 운영에서 잘못 만든 재료는 MCP 로 못 지운다."""
+    similar = contribute.similar_materials(db, payload.name)
+    try:
+        material = contribute.create_material(db, payload, user)
+        out = CatalogMaterialPreviewOut(
+            name=material.name,
+            category=material.category,
+            attributes=material.attributes,
+            similar=[_material_brief(one) for one in similar],
+        )
+    finally:
+        db.rollback()
+    return out
+
+
+def _material_brief(row: CatalogMaterial) -> CatalogMaterialOut:
+    return CatalogMaterialOut(
+        id=row.id,
+        name=row.name,
+        material_code=row.material_code,
+        category=row.category,
+        origin=contribute.origin_of(row),
+        subsystem=row.subsystem,
+        role=row.role,
+        manufacturer=row.manufacturer,
+        material_class=row.material_class,
+        grade=row.grade,
+        source_missing_at=row.source_missing_at,
+    )
+
+
 @router.delete("/materials/{material_id}", status_code=204)
 def delete_catalog_material(
     material_id: uuid.UUID,
@@ -1550,6 +1613,14 @@ def _series_out(
             )
         )
     }
+    batches = {
+        one.id: one.key
+        for one in db.scalars(
+            select(CatalogBatch).where(
+                CatalogBatch.id.in_({row.batch_id for row in rows if row.batch_id})
+            )
+        )
+    }
     counts: dict[uuid.UUID, int] = {
         series_id: int(count)
         for series_id, count in db.execute(
@@ -1593,6 +1664,7 @@ def _series_out(
                 if row.created_by_id
                 else None,
                 created_at=row.created_at,
+                batch_key=batches.get(row.batch_id) if row.batch_id else None,
             )
         )
     return out
@@ -1710,6 +1782,57 @@ def delete_catalog_series(
     if removed.kind == "parameter_set":
         parameters.forget()
     return Response(status_code=204)
+
+
+# --- 반입 묶음 (ADR 0068) ---------------------------------------------------------
+
+
+@router.post("/batches/import", response_model=CatalogBatchImportOut)
+def import_catalog_batch(
+    payload: CatalogBatchBundleIn,
+    dry_run: bool = Query(
+        default=True, description="기본은 미리보기 — 아무것도 남기지 않는다"
+    ),
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> CatalogBatchImportOut:
+    """**묶음 파일 하나를 한 번에 들인다**(자료 관리자) — 전부 되거나 전부 안 된다.
+
+    같은 외부 키 · 같은 내용이면 그대로 두고(`existing`), 내용이 다르면 문제로 낸다. 적용에서
+    문제가 하나라도 있으면 422 와 함께 보고서(`details`)를 돌려주고 아무것도 적지 않는다.
+    감사는 `batches.import_bundle` 이 남긴다.
+    """
+    return batches.import_bundle(db, payload, user, dry_run=dry_run)
+
+
+@router.get("/batches", response_model=list[CatalogBatchOut])
+def list_catalog_batches(
+    _user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> list[CatalogBatchOut]:
+    """반입 묶음 목록 — 최근 것부터. 줄 수 · 라이선스 · 사내가 받아 간 값 수."""
+    return batches.list_batches(db)
+
+
+@router.get("/batches/{key:path}", response_model=CatalogBatchOut)
+def get_catalog_batch(
+    key: str,
+    _user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> CatalogBatchOut:
+    return batches.summary(db, batches.batch_or_404(db, key))
+
+
+@router.delete("/batches/{key:path}", response_model=CatalogBatchDeleteOut)
+def delete_catalog_batch(
+    key: str,
+    dry_run: bool = Query(default=True, description="기본은 미리보기 — 지울 수만 센다"),
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> CatalogBatchDeleteOut:
+    """묶음째 지운다(자료 관리자). 사내가 받아 간 값 · 사내와 이은 재료가 있으면 막는다(409).
+    감사는 `batches.delete_batch` 가 남긴다."""
+    return batches.delete_batch(db, key, user, dry_run=dry_run)
 
 
 def _value_label(db: Session, row: CatalogValue) -> str:

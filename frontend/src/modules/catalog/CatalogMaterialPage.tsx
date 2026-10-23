@@ -145,7 +145,7 @@ export default function CatalogMaterialPage() {
     )
   }
 
-  const curveSets = series.filter((one) => one.kind === 'curve').length
+  const curveSets = series.filter((one) => one.kind === 'curve' || one.kind === 'scatter').length
   const parameterSets = series.filter((one) => one.kind === 'parameter_set')
 
   return (

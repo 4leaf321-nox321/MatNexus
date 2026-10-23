@@ -100,6 +100,8 @@ class CatalogSourceOut(BaseModel):
     year: int | None
     publisher: str | None
     license: str | None
+    attribution: str | None = None
+    """귀속 문구 — CC BY 처럼 표기를 조건으로 하는 라이선스가 요구하는 글(ADR 0068)."""
 
 
 class CatalogValueOut(BaseModel):
@@ -359,6 +361,8 @@ class CatalogSeriesOut(BaseModel):
     notes: str | None
     created_by: str | None = None
     created_at: datetime
+    batch_key: str | None = None
+    """반입 묶음으로 들어왔으면 그 묶음(ADR 0068)."""
 
 
 class CatalogMaterialDetailOut(BaseModel):
@@ -475,6 +479,9 @@ class CatalogMaterialCreate(BaseModel):
     material_class: str | None = None
     subsystem: str | None = Field(default=None, max_length=50)
     description: str | None = None
+    attributes: dict[str, Any] | None = None
+    """규격명 · 형태 · 상태 같은 재료의 정체(ADR 0068) — `contribute.MATERIAL_ATTRIBUTES` 의
+    칸만 받는다. 모르는 칸은 거절한다(아무 칸이나 받으면 같은 뜻이 이름 둘로 갈린다)."""
 
 
 class CatalogSourceIn(BaseModel):
@@ -488,6 +495,10 @@ class CatalogSourceIn(BaseModel):
     doi: str | None = Field(default=None, max_length=200)
     url: str | None = None
     publisher: str | None = Field(default=None, max_length=300)
+    license: str | None = Field(default=None, max_length=100)
+    """SPDX 식별자(`CC-BY-4.0`) 또는 `LicenseRef-…`. 상업 이용이 안 되는 것(NC)은 거절한다."""
+    attribution: str | None = None
+    """귀속 문구 — 라이선스가 표기를 조건으로 하면 그 글."""
 
 
 class CatalogValueCreate(BaseModel):
@@ -532,13 +543,16 @@ class CatalogSeriesCreate(BaseModel):
     방법 · 조건은 벌 전체가 하나다.
     """
 
-    kind: Literal["curve", "parameter_set"]
+    kind: Literal["curve", "scatter", "parameter_set"]
     label: str = Field(min_length=1, max_length=200)
     x_key: str | None = Field(default=None, max_length=100)
     x_unit: str | None = Field(default=None, max_length=50)
     """축 값의 단위. 비우면 키의 단위로 적은 것으로 본다(temperature_k 면 K)."""
     columns: list[CatalogSeriesColumnIn] = Field(default_factory=list, max_length=8)
     rows: list[list[float | None]] = Field(default_factory=list, max_length=5000)
+    row_conditions: list[dict[str, Any]] | None = None
+    """줄마다 점에 더할 조건 — `rows` 와 같은 길이. `runout`(bool) · `specimen` ·
+    `failure_mode` 만 받는다(ADR 0068). S-N 의 런아웃 표시가 여기 든다."""
     model: str | None = Field(default=None, max_length=50)
     property_key: str | None = Field(default=None, max_length=100)
     terms: list[CatalogSeriesTermIn] = Field(default_factory=list, max_length=500)
@@ -945,3 +959,161 @@ class CatalogParameterSetOut(BaseModel):
     거절된다(어느 값이 쓰일지 알 수 없어서다)."""
 
     terms: list[CatalogParameterTermOut] = []
+
+
+# --- 반입 묶음 (ADR 0068) ----------------------------------------------------------
+
+
+class CatalogMaterialPreviewOut(BaseModel):
+    """재료를 만들면 **이렇게 된다** — 만들 때와 같은 검사를 지났다. 비슷한 기존 재료를
+    함께 준다."""
+
+    name: str
+    category: str
+    attributes: dict[str, Any] | None
+    similar: list[CatalogMaterialOut]
+    """이름 낱말이 겹치는 기존 문헌 재료(최대 10) — 같은 재료를 또 만들지 않게."""
+
+
+class CatalogBatchMetaIn(BaseModel):
+    key: str = Field(min_length=3, max_length=160, pattern=r"^[a-z0-9][a-z0-9._/-]{2,159}$")
+    """`materialcollector/fatigue-literature/2026-10-23` 꼴 — 소문자 · 숫자 · `._/-`."""
+    title: str = Field(min_length=1, max_length=300)
+    description: str | None = None
+    manifest_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+
+
+_ITEM_KEY = r"^[A-Za-z0-9][A-Za-z0-9._:/-]{0,38}$"
+
+
+class CatalogBatchSourceIn(CatalogSourceIn):
+    key: str = Field(pattern=_ITEM_KEY)
+    """묶음 안의 출처 키 — 값 · 벌이 이 키로 출처를 가리킨다."""
+
+
+class CatalogBatchMaterialIn(BaseModel):
+    """새 문헌 재료, 또는 **이미 있는 문헌 재료**(`existing_id`)를 가리킨다 — 둘 중 하나."""
+
+    key: str = Field(pattern=_ITEM_KEY)
+    existing_id: uuid.UUID | None = None
+    """이미 있는 문헌 재료에 붙일 때. 그 재료는 묶음의 것이 아니라 묶음을 지워도 남는다."""
+    name: str | None = Field(default=None, max_length=300)
+    category: str | None = Field(default=None, max_length=30)
+    material_code: str | None = Field(default=None, max_length=100)
+    manufacturer: str | None = None
+    grade: str | None = None
+    material_class: str | None = None
+    subsystem: str | None = Field(default=None, max_length=50)
+    description: str | None = None
+    attributes: dict[str, Any] | None = None
+
+
+class CatalogBatchValueIn(BaseModel):
+    """낱값 하나 — 출처는 묶음의 출처 키로 가리킨다."""
+
+    key: str = Field(pattern=_ITEM_KEY)
+    material: str
+    """묶음의 재료 키."""
+    source: str
+    """묶음의 출처 키."""
+    property_key: str = Field(min_length=1, max_length=100)
+    value_num: float | None = None
+    value_text: str | None = None
+    unit: str | None = Field(default=None, max_length=50)
+    uncertainty: float | None = None
+    conditions: dict[str, Any] | None = None
+    method: str = "handbook"
+    quality_tier: int = Field(ge=1, le=4)
+    source_detail: str | None = None
+    notes: str | None = None
+
+
+class CatalogBatchSeriesIn(BaseModel):
+    """이어진 값 한 벌(ADR 0067) — 출처는 묶음의 출처 키로."""
+
+    key: str = Field(pattern=_ITEM_KEY)
+    material: str
+    source: str
+    kind: Literal["curve", "scatter", "parameter_set"]
+    label: str = Field(min_length=1, max_length=200)
+    x_key: str | None = Field(default=None, max_length=100)
+    x_unit: str | None = Field(default=None, max_length=50)
+    columns: list[CatalogSeriesColumnIn] = Field(default_factory=list, max_length=8)
+    rows: list[list[float | None]] = Field(default_factory=list, max_length=5000)
+    row_conditions: list[dict[str, Any]] | None = None
+    model: str | None = Field(default=None, max_length=50)
+    property_key: str | None = Field(default=None, max_length=100)
+    terms: list[CatalogSeriesTermIn] = Field(default_factory=list, max_length=500)
+    conditions: dict[str, Any] | None = None
+    method: str = "handbook"
+    quality_tier: int = Field(ge=1, le=4)
+    source_detail: str | None = None
+    notes: str | None = None
+
+
+class CatalogBatchBundleIn(BaseModel):
+    """**묶음 파일 하나**(ADR 0068) — 서버가 한 번에 받아 전부 되거나 전부 안 된다."""
+
+    batch: CatalogBatchMetaIn
+    sources: list[CatalogBatchSourceIn] = Field(default_factory=list, max_length=2000)
+    materials: list[CatalogBatchMaterialIn] = Field(default_factory=list, max_length=2000)
+    values: list[CatalogBatchValueIn] = Field(default_factory=list, max_length=10000)
+    series: list[CatalogBatchSeriesIn] = Field(default_factory=list, max_length=2000)
+
+
+class CatalogBatchCountOut(BaseModel):
+    created: int = 0
+    existing: int = 0
+    """같은 외부 키 · 같은 내용으로 이미 있어 그대로 둔 것."""
+
+
+class CatalogBatchProblemOut(BaseModel):
+    kind: str
+    """`source` · `material` · `value` · `series`."""
+    key: str
+    code: str
+    message: str
+
+
+class CatalogBatchImportOut(BaseModel):
+    """들이기의 결과 — 미리보기면 **들였을 때의 결과**이고 아무것도 남지 않는다."""
+
+    batch_key: str
+    dry_run: bool
+    applied: bool
+    """실제로 적었나. 문제가 하나라도 있으면 아무것도 적지 않는다."""
+    sources: CatalogBatchCountOut
+    materials: CatalogBatchCountOut
+    values: CatalogBatchCountOut
+    series: CatalogBatchCountOut
+    points: int
+    """새로 생긴 벌의 점 수."""
+    licenses: dict[str, int]
+    """이 묶음 출처의 라이선스별 수 — 빈 것은 `(없음)`."""
+    problems: list[CatalogBatchProblemOut]
+
+
+class CatalogBatchOut(BaseModel):
+    key: str
+    title: str
+    description: str | None
+    manifest_sha256: str | None
+    created_by: str | None
+    created_at: datetime
+    retired_at: datetime | None
+    materials: int
+    sources: int
+    values: int
+    series: int
+    adopted: int
+    """사내 재료 · 시료가 선언 물성으로 받아 간 이 묶음의 값 수 — 0 이 아니면 지울 수 없다."""
+    licenses: dict[str, int]
+
+
+class CatalogBatchDeleteOut(BaseModel):
+    batch_key: str
+    dry_run: bool
+    series: int
+    values: int
+    sources: int
+    materials: int

@@ -4806,6 +4806,899 @@
         "title": "CascadeDeleteRequest",
         "type": "object"
       },
+      "CatalogBatchBundleIn": {
+        "description": "**묶음 파일 하나**(ADR 0068) — 서버가 한 번에 받아 전부 되거나 전부 안 된다.",
+        "properties": {
+          "batch": {
+            "$ref": "#/components/schemas/CatalogBatchMetaIn"
+          },
+          "materials": {
+            "items": {
+              "$ref": "#/components/schemas/CatalogBatchMaterialIn"
+            },
+            "maxItems": 2000,
+            "title": "Materials",
+            "type": "array"
+          },
+          "series": {
+            "items": {
+              "$ref": "#/components/schemas/CatalogBatchSeriesIn"
+            },
+            "maxItems": 2000,
+            "title": "Series",
+            "type": "array"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/CatalogBatchSourceIn"
+            },
+            "maxItems": 2000,
+            "title": "Sources",
+            "type": "array"
+          },
+          "values": {
+            "items": {
+              "$ref": "#/components/schemas/CatalogBatchValueIn"
+            },
+            "maxItems": 10000,
+            "title": "Values",
+            "type": "array"
+          }
+        },
+        "required": [
+          "batch"
+        ],
+        "title": "CatalogBatchBundleIn",
+        "type": "object"
+      },
+      "CatalogBatchCountOut": {
+        "properties": {
+          "created": {
+            "default": 0,
+            "title": "Created",
+            "type": "integer"
+          },
+          "existing": {
+            "default": 0,
+            "title": "Existing",
+            "type": "integer"
+          }
+        },
+        "title": "CatalogBatchCountOut",
+        "type": "object"
+      },
+      "CatalogBatchDeleteOut": {
+        "properties": {
+          "batch_key": {
+            "title": "Batch Key",
+            "type": "string"
+          },
+          "dry_run": {
+            "title": "Dry Run",
+            "type": "boolean"
+          },
+          "materials": {
+            "title": "Materials",
+            "type": "integer"
+          },
+          "series": {
+            "title": "Series",
+            "type": "integer"
+          },
+          "sources": {
+            "title": "Sources",
+            "type": "integer"
+          },
+          "values": {
+            "title": "Values",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "batch_key",
+          "dry_run",
+          "series",
+          "values",
+          "sources",
+          "materials"
+        ],
+        "title": "CatalogBatchDeleteOut",
+        "type": "object"
+      },
+      "CatalogBatchImportOut": {
+        "description": "들이기의 결과 — 미리보기면 **들였을 때의 결과**이고 아무것도 남지 않는다.",
+        "properties": {
+          "applied": {
+            "title": "Applied",
+            "type": "boolean"
+          },
+          "batch_key": {
+            "title": "Batch Key",
+            "type": "string"
+          },
+          "dry_run": {
+            "title": "Dry Run",
+            "type": "boolean"
+          },
+          "licenses": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Licenses",
+            "type": "object"
+          },
+          "materials": {
+            "$ref": "#/components/schemas/CatalogBatchCountOut"
+          },
+          "points": {
+            "title": "Points",
+            "type": "integer"
+          },
+          "problems": {
+            "items": {
+              "$ref": "#/components/schemas/CatalogBatchProblemOut"
+            },
+            "title": "Problems",
+            "type": "array"
+          },
+          "series": {
+            "$ref": "#/components/schemas/CatalogBatchCountOut"
+          },
+          "sources": {
+            "$ref": "#/components/schemas/CatalogBatchCountOut"
+          },
+          "values": {
+            "$ref": "#/components/schemas/CatalogBatchCountOut"
+          }
+        },
+        "required": [
+          "batch_key",
+          "dry_run",
+          "applied",
+          "sources",
+          "materials",
+          "values",
+          "series",
+          "points",
+          "licenses",
+          "problems"
+        ],
+        "title": "CatalogBatchImportOut",
+        "type": "object"
+      },
+      "CatalogBatchMaterialIn": {
+        "description": "새 문헌 재료, 또는 **이미 있는 문헌 재료**(`existing_id`)를 가리킨다 — 둘 중 하나.",
+        "properties": {
+          "attributes": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attributes"
+          },
+          "category": {
+            "anyOf": [
+              {
+                "maxLength": 30,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "existing_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Existing Id"
+          },
+          "grade": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Grade"
+          },
+          "key": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]{0,38}$",
+            "title": "Key",
+            "type": "string"
+          },
+          "manufacturer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manufacturer"
+          },
+          "material_class": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Material Class"
+          },
+          "material_code": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Material Code"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 300,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "subsystem": {
+            "anyOf": [
+              {
+                "maxLength": 50,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subsystem"
+          }
+        },
+        "required": [
+          "key"
+        ],
+        "title": "CatalogBatchMaterialIn",
+        "type": "object"
+      },
+      "CatalogBatchMetaIn": {
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "key": {
+            "maxLength": 160,
+            "minLength": 3,
+            "pattern": "^[a-z0-9][a-z0-9._/-]{2,159}$",
+            "title": "Key",
+            "type": "string"
+          },
+          "manifest_sha256": {
+            "anyOf": [
+              {
+                "pattern": "^[0-9a-f]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manifest Sha256"
+          },
+          "title": {
+            "maxLength": 300,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "title"
+        ],
+        "title": "CatalogBatchMetaIn",
+        "type": "object"
+      },
+      "CatalogBatchOut": {
+        "properties": {
+          "adopted": {
+            "title": "Adopted",
+            "type": "integer"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "licenses": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Licenses",
+            "type": "object"
+          },
+          "manifest_sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manifest Sha256"
+          },
+          "materials": {
+            "title": "Materials",
+            "type": "integer"
+          },
+          "retired_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retired At"
+          },
+          "series": {
+            "title": "Series",
+            "type": "integer"
+          },
+          "sources": {
+            "title": "Sources",
+            "type": "integer"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "values": {
+            "title": "Values",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "key",
+          "title",
+          "description",
+          "manifest_sha256",
+          "created_by",
+          "created_at",
+          "retired_at",
+          "materials",
+          "sources",
+          "values",
+          "series",
+          "adopted",
+          "licenses"
+        ],
+        "title": "CatalogBatchOut",
+        "type": "object"
+      },
+      "CatalogBatchProblemOut": {
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "key",
+          "code",
+          "message"
+        ],
+        "title": "CatalogBatchProblemOut",
+        "type": "object"
+      },
+      "CatalogBatchSeriesIn": {
+        "description": "이어진 값 한 벌(ADR 0067) — 출처는 묶음의 출처 키로.",
+        "properties": {
+          "columns": {
+            "items": {
+              "$ref": "#/components/schemas/CatalogSeriesColumnIn"
+            },
+            "maxItems": 8,
+            "title": "Columns",
+            "type": "array"
+          },
+          "conditions": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conditions"
+          },
+          "key": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]{0,38}$",
+            "title": "Key",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "curve",
+              "scatter",
+              "parameter_set"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          },
+          "material": {
+            "title": "Material",
+            "type": "string"
+          },
+          "method": {
+            "default": "handbook",
+            "title": "Method",
+            "type": "string"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "maxLength": 50,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "property_key": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Property Key"
+          },
+          "quality_tier": {
+            "maximum": 4.0,
+            "minimum": 1.0,
+            "title": "Quality Tier",
+            "type": "integer"
+          },
+          "row_conditions": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Row Conditions"
+          },
+          "rows": {
+            "items": {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            "maxItems": 5000,
+            "title": "Rows",
+            "type": "array"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "source_detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Detail"
+          },
+          "terms": {
+            "items": {
+              "$ref": "#/components/schemas/CatalogSeriesTermIn"
+            },
+            "maxItems": 500,
+            "title": "Terms",
+            "type": "array"
+          },
+          "x_key": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "X Key"
+          },
+          "x_unit": {
+            "anyOf": [
+              {
+                "maxLength": 50,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "X Unit"
+          }
+        },
+        "required": [
+          "key",
+          "material",
+          "source",
+          "kind",
+          "label",
+          "quality_tier"
+        ],
+        "title": "CatalogBatchSeriesIn",
+        "type": "object"
+      },
+      "CatalogBatchSourceIn": {
+        "properties": {
+          "attribution": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attribution"
+          },
+          "authors": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Authors"
+          },
+          "doi": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Doi"
+          },
+          "key": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]{0,38}$",
+            "title": "Key",
+            "type": "string"
+          },
+          "kind": {
+            "maxLength": 30,
+            "minLength": 1,
+            "title": "Kind",
+            "type": "string"
+          },
+          "license": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "License"
+          },
+          "publisher": {
+            "anyOf": [
+              {
+                "maxLength": 300,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Publisher"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          },
+          "year": {
+            "anyOf": [
+              {
+                "maximum": 2100.0,
+                "minimum": 1800.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year"
+          }
+        },
+        "required": [
+          "kind",
+          "key"
+        ],
+        "title": "CatalogBatchSourceIn",
+        "type": "object"
+      },
+      "CatalogBatchValueIn": {
+        "description": "낱값 하나 — 출처는 묶음의 출처 키로 가리킨다.",
+        "properties": {
+          "conditions": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conditions"
+          },
+          "key": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]{0,38}$",
+            "title": "Key",
+            "type": "string"
+          },
+          "material": {
+            "title": "Material",
+            "type": "string"
+          },
+          "method": {
+            "default": "handbook",
+            "title": "Method",
+            "type": "string"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "property_key": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Property Key",
+            "type": "string"
+          },
+          "quality_tier": {
+            "maximum": 4.0,
+            "minimum": 1.0,
+            "title": "Quality Tier",
+            "type": "integer"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "source_detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Detail"
+          },
+          "uncertainty": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Uncertainty"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "maxLength": 50,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit"
+          },
+          "value_num": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value Num"
+          },
+          "value_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value Text"
+          }
+        },
+        "required": [
+          "key",
+          "material",
+          "source",
+          "property_key",
+          "quality_tier"
+        ],
+        "title": "CatalogBatchValueIn",
+        "type": "object"
+      },
       "CatalogCompareCellOut": {
         "description": "비교 표의 칸 하나 — 그 재료의 그 물성 대표값. 없으면 None 칸.",
         "properties": {
@@ -5219,6 +6112,18 @@
       },
       "CatalogMaterialCreate": {
         "properties": {
+          "attributes": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attributes"
+          },
           "category": {
             "maxLength": 30,
             "minLength": 1,
@@ -5628,6 +6533,46 @@
           "items"
         ],
         "title": "CatalogMaterialPage",
+        "type": "object"
+      },
+      "CatalogMaterialPreviewOut": {
+        "description": "재료를 만들면 **이렇게 된다** — 만들 때와 같은 검사를 지났다. 비슷한 기존 재료를\n함께 준다.",
+        "properties": {
+          "attributes": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attributes"
+          },
+          "category": {
+            "title": "Category",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "similar": {
+            "items": {
+              "$ref": "#/components/schemas/CatalogMaterialOut"
+            },
+            "title": "Similar",
+            "type": "array"
+          }
+        },
+        "required": [
+          "name",
+          "category",
+          "attributes",
+          "similar"
+        ],
+        "title": "CatalogMaterialPreviewOut",
         "type": "object"
       },
       "CatalogParameterSetOut": {
@@ -6107,6 +7052,7 @@
           "kind": {
             "enum": [
               "curve",
+              "scatter",
               "parameter_set"
             ],
             "title": "Kind",
@@ -6163,6 +7109,21 @@
             "minimum": 1.0,
             "title": "Quality Tier",
             "type": "integer"
+          },
+          "row_conditions": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Row Conditions"
           },
           "rows": {
             "items": {
@@ -6268,6 +7229,17 @@
       "CatalogSeriesOut": {
         "description": "이어진 값 한 벌의 머리(ADR 0067) — 곡선 · 표 또는 계수 묶음.",
         "properties": {
+          "batch_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Batch Key"
+          },
           "columns": {
             "items": {
               "$ref": "#/components/schemas/CatalogSeriesColumnOut"
@@ -6523,6 +7495,17 @@
       "CatalogSourceIn": {
         "description": "값의 출처. **제목·DOI·URL 중 하나는 있어야 한다** — 출처 없는 값은 안 받는다.",
         "properties": {
+          "attribution": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attribution"
+          },
           "authors": {
             "anyOf": [
               {
@@ -6551,6 +7534,18 @@
             "minLength": 1,
             "title": "Kind",
             "type": "string"
+          },
+          "license": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "License"
           },
           "publisher": {
             "anyOf": [
@@ -6608,6 +7603,17 @@
       },
       "CatalogSourceOut": {
         "properties": {
+          "attribution": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attribution"
+          },
           "doi": {
             "anyOf": [
               {
@@ -40384,6 +41390,183 @@
         ]
       }
     },
+    "/api/catalog/batches": {
+      "get": {
+        "description": "반입 묶음 목록 — 최근 것부터. 줄 수 · 라이선스 · 사내가 받아 간 값 수.",
+        "operationId": "list_catalog_batches_api_catalog_batches_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CatalogBatchOut"
+                  },
+                  "title": "Response List Catalog Batches Api Catalog Batches Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Catalog Batches",
+        "tags": [
+          "catalog"
+        ]
+      }
+    },
+    "/api/catalog/batches/import": {
+      "post": {
+        "description": "**묶음 파일 하나를 한 번에 들인다**(자료 관리자) — 전부 되거나 전부 안 된다.\n\n같은 외부 키 · 같은 내용이면 그대로 두고(`existing`), 내용이 다르면 문제로 낸다. 적용에서\n문제가 하나라도 있으면 422 와 함께 보고서(`details`)를 돌려주고 아무것도 적지 않는다.\n감사는 `batches.import_bundle` 이 남긴다.",
+        "operationId": "import_catalog_batch_api_catalog_batches_import_post",
+        "parameters": [
+          {
+            "description": "기본은 미리보기 — 아무것도 남기지 않는다",
+            "in": "query",
+            "name": "dry_run",
+            "required": false,
+            "schema": {
+              "default": true,
+              "description": "기본은 미리보기 — 아무것도 남기지 않는다",
+              "title": "Dry Run",
+              "type": "boolean"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CatalogBatchBundleIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogBatchImportOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Import Catalog Batch",
+        "tags": [
+          "catalog"
+        ]
+      }
+    },
+    "/api/catalog/batches/{key}": {
+      "delete": {
+        "description": "묶음째 지운다(자료 관리자). 사내가 받아 간 값 · 사내와 이은 재료가 있으면 막는다(409).\n감사는 `batches.delete_batch` 가 남긴다.",
+        "operationId": "delete_catalog_batch_api_catalog_batches__key__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "title": "Key",
+              "type": "string"
+            }
+          },
+          {
+            "description": "기본은 미리보기 — 지울 수만 센다",
+            "in": "query",
+            "name": "dry_run",
+            "required": false,
+            "schema": {
+              "default": true,
+              "description": "기본은 미리보기 — 지울 수만 센다",
+              "title": "Dry Run",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogBatchDeleteOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Catalog Batch",
+        "tags": [
+          "catalog"
+        ]
+      },
+      "get": {
+        "operationId": "get_catalog_batch_api_catalog_batches__key__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "title": "Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogBatchOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Catalog Batch",
+        "tags": [
+          "catalog"
+        ]
+      }
+    },
     "/api/catalog/compare": {
       "get": {
         "description": "재료 나란히 보기 — 물성마다 각 재료의 대표값 한 줄.\n\n**후보 수를 함께 준다.** 칸의 숫자가 N개 중 하나라는 사실 자체가 사용자가\n알아야 할 정보다(상세 화면과 같은 원칙).",
@@ -41398,6 +42581,48 @@
           }
         },
         "summary": "Create Catalog Material",
+        "tags": [
+          "catalog"
+        ]
+      }
+    },
+    "/api/catalog/materials/preview": {
+      "post": {
+        "description": "재료를 만들기 전에 **만들 때와 같은 검사**를 돌리고 되돌린다(ADR 0068). 이름 낱말이\n겹치는 기존 재료를 함께 준다 — 운영에서 잘못 만든 재료는 MCP 로 못 지운다.",
+        "operationId": "preview_catalog_material_api_catalog_materials_preview_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CatalogMaterialCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogMaterialPreviewOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Preview Catalog Material",
         "tags": [
           "catalog"
         ]

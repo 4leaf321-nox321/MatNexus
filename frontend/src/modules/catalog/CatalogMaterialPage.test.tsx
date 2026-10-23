@@ -413,6 +413,69 @@ describe('요약 + 탭 (2026-10-22)', () => {
     expect(screen.getAllByRole('row')).toHaveLength(3)
   })
 
+  it('출처의 라이선스가 열로 선다 — 귀속 문구는 그 칸에 걸린다(ADR 0068)', async () => {
+    material.mockResolvedValue({
+      ...DETAIL,
+      values: DETAIL.values.map((one) =>
+        one.source
+          ? { ...one, source: { ...one.source, license: 'CC-BY-4.0', attribution: 'Kim (2020), CC BY 4.0' } }
+          : one
+      ),
+    })
+    show('sources')
+    const cell = await screen.findByText('CC-BY-4.0')
+    expect(cell).toHaveAttribute('title', 'Kim (2020), CC BY 4.0')
+  })
+
+  it('산점 한 벌은 점으로 — 런아웃은 빈 점, 반입 묶음이면 묶음 키(ADR 0068)', async () => {
+    const point = (id: string, cycles: number, stress: number, runout = false) => ({
+      ...DETAIL.values[0],
+      id,
+      property_key: 'mechanical.fatigue_strength',
+      property_name: '피로강도',
+      value_num: stress,
+      conditions: { cycles, ...(runout ? { runout: true } : {}) },
+      distinguishing: {},
+      representative: false,
+      separated_by: '산점의 점',
+      series_id: 'scatter-1',
+    })
+    material.mockResolvedValue({
+      ...DETAIL,
+      values: [
+        ...DETAIL.values,
+        point('eeeeeeee-0000-0000-0000-000000000001', 1.2e5, 4e8),
+        point('eeeeeeee-0000-0000-0000-000000000002', 1e7, 2.5e8, true),
+      ],
+      series: [
+        {
+          id: 'scatter-1',
+          kind: 'scatter',
+          label: 'S-N R=-1',
+          x_key: 'cycles',
+          x_unit: null,
+          columns: [{ property_key: 'mechanical.fatigue_strength', property_name: '피로강도', unit: 'Pa' }],
+          model: null,
+          point_count: 2,
+          conditions: null,
+          method: 'digitized',
+          quality_tier: 3,
+          source: SOURCE,
+          source_detail: 'Fig. 5',
+          notes: null,
+          created_by: null,
+          created_at: '2026-10-23T00:00:00Z',
+          batch_key: 'materialcollector/fatigue-literature/2026-10-23',
+        },
+      ],
+    })
+    show('curves')
+    expect(await screen.findByText('S-N R=-1')).toBeInTheDocument()
+    expect(screen.getByText(/반입 · materialcollector\/fatigue-literature/)).toBeInTheDocument()
+    const groups = screen.getAllByTestId('chart-dots')
+    expect(groups.map((one) => one.getAttribute('aria-label'))).toEqual(['파단', '런아웃'])
+  })
+
   it('전체 값 탭은 물성 이름으로 거른다', async () => {
     show('values')
     await screen.findByText(/T 296\.15 K/)
