@@ -126,7 +126,9 @@ export const ACTION_LABELS: Record<string, string> = {
   'test_run.updated': '시험 정보 변경',
   'processing_result.deleted': '처리 결과 삭제',
   'group_result.deleted': '글로벌 피팅 결과 삭제',
+  // 보유 장비는 지웠다(2026-10-23, 정본은 TestScope) — 지난 기록을 읽으려 이름표만 남긴다.
   'equipment.deleted': '장비 삭제',
+  'integration.updated': '외부 연동 변경',
   'trash.restored': '휴지통 복원',
   'trash.purged': '휴지통 영구 삭제',
   'data.exported': '데이터 내보내기',

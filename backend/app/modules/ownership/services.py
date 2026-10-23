@@ -30,7 +30,6 @@ from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.modules.accounts.models import User
-from app.modules.equipment.models import EquipmentUnit
 from app.modules.fitting.models import ExportProfile, PropertyCard
 from app.modules.grouping.models import GroupResult
 from app.modules.materials.models import Material, Sample, Specimen
@@ -48,12 +47,11 @@ MODELS: dict[str, type[permissions.Owned]] = {
     "test_run": TestRun,
     "property_card": PropertyCard,
     "group_result": GroupResult,
-    # 정의와 장비(ADR 0035 3단계) — 재료 아래에 매달리지 않는다. 보기는 전원이다.
+    # 정의(ADR 0035 3단계) — 재료 아래에 매달리지 않는다. 보기는 전원이다.
     "test_type": TestType,
     "format_profile": FormatProfile,
     "recipe": ProcessingRecipe,
     "export_profile": ExportProfile,
-    "equipment": EquipmentUnit,
 }
 LABELS: dict[str, str] = {
     "material": "재료",
@@ -66,7 +64,6 @@ LABELS: dict[str, str] = {
     "format_profile": "장비 파일 정의",
     "recipe": "레시피",
     "export_profile": "해석용 물성 정의",
-    "equipment": "장비",
 }
 _KIND_OF: dict[type, OwnedKind] = {
     Material: "material",
@@ -79,11 +76,10 @@ _KIND_OF: dict[type, OwnedKind] = {
     FormatProfile: "format_profile",
     ProcessingRecipe: "recipe",
     ExportProfile: "export_profile",
-    EquipmentUnit: "equipment",
 }
 
 #: 재료 아래에 매달리지 않는 것 — 아래로 딸린 것도 없다.
-_STANDALONE = (TestType, FormatProfile, ProcessingRecipe, ExportProfile, EquipmentUnit)
+_STANDALONE = (TestType, FormatProfile, ProcessingRecipe, ExportProfile)
 
 
 def kind_of(row: permissions.Owned) -> OwnedKind:
@@ -97,8 +93,6 @@ def name_of(row: permissions.Owned) -> str:
         return row.label
     if isinstance(row, GroupResult):
         return f"{row.plugin_id} · {len(row.members)}건"
-    if isinstance(row, EquipmentUnit):
-        return row.name
     if isinstance(row, Material | Sample | Specimen | TestRun):
         return row.record_name
     return str(row.id)

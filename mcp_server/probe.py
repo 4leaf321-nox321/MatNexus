@@ -154,7 +154,6 @@ async def sweep(session: ClientSession) -> None:
     await call(session, "platform_summary")
     await call(session, "get_taxonomy")
     await call(session, "measurement_gaps")
-    await call(session, "list_equipment", {"limit": 3})
 
     found = await call(session, "search_materials", {"query": "A", "limit": 3})
     material_id = _first(found, "id", "material_id")

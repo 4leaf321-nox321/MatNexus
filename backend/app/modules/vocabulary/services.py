@@ -556,21 +556,6 @@ PART_BINDINGS = (
 #:
 #: 세 번째 칸은 WHERE 조각이고 `{t}` 가 그 표를 가리킨다. 표를 별칭으로 읽는
 #: 자리가 있어서(`drift`) 이름을 박아 둘 수 없다.
-#: 보유 장비. **부모부터 적는다** — 장비 유형이 장비의 부모다.
-#:
-#: **조직은 여기 없다.** 장비를 들고 있는 단위는 부서(`workspaces`)이고, 그것은
-#: 이미 본부→팀 트리다(`Workspace.parent_id`). 기준정보에 조직 축을 따로 두면
-#: 같은 조직이 두 목록에 쌓이고 합칠 방법이 없다 — 실제로 한 번 그렇게 만들었다가
-#: 걷어냈다(2026-09-07).
-EQUIPMENT_BINDINGS = (
-    Binding("instrument_type", "instrument_type", "type_term_id"),
-    Binding("instrument", "instrument", "instrument_term_id", parent_field="instrument_type"),
-    Binding("lab", "lab", "lab_term_id"),
-    # **재료 제조사와 다른 축이다**(`instrument_maker`). 칸 이름은 `manufacturer`
-    # 그대로다 — 장비를 만든 회사가 맞고, 다른 것은 어느 목록에서 고르냐다.
-    Binding("instrument_maker", "manufacturer", "manufacturer_term_id"),
-)
-
 _COUNT_SOURCES: tuple[tuple[str, tuple[Binding, ...], str], ...] = (
     ("materials", MATERIAL_BINDINGS, " AND {t}.deleted_at IS NULL"),
     ("samples", SAMPLE_BINDINGS, " AND {t}.deleted_at IS NULL"),
@@ -578,9 +563,6 @@ _COUNT_SOURCES: tuple[tuple[str, tuple[Binding, ...], str], ...] = (
     ("test_runs", TEST_RUN_BINDINGS, " AND {t}.deleted_at IS NULL"),
     # 용도는 재료에 매달려 있다. **지운 재료의 용도가 남으면** 「쓰는 곳」 이
     # 실제보다 커지고, 안 쓰는 용어가 피커 위쪽에 계속 앉아 있다.
-    # 장비는 소프트 삭제가 없다 — 폐기가 상태이고 행은 산다. 다만 **폐기한
-    # 장비도 그 값을 쓰고 있다**(지난 시험이 가리킨다). 그래서 안 거른다.
-    ("equipment_units", EQUIPMENT_BINDINGS, ""),
     (
         "material_parts",
         PART_BINDINGS,

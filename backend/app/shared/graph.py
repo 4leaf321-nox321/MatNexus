@@ -3,8 +3,8 @@
 4단계다. 3단계(`relations`)가 「무엇이 무엇과 어떤 사이인가」를 적었고, 여기는 그
 적힌 것을 따라 실제로 걷는다.
 
-    「이 물성을 재는 장비가 어디에 있나」
-        property ─measured_by→ instrument ←unit_of─ equipment_unit ─held_by→ workspace
+    「이 물성을 무엇으로 재나」
+        property ─measured_by→ instrument
 
     「이 값이 어느 재료에서 나왔나」
         test_run ─tested→ specimen ─part_of→ sample ─derived_from→ material

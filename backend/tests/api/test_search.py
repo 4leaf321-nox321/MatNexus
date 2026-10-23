@@ -18,7 +18,6 @@ from typing import Any
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
-from app.modules.equipment.models import EquipmentUnit, asset_key
 from app.modules.tests.definitions import ensure_builtin_test_types
 
 TRA = Path(__file__).resolve().parents[1] / "fixtures" / "Example.tra"
@@ -109,21 +108,11 @@ class TestAcrossKinds:
     ) -> None:
         """사람은 「SECC180」 이 재료인지 시험인지 모른 채 친다."""
         _chain(client, db, admin_headers, grade="SRCH180")
-        db.add(
-            EquipmentUnit(
-                asset_no="SRCH-1",
-                asset_key=asset_key("SRCH-1"),
-                name="SRCH180 만능시험기",
-                status="in_service",
-                ownership="owned",
-            )
-        )
-        db.commit()
 
         answer = client.get(SEARCH, params={"q": "SRCH180"}, headers=admin_headers)
         assert answer.status_code == 200, answer.text
         body = answer.json()
-        assert {"material", "sample", "specimen", "test_run", "equipment_unit"} <= _kinds(body)
+        assert {"material", "sample", "specimen", "test_run"} <= _kinds(body)
 
     def test_종류를_고르면_그것만_더_준다(
         self, client: TestClient, db: Session, admin_headers: dict[str, str]

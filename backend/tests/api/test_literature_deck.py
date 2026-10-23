@@ -13,6 +13,7 @@
 
 from __future__ import annotations
 
+import itertools
 import json
 import uuid
 from pathlib import Path
@@ -67,7 +68,9 @@ def load(db: Session, tmp_path: Path) -> tuple[uuid.UUID, uuid.UUID]:
     return sus.id, fr4.id
 
 
-_NEXT = iter(range(900, 999))
+# 끝을 두지 않는다 — 99개로 끊었더니 시험이 늘어 한 워커에 몰리면 `StopIteration` 이 났다
+# (2026-10-23). 시험마다 표를 비우므로 번호가 커져도 겹치지 않는다.
+_NEXT = itertools.count(900)
 
 
 def add_value(
@@ -623,6 +626,142 @@ class Test초탄성_벌:
         )
         assert both.status_code == 422
         assert both.json()["error"]["code"] == "MNX-FITTING-0046"
+
+
+class Test초탄성_벌_고르기:
+    """**모드와 큰 변형 안정성을 본다**(2026-10-23).
+
+    전에는 등급 · 조건 · 식이 같으면 이름표(set_id 글자)가 정했다 — Ecoflex 00-20 의 압축
+    Yeoh 가 uuid 순서로 뽑혔고 인장 33 % 에서 불안정했다. 계수는 그 실측 그대로다.
+    """
+
+    KEY = Test초탄성_벌.KEY
+    #: 압축 곡선(0.5~25 %)에서 맞춘 Yeoh — 이름표가 앞선다(`a-…`).
+    COMPRESSION = ("a-compression", "compression", (18815.5, 18948.8, -41042.4))
+    #: 인장 곡선(7~354 %)에서 맞춘 Yeoh.
+    TENSION = ("b-tension", "uniaxial tension", (21000.0, 897.4, -0.5306))
+
+    def _load(
+        self, db: Session, tmp_path: Path, sets: tuple[tuple[str, str, Any], ...]
+    ) -> uuid.UUID:
+        from app.modules.catalog import parameters
+
+        _, fr4 = load(db, tmp_path)
+        give_fr4_elastic(db, fr4)
+        db.add(
+            CatalogDefinition(
+                mt_id=880,
+                key=self.KEY,
+                domain="mechanical",
+                name="초탄성 계수",
+                si_unit="Pa",
+                value_type="numeric",
+            )
+        )
+        db.flush()
+        for set_id, mode, coefficients in sets:
+            for name, value in zip(("C10", "C20", "C30"), coefficients, strict=True):
+                db.add(
+                    CatalogValue(
+                        material_id=fr4,
+                        property_key=self.KEY,
+                        value_num=value,
+                        unit="Pa",
+                        quality_tier=3,
+                        method="measured",
+                        # 출처마다 모드 칸 이름이 다르다 — `mode` 와 `deformation_mode`.
+                        conditions={
+                            "term": name,
+                            "model": "yeoh_3",
+                            "set_id": set_id,
+                            ("mode" if mode == "compression" else "deformation_mode"): mode,
+                        },
+                    )
+                )
+        db.commit()
+        parameters.forget()
+        return fr4
+
+    def test_이름표가_앞서도_불안정한_압축_벌보다_인장_벌을_고른다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str], tmp_path: Path
+    ) -> None:
+        fr4 = self._load(db, tmp_path, (self.COMPRESSION, self.TENSION))
+        made = build(client, admin_headers, "abaqus_hyperelastic", [(1, fr4)])
+        assert made.status_code == 200, made.text
+        text = made.json()["text"]
+        assert "문헌 벌 yeoh_3/b-tension" in text and "단축 인장 데이터" in text
+        assert "한 모드(단축 인장)로 맞춘 계수입니다" in text
+        # 밀린 벌은 모드와 깨지는 자리를 함께 말한다.
+        assert "yeoh_3/a-compression · 단축 압축 · 인장 33 %" in text
+        assert "주의:" not in text
+
+    def test_같은_모드면_안정한_벌이_앞선다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str], tmp_path: Path
+    ) -> None:
+        """모드가 같으면 안정성만 남는다 — 이름표가 앞선 불안정한 벌이 뽑히지 않는다."""
+        unstable = ("a-tension-short", "tension", self.COMPRESSION[2])
+        fr4 = self._load(db, tmp_path, (unstable, self.TENSION))
+        text = build(client, admin_headers, "abaqus_hyperelastic", [(1, fr4)]).json()["text"]
+        assert "문헌 벌 yeoh_3/b-tension" in text
+
+    def test_둘_다_안정하면_인장_벌이_압축_벌보다_앞선다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str], tmp_path: Path
+    ) -> None:
+        """안정성이 같으면 모드가 가른다 — 덱 기본값은 어떤 하중인지 모른다."""
+        stable_compression = ("a-compression", "compression", (18815.5, 500.0, 10.0))
+        fr4 = self._load(db, tmp_path, (stable_compression, self.TENSION))
+        text = build(client, admin_headers, "abaqus_hyperelastic", [(1, fr4)]).json()["text"]
+        assert "문헌 벌 yeoh_3/b-tension" in text
+        assert "yeoh_3/a-compression · 단축 압축)" in text
+
+    def test_벌이_불안정한_것뿐이면_쓰되_어디서_깨지는지_말한다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str], tmp_path: Path
+    ) -> None:
+        fr4 = self._load(db, tmp_path, (self.COMPRESSION,))
+        text = build(client, admin_headers, "abaqus_hyperelastic", [(1, fr4)]).json()["text"]
+        assert "문헌 벌 yeoh_3/a-compression" in text
+        assert "주의: 이 초탄성 계수는 인장 33 % · 압축 29 % · 등이축 17 %" in text
+
+    def test_사내_카드는_고른_벌을_바꾸지_않고_깨지는_자리를_근거에_적는다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str], tmp_path: Path
+    ) -> None:
+        fr4 = self._load(db, tmp_path, (self.COMPRESSION, self.TENSION))
+        material = client.post(
+            "/api/materials",
+            json={
+                "family": "Polymer",
+                "category": "Rubber",
+                "grade": f"HY-{uuid.uuid4().hex[:6]}",
+            },
+            headers=admin_headers,
+        ).json()["id"]
+        adopted = client.post(
+            f"/api/materials/{material}/parameter-sets",
+            json={
+                "property_key": self.KEY,
+                "catalog_material_id": str(fr4),
+                "model": "yeoh_3",
+                "set_id": "a-compression",
+            },
+            headers=admin_headers,
+        )
+        assert adopted.status_code == 201, adopted.text
+        card = client.post(
+            "/api/fitting/cards/declared",
+            json={
+                "material_id": material,
+                "label": "압축 Yeoh",
+                "parameter_set_ids": [adopted.json()["id"]],
+            },
+            headers=admin_headers,
+        )
+        assert card.status_code in (200, 201), card.text
+        body = card.json()
+        assert body["blocks"]["hyperelastic"]["rows"][2]["value"] == -41042.4
+        assert any(
+            note.startswith("주의: 이 초탄성 계수는 인장 33 %")
+            for note in body["source"]["notes"]
+        )
 
 
 class Test문헌_속도_의존:

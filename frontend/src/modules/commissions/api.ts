@@ -13,6 +13,8 @@ export type LinkedRun = components['schemas']['LinkedRunOut']
 export type CommissionItemIn = components['schemas']['CommissionItemIn']
 export type CommissionCreate = components['schemas']['CommissionCreateRequest']
 export type CommissionUpdate = components['schemas']['CommissionUpdateRequest']
+export type LabSuggestions = components['schemas']['LabSuggestionsOut']
+export type LabSuggestionItem = components['schemas']['LabSuggestionItemIn']
 type EventRequest = components['schemas']['CommissionEventRequest']
 
 /**
@@ -59,6 +61,9 @@ export const DELIVERABLE_CURVES_LABEL = '곡선·처리 결과'
 
 export const commissionsApi = {
   statuses: () => api.get<CommissionStatus[]>('/commissions/statuses'),
+  /** 받는 부서 추천 — 항목을 할 보유 장비가 있는 부서(TestScope). 저장하지 않는다. */
+  labSuggestions: (items: LabSuggestionItem[]) =>
+    api.post<LabSuggestions>('/commissions/lab-suggestions', { items }),
   list: (params: CommissionListParams = {}) => {
     const query = new URLSearchParams()
     if (params.scope) query.set('scope', params.scope)

@@ -22,7 +22,6 @@ OwnedKind = Literal[
     "format_profile",
     "recipe",
     "export_profile",
-    "equipment",
 ]
 
 

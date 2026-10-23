@@ -240,7 +240,10 @@ EXCLUDED_TABLES: dict[str, str] = {
     "group_results": "여러 시험을 묶은 처리 결과(14) — 처리결과 마디에 딸린다",
     "ensemble_results": "묶음 처리의 앙상블(1) — 같다",
     "guide_assets": "핸드북에 붙은 그림·파일(75) — 절 마디를 집으면 본문과 함께 온다",
-    "equipment_parts": "보유 장비의 부품(4) — 장비 마디에 딸린 목록이다",
+    "integration_connections": (
+        "외부 연동 설정(TestScope 주소 · 봉인한 토큰) — 시스템 관리자의 설정이지 물성 그래프의"
+        " 마디가 아니다"
+    ),
     "material_parts": (
         "재료의 적용 부품 줄(파트 · 제품 · 부품코드 · 사업부, ADR 0064) — 재료의 칸이다."
         " 파트 · 제품 · 부품코드로 찾는 것은 `search_materials` 의 일"
@@ -258,10 +261,6 @@ EXCLUDED_TABLES: dict[str, str] = {
 #: **막힌 물음이 있는데 아직 안 정한 것.** 「모른다」 를 적는 자리가 아니라
 #: 「이 물음이 지금 막혀 있다」 를 적는 자리다 — 늘어나면 그 자체가 신호다.
 PENDING_TABLES: dict[str, str] = {
-    "equipment_calibrations": (
-        "「이 장비의 교정이 언제까지 유효한가」 — AI 가 실제로 물었고 못 찾았다"
-        "(실측 2026-09-10). 지금은 보유 장비가 6대·교정 4건이라 물어도 거의 빈손이다"
-    ),
     "workbench_items": "워크벤치는 사람의 작업 공간이다 — 물성 그래프에 넣을 것인지 안 정했다",
     "workbench_runs": (
         "같다 — 넣는다면 「이 재료를 누가 어디서 만졌나」 에 가깝고, 그것은 사람 쪽이다"
@@ -284,10 +283,6 @@ PENDING_TABLES: dict[str, str] = {
 )
 
 EXCLUDED_FKS: dict[tuple[str, str], str] = {
-    ("equipment_units", "instrument_term_id"): 축,
-    ("equipment_units", "lab_term_id"): 축,
-    ("equipment_units", "manufacturer_term_id"): 축,
-    ("equipment_units", "type_term_id"): 축,
     ("materials", "category_term_id"): 축,
     ("materials", "family_term_id"): 축,
     ("materials", "grade_term_id"): 축,
@@ -311,10 +306,9 @@ EXCLUDED_FKS: dict[tuple[str, str], str] = {
     ("specimens", "edit_workspace_id"): 편집,
     ("test_runs", "edit_workspace_id"): 편집,
     ("property_cards", "edit_workspace_id"): 편집,
-    # 3단계 — 정의와 장비도 사람이 고친다.
+    # 3단계 — 정의도 사람이 고친다.
     ("test_types", "edit_workspace_id"): 편집,
     ("processing_recipes", "edit_workspace_id"): 편집,
-    ("equipment_units", "edit_workspace_id"): 편집,
     # 용어끼리의 상하(등급 172개가 분류 아래에 선다). **들머리가 없어서 지금은
     # 뜻이 없다** — 재료에서 용어로 가는 길을 위의 `축` 판단으로 일부러 안 냈으니,
     # 용어 상하만 이어 두면 아무 데서도 그 사슬에 못 들어간다. 축을 열면 이것도

@@ -1,11 +1,15 @@
 /**
  * 측정법 — 물성을 고르면 「무엇으로 재는가」 가 기법별로 펼쳐진다.
  *
- * 좌측 피커는 **잴 수 있는 물성(보유 장비 있음/카탈로그만)과 장비 없는 물성**을
+ * 좌측 피커는 **재는 법이 있는 물성과 없는 물성**을
  * 갈라 보여 준다 — 빈 칸을 숨기면 찾다가 없어서 알게 된다. `?key=` 딥링크로
  * 카탈로그 상세의 물성 행에서 바로 온다. 핸드북 절에서도 온다(절에 이름이 나온 물성).
  *
  * 상세 아래에는 그 물성 · 규격을 다룬 **핸드북 절**이 선다(`HandbookSections`, 2026-10-03).
+ *
+ * **「보유」 는 TestScope 에 묻는다**(2026-10-23). 장비 카탈로그의 `owned` 는 원본(MaterialTwin)
+ * 표시라 전부 거짓이었고, 그대로 보이면 모든 물성이 「보유 0」 이었다. 보유 장비 · 교정은
+ * TestScope 가 정본이라 물성 상세가 그때 묻는다(`OwnedSection`).
  */
 
 import { useSearchParams } from 'react-router-dom'
@@ -19,6 +23,7 @@ import {
 } from '@/modules/metrology/api'
 import type { MetrologyCoverageRow, MetrologyProperty } from '@/modules/metrology/api'
 import { HandbookSections } from '@/modules/metrology/HandbookSections'
+import { OwnedSection } from '@/modules/metrology/OwnedSection'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { PageHeader } from '@/shared/components/PageHeader'
 import { useResource } from '@/shared/hooks/useResource'
@@ -64,22 +69,16 @@ export default function MetrologyPage() {
     <div className="space-y-4">
       <PageHeader
         title="측정법"
-        description="물성마다 어떤 기법·규격·장비로 재는지를 보여 줍니다. 장비 카탈로그에 있는 것과 실제 보유 장비를 구별합니다."
+        description="물성마다 어떤 기법·규격·장비 모델로 재는지, 그리고 그것을 잴 우리 장비(TestScope)를 보여 줍니다."
       />
       <ErrorNotice error={summary.error} />
       <ErrorNotice error={coverage.error} />
 
       {summary.data && (
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
           <div className="rounded-md border p-3">
             <div className="text-muted-foreground text-xs">장비 (카탈로그)</div>
             <div className="text-xl font-semibold tabular-nums">{summary.data.instruments}</div>
-          </div>
-          <div className="rounded-md border p-3">
-            <div className="text-muted-foreground text-xs">보유 장비</div>
-            <div className="text-xl font-semibold tabular-nums">
-              {summary.data.instruments_owned}
-            </div>
           </div>
           <div className="rounded-md border p-3">
             <div className="text-muted-foreground text-xs">측정 능력</div>
@@ -103,13 +102,13 @@ export default function MetrologyPage() {
           {coverage.data && (
             <>
               <PropertyList
-                title="잴 수 있는 물성"
+                title="재는 법이 있는 물성"
                 rows={coverage.data.covered}
                 selectedKey={selectedKey}
                 onPick={pick}
               />
               <PropertyList
-                title="장비가 없는 물성"
+                title="재는 법이 없는 물성"
                 rows={coverage.data.gaps}
                 selectedKey={selectedKey}
                 onPick={pick}
@@ -173,7 +172,7 @@ function PropertyList({
               <span className="text-muted-foreground shrink-0 text-xs tabular-nums">
                 {muted
                   ? `값 ${row.value_count}`
-                  : `장비 ${row.instrument_count} · 보유 ${row.owned_instrument_count}`}
+                  : `장비 ${row.instrument_count}`}
               </span>
             </button>
           </li>
@@ -200,6 +199,8 @@ function PropertyDetail({ detail }: { detail: MetrologyProperty }) {
         </p>
       </div>
 
+      <OwnedSection propertyKey={detail.property_key} />
+
       {detail.techniques.length === 0 && (
         <p className="text-muted-foreground rounded-md border p-6 text-sm">
           이 물성을 잴 수 있는 장비가 카탈로그에 없습니다.
@@ -216,7 +217,6 @@ function PropertyDetail({ detail }: { detail: MetrologyProperty }) {
               <thead>
                 <tr className="text-muted-foreground border-b text-left text-xs">
                   <th className="p-2">장비</th>
-                  <th className="p-2">보유</th>
                   <th className="p-2">규격</th>
                   <th className="p-2">측정 범위</th>
                   <th className="p-2">분해능</th>
@@ -243,16 +243,6 @@ function PropertyDetail({ detail }: { detail: MetrologyProperty }) {
                         {INSTRUMENT_CATEGORY_LABELS[cap.instrument.category] ??
                           cap.instrument.category}
                       </div>
-                    </td>
-                    <td className="p-2">
-                      {cap.instrument.owned ? (
-                        <span title={cap.instrument.owned_note ?? undefined}>
-                          보유
-                          {cap.instrument.owner_name ? ` (${cap.instrument.owner_name})` : ''}
-                        </span>
-                      ) : (
-                        <span className="text-muted-foreground">카탈로그만</span>
-                      )}
                     </td>
                     <td className="p-2">{cap.standard ?? dash}</td>
                     <td className="p-2 tabular-nums">

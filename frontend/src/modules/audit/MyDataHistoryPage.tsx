@@ -54,7 +54,6 @@ const PAGES: Record<string, (id: string) => string> = {
   materials: (id) => `/materials/${id}`,
   specimens: (id) => `/specimens/${id}`,
   test_runs: (id) => `/test-runs/${id}`,
-  equipment_units: (id) => `/settings/equipment/${id}`,
 }
 
 function hrefOf(entry: AuditEntry): string | null {

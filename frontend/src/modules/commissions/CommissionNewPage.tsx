@@ -18,6 +18,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 
 import { commissionsApi } from '@/modules/commissions/api'
 import { ItemsEditor, emptyItem, missingInItems, toPayload } from '@/modules/commissions/ItemsEditor'
+import { LabSuggestions } from '@/modules/commissions/LabSuggestions'
 import type { ItemDraft } from '@/modules/commissions/ItemsEditor'
 import { SamplePicker } from '@/modules/commissions/SamplePicker'
 import { fittingApi } from '@/modules/fitting/api'
@@ -247,6 +248,9 @@ export default function CommissionNewPage() {
                 </option>
               ))}
             </select>
+          </div>
+          <div className="sm:col-span-3">
+            <LabSuggestions items={items} selected={lab} onPick={setLab} />
           </div>
         </div>
       </section>

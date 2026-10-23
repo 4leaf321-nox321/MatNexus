@@ -148,6 +148,15 @@ def engine():  # type: ignore[no-untyped-def]
     # 여기는 `create_all` 이라 따로 해 줘야 한다.
     with eng.begin() as conn:
         conn.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm"))
+        # **지운 표가 남아 있으면 `drop_all` 이 막힌다.** 모델에서 뺀 표는 `drop_all` 이
+        # 모르는데, 그 표가 남은 표를 FK 로 붙들고 있다 — 보유 장비를 지운 뒤 `instruments` 를
+        # 못 지웠다(2026-10-23). 이 DB 는 `_test` 가 붙은 시험 전용이다.
+        known = set(Base.metadata.tables)
+        found = conn.execute(
+            text("SELECT tablename FROM pg_tables WHERE schemaname = 'public'")
+        )
+        for name in sorted(set(found.scalars()) - known):
+            conn.execute(text(f'DROP TABLE IF EXISTS "{name}" CASCADE'))
     Base.metadata.drop_all(eng)
     Base.metadata.create_all(eng)
     yield eng

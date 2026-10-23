@@ -13496,1733 +13496,6 @@
         "title": "EnsembleSaveRequest",
         "type": "object"
       },
-      "EquipmentBulkRequest": {
-        "properties": {
-          "dry_run": {
-            "default": true,
-            "title": "Dry Run",
-            "type": "boolean"
-          },
-          "rows": {
-            "items": {
-              "$ref": "#/components/schemas/EquipmentBulkRow"
-            },
-            "title": "Rows",
-            "type": "array"
-          }
-        },
-        "required": [
-          "rows"
-        ],
-        "title": "EquipmentBulkRequest",
-        "type": "object"
-      },
-      "EquipmentBulkResult": {
-        "properties": {
-          "created": {
-            "title": "Created",
-            "type": "integer"
-          },
-          "dry_run": {
-            "title": "Dry Run",
-            "type": "boolean"
-          },
-          "errors": {
-            "title": "Errors",
-            "type": "integer"
-          },
-          "rows": {
-            "items": {
-              "$ref": "#/components/schemas/EquipmentBulkRowResult"
-            },
-            "title": "Rows",
-            "type": "array"
-          },
-          "skipped": {
-            "title": "Skipped",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "dry_run",
-          "created",
-          "skipped",
-          "errors",
-          "rows"
-        ],
-        "title": "EquipmentBulkResult",
-        "type": "object"
-      },
-      "EquipmentBulkRow": {
-        "description": "붙여넣기 표 한 줄.\n\n등록 요청과 같은 모양이다 — 부서를 slug·이름으로 받는 것이 이제 양쪽 공통이다.",
-        "properties": {
-          "asset_no": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Asset No"
-          },
-          "attributes": {
-            "additionalProperties": true,
-            "title": "Attributes",
-            "type": "object"
-          },
-          "commissioned_on": {
-            "anyOf": [
-              {
-                "format": "date",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Commissioned On"
-          },
-          "instrument": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Instrument"
-          },
-          "instrument_id": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Instrument Id"
-          },
-          "instrument_type": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Instrument Type"
-          },
-          "lab": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Lab"
-          },
-          "location_detail": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Location Detail"
-          },
-          "manufacturer": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Manufacturer"
-          },
-          "model": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Model"
-          },
-          "name": {
-            "maxLength": 120,
-            "minLength": 1,
-            "title": "Name",
-            "type": "string"
-          },
-          "notes": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Notes"
-          },
-          "owner_contact": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Owner Contact"
-          },
-          "owner_name": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Owner Name"
-          },
-          "ownership": {
-            "default": "internal",
-            "title": "Ownership",
-            "type": "string"
-          },
-          "retired_on": {
-            "anyOf": [
-              {
-                "format": "date",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Retired On"
-          },
-          "serial_no": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Serial No"
-          },
-          "status": {
-            "default": "active",
-            "title": "Status",
-            "type": "string"
-          },
-          "workspace": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Workspace"
-          }
-        },
-        "required": [
-          "name"
-        ],
-        "title": "EquipmentBulkRow",
-        "type": "object"
-      },
-      "EquipmentBulkRowResult": {
-        "properties": {
-          "index": {
-            "title": "Index",
-            "type": "integer"
-          },
-          "name": {
-            "title": "Name",
-            "type": "string"
-          },
-          "new_terms": {
-            "items": {
-              "type": "string"
-            },
-            "title": "New Terms",
-            "type": "array"
-          },
-          "outcome": {
-            "title": "Outcome",
-            "type": "string"
-          },
-          "reason": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Reason"
-          },
-          "unit_id": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Unit Id"
-          }
-        },
-        "required": [
-          "index",
-          "name",
-          "outcome"
-        ],
-        "title": "EquipmentBulkRowResult",
-        "type": "object"
-      },
-      "EquipmentCalibrationCreate": {
-        "properties": {
-          "agency": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Agency"
-          },
-          "certificate_no": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Certificate No"
-          },
-          "notes": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Notes"
-          },
-          "part_id": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Part Id"
-          },
-          "performed_on": {
-            "format": "date",
-            "title": "Performed On",
-            "type": "string"
-          },
-          "result": {
-            "default": "pass",
-            "title": "Result",
-            "type": "string"
-          },
-          "valid_until": {
-            "anyOf": [
-              {
-                "format": "date",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Valid Until"
-          }
-        },
-        "required": [
-          "performed_on"
-        ],
-        "title": "EquipmentCalibrationCreate",
-        "type": "object"
-      },
-      "EquipmentCalibrationOut": {
-        "properties": {
-          "agency": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Agency"
-          },
-          "certificate_no": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Certificate No"
-          },
-          "created_at": {
-            "format": "date-time",
-            "title": "Created At",
-            "type": "string"
-          },
-          "id": {
-            "format": "uuid",
-            "title": "Id",
-            "type": "string"
-          },
-          "notes": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Notes"
-          },
-          "part_id": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Part Id"
-          },
-          "performed_on": {
-            "format": "date",
-            "title": "Performed On",
-            "type": "string"
-          },
-          "result": {
-            "title": "Result",
-            "type": "string"
-          },
-          "storage_path": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Storage Path"
-          },
-          "unit_id": {
-            "format": "uuid",
-            "title": "Unit Id",
-            "type": "string"
-          },
-          "valid_until": {
-            "anyOf": [
-              {
-                "format": "date",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Valid Until"
-          }
-        },
-        "required": [
-          "id",
-          "unit_id",
-          "part_id",
-          "performed_on",
-          "valid_until",
-          "agency",
-          "certificate_no",
-          "result",
-          "storage_path",
-          "notes",
-          "created_at"
-        ],
-        "title": "EquipmentCalibrationOut",
-        "type": "object"
-      },
-      "EquipmentPartCreate": {
-        "properties": {
-          "asset_no": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Asset No"
-          },
-          "capacity": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Capacity"
-          },
-          "installed_on": {
-            "anyOf": [
-              {
-                "format": "date",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Installed On"
-          },
-          "kind": {
-            "default": "other",
-            "title": "Kind",
-            "type": "string"
-          },
-          "label": {
-            "maxLength": 120,
-            "minLength": 1,
-            "title": "Label",
-            "type": "string"
-          },
-          "manufacturer": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Manufacturer"
-          },
-          "model": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Model"
-          },
-          "notes": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Notes"
-          },
-          "removed_on": {
-            "anyOf": [
-              {
-                "format": "date",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Removed On"
-          },
-          "serial_no": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Serial No"
-          }
-        },
-        "required": [
-          "label"
-        ],
-        "title": "EquipmentPartCreate",
-        "type": "object"
-      },
-      "EquipmentPartOut": {
-        "properties": {
-          "asset_no": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Asset No"
-          },
-          "capacity": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Capacity"
-          },
-          "id": {
-            "format": "uuid",
-            "title": "Id",
-            "type": "string"
-          },
-          "installed_on": {
-            "anyOf": [
-              {
-                "format": "date",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Installed On"
-          },
-          "kind": {
-            "title": "Kind",
-            "type": "string"
-          },
-          "label": {
-            "title": "Label",
-            "type": "string"
-          },
-          "manufacturer": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Manufacturer"
-          },
-          "model": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Model"
-          },
-          "notes": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Notes"
-          },
-          "removed_on": {
-            "anyOf": [
-              {
-                "format": "date",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Removed On"
-          },
-          "serial_no": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Serial No"
-          },
-          "unit_id": {
-            "format": "uuid",
-            "title": "Unit Id",
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "unit_id",
-          "kind",
-          "label",
-          "asset_no",
-          "manufacturer",
-          "model",
-          "serial_no",
-          "capacity",
-          "installed_on",
-          "removed_on",
-          "notes"
-        ],
-        "title": "EquipmentPartOut",
-        "type": "object"
-      },
-      "EquipmentPartUpdate": {
-        "properties": {
-          "asset_no": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Asset No"
-          },
-          "capacity": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Capacity"
-          },
-          "installed_on": {
-            "anyOf": [
-              {
-                "format": "date",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Installed On"
-          },
-          "kind": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Kind"
-          },
-          "label": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Label"
-          },
-          "manufacturer": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Manufacturer"
-          },
-          "model": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Model"
-          },
-          "notes": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Notes"
-          },
-          "removed_on": {
-            "anyOf": [
-              {
-                "format": "date",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Removed On"
-          },
-          "serial_no": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Serial No"
-          }
-        },
-        "title": "EquipmentPartUpdate",
-        "type": "object"
-      },
-      "EquipmentSummaryOut": {
-        "properties": {
-          "by_lab": {
-            "items": {
-              "$ref": "#/components/schemas/EquipmentSummaryRow"
-            },
-            "title": "By Lab",
-            "type": "array"
-          },
-          "by_org": {
-            "items": {
-              "$ref": "#/components/schemas/EquipmentSummaryRow"
-            },
-            "title": "By Org",
-            "type": "array"
-          },
-          "by_root_org": {
-            "items": {
-              "$ref": "#/components/schemas/EquipmentSummaryRow"
-            },
-            "title": "By Root Org",
-            "type": "array"
-          },
-          "total": {
-            "title": "Total",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "total",
-          "by_root_org",
-          "by_org",
-          "by_lab"
-        ],
-        "title": "EquipmentSummaryOut",
-        "type": "object"
-      },
-      "EquipmentSummaryRow": {
-        "description": "현황 한 줄. 사업부·조직 어느 층으로도 묶인다.",
-        "properties": {
-          "active": {
-            "title": "Active",
-            "type": "integer"
-          },
-          "calibration_due": {
-            "title": "Calibration Due",
-            "type": "integer"
-          },
-          "external": {
-            "title": "External",
-            "type": "integer"
-          },
-          "idle": {
-            "title": "Idle",
-            "type": "integer"
-          },
-          "key": {
-            "title": "Key",
-            "type": "string"
-          },
-          "label": {
-            "title": "Label",
-            "type": "string"
-          },
-          "maintenance": {
-            "title": "Maintenance",
-            "type": "integer"
-          },
-          "retired": {
-            "title": "Retired",
-            "type": "integer"
-          },
-          "total": {
-            "title": "Total",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "key",
-          "label",
-          "total",
-          "active",
-          "maintenance",
-          "idle",
-          "retired",
-          "external",
-          "calibration_due"
-        ],
-        "title": "EquipmentSummaryRow",
-        "type": "object"
-      },
-      "EquipmentTermRef": {
-        "description": "기준정보 값 하나 — id 와 함께 **보여 줄 이름**을 싣는다.\n\n화면이 이름을 얻으려고 축 목록을 따로 부르지 않게 한다. 부모(사업부)를 함께\n싣는 이유도 같다 — 조직만 오면 「어느 사업부인가」 를 화면이 또 물어야 한다.",
-        "properties": {
-          "id": {
-            "format": "uuid",
-            "title": "Id",
-            "type": "string"
-          },
-          "label": {
-            "title": "Label",
-            "type": "string"
-          },
-          "parent_id": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Parent Id"
-          },
-          "parent_label": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Parent Label"
-          }
-        },
-        "required": [
-          "id",
-          "label"
-        ],
-        "title": "EquipmentTermRef",
-        "type": "object"
-      },
-      "EquipmentUnitCreate": {
-        "properties": {
-          "asset_no": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Asset No"
-          },
-          "attributes": {
-            "additionalProperties": true,
-            "title": "Attributes",
-            "type": "object"
-          },
-          "commissioned_on": {
-            "anyOf": [
-              {
-                "format": "date",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Commissioned On"
-          },
-          "instrument": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Instrument"
-          },
-          "instrument_id": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Instrument Id"
-          },
-          "instrument_type": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Instrument Type"
-          },
-          "lab": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Lab"
-          },
-          "location_detail": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Location Detail"
-          },
-          "manufacturer": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Manufacturer"
-          },
-          "model": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Model"
-          },
-          "name": {
-            "maxLength": 120,
-            "minLength": 1,
-            "title": "Name",
-            "type": "string"
-          },
-          "notes": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Notes"
-          },
-          "owner_contact": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Owner Contact"
-          },
-          "owner_name": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Owner Name"
-          },
-          "ownership": {
-            "default": "internal",
-            "title": "Ownership",
-            "type": "string"
-          },
-          "retired_on": {
-            "anyOf": [
-              {
-                "format": "date",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Retired On"
-          },
-          "serial_no": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Serial No"
-          },
-          "status": {
-            "default": "active",
-            "title": "Status",
-            "type": "string"
-          },
-          "workspace": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Workspace"
-          }
-        },
-        "required": [
-          "name"
-        ],
-        "title": "EquipmentUnitCreate",
-        "type": "object"
-      },
-      "EquipmentUnitOut": {
-        "description": "목록과 상세가 같은 모양을 쓴다 — 목록에서 본 것이 상세에 없으면 놀란다.",
-        "properties": {
-          "access": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/EditAccessOut"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "asset_no": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Asset No"
-          },
-          "attributes": {
-            "additionalProperties": true,
-            "title": "Attributes",
-            "type": "object"
-          },
-          "calibration_valid_until": {
-            "anyOf": [
-              {
-                "format": "date",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Calibration Valid Until"
-          },
-          "commissioned_on": {
-            "anyOf": [
-              {
-                "format": "date",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Commissioned On"
-          },
-          "created_at": {
-            "format": "date-time",
-            "title": "Created At",
-            "type": "string"
-          },
-          "id": {
-            "format": "uuid",
-            "title": "Id",
-            "type": "string"
-          },
-          "instrument_id": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Instrument Id"
-          },
-          "instrument_term": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/EquipmentTermRef"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "instrument_type": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/EquipmentTermRef"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "lab": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/EquipmentTermRef"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "last_calibrated_on": {
-            "anyOf": [
-              {
-                "format": "date",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Last Calibrated On"
-          },
-          "location_detail": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Location Detail"
-          },
-          "manufacturer": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Manufacturer"
-          },
-          "model": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Model"
-          },
-          "name": {
-            "title": "Name",
-            "type": "string"
-          },
-          "notes": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Notes"
-          },
-          "org": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/EquipmentWorkspaceRef"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "owner_contact": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Owner Contact"
-          },
-          "owner_name": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Owner Name"
-          },
-          "ownership": {
-            "title": "Ownership",
-            "type": "string"
-          },
-          "part_count": {
-            "default": 0,
-            "title": "Part Count",
-            "type": "integer"
-          },
-          "retired_on": {
-            "anyOf": [
-              {
-                "format": "date",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Retired On"
-          },
-          "serial_no": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Serial No"
-          },
-          "status": {
-            "title": "Status",
-            "type": "string"
-          },
-          "updated_at": {
-            "format": "date-time",
-            "title": "Updated At",
-            "type": "string"
-          },
-          "workspace_id": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Workspace Id"
-          }
-        },
-        "required": [
-          "id",
-          "asset_no",
-          "name",
-          "ownership",
-          "status",
-          "manufacturer",
-          "model",
-          "serial_no",
-          "instrument_id",
-          "location_detail",
-          "workspace_id",
-          "owner_name",
-          "owner_contact",
-          "commissioned_on",
-          "retired_on",
-          "attributes",
-          "notes",
-          "created_at",
-          "updated_at"
-        ],
-        "title": "EquipmentUnitOut",
-        "type": "object"
-      },
-      "EquipmentUnitUpdate": {
-        "description": "**전부 선택이다.** 보낸 것만 바꾼다(`exclude_unset`).",
-        "properties": {
-          "asset_no": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Asset No"
-          },
-          "attributes": {
-            "anyOf": [
-              {
-                "additionalProperties": true,
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Attributes"
-          },
-          "commissioned_on": {
-            "anyOf": [
-              {
-                "format": "date",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Commissioned On"
-          },
-          "instrument": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Instrument"
-          },
-          "instrument_id": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Instrument Id"
-          },
-          "instrument_type": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Instrument Type"
-          },
-          "lab": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Lab"
-          },
-          "location_detail": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Location Detail"
-          },
-          "manufacturer": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Manufacturer"
-          },
-          "model": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Model"
-          },
-          "name": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Name"
-          },
-          "notes": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Notes"
-          },
-          "owner_contact": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Owner Contact"
-          },
-          "owner_name": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Owner Name"
-          },
-          "ownership": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Ownership"
-          },
-          "retired_on": {
-            "anyOf": [
-              {
-                "format": "date",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Retired On"
-          },
-          "serial_no": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Serial No"
-          },
-          "status": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Status"
-          },
-          "workspace": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Workspace"
-          }
-        },
-        "title": "EquipmentUnitUpdate",
-        "type": "object"
-      },
-      "EquipmentWorkspaceRef": {
-        "description": "장비를 들고 있는 부서 — **상위 조직까지 함께.**\n\n부서는 본부→팀 트리라(`Workspace.parent_id`) 「어느 본부의 팀인가」 가 목록\n한 줄에서 보여야 한다. 화면이 부서 목록을 따로 받아 잇게 두면 줄마다 그 일을\n한다.",
-        "properties": {
-          "id": {
-            "format": "uuid",
-            "title": "Id",
-            "type": "string"
-          },
-          "label": {
-            "title": "Label",
-            "type": "string"
-          },
-          "root_id": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Root Id"
-          },
-          "root_label": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Root Label"
-          },
-          "slug": {
-            "title": "Slug",
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "slug",
-          "label"
-        ],
-        "title": "EquipmentWorkspaceRef",
-        "type": "object"
-      },
       "ExpiredOut": {
         "properties": {
           "bytes": {
@@ -19471,6 +17744,212 @@
         "title": "InstrumentDimensionsOut",
         "type": "object"
       },
+      "IntegrationCheckOut": {
+        "properties": {
+          "checked_at": {
+            "format": "date-time",
+            "title": "Checked At",
+            "type": "string"
+          },
+          "linked_properties": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Linked Properties"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "who": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Who"
+          }
+        },
+        "required": [
+          "ok",
+          "message",
+          "checked_at"
+        ],
+        "title": "IntegrationCheckOut",
+        "type": "object"
+      },
+      "IntegrationIn": {
+        "description": "연결 고치기. 주소 둘은 늘 보낸 그대로 바뀐다(빈 값이면 비운다).",
+        "properties": {
+          "base_url": {
+            "default": "",
+            "maxLength": 500,
+            "title": "Base Url",
+            "type": "string"
+          },
+          "clear_token": {
+            "default": false,
+            "title": "Clear Token",
+            "type": "boolean"
+          },
+          "token": {
+            "anyOf": [
+              {
+                "maxLength": 4000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Token"
+          },
+          "web_url": {
+            "default": "",
+            "maxLength": 500,
+            "title": "Web Url",
+            "type": "string"
+          }
+        },
+        "title": "IntegrationIn",
+        "type": "object"
+      },
+      "IntegrationOut": {
+        "description": "연결 하나 — **토큰은 싣지 않는다.** 「설정됨」 과 「이 서버가 풀 수 있나」 만.",
+        "properties": {
+          "base_url": {
+            "title": "Base Url",
+            "type": "string"
+          },
+          "check_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Check Message"
+          },
+          "check_ok": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Check Ok"
+          },
+          "checked_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checked At"
+          },
+          "configured": {
+            "title": "Configured",
+            "type": "boolean"
+          },
+          "has_token": {
+            "title": "Has Token",
+            "type": "boolean"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "link_url": {
+            "title": "Link Url",
+            "type": "string"
+          },
+          "system": {
+            "title": "System",
+            "type": "string"
+          },
+          "token_readable": {
+            "title": "Token Readable",
+            "type": "boolean"
+          },
+          "token_set_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Token Set At"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          },
+          "updated_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated By"
+          },
+          "web_url": {
+            "title": "Web Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "system",
+          "label",
+          "base_url",
+          "web_url",
+          "link_url",
+          "has_token",
+          "token_readable",
+          "token_set_at",
+          "configured",
+          "checked_at",
+          "check_ok",
+          "check_message",
+          "updated_by",
+          "updated_at"
+        ],
+        "title": "IntegrationOut",
+        "type": "object"
+      },
       "ItemAddRequest": {
         "description": "담기. **여럿을 한 번에** — 목록에서 골라 담는 일이라 한 건씩이면 왕복이 는다.",
         "properties": {
@@ -20202,6 +18681,156 @@
           "detail_path"
         ],
         "title": "KGTypeNodeOut",
+        "type": "object"
+      },
+      "LabSuggestionItemIn": {
+        "description": "의뢰 항목 하나 — 시험 종류 또는 무엇을 재는지(물성 이름).",
+        "properties": {
+          "property_hint": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Property Hint"
+          },
+          "test_type_key": {
+            "anyOf": [
+              {
+                "maxLength": 50,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Test Type Key"
+          }
+        },
+        "title": "LabSuggestionItemIn",
+        "type": "object"
+      },
+      "LabSuggestionOut": {
+        "description": "그 항목들을 할 보유 장비가 있는 부서 하나(TestScope).",
+        "properties": {
+          "equipment": {
+            "items": {
+              "$ref": "#/components/schemas/OwnedEquipmentOut"
+            },
+            "title": "Equipment",
+            "type": "array"
+          },
+          "items": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "workspace_name": {
+            "title": "Workspace Name",
+            "type": "string"
+          },
+          "workspace_slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workspace Slug"
+          }
+        },
+        "required": [
+          "workspace_slug",
+          "workspace_name",
+          "items",
+          "equipment"
+        ],
+        "title": "LabSuggestionOut",
+        "type": "object"
+      },
+      "LabSuggestionRequest": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/LabSuggestionItemIn"
+            },
+            "maxItems": 20,
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "title": "LabSuggestionRequest",
+        "type": "object"
+      },
+      "LabSuggestionsOut": {
+        "properties": {
+          "labs": {
+            "items": {
+              "$ref": "#/components/schemas/LabSuggestionOut"
+            },
+            "title": "Labs",
+            "type": "array"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          },
+          "unresolved": {
+            "items": {
+              "$ref": "#/components/schemas/LabUnresolvedOut"
+            },
+            "title": "Unresolved",
+            "type": "array"
+          }
+        },
+        "required": [
+          "state",
+          "message"
+        ],
+        "title": "LabSuggestionsOut",
+        "type": "object"
+      },
+      "LabUnresolvedOut": {
+        "description": "TestScope 에서 시험 항목 · 물성으로 못 푼 항목 — 추천에서 빠졌다는 사실을 말한다.",
+        "properties": {
+          "candidates": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Candidates",
+            "type": "array"
+          },
+          "item": {
+            "title": "Item",
+            "type": "integer"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "item",
+          "text",
+          "reason"
+        ],
+        "title": "LabUnresolvedOut",
         "type": "object"
       },
       "LinkCandidateOut": {
@@ -23777,6 +22406,184 @@
         "title": "OverviewRequest",
         "type": "object"
       },
+      "OwnedEquipmentOut": {
+        "description": "보유 장비 한 대 — TestScope 가 준 그대로 + 그 장비 화면 링크.",
+        "properties": {
+          "asset_no": {
+            "title": "Asset No",
+            "type": "string"
+          },
+          "calibration_due_on": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Calibration Due On"
+          },
+          "contact": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact"
+          },
+          "equipment_id": {
+            "title": "Equipment Id",
+            "type": "string"
+          },
+          "link": {
+            "title": "Link",
+            "type": "string"
+          },
+          "location": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Location"
+          },
+          "method_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Method Code"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "site": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Site"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "test_item": {
+            "title": "Test Item",
+            "type": "string"
+          },
+          "workspace": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workspace"
+          }
+        },
+        "required": [
+          "equipment_id",
+          "name",
+          "asset_no",
+          "status",
+          "workspace",
+          "site",
+          "location",
+          "contact",
+          "test_item",
+          "method_code",
+          "calibration_due_on",
+          "link"
+        ],
+        "title": "OwnedEquipmentOut",
+        "type": "object"
+      },
+      "OwnedOut": {
+        "description": "「이것을 잴 우리 장비」 — 상태가 먼저다(`off · error · unlinked · none · found`).",
+        "properties": {
+          "catalog_series": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Catalog Series"
+          },
+          "equipment": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/OwnedEquipmentOut"
+            },
+            "title": "Equipment",
+            "type": "array"
+          },
+          "equipment_total": {
+            "default": 0,
+            "title": "Equipment Total",
+            "type": "integer"
+          },
+          "link": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Link"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          },
+          "suggested": {
+            "default": false,
+            "title": "Suggested",
+            "type": "boolean"
+          },
+          "test_items": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Test Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "state",
+          "message"
+        ],
+        "title": "OwnedOut",
+        "type": "object"
+      },
       "OwnershipChangeOut": {
         "properties": {
           "access": {
@@ -23855,8 +22662,7 @@
               "test_type",
               "format_profile",
               "recipe",
-              "export_profile",
-              "equipment"
+              "export_profile"
             ],
             "title": "Kind",
             "type": "string"
@@ -23907,8 +22713,7 @@
               "test_type",
               "format_profile",
               "recipe",
-              "export_profile",
-              "equipment"
+              "export_profile"
             ],
             "title": "Kind",
             "type": "string"
@@ -23941,8 +22746,7 @@
               "test_type",
               "format_profile",
               "recipe",
-              "export_profile",
-              "equipment"
+              "export_profile"
             ],
             "title": "Kind",
             "type": "string"
@@ -24055,37 +22859,6 @@
           "offset"
         ],
         "title": "Page[DeclaredReviewOut]",
-        "type": "object"
-      },
-      "Page_EquipmentUnitOut_": {
-        "properties": {
-          "items": {
-            "items": {
-              "$ref": "#/components/schemas/EquipmentUnitOut"
-            },
-            "title": "Items",
-            "type": "array"
-          },
-          "limit": {
-            "title": "Limit",
-            "type": "integer"
-          },
-          "offset": {
-            "title": "Offset",
-            "type": "integer"
-          },
-          "total": {
-            "title": "Total",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "items",
-          "total",
-          "limit",
-          "offset"
-        ],
-        "title": "Page[EquipmentUnitOut]",
         "type": "object"
       },
       "Page_InboxItemOut_": {
@@ -44739,6 +43512,48 @@
         ]
       }
     },
+    "/api/commissions/lab-suggestions": {
+      "post": {
+        "description": "**받는 부서 추천** — 항목을 할 보유 장비가 있는 부서(TestScope). 읽기만 한다.\n\nPOST 인 까닭은 항목 목록을 몸에 싣기 때문이다 — 아무것도 저장하지 않는다.",
+        "operationId": "lab_suggestions_api_commissions_lab_suggestions_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LabSuggestionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LabSuggestionsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Lab Suggestions",
+        "tags": [
+          "commissions"
+        ]
+      }
+    },
     "/api/commissions/statuses": {
       "get": {
         "description": "상태의 차례와 이름. 화면이 표를 갖지 않는다.",
@@ -45246,690 +44061,6 @@
         "summary": "Attach Sample",
         "tags": [
           "commissions"
-        ]
-      }
-    },
-    "/api/equipment/parts/{part_id}": {
-      "delete": {
-        "operationId": "delete_part_api_equipment_parts__part_id__delete",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "part_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Part Id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Delete Part",
-        "tags": [
-          "equipment"
-        ]
-      },
-      "patch": {
-        "operationId": "update_part_api_equipment_parts__part_id__patch",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "part_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Part Id",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/EquipmentPartUpdate"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/EquipmentPartOut"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Update Part",
-        "tags": [
-          "equipment"
-        ]
-      }
-    },
-    "/api/equipment/summary": {
-      "get": {
-        "description": "상위 조직별·부서별·시험실별 현황.\n\n**상위 조직은 부서 트리를 타고 나온다** — 장비에 상위 조직을 따로 안 적기\n때문이다(`Workspace.parent_id`). 같은 답을 두 번 저장하면 언젠가 갈린다.",
-        "operationId": "summary_api_equipment_summary_get",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/EquipmentSummaryOut"
-                }
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "summary": "Summary",
-        "tags": [
-          "equipment"
-        ]
-      }
-    },
-    "/api/equipment/units": {
-      "get": {
-        "description": "**서버가 상한을 강제한다**(AGENTS.md) — `le=200`.\n\n폐기 장비는 기본으로 뺀다. 목록의 주 쓰임이 「지금 쓸 수 있는 것」 이라\n폐기까지 섞이면 세는 숫자가 틀린다 — `status=retired` 로 골라 보면 나온다.",
-        "operationId": "list_units_api_equipment_units_get",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "q",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Q"
-            }
-          },
-          {
-            "in": "query",
-            "name": "status",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Status"
-            }
-          },
-          {
-            "in": "query",
-            "name": "ownership",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Ownership"
-            }
-          },
-          {
-            "in": "query",
-            "name": "workspace_id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "format": "uuid",
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Workspace Id"
-            }
-          },
-          {
-            "in": "query",
-            "name": "lab_term_id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "format": "uuid",
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Lab Term Id"
-            }
-          },
-          {
-            "in": "query",
-            "name": "type_term_id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "format": "uuid",
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Type Term Id"
-            }
-          },
-          {
-            "in": "query",
-            "name": "calibration_due",
-            "required": false,
-            "schema": {
-              "default": false,
-              "title": "Calibration Due",
-              "type": "boolean"
-            }
-          },
-          {
-            "in": "query",
-            "name": "limit",
-            "required": false,
-            "schema": {
-              "default": 50,
-              "maximum": 200,
-              "minimum": 1,
-              "title": "Limit",
-              "type": "integer"
-            }
-          },
-          {
-            "in": "query",
-            "name": "offset",
-            "required": false,
-            "schema": {
-              "default": 0,
-              "minimum": 0,
-              "title": "Offset",
-              "type": "integer"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Page_EquipmentUnitOut_"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "List Units",
-        "tags": [
-          "equipment"
-        ]
-      },
-      "post": {
-        "description": "**누구나 올린다**(ADR 0035). 올린 사람이 등록자다 — 편집을 줄 부서는 「권한」 에서.",
-        "operationId": "create_unit_api_equipment_units_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/EquipmentUnitCreate"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/EquipmentUnitOut"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Create Unit",
-        "tags": [
-          "equipment"
-        ]
-      }
-    },
-    "/api/equipment/units/bulk": {
-      "post": {
-        "description": "엑셀에서 복사해 붙인 표를 받는다 — **드라이런이 기본이다.**\n\n기준정보는 **이름으로 온다**(사람이 엑셀에 id 를 적지 않는다). 없는 이름은\n새 값이 되는데, 그것이 이 화면에서 가장 흔한 사고다(오타 하나가 새 조직을\n만든다). 그래서 드라이런이 **무엇이 새로 생기는지 먼저 보여 준다.**\n\n**누구나 올린다**(ADR 0035) — 올린 사람이 줄마다 등록자다.",
-        "operationId": "bulk_create_api_equipment_units_bulk_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/EquipmentBulkRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/EquipmentBulkResult"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Bulk Create",
-        "tags": [
-          "equipment"
-        ]
-      }
-    },
-    "/api/equipment/units/{unit_id}": {
-      "delete": {
-        "description": "**가리키는 것이 있으면 못 지운다.**\n\n부속·교정은 함께 지워진다(장비를 떠나 살지 않는다). 그 밖의 참조가 있으면\n거절하고 무엇이 가리키는지 말해 준다 — 폐기하려는 것이면 `status='retired'` 다.",
-        "operationId": "delete_unit_api_equipment_units__unit_id__delete",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "unit_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Unit Id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Delete Unit",
-        "tags": [
-          "equipment"
-        ]
-      },
-      "get": {
-        "operationId": "get_unit_api_equipment_units__unit_id__get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "unit_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Unit Id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/EquipmentUnitOut"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Get Unit",
-        "tags": [
-          "equipment"
-        ]
-      },
-      "patch": {
-        "description": "**보낸 것만 바꾼다.** 안 보낸 것과 비운 것을 구별한다(AGENTS.md).",
-        "operationId": "update_unit_api_equipment_units__unit_id__patch",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "unit_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Unit Id",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/EquipmentUnitUpdate"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/EquipmentUnitOut"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Update Unit",
-        "tags": [
-          "equipment"
-        ]
-      }
-    },
-    "/api/equipment/units/{unit_id}/calibrations": {
-      "get": {
-        "description": "최근 것이 위로. **이력이라 지우지 않는다** — 고칠 일이 있으면 한 줄 더 넣는다.",
-        "operationId": "list_calibrations_api_equipment_units__unit_id__calibrations_get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "unit_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Unit Id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/EquipmentCalibrationOut"
-                  },
-                  "title": "Response List Calibrations Api Equipment Units  Unit Id  Calibrations Get",
-                  "type": "array"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "List Calibrations",
-        "tags": [
-          "equipment"
-        ]
-      },
-      "post": {
-        "operationId": "create_calibration_api_equipment_units__unit_id__calibrations_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "unit_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Unit Id",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/EquipmentCalibrationCreate"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/EquipmentCalibrationOut"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Create Calibration",
-        "tags": [
-          "equipment"
-        ]
-      }
-    },
-    "/api/equipment/units/{unit_id}/parts": {
-      "get": {
-        "operationId": "list_parts_api_equipment_units__unit_id__parts_get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "unit_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Unit Id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/EquipmentPartOut"
-                  },
-                  "title": "Response List Parts Api Equipment Units  Unit Id  Parts Get",
-                  "type": "array"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "List Parts",
-        "tags": [
-          "equipment"
-        ]
-      },
-      "post": {
-        "operationId": "create_part_api_equipment_units__unit_id__parts_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "unit_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Unit Id",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/EquipmentPartCreate"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/EquipmentPartOut"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Create Part",
-        "tags": [
-          "equipment"
         ]
       }
     },
@@ -50433,6 +48564,165 @@
         ]
       }
     },
+    "/api/integrations": {
+      "get": {
+        "operationId": "list_integrations_api_integrations_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/IntegrationOut"
+                  },
+                  "title": "Response List Integrations Api Integrations Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Integrations",
+        "tags": [
+          "integrations"
+        ]
+      }
+    },
+    "/api/integrations/{system}": {
+      "get": {
+        "operationId": "get_integration_api_integrations__system__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "system",
+            "required": true,
+            "schema": {
+              "title": "System",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Integration",
+        "tags": [
+          "integrations"
+        ]
+      },
+      "put": {
+        "operationId": "update_integration_api_integrations__system__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "system",
+            "required": true,
+            "schema": {
+              "title": "System",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IntegrationIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Integration",
+        "tags": [
+          "integrations"
+        ]
+      }
+    },
+    "/api/integrations/{system}/check": {
+      "post": {
+        "operationId": "check_integration_api_integrations__system__check_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "system",
+            "required": true,
+            "schema": {
+              "title": "System",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationCheckOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Check Integration",
+        "tags": [
+          "integrations"
+        ]
+      }
+    },
     "/api/maintenance/cleanup": {
       "post": {
         "description": "정리를 큐에 넣는다. 파일이 많으면 오래 걸리므로 요청을 붙잡지 않는다.",
@@ -52924,7 +51214,7 @@
     },
     "/api/metrology/by-property/{key}": {
       "get": {
-        "description": "물성 하나의 측정 지도 — 기법별로 묶고, 보유 장비를 앞세운다.",
+        "description": "물성 하나의 측정 지도 — 기법별로 묶는다. 우리 장비는 `owned` 가 TestScope 에 묻는다.",
         "operationId": "by_property_api_metrology_by_property__key__get",
         "parameters": [
           {
@@ -52960,6 +51250,49 @@
           }
         },
         "summary": "By Property",
+        "tags": [
+          "metrology"
+        ]
+      }
+    },
+    "/api/metrology/by-property/{key}/owned": {
+      "get": {
+        "description": "**이 물성을 잴 우리 장비** — TestScope(보유 장비 · 교정의 정본, ADR 0069)에 그때 묻는다.\n\n측정 지도(`by-property`)와 따로 둔다 — TestScope 가 느리거나 꺼져 있어도 지도는 바로 선다.\n상태가 먼저다: `unlinked` 는 「모름」 이지 「없음」 이 아니다.",
+        "operationId": "owned_for_property_api_metrology_by_property__key__owned_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "title": "Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OwnedOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Owned For Property",
         "tags": [
           "metrology"
         ]
@@ -53898,8 +52231,7 @@
                 "test_type",
                 "format_profile",
                 "recipe",
-                "export_profile",
-                "equipment"
+                "export_profile"
               ],
               "title": "Kind",
               "type": "string"
@@ -53962,8 +52294,7 @@
                 "test_type",
                 "format_profile",
                 "recipe",
-                "export_profile",
-                "equipment"
+                "export_profile"
               ],
               "title": "Kind",
               "type": "string"

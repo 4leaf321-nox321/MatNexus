@@ -2,8 +2,9 @@
  * 측정법 — **「그 물성은 무엇으로 재는가」** (MaterialTwin 이식 4단계).
  *
  * 읽기 전용이다. 데이터는 서버의 이관 스크립트로만 들어온다. 화면이 지킬 것
- * 둘: ① 장비 카탈로그에 있는 것과 **우리가 보유한 것**을 가른다 ② 물성↔장비
- * 매핑은 사람의 판단이라 확신도(high·medium·low)가 high 가 아니면 표시를 단다.
+ * 둘: ① **우리 장비는 TestScope 에 묻는다**(`owned`, 2026-10-23) — 「모름」 과 「없음」 을
+ * 가른다 ② 물성↔장비 매핑은 사람의 판단이라 확신도(high·medium·low)가 high 가 아니면
+ * 표시를 단다.
  */
 
 import { api } from '@/shared/api/client'
@@ -14,6 +15,7 @@ export type MetrologyCoverage = components['schemas']['MetrologyCoverageOut']
 export type MetrologyCoverageRow = components['schemas']['MetrologyCoverageRowOut']
 export type MetrologyProperty = components['schemas']['MetrologyPropertyOut']
 export type MetrologyCapability = components['schemas']['MetrologyCapabilityOut']
+export type OwnedEquipment = components['schemas']['OwnedOut']
 
 /** 장비 분류의 화면 라벨. */
 export const INSTRUMENT_CATEGORY_LABELS: Record<string, string> = {
@@ -63,4 +65,7 @@ export const metrologyApi = {
   coverage: () => api.get<MetrologyCoverage>('/metrology/coverage'),
   byProperty: (key: string) =>
     api.get<MetrologyProperty>(`/metrology/by-property/${encodeURIComponent(key)}`),
+  /** 이 물성을 잴 우리 장비 — 서버가 TestScope 에 그때 묻는다. */
+  owned: (key: string) =>
+    api.get<OwnedEquipment>(`/metrology/by-property/${encodeURIComponent(key)}/owned`),
 }

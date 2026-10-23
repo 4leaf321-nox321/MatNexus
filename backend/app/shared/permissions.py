@@ -44,7 +44,6 @@ from sqlalchemy.orm import Session
 
 from app.modules.accounts.models import User
 from app.modules.commissions.models import Commission
-from app.modules.equipment.models import EquipmentUnit
 from app.modules.fitting.models import ExportProfile, PropertyCard
 from app.modules.grouping.models import GroupResult
 from app.modules.materials.models import Material, Sample, Specimen
@@ -306,7 +305,6 @@ Owned = (
     | FormatProfile
     | ProcessingRecipe
     | ExportProfile
-    | EquipmentUnit
     | WorkbenchRun
 )
 
@@ -316,7 +314,6 @@ _REGISTRANT: dict[type, str] = {
     Sample: "registered_by_id",
     Specimen: "registered_by_id",
     TestRun: "registered_by_id",
-    EquipmentUnit: "registered_by_id",
     PropertyCard: "created_by_id",
     GroupResult: "created_by_id",
     TestType: "created_by_id",
@@ -343,7 +340,6 @@ _SUBJECT: dict[type, str] = {
     FormatProfile: "이 장비 파일 정의는",
     ProcessingRecipe: "이 레시피는",
     ExportProfile: "이 해석용 물성 정의는",
-    EquipmentUnit: "이 장비는",
     WorkbenchRun: "이 작업은",
 }
 

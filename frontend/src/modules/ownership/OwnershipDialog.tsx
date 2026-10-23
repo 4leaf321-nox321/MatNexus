@@ -46,12 +46,11 @@ const KIND_LABELS: Record<OwnedKind, string> = {
   test_run: '시험',
   property_card: '카드',
   group_result: '묶음',
-  // 정의와 장비도 사람이 고친다(ADR 0035 3단계) — 아래로 딸린 것은 없다.
+  // 정의도 사람이 고친다(ADR 0035 3단계) — 아래로 딸린 것은 없다.
   test_type: '시험 정의',
   format_profile: '장비 파일 정의',
   recipe: '레시피',
   export_profile: '해석용 물성 정의',
-  equipment: '장비',
 }
 
 export function OwnershipDialog({

@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.modules.accounts.models import User
-from app.modules.commissions import services
+from app.modules.commissions import labs, services
 from app.modules.commissions.models import (
     PRIORITY_LABELS,
     STATUS_LABELS,
@@ -36,6 +36,8 @@ from app.modules.commissions.schemas import (
     CommissionStatusOut,
     CommissionUpdateRequest,
     ItemCardOut,
+    LabSuggestionRequest,
+    LabSuggestionsOut,
     LinkedRunOut,
     LinkRunRequest,
     NamedOut,
@@ -266,6 +268,19 @@ def _detail(db: Session, item: Commission, viewer: User) -> CommissionDetailOut:
 def list_statuses(user: User = Depends(current_user)) -> list[CommissionStatusOut]:
     """상태의 차례와 이름. 화면이 표를 갖지 않는다."""
     return [CommissionStatusOut(key=one, label=STATUS_LABELS[one]) for one in STATUSES]
+
+
+@router.post("/lab-suggestions", response_model=LabSuggestionsOut)
+def lab_suggestions(
+    payload: LabSuggestionRequest,
+    _user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> LabSuggestionsOut:
+    """**받는 부서 추천** — 항목을 할 보유 장비가 있는 부서(TestScope). 읽기만 한다.
+
+    POST 인 까닭은 항목 목록을 몸에 싣기 때문이다 — 아무것도 저장하지 않는다.
+    """
+    return labs.suggest(db, payload)
 
 
 @router.get("", response_model=Page[CommissionOut])

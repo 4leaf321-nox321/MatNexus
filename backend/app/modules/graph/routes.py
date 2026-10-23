@@ -366,7 +366,6 @@ KEY_NAMES: dict[str, str] = {
     "material": "재료 번호",
     "sample": "로트",
     "commission": "의뢰 번호",
-    "equipment_unit": "자산번호",
     "workspace": "주소",
     "source": "DOI",
     "catalog_material": "재료 코드",

@@ -8,6 +8,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field, model_validator
 
+from app.shared import testscope
+
 
 class NamedOut(BaseModel):
     """이름 붙은 참조 하나 — 부서·사람·재료."""
@@ -261,3 +263,43 @@ class ResolveItemRequest(BaseModel):
     test_type_key: str = Field(min_length=1, max_length=50)
     conditions: dict[str, Any] = Field(default_factory=dict)
     condition_units: dict[str, str] = Field(default_factory=dict)
+
+
+class LabSuggestionItemIn(BaseModel):
+    """의뢰 항목 하나 — 시험 종류 또는 무엇을 재는지(물성 이름)."""
+
+    test_type_key: str | None = Field(default=None, max_length=50)
+    property_hint: str | None = Field(default=None, max_length=200)
+
+
+class LabSuggestionRequest(BaseModel):
+    items: list[LabSuggestionItemIn] = Field(default_factory=list, max_length=20)
+
+
+class LabSuggestionOut(BaseModel):
+    """그 항목들을 할 보유 장비가 있는 부서 하나(TestScope)."""
+
+    workspace_slug: str | None
+    """MatNexus 부서 — TestScope 부서와 이름이 같은 부서가 **하나일 때만**. 없으면 고를 수 없고
+    이름만 보인다."""
+    workspace_name: str
+    items: list[int]
+    """이 부서 장비로 할 수 있는 항목(0 부터)."""
+    equipment: list[testscope.OwnedEquipmentOut]
+
+
+class LabUnresolvedOut(BaseModel):
+    """TestScope 에서 시험 항목 · 물성으로 못 푼 항목 — 추천에서 빠졌다는 사실을 말한다."""
+
+    item: int
+    text: str
+    reason: str
+    candidates: list[str] = Field(default_factory=list)
+
+
+class LabSuggestionsOut(BaseModel):
+    state: str
+    """`off`(연결 없음) · `error`(못 닿음) · `ok`."""
+    message: str
+    labs: list[LabSuggestionOut] = Field(default_factory=list)
+    unresolved: list[LabUnresolvedOut] = Field(default_factory=list)

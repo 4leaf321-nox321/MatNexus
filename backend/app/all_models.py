@@ -30,11 +30,6 @@ from app.modules.catalog.taxonomy_models import (
     PropertyGroupMember,
 )
 from app.modules.commissions.models import Commission, CommissionEvent, CommissionItem
-from app.modules.equipment.models import (
-    EquipmentCalibration,
-    EquipmentPart,
-    EquipmentUnit,
-)
 from app.modules.fitting.models import (
     CardBlock,
     ExportFormatHold,
@@ -50,6 +45,7 @@ from app.modules.guide.models import (
     GuideRevision,
     GuideSection,
 )
+from app.modules.integrations.models import IntegrationConnection
 from app.modules.materials.models import (
     Material,
     MaterialApprovalRequest,
@@ -111,9 +107,6 @@ __all__ = [
     "CommissionItem",
     "Curve",
     "EnsembleResult",
-    "EquipmentCalibration",
-    "EquipmentPart",
-    "EquipmentUnit",
     "ExportFormatHold",
     "ExportProfile",
     "FormatProfile",
@@ -125,6 +118,7 @@ __all__ = [
     "GuideSection",
     "Instrument",
     "InstrumentCapability",
+    "IntegrationConnection",
     "Job",
     "Material",
     "MaterialApprovalRequest",

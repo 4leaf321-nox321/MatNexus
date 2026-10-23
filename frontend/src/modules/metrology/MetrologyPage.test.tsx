@@ -1,10 +1,11 @@
 /**
  * 측정법 화면.
  *
- *   요약 타일이 카탈로그 장비 수와 보유 수를 가른다
- *   피커가 잴 수 있는 물성과 장비 없는 물성을 가른다
+ *   요약 타일은 카탈로그 장비 수만 — 「보유」 는 말하지 않는다(정본은 TestScope)
+ *   피커가 재는 법이 있는 물성과 없는 물성을 가른다
  *   ?key= 딥링크로 오면 기법별 표가 바로 선다 — 확신도 ≠ high 는 표시가 붙는다
  *   빈 칸은 — 로 보인다
+ *   우리 장비는 TestScope 에 묻는다 — 「모름」 은 문장으로, 장비는 표와 TestScope 링크로
  */
 
 import { render, screen, within } from '@testing-library/react'
@@ -17,6 +18,7 @@ import MetrologyPage from '@/modules/metrology/MetrologyPage'
 const summary = vi.fn()
 const coverage = vi.fn()
 const byProperty = vi.fn()
+const owned = vi.fn()
 const guideSearch = vi.fn()
 
 vi.mock('@/modules/guide/api', async (importOriginal) => ({
@@ -30,6 +32,7 @@ vi.mock('@/modules/metrology/api', async (importOriginal) => ({
     summary: (...args: unknown[]) => summary(...args),
     coverage: (...args: unknown[]) => coverage(...args),
     byProperty: (...args: unknown[]) => byProperty(...args),
+    owned: (...args: unknown[]) => owned(...args),
   },
 }))
 
@@ -68,24 +71,33 @@ beforeEach(() => {
   })
   coverage.mockResolvedValue({ covered: [YOUNG], gaps: [DENSITY] })
   guideSearch.mockResolvedValue([])
+  owned.mockResolvedValue({
+    state: 'unlinked',
+    message: 'TestScope 에 이 물성을 내는 시험 항목 연결이 없어 보유 장비를 모릅니다 — 「없다」 가 아닙니다.',
+    test_items: [],
+    suggested: false,
+    equipment: [],
+    catalog_series: null,
+    link: 'http://ts.example:8020',
+  })
 })
 
 describe('측정법', () => {
-  it('요약이 카탈로그 장비와 보유를 가르고, 피커가 빈 칸을 숨기지 않는다', async () => {
+  it('요약에 「보유」 가 없고, 피커가 빈 칸을 숨기지 않는다', async () => {
     render(
       <MemoryRouter initialEntries={['/metrology']}>
         <MetrologyPage />
       </MemoryRouter>
     )
     expect(await screen.findByText('218')).toBeInTheDocument()
-    expect(screen.getByText('보유 장비')).toBeInTheDocument()
-    expect(screen.getByText('12')).toBeInTheDocument()
+    // 원본의 `owned` 는 전부 거짓이었다 — 「보유 0」 을 보이지 않는다(2026-10-23).
+    expect(screen.queryByText('보유 장비')).not.toBeInTheDocument()
     // 커버된 물성은 전체 대비로 읽힌다.
     expect(screen.getByText('96')).toBeInTheDocument()
     expect(screen.getByText('/ 271')).toBeInTheDocument()
-    // 잴 수 있는 물성과 장비 없는 물성이 갈라져 선다.
+    // 재는 법이 있는 물성과 없는 물성이 갈라져 선다.
     expect(screen.getByText('탄성계수')).toBeInTheDocument()
-    expect(screen.getByText('장비 1 · 보유 1')).toBeInTheDocument()
+    expect(screen.getByText('장비 1')).toBeInTheDocument()
     expect(screen.getByText('밀도')).toBeInTheDocument()
     expect(screen.getByText('값 7')).toBeInTheDocument()
     expect(byProperty).not.toHaveBeenCalled()
@@ -139,7 +151,10 @@ describe('측정법', () => {
     expect(byProperty).toHaveBeenCalledWith('mechanical.youngs_modulus')
     expect(await screen.findByText('tensile')).toBeInTheDocument()
     expect(screen.getByText(/Instron 5982/)).toBeInTheDocument()
-    expect(screen.getByText('보유 (홍측정)')).toBeInTheDocument()
+    // 원본의 보유 열은 없다 — 우리 장비는 TestScope 칸이 말한다.
+    expect(screen.queryByRole('columnheader', { name: '보유' })).not.toBeInTheDocument()
+    expect(await screen.findByText(/「없다」 가 아닙니다/)).toBeInTheDocument()
+    expect(owned).toHaveBeenCalledWith('mechanical.youngs_modulus')
     expect(screen.getByText('ISO 6892-1')).toBeInTheDocument()
     expect(screen.getByText('0.5 ~ 100000 N')).toBeInTheDocument()
     expect(screen.getByText('233.15 ~ 573.15 K')).toBeInTheDocument()
@@ -171,6 +186,76 @@ describe('측정법', () => {
     expect(
       await screen.findByText('이 물성을 잴 수 있는 장비가 카탈로그에 없습니다.')
     ).toBeInTheDocument()
+  })
+})
+
+describe('우리 장비 (TestScope)', () => {
+  it('장비가 있으면 TestScope 링크와 교정 만료를, 지난 교정은 표를 단다', async () => {
+    byProperty.mockResolvedValue({
+      property_key: 'mechanical.tensile_strength',
+      name: '인장강도',
+      domain: 'mechanical',
+      symbol: null,
+      si_unit: 'Pa',
+      test_standard: null,
+      techniques: [],
+    })
+    owned.mockResolvedValue({
+      state: 'found',
+      message: 'TestScope 보유 장비 2대(시험 항목 인장).',
+      test_items: ['인장'],
+      suggested: true,
+      equipment: [
+        {
+          equipment_id: 'e1',
+          name: '만능시험기 1호기',
+          asset_no: 'A-1',
+          status: 'active',
+          workspace: '재료시험팀',
+          site: '2공장',
+          location: '3층',
+          contact: '홍측정',
+          test_item: '인장',
+          method_code: null,
+          calibration_due_on: '2099-03-31',
+          link: 'http://ts.example:8020/equipment/e1',
+        },
+        {
+          equipment_id: 'e2',
+          name: '만능시험기 2호기',
+          asset_no: 'A-2',
+          status: 'active',
+          workspace: '재료시험팀',
+          site: null,
+          location: null,
+          contact: null,
+          test_item: '인장',
+          method_code: null,
+          calibration_due_on: '2020-01-31',
+          link: 'http://ts.example:8020/equipment/e2',
+        },
+      ],
+      equipment_total: 109,
+      catalog_series: null,
+      link: 'http://ts.example:8020',
+    })
+    render(
+      <MemoryRouter initialEntries={['/metrology?key=mechanical.tensile_strength']}>
+        <MetrologyPage />
+      </MemoryRouter>
+    )
+    const first = await screen.findByRole('link', { name: '만능시험기 1호기' })
+    expect(first).toHaveAttribute('href', 'http://ts.example:8020/equipment/e1')
+    expect(screen.getByText('2공장 · 3층')).toBeInTheDocument()
+    expect(screen.getByText(/2020-01-31/)).toHaveTextContent('(지남)')
+    expect(screen.getByText('2099-03-31')).toBeInTheDocument()
+    expect(screen.getByText(/기계 제안입니다/)).toBeInTheDocument()
+    // 실측: 인장강도 하나에 109대 — 화면에는 받은 만큼만, 나머지는 TestScope 로.
+    expect(screen.getByText(/외 107대/)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'TestScope 에서 전체 보기' })).toHaveAttribute(
+      'href',
+      'http://ts.example:8020'
+    )
   })
 })
 

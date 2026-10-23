@@ -97,7 +97,7 @@ test('문헌 물성부터 혼합 덱까지', async ({ page, request }) => {
 
   await test.step('측정법 — 물성에서 장비까지', async () => {
     await page.goto('/metrology')
-    await expect(page.getByText('보유 장비', { exact: true })).toBeVisible()
+    await expect(page.getByText('장비 (카탈로그)', { exact: true })).toBeVisible()
     // 잴 수 있는 물성 하나를 고르면 기법별 표가 선다.
     await page
       .getByRole('button', { name: /탄성계수/ })

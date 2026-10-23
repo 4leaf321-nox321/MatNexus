@@ -160,16 +160,6 @@ NODE_META: tuple[NodeMeta, ...] = (
     ),
     NodeMeta("commission_item", LAYER_OPERATIONS, "list-checks", None, 140),
     NodeMeta(
-        "equipment_unit",
-        LAYER_OPERATIONS,
-        "wrench",
-        "/settings/equipment/{id}",
-        150,
-        key_column="asset_no",
-        status_column="status",
-        workspace_column="workspace_id",
-    ),
-    NodeMeta(
         "workspace",
         LAYER_OPERATIONS,
         "building-2",

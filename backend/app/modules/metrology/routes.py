@@ -2,7 +2,8 @@
 
 데이터는 이관 스크립트(`scripts/import_materialtwin.py`)로만 들어온다. 화면의
 질문은 둘이다: 「이 물성은 무엇으로 재는가」(by-property) 와 「우리는 무엇을
-잴 수 있고 무엇이 빈 칸인가」(coverage).
+잴 수 있고 무엇이 빈 칸인가」(coverage). 「그 장비가 우리에게 있나」 는 TestScope 에
+묻는다(`by-property/{key}/owned`, 2026-10-23).
 """
 
 from __future__ import annotations
@@ -24,6 +25,7 @@ from app.modules.metrology.schemas import (
     MetrologySummaryOut,
     MetrologyTechniqueGroupOut,
 )
+from app.shared import testscope
 from app.shared.auth import current_user
 from app.shared.errors import NotFound
 
@@ -110,7 +112,7 @@ def coverage(
 def by_property(
     key: str, _user: User = Depends(current_user), db: Session = Depends(get_db)
 ) -> MetrologyPropertyOut:
-    """물성 하나의 측정 지도 — 기법별로 묶고, 보유 장비를 앞세운다."""
+    """물성 하나의 측정 지도 — 기법별로 묶는다. 우리 장비는 `owned` 가 TestScope 에 묻는다."""
     definition = db.scalar(select(CatalogDefinition).where(CatalogDefinition.key == key))
     if definition is None:
         raise NotFound("MNX-METROLOGY-0001", f"모르는 물성입니다: {key}")
@@ -169,3 +171,17 @@ def by_property(
             for technique, capabilities in ordered
         ],
     )
+
+
+@router.get("/by-property/{key}/owned", response_model=testscope.OwnedOut)
+def owned_for_property(
+    key: str, _user: User = Depends(current_user), db: Session = Depends(get_db)
+) -> testscope.OwnedOut:
+    """**이 물성을 잴 우리 장비** — TestScope(보유 장비 · 교정의 정본, ADR 0069)에 그때 묻는다.
+
+    측정 지도(`by-property`)와 따로 둔다 — TestScope 가 느리거나 꺼져 있어도 지도는 바로 선다.
+    상태가 먼저다: `unlinked` 는 「모름」 이지 「없음」 이 아니다.
+    """
+    if db.scalar(select(CatalogDefinition.key).where(CatalogDefinition.key == key)) is None:
+        raise NotFound("MNX-METROLOGY-0001", f"모르는 물성입니다: {key}")
+    return testscope.owned(db, key)

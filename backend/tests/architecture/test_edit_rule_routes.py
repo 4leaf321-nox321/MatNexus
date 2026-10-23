@@ -46,7 +46,6 @@ FILES = {
     # 판정이다.
     "sp_core": APP / "sp_core" / "routes.py",
     "ownership": APP / "ownership" / "routes.py",
-    "equipment": APP / "equipment" / "routes.py",
     "workbench": APP / "workbench" / "routes.py",
     "trash": APP / "trash" / "routes.py",
 }
@@ -77,7 +76,6 @@ HELPERS = {
     ("processing", "_require_result_removal"): "require_edit(",
     # 마스터커브 · Prony 지우기 — 만든 사람이거나 고칠 수 있는 사람(처리 결과와 같은 규칙).
     ("viscoelastic", "_require_removal"): "require_edit(",
-    ("equipment", "_require_edit"): "require_edit(",
     ("workbench", "_editable_run"): "require_edit(",
     # 선언 물성 승인 — 검토의 뜻이 있는 일이라 카드 확정과 같은 판정(ADR 0049).
     ("materials", "_require_approver"): "require_steward(",
@@ -174,8 +172,6 @@ EXEMPT: dict[tuple[str, str], str] = {
     ("formats", "try_profile"): _읽기,
     ("formats", "check_profile"): _읽기,
     ("formats", "create_profile"): _정의,
-    ("equipment", "create_unit"): _만들기 + " — 장비도 누구나 올린다(3단계)",
-    ("equipment", "bulk_create"): _만들기 + " — 붙여넣기 일괄 등록",
     ("workbench", "create_run"): _만들기 + " — 작업은 내 소속 부서의 것으로 선다",
     ("workbench", "bom_alias_lookup"): _읽기,
     (

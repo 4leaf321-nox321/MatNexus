@@ -262,13 +262,6 @@ KINDS: dict[str, EntityKind] = {
             name_columns=("vendor", "model"),
         ),
         EntityKind(
-            slug="equipment_unit",
-            label="보유 장비",
-            table="equipment_units",
-            module="equipment",
-            name_columns=("name",),
-        ),
-        EntityKind(
             slug="term",
             label="기준정보 값",
             table="vocabulary_terms",
@@ -456,24 +449,6 @@ RELATIONS: dict[str, RelationType] = {
             src="property",
             dst="instrument",
             source=via("instrument_capabilities", "property_key", "instrument_id"),
-        ),
-        RelationType(
-            slug="unit_of",
-            label="이 개체의 장비 정의",
-            inverse_label="이 장비 정의의 보유 개체",
-            src="equipment_unit",
-            dst="instrument",
-            source=fk("equipment_units", "instrument_id"),
-        ),
-        RelationType(
-            slug="held_by",
-            label="이 장비를 가진 조직",
-            inverse_label="이 조직이 가진 장비",
-            src="equipment_unit",
-            dst="workspace",
-            source=fk("equipment_units", "workspace_id"),
-            note="온톨로지에 넣는 유일한 조직 관계 — "
-            "「우리 사업부에 이 장비가 있나」 는 사람이 실제로 묻는다.",
         ),
         RelationType(
             slug="child_of",

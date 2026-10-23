@@ -44,6 +44,7 @@ import { realmGroups } from '@/shared/layout/navigation'
  */
 const AccountsAdminPage = lazy(() => import('@/modules/accounts/AccountsAdminPage'))
 const UsagePage = lazy(() => import('@/modules/usage/UsagePage'))
+const IntegrationsPage = lazy(() => import('@/modules/integrations/IntegrationsPage'))
 const WorkbenchPage = lazy(() => import('@/modules/workbench/WorkbenchPage'))
 const BomDeckPage = lazy(() => import('@/modules/fitting/BomDeckPage'))
 const BomPartsImportPage = lazy(() => import('@/modules/materials/BomPartsImportPage'))
@@ -59,8 +60,6 @@ const CatalogAshbyPage = lazy(() => import('@/modules/catalog/CatalogAshbyPage')
 const CatalogCoveragePage = lazy(() => import('@/modules/catalog/CatalogCoveragePage'))
 const CatalogTaxonomyPage = lazy(() => import('@/modules/catalog/CatalogTaxonomyPage'))
 const CatalogLinksPage = lazy(() => import('@/modules/catalog/CatalogLinksPage'))
-const EquipmentPage = lazy(() => import('@/modules/equipment/EquipmentPage'))
-const EquipmentDetailPage = lazy(() => import('@/modules/equipment/EquipmentDetailPage'))
 const MetrologyPage = lazy(() => import('@/modules/metrology/MetrologyPage'))
 const CardsPage = lazy(() => import('@/modules/fitting/CardsPage'))
 const BatchUploadPage = lazy(() => import('@/modules/tests/BatchUploadPage'))
@@ -212,9 +211,6 @@ export const router = createBrowserRouter([
           { path: 'catalog/:id', element: <CatalogMaterialPage /> },
           // 측정법 — 「그 물성은 무엇으로 재는가」 (MaterialTwin 이식 4단계).
           { path: 'metrology', element: <MetrologyPage /> },
-          // 보유 장비 — 측정법이 「무엇으로 재나」 라면 여기는 「우리 것은 어디 있나」.
-          { path: 'settings/equipment', element: <EquipmentPage /> },
-          { path: 'settings/equipment/:id', element: <EquipmentDetailPage /> },
 
           // 복합 물성 영역 — 개요 하나만 진짜 화면이고 나머지는 자리다(ADR 0026).
           { path: 'composite', element: <CompositeOverviewPage /> },
@@ -270,6 +266,8 @@ export const router = createBrowserRouter([
           // 관리 (전사)
           { path: 'admin/accounts', element: <AccountsAdminPage /> },
           { path: 'admin/usage', element: <UsagePage /> },
+          // 외부 연동 — TestScope 주소와 읽기 토큰(`.env` 가 아니라 화면에서, 2026-10-23).
+          { path: 'admin/integrations', element: <IntegrationsPage /> },
           { path: 'admin/workspaces', element: <WorkspacesAdminPage /> },
           // **단위는 기준정보 안의 한 칸이다.** 따로 주소를 두지 않는다 —
           // 사람이 폼에서 고르는 목록이라는 점에서 같은 것이고, 문 둘을 두면

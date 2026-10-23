@@ -523,7 +523,7 @@ def _space(db: Session, slug: str) -> Workspace:
     return found
 
 
-class Test정의와_장비:
+class Test정의:
     def test_정의는_누구나_만들고_등록자가_고치며_부서에_주면_그_부서가_고친다(
         self, client: TestClient, people: dict[str, tuple[str, dict[str, str]]]
     ) -> None:
@@ -556,28 +556,6 @@ class Test정의와_장비:
         )
         assert edited.status_code == 200, edited.text
         assert edited.json()["access"]["edit_workspace"] == "dept-a 부서"
-
-    def test_장비는_누구나_올리고_남의_장비는_못_고친다(
-        self, client: TestClient, people: dict[str, tuple[str, dict[str, str]]]
-    ) -> None:
-        """전에는 「어느 부서든 관리자면」 — 남의 조직 장비를 누구 관리자든 고쳤다."""
-        _, bora = people["bora"]
-        _, alice = people["alice"]
-        unit = client.post("/api/equipment/units", json={"name": "보라의 DMA"}, headers=bora)
-        assert unit.status_code == 201, unit.text
-        unit_id = unit.json()["id"]
-        blocked = client.patch(
-            f"/api/equipment/units/{unit_id}", json={"notes": "남"}, headers=alice
-        )
-        assert blocked.status_code == 403, blocked.text
-        assert "등록자 보라" in blocked.json()["error"]["message"]
-        # 부속·교정도 장비를 따라간다.
-        part = client.post(
-            f"/api/equipment/units/{unit_id}/parts",
-            json={"kind": "load_cell", "label": "5 kN"},
-            headers=alice,
-        )
-        assert part.status_code == 403, part.text
 
 
 class Test휴지통:

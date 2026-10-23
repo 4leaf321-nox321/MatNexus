@@ -9,13 +9,61 @@ from __future__ import annotations
 import pytest
 
 from matcore import export
-from matcore.cards.hyperelastic import HYPERELASTIC_ORDER, FromSet, from_parameter_set
+from matcore.cards.hyperelastic import (
+    HYPERELASTIC_ORDER,
+    FromSet,
+    from_parameter_set,
+    stability,
+)
 
 
 def _ok(model: str, terms: dict[str, tuple[float, str]]) -> FromSet:
     made = from_parameter_set(model, terms)
     assert isinstance(made, FromSet), made
     return made
+
+
+class Test큰_변형_안정성:
+    """음의 고차 계수가 다 위험하지는 않다 — 경로마다 공칭 응력이 느는지 걷는다(2026-10-23).
+
+    계수는 개발 DB 의 실측이다(Ecoflex 00-20 · Dragon Skin 10).
+    """
+
+    def test_압축_곡선으로_맞춘_Yeoh_는_인장_33_퍼센트에서_깨진다(self) -> None:
+        found = stability({"c10": 18815.5, "c20": 18948.8, "c30": -41042.4})
+        assert found is not None and not found.ok
+        assert found.breaks["인장"] == pytest.approx(33.5, abs=0.6)
+        assert found.breaks["등이축"] == pytest.approx(17.0, abs=0.6)
+        assert set(found.weak) == {"인장", "압축", "등이축", "평면 전단"}
+        assert found.describe().startswith("인장 33 % · 압축 29 %")
+
+    def test_음수_계수여도_안정하면_통과한다(self) -> None:
+        tension = stability({"c10": 21000.0, "c20": 897.4, "c30": -0.5306})
+        dragon = stability({"c10": 24060.0, "c20": -170700.0, "c30": 2055000.0})
+        assert tension is not None and tension.ok and tension.describe() == ""
+        assert dragon is not None and dragon.ok
+
+    def test_기본값_범위_밖에서만_깨지면_약하지_않다(self) -> None:
+        """Mooney C01 < 0 — 압축 54 % 는 기본값 범위(50 %) 밖, 등이축 31 % 는 안."""
+        found = stability({"c10": 21800.0, "c01": -7000.0})
+        assert found is not None
+        assert found.weak == ("등이축",) and "압축" in found.breaks
+
+    def test_다항식_꼴이_아니면_모른다(self) -> None:
+        assert stability({"mu": 1.0e5, "alpha": 2.0}) is None
+
+
+def test_시험_모드는_칸_이름과_표기가_달라도_읽는다() -> None:
+    from app.shared.hyperelastic_sets import mode_of
+
+    assert mode_of({"mode": "tension"}) == "tension"
+    assert mode_of({"deformation_mode": "uniaxial tension"}) == "tension"
+    assert mode_of({"mode": "uniaxial_compression"}) == "compression"
+    assert mode_of({"test_method": "uniaxial extension on Instron, 8 specimens"}) == "tension"
+    assert mode_of({"mode": "equibiaxial tension"}) == "biaxial"
+    assert mode_of({"mode": "inverse_fe_magnetic_bending"}) == "other"
+    # 교정 전 값(`…_before_correction`)은 모드가 아니다.
+    assert mode_of({"mode_before_correction": "uniaxial_tension"}) == ""
 
 
 def test_계수_차례가_덱과_같다() -> None:

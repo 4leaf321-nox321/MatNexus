@@ -208,3 +208,103 @@ HYPERELASTIC_ORDER: dict[str, tuple[str, ...]] = {
     # 2차 다항식 — Abaqus `POLYNOMIAL, N=2` 의 차례(C10, C01, C20, C11, C02).
     "polynomial_2": ("c10", "c01", "c20", "c11", "c02"),
 }
+
+
+# ── 큰 변형의 안정성 (2026-10-23) ───────────────────────────────────────────────────
+#
+# `_stable` 은 작은 변형만 본다. 고차 계수가 음이면 변형이 커질 때 응력이 줄어드는 구간이
+# 생기고(Drucker 조건 위반), 솔버는 거기서 멈추거나 국소화한다. 실측(개발 DB): Ecoflex 00-20
+# 의 압축 곡선(0.5~25 %)에서 맞춘 Yeoh(C30 = -41 kPa)는 그 구간에서는 맞지만 **단축 인장
+# 33 % · 등이축 17 % 에서 불안정**하다. 같은 재료의 인장 곡선(7~354 %)에서 맞춘 Yeoh 는 인장
+# 300 % 까지 안정하다.
+#
+# 음의 계수만 보고 거르면 틀린다 — Dragon Skin 10 의 C20 = -171 kPa 벌은 끝까지 안정하다.
+# 그래서 변형 경로마다 공칭 응력이 늘어나는지(비압축, dP/dλ > 0)를 직접 걷는다.
+
+#: 경로마다 (이름, 늘림비 끝, 덱 기본값이 버텨야 하는 늘림비). 기본값 범위는 고무 부품 해석에서
+#: 흔한 변형이다 — 그보다 큰 변형은 그 범위로 맞춘 벌을 사람이 고른다.
+STABILITY_PATHS: tuple[tuple[str, float, float], ...] = (
+    ("인장", 4.0, 2.0),
+    ("압축", 0.3, 0.5),
+    ("등이축", 3.0, 1.5),
+    ("평면 전단", 3.0, 1.5),
+)
+_STEP = 0.005
+
+
+def _terms(values: Mapping[str, float]) -> list[tuple[int, int, float]] | None:
+    """`cij` → (i, j, 계수). 다항식 꼴이 아니면(Ogden) None."""
+    out = []
+    for name, value in values.items():
+        if len(name) != 3 or name[0] != "c" or not name[1:].isdigit():
+            return None
+        out.append((int(name[1]), int(name[2]), float(value)))
+    return out
+
+
+def _nominal(terms: list[tuple[int, int, float]], path: str, stretch: float) -> float:
+    """비압축 경로 하나의 공칭 응력 — W = Σ Cij (I1-3)^i (I2-3)^j."""
+    lam = stretch
+    if path in ("인장", "압축"):
+        i1, i2 = lam * lam + 2.0 / lam, 2.0 * lam + 1.0 / (lam * lam)
+    elif path == "등이축":
+        i1, i2 = 2.0 * lam * lam + lam**-4, lam**4 + 2.0 / (lam * lam)
+    else:
+        i1 = i2 = lam * lam + 1.0 + 1.0 / (lam * lam)
+    a, b = i1 - 3.0, i2 - 3.0
+    w1 = sum(i * c * a ** (i - 1) * b**j for i, j, c in terms if i)
+    w2 = sum(j * c * a**i * b ** (j - 1) for i, j, c in terms if j)
+    if path in ("인장", "압축"):
+        return 2.0 * (lam - lam**-2) * (w1 + w2 / lam)
+    if path == "등이축":
+        return 2.0 * (lam - lam**-5) * (w1 + lam * lam * w2)
+    return 2.0 * (lam - lam**-3) * (w1 + w2)
+
+
+@dataclass(frozen=True)
+class Stability:
+    """경로마다 **처음 불안정해지는 공칭 변형률**(%, 압축은 줄어든 비율).
+
+    끝까지 안정한 경로는 없다."""
+
+    breaks: dict[str, float]
+    weak: tuple[str, ...]
+    """덱 기본값 범위(`STABILITY_PATHS` 셋째 칸) 안에서 깨지는 경로."""
+
+    @property
+    def ok(self) -> bool:
+        return not self.weak
+
+    def describe(self) -> str:
+        """「인장 33 % · 등이축 17 % 에서 불안정」 — 다 안정하면 빈 글자."""
+        if not self.breaks:
+            return ""
+        shown = " · ".join(f"{path} {strain:.0f} %" for path, strain in self.breaks.items())
+        return f"{shown} 에서 불안정"
+
+
+def stability(values: Mapping[str, float]) -> Stability | None:
+    """다항식 꼴(Neo-Hookean · Mooney-Rivlin · Yeoh · 2차)의 경로별 안정 범위.
+
+    Ogden 처럼 다항식 꼴이 아니면 None."""
+    terms = _terms(values)
+    if terms is None:
+        return None
+    breaks: dict[str, float] = {}
+    weak: list[str] = []
+    for path, end, needed in STABILITY_PATHS:
+        down = end < 1.0
+        step = -_STEP if down else _STEP
+        lam, before = 1.0, 0.0
+        while (lam > end) if down else (lam < end):
+            lam += step
+            now = _nominal(terms, path, lam)
+            # 늘리면 커지고 누르면 작아져야 한다 — 거꾸로 가는 첫 자리가 깨지는 곳이다.
+            if (now >= before) if down else (now <= before):
+                at = lam - step
+                breaks[path] = abs(at - 1.0) * 100.0
+                if (at > needed) if down else (at < needed):
+                    weak.append(path)
+                break
+            before = now
+    return Stability(breaks, tuple(weak))

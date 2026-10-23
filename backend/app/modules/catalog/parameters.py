@@ -98,6 +98,10 @@ class ParameterSet:
     NBR 씰 고무는 노화 8조건이 한 벌로 뭉쳐 `C01` 이 8번이었다).
     """
 
+    conditions: dict[str, Any] = field(default_factory=dict)
+    """벌 전체의 조건(첫 항의 것) — 시험 모드 · 적합 구간처럼 **형제 벌과 안 갈려도** 그 벌의
+    성질인 것. `distinguishing` 은 갈린 것만 들어 모드가 모두 같으면 비어 있다(2026-10-23)."""
+
     duplicated: list[str] = field(default_factory=list)
     """그래도 남은 겹친 항 이름. **비어 있어야 정상이다.**
 
@@ -426,6 +430,7 @@ def sets(
                     quality_tier=part[0]["quality_tier"],
                     source=part[0]["source"] or None,
                     distinguishing=marks,
+                    conditions=dict(part[0].get("conditions") or {}),
                     # 갈랐는데도 남았으면 **그 사실을 들고 다닌다.** 조용히 두면
                     # 받는 쪽은 항이 왜 여러 번인지 모른 채 채택한다.
                     duplicated=sorted(name for name, times in counted.items() if times > 1),

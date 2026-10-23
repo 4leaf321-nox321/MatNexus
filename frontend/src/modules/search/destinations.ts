@@ -42,8 +42,6 @@ export function destinationOf(hit: SearchHit): Destination {
       return { href: `/test-runs/${hit.id}` }
     case 'catalog_material':
       return { href: `/catalog/${hit.id}` }
-    case 'equipment_unit':
-      return { href: `/settings/equipment/${hit.id}` }
     case 'guide_document':
       return { href: `/guide/${hit.id}`, approximate: true }
     // 핸드북 절은 문서 키·절 키로 열린다(`/guide/:documentKey/:sectionKey`). 검색이

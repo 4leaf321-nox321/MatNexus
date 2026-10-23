@@ -1789,6 +1789,10 @@ def _parameter_blocks(
         )
         if moved[0].note:
             notes.append(moved[0].note)
+        # 사람이 고른 벌이라 바꾸지 않는다 — 큰 변형에서 깨지면 근거에 적는다(2026-10-23).
+        warned = hyperelastic_sets.unstable_note(moved[0])
+        if warned:
+            notes.append(warned)
     return block, notes
 
 

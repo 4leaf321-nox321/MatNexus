@@ -1052,67 +1052,14 @@ async def get_catalog_material(
 
 
 @mcp.tool()
-async def list_equipment(
-    ctx: Context,
-    query: str | None = None,
-    status: str | None = None,
-    calibration_due: bool = False,
-    limit: int = 30,
-) -> dict[str, Any]:
-    """우리 **장비** — 이름·모델·제조사·소속 랩·교정 만료(2026-09-20).
-
-    「이 시험 어디서 하나」·「교정 지난 장비 있나」 에 답한다. `how_to_measure` 가 물성
-    하나의 장비를 짚어 주는 것과 짝이다 — 이것은 장비에서 출발한다.
-
-        status           active · retired …  calibration_due   참이면 교정 만료·임박만
-        calibration_valid_until   지났으면 그 장비로 잰 값은 **교정 밖**이다 — 사람에게 말해라
-    """
-    got = await _get(
-        ctx,
-        "/equipment/units",
-        {
-            "q": query,
-            "status": status,
-            "calibration_due": calibration_due or None,
-            "limit": max_limit(limit),
-        },
-    )
-    if isinstance(got, dict) and "error" in got:
-        return got
-    items = got.get("items", []) if isinstance(got, dict) else []
-    out = {
-        "total": got.get("total") if isinstance(got, dict) else len(items),
-        "shown": len(items),
-        "units": [
-            {
-                "id": one.get("id"),
-                "name": one.get("name"),
-                "asset_no": one.get("asset_no"),
-                "manufacturer": one.get("manufacturer"),
-                "model": one.get("model"),
-                "status": one.get("status"),
-                "ownership": one.get("ownership"),
-                "instrument_type": (one.get("instrument_type") or {}).get("label"),
-                "lab": (one.get("lab") or {}).get("label"),
-                "org": (one.get("org") or {}).get("label"),
-                "last_calibrated_on": one.get("last_calibrated_on"),
-                "calibration_valid_until": one.get("calibration_valid_until"),
-            }
-            for one in items
-        ],
-    }
-    return _complete(out, whole=len(items) >= int(out["total"] or 0))
-
-
-@mcp.tool()
 async def how_to_measure(ctx: Context, property_key: str) -> dict[str, Any]:
     """**이 물성은 무엇으로 어떻게 재는가** — 기법·시험 규격·장비.
 
     `property_key` 는 카탈로그 물성 키다(`mechanical.youngs_modulus` 처럼 —
     `get_catalog_material` 응답의 `property_key` 를 그대로 넘긴다).
 
-    **장비 카탈로그에 있는 것과 우리가 보유한 것은 다르다** — `owned` 를 보고
-    말한다. 「잴 수 있다」 와 「그런 장비가 세상에 있다」 는 다른 말이다.
+    **우리 장비는 `owned` 가 TestScope 에 물은 답이다**(보유 장비 · 교정의 정본).
+    `state` 가 unlinked · off · error 면 「모름」 — 「없다」 는 none 일 때만 말한다.
     """
     got = await _get(ctx, f"/metrology/by-property/{property_key}")
     if "error" in got:
@@ -1135,8 +1082,6 @@ async def how_to_measure(ctx: Context, property_key: str) -> dict[str, Any]:
             rows.append(
                 {
                     "instrument": f"{instrument.get('vendor')} {instrument.get('model')}",
-                    "owned": instrument.get("owned"),
-                    "owner": instrument.get("owner_name"),
                     "standard": one.get("standard"),
                     "range": [
                         one.get("range_min"),
@@ -1159,19 +1104,38 @@ async def how_to_measure(ctx: Context, property_key: str) -> dict[str, Any]:
         techniques.append(
             {"technique": group.get("technique") or "기법 미정", "instruments": rows}
         )
-    owned = sum(1 for group in techniques for one in group["instruments"] if one.get("owned"))
+    # 우리 장비는 TestScope 에 묻는다(ADR 0069) — 원본(MaterialTwin)의 `owned` 는 전부 거짓이었다.
+    mine = await _get(ctx, f"/metrology/by-property/{property_key}/owned")
+    if "error" in mine:
+        mine = {"state": "error", "message": str(mine["error"])}
     return {
         "property": got.get("name"),
         "property_key": got.get("property_key"),
         "si_unit": got.get("si_unit"),
         "test_standard": got.get("test_standard"),
-        "owned_instrument_count": owned,
         "techniques": techniques,
-        **(
-            {"caveat": "보유 장비가 없다 — 이 물성은 외주하거나 문헌값을 써야 한다"}
-            if owned == 0
-            else {}
-        ),
+        "owned": {
+            key: mine.get(key)
+            for key in ("state", "message", "test_items", "suggested", "equipment_total", "link")
+        }
+        | {
+            "equipment": [
+                {
+                    key: one.get(key)
+                    for key in (
+                        "name",
+                        "asset_no",
+                        "status",
+                        "workspace",
+                        "location",
+                        "contact",
+                        "calibration_due_on",
+                        "link",
+                    )
+                }
+                for one in (mine.get("equipment") or [])[:10]
+            ]
+        },
     }
 
 
@@ -4721,11 +4685,11 @@ async def compare_catalog_materials(
 
 @mcp.tool()
 async def measurement_gaps(ctx: Context) -> dict[str, Any]:
-    """**우리가 못 재는 물성이 무엇인가** — 측정 능력의 빈 칸.
+    """**재는 법을 모르는 물성이 무엇인가** — 측정 지식의 빈 칸.
 
-    카탈로그 물성 정의 전수를 훑어, 측정 능력이 이어진 것(`covered`)과 장비가
-    하나도 없는 것(`gaps`)을 가른다. `owned_instrument_count` 가 0 이면 **장비
-    카탈로그에는 있지만 우리는 못 잰다**는 뜻이다.
+    카탈로그 물성 정의 전수를 훑어, 측정 기법 · 장비 모델이 이어진 것(`covered`)과
+    하나도 없는 것(`gaps`)을 가른다. **우리가 그 장비를 가졌는지는 모른다** — 보유
+    장비의 정본은 TestScope 다.
 
     응답이 길어지므로 빈 칸은 값이 많은 순으로 앞쪽만 낸다 — 전부 필요하면
     화면(측정법)에서 본다.
@@ -4735,12 +4699,10 @@ async def measurement_gaps(ctx: Context) -> dict[str, Any]:
         return got
     covered = got.get("covered", [])
     gaps = got.get("gaps", [])
-    not_owned = [one for one in covered if not one.get("owned_instrument_count")]
     gaps_sorted = sorted(gaps, key=lambda one: -(one.get("value_count") or 0))[:15]
     return {
         "covered_count": len(covered),
         "gap_count": len(gaps),
-        "owned_none_count": len(not_owned),
         "gaps_top": [
             {
                 "property": one.get("name"),
@@ -4750,13 +4712,9 @@ async def measurement_gaps(ctx: Context) -> dict[str, Any]:
             }
             for one in gaps_sorted
         ],
-        "covered_but_not_owned": [
-            {"property": one.get("name"), "instruments_in_catalog": one.get("instrument_count")}
-            for one in not_owned[:10]
-        ],
         "note": (
-            "gaps 는 장비 정보가 아예 없는 물성이고, covered_but_not_owned 는"
-            " 장비는 알지만 우리가 보유하지 않은 물성이다 — 둘 다 「지금은 못 잰다」."
+            "gaps 는 측정 기법 · 장비 정보가 아예 없는 물성이다. 우리가 그 장비를 가졌는지는"
+            " TestScope 가 정본이라 여기서 「못 잰다」 고 하지 않는다."
         ),
     }
 
@@ -7632,9 +7590,9 @@ _RECIPES: list[dict[str, str]] = [
     },
     {
         "question": "이 물성을 무엇으로 재나 / 우리가 그 장비를 갖고 있나",
-        "steps": "resolve_property(name) → how_to_measure(property_key) → "
-        'related(kind="instrument", id=…, relation="unit_of")',
-        "note": "`unit_of` 가 비면 **정의만 있고 보유 장비가 없는 것**이다.",
+        "steps": "resolve_property(name) → how_to_measure(property_key)",
+        "note": "우리 장비는 응답의 `owned` 가 TestScope 에 물은 답이다 — state 가 none 일 때만 "
+        "「없다」, unlinked · off · error 는 「모른다」 고 말한다.",
     },
     {
         "question": "이 측정 의뢰에서 나온 시험·값은 어디까지 됐나",
