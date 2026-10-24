@@ -135,6 +135,22 @@ describe('곡선 · 표 입력', () => {
     await waitFor(() => expect(screen.queryByText(/점 2개를 넣습니다/)).not.toBeInTheDocument())
     expect(screen.getByRole('button', { name: '넣기' })).toBeDisabled()
   })
+
+  it('목록 밖 조건 칸은 미리보기에 경고로 선다 — 막지는 않는다(ADR 0071)', async () => {
+    const message = "조건 칸 'aging_weeks' 은 정의의 축 · 문헌 조건 칸 목록에 없습니다"
+    previewSeries.mockResolvedValue({
+      ...MADE,
+      warnings: [{ key: 'aging_weeks', count: 1, example: '온도별 탄성계수', message }],
+    })
+    render(<SeriesDialog detail={DETAIL} open onClose={vi.fn()} onDone={vi.fn()} />)
+    fireEvent.change(screen.getByLabelText('곡선 물성 찾기'), { target: { value: '탄성' } })
+    fireEvent.click(await screen.findByRole('button', { name: /탄성계수/ }))
+    fireEvent.change(screen.getByLabelText(/값 붙여넣기/), { target: { value: '25\t50\n100\t45' } })
+    fireEvent.change(screen.getByLabelText('출처 제목'), { target: { value: '논문' } })
+    fireEvent.click(screen.getByRole('button', { name: '미리보기' }))
+    expect(await screen.findByRole('status')).toHaveTextContent(message)
+    expect(screen.getByRole('button', { name: '넣기' })).toBeEnabled()
+  })
 })
 
 describe('산점 · 라이선스 (ADR 0068)', () => {

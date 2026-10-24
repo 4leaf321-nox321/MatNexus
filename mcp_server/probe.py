@@ -212,6 +212,8 @@ async def sweep(session: ClientSession) -> None:
         name = (detail or {}).get("name") if isinstance(detail, dict) else None
         if name:
             await call(session, "get_material", {"material_id": name})
+        # 이 재료가 쓰인 부품(2026-10-25) — 없으면 빈 목록이 맞는 답이다.
+        await call(session, "list_material_parts", {"material_id": material_id, "limit": 5})
         # 문헌 연결 — 후보를 보고, 있으면 첫 후보로 **미리보기만**(2026-10-08).
         linking = await call(session, "link_catalog_material", {"material_id": material_id})
         offered = (linking or {}).get("candidates") if isinstance(linking, dict) else None
@@ -366,6 +368,8 @@ async def sweep(session: ClientSession) -> None:
         detail = await call(
             session, "get_catalog_material", {"catalog_material_id": catalog_id}
         )
+        # 덱이 지을 합성 곡선 — 못 지으면 `ok: false` 와 까닭이 맞는 답이다.
+        await call(session, "preview_synthetic_curve", {"catalog_material_id": catalog_id})
         for one in detail.get("values") or [] if isinstance(detail, dict) else []:
             if (
                 one.get("property_key")
@@ -383,6 +387,66 @@ async def sweep(session: ClientSession) -> None:
         if series:
             await call(session, "get_catalog_series", {"series_id": series[0]["id"]})
             break
+    # **반입 묶음 · 곡선 벌**(ADR 0067 · 0068) — 수집기가 쓰는 길. 미리보기 · 거절만 한다.
+    #   한 번도 안 불리던 넷이다(2026-10-25). 조건 칸 경고(`warnings`)가 오는지도 이 자리에서 본다.
+    batches = await call(session, "get_catalog_batch", {})
+    listed = (batches.get("batches") or []) if isinstance(batches, dict) else []
+    if isinstance(listed, list) and listed and isinstance(listed[0], dict):
+        await call(session, "get_catalog_batch", {"key": listed[0]["key"]})
+    if catalog_id:
+        await call(
+            session,
+            "add_catalog_series",
+            {
+                "catalog_material_id": catalog_id,
+                "kind": "curve",
+                "label": "점검용 온도별 탄성계수",
+                "quality_tier": 3,
+                "source_kind": "journal",
+                "source_title": "MCP 점검 — 저장하지 않는다",
+                "method": "digitized",
+                "x_key": "temperature_k",
+                "x_unit": "°C",
+                "columns": [{"property_key": "mechanical.youngs_modulus", "unit": "GPa"}],
+                "rows": [[25, 200], [100, 195]],
+                "conditions": {"aging_weeks": 1},
+                "dry_run": True,
+            },
+        )
+    await call(
+        session, "delete_catalog_series", {"series_id": str(uuid.uuid4())}, expect_error=True
+    )
+    bundle = Path(os.environ.get("TEMP", ".")) / "matnexus_probe_bundle.json"
+    bundle.write_text(
+        json.dumps(
+            {
+                "batch": {"key": "probe/mcp-check", "title": "MCP 점검 — 저장하지 않는다"},
+                "sources": [
+                    {"key": "s", "kind": "journal", "title": "점검 문헌", "license": "CC-BY-4.0"}
+                ],
+                "materials": [{"key": "m", "name": "점검용 문헌 재료", "category": "metal"}],
+                "values": [
+                    {
+                        "key": "v",
+                        "material": "m",
+                        "source": "s",
+                        "property_key": "mechanical.youngs_modulus",
+                        "value_num": 200,
+                        "unit": "GPa",
+                        "conditions": {"temperature_k": 296.15},
+                        "method": "measured",
+                        "quality_tier": 2,
+                    }
+                ],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    try:
+        await call(session, "import_catalog_batch", {"path": str(bundle), "dry_run": True})
+    finally:
+        bundle.unlink(missing_ok=True)
     if len(catalog_ids) >= 2:
         await call(session, "compare_catalog_materials", {"catalog_material_ids": catalog_ids})
     await call(session, "match_bom", {"text": "브래킷\tSPCC\n볼트\tSCM435"})
@@ -487,6 +551,12 @@ async def sweep(session: ClientSession) -> None:
         found = (curves or {}).get("master_curves") if isinstance(curves, dict) else None
         sweeps = (curves or {}).get("sweeps") if isinstance(curves, dict) else None
         if sweeps:
+            # 온도별 저장 탄성률 카드 — 미리보기는 표를 만들지 않는다(없으면 「넣을 때 만든다」).
+            await call(
+                session,
+                "create_dma_temperature_card",
+                {"test_run_ids": [dma], "label": "점검용", "dry_run": True},
+            )
             await call(
                 session,
                 "build_master_curve",
@@ -681,6 +751,19 @@ async def sweep(session: ClientSession) -> None:
                     "items": [{"property_hint": "고온 탄성계수", "count": 1}],
                     "dry_run": True,
                 },
+            )
+            # 받는 부서를 비우면 거절하고 TestScope 추천(`lab_suggestions`)을 준다(ADR 0069 C).
+            await call(
+                session,
+                "create_commission",
+                {
+                    "title": "점검용 의뢰",
+                    "purpose": "MCP 점검 — 저장하지 않는다",
+                    "material_hint": "점검용 새 재료(아직 등록 전)",
+                    "items": [{"test_type_key": "tensile", "count": 1}],
+                    "dry_run": True,
+                },
+                expect_error=True,
             )
 
     sections = await call(

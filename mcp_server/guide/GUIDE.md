@@ -223,6 +223,7 @@ origin `declared:literature+catalog1`). `adopt_catalog_values` 가 어느 문헌
    `import_catalog_batch(path)` 로 한 번에(자료 관리자) — 다시 불러도 중복이 생기지 않는다.
    있던 재료는 원본 번호(`existing_mt_id`)로 가리키고, 미리보기의 `attached` 이름을 사람에게 보인다.
    미리보기의 `warnings` 는 문헌 조건 칸 목록 밖의 이름이다 — 같은 뜻이 다른 이름으로 갈린다.
+   `add_catalog_value` · `add_catalog_series` 도 같은 `warnings` 를 준다 — 사람에게 옮기고 이름을 고친다.
 
 직접 넣은 것은 `origin: local` 로 보이고, 넣은 사람과 관리자만 지울 수 있다. 이관해 온
 값은 원본(MaterialTwin)이 정본이라 못 지운다. 물성 키가 `local.` 으로 시작하면 MatNexus
@@ -676,6 +677,11 @@ ISO 178 은 현으로, ISO 7743 은 4번째 하중 구간. 단계를 짤 때 그
 문헌을 뒤지는 것 아니면 **재는 것**이다. `create_commission` 이 측정 의뢰를 **작성
 중으로** 짓는다(기본이 `dry_run=True`).
 
+**받는 부서를 짐작해 적지 마라.** 모르면 `lab` 을 비우고 부른다 — `lab_suggestions` 가 그 항목을
+할 장비가 있는 부서(TestScope)다. 사람에게 보이고 고르게 한다. `state` 가 off · error 이거나
+`unresolved` 에 든 항목은 추천이 「모름」 이지 「그 장비가 없다」 가 아니다. 부서를 줘도 미리보기의
+`lab_is_suggested` 가 거짓이면 그 사실을 함께 말한다.
+
 **내는 것은 사람이 「내라」 고 할 때만.** 내면 받는 부서에 알림이 가고 그쪽 일정이
 잡힌다 — `create_commission(..., submit=True)` 나 `change_commission_status(id,
 "submitted")`. 접수 · 보류 · 결과 전달 같은 이후의 상태도 `change_commission_status` 로
@@ -754,7 +760,12 @@ README 의 기대값과 견주게 안내한다 — 덱 숫자가 맞아도 솔�
     점탄성(Prony 하나)      get_prony_fits → create_viscoelastic_card(prony_fit_id)
     점탄성(Prony 여럿)      list_groups → create_card_from_group(plugin_id=viscoelastic.prony_group)
     DMA 선형 탄성률         create_lve_card(material_id, test_type, orientation)
+    DMA 온도별 E′ · tan δ   create_dma_temperature_card(test_run_ids, frequency_hz) — 시편 평균
     확장이 선언한 묶음      list_groups → create_card_from_group
+
+온도별 E′ 카드는 **정적 탄성계수가 아니다** — 탄성 블록에 안 실리고, 「영률을 달라」 는 물음에
+이 값을 주지 않는다. 문헌 재료의 덱 곡선이 궁금하면 `preview_synthetic_curve` — 스칼라로 지은
+곡선이라 실측이 아니라고 함께 말한다.
 
 전부 미리보기가 기본이고, **푸아송비·밀도는 지어 넣지 마라** — 시험이 주지 않는 값이라
 재료에서 물려받고, 없으면 사람에게 묻는다.

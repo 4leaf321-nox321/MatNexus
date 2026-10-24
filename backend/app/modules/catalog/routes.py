@@ -56,6 +56,7 @@ from app.modules.catalog.schemas import (
     CatalogBatchDeleteOut,
     CatalogBatchImportOut,
     CatalogBatchOut,
+    CatalogBatchWarningOut,
     CatalogCompareCellOut,
     CatalogCompareOut,
     CatalogCompareRowOut,
@@ -1577,9 +1578,19 @@ def preview_catalog_value(
             unit=row.unit,
             uncertainty=row.uncertainty,
             converted=converted,
+            warnings=_value_warnings(db, row.property_key, payload),
         )
     finally:
         db.rollback()
+
+
+def _value_warnings(
+    db: Session, property_key: str, payload: CatalogValueCreate
+) -> list[CatalogBatchWarningOut]:
+    """적은 조건 칸 가운데 목록 밖의 이름 — 반입 묶음과 같은 판정(ADR 0071)."""
+    return batches.condition_warnings(
+        db, [(property_key, [property_key], payload.conditions or {})]
+    )
 
 
 @router.post(
@@ -1598,6 +1609,7 @@ def create_catalog_value(
     """
     row, converted = contribute.create_value(db, material_id, payload, user)
     db.flush()
+    warnings = _value_warnings(db, row.property_key, payload)
     # **AI 가 넣은 문헌 값은 남긴다.** 출처가 붙어도 「그 출처에 정말 그 값이 있나」 는 사람이
     # 확인할 일이고, 그 확인이 필요한 값을 여기서 고른다(등록자 칸은 토큰 주인이다).
     audit.record_by_client(
@@ -1617,7 +1629,9 @@ def create_catalog_value(
         .where(CatalogValue.id == row.id)
     ).all()
     creators = contribute.creator_names(db, {user.id})
-    return CatalogValueCreatedOut(value=_values_out(got, creators)[0], converted=converted)
+    return CatalogValueCreatedOut(
+        value=_values_out(got, creators)[0], converted=converted, warnings=warnings
+    )
 
 
 @router.delete("/values/{value_id}", status_code=204)
@@ -1777,6 +1791,10 @@ def _series_made_out(
         series=_series_out(db, [series], creators)[0],
         points=[_point_out(point, series.x_key) for point in made.points],
         converted=made.converted,
+        # 공통 조건만 본다 — 줄 조건(런아웃 · 시편)은 정해진 칸만 받는다(`ROW_CONDITIONS`).
+        warnings=batches.condition_warnings(
+            db, [(series.label, list(series.columns or []), series.conditions or {})]
+        ),
     )
 
 

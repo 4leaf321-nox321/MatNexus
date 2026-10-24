@@ -11225,6 +11225,8 @@ export interface components {
         /**
          * CatalogBatchWarningOut
          * @description 막지는 않는 것 — 정의의 조건축 · 문헌 조건 칸 목록에 없는 조건 칸(ADR 0071).
+         *
+         *     반입 묶음 미리보기와 값 하나 · 벌 하나 넣기가 같은 판정을 쓴다.
          */
         CatalogBatchWarningOut: {
             /** Count */
@@ -11768,6 +11770,8 @@ export interface components {
             /** Points */
             points: components["schemas"]["CatalogSeriesPointOut"][];
             series: components["schemas"]["CatalogSeriesOut"];
+            /** Warnings */
+            warnings?: components["schemas"]["CatalogBatchWarningOut"][];
         };
         /**
          * CatalogSeriesOut
@@ -11976,6 +11980,8 @@ export interface components {
             /** Converted */
             converted?: string | null;
             value: components["schemas"]["CatalogValueOut"];
+            /** Warnings */
+            warnings?: components["schemas"]["CatalogBatchWarningOut"][];
         };
         /** CatalogValueOut */
         CatalogValueOut: {
@@ -12077,6 +12083,8 @@ export interface components {
             value_num: number | null;
             /** Value Text */
             value_text: string | null;
+            /** Warnings */
+            warnings?: components["schemas"]["CatalogBatchWarningOut"][];
         };
         /** ChangePasswordRequest */
         ChangePasswordRequest: {

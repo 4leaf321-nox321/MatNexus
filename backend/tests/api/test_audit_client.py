@@ -1007,6 +1007,26 @@ class Test표_입력과_점탄성도_남는다:
         assert fitted[0]["changes"]["terms"] == len(fit.json()["terms"])
         assert fitted[0]["changes"]["terms_asked"] is None
 
+    def test_AI_가_지은_온도별_탄성률_표가_남고_화면은_안_남는다(
+        self, client: TestClient, admin_headers: dict[str, str], dma_run_id: str
+    ) -> None:
+        """DMA 온도별 카드의 근거(2026-10-25) — MCP 가 카드를 지으며 표를 만든다."""
+        sweeps = client.get(
+            f"/api/viscoelastic/runs/{dma_run_id}/sweeps", headers=admin_headers
+        ).json()["items"]
+        low = max(one["minimum_frequency_hz"] for one in sweeps)
+        high = min(one["maximum_frequency_hz"] for one in sweeps)
+        url = f"/api/viscoelastic/runs/{dma_run_id}/modulus-tables"
+        by_hand = client.post(url, json={"frequency_hz": low}, headers=admin_headers)
+        assert by_hand.status_code == 201, by_hand.text
+        assert not _mine(client, admin_headers, "modulus_table.built_by_client", dma_run_id)
+        mcp = {**admin_headers, "X-Client": "mcp"}
+        by_ai = client.post(url, json={"frequency_hz": (low * high) ** 0.5}, headers=mcp)
+        assert by_ai.status_code == 201, by_ai.text
+        (entry,) = _mine(client, admin_headers, "modulus_table.built_by_client", dma_run_id)
+        assert entry["changes"]["modulus_table_id"] == by_ai.json()["id"]
+        assert entry["changes"]["rows"] == len(by_ai.json()["rows"])
+
     def test_화면에서_겹친_것은_안_남는다(
         self, client: TestClient, admin_headers: dict[str, str], dma_run_id: str
     ) -> None:

@@ -486,6 +486,12 @@ export function SeriesDialog({
                 점 {preview.points.length}개를 넣습니다
                 {(preview.converted ?? []).length > 0 ? ` — ${(preview.converted ?? []).join(' · ')}` : ''}.
               </p>
+              {/* 막지 않는 경고 — 문헌 조건 칸 목록 밖의 이름(ADR 0071). 받지만 검색에서 갈린다. */}
+              {(preview.warnings ?? []).map((one) => (
+                <p key={one.key} role="status" className="text-sm text-amber-700 dark:text-amber-400">
+                  {one.message}
+                </p>
+              ))}
               {first && chart.length > 0 && (
                 <CurveChart
                   points={chart}

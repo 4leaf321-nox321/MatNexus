@@ -133,6 +133,8 @@ VOCABULARY_ALIAS_ADDED_BY_CLIENT = "vocabulary.alias_added_by_client"
 TEST_RUNS_IMPORTED_BY_CLIENT = "test_runs.imported_by_client"
 MASTER_CURVE_BUILT_BY_CLIENT = "master_curve.built_by_client"
 PRONY_FITTED_BY_CLIENT = "prony.fitted_by_client"
+#: 온도별 탄성률 표(2026-10-25) — DMA 온도별 카드의 근거다. MCP 가 카드를 지을 때 만든다.
+MODULUS_TABLE_BUILT_BY_CLIENT = "modulus_table.built_by_client"
 #: 마스터커브 · Prony 적합을 **실제로 지운** 일(2026-10-22). 되살릴 수 없고, 그 계수가 이미
 #: 카드 · 보고서에 실렸을 수 있다 — 처리 결과 지우기와 같은 까닭으로 남긴다.
 MASTER_CURVE_DELETED = "master_curve.deleted"

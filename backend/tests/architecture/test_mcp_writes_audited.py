@@ -65,6 +65,7 @@ READS: dict[tuple[str, str], str] = {
     ("POST", "/catalog/materials/{}/values/preview"): "넣을 때와 같은 검사를 돌리고 되돌린다",
     ("POST", "/catalog/materials/{}/series/preview"): "넣을 때와 같은 검사를 돌리고 되돌린다",
     ("POST", "/catalog/materials/preview"): "만들 때와 같은 검사를 돌리고 되돌린다",
+    ("POST", "/commissions/lab-suggestions"): "받는 부서를 TestScope 에 묻기만 한다",
 }
 
 _PARAM = re.compile(r"\{[^}]*\}")

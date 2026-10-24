@@ -171,7 +171,29 @@ def _duplicate_keys(bundle: CatalogBatchBundleIn, run: _Run) -> None:
 def _condition_warnings(
     db: Session, bundle: CatalogBatchBundleIn
 ) -> list[CatalogBatchWarningOut]:
+    """묶음의 값 · 벌의 조건 칸 — `condition_warnings` 로."""
+    items: list[tuple[str, list[str], dict[str, Any]]] = [
+        (one.key, [one.property_key], one.conditions or {}) for one in bundle.values
+    ]
+    items += [
+        (
+            one.key,
+            [column.property_key for column in one.columns]
+            + ([one.property_key] if one.property_key else []),
+            one.conditions or {},
+        )
+        for one in bundle.series
+    ]
+    return condition_warnings(db, items)
+
+
+def condition_warnings(
+    db: Session, items: list[tuple[str, list[str], dict[str, Any]]]
+) -> list[CatalogBatchWarningOut]:
     """정의의 조건축에도 문헌 조건 칸 목록에도 없는 조건 칸(ADR 0071) — 막지 않고 센다.
+
+    `items` 는 `(보일 이름, 물성 키들, 조건)`. 반입 묶음과 값 하나 · 벌 하나 넣기가 같이 쓴다 —
+    묶음만 경고하면 MCP 로 하나씩 넣은 `aging_weeks` 는 아무 말 없이 들어갔다(2026-10-25).
 
     서버는 자유 칸이라 받지만, 같은 뜻이 다른 이름으로 들어오면 검색 · 비교에서 갈린다.
     """
@@ -193,18 +215,6 @@ def _condition_warnings(
 
     counts: Counter[str] = Counter()
     example: dict[str, str] = {}
-    items: list[tuple[str, list[str], dict[str, Any]]] = [
-        (one.key, [one.property_key], one.conditions or {}) for one in bundle.values
-    ]
-    items += [
-        (
-            one.key,
-            [column.property_key for column in one.columns]
-            + ([one.property_key] if one.property_key else []),
-            one.conditions or {},
-        )
-        for one in bundle.series
-    ]
     for key, properties, conditions in items:
         fine = allowed(properties)
         for name in conditions:

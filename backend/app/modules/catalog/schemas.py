@@ -598,12 +598,26 @@ class CatalogSeriesPointsOut(BaseModel):
     """축 차례. 출처 · 등급 · 방법은 벌 전체가 하나라 점마다 되풀이하지 않는다."""
 
 
+class CatalogBatchWarningOut(BaseModel):
+    """막지는 않는 것 — 정의의 조건축 · 문헌 조건 칸 목록에 없는 조건 칸(ADR 0071).
+
+    반입 묶음 미리보기와 값 하나 · 벌 하나 넣기가 같은 판정을 쓴다."""
+
+    key: str
+    count: int
+    example: str
+    """처음 본 항목 키(값 하나 · 벌 하나 넣기면 그 물성 키 · 벌 이름)."""
+    message: str
+
+
 class CatalogSeriesCreatedOut(BaseModel):
     series: CatalogSeriesOut
     points: list[CatalogSeriesPointOut]
     """저장된(미리보기면 저장될) 점 — 정의 단위로 환산한 값."""
     converted: list[str] = Field(default_factory=list)
     """열마다 환산 내역 — "MPa → Pa(12점)"."""
+    warnings: list[CatalogBatchWarningOut] = Field(default_factory=list)
+    """공통 조건 가운데 정의의 축 · 문헌 조건 칸 목록에 없는 이름 — 받지만 검색에서 갈린다."""
 
 
 class CatalogPropertyPreviewOut(BaseModel):
@@ -637,12 +651,16 @@ class CatalogValuePreviewOut(BaseModel):
     uncertainty: float | None
     converted: str | None = None
     """환산했으면 그 내역 — "310 MPa → 3.1e+08 Pa"."""
+    warnings: list[CatalogBatchWarningOut] = Field(default_factory=list)
+    """조건 칸 가운데 정의의 축 · 문헌 조건 칸 목록에 없는 이름(ADR 0071) — 막지 않는다."""
 
 
 class CatalogValueCreatedOut(BaseModel):
     value: CatalogValueOut
     converted: str | None = None
     """단위를 환산했으면 그 내역 — "310 MPa → 3.1e+08 Pa"."""
+    warnings: list[CatalogBatchWarningOut] = Field(default_factory=list)
+    """미리보기와 같은 조건 칸 경고 — 넣은 뒤에도 말한다."""
 
 
 class PropertyCandidateOut(BaseModel):
@@ -1117,16 +1135,6 @@ class CatalogBatchAttachedOut(BaseModel):
     id: uuid.UUID
     mt_id: int | None
     name: str
-
-
-class CatalogBatchWarningOut(BaseModel):
-    """막지는 않는 것 — 정의의 조건축 · 문헌 조건 칸 목록에 없는 조건 칸(ADR 0071)."""
-
-    key: str
-    count: int
-    example: str
-    """처음 본 항목 키."""
-    message: str
 
 
 class CatalogBatchImportOut(BaseModel):

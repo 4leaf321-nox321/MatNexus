@@ -531,6 +531,21 @@ def create_modulus_table(
     """
     run = get_run(db, user, test_run_id)
     table = services.build_modulus_table(db, run, payload.frequency_hz, created_by_id=user.id)
+    db.flush()
+    # **AI 가 지었으면 남긴다**(2026-10-25) — 마스터커브 · Prony 처럼 카드의 근거가 되는 값.
+    audit.record_by_client(
+        db,
+        action=audit.MODULUS_TABLE_BUILT_BY_CLIENT,
+        actor=user,
+        target_table="test_runs",
+        target_id=run.id,
+        target_label=run.record_name,
+        changes={
+            "modulus_table_id": str(table.id),
+            "frequency_hz": table.frequency_hz,
+            "rows": len(table.rows or []),
+        },
+    )
     db.commit()
     db.refresh(table)
     return _table_out(table)

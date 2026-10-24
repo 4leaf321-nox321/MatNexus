@@ -97,3 +97,9 @@ TestScope 는 같은 일을 온전히 한다 — 장비 제품군 → 기종 →
 - 더함: `app/shared/secretbox.py` · `app/modules/integrations` · `frontend/src/modules/integrations` · 감사
   `integration.updated` · 운영 핸드북 「TestScope 연결」.
 - 시험 DB 정리: 모델에서 뺀 표가 시험 DB 에 남아 `drop_all` 을 막던 것을 `conftest` 가 지운다.
+
+## 후속 (2026-10-25)
+
+의뢰 받는 부서 추천(C)이 화면에만 있었다. MCP `create_commission` 의 미리보기가 `lab_suggestions` 를 싣고, `lab` 을
+비우면 추천과 함께 거절한다. 고른 부서가 추천에 있는지(`lab_is_suggested`)는 TestScope 에 물었을 때만 참 · 거짓이고
+못 물었으면 모름(None)이다 — 판단은 `mcp_server/lab_choice.py`(시험 `test_mcp_lab_choice.py`).

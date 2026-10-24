@@ -5763,7 +5763,7 @@
         "type": "object"
       },
       "CatalogBatchWarningOut": {
-        "description": "막지는 않는 것 — 정의의 조건축 · 문헌 조건 칸 목록에 없는 조건 칸(ADR 0071).",
+        "description": "막지는 않는 것 — 정의의 조건축 · 문헌 조건 칸 목록에 없는 조건 칸(ADR 0071).\n\n반입 묶음 미리보기와 값 하나 · 벌 하나 넣기가 같은 판정을 쓴다.",
         "properties": {
           "count": {
             "title": "Count",
@@ -7411,6 +7411,13 @@
           },
           "series": {
             "$ref": "#/components/schemas/CatalogSeriesOut"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/CatalogBatchWarningOut"
+            },
+            "title": "Warnings",
+            "type": "array"
           }
         },
         "required": [
@@ -8151,6 +8158,13 @@
           },
           "value": {
             "$ref": "#/components/schemas/CatalogValueOut"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/CatalogBatchWarningOut"
+            },
+            "title": "Warnings",
+            "type": "array"
           }
         },
         "required": [
@@ -8484,6 +8498,13 @@
               }
             ],
             "title": "Value Text"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/CatalogBatchWarningOut"
+            },
+            "title": "Warnings",
+            "type": "array"
           }
         },
         "required": [

@@ -31,6 +31,7 @@ from app.modules.catalog.local_definitions import (
 )
 from app.modules.catalog.models import (
     CatalogDefinition,
+    CatalogMaterial,
     CatalogSource,
     CatalogValue,
 )
@@ -132,6 +133,56 @@ class Test조건_칸:
         assert [(one["key"], one["count"], one["example"]) for one in shown["warnings"]] == [
             ("aging_weeks", 2, "v-uts")
         ]
+
+    def test_값_하나_벌_하나를_넣을_때도_같이_경고한다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str]
+    ) -> None:
+        """묶음만 경고하면 MCP 로 하나씩 넣은 `aging_weeks` 는 말없이 들어갔다(2026-10-25)."""
+        material = db.scalar(select(CatalogMaterial).where(CatalogMaterial.mt_id == 920001))
+        assert material is not None
+        value: dict[str, Any] = {
+            "property_key": "mechanical.tensile_strength",
+            "value_num": 650,
+            "unit": "MPa",
+            # 정의의 축(temperature_k) · 목록의 칸(thickness_mm)은 경고가 없다.
+            "conditions": {"temperature_k": 296.15, "thickness_mm": 1.0, "aging_weeks": 2},
+            "method": "measured",
+            "quality_tier": 2,
+            "source": {"kind": "journal", "title": "AISI 304 sheet", "year": 2020},
+        }
+        url = f"/api/catalog/materials/{material.id}/values"
+        for path in (f"{url}/preview", url):
+            got = client.post(path, json=value, headers=admin_headers)
+            assert got.status_code in (200, 201), got.text
+            assert [(one["key"], one["example"]) for one in got.json()["warnings"]] == [
+                ("aging_weeks", "mechanical.tensile_strength")
+            ]
+        series = {
+            "kind": "scatter",
+            "label": "S-N 노화",
+            "x_key": "cycles",
+            "columns": [{"property_key": "mechanical.fatigue_strength", "unit": "MPa"}],
+            "rows": [[1e5, 400], [1e7, 250]],
+            "conditions": {"stress_ratio_R": -1, "aging_weeks": 2},
+            "method": "digitized",
+            "quality_tier": 3,
+            "source": {"kind": "journal", "title": "AISI 304 sheet", "year": 2020},
+        }
+        url = f"/api/catalog/materials/{material.id}/series"
+        for path in (f"{url}/preview", url):
+            got = client.post(path, json=series, headers=admin_headers)
+            assert got.status_code in (200, 201), got.text
+            assert [(one["key"], one["example"]) for one in got.json()["warnings"]] == [
+                ("aging_weeks", "S-N 노화")
+            ]
+        # 이름이 맞으면 조용하다.
+        value["conditions"] = {"temperature_k": 296.15, "aging_hours": 336}
+        got = client.post(
+            f"/api/catalog/materials/{material.id}/values/preview",
+            json=value,
+            headers=admin_headers,
+        )
+        assert got.json()["warnings"] == []
 
     def test_목록을_누구나_읽는다(
         self, client: TestClient, admin_headers: dict[str, str]

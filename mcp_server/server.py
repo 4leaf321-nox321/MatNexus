@@ -41,6 +41,7 @@ import httpx
 
 # 같은 폴더 — 판단만 떼어 둔 순수 함수들(시험이 부를 수 있게).
 import declared_points
+import lab_choice
 import retry_plan
 import term_gate
 import usage_report
@@ -727,6 +728,63 @@ async def get_material(ctx: Context, material_id: str) -> dict[str, Any]:
 
 
 @mcp.tool()
+async def list_material_parts(
+    ctx: Context,
+    material_id: str,
+    q: str | None = None,
+    product: str | None = None,
+    division: str | None = None,
+    limit: int = 30,
+) -> dict[str, Any]:
+    """사내 재료가 **쓰인 부품** — 파트명 · 부품코드 · 제품 · 사업부(BOM 에서 들인 것 · 적은 것).
+
+    「이 재료가 어느 제품에 쓰이나」 는 `products`(제품마다 부품 수, 거르기 전 전체)로 답한다.
+    `q` 는 파트명 · 부품코드 · 제품 · 비고의 글자. 반대로 부품표로 재료를 찾는 것은 `match_bom`.
+    """
+    resolved = await _resolve_material(ctx, material_id)
+    if isinstance(resolved, dict):
+        return resolved
+    got = await _get(
+        ctx,
+        f"/materials/{resolved}/parts",
+        {
+            "q": q,
+            "product": product,
+            "division": division,
+            "limit": max(1, min(limit, MAX_LIMIT)),
+        },
+    )
+    if "error" in got:
+        return got
+    items = got.get("items") or []
+    total = int(got.get("total") or 0)
+    out = {
+        "material_id": resolved,
+        "total": total,
+        "products": [
+            {"product": one.get("value"), "parts": one.get("count")}
+            for one in got.get("products") or []
+        ][:20],
+        "divisions": [
+            {"division": one.get("value"), "parts": one.get("count")}
+            for one in got.get("divisions") or []
+        ][:20],
+        "parts": [
+            {
+                "part": one.get("part"),
+                "part_code": one.get("part_code"),
+                "product": one.get("product"),
+                "division": one.get("division"),
+                "source": one.get("source"),
+                **({"source_ref": one["source_ref"]} if one.get("source_ref") else {}),
+            }
+            for one in items
+        ],
+    }
+    return _complete(out, whole=len(items) >= total)
+
+
+@mcp.tool()
 async def convert_unit(
     ctx: Context,
     from_unit: str,
@@ -869,6 +927,12 @@ async def list_unit_systems(ctx: Context) -> dict[str, Any]:
 
 
 # ── 문헌 카탈로그 (2단계) ─────────────────────────────────────────────────────
+
+
+def _warned(got: dict[str, Any]) -> dict[str, Any]:
+    """서버의 조건 칸 경고(ADR 0071) — 있을 때만 싣는다. 막지 않지만 사람에게 옮긴다."""
+    warnings = [one.get("message") for one in got.get("warnings") or []]
+    return {"warnings": warnings} if warnings else {}
 
 
 def _catalog_value(row: dict[str, Any]) -> dict[str, Any]:
@@ -1124,6 +1188,32 @@ async def get_catalog_series(ctx: Context, series_id: str) -> dict[str, Any]:
             for one in points[:POINTS_SHOWN]
         ],
         "omitted": max(0, len(points) - POINTS_SHOWN),
+    }
+
+
+@mcp.tool()
+async def preview_synthetic_curve(ctx: Context, catalog_material_id: str) -> dict[str, Any]:
+    """문헌 재료의 **합성 소성 곡선** — 덱의 「곡선 합성」 이 스칼라(E · 항복 · 인장 · 연신율)로
+    지을 것과 같은 계산. **실측이 아니다** — 답할 때 그렇게 말한다. 못 지으면 `why`.
+    곡선은 `[변형률, 응력 Pa]` 20점으로 솎는다(덱에는 `table_points` 점이 실린다).
+    """
+    got = await _get(ctx, f"/catalog/materials/{catalog_material_id}/synthetic-curve")
+    if "error" in got:
+        return got
+    if not got.get("ok"):
+        return {"ok": False, "why": got.get("why")}
+    pairs = list(zip(got.get("strain") or [], got.get("stress") or [], strict=False))
+    return {
+        "ok": True,
+        "model": got.get("model"),
+        "note": got.get("note"),
+        "inconsistent": got.get("inconsistent"),
+        "youngs_modulus_pa": got.get("youngs_modulus"),
+        "inputs": got.get("inputs") or [],
+        "table_points": got.get("table_points"),
+        "curve": [[strain, stress] for strain, stress in _thin(pairs, 20)],
+        "notes": got.get("notes") or [],
+        "caveat": "합성 곡선 — 실측이 아니다",
     }
 
 
@@ -3358,6 +3448,137 @@ async def create_lve_card(
     return await _send(ctx, "POST", "/fitting/cards/lve", body)
 
 
+def _same_frequency(left: Any, right: float) -> bool:
+    try:
+        return abs(float(left) - right) <= 1e-9 * max(abs(right), 1.0)
+    except (TypeError, ValueError):
+        return False
+
+
+@mcp.tool()
+async def create_dma_temperature_card(
+    ctx: Context,
+    test_run_ids: list[str],
+    label: str,
+    frequency_hz: float = 1.0,
+    poisson_ratio: float | None = None,
+    note: str | None = None,
+    dry_run: bool = True,
+) -> dict[str, Any]:
+    """DMA 의 **온도별 저장 탄성률(E′ · E″ · tan δ) 카드** 초안 — 시험마다 그 주파수의 표에서.
+
+    시험이 여럿이면 **시편 평균**이다(모든 시편에 있는 온도만, 줄마다 변동계수). 같은 재료 ·
+    시험 종류 · 방향이어야 한다. 표가 없는 시험은 넣을 때 그 주파수로 만든다 — 잰 범위 밖의 온도는
+    외삽하지 않고 뺀다(미리보기의 `sweeps_outside` · `all_sweeps_reach_hz`). 정적 탄성계수와 뜻이 달라 탄성 블록에 안 싣는다. G′ 로 잰 표는
+    `poisson_ratio`(비우면 재료 값)로 E 로 옮긴다. 기본이 미리보기이고 만들어도 초안이다.
+    """
+    runs: list[str] = []
+    for one in test_run_ids[:50]:
+        resolved = await _resolve_run(ctx, one)
+        if isinstance(resolved, dict):
+            return resolved
+        runs.append(resolved)
+    if not runs:
+        return {"error": "시험을 하나 이상 주세요."}
+    plan: list[dict[str, Any]] = []
+    for run in runs:
+        tables = await _get(ctx, f"/viscoelastic/runs/{run}/modulus-tables")
+        if isinstance(tables, dict) and "error" in tables:
+            return {**tables, "test_run_id": run}
+        # 같은 주파수의 표가 여럿이면 가장 최근 것 — 표는 불변이라 새로 만든 쪽이 지금의 읽기다.
+        same = [
+            one
+            for one in (tables if isinstance(tables, list) else [])
+            if _same_frequency(one.get("frequency_hz"), frequency_hz)
+        ]
+        found = max(same, key=lambda one: str(one.get("created_at") or ""), default=None)
+        temps = [row.get("temperature_k") for row in (found or {}).get("rows") or []]
+        reach: dict[str, Any] = {}
+        if found is None:
+            # 아직 표가 없으면 **그 주파수가 잰 범위 안인지**를 미리 — 밖인 온도는 빠진다.
+            sweeps = await _get(ctx, f"/viscoelastic/runs/{run}/sweeps")
+            spans = [
+                (one.get("minimum_frequency_hz"), one.get("maximum_frequency_hz"))
+                for one in (sweeps.get("items") or [] if isinstance(sweeps, dict) else [])
+                if one.get("minimum_frequency_hz") and one.get("maximum_frequency_hz")
+            ]
+            if spans:
+                reach = {
+                    "sweeps": len(spans),
+                    "all_sweeps_reach_hz": [
+                        max(low for low, _ in spans),
+                        min(high for _, high in spans),
+                    ],
+                    "sweeps_outside": sum(
+                        1 for low, high in spans if not low <= frequency_hz <= high
+                    ),
+                }
+        plan.append(
+            {
+                "test_run_id": run,
+                "modulus_table_id": (found or {}).get("id"),
+                "will_build": found is None,
+                **(
+                    {
+                        "rows": len(temps),
+                        "temperature_k": [min(temps), max(temps)] if temps else None,
+                        "modulus_basis": found.get("modulus_basis"),
+                        "notes": found.get("notes") or [],
+                    }
+                    if found
+                    else reach
+                ),
+            }
+        )
+    body: dict[str, Any] = {"label": label, "poisson_ratio": poisson_ratio, "note": note}
+    if dry_run:
+        building = sum(1 for one in plan if one["will_build"])
+        # 모든 스윕의 범위 밖이면 표가 한 줄도 안 나온다 — 넣으면 거절된다(외삽하지 않는다).
+        blocked = [
+            one["test_run_id"]
+            for one in plan
+            if one.get("sweeps") and one.get("sweeps_outside") == one.get("sweeps")
+        ]
+        return {
+            "dry_run": True,
+            "frequency_hz": frequency_hz,
+            "tables": plan,
+            "will_create": body,
+            "note": (
+                f"{frequency_hz:g} Hz 는 시험 {len(blocked)}건의 모든 스윕 범위 밖입니다 — 표를 못 "
+                "만듭니다. `all_sweeps_reach_hz` 안에서 고르세요."
+                if blocked
+                else (
+                    f"표가 없는 시험 {building}건은 넣을 때 {frequency_hz:g} Hz 로 표를 만듭니다. "
+                    if building
+                    else ""
+                )
+                + "이대로 만들려면 dry_run=False 로 다시 부르세요. 만들어도 초안입니다."
+            ),
+        }
+    ids: list[str] = []
+    for one in plan:
+        if one["modulus_table_id"]:
+            ids.append(one["modulus_table_id"])
+            continue
+        made = await _send(
+            ctx,
+            "POST",
+            f"/viscoelastic/runs/{one['test_run_id']}/modulus-tables",
+            {"frequency_hz": frequency_hz},
+        )
+        if "error" in made:
+            return {**made, "test_run_id": one["test_run_id"], "built_tables": ids}
+        ids.append(made["id"])
+    card = await _send(
+        ctx, "POST", "/fitting/cards/dma-temperature", {**body, "modulus_table_ids": ids}
+    )
+    if "error" in card:
+        # 만든 표는 남는다 — 불변이고 다시 쓰인다. 무엇이 막았는지만 옮긴다.
+        return {**card, "modulus_table_ids": ids}
+    return {**_card_summary(card), "modulus_table_ids": ids}
+
+
 @mcp.tool()
 async def create_card_from_tests(
     ctx: Context,
@@ -4471,6 +4692,7 @@ async def add_catalog_value(
             "method": method,
             "conditions": conditions,
             "source": body["source"],
+            **_warned(checked),
             "note": "이대로 넣으려면 dry_run=False 로 다시 부르세요.",
         }
     got = await _send(ctx, "POST", f"/catalog/materials/{catalog_material_id}/values", body)
@@ -4481,6 +4703,7 @@ async def add_catalog_value(
         "stored": stored,
         "value_id": (got.get("value") or {}).get("id"),
         **({"converted": got["converted"]} if got.get("converted") else {}),
+        **_warned(got),
         "note": "넣었습니다. 잘못 넣었으면 delete_catalog_value 로 지웁니다(넣은 사람·관리자만).",
     }
 
@@ -4642,6 +4865,7 @@ async def add_catalog_series(
             "points": (shown.get("points") or [])[:12],
             "point_count": len(shown.get("points") or []),
             "converted": shown.get("converted"),
+            **_warned(shown),
             "note": "이대로 넣으려면 dry_run=False 로 다시 부르세요.",
         }
     got = await _send(ctx, "POST", f"/catalog/materials/{catalog_material_id}/series", body)
@@ -4652,6 +4876,7 @@ async def add_catalog_series(
         "series_id": series.get("id"),
         "point_count": series.get("point_count"),
         "converted": got.get("converted"),
+        **_warned(got),
         "note": "넣었습니다. 잘못 넣었으면 delete_catalog_series 로 점과 함께 지웁니다.",
     }
 
@@ -6672,13 +6897,19 @@ async def _resolve_lab(ctx: Context, lab: str) -> dict[str, Any]:
     }
 
 
+async def _lab_suggestions(ctx: Context, items: list[dict[str, Any]]) -> dict[str, Any]:
+    """받는 부서 추천 — 항목을 할 보유 장비가 있는 부서(TestScope, ADR 0069 C). 읽기만 한다."""
+    got = await _send(ctx, "POST", "/commissions/lab-suggestions", lab_choice.asked(items))
+    return lab_choice.shaped(got)
+
+
 @mcp.tool()
 async def create_commission(
     ctx: Context,
     title: str,
     purpose: str,
-    lab: str,
     items: list[dict[str, Any]],
+    lab: str | None = None,
     sample_id: str | None = None,
     material_hint: str | None = None,
     sample_plan: str | None = None,
@@ -6700,6 +6931,9 @@ async def create_commission(
     나중에 내려면 `change_commission_status(id, "submitted")`.
 
     **기본이 미리보기(dry_run=True)다.** 무엇이 적힐지 사람에게 보이고 나서 만든다.
+
+    **받는 부서(`lab`)를 모르면 비우고 미리보기** — `lab_suggestions` 가 그 항목을 할 장비가
+    있는 부서(TestScope)다. 고르는 것은 사람이고, `unresolved` 항목은 추천에서 빠졌다.
 
     ## 무엇을 재는가
 
@@ -6727,9 +6961,14 @@ async def create_commission(
     **`conditions` 의 키는 `list_condition_fields(test_type)` 에서 본다.** 지어 적은
     키는 거절되거나, 더 나쁘게는 조건 검색에 안 걸린다.
     """
+    if not lab:
+        return {
+            "error": "받는 부서(lab)를 정하세요 — 사람에게 추천을 보이고 고르게 하세요.",
+            "lab_suggestions": await _lab_suggestions(ctx, items),
+        }
     resolved = await _resolve_lab(ctx, lab)
     if "error" in resolved:
-        return resolved
+        return {**resolved, "lab_suggestions": await _lab_suggestions(ctx, items)}
     body: dict[str, Any] = {
         "title": title,
         "purpose": purpose,
@@ -6744,9 +6983,13 @@ async def create_commission(
         "submit": bool(submit),
     }
     if dry_run:
+        suggested = await _lab_suggestions(ctx, items)
         return {
             "dry_run": True,
             "will_create": {**body, "lab": resolved},
+            "lab_suggestions": suggested,
+            # TestScope 에 물을 수 있을 때만 참 · 거짓 — 못 물었으면 「모름」 이다(ADR 0069).
+            "lab_is_suggested": lab_choice.is_suggested(resolved["slug"], suggested),
             "note": "이대로 만들려면 dry_run=False 로 다시 부르세요. "
             + (
                 "**만들면서 접수 대기로 냅니다** — 받는 부서에 알림이 갑니다."

@@ -102,7 +102,7 @@ ms)를 알린다 — 「관리 → 사용 현황」 의 MCP 숫자가 여기서 
 도구의 답은 그대로 나간다. 도구 하나가 백엔드를 여러 번 부르므로 API 요청 수(`X-Client: mcp`)와
 도구 수는 다르다 — 둘 다 그 화면에 있다.
 
-## 5. 지금 있는 것 (도구 125개)
+## 5. 지금 있는 것 (도구 128개)
 
 **전부 한 번에 불러 보려면 `probe.py` 를 돌린다** — 진짜 MCP 클라이언트로 한 바퀴
 돈다(아래 「실측으로 잡은 것」 참조). 화면이나 curl 로는 안 보이는 층이 있다.
@@ -136,6 +136,7 @@ ms)를 알린다 — 「관리 → 사용 현황」 의 MCP 숫자가 여기서 
 ### 사내 재료
 
     get_material(material_id)          기본 칸·선언 물성·카드·문헌 연결
+    list_material_parts(material_id, q?)  이 재료가 쓰인 부품 — 제품 · 사업부별 수
     get_parameter_sets(material_id)    모델 파라미터 벌 (Anand·Prony·Ogden)
     list_cards(material_id?, status?, q?, asked?)  물성 카드 목록 — q 는 이름 · 카드 번호 · 재료
                                        번호, asked 면 확정 요청 온 초안만
@@ -177,6 +178,7 @@ Family·Category·Grade·제조사·유통사·시편 규격은 **기준정보**
     search_catalog(query, category?)   문헌 재료 찾기 (출처·등급이 붙는다)
     get_catalog_material(id, domain?)  물성 전부 — 값·조건·등급·출처. 곡선 · 산점은 벌 머리만
     get_catalog_series(series_id)      곡선 · 산점 한 벌의 점(ADR 0072 — 상세에는 안 실린다)
+    preview_synthetic_curve(id)        덱이 스칼라로 지을 합성 소성 곡선 — 실측 아님
     get_catalog_parameter_sets(id)     받아 갈 파라미터 벌 후보
     compare_catalog_materials(ids)     여럿을 한 표로 (최대 8종)
     match_bom(text)                    부품표를 붙여 후보를 찾는다
@@ -209,6 +211,7 @@ Family·Category·Grade·제조사·유통사·시편 규격은 **기준정보**
     ★ create_card_from_group(...)      묶음에서 — 속도 의존·점탄성·확장 묶음을 한 길로
     ★ create_viscoelastic_card(...)    Prony 적합 하나에서 점탄성 카드 초안
     ★ create_lve_card(...)             DMA 변형률 스윕의 선형 탄성률 카드 초안
+    ★ create_dma_temperature_card(...) DMA 온도별 저장 탄성률 카드 초안 — 시험마다 그 주파수의 표(시편 평균)
 
     ★ set_card_status(card, action)    publish(초안 → 확정) · deprecate(사용 중지) ·
                                        restore(사용 중지 → 초안) — 자료 관리자만
@@ -318,6 +321,7 @@ SP(Standard Platform)의 코어(부서 · 기관 · 장비 · PLM · 물성 …)
     list_commissions(scope?, status?)  누가 무엇을 왜 재 달라고 했고 어디까지 됐나
     get_commission(commission_id)      항목·붙은 시험·진행률·이력
     ★ create_commission(...)           작성 중으로 짓는다. submit=True 면 바로 낸다 (미리보기 기본)
+                                       lab 을 비우면 TestScope 기준 받는 부서 추천(lab_suggestions)
     ★ change_commission_status(...)    의뢰 · 접수 · 시험 시작 · 보류 · 결과 전달 · 완료 · 반려 —
                                        갈 수 있는 곳은 서버가 정한다(`allowed`)
     ★ assign_commission(id, assignee)  담당자 — 받는 부서 멤버에서 이름으로 찾아 준다
@@ -350,8 +354,8 @@ SP(Standard Platform)의 코어(부서 · 기관 · 장비 · PLM · 물성 …)
 대조해 「배열을 주는 경로를 그대로 돌려주는데 반환 표기가 `dict`」 인 도구를
 잡는다. 전체 스위트에 들어 있으니 따로 부를 일은 드물다.
 
-같은 파일이 **설명의 예산**도 건다(2026-10-03) — 도구 하나 2,000자, 전부 56,500자(2026-10-14
-에 52,000 에서 올렸다 — ADR 0061 의 도구 10개).
+같은 파일이 **설명의 예산**도 건다(2026-10-03) — 도구 하나 2,000자, 전부 64,000자(올린 내력과
+이유는 `DESCRIPTIONS_BUDGET` 옆에 — 마지막은 2026-10-25, 58,500 에서).
 도구 목록은 클라이언트가 대화마다 싣는 상주 비용이라, 도구를 더하거나 설명을 늘렸으면
 크기를 잰다:
 

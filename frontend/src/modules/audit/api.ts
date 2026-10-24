@@ -106,6 +106,7 @@ export const ACTION_LABELS: Record<string, string> = {
   'test_runs.imported_by_client': 'AI 가 표로 시험 입력',
   'master_curve.built_by_client': 'AI 가 마스터커브 생성',
   'prony.fitted_by_client': 'AI 가 Prony 적합',
+  'modulus_table.built_by_client': 'AI 가 온도별 탄성률 표 생성',
   'master_curve.deleted': '마스터커브 삭제',
   'prony.deleted': 'Prony 적합 삭제',
   'modulus_table.deleted': '온도별 탄성률 표 삭제',
