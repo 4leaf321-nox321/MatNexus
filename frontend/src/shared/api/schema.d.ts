@@ -1041,6 +1041,9 @@ export interface paths {
          *     **곡선 · 산점의 점은 싣지 않는다**(ADR 0072) — 대표로 뽑힌 곡선 점만 온다. 점마다
          *     출처 · 조건 · 갈리는 조건을 되풀이해 실어, 점 9,105개인 재료(Ti-6Al-4V L-PBF)가
          *     16 MB · 1.6 초였다(2026-10-24 실측). 점은 `GET /catalog/series/{id}/points`.
+         *
+         *     **`source_once=true` 면 출처를 한 번만 싣는다**(ADR 0073) — 출처 3종이 값 · 벌 1,200개에
+         *     되풀이돼 2.1 MB 의 490 KB 였다. 안 주면 지금 모양 그대로다(바깥에서 읽는 쪽이 깨지지 않게).
          */
         get: operations["get_material_api_catalog_materials__material_id__get"];
         put?: never;
@@ -11456,6 +11459,8 @@ export interface components {
             series?: components["schemas"]["CatalogSeriesOut"][];
             /** Source Missing At */
             source_missing_at?: string | null;
+            /** Sources */
+            sources?: components["schemas"]["CatalogSourceOut"][];
             /** Subsystem */
             subsystem: string | null;
             /** Values */
@@ -11815,6 +11820,8 @@ export interface components {
             source: components["schemas"]["CatalogSourceOut"] | null;
             /** Source Detail */
             source_detail: string | null;
+            /** Source Id */
+            source_id?: string | null;
             /** X Key */
             x_key: string | null;
             /** X Max */
@@ -12042,6 +12049,8 @@ export interface components {
             source: components["schemas"]["CatalogSourceOut"] | null;
             /** Source Detail */
             source_detail: string | null;
+            /** Source Id */
+            source_id?: string | null;
             /** Source Missing At */
             source_missing_at?: string | null;
             /** Summary */
@@ -25496,7 +25505,10 @@ export interface operations {
     };
     get_material_api_catalog_materials__material_id__get: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description 참이면 출처를 맨 위 `sources` 에 한 번씩, 값 · 벌에는 `source_id` 만 */
+                source_once?: boolean;
+            };
             header?: never;
             path: {
                 material_id: string;

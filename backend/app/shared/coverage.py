@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import uuid
 from collections import defaultdict
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -407,7 +408,7 @@ def group_entries(db: Session, material_id: uuid.UUID) -> dict[str, list[Entry]]
 
 
 def _thin_catalog_series(
-    db: Session, values: list[CatalogValue]
+    db: Session, values: Sequence[Any]
 ) -> tuple[set[uuid.UUID], dict[uuid.UUID, str]]:
     """문헌의 **이어진 한 벌**(ADR 0067)은 물성마다 지도에 `TABLE_ROWS_ON_MAP` 점까지.
 
@@ -415,7 +416,7 @@ def _thin_catalog_series(
     같은 규칙으로 축을 따라 양 끝을 남기고 고르게 솎는다. `(남길 값 id, 벌 → 솎은 내역)`.
     """
     kept = {value.id for value in values if value.series_id is None}
-    grouped: dict[tuple[uuid.UUID, str], list[CatalogValue]] = defaultdict(list)
+    grouped: dict[tuple[uuid.UUID, str], list[Any]] = defaultdict(list)
     for value in values:
         if value.series_id is not None:
             grouped[(value.series_id, value.property_key)].append(value)
@@ -433,7 +434,7 @@ def _thin_catalog_series(
     for (series_id, _), points in grouped.items():
         axis = axes.get(series_id)
 
-        def at(value: CatalogValue, axis: str | None = axis) -> float:
+        def at(value: Any, axis: str | None = axis) -> float:
             raw = (value.conditions or {}).get(axis or "")
             return float(raw) if isinstance(raw, int | float) else 0.0
 
@@ -528,8 +529,18 @@ def collect(db: Session, material_id: uuid.UUID) -> Coverage:
     linked = select(CatalogLink.catalog_material_id).where(
         CatalogLink.material_id == material_id
     )
+    # 지도에 쓰는 칸만 읽는다 — 점이 수천 개인 재료에서 ORM 객체를 짓는 것이 시간의 절반이었다.
     catalog_rows = db.execute(
-        select(CatalogValue, CatalogMaterial)
+        select(
+            CatalogValue.id,
+            CatalogValue.series_id,
+            CatalogValue.property_key,
+            CatalogValue.value_num,
+            CatalogValue.quality_tier,
+            CatalogValue.conditions,
+            CatalogValue.source_detail,
+            CatalogMaterial.name.label("material_name"),
+        )
         .join(CatalogMaterial, CatalogMaterial.id == CatalogValue.material_id)
         .where(
             CatalogValue.material_id.in_(linked),
@@ -538,8 +549,8 @@ def collect(db: Session, material_id: uuid.UUID) -> Coverage:
             CatalogValue.source_missing_at.is_(None),
         )
     ).all()
-    kept, thinned = _thin_catalog_series(db, [value for value, _ in catalog_rows])
-    for value, catalog_material in catalog_rows:
+    kept, thinned = _thin_catalog_series(db, catalog_rows)
+    for value in catalog_rows:
         if value.id not in kept:
             continue
         method = value.source_detail or None
@@ -557,7 +568,7 @@ def collect(db: Session, material_id: uuid.UUID) -> Coverage:
                 method=method,
                 ref_kind="catalog_value",
                 ref_id=str(value.id),
-                ref_label=catalog_material.name,
+                ref_label=value.material_name,
             )
         )
 

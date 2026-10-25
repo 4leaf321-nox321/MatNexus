@@ -1125,3 +1125,42 @@ class Test축_칸_맞추기:
         assert fields["measured_key"]["choices"]  # 레지스트리에서 채운다
         # 두 번째는 할 일이 없다.
         assert refresh_builtin_axis_fields(db) == []
+
+
+@pytest.mark.usefixtures("definitions")
+class Test뜻_검색은_글자가_못_맞힐_때만:
+    """**글자가 정확히 맞으면 임베딩을 안 부른다**(2026-10-26) — 값 검색마다 0.4~0.6 초였다."""
+
+    def _asked(self, monkeypatch: pytest.MonkeyPatch) -> list[str]:
+        from app.shared import semantic
+
+        asked: list[str] = []
+
+        def search(_db: Any, text: str, *_args: Any, **_kwargs: Any) -> list[Any]:
+            asked.append(text)
+            return []
+
+        monkeypatch.setattr(semantic, "search", search)
+        return asked
+
+    def test_키_이름이_맞으면_뜻을_묻지_않는다(
+        self, db: Session, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from app.shared import property_names
+
+        asked = self._asked(monkeypatch)
+        for text in ("mechanical.yield_strength", "항복강도"):
+            found = property_names.resolve(db, text, limit=5)
+            assert found[0].key == "mechanical.yield_strength"
+        assert asked == []
+
+    def test_글자가_못_맞히면_여전히_뜻을_묻는다(
+        self, db: Session, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from app.shared import property_names
+
+        asked = self._asked(monkeypatch)
+        # 「항복」 은 두 물성에 부분으로만 걸린다 — 통째로 맞은 것이 없다.
+        property_names.resolve(db, "항복", limit=5)
+        property_names.resolve(db, "무르는 온도", limit=5)
+        assert asked == ["항복", "무르는 온도"]

@@ -43,6 +43,7 @@ import {
 import { Input } from '@/shared/components/ui/input'
 import { Label } from '@/shared/components/ui/label'
 import { Textarea } from '@/shared/components/ui/textarea'
+import { useResource } from '@/shared/hooks/useResource'
 import { axisLabel, display, toDisplay } from '@/shared/units'
 
 /** 한 벌의 물성 열 상한 — 저장 · 탄성률 · tan δ 셋이면 DMA 표 하나다. */
@@ -149,6 +150,15 @@ export function SeriesDialog({
   const [preview, setPreview] = useState<CatalogSeriesCreated | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<Error | null>(null)
+  // 축 이름표 — 정해 둔 표(`AXIS_META`)에 없으면 서버의 문헌 조건 칸 목록에서(ADR 0071). 창이 열릴
+  // 때만 받는다.
+  const fields = useResource(() => (open ? catalogApi.conditionFields() : Promise.resolve([])), [open])
+  const fieldLabels = useMemo(
+    () => new Map((fields.data ?? []).map((one) => [one.key, one.label])),
+    [fields.data]
+  )
+  const axisTitle = (axis: string) =>
+    axisName(axis) !== axis ? axisName(axis) : (fieldLabels.get(axis) ?? axis)
 
   useEffect(() => {
     if (UNGROUNDED.has(method)) setTier(4)
@@ -359,7 +369,7 @@ export function SeriesDialog({
                 >
                   {axes.map((axis) => (
                     <option key={axis} value={axis}>
-                      {axisName(axis)} ({axis})
+                      {axisTitle(axis)} ({axis})
                     </option>
                   ))}
                 </select>

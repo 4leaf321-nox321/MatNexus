@@ -16,6 +16,7 @@ import type { CatalogMaterialDetail } from '@/modules/catalog/api'
 const resolveProperty = vi.fn()
 const previewSeries = vi.fn()
 const createSeries = vi.fn()
+const conditionFields = vi.fn()
 
 vi.mock('@/modules/catalog/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/modules/catalog/api')>()),
@@ -23,6 +24,7 @@ vi.mock('@/modules/catalog/api', async (importOriginal) => ({
     resolveProperty: (...args: unknown[]) => resolveProperty(...args),
     previewSeries: (...args: unknown[]) => previewSeries(...args),
     createSeries: (...args: unknown[]) => createSeries(...args),
+    conditionFields: (...args: unknown[]) => conditionFields(...args),
   },
 }))
 
@@ -77,6 +79,9 @@ beforeEach(() => {
   resolveProperty.mockResolvedValue({ ambiguous: false, candidates: [CANDIDATE] })
   previewSeries.mockResolvedValue(MADE)
   createSeries.mockResolvedValue(MADE)
+  conditionFields.mockResolvedValue([
+    { key: 'environment', group: '공통', label: '시험 환경', unit: null, values: null, note: null },
+  ])
 })
 
 describe('곡선 · 표 입력', () => {
@@ -150,6 +155,36 @@ describe('곡선 · 표 입력', () => {
     fireEvent.click(screen.getByRole('button', { name: '미리보기' }))
     expect(await screen.findByRole('status')).toHaveTextContent(message)
     expect(screen.getByRole('button', { name: '넣기' })).toBeEnabled()
+  })
+})
+
+describe('축 이름표 (ADR 0071)', () => {
+  it('ΔK 는 이름과 MPa·m^0.5 로, 표에 없는 축은 문헌 조건 칸 목록의 이름으로 선다', async () => {
+    resolveProperty.mockResolvedValue({
+      ambiguous: false,
+      candidates: [
+        {
+          ...CANDIDATE,
+          key: 'mechanical.crack_growth_rate',
+          name: '균열성장률 da/dN',
+          si_unit: 'm/cycle',
+          matched_text: '균열성장률 da/dN',
+          condition_axes: ['delta_k_pa_sqrt_m', 'environment'],
+        },
+      ],
+    })
+    render(<SeriesDialog detail={DETAIL} open onClose={vi.fn()} onDone={vi.fn()} />)
+    fireEvent.change(screen.getByLabelText('곡선 물성 찾기'), { target: { value: '균열' } })
+    fireEvent.click(await screen.findByRole('button', { name: /균열성장률/ }))
+    const axis = screen.getByLabelText('축') as HTMLSelectElement
+    await waitFor(() =>
+      expect([...axis.options].map((one) => one.textContent)).toEqual([
+        '응력확대계수 범위 ΔK (delta_k_pa_sqrt_m)',
+        '시험 환경 (environment)',
+      ])
+    )
+    // 문헌이 적는 단위로 받는다 — 서버가 Pa·m^0.5 로 옮긴다.
+    expect(screen.getByLabelText('축 단위')).toHaveValue('MPa·m^0.5')
   })
 })
 

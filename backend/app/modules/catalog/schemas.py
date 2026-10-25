@@ -152,6 +152,9 @@ class CatalogValueOut(BaseModel):
     series_id: uuid.UUID | None = None
     """이어진 값 한 벌(곡선 · 계수 묶음)의 점이면 그 벌(ADR 0067). 상세의 `series` 에 머리가
     있다."""
+    source_id: uuid.UUID | None = None
+    """출처의 id — 상세를 `source_once=true` 로 받으면 `source` 는 비고 이것과 맨 위
+    `sources` 로 잇는다(ADR 0073)."""
     """같은 물성의 후보 중 대표로 뽑힌 값인가. **진 후보도 함께 온다** — 화면이
     이유와 같이 보여 준다."""
     n_candidates: int = 1
@@ -367,6 +370,8 @@ class CatalogSeriesOut(BaseModel):
     method: str
     quality_tier: int
     source: CatalogSourceOut | None
+    source_id: uuid.UUID | None = None
+    """`source_once=true` 면 `source` 는 비고 이것으로 상세의 `sources` 에 잇는다(ADR 0073)."""
     source_detail: str | None
     notes: str | None
     created_by: str | None = None
@@ -398,6 +403,9 @@ class CatalogMaterialDetailOut(BaseModel):
     series: list[CatalogSeriesOut] = Field(default_factory=list)
     """직접 넣은 **이어진 값 한 벌**들(ADR 0067). 점 수 · 값 범위는 머리에 있다. 값 검색 ·
     대표값은 여전히 그 점을 낱값처럼 읽는다."""
+    sources: list[CatalogSourceOut] = Field(default_factory=list)
+    """`source_once=true` 로 받았을 때만 — 값 · 벌이 쓰는 출처를 한 번씩(ADR 0073). 그때
+    값 · 벌의 `source` 는 비고 `source_id` 로 잇는다. 안 주면 비고 `source` 가 값마다 온다."""
 
 
 # --- 직접 넣기 (contribute.py) ------------------------------------------------

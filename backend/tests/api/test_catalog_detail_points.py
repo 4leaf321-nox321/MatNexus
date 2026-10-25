@@ -81,6 +81,28 @@ class Test상세의_대표:
         # 후보 수도 상세와 같다 — 곡선 한 벌이 후보 하나다.
         assert row["cells"][0]["n_candidates"] == 2
 
+    def test_출처를_한_번만_싣는_모양은_고를_때만(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str]
+    ) -> None:
+        """ADR 0073 — 출처 3종이 값 · 벌 1,200개에 되풀이됐다. 안 고르면 모양이 그대로다."""
+        material = db.scalar(select(CatalogMaterial).where(CatalogMaterial.mt_id == 910001))
+        assert material is not None
+        assert _post(client, admin_headers, material, _curve()).status_code == 201
+        url = f"/api/catalog/materials/{material.id}"
+
+        inline = client.get(url, headers=admin_headers).json()
+        assert inline["sources"] == []
+        assert all(one["source"]["title"] == SOURCE["title"] for one in inline["series"])
+        assert all(one["source"] is not None for one in inline["values"])
+
+        once = client.get(url, params={"source_once": "true"}, headers=admin_headers).json()
+        assert [one["title"] for one in once["sources"]] == [SOURCE["title"]]
+        source_id = once["sources"][0]["id"]
+        for one in [*once["values"], *once["series"]]:
+            assert one["source"] is None and one["source_id"] == source_id
+        # 출처 말고는 같은 응답이다.
+        assert [one["id"] for one in once["values"]] == [one["id"] for one in inline["values"]]
+
     def test_없는_벌의_점은_404(
         self, client: TestClient, admin_headers: dict[str, str]
     ) -> None:

@@ -1162,6 +1162,7 @@ def _values_out(
             if value.created_by_id
             else None,
             series_id=value.series_id,
+            source_id=value.source_id,
         )
         for value, definition, source in rows
     ]
@@ -1171,6 +1172,10 @@ def _values_out(
 @router.get("/materials/{material_id}", response_model=CatalogMaterialDetailOut)
 def get_material(
     material_id: uuid.UUID,
+    source_once: bool = Query(
+        default=False,
+        description="참이면 출처를 맨 위 `sources` 에 한 번씩, 값 · 벌에는 `source_id` 만",
+    ),
     _user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> CatalogMaterialDetailOut:
@@ -1182,6 +1187,9 @@ def get_material(
     **곡선 · 산점의 점은 싣지 않는다**(ADR 0072) — 대표로 뽑힌 곡선 점만 온다. 점마다
     출처 · 조건 · 갈리는 조건을 되풀이해 실어, 점 9,105개인 재료(Ti-6Al-4V L-PBF)가
     16 MB · 1.6 초였다(2026-10-24 실측). 점은 `GET /catalog/series/{id}/points`.
+
+    **`source_once=true` 면 출처를 한 번만 싣는다**(ADR 0073) — 출처 3종이 값 · 벌 1,200개에
+    되풀이돼 2.1 MB 의 490 KB 였다. 안 주면 지금 모양 그대로다(바깥에서 읽는 쪽이 깨지지 않게).
     """
     item = db.get(CatalogMaterial, material_id)
     if item is None:
@@ -1239,6 +1247,14 @@ def get_material(
         | {one.created_by_id for one in series if one.created_by_id},
     )
     values = _values_out(rows, creators, hide_points_of=curves)
+    heads = _series_out(db, series, creators)
+    sources: dict[uuid.UUID, CatalogSourceOut] = {}
+    if source_once:
+        holders: list[CatalogValueOut | CatalogSeriesOut] = [*values, *heads]
+        for one in holders:
+            if one.source is not None:
+                sources.setdefault(one.source.id, one.source)
+                one.source = None
     return CatalogMaterialDetailOut(
         id=item.id,
         name=item.name,
@@ -1255,7 +1271,8 @@ def get_material(
         source_missing_at=item.source_missing_at,
         created_by=creators.get(item.created_by_id) if item.created_by_id else None,
         values=values,
-        series=_series_out(db, series, creators),
+        series=heads,
+        sources=list(sources.values()),
     )
 
 
@@ -1775,6 +1792,7 @@ def _series_out(
                 else None,
                 created_at=row.created_at,
                 batch_key=batches.get(row.batch_id) if row.batch_id else None,
+                source_id=row.source_id,
             )
         )
     return out

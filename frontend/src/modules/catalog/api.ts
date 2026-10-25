@@ -275,6 +275,18 @@ export type AshbyAxis = components['schemas']['AshbyAxisOut']
 export type AshbyResult = components['schemas']['AshbyOut']
 export type CoverageResult = components['schemas']['CatalogCoverageOut']
 
+/**
+ * 출처를 한 번만 받은 상세(ADR 0073)의 값 · 벌에 `source` 를 다시 채운다. 이미 찬 것 · 출처 없는
+ * 것은 그대로 — 서버가 `sources` 를 안 줬으면(옛 서버) 손대지 않는다.
+ */
+export function withSources(detail: CatalogMaterialDetail): CatalogMaterialDetail {
+  const byId = new Map((detail.sources ?? []).map((one) => [one.id, one]))
+  if (byId.size === 0) return detail
+  const fill = <T extends { source?: CatalogValue['source']; source_id?: string | null }>(one: T): T =>
+    one.source || !one.source_id ? one : { ...one, source: byId.get(one.source_id) ?? null }
+  return { ...detail, values: detail.values.map(fill), series: (detail.series ?? []).map(fill) }
+}
+
 export const catalogApi = {
   compare: (ids: string[]) =>
     api.get<CompareResult>(`/catalog/compare?ids=${ids.join(',')}`),
@@ -331,7 +343,9 @@ export const catalogApi = {
     const suffix = search.toString()
     return api.get<CatalogMaterialPage>(`/catalog/materials${suffix ? `?${suffix}` : ''}`)
   },
-  material: (id: string) => api.get<CatalogMaterialDetail>(`/catalog/materials/${id}`),
+  /** 출처는 한 번만 받아(ADR 0073) 값 · 벌에 다시 채운다 — 화면의 나머지는 `source` 를 그대로 읽는다. */
+  material: (id: string) =>
+    api.get<CatalogMaterialDetail>(`/catalog/materials/${id}?source_once=true`).then(withSources),
   /** 덱의 「곡선 합성」 이 지을 곡선 — 못 지으면 `ok: false` 와 이유(200). */
   syntheticCurve: (id: string) =>
     api.get<SyntheticCurvePreview>(`/catalog/materials/${id}/synthetic-curve`),
@@ -391,6 +405,8 @@ export const catalogApi = {
   /** 한 벌의 점 — 재료 상세에는 안 실린다(ADR 0072). 그 벌을 펼칠 때 받는다. */
   seriesPoints: (seriesId: string) =>
     api.get<CatalogSeriesPoints>(`/catalog/series/${seriesId}/points`),
+  /** 문헌 조건 칸 목록(ADR 0071) — 이름표 · 단위 · 고를 값. 정본은 서버 씨앗이다. */
+  conditionFields: () => api.get<CatalogConditionField[]>('/catalog/condition-fields'),
 }
 
 export type CatalogPropertyCreate = components['schemas']['CatalogPropertyCreate']
@@ -408,6 +424,7 @@ export type CatalogSeriesCreate = components['schemas']['CatalogSeriesCreate']
 export type CatalogSeriesCreated = components['schemas']['CatalogSeriesCreatedOut']
 export type CatalogSeriesPoint = components['schemas']['CatalogSeriesPointOut']
 export type CatalogSeriesPoints = components['schemas']['CatalogSeriesPointsOut']
+export type CatalogConditionField = components['schemas']['CatalogConditionFieldOut']
 export type PropertyResolve = components['schemas']['PropertyResolveOut']
 export type AliasCandidate = components['schemas']['AliasCandidateOut']
 export type PropertyCandidate = components['schemas']['PropertyCandidateOut']

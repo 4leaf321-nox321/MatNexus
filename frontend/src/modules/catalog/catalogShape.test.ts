@@ -11,11 +11,15 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  LOG_AXES,
   autoCurves,
+  axisName,
+  axisUnit,
   propertyGroups,
   scatterSets,
   seriesLines,
   sourceRows,
+  spansDecades,
   tierCounts,
   valueTotal,
 } from '@/modules/catalog/catalogShape'
@@ -303,5 +307,43 @@ describe('산점 한 벌 (ADR 0068)', () => {
     expect(set.hollow).toHaveLength(2)
     // 산점은 곡선 선에 끼지 않는다.
     expect(seriesLines(series, points)).toEqual([])
+  })
+})
+
+describe('자릿수로 그리기', () => {
+  it('두 자릿수 넘게 걸치는 양수만 로그 — 0 이나 음수가 섞이면 고른 눈금', () => {
+    expect(spansDecades([1e-10, 3e-9, 2e-7])).toBe(true)
+    expect(spansDecades([200, 210, 250])).toBe(false)
+    expect(spansDecades([0, 1e-9, 1e-6])).toBe(false)
+    expect(spansDecades([5e-9])).toBe(false)
+  })
+
+  it('ΔK 축은 MPa·m^0.5 로 보이고 로그 축이다', async () => {
+    const { axisLabel, toDisplay } = await import('@/shared/units')
+    expect(axisLabel(axisName('delta_k_pa_sqrt_m'), axisUnit('delta_k_pa_sqrt_m'))).toBe(
+      '응력확대계수 범위 ΔK (MPa·m^0.5)'
+    )
+    expect(toDisplay(1e7, axisUnit('delta_k_pa_sqrt_m'))).toBeCloseTo(10)
+    expect(LOG_AXES.has('delta_k_pa_sqrt_m')).toBe(true)
+  })
+})
+
+describe('출처를 한 번만 받은 상세 (ADR 0073)', () => {
+  it('값 · 벌의 source 를 sources 에서 다시 채우고, 찬 것 · 출처 없는 것은 그대로', async () => {
+    const { withSources } = await import('@/modules/catalog/api')
+    const bare = value({ source: null, source_id: 's1' })
+    const none = value({ source: null, source_id: null })
+    const filled = value({})
+    const detail = {
+      values: [bare, none, filled],
+      series: [{ ...DMA, source: null, source_id: 's1' }],
+      sources: [SOURCE],
+    } as unknown as Parameters<typeof withSources>[0]
+    const got = withSources(detail)
+    expect(got.values.map((one) => one.source?.title ?? null)).toEqual(['논문 A', null, '논문 A'])
+    expect(got.series?.[0].source?.title).toBe('논문 A')
+    // 옛 서버(sources 없음)면 손대지 않는다.
+    const old = { ...detail, sources: [] }
+    expect(withSources(old)).toBe(old)
   })
 })

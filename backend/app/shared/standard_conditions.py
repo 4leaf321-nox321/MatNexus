@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from functools import cache
 from typing import Any
 
 
@@ -175,10 +176,13 @@ UNIT_KEYS: dict[str, tuple[str, float, float]] = {
 }
 
 
+@cache
 def catalog_keys(quantity: str) -> tuple[tuple[str, float, float], ...]:
     """문헌 `conditions` 에서 이 양을 읽는 키와 환산 `(키, 배수, 더할 값)` — **앞이 이긴다.**
 
     단위가 이름에 박힌 키가 먼저, 그다음 표준 조건의 이름 · 별칭이다(SI 로 적었다고 본다).
+    표는 모듈 상수라 한 번만 짓는다 — 물성 지도가 문헌 칸마다 · 조건마다 다시 지어, 칸 7천 개인
+    재료에서 그것만 0.9 초였다(2026-10-26, 프로파일러 기준).
     """
     named = [
         (key, factor, offset)

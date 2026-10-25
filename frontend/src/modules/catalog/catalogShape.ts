@@ -51,10 +51,41 @@ export const AXIS_META: Record<string, [string, string | null]> = {
   depth_um: ['깊이', 'µm'],
   load_n: ['하중', 'N'],
   cycles: ['수명(반복수)', null],
+  // 공개 피로 반입의 축(ADR 0071) — 이름은 문헌 조건 칸 목록(`condition-fields.json`)과 같게.
+  // ΔK 는 화면 단위 표의 `Pa.m0.5` 로 적어야 MPa·m^0.5 로 보인다.
+  delta_k_pa_sqrt_m: ['응력확대계수 범위 ΔK', 'Pa.m0.5'],
+  stress_ratio_R: ['응력비 R', null],
+  strain_ratio_R: ['변형률비 R', null],
+  strain_amplitude: ['변형률 진폭', null],
+  mean_stress_mpa: ['평균 응력', 'MPa'],
+  hold_time_s: ['유지 시간', 's'],
+  thickness_mm: ['두께', 'mm'],
+  secant_strain_pct: ['할선 변형률', '%'],
+  aging_temperature_k: ['노화 온도', 'K'],
+  life_fraction: ['수명 비율', null],
+  kt: ['응력집중계수 Kt', null],
+  prior_max_strain_pct: ['앞선 최대 변형률', '%'],
+  mixing_time_min: ['혼합 시간', 'min'],
 }
 
-/** 자릿수로 펼쳐 보는 축 — 속도 · 주파수 · 시간은 몇 자리에 걸쳐 잰다. */
-export const LOG_AXES = new Set(['strain_rate_s', 'strain_rate_1_s', 'frequency_hz', 'time_s', 'cycles'])
+/** 자릿수로 펼쳐 보는 축 — 속도 · 주파수 · 시간 · 수명 · ΔK 는 몇 자리에 걸쳐 잰다. */
+export const LOG_AXES = new Set([
+  'strain_rate_s',
+  'strain_rate_1_s',
+  'frequency_hz',
+  'time_s',
+  'cycles',
+  'delta_k_pa_sqrt_m',
+])
+
+/**
+ * 값이 **두 자릿수 넘게** 걸치는가 — 그러면 세로도 자릿수로 그린다. 균열 성장률(da/dN)은
+ * 10⁻¹⁰ ~ 10⁻⁶ m/cycle 에 걸쳐, 고른 눈금이면 마지막 점 하나만 보이고 나머지는 바닥에 붙는다.
+ */
+export function spansDecades(values: number[], decades = 2): boolean {
+  if (values.length < 2 || values.some((one) => !(one > 0))) return false
+  return Math.log10(Math.max(...values) / Math.min(...values)) > decades
+}
 
 export function axisName(key: string): string {
   return AXIS_META[key]?.[0] ?? key

@@ -145,6 +145,10 @@ def _alias_hits(db: Session, needle: str) -> dict[str, tuple[str, str]]:
     return {key: ("alias_partial", alias) for key, alias in rough}
 
 
+#: 글자가 **통째로** 맞은 자리 — 이 중 하나로 걸리면 뜻 검색을 부르지 않는다.
+EXACT_MATCHES = frozenset({"alias", "name", "symbol", "key"})
+
+
 def resolve(db: Session, text: str, *, limit: int = MAX_CANDIDATES) -> list[Candidate]:
     """사람이 부르는 이름 → 물성 후보들. **비면 빈 목록이고, 하나를 지어내지 않는다.**"""
     needle = compare_key(text)
@@ -272,7 +276,12 @@ def resolve(db: Session, text: str, *, limit: int = MAX_CANDIDATES) -> list[Cand
     #
     # **글자로 찾은 것을 밀어내지 않는다** — 점수를 낮게 줘 아래에 붙는다. 뜻은 짐작이고
     # 별칭은 사람이 못 박은 것이라, 그 둘이 같은 무게면 안 된다.
-    if len(made) < limit:
+    #
+    # **글자가 정확히 맞았으면 뜻은 안 본다**(2026-10-26). 그때 뜻 후보는 아래에 붙을 뿐인데,
+    # 임베딩 한 번이 값 검색마다 0.4~0.6 초였다 — AI 는 대개 푼 키를 그대로 넘긴다(실측: 값
+    # 질의 31 ms · 이름 풀이 560 ms).
+    exact = any(one.matched_by in EXACT_MATCHES for one in made)
+    if len(made) < limit and not exact:
         made.extend(_meaning_candidates(db, text, exclude={one.key for one in made}))
 
     made.sort(key=lambda one: (-one.score, one.key))

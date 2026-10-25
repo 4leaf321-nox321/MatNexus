@@ -6485,6 +6485,13 @@
             ],
             "title": "Source Missing At"
           },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/CatalogSourceOut"
+            },
+            "title": "Sources",
+            "type": "array"
+          },
           "subsystem": {
             "anyOf": [
               {
@@ -7544,6 +7551,18 @@
             ],
             "title": "Source Detail"
           },
+          "source_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Id"
+          },
           "x_key": {
             "anyOf": [
               {
@@ -8310,6 +8329,18 @@
               }
             ],
             "title": "Source Detail"
+          },
+          "source_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Id"
           },
           "source_missing_at": {
             "anyOf": [
@@ -41767,7 +41798,7 @@
         ]
       },
       "get": {
-        "description": "재료 하나의 모든 물성값 — 값·조건·등급·출처가 한 줄이다.\n\n**후보를 숨기지 않는다.** 같은 물성에 값이 여럿이면 전부 준다 — 어느 것을\n대표로 볼지는 화면(다음 단계)이 이유와 함께 보여 준다.\n\n**곡선 · 산점의 점은 싣지 않는다**(ADR 0072) — 대표로 뽑힌 곡선 점만 온다. 점마다\n출처 · 조건 · 갈리는 조건을 되풀이해 실어, 점 9,105개인 재료(Ti-6Al-4V L-PBF)가\n16 MB · 1.6 초였다(2026-10-24 실측). 점은 `GET /catalog/series/{id}/points`.",
+        "description": "재료 하나의 모든 물성값 — 값·조건·등급·출처가 한 줄이다.\n\n**후보를 숨기지 않는다.** 같은 물성에 값이 여럿이면 전부 준다 — 어느 것을\n대표로 볼지는 화면(다음 단계)이 이유와 함께 보여 준다.\n\n**곡선 · 산점의 점은 싣지 않는다**(ADR 0072) — 대표로 뽑힌 곡선 점만 온다. 점마다\n출처 · 조건 · 갈리는 조건을 되풀이해 실어, 점 9,105개인 재료(Ti-6Al-4V L-PBF)가\n16 MB · 1.6 초였다(2026-10-24 실측). 점은 `GET /catalog/series/{id}/points`.\n\n**`source_once=true` 면 출처를 한 번만 싣는다**(ADR 0073) — 출처 3종이 값 · 벌 1,200개에\n되풀이돼 2.1 MB 의 490 KB 였다. 안 주면 지금 모양 그대로다(바깥에서 읽는 쪽이 깨지지 않게).",
         "operationId": "get_material_api_catalog_materials__material_id__get",
         "parameters": [
           {
@@ -41778,6 +41809,18 @@
               "format": "uuid",
               "title": "Material Id",
               "type": "string"
+            }
+          },
+          {
+            "description": "참이면 출처를 맨 위 `sources` 에 한 번씩, 값 · 벌에는 `source_id` 만",
+            "in": "query",
+            "name": "source_once",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "참이면 출처를 맨 위 `sources` 에 한 번씩, 값 · 벌에는 `source_id` 만",
+              "title": "Source Once",
+              "type": "boolean"
             }
           }
         ],

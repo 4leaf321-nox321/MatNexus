@@ -26,6 +26,7 @@ import {
   pointSets,
   scatterSets,
   seriesLines,
+  spansDecades,
 } from '@/modules/catalog/catalogShape'
 import type { CurveLine } from '@/modules/catalog/catalogShape'
 import { CurveChart } from '@/modules/tests/CurveChart'
@@ -73,6 +74,7 @@ function LinesChart({ lines }: { lines: CurveLine[] }) {
   const [first, ...rest] = drawn
   const axis = first.axis
   const logX = LOG_AXES.has(axis) && drawn.every((line) => line.points.every(([x]) => x > 0))
+  const logY = spansDecades(drawn.flatMap((line) => line.points.map(([, y]) => y)))
   return (
     <div className="space-y-1">
       <CurveChart
@@ -86,6 +88,7 @@ function LinesChart({ lines }: { lines: CurveLine[] }) {
         xLabel={axisLabel(axisName(axis), axisUnit(axis))}
         yLabel={axisLabel(first.name, first.unit)}
         logX={logX}
+        logY={logY}
         height={260}
       />
       <ul className="flex flex-wrap gap-x-4 gap-y-1 text-xs">

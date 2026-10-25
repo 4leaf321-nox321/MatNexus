@@ -40,6 +40,7 @@ from urllib.parse import quote
 import httpx
 
 # 같은 폴더 — 판단만 떼어 둔 순수 함수들(시험이 부를 수 있게).
+import catalog_rows
 import declared_points
 import lab_choice
 import retry_plan
@@ -962,7 +963,8 @@ def _catalog_value(row: dict[str, Any]) -> dict[str, Any]:
         ),
         "unit": row.get("unit"),
         "uncertainty": row.get("uncertainty"),
-        "conditions": row.get("conditions"),
+        # 관리 표지(고친 내력 · 판정 메모)는 뺀다 — 화면도 대표값도 안 쓴다(`catalog_rows`).
+        "conditions": catalog_rows.semantic_conditions(row.get("conditions")),
         "method": row.get("method"),
         "quality_tier": tier,
         # `local` 은 MatNexus 에서 직접 넣은 값 — 이관해 온 값과 같이 서되 구별된다.
@@ -1044,8 +1046,8 @@ async def get_catalog_material(
         property_keys   아는 키만 콕 집는다 (`resolve_property` 로 푼 것)
         limit           기본 60. 잘리면 `omitted` 로 몇 개가 남았는지 말해 준다
 
-    **파라미터 벌(Anand·Prony 같은 것)은 여기서 찾지 마라.** 낱개로 흩어져 보이는
-    데다 개수가 많다 — `get_catalog_parameter_sets` 가 벌로 묶어 준다.
+    **파라미터 벌(Anand·Prony 같은 것)은 여기서 찾지 마라** — 그 항은 `property_keys` 로 콕 집을
+    때만 온다(`parameter_terms_omitted`). `get_catalog_parameter_sets` 가 벌로 묶어 준다.
 
     **곡선 · 산점의 점은 `values` 에 없다**(대표 점만) — `get_catalog_series(series_id)`.
 
@@ -1061,6 +1063,10 @@ async def get_catalog_material(
         if (not domain or row.get("domain") == domain)
         and (not wanted or str(row.get("property_key", "")).lower() in wanted)
     ]
+    # **계수 묶음의 항은 키를 콕 집었을 때만** — 안 그러면 Anand 9항 · Prony 항이 60칸을 먼저 채운다.
+    terms = 0 if wanted else sum(1 for row in rows if row.get("formula_term"))
+    if terms:
+        rows = [row for row in rows if not row.get("formula_term")]
     total = len(rows)
     # **대표값을 먼저 남긴다.** 잘라야 한다면 밀린 후보부터 버리는 것이 맞다 —
     # 받아 갈 수 있는 값은 대표값이다.
@@ -1095,6 +1101,7 @@ async def get_catalog_material(
         "omitted": max(0, total - len(values)),
         # 이 재료의 값은 **이것이 전부**인가 — `omitted` 가 0 이면 그렇다.
         "complete": total <= len(values),
+        **({"parameter_terms_omitted": terms} if terms else {}),
         "tier_counts": tiers,
         "values": values,
         "series_total": len(series),

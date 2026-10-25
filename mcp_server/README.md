@@ -176,7 +176,8 @@ Family·Category·Grade·제조사·유통사·시편 규격은 **기준정보**
 ### 문헌 카탈로그 → 사내로 받아 오기
 
     search_catalog(query, category?)   문헌 재료 찾기 (출처·등급이 붙는다)
-    get_catalog_material(id, domain?)  물성 전부 — 값·조건·등급·출처. 곡선 · 산점은 벌 머리만
+    get_catalog_material(id, domain?)  물성 전부 — 값·조건·등급·출처. 곡선 · 산점은 벌 머리만,
+                                       계수 묶음 항은 property_keys 로 콕 집을 때만, 관리 표지는 뺀다
     get_catalog_series(series_id)      곡선 · 산점 한 벌의 점(ADR 0072 — 상세에는 안 실린다)
     preview_synthetic_curve(id)        덱이 스칼라로 지을 합성 소성 곡선 — 실측 아님
     get_catalog_parameter_sets(id)     받아 갈 파라미터 벌 후보
