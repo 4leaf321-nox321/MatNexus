@@ -5953,6 +5953,17 @@
             ],
             "title": "Note"
           },
+          "scale": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scale"
+          },
           "unit": {
             "anyOf": [
               {
@@ -6471,6 +6482,13 @@
               "$ref": "#/components/schemas/CatalogSeriesOut"
             },
             "title": "Series",
+            "type": "array"
+          },
+          "series_brief": {
+            "items": {
+              "$ref": "#/components/schemas/CatalogSeriesBriefOut"
+            },
+            "title": "Series Brief",
             "type": "array"
           },
           "source_missing_at": {
@@ -7119,6 +7137,117 @@
           }
         },
         "title": "CatalogPropertyUpdate",
+        "type": "object"
+      },
+      "CatalogSeriesBriefOut": {
+        "description": "벌 머리의 **셈에 쓰는 칸만**(ADR 0073 후속) — 물성 요약 · 출처 · 등급 셈이 이것으로\n선다.\n\n이름 · 메모 · 공통 조건 · 출처 설명은 안 싣는다 — 벌이 555개인 재료(Ti-6Al-4V L-PBF)에서\n머리만 872 KB 였고 그 절반이 메모와 조건이었다(2026-10-26 실측). 그 칸은 화면이 벌을 보일\n때 `GET /catalog/materials/{id}/series` 로 쪽마다 받는다.",
+        "properties": {
+          "columns": {
+            "items": {
+              "$ref": "#/components/schemas/CatalogSeriesColumnOut"
+            },
+            "title": "Columns",
+            "type": "array"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "method": {
+            "title": "Method",
+            "type": "string"
+          },
+          "point_count": {
+            "title": "Point Count",
+            "type": "integer"
+          },
+          "quality_tier": {
+            "title": "Quality Tier",
+            "type": "integer"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CatalogSourceOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Id"
+          },
+          "x_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "X Key"
+          },
+          "x_max": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "X Max"
+          },
+          "x_min": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "X Min"
+          },
+          "x_unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "X Unit"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "x_key",
+          "columns",
+          "point_count",
+          "method",
+          "quality_tier",
+          "source"
+        ],
+        "title": "CatalogSeriesBriefOut",
         "type": "object"
       },
       "CatalogSeriesColumnIn": {
@@ -10228,6 +10357,67 @@
       },
       "CoverageEntryOut": {
         "properties": {
+          "axis_high": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Axis High"
+          },
+          "axis_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Axis Label"
+          },
+          "axis_low": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Axis Low"
+          },
+          "axis_unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Axis Unit"
+          },
+          "condition_ranges": {
+            "additionalProperties": {
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "type": "array"
+            },
+            "title": "Condition Ranges",
+            "type": "object"
+          },
           "conditions": {
             "additionalProperties": {
               "type": "number"
@@ -10238,6 +10428,28 @@
           "count": {
             "title": "Count",
             "type": "integer"
+          },
+          "high_si": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "High Si"
+          },
+          "low_si": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Low Si"
           },
           "method": {
             "anyOf": [
@@ -10265,6 +10477,39 @@
           "ref_label": {
             "title": "Ref Label",
             "type": "string"
+          },
+          "series_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Series Id"
+          },
+          "series_kind": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Series Kind"
+          },
+          "series_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Series Label"
           },
           "spread_si": {
             "anyOf": [
@@ -10369,6 +10614,43 @@
           "entries"
         ],
         "title": "CoveragePropertyOut",
+        "type": "object"
+      },
+      "CoverageSeriesPointsOut": {
+        "description": "물성 지도의 묶인 줄을 펼친 것 — 그 벌의 점을 낱값 줄 모양으로(축 차례).\n\n`shown < total` 이면 물성마다 축을 따라 양 끝을 남기고 고르게 솎았다. 곡선 전부는 문헌\n재료의 「곡선 · 표」 탭에 있다.",
+        "properties": {
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "properties": {
+            "items": {
+              "$ref": "#/components/schemas/CoveragePropertyOut"
+            },
+            "title": "Properties",
+            "type": "array"
+          },
+          "series_id": {
+            "title": "Series Id",
+            "type": "string"
+          },
+          "shown": {
+            "title": "Shown",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "series_id",
+          "label",
+          "total",
+          "shown",
+          "properties"
+        ],
+        "title": "CoverageSeriesPointsOut",
         "type": "object"
       },
       "CoverageTypeOut": {
@@ -23042,6 +23324,37 @@
           "offset"
         ],
         "title": "Page[AuditEntryOut]",
+        "type": "object"
+      },
+      "Page_CatalogSeriesOut_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CatalogSeriesOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "Page[CatalogSeriesOut]",
         "type": "object"
       },
       "Page_CommissionOut_": {
@@ -41798,7 +42111,7 @@
         ]
       },
       "get": {
-        "description": "재료 하나의 모든 물성값 — 값·조건·등급·출처가 한 줄이다.\n\n**후보를 숨기지 않는다.** 같은 물성에 값이 여럿이면 전부 준다 — 어느 것을\n대표로 볼지는 화면(다음 단계)이 이유와 함께 보여 준다.\n\n**곡선 · 산점의 점은 싣지 않는다**(ADR 0072) — 대표로 뽑힌 곡선 점만 온다. 점마다\n출처 · 조건 · 갈리는 조건을 되풀이해 실어, 점 9,105개인 재료(Ti-6Al-4V L-PBF)가\n16 MB · 1.6 초였다(2026-10-24 실측). 점은 `GET /catalog/series/{id}/points`.\n\n**`source_once=true` 면 출처를 한 번만 싣는다**(ADR 0073) — 출처 3종이 값 · 벌 1,200개에\n되풀이돼 2.1 MB 의 490 KB 였다. 안 주면 지금 모양 그대로다(바깥에서 읽는 쪽이 깨지지 않게).",
+        "description": "재료 하나의 모든 물성값 — 값·조건·등급·출처가 한 줄이다.\n\n**후보를 숨기지 않는다.** 같은 물성에 값이 여럿이면 전부 준다 — 어느 것을\n대표로 볼지는 화면(다음 단계)이 이유와 함께 보여 준다.\n\n**곡선 · 산점의 점은 싣지 않는다**(ADR 0072) — 대표로 뽑힌 곡선 점만 온다. 점마다\n출처 · 조건 · 갈리는 조건을 되풀이해 실어, 점 9,105개인 재료(Ti-6Al-4V L-PBF)가\n16 MB · 1.6 초였다(2026-10-24 실측). 점은 `GET /catalog/series/{id}/points`.\n\n**`source_once=true` 면 출처를 한 번만 싣는다**(ADR 0073) — 출처 3종이 값 · 벌 1,200개에\n되풀이돼 2.1 MB 의 490 KB 였다. 안 주면 지금 모양 그대로다(바깥에서 읽는 쪽이 깨지지 않게).\n\n**`series_brief=true` 면 벌 머리를 셈에 쓰는 칸만 싣는다**(ADR 0073 후속) — 벌 555개의\n머리가 872 KB 였고 절반이 메모 · 조건이었다. 화면은 벌을 보일 때 머리를 쪽으로 받는다.",
         "operationId": "get_material_api_catalog_materials__material_id__get",
         "parameters": [
           {
@@ -41820,6 +42133,18 @@
               "default": false,
               "description": "참이면 출처를 맨 위 `sources` 에 한 번씩, 값 · 벌에는 `source_id` 만",
               "title": "Source Once",
+              "type": "boolean"
+            }
+          },
+          {
+            "description": "참이면 벌 머리를 셈에 쓰는 칸만 `series_brief` 에 — 이름 · 메모 · 조건은 `GET /catalog/materials/{id}/series` 로 쪽마다",
+            "in": "query",
+            "name": "series_brief",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "참이면 벌 머리를 셈에 쓰는 칸만 `series_brief` 에 — 이름 · 메모 · 조건은 `GET /catalog/materials/{id}/series` 로 쪽마다",
+              "title": "Series Brief",
               "type": "boolean"
             }
           }
@@ -41901,6 +42226,84 @@
       }
     },
     "/api/catalog/materials/{material_id}/series": {
+      "get": {
+        "description": "이 재료의 **벌 머리를 쪽으로** — 이름 · 메모 · 조건 · 출처까지(ADR 0073 후속).\n\n상세(`series_brief=true`)는 셈에 쓰는 칸만 싣고, 화면은 벌을 보일 때 이것을 부른다. 차례는\n상세와 같다(넣은 차례).",
+        "operationId": "list_material_series_api_catalog_materials__material_id__series_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "material_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Material Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "`points`(곡선 · 산점) · `parameter_set`(계수 묶음)",
+            "in": "query",
+            "name": "kind",
+            "required": false,
+            "schema": {
+              "default": "points",
+              "description": "`points`(곡선 · 산점) · `parameter_set`(계수 묶음)",
+              "pattern": "^(points|parameter_set)$",
+              "title": "Kind",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_CatalogSeriesOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Material Series",
+        "tags": [
+          "catalog"
+        ]
+      },
       "post": {
         "description": "**이어진 값 한 벌**을 넣는다(ADR 0067) — 곡선 · 표(축 하나 + 물성 열) 또는 계수 묶음.\n\n점마다 문헌 값 한 줄이 생기고 묶음 칸으로 머리에 이어진다 — 값 검색 · 물성 지도 · 사내\n재료 반영 · 덱은 그 점을 낱값처럼 읽는다. 출처 · 등급 · 방법은 벌 전체가 하나다.",
         "operationId": "create_catalog_series_api_catalog_materials__material_id__series_post",
@@ -51381,6 +51784,60 @@
           }
         },
         "summary": "Property Coverage",
+        "tags": [
+          "materials"
+        ]
+      }
+    },
+    "/api/materials/{material_id}/property-coverage/series/{series_id}": {
+      "get": {
+        "description": "물성 지도의 **묶인 줄을 펼친다** — 이어진 문헌 재료의 곡선 · 산점 한 벌의 점을 지도와\n같은 줄 모양으로(축 차례). 지도는 한 벌을 한 줄로 싣는다(점 수 · 범위).",
+        "operationId": "property_coverage_series_api_materials__material_id__property_coverage_series__series_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "material_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Material Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "series_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Series Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CoverageSeriesPointsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Property Coverage Series",
         "tags": [
           "materials"
         ]

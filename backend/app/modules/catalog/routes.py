@@ -79,6 +79,7 @@ from app.modules.catalog.schemas import (
     CatalogPropertyMigrateOut,
     CatalogPropertyPreviewOut,
     CatalogPropertyUpdate,
+    CatalogSeriesBriefOut,
     CatalogSeriesColumnOut,
     CatalogSeriesCreate,
     CatalogSeriesCreatedOut,
@@ -135,7 +136,7 @@ from app.shared import (
 from app.shared import litdeck as deck_builder
 from app.shared.auth import current_user, require_system_admin
 from app.shared.errors import AppError, NotFound
-from app.shared.pagination import clamp_limit
+from app.shared.pagination import Page, clamp_limit
 from app.shared.permissions import (
     editor,
     require_edit,
@@ -728,19 +729,41 @@ def _representative_values(
 
     산점의 점은 안 읽고 곡선 점은 벌마다 앞선 하나만 넘긴다 — 대표는 같고(ADR 0072), S-N 점
     수천 개 때문에 비교 · Ashby 피로축이 1 초를 넘었다(2026-10-24 실측).
+
+    벌의 점은 **순위에 드는 칸만 읽어** 앞선 점을 고르고 그 점만 객체로 받는다 — 상세와 같은
+    방법. 점 5천 개를 ORM 으로 지으면 비교 시간의 절반이었다(2026-10-26).
     """
-    query = select(CatalogValue).where(
-        CatalogValue.material_id.in_(material_ids), CatalogValue.scatter_point.is_(False)
-    )
+    where = [CatalogValue.material_id.in_(material_ids), CatalogValue.scatter_point.is_(False)]
     if keys is not None:
-        query = query.where(CatalogValue.property_key.in_(keys))
+        where.append(CatalogValue.property_key.in_(keys))
+    loose = list(
+        db.scalars(select(CatalogValue).where(*where, CatalogValue.series_id.is_(None)))
+    )
+    ahead = representative.leaders(
+        db.execute(
+            select(
+                CatalogValue.id,
+                CatalogValue.series_id,
+                CatalogValue.property_key,
+                CatalogValue.conditions,
+                CatalogValue.quality_tier,
+                CatalogValue.value_num,
+                CatalogValue.mt_id,
+                CatalogValue.source_missing_at,
+                CatalogValue.scatter_point,
+            ).where(*where, CatalogValue.series_id.is_not(None))
+        ).all(),
+        lambda one: one.series_id,
+    )
+    if ahead:
+        loose += db.scalars(
+            select(CatalogValue).where(CatalogValue.id.in_([one.id for one in ahead]))
+        )
     by_material: dict[uuid.UUID, list[CatalogValue]] = {}
-    for value in db.scalars(query):
+    for value in loose:
         by_material.setdefault(value.material_id, []).append(value)
     out: dict[tuple[uuid.UUID, str], CatalogValue] = {}
     for material_id, values in by_material.items():
-        # 낱값은 저마다 한 칸(제 id)이라 그대로 남는다.
-        values = representative.leaders(values, lambda one: one.series_id or one.id)
         marks = representative.annotate(values)
         for value in values:
             # 변수 값은 항마다 따로 대표가 선다 — 「그 물성의 값」 자리에는 스칼라만.
@@ -1176,6 +1199,13 @@ def get_material(
         default=False,
         description="참이면 출처를 맨 위 `sources` 에 한 번씩, 값 · 벌에는 `source_id` 만",
     ),
+    series_brief: bool = Query(
+        default=False,
+        description=(
+            "참이면 벌 머리를 셈에 쓰는 칸만 `series_brief` 에 — 이름 · 메모 · 조건은 "
+            "`GET /catalog/materials/{id}/series` 로 쪽마다"
+        ),
+    ),
     _user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> CatalogMaterialDetailOut:
@@ -1190,6 +1220,9 @@ def get_material(
 
     **`source_once=true` 면 출처를 한 번만 싣는다**(ADR 0073) — 출처 3종이 값 · 벌 1,200개에
     되풀이돼 2.1 MB 의 490 KB 였다. 안 주면 지금 모양 그대로다(바깥에서 읽는 쪽이 깨지지 않게).
+
+    **`series_brief=true` 면 벌 머리를 셈에 쓰는 칸만 싣는다**(ADR 0073 후속) — 벌 555개의
+    머리가 872 KB 였고 절반이 메모 · 조건이었다. 화면은 벌을 보일 때 머리를 쪽으로 받는다.
     """
     item = db.get(CatalogMaterial, material_id)
     if item is None:
@@ -1199,7 +1232,7 @@ def get_material(
         db.scalars(
             select(CatalogSeries)
             .where(CatalogSeries.material_id == item.id)
-            .order_by(CatalogSeries.created_at)
+            .order_by(CatalogSeries.created_at, CatalogSeries.id)
         )
     )
     curves = [one.id for one in series if one.kind == "curve"]
@@ -1255,6 +1288,10 @@ def get_material(
             if one.source is not None:
                 sources.setdefault(one.source.id, one.source)
                 one.source = None
+    brief: list[CatalogSeriesBriefOut] = []
+    if series_brief:
+        brief = [CatalogSeriesBriefOut.model_validate(one.model_dump()) for one in heads]
+        heads = []
     return CatalogMaterialDetailOut(
         id=item.id,
         name=item.name,
@@ -1272,7 +1309,57 @@ def get_material(
         created_by=creators.get(item.created_by_id) if item.created_by_id else None,
         values=values,
         series=heads,
+        series_brief=brief,
         sources=list(sources.values()),
+    )
+
+
+#: 벌 머리 한 쪽의 상한 — 화면은 20벌씩 받는다.
+SERIES_PAGE_MAX = 100
+
+#: 쪽으로 받는 벌의 묶음 — 점이 상세에 안 실리는 곡선 · 산점, 그리고 계수 묶음.
+SERIES_KINDS = {"points": ("curve", "scatter"), "parameter_set": ("parameter_set",)}
+
+
+@router.get("/materials/{material_id}/series", response_model=Page[CatalogSeriesOut])
+def list_material_series(
+    material_id: uuid.UUID,
+    kind: str = Query(
+        default="points",
+        pattern="^(points|parameter_set)$",
+        description="`points`(곡선 · 산점) · `parameter_set`(계수 묶음)",
+    ),
+    limit: int = Query(default=20, ge=1, le=SERIES_PAGE_MAX),
+    offset: int = Query(default=0, ge=0),
+    _user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> Page[CatalogSeriesOut]:
+    """이 재료의 **벌 머리를 쪽으로** — 이름 · 메모 · 조건 · 출처까지(ADR 0073 후속).
+
+    상세(`series_brief=true`)는 셈에 쓰는 칸만 싣고, 화면은 벌을 보일 때 이것을 부른다. 차례는
+    상세와 같다(넣은 차례).
+    """
+    if db.get(CatalogMaterial, material_id) is None:
+        raise NotFound("MNX-CATALOG-0001", "카탈로그에 없는 재료입니다.")
+    where = (
+        CatalogSeries.material_id == material_id,
+        CatalogSeries.kind.in_(SERIES_KINDS[kind]),
+    )
+    total = int(db.scalar(select(func.count()).select_from(CatalogSeries).where(*where)) or 0)
+    rows = list(
+        db.scalars(
+            select(CatalogSeries)
+            .where(*where)
+            .order_by(CatalogSeries.created_at, CatalogSeries.id)
+            .offset(offset)
+            .limit(limit)
+        )
+    )
+    creators = contribute.creator_names(
+        db, {one.created_by_id for one in rows if one.created_by_id}
+    )
+    return Page[CatalogSeriesOut](
+        items=_series_out(db, rows, creators), total=total, limit=limit, offset=offset
     )
 
 

@@ -9,7 +9,8 @@
  * 으로 갈렸어야 할 값이 한 선이라고 믿게 된다.
  *
  * **점은 벌을 펼칠 때 받는다**(ADR 0072). 재료 상세가 점을 다 실으면 벌 555개 · 점 9,105개인
- * 재료가 16 MB 였다. 앞의 몇 벌만 펼쳐 두고, 벌은 20개씩 세운다.
+ * 재료가 16 MB 였다. 앞의 몇 벌만 펼쳐 두고, 벌은 20개씩 세운다. **벌 머리(이름 · 메모 · 조건)도
+ * 20개씩 서버에서 받는다**(ADR 0073 후속) — 상세에는 셈에 쓰는 칸만 실린다.
  */
 
 import { ChevronDown, ChevronRight, Trash2 } from 'lucide-react'
@@ -23,7 +24,6 @@ import {
   LOG_AXES,
   axisName,
   axisUnit,
-  pointSets,
   scatterSets,
   seriesLines,
   spansDecades,
@@ -52,6 +52,9 @@ const OPEN_FIRST = 4
 
 /** 한 번에 세울 벌 수 — 벌이 555개인 재료가 있다(2026-10-24). */
 const PAGE = 20
+
+/** 계수 묶음은 머리를 한 번에 — 서버가 한 쪽에 주는 상한. */
+const SET_PAGE = 100
 
 /** 겹친 선의 색 — 첫 선은 그래프의 기본색, 나머지는 이 차례로. 범례의 칸도 같은 색이다. */
 const TONES = [
@@ -352,19 +355,72 @@ export function SeriesCard({
   }
 }
 
+/** 「계수 묶음」 탭의 직접 넣은 계수 묶음 — 머리 전부를 받아 카드로(벌이 적다). */
+export function ParameterSetCards({
+  materialId,
+  canRemove,
+  onRemove,
+}: {
+  materialId: string
+  canRemove: (series: CatalogSeries) => boolean
+  onRemove: (series: CatalogSeries) => void
+}) {
+  const sets = useResource(
+    () => catalogApi.materialSeries(materialId, 'parameter_set', 0, SET_PAGE),
+    [materialId]
+  )
+  return (
+    <>
+      <ErrorNotice error={sets.error} />
+      {(sets.data?.items ?? []).map((one) => (
+        <SeriesCard key={one.id} series={one} canRemove={canRemove(one)} onRemove={onRemove} />
+      ))}
+      {sets.data && sets.data.total > sets.data.items.length && (
+        <p className="text-muted-foreground text-xs">
+          앞의 {sets.data.items.length}벌만 보였습니다(전체 {sets.data.total}벌).
+        </p>
+      )}
+    </>
+  )
+}
+
 export function CurvesPanel({
-  series,
+  materialId,
+  total,
   autoLines,
   canRemove,
   onRemove,
 }: {
-  series: CatalogSeries[]
+  materialId: string
+  /** 직접 넣은 곡선 · 산점 벌 수 — 상세의 짧은 머리에서 센다. 머리는 여기서 쪽마다 받는다. */
+  total: number
   autoLines: CurveLine[]
   canRemove: (series: CatalogSeries) => boolean
   onRemove: (series: CatalogSeries) => void
 }) {
-  const curves = pointSets(series)
-  const [shown, setShown] = useState(PAGE)
+  const first = useResource(
+    () => (total > 0 ? catalogApi.materialSeries(materialId, 'points', 0, PAGE) : Promise.resolve(null)),
+    [materialId, total]
+  )
+  const [more, setMore] = useState<CatalogSeries[]>([])
+  const [loading, setLoading] = useState(false)
+  const [moreError, setMoreError] = useState<Error | null>(null)
+  const curves = [...(first.data?.items ?? []), ...more]
+  const known = first.data?.total ?? total
+
+  async function loadMore() {
+    setLoading(true)
+    setMoreError(null)
+    try {
+      const page = await catalogApi.materialSeries(materialId, 'points', curves.length, PAGE)
+      setMore((current) => [...current, ...page.items])
+    } catch (caught) {
+      setMoreError(caught instanceof Error ? caught : new Error('더 받지 못했습니다.'))
+    } finally {
+      setLoading(false)
+    }
+  }
+
   // 화면이 이은 선은 물성 · 축마다 한 판에.
   const panels = new Map<string, CurveLine[]>()
   for (const line of autoLines) {
@@ -378,20 +434,23 @@ export function CurvesPanel({
       <section className="space-y-2">
         <h2 className="text-sm font-semibold">
           직접 넣은 곡선 · 표 · 산점
-          <span className="text-muted-foreground ml-2 text-xs font-normal">{curves.length}벌</span>
+          <span className="text-muted-foreground ml-2 text-xs font-normal">{known}벌</span>
         </h2>
-        {curves.length === 0 ? (
+        <ErrorNotice error={first.error} />
+        {known === 0 ? (
           <p className="text-muted-foreground rounded-md border py-6 text-center text-sm">
             아직 없습니다. 「곡선 입력」 으로 문헌의 곡선 · 표를 한 벌로 넣을 수 있습니다.
           </p>
+        ) : !first.data ? (
+          !first.error && <p className="text-muted-foreground text-xs">벌을 받는 중…</p>
         ) : (
           <>
-            {curves.length > OPEN_FIRST && (
+            {known > OPEN_FIRST && (
               <p className="text-muted-foreground text-xs">
                 앞의 {OPEN_FIRST}벌만 펼쳐 두었습니다 — 나머지는 이름을 누르면 점을 받아 그립니다.
               </p>
             )}
-            {curves.slice(0, shown).map((one, index) => (
+            {curves.map((one, index) => (
               <SeriesCard
                 key={one.id}
                 series={one}
@@ -400,9 +459,10 @@ export function CurvesPanel({
                 initiallyOpen={index < OPEN_FIRST}
               />
             ))}
-            {curves.length > shown && (
-              <Button size="sm" variant="outline" onClick={() => setShown((current) => current + PAGE)}>
-                더 보기 (남은 {curves.length - shown}벌)
+            <ErrorNotice error={moreError} />
+            {known > curves.length && (
+              <Button size="sm" variant="outline" disabled={loading} onClick={() => void loadMore()}>
+                {loading ? '받는 중…' : `더 보기 (남은 ${known - curves.length}벌)`}
               </Button>
             )}
           </>

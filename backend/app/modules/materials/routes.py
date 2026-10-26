@@ -53,6 +53,7 @@ from app.modules.materials.schemas import (
     CascadeDeleteRequest,
     ClassificationOut,
     ConditionUnitOut,
+    CoverageSeriesPointsOut,
     DeclaredApprovalOut,
     DeclaredApprovalRequest,
     DeclaredCatalogOut,
@@ -1716,6 +1717,25 @@ def property_coverage(
     services.get_material(db, user, material_id)  # 가시성 판정
     made = coverage.collect(db, material_id)
     return PropertyCoverageOut.model_validate(made, from_attributes=True)
+
+
+@router.get(
+    "/{material_id}/property-coverage/series/{series_id}",
+    response_model=CoverageSeriesPointsOut,
+)
+def property_coverage_series(
+    material_id: uuid.UUID,
+    series_id: uuid.UUID,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> CoverageSeriesPointsOut:
+    """물성 지도의 **묶인 줄을 펼친다** — 이어진 문헌 재료의 곡선 · 산점 한 벌의 점을 지도와
+    같은 줄 모양으로(축 차례). 지도는 한 벌을 한 줄로 싣는다(점 수 · 범위)."""
+    services.get_material(db, user, material_id)  # 가시성 판정
+    made = coverage.series_points(db, material_id, series_id)
+    if made is None:
+        raise NotFound("MNX-MATERIALS-0065", "이 재료에 이어진 문헌 재료의 벌이 아닙니다.")
+    return CoverageSeriesPointsOut.model_validate(made, from_attributes=True)
 
 
 @router.get("/{material_id}", response_model=MaterialOut)

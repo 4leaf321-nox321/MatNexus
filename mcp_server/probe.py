@@ -48,9 +48,11 @@ import subprocess
 import sys
 import time
 import uuid
+from collections import Counter
 from pathlib import Path
 from typing import Any
 
+import httpx
 from mcp import ClientSession
 from mcp.client.streamable_http import streamable_http_client
 from mcp.shared._httpx_utils import create_mcp_http_client
@@ -141,6 +143,80 @@ def _first(payload: Any, *keys: str) -> str | None:
                 return str(payload[key])
     if isinstance(payload, list) and payload:
         return _first(payload[0], *keys)
+    return None
+
+
+async def _api(path: str, params: dict[str, Any]) -> Any:
+    """**무엇을 부를지 고를 때만** 백엔드를 직접 본다 — 도구 점검은 `call` 이 한다. 실패면 `None`."""
+    headers = {"Authorization": f"Bearer {os.environ.get('MATNEXUS_PAT', '')}"}
+    try:
+        async with httpx.AsyncClient(base_url=API_BASE, headers=headers, timeout=30) as client:
+            got = await client.get(path, params=params)
+    except httpx.HTTPError:
+        return None
+    return got.json() if got.status_code == 200 else None
+
+
+async def pick_fit_material() -> tuple[str | None, str]:
+    """시험 기반 카드 길에 쓸 재료 — **인장 채택 시험이 가장 많은 재료 · 방향**(둘 이상).
+
+    전에는 사람이 `MATNEXUS_PROBE_FIT_MATERIAL` 로 알려 줘야 불렀다. 안 주면 `create_card_from_tests`
+    · `preview_card_fit` 가 늘 「부르지 못한 도구」 에 남았다(2026-10-26). 주면 그것을 쓴다.
+    """
+    given = os.environ.get("MATNEXUS_PROBE_FIT_MATERIAL")
+    if given:
+        return given, os.environ.get("MATNEXUS_PROBE_FIT_ORIENTATION", "MD")
+    runs = await _api(
+        "/test-runs", {"test_type_key": "tensile", "adopted": "true", "limit": 1000}
+    )
+    counted = Counter(
+        (one["material_id"], one.get("orientation") or "MD")
+        for one in (runs or {}).get("items", [])
+        if one.get("material_id")
+    )
+    if not counted:
+        return None, "MD"
+    (material, orientation), count = counted.most_common(1)[0]
+    if count < 2:
+        return None, "MD"
+    print(f"   (고른 재료: 인장 채택 {count}건 · {orientation} · {material})")
+    return str(material), str(orientation)
+
+
+#: 계수 묶음을 찾아볼 키 — 개발 DB 에 많은 차례로. 앞에서 찾으면 멈춘다.
+PARAMETER_KEYS = ("mechanical.prony_relaxation_time", "mechanical.anand_constant")
+
+
+async def pick_parameter_material() -> str | None:
+    """계수 묶음이 있는 **문헌 재료** — 이름 풀기로 변수 하나를 얻어 값 검색으로 찾는다.
+
+    `MATNEXUS_PROBE_PARAM_MATERIAL` 을 주면 그것을 쓴다. 안 주고 못 찾으면 `None` —
+    `adopt_parameter_set` 이 「부르지 못한 도구」 에 남는다.
+    """
+    given = os.environ.get("MATNEXUS_PROBE_PARAM_MATERIAL")
+    if given:
+        return given
+    for key in PARAMETER_KEYS:
+        resolved = await _api("/catalog/properties/resolve", {"q": key, "limit": 1})
+        candidates = (resolved or {}).get("candidates") or []
+        if not candidates or not candidates[0].get("terms"):
+            continue
+        found = await _api(
+            "/catalog/properties/search",
+            {
+                "q": key,
+                "unit": candidates[0]["si_unit"],
+                "term": candidates[0]["terms"][0],
+                "min": -1e30,
+                "max": 1e30,
+                "scope": "catalog",
+                "limit": 5,
+            },
+        )
+        for hit in (found or {}).get("hits", []):
+            if hit.get("world") == "catalog":
+                print(f"   (고른 문헌 재료: {key} · {hit.get('material_name')})")
+                return str(hit["material_id"])
     return None
 
 
@@ -455,14 +531,14 @@ async def sweep(session: ClientSession) -> None:
     await call(session, "how_to_measure", {"property_key": "yield_strength"}, expect_error=True)
     await call(session, "how_to_measure", {"property_key": "mechanical.yield_strength"})
 
-    # **시험 기반 카드 길**: 적합을 견주고, 초안을 미리보기까지 해 본다.
-    #   DP600 은 시편 8개가 붙어 있어 대표 곡선이 나온다(개발 DB).
-    fit_material = os.environ.get("MATNEXUS_PROBE_FIT_MATERIAL")
+    # **시험 기반 카드 길**: 적합을 견주고, 초안을 미리보기까지 해 본다. 재료는 프로브가
+    #   고른다(인장 채택 시험이 가장 많은 재료 · 방향) — 환경 변수로 정해 줄 수도 있다.
+    fit_material, orientation = await pick_fit_material()
     if fit_material:
         await call(
             session,
             "preview_card_fit",
-            {"material_id": fit_material, "test_type": "tensile", "orientation": "MD"},
+            {"material_id": fit_material, "test_type": "tensile", "orientation": orientation},
         )
         # 대표 곡선 기준(ADR 0041) — 하한 · 평균 − 2σ.
         await call(
@@ -471,7 +547,7 @@ async def sweep(session: ClientSession) -> None:
             {
                 "material_id": fit_material,
                 "test_type": "tensile",
-                "orientation": "MD",
+                "orientation": orientation,
                 "basis": "lower",
                 "basis_method": "sd",
                 "basis_k": 2,
@@ -483,7 +559,7 @@ async def sweep(session: ClientSession) -> None:
             {
                 "material_id": fit_material,
                 "test_type": "tensile",
-                "orientation": "MD",
+                "orientation": orientation,
                 "label": "점검용 초안",
                 "dry_run": True,
             },
@@ -774,21 +850,26 @@ async def sweep(session: ClientSession) -> None:
         await call(session, "get_handbook_section", {"section_id": section_id})
 
     # ── 쓰기 — 전부 미리보기 ────────────────────────────────────────────────
-    parameterized = os.environ.get("MATNEXUS_PROBE_PARAM_MATERIAL")
+    parameterized = await pick_parameter_material()
     if parameterized:
-        await call(
+        sets = await call(
             session, "get_catalog_parameter_sets", {"catalog_material_id": parameterized}
         )
-        if material_id:
+        # 받을 벌은 그 재료가 실제로 가진 첫 벌 — 짐작한 키로 부르면 「없다」 만 보고, 벌을 안
+        # 정하면 같은 키의 벌이 여럿일 때 「어느 벌인가」 만 되묻는다(담을 것까지 안 간다).
+        listed = (sets or {}).get("sets") if isinstance(sets, dict) else None
+        first = listed[0] if listed else {}
+        if material_id and first.get("property_key"):
             await call(
                 session,
                 "adopt_parameter_set",
                 {
                     "material_id": material_id,
                     "catalog_material_id": parameterized,
-                    "property_key": os.environ.get(
-                        "MATNEXUS_PROBE_PARAM_KEY", "mechanical.prony_relaxation_time"
-                    ),
+                    "property_key": first["property_key"],
+                    "model": first.get("model") or "",
+                    "set_id": first.get("set_id") or "",
+                    "variant": first.get("variant") or "",
                     "dry_run": True,
                 },
             )

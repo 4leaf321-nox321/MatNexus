@@ -4,7 +4,7 @@
  * 왔다」 를 세려면 표를 끝까지 내려야 했다.
  */
 
-import type { CatalogSeries, CatalogValue } from '@/modules/catalog/api'
+import type { CatalogSeriesBrief, CatalogValue } from '@/modules/catalog/api'
 import { SourceLabel, TierBadge } from '@/modules/catalog/CatalogValueTable'
 import { METHOD_LABELS } from '@/modules/catalog/catalogForms'
 import { sourceRows } from '@/modules/catalog/catalogShape'
@@ -27,7 +27,7 @@ const KIND_LABELS: Record<string, string> = {
   other: '기타',
 }
 
-export function SourcesTable({ values, series = [] }: { values: CatalogValue[]; series?: CatalogSeries[] }) {
+export function SourcesTable({ values, series = [] }: { values: CatalogValue[]; series?: CatalogSeriesBrief[] }) {
   const rows = sourceRows(values, series)
   return (
     <div className="overflow-x-auto rounded-md border">

@@ -10,7 +10,8 @@
     measured   채택된 처리 결과의 스칼라 (재료·물성·방법·조건별로 묶어 평균·표본 수)
                · 묶음 결과 · DMA 온도별 탄성률 표(온도 · 주파수가 조건)
     internal   선언 물성의 점 (재료 층 + 시료 층)
-    catalog    이어진 문헌 재료(`catalog_links`)의 값
+    catalog    이어진 문헌 재료(`catalog_links`)의 값 — 곡선 · 산점 한 벌은 한 줄
+               (점 수 · 범위), 점은 `series_points` 로 펼친다
 
 물성 이름은 문헌 정의 키(`catalog_definitions.key`)를 공용어로 쓴다 — 시험 스칼라는
 `Produced.property_key`, 선언 항목은 `property_links` 로 그 키에 이어진다. 이어지지
@@ -25,6 +26,7 @@
 
 from __future__ import annotations
 
+import statistics
 import uuid
 from collections import defaultdict
 from collections.abc import Sequence
@@ -34,6 +36,7 @@ from typing import Any
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.modules.catalog import local_definitions
 from app.modules.catalog.models import (
     CatalogDefinition,
     CatalogLink,
@@ -65,9 +68,25 @@ class Entry:
     method: str | None
     """잰 값의 방법(스칼라 키·계산 옵션) · 선언의 출처 · 문헌의 출처 요약."""
     ref_kind: str
-    """`test_run` · `material` · `sample` · `catalog_value` — 누르면 어디로 가나."""
+    """`test_run` · `material` · `sample` · `catalog_value` · `catalog_series` — 누르면
+    어디로 가나."""
     ref_id: str
     ref_label: str
+    low_si: float | None = None
+    high_si: float | None = None
+    """묶인 값의 범위(SI) — 문헌 한 벌을 한 줄로 묶었을 때만(`series_id`)."""
+    series_id: str | None = None
+    """문헌 곡선 · 산점 한 벌을 묶은 줄이면 그 벌. 점은 `series_points` 로 펼친다."""
+    series_kind: str | None = None
+    series_label: str | None = None
+    condition_ranges: dict[str, tuple[float, float]] = field(default_factory=dict)
+    """점마다 갈리는 표준 조건의 범위(SI). 모든 점이 같은 조건은 `conditions` 에 선다."""
+    axis_label: str | None = None
+    """벌의 축이 표준 조건이 아닐 때(수명 · 변형률 …) 그 이름 — 축 단위로 `axis_low~axis_high`.
+    펼친 점 하나면 `axis_low == axis_high` 가 그 점의 축 값이다."""
+    axis_unit: str | None = None
+    axis_low: float | None = None
+    axis_high: float | None = None
 
 
 @dataclass(frozen=True)
@@ -309,7 +328,7 @@ _TABLE_PROPERTIES = (
 )
 
 
-def _thin(rows: list[dict[str, Any]], limit: int) -> list[dict[str, Any]]:
+def _thin[T](rows: list[T], limit: int) -> list[T]:
     """양 끝을 남기고 고르게 `limit` 줄 — 온도 범위가 지도에서 줄지 않게."""
     if len(rows) <= limit:
         return rows
@@ -407,44 +426,185 @@ def group_entries(db: Session, material_id: uuid.UUID) -> dict[str, list[Entry]]
     return made
 
 
-def _thin_catalog_series(
-    db: Session, values: Sequence[Any]
-) -> tuple[set[uuid.UUID], dict[uuid.UUID, str]]:
-    """문헌의 **이어진 한 벌**(ADR 0067)은 물성마다 지도에 `TABLE_ROWS_ON_MAP` 점까지.
+#: 지도에서 한 줄로 묶는 벌 — 축을 따라 이어진 점들이다. 계수 묶음의 항(Anand 의 A · h0 …)은
+#: 서로 다른 변수라 범위로 묶으면 뜻이 없어 낱값처럼 선다.
+GROUPED_KINDS = ("curve", "scatter")
 
-    응력-변형률 곡선 한 벌이 수백 점이라 다 세우면 지도가 그 곡선으로 덮인다 — 온도별 표와
-    같은 규칙으로 축을 따라 양 끝을 남기고 고르게 솎는다. `(남길 값 id, 벌 → 솎은 내역)`.
+#: 벌 하나를 펼칠 때 서버가 주는 점의 상한 — 축을 따라 양 끝을 남기고 고르게 솎는다.
+SERIES_POINTS_ON_MAP = 200
+
+#: 지도에 쓰는 문헌 값의 칸 — 점이 수천 개인 재료에서 ORM 객체를 짓는 것이 시간의 절반이었다.
+_CATALOG_COLUMNS = (
+    CatalogValue.id,
+    CatalogValue.series_id,
+    CatalogValue.property_key,
+    CatalogValue.value_num,
+    CatalogValue.quality_tier,
+    CatalogValue.conditions,
+    CatalogValue.source_detail,
+    CatalogMaterial.name.label("material_name"),
+)
+
+
+def _catalog_filters() -> tuple[Any, ...]:
+    return (
+        CatalogValue.value_num.is_not(None),
+        # 원본에서 빠진 값은 「문헌이 채운다」 의 근거가 아니다(`mt_import.mark_missing`).
+        CatalogValue.source_missing_at.is_(None),
+    )
+
+
+def _linked_catalog(material_id: uuid.UUID) -> Any:
+    return select(CatalogLink.catalog_material_id).where(
+        CatalogLink.material_id == material_id
+    )
+
+
+def _number_at(value: Any, key: str | None) -> float | None:
+    raw = (value.conditions or {}).get(key or "")
+    if isinstance(raw, int | float) and not isinstance(raw, bool):
+        return float(raw)
+    return None
+
+
+@dataclass(frozen=True)
+class _Axis:
+    """벌의 축이 **표준 조건이 아닐 때만** — 수명 · 변형률처럼. 온도 축은 조건으로 선다."""
+
+    key: str
+    label: str
+    unit: str | None
+
+
+def _axis_of(x_key: str | None, fields: dict[str, dict[str, Any]]) -> _Axis | None:
+    if not x_key or _catalog_condition({x_key: 1.0}):
+        return None
+    found = fields.get(x_key) or {}
+    return _Axis(key=x_key, label=str(found.get("label") or x_key), unit=found.get("unit"))
+
+
+def _condition_fields() -> dict[str, dict[str, Any]]:
+    return {str(one["key"]): one for one in local_definitions.condition_fields()}
+
+
+def _catalog_entry(value: Any, axis: _Axis | None = None) -> Entry:
+    """문헌 값 하나 — 낱값이거나 펼친 벌의 점 하나(그때는 축 값이 `axis_low == axis_high`)."""
+    at = _number_at(value, axis.key) if axis is not None else None
+    return Entry(
+        origin="catalog",
+        tier=int(value.quality_tier),
+        value_si=float(value.value_num),
+        count=1,
+        spread_si=None,
+        conditions=_catalog_condition(value.conditions),
+        method=value.source_detail or None,
+        ref_kind="catalog_value",
+        ref_id=str(value.id),
+        ref_label=value.material_name,
+        axis_label=axis.label if axis is not None and at is not None else None,
+        axis_unit=axis.unit if axis is not None and at is not None else None,
+        axis_low=at,
+        axis_high=at,
+    )
+
+
+def _series_entry(head: CatalogSeries, points: Sequence[Any], axis: _Axis | None) -> Entry:
+    """**문헌 한 벌을 한 줄로**(ADR 0072 후속) — 점 수 · 값 범위 · 가운데값 · 조건 · 축 범위.
+
+    전에는 점 하나가 한 줄이고 벌마다 20점까지만 솎았다. 1~몇 점짜리 산점이 수백 벌인 재료
+    (Ti-6Al-4V L-PBF)는 솎을 것이 없어, 이어진 사내 재료의 지도가 문헌 칸 7,242개였다 — AI 도
+    그 지도를 그대로 받는다(2026-10-26 실측). 모든 점이 같은 조건은 `conditions`, 점마다 갈리는
+    조건은 `condition_ranges` 에 선다.
     """
-    kept = {value.id for value in values if value.series_id is None}
-    grouped: dict[tuple[uuid.UUID, str], list[Any]] = defaultdict(list)
-    for value in values:
-        if value.series_id is not None:
-            grouped[(value.series_id, value.property_key)].append(value)
-    if not grouped:
-        return kept, {}
-    axes = {
-        series.id: series.x_key
-        for series in db.scalars(
-            select(CatalogSeries).where(
-                CatalogSeries.id.in_({series_id for series_id, _ in grouped})
-            )
+    numbers = sorted(float(one.value_num) for one in points)
+    found = [_catalog_condition(one.conditions) for one in points]
+    fixed: dict[str, float] = {}
+    ranges: dict[str, tuple[float, float]] = {}
+    for key in sorted({key for one in found for key in one}):
+        seen = [one[key] for one in found if key in one]
+        if len(seen) == len(found) and min(seen) == max(seen):
+            fixed[key] = seen[0]
+        else:
+            ranges[key] = (min(seen), max(seen))
+    xs = (
+        [x for x in (_number_at(one, axis.key) for one in points) if x is not None]
+        if axis
+        else []
+    )
+    first = points[0]
+    return Entry(
+        origin="catalog",
+        tier=int(head.quality_tier),
+        value_si=statistics.median(numbers),
+        count=len(numbers),
+        spread_si=None,
+        conditions=fixed,
+        method=head.source_detail or first.source_detail or None,
+        ref_kind="catalog_series",
+        ref_id=str(head.id),
+        ref_label=first.material_name,
+        low_si=numbers[0],
+        high_si=numbers[-1],
+        series_id=str(head.id),
+        series_kind=head.kind,
+        series_label=head.label,
+        condition_ranges=ranges,
+        axis_label=axis.label if axis is not None and xs else None,
+        axis_unit=axis.unit if axis is not None and xs else None,
+        axis_low=min(xs) if xs else None,
+        axis_high=max(xs) if xs else None,
+    )
+
+
+@dataclass(frozen=True)
+class SeriesPoints:
+    """벌 하나를 펼친 것 — 물성마다 점들(축 차례). `shown < total` 이면 솎았다."""
+
+    series_id: str
+    label: str
+    total: int
+    shown: int
+    properties: tuple[PropertyRow, ...]
+
+
+def series_points(
+    db: Session, material_id: uuid.UUID, series_id: uuid.UUID
+) -> SeriesPoints | None:
+    """지도의 묶인 줄을 **펼친다** — 그 벌의 점을 낱값 줄 모양으로. 이 재료에 이어진 문헌
+    재료의 벌이 아니면 `None`(지도에 없던 벌을 이 길로 읽지 않는다).
+
+    점이 `SERIES_POINTS_ON_MAP` 를 넘으면 물성마다 축을 따라 양 끝을 남기고 고르게 솎는다 —
+    곡선 전부는 문헌 재료의 「곡선 · 표」 탭에 있다.
+    """
+    head = db.scalar(
+        select(CatalogSeries).where(
+            CatalogSeries.id == series_id,
+            CatalogSeries.material_id.in_(_linked_catalog(material_id)),
         )
+    )
+    if head is None:
+        return None
+    rows = db.execute(
+        select(*_CATALOG_COLUMNS)
+        .join(CatalogMaterial, CatalogMaterial.id == CatalogValue.material_id)
+        .where(CatalogValue.series_id == head.id, *_catalog_filters())
+    ).all()
+    by_key: dict[str, list[Any]] = defaultdict(list)
+    for value in sorted(rows, key=lambda one: _number_at(one, head.x_key) or 0.0):
+        by_key[value.property_key].append(value)
+    axis = _axis_of(head.x_key, _condition_fields())
+    share = max(SERIES_POINTS_ON_MAP // max(len(by_key), 1), 2)
+    picked = {
+        key: [_catalog_entry(one, axis) for one in _thin(values, share)]
+        for key, values in by_key.items()
     }
-    thinned: dict[uuid.UUID, str] = {}
-    for (series_id, _), points in grouped.items():
-        axis = axes.get(series_id)
-
-        def at(value: Any, axis: str | None = axis) -> float:
-            raw = (value.conditions or {}).get(axis or "")
-            return float(raw) if isinstance(raw, int | float) else 0.0
-
-        points.sort(key=at)
-        rows = [{"id": one.id} for one in points]
-        picked = _thin(rows, TABLE_ROWS_ON_MAP)
-        kept.update(row["id"] for row in picked)
-        if len(picked) < len(rows):
-            thinned[series_id] = f"곡선 {len(rows)}점 중 {len(picked)}점"
-    return kept, thinned
+    return SeriesPoints(
+        series_id=str(head.id),
+        label=head.label,
+        total=len(rows),
+        shown=sum(len(entries) for entries in picked.values()),
+        properties=_property_rows(db, picked, keep_order=True),
+    )
 
 
 def collect(db: Session, material_id: uuid.UUID) -> Coverage:
@@ -525,75 +685,67 @@ def collect(db: Session, material_id: uuid.UUID) -> Coverage:
     if unmapped_items:
         unmapped["items"] = sorted(unmapped_items)
 
-    # ── 이어진 문헌 재료의 값
-    linked = select(CatalogLink.catalog_material_id).where(
-        CatalogLink.material_id == material_id
-    )
-    # 지도에 쓰는 칸만 읽는다 — 점이 수천 개인 재료에서 ORM 객체를 짓는 것이 시간의 절반이었다.
+    # ── 이어진 문헌 재료의 값 — 곡선 · 산점 한 벌은 한 줄로
     catalog_rows = db.execute(
-        select(
-            CatalogValue.id,
-            CatalogValue.series_id,
-            CatalogValue.property_key,
-            CatalogValue.value_num,
-            CatalogValue.quality_tier,
-            CatalogValue.conditions,
-            CatalogValue.source_detail,
-            CatalogMaterial.name.label("material_name"),
-        )
+        select(*_CATALOG_COLUMNS)
         .join(CatalogMaterial, CatalogMaterial.id == CatalogValue.material_id)
-        .where(
-            CatalogValue.material_id.in_(linked),
-            CatalogValue.value_num.is_not(None),
-            # 원본에서 빠진 값은 「문헌이 채운다」 의 근거가 아니다(`mt_import.mark_missing`).
-            CatalogValue.source_missing_at.is_(None),
-        )
+        .where(CatalogValue.material_id.in_(_linked_catalog(material_id)), *_catalog_filters())
     ).all()
-    kept, thinned = _thin_catalog_series(db, catalog_rows)
+    in_series: dict[tuple[uuid.UUID, str], list[Any]] = defaultdict(list)
     for value in catalog_rows:
-        if value.id not in kept:
-            continue
-        method = value.source_detail or None
-        if value.series_id is not None and value.series_id in thinned:
-            said = thinned[value.series_id]
-            method = f"{method} · {said}" if method else said
-        by_property[value.property_key].append(
-            Entry(
-                origin="catalog",
-                tier=int(value.quality_tier),
-                value_si=float(value.value_num),
-                count=1,
-                spread_si=None,
-                conditions=_catalog_condition(value.conditions),
-                method=method,
-                ref_kind="catalog_value",
-                ref_id=str(value.id),
-                ref_label=value.material_name,
+        if value.series_id is None:
+            by_property[value.property_key].append(_catalog_entry(value))
+        else:
+            in_series[(value.series_id, value.property_key)].append(value)
+    if in_series:
+        heads = {
+            one.id: one
+            for one in db.scalars(
+                select(CatalogSeries).where(
+                    CatalogSeries.id.in_({series_id for series_id, _ in in_series})
+                )
             )
-        )
+        }
+        fields = _condition_fields()
+        for (series_id, key), points in in_series.items():
+            head = heads[series_id]
+            if head.kind in GROUPED_KINDS:
+                axis = _axis_of(head.x_key, fields)
+                by_property[key].append(_series_entry(head, points, axis))
+            else:
+                by_property[key].extend(_catalog_entry(one) for one in points)
 
-    # ── 이름·단위
+    return Coverage(
+        material_id=str(material_id),
+        properties=_property_rows(db, by_property),
+        counts=_counts(db, material_id, by_property),
+        unmapped=unmapped,
+    )
+
+
+def _entry_order(one: Entry) -> tuple[int, str, float]:
+    return (one.tier, one.origin, one.value_si)
+
+
+def _property_rows(
+    db: Session, by_property: dict[str, list[Entry]], *, keep_order: bool = False
+) -> tuple[PropertyRow, ...]:
+    """물성마다 이름 · 단위를 붙인다. 줄은 좋은 등급 먼저 — 펼친 점은 축 차례 그대로."""
     keys = sorted(by_property)
     defs = {
         one.key: one
         for one in db.scalars(select(CatalogDefinition).where(CatalogDefinition.key.in_(keys)))
     }
-    properties = tuple(
+    return tuple(
         PropertyRow(
             key=key,
             name=defs[key].name if key in defs else key,
             si_unit=defs[key].si_unit if key in defs else None,
             entries=tuple(
-                sorted(by_property[key], key=lambda one: (one.tier, one.origin, one.value_si))
+                by_property[key] if keep_order else sorted(by_property[key], key=_entry_order)
             ),
         )
         for key in keys
-    )
-    return Coverage(
-        material_id=str(material_id),
-        properties=properties,
-        counts=_counts(db, material_id, by_property),
-        unmapped=unmapped,
     )
 
 

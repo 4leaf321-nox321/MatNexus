@@ -9,6 +9,7 @@ export type ApprovalAsk = components['schemas']['ApprovalAskOut']
 export type ApprovalAskStatus = components['schemas']['ApprovalAskStatusOut']
 export type PropertyCoverage = components['schemas']['PropertyCoverageOut']
 export type CoverageEntry = components['schemas']['CoverageEntryOut']
+export type CoverageSeriesPoints = components['schemas']['CoverageSeriesPointsOut']
 export type MaterialPage = components['schemas']['Page_MaterialOut_']
 export type MaterialTreeSummary = components['schemas']['MaterialTreeSummaryOut']
 export type Sample = components['schemas']['SampleOut']
@@ -220,6 +221,9 @@ export const materialsApi = {
   /** 물성 지도 — 어떤 물성이 어떤 조건에 어떤 등급으로 있나(시험·선언·문헌 한 장). */
   propertyCoverage: (id: string) =>
     api.get<PropertyCoverage>(`/materials/${id}/property-coverage`),
+  /** 지도에서 한 줄로 묶인 문헌 곡선 · 산점 한 벌의 점 — 펼칠 때 받는다. */
+  coverageSeries: (id: string, seriesId: string) =>
+    api.get<CoverageSeriesPoints>(`/materials/${id}/property-coverage/series/${seriesId}`),
   /** 이 재료가 문헌에서 받아 온 모델 파라미터 벌들(ADR 0029). */
   parameterSets: (id: string) => api.get<ParameterSet[]>(`/materials/${id}/parameter-sets`),
   /** 소속 거르기의 선택지. 내가 볼 수 있는 부서. */

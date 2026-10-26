@@ -193,6 +193,10 @@ class Test조건_칸:
         assert {"loading_mode", "stress_basis", "aging_hours", "weld_zone"} <= keys
         assert "aging_weeks" not in keys
         assert keys == condition_keys()
+        # 로그 축 표지 — 화면의 축 이름표가 이 목록에서 만들어진다(axis_meta.mjs).
+        scale = {one["key"]: one.get("scale") for one in got.json()}
+        assert scale["delta_k_pa_sqrt_m"] == "log" and scale["cycles"] == "log"
+        assert scale["temperature_k"] is None
 
 
 class Test새_키와_축:

@@ -380,6 +380,28 @@ class CatalogSeriesOut(BaseModel):
     """반입 묶음으로 들어왔으면 그 묶음(ADR 0068)."""
 
 
+class CatalogSeriesBriefOut(BaseModel):
+    """벌 머리의 **셈에 쓰는 칸만**(ADR 0073 후속) — 물성 요약 · 출처 · 등급 셈이 이것으로
+    선다.
+
+    이름 · 메모 · 공통 조건 · 출처 설명은 안 싣는다 — 벌이 555개인 재료(Ti-6Al-4V L-PBF)에서
+    머리만 872 KB 였고 그 절반이 메모와 조건이었다(2026-10-26 실측). 그 칸은 화면이 벌을 보일
+    때 `GET /catalog/materials/{id}/series` 로 쪽마다 받는다."""
+
+    id: uuid.UUID
+    kind: str
+    x_key: str | None
+    x_unit: str | None = None
+    x_min: float | None = None
+    x_max: float | None = None
+    columns: list[CatalogSeriesColumnOut]
+    point_count: int
+    method: str
+    quality_tier: int
+    source: CatalogSourceOut | None
+    source_id: uuid.UUID | None = None
+
+
 class CatalogMaterialDetailOut(BaseModel):
     id: uuid.UUID
     name: str
@@ -402,7 +424,11 @@ class CatalogMaterialDetailOut(BaseModel):
     벌의 점은 `GET /catalog/series/{id}/points` 로 따로 받는다."""
     series: list[CatalogSeriesOut] = Field(default_factory=list)
     """직접 넣은 **이어진 값 한 벌**들(ADR 0067). 점 수 · 값 범위는 머리에 있다. 값 검색 ·
-    대표값은 여전히 그 점을 낱값처럼 읽는다."""
+    대표값은 여전히 그 점을 낱값처럼 읽는다. `series_brief=true` 로 받으면 비고
+    `series_brief` 가 선다."""
+    series_brief: list[CatalogSeriesBriefOut] = Field(default_factory=list)
+    """`series_brief=true` 로 받았을 때만 — 벌마다 셈에 쓰는 칸만(ADR 0073 후속). 머리 전부는
+    `GET /catalog/materials/{id}/series` 로 쪽마다."""
     sources: list[CatalogSourceOut] = Field(default_factory=list)
     """`source_once=true` 로 받았을 때만 — 값 · 벌이 쓰는 출처를 한 번씩(ADR 0073). 그때
     값 · 벌의 `source` 는 비고 `source_id` 로 잇는다. 안 주면 비고 `source` 가 값마다 온다."""
@@ -1203,3 +1229,6 @@ class CatalogConditionFieldOut(BaseModel):
     unit: str | None = None
     values: list[str] = Field(default_factory=list)
     note: str | None = None
+    scale: str | None = None
+    """`log` 면 자릿수로 펼쳐 보는 축(주파수 · 수명 · ΔK …). 화면의 축 이름표가 이 목록에서
+    만들어진다(`frontend/scripts/axis_meta.mjs`)."""

@@ -23,7 +23,7 @@ import { AddValueDialog } from '@/modules/catalog/AddValueDialog'
 import { AdoptDialog } from '@/modules/catalog/AdoptDialog'
 import { CatalogValueTable, MissingBadge, TierBadge } from '@/modules/catalog/CatalogValueTable'
 import { CreateMaterialDialog } from '@/modules/catalog/CreateMaterialDialog'
-import { CurvesPanel, SeriesCard } from '@/modules/catalog/CurvesPanel'
+import { CurvesPanel, ParameterSetCards } from '@/modules/catalog/CurvesPanel'
 import { ParameterSetsSection } from '@/modules/catalog/ParameterSetsSection'
 import { PropertySummary } from '@/modules/catalog/PropertySummary'
 import type { CatalogTab } from '@/modules/catalog/PropertySummary'
@@ -77,6 +77,8 @@ export default function CatalogMaterialPage() {
   const [units, setUnits] = useUnitMode()
   const { user } = useAuth()
   const [removeError, setRemoveError] = useState<Error | null>(null)
+  // 벌 머리는 탭이 쪽마다 받는다 — 벌을 넣거나 지우면 처음부터 다시 받게 새로 세운다.
+  const [seriesVersion, setSeriesVersion] = useState(0)
   const [params, setParams] = useSearchParams()
   const asked = params.get('tab') as CatalogTab | null
   const tab: CatalogTab = asked && TABS.includes(asked) ? asked : 'summary'
@@ -93,7 +95,8 @@ export default function CatalogMaterialPage() {
   }
 
   const values = useMemo(() => item?.values ?? [], [item])
-  const series = useMemo(() => item?.series ?? [], [item])
+  // 벌 머리는 셈에 쓰는 칸만 온다(ADR 0073 후속) — 이름 · 메모 · 조건은 탭이 쪽마다 받는다.
+  const series = useMemo(() => item?.series_brief ?? [], [item])
   const autoLines = useMemo(() => autoCurves(values), [values])
   const groups = useMemo(() => propertyGroups(values, autoLines, series), [values, autoLines, series])
   const tiers = tierCounts(values, series)
@@ -134,6 +137,7 @@ export default function CatalogMaterialPage() {
     setRemoveError(null)
     try {
       await catalogApi.deleteSeries(one.id)
+      setSeriesVersion((current) => current + 1)
       detail.reload()
     } catch (caught) {
       setRemoveError(caught instanceof Error ? caught : new Error('지우지 못했습니다.'))
@@ -150,7 +154,7 @@ export default function CatalogMaterialPage() {
   }
 
   const curveSets = series.filter((one) => one.kind === 'curve' || one.kind === 'scatter').length
-  const parameterSets = series.filter((one) => one.kind === 'parameter_set')
+  const parameterSets = series.filter((one) => one.kind === 'parameter_set').length
 
   return (
     <div className="space-y-4">
@@ -264,7 +268,9 @@ export default function CatalogMaterialPage() {
           </TabsContent>
           <TabsContent value="curves" className="mt-3 space-y-6">
             <CurvesPanel
-              series={series}
+              key={seriesVersion}
+              materialId={id}
+              total={curveSets}
               autoLines={autoLines}
               canRemove={canRemoveSeries}
               onRemove={(one) => void removeSeries(one)}
@@ -278,14 +284,14 @@ export default function CatalogMaterialPage() {
           <TabsContent value="sets" className="mt-3 space-y-3">
             {/* **직접 넣은 계수 묶음**은 머리째 보이고 지울 수 있다. 아래 목록은 이관해 온 것까지
                 값의 `set_id` 로 묶은 것이라 같은 벌이 거기에도 선다. */}
-            {parameterSets.map((one) => (
-              <SeriesCard
-                key={one.id}
-                series={one}
-                canRemove={canRemoveSeries(one)}
+            {parameterSets > 0 && (
+              <ParameterSetCards
+                key={seriesVersion}
+                materialId={id}
+                canRemove={canRemoveSeries}
                 onRemove={(target) => void removeSeries(target)}
               />
-            ))}
+            )}
             <ParameterSetsSection materialId={id} />
           </TabsContent>
           <TabsContent value="sources" className="mt-3">
@@ -329,6 +335,7 @@ export default function CatalogMaterialPage() {
           onDone={(message) => {
             setAddingSeries(false)
             setAdded(message)
+            setSeriesVersion((current) => current + 1)
             detail.reload()
             openTab('curves')
           }}

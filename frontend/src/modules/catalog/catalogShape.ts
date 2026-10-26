@@ -16,7 +16,8 @@
  */
 
 import { fmtConditions, isBookkeeping } from '@/modules/catalog/api'
-import type { CatalogSeries, CatalogSeriesPoint, CatalogValue } from '@/modules/catalog/api'
+import { AXIS_META } from '@/modules/catalog/axisMeta'
+import type { CatalogSeries, CatalogSeriesBrief, CatalogSeriesPoint, CatalogValue } from '@/modules/catalog/api'
 
 type Source = NonNullable<CatalogValue['source']>
 
@@ -27,56 +28,11 @@ export const MIN_CURVE_POINTS = 3
 const NOT_AXIS = new Set(['assumption', 'model', 'set_id', 'n_terms'])
 
 /**
- * 축 키 → [이름, SI 단위]. 단위는 표시 단위가 아니라 **저장 단위**다 — 표시는 `shared/units`
- * 표가 정한다(K → °C). 모르는 축은 키 그대로 · 단위 없이 그린다.
+ * 축 키 → [이름, 저장 단위] · 로그 축 — **문헌 조건 칸 목록(서버 씨앗)에서 만든 표**다(`axisMeta.ts`,
+ * 2026-10-26). 전에는 여기 손으로 따로 적어, 서버 목록에 ΔK 를 더해도 화면은 키 이름을 그대로 보였다.
+ * 모르는 축은 키 그대로 · 단위 없이 그린다.
  */
-export const AXIS_META: Record<string, [string, string | null]> = {
-  temperature_k: ['온도', 'K'],
-  temperature_c: ['온도', '°C'],
-  strain_pct: ['변형률', '%'],
-  strain: ['변형률', null],
-  strain_rate_s: ['변형률 속도', '1/s'],
-  strain_rate_1_s: ['변형률 속도', '1/s'],
-  frequency_hz: ['주파수', 'Hz'],
-  time_s: ['시간', 's'],
-  duration_h: ['시간', 'h'],
-  aging_hours: ['노화 시간', 'h'],
-  aging_days: ['노화 일수', null],
-  wavelength_nm: ['파장', 'nm'],
-  wavelength_m: ['파장', 'm'],
-  humidity_pct: ['습도', '%'],
-  humidity_rh: ['습도', '%'],
-  thickness_m: ['두께', 'm'],
-  thickness_um: ['두께', 'µm'],
-  depth_um: ['깊이', 'µm'],
-  load_n: ['하중', 'N'],
-  cycles: ['수명(반복수)', null],
-  // 공개 피로 반입의 축(ADR 0071) — 이름은 문헌 조건 칸 목록(`condition-fields.json`)과 같게.
-  // ΔK 는 화면 단위 표의 `Pa.m0.5` 로 적어야 MPa·m^0.5 로 보인다.
-  delta_k_pa_sqrt_m: ['응력확대계수 범위 ΔK', 'Pa.m0.5'],
-  stress_ratio_R: ['응력비 R', null],
-  strain_ratio_R: ['변형률비 R', null],
-  strain_amplitude: ['변형률 진폭', null],
-  mean_stress_mpa: ['평균 응력', 'MPa'],
-  hold_time_s: ['유지 시간', 's'],
-  thickness_mm: ['두께', 'mm'],
-  secant_strain_pct: ['할선 변형률', '%'],
-  aging_temperature_k: ['노화 온도', 'K'],
-  life_fraction: ['수명 비율', null],
-  kt: ['응력집중계수 Kt', null],
-  prior_max_strain_pct: ['앞선 최대 변형률', '%'],
-  mixing_time_min: ['혼합 시간', 'min'],
-}
-
-/** 자릿수로 펼쳐 보는 축 — 속도 · 주파수 · 시간 · 수명 · ΔK 는 몇 자리에 걸쳐 잰다. */
-export const LOG_AXES = new Set([
-  'strain_rate_s',
-  'strain_rate_1_s',
-  'frequency_hz',
-  'time_s',
-  'cycles',
-  'delta_k_pa_sqrt_m',
-])
+export { AXIS_META, LOG_AXES } from '@/modules/catalog/axisMeta'
 
 /**
  * 값이 **두 자릿수 넘게** 걸치는가 — 그러면 세로도 자릿수로 그린다. 균열 성장률(da/dN)은
@@ -105,18 +61,18 @@ function canBeAxis(key: string): boolean {
 }
 
 /** 점이 상세에 안 실리는 벌(곡선 · 산점) — 계수 묶음의 항은 값 목록에 그대로 있다. */
-export function pointSets(series: CatalogSeries[]): CatalogSeries[] {
+export function pointSets<T extends CatalogSeriesBrief>(series: T[]): T[] {
   return series.filter((one) => one.kind === 'curve' || one.kind === 'scatter')
 }
 
 /** 값 목록 가운데 벌의 점이 아닌 것 — 점은 벌 머리의 수로 센다(대표로 실린 점을 두 번 세지 않게). */
-function ownValues(values: CatalogValue[], series: CatalogSeries[]): CatalogValue[] {
+function ownValues(values: CatalogValue[], series: CatalogSeriesBrief[]): CatalogValue[] {
   const ids = new Set(pointSets(series).map((one) => one.id))
   return values.filter((value) => !value.series_id || !ids.has(value.series_id))
 }
 
 /** 값 수 — 낱값 · 계수 항에 곡선 · 산점의 점까지. */
-export function valueTotal(values: CatalogValue[], series: CatalogSeries[]): number {
+export function valueTotal(values: CatalogValue[], series: CatalogSeriesBrief[]): number {
   return (
     ownValues(values, series).length +
     pointSets(series).reduce((sum, one) => sum + one.point_count, 0)
@@ -124,7 +80,7 @@ export function valueTotal(values: CatalogValue[], series: CatalogSeries[]): num
 }
 
 /** 직접 넣은 곡선의 선 수 — 열마다 하나(점이 있는 열만). 산점은 선이 아니다. */
-export function seriesLineCount(series: CatalogSeries[], propertyKey?: string): number {
+export function seriesLineCount(series: CatalogSeriesBrief[], propertyKey?: string): number {
   return series
     .filter((one) => one.kind === 'curve' && one.x_key)
     .flatMap((one) => one.columns)
@@ -170,7 +126,7 @@ export interface PropertyGroup {
 export function propertyGroups(
   values: CatalogValue[],
   autoLines: CurveLine[] = [],
-  series: CatalogSeries[] = []
+  series: CatalogSeriesBrief[] = []
 ): PropertyGroup[] {
   const byKey = new Map<string, CatalogValue[]>()
   for (const value of values) {
@@ -180,7 +136,7 @@ export function propertyGroups(
   }
   const own = new Set(ownValues(values, series).map((one) => one.id))
   const sets = pointSets(series)
-  const columns = new Map<string, { set: CatalogSeries; column: CatalogSeries['columns'][number] }[]>()
+  const columns = new Map<string, { set: CatalogSeriesBrief; column: CatalogSeriesBrief['columns'][number] }[]>()
   for (const set of sets) {
     for (const column of set.columns) {
       const list = columns.get(column.property_key) ?? []
@@ -449,7 +405,7 @@ export interface SourceRow {
  * 출처 하나에 한 줄 — 값이 많은 출처부터. 출처 없는 값이 있으면 그것도 한 줄로 선다. 곡선 · 산점의
  * 점은 벌 머리로 센다(출처 · 등급 · 방법이 벌 전체로 하나다).
  */
-export function sourceRows(values: CatalogValue[], series: CatalogSeries[] = []): SourceRow[] {
+export function sourceRows(values: CatalogValue[], series: CatalogSeriesBrief[] = []): SourceRow[] {
   const rows = new Map<
     string,
     { source: Source | null; count: number; properties: Set<string>; tiers: Set<number>; methods: Set<string> }
@@ -487,7 +443,7 @@ export function sourceRows(values: CatalogValue[], series: CatalogSeries[] = [])
 }
 
 /** 등급마다 값 수 — 곡선 · 산점의 점까지. */
-export function tierCounts(values: CatalogValue[], series: CatalogSeries[] = []): Map<number, number> {
+export function tierCounts(values: CatalogValue[], series: CatalogSeriesBrief[] = []): Map<number, number> {
   const counts = new Map<number, number>()
   const add = (tier: number, count: number) => counts.set(tier, (counts.get(tier) ?? 0) + count)
   for (const value of ownValues(values, series)) add(value.quality_tier, 1)

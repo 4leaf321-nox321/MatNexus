@@ -6,7 +6,7 @@
 열 단위는 정의 단위로           GPa 로 넣어도 Pa 로 — 값 하나와 같은 검사
 계수 묶음은 항의 단위 그대로     Anand 처럼 무차원 키의 항은 환산하지 않는다(ADR 0029)
 지우기는 넣은 사람 · 관리자      점과 함께, 감사에 남는다
-지도는 한 벌에 20점까지          응력-변형률 수백 점이 지도를 덮지 않는다
+지도는 한 벌이 한 줄            점 수 · 범위로, 펼치면 점(200점까지) — 지도를 덮지 않는다
 """
 
 from __future__ import annotations
@@ -31,7 +31,7 @@ from app.modules.catalog.models import (
 )
 from app.modules.materials.models import Material
 from app.modules.workspaces.models import Workspace
-from app.shared.coverage import TABLE_ROWS_ON_MAP
+from app.shared.coverage import SERIES_POINTS_ON_MAP
 
 SOURCE = {"kind": "journal", "title": "SAC305 고온 인장", "year": 2014}
 
@@ -360,24 +360,26 @@ class Test지우기:
 
 
 class Test물성_지도:
-    def test_한_벌은_양끝을_남기고_솎는다(
-        self,
-        client: TestClient,
-        db: Session,
-        admin_headers: dict[str, str],
-        lit: CatalogMaterial,
-    ) -> None:
-        mine = Material(
+    """한 벌은 지도에서 한 줄이고(점 수 · 범위), 펼치면 점이 낱값 줄 모양으로 선다."""
+
+    @pytest.fixture
+    def mine(self, db: Session, lit: CatalogMaterial) -> Material:
+        made = Material(
             record_name="사내 SAC305", family="Metal", category="Solder", grade="SAC305"
         )
-        db.add(mine)
+        db.add(made)
         db.flush()
-        db.add(CatalogLink(material_id=mine.id, catalog_material_id=lit.id))
+        db.add(CatalogLink(material_id=made.id, catalog_material_id=lit.id))
         db.commit()
-        rows = [[float(index), 100.0 + index] for index in range(50)]
+        return made
+
+    def _strain_curve(
+        self, client: TestClient, headers: dict[str, str], lit: CatalogMaterial, count: int
+    ) -> str:
+        rows = [[float(index), 100.0 + index] for index in range(count)]
         made = _post(
             client,
-            admin_headers,
+            headers,
             lit,
             _curve(
                 label="응력-변형률",
@@ -390,13 +392,109 @@ class Test물성_지도:
             ),
         )
         assert made.status_code == 201, made.text
-        coverage = client.get(
-            f"/api/materials/{mine.id}/property-coverage", headers=admin_headers
+        return str(made.json()["series"]["id"])
+
+    def _entries(
+        self, client: TestClient, headers: dict[str, str], mine: Material, key: str
+    ) -> list[dict[str, Any]]:
+        coverage = client.get(f"/api/materials/{mine.id}/property-coverage", headers=headers)
+        assert coverage.status_code == 200, coverage.text
+        rows: dict[str, Any] = {one["key"]: one for one in coverage.json()["properties"]}
+        entries: list[dict[str, Any]] = rows[key]["entries"]
+        return entries
+
+    def test_한_벌은_한_줄_점_수와_범위(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        lit: CatalogMaterial,
+        mine: Material,
+    ) -> None:
+        series_id = self._strain_curve(client, admin_headers, lit, 50)
+        entries = self._entries(
+            client, admin_headers, mine, "mechanical.tensile_stress_at_strain"
+        )
+        assert len(entries) == 1, entries
+        one = entries[0]
+        assert one["series_id"] == series_id and one["ref_kind"] == "catalog_series"
+        assert one["series_kind"] == "curve" and one["series_label"] == "응력-변형률"
+        assert one["count"] == 50
+        assert (one["low_si"], one["high_si"]) == pytest.approx((1.0e8, 1.49e8))
+        assert one["value_si"] == pytest.approx(1.245e8)  # 가운데값
+        # 축이 표준 조건이 아니면(변형률) 축 이름 · 범위가 따로 선다.
+        assert one["axis_label"] == "변형률" and one["axis_unit"] == "%"
+        assert (one["axis_low"], one["axis_high"]) == pytest.approx((0.0, 49.0))
+        assert one["conditions"] == {} and one["condition_ranges"] == {}
+
+    def test_온도_축은_조건_범위로(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        lit: CatalogMaterial,
+        mine: Material,
+    ) -> None:
+        made = _post(client, admin_headers, lit, _curve())
+        assert made.status_code == 201, made.text
+        [one] = self._entries(client, admin_headers, mine, "mechanical.youngs_modulus")
+        assert one["count"] == 3 and one["axis_label"] is None
+        assert one["condition_ranges"] == {"temperature": pytest.approx([298.15, 423.15])}
+        assert "temperature" not in one["conditions"]
+
+    def test_펼치면_점이_축_차례로(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        lit: CatalogMaterial,
+        mine: Material,
+    ) -> None:
+        series_id = self._strain_curve(client, admin_headers, lit, 50)
+        opened = client.get(
+            f"/api/materials/{mine.id}/property-coverage/series/{series_id}",
+            headers=admin_headers,
+        )
+        assert opened.status_code == 200, opened.text
+        body = opened.json()
+        assert (body["total"], body["shown"], body["label"]) == (50, 50, "응력-변형률")
+        [row] = body["properties"]
+        assert row["key"] == "mechanical.tensile_stress_at_strain" and row["si_unit"] == "Pa"
+        axis = [one["axis_low"] for one in row["entries"]]
+        assert axis == pytest.approx([float(index) for index in range(50)])
+        assert all(one["axis_low"] == one["axis_high"] for one in row["entries"])
+        assert all(one["ref_kind"] == "catalog_value" for one in row["entries"])
+
+    def test_점이_많으면_양끝을_남기고_솎는다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        lit: CatalogMaterial,
+        mine: Material,
+    ) -> None:
+        series_id = self._strain_curve(client, admin_headers, lit, SERIES_POINTS_ON_MAP + 50)
+        body = client.get(
+            f"/api/materials/{mine.id}/property-coverage/series/{series_id}",
+            headers=admin_headers,
         ).json()
-        entries = {one["key"]: one for one in coverage["properties"]}[
-            "mechanical.tensile_stress_at_strain"
-        ]["entries"]
-        assert len(entries) == TABLE_ROWS_ON_MAP
-        values = sorted(one["value_si"] for one in entries)
-        assert values[0] == pytest.approx(1.0e8) and values[-1] == pytest.approx(1.49e8)
-        assert all("곡선 50점 중 20점" in (one["method"] or "") for one in entries)
+        assert body["total"] == SERIES_POINTS_ON_MAP + 50
+        assert body["shown"] == SERIES_POINTS_ON_MAP
+        axis = [one["axis_low"] for one in body["properties"][0]["entries"]]
+        assert axis[0] == 0.0 and axis[-1] == float(SERIES_POINTS_ON_MAP + 49)
+
+    def test_이어지지_않은_문헌의_벌은_펼치지_않는다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        lit: CatalogMaterial,
+        mine: Material,
+    ) -> None:
+        other = CatalogMaterial(mt_id=910002, name="남의 땜납", category="metal")
+        db.add(other)
+        db.commit()
+        made = _post(client, admin_headers, other, _curve())
+        assert made.status_code == 201, made.text
+        opened = client.get(
+            f"/api/materials/{mine.id}/property-coverage/series/{made.json()['series']['id']}",
+            headers=admin_headers,
+        )
+        assert opened.status_code == 404
+        assert opened.json()["error"]["code"] == "MNX-MATERIALS-0065"

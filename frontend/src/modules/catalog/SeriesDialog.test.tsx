@@ -16,7 +16,6 @@ import type { CatalogMaterialDetail } from '@/modules/catalog/api'
 const resolveProperty = vi.fn()
 const previewSeries = vi.fn()
 const createSeries = vi.fn()
-const conditionFields = vi.fn()
 
 vi.mock('@/modules/catalog/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/modules/catalog/api')>()),
@@ -24,7 +23,6 @@ vi.mock('@/modules/catalog/api', async (importOriginal) => ({
     resolveProperty: (...args: unknown[]) => resolveProperty(...args),
     previewSeries: (...args: unknown[]) => previewSeries(...args),
     createSeries: (...args: unknown[]) => createSeries(...args),
-    conditionFields: (...args: unknown[]) => conditionFields(...args),
   },
 }))
 
@@ -79,9 +77,6 @@ beforeEach(() => {
   resolveProperty.mockResolvedValue({ ambiguous: false, candidates: [CANDIDATE] })
   previewSeries.mockResolvedValue(MADE)
   createSeries.mockResolvedValue(MADE)
-  conditionFields.mockResolvedValue([
-    { key: 'environment', group: '공통', label: '시험 환경', unit: null, values: null, note: null },
-  ])
 })
 
 describe('곡선 · 표 입력', () => {
@@ -159,7 +154,7 @@ describe('곡선 · 표 입력', () => {
 })
 
 describe('축 이름표 (ADR 0071)', () => {
-  it('ΔK 는 이름과 MPa·m^0.5 로, 표에 없는 축은 문헌 조건 칸 목록의 이름으로 선다', async () => {
+  it('ΔK 는 이름과 MPa·m^0.5 로, 그 밖의 축도 문헌 조건 칸 목록의 이름으로 선다', async () => {
     resolveProperty.mockResolvedValue({
       ambiguous: false,
       candidates: [

@@ -1044,6 +1044,9 @@ export interface paths {
          *
          *     **`source_once=true` 면 출처를 한 번만 싣는다**(ADR 0073) — 출처 3종이 값 · 벌 1,200개에
          *     되풀이돼 2.1 MB 의 490 KB 였다. 안 주면 지금 모양 그대로다(바깥에서 읽는 쪽이 깨지지 않게).
+         *
+         *     **`series_brief=true` 면 벌 머리를 셈에 쓰는 칸만 싣는다**(ADR 0073 후속) — 벌 555개의
+         *     머리가 872 KB 였고 절반이 메모 · 조건이었다. 화면은 벌을 보일 때 머리를 쪽으로 받는다.
          */
         get: operations["get_material_api_catalog_materials__material_id__get"];
         put?: never;
@@ -1088,7 +1091,14 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * List Material Series
+         * @description 이 재료의 **벌 머리를 쪽으로** — 이름 · 메모 · 조건 · 출처까지(ADR 0073 후속).
+         *
+         *     상세(`series_brief=true`)는 셈에 쓰는 칸만 싣고, 화면은 벌을 보일 때 이것을 부른다. 차례는
+         *     상세와 같다(넣은 차례).
+         */
+        get: operations["list_material_series_api_catalog_materials__material_id__series_get"];
         put?: never;
         /**
          * Create Catalog Series
@@ -4653,6 +4663,27 @@ export interface paths {
          *     스칼라·항목은 `unmapped` 로 함께 — 지도에서 사라지면 없는 줄 안다.
          */
         get: operations["property_coverage_api_materials__material_id__property_coverage_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/materials/{material_id}/property-coverage/series/{series_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Property Coverage Series
+         * @description 물성 지도의 **묶인 줄을 펼친다** — 이어진 문헌 재료의 곡선 · 산점 한 벌의 점을 지도와
+         *     같은 줄 모양으로(축 차례). 지도는 한 벌을 한 줄로 싣는다(점 수 · 범위).
+         */
+        get: operations["property_coverage_series_api_materials__material_id__property_coverage_series__series_id__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -11297,6 +11328,8 @@ export interface components {
             label: string;
             /** Note */
             note?: string | null;
+            /** Scale */
+            scale?: string | null;
             /** Unit */
             unit?: string | null;
             /** Values */
@@ -11457,6 +11490,8 @@ export interface components {
             role: string | null;
             /** Series */
             series?: components["schemas"]["CatalogSeriesOut"][];
+            /** Series Brief */
+            series_brief?: components["schemas"]["CatalogSeriesBriefOut"][];
             /** Source Missing At */
             source_missing_at?: string | null;
             /** Sources */
@@ -11687,6 +11722,43 @@ export interface components {
         CatalogPropertyUpdate: {
             /** Description */
             description?: string | null;
+        };
+        /**
+         * CatalogSeriesBriefOut
+         * @description 벌 머리의 **셈에 쓰는 칸만**(ADR 0073 후속) — 물성 요약 · 출처 · 등급 셈이 이것으로
+         *     선다.
+         *
+         *     이름 · 메모 · 공통 조건 · 출처 설명은 안 싣는다 — 벌이 555개인 재료(Ti-6Al-4V L-PBF)에서
+         *     머리만 872 KB 였고 그 절반이 메모와 조건이었다(2026-10-26 실측). 그 칸은 화면이 벌을 보일
+         *     때 `GET /catalog/materials/{id}/series` 로 쪽마다 받는다.
+         */
+        CatalogSeriesBriefOut: {
+            /** Columns */
+            columns: components["schemas"]["CatalogSeriesColumnOut"][];
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Kind */
+            kind: string;
+            /** Method */
+            method: string;
+            /** Point Count */
+            point_count: number;
+            /** Quality Tier */
+            quality_tier: number;
+            source: components["schemas"]["CatalogSourceOut"] | null;
+            /** Source Id */
+            source_id?: string | null;
+            /** X Key */
+            x_key: string | null;
+            /** X Max */
+            x_max?: number | null;
+            /** X Min */
+            x_min?: number | null;
+            /** X Unit */
+            x_unit?: string | null;
         };
         /** CatalogSeriesColumnIn */
         CatalogSeriesColumnIn: {
@@ -12702,12 +12774,31 @@ export interface components {
         };
         /** CoverageEntryOut */
         CoverageEntryOut: {
+            /** Axis High */
+            axis_high?: number | null;
+            /** Axis Label */
+            axis_label?: string | null;
+            /** Axis Low */
+            axis_low?: number | null;
+            /** Axis Unit */
+            axis_unit?: string | null;
+            /** Condition Ranges */
+            condition_ranges?: {
+                [key: string]: [
+                    number,
+                    number
+                ];
+            };
             /** Conditions */
             conditions: {
                 [key: string]: number;
             };
             /** Count */
             count: number;
+            /** High Si */
+            high_si?: number | null;
+            /** Low Si */
+            low_si?: number | null;
             /** Method */
             method: string | null;
             /** Origin */
@@ -12718,6 +12809,12 @@ export interface components {
             ref_kind: string;
             /** Ref Label */
             ref_label: string;
+            /** Series Id */
+            series_id?: string | null;
+            /** Series Kind */
+            series_kind?: string | null;
+            /** Series Label */
+            series_label?: string | null;
             /** Spread Si */
             spread_si: number | null;
             /** Tier */
@@ -12754,6 +12851,25 @@ export interface components {
             name: string;
             /** Si Unit */
             si_unit: string | null;
+        };
+        /**
+         * CoverageSeriesPointsOut
+         * @description 물성 지도의 묶인 줄을 펼친 것 — 그 벌의 점을 낱값 줄 모양으로(축 차례).
+         *
+         *     `shown < total` 이면 물성마다 축을 따라 양 끝을 남기고 고르게 솎았다. 곡선 전부는 문헌
+         *     재료의 「곡선 · 표」 탭에 있다.
+         */
+        CoverageSeriesPointsOut: {
+            /** Label */
+            label: string;
+            /** Properties */
+            properties: components["schemas"]["CoveragePropertyOut"][];
+            /** Series Id */
+            series_id: string;
+            /** Shown */
+            shown: number;
+            /** Total */
+            total: number;
         };
         /** CoverageTypeOut */
         CoverageTypeOut: {
@@ -17581,6 +17697,17 @@ export interface components {
         Page_AuditEntryOut_: {
             /** Items */
             items: components["schemas"]["AuditEntryOut"][];
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+            /** Total */
+            total: number;
+        };
+        /** Page[CatalogSeriesOut] */
+        Page_CatalogSeriesOut_: {
+            /** Items */
+            items: components["schemas"]["CatalogSeriesOut"][];
             /** Limit */
             limit: number;
             /** Offset */
@@ -25508,6 +25635,8 @@ export interface operations {
             query?: {
                 /** @description 참이면 출처를 맨 위 `sources` 에 한 번씩, 값 · 벌에는 `source_id` 만 */
                 source_once?: boolean;
+                /** @description 참이면 벌 머리를 셈에 쓰는 칸만 `series_brief` 에 — 이름 · 메모 · 조건은 `GET /catalog/materials/{id}/series` 로 쪽마다 */
+                series_brief?: boolean;
             };
             header?: never;
             path: {
@@ -25584,6 +25713,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CatalogParameterSetOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_material_series_api_catalog_materials__material_id__series_get: {
+        parameters: {
+            query?: {
+                /** @description `points`(곡선 · 산점) · `parameter_set`(계수 묶음) */
+                kind?: string;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path: {
+                material_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_CatalogSeriesOut_"];
                 };
             };
             /** @description Validation Error */
@@ -31327,6 +31492,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PropertyCoverageOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    property_coverage_series_api_materials__material_id__property_coverage_series__series_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                material_id: string;
+                series_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CoverageSeriesPointsOut"];
                 };
             };
             /** @description Validation Error */

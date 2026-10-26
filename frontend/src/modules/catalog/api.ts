@@ -284,7 +284,12 @@ export function withSources(detail: CatalogMaterialDetail): CatalogMaterialDetai
   if (byId.size === 0) return detail
   const fill = <T extends { source?: CatalogValue['source']; source_id?: string | null }>(one: T): T =>
     one.source || !one.source_id ? one : { ...one, source: byId.get(one.source_id) ?? null }
-  return { ...detail, values: detail.values.map(fill), series: (detail.series ?? []).map(fill) }
+  return {
+    ...detail,
+    values: detail.values.map(fill),
+    series: (detail.series ?? []).map(fill),
+    series_brief: (detail.series_brief ?? []).map(fill),
+  }
 }
 
 export const catalogApi = {
@@ -343,9 +348,17 @@ export const catalogApi = {
     const suffix = search.toString()
     return api.get<CatalogMaterialPage>(`/catalog/materials${suffix ? `?${suffix}` : ''}`)
   },
-  /** 출처는 한 번만 받아(ADR 0073) 값 · 벌에 다시 채운다 — 화면의 나머지는 `source` 를 그대로 읽는다. */
+  /** 출처는 한 번만 받아(ADR 0073) 값 · 벌에 다시 채운다 — 화면의 나머지는 `source` 를 그대로 읽는다.
+   *  벌 머리는 셈에 쓰는 칸만(`series_brief`) — 벌을 보일 때 `materialSeries` 로 쪽마다 받는다. */
   material: (id: string) =>
-    api.get<CatalogMaterialDetail>(`/catalog/materials/${id}?source_once=true`).then(withSources),
+    api
+      .get<CatalogMaterialDetail>(`/catalog/materials/${id}?source_once=true&series_brief=true`)
+      .then(withSources),
+  /** 벌 머리 한 쪽 — 이름 · 메모 · 조건 · 출처까지. `points` 는 곡선 · 산점, 차례는 상세와 같다. */
+  materialSeries: (id: string, kind: 'points' | 'parameter_set', offset = 0, limit = 20) =>
+    api.get<CatalogSeriesPage>(
+      `/catalog/materials/${id}/series?kind=${kind}&offset=${offset}&limit=${limit}`
+    ),
   /** 덱의 「곡선 합성」 이 지을 곡선 — 못 지으면 `ok: false` 와 이유(200). */
   syntheticCurve: (id: string) =>
     api.get<SyntheticCurvePreview>(`/catalog/materials/${id}/synthetic-curve`),
@@ -405,8 +418,6 @@ export const catalogApi = {
   /** 한 벌의 점 — 재료 상세에는 안 실린다(ADR 0072). 그 벌을 펼칠 때 받는다. */
   seriesPoints: (seriesId: string) =>
     api.get<CatalogSeriesPoints>(`/catalog/series/${seriesId}/points`),
-  /** 문헌 조건 칸 목록(ADR 0071) — 이름표 · 단위 · 고를 값. 정본은 서버 씨앗이다. */
-  conditionFields: () => api.get<CatalogConditionField[]>('/catalog/condition-fields'),
 }
 
 export type CatalogPropertyCreate = components['schemas']['CatalogPropertyCreate']
@@ -420,11 +431,13 @@ export type CatalogMaterialCreate = components['schemas']['CatalogMaterialCreate
 export type CatalogValueCreate = components['schemas']['CatalogValueCreate']
 export type CatalogValueCreated = components['schemas']['CatalogValueCreatedOut']
 export type CatalogSeries = components['schemas']['CatalogSeriesOut']
+/** 벌 머리의 셈에 쓰는 칸만(ADR 0073 후속) — 상세가 싣는다. 이름 · 메모 · 조건은 `materialSeries` 로. */
+export type CatalogSeriesBrief = components['schemas']['CatalogSeriesBriefOut']
+export type CatalogSeriesPage = components['schemas']['Page_CatalogSeriesOut_']
 export type CatalogSeriesCreate = components['schemas']['CatalogSeriesCreate']
 export type CatalogSeriesCreated = components['schemas']['CatalogSeriesCreatedOut']
 export type CatalogSeriesPoint = components['schemas']['CatalogSeriesPointOut']
 export type CatalogSeriesPoints = components['schemas']['CatalogSeriesPointsOut']
-export type CatalogConditionField = components['schemas']['CatalogConditionFieldOut']
 export type PropertyResolve = components['schemas']['PropertyResolveOut']
 export type AliasCandidate = components['schemas']['AliasCandidateOut']
 export type PropertyCandidate = components['schemas']['PropertyCandidateOut']

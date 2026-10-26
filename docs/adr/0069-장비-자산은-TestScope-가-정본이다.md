@@ -103,3 +103,10 @@ TestScope 는 같은 일을 온전히 한다 — 장비 제품군 → 기종 →
 의뢰 받는 부서 추천(C)이 화면에만 있었다. MCP `create_commission` 의 미리보기가 `lab_suggestions` 를 싣고, `lab` 을
 비우면 추천과 함께 거절한다. 고른 부서가 추천에 있는지(`lab_is_suggested`)는 TestScope 에 물었을 때만 참 · 거짓이고
 못 물었으면 모름(None)이다 — 판단은 `mcp_server/lab_choice.py`(시험 `test_mcp_lab_choice.py`).
+
+## 후속 (2026-10-26) — 장비 기준정보 축
+
+보유 장비를 지운 뒤 아무도 안 가리키게 된 기준정보 「장비 제조사」(instrument_maker) · 「시험실」(lab) 축을
+걷었다(마이그레이션 c4e8a1d7f203). 바깥에서 가리키는 값(외래키 칸 · SP 연결)이 있으면 그 축은 남긴다. 「장비」 ·
+「장비 유형」 은 시험이 파일에서 읽은 장비 이름을 가리키므로 남는다 — 시험을 TestScope 장비 한 대에 잇는 일(B)은
+그대로 보류다.

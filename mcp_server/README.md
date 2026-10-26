@@ -383,11 +383,15 @@ $env:MATNEXUS_API_BASE = 'http://127.0.0.1:8011/api'
 자식으로 띄웠다 내린다. **오류라고 다 결함은 아니다**: 없는 물성으로 채택을
 시도하면 「담을 값이 없습니다」 가 맞는 답이다.
 
-**도구 전부를 부르려면 둘을 더 준다** — 없으면 그 도구가 「부르지 못한 도구」 에 남는다.
+**재료가 있어야 부를 수 있는 도구는 프로브가 재료를 스스로 고른다**(2026-10-26) — 시험 기반
+카드 길(`preview_card_fit` · `create_card_from_tests`)은 인장 채택 시험이 가장 많은 재료 · 방향,
+`adopt_parameter_set` 은 계수 묶음(Prony · Anand)이 있는 문헌 재료와 그 첫 벌이다. 고른 것은
+출력에 `(고른 재료: …)` 로 선다. 전에는 사람이 둘을 환경 변수로 알려 줘야 했고, 안 주면 셋이
+늘 「부르지 못한 도구」 에 남았다. 정해 주고 싶으면 그대로 준다.
 
 ```powershell
-$env:MATNEXUS_PROBE_FIT_MATERIAL = '<인장 MD 채택 시험이 여럿인 재료 id>'   # create_card_from_tests
-$env:MATNEXUS_PROBE_PARAM_MATERIAL = '<파라미터 벌이 있는 문헌 재료 id>'     # adopt_parameter_set
+$env:MATNEXUS_PROBE_FIT_MATERIAL = '<인장 채택 시험이 여럿인 재료 id>'    # 방향은 MATNEXUS_PROBE_FIT_ORIENTATION(기본 MD)
+$env:MATNEXUS_PROBE_PARAM_MATERIAL = '<계수 묶음이 있는 문헌 재료 id>'
 ```
 
 미리보기가 없는 쓰기(문헌 재료 추가, 값 지우기, 키 폐기·이관, 빈 수신함 연결 — 문헌 물성

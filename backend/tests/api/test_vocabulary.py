@@ -2048,7 +2048,7 @@ class Test있는_값은_관리자만_꾸민다:
         workspace: Any,
     ) -> None:
         client.post(
-            "/api/vocabularies/instrument_maker/terms/bulk",
+            "/api/vocabularies/sales_type/terms/bulk",
             json={"values": ["남의제철"]},
             headers=admin_headers,
         )
@@ -2056,13 +2056,13 @@ class Test있는_값은_관리자만_꾸민다:
         row = {"values": ["남의제철	NAMUI"]}
 
         preview = client.post(
-            "/api/vocabularies/instrument_maker/terms/bulk/preview", json=row, headers=headers
+            "/api/vocabularies/sales_type/terms/bulk/preview", json=row, headers=headers
         )
         (planned,) = preview.json()["items"]
         assert planned["aliases"] == [] and planned["warnings"], "미리보기도 같은 말을 한다"
 
         made = client.post(
-            "/api/vocabularies/instrument_maker/terms/bulk", json=row, headers=headers
+            "/api/vocabularies/sales_type/terms/bulk", json=row, headers=headers
         )
         assert made.status_code == 200, made.text
         (item,) = made.json()["items"]
@@ -2070,7 +2070,7 @@ class Test있는_값은_관리자만_꾸민다:
         assert any("시스템 관리자" in one for one in item["warnings"])
         # 별칭이 안 붙었다 — 그 표기로 넣으면 새 값이 생긴다.
         again = client.post(
-            "/api/vocabularies/instrument_maker/terms/bulk",
+            "/api/vocabularies/sales_type/terms/bulk",
             json={"values": ["NAMUI"]},
             headers=admin_headers,
         )
@@ -2084,7 +2084,7 @@ class Test있는_값은_관리자만_꾸민다:
     ) -> None:
         headers = self.member(client, db, workspace)
         made = client.post(
-            "/api/vocabularies/instrument_maker/terms/bulk",
+            "/api/vocabularies/sales_type/terms/bulk",
             json={"values": ["새제철	SAE;새제철(주)"]},
             headers=headers,
         )

@@ -2755,6 +2755,11 @@ async def property_coverage(ctx: Context, material_id: str) -> dict[str, Any]:
         unmapped                 공용어에 안 이어진 시험 스칼라·선언 항목 — **없는 게 아니라
                                  안 이어진 것**이다. 사람에게 「물성 매핑에서 이으면 보인다」
 
+    **`series_id` 가 있는 줄은 문헌 곡선 · 산점 한 벌**이다 — `count` 가 점 수, `low_si~high_si`
+    가 값 범위, `value_si` 는 가운데값, 점마다 갈리는 조건은 `condition_ranges`, 표준 조건이 아닌
+    축(수명 · 변형률)은 `axis_label` · `axis_low~axis_high`. 점 하나하나가 필요하면
+    `get_catalog_series(series_id)`.
+
     ## 「없다」 는 `counts` 가 답한다 — **다시 뒤지지 마라**
 
     `counts.measured` 가 0 이면 **잰 값은 없다**(채택된 처리 결과 · 묶음 결과 · DMA 온도별

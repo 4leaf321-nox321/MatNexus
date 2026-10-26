@@ -103,6 +103,61 @@ class Test상세의_대표:
         # 출처 말고는 같은 응답이다.
         assert [one["id"] for one in once["values"]] == [one["id"] for one in inline["values"]]
 
+    def test_짧은_머리는_셈에_쓰는_칸만_머리_전부는_쪽으로(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str]
+    ) -> None:
+        """ADR 0073 후속 — 벌 555개의 머리가 872 KB 였고 절반이 메모 · 조건이었다."""
+        material = db.scalar(select(CatalogMaterial).where(CatalogMaterial.mt_id == 910001))
+        assert material is not None
+        labels = [f"곡선 {index}" for index in range(3)]
+        for label in labels:
+            made = _post(
+                client,
+                admin_headers,
+                material,
+                _curve(label=label, notes="원 논문 메모", conditions={"strain_rate_s": 0.001}),
+            )
+            assert made.status_code == 201, made.text
+        url = f"/api/catalog/materials/{material.id}"
+
+        full = client.get(url, params={"source_once": "true"}, headers=admin_headers).json()
+        brief = client.get(
+            url, params={"source_once": "true", "series_brief": "true"}, headers=admin_headers
+        ).json()
+        assert brief["series"] == [] and len(brief["series_brief"]) == 3
+        assert full["series_brief"] == []
+        for short, whole in zip(brief["series_brief"], full["series"], strict=True):
+            # 셈에 쓰는 칸은 같고, 이름 · 메모 · 조건은 안 실린다.
+            assert set(short) == {
+                "id", "kind", "x_key", "x_unit", "x_min", "x_max", "columns",
+                "point_count", "method", "quality_tier", "source", "source_id",
+            }  # fmt: skip
+            assert {key: whole[key] for key in short} == short
+        assert [one["id"] for one in brief["values"]] == [one["id"] for one in full["values"]]
+
+        first = client.get(f"{url}/series", params={"limit": 2}, headers=admin_headers).json()
+        assert (first["total"], first["limit"], first["offset"]) == (3, 2, 0)
+        rest = client.get(
+            f"{url}/series", params={"limit": 2, "offset": 2}, headers=admin_headers
+        ).json()
+        paged = [*first["items"], *rest["items"]]
+        # 상세와 같은 차례, 머리 전부(이름 · 메모 · 조건 · 출처까지).
+        assert [one["id"] for one in paged] == [one["id"] for one in full["series"]]
+        assert [one["label"] for one in paged] == labels
+        assert all(one["notes"] == "원 논문 메모" for one in paged)
+        assert all(one["source"]["title"] == SOURCE["title"] for one in paged)
+
+        sets = client.get(
+            f"{url}/series", params={"kind": "parameter_set"}, headers=admin_headers
+        ).json()
+        assert sets["total"] == 0 and sets["items"] == []
+        too_many = client.get(f"{url}/series", params={"limit": 101}, headers=admin_headers)
+        assert too_many.status_code == 422
+        missing = client.get(
+            f"/api/catalog/materials/{uuid.uuid4()}/series", headers=admin_headers
+        )
+        assert missing.status_code == 404
+
     def test_없는_벌의_점은_404(
         self, client: TestClient, admin_headers: dict[str, str]
     ) -> None:

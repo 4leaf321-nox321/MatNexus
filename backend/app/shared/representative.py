@@ -22,6 +22,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
+from functools import cache
 from typing import Any
 
 from sqlalchemy import or_
@@ -50,7 +51,9 @@ _UNKNOWN_TEMPERATURE_PENALTY = 5.0
 _SLOTS = ("원본에서 빠짐", "산점의 점", "상태", "등급", "수치", "온도", "조건 수", "입력 순서")
 
 
+@cache
 def is_bookkeeping(key: str) -> bool:
+    # 키 이름만 보는 판정이라 기억해 둔다 — 비교 한 번에 같은 키를 10만 번 물었다(2026-10-26).
     return (
         key in _BOOKKEEPING_KEYS
         or key.startswith("verdict_")

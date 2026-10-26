@@ -149,6 +149,19 @@ jobs:
             exit 1
           }
 
+      # 화면의 축 이름표는 문헌 조건 칸 목록(서버 씨앗)에서 만든다. 표만 손으로 고치면 서버 목록과
+      # 갈린다 — 2026-10-26 까지 두 벌이라, 목록에 ΔK 를 더해도 화면은 키 이름을 그대로 보였다.
+      - name: 축 이름표 최신성
+        working-directory: frontend
+        shell: pwsh
+        run: |
+          node scripts/axis_meta.mjs
+          $diff = git status --porcelain -- src/modules/catalog/axisMeta.ts
+          if ($diff) {
+            Write-Error "축 이름표가 문헌 조건 칸 목록과 다릅니다. backend/seeds/catalog/condition-fields.json 을 고치고 frontend 에서 'node scripts/axis_meta.mjs' 로 다시 만드세요."
+            exit 1
+          }
+
   smoke:
     name: 스모크 (진짜 서버·워커·DB)
     runs-on: windows-latest

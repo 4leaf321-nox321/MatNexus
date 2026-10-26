@@ -7,6 +7,7 @@
  *   출처가 값 옆에 산다            제목·연도·DOI 링크
  *   직접 넣은 값은 그렇게 보인다     「직접 넣음 · 누구」, 넣은 사람만 지우기 단추
  *   요약 + 탭(2026-10-22)            물성 하나에 한 줄 · 곡선 · 출처 — 값 줄은 「전체 값」 탭
+ *   벌 머리는 짧게, 카드는 쪽으로    상세는 셈에 쓰는 칸만 — 곡선 탭이 20벌씩 받는다(ADR 0073 후속)
  */
 
 import { render, screen, within } from '@testing-library/react'
@@ -19,13 +20,29 @@ const material = vi.fn()
 const deleteValue = vi.fn()
 const deleteSeries = vi.fn()
 const seriesPoints = vi.fn()
+const materialSeries = vi.fn()
+
+type Head = { kind: string }
+/** 흉내 낸 상세가 가진 벌 — 서버처럼 상세에는 짧은 머리로, 머리 전부는 쪽으로 준다. */
+let heads: Head[] = []
 
 vi.mock('@/modules/catalog/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/modules/catalog/api')>()),
   catalogApi: {
     summary: vi.fn(),
     materials: vi.fn(),
-    material: (...args: unknown[]) => material(...args),
+    material: async (...args: unknown[]) => {
+      const got = (await material(...args)) as { series?: Head[] } | null
+      heads = got?.series ?? []
+      return got && { ...got, series: [], series_brief: heads }
+    },
+    materialSeries: (id: string, kind: string, offset = 0, limit = 20) => {
+      materialSeries(id, kind, offset, limit)
+      const wanted = heads.filter((one) =>
+        kind === 'points' ? one.kind === 'curve' || one.kind === 'scatter' : one.kind === kind
+      )
+      return Promise.resolve({ items: wanted.slice(offset, offset + limit), total: wanted.length, limit, offset })
+    },
     deleteValue: (...args: unknown[]) => deleteValue(...args),
     deleteSeries: (...args: unknown[]) => deleteSeries(...args),
     seriesPoints: (...args: unknown[]) => seriesPoints(...args),
@@ -539,6 +556,27 @@ describe('요약 + 탭 (2026-10-22)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'S-N 벌 4 펼치기' }))
     await waitFor(() => expect(seriesPoints).toHaveBeenCalledWith('sn-4'))
     expect(seriesPoints).toHaveBeenCalledTimes(5)
+  })
+
+  it('벌 머리는 쪽으로 받는다 — 20벌씩, 「더 보기」 가 다음 쪽을 부른다', async () => {
+    const many = Array.from({ length: 25 }, (_, index) => scatter(`sn-${index}`, `S-N 벌 ${index}`))
+    material.mockResolvedValue({ ...DETAIL, series: many })
+    show('curves')
+    await screen.findByText('S-N 벌 19')
+    expect(screen.queryByText('S-N 벌 20')).not.toBeInTheDocument()
+    expect(materialSeries).toHaveBeenCalledWith(DETAIL.id, 'points', 0, 20)
+    const { fireEvent } = await import('@testing-library/react')
+    fireEvent.click(screen.getByRole('button', { name: '더 보기 (남은 5벌)' }))
+    expect(await screen.findByText('S-N 벌 24')).toBeInTheDocument()
+    expect(materialSeries).toHaveBeenLastCalledWith(DETAIL.id, 'points', 20, 20)
+    expect(screen.queryByRole('button', { name: /더 보기/ })).not.toBeInTheDocument()
+  })
+
+  it('요약은 벌 머리를 쪽으로 받지 않는다 — 셈은 상세의 짧은 머리로', async () => {
+    material.mockResolvedValue({ ...DETAIL, series: [scatter('scatter-1', 'S-N R=-1')] })
+    show('')
+    await screen.findByRole('button', { name: '대표 없음 · 산점 1벌' })
+    expect(materialSeries).not.toHaveBeenCalled()
   })
 
   it('전체 값 탭은 물성 이름으로 거른다', async () => {

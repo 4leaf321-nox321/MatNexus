@@ -287,6 +287,23 @@ class CoverageEntryOut(BaseModel):
     ref_kind: str
     ref_id: str
     ref_label: str
+    low_si: float | None = None
+    high_si: float | None = None
+    """묶인 값의 범위(SI) — 문헌 곡선 · 산점 한 벌을 한 줄로 묶었을 때만."""
+    series_id: str | None = None
+    """**문헌 한 벌을 묶은 줄**이면 그 벌. `count` 가 점 수, `value_si` 는 가운데값이다.
+    점은 `GET /materials/{id}/property-coverage/series/{series_id}` 로 펼친다."""
+    series_kind: str | None = None
+    """`curve` · `scatter`."""
+    series_label: str | None = None
+    condition_ranges: dict[str, tuple[float, float]] = Field(default_factory=dict)
+    """점마다 갈리는 표준 조건의 범위(SI). 모든 점이 같은 조건은 `conditions` 에 선다."""
+    axis_label: str | None = None
+    """벌의 축이 표준 조건이 아닐 때(수명 · 변형률 …)의 이름 — 축 단위로 `axis_low~axis_high`.
+    펼친 점 하나면 둘이 같다(그 점의 축 값)."""
+    axis_unit: str | None = None
+    axis_low: float | None = None
+    axis_high: float | None = None
 
 
 class CoveragePropertyOut(BaseModel):
@@ -319,6 +336,19 @@ class PropertyCoverageOut(BaseModel):
     properties: list[CoveragePropertyOut]
     counts: CoverageCountsOut
     unmapped: dict[str, list[str]]
+
+
+class CoverageSeriesPointsOut(BaseModel):
+    """물성 지도의 묶인 줄을 펼친 것 — 그 벌의 점을 낱값 줄 모양으로(축 차례).
+
+    `shown < total` 이면 물성마다 축을 따라 양 끝을 남기고 고르게 솎았다. 곡선 전부는 문헌
+    재료의 「곡선 · 표」 탭에 있다."""
+
+    series_id: str
+    label: str
+    total: int
+    shown: int
+    properties: list[CoveragePropertyOut]
 
 
 class MaterialOut(BaseModel):

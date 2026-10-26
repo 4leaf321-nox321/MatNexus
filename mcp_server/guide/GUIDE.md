@@ -876,9 +876,9 @@ MatNexus 는 SP(Standard Platform)의 코어 온톨로지(부서 · 기관 · �
 1. `sp_core_status()` — 무엇을 받아 두었나(타입 · 건수 · 칸), 최근 받기가 성공했나. `configured` 가
    거짓이거나 최근 받기가 실패했으면 거기서 멈추고 사람에게 말한다.
 2. `match_sp_core(sp_type, target, vocabulary?)` — 견줄 짝을 고른다. 겹칠 가능성이 큰 것부터: SP 의
-   물성 · 물성군 · 분야 ↔ `property` · `property_group` · `property_field`, 기관 ↔ 제조사 · 거래처 ·
-   장비 제조사(`term` + `manufacturer` · `vendor` · `instrument_maker`), 부서 ↔ 사업부 · 시험실
-   (`division` · `lab`). **짝 자체가 맞는지부터 사람에게 묻는다.**
+   물성 · 물성군 · 분야 ↔ `property` · `property_group` · `property_field`, 기관 ↔ 제조사 · 거래처
+   (`term` + `manufacturer` · `vendor`), 부서 ↔ 사업부(`division`). 장비의 제조사 · 위치는 TestScope 가
+   정본이라 MatNexus 에 축이 없다. **짝 자체가 맞는지부터 사람에게 묻는다.**
 3. 결과를 그대로 보인다 — `matched`(하나에만 맞음, `by` 가 key · name · alias), `ambiguous`(둘 이상 —
    사람이 고른다), `sp_only`(맞는 것 없음 — 잇지 않는다). **후보도 저절로 잇지 않는다.**
 4. 사람이 고른 줄만 `link_sp_core(items)` 미리보기 → 확인 → `dry_run=False`. 오류(지워진 SP 객체 ·
