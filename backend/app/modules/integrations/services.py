@@ -1,8 +1,10 @@
 """외부 연동 — 설정을 읽고 고치고, 실제로 닿는지 확인한다.
 
 고치기     주소 둘 · 토큰(봉인). 토큰은 **안 보내면 그대로**, 지우기는 따로 말한다
-연결 확인  `GET {api}/auth/me` 로 토큰 주인을, `GET {api}/properties` 로 시험 항목이 이어진
-           물성 수를 본다 — 둘째가 0 이면 닿아도 물성으로 장비를 못 찾는다
+연결 확인  TestScope — `GET {api}/auth/me` 로 토큰 주인을, `GET {api}/properties` 로
+           시험 항목이 이어진 물성 수를 본다(둘째가 0 이면 닿아도 물성으로 장비를
+           못 찾는다).
+           SP 코어 — `GET {…/api/core}` 카탈로그로 판과 이 토큰이 읽을 수 있는 공개 타입을 본다
 빌려주기   바깥에 묻는 쪽(측정법 · 의뢰)은 `shared.testscope` 를 거친다 — 주소 · 토큰 ·
            클라이언트가 거기 한 벌이다(시험은 `testscope.TRANSPORT` 에 모의를 끼운다)
 """
@@ -23,7 +25,7 @@ from app.modules.integrations.schemas import (
     IntegrationIn,
     IntegrationOut,
 )
-from app.shared import audit, secretbox, testscope
+from app.shared import audit, secretbox, sp_connection, testscope
 from app.shared.errors import AppError, NotFound
 
 
@@ -53,6 +55,14 @@ def _clean_url(raw: str, *, field: str) -> str:
     return url
 
 
+#: 시험이 모의 SP 를 끼우는 자리. 운영에서는 비어 있다.
+SP_TRANSPORT: httpx.BaseTransport | None = None
+#: 「연결 확인」 이 기다리는 한계 — 카탈로그 하나라 길 까닭이 없다.
+SP_TIMEOUT_SECONDS = 15.0
+#: 연결 확인 줄에 이름을 적는 타입 수.
+SP_TYPES_SHOWN = 6
+
+
 def api_url(raw: str) -> str:
     """API 주소 — 끝에 `/api` 가 없으면 붙인다. 화면 주소를 그대로 붙여 넣는 일이 흔하다."""
     url = _clean_url(raw, field="API 주소")
@@ -61,16 +71,27 @@ def api_url(raw: str) -> str:
     return url
 
 
+def base_url(system: str, raw: str) -> str:
+    """시스템마다 이 서버가 부르는 주소의 끝을 맞춘다 — TestScope `…/api`, SP `…/api/core`."""
+    if system == sp_connection.SYSTEM:
+        return sp_connection.core_url(_clean_url(raw, field="API 주소"))
+    return api_url(raw)
+
+
 def link_url(row: IntegrationConnection | None) -> str:
     if row is None:
         return ""
     if row.web_url:
         return row.web_url
-    return row.base_url[: -len("/api")] if row.base_url.endswith("/api") else row.base_url
+    for suffix in (sp_connection.CORE_SUFFIX, "/api"):
+        if row.base_url.endswith(suffix):
+            return row.base_url[: -len(suffix)]
+    return row.base_url
 
 
 def to_out(db: Session, system: str, row: IntegrationConnection | None) -> IntegrationOut:
     readable = bool(row and secretbox.unseal(row.token_sealed))
+    configured = bool(row and row.base_url and readable)
     editor = db.get(User, row.updated_by_id) if row and row.updated_by_id else None
     return IntegrationOut(
         system=system,
@@ -81,7 +102,12 @@ def to_out(db: Session, system: str, row: IntegrationConnection | None) -> Integ
         has_token=bool(row and row.token_sealed),
         token_readable=readable,
         token_set_at=row.token_set_at if row else None,
-        configured=bool(row and row.base_url and readable),
+        configured=configured,
+        from_env=(
+            system == sp_connection.SYSTEM
+            and not configured
+            and sp_connection.from_env() is not None
+        ),
         checked_at=row.checked_at if row else None,
         check_ok=row.check_ok if row else None,
         check_message=row.check_message if row else None,
@@ -100,7 +126,7 @@ def list_all(db: Session) -> list[IntegrationOut]:
 
 def update(db: Session, system: str, payload: IntegrationIn, user: User) -> IntegrationOut:
     _system(system)
-    base = api_url(payload.base_url)
+    base = base_url(system, payload.base_url)
     web = _clean_url(payload.web_url, field="화면 주소")
     row = _row(db, system)
     if row is None:
@@ -146,17 +172,76 @@ def update(db: Session, system: str, payload: IntegrationIn, user: User) -> Inte
             changes=changes,
         )
         # 물성 표 캐시는 옛 주소 · 토큰으로 받은 것이다.
-        testscope.forget()
+        if system == testscope.SYSTEM:
+            testscope.forget()
     db.commit()
     db.refresh(row)
     return to_out(db, system, row)
 
 
 def credentials(db: Session, system: str) -> tuple[str, str] | None:
-    """바깥에 물을 주소와 토큰 — 설정이 덜 됐거나 토큰을 못 풀면 None(지어 쓰지 않는다)."""
+    """바깥에 물을 주소와 토큰 — 설정이 덜 됐거나 토큰을 못 풀면 None(지어 쓰지 않는다).
+
+    SP 코어는 화면에 없으면 `.env` 의 값이다 — 받기가 실제로 쓰는 것과 같다.
+    """
     _system(system)
+    if system == sp_connection.SYSTEM:
+        sp = sp_connection.connection(db)
+        return (sp.url, sp.token) if sp else None
     found = testscope.connection(db)
     return (found.api, found.token) if found else None
+
+
+def _probe_sp_core(base: str, token: str) -> IntegrationCheckOut:
+    """코어 카탈로그(`GET {base}`)를 읽는다 — 받기가 맨 처음 하는 일과 같다."""
+    now = datetime.now(UTC)
+
+    def failed(message: str) -> IntegrationCheckOut:
+        return IntegrationCheckOut(ok=False, message=message, checked_at=now)
+
+    try:
+        with httpx.Client(
+            headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
+            timeout=SP_TIMEOUT_SECONDS,
+            transport=SP_TRANSPORT,
+        ) as http:
+            response = http.get(base)
+    except httpx.HTTPError as exc:
+        return failed(f"SP 에 닿지 못했습니다 — 주소 · 방화벽 · 서비스 확인({exc}).")
+    if response.status_code in (401, 403):
+        return failed(
+            f"SP 가 토큰을 거절했습니다(HTTP {response.status_code}) — `core:read` 범위의 "
+            "토큰인지, 만료 · 폐기되지 않았는지 SP 관리자에게 확인하세요."
+        )
+    if response.status_code == 404:
+        return failed(
+            "그 주소에 SP 코어 API 가 없습니다(HTTP 404) — 주소가 `https://<SP>/api/core` "
+            "꼴인지 확인하세요."
+        )
+    if response.status_code != 200:
+        return failed(f"SP 가 HTTP {response.status_code} 로 답했습니다.")
+    try:
+        body = response.json()
+    except ValueError:
+        return failed("SP 코어가 아닌 곳이 답했습니다(JSON 이 아님) — 주소를 확인하세요.")
+    if not isinstance(body, dict) or not isinstance(body.get("types"), list):
+        return failed("SP 코어 카탈로그 모양이 아닙니다(types 없음) — 주소를 확인하세요.")
+    types = [one for one in body["types"] if isinstance(one, dict) and one.get("slug")]
+    names = ", ".join(
+        str(one.get("label") or one["slug"]) for one in types[:SP_TYPES_SHOWN]
+    ) + (f" 외 {len(types) - SP_TYPES_SHOWN}" if len(types) > SP_TYPES_SHOWN else "")
+    revision = f" 판 {body['revision']}" if body.get("revision") else ""
+    if not types:
+        message = (
+            f"연결됨 — {body.get('system') or 'SP'}{revision}. 다만 이 토큰으로 읽을 수 "
+            "있는 공개 코어 타입이 없습니다 — SP 의 공개 설정 · 토큰 범위를 확인하세요."
+        )
+    else:
+        message = (
+            f"연결됨 — {body.get('system') or 'SP'}{revision}, 받을 코어 타입 {len(types)}개"
+            f"({names}). 받기는 하루 한 번 — 바로 받으려면 AI 의 `sync_sp_core`."
+        )
+    return IntegrationCheckOut(ok=True, message=message, checked_at=now, core_types=len(types))
 
 
 def _probe_testscope(base: str, token: str) -> IntegrationCheckOut:
@@ -196,10 +281,13 @@ def _probe_testscope(base: str, token: str) -> IntegrationCheckOut:
 
 
 def check(db: Session, system: str) -> IntegrationCheckOut:
-    """실제로 닿는지 본다 — 결과를 줄에 남겨 화면이 다음에도 보인다."""
+    """실제로 닿는지 본다 — 결과를 줄에 남겨 화면이 다음에도 보인다.
+
+    SP 코어가 화면에 없고 `.env` 로만 닿으면 그 값으로 묻는다(남길 줄이 없어 결과만 낸다).
+    """
     row = _row(db, _system(system))
     found = credentials(db, system)
-    if row is None or found is None:
+    if found is None:
         if row is None or not row.base_url:
             message = "API 주소를 먼저 넣으세요."
         elif not row.token_sealed:
@@ -207,9 +295,13 @@ def check(db: Session, system: str) -> IntegrationCheckOut:
         else:
             message = "이 서버가 봉인한 토큰을 풀지 못합니다 — 토큰을 다시 넣으세요."
         return IntegrationCheckOut(ok=False, message=message, checked_at=datetime.now(UTC))
-    result = _probe_testscope(*found)
-    row.checked_at = result.checked_at
-    row.check_ok = result.ok
-    row.check_message = result.message
-    db.commit()
+    if system == sp_connection.SYSTEM:
+        result = _probe_sp_core(*found)
+    else:
+        result = _probe_testscope(*found)
+    if row is not None and row.base_url:
+        row.checked_at = result.checked_at
+        row.check_ok = result.ok
+        row.check_message = result.message
+        db.commit()
     return result

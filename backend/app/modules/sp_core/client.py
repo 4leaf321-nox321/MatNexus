@@ -71,7 +71,7 @@ class SpCoreClient:
     ) -> None:
         if not base or not token:
             raise SpCoreError(
-                "SP 코어 주소(SP_CORE_URL)와 토큰(SP_CORE_TOKEN)이 설정돼 있지 않습니다."
+                "SP 코어 주소와 토큰이 설정돼 있지 않습니다 — 「관리 > 외부 연동」."
             )
         self.base = base.rstrip("/")
         self._client = httpx.Client(
@@ -106,11 +106,11 @@ class SpCoreClient:
             if code.endswith("CORE-0001"):
                 raise NotPublished(f"SP 가 이 타입을 더 이상 공개하지 않습니다({path}).")
             raise SpCoreError(
-                f"SP 코어가 404 를 줬습니다({path}) — 주소(SP_CORE_URL)를 보세요."
+                f"SP 코어가 404 를 줬습니다({path}) — 「외부 연동」 의 SP 주소를 보세요."
             )
         if response.status_code in (401, 403):
             raise SpCoreError(
-                f"SP 코어가 {response.status_code} 를 줬습니다 — 토큰(SP_CORE_TOKEN)이 "
+                f"SP 코어가 {response.status_code} 를 줬습니다 — 「외부 연동」 의 SP 토큰이 "
                 "맞는지, "
                 "`core:read` 범위인지 보세요."
             )

@@ -25,10 +25,12 @@ def _uuid_or_none(raw: Any) -> uuid.UUID | None:
 @handler(kinds.SP_CORE_PULL)
 def pull(db: Session, payload: dict[str, Any]) -> None:
     """설정이 없으면 **조용히 건너뛴다** — SP 를 안 쓰는 설치도 같은 워커를 돈다."""
-    if not sync.configured():
-        logger.info("SP 코어 받기: SP_CORE_URL · SP_CORE_TOKEN 이 없어 건너뜁니다.")
+    if not sync.configured(db):
+        logger.info(
+            "SP 코어 받기: 외부 연동 화면 · .env 어디에도 주소 · 토큰이 없어 건너뜁니다."
+        )
         return
-    with sync.open_client() as client:
+    with sync.open_client(db) as client:
         run = sync.pull(
             db,
             client,

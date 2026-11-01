@@ -1,8 +1,9 @@
 /**
  * 외부 연동 — **바깥 시스템에 닿는 주소와 토큰을 시스템 관리자가 화면에서 넣는다**(2026-10-23).
  *
- * `.env` 에 두면 서버 파일을 고치고 서비스를 다시 띄워야 바뀐다. 지금은 TestScope 하나 —
- * 보유 장비 · 교정의 정본이다.
+ * `.env` 에 두면 서버 파일을 고치고 서비스를 다시 띄워야 바뀐다. 지금은 둘이다 — TestScope
+ * (보유 장비 · 교정의 정본)와 Standard Platform 코어 온톨로지(2026-10-27 — 전에는 `.env` 에만
+ * 넣을 수 있어, TestScope 를 여기서 붙인 사람이 SP 를 어디서 넣는지 찾지 못했다).
  *
  * ## 토큰은 다시 보이지 않는다
  *
@@ -17,7 +18,7 @@
  */
 
 import { useState } from 'react'
-import type { FormEvent } from 'react'
+import type { FormEvent, ReactNode } from 'react'
 
 import { integrationsApi } from '@/modules/integrations/api'
 import type { Integration, IntegrationCheck } from '@/modules/integrations/api'
@@ -30,6 +31,57 @@ import { useResource } from '@/shared/hooks/useResource'
 
 function when(value: string | null | undefined): string {
   return value ? new Date(value).toLocaleString('ko-KR') : ''
+}
+
+/** 시스템마다 다른 안내 · 칸 이름. 서버가 모르는 시스템을 보내면 일반 문구로 선다. */
+interface Copy {
+  about: ReactNode
+  basePlaceholder: string
+  baseHelp: string
+  /** 사람이 여는 화면 주소 칸 — 링크를 만드는 시스템만(SP 코어는 링크가 없다). */
+  web: boolean
+  tokenLabel: string
+  tokenPlaceholder: string
+}
+
+const COPY: Record<string, Copy> = {
+  testscope: {
+    about: (
+      <>
+        보유 장비 · 교정 · 기종 사양의 정본입니다. TestScope 에서 <b>읽기(read)</b> 범위만 준 개인
+        토큰을 발급해 넣습니다. 그 토큰 주인이 볼 수 있는 부서의 장비만 보입니다.
+      </>
+    ),
+    basePlaceholder: 'http://testscope-서버:8020/api',
+    baseHelp: '이 서버가 부르는 주소. 같은 서버면 127.0.0.1 — 끝의 /api 는 없으면 붙입니다.',
+    web: true,
+    tokenLabel: '읽기 토큰',
+    tokenPlaceholder: 'TestScope 개인 토큰',
+  },
+  sp_core: {
+    about: (
+      <>
+        Standard Platform(SP)의 코어 온톨로지(부서 · 기관 · 장비 · PLM · 물성 등)를 하루 한 번
+        받습니다. 받은 것은 따로 보관만 하고 기준정보 · 물성은 바꾸지 않습니다 — 잇는 일은
+        AI(MCP)로 합니다. SP 관리자에게 <b>core:read</b> 범위 토큰을 받아 넣습니다. 그 토큰
+        주인이 볼 수 있는 범위만 받습니다.
+      </>
+    ),
+    basePlaceholder: 'https://sp-서버/api/core',
+    baseHelp: '이 서버가 부르는 코어 창구. 끝의 /api/core 는 없으면 붙입니다.',
+    web: false,
+    tokenLabel: 'core:read 토큰',
+    tokenPlaceholder: 'SP 에서 받은 core:read 토큰',
+  },
+}
+
+const GENERIC: Copy = {
+  about: '바깥 시스템에 닿는 주소와 토큰입니다.',
+  basePlaceholder: 'https://…/api',
+  baseHelp: '이 서버가 부르는 주소.',
+  web: true,
+  tokenLabel: '토큰',
+  tokenPlaceholder: '발급받은 토큰',
 }
 
 export default function IntegrationsPage() {
@@ -99,6 +151,7 @@ function ConnectionForm({ initial }: { initial: Integration }) {
     void save()
   }
 
+  const copy = COPY[shown.system] ?? GENERIC
   const id = (name: string) => `${shown.system}-${name}`
   const tokenState = !shown.has_token
     ? '없음'
@@ -120,10 +173,13 @@ function ConnectionForm({ initial }: { initial: Integration }) {
           </span>
         )}
       </div>
-      <p className="text-muted-foreground text-sm">
-        보유 장비 · 교정 · 기종 사양의 정본입니다. TestScope 에서 <b>읽기(read)</b> 범위만 준 개인
-        토큰을 발급해 넣습니다. 그 토큰 주인이 볼 수 있는 부서의 장비만 보입니다.
-      </p>
+      <p className="text-muted-foreground text-sm">{copy.about}</p>
+      {shown.from_env && (
+        <p className="rounded-md border border-sky-300 p-2 text-sm text-sky-800">
+          지금은 서버 <code>.env</code> 의 주소 · 토큰으로 닿고 있습니다. 여기에 넣으면 이 화면의
+          값이 먼저입니다.
+        </p>
+      )}
 
       <div className="grid gap-3 md:grid-cols-2">
         <div className="space-y-1">
@@ -132,33 +188,33 @@ function ConnectionForm({ initial }: { initial: Integration }) {
             id={id('base')}
             value={baseUrl}
             onChange={(event) => setBaseUrl(event.target.value)}
-            placeholder="http://testscope-서버:8020/api"
+            placeholder={copy.basePlaceholder}
           />
-          <p className="text-muted-foreground text-xs">
-            이 서버가 부르는 주소. 같은 서버면 127.0.0.1 — 끝의 /api 는 없으면 붙입니다.
-          </p>
+          <p className="text-muted-foreground text-xs">{copy.baseHelp}</p>
         </div>
-        <div className="space-y-1">
-          <Label htmlFor={id('web')}>화면 주소(링크용)</Label>
-          <Input
-            id={id('web')}
-            value={webUrl}
-            onChange={(event) => setWebUrl(event.target.value)}
-            placeholder={shown.link_url || 'http://testscope-서버:8020'}
-          />
-          <p className="text-muted-foreground text-xs">
-            사람이 브라우저로 여는 주소. 비우면 API 주소에서 /api 를 뗀 것을 씁니다.
-          </p>
-        </div>
+        {copy.web && (
+          <div className="space-y-1">
+            <Label htmlFor={id('web')}>화면 주소(링크용)</Label>
+            <Input
+              id={id('web')}
+              value={webUrl}
+              onChange={(event) => setWebUrl(event.target.value)}
+              placeholder={shown.link_url || 'http://testscope-서버:8020'}
+            />
+            <p className="text-muted-foreground text-xs">
+              사람이 브라우저로 여는 주소. 비우면 API 주소에서 /api 를 뗀 것을 씁니다.
+            </p>
+          </div>
+        )}
         <div className="space-y-1 md:col-span-2">
-          <Label htmlFor={id('token')}>읽기 토큰</Label>
+          <Label htmlFor={id('token')}>{copy.tokenLabel}</Label>
           <Input
             id={id('token')}
             type="password"
             autoComplete="off"
             value={token}
             onChange={(event) => setToken(event.target.value)}
-            placeholder={shown.has_token ? '바꿀 때만 넣으세요' : 'TestScope 개인 토큰'}
+            placeholder={shown.has_token ? '바꿀 때만 넣으세요' : copy.tokenPlaceholder}
           />
           <p className="text-muted-foreground text-xs">지금: {tokenState}</p>
         </div>

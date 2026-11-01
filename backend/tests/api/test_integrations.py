@@ -18,11 +18,12 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 from test_catalog_contribute import member_headers
 
+from app.config import get_settings
 from app.modules.audit.models import AuditEntry
 from app.modules.integrations import services
 from app.modules.integrations.models import IntegrationConnection
 from app.modules.workspaces.models import Workspace
-from app.shared import secretbox
+from app.shared import secretbox, sp_connection
 from app.shared import testscope as testscope_client
 
 URL = "/api/integrations/testscope"
@@ -113,7 +114,10 @@ class Test설정:
         assert client.post(f"{URL}/check", headers=member).status_code == 403
         assert db.scalar(select(IntegrationConnection)) is None
         listed = client.get("/api/integrations", headers=admin_headers).json()
-        assert [(one["system"], one["configured"]) for one in listed] == [("testscope", False)]
+        assert [(one["system"], one["configured"]) for one in listed] == [
+            ("testscope", False),
+            ("sp_core", False),
+        ]
 
 
 class Test연결_확인:
@@ -168,3 +172,148 @@ class Test연결_확인:
         answer = client.post(f"{URL}/check", headers=admin_headers).json()
         assert "토큰을 먼저" in answer["message"]
         assert testscope == []
+
+
+# ── SP 코어 ────────────────────────────────────────────────────────────────────────────
+
+SP_URL = "/api/integrations/sp_core"
+#: 시험용 가짜 `core:read` 토큰.
+SP_TOKEN = "sp_core_read_0001"
+CATALOG = {
+    "system": "SP-운영",
+    "revision": "r12",
+    "types": [
+        {"slug": "organization", "label": "기관"},
+        {"slug": "property", "label": "물성"},
+    ],
+}
+
+
+@pytest.fixture
+def sp() -> Iterator[list[httpx.Request]]:
+    """모의 SP 코어 창구 — 카탈로그만 답한다. 토큰이 맞을 때만."""
+    seen: list[httpx.Request] = []
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        if request.headers.get("Authorization") != f"Bearer {SP_TOKEN}":
+            return httpx.Response(401, json={"error": {"code": "APP-AUTH"}})
+        if request.url.path == "/api/core":
+            return httpx.Response(200, json=CATALOG)
+        return httpx.Response(404, json={"error": {"code": "APP-NOT-FOUND"}})
+
+    services.SP_TRANSPORT = httpx.MockTransport(answer)
+    try:
+        yield seen
+    finally:
+        services.SP_TRANSPORT = None
+
+
+def _save_sp(client: TestClient, headers: dict[str, str], **body: Any) -> Any:
+    return client.put(SP_URL, json={"base_url": "https://sp.example", **body}, headers=headers)
+
+
+class TestSP코어:
+    """SP 코어 온톨로지 받기의 주소 · 토큰도 이 화면에서(2026-10-27, 사용자 요청).
+
+    처음(ADR 0063)에는 서버 `.env` 에만 넣을 수 있어, TestScope 를 화면으로 붙인 사람이 SP 를
+    어디서 넣는지 찾지 못했다.
+    """
+
+    def test_주소를_코어_창구로_맞추고_토큰은_봉인한다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str]
+    ) -> None:
+        for typed in (
+            "https://sp.example/",
+            "https://sp.example/api",
+            "https://sp.example/api/core/",
+        ):
+            saved = _save_sp(client, admin_headers, base_url=typed, token=SP_TOKEN)
+            assert saved.status_code == 200, saved.text
+            assert saved.json()["base_url"] == "https://sp.example/api/core", typed
+        body = saved.json()
+        assert body["label"] == "Standard Platform 코어 온톨로지"
+        assert body["link_url"] == "https://sp.example"
+        assert body["configured"] and not body["from_env"]
+        assert SP_TOKEN not in saved.text
+        found = sp_connection.connection(db)
+        assert found == sp_connection.Connection(
+            "https://sp.example/api/core", SP_TOKEN, "screen"
+        )
+
+    def test_화면이_env_보다_먼저고_env_만_있으면_그렇다고_말한다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        settings = get_settings()
+        monkeypatch.setattr(settings, "sp_core_url", "https://old-sp.example/api/core")
+        monkeypatch.setattr(settings, "sp_core_token", "env-token")
+        shown = client.get(SP_URL, headers=admin_headers).json()
+        assert shown["configured"] is False and shown["from_env"] is True
+        assert sp_connection.connection(db) == sp_connection.Connection(
+            "https://old-sp.example/api/core", "env-token", "env"
+        )
+
+        assert _save_sp(client, admin_headers, token=SP_TOKEN).status_code == 200
+        shown = client.get(SP_URL, headers=admin_headers).json()
+        assert shown["configured"] is True and shown["from_env"] is False
+        found = sp_connection.connection(db)
+        assert found is not None and (found.url, found.source) == (
+            "https://sp.example/api/core",
+            "screen",
+        )
+
+    def test_연결_확인은_카탈로그를_읽고_거절과_없는_주소를_가른다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        sp: list[httpx.Request],
+    ) -> None:
+        assert _save_sp(client, admin_headers, token=SP_TOKEN).status_code == 200
+        result = client.post(f"{SP_URL}/check", headers=admin_headers).json()
+        assert result["ok"] is True and result["core_types"] == 2, result
+        assert "판 r12" in result["message"] and "기관" in result["message"]
+        assert [str(one.url) for one in sp] == ["https://sp.example/api/core"]
+        assert client.get(SP_URL, headers=admin_headers).json()["check_ok"] is True
+
+        assert _save_sp(client, admin_headers, token="expired").status_code == 200
+        refused = client.post(f"{SP_URL}/check", headers=admin_headers).json()
+        assert refused["ok"] is False and "거절" in refused["message"]
+
+        moved = _save_sp(
+            client, admin_headers, base_url="https://sp.example/elsewhere", token=SP_TOKEN
+        )
+        assert moved.status_code == 200
+        missing = client.post(f"{SP_URL}/check", headers=admin_headers).json()
+        assert missing["ok"] is False and "코어 API 가 없습니다" in missing["message"]
+
+    def test_받기는_재기동_없이_화면의_값으로_돈다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str]
+    ) -> None:
+        from app.modules.sp_core import sync
+
+        assert sync.configured(db) is False
+        refused = client.post("/api/sp-core/sync", json={}, headers=admin_headers)
+        assert refused.status_code == 409 and "외부 연동" in refused.json()["error"]["message"]
+
+        assert _save_sp(client, admin_headers, token=SP_TOKEN).status_code == 200
+        assert sync.configured(db) is True
+        asked: list[httpx.Request] = []
+
+        def answer(request: httpx.Request) -> httpx.Response:
+            asked.append(request)
+            return httpx.Response(200, json=CATALOG)
+
+        with sync.open_client(db, transport=httpx.MockTransport(answer)) as sp_client:
+            assert sp_client.catalog()["revision"] == "r12"
+        assert str(asked[0].url).startswith("https://sp.example/api/core")
+        assert asked[0].headers["Authorization"] == f"Bearer {SP_TOKEN}"
+
+        status = client.get("/api/sp-core/status", headers=admin_headers).json()
+        assert status["configured"] is True and status["source"] == "https://sp.example"
+        assert (
+            client.post("/api/sp-core/sync", json={}, headers=admin_headers).status_code == 202
+        )

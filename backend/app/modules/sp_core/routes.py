@@ -25,7 +25,6 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
-from app.config import get_settings
 from app.database import get_db
 from app.jobs import kinds, queue
 from app.modules.accounts.models import User
@@ -55,7 +54,7 @@ from app.modules.sp_core.schemas import (
     SpCoreUnlinkOut,
     SpCoreUnlinkRequest,
 )
-from app.shared import audit, permissions
+from app.shared import audit, permissions, sp_connection
 from app.shared.auth import current_user
 from app.shared.errors import AppError, Conflict, NotFound
 
@@ -70,12 +69,12 @@ EDGES_MAX = 200
 RUNS_SHOWN = 5
 
 
-def _source() -> str | None:
+def _source(db: Session) -> str | None:
     """받는 곳 — **호스트까지만.** 토큰은 물론, 주소의 경로도 바깥에 말할 까닭이 없다."""
-    url = get_settings().sp_core_url
-    if not url:
+    found = sp_connection.connection(db)
+    if found is None:
         return None
-    parts = urlsplit(url)
+    parts = urlsplit(found.url)
     return f"{parts.scheme}://{parts.netloc}" if parts.netloc else None
 
 
@@ -152,8 +151,8 @@ def status(
         )
     ]
     return SpCoreStatusOut(
-        configured=sync.configured(),
-        source=_source(),
+        configured=sync.configured(db),
+        source=_source(db),
         types=types,
         runs=runs,
         links=sum(tied.values()),
@@ -168,11 +167,11 @@ def request_sync(
 ) -> SpCoreSyncOut:
     """받기를 **지금** 부른다 — 워커가 돈다(보통은 하루 한 번 저절로)."""
     permissions.require_steward(user, code=_CODE, what=_WHAT)
-    if not sync.configured():
+    if not sync.configured(db):
         raise Conflict(
             "MNX-SPCORE-0001",
-            "SP 코어 주소 · 토큰이 설정돼 있지 않아 받을 수 없습니다 — 서버의 .env 에 "
-            "SP_CORE_URL · SP_CORE_TOKEN 을 넣고 백엔드 · 워커를 다시 켜세요(운영 핸드북).",
+            "SP 코어 주소 · 토큰이 설정돼 있지 않아 받을 수 없습니다 — 시스템 관리자가 "
+            "「관리 > 외부 연동」 의 Standard Platform 에 주소와 core:read 토큰을 넣으세요.",
         )
     job = queue.enqueue(
         db,

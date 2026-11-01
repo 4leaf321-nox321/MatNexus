@@ -15838,6 +15838,8 @@ export interface components {
              * Format: date-time
              */
             checked_at: string;
+            /** Core Types */
+            core_types?: number | null;
             /** Linked Properties */
             linked_properties?: number | null;
             /** Message */
@@ -15885,6 +15887,11 @@ export interface components {
             checked_at: string | null;
             /** Configured */
             configured: boolean;
+            /**
+             * From Env
+             * @default false
+             */
+            from_env: boolean;
             /** Has Token */
             has_token: boolean;
             /** Label */

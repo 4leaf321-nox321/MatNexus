@@ -5,9 +5,10 @@
  *   빈 칸으로 저장하면 token=null            주소만 고쳐도 토큰이 안 지워진다
  *   지우기는 따로 누른다                     clear_token
  *   연결 확인 결과가 한 줄로 선다             토큰 주인 · 물성 수
+ *   SP 코어도 여기서 넣는다(2026-10-27)       core:read 토큰 · 링크 칸 없음 · .env 로 닿는 중이면 말함
  */
 
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import IntegrationsPage from '@/modules/integrations/IntegrationsPage'
@@ -36,6 +37,7 @@ const SET: Integration = {
   token_readable: true,
   token_set_at: '2026-10-23T00:00:00Z',
   configured: true,
+  from_env: false,
   checked_at: null,
   check_ok: null,
   check_message: null,
@@ -99,5 +101,50 @@ describe('외부 연동', () => {
     fireEvent.click(screen.getByRole('button', { name: '연결 확인' }))
     expect(await screen.findByRole('status')).toHaveTextContent('연동 계정')
     expect(check).toHaveBeenCalledWith('testscope')
+  })
+
+  it('SP 코어는 core:read 토큰을 받고 링크 칸이 없으며, .env 로 닿는 중이면 그렇다고 말한다', async () => {
+    const sp: Integration = {
+      ...SET,
+      system: 'sp_core',
+      label: 'Standard Platform 코어 온톨로지',
+      base_url: '',
+      link_url: '',
+      has_token: false,
+      token_readable: false,
+      token_set_at: null,
+      configured: false,
+      from_env: true,
+      updated_by: null,
+      updated_at: null,
+    }
+    list.mockResolvedValue([SET, sp])
+    save.mockImplementation(async () => ({
+      ...sp,
+      base_url: 'https://sp.example/api/core',
+      has_token: true,
+      token_readable: true,
+      configured: true,
+      from_env: false,
+    }))
+    render(<IntegrationsPage />)
+    const form = within(await screen.findByRole('form', { name: 'Standard Platform 코어 온톨로지' }))
+    expect(form.getByText(/이 화면의 값이 먼저/)).toBeInTheDocument()
+    expect(form.queryByLabelText('화면 주소(링크용)')).toBeNull()
+
+    fireEvent.change(form.getByLabelText('API 주소'), { target: { value: 'https://sp.example' } })
+    fireEvent.change(form.getByLabelText('core:read 토큰'), { target: { value: ' sp_tok ' } })
+    fireEvent.click(form.getByRole('button', { name: '저장' }))
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1))
+    expect(save).toHaveBeenCalledWith('sp_core', {
+      base_url: 'https://sp.example',
+      web_url: '',
+      token: 'sp_tok',
+      clear_token: false,
+    })
+    await waitFor(() =>
+      expect(form.getByLabelText('API 주소')).toHaveValue('https://sp.example/api/core')
+    )
+    expect(form.queryByText(/이 화면의 값이 먼저/)).toBeNull()
   })
 })

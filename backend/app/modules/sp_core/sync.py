@@ -36,7 +36,6 @@ import httpx
 from sqlalchemy import and_, or_, select, update
 from sqlalchemy.orm import Session
 
-from app.config import get_settings
 from app.modules.sp_core.client import BadCursor, NotPublished, SpCoreClient, SpCoreError
 from app.modules.sp_core.models import (
     KEY_MAX,
@@ -47,6 +46,7 @@ from app.modules.sp_core.models import (
     SpCoreRun,
     SpCoreType,
 )
+from app.shared import sp_connection
 
 logger = logging.getLogger(__name__)
 
@@ -56,15 +56,23 @@ FULL_EVERY = timedelta(days=7)
 WARNINGS_MAX = 50
 
 
-def configured() -> bool:
-    settings = get_settings()
-    return bool(settings.sp_core_url and settings.sp_core_token)
+def configured(db: Session) -> bool:
+    """받을 수 있나 — 외부 연동 화면이나 `.env` 에 주소와 토큰이 있다(`sp_connection`)."""
+    return sp_connection.connection(db) is not None
 
 
-def open_client(transport: httpx.BaseTransport | None = None) -> SpCoreClient:
-    """설정의 주소 · 토큰으로 연다. 시험은 `transport` 를 넣는다."""
-    settings = get_settings()
-    return SpCoreClient(settings.sp_core_url, settings.sp_core_token, transport=transport)
+def open_client(db: Session, transport: httpx.BaseTransport | None = None) -> SpCoreClient:
+    """**부를 때마다** 설정을 읽어 연다 — 화면에서 바꾸면 재기동 없이 다음 받기부터 그 값이다.
+
+    시험은 `transport` 를 넣는다.
+    """
+    found = sp_connection.connection(db)
+    if found is None:
+        raise SpCoreError(
+            "SP 코어 주소 · 토큰이 없습니다 — 「관리 > 외부 연동」 의 Standard Platform 에 "
+            "넣으세요."
+        )
+    return SpCoreClient(found.url, found.token, transport=transport)
 
 
 def _now() -> datetime:

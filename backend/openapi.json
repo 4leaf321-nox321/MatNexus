@@ -18278,6 +18278,17 @@
             "title": "Checked At",
             "type": "string"
           },
+          "core_types": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Core Types"
+          },
           "linked_properties": {
             "anyOf": [
               {
@@ -18396,6 +18407,11 @@
           },
           "configured": {
             "title": "Configured",
+            "type": "boolean"
+          },
+          "from_env": {
+            "default": false,
+            "title": "From Env",
             "type": "boolean"
           },
           "has_token": {

@@ -23,6 +23,9 @@ class IntegrationOut(BaseModel):
     token_set_at: datetime | None
     configured: bool
     """주소와 풀 수 있는 토큰이 다 있다 — 바깥에 물을 수 있다."""
+    from_env: bool = False
+    """화면에는 없고 서버 `.env` 의 값으로 닿고 있다(SP 코어만 — 화면 이전의 설정 자리).
+    화면에 넣으면 화면이 이긴다."""
     checked_at: datetime | None
     check_ok: bool | None
     check_message: str | None
@@ -50,3 +53,5 @@ class IntegrationCheckOut(BaseModel):
     """TestScope 가 알아본 토큰 주인 — 그 사람이 볼 수 있는 부서의 장비만 보인다."""
     linked_properties: int | None = None
     """시험 항목이 이어진 물성 수 — 0 이면 연결은 됐어도 물성으로 장비를 못 찾는다."""
+    core_types: int | None = None
+    """SP 코어 — 이 토큰으로 읽을 수 있는 공개 코어 타입 수. 0 이면 닿아도 받을 것이 없다."""

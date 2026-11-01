@@ -20,7 +20,9 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.database import Base
 
 #: 붙일 수 있는 바깥 시스템과 화면 이름. 늘리려면 여기에 한 줄 — 연결 확인은 `services` 에.
-SYSTEMS = {"testscope": "TestScope"}
+#: `sp_core` 는 SP 코어 온톨로지를 받는 창구(ADR 0063) — 처음에는 `.env` 에만
+#: 넣었다(화면으로 옮김 2026-10-27).
+SYSTEMS = {"testscope": "TestScope", "sp_core": "Standard Platform 코어 온톨로지"}
 
 
 class IntegrationConnection(Base):
@@ -32,9 +34,10 @@ class IntegrationConnection(Base):
         PgUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
     system: Mapped[str] = mapped_column(String(40), unique=True)
-    """`testscope` — 바깥 시스템의 이름. 한 시스템에 한 줄이다."""
+    """`testscope` · `sp_core` — 바깥 시스템의 이름. 한 시스템에 한 줄이다."""
     base_url: Mapped[str] = mapped_column(String(500), default="", server_default="")
-    """**이 서버가** 부르는 API 주소(`http://127.0.0.1:8020/api`). 같은 서버면 localhost."""
+    """**이 서버가** 부르는 API 주소(`http://127.0.0.1:8020/api`). 같은 서버면 localhost.
+    SP 코어는 코어 창구(`https://<SP>/api/core`)."""
     web_url: Mapped[str] = mapped_column(String(500), default="", server_default="")
     """**사람이** 여는 화면 주소(`http://testscope-서버:8020`) — 링크에 쓴다. 비우면 API
     주소에서 `/api` 를 뗀 것. 서버끼리는 localhost 로 닿아도 사람의 브라우저는 그 주소로 못
