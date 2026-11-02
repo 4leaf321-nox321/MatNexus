@@ -6261,6 +6261,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/sp-core/linked": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Linked
+         * @description **화면의 「SP」 배지** — 한 대상 종류(기준정보는 한 축)에 이어진 SP 객체를 한 번에.
+         *
+         *     화면은 줄마다 묻지 않는다 — 한 번 받아 대상 키로 찾는다. 연결 목록(`/links`)과 달리 대상
+         *     이름을 다시 찾지 않는다(화면이 이미 갖고 있다). SP 쪽 이름 · 사라짐은 한 질의로 붙인다.
+         */
+        get: operations["list_linked_api_sp_core_linked_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/sp-core/links": {
         parameters: {
             query?: never;
@@ -21005,6 +21028,43 @@ export interface components {
             note?: string | null;
         };
         /**
+         * SpCoreLinkedOut
+         * @description 화면의 「SP」 배지 하나 — 대상 하나에 이어진 SP 객체.
+         */
+        SpCoreLinkedOut: {
+            /**
+             * Link Id
+             * Format: uuid
+             */
+            link_id: string;
+            /**
+             * Sp Deleted
+             * @default false
+             */
+            sp_deleted: boolean;
+            /** Sp Key */
+            sp_key: string;
+            /** Sp Label */
+            sp_label?: string | null;
+            /** Sp Type */
+            sp_type: string;
+            /** Sp Type Label */
+            sp_type_label?: string | null;
+            /** Target Ref */
+            target_ref: string;
+        };
+        /** SpCoreLinkedPage */
+        SpCoreLinkedPage: {
+            /** Items */
+            items: components["schemas"]["SpCoreLinkedOut"][];
+            /** Target */
+            target: string;
+            /** Truncated */
+            truncated: boolean;
+            /** Vocabulary */
+            vocabulary?: string | null;
+        };
+        /**
          * SpCoreMatchOut
          * @description 한 SP 타입을 한 대상과 견준 것 — **후보는 저절로 잇지 않는다.**
          */
@@ -34000,6 +34060,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["FailedJobOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_linked_api_sp_core_linked_get: {
+        parameters: {
+            query: {
+                /** @description term · property · property_group · property_field */
+                target: string;
+                /** @description target=term 이면 기준정보 축 slug */
+                vocabulary?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SpCoreLinkedPage"];
                 };
             };
             /** @description Validation Error */

@@ -15,7 +15,7 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import Select, String, cast, select
 from sqlalchemy.orm import Session
 
 from app.modules.catalog.models import CatalogDefinition
@@ -56,18 +56,50 @@ def bad_kind(kind: str) -> AppError:
     )
 
 
+def axis_of(db: Session, vocabulary: str | None) -> Vocabulary:
+    """기준정보 값은 **축 하나 안에서** 본다 — 축이 없으면 말한다."""
+    if not vocabulary:
+        raise AppError(
+            "MNX-SPCORE-0005",
+            "기준정보 값과 견주려면 어느 축인지(vocabulary — 예: manufacturer)를 주세요.",
+            status=422,
+        )
+    axis = db.scalar(select(Vocabulary).where(Vocabulary.slug == vocabulary))
+    if axis is None:
+        raise NotFound("MNX-SPCORE-0006", f"그런 기준정보 축이 없습니다: {vocabulary}")
+    return axis
+
+
+def axis_refs(db: Session, vocabulary: str | None) -> Select[tuple[str]]:
+    """축 하나에 든 값의 연결 키(id 글자) — 그 축의 연결만 고르는 하위 질의.
+
+    축에 값이 수만 개(강종)일 수 있어 목록으로 받지 않고 질의로 넘긴다. 연결 키는
+    `normalize_ref` 가 맞춘 꼴이라 PostgreSQL 의 uuid → 글자와 같다.
+    """
+    axis = axis_of(db, vocabulary)
+    return select(cast(VocabularyTerm.id, String)).where(
+        VocabularyTerm.vocabulary_id == axis.id
+    )
+
+
+def normalize_ref(kind: str, ref: str) -> str:
+    """연결 키를 한 꼴로 — 기준정보 값 id 는 소문자 · 하이픈 꼴.
+
+    대문자 · 중괄호 꼴도 같은 값을 찾아(`uuid.UUID`) 이어지는데, 그대로 두면 화면 배지가
+    축의 id 와 견줄 때 조용히 빠지고 같은 짝이 두 줄이 된다.
+    """
+    if kind != "term":
+        return ref
+    try:
+        return str(uuid.UUID(ref))
+    except ValueError:
+        return ref
+
+
 def pool(db: Session, kind: str, vocabulary: str | None = None) -> list[Target]:
     """맞은편 전부. `term` 이면 어느 기준정보 축인지(`vocabulary`)가 있어야 한다."""
     if kind == "term":
-        if not vocabulary:
-            raise AppError(
-                "MNX-SPCORE-0005",
-                "기준정보 값과 견주려면 어느 축인지(vocabulary — 예: manufacturer)를 주세요.",
-                status=422,
-            )
-        axis = db.scalar(select(Vocabulary).where(Vocabulary.slug == vocabulary))
-        if axis is None:
-            raise NotFound("MNX-SPCORE-0006", f"그런 기준정보 축이 없습니다: {vocabulary}")
+        axis = axis_of(db, vocabulary)
         terms = list(
             db.scalars(
                 select(VocabularyTerm).where(

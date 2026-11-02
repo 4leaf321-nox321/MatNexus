@@ -31772,6 +31772,100 @@
         "title": "SpCoreLinkRequest",
         "type": "object"
       },
+      "SpCoreLinkedOut": {
+        "description": "화면의 「SP」 배지 하나 — 대상 하나에 이어진 SP 객체.",
+        "properties": {
+          "link_id": {
+            "format": "uuid",
+            "title": "Link Id",
+            "type": "string"
+          },
+          "sp_deleted": {
+            "default": false,
+            "title": "Sp Deleted",
+            "type": "boolean"
+          },
+          "sp_key": {
+            "title": "Sp Key",
+            "type": "string"
+          },
+          "sp_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sp Label"
+          },
+          "sp_type": {
+            "title": "Sp Type",
+            "type": "string"
+          },
+          "sp_type_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sp Type Label"
+          },
+          "target_ref": {
+            "title": "Target Ref",
+            "type": "string"
+          }
+        },
+        "required": [
+          "link_id",
+          "target_ref",
+          "sp_type",
+          "sp_key"
+        ],
+        "title": "SpCoreLinkedOut",
+        "type": "object"
+      },
+      "SpCoreLinkedPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SpCoreLinkedOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "target": {
+            "title": "Target",
+            "type": "string"
+          },
+          "truncated": {
+            "title": "Truncated",
+            "type": "boolean"
+          },
+          "vocabulary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vocabulary"
+          }
+        },
+        "required": [
+          "target",
+          "items",
+          "truncated"
+        ],
+        "title": "SpCoreLinkedPage",
+        "type": "object"
+      },
       "SpCoreMatchOut": {
         "description": "한 SP 타입을 한 대상과 견준 것 — **후보는 저절로 잇지 않는다.**",
         "properties": {
@@ -55561,6 +55655,69 @@
         "summary": "Retry",
         "tags": [
           "server"
+        ]
+      }
+    },
+    "/api/sp-core/linked": {
+      "get": {
+        "description": "**화면의 「SP」 배지** — 한 대상 종류(기준정보는 한 축)에 이어진 SP 객체를 한 번에.\n\n화면은 줄마다 묻지 않는다 — 한 번 받아 대상 키로 찾는다. 연결 목록(`/links`)과 달리 대상\n이름을 다시 찾지 않는다(화면이 이미 갖고 있다). SP 쪽 이름 · 사라짐은 한 질의로 붙인다.",
+        "operationId": "list_linked_api_sp_core_linked_get",
+        "parameters": [
+          {
+            "description": "term · property · property_group · property_field",
+            "in": "query",
+            "name": "target",
+            "required": true,
+            "schema": {
+              "description": "term · property · property_group · property_field",
+              "title": "Target",
+              "type": "string"
+            }
+          },
+          {
+            "description": "target=term 이면 기준정보 축 slug",
+            "in": "query",
+            "name": "vocabulary",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "target=term 이면 기준정보 축 slug",
+              "title": "Vocabulary"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpCoreLinkedPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Linked",
+        "tags": [
+          "sp_core"
         ]
       }
     },

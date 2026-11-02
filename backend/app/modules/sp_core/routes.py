@@ -7,12 +7,14 @@
     GET  /sp-core/match                      한 SP 타입 ↔ 한 대상(기준정보 축 · 물성 · 물성군
     · 분야) 대조
     GET  /sp-core/links                      연결 목록
+    GET  /sp-core/linked                     한 대상 종류(기준정보는 한 축)에 이어진 SP — 배지
     POST /sp-core/links                      잇기 — 미리보기가 기본 · 자료 관리자
     POST /sp-core/links/remove               끊기 — 미리보기가 기본 · 자료 관리자
 
-**화면이 없다**(`tests/architecture/test_boundaries.BACKEND_ONLY`) — 잇는 일은 운영에서 AI 가
-MCP 로 후보를 보이고 사람이 확인한다. 읽기는 로그인한 누구나 한다 — 바깥 시스템의 공개
-목록이다.
+**잇는 화면은 없다** — 잇는 일은 운영에서 AI 가 MCP 로 후보를 보이고 사람이 확인한다. 화면은
+이어진 것을 **보이기만** 한다(2026-11-02 — 기준정보 · 물성 분류의 「SP」 배지). 전에는 그것도
+없어서 이어도 변경 이력 말고는 어디에도 안 보였다. 읽기는 로그인한 누구나 한다 — 바깥
+시스템의 공개 목록이다.
 """
 
 from __future__ import annotations
@@ -22,7 +24,7 @@ from typing import Any
 from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import func, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -37,6 +39,8 @@ from app.modules.sp_core.models import (
     SpCoreType,
 )
 from app.modules.sp_core.schemas import (
+    SpCoreLinkedOut,
+    SpCoreLinkedPage,
     SpCoreLinkOut,
     SpCoreLinkPage,
     SpCoreLinkPlanOut,
@@ -54,7 +58,7 @@ from app.modules.sp_core.schemas import (
     SpCoreUnlinkOut,
     SpCoreUnlinkRequest,
 )
-from app.shared import audit, permissions, sp_connection
+from app.shared import audit, link_targets, permissions, sp_connection
 from app.shared.auth import current_user
 from app.shared.errors import AppError, Conflict, NotFound
 
@@ -66,6 +70,8 @@ _WHAT = "SP 코어 온톨로지 받기 · 연결"
 PAGE_MAX = 200
 #: 객체 상세에 싣는 선의 상한.
 EDGES_MAX = 200
+#: 배지용 연결의 상한 — 한 대상 종류(한 축)에 이보다 많이 이어지면 일부만 싣고 그렇다고 말한다.
+LINKED_MAX = 5000
 RUNS_SHOWN = 5
 
 
@@ -399,6 +405,60 @@ def list_links(
         )
     )
     return SpCoreLinkPage(items=_link_outs(db, rows), total=total, limit=limit, offset=offset)
+
+
+@router.get("/linked", response_model=SpCoreLinkedPage)
+def list_linked(
+    target: str = Query(..., description="term · property · property_group · property_field"),
+    vocabulary: str | None = Query(
+        default=None, description="target=term 이면 기준정보 축 slug"
+    ),
+    _user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> SpCoreLinkedPage:
+    """**화면의 「SP」 배지** — 한 대상 종류(기준정보는 한 축)에 이어진 SP 객체를 한 번에.
+
+    화면은 줄마다 묻지 않는다 — 한 번 받아 대상 키로 찾는다. 연결 목록(`/links`)과 달리 대상
+    이름을 다시 찾지 않는다(화면이 이미 갖고 있다). SP 쪽 이름 · 사라짐은 한 질의로 붙인다.
+    """
+    if target not in links.TARGETS:
+        raise link_targets.bad_kind(target)
+    query = (
+        select(SpCoreLink, SpCoreObject.label, SpCoreObject.deleted, SpCoreType.label)
+        .outerjoin(
+            SpCoreObject,
+            and_(
+                SpCoreObject.type_slug == SpCoreLink.sp_type,
+                SpCoreObject.key == SpCoreLink.sp_key,
+            ),
+        )
+        .outerjoin(SpCoreType, SpCoreType.slug == SpCoreLink.sp_type)
+        .where(SpCoreLink.target_kind == target)
+    )
+    if target == "term":
+        query = query.where(SpCoreLink.target_ref.in_(link_targets.axis_refs(db, vocabulary)))
+    rows = db.execute(
+        query.order_by(SpCoreLink.target_ref, SpCoreLink.sp_type, SpCoreLink.sp_key).limit(
+            LINKED_MAX + 1
+        )
+    ).all()
+    return SpCoreLinkedPage(
+        target=target,
+        vocabulary=vocabulary if target == "term" else None,
+        items=[
+            SpCoreLinkedOut(
+                link_id=link.id,
+                target_ref=link.target_ref,
+                sp_type=link.sp_type,
+                sp_type_label=type_label,
+                sp_key=link.sp_key,
+                sp_label=sp_label,
+                sp_deleted=bool(sp_deleted),
+            )
+            for link, sp_label, sp_deleted, type_label in rows[:LINKED_MAX]
+        ],
+        truncated=len(rows) > LINKED_MAX,
+    )
 
 
 @router.post("/links", response_model=SpCoreLinkPlanOut)

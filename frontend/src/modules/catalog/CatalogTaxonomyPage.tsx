@@ -33,6 +33,9 @@ import type {
   TaxonomyGroup,
   TaxonomyProperty,
 } from '@/modules/catalog/taxonomyApi'
+import type { SpLinked } from '@/modules/sp_core/api'
+import { SpBadge } from '@/modules/sp_core/SpBadge'
+import { useSpLinked } from '@/modules/sp_core/useSpLinked'
 import { useAuth } from '@/shared/auth/AuthContext'
 import { isDataSteward } from '@/shared/auth/roles'
 import { ConfirmDialog } from '@/shared/components/ConfirmDialog'
@@ -68,6 +71,13 @@ type Editing =
   | { kind: 'field'; field: TaxonomyField | null }
   | { kind: 'group'; group: TaxonomyGroup | null; fieldKey: string }
 
+/** 키 → 이어진 SP. 분야 · 물성군 · 물성마다 따로 받는다(키가 겹칠 수 있다). */
+interface SpMaps {
+  field: Map<string, SpLinked[]>
+  group: Map<string, SpLinked[]>
+  property: Map<string, SpLinked[]>
+}
+
 export default function CatalogTaxonomyPage() {
   const { user } = useAuth()
   const canEdit = isDataSteward(user)
@@ -85,6 +95,16 @@ export default function CatalogTaxonomyPage() {
 
   const data = tree.data
   const needle = query.trim().toLowerCase()
+  // **SP 와 이어진 것에 배지**(ADR 0063) — 이 분류를 바깥이 키로 읽어 가므로, 어느 것이 SP 의
+  // 무엇과 같은 것으로 이어져 있는지가 여기서 보여야 한다.
+  const spFields = useSpLinked('property_field')
+  const spGroups = useSpLinked('property_group')
+  const spProperties = useSpLinked('property')
+  const sp: SpMaps = {
+    field: spFields.byRef,
+    group: spGroups.byRef,
+    property: spProperties.byRef,
+  }
 
   const byGroup = useMemo(() => {
     const out = new Map<string, TaxonomyProperty[]>()
@@ -174,6 +194,9 @@ export default function CatalogTaxonomyPage() {
             물성군 {data.groups.filter((one) => !one.retired).length}
           </p>
           {data.truncated && <Badge variant="destructive">물성이 너무 많아 일부만 보입니다</Badge>}
+          {(spFields.truncated || spGroups.truncated || spProperties.truncated) && (
+            <Badge variant="outline">SP 연결이 많아 일부만 표시</Badge>
+          )}
           <Input
             className="h-8 w-56"
             aria-label="물성 찾기"
@@ -202,6 +225,7 @@ export default function CatalogTaxonomyPage() {
             )}
             byGroup={byGroup}
             needle={needle}
+            sp={sp}
             canEdit={canEdit}
             busy={busy}
             selected={selected}
@@ -226,6 +250,7 @@ export default function CatalogTaxonomyPage() {
           </p>
           <UnclassifiedList
             properties={unclassified}
+            sp={sp.property}
             canEdit={canEdit}
             selected={selected}
             onToggle={toggle}
@@ -297,6 +322,7 @@ function FieldSection({
   groups,
   byGroup,
   needle,
+  sp,
   canEdit,
   busy,
   selected,
@@ -313,6 +339,7 @@ function FieldSection({
   groups: TaxonomyGroup[]
   byGroup: Map<string, TaxonomyProperty[]>
   needle: string
+  sp: SpMaps
   canEdit: boolean
   busy: boolean
   selected: Set<string>
@@ -343,6 +370,7 @@ function FieldSection({
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <h2 className="font-semibold">{field.name}</h2>
         <code className="text-muted-foreground font-mono text-xs">{field.key}</code>
+        <SpBadge links={sp.field.get(field.key)} label={`분야 ${field.name}`} />
         {field.retired && <Badge variant="outline">폐기</Badge>}
         <span className="text-muted-foreground text-sm">
           물성군 {field.group_count} · 물성 {field.property_count}
@@ -386,6 +414,7 @@ function FieldSection({
               <div className="mb-2 flex flex-wrap items-center gap-2">
                 <h3 className="text-sm font-medium">{group.name}</h3>
                 <code className="text-muted-foreground font-mono text-xs">{group.key}</code>
+                <SpBadge links={sp.group.get(group.key)} label={`물성군 ${group.name}`} />
                 {group.retired && <Badge variant="outline">폐기</Badge>}
                 <span className="text-muted-foreground text-xs">{group.property_count}종</span>
                 {canEdit && (
@@ -434,6 +463,7 @@ function FieldSection({
                     <PropertyChip
                       key={property.key}
                       property={property}
+                      sp={sp.property.get(property.key)}
                       canEdit={canEdit}
                       checked={selected.has(property.key)}
                       onToggle={onToggle}
@@ -455,12 +485,14 @@ function FieldSection({
 /** 물성 하나. 자료 관리자에게는 고르는 칸이 붙는다. */
 function PropertyChip({
   property,
+  sp,
   canEdit,
   checked,
   onToggle,
   crossDomain = false,
 }: {
   property: TaxonomyProperty
+  sp?: SpLinked[]
   canEdit: boolean
   checked: boolean
   onToggle: (key: string) => void
@@ -486,27 +518,41 @@ function PropertyChip({
     'inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs',
     checked && 'border-primary bg-primary/10'
   )
-  if (!canEdit) return <span className={style}>{body}</span>
+  const badge = <SpBadge links={sp} label={property.name} />
+  if (!canEdit) {
+    return (
+      <span className={style}>
+        {body}
+        {badge}
+      </span>
+    )
+  }
+  // **배지는 `<label>` 밖에 둔다.** 안에 두면 배지를 누를 때 고르는 칸까지 바뀐다.
   return (
-    <label className={cn(style, 'cursor-pointer')} title={`값 ${property.value_count}건`}>
-      <input
-        type="checkbox"
-        aria-label={`${property.name} 고르기`}
-        checked={checked}
-        onChange={() => onToggle(property.key)}
-      />
-      {body}
-    </label>
+    <span className={style}>
+      <label className="inline-flex cursor-pointer items-center gap-1.5" title={`값 ${property.value_count}건`}>
+        <input
+          type="checkbox"
+          aria-label={`${property.name} 고르기`}
+          checked={checked}
+          onChange={() => onToggle(property.key)}
+        />
+        {body}
+      </label>
+      {badge}
+    </span>
   )
 }
 
 function UnclassifiedList({
   properties,
+  sp,
   canEdit,
   selected,
   onToggle,
 }: {
   properties: TaxonomyProperty[]
+  sp: Map<string, SpLinked[]>
   canEdit: boolean
   selected: Set<string>
   onToggle: (key: string) => void
@@ -530,6 +576,7 @@ function UnclassifiedList({
               <PropertyChip
                 key={property.key}
                 property={property}
+                sp={sp.get(property.key)}
                 canEdit={canEdit}
                 checked={selected.has(property.key)}
                 onToggle={onToggle}

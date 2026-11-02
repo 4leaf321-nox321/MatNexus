@@ -36,6 +36,36 @@ vi.mock('@/modules/catalog/taxonomyApi', async (importOriginal) => ({
   },
 }))
 
+const linked = vi.fn()
+vi.mock('@/modules/sp_core/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/modules/sp_core/api')>()),
+  // 창을 열면 SP 객체를 받는다 — 이 시험은 배지까지만 보므로 끝나지 않는 받기로 둔다.
+  spCoreApi: {
+    linked: (...args: unknown[]) => linked(...args),
+    object: () => new Promise(() => {}),
+  },
+}))
+
+/** SP 연결 하나 — 대상 종류마다 따로 묻는다. */
+function spLink(target: string, ref: string, key: string, label: string) {
+  return {
+    target,
+    vocabulary: null,
+    items: [
+      {
+        link_id: `l-${key}`,
+        target_ref: ref,
+        sp_type: 'property',
+        sp_type_label: '물성',
+        sp_key: key,
+        sp_label: label,
+        sp_deleted: false,
+      },
+    ],
+    truncated: false,
+  }
+}
+
 let me: Record<string, unknown> = {}
 vi.mock('@/shared/auth/AuthContext', () => ({
   useAuth: () => ({ user: me, reload: vi.fn(), logout: vi.fn() }),
@@ -129,7 +159,41 @@ beforeEach(() => {
   assign.mockReset()
   importRows.mockReset()
   tree.mockResolvedValue(TREE)
+  linked.mockReset()
+  linked.mockImplementation(async (target: string) => ({
+    target,
+    vocabulary: null,
+    items: [],
+    truncated: false,
+  }))
   me = STEWARD
+})
+
+describe('SP 배지', () => {
+  it('SP 와 이어진 물성 · 물성군에 배지가 서고, 배지를 눌러도 고르는 칸은 안 바뀐다', async () => {
+    linked.mockImplementation(async (target: string) =>
+      target === 'property'
+        ? spLink(target, 'mechanical.tensile_strength', 'sp-0002', '인장강도')
+        : target === 'property_group'
+          ? spLink(target, 'pg-0001', 'pg-strength', '강도')
+          : { target, vocabulary: null, items: [], truncated: false }
+    )
+    show()
+    const badge = await screen.findByRole('button', { name: '인장강도 — SP 연결 1개' })
+    expect(
+      screen.getByRole('button', { name: '물성군 강도 — SP 연결 1개' })
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /항복강도 — SP/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /분야 기계 — SP/ })).not.toBeInTheDocument()
+    expect(new Set(linked.mock.calls.map(([target]) => target))).toEqual(
+      new Set(['property', 'property_group', 'property_field'])
+    )
+
+    // **배지는 `<label>` 밖이다** — 안에 두면 배지를 누를 때 고르기까지 바뀐다.
+    await userEvent.click(badge)
+    expect(screen.getByLabelText('인장강도 고르기')).not.toBeChecked()
+    expect(screen.queryByText(/개 고름/)).not.toBeInTheDocument()
+  })
 })
 
 describe('트리', () => {

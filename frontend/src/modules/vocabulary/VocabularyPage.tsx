@@ -21,6 +21,8 @@ import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Pencil, Search } from 'lucide-react'
 
+import { SpBadge } from '@/modules/sp_core/SpBadge'
+import { useSpLinked } from '@/modules/sp_core/useSpLinked'
 import { UnitsContent } from '@/modules/units/UnitsPage'
 import { vocabularyApi } from '@/modules/vocabulary/api'
 import { VocabularyAxisPanel } from '@/modules/vocabulary/VocabularyAxisPanel'
@@ -61,6 +63,8 @@ export default function VocabularyPage() {
   )
   const rows = terms.data?.items ?? []
   const total = terms.data?.total ?? 0
+  // **SP 와 이어진 값에 배지.** 축 하나를 한 번에 받는다 — 줄마다 묻지 않는다.
+  const sp = useSpLinked(active ? 'term' : null, active?.slug)
 
   const parentLabel = useMemo(
     () => list.find((item) => item.slug === active?.parent_slug)?.label ?? null,
@@ -120,6 +124,7 @@ export default function VocabularyPage() {
                   없으면 「이것이 전부」 로 읽힌다. */}
               {total}개{total > rows.length && ` 중 ${rows.length}개`}
             </span>
+            {sp.truncated && <Badge variant="outline">SP 연결이 많아 일부만 표시</Badge>}
           </div>
 
           <ErrorNotice error={terms.error} className="mb-3" />
@@ -147,6 +152,7 @@ export default function VocabularyPage() {
                     <tr key={item.id} className="border-t">
                       <td className="px-3 py-1.5">
                         {item.value}
+                        <SpBadge links={sp.byRef.get(item.id)} label={item.value} className="ml-2" />
                         {/* 감춘 값은 드롭다운에 안 뜬다 — 목록에 있는데 못 고르는
                             이유가 화면에 있어야 한다. */}
                         {item.status !== 'active' && (

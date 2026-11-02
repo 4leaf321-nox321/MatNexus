@@ -27,6 +27,15 @@ vi.mock('@/modules/vocabulary/api', () => ({
 
 vi.mock('@/modules/units/api', () => ({ unitsApi: { list: () => units() } }))
 
+const linked = vi.fn()
+vi.mock('@/modules/sp_core/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/modules/sp_core/api')>()),
+  spCoreApi: {
+    linked: (...args: unknown[]) => linked(...args),
+    object: () => new Promise(() => {}),
+  },
+}))
+
 vi.mock('@/shared/auth/AuthContext', () => ({
   useAuth: () => ({ user: { is_system_admin: isAdmin } }),
 }))
@@ -71,6 +80,7 @@ async function show(rows: unknown[], total = rows.length) {
 beforeEach(() => {
   vi.clearAllMocks()
   isAdmin = false
+  linked.mockResolvedValue({ target: 'term', vocabulary: 'manufacturer', items: [], truncated: false })
   units.mockResolvedValue({
     total_units: 1,
     dimensions: [
@@ -130,6 +140,34 @@ describe('기준정보 보기', () => {
     await show([term({ value: '옛제조사', status: 'hidden' })])
     expect(await screen.findByText('옛제조사')).toBeInTheDocument()
     expect(screen.getByText('감춤')).toBeInTheDocument()
+  })
+
+  it('SP 와 이어진 값에만 배지가 선다 — 축 하나를 한 번에 묻는다', async () => {
+    // **이어도 화면 어디에도 안 보였다**(2026-11-02). 줄마다 묻지 않고 축을 한 번에 받는다.
+    const posco = term({ value: '포스코' })
+    const other = term({ value: '현대제철' })
+    linked.mockResolvedValue({
+      target: 'term',
+      vocabulary: 'manufacturer',
+      items: [
+        {
+          link_id: 'l1',
+          target_ref: posco.id,
+          sp_type: 'organization',
+          sp_type_label: '기관',
+          sp_key: 'ORG-1',
+          sp_label: '포스코',
+          sp_deleted: false,
+        },
+      ],
+      truncated: false,
+    })
+    await show([posco, other])
+    expect(await screen.findByRole('button', { name: '포스코 — SP 연결 1개' })).toBeInTheDocument()
+    expect(screen.getByText('현대제철')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /현대제철 — SP/ })).not.toBeInTheDocument()
+    expect(linked).toHaveBeenCalledTimes(1)
+    expect(linked).toHaveBeenCalledWith('term', 'manufacturer')
   })
 
   it('몇 개 중 몇 개인지 말한다', async () => {

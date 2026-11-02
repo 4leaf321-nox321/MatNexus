@@ -185,3 +185,25 @@ class SpCoreLinkPage(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+class SpCoreLinkedOut(BaseModel):
+    """화면의 「SP」 배지 하나 — 대상 하나에 이어진 SP 객체."""
+
+    link_id: uuid.UUID
+    target_ref: str
+    """기준정보 값은 id, 물성 · 물성군 · 분야는 키 — 화면은 이것으로 줄을 찾는다."""
+    sp_type: str
+    sp_type_label: str | None = None
+    sp_key: str
+    sp_label: str | None = None
+    sp_deleted: bool = False
+    """SP 에서 사라진(합쳐진) 객체에 이어져 있다 — 연결이 낡았다는 뜻이라 배지가 말한다."""
+
+
+class SpCoreLinkedPage(BaseModel):
+    target: str
+    vocabulary: str | None = None
+    items: list[SpCoreLinkedOut]
+    truncated: bool
+    """상한을 넘어 일부만 실었다."""

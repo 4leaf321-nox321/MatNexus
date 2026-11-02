@@ -36,6 +36,8 @@ import {
 import { AliasCandidatesPanel } from '@/modules/catalog/AliasCandidatesPanel'
 import { PropertyMappingPanel } from '@/modules/catalog/PropertyMappingPanel'
 import { catalogApi } from '@/modules/catalog/api'
+import { SpBadge } from '@/modules/sp_core/SpBadge'
+import { useSpLinked } from '@/modules/sp_core/useSpLinked'
 import { BULK_MAX, vocabularyApi } from '@/modules/vocabulary/api'
 import { SpecimenFieldsDialog } from '@/modules/vocabulary/SpecimenFieldsDialog'
 import { PasteTable, columnsOf, toLines } from '@/modules/vocabulary/PasteTable'
@@ -403,6 +405,9 @@ function TermTable({ vocabulary, role }: { vocabulary: Vocabulary; role: AxisRol
 
   const page = terms.data
   const rows = page?.items ?? []
+  // **SP 와 이어진 값에 배지.** 이름을 고치거나 합치기 전에 바깥이 이 값을 잇고 있는지가
+  // 보여야 한다 — 연결은 값 id 에 붙어 있어 이름을 고쳐도 따라온다.
+  const sp = useSpLinked('term', vocabulary.slug)
   // **Shift 로 범위를 고른다.** 기준정보는 한 쪽이 수십 줄이다.
   //
   // 선언이 `removeSelected` 보다 아래인데, 그 함수는 사람이 누를 때 도므로
@@ -672,6 +677,7 @@ function TermTable({ vocabulary, role }: { vocabulary: Vocabulary; role: AxisRol
               </TableCell>
               <TableCell>
                 {item.value}
+                <SpBadge links={sp.byRef.get(item.id)} label={item.value} className="ml-2" />
                 {item.status === 'deprecated' && (
                   <Badge variant="outline" className="ml-2 text-xs">
                     감춤

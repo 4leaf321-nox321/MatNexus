@@ -152,7 +152,8 @@ def plan(db: Session, items: list[dict[str, Any]]) -> Plan:
     seen: set[tuple[str, str, str, str]] = set()
     for item in items:
         sp_type, sp_key = str(item["sp_type"]), str(item["sp_key"])
-        kind, ref = str(item["target"]), str(item["target_ref"])
+        kind = str(item["target"])
+        ref = link_targets.normalize_ref(kind, str(item["target_ref"]))
         row: dict[str, Any] = {
             "sp_type": sp_type,
             "sp_key": sp_key,

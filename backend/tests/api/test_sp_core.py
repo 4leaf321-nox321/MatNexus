@@ -622,6 +622,99 @@ class TestAPI:
         assert db.scalar(select(SpCoreLink)) is None
         assert db.scalar(select(AuditEntry).where(AuditEntry.action == "sp_core.unlinked"))
 
+    def test_화면_배지는_한_축의_연결을_SP_이름과_함께_한_번에(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        received: None,
+    ) -> None:
+        term_id = _term(db, "manufacturer", "POSCO")
+        other_axis = _term(db, "vendor", "포스코인터내셔널")
+        items = [
+            # 대문자로 넣어도 같은 값이다 — 그대로 저장하면 배지가 축의 id 와 못 맞춘다.
+            {
+                "sp_type": "organization",
+                "sp_key": "ORG-1",
+                "target": "term",
+                "target_ref": term_id.upper(),
+            },
+            {
+                "sp_type": "organization",
+                "sp_key": "ORG-1",
+                "target": "term",
+                "target_ref": other_axis,
+            },
+            {
+                "sp_type": "property",
+                "sp_key": "sp-0002",
+                "target": "property",
+                "target_ref": "mechanical.tensile_strength",
+            },
+        ]
+        made = client.post(
+            "/api/sp-core/links",
+            json={"items": items, "dry_run": False},
+            headers=admin_headers,
+        )
+        assert made.status_code == 200, made.text
+        again = client.post(
+            "/api/sp-core/links",
+            json={"items": [{**items[0], "target_ref": term_id}]},
+            headers=admin_headers,
+        ).json()
+        assert again["exists"] == 1, "꼴만 다른 id 로 같은 짝이 두 줄이 되면 안 된다"
+
+        plain = _member(client, admin_headers)
+        got = client.get(
+            "/api/sp-core/linked",
+            params={"target": "term", "vocabulary": "manufacturer"},
+            headers=plain,
+        )
+        assert got.status_code == 200, got.text
+        body = got.json()
+        assert body["truncated"] is False
+        assert [
+            (one["target_ref"], one["sp_key"], one["sp_label"], one["sp_type_label"])
+            for one in body["items"]
+        ] == [(term_id, "ORG-1", "포스코", "기관")], "다른 축(거래처)의 연결은 안 섞인다"
+
+        props = client.get(
+            "/api/sp-core/linked", params={"target": "property"}, headers=plain
+        ).json()
+        assert [(one["target_ref"], one["sp_deleted"]) for one in props["items"]] == [
+            ("mechanical.tensile_strength", False)
+        ]
+        # SP 에서 사라지면 연결은 남고 배지가 그렇다고 말한다.
+        obj = _obj(db, "property", "sp-0002")
+        assert obj is not None
+        obj.deleted = True
+        db.commit()
+        props = client.get(
+            "/api/sp-core/linked", params={"target": "property"}, headers=plain
+        ).json()
+        assert props["items"][0]["sp_deleted"] is True
+
+        assert (
+            client.get(
+                "/api/sp-core/linked", params={"target": "term"}, headers=plain
+            ).status_code
+            == 422
+        ), "기준정보는 축을 줘야 한다"
+        missing = client.get(
+            "/api/sp-core/linked",
+            params={"target": "term", "vocabulary": "nothing"},
+            headers=plain,
+        )
+        assert missing.status_code == 404
+        assert missing.json()["error"]["code"] == "MNX-SPCORE-0006"
+        assert (
+            client.get(
+                "/api/sp-core/linked", params={"target": "material"}, headers=plain
+            ).status_code
+            == 422
+        )
+
     def test_잇기_끊기_받기는_자료_관리자만(
         self, client: TestClient, admin_headers: dict[str, str], received: None
     ) -> None:
