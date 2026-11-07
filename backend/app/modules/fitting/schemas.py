@@ -1180,6 +1180,10 @@ class BomDeckOut(BaseModel):
     literature_count: int
     synthetic_count: int = 0
     """합성 곡선으로 실린 부품 수 — 문헌 스칼라 수와도 갈라 보인다."""
+    measured_curve_count: int = 0
+    """**문헌 실측 곡선**으로 실린 부품 수(2026-11-08) — 응력-변형률 한 벌을 소성 표로 옮겼거나
+    고무의 그 곡선에 초탄성 식을 맞춘 줄. 「곡선 합성」 을 켰어도 잰 곡선을 썼으면 여기로
+    센다 — 합성으로 세면 사람은 실측을 지어낸 것으로 읽는다."""
     literature_format: str | None = None
     """문헌 줄에 쓴 형식 — 비워 보냈으면 서버가 고른 것이다."""
 

@@ -405,6 +405,9 @@ export function BomDeck() {
                 {built.literature_count > 0 && built.literature_format
                   ? ` (${built.literature_format})`
                   : ''}
+                {/* 잰 곡선과 지은 곡선을 갈라 센다 — 실측을 「합성」 으로 세면 지어낸 것으로 읽힌다. */}
+                {(built.measured_curve_count ?? 0) > 0 &&
+                  ` · 문헌 실측 곡선 ${built.measured_curve_count}`}
                 {built.synthetic_count > 0 && ` · 합성 곡선 ${built.synthetic_count}`}
                 {built.skipped.length > 0 && ` · 건너뜀 ${built.skipped.length}`}
               </span>
@@ -551,7 +554,8 @@ function MatchRow({
             </option>
           ))}
         </select>
-        {/* 곡선 합성 — 지어낸 곡선은 지어냈다고 말한다. 사내 카드가 있으면 실측이 이긴다. */}
+        {/* 곡선 합성 — 지어낸 곡선은 지어냈다고 말한다. 사내 카드가 있으면 실측이 이긴다.
+            문헌에 응력-변형률 곡선이 있으면 덱은 합성 대신 그것을 쓴다(2026-11-08). */}
         {row.catalog && !row.cardId && (
           <label className="text-muted-foreground mt-1 flex items-center gap-1 text-xs">
             <input
@@ -560,7 +564,8 @@ function MatchRow({
               checked={row.synthesize}
               onChange={(event) => onChange({ ...row, synthesize: event.target.checked })}
             />
-            곡선 합성 — 실측 아님, 덱에 합성 표지(고무는 곡선 대신 초탄성)
+            곡선 합성 — 문헌 실측 곡선이 있으면 그것, 없으면 합성(실측 아님, 덱에 합성 표지).
+            고무는 곡선 대신 초탄성
           </label>
         )}
       </td>
@@ -569,7 +574,7 @@ function MatchRow({
           <span className="text-emerald-700 dark:text-emerald-500">사내 카드 (곡선)</span>
         ) : row.catalog ? (
           row.synthesize ? (
-            <span className="text-amber-700 dark:text-amber-500">문헌 합성 곡선</span>
+            <span className="text-amber-700 dark:text-amber-500">문헌 곡선 (실측 · 없으면 합성)</span>
           ) : (
             <span>문헌 스칼라</span>
           )

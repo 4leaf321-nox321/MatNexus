@@ -10079,6 +10079,11 @@ export interface components {
             literature_count: number;
             /** Literature Format */
             literature_format?: string | null;
+            /**
+             * Measured Curve Count
+             * @default 0
+             */
+            measured_curve_count: number;
             /** Notes */
             notes: string[];
             /** Skipped */

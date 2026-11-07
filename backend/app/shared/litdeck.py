@@ -22,6 +22,13 @@
 전에는 `dyna_elastic`·`dyna_thermal` 둘이 고정이었다. 지금은 **카드 내보내기와 같은
 형식 목록**(코드판 + 해석용 물성 정의, 사용 중단 제외)에서, 문헌이 채울 수 있는 블록만
 요구하는 형식을 고른다(`literature_formats`). 곡선이 필요한 형식은 「곡선 합성」 을 켤 때만.
+
+## 잰 곡선이 지은 곡선을 이긴다 (2026-11-08)
+
+문헌에 응력-변형률 한 벌(ADR 0067)이 있으면 덱이 그것을 쓴다(`shared/literature_curves`) —
+고무는 그 곡선에 초탄성 식을 맞추고(벌 > 맞춤 > E/6), 그 밖은 진응력 · 진소성변형률 표로
+옮긴다(잰 곡선 > 합성). 잰 곡선은 지어낸 것이 아니라서 「곡선 합성」 을 안 켜도 쓴다. 블록의
+`origin` 이 어디서 왔는지 말하고(`curve_origin`), BOM 이 그것으로 줄을 센다.
 """
 
 from __future__ import annotations
@@ -48,6 +55,7 @@ from app.shared import (
     declared_card,
     declared_slots,
     hyperelastic_sets,
+    literature_curves,
     literature_material,
     moisture,
     representative,
@@ -485,9 +493,18 @@ def assemble(
     if hyperelastic_sets.BLOCK in wanted:
         # 문헌 초탄성 벌 → 초탄성 블록(2026-10-08). 여럿이면 정한 차례로 하나, 나머지는 각주.
         hyper, said = hyperelastic_sets.from_catalog(db, material.id)
+        if hyper is not None:
+            hyper["origin"] = "set"
+        if hyper is None and is_rubber(material):
+            # 벌이 없는 고무 — 문헌 응력-변형률 곡선이 있으면 거기에 맞춘다(2026-11-08). 잰
+            # 곡선에서 나온 값이라 「곡선 합성」 을 안 켜도 쓴다 — 지어낸 것은 아래 E/6 뿐이다.
+            hyper, more = literature_curves.fitted_hyperelastic(db, material)
+            said = [*said, *more]
         if hyper is None and synthesize and is_rubber(material):
-            # 벌이 없는 고무 — 곡선 합성을 켰으면 E 에서 Neo-Hookean(2026-10-13).
+            # 벌도 곡선도 없는 고무 — 곡선 합성을 켰으면 E 에서 Neo-Hookean(2026-10-13).
             hyper, more = synthetic_rubber(elastic)
+            if hyper is not None:
+                hyper["origin"] = "synthetic"
             said = [*said, *more]
         if hyper is not None:
             blocks[hyperelastic_sets.BLOCK] = hyper
@@ -508,17 +525,50 @@ def assemble(
     # 합성은 켜져 있어도 곡선이 필요 없고, 곡선 합성의 거절(「소성 표가 안 나오는 재료」)이 그
     # 줄을 막으면 안 된다. 형식을 모르면(미리보기) 전처럼 짓는다.
     wants_table = target is None or any(need.block == SYNTHETIC_BLOCK for need in target.needs)
-    if synthesize and wants_table:
+    unused_curve = ""
+    if wants_table and not is_rubber(material):
+        # **잰 곡선이 지은 곡선을 이긴다**(2026-11-08). 문헌에 인장 응력-변형률 한 벌이
+        # 있으면 그것을 진응력 · 진소성변형률 표로 — 「곡선 합성」 을 안 켜도 쓴다(지어낸 것이
+        # 아니다).
+        # 고무 곡선은 소성 표로 옮기지 않는다 — 고무는 위에서 초탄성으로 간다.
+        measured, said = literature_curves.measured_plastic(
+            db, material, elastic.get("youngs_modulus")
+        )
+        provenance.extend(said)
+        if measured is not None:
+            blocks[SYNTHETIC_BLOCK] = {"rows": measured, "origin": "measured"}
+        elif said:
+            # 곡선은 있는데 못 쓴 까닭 — 합성마저 안 되면 이것이 더 정확한 말이다.
+            unused_curve = said[0] + " "
+    if synthesize and wants_table and SYNTHETIC_BLOCK not in blocks:
         made = declared_card.synthetic_plastic(stand_in, elastic)
         if isinstance(made, str):
             if made.startswith("소성 표가"):
-                return made
+                return unused_curve + made
             # 선언 카드의 말(「선언 물성에 적으세요」)은 문헌 재료에 안 맞는다.
-            return SYNTH_MISSING
+            return unused_curve + SYNTH_MISSING
         rows, notes = made
-        blocks[SYNTHETIC_BLOCK] = {"rows": rows}
+        blocks[SYNTHETIC_BLOCK] = {"rows": rows, "origin": "synthetic"}
         provenance.extend(notes)
     return Assembled(blocks=blocks, provenance=provenance)
+
+
+def curve_origin(deck: export.Deck) -> str | None:
+    """이 덱의 곡선(소성 표 · 고무의 초탄성)이 어디서 왔나 — `measured`(문헌 실측 곡선) ·
+    `fitted`(그 곡선에 맞춘 초탄성) · `synthetic`(스칼라로 지음) · None(곡선 없음 · 출판된 벌).
+
+    BOM 이 줄을 셀 때 쓴다 — 「곡선 합성」 을 켠 줄이라고 다 합성이 아니다. 잰 곡선을 쓴 줄을
+    「합성 곡선」 으로 세면 사람은 실측을 지어낸 것으로 읽는다.
+    """
+    for block in (SYNTHETIC_BLOCK, hyperelastic_sets.BLOCK):
+        found = deck.blocks.get(block)
+        if isinstance(found, dict) and found.get("origin") in (
+            "measured",
+            "fitted",
+            "synthetic",
+        ):
+            return str(found["origin"])
+    return None
 
 
 #: 합성할 스칼라가 모자랄 때 — 덱과 미리보기가 같은 말을 한다.
@@ -578,6 +628,15 @@ def synthetic_preview(db: Session, material: CatalogMaterial) -> SyntheticPrevie
             )
         )
     notes = [virtual.adjusted] if virtual.adjusted else []
+    measured = (
+        [] if is_rubber(material) else literature_curves.curves(db, material.id, ("tension",))
+    )
+    if measured:
+        # 미리 본 곡선과 덱의 표가 다르면 미리보기가 거짓말을 한다 — 덱은 잰 곡선을 쓴다.
+        notes.append(
+            f"덱은 이 합성 곡선 대신 문헌 실측 곡선 「{measured[0].label}」 을 소성 표로 "
+            "씁니다(「곡선 합성」 을 안 켜도) — 「곡선 · 표」 탭에서 볼 수 있습니다."
+        )
     if virtual.unmapped:
         notes.append(
             "사내 물성 항목과 이어지지 않아 못 쓴 문헌 값: "

@@ -1203,6 +1203,8 @@ async def preview_synthetic_curve(ctx: Context, catalog_material_id: str) -> dic
     """문헌 재료의 **합성 소성 곡선** — 덱의 「곡선 합성」 이 스칼라(E · 항복 · 인장 · 연신율)로
     지을 것과 같은 계산. **실측이 아니다** — 답할 때 그렇게 말한다. 못 지으면 `why`.
     곡선은 `[변형률, 응력 Pa]` 20점으로 솎는다(덱에는 `table_points` 점이 실린다).
+    `notes` 가 「덱은 이 합성 곡선 대신 문헌 실측 곡선 …」 이라고 하면 **덱은 이 곡선이 아니라
+    문헌의 잰 곡선을 쓴다** — 그 사실을 먼저 전한다.
     """
     got = await _get(ctx, f"/catalog/materials/{catalog_material_id}/synthetic-curve")
     if "error" in got:
@@ -2856,6 +2858,10 @@ async def build_deck(
     덱까지 낸다 — 지어낸 곡선은 덱 각주에 「합성 — 실측이 아니다」 로 남고, 사람에게도
     그렇게 전해야 한다. 기본은 꺼져 있다.
 
+    **문헌에 응력-변형률 곡선이 있으면 합성 대신 그 곡선을 쓴다**(고무는 그 곡선에 맞춘
+    초탄성). 그런 줄은 `synthetic_count` 가 아니라 `measured_curve_count` 로 온다 — 잰 곡선을
+    「합성」 이라고 전하지 마라.
+
     ## 파일을 건네려면 `include_text=True`
 
     기본은 머리(출처 각주)와 개수만 온다 — 수백 줄이면 대화가 그것으로 찬다.
@@ -2898,6 +2904,7 @@ async def build_deck(
         "literature_count": got.get("literature_count"),
         "literature_format": got.get("literature_format"),
         "synthetic_count": got.get("synthetic_count", 0),
+        "measured_curve_count": got.get("measured_curve_count", 0),
         "skipped": got.get("skipped", []),
         # **기본은 머리(출처 각주)만이다.** 수백 줄이면 대화가 그것으로 찬다.
         "header": "\n".join(

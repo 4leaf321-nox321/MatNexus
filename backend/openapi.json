@@ -2317,6 +2317,11 @@
             ],
             "title": "Literature Format"
           },
+          "measured_curve_count": {
+            "default": 0,
+            "title": "Measured Curve Count",
+            "type": "integer"
+          },
           "notes": {
             "items": {
               "type": "string"

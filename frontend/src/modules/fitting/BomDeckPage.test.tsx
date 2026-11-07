@@ -205,7 +205,7 @@ describe('BOM 혼합 덱', () => {
     await user.selectOptions(pickers[0], CATALOG_ID)
     // 문헌만 매칭된 줄에만 합성 스위치가 있다 — 사내 카드가 있으면 실측이 이긴다.
     await user.click(screen.getByRole('checkbox'))
-    expect(screen.getByText('문헌 합성 곡선')).toBeInTheDocument()
+    expect(screen.getByText('문헌 곡선 (실측 · 없으면 합성)')).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: '덱 생성' }))
     await waitFor(() =>
@@ -216,6 +216,35 @@ describe('BOM 혼합 덱', () => {
       { rows: Array<Record<string, unknown>> },
     ]
     expect(body.rows[0]).toMatchObject({ catalog_material_id: CATALOG_ID, synthesize: true })
+  })
+
+  it('문헌 실측 곡선으로 실린 줄은 합성 곡선과 갈라 센다', async () => {
+    mockApis({ cards: [] })
+    const fallback = post.getMockImplementation()
+    post.mockImplementation((url: unknown, ...rest: unknown[]) =>
+      String(url).startsWith('/fitting/decks/bom')
+        ? Promise.resolve({
+            text: '*KEYWORD\n*END\n',
+            filename: 'bom_deck_si.k',
+            format_family: 'dyna',
+            skipped: [],
+            notes: [],
+            card_count: 0,
+            literature_count: 0,
+            synthetic_count: 0,
+            measured_curve_count: 1,
+          })
+        : fallback?.(url, ...rest)
+    )
+    const user = userEvent.setup()
+    await pasteAndMatch(user)
+    await user.selectOptions(screen.getAllByRole('combobox')[0], CATALOG_ID)
+    await user.click(screen.getByRole('checkbox'))
+    await user.click(screen.getByRole('button', { name: '덱 생성' }))
+
+    // 데이터로 그려진 요약을 기다린다 — 잰 곡선을 「합성」 으로 세면 지어낸 것으로 읽힌다.
+    expect(await screen.findByText(/문헌 실측 곡선 1/)).toBeInTheDocument()
+    expect(screen.queryByText(/합성 곡선 \d/)).toBeNull()
   })
 
   it('엑셀 다열이면 열 매핑을 물어본다', async () => {

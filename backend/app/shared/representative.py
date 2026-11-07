@@ -68,6 +68,11 @@ def semantic_conditions(conditions: dict[str, Any] | None) -> dict[str, Any]:
     return {k: v for k, v in conditions.items() if not is_bookkeeping(k)}
 
 
+def temperature_distance(conditions: dict[str, Any]) -> float:
+    """상온(23 ℃)에서 얼마나 먼가(K). 온도가 안 적혔으면 벌점 — 대표값 고르기와 같은 잣대다."""
+    return _temperature_distance(conditions)
+
+
 def _temperature_distance(conditions: dict[str, Any]) -> float:
     for key, offset in (("temperature_k", 0.0), ("temperature_c", 273.15)):
         raw = conditions.get(key)

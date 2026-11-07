@@ -5199,6 +5199,7 @@ def build_bom_deck(
     card_count = 0
     literature_count = 0
     synthetic_count = 0
+    measured_curve_count = 0
     for row in payload.rows:
         # 줄마다 다른 형식 — 같은 솔버 안에서만.
         row_targets = card_targets
@@ -5320,8 +5321,13 @@ def build_bom_deck(
                 continue
             rendered.append(made.text)
             notes.extend(made.notes)
-            if row.synthesize:
+            # 곡선이 어디서 왔는지로 센다 — 「곡선 합성」 을 켠 줄이라도 문헌의 잰 곡선을
+            # 썼으면 합성이 아니다(2026-11-08).
+            origin = litdeck.curve_origin(deck_or_why)
+            if origin == "synthetic":
                 synthetic_count += 1
+            elif origin in ("measured", "fitted"):
+                measured_curve_count += 1
             else:
                 literature_count += 1
             continue
@@ -5349,6 +5355,7 @@ def build_bom_deck(
         card_count=card_count,
         literature_count=literature_count,
         synthetic_count=synthetic_count,
+        measured_curve_count=measured_curve_count,
         literature_format=lit_target.key if lit_target else None,
     )
 
