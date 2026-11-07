@@ -647,3 +647,109 @@ class Test내보내기:
             "/api/voc/export", json={"ids": [item["id"], str(uuid.uuid4())]}, headers=mine
         )
         assert response.status_code == 404
+
+
+class Test내용_복사:
+    """게시판의 글을 본문 · 이력째로 — 「내용 복사」 가 범위를 모으는 자리.
+
+    목록과 같은 거르기에 번호 범위(양끝 포함)와 고른 건을 더 받고, 차례는 목록과 같다.
+    """
+
+    def test_번호_범위는_양끝을_넣고_최신이_위다(
+        self,
+        client: TestClient,
+        db: Session,
+        workspace: Workspace,
+        admin_headers: dict[str, str],
+    ) -> None:
+        hong = member_headers(client, db, workspace)
+        made = [_voc(client, hong, title=f"{at}번째") for at in range(1, 6)]
+        seqs = [one["seq"] for one in made]
+        client.post(
+            f"/api/voc/{made[2]['id']}/attachments",
+            files={"file": ("캡처.png", b"\x89PNG", "image/png")},
+            headers=hong,
+        )
+        _move(client, admin_headers, made[2]["id"], "accepted", "보겠습니다")
+        _move(client, admin_headers, made[2]["id"], None, "재현됩니다")
+
+        response = client.get(
+            "/api/voc/contents",
+            params={"seq_from": seqs[1], "seq_to": seqs[3]},
+            headers=hong,
+        )
+        assert response.status_code == 200, response.text
+        page = response.json()
+        assert page["total"] == 3
+        assert [one["seq"] for one in page["items"]] == [seqs[3], seqs[2], seqs[1]]
+
+        middle = page["items"][1]
+        assert middle["body"] == "목록이 느립니다"
+        assert middle["created_by"] == "홍길동"
+        assert middle["status_label"] == "접수"
+        assert middle["page_path"] == "/w/metal/tests"
+        assert middle["attachments"] == ["캡처.png"]
+        # 등록 · 옮김 · 댓글이 시간순으로 — 상세와 같은 줄이다.
+        assert [
+            (one["from_status"], one["to_status"], one["note"]) for one in middle["events"]
+        ] == [
+            (None, "open", None),
+            ("open", "accepted", "보겠습니다"),
+            ("accepted", "accepted", "재현됩니다"),
+        ]
+        detail = client.get(f"/api/voc/{made[2]['id']}", headers=hong).json()
+        assert middle["events"] == detail["events"]
+
+    def test_목록의_거르기가_그대로_걸린다(
+        self,
+        client: TestClient,
+        db: Session,
+        workspace: Workspace,
+        admin_headers: dict[str, str],
+    ) -> None:
+        hong = member_headers(client, db, workspace)
+        kim = login_as(client, db, workspace, email="kim", name="김철수")
+        first = _voc(client, hong, title="곡선이 안 보여요")
+        second = _voc(client, kim, title="내보내기가 느려요")
+        _voc(client, hong, title="곡선 색이 흐려요")
+        _move(client, admin_headers, first["id"], "accepted", "보겠습니다")
+
+        def seqs(params: dict[str, Any]) -> list[int]:
+            response = client.get("/api/voc/contents", params=params, headers=hong)
+            assert response.status_code == 200, response.text
+            return [one["seq"] for one in response.json()["items"]]
+
+        assert seqs({"status": "accepted"}) == [first["seq"]]
+        assert seqs({"q": "곡선", "seq_to": first["seq"]}) == [first["seq"]]
+        assert second["seq"] not in seqs({"mine": True})
+        assert (
+            client.get(
+                "/api/voc/contents", params={"status": "없는상태"}, headers=hong
+            ).status_code
+            == 422
+        )
+
+    def test_고른_건만_모으고_한_번에_묻는_수에_상한이_있다(
+        self,
+        client: TestClient,
+        db: Session,
+        workspace: Workspace,
+    ) -> None:
+        import uuid
+
+        hong = member_headers(client, db, workspace)
+        made = [_voc(client, hong, title=f"{at}번째") for at in range(1, 4)]
+        response = client.get(
+            "/api/voc/contents",
+            params={"ids": [made[0]["id"], made[2]["id"]]},
+            headers=hong,
+        )
+        assert response.status_code == 200, response.text
+        assert [one["seq"] for one in response.json()["items"]] == [
+            made[2]["seq"],
+            made[0]["seq"],
+        ]
+
+        too_many = [str(uuid.uuid4()) for _ in range(51)]
+        response = client.get("/api/voc/contents", params={"ids": too_many}, headers=hong)
+        assert response.status_code == 422

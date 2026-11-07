@@ -9,6 +9,9 @@ export type VocEvent = components['schemas']['VocEventOut']
 export type VocAttachment = components['schemas']['VocAttachmentOut']
 export type VocPage = components['schemas']['Page_VocOut_']
 export type VocStatus = components['schemas']['VocStatusOut']
+/** 복사할 글 한 건 — 본문 · 이력 · 첨부 이름째(`GET /voc/contents`). */
+export type VocContent = components['schemas']['VocContentOut']
+export type VocContentPage = components['schemas']['Page_VocContentOut_']
 type CreateRequest = components['schemas']['VocCreateRequest']
 type UpdateRequest = components['schemas']['VocUpdateRequest']
 type EventRequest = components['schemas']['VocEventRequest']
@@ -19,6 +22,29 @@ export interface VocListParams {
   mine?: boolean
   limit?: number
   offset?: number
+}
+
+/** 내용 복사의 범위 — 목록의 거르기에 번호 범위(양끝 포함)를 더한다. */
+export interface VocContentParams extends VocListParams {
+  seqFrom?: number
+  seqTo?: number
+}
+
+/** 고른 건을 한 번에 묻는 수. 주소에 실려 가므로 서버(`MAX_CONTENT_IDS`)가 같은 수로 막는다. */
+export const CONTENT_IDS_PER_ASK = 50
+
+function contentQuery(params: VocContentParams & { ids?: string[] }): string {
+  const query = new URLSearchParams()
+  if (params.status) query.set('status', params.status)
+  if (params.q) query.set('q', params.q)
+  if (params.mine) query.set('mine', 'true')
+  if (params.seqFrom) query.set('seq_from', String(params.seqFrom))
+  if (params.seqTo) query.set('seq_to', String(params.seqTo))
+  for (const id of params.ids ?? []) query.append('ids', id)
+  if (params.limit) query.set('limit', String(params.limit))
+  if (params.offset) query.set('offset', String(params.offset))
+  const suffix = query.toString()
+  return `/voc/contents${suffix ? `?${suffix}` : ''}`
 }
 
 /**
@@ -49,6 +75,19 @@ export const vocApi = {
     if (params.offset) query.set('offset', String(params.offset))
     const suffix = query.toString()
     return api.get<VocPage>(`/voc${suffix ? `?${suffix}` : ''}`)
+  },
+  /** 범위의 글을 본문 · 이력째로 — 쪽은 `fetchAll` 이 넘긴다. */
+  contents: (params: VocContentParams = {}) => api.get<VocContentPage>(contentQuery(params)),
+  /** 고른 건들의 글. 주소 길이 때문에 `CONTENT_IDS_PER_ASK` 개씩 나눠 묻고, 게시판 차례(최신이
+   *  위)로 모아 준다. 없어진 건은 빠진다 — 몇 건이 빠졌는지는 부른 쪽이 고른 수와 견준다. */
+  contentsOf: async (ids: string[]): Promise<VocContent[]> => {
+    const found: VocContent[] = []
+    for (let at = 0; at < ids.length; at += CONTENT_IDS_PER_ASK) {
+      const chunk = ids.slice(at, at + CONTENT_IDS_PER_ASK)
+      const page = await api.get<VocContentPage>(contentQuery({ ids: chunk, limit: chunk.length }))
+      found.push(...page.items)
+    }
+    return found.sort((a, b) => b.seq - a.seq)
   },
   get: (id: string) => api.get<VocDetail>(`/voc/${id}`),
   create: (payload: CreateRequest) => api.post<VocDetail>('/voc', payload),

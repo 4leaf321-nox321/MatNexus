@@ -8073,6 +8073,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/voc/contents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Contents
+         * @description 게시판의 글을 **본문 · 이력째로** — 「내용 복사」 가 범위를 모으는 자리(2026-11-07).
+         *
+         *     거르기는 목록과 같고(`_board`), 번호 범위(`seq_from` ~ `seq_to`, 양끝 포함)와 고른 건
+         *     (`ids`)을 더 받는다. 차례도 목록과 같이 최신이 위다. 이력 · 첨부 · 이름은 쪽마다 한
+         *     번씩 묶어 읽는다 — 건마다 읽으면 200건짜리 쪽이 600번 묻는다.
+         */
+        get: operations["list_contents_api_voc_contents_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/voc/export": {
         parameters: {
             query?: never;
@@ -17844,6 +17868,17 @@ export interface components {
             /** Total */
             total: number;
         };
+        /** Page[VocContentOut] */
+        Page_VocContentOut_: {
+            /** Items */
+            items: components["schemas"]["VocContentOut"][];
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+            /** Total */
+            total: number;
+        };
         /** Page[VocOut] */
         Page_VocOut_: {
             /** Items */
@@ -23649,6 +23684,44 @@ export interface components {
             size: number;
             /** Url */
             url: string;
+        };
+        /**
+         * VocContentOut
+         * @description 복사할 글 한 건 — 게시판의 「내용 복사」(2026-11-07).
+         *
+         *     목록(`VocOut`)에는 본문이 없고 상세(`VocDetailOut`)는 한 건씩이라, 범위를 복사하려면
+         *     건마다 상세를 불러야 했다(N+1). 여기는 **읽을 글만** 싣는다 — 고칠 수 있나 · 옮길 곳
+         *     같은 보는 사람 몫의 판정은 복사한 글에 안 들어가므로 계산하지 않는다.
+         */
+        VocContentOut: {
+            /** Attachments */
+            attachments: string[];
+            /** Body */
+            body: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Created By */
+            created_by: string | null;
+            /** Events */
+            events: components["schemas"]["VocEventOut"][];
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Page Path */
+            page_path: string | null;
+            /** Seq */
+            seq: number;
+            /** Status */
+            status: string;
+            /** Status Label */
+            status_label: string;
+            /** Title */
+            title: string;
         };
         /** VocCreateRequest */
         VocCreateRequest: {
@@ -36853,6 +36926,44 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["VocDetailOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_contents_api_voc_contents_get: {
+        parameters: {
+            query?: {
+                status?: string | null;
+                q?: string | null;
+                mine?: boolean;
+                seq_from?: number | null;
+                seq_to?: number | null;
+                ids?: string[] | null;
+                limit?: number | null;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_VocContentOut_"];
                 };
             };
             /** @description Validation Error */

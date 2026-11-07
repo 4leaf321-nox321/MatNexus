@@ -18,7 +18,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, File, Query, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
-from sqlalchemy import func, or_, select
+from sqlalchemy import Select, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -36,6 +36,7 @@ from app.modules.voc.models import (
 )
 from app.modules.voc.schemas import (
     VocAttachmentOut,
+    VocContentOut,
     VocCreateRequest,
     VocDetailOut,
     VocEventOut,
@@ -153,6 +154,18 @@ def _can_attach(item: VocItem, user: User) -> bool:
     return bool(user.is_system_admin or item.created_by_id == user.id)
 
 
+def _event_out(event: VocEvent, names: dict[uuid.UUID, str]) -> VocEventOut:
+    return VocEventOut(
+        id=event.id,
+        at=event.at,
+        by=names.get(event.by_id) if event.by_id else None,
+        from_status=event.from_status,
+        to_status=event.to_status,
+        to_status_label=VOC_STATUS_LABELS.get(event.to_status, event.to_status),
+        note=event.note,
+    )
+
+
 def _detail(db: Session, item: VocItem, viewer: User) -> VocDetailOut:
     events = list(
         db.scalars(
@@ -197,18 +210,7 @@ def _detail(db: Session, item: VocItem, viewer: User) -> VocDetailOut:
             for one in attachments
         ],
         can_attach=_can_attach(item, viewer),
-        events=[
-            VocEventOut(
-                id=one.id,
-                at=one.at,
-                by=names.get(one.by_id) if one.by_id else None,
-                from_status=one.from_status,
-                to_status=one.to_status,
-                to_status_label=VOC_STATUS_LABELS.get(one.to_status, one.to_status),
-                note=one.note,
-            )
-            for one in events
-        ],
+        events=[_event_out(one, names) for one in events],
         allowed=allowed,
         can_delete_events=bool(viewer.is_system_admin),
         allowed_labels={one: MOVE_LABELS.get(one, one) for one in allowed},
@@ -309,6 +311,37 @@ def list_statuses(user: User = Depends(current_user)) -> list[VocStatusOut]:
     return [VocStatusOut(key=one, label=VOC_STATUS_LABELS[one]) for one in VOC_STATUSES]
 
 
+def _board(
+    user: User,
+    *,
+    status: str | None,
+    q: str | None,
+    mine: bool,
+    seq_from: int | None = None,
+    seq_to: int | None = None,
+    ids: list[uuid.UUID] | None = None,
+) -> Select[tuple[VocItem]]:
+    """게시판의 거르기 — **목록과 내용 복사가 같은 조건을 쓴다.** 둘이 따로 적으면
+    화면에 보이는 것과 복사되는 것이 어긋나고, 사람은 그것을 모른 채 붙여 넣는다."""
+    query = select(VocItem)
+    if status:
+        if status not in VOC_STATUSES:
+            raise AppError("MNX-VOC-0002", "허용되지 않는 상태입니다.", status=422)
+        query = query.where(VocItem.status == status)
+    if mine:
+        query = query.where(VocItem.created_by_id == user.id)
+    if q and q.strip():
+        needle = f"%{q.strip()}%"
+        query = query.where(or_(VocItem.title.ilike(needle), VocItem.body.ilike(needle)))
+    if seq_from is not None:
+        query = query.where(VocItem.seq >= seq_from)
+    if seq_to is not None:
+        query = query.where(VocItem.seq <= seq_to)
+    if ids:
+        query = query.where(VocItem.id.in_(ids))
+    return query
+
+
 @router.get("", response_model=Page[VocOut])
 def list_items(
     status: str | None = Query(default=None),
@@ -320,16 +353,7 @@ def list_items(
     db: Session = Depends(get_db),
 ) -> Page[VocOut]:
     """게시판. **누구나 전부 본다** — 최신이 위다."""
-    query = select(VocItem)
-    if status:
-        if status not in VOC_STATUSES:
-            raise AppError("MNX-VOC-0002", "허용되지 않는 상태입니다.", status=422)
-        query = query.where(VocItem.status == status)
-    if mine:
-        query = query.where(VocItem.created_by_id == user.id)
-    if q and q.strip():
-        needle = f"%{q.strip()}%"
-        query = query.where(or_(VocItem.title.ilike(needle), VocItem.body.ilike(needle)))
+    query = _board(user, status=status, q=q, mine=mine)
 
     total = db.scalar(select(func.count()).select_from(query.subquery())) or 0
     size = clamp_limit(limit)
@@ -374,6 +398,80 @@ def list_items(
                 or (one.created_by_id == user.id and one.id not in spoken),
                 event_count=max(counts.get(one.id, 0) - 1, 0),
                 attachment_count=files.get(one.id, 0),
+            )
+            for one in items
+        ],
+        total=int(total),
+        limit=size,
+        offset=offset,
+    )
+
+
+#: 고른 건을 한 번에 묻는 상한. 주소에 실려 가므로 길이가 곧 한계다 — 화면은 이만큼씩
+#: 나눠 묻는다(`vocApi.contentsOf`).
+MAX_CONTENT_IDS = 50
+
+
+@router.get("/contents", response_model=Page[VocContentOut])
+def list_contents(
+    status: str | None = Query(default=None),
+    q: str | None = Query(default=None, max_length=200),
+    mine: bool = Query(default=False),
+    seq_from: int | None = Query(default=None, ge=1),
+    seq_to: int | None = Query(default=None, ge=1),
+    ids: list[uuid.UUID] | None = Query(default=None, max_length=MAX_CONTENT_IDS),
+    limit: int | None = Query(default=None, le=1000),
+    offset: int = Query(default=0, ge=0),
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> Page[VocContentOut]:
+    """게시판의 글을 **본문 · 이력째로** — 「내용 복사」 가 범위를 모으는 자리(2026-11-07).
+
+    거르기는 목록과 같고(`_board`), 번호 범위(`seq_from` ~ `seq_to`, 양끝 포함)와 고른 건
+    (`ids`)을 더 받는다. 차례도 목록과 같이 최신이 위다. 이력 · 첨부 · 이름은 쪽마다 한
+    번씩 묶어 읽는다 — 건마다 읽으면 200건짜리 쪽이 600번 묻는다.
+    """
+    query = _board(
+        user, status=status, q=q, mine=mine, seq_from=seq_from, seq_to=seq_to, ids=ids
+    )
+    total = db.scalar(select(func.count()).select_from(query.subquery())) or 0
+    size = clamp_limit(limit)
+    items = list(db.scalars(query.order_by(VocItem.seq.desc()).limit(size).offset(offset)))
+    wanted = [one.id for one in items]
+    events: dict[uuid.UUID, list[VocEvent]] = {one: [] for one in wanted}
+    files: dict[uuid.UUID, list[str]] = {one: [] for one in wanted}
+    if wanted:
+        for event in db.scalars(
+            select(VocEvent)
+            .where(VocEvent.item_id.in_(wanted))
+            .order_by(VocEvent.at, VocEvent.id)
+        ):
+            events[event.item_id].append(event)
+        for item_id, filename in db.execute(
+            select(VocAttachment.item_id, VocAttachment.filename)
+            .where(VocAttachment.item_id.in_(wanted))
+            .order_by(VocAttachment.created_at, VocAttachment.id)
+        ).all():
+            files[item_id].append(filename)
+    names = _names(
+        db,
+        {one.created_by_id for one in items}
+        | {event.by_id for rows in events.values() for event in rows},
+    )
+    return Page(
+        items=[
+            VocContentOut(
+                id=one.id,
+                seq=one.seq,
+                title=one.title,
+                status=one.status,
+                status_label=VOC_STATUS_LABELS.get(one.status, one.status),
+                page_path=one.page_path,
+                created_at=one.created_at,
+                created_by=names.get(one.created_by_id) if one.created_by_id else None,
+                body=one.body,
+                events=[_event_out(event, names) for event in events[one.id]],
+                attachments=files[one.id],
             )
             for one in items
         ],

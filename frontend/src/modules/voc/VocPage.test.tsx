@@ -19,6 +19,13 @@ const statuses = vi.fn()
 const create = vi.fn()
 const attach = vi.fn()
 const exportZip = vi.fn()
+const contents = vi.fn()
+const contentsOf = vi.fn()
+const copyText = vi.fn()
+
+vi.mock('@/shared/lib/clipboard', () => ({
+  copyText: (text: string) => copyText(text),
+}))
 
 vi.mock('@/modules/voc/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/modules/voc/api')>()),
@@ -28,6 +35,8 @@ vi.mock('@/modules/voc/api', async (importOriginal) => ({
     create: (...args: unknown[]) => create(...args),
     attach: (...args: unknown[]) => attach(...args),
     exportZip: (...args: unknown[]) => exportZip(...args),
+    contents: (...args: unknown[]) => contents(...args),
+    contentsOf: (...args: unknown[]) => contentsOf(...args),
   },
 }))
 
@@ -179,6 +188,142 @@ describe('고른 건 내려받기', () => {
   it('첨부가 있는 건은 클립과 수가 보인다', async () => {
     await show([item({ attachment_count: 2 })])
     expect(await screen.findByTitle('첨부 2개')).toHaveTextContent('2')
+  })
+})
+
+describe('범위를 골라 내용 복사', () => {
+  const user = () => userEvent.setup()
+  const five = () =>
+    [16, 15, 14, 13, 12].map((seq) => item({ id: `voc-${seq}`, seq, title: `${seq}번 글` }))
+
+  /** 복사할 글 한 건 — 화면의 줄과 같은 번호 · 제목에 본문 · 이력. */
+  const content = (seq: number) => ({
+    id: `voc-${seq}`,
+    seq,
+    title: `${seq}번 글`,
+    status: 'open',
+    status_label: '등록',
+    page_path: null,
+    created_at: '2026-08-27T10:00:00Z',
+    created_by: '홍길동',
+    body: `${seq}번 본문`,
+    events: [],
+    attachments: [],
+  })
+
+  beforeEach(() => {
+    list.mockReset()
+    statuses.mockReset()
+    statuses.mockResolvedValue(STATUSES)
+    contents.mockReset()
+    contentsOf.mockReset()
+    copyText.mockReset()
+    copyText.mockResolvedValue(true)
+  })
+
+  async function open(u: ReturnType<typeof userEvent.setup>, name: string | RegExp) {
+    await u.click(screen.getByRole('button', { name }))
+    const dialog = await screen.findByRole('dialog')
+    const box = within(dialog).getByLabelText('VOC 내용') as HTMLTextAreaElement
+    return { dialog, box }
+  }
+
+  it('Shift 를 누른 채 고르면 사이의 줄까지 고르고, 다시 그렇게 누르면 사이를 푼다', async () => {
+    const u = user()
+    await show(five())
+    await u.click(screen.getByLabelText('15번 글 고르기'))
+    await u.keyboard('{Shift>}')
+    await u.click(screen.getByLabelText('13번 글 고르기'))
+    await u.keyboard('{/Shift}')
+    const checked = (seq: number) =>
+      (screen.getByLabelText(`${seq}번 글 고르기`) as HTMLInputElement).checked
+    expect([16, 15, 14, 13, 12].map(checked)).toEqual([false, true, true, true, false])
+    expect(screen.getByRole('button', { name: '고른 3건 복사' })).toBeInTheDocument()
+
+    // 고른 줄에서 Shift 로 누르면 푸는 쪽이다 — 마지막으로 누른 13 부터 14 까지.
+    await u.keyboard('{Shift>}')
+    await u.click(screen.getByLabelText('14번 글 고르기'))
+    await u.keyboard('{/Shift}')
+    expect([16, 15, 14, 13, 12].map(checked)).toEqual([false, true, false, false, false])
+  })
+
+  it('고른 건을 모아 보여 주고, 다 모인 뒤 누르면 그 글을 복사한다', async () => {
+    const u = user()
+    contentsOf.mockResolvedValue([content(15), content(14)])
+    await show(five())
+    await u.click(screen.getByLabelText('15번 글 고르기'))
+    await u.keyboard('{Shift>}')
+    await u.click(screen.getByLabelText('14번 글 고르기'))
+    await u.keyboard('{/Shift}')
+
+    const { dialog, box } = await open(u, '고른 2건 복사')
+    // 데이터로 그려진 것을 기다린다 — 마지막 건의 본문까지 들어왔을 때다.
+    await waitFor(() => expect(box.value).toContain('14번 본문'))
+    expect(contentsOf).toHaveBeenCalledWith(['voc-15', 'voc-14'])
+    expect(box.value).toContain('고른 2건')
+    expect(box.value.indexOf('## 15. 15번 글')).toBeLessThan(box.value.indexOf('## 14. 14번 글'))
+    expect(contents).not.toHaveBeenCalled()
+
+    await u.click(within(dialog).getByRole('button', { name: '복사' }))
+    await waitFor(() => expect(copyText).toHaveBeenCalledWith(box.value))
+    expect(await within(dialog).findByRole('button', { name: '복사했습니다' })).toBeInTheDocument()
+  })
+
+  it('번호 범위는 거른 조건 안에서 모으고, 거꾸로 적으면 바로잡는다', async () => {
+    const u = user()
+    contents.mockImplementation(async (params: { seqFrom?: number }) => {
+      const items = params.seqFrom ? [content(14), content(13)] : five().map((one) => content(one.seq))
+      return { items, total: items.length, limit: 200, offset: 0 }
+    })
+    await show(five())
+    await u.click(screen.getByRole('button', { name: '해결' }))
+    await screen.findAllByText('16번 글')
+
+    const { dialog, box } = await open(u, '내용 복사')
+    // 열자마자 거른 조건 전부를 모은다.
+    await waitFor(() => expect(box.value).toContain('12번 본문'))
+    expect(contents).toHaveBeenLastCalledWith(
+      expect.objectContaining({ status: 'resolved', seqFrom: undefined, seqTo: undefined })
+    )
+    expect(box.value).toContain('상태 「해결」')
+
+    await u.type(within(dialog).getByLabelText('번호 시작'), '14')
+    await u.type(within(dialog).getByLabelText('번호 끝'), '13')
+    // 칸만 고치고 안 모았으면 복사가 막힌다 — 글은 아직 옛 범위다.
+    expect(within(dialog).getByRole('button', { name: '복사' })).toBeDisabled()
+    expect(within(dialog).getByRole('alert')).toHaveTextContent('모으기')
+
+    await u.click(within(dialog).getByRole('button', { name: '모으기' }))
+    await waitFor(() => expect(box.value).toContain('번호 13~14'))
+    expect(contents).toHaveBeenLastCalledWith(
+      expect.objectContaining({ status: 'resolved', seqFrom: 13, seqTo: 14 })
+    )
+    expect(box.value).not.toContain('12번 본문')
+    expect((within(dialog).getByLabelText('번호 시작') as HTMLInputElement).value).toBe('13')
+    expect(within(dialog).getByRole('button', { name: '복사' })).toBeEnabled()
+  })
+
+  it('고른 것이 있어도 번호 범위로 바꿔 모을 수 있다', async () => {
+    const u = user()
+    contentsOf.mockResolvedValue([content(16)])
+    contents.mockResolvedValue({ items: [content(13)], total: 1, limit: 200, offset: 0 })
+    await show(five())
+    await u.click(screen.getByLabelText('16번 글 고르기'))
+    const { dialog, box } = await open(u, '고른 1건 복사')
+    await waitFor(() => expect(box.value).toContain('16번 본문'))
+
+    await u.click(within(dialog).getByRole('radio', { name: '번호 범위' }))
+    await waitFor(() => expect(box.value).toContain('13번 본문'))
+    expect(box.value).not.toContain('16번 본문')
+  })
+
+  it('선택 해제는 다른 쪽에서 고른 것까지 푼다', async () => {
+    const u = user()
+    await show(five())
+    await u.click(screen.getByLabelText('16번 글 고르기'))
+    await u.click(screen.getByRole('button', { name: '선택 해제' }))
+    expect(screen.getByRole('button', { name: '내용 복사' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /다운로드/ })).not.toBeInTheDocument()
   })
 })
 

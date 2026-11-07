@@ -84,6 +84,29 @@ class VocDetailOut(VocOut):
     """`allowed` 가운데 말을 반드시 적어야 하는 것."""
 
 
+class VocContentOut(BaseModel):
+    """복사할 글 한 건 — 게시판의 「내용 복사」(2026-11-07).
+
+    목록(`VocOut`)에는 본문이 없고 상세(`VocDetailOut`)는 한 건씩이라, 범위를 복사하려면
+    건마다 상세를 불러야 했다(N+1). 여기는 **읽을 글만** 싣는다 — 고칠 수 있나 · 옮길 곳
+    같은 보는 사람 몫의 판정은 복사한 글에 안 들어가므로 계산하지 않는다.
+    """
+
+    id: uuid.UUID
+    seq: int
+    title: str
+    status: str
+    status_label: str
+    page_path: str | None
+    created_at: datetime
+    created_by: str | None
+    body: str
+    events: list[VocEventOut]
+    """등록부터 지금까지, 시간순 — 상세와 같은 줄들이다."""
+    attachments: list[str]
+    """첨부 파일 이름. 글로는 파일을 못 옮기니 무엇이 붙어 있었는지만 남긴다."""
+
+
 class VocCreateRequest(BaseModel):
     title: str = Field(min_length=1, max_length=200)
     body: str = Field(min_length=1)

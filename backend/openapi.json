@@ -23652,6 +23652,37 @@
         "title": "Page[TestRunOut]",
         "type": "object"
       },
+      "Page_VocContentOut_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/VocContentOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "Page[VocContentOut]",
+        "type": "object"
+      },
       "Page_VocOut_": {
         "properties": {
           "items": {
@@ -38569,6 +38600,92 @@
           "url"
         ],
         "title": "VocAttachmentOut",
+        "type": "object"
+      },
+      "VocContentOut": {
+        "description": "복사할 글 한 건 — 게시판의 「내용 복사」(2026-11-07).\n\n목록(`VocOut`)에는 본문이 없고 상세(`VocDetailOut`)는 한 건씩이라, 범위를 복사하려면\n건마다 상세를 불러야 했다(N+1). 여기는 **읽을 글만** 싣는다 — 고칠 수 있나 · 옮길 곳\n같은 보는 사람 몫의 판정은 복사한 글에 안 들어가므로 계산하지 않는다.",
+        "properties": {
+          "attachments": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Attachments",
+            "type": "array"
+          },
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By"
+          },
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/VocEventOut"
+            },
+            "title": "Events",
+            "type": "array"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "page_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page Path"
+          },
+          "seq": {
+            "title": "Seq",
+            "type": "integer"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "status_label": {
+            "title": "Status Label",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "seq",
+          "title",
+          "status",
+          "status_label",
+          "page_path",
+          "created_at",
+          "created_by",
+          "body",
+          "events",
+          "attachments"
+        ],
+        "title": "VocContentOut",
         "type": "object"
       },
       "VocCreateRequest": {
@@ -60598,6 +60715,166 @@
           }
         },
         "summary": "Create Item",
+        "tags": [
+          "voc"
+        ]
+      }
+    },
+    "/api/voc/contents": {
+      "get": {
+        "description": "게시판의 글을 **본문 · 이력째로** — 「내용 복사」 가 범위를 모으는 자리(2026-11-07).\n\n거르기는 목록과 같고(`_board`), 번호 범위(`seq_from` ~ `seq_to`, 양끝 포함)와 고른 건\n(`ids`)을 더 받는다. 차례도 목록과 같이 최신이 위다. 이력 · 첨부 · 이름은 쪽마다 한\n번씩 묶어 읽는다 — 건마다 읽으면 200건짜리 쪽이 600번 묻는다.",
+        "operationId": "list_contents_api_voc_contents_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "mine",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Mine",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "seq_from",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Seq From"
+            }
+          },
+          {
+            "in": "query",
+            "name": "seq_to",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Seq To"
+            }
+          },
+          {
+            "in": "query",
+            "name": "ids",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  "maxItems": 50,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ids"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 1000,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Limit"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_VocContentOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Contents",
         "tags": [
           "voc"
         ]

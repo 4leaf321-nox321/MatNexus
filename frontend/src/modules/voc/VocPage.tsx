@@ -18,12 +18,21 @@
  * 재현하는 실마리다.
  */
 
-import { useState } from 'react'
-import { Download, MessageSquare, MessageSquarePlus, Paperclip, Search, X } from 'lucide-react'
+import { useRef, useState } from 'react'
+import {
+  Copy,
+  Download,
+  MessageSquare,
+  MessageSquarePlus,
+  Paperclip,
+  Search,
+  X,
+} from 'lucide-react'
 import { Link, useNavigate } from 'react-router-dom'
 
 import { STATUS_TONES, vocApi } from '@/modules/voc/api'
 import type { VocItem } from '@/modules/voc/api'
+import { VocCopyDialog } from '@/modules/voc/VocCopyDialog'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { PageHeader } from '@/shared/components/PageHeader'
 import { Stamp } from '@/shared/components/Stamp'
@@ -76,6 +85,10 @@ export default function VocPage() {
   const [picked, setPicked] = useState<Set<string>>(new Set())
   const [exporting, setExporting] = useState(false)
   const [exportError, setExportError] = useState<Error | null>(null)
+  // **내용 복사**(2026-11-07) — 고른 건이나 번호 범위를 글 하나로(`VocCopyDialog`).
+  const [copying, setCopying] = useState(false)
+  // Shift 로 범위를 고를 때의 앞 끝 — 마지막으로 누른 줄.
+  const anchor = useRef<string | null>(null)
 
   const statuses = useResource(() => vocApi.statuses(), [])
   const page = useResource(
@@ -86,13 +99,25 @@ export default function VocPage() {
   const pickedOnPage = rows.filter((item) => picked.has(item.id))
   const allPicked = rows.length > 0 && pickedOnPage.length === rows.length
 
-  function togglePick(id: string) {
+  /**
+   * 한 줄을 고르거나 푼다. **Shift 를 누른 채면 마지막으로 누른 줄과 사이의 줄까지** — 누른 줄이
+   * 고른 쪽으로 가면 다 고르고, 푸는 쪽이면 다 푼다(탐색기 · 메일과 같다). 마지막으로 누른 줄이
+   * 이 쪽에 없으면(쪽을 넘겼으면) 한 줄만 바꾼다 — 안 보이는 줄까지 바뀌면 안 된다.
+   */
+  function togglePick(id: string, span: boolean) {
+    const at = rows.findIndex((one) => one.id === id)
+    const from = span && anchor.current ? rows.findIndex((one) => one.id === anchor.current) : -1
+    const ids =
+      from >= 0 && at >= 0
+        ? rows.slice(Math.min(from, at), Math.max(from, at) + 1).map((one) => one.id)
+        : [id]
     setPicked((current) => {
       const next = new Set(current)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
+      const on = !current.has(id)
+      ids.forEach((one) => (on ? next.add(one) : next.delete(one)))
       return next
     })
+    anchor.current = id
   }
 
   function togglePage() {
@@ -142,7 +167,21 @@ export default function VocPage() {
         title="VOC"
         description="불편한 점이나 필요한 기능을 남겨 주세요. 등록 → 접수 → 처리 중 → 해결 → 종료 로 흐르고, 누가 언제 옮겼는지 남습니다."
         actions={
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
+            {/* 고른 것은 다른 쪽에도 남아 있어 안 보인다 — 한 번에 푸는 길을 둔다. */}
+            {picked.size > 0 && (
+              <Button variant="ghost" onClick={() => setPicked(new Set())}>
+                <X className="size-4" />
+                선택 해제
+              </Button>
+            )}
+            {(total > 0 || picked.size > 0) && (
+              <Button variant="outline" onClick={() => setCopying(true)}>
+                <Copy className="size-4" />
+                {/* 고른 것이 있으면 그것부터 — 무엇을 복사하는지 단추가 말한다. */}
+                {picked.size > 0 ? `고른 ${picked.size}건 복사` : '내용 복사'}
+              </Button>
+            )}
             {/* 고른 것이 있을 때만 선다 — 늘 서 있으면 「뭘 내려받지」 가 된다. */}
             {picked.size > 0 && (
               <Button variant="outline" disabled={exporting} onClick={() => void exportPicked()}>
@@ -243,8 +282,12 @@ export default function VocPage() {
                     <input
                       type="checkbox"
                       aria-label={`${item.title} 고르기`}
+                      title="Shift 를 누른 채 고르면 사이의 건까지 고릅니다"
                       checked={picked.has(item.id)}
-                      onChange={() => togglePick(item.id)}
+                      // 체크박스의 change 는 click 에서 온다 — Shift 는 그 click 이 안다.
+                      onChange={(event) =>
+                        togglePick(item.id, (event.nativeEvent as MouseEvent).shiftKey === true)
+                      }
                     />
                   </TableCell>
                   <TableCell className="text-right tabular-nums">{item.seq}</TableCell>
@@ -327,6 +370,19 @@ export default function VocPage() {
             </Button>
           </div>
         </div>
+      )}
+
+      {copying && (
+        <VocCopyDialog
+          picked={[...picked]}
+          filters={{
+            status,
+            statusLabel: statuses.data?.find((one) => one.key === status)?.label,
+            q,
+            mine,
+          }}
+          onClose={() => setCopying(false)}
+        />
       )}
 
       <WriteDialog
