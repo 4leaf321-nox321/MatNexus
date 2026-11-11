@@ -23316,6 +23316,37 @@
         "title": "OwnershipSkippedOut",
         "type": "object"
       },
+      "Page_AccountOut_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AccountOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "Page[AccountOut]",
+        "type": "object"
+      },
       "Page_AuditEntryOut_": {
         "properties": {
           "items": {
@@ -39671,6 +39702,7 @@
   "paths": {
     "/api/accounts": {
       "get": {
+        "description": "계정 목록 — **쪽과 전체 수**(2026-11-10). 상한은 다른 목록과 같다(`clamp_limit`, 200).\n\n전에는 50명짜리 배열만 주고 몇 명인지 말하지 않아, 계정 관리 화면이 첫 쪽만 그렸다 —\n사용자가 늘자 51번째부터 목록 끝까지 안 보였다. 화면은 `total` 을 보고 쪽을 이어 받는다\n(`fetchAll`).",
         "operationId": "list_accounts_api_accounts_get",
         "parameters": [
           {
@@ -39695,11 +39727,17 @@
             "name": "limit",
             "required": false,
             "schema": {
-              "default": 50,
-              "maximum": 100,
-              "minimum": 1,
-              "title": "Limit",
-              "type": "integer"
+              "anyOf": [
+                {
+                  "maximum": 1000,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Limit"
             }
           },
           {
@@ -39719,11 +39757,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/AccountOut"
-                  },
-                  "title": "Response List Accounts Api Accounts Get",
-                  "type": "array"
+                  "$ref": "#/components/schemas/Page_AccountOut_"
                 }
               }
             },

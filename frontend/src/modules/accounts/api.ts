@@ -10,6 +10,7 @@ import { api } from '@/shared/api/client'
 import type { components } from '@/shared/api/schema'
 
 export type Account = components['schemas']['AccountOut']
+export type AccountPage = components['schemas']['Page_AccountOut_']
 /** `deleted` 는 상태 칸이 아니라 `deleted_at` 이 있는 계정 — 목록에서만 따로 본다. */
 export type AccountStatus = 'pending' | 'active' | 'suspended' | 'deleted'
 export type Reference = components['schemas']['ReferenceOut']
@@ -28,13 +29,18 @@ export const accountsApi = {
   /** 가입 규칙(허용 메일 도메인). 로그인 전에 읽는다 — 치기 전에 알려 준다. */
   signupPolicy: () => api.get<SignupPolicy>('/accounts/signup-policy'),
 
-  list: (status?: AccountStatus) =>
-    api.get<Account[]>(status ? `/accounts?status=${status}` : '/accounts'),
+  /** 계정 한 쪽과 전체 수(2026-11-10). **화면은 `fetchAll` 로 이어 받는다** — 전에는 배열 한
+   *  번(50명)만 받아 51번째 계정부터 목록 끝까지 안 보였다. */
+  list: (status: AccountStatus | undefined, limit: number, offset: number) => {
+    const query = new URLSearchParams({ limit: String(limit), offset: String(offset) })
+    if (status) query.set('status', status)
+    return api.get<AccountPage>(`/accounts?${query.toString()}`)
+  },
 
   /** 활성 시스템 관리자 수. **서버가 센다** — 목록은 쪽 단위라 화면이 세면 틀린다. */
   summary: () => api.get<AccountSummary>('/accounts/summary'),
 
-  /** 가입한 사람의 아이디 전부 — `id1;id2;…`. 서버가 전부 모은다(목록은 100 개 상한). */
+  /** 가입한 사람의 아이디 전부 — `id1;id2;…`. 서버가 전부 모은다(목록은 쪽 단위 · 화면은 2,000명까지). */
   ids: (includeInactive = false) =>
     api.get<AccountIds>(includeInactive ? '/accounts/ids?include_inactive=true' : '/accounts/ids'),
 

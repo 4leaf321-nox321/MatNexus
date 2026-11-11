@@ -37,34 +37,64 @@ def _workspace_by_slug(db: Session, slug: str) -> Workspace:
 
 
 def account_out(db: Session, user: User) -> AccountOut:
-    rows = db.execute(
-        select(Workspace.slug)
-        .join(WorkspaceMember, WorkspaceMember.workspace_id == Workspace.id)
-        .where(WorkspaceMember.user_id == user.id)
+    return accounts_out(db, [user])[0]
+
+
+def accounts_out(db: Session, users: list[User]) -> list[AccountOut]:
+    """계정 여럿을 응답으로 — **부서는 한 번에 읽는다**(2026-11-10).
+
+    전에는 계정마다 소속 한 번 · 홈 부서 · 신청 부서를 따로 물어, 목록 한 쪽이 사람 수의 두세
+    배를 물었다(N+1). 쪽이 200명이 되면서 묶었다.
+    """
+    if not users:
+        return []
+    memberships: dict[uuid.UUID, list[str]] = {user.id: [] for user in users}
+    for user_id, slug in db.execute(
+        select(WorkspaceMember.user_id, Workspace.slug)
+        .join(Workspace, WorkspaceMember.workspace_id == Workspace.id)
+        .where(WorkspaceMember.user_id.in_(list(memberships)))
         .order_by(Workspace.name)
-    ).all()
-
-    home = db.get(Workspace, user.home_workspace_id) if user.home_workspace_id else None
-    requested = (
-        db.get(Workspace, user.requested_workspace_id) if user.requested_workspace_id else None
+    ).all():
+        memberships[user_id].append(slug)
+    wanted = {
+        one
+        for user in users
+        for one in (user.home_workspace_id, user.requested_workspace_id)
+        if one is not None
+    }
+    slugs: dict[uuid.UUID, str] = (
+        {
+            row.id: row.slug
+            for row in db.execute(
+                select(Workspace.id, Workspace.slug).where(Workspace.id.in_(wanted))
+            )
+        }
+        if wanted
+        else {}
     )
-
-    return AccountOut(
-        id=user.id,
-        email=user.email,
-        display_name=user.display_name,
-        status=user.status,
-        is_system_admin=user.is_system_admin,
-        is_data_manager=user.is_data_manager,
-        must_change_password=user.must_change_password,
-        home_workspace_slug=home.slug if home else None,
-        requested_workspace_slug=requested.slug if requested else None,
-        memberships=[row[0] for row in rows],
-        created_at=user.created_at,
-        decided_at=user.decided_at,
-        decision_note=user.decision_note,
-        deleted_at=user.deleted_at,
-    )
+    return [
+        AccountOut(
+            id=user.id,
+            email=user.email,
+            display_name=user.display_name,
+            status=user.status,
+            is_system_admin=user.is_system_admin,
+            is_data_manager=user.is_data_manager,
+            must_change_password=user.must_change_password,
+            home_workspace_slug=slugs.get(user.home_workspace_id)
+            if user.home_workspace_id
+            else None,
+            requested_workspace_slug=slugs.get(user.requested_workspace_id)
+            if user.requested_workspace_id
+            else None,
+            memberships=memberships[user.id],
+            created_at=user.created_at,
+            decided_at=user.decided_at,
+            decision_note=user.decision_note,
+            deleted_at=user.deleted_at,
+        )
+        for user in users
+    ]
 
 
 # --- 가입 ---------------------------------------------------------------------
@@ -639,19 +669,29 @@ def account_ids(db: Session, *, include_inactive: bool) -> list[str]:
     return [str(one) for one in db.scalars(query)]
 
 
-def list_accounts(db: Session, *, status: str | None, limit: int, offset: int) -> list[User]:
-    """계정 목록. **삭제된 계정은 `status="deleted"` 로만 본다** — 다른 목록에는 안 나온다.
+def list_accounts(
+    db: Session, *, status: str | None, limit: int, offset: int
+) -> tuple[list[User], int]:
+    """계정 한 쪽과 **전체 수**. **삭제된 계정은 `status="deleted"` 로만 본다** — 다른 목록에는
+    안 나온다.
 
     삭제가 소프트라(`deleted_at` + `suspended`) 전에는 「정지」 로 섞여 나왔고, 그 줄의
     「활성화」 가 지운 계정을 되살렸다(2026-09-18).
+
+    전체 수를 함께 준다(2026-11-10) — 전에는 한 쪽(50명)만 주고 몇 명인지 말하지 않아, 화면이
+    첫 쪽만 그렸고 51번째 계정부터 어디에도 안 보였다.
     """
-    query = select(User).order_by(User.created_at.desc()).limit(limit).offset(offset)
+    query = select(User)
     if status == "deleted":
-        return list(db.scalars(query.where(User.deleted_at.is_not(None))))
-    query = query.where(User.deleted_at.is_(None))
-    if status:
-        query = query.where(User.status == status)
-    return list(db.scalars(query))
+        query = query.where(User.deleted_at.is_not(None))
+    else:
+        query = query.where(User.deleted_at.is_(None))
+        if status:
+            query = query.where(User.status == status)
+    total = db.scalar(select(func.count()).select_from(query.subquery())) or 0
+    # 같은 때에 만든 계정끼리도 쪽 경계에서 차례가 흔들리지 않게 id 로 한 번 더 가른다.
+    page = query.order_by(User.created_at.desc(), User.id).limit(limit).offset(offset)
+    return list(db.scalars(page)), int(total)
 
 
 def _ensure_membership(db: Session, *, workspace: Workspace, user: User, role: str) -> None:

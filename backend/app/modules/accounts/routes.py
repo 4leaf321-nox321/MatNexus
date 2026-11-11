@@ -34,6 +34,7 @@ from app.modules.accounts.schemas import (
 )
 from app.shared import signup_domain
 from app.shared.auth import require_system_admin
+from app.shared.pagination import Page, clamp_limit
 
 router = APIRouter(prefix="/accounts", tags=["accounts"])
 
@@ -81,16 +82,23 @@ def account_ids(
     return AccountIdsOut(count=len(ids), ids=ids, text=";".join(ids))
 
 
-@router.get("", response_model=list[AccountOut])
+@router.get("", response_model=Page[AccountOut])
 def list_accounts(
     status: str | None = Query(default=None, pattern="^(pending|active|suspended|deleted)$"),
-    limit: int = Query(default=50, ge=1, le=100),
+    limit: int | None = Query(default=None, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
     _: User = Depends(require_system_admin),
     db: Session = Depends(get_db),
-) -> list[AccountOut]:
-    users = services.list_accounts(db, status=status, limit=limit, offset=offset)
-    return [services.account_out(db, user) for user in users]
+) -> Page[AccountOut]:
+    """계정 목록 — **쪽과 전체 수**(2026-11-10). 상한은 다른 목록과 같다(`clamp_limit`, 200).
+
+    전에는 50명짜리 배열만 주고 몇 명인지 말하지 않아, 계정 관리 화면이 첫 쪽만 그렸다 —
+    사용자가 늘자 51번째부터 목록 끝까지 안 보였다. 화면은 `total` 을 보고 쪽을 이어 받는다
+    (`fetchAll`).
+    """
+    size = clamp_limit(limit)
+    users, total = services.list_accounts(db, status=status, limit=size, offset=offset)
+    return Page(items=services.accounts_out(db, users), total=total, limit=size, offset=offset)
 
 
 @router.post("", response_model=TemporaryPasswordResponse, status_code=201)

@@ -8,10 +8,12 @@
  * 관리자가 직접 전달한다(SecretOnceDialog).
  */
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import {
   KeyRound,
   Loader2,
+  Mail,
+  X,
   ShieldCheck,
   ShieldMinus,
   ShieldOff,
@@ -26,9 +28,11 @@ import {
 import { DeleteAccountDialog } from '@/modules/accounts/DeleteAccountDialog'
 import { ExportIdsDialog } from '@/modules/accounts/ExportIdsDialog'
 import { HomeWorkspaceDialog } from '@/modules/accounts/HomeWorkspaceDialog'
+import { MailAddressesDialog } from '@/modules/accounts/MailAddressesDialog'
 import { accountsApi } from '@/modules/accounts/api'
 import type { Account } from '@/modules/accounts/api'
 import { workspacesApi } from '@/modules/workspaces/api'
+import { fetchAll } from '@/shared/api/paging'
 import { useAuth } from '@/shared/auth/AuthContext'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { PageHeader } from '@/shared/components/PageHeader'
@@ -83,15 +87,28 @@ export default function AccountsAdminPage() {
   const [exporting, setExporting] = useState(false)
   const [homing, setHoming] = useState<Account | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  // **골라서 메일 주소를 복사한다**(2026-11-11) — 여러 사람에게 한 번에 메일을 쓰려고. 탭을 바꾸면
+  // 푼다 — 보이지 않는 줄이 골라진 채 남으면 누구에게 가는지 모른다.
+  const [picked, setPicked] = useState<Set<string>>(new Set())
+  const [mailing, setMailing] = useState(false)
+  // Shift 로 범위를 고를 때의 앞 끝 — 마지막으로 누른 줄.
+  const anchor = useRef<string | null>(null)
 
   const { user: me } = useAuth()
 
   // 삭제된 계정은 「삭제됨」 탭에서만 — 「전체」 에 섞이면 「정지」 로 보이고 그 줄의
   // 「활성화」 가 지운 계정을 되살렸다(2026-09-18).
+  //
+  // **쪽을 이어 받는다**(2026-11-10). 전에는 한 번(50명)만 받아, 사용자가 늘자 51번째 계정부터
+  // 목록 끝까지 어디에도 안 보였다 — 삭제할 때 자료를 넘겨받을 사람 후보도 그만큼 잘렸다.
   const accounts = useResource(
     () =>
-      accountsApi.list(
-        tab === 'pending' ? 'pending' : tab === 'deleted' ? 'deleted' : undefined
+      fetchAll((limit, offset) =>
+        accountsApi.list(
+          tab === 'pending' ? 'pending' : tab === 'deleted' ? 'deleted' : undefined,
+          limit,
+          offset
+        )
       ),
     [tab],
   )
@@ -147,7 +164,40 @@ export default function AccountsAdminPage() {
     }
   }
 
-  const rows = accounts.data ?? []
+  const rows = accounts.data?.items ?? []
+  const total = accounts.data?.total ?? 0
+  // 지운 계정에는 메일이 안 간다 — 「삭제됨」 탭에는 고르는 칸이 없다.
+  const pickable = tab !== 'deleted'
+  const columns = pickable ? 6 : 5
+  const pickedRows = rows.filter((row) => picked.has(row.id))
+  const allPicked = rows.length > 0 && pickedRows.length === rows.length
+
+  function changeTab(next: Tab) {
+    setTab(next)
+    setPicked(new Set())
+    anchor.current = null
+  }
+
+  /** 한 줄을 고르거나 푼다. **Shift 를 누른 채면 마지막으로 누른 줄과 사이까지**(VOC 게시판과 같다). */
+  function togglePick(id: string, span: boolean) {
+    const at = rows.findIndex((one) => one.id === id)
+    const from = span && anchor.current ? rows.findIndex((one) => one.id === anchor.current) : -1
+    const ids =
+      from >= 0 && at >= 0
+        ? rows.slice(Math.min(from, at), Math.max(from, at) + 1).map((one) => one.id)
+        : [id]
+    setPicked((current) => {
+      const next = new Set(current)
+      const on = !current.has(id)
+      ids.forEach((one) => (on ? next.add(one) : next.delete(one)))
+      return next
+    })
+    anchor.current = id
+  }
+
+  function toggleAll() {
+    setPicked(allPicked ? new Set() : new Set(rows.map((row) => row.id)))
+  }
   const options = workspaces.data ?? []
   /** slug 를 사람이 읽는 이름으로. 못 찾으면 slug 그대로 — 감추지 않는다. */
   const nameOf = (slug: string) =>
@@ -159,7 +209,20 @@ export default function AccountsAdminPage() {
         title="계정 관리"
         description="가입 신청을 승인하고 계정 상태를 관리합니다."
         actions={
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
+            {/* 고른 것이 있을 때만 선다 — 늘 서 있으면 「누구에게 보내지」 가 된다. */}
+            {picked.size > 0 && (
+              <>
+                <Button variant="ghost" onClick={() => setPicked(new Set())}>
+                  <X className="size-4" />
+                  선택 해제
+                </Button>
+                <Button variant="outline" onClick={() => setMailing(true)}>
+                  <Mail className="size-4" />
+                  메일 주소 복사 ({picked.size.toLocaleString('ko-KR')}명)
+                </Button>
+              </>
+            )}
             {/* 가입한 사람의 아이디를 한 줄로 — 「전체」 탭에서만. 대기 탭에서 보이면 대기자만
                 내보내는 것으로 읽힌다. */}
             {tab === 'all' && (
@@ -176,7 +239,7 @@ export default function AccountsAdminPage() {
         }
       />
 
-      <Tabs value={tab} onValueChange={(value) => setTab(value as Tab)} className="mb-4">
+      <Tabs value={tab} onValueChange={(value) => changeTab(value as Tab)} className="mb-4">
         <TabsList>
           <TabsTrigger value="pending">승인 대기</TabsTrigger>
           <TabsTrigger value="all">전체</TabsTrigger>
@@ -211,6 +274,16 @@ export default function AccountsAdminPage() {
         <Table>
           <TableHeader>
             <TableRow>
+              {pickable && (
+                <TableHead className="w-8">
+                  <input
+                    type="checkbox"
+                    aria-label="이 목록 전부 고르기"
+                    checked={allPicked}
+                    onChange={toggleAll}
+                  />
+                </TableHead>
+              )}
               <TableHead>아이디</TableHead>
               <TableHead>이름</TableHead>
               <TableHead>상태</TableHead>
@@ -221,7 +294,7 @@ export default function AccountsAdminPage() {
           <TableBody>
             {accounts.loading && (
               <TableRow>
-                <TableCell colSpan={5} className="text-muted-foreground py-8 text-center">
+                <TableCell colSpan={columns} className="text-muted-foreground py-8 text-center">
                   <Loader2 className="mx-auto size-4 animate-spin" />
                 </TableCell>
               </TableRow>
@@ -229,7 +302,7 @@ export default function AccountsAdminPage() {
 
             {!accounts.loading && rows.length === 0 && (
               <TableRow>
-                <TableCell colSpan={5} className="text-muted-foreground py-8 text-center">
+                <TableCell colSpan={columns} className="text-muted-foreground py-8 text-center">
                   {tab === 'pending' ? '승인을 기다리는 신청이 없습니다.' : '계정이 없습니다.'}
                 </TableCell>
               </TableRow>
@@ -237,6 +310,20 @@ export default function AccountsAdminPage() {
 
             {rows.map((account) => (
               <TableRow key={account.id}>
+                {pickable && (
+                  <TableCell>
+                    <input
+                      type="checkbox"
+                      aria-label={`${account.display_name} 고르기`}
+                      title="Shift 를 누른 채 고르면 사이의 계정까지 고릅니다"
+                      checked={picked.has(account.id)}
+                      // 체크박스의 change 는 click 에서 온다 — Shift 는 그 click 이 안다.
+                      onChange={(event) =>
+                        togglePick(account.id, (event.nativeEvent as MouseEvent).shiftKey === true)
+                      }
+                    />
+                  </TableCell>
+                )}
                 <TableCell className="font-medium">
                   {/* 지운 계정의 아이디는 `hong@samsung.com#deleted-…` 로 풀려 있다 — 원래
                       아이디만 보이고, 언제 지웠는지는 상태 칸이 말한다. */}
@@ -391,6 +478,19 @@ export default function AccountsAdminPage() {
           </TableBody>
         </Table>
       </div>
+      {/* 몇 명인지 말한다 — 끝까지 다 보이는지 사람이 알 길이 이것뿐이다. 2,000명에서 멈추면
+          그렇다고 말한다(`fetchAll`, 조용히 자르지 않는다). */}
+      {!accounts.loading && rows.length > 0 && (
+        <p className="mt-2 text-sm" role="status">
+          {rows.length.toLocaleString('ko-KR')}명
+          {rows.length < total &&
+            ` — 전체 ${total.toLocaleString('ko-KR')}명 중 앞의 ${rows.length.toLocaleString('ko-KR')}명만 표시합니다.`}
+        </p>
+      )}
+
+      {mailing && (
+        <MailAddressesDialog accounts={pickedRows} onClose={() => setMailing(false)} />
+      )}
 
       <RejectDialog
         account={rejecting}

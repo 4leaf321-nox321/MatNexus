@@ -71,11 +71,13 @@ def test_deleted_account_is_listed_apart_and_cannot_be_revived(
     user = make_user(db, "hong", workspace)
     client.request("DELETE", f"/api/accounts/{user.id}", json={}, headers=admin_headers)
 
-    everyone = client.get("/api/accounts", headers=admin_headers).json()
+    everyone = client.get("/api/accounts", headers=admin_headers).json()["items"]
     assert all(item["id"] != str(user.id) for item in everyone)
-    suspended = client.get("/api/accounts?status=suspended", headers=admin_headers).json()
+    suspended = client.get("/api/accounts?status=suspended", headers=admin_headers).json()[
+        "items"
+    ]
     assert all(item["id"] != str(user.id) for item in suspended)
-    deleted = client.get("/api/accounts?status=deleted", headers=admin_headers).json()
+    deleted = client.get("/api/accounts?status=deleted", headers=admin_headers).json()["items"]
     assert [item["id"] for item in deleted] == [str(user.id)]
     assert deleted[0]["deleted_at"] is not None
 

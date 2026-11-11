@@ -11,7 +11,14 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List Accounts */
+        /**
+         * List Accounts
+         * @description 계정 목록 — **쪽과 전체 수**(2026-11-10). 상한은 다른 목록과 같다(`clamp_limit`, 200).
+         *
+         *     전에는 50명짜리 배열만 주고 몇 명인지 말하지 않아, 계정 관리 화면이 첫 쪽만 그렸다 —
+         *     사용자가 늘자 51번째부터 목록 끝까지 안 보였다. 화면은 `total` 을 보고 쪽을 이어 받는다
+         *     (`fetchAll`).
+         */
         get: operations["list_accounts_api_accounts_get"];
         put?: never;
         /** Create Account */
@@ -17752,6 +17759,17 @@ export interface components {
             /** Reason */
             reason: string;
         };
+        /** Page[AccountOut] */
+        Page_AccountOut_: {
+            /** Items */
+            items: components["schemas"]["AccountOut"][];
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+            /** Total */
+            total: number;
+        };
         /** Page[AuditEntryOut] */
         Page_AuditEntryOut_: {
             /** Items */
@@ -24154,7 +24172,7 @@ export interface operations {
         parameters: {
             query?: {
                 status?: string | null;
-                limit?: number;
+                limit?: number | null;
                 offset?: number;
             };
             header?: never;
@@ -24169,7 +24187,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["AccountOut"][];
+                    "application/json": components["schemas"]["Page_AccountOut_"];
                 };
             };
             /** @description Validation Error */

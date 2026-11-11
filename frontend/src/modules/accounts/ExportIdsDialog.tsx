@@ -25,7 +25,7 @@ import { copyText } from '@/shared/lib/clipboard'
 
 export function ExportIdsDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [includeInactive, setIncludeInactive] = useState(false)
-  const [copied, setCopied] = useState(false)
+  const [copied, setCopied] = useState<'yes' | 'no' | null>(null)
   const ids = useResource(
     () => (open ? accountsApi.ids(includeInactive) : Promise.resolve(null)),
     [open, includeInactive]
@@ -33,10 +33,11 @@ export function ExportIdsDialog({ open, onClose }: { open: boolean; onClose: () 
 
   async function copy() {
     if (!ids.data) return
-    if (await copyText(ids.data.text)) {
-      setCopied(true)
-      window.setTimeout(() => setCopied(false), 1500)
-    }
+    // 막혀도 말한다(2026-11-11) — 운영 서버가 HTTP 라 브라우저가 복사를 막을 수 있고, 전에는 그때
+    // 아무 말이 없어 사람은 복사된 줄 알고 빈 것을 붙여 넣었다.
+    const ok = await copyText(ids.data.text)
+    setCopied(ok ? 'yes' : 'no')
+    if (ok) window.setTimeout(() => setCopied(null), 1500)
   }
 
   return (
@@ -72,14 +73,19 @@ export function ExportIdsDialog({ open, onClose }: { open: boolean; onClose: () 
         <p className="text-muted-foreground text-xs">
           {ids.data ? `${ids.data.count}명 · 아이디순` : ''}
         </p>
+        {copied === 'no' && (
+          <p className="text-destructive text-sm" role="alert">
+            브라우저가 복사를 막았습니다 — 위 칸을 눌러 전부 고른 뒤 Ctrl+C 로 복사하세요.
+          </p>
+        )}
 
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>
             닫기
           </Button>
           <Button disabled={!ids.data || ids.data.count === 0} onClick={copy}>
-            {copied ? <Check className="size-4" /> : <Copy className="size-4" />}
-            {copied ? '복사됨' : '복사'}
+            {copied === 'yes' ? <Check className="size-4" /> : <Copy className="size-4" />}
+            {copied === 'yes' ? '복사됨' : '복사'}
           </Button>
         </DialogFooter>
       </DialogContent>

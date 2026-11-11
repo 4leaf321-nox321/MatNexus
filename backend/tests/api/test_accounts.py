@@ -267,7 +267,7 @@ def test_pending_list_shows_applicants(
 
     pending = client.get("/api/accounts?status=pending", headers=admin_headers)
     assert pending.status_code == 200
-    assert {row["email"] for row in pending.json()} == {"hong", "kim"}
+    assert {row["email"] for row in pending.json()["items"]} == {"hong", "kim"}
 
 
 def test_아이디_내보내기는_전부를_한_줄로_활성만_기본(
@@ -579,3 +579,48 @@ def test_권한_변경이_감사_기록에_남는다(
         db.scalars(select(AuditEntry).where(AuditEntry.action == "account.admin_changed"))
     )
     assert len(again) == 1
+
+
+def test_목록은_쪽과_전체_수를_주고_이어_받으면_끝까지_다_나온다(
+    client: TestClient, db: Session, admin_headers: dict[str, str]
+) -> None:
+    """50명짜리 배열만 주고 전체 수를 안 알려, 화면이 첫 쪽만 그렸다(2026-11-10) — 사용자가
+    늘자 51번째 계정부터 목록 끝까지 안 보였다. 이제 쪽마다 `total` 을 주고, 이어 받으면
+    빠짐 · 겹침이 없다."""
+    from app.modules.auth import security
+
+    hashed = security.hash_password("member-password-1")  # 한 번만 — 230번 해시하면 느리다
+    db.add_all(
+        User(
+            email=f"many{at:03d}@example.com",
+            password_hash=hashed,
+            display_name=f"사람 {at:03d}",
+            status="active",
+        )
+        for at in range(230)
+    )
+    db.commit()
+
+    first = client.get("/api/accounts", headers=admin_headers)
+    assert first.status_code == 200, first.text
+    body = first.json()
+    total = body["total"]
+    assert total >= 231  # 230명 + 관리자
+    assert body["limit"] == 50 and len(body["items"]) == 50
+
+    seen: list[str] = []
+    while len(seen) < total:
+        page = client.get(
+            f"/api/accounts?limit=1000&offset={len(seen)}", headers=admin_headers
+        ).json()
+        assert page["limit"] == 200  # 서버 상한 — 큰 수를 달라 해도 200명씩
+        assert page["total"] == total and page["items"]
+        seen.extend(row["id"] for row in page["items"])
+    assert len(seen) == total == len(set(seen))
+    assert {f"many{at:03d}@example.com" for at in range(230)} <= {
+        row["email"]
+        for offset in range(0, total, 200)
+        for row in client.get(
+            f"/api/accounts?limit=200&offset={offset}", headers=admin_headers
+        ).json()["items"]
+    }
