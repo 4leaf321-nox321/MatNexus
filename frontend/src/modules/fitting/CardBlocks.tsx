@@ -20,6 +20,7 @@ import { useState } from 'react'
 import { CardRemarks } from '@/modules/fitting/CardRemarks'
 import type { Remark } from '@/modules/fitting/CardRemarks'
 import type { BlockSpec, Produced, PropertyCard } from '@/modules/fitting/api'
+import { plotLine } from '@/modules/fitting/plotLine'
 import { CurveChart } from '@/modules/tests/CurveChart'
 import { Badge } from '@/shared/components/ui/badge'
 import { axisLabel, formatScalar, toDisplay } from '@/shared/units'
@@ -169,9 +170,6 @@ function Rows({ columns: declared, rows }: { columns: Produced[]; rows: Record<s
   )
 }
 
-/** 계수 선을 몇 점으로 그리나. 로그 축에서 자릿수마다 고르게. */
-const LINE_POINTS = 60
-
 /**
  * 블록의 **그래프**(2026-10-22) — 선언(`spec.plot`)대로 점과 계수 선을 그린다. 블록 이름은 모른다.
  *
@@ -212,26 +210,15 @@ export function BlockPlotView({
   const solid = points.filter((one) => !one.hollow).map((one) => shown(one.x, one.y))
   const hollow = points.filter((one) => one.hollow).map((one) => shown(one.x, one.y))
 
-  // 계수 선 — 점(빈 점을 빼고, 없으면 전부)이 있는 x 범위에서만.
-  const line: [number, number][] = []
-  const coefficient = plot.line ? Number(values[plot.line.coefficient]) : NaN
-  const exponent = plot.line ? Number(values[plot.line.exponent]) : NaN
-  if (Number.isFinite(coefficient) && Number.isFinite(exponent)) {
-    const span = (points.some((one) => !one.hollow) ? points.filter((one) => !one.hollow) : points)
-      .map((one) => one.x)
-      .filter((x) => !plot.log_x || x > 0)
-    if (span.length > 0) {
-      const low = Math.min(...span)
-      const high = Math.max(...span)
-      for (let index = 0; index < LINE_POINTS; index += 1) {
-        const share = index / (LINE_POINTS - 1)
-        const x = plot.log_x
-          ? 10 ** (Math.log10(low) + (Math.log10(high) - Math.log10(low)) * share)
-          : low + (high - low) * share
-        line.push(shown(x, coefficient * x ** exponent))
-      }
-    }
-  }
+  // 계수 선 — 점(빈 점을 빼고, 없으면 전부)이 있는 x 범위에서만. 꺾이는 선(2구간 S-N)도
+  // 같은 길이다(`plotLine`).
+  const span = (points.some((one) => !one.hollow) ? points.filter((one) => !one.hollow) : points)
+    .map((one) => one.x)
+    .filter((x) => !plot.log_x || x > 0)
+  const line =
+    span.length > 0
+      ? plotLine(plot, values, Math.min(...span), Math.max(...span)).map(([x, y]) => shown(x, y))
+      : []
 
   return (
     <div className="my-2">

@@ -853,6 +853,40 @@ describe('묶음 결과의 그래프', () => {
     expect(screen.getByText('진폭 (MPa)')).toBeInTheDocument()
   })
 
+  it('점의 키가 같은 선언이 둘이면 계수 선의 키가 결과에 있는 쪽으로 그린다', async () => {
+    // 한 직선 · 2구간 S-N 이 그렇다(2026-11-14) — 점만 보고 고르면 2구간 결과에 한 직선
+    // 그래프가 잡혀 선이 빠졌다.
+    const BENT = {
+      ...PLOTTED,
+      key: 'imaginary_bent',
+      rows: PLOTTED.rows.map((one) =>
+        one.key === 'level' ? { ...one, label: '꺾인 진폭' } : one
+      ),
+      plot: {
+        ...PLOTTED.plot,
+        line: { coefficient: 'a1', exponent: 'b1', knee: 'knee', exponent2: 'b2' },
+      },
+    }
+    ofMaterial.mockResolvedValue([
+      {
+        ...ROW,
+        id: 'g11',
+        plugin_id: 'imaginary.bent',
+        options: {},
+        used: ['A', 'B'],
+        values: { a1: 1e9, b1: -0.1, knee: 5e4, b2: -0.05 },
+        detail: { points: POINTS },
+        warnings: [],
+      },
+    ])
+    blocks.mockResolvedValue([PLOTTED, BENT])
+    show(<GroupsPanel materialId="m1" />)
+
+    await userEvent.click(await screen.findByRole('button', { name: '그래프 보기' }))
+    expect(screen.getByText('꺾인 진폭 (MPa)')).toBeInTheDocument()
+    expect(screen.getByText('계수로 그린 선')).toBeInTheDocument()
+  })
+
   it('점이 없거나 선언의 키를 안 들면 그래프 단추가 없다', async () => {
     ofMaterial.mockResolvedValue([
       { ...ROW, id: 'g8', detail: { points: [{ member: 'A', other: 1 }] } },

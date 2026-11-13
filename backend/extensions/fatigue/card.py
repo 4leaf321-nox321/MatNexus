@@ -99,6 +99,208 @@ SN_CURVE = register_block(
     )
 )
 
+#: **2구간 S-N**(VOC 61, 2026-11-14) — `sn_curve` 와 블록을 가른다. 같은 블록에 넣으면
+#: 한 직선만 읽는 덱(정의판 셋이 `sn_curve.basquin_a · b` 를 읽는다)이 2구간 카드에서
+#: 둘째 기울기를 버리고 **한 직선 덱을 조용히 낸다.** 블록이 다르면 그 형식들은 이
+#: 카드를 「모자란 블록」 으로 거절한다.
+SN_BILINEAR = register_block(
+    BlockSpec(
+        key="sn_bilinear",
+        label="S-N 곡선 (2구간)",
+        help=(
+            "시편마다 (응력 진폭, 파단 수명) 점과 꺾임 수명 Nc1 에서 기울기가 바뀌는 두 직선 "
+            "S = A1·N^b1 (N ≤ Nc1) · 그 뒤 b2. **런아웃은 행에 남되 적합에서는 뺀 값이다.** "
+            "한 직선과 견준 판정(F 검정 · ΔBIC)을 함께 싣는다 — 근거가 약하면 한 직선이 낫다."
+        ),
+        produces=(
+            Produced(key="source", label="표를 만든 방법", si_unit="1"),
+            Produced(key="model", label="식", si_unit="1", help="`bilinear`."),
+            Produced(
+                key="sn_a1",
+                label="1구간 절편 A1 (진폭)",
+                si_unit="Pa",
+                help=(
+                    "S = A1·N^b1 의 A1. 응력 **진폭** 기준 — MATFAT · MATFTG 의 SRI1 은 "
+                    "범위라 2·A1."
+                ),
+            ),
+            Produced(key="sn_b1", label="1구간 기울기 b1", si_unit="1"),
+            Produced(
+                key="knee_cycles",
+                label="꺾임 수명 Nc1",
+                si_unit="1",
+                help="이 수명부터 둘째 기울기 b2 로 이어진다.",
+            ),
+            Produced(key="knee_stress", label="꺾임 응력 (진폭)", si_unit="Pa"),
+            Produced(key="sn_b2", label="2구간 기울기 b2", si_unit="1"),
+            Produced(key="sn_r_squared", label="적합의 R²", si_unit="1"),
+            Produced(
+                key="log_scatter",
+                label="흩어짐 SE",
+                si_unit="1",
+                help=(
+                    "log N 잔차의 표준편차(자릿수, 자유도 n-4) — HyperLife · MATFAT 의 SE 와 "
+                    "같은 뜻."
+                ),
+            ),
+            Produced(key="point_count", label="적합에 쓴 점 수", si_unit="1"),
+            Produced(key="runout_count", label="런아웃 수", si_unit="1"),
+            Produced(key="segment1_points", label="1구간 파단점 수", si_unit="1"),
+            Produced(
+                key="segment2_points",
+                label="2구간 파단점 수",
+                si_unit="1",
+                help="둘째 기울기를 정한 점 — 고주기 쪽은 런아웃이 많아 적기 쉽다.",
+            ),
+            Produced(
+                key="bilinear_p_value",
+                label="F 검정 p (한 직선 대비)",
+                si_unit="1",
+                help="작을수록 2구간이 한 직선보다 낫다. 꺾임을 데이터로 정해 근사다.",
+            ),
+            Produced(
+                key="bilinear_delta_bic",
+                label="ΔBIC (2구간 - 한 직선)",
+                si_unit="1",
+                help="음수면 2구간이 낫다.",
+            ),
+            Produced(
+                key="bilinear_supported",
+                label="2구간 근거",
+                si_unit="1",
+                help="1 이면 F 검정 · ΔBIC 둘 다 2구간 쪽. 0 이면 한 직선 권장.",
+            ),
+            Produced(key="strength_at_1e5", label="피로 강도 @1e5", si_unit="Pa"),
+            Produced(key="strength_at_1e6", label="피로 강도 @1e6", si_unit="Pa"),
+            Produced(key="strength_at_1e7", label="피로 강도 @1e7", si_unit="Pa"),
+            Produced(
+                key="tensile_strength",
+                label="인장강도 (UTS)",
+                si_unit="Pa",
+                property_key="mechanical.tensile_strength",
+                help="재료에 적어 둔 값. OptiStruct · Nastran 피로 카드가 요구한다.",
+            ),
+            Produced(
+                key="yield_strength",
+                label="항복강도",
+                si_unit="Pa",
+                property_key="mechanical.yield_strength",
+                help="재료에 적어 둔 값. 있으면 피로 카드의 STATIC 줄에 함께 적는다.",
+            ),
+        ),
+        rows=SN_CURVE.rows,
+        order=46,
+        kind_priority=3,
+        from_values=False,
+        plot=BlockPlot(
+            x="cycles_to_failure",
+            y="stress_amplitude",
+            log_x=True,
+            log_y=True,
+            hollow="runout",
+            line=PowerLine(
+                coefficient="sn_a1", exponent="sn_b1", knee="knee_cycles", exponent2="sn_b2"
+            ),
+        ),
+    )
+)
+
+
+def _bilinear(deck: Deck) -> tuple[float, float, float, float, float]:
+    """`(A1, b1, b2, Nc1, 꺾임 응력)` — 덱의 단위계로 옮긴 값. 이어짐을 여기서 한 번 본다."""
+    found = [
+        deck.number("sn_bilinear", key)
+        for key in ("sn_a1", "sn_b1", "sn_b2", "knee_cycles", "knee_stress")
+    ]
+    assert all(one is not None for one in found)
+    a1, b1, b2, knee, stress = (float(one) for one in found)  # type: ignore[arg-type]
+    if a1 <= 0.0 or b1 >= 0.0 or b2 >= 0.0 or knee <= 0.0 or stress <= 0.0:
+        raise ExportError(
+            f"2구간 S-N 이 아닙니다 — A1={a1:g}, b1={b1:g}, b2={b2:g}, Nc1={knee:g}: A1 · "
+            f"Nc1 · 꺾임 응력은 양수, 두 기울기는 음수여야 합니다."
+        )
+    if abs(a1 * knee**b1 - stress) > 1e-6 * stress:
+        raise ExportError(
+            f"꺾임 응력 {stress:g} 이 A1·Nc1^b1 = {a1 * knee**b1:g} 과 다릅니다 — 두 구간이 "
+            "이어지지 않는 카드입니다."
+        )
+    return a1, b1, b2, knee, stress
+
+
+def _support_note(deck: Deck, block: str) -> list[str]:
+    """2구간 근거가 약한 카드 — 덱에도 그 사실이 따라간다(만든 사람이 골랐다)."""
+    if deck.number(block, "bilinear_supported") != 0.0:
+        return []
+    p = deck.number(block, "bilinear_p_value")
+    bic = deck.number(block, "bilinear_delta_bic")
+    return [
+        "2구간 근거가 약한 카드입니다 — 한 직선과 견준 F 검정 p = "
+        f"{p:.3g}, ΔBIC = {bic:+.3g}. 한 직선(Basquin) 카드가 권장입니다."
+        if p is not None and bic is not None
+        else "2구간 근거가 약한 카드입니다 — 한 직선(Basquin) 카드가 권장입니다."
+    ]
+
+
+@register_renderer(
+    key="dyna_fatigue_bilinear",
+    label="LS-DYNA (피로 S-N 2구간)",
+    extension="k",
+    suffix="_fatigue2seg",
+    describe=(
+        "*MAT_ADD_FATIGUE — 2구간 S-N 을 식 구간 둘로(LCID=-3 S = a·N^b, 구간 카드 하나 더, "
+        "SNTYPE=1 진폭). LS-DYNA R13 이상. MID 는 구조 재료의 번호로 맞춘다."
+    ),
+    keywords=("*KEYWORD", "*MAT_ADD_FATIGUE", "*END"),
+    needs=(
+        Need("sn_bilinear", values=("sn_a1", "sn_b1", "sn_b2", "knee_cycles", "knee_stress")),
+    ),
+)
+def render_dyna_fatigue_bilinear(deck: Deck) -> Rendered:
+    """카드 1b(LCID<0) + **S-N 구간 카드 2a**(`Ai Bi STHRESi` — 4 · 5 · 6칸).
+
+    매뉴얼(R13, *MAT_ADD_FATIGUE Remark 1): 「multiple slopes … each segment defined by
+    Ai, Bi and STHRESi … The lower limit of the ith segment is represented by the threshold
+    stress STHRESi … This only applies to the case where LCID < 0」. R11 은 같은 문장이
+    LCID = -1 · -2 에만 열려 있었다 — LCID=-1(N·S^b = a)로 쓰면 a = A^(-1/b) 가 MPa 에서도
+    10^49 를 넘어(b2 = -0.05) 단정밀도가 못 읽는다. 그래서 한 직선 덱과 같은 LCID=-3
+    (S = a·N^b)에 구간 카드를 붙이고 R13 이상이라고 적는다.
+
+    1구간: A1 · b1, 하한 STHRES1 = 꺾임 응력. 2구간: A2 = S_k·Nc1^(-b2) · b2, 하한
+    STHRES2 = 0 — 둘째 기울기가 그대로 이어진다(한 직선 덱처럼 피로 한도를 지어 넣지 않는다).
+    """
+    a1, b1, b2, knee, stress = _bilinear(deck)
+    a2 = stress * knee ** (-b2)
+    ratios = _ratios_of(deck, "sn_bilinear")
+    notes = [
+        "*MAT_ADD_FATIGUE 는 구조 재료에 얹는 카드입니다 — MID 를 그 재료 번호로 맞추세요.",
+        "S-N 구간 카드(2구간)는 LS-DYNA R13 이상이 LCID=-3 에서 읽습니다.",
+        *_support_note(deck, "sn_bilinear"),
+    ]
+    lines = ["*KEYWORD", *_header(deck, "$")]
+    lines.append(f"$ Consistent units: {deck.units.declaration}")
+    lines.append("$ 2-segment S-N, S = stress AMPLITUDE (SNTYPE=1), LCID=-3: S = a * N^b")
+    lines.append(f"$   segment 1: a1 = {a1:.6g}, b1 = {b1:.6g} down to STHRES1 = knee stress")
+    lines.append(f"$   (knee at N = {knee:.6g} cycles, S = {stress:.6g})")
+    lines.append(f"$   segment 2: a2 = {a2:.6g}, b2 = {b2:.6g} down to STHRES2 = 0")
+    lines.append("$   (the second slope continues - no endurance limit is invented).")
+    lines.append("$ S-N segment cards with LCID=-3 need LS-DYNA R13 or later.")
+    lines.append("$ MID must be the structural material this fatigue curve belongs to.")
+    if ratios:
+        lines.append(f"$ Stress ratio R of the tests: {', '.join(f'{r:g}' for r in ratios)}.")
+        notes.extend(_ratio_note(ratios))
+    lines.append("*MAT_ADD_FATIGUE")
+    lines.append(
+        "$      mid      lcid     ltype         a         b    sthres    snlimt    sntype"
+    )
+    lines.append(
+        f"{deck.solver_id:>10}{-3:>10}{0:>10}{_dyna._f10(a1)}{_dyna._f10(b1)}"
+        f"{_dyna._f10(stress)}{0:>10}{1:>10}"
+    )
+    lines.append("$                                      a2        b2   sthres2")
+    lines.append(f"{'':>30}{_dyna._f10(a2)}{_dyna._f10(b2)}{_dyna._f10(0.0)}")
+    lines.append("*END")
+    return Rendered(text="\n".join(lines) + "\n", notes=tuple(notes))
+
 
 @register_renderer(
     key="dyna_fatigue",
@@ -164,10 +366,14 @@ def _basquin(deck: Deck) -> tuple[float, float]:
 
 
 def _ratios(deck: Deck) -> list[float]:
+    return _ratios_of(deck, "sn_curve")
+
+
+def _ratios_of(deck: Deck, block: str) -> list[float]:
     return sorted(
         {
             round(float(row["stress_ratio"]), 3)
-            for row in deck.rows("sn_curve")
+            for row in deck.rows(block)
             if isinstance(row.get("stress_ratio"), int | float)
         }
     )
@@ -217,10 +423,10 @@ def _stress_name(deck: Deck, solver: str) -> tuple[str, float]:
     return _STRESS_NAMES[symbol]
 
 
-def _strengths(deck: Deck) -> tuple[float, float | None]:
-    uts = deck.number("sn_curve", "tensile_strength")
+def _strengths(deck: Deck, block: str = "sn_curve") -> tuple[float, float | None]:
+    uts = deck.number(block, "tensile_strength")
     assert uts is not None
-    ys = deck.number("sn_curve", "yield_strength")
+    ys = deck.number(block, "yield_strength")
     if uts <= 0.0 or (ys is not None and ys <= 0.0):
         raise ExportError(
             "인장강도 · 항복강도는 양수여야 합니다 — 재료에 적어 둔 값을 보세요."
@@ -271,13 +477,27 @@ def render_optistruct_fatigue(deck: Deck) -> Rendered:
     매뉴얼이 MATFAT 의 S-N 을 R=-1 시험의 것으로 본다 — 아니면 말한다.
     """
     a, b = _basquin(deck)
-    uts, ys = _strengths(deck)
     end = _tested_to(deck)
+    return _matfat(
+        deck, "sn_curve", (2.0 * a, b, end, b), _range_comments(a, b, end, "B", "NC1")
+    )
+
+
+def _matfat(
+    deck: Deck,
+    block: str,
+    sn: tuple[float, float, float, float],
+    comments: list[str],
+    extra_notes: tuple[str, ...] = (),
+) -> Rendered:
+    """MATFAT 한 장 — `sn` 은 `(SRI1, B1, NC1, B2)`(범위 절편). 한 직선 · 2구간이 같이 쓴다."""
+    sri1, b1, nc1, b2 = sn
+    uts, ys = _strengths(deck, block)
     unit, _ = _stress_name(deck, "OptiStruct")
     length = _LENGTH_NAMES.get(deck.units.symbol("m"))
-    notes = [_MID_NOTE, *_ratio_note(_ratios(deck))]
+    notes = [_MID_NOTE, *extra_notes, *_ratio_note(_ratios_of(deck, block))]
     lines = _bulk._head(deck, "OptiStruct")
-    lines.extend(_range_comments(a, b, end, "B", "NC1"))
+    lines.extend(comments)
     if length is None:
         lines.append("$ LENUNIT left blank - this length unit has no MATFAT name.")
     lines.extend(
@@ -291,12 +511,59 @@ def render_optistruct_fatigue(deck: Deck) -> Rendered:
                 [
                     deck.solver_id, unit, length, None, None, None, None, None,
                     "STATIC", ys, uts, None, None, None, None, None,
-                    "SN", 2.0 * a, b, end, b, None, None, None,
+                    "SN", sri1, b1, nc1, b2, None, None, None,
                 ],
             ),
         ]
     )  # fmt: skip
     return Rendered(text="\n".join(lines) + "\n", notes=tuple(notes))
+
+
+_BILINEAR_NEEDS = (
+    Need(
+        "sn_bilinear",
+        values=("sn_a1", "sn_b1", "sn_b2", "knee_cycles", "knee_stress", "tensile_strength"),
+    ),
+    Need("sn_bilinear", values=("yield_strength",), optional=True),
+)
+
+
+def _bilinear_comments(
+    a1: float, b1: float, b2: float, knee: float, slope: str, knee_name: str
+) -> list[str]:
+    return [
+        "$ 2-segment S-N in stress RANGE: SRI1 = 2 x amplitude intercept of segment 1",
+        f"$   ({a1:.6g} * N^{b1:.6g} amplitude up to {knee_name} = {knee:.6g} cycles,",
+        f"$   then {slope}2 = {b2:.6g}; the two segments meet at {knee_name}).",
+        "$ Fitted in MatNexus: log N on log S (ASTM E739), runouts excluded. SE left blank.",
+        "$ UTS / YS are the values stated on the material, not from the fatigue tests.",
+        "$ MID must be the structural MAT1 this fatigue curve belongs to.",
+    ]
+
+
+@register_renderer(
+    key="optistruct_fatigue_bilinear",
+    label="OptiStruct (피로 S-N 2구간)",
+    extension="fem",
+    suffix="_fatigue2seg",
+    describe=(
+        "MATFAT — STATIC(인장 · 항복강도) + SN(SRI1 = 2·A1 범위 절편, B1 · NC1(꺾임 수명) · "
+        "B2). 인장강도는 재료에 적어 둔 값이 카드에 실려 있어야 한다. MID 는 구조 "
+        "재료(MAT1)의 번호."
+    ),
+    keywords=("MATFAT*",),
+    needs=_BILINEAR_NEEDS,
+)
+def render_optistruct_fatigue_bilinear(deck: Deck) -> Rendered:
+    """한 직선 MATFAT 과 같은 카드 — SN 줄만 `SRI1 B1 NC1 B2` 를 2구간 그대로 적는다."""
+    a1, b1, b2, knee, _ = _bilinear(deck)
+    return _matfat(
+        deck,
+        "sn_bilinear",
+        (2.0 * a1, b1, knee, b2),
+        _bilinear_comments(a1, b1, b2, knee, "B", "NC1"),
+        tuple(_support_note(deck, "sn_bilinear")),
+    )
 
 
 @register_renderer(
@@ -326,35 +593,55 @@ def render_nastran_fatigue(deck: Deck) -> Rendered:
     여기서 이유를 말한다. 범위를 벗어난 항복강도는 빼고 말한다(STATIC 줄에서 선택 칸이다).
     """
     a, b = _basquin(deck)
-    uts, ys = _strengths(deck)
     end = _tested_to(deck)
-    unit, per_mpa = _stress_name(deck, "Nastran")
-    notes = [_MID_NOTE]
-    if not -1.0 < b < -0.02:
-        raise ExportError(
-            f"MATFTG 의 b1 은 -1 과 -0.02 사이여야 합니다 — 이 카드는 b = {b:.4g}."
-        )
-    if not b > -0.5:
-        raise ExportError(
+    return _matftg(
+        deck,
+        "sn_curve",
+        (2.0 * a, b, end, b),
+        _range_comments(a, b, end, "b", "Nc1"),
+        b2_error=(
             "MATFTG 의 b2 는 -0.5 보다 커야 하는데, 한 직선으로 이으려면 "
             f"b2 = b1 = {b:.4g} 입니다."
+        ),
+    )
+
+
+def _matftg(
+    deck: Deck,
+    block: str,
+    sn: tuple[float, float, float, float],
+    comments: list[str],
+    *,
+    b2_error: str,
+    extra_notes: tuple[str, ...] = (),
+) -> Rendered:
+    """MATFTG 한 장 — `sn` 은 `(SRI1, b1, Nc1, b2)`(범위 절편). 한 직선 · 2구간이 같이 쓴다."""
+    sri1, b1, nc1, b2 = sn
+    uts, ys = _strengths(deck, block)
+    unit, per_mpa = _stress_name(deck, "Nastran")
+    notes = [_MID_NOTE, *extra_notes]
+    if not -1.0 < b1 < -0.02:
+        raise ExportError(
+            f"MATFTG 의 b1 은 -1 과 -0.02 사이여야 합니다 — 이 카드는 b1 = {b1:.4g}."
         )
+    if not b2 > -0.5:
+        raise ExportError(b2_error)
     if not 100.0 <= uts / per_mpa <= 4000.0:
         raise ExportError(
             f"MATFTG 는 인장강도 100~4000 MPa 만 받습니다(금속 피로) — 이 카드는 "
             f"{uts / per_mpa:.4g} MPa."
         )
-    if not 1.0 <= 2.0 * a / per_mpa <= 2.5e4:
+    if not 1.0 <= sri1 / per_mpa <= 2.5e4:
         raise ExportError(
             "MATFTG 의 SRI1 은 1~25000 MPa 만 받습니다 — 이 카드는 "
-            f"2A = {2.0 * a / per_mpa:.4g} MPa."
+            f"SRI1 = {sri1 / per_mpa:.4g} MPa."
         )
     if ys is not None and not 50.0 <= ys / per_mpa <= 3000.0:
         notes.append(
             f"항복강도 {ys / per_mpa:.4g} MPa 는 MATFTG 범위(50~3000 MPa) 밖이라 뺐습니다."
         )
         ys = None
-    ratios = _ratios(deck)
+    ratios = _ratios_of(deck, block)
     rr = ratios[0] if len(ratios) == 1 else None
     if len(ratios) > 1:
         notes.append(
@@ -363,7 +650,7 @@ def render_nastran_fatigue(deck: Deck) -> Rendered:
             "맞습니다."
         )
     lines = _bulk._head(deck, "MSC Nastran")
-    lines.extend(_range_comments(a, b, end, "b", "Nc1"))
+    lines.extend(comments)
     if unit == "MPA":
         lines.append("$ Stresses in MPa - the Nastran fatigue default (no DTI,UNITS needed).")
     else:
@@ -390,9 +677,35 @@ def render_nastran_fatigue(deck: Deck) -> Rendered:
                 [
                     deck.solver_id, None, None, None, None, None, None, None,
                     "STATIC", ys, uts, None, None, rr, None, None,
-                    "SN", 2.0 * a, b, end, b, None, None, None,
+                    "SN", sri1, b1, nc1, b2, None, None, None,
                 ],
             ),
         ]
     )  # fmt: skip
     return Rendered(text="\n".join(lines) + "\n", notes=tuple(notes))
+
+
+@register_renderer(
+    key="nastran_fatigue_bilinear",
+    label="Nastran (피로 S-N 2구간)",
+    extension="bdf",
+    suffix="_fatigue2seg",
+    describe=(
+        "MATFTG — STATIC(인장 · 항복강도, 시험 R) + SN(SRI1 = 2·A1 범위 절편, b1 · Nc1(꺾임 "
+        "수명) · b2). SOL 101 · 103 · 112 임베디드 피로(금속). 모델 응력이 MPa 가 아니면 "
+        "DTI,UNITS 를 모델에 둔다."
+    ),
+    keywords=("MATFTG*",),
+    needs=_BILINEAR_NEEDS,
+)
+def render_nastran_fatigue_bilinear(deck: Deck) -> Rendered:
+    """한 직선 MATFTG 와 같은 카드와 범위 검사 — SN 줄만 `SRI1 b1 Nc1 b2` 를 2구간 그대로."""
+    a1, b1, b2, knee, _ = _bilinear(deck)
+    return _matftg(
+        deck,
+        "sn_bilinear",
+        (2.0 * a1, b1, knee, b2),
+        _bilinear_comments(a1, b1, b2, knee, "b", "Nc1"),
+        b2_error=f"MATFTG 의 b2 는 -0.5 보다 커야 합니다 — 이 카드는 b2 = {b2:.4g}.",
+        extra_notes=tuple(_support_note(deck, "sn_bilinear")),
+    )

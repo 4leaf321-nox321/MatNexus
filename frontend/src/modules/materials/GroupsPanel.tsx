@@ -152,11 +152,17 @@ function GroupCard({
   // 블록의 행과 같은 키(응력 진폭 · 파단 수명 · 런아웃)를 든다 — 플러그인 id 를 외우지 않고,
   // 점이 x · y 키를 다 든 블록 선언을 찾아 그 선언대로 그린다. 계수 선은 결과의 값에서.
   const points = (row.detail?.points as Record<string, unknown>[] | undefined) ?? []
+  // **계수 선의 키가 결과에 있는 블록**을 고른다(2026-11-14). 한 직선 · 2구간 S-N 은 점의 키가
+  // 같아, 점만 보고 고르면 2구간 결과에 한 직선 그래프가 잡혀 선이 빠졌다.
   const plotted =
     points.length > 0
       ? plots.find((one) => {
           const plot = one.plot
-          return plot != null && points.every((point) => plot.x in point && plot.y in point)
+          return (
+            plot != null &&
+            points.every((point) => plot.x in point && plot.y in point) &&
+            (plot.line == null || row.values[plot.line.coefficient] != null)
+          )
         })
       : undefined
 
@@ -713,7 +719,9 @@ export function GroupsPanel({
                 <b>표로 넣은 시험 여럿의 조건·요약값을 한 계산에 투입.</b>
                 <br />
                 S-N 의 경우: 시험 조건의 응력 진폭과 요약값의 파단 수명(cycles_to_failure)·
-                런아웃(runout)으로 Basquin 곡선 산출. 채택 결과 불필요.
+                런아웃(runout)으로 Basquin 곡선(한 직선) 또는 2구간 곡선(꺾임 수명 Nc1 · 두
+                기울기) 산출. 2구간은 한 직선과 견준 판정(F 검정 · ΔBIC) 함께 표시. 채택 결과
+                불필요.
               </DialogDescription>
             ) : needs === 'adopted_result' ? (
               <DialogDescription>

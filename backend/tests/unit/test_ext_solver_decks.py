@@ -376,3 +376,107 @@ class Test피로:
         assert "dyna_fatigue" in formats
         assert "optistruct_fatigue" not in formats
         assert "nastran_fatigue" not in formats
+
+
+class Test피로_2구간:
+    """2구간 S-N(VOC 61, 2026-11-14) — A1 = 1000 MPa · b1 = -0.1 · Nc1 = 1e5 · b2 = -0.05.
+
+    LS-DYNA 는 매뉴얼(R13 *MAT_ADD_FATIGUE)의 S-N 구간 카드로, MATFAT · MATFTG 는 SN 줄의
+    `SRI1 B1 NC1 B2` 로 낸다 — 셋 다 범위/진폭 · 꺾임 자리가 갈리는 곳이다.
+    """
+
+    A1, B1, KNEE, B2 = 1000e6, -0.1, 1e5, -0.05
+    STRESS = A1 * KNEE**B1  # 꺾임 응력 ≈ 316 MPa
+
+    def block(self, **override: float) -> dict[str, Any]:
+        values: dict[str, float] = {
+            "sn_a1": self.A1,
+            "sn_b1": self.B1,
+            "sn_b2": self.B2,
+            "knee_cycles": self.KNEE,
+            "knee_stress": self.STRESS,
+            "tensile_strength": 680e6,
+            "yield_strength": 430e6,
+            "bilinear_supported": 1.0,
+            "bilinear_p_value": 1e-6,
+            "bilinear_delta_bic": -20.0,
+        }
+        values.update(override)
+        return {
+            "values": values,
+            "rows": [
+                {"stress_amplitude": 400e6, "cycles_to_failure": 1.0e4, "stress_ratio": -1.0},
+                {"stress_amplitude": 250e6, "cycles_to_failure": 1.1e7, "stress_ratio": -1.0},
+            ],
+        }
+
+    def test_LS_DYNA_는_LCID_3_에_구간_카드_하나_진폭(self) -> None:
+        lines = mm("dyna_fatigue_bilinear", sn_bilinear=self.block()).splitlines()
+        first = cols(after(lines, "mid"), 10, 10, 10, 10, 10, 10, 10, 10)
+        assert first[:3] == ["7", "-3", "0"]
+        assert float(first[3]) == pytest.approx(1000.0)  # A1, MPa
+        assert float(first[4]) == pytest.approx(-0.1)
+        # STHRES1 = 꺾임 응력 — 1구간의 하한(매뉴얼: STHRESi 는 i 번째 구간의 하한).
+        assert float(first[5]) == pytest.approx(self.STRESS / 1e6, rel=1e-8)
+        assert first[7] == "1"  # SNTYPE — 기본은 범위(0)라 늘 적는다
+        second = cols(after(lines, "a2"), 10, 10, 10, 10, 10, 10)
+        assert second[:3] == ["", "", ""]  # 구간 카드는 4 · 5 · 6칸
+        a2, b2, sthres2 = (float(one) for one in second[3:6])
+        assert b2 == pytest.approx(-0.05) and sthres2 == 0.0
+        # 덱이 말하는 수명 = 2구간 곡선의 수명 — 꺾임 아래 200 MPa 에서 되읽어 본다.
+        stress = 200.0
+        from_deck = (stress / a2) ** (1.0 / b2)
+        truth = self.KNEE * (stress / (self.STRESS / 1e6)) ** (1.0 / self.B2)
+        assert from_deck == pytest.approx(truth, rel=1e-6)
+        # 꺾임에서 두 구간이 만난다.
+        assert a2 * self.KNEE**b2 == pytest.approx(float(first[5]), rel=1e-8)
+        assert "R13" in "\n".join(lines)
+
+    def test_MATFAT_는_SRI1_2A1_과_꺾임_수명_둘째_기울기(self) -> None:
+        card = large_card(
+            mm("optistruct_fatigue_bilinear", sn_bilinear=self.block()), "MATFAT"
+        )
+        assert card[0][:3] == ["7", "MPA", "MM"]
+        assert card[1][:3] == ["STATIC", "4.30000000E+02", "6.80000000E+02"]
+        sn, sri1, b1, nc1, b2 = card[2][:5]
+        assert sn == "SN"
+        assert float(sri1) == pytest.approx(2000.0)  # 범위 절편 = 2·A1
+        assert float(b1) == pytest.approx(-0.1)
+        assert float(nc1) == pytest.approx(1e5)  # 꺾임 수명 — 한 직선은 시험이 끝난 수명
+        assert float(b2) == pytest.approx(-0.05)
+
+    def test_MATFTG_는_같은_칸과_범위_검사(self) -> None:
+        card = large_card(mm("nastran_fatigue_bilinear", sn_bilinear=self.block()), "MATFTG")
+        sn = card[2]
+        assert sn[0] == "SN"
+        assert float(sn[1]) == pytest.approx(2000.0)
+        assert float(sn[2]) == pytest.approx(-0.1)
+        assert float(sn[3]) == pytest.approx(1e5)
+        assert float(sn[4]) == pytest.approx(-0.05)
+        with pytest.raises(export.ExportError, match=r"b2 = -0\.6"):
+            steep = self.block(sn_b2=-0.6, knee_stress=self.A1 * self.KNEE**self.B1)
+            mm("nastran_fatigue_bilinear", sn_bilinear=steep)
+
+    def test_한_직선과_2구간_카드는_서로의_형식에_안_선다(self) -> None:
+        """같은 형식이 둘 다 받으면 둘째 기울기를 버린 한 직선 덱이 조용히 나간다."""
+        bent = export.Deck(name="DP600", solver_id=7, blocks={"sn_bilinear": self.block()})
+        formats = export.available_formats(bent)
+        assert {
+            "dyna_fatigue_bilinear",
+            "optistruct_fatigue_bilinear",
+            "nastran_fatigue_bilinear",
+        } <= set(formats)
+        assert not {"dyna_fatigue", "optistruct_fatigue", "nastran_fatigue"} & set(formats)
+        straight = export.Deck(name="DP600", solver_id=7, blocks={"sn_curve": Test피로.SN})
+        assert not {one for one in export.available_formats(straight) if "bilinear" in one}
+
+    def test_근거가_약한_카드는_덱_알림이_말한다(self) -> None:
+        weak = self.block(bilinear_supported=0.0, bilinear_p_value=0.4, bilinear_delta_bic=3.0)
+        deck = export.Deck(name="DP600", solver_id=7, blocks={"sn_bilinear": weak})
+        got = export.render("optistruct_fatigue_bilinear", deck, MM_N_TONNE)
+        assert any("2구간 근거가 약한 카드" in one and "p = 0.4" in one for one in got.notes)
+
+    def test_이어지지_않는_카드는_거절한다(self) -> None:
+        broken = self.block(knee_stress=self.STRESS * 1.1)
+        with pytest.raises(export.ExportError, match="이어지지"):
+            mm("dyna_fatigue_bilinear", sn_bilinear=broken)

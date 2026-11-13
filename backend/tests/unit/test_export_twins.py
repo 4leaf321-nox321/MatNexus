@@ -57,6 +57,13 @@ CODE_ONLY = {
     # 폼(2026-10-20, 확장 `compression`) — 응력이 내려가는 곡선을 **거부**한다. 정의판은 그
     # 검사를 못 해 경질 폼의 봉우리까지 *MAT_LOW_DENSITY_FOAM 으로 내보내게 된다.
     "dyna_foam",
+    # 2구간 S-N(2026-11-14, 확장 `fatigue`, ADR 0075) — 두 구간이 꺾임에서 이어지는지
+    # (꺾임 응력 = A1·Nc1^b1)를 보고 이어지지 않으면 **거부**한다. 정의판은 그 검사와
+    # 「2구간 근거 약함」 알림을 못 해, 이어지지 않는 카드를 그대로 덱으로 내게 된다
+    # (폼과 같은 판단).
+    "dyna_fatigue_bilinear",
+    "optistruct_fatigue_bilinear",
+    "nastran_fatigue_bilinear",
 }
 
 

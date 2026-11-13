@@ -734,10 +734,14 @@ class CardValueOut(BaseModel):
 
 
 class PowerLineOut(BaseModel):
-    """`y = values[coefficient] · x ^ values[exponent]`."""
+    """`y = values[coefficient] · x ^ values[exponent]`.
+
+    `knee` · `exponent2` 가 있으면 그 x 부터 둘째 지수로 이어서(2구간 S-N, 2026-11-14)."""
 
     coefficient: str
     exponent: str
+    knee: str | None = None
+    exponent2: str | None = None
 
 
 class BlockPlotOut(BaseModel):

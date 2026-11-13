@@ -64,6 +64,11 @@ class PowerLine:
 
     coefficient: str
     exponent: str
+    knee: str | None = None
+    """꺾이는 x 의 키(2026-11-14) — 있으면 그 x 부터 `exponent2` 의 기울기로 **이어서**
+    그린다(`y = c·k^e·(x/k)^e2`). 2구간 S-N(꺾임 수명 Nc1 · 둘째 기울기 b2)이 그렇다.
+    비면 한 직선이다."""
+    exponent2: str | None = None
 
 
 @dataclass(frozen=True)

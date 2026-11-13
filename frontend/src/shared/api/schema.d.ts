@@ -18163,12 +18163,18 @@ export interface components {
         /**
          * PowerLineOut
          * @description `y = values[coefficient] · x ^ values[exponent]`.
+         *
+         *     `knee` · `exponent2` 가 있으면 그 x 부터 둘째 지수로 이어서(2구간 S-N, 2026-11-14).
          */
         PowerLineOut: {
             /** Coefficient */
             coefficient: string;
             /** Exponent */
             exponent: string;
+            /** Exponent2 */
+            exponent2?: string | null;
+            /** Knee */
+            knee?: string | null;
         };
         /** ProcessOut */
         ProcessOut: {

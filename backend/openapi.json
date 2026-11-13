@@ -24278,7 +24278,7 @@
         "type": "object"
       },
       "PowerLineOut": {
-        "description": "`y = values[coefficient] · x ^ values[exponent]`.",
+        "description": "`y = values[coefficient] · x ^ values[exponent]`.\n\n`knee` · `exponent2` 가 있으면 그 x 부터 둘째 지수로 이어서(2구간 S-N, 2026-11-14).",
         "properties": {
           "coefficient": {
             "title": "Coefficient",
@@ -24287,6 +24287,28 @@
           "exponent": {
             "title": "Exponent",
             "type": "string"
+          },
+          "exponent2": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exponent2"
+          },
+          "knee": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Knee"
           }
         },
         "required": [

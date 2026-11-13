@@ -110,7 +110,13 @@ def test_표로_넣은_피로_시험이_S_N_묶음과_카드가_된다(
         "log_x": True,
         "log_y": True,
         "hollow": "runout",
-        "line": {"coefficient": "basquin_a", "exponent": "basquin_b"},
+        # 꺾임 칸이 비면 한 직선이다(2구간 S-N 이 쓰는 칸, 2026-11-14).
+        "line": {
+            "coefficient": "basquin_a",
+            "exponent": "basquin_b",
+            "knee": None,
+            "exponent2": None,
+        },
     }
 
     # ③ 카드 — 공용 길. 탄성계수는 없으니 탄성 블록은 비고, S-N 블록이 실린다.
@@ -269,3 +275,105 @@ def test_묶음_결과가_물성_지도와_값_검색에_선다(
     )
     assert listed.status_code == 200, listed.text
     assert [one["id"] for one in listed.json()["items"]] == [imported["material_id"]]
+
+
+# ── 2구간 S-N (VOC 61, 2026-11-14) ───────────────────────────────────────────────────
+# A1 = 1000 MPa · b1 = -0.1 · 꺾임 수명 1e5 · b2 = -0.05 — 표 입력에서 덱까지 같은 길.
+
+A1, B1, KNEE, B2 = 1000e6, -0.1, 1e5, -0.05
+
+
+def _bent_rows() -> list[str]:
+    knee_stress = A1 * KNEE**B1
+    lines = [HEADER]
+    stresses = (600, 520, 450, 400, 350, 300, 280, 260, 240)
+    for index, stress_mpa in enumerate(stresses, start=1):
+        stress = stress_mpa * 1e6
+        cycles = (
+            (stress / A1) ** (1.0 / B1)
+            if stress >= knee_stress
+            else KNEE * (stress / knee_stress) ** (1.0 / B2)
+        )
+        lines.append(f"{index}\tNA\t{stress_mpa}\t-1\t{cycles:.0f}\tno")
+    lines.append(f"{len(stresses) + 1}\tNA\t200\t-1\t100000000\tyes")
+    return lines
+
+
+def test_2구간_묶음이_카드와_2구간_덱이_되고_한_직선_형식에는_안_선다(
+    client: TestClient, db: Session, admin_headers: dict[str, str]
+) -> None:
+    ensure_builtin_test_types(db)
+    db.commit()
+    material = client.post(
+        "/api/materials",
+        json={"family": "Metal", "category": "Steel", "grade": "SM490", "spec_thickness": 3.0},
+        headers=admin_headers,
+    ).json()
+    sample = client.post(
+        f"/api/materials/{material['id']}/samples", json={}, headers=admin_headers
+    ).json()
+    made = client.post(
+        "/api/test-runs/import",
+        json={
+            "sample_id": sample["id"],
+            "test_type": "fatigue",
+            "values": _bent_rows(),
+            "create_missing": True,
+        },
+        headers=admin_headers,
+    )
+    assert made.status_code == 200, made.text
+    runs = client.get(
+        "/api/test-runs", params={"material_id": material["id"]}, headers=admin_headers
+    ).json()["items"]
+    assert len(runs) == 10
+
+    kinds = client.get("/api/groups/kinds?applies_to=fatigue", headers=admin_headers).json()
+    found = next(one for one in kinds if one["id"] == "fatigue.sn_bilinear")
+    assert found["needs"] == "summary" and found["makes_card"] is True
+
+    group = client.post(
+        "/api/groups",
+        json={"plugin_id": "fatigue.sn_bilinear", "run_ids": [one["id"] for one in runs]},
+        headers=admin_headers,
+    )
+    assert group.status_code == 201, group.text
+    values = group.json()["values"]
+    # 수명을 정수로 적어 넣었다(실제 시험도 그렇다) — 600 MPa 의 165.4 회가 165 회가 되는 만큼
+    # (0.25 %) 짧은 수명 쪽이 흔들려 꺾임이 0.2 % 쯤 옮는다. 그 차이 안에서 되돌아온다.
+    assert values["knee_cycles"] == pytest.approx(KNEE, rel=1e-2)
+    assert values["sn_b1"] == pytest.approx(B1, rel=1e-2)
+    assert values["sn_b2"] == pytest.approx(B2, rel=1e-2)
+    assert values["bilinear_supported"] == 1.0
+    assert values["runout_count"] == 1
+
+    # 카드 · 묶음 화면이 같은 선언으로 꺾인 선을 그린다.
+    blocks = client.get("/api/fitting/blocks", headers=admin_headers).json()
+    plot = next(one for one in blocks if one["key"] == "sn_bilinear")["plot"]
+    assert plot["line"] == {
+        "coefficient": "sn_a1",
+        "exponent": "sn_b1",
+        "knee": "knee_cycles",
+        "exponent2": "sn_b2",
+    }
+
+    card = client.post(
+        "/api/fitting/cards/from-group",
+        json={"group_result_id": group.json()["id"], "label": "SM490 S-N 2구간"},
+        headers=admin_headers,
+    )
+    assert card.status_code == 201, card.text
+    body = card.json()
+    assert "sn_bilinear" in body["blocks"] and "sn_curve" not in body["blocks"]
+    assert len(body["blocks"]["sn_bilinear"]["rows"]) == 10
+    formats = set(body["available_formats"])
+    assert "dyna_fatigue_bilinear" in formats
+    # 한 직선 형식(코드판 · 정의판)은 이 카드를 못 낸다 — 둘째 기울기를 버리지 않게.
+    assert not {one for one in formats if "fatigue" in one and "bilinear" not in one}
+
+    deck = client.get(
+        f"/api/fitting/cards/{body['id']}/export?format=dyna_fatigue_bilinear",
+        headers=admin_headers,
+    )
+    assert deck.status_code == 200, deck.text
+    assert "*MAT_ADD_FATIGUE" in deck.text and "R13" in deck.text

@@ -269,8 +269,8 @@ a:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-of
 
       <tr class="grp"><td colspan="7">일부만 간다</td></tr>
       <tr><td>피로 S-N</td>
-        <td>피로 (표로 입력 — 시편마다 점 하나)</td><td>—</td><td class="k">fatigue.sn_curve</td>
-        <td class="k">sn_curve</td><td><b>LS-DYNA · OptiStruct · Nastran</b> — 뒤의 둘은 재료에 적어 둔 인장강도가 카드에 실려야</td><td class="vd m">◐ 솔버 셋</td></tr>
+        <td>피로 (표로 입력 — 시편마다 점 하나)</td><td>—</td><td class="k">fatigue.sn_curve · fatigue.sn_bilinear</td>
+        <td class="k">sn_curve · sn_bilinear</td><td><b>LS-DYNA · OptiStruct · Nastran</b> — 뒤의 둘은 재료에 적어 둔 인장강도가 카드에 실려야 · 2구간(꺾임 수명 · 두 기울기)도 셋 다</td><td class="vd m">◐ 솔버 셋</td></tr>
       <tr><td>점도 (유변)</td>
         <td>레오미터 유동</td><td>—</td><td>Cross · Carreau</td>
         <td class="k">rheology</td><td><b>Abaqus · LS-DYNA (ICFD) 만</b></td><td class="vd m">◐ 솔버 둘</td></tr>
@@ -339,6 +339,7 @@ a:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-of
       <tr><td><b>묶음</b></td><td class="k">tensile.rate_family</td><td>속도별 소성 곡선 → Cowper-Symonds · Johnson-Cook C</td></tr>
       <tr><td><b>묶음</b></td><td class="k">tensile.temperature_family</td><td>온도별 소성 곡선 → Johnson-Cook m</td></tr>
       <tr><td><b>묶음</b></td><td class="k">fatigue.sn_curve</td><td>시편마다 (응력 진폭, 수명) 점 하나 → Basquin S-N, 런아웃 표시</td></tr>
+      <tr><td><b>묶음</b></td><td class="k">fatigue.sn_bilinear</td><td>같은 점 → 2구간 S-N(꺾임 수명 Nc1 · 두 기울기 b1 · b2), 꺾임은 응력 범위 전체에서 탐색, 한 직선 대비 판정(F 검정 · ΔBIC) 함께 표시 — 근거가 약하면 「한 직선 권장」 경고</td></tr>
       <tr><td><b>묶음</b></td><td class="k">anisotropy.r_family</td><td>세 방향 r값 → r̄ · Δr · Hill48 계수</td></tr>
     </tbody>
   </table></div>
@@ -360,6 +361,7 @@ a:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-of
       <tr><td class="k">lve</td><td>선형탄성구간 탄성률 (DMA 변형률 스윕) — 변형률 한계 · 주파수 · 온도 · 변동계수</td></tr>
       <tr><td class="k">rheology</td><td>유변 — 영전단 점도 · 박화 시작 전단율 · 잔차</td></tr>
       <tr><td class="k">sn_curve</td><td>S-N 곡선 — Basquin a · b · 10⁵ / 10⁶ / 10⁷ 회 강도 · 런아웃 수</td></tr>
+      <tr><td class="k">sn_bilinear</td><td>2구간 S-N — A1 · b1 · 꺾임 수명 Nc1 · 꺾임 응력 · b2 · 흩어짐 SE · 구간별 파단점 수 · 한 직선 대비 판정. 그래프는 시험 점과 꺾인 두 구간을 함께 표시</td></tr>
       <tr><td class="k">anisotropy</td><td>r₀ · r₄₅ · r₉₀ · r̄ · Δr · Hill48 F · G · H · N</td></tr>
       <tr><td class="k">reference</td><td>참고 물성 — Tg · 융점 · 사용 · 분해 온도 · 굽힘 · 압축 · 파괴인성 · 경도 · 절연파괴 · 표면저항 · CTI · 내아크 · 박리 · 점도. <strong>덱에는 안 실리고</strong>, 재료에 적어 둔 값이 있으면 카드에 스스로 붙습니다(데이터시트로 볼 때)</td></tr>
       <tr><td class="k">model_params</td><td>문헌 모델 파라미터 벌 인용 (Anand · Prony · Ogden 처럼 한 벌이어야 뜻이 있는 값) — 해석 형식은 받지 않고 중립 JSON 에 실립니다</td></tr>
@@ -383,7 +385,7 @@ a:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-of
       <tr><td><b>선형탄성구간 (DMA)</b></td><td>Abaqus</td><td class="k">elastic · lve</td></tr>
       <tr><td><b>열물성</b></td><td>6종</td><td class="k">thermal (밀도는 elastic 에서)</td></tr>
       <tr><td><b>점도</b></td><td>Abaqus · LS-DYNA (ICFD 유체)</td><td class="k">rheology (LS-DYNA 는 밀도도)</td></tr>
-      <tr><td><b>피로 S-N</b></td><td>LS-DYNA · OptiStruct (<code>MATFAT</code>) · Nastran (<code>MATFTG</code>)</td><td class="k">sn_curve (OptiStruct · Nastran 은 인장강도도 — 재료에 적어 둔 값이 카드에 실린다)</td></tr>
+      <tr><td><b>피로 S-N</b></td><td>LS-DYNA · OptiStruct (<code>MATFAT</code>) · Nastran (<code>MATFTG</code>)</td><td class="k">sn_curve (OptiStruct · Nastran 은 인장강도도 — 재료에 적어 둔 값이 카드에 실린다) · 2구간은 sn_bilinear — LS-DYNA S-N 구간 카드(R13 이상) · MATFAT · MATFTG 의 SRI1 · B1 · NC1 · B2</td></tr>
       <tr><td><b>전자기</b></td><td>AEDT (HFSS · Maxwell · Q3D · Icepak) · CST · ANSYS (전기 — 줄 발열 · 정전기)</td><td class="k">electrical (thermal · elastic · optical 은 형식에 따라 곁들임)</td></tr>
       <tr><td><b>전자 냉각</b></td><td>Flotherm</td><td class="k">thermal · elastic (저항률 · 방사율은 있으면)</td></tr>
       <tr><td><b>광학</b></td><td>Zemax (유리 카탈로그) · CODE V (사설 유리) · n·k 표 (Lumerical · COMSOL)</td><td class="k">optical</td></tr>

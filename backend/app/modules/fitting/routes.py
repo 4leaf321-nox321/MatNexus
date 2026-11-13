@@ -264,6 +264,8 @@ def list_blocks(user: User = Depends(current_user)) -> list[BlockSpecOut]:
                         PowerLineOut(
                             coefficient=spec.plot.line.coefficient,
                             exponent=spec.plot.line.exponent,
+                            knee=spec.plot.line.knee,
+                            exponent2=spec.plot.line.exponent2,
                         )
                         if spec.plot.line
                         else None
