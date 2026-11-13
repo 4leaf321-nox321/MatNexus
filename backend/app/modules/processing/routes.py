@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import uuid
 from collections.abc import Mapping
@@ -202,11 +203,45 @@ def _run_pipeline(
     except processing.ProcessingError as exc:
         if exc.done is not None and exc.done.stages:
             # **여기까지 된 것이 결과다**(2026-10-22) — 멈춘 단계는 `failures` 에 들어 있다.
-            return exc.done, curve
+            return _note_specimen(db, run, exc.done, steps), curve
         # **처리 실패는 사용자 오류다.** 500 으로 내면 로그를 뒤져야 알 수 있고,
         # 메시지에는 이미 어느 단계에서 무엇이 어긋났는지 적혀 있다.
         raise AppError("MNX-PROCESSING-0004", str(exc), status=422) from exc
-    return result, curve
+    return _note_specimen(db, run, result, steps), curve
+
+
+def _note_specimen(
+    db: Session, run: TestRun, result: processing.PipelineResult, steps: list[dict[str, Any]]
+) -> processing.PipelineResult:
+    """시편 치수(`@specimen_…`)를 가리킨 단계의 노트에 **쓴 치수와 출처**를 붙인다(VOC 56).
+
+    결과는 불변이라 「이 응력을 실측으로 냈나 공칭으로 냈나」 는 저장할 때 적어 두지 않으면
+    영영 모른다. 미리보기 · 일괄 · 저장이 모두 여기를 지나므로 어디서 보든 같은 줄이 선다.
+    """
+
+    def uses(index: int) -> bool:
+        options = steps[index].get("options") if index < len(steps) else None
+        return any(
+            isinstance(value, str)
+            and value.startswith("@")
+            and value.lstrip("@?").startswith("specimen_")
+            for value in (options or {}).values()
+        )
+
+    if not any(uses(stage.index) for stage in result.stages):
+        return result
+    note = curvedata.specimen_provenance(db, run)
+    if not note:
+        return result
+    return dataclasses.replace(
+        result,
+        stages=tuple(
+            dataclasses.replace(stage, notes=(*stage.notes, note))
+            if uses(stage.index)
+            else stage
+            for stage in result.stages
+        ),
+    )
 
 
 def _failure_out(failure: processing.Failure) -> StepFailureOut:
@@ -998,8 +1033,8 @@ def _project_summaries(db: Session, run: TestRun, result: ProcessingResult | Non
         )
 
 
-def _require_adoptable(item: ProcessingResult) -> None:
-    """채택할 수 있는 결과인가 — 한 건 · 여러 건이 같은 규칙으로 막는다.
+def _adoptable_problem(item: ProcessingResult) -> str | None:
+    """채택할 수 없는 까닭 — 없으면 `None`. 한 건 · 여러 건 · 일괄 처리가 같은 규칙을 쓴다.
 
     이 검사가 생기기 전(2026-10-04)에 저장된 결과는 긴 이름을 들고 있을 수 있다 —
     요약값 칸에 안 들어가 500 이었다. 결과는 불변이라 고칠 수 없고, 다시 돌리는 것이 답이다.
@@ -1010,12 +1045,18 @@ def _require_adoptable(item: ProcessingResult) -> None:
         if len(str(s.get("key", ""))) > SCALAR_KEY_MAX
     ]
     if too_long:
-        raise Conflict(
-            "MNX-PROCESSING-0018",
+        return (
             f"이 결과는 이름이 {SCALAR_KEY_MAX}자를 넘는 값을 들고 있어 채택할 수 없습니다: "
             f"{', '.join(too_long)}. 그 계산이 이름을 줄인 뒤 같은 레시피로 다시 돌려 "
-            f"저장한 결과를 채택하세요.",
+            f"저장한 결과를 채택하세요."
         )
+    return None
+
+
+def _require_adoptable(item: ProcessingResult) -> None:
+    problem = _adoptable_problem(item)
+    if problem:
+        raise Conflict("MNX-PROCESSING-0018", problem)
 
 
 @router.post("/results/{result_id}/adopt", response_model=ProcessingResultOut)
@@ -1746,10 +1787,13 @@ def run_batch(
             adopted = False
             failures = _stored_failures(stored.failures)
             lost = _lost_on_adopt(before, stored.scalars, failures)
+            # 한 건 채택 · 여러 건 채택과 같은 검사(2026-11-14) — 전에는 일괄 처리만
+            # 건너뛰었다.
+            problem = _adoptable_problem(stored) if payload.adopt else None
             # **부분 결과가 지금 채택된 값을 덮어 잃게 하지 않는다**(2026-10-22). 처음 처리하는
             # 시험은 잃을 것이 없으니 채택한다 — 인장강도라도 물성으로 선다. 이미 채택된
             # 값(항복강도 등)이 이 결과에 없으면 채택은 그대로 두고 결과만 쌓는다.
-            if payload.adopt and not several and not lost:
+            if payload.adopt and not several and not lost and not problem:
                 run.adopted_result_id = stored.id
                 _project_summaries(db, run, stored)
                 adopted = True
@@ -1769,7 +1813,10 @@ def run_batch(
                     previous=before,
                     previous_adopted_id=was_adopted,
                     failures=failures,
-                    warning=_adoption_note(payload.adopt, several, lost),
+                    warning=(
+                        _adoption_note(payload.adopt, several, lost)
+                        or (f"채택은 하지 않았습니다 — {problem}" if problem else None)
+                    ),
                 )
             )
 

@@ -2041,6 +2041,41 @@ class Test파일이_시험_조건을_채운다:
         # 비어 있던 칸은 채워진다 — 안 채우면 이 기능이 아무것도 안 하는 것이다.
         assert detail["conditions"]["preload"] == pytest.approx(1000.0)
 
+    def test_파일이_다른_칸을_채워도_사람이_적은_숫자는_다시_환산되지_않는다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        told: None,
+        specimen: dict[str, Any],
+        db: Session,
+    ) -> None:
+        """이미 SI 로 저장된 조건을 사람이 적은 단위(°C)로 **한 번 더** 환산했다(2026-11-14
+        발견, VOC 55 조사) — 파일이 빈 칸 하나만 채워도 25 °C = 298.15 K 가 571.3 K 가 됐다.
+        속도는 10 mm/min 이 6만분의 1 이 된다. 값이 그럴듯해 화면에 티가 안 난다."""
+        del told
+        response = client.post(
+            "/api/test-runs",
+            data={
+                "specimen_id": specimen["id"],
+                "test_type": "dma_sweep",
+                "conditions": json.dumps({"reference_temperature": 25}),
+                "condition_units": json.dumps({"reference_temperature": "degC"}),
+            },
+            files={"file": ("Example FreqTemp.csv", FREQ_TEMP.read_bytes())},
+            headers=admin_headers,
+        )
+        assert response.status_code == 202, response.text
+        run = response.json()
+        assert services.parse_run(db, uuid.UUID(run["id"])) == "parsed"
+        detail = client.get(f"/api/test-runs/{run['id']}", headers=admin_headers).json()
+        assert detail["conditions"]["preload"] == pytest.approx(1000.0)  # 파일이 채운 칸
+        assert detail["conditions"]["reference_temperature"] == pytest.approx(298.15)
+        saved = db.get(TestRun, uuid.UUID(run["id"]))
+        assert saved is not None
+        # 무엇으로 입력했는지도 그대로 — 사람은 °C, 파일은 kN.
+        assert saved.input_units["reference_temperature"] == "degC"
+        assert saved.input_units["preload"] == "kN"
+
     def test_조건이_안_맞아도_곡선은_들어온다(
         self,
         client: TestClient,

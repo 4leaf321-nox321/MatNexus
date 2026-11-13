@@ -77,6 +77,10 @@ LEGACY_LABELS = {
 }
 
 
+#: 단면 모양을 안 고른 규격이 넓이를 내는 칸 — 옛 규칙 「폭 곱하기 두께」.
+_OLD_AREA_RULE = ("width", "thickness")
+
+
 def legacy_fields() -> list[Field]:
     """규격을 안 정한 시편이 쓰는 칸. **옛 셋이다.**
 
@@ -263,9 +267,29 @@ def _with_needs(fields: tuple[Field, ...], cross_section: str | None) -> tuple[F
 
     규격이 공칭을 적어 두는 자리와 시편이 실측을 적는 자리는 같은 칸이다. 그러니
     식이 요구하는 칸은 **늘 있어야 한다** — 공칭을 안 적었어도 시편이 채울 수 있게.
+
+    **모양을 안 골랐으면 옛 규칙(폭 곱하기 두께)이 식이다**(`area_detail`) — 그 두 칸도 늘
+    있어야 한다. 2026-11-14(VOC 56): 게이지 · 전체 길이만 선언한 규격의 시편 8건에서, 장비
+    파일이 준 실측 폭 · 두께가 들어갈 칸이 없어 버려지고 처리가 다른 값으로 단면적을 냈다.
     """
     if not cross_section:
-        return fields
+        known = {item.key for item in fields}
+        return (
+            *fields,
+            *(
+                Field(
+                    key=key,
+                    label=LEGACY_LABELS[key],
+                    dimension="length",
+                    si_unit="m",
+                    is_required=False,
+                    help="단면 모양을 안 고른 규격은 폭 곱하기 두께로 단면적을 냅니다.",
+                    inherited=True,
+                )
+                for key in _OLD_AREA_RULE
+                if key not in known
+            ),
+        )
     shape = specimen_kit.CROSS_SECTIONS.get(cross_section)
     if shape is None:
         return fields

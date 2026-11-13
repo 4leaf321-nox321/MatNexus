@@ -177,6 +177,17 @@ class TestEuropeanLocale:
         assert displacement.values[0] == pytest.approx(0.0015)  # 1,5 mm → m
         assert displacement.values[2] == pytest.approx(1.2345)  # 1.234,5 mm → m
 
+    def test_시편_치수의_쉼표_소수도_숫자로_남긴다(self) -> None:
+        # 원문 `"0,986"` 을 그대로 두면 치수를 읽는 쪽이 숫자로 못 읽고 버려, 처리가 규격
+        # 공칭으로 응력을 냈다(2026-11-14, VOC 56). 요약값과 같은 규칙으로 고친다.
+        data = b'"Specimen thickness a0";0,986;"mm"\n"Specimen width b0";12,473;"mm"\n' + (
+            self.EURO
+        )
+        parsed = zwick_tra.parse(data)
+        assert parsed.metadata["specimen_thickness_a0"] == "0.986"
+        assert parsed.metadata["specimen_width_b0"] == "12.473"
+        assert parsed.metadata["specimen_thickness_a0_unit"] == "mm"
+
     def test_천단위_점이_지수표기를_망가뜨리지_않는다(self) -> None:
         """`text.replace('.', '')` 를 조건 없이 하면 `1.46484e-007` 이
         `146484e-007` 이 되어 값이 10^5 배 어긋난 채로 **파싱은 성공한다.**"""

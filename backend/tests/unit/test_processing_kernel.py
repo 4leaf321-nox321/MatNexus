@@ -970,6 +970,40 @@ class Test토우보정:
 WHOLE = {"youngs_modulus": E_TRUE, "yield_policy": "line_crossing"}
 
 
+class Test진응력_이중_변환:
+    """**이미 진값인 열을 공칭 자리에 넣지 못한다**(2026-11-14, VOC 53).
+
+    장비가 계산한 진응력도 Pa 열이라 단위 검사를 지난다 — 응력 열로 고르면 σ(1+ε) 가 두 번
+    곱해져 그럴듯한 숫자로 카드까지 간다.
+    """
+
+    @pytest.mark.parametrize(
+        ("option", "column"),
+        [("stress", "true_stress"), ("strain", "true_strain"), ("stress", "stress_true")],
+    )
+    def test_진값_열은_거절한다(self, option: str, column: str) -> None:
+        base = synthetic()
+        source = "stress_engineering" if option == "stress" else "strain_engineering"
+        frame = Frame(
+            {**base.columns, column: base.columns[source]},
+            {**base.units, column: base.units[source]},
+        )
+        with pytest.raises(ProcessingError, match="이미 진"):
+            processing.apply([Step("tensile.true_plastic", {**WHOLE, option: column})], frame)
+
+    def test_공칭_열을_이름으로_골라도_된다(self) -> None:
+        # 평활한 공칭 열처럼 이름이 달라도 진값이 아니면 받는다.
+        base = synthetic()
+        frame = Frame(
+            {**base.columns, "stress_smoothed": base.columns["stress_engineering"]},
+            {**base.units, "stress_smoothed": "Pa"},
+        )
+        result = processing.apply(
+            [Step("tensile.true_plastic", {**WHOLE, "stress": "stress_smoothed"})], frame
+        )
+        assert "stress_true" in result.frame.columns
+
+
 class Test진응력:
     def test_변환식이_맞다(self) -> None:
         result = processing.apply([Step("tensile.true_plastic", WHOLE)], synthetic())
@@ -1490,6 +1524,113 @@ class Test항복_강하_정리:
             result.frame.columns["strain_true_plastic"] > 0
         ]
         assert plastic[0] == pytest.approx(278e6, rel=0.02)
+
+
+def noisy_resin(seed: int) -> Frame:
+    """수지 3000점 — 봉우리 58 MPa(변형률 0.045) 뒤 넥으로 48 까지, 잡음 σ 0.1 MPa.
+
+    VOC 58 의 곡선과 같은 꼴이다. 옛 판정(그 시점까지의 최댓값에 견준 문턱)은 탄성 구간 시작의
+    잡음에 걸려 seed 1 을 변형률 0.0023 · 4.75 MPa 에서 잘랐고, seed 4 · 5 는 첫 점이 음수라
+    빈 배열의 argmax 로 멈췄다(화면에서는 500).
+    """
+    strain = np.linspace(0.0, 0.3, 3000)
+    base = np.where(
+        strain <= 0.045,
+        58e6 * np.sin(strain / 0.045 * np.pi / 2),
+        48e6 + 10e6 * np.exp(-(strain - 0.045) / 0.02),
+    )
+    rng = np.random.default_rng(seed)
+    return Frame(
+        {
+            "strain_engineering": strain,
+            "stress_engineering": base + rng.normal(0, 0.1e6, 3000),
+        },
+        {"strain_engineering": "1", "stress_engineering": "Pa"},
+    )
+
+
+class Test잡음_속의_봉우리:
+    """**잡음 하강에 걸려 탄성 구간에서 자르지 않는다**(2026-11-14, VOC 58).
+
+    잘린 곡선에서 잰 인장강도는 실패 표시 없이 저장된다 — 조용히 틀리는 자리다.
+    """
+
+    @pytest.mark.parametrize("seed", [0, 1, 4, 5, 7])
+    def test_자르기는_참_봉우리에서_한다(self, seed: int) -> None:
+        result = _run(noisy_resin(seed), {"method": "cut"})
+        assert result.frame.columns["strain_engineering"][-1] == pytest.approx(
+            0.045, abs=0.003
+        )
+        assert result.frame.columns["stress_engineering"][-1] > 0.99 * 58e6
+
+    def test_곧_다시_넘는_하강은_봉우리로_치지_않는다(self) -> None:
+        # 문턱을 최댓값에 견주기만 해서는 봉우리 근처 평평한 곳의 잡음에 일찍 걸린다.
+        early = _run(noisy_resin(0), {"method": "keep", "persist_strain": 0.0})
+        assert scalar(early, "upper_yield_strength") < 0.99 * 58e6
+        result = _run(noisy_resin(0), {"method": "keep"})
+        assert scalar(result, "upper_yield_strength") == pytest.approx(58e6, rel=0.01)
+
+    def test_첫_점이_음수여도_멈추지_않는다(self) -> None:
+        frame = polymer_neck()
+        stress = frame.columns["stress_engineering"].copy()
+        stress[0] = -0.3e6  # 영점이 조금 어긋난 하중
+        frame = Frame({**frame.columns, "stress_engineering": stress}, dict(frame.units))
+        result = _run(frame, {"method": "cut"})
+        assert result.frame.columns["strain_engineering"][-1] == pytest.approx(0.05, abs=0.003)
+
+    def test_봉우리가_최대의_절반도_안_되면_자르지_않고_까닭을_말한다(self) -> None:
+        # 그립 미끄럼 — 30 MPa 에서 20 으로 떨어져 한동안 머문 뒤 300 MPa 까지 오른다.
+        strain = np.linspace(0.0, 0.10, 1001)
+        stress = np.where(
+            strain <= 0.001,
+            30e6 * strain / 0.001,
+            np.where(strain <= 0.005, 20e6, np.minimum(20e6 + 3e9 * (strain - 0.005), 300e6)),
+        )
+        frame = Frame(
+            {"strain_engineering": strain, "stress_engineering": stress},
+            {"strain_engineering": "1", "stress_engineering": "Pa"},
+        )
+        with pytest.raises(ProcessingError, match="자르지 않았습니다"):
+            _run(frame, {"method": "cut"})
+        # 재기만 하면 그 하강을 그대로 보여 준다 — 사람이 보고 정한다.
+        kept = _run(frame, {"method": "keep"})
+        assert scalar(kept, "upper_yield_strength") == pytest.approx(30e6)
+
+    def test_작은_하강은_최대_응력에_견주어_본다(self) -> None:
+        # 5 MPa 에서 4 로 미끄러져 머문 뒤 300 MPa 까지 — 그 시점 최댓값(5)에 견주면 20 %
+        # 하강이라 「상항복강도 5 MPa」 가 값으로 나갔다. 최대 응력(300)에 견주면 0.33 % 로
+        # 문턱 아래다.
+        strain = np.linspace(0.0, 0.10, 1001)
+        stress = np.where(
+            strain <= 0.001,
+            5e6 * strain / 0.001,
+            np.where(strain <= 0.005, 4e6, np.minimum(4e6 + 3e9 * (strain - 0.005), 300e6)),
+        )
+        frame = Frame(
+            {"strain_engineering": strain, "stress_engineering": stress},
+            {"strain_engineering": "1", "stress_engineering": "Pa"},
+        )
+        result = _run(frame, {"method": "keep"})
+        assert not any(item.key == "upper_yield_strength" for item in result.scalars)
+
+    def test_잡음_연강도_항복점_현상은_그대로_잡는다(self) -> None:
+        frame = mild_steel()
+        rng = np.random.default_rng(3)
+        stress = frame.columns["stress_engineering"] + rng.normal(0, 1e6, frame.length())
+        frame = Frame({**frame.columns, "stress_engineering": stress}, dict(frame.units))
+        result = _run(frame, {"method": "keep"})
+        assert scalar(result, "upper_yield_strength") == pytest.approx(320e6, rel=0.01)
+        assert scalar(result, "luders_strain") == pytest.approx(0.045, abs=0.003)
+
+    def test_포락선은_다시_넘는_잡음도_편다(self) -> None:
+        # 포락선 · 단조 회귀는 잡음성 요철을 고치는 방법이다 — 봉우리 판정과 따로 간다.
+        frame = noisy_resin(0)
+        cut = frame.select(np.arange(400))  # 변형률 0.04 — 봉우리 앞까지만, 진짜 하강이 없다
+        result = _run(cut, {"method": "envelope", "threshold": 0.001})
+        assert np.all(np.diff(result.frame.columns["stress_engineering"]) >= 0)
+        assert scalar(result, "yield_drop_points") > 0
+        assert not any(item.key == "upper_yield_strength" for item in result.scalars)
+        assert any("잡음으로 보고" in note for note in result.notes)
 
 
 def plateau() -> Frame:

@@ -303,6 +303,44 @@ def specimen_scalars(db: Session, run: TestRun) -> list[processing.Scalar]:
     return given
 
 
+#: 치수 출처 → 사람이 읽는 말. `specimen_size.Size.source` 와 같은 이름이다.
+SIZE_SOURCES = {
+    "run": "이 시험 파일",
+    "measured": "시편 실측",
+    "nominal": "규격 공칭",
+    "material": "재료 스펙",
+}
+
+
+def specimen_provenance(db: Session, run: TestRun) -> str | None:
+    """처리가 쓴 시편 치수와 **그 출처** 한 줄 — 없으면 `None`.
+
+    2026-11-14(VOC 56): 파일 헤더에 실측 폭 · 두께가 있는데 옛 시험이라 시험에 안 담겨,
+    처리가 규격 공칭(폭 12.5 · 두께 1.0 mm)으로 응력을 냈다. 결과에는 단면적 숫자만 남아 어느
+    값으로 냈는지 나중에 답할 수 없었다. 결과는 불변이라, 그때 쓴 치수를 그 자리에 적는다.
+    """
+    specimen = db.get(Specimen, run.specimen_id)
+    if specimen is None:
+        return None
+    sizes = specimen_size.sizes_of(db, specimen, run.dimensions or {})
+    if not sizes.items:
+        return None
+    parts = []
+    for item in sizes.items:
+        # 규격이 없는 시편은 칸 이름이 키 그대로다(`thickness`) — 옛 셋은 우리말 이름을 안다.
+        label = (
+            specimen_size.LEGACY_LABELS.get(item.key, item.label)
+            if (item.label == item.key)
+            else item.label
+        )
+        where = SIZE_SOURCES.get(item.source, item.source)
+        if item.si_unit == "m":
+            parts.append(f"{label} {item.value * 1000:.4g} mm({where})")
+        else:
+            parts.append(f"{label} {item.value:.4g} {item.si_unit}({where})")
+    return "쓴 시편 치수: " + " · ".join(parts)
+
+
 def condition_scalars(db: Session, run: TestRun) -> list[processing.Scalar]:
     """이 시험의 **조건**을 파이프라인이 `@` 로 참조할 수 있게 넘긴다.
 
@@ -500,3 +538,40 @@ def instrument_dimensions(
                 found[field.key] = metres
                 break
     return found
+
+
+def unread_dimensions(
+    metadata: Mapping[str, object], fields: Sequence[Field] = ()
+) -> list[str]:
+    """파일에 치수가 **있는데 못 읽은** 칸 — `"두께 '0.986'(단위 없음)"` 처럼.
+
+    `instrument_dimensions` 는 단위를 모르면 포기한다(1000배 틀린 시편보다 낫다). 그런데 말없이
+    포기하면 처리는 규격 공칭으로 응력을 내고, 사람은 파일 값으로 낸 줄 안다(VOC 56). 그래서
+    못 읽은 것은 읽기 경고로 남긴다.
+    """
+    found = instrument_dimensions(metadata, fields)
+    known = list(fields) or [
+        Field(
+            key=key,
+            label=specimen_size.LEGACY_LABELS.get(key, key),
+            dimension="length",
+            si_unit="m",
+            is_required=False,
+            help=None,
+            inherited=False,
+        )
+        for key in DIMENSION_ALIASES
+    ]
+    missed: list[str] = []
+    for field in known:
+        if field.kind != "number" or field.key in found:
+            continue
+        for alias in _candidates(field):
+            raw = metadata.get(alias)
+            if raw is None or not str(raw).strip():
+                continue
+            unit = str(metadata.get(f"{alias}_unit") or "").strip()
+            why = f"단위 {unit}" if unit else "단위 없음"
+            missed.append(f"{field.label} '{str(raw).strip()}'({why})")
+            break
+    return missed

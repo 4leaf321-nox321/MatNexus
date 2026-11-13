@@ -371,6 +371,53 @@ class Test시험이_자기_치수를_든다:
         assert stored.dimensions["thickness"] == pytest.approx(0.000986)
         assert stored.dimensions["width"] == pytest.approx(0.012473)
 
+    def test_단면_모양을_안_고른_규격에서도_파일의_폭_두께가_담긴다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str], seeded: None
+    ) -> None:
+        """게이지 길이만 선언한 규격 — 넓이는 옛 규칙(폭 곱하기 두께)으로 내는데 그 칸이
+        없어서, 파일의 실측 폭 · 두께가 버려지고 다른 값으로 응력이 났다(2026-11-14, VOC 56 ·
+        개발 DB 8건)."""
+        make_standard(client, admin_headers, "게이지만", attributes={})
+        specimen = make_specimen(client, admin_headers, standard="게이지만")
+        run = self.upload(client, admin_headers, db, specimen["id"])
+
+        stored = db.get(TestRun, uuid.UUID(run["id"]))
+        assert stored is not None
+        assert stored.dimensions["thickness"] == pytest.approx(0.000986)
+        assert stored.dimensions["width"] == pytest.approx(0.012473)
+        # 시편 화면에도 그 칸이 선다 — 사람이 잰 값을 적을 자리가 있어야 한다.
+        keys = {
+            one["key"]
+            for one in dimensions_of(client, admin_headers, specimen["id"])["fields"]
+        }
+        assert {"width", "thickness"} <= keys
+
+    def test_못_읽은_파일_치수는_경고로_남긴다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str], seeded: None
+    ) -> None:
+        """단위가 없는 두께 — 짐작해 넣지 않되(1000배 틀린 시편), 말없이 버리지도 않는다."""
+        specimen = make_specimen(client, admin_headers)
+        tra = (Path(__file__).resolve().parents[1] / "fixtures" / "Example.tra").read_bytes()
+        old = b'"Specimen thickness a0",0.986,"mm"'
+        assert tra.count(old) == 1
+        made = client.post(
+            "/api/test-runs",
+            data={"specimen_id": specimen["id"], "test_type": "tensile", "conditions": "{}"},
+            files={
+                "file": ("Example.tra", tra.replace(old, b'"Specimen thickness a0",0.986'))
+            },
+            headers=admin_headers,
+        )
+        assert made.status_code == 202, made.text
+        assert test_services.parse_run(db, uuid.UUID(made.json()["id"])) == "parsed"
+
+        stored = db.get(TestRun, uuid.UUID(made.json()["id"]))
+        assert stored is not None
+        assert "thickness" not in stored.dimensions
+        assert stored.dimensions["width"] == pytest.approx(0.012473)
+        warning = stored.source_metadata["_warnings"]
+        assert "두께 '0.986'(단위 없음)" in warning
+
     def test_시편에_적힌_값보다_먼저다(
         self, client: TestClient, db: Session, admin_headers: dict[str, str], seeded: None
     ) -> None:

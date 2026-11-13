@@ -78,6 +78,28 @@ def _pair(frame: Frame, options: dict[str, Any]) -> tuple[np.ndarray, np.ndarray
     return strain, stress, strain_key, stress_key
 
 
+def _already_true(key: str) -> bool:
+    """이미 진(true) 값인 열인가 — 이 모듈의 `stress_true` · 장비가 보낸 `true_stress`."""
+    words = key.lower().split("_")
+    return key in (TRUE_STRAIN, TRUE_STRESS, PLASTIC_STRAIN) or "true" in words
+
+
+def _require_engineering(strain_key: str, stress_key: str) -> None:
+    """진응력 변환에 **이미 진 값인 열**을 넣지 못하게 막는다(2026-11-14, VOC 53).
+
+    장비가 계산한 진응력(`true_stress`)도 Pa 열이라 단위 검사를 지난다. 그것을 응력 열로 고르면
+    σ(1+ε) 가 두 번 곱해져 진응력이 그만큼 커진 채 **그럴듯한 숫자로** 카드까지 간다 — 경고로는
+    모자라 막는다.
+    """
+    wrong = [key for key in (strain_key, stress_key) if _already_true(key)]
+    if wrong:
+        raise ProcessingError(
+            f"'{', '.join(wrong)}' 는 이미 진(true) 값인 열로 보입니다 — 이 단계는 "
+            "공칭 변형률 · 공칭 응력을 받아 진값으로 바꾸므로, 한 번 더 바꾸면 σ(1+ε) 가 "
+            f"두 번 곱해집니다. 공칭 열(기본 '{STRAIN}' · '{STRESS}')을 고르세요."
+        )
+
+
 def _peak_index(stress: np.ndarray) -> int:
     """최대응력 점. **빠진 칸(NaN)을 건너뛴다.**
 
@@ -1502,6 +1524,7 @@ def true_plastic(frame: Frame, options: dict[str, Any]) -> StepResult:
     것이 기본이지만 버리거나 남길 수도 있게 둔다 — 적합 코드마다 요구가 다르다.
     """
     strain, stress, strain_key, stress_key = _pair(frame, options)
+    _require_engineering(strain_key, stress_key)
     require_increasing(strain, what=f"'{strain_key}'")
 
     modulus = option_float(options, "youngs_modulus")
@@ -1638,6 +1661,16 @@ def true_plastic(frame: Frame, options: dict[str, Any]) -> StepResult:
 #: 최대 응력에 견주어 이보다 작은 하강은 잡음이다 — 항복점·연화로 보지 않는다.
 YIELD_DROP_THRESHOLD = 0.005
 
+#: 내려간 뒤 이 변형률 안에 그 봉우리를 **다시 넘으면** 잡음이다(2026-11-14, VOC 58). 잡음은 몇
+#: 점 안에 다시 넘고, 수지의 넥은 끝까지 안 넘고, 연강은 뤼더스 길이(0.01~0.05)를 지나서야
+#: 넘는다.
+YIELD_DROP_PERSIST = 0.002
+
+#: 자를 봉우리가 최대 응력의 이 비율보다 낮으면 자르지 않고 멈춘다 — 잡음 하강에 걸린 것이다.
+#: 옛 판정이 합성 수지 곡선(잡음 σ 0.1 MPa)을 자른 봉우리는 최댓값의 0.3~9 % 였고, 연강의 ReH
+#: 는 끝 응력의 80 % 다 — 그 사이에 둔다.
+CUT_MIN_SHARE = 0.5
+
 YIELD_DROP_METHODS = ("envelope", "isotonic", "lower_yield", "cut", "keep")
 
 
@@ -1665,15 +1698,46 @@ def _isotonic(values: np.ndarray) -> np.ndarray:
     return out
 
 
-def _first_drop(stress: np.ndarray, threshold: float) -> int | None:
-    """첫 「진짜」 하강 — 직전 최댓값에서 `threshold`(최댓값 비율)만큼 내려간 첫 점.
+def _first_drop(
+    strain: np.ndarray, stress: np.ndarray, threshold: float, persist: float
+) -> int | None:
+    """첫 「진짜」 하강 — 직전 최댓값에서 **최대 응력의** `threshold` 넘게 내려가고, 변형률
+    `persist` 안에 그 최댓값을 다시 넘지 않는 첫 점. 없으면 `None`.
 
-    없으면 `None` — 잡음 이상의 연화가 없다는 뜻이다.
+    ## 문턱은 전체 최댓값에 견준다(2026-11-14, VOC 58)
+
+    전에는 「그 시점까지의 최댓값」 에 견줬다. 탄성 구간 시작에서는 그 값이 작아 잡음 한
+    점으로도 문턱을 넘었다 — 수지 곡선이 변형률 0.0023 · 4.75 MPa 에서 잘려 3000점 중 2976점을
+    버렸고, 그 곡선에서 잰 인장강도 4.75 MPa 가 실패 표시 없이 저장됐다. 도움말은 처음부터
+    「최대 응력에 견준 비율」 이었다.
+
+    ## 다시 넘으면 잡음이다
+
+    문턱만 바꿔서는 봉우리 근처 평평한 곳의 잡음에 여전히 일찍 걸린다(합성: 참 봉우리 0.045 를
+    0.034 에서 잘랐다). 잡음은 몇 점 안에 그 봉우리를 다시 넘고, 실제 하강은 안 넘거나(넥)
+    뤼더스 길이를 지나서 넘는다. 곡선 끝에서 `persist` 안쪽의 하강은 지켜볼 수 없어 세지
+    않는다. `persist` 가 0 이면 이 판정을 끈다.
     """
+    if not len(stress):
+        return None
+    peak = float(np.max(stress))
+    if peak <= 0:
+        return None
     running = np.maximum.accumulate(stress)
-    drop = running - stress
-    hit = np.nonzero(drop > threshold * running)[0]
-    return int(hit[0]) if hit.size else None
+    hits = np.nonzero(running - stress > threshold * peak)[0]
+    for index in hits:
+        if index == 0:  # 첫 점은 앞 봉우리가 없다 — 영점이 어긋난 곡선에서 생긴다
+            continue
+        if persist > 0:
+            if float(strain[-1]) < float(strain[index]) + persist:
+                # 끝까지 지켜볼 수 없다 — 봉우리 앞에서 잘린 곡선 끝의 잡음이 「상항복강도」 로
+                # 나가지 않게 세지 않는다. 파단 직전의 낙하는 항복점이 아니다(자르기는 crop).
+                break
+            end = int(np.searchsorted(strain, strain[index] + persist, side="right"))
+            if np.any(stress[index + 1 : end] >= running[index]):
+                continue  # 곧 다시 넘는다 — 잡음
+        return int(index)
+    return None
 
 
 @register(
@@ -1717,6 +1781,16 @@ def _first_drop(stress: np.ndarray, threshold: float) -> int | None:
             unit="1",
             help="최대 응력에 견준 비율. 이보다 작은 하강은 잡음으로 보고 항복점·연화로 치지 "
             "않습니다(기본 0.5 %).",
+        ),
+        ParamSpec(
+            name="persist_strain",
+            label="다시 넘는 변형률",
+            type="float",
+            default=YIELD_DROP_PERSIST,
+            unit="1",
+            help="내려간 뒤 이 변형률 안에 그 봉우리를 다시 넘으면 잡음으로 봅니다"
+            "(기본 0.002). 연강의 항복점 현상(뤼더스 평탄부)은 그보다 길어 그대로 잡힙니다. "
+            "0 이면 끕니다.",
         ),
         ParamSpec(
             name="min_slope",
@@ -1768,7 +1842,7 @@ def _first_drop(stress: np.ndarray, threshold: float) -> int | None:
         ),
     ),
     order=35,
-    version="1",
+    version="2",  # 2: 문턱을 전체 최댓값에 · 다시 넘으면 잡음 · 자르기 전 자기 검사
 )
 def yield_drop(frame: Frame, options: dict[str, Any]) -> StepResult:
     """항복 이후 **내려가는 구간**을 정리한다 — 단조 표를 받는 솔버를 위해.
@@ -1783,8 +1857,9 @@ def yield_drop(frame: Frame, options: dict[str, Any]) -> StepResult:
     수지의 연화는 실제 재료 거동이고, 그것을 버렸다는 사실이 근거에 있어야 나중에
     SAMP-1 로 갈 때 되짚을 수 있다. 하강 폭·손댄 점 수는 값으로, 방법과 구간은 노트로.
 
-    문턱(`threshold`) 미만의 하강만 있으면 **아무것도 안 한다** — 잡음까지 정리하면
-    모든 곡선이 조금씩 손대진 채 저장되고, 그것은 「측정 그대로」 가 아니다.
+    문턱(`threshold`, 최대 응력 비율) 미만이거나 `persist_strain` 안에 봉우리를 다시 넘는
+    하강만 있으면 **아무것도 안 한다** — 잡음까지 정리하면 모든 곡선이 조금씩 손대진 채
+    저장되고, 그것은 「측정 그대로」 가 아니다.
     """
     strain, stress, strain_key, stress_key = _pair(frame, options)
     require_increasing(strain, what=f"'{strain_key}'")
@@ -1795,10 +1870,17 @@ def yield_drop(frame: Frame, options: dict[str, Any]) -> StepResult:
     min_slope = option_float(options, "min_slope", 0.0)
     if min_slope < 0:
         raise ProcessingError(f"최소 기울기는 0 이상이어야 합니다: {min_slope}")
+    persist = option_float(options, "persist_strain", YIELD_DROP_PERSIST)
+    if persist < 0:
+        raise ProcessingError(f"다시 넘는 변형률은 0 이상이어야 합니다: {persist}")
 
     running = np.maximum.accumulate(stress)
     max_drop = float(np.max(running - stress)) if len(stress) else 0.0
-    first = _first_drop(stress, threshold)
+    peak = float(np.max(stress)) if len(stress) else 0.0
+    # 봉우리 자리(ReH · 자르기 · 하항복점)는 「다시 넘지 않는」 하강으로만 정한다. 포락선 ·
+    # 단조 회귀는 잡음성 요철도 고치는 방법이라, 문턱만 넘으면 다시 넘는 하강이어도 손댄다.
+    first = _first_drop(strain, stress, threshold, persist)
+    rough = first is None and peak > 0 and max_drop > threshold * peak
     notes: list[str] = []
     scalars: list[Scalar] = [Scalar("yield_drop_max", "최대 하강 폭", max_drop, "Pa")]
 
@@ -1832,19 +1914,25 @@ def yield_drop(frame: Frame, options: dict[str, Any]) -> StepResult:
                 else " — 끝까지 봉우리를 다시 넘지 않습니다(연화가 이어집니다)."
             )
         )
+    elif rough:
+        notes.append(
+            f"변형률 {persist:g} 안에 봉우리를 다시 넘는 하강만 있습니다(가장 큰 하강 "
+            f"{max_drop / 1e6:.3g} MPa) — 잡음으로 보고 항복점·연화로 보지 않습니다."
+        )
     else:
         notes.append(
-            f"직전 최댓값에서 {threshold * 100:.2g} % 를 넘는 하강이 없습니다"
-            f"(최대 {max_drop / 1e6:.3g} MPa) — 연화로 보지 않습니다."
+            f"최대 응력의 {threshold * 100:.2g} % 를 넘는 하강이 없습니다"
+            f"(가장 큰 하강 {max_drop / 1e6:.3g} MPa) — 연화로 보지 않습니다."
         )
 
-    if method == "keep" or (first is None and min_slope <= 0):
+    smooth = rough and method in ("envelope", "isotonic")
+    if method == "keep" or (first is None and not smooth and min_slope <= 0):
         if method != "keep":
             notes.append("곡선은 그대로 둡니다.")
         scalars.append(Scalar("yield_drop_points", "손댄 점 수", 0.0, "1"))
         return StepResult(frame, notes=tuple(notes), scalars=tuple(scalars))
 
-    if first is None:
+    if first is None and not smooth:
         # 하강은 없는데 최소 기울기를 달라고 했다 — 평탄부(접선계수 0)만 올린다.
         # 아무 열에나 걸 수 있는 같은 일은 `curve.monotone` 이 한다.
         fixed = stress.astype(np.float64).copy()
@@ -1866,6 +1954,18 @@ def yield_drop(frame: Frame, options: dict[str, Any]) -> StepResult:
 
     if method == "cut":
         assert upper_index is not None
+        # **자르기 전에 스스로 본다**(2026-11-14, VOC 58). 남길 봉우리가 최대 응력의 절반도 안
+        # 되면 잡음 하강에 걸린 것이다 — 그대로 자르면 그 곡선에서 잰 인장강도가 실패 표시
+        # 없이 저장된다. 멈추고 까닭을 말한다(곡선을 바꾸는 단계라 뒤 단계도 멈춘다).
+        share = float(stress[upper_index]) / float(np.max(stress))
+        if share < CUT_MIN_SHARE:
+            raise ProcessingError(
+                f"자를 봉우리(변형률 {float(strain[upper_index]):.4g}, "
+                f"{float(stress[upper_index]) / 1e6:.4g} MPa)가 최대 응력의 "
+                f"{share * 100:.3g} % 입니다 — 잡음 하강에 걸렸을 수 있어 자르지 않았습니다. "
+                "하강 문턱이나 「다시 넘는 변형률」 을 키우거나, 방법을 'keep' 으로 두고 "
+                "하강을 먼저 보세요."
+            )
         kept = upper_index + 1
         removed = len(stress) - kept
         notes.append(

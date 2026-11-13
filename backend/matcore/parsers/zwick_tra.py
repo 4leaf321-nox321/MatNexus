@@ -439,7 +439,11 @@ def _build_summary(
         if normalized in SPECIMEN_FIELDS or normalized.startswith(SPECIMEN_PREFIX):
             # 아는 것은 저장된 키로, 나머지는 이름을 그대로 슬러그로.
             name = SPECIMEN_FIELDS.get(normalized) or _slug(label)
-            metadata[name] = raw_value
+            # **유럽식 쉼표 소수는 여기서 숫자로 고친다**(2026-11-14, VOC 56) — 원문 `"0,986"`
+            # 을 그대로 두면 치수를 읽는 쪽(`curvedata._as_metres`)이 숫자로 못 읽고 버려,
+            # 처리가 규격 공칭으로 응력을 냈다. 요약값과 같은 `_to_float` 규칙이다.
+            number = _to_float(raw_value, delimiter) if delimiter == ";" else None
+            metadata[name] = repr(number) if number is not None else raw_value
             if raw_unit:
                 metadata[f"{name}_unit"] = raw_unit
             continue

@@ -720,6 +720,46 @@ class Test미리보기:
         # 대개 면적 문제다.
         assert "12.12 mm²" in body.json()["notes"][0]
 
+    def test_쓴_치수와_그_출처를_단계_노트에_남긴다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        run_id: str,
+        db: Session,
+    ) -> None:
+        """결과는 불변이라 「실측으로 냈나 공칭으로 냈나」 는 그때 적지 않으면 영영 모른다
+        (VOC 56)."""
+        run = db.get(TestRun, uuid.UUID(run_id))
+        assert run is not None
+        specimen = db.get(Specimen, run.specimen_id)
+        assert specimen is not None
+        specimen.gauge_length_m = 0.05
+        specimen.width_m = 12.12e-3
+        specimen.thickness_m = 1.0e-3
+        run.dimensions = {"thickness": 0.986e-3}  # 이 시험 파일이 잰 두께
+        db.commit()
+
+        body = client.post(
+            "/api/processing/preview",
+            json={
+                "test_run_id": run_id,
+                "steps": [
+                    {
+                        "plugin": "tensile.engineering",
+                        "options": {
+                            "gauge_length": "@specimen_gauge_length",
+                            "area": "@specimen_area",
+                        },
+                    }
+                ],
+            },
+            headers=admin_headers,
+        )
+        assert body.status_code == 200, body.text
+        note = next(one for one in body.json()["notes"] if one.startswith("쓴 시편 치수"))
+        assert "두께 0.986 mm(이 시험 파일)" in note
+        assert "폭 12.12 mm(시편 실측)" in note
+
 
 class Test레시피_계보:
     """결과가 **어느 레시피로** 나왔나(2026-10-03, 이슈 #2).

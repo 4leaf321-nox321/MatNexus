@@ -656,7 +656,7 @@ def _read_and_store(db: Session, run: TestRun, test_type: TestType) -> str:
     run.temperature_step_count = _temperature_steps(parsed)
 
     run.source_metadata = dict(parsed.metadata)
-    _apply_dimensions(db, run, parsed)
+    unread = _apply_dimensions(db, run, parsed)
     filled = _apply_record(db, run, parsed)
     filled += _apply_conditions(db, run, test_type, parsed)
     run.parser_version = how[:80]
@@ -670,6 +670,7 @@ def _read_and_store(db: Session, run: TestRun, test_type: TestType) -> str:
         *picked,
         *parsed.warnings,
         *renamed,
+        *unread,
         *filled,
         *parse_hooks.fire_parsed(db, run),
     ]
@@ -690,7 +691,7 @@ def _read_and_store(db: Session, run: TestRun, test_type: TestType) -> str:
     return "parsed"
 
 
-def _apply_dimensions(db: Session, run: TestRun, parsed: ParsedTest) -> None:
+def _apply_dimensions(db: Session, run: TestRun, parsed: ParsedTest) -> list[str]:
     """파일이 들고 온 시편 치수를 **이 시험에** 담는다.
 
     ## 왜 시편이 아니라 여기인가
@@ -710,11 +711,19 @@ def _apply_dimensions(db: Session, run: TestRun, parsed: ParsedTest) -> None:
     사람이 규격 공칭을 적어 두는 자리도 거기다.
     """
     specimen = db.get(Specimen, run.specimen_id)
-    found = curvedata.instrument_dimensions(
-        parsed.metadata, specimen_size.dimension_fields(db, specimen)
-    )
+    fields = specimen_size.dimension_fields(db, specimen)
+    found = curvedata.instrument_dimensions(parsed.metadata, fields)
     if found:
         run.dimensions = found
+    missed = curvedata.unread_dimensions(parsed.metadata, fields)
+    if not missed:
+        return []
+    # **말없이 버리지 않는다**(2026-11-14, VOC 56) — 버리면 처리가 규격 공칭으로 응력을 내고
+    # 사람은 파일 값으로 낸 줄 안다. 단위를 짐작해 넣지도 않는다(1000배 틀린 시편이 된다).
+    return [
+        f"파일의 시편 치수를 읽지 못해 이 시험에 넣지 않았습니다: {', '.join(missed)} — "
+        "처리는 시편 실측 · 규격 공칭을 씁니다. 프로파일에서 그 항목의 단위를 지정하세요."
+    ]
 
 
 def _apply_record(db: Session, run: TestRun, parsed: ParsedTest) -> list[str]:
@@ -812,12 +821,27 @@ def _apply_conditions(
     try:
         # **이미 있는 것과 함께 넘긴다.** 새 것만 넘기면 이미 적힌 조건이
         # 「안 보낸 것」이 되어 통째로 지워진다.
+        #
+        # **단위는 새 칸에만 준다**(2026-11-14). 이미 있는 값은 SI 로 저장돼 있는데, 사람이
+        # 적은 단위(°C · mm/min)와 함께 넘기면 그 단위로 **한 번 더** 환산됐다 — 파일이 빈 칸
+        # 하나만 채워도 25 °C 가 571.3 K, 10 mm/min 이 6만분의 1 이 됐다. 단위 없이 넘기면 SI
+        # 로 다시 읽혀 그대로다.
         values, units = normalize_conditions(
             db,
             test_type,
             {**already, **fresh},
-            {**(run.input_units or {}), **parsed.condition_units},
+            {key: unit for key, unit in parsed.condition_units.items() if key in fresh},
         )
+        # 「무엇으로 입력했는지」(ADR 0004)는 이미 있던 칸의 원래 기록을 둔다 — 위에서 SI 로
+        # 다시 읽혔으니 그 칸의 단위가 SI 로 바뀌어 돌아온다.
+        units = {
+            **units,
+            **{
+                key: unit
+                for key, unit in (run.input_units or {}).items()
+                if key in already and key not in fresh
+            },
+        }
     except AppError as error:
         return [
             f"파일이 말한 시험 조건({', '.join(sorted(fresh))})을 "
