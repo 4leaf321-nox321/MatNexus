@@ -644,10 +644,17 @@ class Test같은_측정이_다시_들어올_때:
         tensile: None,
         specimen: dict[str, Any],
     ) -> None:
-        # 줄끝만 바꾼 사본 — 원본 SHA 는 다르고 곡선 값은 같다.
-        self._parsed(client, admin_headers, db, specimen["id"], TRA.read_bytes())
-        copy = TRA.read_bytes().replace(b"\r\n", b"\n")
-        assert copy != TRA.read_bytes()
+        # 줄끝만 바꾼 사본 — 원본 SHA 는 다르고 곡선 값은 같다. **고정물의 줄끝은 체크아웃에 따라
+        # 다르다**(로컬 CRLF · CI LF) — 있는 쪽의 반대로 바꾼다. CRLF → LF 만 했더니 CI 에서는
+        # 사본이 원본과 같아 시험이 깨졌다(v1.314.0).
+        original = TRA.read_bytes()
+        self._parsed(client, admin_headers, db, specimen["id"], original)
+        copy = (
+            original.replace(b"\r\n", b"\n")
+            if b"\r\n" in original
+            else original.replace(b"\n", b"\r\n")
+        )
+        assert copy != original
         second = self._parsed(client, admin_headers, db, specimen["id"], copy)
         codes = [one["code"] for one in second.checks]
         assert codes.count("duplicate_curve") == 1 and "duplicate_file" not in codes
