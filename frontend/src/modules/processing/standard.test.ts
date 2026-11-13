@@ -50,6 +50,13 @@ describe('표준 단계', () => {
     expect(at('curve.resample')).toBeLessThan(at('curve.crop'))
   })
 
+  it('파단 뒤 자르기는 정렬 앞이다', () => {
+    // **정렬하면 기록 순서를 잃는다**(2026-11-14, VOC 57) — 신율계가 되튄 점이 곡선 안쪽에
+    // 끼어들고, 단조 보정이 그 하강을 덮었다.
+    expect(at('tensile.engineering')).toBeLessThan(at('tensile.break_cut'))
+    expect(at('tensile.break_cut')).toBeLessThan(at('curve.sort_unique'))
+  })
+
   it('네킹을 짚고 나서 자른다', () => {
     expect(at('tensile.necking_candidate')).toBeLessThan(at('curve.crop'))
   })

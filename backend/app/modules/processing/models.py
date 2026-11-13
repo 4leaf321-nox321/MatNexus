@@ -196,6 +196,15 @@ class ProcessingResult(Base):
     **비어 있지 않으면 부분 결과다**(2026-10-22). 전에는 한 단계라도 실패하면 저장하지
     않아, 일괄 처리에서 멀쩡히 나온 인장강도까지 잃었다(v1.285.0 보고). 나온 값은 맞지만
     다 나오지는 않았다는 사실이 여기 남는다 — 화면 · 일괄 채택이 이것을 본다."""
+    warnings: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSONB, default=list, server_default="[]"
+    )
+    """사람이 확인할 것 `[{source, label, message}]` — `source` 는 `test`(시험 점검) ·
+    `step`(단계).
+
+    **채택할 때 확인을 받는다**(2026-11-14, VOC 53~58). 경고가 화면에만 뜨면 채택 · 카드에서
+    사라졌다. 처리한 그때의 시험 점검을 함께 적는다 — 결과는 불변이고 시험은 다시 읽힐 수
+    있다."""
 
     storage_path: Mapped[str] = mapped_column(String(500))
     row_count: Mapped[int] = mapped_column(Integer)

@@ -23,6 +23,7 @@ import type { BlockSpec, Produced, PropertyCard } from '@/modules/fitting/api'
 import { plotLine } from '@/modules/fitting/plotLine'
 import { CurveChart } from '@/modules/tests/CurveChart'
 import { Badge } from '@/shared/components/ui/badge'
+import { WarningList, type WarningItem } from '@/shared/components/WarningList'
 import { axisLabel, formatScalar, toDisplay } from '@/shared/units'
 
 /** 표를 이만큼만 편다. 나머지는 몇 행인지 말한다. */
@@ -276,6 +277,13 @@ export function CardBlocks({
       )}
       {/* 근거 시험이 다른 두께의 재료로 옮겨진 일 따위 — 값은 그대로라 말로 남는다. */}
       <CardRemarks card={card} canRemove={canRemoveRemark} onRemove={onRemoveRemark} />
+      {/* **근거 시험들의 경고**(2026-11-14, VOC 53~58) — 채택할 때 확인한 처리 경고와 시편마다
+          다른 속도. 막지 않고 카드에 남긴다. */}
+      <WarningList
+        title="근거 시험의 경고"
+        className="text-xs"
+        items={((card.source as { warnings?: WarningItem[] } | null)?.warnings ?? []) as WarningItem[]}
+      />
 
       {present.map((spec) => {
         const payload = blocks[spec.key]

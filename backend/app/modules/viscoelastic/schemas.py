@@ -17,6 +17,11 @@ class SweepOut(BaseModel):
     point_count: int
     minimum_frequency_hz: float
     maximum_frequency_hz: float
+    temperature_spread_k: float = 0.0
+    """곡선 안 온도의 폭(최대 - 최소, K)."""
+    is_ramp: bool = False
+    """온도가 크게 변하는 **램프** — 등온 스윕이 아니라 기본 후보에서 빠진다(2026-11-14,
+    VOC 53). 화면은 표시를 달고 기본으로 고르지 않는다. 사람이 고르면 겹친다."""
 
 
 class SweepListOut(BaseModel):

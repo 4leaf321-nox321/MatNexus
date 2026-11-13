@@ -55,6 +55,7 @@ import {
   TableRow,
 } from '@/shared/components/ui/table'
 import { useResource } from '@/shared/hooks/useResource'
+import { WarningList } from '@/shared/components/WarningList'
 import { axisLabel, formatScalar, toDisplay } from '@/shared/units'
 
 /** 한 번에 견주는 시험 수 — 서버의 `OVERVIEW_MAX` 와 같다. 넘으면 나눠서 한다. */
@@ -83,6 +84,8 @@ function resultName(result: ResultBrief): string {
   if (result.has_true_stress) parts.push('진응력 포함')
   // 실패한 단계가 있었던 결과 — 고르기 전에 빠진 값이 있다는 것을 안다(2026-10-22).
   if ((result.failures?.length ?? 0) > 0) parts.push(`부분 결과(실패 ${result.failures?.length})`)
+  // 사람이 확인할 경고가 있는 결과 — 채택할 때 확인을 받는다(2026-11-14).
+  if ((result.warnings?.length ?? 0) > 0) parts.push(`경고 ${result.warnings?.length}`)
   if (result.stale) parts.push('옛 원본')
   if (result.is_adopted) parts.push('지금 채택')
   return parts.join(' · ')
@@ -170,8 +173,10 @@ export function AdoptionBoard({ testRunIds, onChanged }: Props) {
     setBusy(true)
     setError(null)
     try {
+      // **경고는 확인 대화에 적혀 있다** — 그것을 보고 「채택」 을 눌렀으므로 확인으로 보낸다.
       const got = await processingApi.adoptMany(
-        sending.map((run) => ({ test_run_id: run.test_run_id, result_id: choose(run)?.id ?? null }))
+        sending.map((run) => ({ test_run_id: run.test_run_id, result_id: choose(run)?.id ?? null })),
+        sending.some((run) => (choose(run)?.warnings?.length ?? 0) > 0)
       )
       setDone(got)
       setUndone(false)
@@ -198,7 +203,9 @@ export function AdoptionBoard({ testRunIds, onChanged }: Props) {
           .map((one) => ({
             test_run_id: one.test_run_id,
             result_id: one.previous_adopted_id ?? null,
-          }))
+          })),
+        // 이전 상태로 돌려놓는 일이다 — 사람이 「되돌리기」 를 눌렀다.
+        true
       )
       setUndone(true)
       setChecked(null)
@@ -237,6 +244,7 @@ export function AdoptionBoard({ testRunIds, onChanged }: Props) {
   const fresh = sending.filter((run) => !run.adopted_result_id)
   const moved = sending.filter((run) => run.adopted_result_id)
   const loud = sending.filter(over)
+  const warned = sending.filter((run) => (choose(run)?.warnings?.length ?? 0) > 0)
 
   return (
     <section aria-label="채택 검토대" className="space-y-3">
@@ -368,7 +376,7 @@ export function AdoptionBoard({ testRunIds, onChanged }: Props) {
         undoable="채택한 뒤 「되돌리기」 로 이전 채택으로 돌려놓을 수 있습니다 — 결과는 지워지지 않습니다."
         busy={busy}
         body={
-          <span className="block space-y-1.5">
+          <div className="space-y-1.5">
             <span className="block">
               새로 채택 <b>{fresh.length}</b>건 · 다른 결과로 바꿈 <b>{moved.length}</b>건. 채택한
               값이 그 시험의 물성이 되어 요약값 표 · 재료 통계로 갑니다. 잘못 눌렀으면 끝난 뒤
@@ -390,13 +398,24 @@ export function AdoptionBoard({ testRunIds, onChanged }: Props) {
                 보셨는지 확인하세요.
               </span>
             )}
+            {warned.length > 0 && (
+              <WarningList
+                  title={`경고가 있는 결과 ${warned.length}건 — 보고 채택`}
+                  items={warned.flatMap((run) =>
+                    (choose(run)?.warnings ?? []).map((one) => ({
+                      ...one,
+                      record_name: run.record_name,
+                    }))
+                  )}
+                />
+            )}
             {locked.length > 0 && (
               <span className="block">
                 고칠 수 없는 시험 {locked.length}건은 이번 채택에서 빠집니다 — 등록자 · 편집을 받은
                 부서 · 자료 관리자가 합니다(줄의 자물쇠에 누구에게 물을지 적혀 있습니다).
               </span>
             )}
-          </span>
+          </div>
         }
         onConfirm={() => void adopt()}
         onClose={() => setConfirming(false)}
@@ -675,6 +694,7 @@ function Detail({ run, chosen }: { run: RunOverview; chosen: ResultBrief | null 
         </p>
       ) : (
         <>
+          <WarningList items={chosen.warnings ?? []} className="mb-3 text-xs" />
           {diffs.length > 0 && (
             <div className="mb-3 space-y-0.5 text-xs" aria-label="지금 채택과 차이">
               <p className="text-muted-foreground">지금 채택 → 고른 결과</p>

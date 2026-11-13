@@ -26,6 +26,7 @@ const setPrimary = vi.fn()
 const unsetPrimary = vi.fn()
 const removeMasterCurve = vi.fn()
 const removePronyFit = vi.fn()
+const createMasterCurve = vi.fn()
 
 /** 겹쳐 놓은 마스터커브 하나. 상세 화면(곡선·이동인자·Prony)을 그리게 한다. */
 const CURVE = {
@@ -65,6 +66,7 @@ vi.mock('@/modules/viscoelastic/api', async (importOriginal) => ({
     unsetPrimary: (...args: unknown[]) => unsetPrimary(...args),
     removeMasterCurve: (...args: unknown[]) => removeMasterCurve(...args),
     removePronyFit: (...args: unknown[]) => removePronyFit(...args),
+    createMasterCurve: (...args: unknown[]) => createMasterCurve(...args),
     modulusTables: () => Promise.resolve([]),
   },
 }))
@@ -294,5 +296,52 @@ describe('지우기와 대표 해제', () => {
     expect(dialog).toHaveTextContent('그 앞에 맞춘 적합이 쓰입니다')
     await userEvent.click(within(dialog).getByRole('button', { name: '삭제' }))
     await waitFor(() => expect(removePronyFit).toHaveBeenCalledWith(FIT.id))
+  })
+})
+
+describe('겹칠 곡선 고르기', () => {
+  // 2026-11-14(VOC 53): -40 °C 부터 오르는 램프가 중앙값 온도의 스윕으로 하나 더 겹쳐졌다. 램프는
+  // 기본으로 빼 두고, 사람이 고르면 넣는다 — 서버에 고른 곡선을 그대로 보낸다.
+  const sweep = (key: string, celsius: number, ramp = false) => ({
+    curve_key: key,
+    label: ramp ? '온도 램프' : `스윕 ${celsius}`,
+    temperature_k: celsius + 273.15,
+    point_count: 8,
+    minimum_frequency_hz: 0.1,
+    maximum_frequency_hz: 10,
+    temperature_spread_k: ramp ? 100 : 0.3,
+    is_ramp: ramp,
+  })
+
+  beforeEach(() => {
+    sweeps.mockResolvedValue({
+      items: [sweep('k1', -40), sweep('k2', -20), sweep('k3', 10, true)],
+      warnings: [],
+      modulus_basis: 'E',
+    })
+    createMasterCurve.mockResolvedValue(CURVE)
+  })
+
+  it('램프는 기본으로 빼고 고른 곡선만 보낸다', async () => {
+    const user = userEvent.setup()
+    show()
+    const picks = within(await screen.findByLabelText('겹칠 곡선'))
+    expect(picks.getByRole('button', { name: /온도 램프 \(램프\)/ })).toHaveAttribute(
+      'aria-pressed',
+      'false'
+    )
+    await user.click(screen.getByRole('button', { name: '겹치기' }))
+    await waitFor(() => expect(createMasterCurve).toHaveBeenCalledTimes(1))
+    expect(createMasterCurve.mock.calls[0][1].curve_keys).toEqual(['k1', 'k2'])
+  })
+
+  it('사람이 고르면 램프도 넣는다', async () => {
+    const user = userEvent.setup()
+    show()
+    const picks = within(await screen.findByLabelText('겹칠 곡선'))
+    await user.click(picks.getByRole('button', { name: /온도 램프/ }))
+    await user.click(screen.getByRole('button', { name: '겹치기' }))
+    await waitFor(() => expect(createMasterCurve).toHaveBeenCalledTimes(1))
+    expect(createMasterCurve.mock.calls[0][1].curve_keys).toEqual(['k1', 'k2', 'k3'])
   })
 })

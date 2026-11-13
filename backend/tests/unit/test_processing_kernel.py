@@ -1633,6 +1633,116 @@ class Test잡음_속의_봉우리:
         assert any("잡음으로 보고" in note for note in result.notes)
 
 
+def broken() -> Frame:
+    """`synthetic()` 에 파단 뒤 기록을 붙인 것 — **기록 순서 그대로**(정렬 전).
+
+    파단 뒤 신율계가 0.095 까지 되튀고(최대하중 점 0.10 보다 작다), 장비는 응력 0 으로 0.5 까지
+    더 적는다 — 개발 DB 데모 곡선이 응력 0 으로 변형률 10.5 까지 적혀 있었다.
+    """
+    base = synthetic()
+    after_strain = np.concatenate([np.linspace(0.099, 0.095, 5), np.linspace(0.2, 0.5, 20)])
+    after_stress = np.concatenate([np.linspace(20e6, 2e6, 5), np.zeros(20)])
+    return Frame(
+        {
+            "strain_engineering": np.concatenate(
+                [base.columns["strain_engineering"], after_strain]
+            ),
+            "stress_engineering": np.concatenate(
+                [base.columns["stress_engineering"], after_stress]
+            ),
+        },
+        dict(base.units),
+    )
+
+
+class Test파단_뒤_자르기:
+    """**정렬하면 기록 순서를 잃는다** — 파단 뒤를 그 전에 자른다(2026-11-14, VOC 57)."""
+
+    SORT = Step("curve.sort_unique", {"x": "strain_engineering", "duplicate_policy": "mean"})
+
+    def test_정렬_전에_자르면_되튄_점이_곡선_안에_안_낀다(self) -> None:
+        kept = processing.apply([Step("tensile.break_cut", {}), self.SORT], broken())
+        assert kept.frame.length() == synthetic().length()
+        assert np.all(np.diff(kept.frame.columns["stress_engineering"]) >= 0)
+        assert any("정렬하면 곡선 안쪽에 끼어들" in note for note in kept.notes)
+        # 안 자르면 응력 2~20 MPa 인 점이 0.095~0.099 에 끼어든다 — 그 하강을 단조 보정이
+        # 덮는다.
+        mixed = processing.apply([self.SORT], broken()).frame.columns["stress_engineering"]
+        assert np.min(np.diff(mixed)) < -300e6
+
+    def test_관측_최대_변형률이_파단_뒤_기록이_아니다(self) -> None:
+        steps = [self.SORT, Step("tensile.strength", {})]
+        assert scalar(processing.apply(steps, broken()), "elongation_observed") == 0.5
+        cut = processing.apply([Step("tensile.break_cut", {}), *steps], broken())
+        assert scalar(cut, "elongation_observed") == pytest.approx(0.10)
+
+    def test_파단이_없으면_그대로_둔다(self) -> None:
+        result = processing.apply([Step("tensile.break_cut", {})], synthetic())
+        assert result.frame.length() == synthetic().length()
+        assert any("그대로 둡니다" in note for note in result.notes)
+
+
+def _with_dip(depth: float, width: float) -> Frame:
+    """`synthetic()` 의 변형률 0.05 에서 `depth`(인장강도 비율)만큼 내려가 `width` 동안
+    머문다."""
+    base = synthetic()
+    strain = base.columns["strain_engineering"]
+    stress = base.columns["stress_engineering"].copy()
+    uts = float(np.max(stress))
+    inside = (strain > 0.05) & (strain < 0.05 + width)
+    stress[inside] = float(np.interp(0.05, strain, stress)) - depth * uts
+    return Frame({**base.columns, "stress_engineering": stress}, dict(base.units))
+
+
+class Test최대_응력_앞_하강_경고:
+    """**단조 보정이 덮기 전에, 정렬 직후 곡선에서 잰다**(2026-11-14, VOC 57).
+
+    경고는 노트와 따로 결과에 남는다 — 채택할 때 확인을 받고 카드 근거에 실린다.
+    """
+
+    def _warnings(self, frame: Frame) -> tuple[str, ...]:
+        return processing.apply([Step("tensile.strength", {})], frame).warnings
+
+    def test_항복점_현상을_말한다(self) -> None:
+        (warning,) = self._warnings(mild_steel())
+        assert "상 · 하항복 차이" in warning
+        assert "항복 강하 정리" in warning
+
+    def test_다시_오르지_않는_작은_하강도_말한다(self) -> None:
+        (warning,) = self._warnings(_with_dip(0.01, 0.01))
+        assert "다시 오르지 않고" in warning
+
+    def test_곧_다시_오르는_잡음은_조용하다(self) -> None:
+        # σ 1.5 MPa — 순간 하강이 인장강도의 1 % 를 넘어도 잡음이다.
+        assert self._warnings(noisy()) == ()
+
+    @pytest.mark.parametrize("seed", [0, 1, 2])
+    def test_평평한_꼭대기의_잡음은_하강이_아니다(self, seed: int) -> None:
+        # 인장강도 근처가 평평하면 잡음 극값끼리의 차이가 0.002 안에 다시 넘지 못해 「다시 오르지
+        # 않는 하강」 처럼 보인다 — 잡음 σ 기준 없이는 10개 seed 전부 경고를 받았다(합성 DP600).
+        strain = np.linspace(0.0, 0.12, 3000)
+        stress = np.minimum(E_TRUE * strain, 460e6 * (1 - np.exp(-(strain + 0.005) / 0.02)))
+        rng = np.random.default_rng(seed)
+        frame = Frame(
+            {
+                "strain_engineering": strain,
+                "stress_engineering": stress + rng.normal(0, 0.0012 * 460e6, len(strain)),
+            },
+            {"strain_engineering": "1", "stress_engineering": "Pa"},
+        )
+        assert self._warnings(frame) == ()
+
+    def test_곧_다시_오르는_큰_요철은_말한다(self) -> None:
+        (warning,) = self._warnings(_with_dip(0.05, 0.001))
+        assert "잡음이 큽니다" in warning
+
+    def test_매끈한_곡선은_조용하다(self) -> None:
+        assert self._warnings(synthetic()) == ()
+
+    def test_최대_응력_뒤의_네킹은_하강이_아니다(self) -> None:
+        assert self._warnings(polymer_neck()) == ()
+
+
 def plateau() -> Frame:
     """항복 뒤 응력이 **그대로**인 곡선 — 내려가지는 않는데 접선계수가 0 이다."""
     strain = np.linspace(0.0, 0.10, 201)

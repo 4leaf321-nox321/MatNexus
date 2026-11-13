@@ -371,6 +371,11 @@
       },
       "AdoptManyRequest": {
         "properties": {
+          "confirm_warnings": {
+            "default": false,
+            "title": "Confirm Warnings",
+            "type": "boolean"
+          },
           "items": {
             "items": {
               "$ref": "#/components/schemas/AdoptManyItem"
@@ -1472,6 +1477,14 @@
               }
             ],
             "title": "Warning"
+          },
+          "warnings": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ResultWarningOut"
+            },
+            "title": "Warnings",
+            "type": "array"
           }
         },
         "required": [
@@ -4768,6 +4781,36 @@
           "si_unit"
         ],
         "title": "CardValueOut",
+        "type": "object"
+      },
+      "CardWarningOut": {
+        "description": "카드 근거의 경고 하나 — 대표를 만든 시험의 처리 결과가 든 것 · 시험끼리 다른 조건.\n\n2026-11-14(VOC 53~58): 처리 경고가 채택 · 카드로 안 넘어와, 카드만 보면 그 값이 실측 치수로\n낸 것인지 · 항복점 현상을 덮은 것인지 알 수 없었다. **막지 않는다** — 카드에 남긴다.",
+        "properties": {
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "record_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Record Name"
+          }
+        },
+        "required": [
+          "label",
+          "message"
+        ],
+        "title": "CardWarningOut",
         "type": "object"
       },
       "CascadeDeleteOut": {
@@ -15282,6 +15325,14 @@
             },
             "title": "Source Points",
             "type": "array"
+          },
+          "warnings": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/CardWarningOut"
+            },
+            "title": "Warnings",
+            "type": "array"
           }
         },
         "required": [
@@ -24496,6 +24547,14 @@
             },
             "title": "Units",
             "type": "object"
+          },
+          "warnings": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ResultWarningOut"
+            },
+            "title": "Warnings",
+            "type": "array"
           }
         },
         "required": [
@@ -24613,6 +24672,14 @@
             "format": "uuid",
             "title": "Test Run Id",
             "type": "string"
+          },
+          "warnings": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ResultWarningOut"
+            },
+            "title": "Warnings",
+            "type": "array"
           }
         },
         "required": [
@@ -24774,6 +24841,14 @@
           "version": {
             "title": "Version",
             "type": "string"
+          },
+          "warnings": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
           }
         },
         "required": [
@@ -28692,6 +28767,14 @@
           "step_count": {
             "title": "Step Count",
             "type": "integer"
+          },
+          "warnings": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ResultWarningOut"
+            },
+            "title": "Warnings",
+            "type": "array"
           }
         },
         "required": [
@@ -28977,6 +29060,34 @@
           "points"
         ],
         "title": "ResultLineOut",
+        "type": "object"
+      },
+      "ResultWarningOut": {
+        "description": "사람이 확인할 것 하나(2026-11-14, VOC 53~58) — 노트(무엇을 했나)와 다르다.\n\n**채택할 때 확인을 받는다.** 경고가 있는 결과는 한 건 · 여러 건 채택에서 `confirm_warnings`\n를 요구하고, 일괄 처리의 「바로 채택」 은 미룬다. 카드 근거에도 실린다.",
+        "properties": {
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "source": {
+            "enum": [
+              "test",
+              "step"
+            ],
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "label",
+          "message"
+        ],
+        "title": "ResultWarningOut",
         "type": "object"
       },
       "RetypeOut": {
@@ -34822,6 +34933,11 @@
             "title": "Curve Key",
             "type": "string"
           },
+          "is_ramp": {
+            "default": false,
+            "title": "Is Ramp",
+            "type": "boolean"
+          },
           "label": {
             "anyOf": [
               {
@@ -34847,6 +34963,11 @@
           },
           "temperature_k": {
             "title": "Temperature K",
+            "type": "number"
+          },
+          "temperature_spread_k": {
+            "default": 0.0,
+            "title": "Temperature Spread K",
             "type": "number"
           }
         },
@@ -54911,7 +55032,7 @@
         ]
       },
       "post": {
-        "description": "이 결과를 **이 시험의 물성**으로 삼는다.\n\n시험당 하나뿐이다 — 포인터가 하나이므로 구조적으로 그렇다. 다른 것을 채택하면\n앞의 것은 시도 목록에 그대로 남는다(지워지지 않는다).",
+        "description": "이 결과를 **이 시험의 물성**으로 삼는다.\n\n시험당 하나뿐이다 — 포인터가 하나이므로 구조적으로 그렇다. 다른 것을 채택하면\n앞의 것은 시도 목록에 그대로 남는다(지워지지 않는다).\n\n**경고가 있으면 확인을 받는다**(2026-11-14, VOC 53~58) — `confirm_warnings` 없이 부르면\n409 와 함께 무엇을 확인할지 돌려준다. 사람과 AI 에 같은 규칙이다.",
         "operationId": "adopt_api_processing_results__result_id__adopt_post",
         "parameters": [
           {
@@ -54922,6 +55043,18 @@
               "format": "uuid",
               "title": "Result Id",
               "type": "string"
+            }
+          },
+          {
+            "description": "경고가 있는 결과도 채택한다 — 사람이 그 경고를 봤다는 뜻.",
+            "in": "query",
+            "name": "confirm_warnings",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "경고가 있는 결과도 채택한다 — 사람이 그 경고를 봤다는 뜻.",
+              "title": "Confirm Warnings",
+              "type": "boolean"
             }
           }
         ],

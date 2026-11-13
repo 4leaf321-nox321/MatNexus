@@ -5874,6 +5874,9 @@ export interface paths {
          *
          *     시험당 하나뿐이다 — 포인터가 하나이므로 구조적으로 그렇다. 다른 것을 채택하면
          *     앞의 것은 시도 목록에 그대로 남는다(지워지지 않는다).
+         *
+         *     **경고가 있으면 확인을 받는다**(2026-11-14, VOC 53~58) — `confirm_warnings` 없이 부르면
+         *     409 와 함께 무엇을 확인할지 돌려준다. 사람과 AI 에 같은 규칙이다.
          */
         post: operations["adopt_api_processing_results__result_id__adopt_post"];
         /**
@@ -9331,6 +9334,11 @@ export interface components {
         };
         /** AdoptManyRequest */
         AdoptManyRequest: {
+            /**
+             * Confirm Warnings
+             * @default false
+             */
+            confirm_warnings: boolean;
             /** Items */
             items: components["schemas"]["AdoptManyItem"][];
         };
@@ -9767,6 +9775,11 @@ export interface components {
             test_run_id: string;
             /** Warning */
             warning?: string | null;
+            /**
+             * Warnings
+             * @default []
+             */
+            warnings: components["schemas"]["ResultWarningOut"][];
         };
         /** BatchOut */
         BatchOut: {
@@ -10995,6 +11008,21 @@ export interface components {
             property_key?: string | null;
             /** Si Unit */
             si_unit: string;
+        };
+        /**
+         * CardWarningOut
+         * @description 카드 근거의 경고 하나 — 대표를 만든 시험의 처리 결과가 든 것 · 시험끼리 다른 조건.
+         *
+         *     2026-11-14(VOC 53~58): 처리 경고가 채택 · 카드로 안 넘어와, 카드만 보면 그 값이 실측 치수로
+         *     낸 것인지 · 항복점 현상을 덮은 것인지 알 수 없었다. **막지 않는다** — 카드에 남긴다.
+         */
+        CardWarningOut: {
+            /** Label */
+            label: string;
+            /** Message */
+            message: string;
+            /** Record Name */
+            record_name?: string | null;
         };
         /**
          * CascadeDeleteOut
@@ -14815,6 +14843,11 @@ export interface components {
                 number,
                 number
             ][];
+            /**
+             * Warnings
+             * @default []
+             */
+            warnings: components["schemas"]["CardWarningOut"][];
         };
         /** FitPreviewRequest */
         FitPreviewRequest: {
@@ -18245,6 +18278,11 @@ export interface components {
             units: {
                 [key: string]: string;
             };
+            /**
+             * Warnings
+             * @default []
+             */
+            warnings: components["schemas"]["ResultWarningOut"][];
         };
         /** ProcessingResultOut */
         ProcessingResultOut: {
@@ -18303,6 +18341,11 @@ export interface components {
              * Format: uuid
              */
             test_run_id: string;
+            /**
+             * Warnings
+             * @default []
+             */
+            warnings: components["schemas"]["ResultWarningOut"][];
         };
         /** ProcessingRunRequest */
         ProcessingRunRequest: {
@@ -18363,6 +18406,11 @@ export interface components {
             scalars: components["schemas"]["ProcessingScalarOut"][];
             /** Version */
             version: string;
+            /**
+             * Warnings
+             * @default []
+             */
+            warnings: string[];
         };
         /**
          * ProcessingStepOut
@@ -19918,6 +19966,11 @@ export interface components {
             stale: boolean;
             /** Step Count */
             step_count: number;
+            /**
+             * Warnings
+             * @default []
+             */
+            warnings: components["schemas"]["ResultWarningOut"][];
         };
         /**
          * ResultContextOut
@@ -20029,6 +20082,24 @@ export interface components {
             x: string;
             /** Y */
             y: string;
+        };
+        /**
+         * ResultWarningOut
+         * @description 사람이 확인할 것 하나(2026-11-14, VOC 53~58) — 노트(무엇을 했나)와 다르다.
+         *
+         *     **채택할 때 확인을 받는다.** 경고가 있는 결과는 한 건 · 여러 건 채택에서 `confirm_warnings`
+         *     를 요구하고, 일괄 처리의 「바로 채택」 은 미룬다. 카드 근거에도 실린다.
+         */
+        ResultWarningOut: {
+            /** Label */
+            label: string;
+            /** Message */
+            message: string;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "test" | "step";
         };
         /** RetypeOut */
         RetypeOut: {
@@ -22354,6 +22425,11 @@ export interface components {
         SweepOut: {
             /** Curve Key */
             curve_key: string;
+            /**
+             * Is Ramp
+             * @default false
+             */
+            is_ramp: boolean;
             /** Label */
             label?: string | null;
             /** Maximum Frequency Hz */
@@ -22364,6 +22440,11 @@ export interface components {
             point_count: number;
             /** Temperature K */
             temperature_k: number;
+            /**
+             * Temperature Spread K
+             * @default 0
+             */
+            temperature_spread_k: number;
         };
         /**
          * SyntheticCurvePreviewOut
@@ -33524,7 +33605,10 @@ export interface operations {
     };
     adopt_api_processing_results__result_id__adopt_post: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description 경고가 있는 결과도 채택한다 — 사람이 그 경고를 봤다는 뜻. */
+                confirm_warnings?: boolean;
+            };
             header?: never;
             path: {
                 result_id: string;

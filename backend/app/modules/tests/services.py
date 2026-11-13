@@ -657,8 +657,10 @@ def _read_and_store(db: Session, run: TestRun, test_type: TestType) -> str:
 
     run.source_metadata = dict(parsed.metadata)
     unread = _apply_dimensions(db, run, parsed)
+    typed = dict(run.conditions or {})
     filled = _apply_record(db, run, parsed)
     filled += _apply_conditions(db, run, test_type, parsed)
+    run.checks = _checks(db, run, test_type, parsed, typed, unread)
     run.parser_version = how[:80]
     run.status = "parsed"
     run.parse_error = None
@@ -670,7 +672,7 @@ def _read_and_store(db: Session, run: TestRun, test_type: TestType) -> str:
         *picked,
         *parsed.warnings,
         *renamed,
-        *unread,
+        *(one["message"] for one in run.checks),
         *filled,
         *parse_hooks.fire_parsed(db, run),
     ]
@@ -723,6 +725,152 @@ def _apply_dimensions(db: Session, run: TestRun, parsed: ParsedTest) -> list[str
     return [
         f"파일의 시편 치수를 읽지 못해 이 시험에 넣지 않았습니다: {', '.join(missed)} — "
         "처리는 시편 실측 · 규격 공칭을 씁니다. 프로파일에서 그 항목의 단위를 지정하세요."
+    ]
+
+
+#: 응력 · 탄성률 · 하중처럼 보이는 채널 이름 — 단위가 비면 무차원으로 읽혀 조용히 틀린다(VOC
+#: 53).
+_FORCE_LIKE = (
+    *("stress", "modulus", "strength", "force", "load", "pressure"),
+    *("응력", "탄성률", "탄성계수", "강도", "하중"),
+)
+
+
+def _checks(
+    db: Session,
+    run: TestRun,
+    test_type: TestType,
+    parsed: ParsedTest,
+    typed: dict[str, Any],
+    unread: list[str],
+) -> list[dict[str, str]]:
+    """**원본과 기록이 다른 것** — 처리 결과로 옮겨 가 채택할 때 확인을 받는다(2026-11-14).
+
+    VOC 53 · 55 · 56: 파일의 값이 기록과 다르거나 기록이 의심스러운데, 말이 화면에만 뜨거나
+    아예 없었다. 막지 않는다 — 어느 쪽이 맞는지는 사람이 안다. `typed` 는 파일이 채우기 전의
+    조건이다.
+    """
+    found = [{"code": "dimension_unread", "message": one} for one in unread]
+    found += _nominal_as_measured(db, run)
+    found += _condition_mismatch(db, run, test_type, parsed, typed)
+    found += _orientation_mismatch(db, run, parsed)
+    found += _dimensionless_suspects(parsed)
+    return found
+
+
+def _nominal_as_measured(db: Session, run: TestRun) -> list[dict[str, str]]:
+    """시편의 「실측」 이 규격 공칭과 똑같은데 이 파일이 잰 값과 다르다 — 공칭을 옮겨 적은 것
+    (VOC 56).
+
+    이 시험은 파일 값을 쓰지만, 파일 치수가 없는 같은 시편의 다른 시험은 그 칸을 실측으로 쓴다.
+    개발 DB 에서 24건이 공칭 12.5 · 1.0 mm 를 실측 칸에 들고 있었다(2026-11-14).
+    """
+    specimen = db.get(Specimen, run.specimen_id)
+    if specimen is None or not run.dimensions:
+        return []
+    sizes = specimen_size.sizes_of(db, specimen)
+    found = []
+    for key, value in run.dimensions.items():
+        measured, nominal = sizes.measured.get(key), sizes.nominal.get(key)
+        if measured is None or nominal is None or abs(measured - nominal) > 1e-12:
+            continue
+        if abs(value - measured) <= 0.005 * measured:
+            continue
+        label = sizes.label_of(key)
+        label = specimen_size.LEGACY_LABELS.get(key, label) if label == key else label
+        found.append(
+            {
+                "code": "dimension_nominal_as_measured",
+                "message": f"시편의 실측 {label} {measured * 1000:.4g} mm 가 규격 공칭과 "
+                f"같고 이 파일의 {label} {value * 1000:.4g} mm 와 다릅니다 — 공칭을 실측 "
+                "칸에 적었을 수 있습니다. 이 시험은 파일 값을 씁니다.",
+            }
+        )
+    return found
+
+
+def _condition_mismatch(
+    db: Session, run: TestRun, test_type: TestType, parsed: ParsedTest, typed: dict[str, Any]
+) -> list[dict[str, str]]:
+    """파일이 말한 조건이 사람이 적은 것과 다르다 — 입력값을 쓰되 말한다(VOC 55, 속도 등).
+
+    전에는 이미 값이 있으면 파일 값을 말없이 버렸다(빈 칸만 채운다). 1 % 안의 차이는
+    반올림이다.
+    """
+    if not parsed.conditions:
+        return []
+    fields = {one.key: one for one in conditions.condition_fields(db, test_type.id)}
+    found = []
+    for key, raw in parsed.conditions.items():
+        mine, field = typed.get(key), fields.get(key)
+        if mine in (None, "") or field is None:
+            continue
+        if isinstance(mine, int | float) and field.si_unit:
+            try:
+                theirs = units.to_si(
+                    float(str(raw).strip().replace(",", ".")),
+                    parsed.condition_units.get(key) or field.si_unit,
+                )
+            except (ValueError, units.UnknownUnit):
+                continue
+            if abs(theirs - float(mine)) <= 0.01 * max(abs(float(mine)), 1e-30):
+                continue
+            shown = (run.input_units or {}).get(key) or field.si_unit
+            said = f"{units.from_si(theirs, shown):.4g} {shown}"
+            kept = f"{units.from_si(float(mine), shown):.4g} {shown}"
+        elif str(raw).strip() != str(mine).strip():
+            said, kept = str(raw).strip(), str(mine).strip()
+        else:
+            continue
+        found.append(
+            {
+                "code": "condition_mismatch",
+                "message": f"파일의 {field.label} {said} 가 입력한 {kept} 와 다릅니다 — "
+                "입력값을 씁니다. 다른 조건의 파일이거나 단위를 잘못 적었을 수 있습니다.",
+            }
+        )
+    return found
+
+
+def _orientation_mismatch(
+    db: Session, run: TestRun, parsed: ParsedTest
+) -> list[dict[str, str]]:
+    """파일이 말한 시편 방향이 이 시험의 시편과 다르다(VOC 55). 모르는 표기는 견주지 않는다."""
+    said = str(parsed.identity.get("specimen_orientation") or "").strip().upper()
+    specimen = db.get(Specimen, run.specimen_id)
+    if said not in ("MD", "TD", "DD", "NA") or specimen is None:
+        return []
+    if said == str(specimen.orientation or "").upper():
+        return []
+    return [
+        {
+            "code": "orientation_mismatch",
+            "message": f"파일의 시편 방향 {said} 가 이 시험의 시편({specimen.orientation})과 "
+            "다릅니다 — 다른 시편의 파일이거나 시편을 잘못 골랐을 수 있습니다.",
+        }
+    ]
+
+
+def _dimensionless_suspects(parsed: ParsedTest) -> list[dict[str, str]]:
+    """응력 · 탄성률 · 하중처럼 보이는데 **무차원**으로 읽힌 채널(VOC 53).
+
+    프로파일의 단위 칸이 비면 그 열은 무차원(`1`)이 된다. 정의에 있는 채널은 단위 검사가
+    막지만, 정의 밖 채널(장비가 계산한 저장 탄성률 등)은 그대로 들어와 숫자가 그럴듯한 채
+    쓰였다.
+    """
+    seen: dict[str, str] = {}
+    for curve in parsed.all_curves:
+        for channel in curve.channels:
+            name = f"{channel.key} {channel.label or ''}".lower()
+            if channel.si_unit == "1" and any(word in name for word in _FORCE_LIKE):
+                seen.setdefault(channel.key, channel.label or channel.key)
+    return [
+        {
+            "code": "dimensionless_channel",
+            "message": f"'{label}'({key}) 채널의 단위가 비어 무차원으로 읽혔습니다 — 응력 · "
+            "탄성률 · 하중이면 형식 프로파일에서 단위를 지정하세요.",
+        }
+        for key, label in seen.items()
     ]
 
 

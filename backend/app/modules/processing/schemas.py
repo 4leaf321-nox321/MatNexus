@@ -142,6 +142,19 @@ class StepFailureOut(BaseModel):
     단계)."""
 
 
+class ResultWarningOut(BaseModel):
+    """사람이 확인할 것 하나(2026-11-14, VOC 53~58) — 노트(무엇을 했나)와 다르다.
+
+    **채택할 때 확인을 받는다.** 경고가 있는 결과는 한 건 · 여러 건 채택에서 `confirm_warnings`
+    를 요구하고, 일괄 처리의 「바로 채택」 은 미룬다. 카드 근거에도 실린다."""
+
+    source: Literal["test", "step"]
+    """`test` 는 읽을 때 잰 시험 점검(원본과 기록이 다름), `step` 은 처리 단계가 낸 경고."""
+    label: str
+    """어디서 — 단계 이름, 시험 점검이면 「시험 점검」."""
+    message: str
+
+
 class ProcessingStageOut(BaseModel):
     """단계 하나가 끝난 시점. **근거가 여기 산다.**
 
@@ -158,6 +171,8 @@ class ProcessingStageOut(BaseModel):
     row_count: int
     columns: list[str]
     scalars: list[ProcessingScalarOut]
+    warnings: list[str] = []
+    """이 단계가 낸 경고 — 사람이 확인할 것(노트와 따로)."""
 
 
 class ProcessingRunRequest(BaseModel):
@@ -214,6 +229,8 @@ class ProcessingPreviewOut(BaseModel):
     **저장하면 부분 결과로 남는다**(2026-10-22) — 실패가 결과와 함께 남는다. 전에는 저장을
     막아 일괄 처리에서 멀쩡한 인장강도까지 잃었다(v1.285.0 보고)."""
     failures: list[StepFailureOut] = []
+    warnings: list[ResultWarningOut] = []
+    """저장하면 결과에 함께 남는 경고 — 시험 점검 + 단계 경고. 채택할 때 확인을 받는다."""
 
     stage_index: int | None = None
     """`points`·`columns`·`units` 가 **어느 단계의 것인가.** `None` 이면 마지막.
@@ -240,6 +257,8 @@ class ProcessingResultOut(BaseModel):
     scalars: list[ProcessingScalarOut]
     failures: list[StepFailureOut] = []
     """실패한 단계 — **비어 있지 않으면 부분 결과다.**"""
+    warnings: list[ResultWarningOut] = []
+    """사람이 확인할 것 — 있으면 채택할 때 확인을 받는다."""
     row_count: int
     columns: list[str]
     runtime: dict[str, str] = {}
@@ -354,6 +373,8 @@ class BatchItemOut(BaseModel):
     되돌리기가 그냥 풀어 버리면, 원래 있던 값까지 사라진다."""
     failures: list[StepFailureOut] = []
     """실패한 단계 — 비어 있지 않으면 **부분 결과로 저장했다**(`status` 는 `ok`)."""
+    warnings: list[ResultWarningOut] = []
+    """사람이 확인할 것 — 있으면 「바로 채택」 이어도 채택을 미룬다(`warning` 에 까닭)."""
     warning: str | None = None
     """부분 결과라 채택을 옮기지 않았을 때 그 이유 — 지금 채택된 값 중 이 결과에 없는 것."""
 
@@ -483,6 +504,8 @@ class ResultBriefOut(BaseModel):
     scalars: list[ProcessingScalarOut]
     failures: list[StepFailureOut] = []
     """실패한 단계 — 비어 있지 않으면 부분 결과다."""
+    warnings: list[ResultWarningOut] = []
+    """사람이 확인할 것 — 채택 검토대가 채택 전에 보여 주고 확인을 받는다."""
 
 
 class RunCurveOut(BaseModel):
@@ -541,6 +564,9 @@ class AdoptManyItem(BaseModel):
 
 class AdoptManyRequest(BaseModel):
     items: list[AdoptManyItem] = Field(min_length=1, max_length=OVERVIEW_MAX)
+    confirm_warnings: bool = False
+    """경고가 있는 결과도 채택한다 — 사람이 그 경고를 봤다는 뜻이다. 안 주면 그 줄은 실패로
+    돌아온다(무엇을 확인해야 하는지와 함께)."""
 
 
 class AdoptManyItemOut(BaseModel):

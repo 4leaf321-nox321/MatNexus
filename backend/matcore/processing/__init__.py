@@ -145,6 +145,11 @@ class StepResult:
     frame: Frame
     notes: tuple[str, ...] = ()
     scalars: tuple[Scalar, ...] = ()
+    #: **사람이 확인해야 하는 것**(2026-11-14, VOC 53~58). 노트는 「무엇을 했나」 의 근거이고,
+    #: 경고는 「이 값을 물성으로 삼기 전에 볼 것」 이다 — 결과와 함께 저장되고, 채택할 때
+    #: 확인을 받고, 카드 근거에 실린다. 노트에 섞어 두면 화면에만 뜨고 채택 · 카드에서
+    #: 사라졌다.
+    warnings: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -167,6 +172,7 @@ class Stage:
     frame: Frame
     notes: tuple[str, ...]
     scalars: tuple[Scalar, ...]
+    warnings: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -209,6 +215,10 @@ class PipelineResult:
     @property
     def notes(self) -> tuple[str, ...]:
         return tuple(note for stage in self.stages for note in stage.notes)
+
+    @property
+    def warnings(self) -> tuple[str, ...]:
+        return tuple(one for stage in self.stages for one in stage.warnings)
 
 
 def apply(
@@ -297,6 +307,7 @@ def apply(
                 frame=result.frame,
                 notes=result.notes,
                 scalars=result.scalars,
+                warnings=result.warnings,
             )
         )
         for scalar in result.scalars:

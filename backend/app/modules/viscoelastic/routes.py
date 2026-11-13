@@ -103,7 +103,11 @@ def list_sweeps(
     입력칸에 숫자를 치게 두면 없는 온도를 적고 나서 오류를 본다.
     """
     run = get_run(db, user, test_run_id)
-    sweeps, used, warnings, basis = services.sweeps_of(db, run)
+    # **램프도 목록에는 싣는다** — 표시를 달아 사람이 고를 수 있게(기본 후보에서는 빠진다).
+    spreads: dict[str, float] = {}
+    sweeps, used, warnings, basis = services.sweeps_of(
+        db, run, include_ramps=True, spreads=spreads
+    )
     labels = {item.key: item.label for item in services.measured_curves(db, run.id)}
     return SweepListOut(
         items=[
@@ -114,6 +118,8 @@ def list_sweeps(
                 point_count=len(sweep.frequency_hz),
                 minimum_frequency_hz=float(sweep.frequency_hz[0]),
                 maximum_frequency_hz=float(sweep.frequency_hz[-1]),
+                temperature_spread_k=spreads.get(key, 0.0),
+                is_ramp=spreads.get(key, 0.0) > services.RAMP_SPREAD_LIMIT,
             )
             for key, sweep in zip(used, sweeps, strict=True)
         ],

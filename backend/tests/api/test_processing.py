@@ -761,6 +761,110 @@ class Test미리보기:
         assert "폭 12.12 mm(시편 실측)" in note
 
 
+class Test경고는_채택에서_확인을_받는다:
+    """**경고가 화면에만 뜨면 채택 · 카드에서 사라진다**(2026-11-14, VOC 53~58).
+
+    결과는 시험 점검 + 단계 경고를 함께 남긴다. 한 건 · 여러 건 채택은 `confirm_warnings` 를
+    요구하고, 일괄 처리의 「바로 채택」 은 미룬다 — 사람과 AI 에 같은 규칙이다.
+    """
+
+    CHECK: ClassVar[dict[str, str]] = {
+        "code": "condition_mismatch",
+        "message": "파일의 시험 속도 5 mm/min 가 입력한 10 mm/min 와 다릅니다 — 입력값을 "
+        "씁니다.",
+    }
+
+    @pytest.fixture
+    def checked(self, run_id: str, db: Session) -> str:
+        run = db.get(TestRun, uuid.UUID(run_id))
+        assert run is not None
+        run.checks = [self.CHECK]
+        db.commit()
+        return run_id
+
+    def _save(self, client: TestClient, headers: dict[str, str], run_id: str) -> Any:
+        saved = client.post(
+            "/api/processing/results",
+            json={"test_run_id": run_id, "steps": STEPS},
+            headers=headers,
+        )
+        assert saved.status_code == 201, saved.text
+        return saved.json()
+
+    def test_결과가_처리한_그때의_시험_점검을_든다(
+        self, client: TestClient, admin_headers: dict[str, str], checked: str, db: Session
+    ) -> None:
+        preview = client.post(
+            "/api/processing/preview",
+            json={"test_run_id": checked, "steps": STEPS},
+            headers=admin_headers,
+        ).json()
+        assert [one["source"] for one in preview["warnings"]] == ["test"]
+        body = self._save(client, admin_headers, checked)
+        assert body["warnings"][0]["message"] == self.CHECK["message"]
+        # 시험을 다시 읽어 점검이 사라져도 결과는 그때의 것을 든다(결과는 불변).
+        run = db.get(TestRun, uuid.UUID(checked))
+        assert run is not None
+        run.checks = []
+        db.commit()
+        again = client.get(
+            "/api/processing/results", params={"test_run_id": checked}, headers=admin_headers
+        ).json()
+        assert again[0]["warnings"][0]["message"] == self.CHECK["message"]
+
+    def test_한_건_채택은_확인을_요구한다(
+        self, client: TestClient, admin_headers: dict[str, str], checked: str
+    ) -> None:
+        result = self._save(client, admin_headers, checked)
+        refused = client.post(
+            f"/api/processing/results/{result['id']}/adopt", headers=admin_headers
+        )
+        assert refused.status_code == 409, refused.text
+        assert refused.json()["error"]["code"] == "MNX-PROCESSING-0020"
+        assert "시험 속도" in refused.json()["error"]["message"]
+        took = client.post(
+            f"/api/processing/results/{result['id']}/adopt",
+            params={"confirm_warnings": True},
+            headers=admin_headers,
+        )
+        assert took.status_code == 200, took.text
+
+    def test_여러_건_채택도_같은_규칙이다(
+        self, client: TestClient, admin_headers: dict[str, str], checked: str
+    ) -> None:
+        result = self._save(client, admin_headers, checked)
+        items = [{"test_run_id": checked, "result_id": result["id"]}]
+        refused = client.post(
+            "/api/processing/adopt-many", json={"items": items}, headers=admin_headers
+        ).json()
+        assert refused["items"][0]["status"] == "failed"
+        assert "경고" in refused["items"][0]["error"]
+        took = client.post(
+            "/api/processing/adopt-many",
+            json={"items": items, "confirm_warnings": True},
+            headers=admin_headers,
+        ).json()
+        assert took["items"][0]["status"] == "ok"
+
+    def test_일괄_처리는_채택을_미룬다(
+        self, client: TestClient, admin_headers: dict[str, str], checked: str, db: Session
+    ) -> None:
+        body = {"test_run_ids": [checked], "steps": STEPS, "adopt": True}
+        dry = client.post(
+            "/api/processing/batch", json={**body, "dry_run": True}, headers=admin_headers
+        ).json()
+        assert "채택은 미룹니다" in dry["items"][0]["warning"]
+        done = client.post("/api/processing/batch", json=body, headers=admin_headers).json()
+        row = done["items"][0]
+        assert row["status"] == "ok" and row["adopted"] is False
+        assert "미뤘습니다" in row["warning"]
+        assert row["warnings"][0]["source"] == "test"
+        run = db.get(TestRun, uuid.UUID(checked))
+        assert run is not None
+        db.refresh(run)
+        assert run.adopted_result_id is None
+
+
 class Test레시피_계보:
     """결과가 **어느 레시피로** 나왔나(2026-10-03, 이슈 #2).
 

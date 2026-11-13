@@ -418,6 +418,29 @@ class Test시험이_자기_치수를_든다:
         warning = stored.source_metadata["_warnings"]
         assert "두께 '0.986'(단위 없음)" in warning
 
+    def test_공칭을_실측_칸에_적었으면_점검에_남긴다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str], seeded: None
+    ) -> None:
+        """시편의 「실측」 이 규격 공칭과 똑같은데 파일이 잰 값과 다르다(VOC 56) — 개발 DB
+        24건이 공칭 12.5 · 1.0 mm 를 실측 칸에 들고 있었다. 0.5 % 안의 차이는 말하지 않는다."""
+        made = make_standard(client, admin_headers, "공칭 있음", attributes={})
+        term = db.get(VocabularyTerm, uuid.UUID(made["id"]))
+        assert term is not None
+        term.attributes = {**(term.attributes or {}), "thickness": 0.001, "width": 0.0125}
+        specimen = make_specimen(client, admin_headers, standard="공칭 있음")
+        stored = db.get(Specimen, uuid.UUID(specimen["id"]))
+        assert stored is not None
+        stored.dimensions = {"thickness": 0.001, "width": 0.0125}  # 공칭을 그대로 옮겨 적음
+        db.commit()
+
+        run = self.upload(client, admin_headers, db, specimen["id"])
+        saved = db.get(TestRun, uuid.UUID(run["id"]))
+        assert saved is not None
+        found = [one for one in saved.checks if one["code"] == "dimension_nominal_as_measured"]
+        # 두께 1.0 vs 파일 0.986(1.4 %)만 — 폭 12.5 vs 12.473(0.2 %)은 반올림이다.
+        assert len(found) == 1, saved.checks
+        assert "두께 1 mm" in found[0]["message"] and "0.986 mm" in found[0]["message"]
+
     def test_시편에_적힌_값보다_먼저다(
         self, client: TestClient, db: Session, admin_headers: dict[str, str], seeded: None
     ) -> None:

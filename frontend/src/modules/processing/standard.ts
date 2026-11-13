@@ -17,6 +17,9 @@
  * 이 목록의 순서에는 이유가 있다.
  *
  *   1. 공칭 — 변위·하중을 응력·변형률로. 시편 치수가 여기서 들어온다.
+ *   1½. 파단 뒤 자르기 — **기록 순서가 남아 있을 때** 파단 뒤 점을 버린다(2026-11-14, VOC 57).
+ *      정렬은 기록 순서를 버린다 — 신율계가 되튄 점이 곡선 안쪽에 끼어들고, 단조 보정이 그
+ *      하강을 덮었다. 파단 뒤에도 적는 장비에서는 관측 최대 변형률이 파단 뒤 변형률이 됐다.
  *   2. 정렬 — 보간과 교점 계산이 정렬을 전제한다.
  *   3. 강도 — 인장강도와 그 자리.
  *   4. 탄성계수 — 항복강도와 진소성이 이 값을 쓴다.
@@ -67,6 +70,8 @@ export const TENSILE_STANDARD: RecipeStep[] = [
     // 시편 치수는 곡선에 없다. `@` 가 그 다리를 놓는다.
     options: { gauge_length: '@specimen_gauge_length', area: '@specimen_area' },
   },
+  // **정렬 앞이다** — 정렬하면 어느 점이 파단 뒤인지 알 수 없다.
+  { plugin: 'tensile.break_cut', options: {} },
   {
     plugin: 'curve.sort_unique',
     options: { x: 'strain_engineering', duplicate_policy: 'mean' },

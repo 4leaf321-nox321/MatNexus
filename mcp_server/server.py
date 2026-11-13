@@ -5620,6 +5620,10 @@ async def run_batch_processing(
             for one in item.get("failures") or []:
                 reason = f"부분 결과 — {(one.get('message') or '').strip()}"
                 grouped.setdefault(reason, []).append(name)
+            # 확인할 경고(2026-11-14) — 「바로 채택」 이어도 서버가 채택을 미룬다.
+            for one in item.get("warnings") or []:
+                reason = f"경고 — {one.get('label')}: {(one.get('message') or '').strip()}"
+                grouped.setdefault(reason, []).append(name)
             continue
         reason = (item.get("error") or "이유 없음").strip()
         grouped.setdefault(reason, []).append(name)
@@ -5634,6 +5638,14 @@ async def run_batch_processing(
             f"{answer.get('failed')}건이 안 됐습니다. **사유별로 묶어 뒀습니다** — "
             "구간을 넓혀 다시 돌리지 말고, 무엇이 왜 막혔는지 사람에게 옮기세요."
         )
+    warned = sum(1 for item in answer["items"] if item.get("warnings"))
+    if warned:
+        answer["note"] = (
+            answer.get("note", "")
+            + f" 확인할 경고가 있는 결과 {warned}건"
+            + (" — 채택은 미뤘습니다" if adopt else "")
+            + ". 경고를 사람에게 옮기고, 채택은 adopt_results 로 확인받아 하세요."
+        ).strip()
     return answer
 
 
@@ -6717,6 +6729,7 @@ async def save_test_type(
 #: 남아 탄성계수가 안 나온다(실측 2026-09-11: 실제 곡선 5건 전부 그랬다).
 TENSILE_STANDARD: tuple[str, ...] = (
     "tensile.engineering",
+    "tensile.break_cut",
     "curve.sort_unique",
     "tensile.strength",
     "tensile.elastic_modulus",
@@ -7283,6 +7296,8 @@ async def list_processing_results(ctx: Context, test_run_id: str) -> dict[str, A
                 }
                 for value in one.get("scalars") or []
             ],
+            # 사람이 확인할 것(시험 점검 · 단계 경고) — 채택할 때 확인을 받는다(2026-11-14).
+            **({"warnings": _warning_lines(one)} if one.get("warnings") else {}),
         }
         for one in results or []
     ]
@@ -7295,13 +7310,25 @@ async def list_processing_results(ctx: Context, test_run_id: str) -> dict[str, A
     }
 
 
+def _warning_lines(result: dict[str, Any]) -> list[str]:
+    """처리 결과의 경고를 한 줄씩 — 「어디서: 무엇」."""
+    return [
+        f"{one.get('label') or ''}: {one.get('message') or ''}".strip(": ")
+        for one in result.get("warnings") or []
+        if isinstance(one, dict)
+    ]
+
+
 #: 한 번에 채택을 바꾸는 시험 수. 서버 상한(200)보다 작게 — 미리보기가 시험마다 한 번씩 읽는다.
 ADOPT_MAX = 50
 
 
 @mcp.tool()
 async def adopt_results(
-    ctx: Context, items: list[dict[str, Any]], dry_run: bool = True
+    ctx: Context,
+    items: list[dict[str, Any]],
+    dry_run: bool = True,
+    confirm_warnings: bool = False,
 ) -> dict[str, Any]:
     """처리 결과를 **채택**한다 — 시험마다 어느 결과를 그 시험의 값으로 삼을지.
 
@@ -7310,6 +7337,9 @@ async def adopt_results(
     기본이 미리보기(시험마다 `current` → `next` 와 값) — **사람에게 보이고 「그대로」 를 들은 뒤**
     `dry_run=False`. 채택된 값이 통계 · 카드 · 덱으로 간다. 되돌리기: 줄마다 온
     `previous_adopted_id` 를 다시 보낸다. 막힌 줄만 `error` 가 온다(권한은 서버가 판정).
+
+    **경고(`warnings`)가 있는 줄은 서버가 확인 없이는 막는다** — 경고 문장을 그대로 사람에게
+    옮기고, 사람이 그래도 채택한다고 했을 때만 `confirm_warnings=True`. 스스로 켜지 마라.
     """
     if not items:
         return {"error": "items 가 비어 있습니다."}
@@ -7348,17 +7378,31 @@ async def adopt_results(
                 {"key": v.get("key"), "value": v.get("value"), "unit": v.get("si_unit")}
                 for v in chosen.get("scalars") or []
             ]
+            if chosen.get("warnings"):
+                row["warnings"] = _warning_lines(chosen)
         plan.append(row)
     if dry_run:
+        warned = sum(1 for row in plan if row.get("warnings"))
         return {
             "dry_run": True,
             "plan": plan,
             "note": "이 표를 사람에게 보이고 확인받은 뒤 dry_run=False 로 다시 부르세요. "
-            "result_id 가 null 인 줄은 채택을 거둡니다.",
+            "result_id 가 null 인 줄은 채택을 거둡니다."
+            + (
+                f" 경고가 있는 줄 {warned}건 — 경고를 그대로 보이고, 사람이 그래도 채택한다고 하면 "
+                "confirm_warnings=True 로 부르세요(안 주면 그 줄은 막힙니다)."
+                if warned
+                else ""
+            ),
         }
     if not payload:
         return {"error": "채택할 시험을 하나도 못 찾았습니다.", "plan": plan}
-    done = await _send(ctx, "POST", "/processing/adopt-many", {"items": payload})
+    done = await _send(
+        ctx,
+        "POST",
+        "/processing/adopt-many",
+        {"items": payload, "confirm_warnings": bool(confirm_warnings)},
+    )
     if isinstance(done, dict) and "error" in done:
         return done
     return {

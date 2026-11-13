@@ -190,6 +190,37 @@ describe('기본으로 고르는 것', () => {
   })
 })
 
+describe('경고가 있는 결과', () => {
+  // 2026-11-14(VOC 53~58): 경고는 결과와 함께 남고, 채택할 때 확인을 받는다 — 사람과 AI 가 같다.
+  it('확인 대화에 경고를 적고, 확인하면 확인과 함께 보낸다', async () => {
+    overview.mockResolvedValue([
+      runOf('1', [
+        result('r1', 150, {
+          warnings: [
+            { source: 'step', label: '인장강도·연신율', message: '상 · 하항복 차이 6.1 %' },
+          ],
+        }),
+      ]),
+      runOf('2', [result('r2', 152)]),
+    ])
+    render(
+      <MemoryRouter>
+        <AdoptionBoard testRunIds={['1', '2']} />
+      </MemoryRouter>
+    )
+    // 보고 있는 시험(첫 줄)의 자세히 보기에 경고가 선다 — 데이터로 그려진 것을 기다린다.
+    expect(await screen.findByText(/상 · 하항복 차이 6.1 %/)).toBeInTheDocument()
+    await rowOf('시편-1')
+    await userEvent.click(screen.getByRole('button', { name: '고른 2건 채택' }))
+    const dialog = within(await screen.findByRole('dialog'))
+    expect(dialog.getByText(/경고가 있는 결과 1건/)).toBeInTheDocument()
+    expect(dialog.getByText(/상 · 하항복 차이 6.1 %/)).toBeInTheDocument()
+    await userEvent.click(dialog.getByRole('button', { name: '채택' }))
+    await waitFor(() => expect(adoptMany).toHaveBeenCalledTimes(1))
+    expect(adoptMany.mock.calls[0][1]).toBe(true)
+  })
+})
+
 describe('누르기 전에 세고, 누른 뒤 되돌린다', () => {
   it('새로 · 바꿈 · 문턱 넘은 것을 세어 묻는다', async () => {
     show()

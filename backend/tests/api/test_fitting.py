@@ -27,8 +27,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.modules.fitting.routes import NO_TEST
+from app.modules.materials.models import Sample, Specimen
+from app.modules.processing.models import ProcessingResult
 from app.modules.tests import services
 from app.modules.tests.definitions import ensure_builtin_test_types
+from app.modules.tests.models import TestRun
 
 TRA = Path(__file__).resolve().parents[1] / "fixtures" / "Example.tra"
 
@@ -263,6 +266,58 @@ class Test미리보기:
         assert body["sample_count"] == 1
         assert body["fits"], "1건이어도 적합은 된다"
         assert any("시편 1개" in note for note in body["notes"])
+
+
+class Test카드_근거의_경고:
+    """**처리 경고가 카드까지 따라온다**(2026-11-14, VOC 53~58) — 막지 않고 근거에 남긴다."""
+
+    def test_채택_결과의_경고와_시편마다_다른_속도를_싣는다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        ready: dict[str, Any],
+        db: Session,
+    ) -> None:
+        runs = list(
+            db.scalars(
+                select(TestRun)
+                .join(Specimen, Specimen.id == TestRun.specimen_id)
+                .join(Sample, Sample.id == Specimen.sample_id)
+                .where(Sample.material_id == uuid.UUID(ready["id"]))
+            )
+        )
+        assert len(runs) == 3
+        first = db.get(ProcessingResult, runs[0].adopted_result_id)
+        assert first is not None
+        first.warnings = [
+            {"source": "step", "label": "인장강도·연신율", "message": "상 · 하항복 차이 6 %"}
+        ]
+        for run, speed in zip(runs, (1e-4, 1e-4, 2e-4), strict=True):
+            run.conditions = {**(run.conditions or {}), "speed_plastic": speed}
+        db.commit()
+
+        body = {"material_id": ready["id"], "test_type_key": "tensile", "orientation": "MD"}
+        preview = client.post("/api/fitting/preview", json=body, headers=admin_headers).json()
+        messages = [one["message"] for one in preview["warnings"]]
+        assert "상 · 하항복 차이 6 %" in messages
+        assert any("시편마다 다릅니다" in one for one in messages), messages
+        named = next(one for one in preview["warnings"] if one["message"].startswith("상"))
+        assert named["record_name"] == runs[0].record_name
+
+        card = client.post(
+            "/api/fitting/cards",
+            json={**body, "label": "경고 실은 카드"},
+            headers=admin_headers,
+        )
+        assert card.status_code == 201, card.text
+        assert [one["message"] for one in card.json()["source"]["warnings"]] == messages
+
+    def test_경고가_없으면_비어_있다(
+        self, client: TestClient, admin_headers: dict[str, str], ready: dict[str, Any]
+    ) -> None:
+        body = {"material_id": ready["id"], "test_type_key": "tensile", "orientation": "MD"}
+        preview = client.post("/api/fitting/preview", json=body, headers=admin_headers).json()
+        assert preview["warnings"] == []
 
 
 class Test물성카드:

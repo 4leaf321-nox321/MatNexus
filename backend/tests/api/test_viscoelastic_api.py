@@ -26,9 +26,10 @@ from sqlalchemy.orm import Session
 from app.modules.tests import services as test_services
 from app.modules.tests.definitions import ensure_builtin_test_types
 from app.modules.tests.legacy_profiles import ensure_builtin_format_profiles
-from app.modules.tests.models import FormatProfile
+from app.modules.tests.models import FormatProfile, TestRun
 from app.modules.viscoelastic import services
 from app.modules.viscoelastic.models import ModulusTable
+from app.shared import curvedata
 from matcore import cards, export
 from matcore.registry import Produced
 
@@ -152,6 +153,92 @@ class Test겹칠_후보:
         for item in found["items"]:
             assert item["minimum_frequency_hz"] > 0
             assert item["maximum_frequency_hz"] > item["minimum_frequency_hz"]
+
+
+class Test램프와_이름_온도:
+    """**온도 램프는 기본 후보가 아니다**(2026-11-14, VOC 53).
+
+    전에는 흔들림 경고만 하고 중앙값을 써서, -40 °C 부터 오르는 램프가 「60 °C 스윕」 으로 하나
+    더 겹쳐졌다. 사람이 곡선을 고르면 넣는다. 곡선 이름의 온도와 측정 온도가 다르면 말한다.
+    """
+
+    @pytest.fixture
+    def ramped(
+        self, dma_run: dict[str, Any], db: Session, monkeypatch: pytest.MonkeyPatch
+    ) -> tuple[str, str]:
+        """측정 스윕 하나의 온도를 -40 → 60 °C 램프로 바꿔 읽게 한다(곡선 파일은 그대로)."""
+        run = db.get(TestRun, uuid.UUID(dma_run["id"]))
+        assert run is not None
+        target = sorted(one.key for one in services.measured_curves(db, run.id))[0]
+        original = curvedata.load_frame
+
+        def load(db_: Session, run_: Any, key: str | None) -> Any:
+            frame, curve = original(db_, run_, key)
+            if key != target:
+                return frame, curve
+            ramp = np.linspace(233.15, 333.15, frame.length())
+            return type(frame)(
+                {**frame.columns, "temperature": ramp}, dict(frame.units)
+            ), curve
+
+        monkeypatch.setattr(curvedata, "load_frame", load)
+        return dma_run["id"], target
+
+    def test_목록은_램프에_표시를_달고_겹치기는_뺀다(
+        self, client: TestClient, admin_headers: dict[str, str], ramped: tuple[str, str]
+    ) -> None:
+        run_id, target = ramped
+        listed = client.get(
+            f"/api/viscoelastic/runs/{run_id}/sweeps", headers=admin_headers
+        ).json()
+        flags = {one["curve_key"]: one["is_ramp"] for one in listed["items"]}
+        assert flags[target] is True and sum(flags.values()) == 1
+
+        reference = next(one["temperature_k"] for one in listed["items"] if not one["is_ramp"])
+        made = client.post(
+            f"/api/viscoelastic/runs/{run_id}/master-curves",
+            json={"reference_temperature_k": reference, "method": "wlf"},
+            headers=admin_headers,
+        )
+        assert made.status_code == 201, made.text
+        assert target not in made.json()["source_curve_keys"]
+        assert any("램프로 보여" in note for note in made.json()["notes"])
+
+    def test_사람이_고르면_램프도_겹친다(
+        self, client: TestClient, admin_headers: dict[str, str], ramped: tuple[str, str]
+    ) -> None:
+        run_id, target = ramped
+        items = client.get(
+            f"/api/viscoelastic/runs/{run_id}/sweeps", headers=admin_headers
+        ).json()["items"]
+        keys = [one["curve_key"] for one in items]
+        reference = next(one["temperature_k"] for one in items if not one["is_ramp"])
+        made = client.post(
+            f"/api/viscoelastic/runs/{run_id}/master-curves",
+            json={"reference_temperature_k": reference, "method": "wlf", "curve_keys": keys},
+            headers=admin_headers,
+        )
+        assert made.status_code == 201, made.text
+        assert target in made.json()["source_curve_keys"]
+
+    def test_이름의_온도가_측정과_다르면_말한다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        dma_run: dict[str, Any],
+        db: Session,
+    ) -> None:
+        run = db.get(TestRun, uuid.UUID(dma_run["id"]))
+        assert run is not None
+        curve = sorted(services.measured_curves(db, run.id), key=lambda one: one.key)[0]
+        curve.label = "Freq sweep 60°C"  # 실제로는 -40 °C 언저리에서 잰 곡선
+        db.commit()
+        listed = client.get(
+            f"/api/viscoelastic/runs/{dma_run['id']}/sweeps", headers=admin_headers
+        ).json()
+        assert any("이름의 온도 60 °C" in one for one in listed["warnings"]), listed[
+            "warnings"
+        ]
 
 
 class Test마스터커브:

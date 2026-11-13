@@ -57,6 +57,7 @@ import type { StatisticsGroup } from '@/modules/statistics/api'
 import { CurveChart } from '@/modules/tests/CurveChart'
 import { ApiError } from '@/shared/api/client'
 import { CreatedOn } from '@/shared/components/CreatedOn'
+import { WarningList } from '@/shared/components/WarningList'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { Badge } from '@/shared/components/ui/badge'
 import { AskDialog, askedMessage } from '@/shared/components/AskDialog'
@@ -911,6 +912,13 @@ function FitComparison({
             얼마나 물러섰는지 견줘 보세요.
           </p>
         )}
+
+        {/* 근거 시험들의 경고 — 저장하면 카드 근거에 그대로 남는다(2026-11-14). */}
+        <WarningList
+          title="근거 시험의 경고 — 카드에 남음"
+          className="text-xs"
+          items={preview.warnings ?? []}
+        />
 
         {preview.notes.length > 0 && (
           <ul className="text-muted-foreground space-y-1 text-xs">

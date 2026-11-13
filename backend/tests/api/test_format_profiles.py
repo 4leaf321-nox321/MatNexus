@@ -2076,6 +2076,70 @@ class Test파일이_시험_조건을_채운다:
         assert saved.input_units["reference_temperature"] == "degC"
         assert saved.input_units["preload"] == "kN"
 
+    def test_파일의_조건이_입력과_다르면_점검에_남긴다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        told: None,
+        specimen: dict[str, Any],
+        db: Session,
+    ) -> None:
+        """입력값을 쓰되 말한다(VOC 55) — 전에는 파일 값을 말없이 버렸다. 1 % 안은
+        반올림이다."""
+        del told
+        response = client.post(
+            "/api/test-runs",
+            data={
+                "specimen_id": specimen["id"],
+                "test_type": "dma_sweep",
+                # 파일은 지그 「3 Point Bending Clamp」 · 예하중 1 kN 이라고 말한다.
+                "conditions": json.dumps({"clamp": "내가 적은 지그", "preload": 2}),
+                "condition_units": json.dumps({"preload": "kN"}),
+            },
+            files={"file": ("Example FreqTemp.csv", FREQ_TEMP.read_bytes())},
+            headers=admin_headers,
+        )
+        assert response.status_code == 202, response.text
+        run_id = uuid.UUID(response.json()["id"])
+        assert services.parse_run(db, run_id) == "parsed"
+        saved = db.get(TestRun, run_id)
+        assert saved is not None
+        assert saved.conditions["preload"] == pytest.approx(2000.0)  # 입력값을 쓴다
+        messages = [
+            one["message"] for one in saved.checks if one["code"] == "condition_mismatch"
+        ]
+        assert any("1 kN" in one and "2 kN" in one for one in messages), messages
+        assert any("3 Point Bending Clamp" in one for one in messages), messages
+        # 시험 화면의 읽기 경고에도 같은 말이 선다.
+        detail = client.get(f"/api/test-runs/{run_id}", headers=admin_headers).json()
+        assert any("입력값을 씁니다" in one for one in detail["warnings"])
+
+    def test_같은_조건이면_조용하다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        told: None,
+        specimen: dict[str, Any],
+        db: Session,
+    ) -> None:
+        del told
+        response = client.post(
+            "/api/test-runs",
+            data={
+                "specimen_id": specimen["id"],
+                "test_type": "dma_sweep",
+                "conditions": json.dumps({"preload": 1000.5}),
+                "condition_units": json.dumps({"preload": "N"}),
+            },
+            files={"file": ("Example FreqTemp.csv", FREQ_TEMP.read_bytes())},
+            headers=admin_headers,
+        )
+        run_id = uuid.UUID(response.json()["id"])
+        assert services.parse_run(db, run_id) == "parsed"
+        saved = db.get(TestRun, run_id)
+        assert saved is not None
+        assert not [one for one in saved.checks if one["code"] == "condition_mismatch"]
+
     def test_조건이_안_맞아도_곡선은_들어온다(
         self,
         client: TestClient,
@@ -2327,3 +2391,19 @@ class Test지운_프로파일:
         response = client.delete("/api/formats/ta_dma850", headers=admin_headers)
         assert response.status_code == 409, response.text
         assert "시험" in response.json()["error"]["message"]
+
+
+def test_응력처럼_보이는_무차원_채널을_점검에_남긴다() -> None:
+    """단위 칸이 비면 그 열은 무차원이 된다(VOC 53) — 정의 밖 채널은 단위 검사도 안 받았다."""
+    from matcore.parsers import Channel, ParsedTest
+
+    parsed = ParsedTest(
+        channels=(
+            Channel(key="storage_modulus", label="E'", si_unit="1", values=(1.0, 2.0)),
+            Channel(key="strain", label="탄성 변형률", si_unit="1", values=(0.0, 0.1)),
+            Channel(key="force", label="Force", si_unit="N", values=(1.0, 2.0)),
+        )
+    )
+    found = services._dimensionless_suspects(parsed)
+    assert [one["code"] for one in found] == ["dimensionless_channel"]
+    assert "storage_modulus" in found[0]["message"]

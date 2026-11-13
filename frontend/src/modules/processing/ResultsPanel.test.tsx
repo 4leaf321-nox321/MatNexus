@@ -244,3 +244,43 @@ describe('결과 펼치기', () => {
     expect(legend.getByText(/^탄성 직선 E/)).toBeInTheDocument()
   })
 })
+
+describe('경고가 있는 결과', () => {
+  // 2026-11-14(VOC 53~58): 경고가 화면에만 뜨고 채택 · 카드에서 사라졌다. 서버도 확인 없이는
+  // 409 로 막는다 — 여기서는 그 확인을 사람이 읽을 수 있는 대화로 받는지 본다.
+  it('채택하기 전에 경고를 보이고, 확인하면 확인과 함께 채택한다', async () => {
+    const { processingApi } = await import('@/modules/processing/api')
+    results.mockResolvedValue([
+      {
+        ...RESULT,
+        warnings: [
+          {
+            source: 'test',
+            label: '시험 점검',
+            message: '파일의 시험 속도 5 mm/min 가 입력한 10 mm/min 와 다릅니다',
+          },
+        ],
+      },
+    ])
+    const user = userEvent.setup()
+    render(<ResultsPanel testRunId="run-1" />)
+    expect(await screen.findByText('경고 1')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /채택/ }))
+    const dialog = within(await screen.findByRole('dialog'))
+    expect(dialog.getByText(/시험 속도 5 mm\/min/)).toBeInTheDocument()
+    expect(processingApi.adopt).not.toHaveBeenCalled()
+
+    await user.click(dialog.getByRole('button', { name: '확인하고 채택' }))
+    await waitFor(() => expect(processingApi.adopt).toHaveBeenCalledWith('r1', true))
+  })
+
+  it('경고가 없으면 묻지 않고 채택한다', async () => {
+    const { processingApi } = await import('@/modules/processing/api')
+    const user = userEvent.setup()
+    render(<ResultsPanel testRunId="run-1" />)
+    await user.click(await screen.findByRole('button', { name: /채택/ }))
+    await waitFor(() => expect(processingApi.adopt).toHaveBeenCalledWith('r1', false))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+})

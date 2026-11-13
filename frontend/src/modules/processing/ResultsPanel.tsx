@@ -27,6 +27,7 @@ import { CurveChart } from '@/modules/tests/CurveChart'
 import { axisLabel, formatScalar, toDisplay } from '@/shared/units'
 import type { ProcessingResult } from '@/modules/processing/api'
 import { ConfirmDialog } from '@/shared/components/ConfirmDialog'
+import { WarningList } from '@/shared/components/WarningList'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
@@ -93,6 +94,8 @@ export function ResultsPanel({ testRunId, onAdoptChange }: Props) {
    * 수 있다.
    */
   const [removing, setRemoving] = useState<ProcessingResult | null>(null)
+  /** 경고가 있는 결과를 채택하려는 중 — 경고를 보이고 확인을 받는다(2026-11-14). */
+  const [confirming, setConfirming] = useState<ProcessingResult | null>(null)
 
   async function remove(item: ProcessingResult) {
     setBusy(true)
@@ -112,12 +115,19 @@ export function ResultsPanel({ testRunId, onAdoptChange }: Props) {
     }
   }
 
-  async function toggle(item: ProcessingResult) {
+  async function toggle(item: ProcessingResult, confirmed = false) {
+    // **경고가 있으면 먼저 보인다.** 서버도 확인 없이는 409 로 막는다 — 여기서 묻는 것은 그
+    // 409 를 사람이 읽을 수 있는 대화로 바꾸는 것이다.
+    if (!item.is_adopted && !confirmed && (item.warnings?.length ?? 0) > 0) {
+      setConfirming(item)
+      return
+    }
     setBusy(true)
     setError(null)
     try {
       if (item.is_adopted) await processingApi.unadopt(item.id)
-      else await processingApi.adopt(item.id)
+      else await processingApi.adopt(item.id, confirmed)
+      setConfirming(null)
       results.reload()
       onAdoptChange?.()
     } catch (caught) {
@@ -218,6 +228,15 @@ export function ResultsPanel({ testRunId, onAdoptChange }: Props) {
                       부분 결과 · 실패 {item.failures?.length}단계
                     </Badge>
                   )}
+                  {(item.warnings?.length ?? 0) > 0 && (
+                    <Badge
+                      variant="outline"
+                      className="border-amber-500/60 text-amber-700 dark:text-amber-400"
+                      title={item.warnings?.map((one) => one.message).join('\n')}
+                    >
+                      경고 {item.warnings?.length}
+                    </Badge>
+                  )}
                   <span className="text-muted-foreground text-xs">
                     {when(item.created_at)}
                   </span>
@@ -297,6 +316,7 @@ export function ResultsPanel({ testRunId, onAdoptChange }: Props) {
                         </div>
                       )}
 
+                      <WarningList items={item.warnings ?? []} className="mb-3" />
                       {/* **이 값이 무엇으로 나왔나.** 스냅샷이라 레시피가 나중에
                           바뀌어도 여기 적힌 것은 그대로다. */}
                       <ol className="space-y-1.5">
@@ -337,6 +357,27 @@ export function ResultsPanel({ testRunId, onAdoptChange }: Props) {
         갑니다. 견주려고 돌린 시도는 <b>지울 수 있습니다</b> — 채택된 것과 반복
         시편 통계의 근거로 실린 것은 지워지지 않습니다.
       </p>
+
+      <ConfirmDialog
+        open={confirming !== null}
+        title="경고를 확인하고 채택할까요?"
+        busy={busy}
+        confirmLabel="확인하고 채택"
+        undoable="채택은 언제든 거두거나 다른 결과로 바꿀 수 있습니다."
+        body={
+          confirming && (
+            <>
+              <WarningList items={confirming.warnings ?? []} />
+              <p className="mt-2">
+                채택하면 이 값이 요약값 · 통계 · 카드로 갑니다. 경고는 결과와 카드 근거에
+                그대로 남습니다.
+              </p>
+            </>
+          )
+        }
+        onConfirm={() => confirming && toggle(confirming, true)}
+        onClose={() => setConfirming(null)}
+      />
 
       {/* **무엇이 사라지는지 적는다.** 「정말 지울까요」 만으로는 사람이 어느
           줄을 눌렀는지 확인할 수 없다 — 결과는 되살릴 데가 없다. */}

@@ -17,6 +17,7 @@
 
 from __future__ import annotations
 
+import re
 import uuid
 from typing import Any
 
@@ -38,6 +39,28 @@ from matcore.parsers import Channel
 #: 0.1 K 안팎으로 흔들리는 것은 정상이고, 1 K 를 넘으면 등온이 아니다.
 TEMPERATURE_SPREAD_LIMIT = 1.0
 
+#: 한 곡선의 온도 폭이 이보다 크면 등온 스윕이 아니라 **온도 램프**다(K) — 마스터커브 후보에서
+#: 기본으로 뺀다(2026-11-14, VOC 53). 전에는 흔들림 경고만 하고 중앙값을 써서, -40 °C 부터
+#: 오르는 램프가 「60 °C 스윕」 으로 하나 더 겹쳐졌다. 1 K 를 넘으면 지금처럼 경고하고 넣는다.
+#: 15 K 인 이유: 형식 정의의 「온도 램프 나누기」 가 만든 준등온 구간(보통 5~10 K, HITACHI 보고
+#: 2026-10-20)은 겹치려고 나눈 것이라 넣고, 나누지 않은 램프(수십 K)만 뺀다.
+RAMP_SPREAD_LIMIT = 15.0
+
+#: 곡선 이름의 온도와 측정 온도 중앙값이 이보다 다르면 경고한다(K).
+LABEL_TEMPERATURE_TOLERANCE = 2.0
+
+#: 곡선 이름에 적힌 온도 — `60°C` · `-40 ℃` · `25degC` · `60C`.
+_NAMED_TEMPERATURE = re.compile(
+    r"(?<![\d.])(-?\d+(?:\.\d+)?)(?:\s*(?:°\s*C|℃|degC)|C\b)", re.IGNORECASE
+)
+
+
+def _named_temperature(name: str) -> float | None:
+    """곡선 이름에 적힌 온도(K). 없거나 둘 이상이면 `None` — 어느 것인지 모른다."""
+    found = _NAMED_TEMPERATURE.findall(name or "")
+    return float(found[0]) + 273.15 if len(found) == 1 else None
+
+
 #: 겹친 곡선의 점 수. 원래 스윕이 온도당 8점이라 넉넉히 잡아도 파일이 작다.
 MASTER_POINTS = 200
 
@@ -51,7 +74,12 @@ def _channel(columns: dict[str, np.ndarray], *names: str) -> np.ndarray | None:
 
 
 def sweeps_of(
-    db: Session, run: TestRun, curve_keys: list[str] | None = None
+    db: Session,
+    run: TestRun,
+    curve_keys: list[str] | None = None,
+    *,
+    include_ramps: bool = False,
+    spreads: dict[str, float] | None = None,
 ) -> tuple[list[viscoelastic.Sweep], list[str], list[str], str]:
     """시험의 측정 곡선을 스윕으로 바꾼다. `(스윕, 쓴 곡선 키, 경고, 탄성률 기준 E|G)`.
 
@@ -60,6 +88,10 @@ def sweeps_of(
 
     **저장 탄성률은 E′ 채널이든 G′ 채널이든 받는다**(2026-10-20, `MODULUS_PAIRS`). 한 시험에
     둘이 섞이면 막는다 — E 와 G 를 한 곡선으로 겹치면 어느 쪽도 아니다.
+
+    **온도 램프는 기본 후보가 아니다**(`RAMP_SPREAD_LIMIT`) — 사람이 곡선을
+    고르면(`curve_keys`) 넣는다. 목록 화면은 `include_ramps` 로 다 받아 램프에 표시를
+    단다(`spreads` 에 곡선마다 폭).
     """
     available = curvedata.curves_of(db, run.id)
     if not available:
@@ -113,16 +145,36 @@ def sweeps_of(
             frequency = angular / (2.0 * np.pi)
 
         spread = float(np.max(temperature) - np.min(temperature))
+        name = curve.label or curve.key
+        if spreads is not None:
+            spreads[curve.key] = spread
+        if spread > RAMP_SPREAD_LIMIT and not curve_keys and not include_ramps:
+            low = float(np.min(temperature)) - 273.15
+            high = float(np.max(temperature)) - 273.15
+            warnings.append(
+                f"'{name}' 은 온도가 {low:.4g}~{high:.4g} °C 로 {spread:.3g} K 변하는 램프로 "
+                "보여 마스터커브 후보에서 뺐습니다 — 등온 스윕이 아닙니다. 넣으려면 곡선을 "
+                "직접 고르세요."
+            )
+            continue
         if spread > TEMPERATURE_SPREAD_LIMIT:
             warnings.append(
-                f"'{curve.label or curve.key}' 의 온도가 {spread:.2f} K 흔들렸습니다 — "
+                f"'{name}' 의 온도가 {spread:.2f} K 흔들렸습니다 — "
                 f"등온 스윕이 아닐 수 있습니다. 중앙값을 썼습니다."
+            )
+        median = float(np.median(temperature))
+        named = _named_temperature(name)
+        if named is not None and abs(named - median) > LABEL_TEMPERATURE_TOLERANCE:
+            warnings.append(
+                f"'{name}' 이름의 온도 {named - 273.15:.4g} °C 와 측정 온도 중앙값 "
+                f"{median - 273.15:.4g} °C 가 다릅니다 — 측정 온도를 씁니다. 다른 온도의 "
+                "곡선이거나 이름이 틀렸을 수 있습니다."
             )
 
         order = np.argsort(frequency)
         sweeps.append(
             viscoelastic.Sweep(
-                temperature_k=float(np.median(temperature)),
+                temperature_k=median,
                 frequency_hz=frequency[order],
                 storage_pa=storage[order],
                 loss_pa=loss[order] if loss is not None else None,

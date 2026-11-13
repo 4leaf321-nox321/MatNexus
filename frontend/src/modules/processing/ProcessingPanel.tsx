@@ -99,6 +99,7 @@ import {
 } from '@/shared/units'
 import { BatchFromSteps } from '@/modules/processing/BatchFromSteps'
 import { RightPanel } from '@/shared/layout/SidePanel'
+import { WarningList } from '@/shared/components/WarningList'
 import { useResource } from '@/shared/hooks/useResource'
 
 interface Props {
@@ -1214,6 +1215,15 @@ export function ProcessingPanel({
                           ))}
                         </ul>
                       )}
+                      {/* **경고는 노트와 따로** — 저장하면 결과에 남고 채택할 때 확인을 받는다. */}
+                      {stage?.warnings?.map((warning) => (
+                        <p
+                          key={warning}
+                          className="border-l-2 border-amber-500 pl-2 text-xs text-amber-800 dark:text-amber-300"
+                        >
+                          {warning}
+                        </p>
+                      ))}
                       {failed && (
                         <p className="border-destructive text-destructive border-l-2 pl-2 text-xs">
                           {failed.stopped ? '여기서 멈췄습니다' : '이 단계만 건너뛰었습니다'} —{' '}
@@ -1422,6 +1432,11 @@ export function ProcessingPanel({
                   기록됩니다.
                 </p>
               )}
+              <WarningList
+                items={result.warnings ?? []}
+                title="저장하면 결과에 남는 경고 — 채택할 때 확인"
+                className="mb-2 text-xs"
+              />
 
               {/* **중간을 보고 있다는 것을 말한다.** 안 적으면 그 그림을
                   최종 결과로 읽고, 「값이 왜 다르지」 로 이어진다. 서버가

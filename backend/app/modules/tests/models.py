@@ -423,6 +423,15 @@ class TestRun(Base):
     밀도가 이미 같은 모양이다(시료 실측 → 재료 공칭). 그리고 그 셋 중 **어느
     것을 썼는지 화면이 말한다** — 값이 두 곳에 살면 "어느 게 맞느냐" 를 묻게
     되고, 답이 안 보이면 그 자리가 조용히 틀리는 자리가 된다."""
+    checks: Mapped[list[dict[str, str]]] = mapped_column(
+        JSONB, default=list, server_default="[]"
+    )
+    """읽을 때 잰 점검 `[{code, message}]` — 원본과 기록이 다른 것(2026-11-14, VOC 53 · 55 ·
+    56).
+
+    읽기 경고(`source_metadata._warnings`)에도 같은 문장이 서지만, 그것은 화면에만 뜨는 문자열
+    하나였다. 이 칸은 처리 결과로 옮겨 가 채택할 때 확인을 받고 카드 근거에 실린다. 다시 읽으면
+    새로 잰다."""
 
     parse_profile_id: Mapped[uuid.UUID | None] = mapped_column(
         PgUUID(as_uuid=True), ForeignKey("format_profiles.id"), index=True, nullable=True

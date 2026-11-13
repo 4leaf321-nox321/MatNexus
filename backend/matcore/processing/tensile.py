@@ -17,7 +17,9 @@
 
 from __future__ import annotations
 
+import dataclasses
 import math
+from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
@@ -1299,6 +1301,7 @@ def strength(frame: Frame, options: dict[str, Any]) -> StepResult:
             f"(변형률 {float(strain[peak]):.6g}, {peak + 1}번째 점). "
             f"연신율은 **관측 구간의 끝**이며 파단점이 아닙니다.",
         ),
+        warnings=_pre_peak_warnings(strain, stress, peak),
         scalars=(
             Scalar("tensile_strength", "인장강도", float(stress[peak]), "Pa"),
             Scalar(
@@ -1309,6 +1312,193 @@ def strength(frame: Frame, options: dict[str, Any]) -> StepResult:
             ),
         ),
     )
+
+
+#: 최대 응력 앞의 하강이 인장강도의 이 비율을 넘으면 경고한다(2026-11-14, VOC 57). 뒤의 단조
+#: 보정(`curve.monotone`)이 그 하강을 덮어, 카드 · 덱에서는 하강이 있었다는 흔적이 사라진다.
+#: **잠정값이다** — `scripts/measure_curve_drops.py` 로 운영 곡선의 분포를 보고 정한다.
+PRE_PEAK_DROP_WARN = 0.005
+
+#: 상 · 하항복 차이가 상항복의 이 비율을 넘으면 항복점 현상으로 보고 경고한다. 잠정값(위와
+#: 같다).
+YIELD_POINT_WARN = 0.025
+
+#: 다시 오르지 않는 하강도 잡음 σ 의 이 배보다는 커야 한다 — 그보다 작으면 잡음과 가를 수 없다.
+NOISE_SIGMAS = 8.0
+
+
+def _pre_peak_warnings(strain: np.ndarray, stress: np.ndarray, peak: int) -> tuple[str, ...]:
+    """최대 응력 **앞**에서 곡선이 내려간 것 — 정렬 직후 공칭 곡선 그대로에서 잰다.
+
+    보정 뒤 곡선(진소성 · 단조 보정)에서 재면 이미 덮인 뒤라 0 이 나온다. 그래서 「인장강도」
+    단계(표준 레시피에서 정렬 바로 뒤)가 잰다. 최대 응력 뒤의 하강은 네킹이라 정상이다.
+
+    **다시 오르는가로 가른다**(항복 강하 정리와 같은 판정). 잡음은 곧 다시 오르므로 폭만 보면
+    평범한 잡음 곡선마다 경고가 선다(σ 1.5 MPa 강 곡선의 순간 하강이 인장강도의 1 % 를 넘는다).
+    다시 오르지 않는 하강은 `PRE_PEAK_DROP_WARN` 부터, 상 · 하항복 차이는 `YIELD_POINT_WARN`
+    부터, 곧 다시 오르는 하강은 `YIELD_POINT_WARN` 을 넘을 때만 말한다.
+    """
+    found = pre_peak_drop(strain, stress, peak)
+    if found is None:
+        return ()
+    if found.upper is not None and found.lower is not None and found.gap is not None:
+        where = (
+            f"(ReH {found.upper / 1e6:.4g} · ReL {found.lower / 1e6:.4g} MPa, "
+            f"변형률 {found.upper_strain:.4g})"
+        )
+        if found.gap >= YIELD_POINT_WARN:
+            return (
+                f"상 · 하항복 차이 {found.gap * 100:.3g} %{where} — 항복점 현상으로 보입니다. "
+                "뒤의 단조 보정은 이 하강을 덮습니다 — 「항복 강하 정리」(하항복점부터)로 "
+                "ReL 을 소성 시작으로 쓸지 확인하세요.",
+            )
+        return (
+            f"최대 응력 앞에서 곡선이 다시 오르지 않고 {found.gap * 100:.2g} % "
+            f"내려갑니다{where} — 뒤의 단조 보정은 이 하강을 덮습니다. 항복점 현상이면 "
+            "「항복 강하 정리」 를 앞에 두세요.",
+        )
+    if found.share < YIELD_POINT_WARN:
+        return ()
+    return (
+        f"최대 응력 앞에서 곧 다시 오르는 하강이 {found.drop / 1e6:.3g} MPa(인장강도의 "
+        f"{found.share * 100:.2g} %)입니다(변형률 {found.drop_strain:.4g}) — 잡음이 큽니다. "
+        "뒤의 단조 보정이 이 요철을 덮습니다 — 평활을 앞에 두거나 신율계 신호를 확인하세요.",
+    )
+
+
+@dataclass(frozen=True)
+class PrePeakDrop:
+    """최대 응력 앞의 하강 — `_pre_peak_warnings` 와 `scripts/measure_curve_drops.py` 가 같은
+    값을 본다."""
+
+    drop: float
+    """곧 다시 오르는 요철까지 포함한 가장 큰 하강(Pa)."""
+    share: float
+    """`drop` / 인장강도."""
+    drop_strain: float
+    upper: float | None = None
+    """다시 오르지 않는 하강의 봉우리(ReH, Pa) — 없으면 `None`."""
+    lower: float | None = None
+    """그 뒤 다시 넘기 전까지의 바닥(ReL, Pa)."""
+    gap: float | None = None
+    """(ReH - ReL) / ReH."""
+    upper_strain: float = 0.0
+
+
+def pre_peak_drop(strain: np.ndarray, stress: np.ndarray, peak: int) -> PrePeakDrop | None:
+    """최대 응력 앞의 하강을 잰다. 잴 수 없으면(점이 모자람 · 인장강도 0 이하) `None`.
+
+    **다시 오르지 않는 하강**은 항복 강하 정리와 같은 판정(`_first_drop`)이되, 문턱은
+    인장강도의 `PRE_PEAK_DROP_WARN` 과 잡음 σ 의 `NOISE_SIGMAS` 배 중 큰 것이다.
+    """
+    uts = float(stress[peak])
+    if not uts > 0:
+        return None
+    keep = np.isfinite(stress[: peak + 1]) & np.isfinite(strain[: peak + 1])
+    pre = stress[: peak + 1][keep]
+    strain = strain[: peak + 1][keep]
+    if len(pre) < 2:
+        return None
+    drops = np.maximum.accumulate(pre) - pre
+    at = int(np.argmax(drops))
+    # **잡음보다 커야 하강이다.** 인장강도 근처의 평평한 구간에서는 앞선 극값(+3σ)과 낮은 점의
+    # 차이만으로 4~5σ 가 나고, 평평해서 0.002 안에 다시 넘지도 못한다 — 합성 DP600(잡음은
+    # 인장강도의 0.12 %)이 0.52 % 「하강」 으로 경고를 받았다. 잡음 σ 는 2차 차분으로 잰다(직선
+    # 추세가 빠진다).
+    noise = (
+        1.4826 * float(np.median(np.abs(np.diff(pre, 2)))) / np.sqrt(6) if len(pre) > 3 else 0
+    )
+    found = PrePeakDrop(
+        drop=float(drops[at]), share=float(drops[at]) / uts, drop_strain=float(strain[at])
+    )
+    first = _first_drop(
+        strain, pre, max(PRE_PEAK_DROP_WARN, NOISE_SIGMAS * noise / uts), YIELD_DROP_PERSIST
+    )
+    if first is None:
+        return found
+    upper = int(np.argmax(pre[:first]))
+    back = np.nonzero(pre[first:] >= pre[upper])[0]
+    end = first + int(back[0]) if back.size else len(pre)
+    low_at = first + int(np.argmin(pre[first:end]))
+    return dataclasses.replace(
+        found,
+        upper=float(pre[upper]),
+        lower=float(pre[low_at]),
+        gap=(float(pre[upper]) - float(pre[low_at])) / float(pre[upper]),
+        upper_strain=float(strain[upper]),
+    )
+
+
+#: 파단으로 보는 하강 — 최대 응력에서 이 비율 넘게 떨어진 첫 점(최대의 20 % 아래).
+BREAK_DROP = 0.8
+
+
+@register(
+    id="tensile.break_cut",
+    kind="processing",
+    label="파단 뒤 자르기",
+    params=(
+        ParamSpec(
+            name="drop",
+            label="파단 하강",
+            type="float",
+            default=BREAK_DROP,
+            unit="1",
+            help="최대 응력 뒤에 이 비율 넘게 떨어진 첫 점을 파단으로 보고 그 뒤를 버립니다"
+            "(기본 0.8 — 최대의 20 % 아래). **기록 순서로 보므로 정렬 앞에 둡니다.**",
+        ),
+        ParamSpec(name="strain", label="변형률 열", type="str", role="column", default=STRAIN),
+        ParamSpec(name="stress", label="응력 열", type="str", role="column", default=STRESS),
+    ),
+    applies_to=("tensile",),
+    # 키만으로 거르지 않는다 — 변위 · 하중을 재는 시험이면 공칭 곡선이 서고 이 단계가 뜻이
+    # 있다.
+    requires_channels=(("displacement",), ("force",)),
+    order=15,
+    version="1",
+)
+def break_cut(frame: Frame, options: dict[str, Any]) -> StepResult:
+    """파단 뒤의 점을 **기록 순서로** 버린다 — 정렬 전에(2026-11-14, VOC 57).
+
+    정렬(`curve.sort_unique`)은 기록 순서를 버린다. 파단 뒤 신율계가 되튀어 변형률이 최대하중
+    점보다 작아진 점은 정렬하면 곡선 **안쪽**에 끼어들어, 응력이 뚝 떨어진 점이 소성 구간
+    한가운데 서고, 뒤의 단조 보정이 그것을 덮는다. 파단 뒤에도 기록이 이어지는 장비에서는 관측
+    최대 변형률도 파단 뒤 변형률이 된다(개발 DB 데모 곡선: 응력 0 인 점이 변형률 10.5 까지).
+    정렬 뒤에는 어느 점이 파단 뒤인지 알 수 없으므로, 기록 순서가 남아 있는 지금 자른다.
+
+    하강이 없으면(파단 전에 기록이 끝났다) 그대로 둔다.
+    """
+    strain, stress, _, _ = _pair(frame, options)
+    drop = option_float(options, "drop", BREAK_DROP)
+    if not 0 < drop < 1:
+        raise ProcessingError(f"파단 하강은 0 과 1 사이여야 합니다: {drop}")
+    if len(stress) < 2:
+        raise ProcessingError("2점 미만입니다.")
+    peak = _peak_index(stress)
+    floor = (1.0 - drop) * float(stress[peak])
+    below = np.nonzero(stress[peak + 1 :] < floor)[0]
+    if not below.size:
+        return StepResult(
+            frame,
+            notes=(
+                f"최대 응력 뒤에 {drop * 100:g} % 넘게 떨어진 점이 없습니다 — 파단 전에 "
+                "기록이 끝났거나 파단이 기록되지 않았습니다. 그대로 둡니다.",
+            ),
+        )
+    cut = peak + 1 + int(below[0])
+    removed = len(stress) - cut
+    back = int(np.count_nonzero(strain[cut:] <= strain[peak]))
+    notes = [
+        f"기록 순서로 최대 응력({float(stress[peak]) / 1e6:.4g} MPa, {peak + 1}번째 점) 뒤 "
+        f"{drop * 100:g} % 넘게 떨어진 {cut + 1}번째 점(변형률 {float(strain[cut]):.4g})을 "
+        f"파단으로 보고 그 뒤 {removed}점을 버렸습니다."
+    ]
+    if back:
+        notes.append(
+            f"그중 {back}점은 변형률이 최대하중 점보다 작아, 정렬하면 곡선 안쪽에 끼어들 "
+            "점이었습니다."
+        )
+    return StepResult(frame.select(np.arange(cut)), notes=tuple(notes))
 
 
 @register(

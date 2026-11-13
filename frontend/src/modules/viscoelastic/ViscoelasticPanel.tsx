@@ -126,7 +126,26 @@ export function ViscoelasticPanel({
 
   // **기준 온도의 기본값은 가장 높은 온도다.** 실무에서 상온이나 사용 온도를
   // 기준으로 잡는 일이 많은데, 그 자리에 있을 확률이 가장 높다.
-  const options = useMemo(() => sweeps.data?.items ?? [], [sweeps.data])
+  const all = useMemo(() => sweeps.data?.items ?? [], [sweeps.data])
+  /**
+   * **겹칠 곡선을 사람이 고른다**(2026-11-14, VOC 53). 기본은 램프를 뺀 전부다 — 온도가 크게 변하는
+   * 램프는 등온 스윕이 아니라, 중앙값 온도의 스윕으로 하나 더 겹쳐지면 마스터커브가 틀어진다.
+   * `null` 이면 기본, 고친 뒤에는 고른 것만. 서버에도 고른 그대로 보낸다(`curve_keys`).
+   */
+  const [picked, setPicked] = useState<Set<string> | null>(null)
+  const options = useMemo(
+    () => all.filter((item) => (picked ? picked.has(item.curve_key) : !item.is_ramp)),
+    [all, picked]
+  )
+  function togglePick(key: string) {
+    const next = new Set(options.map((item) => item.curve_key))
+    if (next.has(key)) next.delete(key)
+    else next.add(key)
+    setPicked(next)
+    if (!next.size || !all.some((item) => next.has(item.curve_key) && item.temperature_k === reference)) {
+      setReference(null)
+    }
+  }
   useEffect(() => {
     if (reference === null && options.length) {
       setReference(Math.max(...options.map((item) => item.temperature_k)))
@@ -181,6 +200,7 @@ export function ViscoelasticPanel({
         reference_temperature_k: reference,
         method,
         manual_shifts: method === 'manual' ? manualShifts(options, reference, manual) : undefined,
+        curve_keys: options.map((item) => item.curve_key),
       })
       await reload()
       // **방금 만든 것을 보여 준다.** 안 그러면 이미 고른 곡선이 그대로 남아,
@@ -214,9 +234,9 @@ export function ViscoelasticPanel({
 
         {/* **왜 버튼이 꺼져 있는지 말한다.** 온도 한 단만 잰 DMA 도 있고, 그때
             겹치기는 할 수 있는 일이 아니다 — 꺼진 버튼만 두면 고장으로 읽힌다. */}
-        {!sweeps.loading && options.length < 2 && (
+        {!sweeps.loading && all.length < 2 && (
           <p className="text-muted-foreground mb-3 rounded-md border p-4 text-sm">
-            {options.length === 0
+            {all.length === 0
               ? '겹칠 스윕이 없습니다. 저장 탄성률(E′ 또는 전단 G′)과 온도가 있는 곡선이 필요합니다.'
               : '온도가 한 단뿐이라 겹칠 것이 없습니다. 마스터커브는 온도가 다른 스윕이 둘 이상 있어야 만들 수 있습니다.'}
           </p>
@@ -231,6 +251,33 @@ export function ViscoelasticPanel({
         ) : null}
 
         <div className="mb-3 space-y-2">
+          {all.length >= 2 && (
+            <div className="flex flex-wrap items-center gap-1.5" aria-label="겹칠 곡선">
+              <Label className="w-20 shrink-0 text-xs">겹칠 곡선</Label>
+              {all.map((item) => {
+                const on = options.some((one) => one.curve_key === item.curve_key)
+                return (
+                  <Button
+                    key={item.curve_key}
+                    size="sm"
+                    variant={on ? 'secondary' : 'ghost'}
+                    aria-pressed={on}
+                    className="h-7 text-xs"
+                    title={
+                      item.is_ramp
+                        ? `온도가 ${item.temperature_spread_k.toFixed(1)} K 변하는 램프 — 기본으로 빼 둡니다`
+                        : (item.label ?? item.curve_key)
+                    }
+                    onClick={() => togglePick(item.curve_key)}
+                  >
+                    {on ? '✓ ' : ''}
+                    {item.label ?? item.curve_key}
+                    {item.is_ramp && ' (램프)'}
+                  </Button>
+                )
+              })}
+            </div>
+          )}
           <div className="flex flex-wrap items-center gap-1.5">
             <Label className="w-20 shrink-0 text-xs">기준 온도</Label>
             {/* **잰 온도만 보여 준다.** 입력칸에 숫자를 치게 두면 없는 온도를

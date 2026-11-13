@@ -59,6 +59,7 @@ from app.modules.fitting.schemas import (
     CardRemarkOut,
     CardSlotIn,
     CardValueOut,
+    CardWarningOut,
     CurveBasisIn,
     DeckCheckItemOut,
     DeckCheckOut,
@@ -125,6 +126,7 @@ from app.modules.workspaces.models import Workspace
 from app.shared import (
     audit,
     codes,
+    conditions,
     curvedata,
     deckmap,
     declared_card,
@@ -728,6 +730,60 @@ def _representative(
     )
 
 
+#: 시편마다 달라도 되는지 견주는 속도 조건 — 인장은 탄성 · 소성 구간 속도, 그 밖은 시험 속도.
+SPEED_KEYS = ("speed_elastic", "speed_plastic", "test_speed", "crosshead_speed", "strain_rate")
+
+
+def _card_warnings(db: Session, group: statistics_services.Group) -> list[dict[str, str]]:
+    """대표를 만든 시험들의 경고 — 카드 근거에 실린다(2026-11-14, VOC 53~58).
+
+    - 채택된 처리 결과가 든 경고(시험 점검 · 단계 경고) — 채택할 때 확인한 그것이다.
+    - **속도가 시편마다 다르면**(VOC 55) — 속도에 민감한 재료면 대표 곡선이 섞인 속도의 평균이
+      된다. 1 % 안은 같은 속도로 본다.
+    """
+    found = [
+        {
+            "record_name": member.run.record_name,
+            "label": str(one.get("label", "")),
+            "message": str(one.get("message", "")),
+        }
+        for member in group.members
+        for one in member.result.warnings or []
+        if isinstance(one, dict)
+    ]
+    fields = {one.key: one for one in conditions.condition_fields(db, group.test_type.id)}
+    for key in SPEED_KEYS:
+        values = [
+            (member, float(member.run.conditions[key]))
+            for member in group.members
+            if isinstance((member.run.conditions or {}).get(key), int | float)
+        ]
+        if len(values) < 2:
+            continue
+        low = min(value for _, value in values)
+        high = max(value for _, value in values)
+        if high - low <= 0.01 * max(abs(high), 1e-30):
+            continue
+        field = fields.get(key)
+        unit = (
+            (values[0][0].run.input_units or {}).get(key)
+            or (field.si_unit if field else None)
+            or "SI"
+        )
+        if unit != "SI":
+            low, high = units.from_si(low, unit), units.from_si(high, unit)
+        found.append(
+            {
+                "record_name": "",
+                "label": "시험 조건",
+                "message": f"{field.label if field else key} 가 시편마다 다릅니다 — "
+                f"{low:.4g}~{high:.4g} {unit}. 속도에 민감한 재료면 대표 곡선이 섞인 속도의 "
+                "평균입니다.",
+            }
+        )
+    return found
+
+
 def _fit_out(
     result: fitting.FitResult | fitting.Blended, *, extrapolate_to: float | None = None
 ) -> FitOut:
@@ -1006,6 +1062,7 @@ def preview(
         members=drawn_members,
         short_runs=short_runs,
         sample_count=len(group.members),
+        warnings=[CardWarningOut(**one) for one in _card_warnings(db, group)],
         fits=[_fit_out(item, extrapolate_to=payload.extrapolate_to) for item in drawn],
         elastic=[
             InheritedValueOut(
@@ -1474,6 +1531,8 @@ def create_card(
             "strain_min": float(strain[0]),
             "strain_max": float(strain[-1]),
             "notes": [*notes, *[line for line in inherited_notes if line]],
+            # 근거 시험들의 경고 — 채택할 때 확인한 것 · 시편마다 다른 속도(VOC 53~58).
+            "warnings": _card_warnings(db, group),
             # **카드가 자기 근거를 들고 있다** 는 원칙의 나머지 절반이다 —
             # 값이 무엇에서 나왔는지에 더해 **무엇 위에서 계산됐는지**.
             "runtime": runtime.manifest(),

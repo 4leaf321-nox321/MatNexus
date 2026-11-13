@@ -63,6 +63,7 @@ from app.modules.processing.schemas import (
     ResultCurveOut,
     ResultGuideOut,
     ResultLineOut,
+    ResultWarningOut,
     RunCurveOut,
     RunOverviewOut,
     StagePointsOut,
@@ -377,6 +378,7 @@ def _store(
                 "version": stage.version,
                 "options": _jsonable(stage.options),
                 "notes": list(stage.notes),
+                "warnings": list(stage.warnings),
             }
             for stage in result.stages
         ],
@@ -400,6 +402,7 @@ def _store(
             }
             for one in result.failures
         ],
+        warnings=_warnings_of(run, result),
         # **계산이 무엇 위에서 돌았는지.** 플러그인 버전이 "어느 계산" 이라면
         # 이것은 "그 계산이 무엇 위에서" 다 — 둘 다 있어야 재현이 닫힌다.
         runtime=runtime.manifest(),
@@ -471,7 +474,47 @@ def _stage_out(stage: processing.Stage) -> ProcessingStageOut:
         row_count=stage.frame.length(),
         columns=sorted(stage.frame.columns),
         scalars=[_scalar_out(item) for item in stage.scalars],
+        warnings=list(stage.warnings),
     )
+
+
+def _warnings_of(run: TestRun, result: processing.PipelineResult) -> list[dict[str, str]]:
+    """이 결과와 함께 남길 경고 — **시험 점검 + 단계 경고**(2026-11-14, VOC 53~58).
+
+    시험 점검(`run.checks`)은 처리한 그때의 것을 적는다 — 결과는 불변이고 시험은 다시 읽힐 수
+    있다. 노트와 따로 두는 이유: 노트는 「무엇을 했나」 이고 경고는 「물성으로 삼기 전에 볼
+    것」 이다. 노트에 섞으면 화면에만 뜨고 채택 · 카드에서 사라졌다.
+    """
+    return [
+        *(
+            {"source": "test", "label": "시험 점검", "message": str(one.get("message", ""))}
+            for one in run.checks or []
+        ),
+        *(
+            {"source": "step", "label": stage.label, "message": message}
+            for stage in result.stages
+            for message in stage.warnings
+        ),
+    ]
+
+
+def _warning_out(rows: Any) -> list[ResultWarningOut]:
+    return [
+        ResultWarningOut(
+            source="test" if one.get("source") == "test" else "step",
+            label=str(one.get("label", "")),
+            message=str(one.get("message", "")),
+        )
+        for one in rows or []
+        if isinstance(one, dict)
+    ]
+
+
+def _warning_text(rows: Any) -> str:
+    """경고를 한 줄로 — 채택을 막거나 미룬 까닭에 붙인다. 셋까지 적고 나머지는 센다."""
+    items = [f"{one.label}: {one.message}" for one in _warning_out(rows)]
+    more = f" 외 {len(items) - 3}건" if len(items) > 3 else ""
+    return " / ".join(items[:3]) + more
 
 
 def _scalar_out(
@@ -650,6 +693,7 @@ def preview(
         stage_index=shown,
         problem=problem,
         failures=[_failure_out(one) for one in result.failures],
+        warnings=_warning_out(_warnings_of(run, result)),
     )
 
 
@@ -743,6 +787,7 @@ def _result_out(
                 row_count=item.row_count,
                 columns=item.columns,
                 scalars=[],
+                warnings=[str(one) for one in stage.get("warnings") or []],
             )
             for index, stage in enumerate(item.stages)
         ],
@@ -757,6 +802,7 @@ def _result_out(
             for s in item.scalars
         ],
         failures=_stored_failures(item.failures),
+        warnings=_warning_out(item.warnings),
         row_count=item.row_count,
         columns=item.columns,
         runtime={str(k): str(v) for k, v in (item.runtime or {}).items()},
@@ -1062,6 +1108,9 @@ def _require_adoptable(item: ProcessingResult) -> None:
 @router.post("/results/{result_id}/adopt", response_model=ProcessingResultOut)
 def adopt(
     result_id: uuid.UUID,
+    confirm_warnings: bool = Query(
+        False, description="경고가 있는 결과도 채택한다 — 사람이 그 경고를 봤다는 뜻."
+    ),
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> ProcessingResultOut:
@@ -1069,6 +1118,9 @@ def adopt(
 
     시험당 하나뿐이다 — 포인터가 하나이므로 구조적으로 그렇다. 다른 것을 채택하면
     앞의 것은 시도 목록에 그대로 남는다(지워지지 않는다).
+
+    **경고가 있으면 확인을 받는다**(2026-11-14, VOC 53~58) — `confirm_warnings` 없이 부르면
+    409 와 함께 무엇을 확인할지 돌려준다. 사람과 AI 에 같은 규칙이다.
     """
     item = db.get(ProcessingResult, result_id)
     if item is None:
@@ -1078,11 +1130,22 @@ def adopt(
     # 선언이라 통계·카드가 그것을 읽는다. 해석하는 사람이 다르면 그 부서에 편집을 준다.
     permissions.require_edit(db, user, run, code="MNX-PROCESSING-0017")
     _require_adoptable(item)
+    _require_confirmed(item, confirm_warnings)
     run.adopted_result_id = item.id
     _project_summaries(db, run, item)
     db.commit()
     db.refresh(item)
     return _result_out(item, adopted=True, stale=_stale(item, run))
+
+
+def _require_confirmed(item: ProcessingResult, confirmed: bool) -> None:
+    """경고가 있는 결과는 **본 사람이** 채택한다 — 한 건 · 여러 건이 같은 판정."""
+    if item.warnings and not confirmed:
+        raise Conflict(
+            "MNX-PROCESSING-0020",
+            f"이 결과에는 확인할 경고가 {len(item.warnings)}건 있습니다 — "
+            f"{_warning_text(item.warnings)}. 보고 나서 채택을 확인하세요.",
+        )
 
 
 #: 저장된 결과를 열었을 때 먼저 보여 줄 축. 앞이 우선이다.
@@ -1750,6 +1813,7 @@ def run_batch(
                             status=422,
                         )
                     lost = _lost_on_adopt(before, computed.scalars, computed.failures)
+                    found = _warnings_of(run, computed)
                     items.append(
                         BatchItemOut(
                             test_run_id=run.id,
@@ -1762,7 +1826,14 @@ def run_batch(
                             previous=before,
                             previous_adopted_id=was_adopted,
                             failures=[_failure_out(one) for one in computed.failures],
-                            warning=_adoption_note(payload.adopt, several, lost),
+                            warnings=_warning_out(found),
+                            warning=_adoption_note(payload.adopt, several, lost)
+                            or (
+                                f"저장하면 확인할 경고가 {len(found)}건이라 채택은 미룹니다 — "
+                                f"{_warning_text(found)}"
+                                if payload.adopt and found
+                                else None
+                            ),
                         )
                     )
                     continue
@@ -1790,6 +1861,14 @@ def run_batch(
             # 한 건 채택 · 여러 건 채택과 같은 검사(2026-11-14) — 전에는 일괄 처리만
             # 건너뛰었다.
             problem = _adoptable_problem(stored) if payload.adopt else None
+            # **경고가 있으면 채택을 미룬다**(2026-11-14, VOC 53~58) — 한 건 · 여러 건 채택은
+            # 확인을 받는데, 일괄 처리는 사람이 줄마다 볼 수 없다. 결과는 쌓였으니 검토대에서
+            # 경고를 보고 고른다.
+            if payload.adopt and not problem and stored.warnings:
+                problem = (
+                    f"확인할 경고가 {len(stored.warnings)}건 있어 미뤘습니다 — "
+                    f"{_warning_text(stored.warnings)}. 채택 검토대에서 보고 고르세요"
+                )
             # **부분 결과가 지금 채택된 값을 덮어 잃게 하지 않는다**(2026-10-22). 처음 처리하는
             # 시험은 잃을 것이 없으니 채택한다 — 인장강도라도 물성으로 선다. 이미 채택된
             # 값(항복강도 등)이 이 결과에 없으면 채택은 그대로 두고 결과만 쌓는다.
@@ -1813,6 +1892,7 @@ def run_batch(
                     previous=before,
                     previous_adopted_id=was_adopted,
                     failures=failures,
+                    warnings=_warning_out(stored.warnings),
                     warning=(
                         _adoption_note(payload.adopt, several, lost)
                         or (f"채택은 하지 않았습니다 — {problem}" if problem else None)
@@ -1879,6 +1959,7 @@ def _brief(item: ProcessingResult, run: TestRun) -> ResultBriefOut:
         is_adopted=item.id == run.adopted_result_id,
         scalars=_batch_scalars(item.scalars),
         failures=_stored_failures(item.failures),
+        warnings=_warning_out(item.warnings),
     )
 
 
@@ -2104,6 +2185,10 @@ def adopt_many(
                         "고른 결과가 이 시험의 것이 아닙니다 — 목록을 다시 읽어 고르세요.",
                     )
                 _require_adoptable(target)
+                # 되돌리기(옛 채택으로 돌려보내기)도 이 길이라 같은 판정을 받는다 — 옛 채택이
+                # 경고 기능 전의 것일 수 있다. 화면의 「되돌리기」 는 사람이 누른 복원이라
+                # 확인으로 보낸다.
+                _require_confirmed(target, payload.confirm_warnings)
             run.adopted_result_id = target.id if target else None
             _project_summaries(db, run, target)
             db.commit()

@@ -186,6 +186,19 @@ class ShortRunOut(BaseModel):
     """나머지 시편 x 폭의 중앙값."""
 
 
+class CardWarningOut(BaseModel):
+    """카드 근거의 경고 하나 — 대표를 만든 시험의 처리 결과가 든 것 · 시험끼리 다른 조건.
+
+    2026-11-14(VOC 53~58): 처리 경고가 채택 · 카드로 안 넘어와, 카드만 보면 그 값이 실측 치수로
+    낸 것인지 · 항복점 현상을 덮은 것인지 알 수 없었다. **막지 않는다** — 카드에 남긴다.
+    """
+
+    record_name: str | None = None
+    """어느 시험의 것인가. 시험끼리 견준 것(속도 차이 등)이면 비어 있다."""
+    label: str
+    message: str
+
+
 class FitPreviewOut(BaseModel):
     source_points: list[tuple[float, float]]
     """적합에 쓴 점(소성변형률, 진응력). 대표 곡선에서 왔다."""
@@ -203,6 +216,8 @@ class FitPreviewOut(BaseModel):
     elastic: list[InheritedValueOut] = []
     """비워 두면 카드에 들어갈 값들. 사람이 모달에서 덮어쓸 수 있다."""
     notes: list[str]
+    warnings: list[CardWarningOut] = []
+    """대표를 만든 시험들의 경고 — 저장하면 카드 근거(`source.warnings`)에 그대로 남는다."""
 
 
 class PropertyCardSaveRequest(BaseModel):

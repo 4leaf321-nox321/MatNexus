@@ -249,9 +249,17 @@ export const processingApi = {
       `/processing/results/${resultId}/curve${search({ x: axes?.x, y: axes?.y })}`
     ),
 
-  /** **이 시험의 물성은 이것.** 시험당 하나뿐이다(ADR 0007). */
-  adopt: (resultId: string) =>
-    api.post<ProcessingResult>(`/processing/results/${resultId}/adopt`, {}),
+  /**
+   * **이 시험의 물성은 이것.** 시험당 하나뿐이다(ADR 0007). 경고가 있는 결과는 `confirmWarnings`
+   * 없이 부르면 409 — 사람이 그 경고를 본 뒤에 채택한다(2026-11-14).
+   */
+  adopt: (resultId: string, confirmWarnings = false) =>
+    api.post<ProcessingResult>(
+      `/processing/results/${resultId}/adopt${search({
+        confirm_warnings: confirmWarnings ? 'true' : undefined,
+      })}`,
+      {}
+    ),
 
   /** 채택만 거둔다 — 결과는 지워지지 않는다. */
   unadopt: (resultId: string) => api.delete<void>(`/processing/results/${resultId}/adopt`),
@@ -307,8 +315,14 @@ export const processingApi = {
    * 시험마다 고른 결과를 채택한다. **건별로 커밋하고 건별로 말한다.** `result_id: null` 은
    * 채택을 거둔다 — 되돌리기는 응답의 `previous_adopted_id` 를 그대로 돌려보낸다.
    */
-  adoptMany: (items: { test_run_id: string; result_id: string | null }[]) =>
-    api.post<AdoptManyOut>('/processing/adopt-many', { items }),
+  adoptMany: (
+    items: { test_run_id: string; result_id: string | null }[],
+    confirmWarnings = false
+  ) =>
+    api.post<AdoptManyOut>('/processing/adopt-many', {
+      items,
+      confirm_warnings: confirmWarnings,
+    }),
 
   recipes: (testType?: string) =>
     api.get<Recipe[]>(`/processing/recipes${search({ test_type: testType })}`),
