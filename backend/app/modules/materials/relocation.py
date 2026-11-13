@@ -111,6 +111,9 @@ class Plan:
     cards: list[AffectedCard]
     records: list[str] = field(default_factory=list)
     """옮기는 시험을 쓴 묶음·대표 곡선 기록 — 원 재료에 남는다(고치지 않고 알린다)."""
+    kind: str = "thickness"
+    """`thickness`(다른 두께의 같은 재료로, 받을 재료를 이름으로 계산) · `material`(사람이
+    고른 재료로, 시료째 — VOC 59). 카드 코멘트 · 감사 기록의 말이 갈린다."""
 
     @property
     def moves(self) -> list[Move]:
@@ -225,6 +228,121 @@ def make_plan(
         runs=runs,
         cards=_affected_cards(db, user, editor, targets, run_ids),
         records=_affected_records(db, targets, run_ids),
+    )
+
+
+def make_sample_plan(
+    db: Session, user: User, sample_ids: list[uuid.UUID], *, target_material_id: uuid.UUID
+) -> Plan:
+    """고른 **시료째** 사람이 고른 재료로 옮기면 무엇이 어디로 가는지 — 쓰지 않는다(VOC 59).
+
+    두께로 이름을 계산하는 길(`make_plan`)은 같은 부서 · 같은 Grade · Details 안에서만 찾았다.
+    받을 재료를 직접 고르게 하되:
+
+    - **분류가 같아야 한다**(Family · Category · Grade) — 다른 재료로 옮기면 그것은 이동이
+      아니라 다른 재료의 시험을 만드는 일이다.
+    - **시료째만** — 시료를 쪼개 옮기면 측정 의뢰 연결이 어긋난다(의뢰는 시료에 붙는다).
+    - **받는 재료도 고칠 수 있어야 한다** — 남의 재료에 시료를 넣는 것은 그 재료를 고치는
+      일이다. 시료와 그 시편도 고칠 수 있어야 한다(ADR 0035).
+
+    카드 · 묶음 기록 · 이름 다시 계산은 두께 이관과 같은 틀이다(`execute`).
+    """
+    editor = permissions.editor(db, user)
+    target = db.scalar(
+        permissions.visible_materials(db, user).where(
+            Material.id == target_material_id, Material.deleted_at.is_(None)
+        )
+    )
+    if target is None:
+        raise AppError("MNX-MATERIALS-0066", "받을 재료를 찾을 수 없습니다.", status=404)
+    if not editor.allows(target):
+        locked = permissions.locked(db, target, code="MNX-MATERIALS-0067")
+        raise Forbidden(
+            "MNX-MATERIALS-0067", f"받을 재료를 고칠 수 없습니다 — {locked.message}"
+        )
+
+    targets: dict[uuid.UUID, Target] = {}
+    blocked: list[str] = []
+    whole: dict[uuid.UUID, bool] = {}
+    for sample_id in dict.fromkeys(sample_ids):
+        sample = db.scalar(
+            select(Sample).where(Sample.id == sample_id, Sample.deleted_at.is_(None))
+        )
+        if sample is None:
+            blocked.append(f"{sample_id} — 시료를 찾을 수 없습니다")
+            continue
+        source = db.get(Material, sample.material_id)
+        if source is None or source.deleted_at is not None:
+            blocked.append(f"{sample.record_name} — 재료를 찾을 수 없습니다")
+            continue
+        if source.id == target.id:
+            blocked.append(f"{sample.record_name} — 이미 {target.record_name} 의 시료입니다")
+            continue
+        same = (source.family, source.category, (source.grade or "").casefold()) == (
+            target.family,
+            target.category,
+            (target.grade or "").casefold(),
+        )
+        if not same:
+            blocked.append(
+                f"{sample.record_name} — 분류가 다른 재료로는 옮기지 않습니다"
+                f"({source.family} · {source.category} · {source.grade} → {target.family} · "
+                f"{target.category} · {target.grade})"
+            )
+            continue
+        if not editor.allows(sample):
+            blocked.append(
+                f"{sample.record_name} — "
+                f"{permissions.locked(db, sample, code='MNX-MATERIALS-0040').message}"
+            )
+            continue
+        specimens = list(
+            db.scalars(
+                select(Specimen).where(
+                    Specimen.sample_id == sample.id, Specimen.deleted_at.is_(None)
+                )
+            )
+        )
+        locked_specimens = [one.record_name for one in specimens if not editor.allows(one)]
+        if locked_specimens:
+            blocked.append(
+                f"{sample.record_name} — 고칠 수 없는 시편이 있어 시료째 옮길 수 없습니다: "
+                + ", ".join(locked_specimens[:3])
+            )
+            continue
+        if not specimens:
+            blocked.append(
+                f"{sample.record_name} — 시편이 없는 시료입니다(옮길 시험이 없습니다)"
+            )
+            continue
+        slot = targets.setdefault(
+            source.id, Target(source=source, name=target.record_name, existing=target)
+        )
+        slot.moves.extend(
+            Move(specimen=one, sample=sample, source=source) for one in specimens
+        )
+        whole[sample.id] = True
+
+    moved_ids = {move.specimen.id for one in targets.values() for move in one.moves}
+    runs: dict[uuid.UUID, list[TestRun]] = {}
+    if moved_ids:
+        for run in db.scalars(
+            select(TestRun).where(
+                TestRun.specimen_id.in_(moved_ids), TestRun.deleted_at.is_(None)
+            )
+        ):
+            runs.setdefault(run.specimen_id, []).append(run)
+    run_ids = {run.id for listed in runs.values() for run in listed}
+    return Plan(
+        thickness_m=float(target.spec_thickness_m or 0.0),
+        unit="mm",
+        targets=targets,
+        blocked=blocked,
+        whole=whole,
+        runs=runs,
+        cards=_affected_cards(db, user, editor, targets, run_ids),
+        records=_affected_records(db, targets, run_ids),
+        kind="material",
     )
 
 
@@ -386,21 +504,24 @@ def execute(
         # 이름은 옮겨 간 재료 기준으로 — 시료·시편·시험까지 내려간다(ADR 0004).
         services.rename_descendants(db, destination)
         db.flush()
-        audit.record(
-            db,
-            action=audit.SPECIMENS_RELOCATED,
-            actor=user,
-            target_table="materials",
-            target_id=destination.id,
-            target_label=destination.record_name,
-            workspace_id=destination.owner_workspace_id,
-            changes={
+        moved = {
+            "actor": user,
+            "target_table": "materials",
+            "target_id": destination.id,
+            "target_label": destination.record_name,
+            "workspace_id": destination.owner_workspace_id,
+            "changes": {
                 "from": target.source.record_name,
                 "to": destination.record_name,
                 "created": target.existing is None,
                 "specimens": [move.specimen.record_name for move in target.moves],
             },
-        )
+        }
+        # 행위 코드는 읽을 수 있게 갈래마다 적는다(변경 이력 화면의 이름표가 그것을 본다).
+        if plan.kind == "thickness":
+            audit.record(db, action=audit.SPECIMENS_RELOCATED, **moved)  # type: ignore[arg-type]
+        else:
+            audit.record(db, action=audit.SAMPLES_MOVED, **moved)  # type: ignore[arg-type]
 
     for one in plan.cards:
         action = card_actions.get(one.card.id, "note")
@@ -411,8 +532,9 @@ def execute(
             for run in listed
             if run.id in set(one.run_ids)
         ]
+        where = "다른 두께의 재료" if plan.kind == "thickness" else "다른 재료"
         message = (
-            f"근거 시험 {len(one.run_ids)}건이 다른 두께의 재료 {', '.join(destinations)} 로 "
+            f"근거 시험 {len(one.run_ids)}건이 {where} {', '.join(destinations)} 로 "
             f"옮겨졌습니다 — 이 카드의 값은 그 시험을 포함해 계산된 것입니다."
         )
         db.add(
@@ -453,7 +575,7 @@ def execute(
                 target_label=one.card.label,
                 workspace_id=one.material.owner_workspace_id,
                 changes={"status": {"before": before, "after": "deprecated"}},
-                reason="근거 시험이 다른 두께의 재료로 옮겨졌습니다",
+                reason=f"근거 시험이 {where}로 옮겨졌습니다",
             )
             result.cards_deprecated += 1
 

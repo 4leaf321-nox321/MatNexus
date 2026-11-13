@@ -5937,6 +5937,53 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/samples/move": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Move Samples
+         * @description 고른 시료를 **시료째** 고른 재료로 옮긴다(2026-11-14, VOC 59).
+         *
+         *     두께로 받을 재료를 계산하는 길(`/specimens/relocate`)은 같은 부서 · 같은 Grade · Details
+         *     안에서만 찾았다. 여기서는 사람이 고르되 분류가 같아야 하고, 받는 재료 · 시료 · 시편을 모두
+         *     고칠 수 있어야 한다. T-번호 · 처리 결과 · 채택은 그대로 따라가고, 이름은 받은 재료 기준으로
+         *     다시 계산된다. **걸린 카드에는 코멘트가 반드시 붙는다.** 한 건이 막혀도 나머지 시료는 간다.
+         */
+        post: operations["move_samples_api_samples_move_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/samples/move-plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Move Samples Plan
+         * @description 고른 시료를 **고른 재료로** 옮기면 무엇이 어디로 가는지 — 쓰지 않는다(VOC 59).
+         *
+         *     걸린 카드와 그 카드를 사용 중지할 수 있는지, 막힌 시료와 그 까닭을 미리 보인다.
+         */
+        post: operations["move_samples_plan_api_samples_move_plan_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/samples/{sample_id}": {
         parameters: {
             query?: never;
@@ -20583,6 +20630,32 @@ export interface components {
             /** Test Runs */
             test_runs: number;
         };
+        /**
+         * SampleMoveRequest
+         * @description 고른 **시료째** 사람이 고른 재료로 옮긴다(2026-11-14, VOC 59).
+         *
+         *     받을 재료는 분류(Family · Category · Grade)가 같아야 하고 고칠 수 있어야 한다. 시료를
+         *     쪼개지
+         *     않는다 — 쪼개면 측정 의뢰 연결이 어긋난다. 카드 처리 · 코멘트는 두께 이관과 같다.
+         */
+        SampleMoveRequest: {
+            /**
+             * Card Actions
+             * @default {}
+             */
+            card_actions: {
+                [key: string]: "note" | "deprecate";
+            };
+            /** Comment */
+            comment?: string | null;
+            /** Sample Ids */
+            sample_ids: string[];
+            /**
+             * Target Material Id
+             * Format: uuid
+             */
+            target_material_id: string;
+        };
         /** SampleOut */
         SampleOut: {
             access?: components["schemas"]["EditAccessOut"] | null;
@@ -33792,6 +33865,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProcessingStepOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    move_samples_api_samples_move_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SampleMoveRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RelocateOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    move_samples_plan_api_samples_move_plan_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SampleMoveRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RelocatePlanOut"];
                 };
             };
             /** @description Validation Error */

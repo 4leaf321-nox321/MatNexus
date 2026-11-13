@@ -33,6 +33,7 @@ import {
   Columns2,
   FileText,
   FileUp,
+  MoveRight,
   Pencil,
   Plus,
   Rows3,
@@ -51,6 +52,7 @@ import type { Sample, Specimen } from '@/modules/materials/api'
 import { SpecimenTests } from '@/modules/tests/SpecimenTests'
 import { SummaryImportDialog } from '@/modules/tests/SummaryImportDialog'
 import { DeleteSampleDialog } from '@/modules/materials/DeleteSampleDialog'
+import { SampleMoveDialog } from '@/modules/materials/SampleMoveDialog'
 import { DeleteSpecimensDialog } from '@/modules/materials/DeleteSpecimensDialog'
 import { display, significant, toDisplay } from '@/shared/units'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
@@ -244,6 +246,7 @@ export function SampleExplorer({
   // **아코디언에 있던 일이 여기로 온다.** 표로 바꾸면서 편집·밀시트·삭제가
   // 사라지면 그건 개선이 아니라 기능 삭제다.
   const [editingSample, setEditingSample] = useState(false)
+  const [movingSample, setMovingSample] = useState(false)
   const [mill, setMill] = useState(false)
   const [removingSample, setRemovingSample] = useState(false)
   const [adding, setAdding] = useState(false)
@@ -364,6 +367,21 @@ export function SampleExplorer({
                 }}
               >
                 <Trash2 className="size-3.5" />
+              </Button>
+              {/* **시료째 다른 재료로**(2026-11-14, VOC 59) — 받을 재료를 사람이 고른다. */}
+              <Button
+                size="icon"
+                variant="ghost"
+                className="size-6"
+                aria-label={`${sample.record_name} 다른 재료로 옮기기`}
+                title={lockedTitle(sample.access) ?? '다른 재료로 옮기기'}
+                disabled={!canEdit(sample.access)}
+                onClick={() => {
+                  setSampleId(sample.id)
+                  setMovingSample(true)
+                }}
+              >
+                <MoveRight className="size-3.5" />
               </Button>
             </div>
           </div>
@@ -733,6 +751,17 @@ export function SampleExplorer({
           {/* **시편 · 시험이 달려 있어도 지운다 — 물어본 뒤에**(2026-10-20). 전에는 「시편이 남아
               있어 지울 수 없습니다」 를 적어 놓고도 확인을 받았고, 누르면 서버가 거절해 아무 일도
               없었다. 시험이 있으면 그 칸을 따로 켜야 지운다. */}
+          <SampleMoveDialog
+            open={movingSample}
+            sampleId={active.id}
+            sampleName={active.record_name}
+            onClose={() => setMovingSample(false)}
+            onDone={() => {
+              setMovingSample(false)
+              setSampleId(null)
+              onChanged()
+            }}
+          />
           <DeleteSampleDialog
             sampleId={active.id}
             sampleName={

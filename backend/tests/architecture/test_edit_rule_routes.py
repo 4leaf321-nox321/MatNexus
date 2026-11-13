@@ -104,6 +104,12 @@ EXEMPT: dict[tuple[str, str], str] = {
         "relocate",
     ): "시편을 다른 두께 재료로 — `relocation.make_plan` 이 시편마다 `editor.allows` 로 "
     "본다(일괄 수정과 같은 규칙), 카드 사용 중지는 옮기기 전에 전부 판정한다",
+    ("materials", "move_samples_plan"): _읽기 + " — 시료를 옮기면 무엇이 어디로 가는지",
+    (
+        "materials",
+        "move_samples",
+    ): "시료째 고른 재료로(VOC 59) — `relocation.make_sample_plan` 이 받는 재료 · 시료 · "
+    "시편마다 `editor.allows` 로 본다, 카드 사용 중지는 옮기기 전에 전부 판정한다",
     ("tests", "detect_test_type"): _읽기,
     ("tests", "create_test_type"): _정의,
     ("tests", "preview_summary_import"): _읽기,

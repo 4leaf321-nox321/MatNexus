@@ -1193,6 +1193,19 @@ class ParameterSetAdoptIn(BaseModel):
     notes: str | None = None
 
 
+class SampleMoveRequest(BaseModel):
+    """고른 **시료째** 사람이 고른 재료로 옮긴다(2026-11-14, VOC 59).
+
+    받을 재료는 분류(Family · Category · Grade)가 같아야 하고 고칠 수 있어야 한다. 시료를
+    쪼개지
+    않는다 — 쪼개면 측정 의뢰 연결이 어긋난다. 카드 처리 · 코멘트는 두께 이관과 같다."""
+
+    sample_ids: list[uuid.UUID] = Field(min_length=1, max_length=200)
+    target_material_id: uuid.UUID
+    card_actions: dict[uuid.UUID, Literal["note", "deprecate"]] = {}
+    comment: str | None = Field(default=None, max_length=1000)
+
+
 class SpecimenRelocateRequest(BaseModel):
     """고른 시편을 **다른 두께의 같은 재료**로(2026-09-29). 계획과 실행이 같은 본문이다."""
 

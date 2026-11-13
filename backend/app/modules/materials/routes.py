@@ -85,6 +85,7 @@ from app.modules.materials.schemas import (
     RelocateTargetOut,
     SampleCreateRequest,
     SampleDeletePlanOut,
+    SampleMoveRequest,
     SampleOut,
     SampleUpdateRequest,
     SimilarNameOut,
@@ -3504,6 +3505,61 @@ def relocate(
         raise AppError(
             "MNX-MATERIALS-0043",
             "옮길 수 있는 시편이 없습니다. " + " · ".join(plan.blocked),
+            status=422,
+        )
+    done = relocation.execute(
+        db, user, plan, card_actions=dict(payload.card_actions), comment=payload.comment
+    )
+    db.commit()
+    return RelocateOut(
+        moved=done.moved,
+        test_runs=done.test_runs,
+        created_materials=done.created,
+        joined_materials=done.joined,
+        split_samples=done.split_samples,
+        cards_noted=done.cards_noted,
+        cards_deprecated=done.cards_deprecated,
+        blocked=plan.blocked,
+    )
+
+
+@samples_router.post("/move-plan", response_model=RelocatePlanOut)
+def move_samples_plan(
+    payload: SampleMoveRequest,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> RelocatePlanOut:
+    """고른 시료를 **고른 재료로** 옮기면 무엇이 어디로 가는지 — 쓰지 않는다(VOC 59).
+
+    걸린 카드와 그 카드를 사용 중지할 수 있는지, 막힌 시료와 그 까닭을 미리 보인다.
+    """
+    return _relocate_plan_out(
+        relocation.make_sample_plan(
+            db, user, payload.sample_ids, target_material_id=payload.target_material_id
+        )
+    )
+
+
+@samples_router.post("/move", response_model=RelocateOut)
+def move_samples(
+    payload: SampleMoveRequest,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> RelocateOut:
+    """고른 시료를 **시료째** 고른 재료로 옮긴다(2026-11-14, VOC 59).
+
+    두께로 받을 재료를 계산하는 길(`/specimens/relocate`)은 같은 부서 · 같은 Grade · Details
+    안에서만 찾았다. 여기서는 사람이 고르되 분류가 같아야 하고, 받는 재료 · 시료 · 시편을 모두
+    고칠 수 있어야 한다. T-번호 · 처리 결과 · 채택은 그대로 따라가고, 이름은 받은 재료 기준으로
+    다시 계산된다. **걸린 카드에는 코멘트가 반드시 붙는다.** 한 건이 막혀도 나머지 시료는 간다.
+    """
+    plan = relocation.make_sample_plan(
+        db, user, payload.sample_ids, target_material_id=payload.target_material_id
+    )
+    if not plan.moves:
+        raise AppError(
+            "MNX-MATERIALS-0068",
+            "옮길 수 있는 시료가 없습니다. " + " · ".join(plan.blocked),
             status=422,
         )
     done = relocation.execute(

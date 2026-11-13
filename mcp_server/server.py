@@ -3232,6 +3232,43 @@ async def relocate_specimens(
 
 
 @mcp.tool()
+async def move_samples(
+    ctx: Context,
+    sample_ids: list[str],
+    target_material_id: str,
+    card_actions: dict[str, str] | None = None,
+    comment: str | None = None,
+    dry_run: bool = True,
+) -> dict[str, Any]:
+    """잘못 고른 재료에 넣은 시료를 **시료째 사람이 고른 재료로 옮긴다**(VOC 59, v1.316.0).
+
+    `relocate_specimens` 는 두께로 받을 재료를 계산하고, 이것은 받을 재료를 직접 받는다. 받을 재료는
+    분류(Family · Category · Grade)가 같아야 하고, 받는 재료 · 시료 · 시편을 고칠 수 있어야 한다 —
+    서버가 판정하고 막힌 까닭(`blocked`)을 준다. 시료를 쪼개지 않는다(의뢰 연결). 번호 S·P·T ·
+    처리 결과 · 채택은 따라가고 이름은 받은 재료 기준으로 바뀐다.
+
+    **기본이 미리보기(dry_run=True)** — 걸린 카드에는 코멘트가 반드시 붙는다. `card_actions`
+    (`note` · `deprecate`)는 **사람에게 물어 정하라.**
+    """
+    body: dict[str, Any] = {
+        "sample_ids": sample_ids,
+        "target_material_id": target_material_id,
+        "card_actions": card_actions or {},
+        "comment": comment,
+    }
+    if dry_run:
+        plan = await _send(ctx, "POST", "/samples/move-plan", body)
+        if isinstance(plan, dict) and "error" not in plan:
+            plan = {
+                "dry_run": True,
+                **plan,
+                "note": "이대로 옮기려면 dry_run=False 로 다시 부르세요. 걸린 카드는 사람에게 보이세요.",
+            }
+        return plan
+    return await _send(ctx, "POST", "/samples/move", body)
+
+
+@mcp.tool()
 async def preview_card_fit(
     ctx: Context,
     material_id: str,

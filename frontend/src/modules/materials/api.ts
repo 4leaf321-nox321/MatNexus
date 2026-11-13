@@ -22,6 +22,7 @@ export type SpecimenBulkField = components['schemas']['SpecimenBulkUpdateRequest
 export type SpecimenBulkResult = components['schemas']['SpecimenBulkUpdateOut']
 /** 다른 두께의 같은 재료로 옮기기(2026-09-29) — 계획과 실행이 같은 본문을 받는다. */
 export type RelocateRequest = components['schemas']['SpecimenRelocateRequest']
+export type SampleMoveRequest = components['schemas']['SampleMoveRequest']
 export type RelocatePlan = components['schemas']['RelocatePlanOut']
 export type RelocateResult = components['schemas']['RelocateOut']
 /** 고친 시편과 **이름이 어떻게 바뀌었는지**. */
@@ -273,6 +274,13 @@ export const materialsApi = {
     api.post<RelocatePlan>('/specimens/relocate-plan', body),
   /** 옮긴다. 걸린 카드에는 코멘트가 반드시 붙고, `card_actions` 로 정리(사용 중지)도 고른다. */
   relocate: (body: RelocateRequest) => api.post<RelocateResult>('/specimens/relocate', body),
+
+  /**
+   * 고른 **시료째** 사람이 고른 재료로 옮기면 무엇이 어디로 가나 — 쓰지 않는다(2026-11-14, VOC 59).
+   * 받을 재료는 분류(Family · Category · Grade)가 같아야 하고 고칠 수 있어야 한다.
+   */
+  movePlan: (body: SampleMoveRequest) => api.post<RelocatePlan>('/samples/move-plan', body),
+  move: (body: SampleMoveRequest) => api.post<RelocateResult>('/samples/move', body),
 
   /**
    * 실제로 쓰이고 있는 분류 조합. **고정 목록을 화면에 박지 않는다** — 부서가
