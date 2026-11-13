@@ -1393,7 +1393,11 @@ def _specimen_brief(one: Any) -> dict[str, Any] | None:
 
 @mcp.tool()
 async def get_statistics(
-    ctx: Context, material_id: str, test_type: str | None = None, orientation: str | None = None
+    ctx: Context,
+    material_id: str,
+    test_type: str | None = None,
+    orientation: str | None = None,
+    unique: bool = False,
 ) -> dict[str, Any]:
     """이 재료의 **산포** — 반복 시편을 묶어 낸 평균·표준편차·이상치.
 
@@ -1415,8 +1419,13 @@ async def get_statistics(
 
     **채택된 결과만 들어간다.** 처리해 놓고 채택 안 한 시험은 여기 없다 —
     `skipped_unadopted` 가 그 수다. 그 수가 크면 통계가 아니라 채택이 문제다.
+
+    `duplicate_count` 는 앞 시험과 **값이 같은 곡선**(같은 지문)을 채택한 시험 수다 — 같은 측정이
+    두 번 셌을 수 있다. 사람에게 말하고, 원하면 `unique=True` 로 하나로 센다(기본은 다 센다).
     """
-    got = await _get(ctx, f"/statistics/materials/{material_id}")
+    got = await _get(
+        ctx, f"/statistics/materials/{material_id}", {"unique": "true"} if unique else None
+    )
     if isinstance(got, dict) and "error" in got:
         return got
     groups = got.get("groups", []) if isinstance(got, dict) else []
@@ -1433,6 +1442,8 @@ async def get_statistics(
                 "orientation": one.get("orientation"),
                 "sample_count": one.get("sample_count"),
                 "skipped_unadopted": one.get("skipped_unadopted"),
+                "duplicate_count": one.get("duplicate_count", 0),
+                "unique": one.get("unique", False),
                 "notes": one.get("notes"),
                 "values_si": [
                     {

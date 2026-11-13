@@ -800,3 +800,34 @@ describe('물성 탭은 카드를 안 만든다', () => {
     expect(createLveCard).not.toHaveBeenCalled()
   })
 })
+
+describe('같은 지문은 하나로', () => {
+  // 2026-11-14(VOC 54): 같은 측정이 두 번 들어가면 통계에 두 번 셌다. 막지 않고 말하고, 셀 때 고른다.
+  it('겹친 수를 말하고, 누르면 하나로 세어 다시 읽는다', async () => {
+    forMaterial.mockImplementation((_id: string, _threshold?: number, unique?: boolean) =>
+      Promise.resolve({
+        groups: [
+          group('MD', 285, {
+            sample_count: unique ? 3 : 5,
+            duplicate_count: 2,
+            unique: Boolean(unique),
+          }),
+        ],
+      })
+    )
+    const user = userEvent.setup()
+    show()
+    const toggle = await screen.findByRole('button', { name: '같은 지문은 하나로' })
+    expect(screen.getByText(/같은 지문\)을 채택한 시험이 2건/)).toBeInTheDocument()
+    expect(toggle).toHaveAttribute('aria-pressed', 'false')
+    await user.click(toggle)
+    await waitFor(() => expect(forMaterial).toHaveBeenLastCalledWith('m1', undefined, true))
+    expect(await screen.findByText('같은 지문 뺌 2')).toBeInTheDocument()
+  })
+
+  it('겹친 것이 없으면 묻지 않는다', async () => {
+    show()
+    await card('항복강도')
+    expect(screen.queryByRole('button', { name: '같은 지문은 하나로' })).toBeNull()
+  })
+})

@@ -138,7 +138,12 @@ export function PropertiesPanel({
   header,
   notice,
 }: Props) {
-  const stats = useResource(() => statisticsApi.forMaterial(materialId), [materialId])
+  /** **같은 지문은 하나로** — 같은 측정이 두 번 들어간 시험을 한 번만 센다(VOC 54). 기본은 다 센다. */
+  const [unique, setUnique] = useState(false)
+  const stats = useResource(
+    () => statisticsApi.forMaterial(materialId, undefined, unique),
+    [materialId, unique]
+  )
   const [error, setError] = useState<Error | null>(null)
   const [saved, setSaved] = useState<string | null>(null)
   const groups = stats.data?.groups ?? []
@@ -244,6 +249,26 @@ export function PropertiesPanel({
             아직 시험이 없습니다.
           </div>
         )}
+
+      {/* **같은 측정이 두 번 셀 수 있으면 말하고 고르게 한다**(VOC 54) — 막지 않는다. */}
+      {(unique || groups.some((group) => (group.duplicate_count ?? 0) > 0)) && (
+        <div className="mb-3 flex shrink-0 flex-wrap items-center gap-2 rounded-md border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-sm">
+          <span>
+            값이 같은 곡선(같은 지문)을 채택한 시험이{' '}
+            {groups.reduce((sum, group) => sum + (group.duplicate_count ?? 0), 0)}건 있습니다 — 같은
+            측정이 두 번 셀 수 있습니다.
+          </span>
+          <Button
+            size="sm"
+            variant={unique ? 'secondary' : 'outline'}
+            className="ml-auto h-7 text-xs"
+            aria-pressed={unique}
+            onClick={() => setUnique(!unique)}
+          >
+            같은 지문은 하나로
+          </Button>
+        </div>
+      )}
 
       {/* **시험종류가 늘어도 화면이 안 길어진다.** 위 표가 값을 다 보이므로,
           아래 상세는 지금 보려는 종류의 것만 있으면 된다 — 종류가 다섯이면
@@ -634,6 +659,11 @@ function GroupCard({
         {group.skipped_unadopted > 0 && (
           <Badge variant="outline" className="text-xs">
             미채택 {group.skipped_unadopted}
+          </Badge>
+        )}
+        {(group.duplicate_count ?? 0) > 0 && (
+          <Badge variant="outline" className="border-amber-500/50 text-xs text-amber-700">
+            {group.unique ? '같은 지문 뺌' : '같은 지문'} {group.duplicate_count}
           </Badge>
         )}
         {/* **접혀 있어도 할 말이 있다는 것은 보여야 한다.** */}

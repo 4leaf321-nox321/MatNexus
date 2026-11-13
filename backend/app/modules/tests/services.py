@@ -16,6 +16,7 @@ from __future__ import annotations
 import logging
 import statistics
 import uuid
+from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -755,7 +756,79 @@ def _checks(
     found += _condition_mismatch(db, run, test_type, parsed, typed)
     found += _orientation_mismatch(db, run, parsed)
     found += _dimensionless_suspects(parsed)
+    found += _duplicates(db, run)
     return found
+
+
+#: 중복 점검에 이름을 적는 시험 수 — 나머지는 센다.
+DUPLICATE_NAMES = 3
+
+
+def _duplicates(db: Session, run: TestRun) -> list[dict[str, str]]:
+    """**같은 원본 · 같은 값의 곡선이 다른 시험에 있다**(VOC 54) — 막지 않고 말한다.
+
+    원본 SHA 가 같으면 같은 파일이고, 곡선 지문(`Curve.fingerprint`)이 같으면 줄끝 · 머리말 ·
+    형식 · 단위만 다른 사본이다. 재시험 · 반복 측정이 정상인 자리라 막지 않는다 — 이 점검이
+    처리 결과로 옮겨 가 채택할 때 확인을 받고, 통계는 「같은 지문은 하나로」 를 고를 수 있다.
+    전에는 같은 SHA 만 시험 메모에 적혀 업로드 화면에도 채택에도 안 보였다.
+    """
+    db.flush()
+    found: list[dict[str, str]] = []
+    if run.source_sha256:
+        same_file = db.scalars(
+            select(TestRun.record_name).where(
+                TestRun.source_sha256 == run.source_sha256,
+                TestRun.id != run.id,
+                TestRun.deleted_at.is_(None),
+            )
+        ).all()
+        if same_file:
+            found.append(
+                {
+                    "code": "duplicate_file",
+                    "message": "내용이 같은 원본 파일이 다른 시험에 있습니다 — "
+                    f"{_names(same_file)}. "
+                    "같은 측정을 두 번 올렸으면 통계에 두 번 들어갑니다.",
+                }
+            )
+    prints = {
+        one.fingerprint: one.label or one.key
+        for one in db.scalars(select(Curve).where(Curve.test_run_id == run.id))
+        if one.fingerprint
+    }
+    if prints:
+        rows = db.execute(
+            select(Curve.fingerprint, TestRun.record_name, TestRun.source_sha256)
+            .join(TestRun, TestRun.id == Curve.test_run_id)
+            .where(
+                Curve.fingerprint.in_(list(prints)),
+                Curve.test_run_id != run.id,
+                TestRun.deleted_at.is_(None),
+            )
+        ).all()
+        # 같은 파일이면 위에서 말했다 — 값만 같은 사본(형식 · 단위만 다른 것)을 따로 말한다.
+        copies: dict[str, list[str]] = {}
+        for print_, name, sha in rows:
+            if run.source_sha256 and sha == run.source_sha256:
+                continue
+            copies.setdefault(print_, []).append(name)
+        for print_, names in copies.items():
+            found.append(
+                {
+                    "code": "duplicate_curve",
+                    "message": f"곡선 '{prints[print_]}' 의 값이 다른 시험의 곡선과 같습니다 "
+                    f"— {_names(names)}. 형식 · 단위만 다른 사본일 수 있습니다(SI 로 견줌).",
+                }
+            )
+    return found
+
+
+def _names(names: Sequence[str]) -> str:
+    unique = list(dict.fromkeys(names))
+    shown = ", ".join(unique[:DUPLICATE_NAMES])
+    return shown + (
+        f" 외 {len(unique) - DUPLICATE_NAMES}건" if len(unique) > DUPLICATE_NAMES else ""
+    )
 
 
 def _nominal_as_measured(db: Session, run: TestRun) -> list[dict[str, str]]:
@@ -1304,6 +1377,11 @@ def _store_curves(db: Session, run: TestRun, parsed: ParsedTest, *, version: str
     # 같은 키가 둘이면 두 번째 파일이 첫 번째를 덮고(같은 파일 이름) 저장은 막힌다.
     taken: set[str] = set()
     renamed: list[str] = []
+    #: 지문에 쓰는 채널 — **시험 종류가 정의한 것만**(VOC 54). 장비가 더 적은 열(시간 · 온도
+    #: 모니터)이 달라도 같은 측정은 같게 본다. 정의가 없으면 곡선의 채널 전부다.
+    defined = set(
+        db.scalars(select(TestChannel.key).where(TestChannel.test_type_id == run.test_type_id))
+    )
     for curve in parsed.all_curves:
         if not curve.channels:
             continue
@@ -1326,6 +1404,13 @@ def _store_curves(db: Session, run: TestRun, parsed: ParsedTest, *, version: str
                 sha256=stored.sha256,
                 byte_size=stored.size,
                 channels=[channel.key for channel in curve.channels],
+                fingerprint=curves.fingerprint(
+                    {
+                        channel.key: channel.values
+                        for channel in curve.channels
+                        if not defined or channel.key in defined
+                    }
+                ),
             )
         )
     return renamed

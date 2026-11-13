@@ -593,6 +593,68 @@ class TestParsing:
         assert services.parse_run(db, uuid.UUID(created["id"])) == "gone"
 
 
+@pytest.mark.duplicates
+class Test같은_측정이_다시_들어올_때:
+    """**막지 않고 말한다**(2026-11-14, VOC 54) — 재시험 · 반복 측정이 정상인 자리다.
+
+    전에는 같은 원본 SHA 만 시험 메모에 적혀 업로드 화면에도 채택에도 안 보였다. 이제 시험
+    점검이 되어 처리 결과로 옮겨 가고, 채택할 때 확인을 받는다.
+    """
+
+    def _parsed(
+        self,
+        client: TestClient,
+        headers: dict[str, str],
+        db: Session,
+        specimen_id: str,
+        data: bytes,
+    ) -> TestRun:
+        made = _upload(client, headers, specimen_id, content=data)
+        assert made.status_code == 202, made.text
+        run_id = uuid.UUID(made.json()["id"])
+        assert services.parse_run(db, run_id) == "parsed"
+        run = db.get(TestRun, run_id)
+        assert run is not None
+        return run
+
+    def test_같은_파일이면_점검에_남긴다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        db: Session,
+        tensile: None,
+        specimen: dict[str, Any],
+    ) -> None:
+        first = self._parsed(client, admin_headers, db, specimen["id"], TRA.read_bytes())
+        assert not [one for one in first.checks if one["code"].startswith("duplicate")]
+        second = self._parsed(client, admin_headers, db, specimen["id"], TRA.read_bytes())
+        codes = [one["code"] for one in second.checks]
+        assert "duplicate_file" in codes
+        assert "duplicate_curve" not in codes  # 같은 파일이면 한 번만 말한다
+        message = next(
+            one["message"] for one in second.checks if one["code"] == "duplicate_file"
+        )
+        assert first.record_name in message
+
+    def test_형식만_다른_사본도_값으로_알아본다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        db: Session,
+        tensile: None,
+        specimen: dict[str, Any],
+    ) -> None:
+        # 줄끝만 바꾼 사본 — 원본 SHA 는 다르고 곡선 값은 같다.
+        self._parsed(client, admin_headers, db, specimen["id"], TRA.read_bytes())
+        copy = TRA.read_bytes().replace(b"\r\n", b"\n")
+        assert copy != TRA.read_bytes()
+        second = self._parsed(client, admin_headers, db, specimen["id"], copy)
+        codes = [one["code"] for one in second.checks]
+        assert codes.count("duplicate_curve") == 1 and "duplicate_file" not in codes
+        curve = db.scalar(select(Curve).where(Curve.test_run_id == second.id))
+        assert curve is not None and curve.fingerprint
+
+
 class TestCurve:
     def test_축약해서_준다(
         self,

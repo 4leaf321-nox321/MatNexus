@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -16,7 +17,7 @@ from sqlalchemy.orm import Session
 
 from app.modules.materials.models import Material, Sample, Specimen
 from app.modules.processing.models import ProcessingResult
-from app.modules.tests.models import TestRun, TestType
+from app.modules.tests.models import Curve, TestRun, TestType
 from app.shared import curvedata, filestore, permissions
 from app.shared.errors import NotFound
 from matcore import curves, statistics
@@ -63,12 +64,23 @@ class Group:
     members: list[Member]
     skipped_unadopted: int
     """채택되지 않아 빠진 시험 수. **조용히 빼면 n 이 왜 15가 아닌지 모른다.**"""
+    duplicates: int = 0
+    """앞 시험과 **같은 지문**의 곡선을 채택한 시험 수(VOC 54) — 같은 측정이 두 번 셀 수 있다.
+    `unique` 로 부르면 이만큼 빠진 뒤다."""
+    unique: bool = False
+    """「같은 지문은 하나로」 로 셌나."""
 
 
 def groups_for_material(
-    db: Session, user: object, material_id: uuid.UUID
+    db: Session, user: object, material_id: uuid.UUID, *, unique: bool = False
 ) -> tuple[Material, list[Group]]:
-    """재료 하나의 묶음들. 방향마다 따로 나온다."""
+    """재료 하나의 묶음들. 방향마다 따로 나온다.
+
+    `unique` 면 **같은 지문은 하나로** 센다(2026-11-14, VOC 54) — 채택 결과가 처리한 곡선의 값
+    지문(`Curve.fingerprint`)이 앞 시험(먼저 등록한 것)과 같으면 뺀다. 기본은 전처럼 다 센다 —
+    재시험 · 반복 측정이 정상인 자리라 사람이 고른다. 어느 쪽이든 겹친 수는 `duplicates` 에
+    선다.
+    """
     material = db.scalar(
         permissions.visible_materials(db, user).where(Material.id == material_id)  # type: ignore[arg-type]
     )
@@ -121,16 +133,51 @@ def groups_for_material(
         test_type = types.get(type_id)
         if test_type is None:
             continue
+        adopted_count = len(members)
+        kept, doubled = _unique_members(db, members)
         groups.append(
             Group(
                 material=material,
                 test_type=test_type,
                 orientation=orientation,
-                members=members,
-                skipped_unadopted=len(items) - len(members),
+                members=kept if unique else members,
+                skipped_unadopted=len(items) - adopted_count,
+                duplicates=doubled,
+                unique=unique,
             )
         )
     return material, groups
+
+
+def fingerprints_of(db: Session, members: Sequence[Member]) -> dict[uuid.UUID, str]:
+    """시험 → 채택 결과가 처리한 곡선의 값 지문. 지문이 없는 곡선(재기 전)은 빠진다."""
+    if not members:
+        return {}
+    wanted = {(one.run.id, one.result.source_curve_key) for one in members}
+    rows = db.execute(
+        select(Curve.test_run_id, Curve.key, Curve.fingerprint).where(
+            Curve.test_run_id.in_([one.run.id for one in members]),
+            Curve.fingerprint.is_not(None),
+        )
+    ).all()
+    return {run_id: print_ for run_id, key, print_ in rows if (run_id, key) in wanted}
+
+
+def _unique_members(db: Session, members: list[Member]) -> tuple[list[Member], int]:
+    """같은 지문은 **먼저 등록한 시험 하나**만 남긴다. `(남긴 것, 뺀 수)`."""
+    prints = fingerprints_of(db, members)
+    seen: set[str] = set()
+    kept: list[Member] = []
+    for member in sorted(members, key=lambda one: (one.run.created_at, str(one.run.id))):
+        print_ = prints.get(member.run.id)
+        if print_ is not None and print_ in seen:
+            continue
+        if print_ is not None:
+            seen.add(print_)
+        kept.append(member)
+    order = {member.run.id: index for index, member in enumerate(members)}
+    kept.sort(key=lambda one: order[one.run.id])
+    return kept, len(members) - len(kept)
 
 
 def scalar_table(group: Group, *, threshold: float) -> list[dict[str, Any]]:

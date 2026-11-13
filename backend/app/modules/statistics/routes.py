@@ -119,6 +119,16 @@ def _group_out(db: Session, group: services.Group, *, threshold: float) -> Group
             f"채택되지 않은 시험 {group.skipped_unadopted}건은 빠졌습니다. "
             f"처리한 뒤 결과 탭에서 채택하면 여기에 들어옵니다."
         )
+    if group.duplicates:
+        # **같은 측정이 두 번 셀 수 있다**(VOC 54) — 막지 않고 말한다. 고르는 것은 사람이다.
+        notes.append(
+            f"같은 지문(값이 같은 곡선)을 채택한 시험 {group.duplicates}건을 빼고 셌습니다 — "
+            "먼저 등록한 시험 하나만 남겼습니다."
+            if group.unique
+            else f"앞 시험과 같은 지문(값이 같은 곡선)을 채택한 시험이 {group.duplicates}건 "
+            "있습니다 — 같은 측정이 두 번 셀 수 있습니다. 「같은 지문은 하나로」 로 한 번만 "
+            "셀 수 있습니다."
+        )
     if len(group.members) == 0:
         # **왜 비었는지 말한다.** 채택이 무엇인지 모르는 사람에게는 빈 화면이
         # 고장으로 보인다.
@@ -173,6 +183,8 @@ def _group_out(db: Session, group: services.Group, *, threshold: float) -> Group
         fit_blocks=fit_blocks,
         sample_count=len(group.members),
         skipped_unadopted=group.skipped_unadopted,
+        duplicate_count=group.duplicates,
+        unique=group.unique,
         test_run_ids=[member.run.id for member in group.members],
         record_names=[member.run.record_name for member in group.members],
         scalars=[
@@ -207,6 +219,9 @@ def _group_out(db: Session, group: services.Group, *, threshold: float) -> Group
 def material_statistics(
     material_id: uuid.UUID,
     threshold: float = Query(default=statistics.DEFAULT_OUTLIER_THRESHOLD, gt=0, le=20),
+    unique: bool = Query(
+        default=False, description="같은 지문의 곡선은 먼저 등록한 시험 하나만 센다(VOC 54)."
+    ),
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> MaterialStatisticsOut:
@@ -215,7 +230,7 @@ def material_statistics(
     인장은 압연 방향에 따라 물성이 다르다 — MD 와 TD 를 한 통계로 묶으면 CV 가
     크게 나오는데 그것은 산포가 아니라 다른 것을 섞은 것이다.
     """
-    material, groups = services.groups_for_material(db, user, material_id)
+    material, groups = services.groups_for_material(db, user, material_id, unique=unique)
     return MaterialStatisticsOut(
         material_id=material.id,
         material_name=material.record_name,
@@ -483,6 +498,9 @@ def _pick_scalars(collected: analysis.Collected, wanted: list[str]) -> list[Anal
 @router.get("/analysis/compare", response_model=CompareOut)
 def analysis_compare(
     material_ids: list[uuid.UUID] = Query(default=[]),
+    unique: bool = Query(
+        default=False, description="같은 지문의 곡선은 먼저 등록한 시험 하나만 센다(VOC 54)."
+    ),
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> CompareOut:
@@ -490,7 +508,7 @@ def analysis_compare(
 
     안 고르면 빈 표를 준다 — 전체를 자동으로 세우면 94개짜리 표가 나온다.
     """
-    collected = analysis.collect(db, user, material_ids=material_ids)
+    collected = analysis.collect(db, user, material_ids=material_ids, unique=unique)
     by_material: dict[uuid.UUID, dict[str, list[analysis.Observation]]] = {}
     names: dict[uuid.UUID, tuple[str, str]] = {}
     for one in collected.observations:
@@ -528,6 +546,7 @@ def analysis_compare(
         materials=sorted(materials, key=lambda one: one.material_name),
         scalars=_scalars(collected),
         skipped_unadopted=collected.skipped_unadopted,
+        duplicate_count=collected.duplicates,
     )
 
 
@@ -550,6 +569,9 @@ def analysis_materials(
 def analysis_distribution(
     scalar: list[str] = Query(default=[]),
     group_by: str = Query(default="family", pattern="^(family|category)$"),
+    unique: bool = Query(
+        default=False, description="같은 지문의 곡선은 먼저 등록한 시험 하나만 센다(VOC 54)."
+    ),
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> AnalysisDistributionOut:
@@ -559,7 +581,7 @@ def analysis_distribution(
     어떻게 흩어지나」 를 한 표에서 본다. 사업부는 여기 없다: 흩어짐은 재료의 성질이지
     누가 쟀는가의 성질이 아니다(사업부별 건수는 홈에 있다).
     """
-    collected = analysis.collect(db, user)
+    collected = analysis.collect(db, user, unique=unique)
     picked = _pick_scalars(collected, scalar)
     keys = [one.key for one in picked]
 
@@ -583,6 +605,7 @@ def analysis_distribution(
         groups=groups,
         scalars=_scalars(collected),
         skipped_unadopted=collected.skipped_unadopted,
+        duplicate_count=collected.duplicates,
     )
 
 
@@ -665,11 +688,14 @@ def analysis_spec_gap(
 def analysis_trend(
     scalar: str | None = Query(default=None),
     group_by: str = Query(default="division", pattern="^(division|material|family)$"),
+    unique: bool = Query(
+        default=False, description="같은 지문의 곡선은 먼저 등록한 시험 하나만 센다(VOC 54)."
+    ),
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> AnalysisTrendOut:
     """해가 가며 값이 흐르는가. **해는 시험일** — 등록일로 세면 이관한 해에 몰린다."""
-    collected = analysis.collect(db, user)
+    collected = analysis.collect(db, user, unique=unique)
     key = _pick_scalar(collected, scalar)
     mine = [one for one in collected.observations if one.scalar_key == key]
 
@@ -712,6 +738,7 @@ def analysis_trend(
         series=series,
         scalars=_scalars(collected),
         skipped_unadopted=collected.skipped_unadopted,
+        duplicate_count=collected.duplicates,
     )
 
 

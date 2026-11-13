@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from typing import ClassVar
 
 import pytest
 
@@ -93,3 +94,42 @@ class TestDownsample:
             (1.0, 1.0),
             (2.0, 4.0),
         ]
+
+
+Columns = dict[str, list[float | None]]
+
+
+class Test값_지문:
+    """**SI 값으로 같은 측정을 알아본다**(2026-11-14, VOC 54) — 원본 SHA 는 형식만 달라도
+    다르다."""
+
+    BASE: ClassVar[Columns] = {
+        "force": [0.0, 1234.5, 2469.0],
+        "displacement": [0.0, 0.001, 0.002],
+    }
+
+    def test_열_차례와_적은_자릿수는_상관없다(self) -> None:
+        again = {
+            "displacement": [0.0, 0.0010000000000000002, 0.002],
+            "force": [0.0, 1234.50000000001, 2469.0],
+        }
+        assert curves.fingerprint(self.BASE) == curves.fingerprint(again)
+
+    def test_단위만_다른_사본은_SI_로_같다(self) -> None:
+        # kN 으로 적힌 파일도 읽을 때 N 으로 바뀌어 같은 값이 된다 — 그 SI 값끼리 견준다.
+        in_kn = [float(value or 0.0) * 1e-3 for value in self.BASE["force"]]
+        back: Columns = {**self.BASE, "force": [value * 1e3 for value in in_kn]}
+        assert curves.fingerprint(self.BASE) == curves.fingerprint(back)
+
+    def test_값이_하나라도_다르면_다르다(self) -> None:
+        other: Columns = {**self.BASE, "force": [0.0, 1234.6, 2469.0]}
+        assert curves.fingerprint(self.BASE) != curves.fingerprint(other)
+
+    def test_빈_칸은_빈_칸끼리만_같다(self) -> None:
+        holed: Columns = {**self.BASE, "force": [0.0, None, 2469.0]}
+        nan: Columns = {**self.BASE, "force": [0.0, float("nan"), 2469.0]}
+        assert curves.fingerprint(holed) == curves.fingerprint(nan)
+        assert curves.fingerprint(holed) != curves.fingerprint(self.BASE)
+
+    def test_열이_없으면_지문도_없다(self) -> None:
+        assert curves.fingerprint({}) is None

@@ -563,6 +563,14 @@ class Curve(Base):
     byte_size: Mapped[int] = mapped_column(BigInteger)
     channels: Mapped[list[str]] = mapped_column(JSONB, default=list, server_default="[]")
     """실제로 들어 있는 채널 키. 정의에 있어도 파일에 없을 수 있다."""
+    fingerprint: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    """**값 지문**(`matcore.curves.fingerprint`) — 시험 종류가 정의한 채널의 SI 값
+    (2026-11-14, VOC 54).
+
+    `sha256` 은 Parquet 파일의 것이라 같은 측정도 열 차례 · 장비가 더 적은 열만 달라도 다르다.
+    같은 지문의 곡선이 다른 시험에 있으면 읽을 때 점검(경고)으로 남고 통계는 「같은 지문은
+    하나로」 를 고를 수 있다. **막지 않는다** — 재시험 · 반복 측정이 정상인 자리다. 비어 있으면
+    지문을 재기 전의 곡선이다(`scripts/backfill_curve_fingerprints.py`)."""
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()

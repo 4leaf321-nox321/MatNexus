@@ -170,3 +170,50 @@ describe('읽을 형식 (2026-10-20)', () => {
     expect(screen.queryByRole('combobox', { name: '읽을 형식' })).not.toBeInTheDocument()
   })
 })
+
+describe('같은 파일이 이미 있을 때 (2026-11-14, VOC 54)', () => {
+  // 서버는 막지 않고 메모에 적는데, 창이 바로 닫혀 그 말을 아무도 못 봤다.
+  it('등록은 하되 닫기 전에 말하고, 「닫기」 를 기다린다', async () => {
+    upload.mockResolvedValue({
+      id: 'run2',
+      record_name: 'SECC_S1_MD_01__TEN_02',
+      note: '※ 내용이 같은 파일이 이미 1건 등록돼 있습니다.',
+    })
+    const onDone = vi.fn()
+    const user = userEvent.setup()
+    render(
+      <UploadDialog
+        open
+        specimenId="sp1"
+        specimenName="SECC_S1_MD_01"
+        presetTestType="tensile"
+        onClose={() => {}}
+        onDone={onDone}
+      />
+    )
+    await user.upload(await screen.findByLabelText('원본 파일'), new File(['x'], 'run.tra'))
+    await user.click(screen.getByRole('button', { name: '업로드' }))
+    expect(await screen.findByText(/내용이 같은 파일이 이미 1건 등록돼 있습니다/)).toBeInTheDocument()
+    expect(onDone).not.toHaveBeenCalled()
+    await user.click(screen.getByRole('button', { name: '닫기' }))
+    expect(onDone).toHaveBeenCalledTimes(1)
+  })
+
+  it('같은 파일이 없으면 바로 닫는다', async () => {
+    const onDone = vi.fn()
+    const user = userEvent.setup()
+    render(
+      <UploadDialog
+        open
+        specimenId="sp1"
+        specimenName="SECC_S1_MD_01"
+        presetTestType="tensile"
+        onClose={() => {}}
+        onDone={onDone}
+      />
+    )
+    await user.upload(await screen.findByLabelText('원본 파일'), new File(['x'], 'run.tra'))
+    await user.click(screen.getByRole('button', { name: '업로드' }))
+    await waitFor(() => expect(onDone).toHaveBeenCalledTimes(1))
+  })
+})

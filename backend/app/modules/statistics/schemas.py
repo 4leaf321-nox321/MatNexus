@@ -85,6 +85,11 @@ class GroupOut(BaseModel):
     sample_count: int
     skipped_unadopted: int
     """채택되지 않아 빠진 시험 수. **조용히 빼면 n 이 왜 이 수인지 모른다.**"""
+    duplicate_count: int = 0
+    """앞 시험과 **같은 지문**의 곡선을 채택한 시험 수(VOC 54). `unique` 로 불렀으면 빠진
+    뒤다."""
+    unique: bool = False
+    """「같은 지문은 하나로」 로 셌나."""
     fittable: bool = False
     """경화식·초탄성 적합에 넣을 수 있나 — 채택 결과에 진소성변형률·진응력 열이 있는가.
 
@@ -276,6 +281,9 @@ class CompareOut(BaseModel):
     scalars: list[AnalysisScalarOut]
     """고른 재료들이 **함께 가진** 항목이 앞에 온다 — 비교표의 열이 된다."""
     skipped_unadopted: int
+    duplicate_count: int = 0
+    """앞 시험과 **같은 지문**의 곡선을 채택한 시험 수(VOC 54). `unique` 로 불렀으면 빠진
+    뒤다."""
 
 
 class DistributionGroupOut(BaseModel):
@@ -292,6 +300,9 @@ class AnalysisDistributionOut(BaseModel):
     groups: list[DistributionGroupOut]
     scalars: list[AnalysisScalarOut]
     skipped_unadopted: int
+    duplicate_count: int = 0
+    """앞 시험과 **같은 지문**의 곡선을 채택한 시험 수(VOC 54). `unique` 로 불렀으면 빠진
+    뒤다."""
 
 
 class MaterialChoiceOut(BaseModel):
@@ -356,6 +367,9 @@ class AnalysisTrendOut(BaseModel):
     series: list[TrendSeriesOut]
     scalars: list[AnalysisScalarOut]
     skipped_unadopted: int
+    duplicate_count: int = 0
+    """앞 시험과 **같은 지문**의 곡선을 채택한 시험 수(VOC 54). `unique` 로 불렀으면 빠진
+    뒤다."""
 
 
 class CoverageCellOut(BaseModel):

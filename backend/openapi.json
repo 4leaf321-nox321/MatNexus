@@ -558,6 +558,11 @@
       },
       "AnalysisDistributionOut": {
         "properties": {
+          "duplicate_count": {
+            "default": 0,
+            "title": "Duplicate Count",
+            "type": "integer"
+          },
           "group_by": {
             "title": "Group By",
             "type": "string"
@@ -653,6 +658,11 @@
       },
       "AnalysisTrendOut": {
         "properties": {
+          "duplicate_count": {
+            "default": 0,
+            "title": "Duplicate Count",
+            "type": "integer"
+          },
           "group_by": {
             "title": "Group By",
             "type": "string"
@@ -9973,6 +9983,11 @@
       },
       "CompareOut": {
         "properties": {
+          "duplicate_count": {
+            "default": 0,
+            "title": "Duplicate Count",
+            "type": "integer"
+          },
           "materials": {
             "items": {
               "$ref": "#/components/schemas/CompareMaterialOut"
@@ -16704,6 +16719,11 @@
               }
             ]
           },
+          "duplicate_count": {
+            "default": 0,
+            "title": "Duplicate Count",
+            "type": "integer"
+          },
           "fit_blocks": {
             "default": [],
             "items": {
@@ -16765,6 +16785,11 @@
           "test_type_label": {
             "title": "Test Type Label",
             "type": "string"
+          },
+          "unique": {
+            "default": false,
+            "title": "Unique",
+            "type": "boolean"
           }
         },
         "required": [
@@ -57438,6 +57463,18 @@
               "title": "Material Ids",
               "type": "array"
             }
+          },
+          {
+            "description": "같은 지문의 곡선은 먼저 등록한 시험 하나만 센다(VOC 54).",
+            "in": "query",
+            "name": "unique",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "같은 지문의 곡선은 먼저 등록한 시험 하나만 센다(VOC 54).",
+              "title": "Unique",
+              "type": "boolean"
+            }
           }
         ],
         "responses": {
@@ -57517,6 +57554,18 @@
               "pattern": "^(family|category)$",
               "title": "Group By",
               "type": "string"
+            }
+          },
+          {
+            "description": "같은 지문의 곡선은 먼저 등록한 시험 하나만 센다(VOC 54).",
+            "in": "query",
+            "name": "unique",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "같은 지문의 곡선은 먼저 등록한 시험 하나만 센다(VOC 54).",
+              "title": "Unique",
+              "type": "boolean"
             }
           }
         ],
@@ -57626,6 +57675,18 @@
               "pattern": "^(division|material|family)$",
               "title": "Group By",
               "type": "string"
+            }
+          },
+          {
+            "description": "같은 지문의 곡선은 먼저 등록한 시험 하나만 센다(VOC 54).",
+            "in": "query",
+            "name": "unique",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "같은 지문의 곡선은 먼저 등록한 시험 하나만 센다(VOC 54).",
+              "title": "Unique",
+              "type": "boolean"
             }
           }
         ],
@@ -57805,6 +57866,18 @@
               "maximum": 20,
               "title": "Threshold",
               "type": "number"
+            }
+          },
+          {
+            "description": "같은 지문의 곡선은 먼저 등록한 시험 하나만 센다(VOC 54).",
+            "in": "query",
+            "name": "unique",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "같은 지문의 곡선은 먼저 등록한 시험 하나만 센다(VOC 54).",
+              "title": "Unique",
+              "type": "boolean"
             }
           }
         ],

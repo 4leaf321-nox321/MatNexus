@@ -1718,8 +1718,9 @@ class Test최대_응력_앞_하강_경고:
 
     @pytest.mark.parametrize("seed", [0, 1, 2])
     def test_평평한_꼭대기의_잡음은_하강이_아니다(self, seed: int) -> None:
-        # 인장강도 근처가 평평하면 잡음 극값끼리의 차이가 0.002 안에 다시 넘지 못해 「다시 오르지
-        # 않는 하강」 처럼 보인다 — 잡음 σ 기준 없이는 10개 seed 전부 경고를 받았다(합성 DP600).
+        # 인장강도 근처가 평평하면 잡음 극값끼리의 차이가 0.002 안에 다시 넘지 못해 「다시
+        # 오르지 않는 하강」 처럼 보인다 — 잡음 σ 기준 없이는 10개 seed 전부 경고를 받았다(합성
+        # DP600).
         strain = np.linspace(0.0, 0.12, 3000)
         stress = np.minimum(E_TRUE * strain, 460e6 * (1 - np.exp(-(strain + 0.005) / 0.02)))
         rng = np.random.default_rng(seed)

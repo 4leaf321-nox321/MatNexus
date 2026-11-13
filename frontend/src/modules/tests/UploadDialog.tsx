@@ -81,6 +81,11 @@ export function UploadDialog({
   const [division, setDivision] = useState('')
   const [error, setError] = useState<Error | null>(null)
   const [saving, setSaving] = useState(false)
+  /**
+   * **같은 파일이 이미 있으면 닫기 전에 말한다**(2026-11-14, VOC 54). 서버는 막지 않고 메모에 적는데,
+   * 창이 바로 닫혀 그 말을 아무도 못 봤다. 등록은 이미 됐다 — 알리고 「닫기」 를 기다린다.
+   */
+  const [duplicate, setDuplicate] = useState<string | null>(null)
   const [picked, setPicked] = useState<Specimen | null>(null)
   // 시료가 정해진 채로 열렸을 때 — 그 시료의 시편 목록과 「새 시편」.
   const sampleSpecimens = useResource(
@@ -168,7 +173,9 @@ export function UploadDialog({
         profileKey: profileKey ?? undefined,
       })
       onUploaded?.(run)
-      onDone()
+      const said = run.note?.match(/※ 내용이 같은 파일이 이미 \d+건 등록돼 있습니다\./)?.[0]
+      if (said) setDuplicate(said.replace('※ ', ''))
+      else onDone()
     } catch (caught) {
       setError(caught instanceof Error ? caught : new Error('업로드에 실패했습니다.'))
     } finally {
@@ -357,13 +364,32 @@ export function UploadDialog({
 
         <ErrorNotice error={error} />
 
+        {duplicate && (
+          <p
+            role="status"
+            className="rounded-md border border-amber-500/40 bg-amber-500/5 p-3 text-sm"
+          >
+            <b>등록했습니다.</b> {duplicate} 같은 측정을 두 번 올렸으면 통계에 두 번 들어갑니다 —
+            시험 상세의 읽기 경고와 채택 확인에도 같은 말이 남고, 통계에서는 「같은 지문은 하나로」
+            로 한 번만 셀 수 있습니다.
+          </p>
+        )}
+
         <DialogFooter>
-          <Button variant="ghost" onClick={onClose} disabled={saving}>
-            취소
-          </Button>
+          {duplicate ? (
+            <Button onClick={onDone}>닫기</Button>
+          ) : (
+            <Button variant="ghost" onClick={onClose} disabled={saving}>
+              취소
+            </Button>
+          )}
           {/* **도는 동안 도는 것이 보여야 한다.** 파일을 올리고 읽는 데 몇 초가
               걸리는데 단추 글자만 바뀌면 「눌렸나」 를 확신 못 해 다시 누른다. */}
-          <Button onClick={submit} disabled={saving || !file || !selected || !targetId}>
+          <Button
+            onClick={submit}
+            disabled={saving || !file || !selected || !targetId || duplicate !== null}
+            className={duplicate ? 'hidden' : undefined}
+          >
             {saving ? (
               <Loader2 className="size-4 animate-spin" />
             ) : (

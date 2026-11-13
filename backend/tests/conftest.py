@@ -138,6 +138,24 @@ def _open_signup() -> Iterator[None]:
         settings.signup_email_domains = original
 
 
+@pytest.fixture(autouse=True)
+def _reused_fixture_files_are_distinct_measurements(
+    request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """**예제 파일을 다시 올린 시험은 서로 다른 측정으로 친다**(2026-11-14, VOC 54).
+
+    시험들은 `Example.tra` 같은 고정물 하나를 여러 시편에 다시 올려 「시편 여럿」 을 흉내 낸다.
+    중복 점검이 그것을 같은 측정으로 잡으면 결과에 경고가 붙고, 채택이 확인을 요구해 41건이
+    이유 없이 멈췄다 — 그 시험들이 보려는 것은 중복이 아니다. 중복 점검 자체를 보는 시험은
+    `@pytest.mark.duplicates` 를 달아 실제 판정을 돌린다.
+    """
+    if request.node.get_closest_marker("duplicates"):
+        return
+    from app.modules.tests import services as test_services
+
+    monkeypatch.setattr(test_services, "_duplicates", lambda db, run: [])
+
+
 @pytest.fixture(scope="session")
 def engine():  # type: ignore[no-untyped-def]
     url = _test_url()

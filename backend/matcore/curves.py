@@ -15,6 +15,7 @@ Parquet 은 필요한 열만 읽는다. 타입과 열 이름이 파일에 들어
 
 from __future__ import annotations
 
+import hashlib
 import io
 from collections.abc import Mapping, Sequence
 
@@ -160,3 +161,32 @@ def downsample(
 
     result.append(points[-1])
     return result
+
+
+#: 지문에 쓰는 유효숫자 — 장비 · 형식이 같은 값을 다른 자릿수로 적어도(1.2340 · 1.234) 같게
+#: 본다.
+FINGERPRINT_DIGITS = 10
+
+
+def fingerprint(columns: Mapping[str, Sequence[float | None]]) -> str | None:
+    """곡선의 **값 지문** — SI 값을 유효숫자 10자리로 반올림해 해시한다(2026-11-14, VOC 54).
+
+    원본 파일의 SHA 는 줄끝 · 머리말 · 형식 · 단위만 달라도 달라진다. 곡선은 읽을 때 이미 SI 로
+    바뀌어 저장되므로(Decimal 환산), SI 값의 지문은 **단위만 다른 사본**(N/kN · mm/m · %/비율)
+    도 같게 본다. 못 잡는 것: 자릿수가 다르게 적힌 사본(1.235 kN 과 1234.56 N), 점을 솎거나
+    자른 사본 — 그것은 근사 비교의 몫이다.
+
+    열 이름 차례와 무관하다(이름순). 열이 없으면 `None`.
+    """
+    if not columns:
+        return None
+    digest = hashlib.sha256()
+    for key in sorted(columns):
+        digest.update(key.encode("utf-8") + b"\x00")
+        for value in columns[key]:
+            if value is None or value != value:  # NaN
+                digest.update(b"n;")
+            else:
+                digest.update(format(float(value), f".{FINGERPRINT_DIGITS}g").encode() + b";")
+        digest.update(b"\x01")
+    return digest.hexdigest()

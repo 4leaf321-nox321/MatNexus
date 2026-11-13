@@ -83,3 +83,6 @@ testpaths = ["tests"]
 #
 # 워커마다 DB 를 나눈다(`conftest._test_url`). 안 나누면 서로의 테이블을 비운다.
 addopts = "-q -n 4"
+markers = [
+    "duplicates: 중복 점검(VOC 54)을 실제로 돌린다 — 안 달면 예제 파일 재사용을 다른 측정으로 친다",
+]

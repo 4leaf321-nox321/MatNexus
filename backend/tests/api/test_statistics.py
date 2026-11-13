@@ -113,6 +113,75 @@ def _adopt(client: TestClient, headers: dict[str, str], run_id: str) -> None:
     client.post(f"/api/processing/results/{stored['id']}/adopt", headers=headers)
 
 
+@pytest.mark.duplicates
+class Test같은_지문은_하나로:
+    """**같은 측정이 두 번 셀 수 있다**(2026-11-14, VOC 54) — 막지 않고, 셀 때 사람이 고른다.
+
+    개발 DB: 같은 재료 · 시험 종류에 같은 원본의 채택 시험이 둘 이상인 조합이 8개였다.
+    """
+
+    def _adopt_confirmed(
+        self, client: TestClient, headers: dict[str, str], run_id: str
+    ) -> None:
+        stored = client.post(
+            "/api/processing/results",
+            json={"test_run_id": run_id, "steps": STEPS},
+            headers=headers,
+        ).json()
+        took = client.post(
+            f"/api/processing/results/{stored['id']}/adopt",
+            params={"confirm_warnings": True},
+            headers=headers,
+        )
+        assert took.status_code == 200, took.text
+
+    def test_기본은_다_세고_겹친_수를_말한다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        db: Session,
+        material: dict[str, Any],
+    ) -> None:
+        for _ in range(3):  # 같은 파일 셋 — 지문이 같다
+            self._adopt_confirmed(
+                client, admin_headers, _run(client, admin_headers, db, material["id"], "MD")
+            )
+        url = f"/api/statistics/materials/{material['id']}"
+        every = client.get(url, headers=admin_headers).json()["groups"][0]
+        assert every["sample_count"] == 3 and every["duplicate_count"] == 2
+        assert any("같은 지문" in note for note in every["notes"])
+
+        once = client.get(url, params={"unique": True}, headers=admin_headers).json()[
+            "groups"
+        ][0]
+        assert once["sample_count"] == 1 and once["unique"] is True
+        assert len(once["test_run_ids"]) == 1
+
+    def test_분석_화면도_같은_선택을_받는다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        db: Session,
+        material: dict[str, Any],
+    ) -> None:
+        for _ in range(2):
+            self._adopt_confirmed(
+                client, admin_headers, _run(client, admin_headers, db, material["id"], "MD")
+            )
+        params: dict[str, Any] = {"material_ids": [material["id"]]}
+        every = client.get(
+            "/api/statistics/analysis/compare", params=params, headers=admin_headers
+        )
+        assert every.json()["duplicate_count"] == 1
+        once = client.get(
+            "/api/statistics/analysis/compare",
+            params={**params, "unique": True},
+            headers=admin_headers,
+        ).json()
+        cells = once["materials"][0]["scalars"]
+        assert cells and all(cell["count"] == 1 for cell in cells), cells
+
+
 class Test통계에_못_들어가는_값:
     """**못 믿는다고 적어 놓고 낸 값이 평균되면 안 된다.**
 

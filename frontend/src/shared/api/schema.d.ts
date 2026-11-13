@@ -9426,6 +9426,11 @@ export interface components {
         };
         /** AnalysisDistributionOut */
         AnalysisDistributionOut: {
+            /**
+             * Duplicate Count
+             * @default 0
+             */
+            duplicate_count: number;
             /** Group By */
             group_by: string;
             /** Groups */
@@ -9460,6 +9465,11 @@ export interface components {
         };
         /** AnalysisTrendOut */
         AnalysisTrendOut: {
+            /**
+             * Duplicate Count
+             * @default 0
+             */
+            duplicate_count: number;
             /** Group By */
             group_by: string;
             /** Scalar Key */
@@ -12687,6 +12697,11 @@ export interface components {
         };
         /** CompareOut */
         CompareOut: {
+            /**
+             * Duplicate Count
+             * @default 0
+             */
+            duplicate_count: number;
             /** Materials */
             materials: components["schemas"]["CompareMaterialOut"][];
             /** Scalars */
@@ -15349,6 +15364,11 @@ export interface components {
         GroupOut: {
             curve: components["schemas"]["CurveStatsOut"] | null;
             /**
+             * Duplicate Count
+             * @default 0
+             */
+            duplicate_count: number;
+            /**
              * Fit Blocks
              * @default []
              */
@@ -15376,6 +15396,11 @@ export interface components {
             test_type_key: string;
             /** Test Type Label */
             test_type_label: string;
+            /**
+             * Unique
+             * @default false
+             */
+            unique: boolean;
         };
         /** GroupResultOut */
         GroupResultOut: {
@@ -35044,6 +35069,8 @@ export interface operations {
         parameters: {
             query?: {
                 material_ids?: string[];
+                /** @description 같은 지문의 곡선은 먼저 등록한 시험 하나만 센다(VOC 54). */
+                unique?: boolean;
             };
             header?: never;
             path?: never;
@@ -35096,6 +35123,8 @@ export interface operations {
             query?: {
                 scalar?: string[];
                 group_by?: string;
+                /** @description 같은 지문의 곡선은 먼저 등록한 시험 하나만 센다(VOC 54). */
+                unique?: boolean;
             };
             header?: never;
             path?: never;
@@ -35168,6 +35197,8 @@ export interface operations {
             query?: {
                 scalar?: string | null;
                 group_by?: string;
+                /** @description 같은 지문의 곡선은 먼저 등록한 시험 하나만 센다(VOC 54). */
+                unique?: boolean;
             };
             header?: never;
             path?: never;
@@ -35285,6 +35316,8 @@ export interface operations {
         parameters: {
             query?: {
                 threshold?: number;
+                /** @description 같은 지문의 곡선은 먼저 등록한 시험 하나만 센다(VOC 54). */
+                unique?: boolean;
             };
             header?: never;
             path: {

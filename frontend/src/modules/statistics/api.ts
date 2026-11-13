@@ -32,10 +32,16 @@ export const statisticsApi = {
   /** 사업부별 현황 — 시험 수와, 그 시험이 걸친 재료·시료·시편 수. */
   divisions: () => api.get<DivisionOverview>('/statistics/divisions'),
 
-  forMaterial: (materialId: string, threshold?: number) =>
-    api.get<MaterialStatistics>(
-      `/statistics/materials/${materialId}${threshold ? `?threshold=${threshold}` : ''}`
-    ),
+  /** `unique` 면 **같은 지문은 하나로** 센다(2026-11-14, VOC 54) — 먼저 등록한 시험 하나만. */
+  forMaterial: (materialId: string, threshold?: number, unique = false) => {
+    const query = new URLSearchParams()
+    if (threshold) query.set('threshold', String(threshold))
+    if (unique) query.set('unique', 'true')
+    const tail = query.toString()
+    return api.get<MaterialStatistics>(
+      `/statistics/materials/${materialId}${tail ? `?${tail}` : ''}`
+    )
+  },
 
   /** 이 묶음의 통계를 남긴다. 불변 — 다시 저장하면 새 행이 생긴다. */
   save: (body: { material_id: string; test_type_key: string; orientation: string }) =>

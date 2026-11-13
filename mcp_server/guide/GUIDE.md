@@ -809,7 +809,9 @@ README 의 기대값과 견주게 안내한다 — 덱 숫자가 맞아도 솔�
 <!--@ statistics -->
 ## 흩어짐 — 평균 하나로 말하지 마라
 
-    얼마나 흩어지나            get_statistics(material_id, test_type, orientation) — 평균·SD·CV·이상치
+    얼마나 흩어지나            get_statistics(material_id, test_type, orientation) — 평균·SD·CV·이상치.
+                               duplicate_count 는 값이 같은 곡선(같은 지문)을 채택한 시험 수 — 같은 측정이
+                               두 번 셌을 수 있다고 말하고, 사람이 원하면 unique=True 로 하나로 센다
     최소 보증값·하위 1 %      get_distribution(…, scalar_key) — 정규·로그정규·와이블 나란히
     선언 vs 잰 값             spec_gap(material_id?) — 차이가 큰 것이 위로
     분류마다 어떻게 흩어지나   spread_by_group(scalars, group_by)

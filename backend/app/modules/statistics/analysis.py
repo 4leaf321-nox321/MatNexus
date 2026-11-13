@@ -39,7 +39,7 @@ from app.modules.accounts.models import User
 from app.modules.fitting.models import PropertyCard
 from app.modules.materials.models import Material, Sample, Specimen
 from app.modules.processing.models import ProcessingResult
-from app.modules.tests.models import TestRun, TestType
+from app.modules.tests.models import Curve, TestRun, TestType
 from app.shared import declared_slots, permissions
 from app.shared import divisions as divisions_order
 from app.shared.coverage import item_links
@@ -72,6 +72,8 @@ class Collected:
     observations: list[Observation]
     skipped_unadopted: int
     """채택 안 돼 빠진 시험 수. **화면이 이 수를 보여야** n 이 설명된다."""
+    duplicates: int = 0
+    """앞 시험과 같은 지문의 곡선을 채택한 시험 수(VOC 54). `unique` 면 이만큼 빠진 뒤다."""
 
 
 def _runs(db: Session, user: User) -> Select[Any]:
@@ -84,6 +86,7 @@ def collect(
     *,
     material_ids: Sequence[uuid.UUID] | None = None,
     scalar_keys: Sequence[str] | None = None,
+    unique: bool = False,
 ) -> Collected:
     """채택된 결과의 스칼라를 관측으로 편다. **다섯 화면이 이것만 쓴다.**
 
@@ -121,10 +124,24 @@ def collect(
     wanted = set(scalar_keys) if scalar_keys else None
     out: list[Observation] = []
     skipped = 0
+    # **같은 지문은 하나로**(VOC 54) — 먼저 등록한 시험 하나만 센다. 지문 비교는 재료 · 시험
+    # 종류를 가리지 않는다: 값이 같은 곡선이면 같은 측정이다.
+    prints = _fingerprints(db, [(run, results.get(run.adopted_result_id)) for run, *_ in rows])
+    seen: set[str] = set()
+    doubled: set[uuid.UUID] = set()
+    for run, *_ in sorted(rows, key=lambda row: (row[0].created_at, str(row[0].id))):
+        print_ = prints.get(run.id)
+        if print_ is None:
+            continue
+        if print_ in seen:
+            doubled.add(run.id)
+        seen.add(print_)
     for run, specimen, _sample, material, test_type in rows:
         result = results.get(run.adopted_result_id) if run.adopted_result_id else None
         if result is None:
             skipped += 1
+            continue
+        if unique and run.id in doubled:
             continue
         for scalar in result.scalars:
             key = str(scalar.get("key", ""))
@@ -151,7 +168,23 @@ def collect(
                     value=float(value),
                 )
             )
-    return Collected(out, skipped)
+    return Collected(out, skipped, len(doubled))
+
+
+def _fingerprints(
+    db: Session, pairs: Sequence[tuple[TestRun, ProcessingResult | None]]
+) -> dict[uuid.UUID, str]:
+    """시험 → 채택 결과가 처리한 곡선의 값 지문(한 질의). 지문이 없으면 빠진다."""
+    wanted = {(run.id, result.source_curve_key) for run, result in pairs if result is not None}
+    if not wanted:
+        return {}
+    rows = db.execute(
+        select(Curve.test_run_id, Curve.key, Curve.fingerprint).where(
+            Curve.test_run_id.in_([run_id for run_id, _ in wanted]),
+            Curve.fingerprint.is_not(None),
+        )
+    ).all()
+    return {run_id: print_ for run_id, key, print_ in rows if (run_id, key) in wanted}
 
 
 # --- 요약 ------------------------------------------------------------------------
