@@ -433,6 +433,18 @@ class TestRun(Base):
     하나였다. 이 칸은 처리 결과로 옮겨 가 채택할 때 확인을 받고 카드 근거에 실린다. 다시 읽으면
     새로 잰다."""
 
+    hold_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    """**물성 사용 보류**의 사유 — 비어 있지 않으면 보류 중이다(2026-11-14, VOC 60).
+
+    자료 관리자가 걸고 푼다(`shared/holds.py`). 걸리면 채택 · 카드에 못 쓰고 통계 · 분석 ·
+    글로벌 피팅에서 빠지며, 이 시험을 근거로 쓴 카드에는 비고가 붙는다. 사람과 AI 에 같은
+    규칙이다.
+    사유가 곧 상태다 — 사유 없는 보류는 없다."""
+    held_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    held_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
+
     parse_profile_id: Mapped[uuid.UUID | None] = mapped_column(
         PgUUID(as_uuid=True), ForeignKey("format_profiles.id"), index=True, nullable=True
     )

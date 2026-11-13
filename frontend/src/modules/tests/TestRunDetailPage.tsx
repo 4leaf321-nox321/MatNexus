@@ -42,6 +42,7 @@ import {
 } from '@/modules/tests/curves'
 import { NOTABLE_DIFFERENCE, pairSummaries } from '@/modules/tests/summaries'
 import { axisLabel, formatValue, toDisplay } from '@/shared/units'
+import { HoldPanel } from '@/modules/tests/HoldPanel'
 import { useAuth } from '@/shared/auth/AuthContext'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import {
@@ -555,6 +556,16 @@ export default function TestRunDetailPage() {
               형식이 없으면 <b>장비 파일 정의</b>에서 새로 만들고 다시 읽습니다.
             </p>
           </div>
+        )}
+
+        {item && (
+          <HoldPanel
+            runId={item.id}
+            holdReason={item.hold_reason}
+            heldBy={item.held_by}
+            canSteward={Boolean(user?.is_system_admin || user?.is_data_manager)}
+            onChanged={run.reload}
+          />
         )}
 
         {item?.note && (

@@ -7309,6 +7309,35 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/test-runs/{run_id}/hold": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Hold Run
+         * @description **물성 사용 보류**를 건다(2026-11-14, VOC 60) — 자료 관리자만, 사유와 함께.
+         *
+         *     걸리면 채택 · 카드 생성이 막히고 통계 · 분석 · 글로벌 피팅에서 빠진다(`shared/holds.py`).
+         *     이미 만든 카드는 값이 불변이라 **비고**를 붙인다 — 「근거 시험 하나가 보류됐다」. 사유를
+         *     바꾸려면 다시 건다(덮어쓴다). 등록자가 아니라 자료 관리자가 푸는 이유: 스스로 풀 수 있으면
+         *     보류가 뜻이 없다.
+         */
+        post: operations["hold_run_api_test_runs__run_id__hold_post"];
+        /**
+         * Release Run
+         * @description 물성 사용 보류를 푼다 — 자료 관리자만. 보류 중이 아니면 그대로 돌려준다.
+         */
+        delete: operations["release_run_api_test_runs__run_id__hold_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/test-runs/{run_id}/instrument-dimensions": {
         parameters: {
             query?: never;
@@ -15609,6 +15638,14 @@ export interface components {
             thickness?: string | null;
         };
         /**
+         * HoldRequest
+         * @description 물성 사용 보류를 건다 — **사유가 곧 상태다**(사유 없는 보류는 없다).
+         */
+        HoldRequest: {
+            /** Reason */
+            reason: string;
+        };
+        /**
          * HomeWorkspaceRequest
          * @description 대표 소속을 정한다.
          *
@@ -22896,6 +22933,12 @@ export interface components {
             curves: components["schemas"]["CurveOut"][];
             /** Division */
             division?: string | null;
+            /** Held At */
+            held_at?: string | null;
+            /** Held By */
+            held_by?: string | null;
+            /** Hold Reason */
+            hold_reason?: string | null;
             /**
              * Id
              * Format: uuid
@@ -23005,6 +23048,12 @@ export interface components {
             created_at: string;
             /** Division */
             division?: string | null;
+            /** Held At */
+            held_at?: string | null;
+            /** Held By */
+            held_by?: string | null;
+            /** Hold Reason */
+            hold_reason?: string | null;
             /**
              * Id
              * Format: uuid
@@ -35861,6 +35910,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CurvePointsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    hold_run_api_test_runs__run_id__hold_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HoldRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TestRunOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    release_run_api_test_runs__run_id__hold_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TestRunOut"];
                 };
             };
             /** @description Validation Error */

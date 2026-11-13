@@ -31,7 +31,7 @@ from app.modules.materials.models import Material, Sample, Specimen
 from app.modules.processing.models import ProcessingResult
 from app.modules.tests.models import TestRun, TestSummary
 from app.modules.viscoelastic.models import MasterCurve, PronyFit
-from app.shared import filestore, permissions, specimen_size
+from app.shared import filestore, holds, permissions, specimen_size
 from app.shared.errors import AppError, NotFound
 from matcore import curves as curvekit
 from matcore import groups, registry
@@ -687,6 +687,10 @@ def create(
         )
 
     runs = [permissions.get_run(db, user, run_id) for run_id in run_ids]
+    # **보류 중인 시험은 묶음에 못 넣는다**(VOC 60) — 사람이 고른 목록이라 빼지 않고 까닭을
+    # 댄다.
+    for run in runs:
+        holds.require_usable(run, code="MNX-GROUPING-0015")
     material = _material_of(db, runs)
     members = (
         collect(db, runs)

@@ -78,6 +78,7 @@ from app.shared import (
     curvedata,
     definition_keys,
     filestore,
+    holds,
     permissions,
     revision,
     specimen_size,
@@ -1129,6 +1130,9 @@ def adopt(
     # **채택은 시험을 고치는 일이다**(ADR 0035) — 「이 시험의 물성은 이것」 이라는
     # 선언이라 통계·카드가 그것을 읽는다. 해석하는 사람이 다르면 그 부서에 편집을 준다.
     permissions.require_edit(db, user, run, code="MNX-PROCESSING-0017")
+    # **보류 중인 시험은 물성이 될 수 없다**(VOC 60) — 확인으로도 못 넘는다. 자료 관리자가
+    # 푼다.
+    holds.require_usable(run, code="MNX-PROCESSING-0021")
     _require_adoptable(item)
     _require_confirmed(item, confirm_warnings)
     run.adopted_result_id = item.id
@@ -1829,6 +1833,11 @@ def run_batch(
                             warnings=_warning_out(found),
                             warning=_adoption_note(payload.adopt, several, lost)
                             or (
+                                holds.message(run)
+                                if payload.adopt and holds.held(run)
+                                else None
+                            )
+                            or (
                                 f"저장하면 확인할 경고가 {len(found)}건이라 채택은 미룹니다 — "
                                 f"{_warning_text(found)}"
                                 if payload.adopt and found
@@ -1861,6 +1870,8 @@ def run_batch(
             # 한 건 채택 · 여러 건 채택과 같은 검사(2026-11-14) — 전에는 일괄 처리만
             # 건너뛰었다.
             problem = _adoptable_problem(stored) if payload.adopt else None
+            if payload.adopt and not problem and holds.held(run):
+                problem = holds.message(run)
             # **경고가 있으면 채택을 미룬다**(2026-11-14, VOC 53~58) — 한 건 · 여러 건 채택은
             # 확인을 받는데, 일괄 처리는 사람이 줄마다 볼 수 없다. 결과는 쌓였으니 검토대에서
             # 경고를 보고 고른다.
@@ -2185,6 +2196,7 @@ def adopt_many(
                         "고른 결과가 이 시험의 것이 아닙니다 — 목록을 다시 읽어 고르세요.",
                     )
                 _require_adoptable(target)
+                holds.require_usable(run, code="MNX-PROCESSING-0021")
                 # 되돌리기(옛 채택으로 돌려보내기)도 이 길이라 같은 판정을 받는다 — 옛 채택이
                 # 경고 기능 전의 것일 수 있다. 화면의 「되돌리기」 는 사람이 누른 복원이라
                 # 확인으로 보낸다.

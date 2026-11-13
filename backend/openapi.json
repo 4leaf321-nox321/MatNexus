@@ -17435,6 +17435,22 @@
         "title": "Hints",
         "type": "object"
       },
+      "HoldRequest": {
+        "description": "물성 사용 보류를 건다 — **사유가 곧 상태다**(사유 없는 보류는 없다).",
+        "properties": {
+          "reason": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "title": "HoldRequest",
+        "type": "object"
+      },
       "HomeWorkspaceRequest": {
         "description": "대표 소속을 정한다.\n\n**비우는 길은 두지 않는다.** 대표 소속이 없으면 로그인이 `memberships[0]`,\n즉 이름 순 첫 부서로 떨어지는데 그것은 사람이 정한 값이 아니다. 지우고 싶은\n상황은 실제로는 \"다른 부서로 옮긴다\" 이므로 그때도 새 값을 준다.",
         "properties": {
@@ -36226,6 +36242,40 @@
             ],
             "title": "Division"
           },
+          "held_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Held At"
+          },
+          "held_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Held By"
+          },
+          "hold_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hold Reason"
+          },
           "id": {
             "format": "uuid",
             "title": "Id",
@@ -36613,6 +36663,40 @@
               }
             ],
             "title": "Division"
+          },
+          "held_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Held At"
+          },
+          "held_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Held By"
+          },
+          "hold_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hold Reason"
           },
           "id": {
             "format": "uuid",
@@ -59140,6 +59224,102 @@
           }
         },
         "summary": "Get Curve",
+        "tags": [
+          "tests"
+        ]
+      }
+    },
+    "/api/test-runs/{run_id}/hold": {
+      "delete": {
+        "description": "물성 사용 보류를 푼다 — 자료 관리자만. 보류 중이 아니면 그대로 돌려준다.",
+        "operationId": "release_run_api_test_runs__run_id__hold_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TestRunOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Release Run",
+        "tags": [
+          "tests"
+        ]
+      },
+      "post": {
+        "description": "**물성 사용 보류**를 건다(2026-11-14, VOC 60) — 자료 관리자만, 사유와 함께.\n\n걸리면 채택 · 카드 생성이 막히고 통계 · 분석 · 글로벌 피팅에서 빠진다(`shared/holds.py`).\n이미 만든 카드는 값이 불변이라 **비고**를 붙인다 — 「근거 시험 하나가 보류됐다」. 사유를\n바꾸려면 다시 건다(덮어쓴다). 등록자가 아니라 자료 관리자가 푸는 이유: 스스로 풀 수 있으면\n보류가 뜻이 없다.",
+        "operationId": "hold_run_api_test_runs__run_id__hold_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HoldRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TestRunOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Hold Run",
         "tags": [
           "tests"
         ]

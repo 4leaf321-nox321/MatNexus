@@ -1349,6 +1349,7 @@ async def list_test_runs(
                 "name": one.get("record_name"),
                 "test_type": one.get("test_type_key"),
                 "status": one.get("status"),
+                **({"hold_reason": one["hold_reason"]} if one.get("hold_reason") else {}),
                 "adopted": bool(one.get("adopted_result_id")),
                 "result_count": one.get("result_count"),
                 "master_curve_count": one.get("master_curve_count"),
@@ -2604,6 +2605,12 @@ async def get_test_run(ctx: Context, test_run_id: str) -> dict[str, Any]:
         # 읽기 실패의 이유 · 읽기 경고(형식 후보가 여럿이었다 등) — 사람에게 옮길 것.
         **({"parse_error": run["parse_error"]} if run.get("parse_error") else {}),
         **({"warnings": run["warnings"]} if run.get("warnings") else {}),
+        # **물성 사용 보류**(VOC 60) — 채택 · 카드에 못 쓰고 통계에서 빠진다. 사유를 사람에게 옮겨라.
+        **(
+            {"hold": {"reason": run["hold_reason"], "by": run.get("held_by")}}
+            if run.get("hold_reason")
+            else {}
+        ),
         "conditions": run.get("conditions"),
         "material_id": run.get("material_id"),
         **({"specimen": specimen} if specimen else {}),
@@ -7381,6 +7388,9 @@ async def adopt_results(
             "current": run.get("adopted_result_id"),
             "next": result_id,
         }
+        if run.get("hold_reason") and result_id is not None:
+            # 보류는 확인으로도 못 넘는다(VOC 60) — 자료 관리자가 풀어야 한다.
+            row["error"] = f"물성 사용 보류 중입니다 — {run['hold_reason']}. 채택할 수 없습니다."
         if result_id is not None and chosen is None:
             row["error"] = "그 결과는 이 시험의 것이 아닙니다 — list_processing_results 로 id 를 확인하세요."
         elif chosen is not None:

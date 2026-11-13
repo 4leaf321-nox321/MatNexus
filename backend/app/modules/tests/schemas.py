@@ -399,6 +399,11 @@ class TestRunOut(BaseModel):
     channels: list[str]
     warnings: list[str]
     created_at: datetime
+    hold_reason: str | None = None
+    """**물성 사용 보류**의 사유 — 있으면 채택 · 카드에 못 쓰고 통계에서 빠진다(VOC 60)."""
+    held_at: datetime | None = None
+    held_by: str | None = None
+    """보류를 건 자료 관리자."""
     access: EditAccessOut | None = None
     """지금 이 사람이 고칠 수 있나 — 못 하면 누구에게 물으면 되는지(ADR 0035)."""
     matched: str | None = None
@@ -1011,3 +1016,9 @@ class ProfileCheckOut(BaseModel):
     """정의로 읽어 본 결과. 실패했으면 없다."""
     problem: str | None = None
     """읽다가 멈춘 자리."""
+
+
+class HoldRequest(BaseModel):
+    """물성 사용 보류를 건다 — **사유가 곧 상태다**(사유 없는 보류는 없다)."""
+
+    reason: str = Field(min_length=1, max_length=1000)

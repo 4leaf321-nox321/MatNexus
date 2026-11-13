@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 from app.modules.materials.models import Material, Sample, Specimen
 from app.modules.processing.models import ProcessingResult
 from app.modules.tests.models import Curve, TestRun, TestType
-from app.shared import curvedata, filestore, permissions
+from app.shared import curvedata, filestore, holds, permissions
 from app.shared.errors import NotFound
 from matcore import curves, statistics
 from matcore.processing import tensile
@@ -69,6 +69,8 @@ class Group:
     `unique` 로 부르면 이만큼 빠진 뒤다."""
     unique: bool = False
     """「같은 지문은 하나로」 로 셌나."""
+    held: int = 0
+    """**물성 사용 보류** 중이라 뺀 채택 시험 수(VOC 60) — 보류는 자료 관리자가 건다."""
 
 
 def groups_for_material(
@@ -125,15 +127,17 @@ def groups_for_material(
     for (type_id, orientation), items in sorted(
         buckets.items(), key=lambda entry: (str(entry[0][0]), entry[0][1])
     ):
-        members = [
+        every = [
             Member(run=run, result=adopted[run.adopted_result_id], specimen=specimen)
             for run, specimen in items
             if run.adopted_result_id and run.adopted_result_id in adopted
         ]
+        # **보류 중인 시험은 통계 · 카드에 안 들어간다**(VOC 60) — 몇 건 뺐는지는 말한다.
+        members = [one for one in every if holds.usable(one.run)]
         test_type = types.get(type_id)
         if test_type is None:
             continue
-        adopted_count = len(members)
+        adopted_count = len(every)
         kept, doubled = _unique_members(db, members)
         groups.append(
             Group(
@@ -144,6 +148,7 @@ def groups_for_material(
                 skipped_unadopted=len(items) - adopted_count,
                 duplicates=doubled,
                 unique=unique,
+                held=len(every) - len(members),
             )
         )
     return material, groups

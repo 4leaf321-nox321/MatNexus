@@ -40,7 +40,7 @@ from app.modules.fitting.models import PropertyCard
 from app.modules.materials.models import Material, Sample, Specimen
 from app.modules.processing.models import ProcessingResult
 from app.modules.tests.models import Curve, TestRun, TestType
-from app.shared import declared_slots, permissions
+from app.shared import declared_slots, holds, permissions
 from app.shared import divisions as divisions_order
 from app.shared.coverage import item_links
 from app.shared.errors import NotFound
@@ -74,6 +74,8 @@ class Collected:
     """채택 안 돼 빠진 시험 수. **화면이 이 수를 보여야** n 이 설명된다."""
     duplicates: int = 0
     """앞 시험과 같은 지문의 곡선을 채택한 시험 수(VOC 54). `unique` 면 이만큼 빠진 뒤다."""
+    held: int = 0
+    """물성 사용 보류 중이라 뺀 채택 시험 수(VOC 60)."""
 
 
 def _runs(db: Session, user: User) -> Select[Any]:
@@ -124,6 +126,7 @@ def collect(
     wanted = set(scalar_keys) if scalar_keys else None
     out: list[Observation] = []
     skipped = 0
+    held = 0
     # **같은 지문은 하나로**(VOC 54) — 먼저 등록한 시험 하나만 센다. 지문 비교는 재료 · 시험
     # 종류를 가리지 않는다: 값이 같은 곡선이면 같은 측정이다.
     prints = _fingerprints(db, [(run, results.get(run.adopted_result_id)) for run, *_ in rows])
@@ -142,6 +145,9 @@ def collect(
             skipped += 1
             continue
         if unique and run.id in doubled:
+            continue
+        if holds.held(run):
+            held += 1
             continue
         for scalar in result.scalars:
             key = str(scalar.get("key", ""))
@@ -168,7 +174,7 @@ def collect(
                     value=float(value),
                 )
             )
-    return Collected(out, skipped, len(doubled))
+    return Collected(out, skipped, len(doubled), held)
 
 
 def _fingerprints(

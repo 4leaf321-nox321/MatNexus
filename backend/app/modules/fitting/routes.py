@@ -133,6 +133,7 @@ from app.shared import (
     declared_slots,
     definition_keys,
     filestore,
+    holds,
     hyperelastic_sets,
     litdeck,
     pagination,
@@ -2083,6 +2084,8 @@ def _from_prony_fit(db: Session, user: User, fit_id: uuid.UUID) -> _Viscoelastic
     if curve is None:
         raise NotFound("MNX-FITTING-0011", "마스터커브를 찾을 수 없습니다.")
     run = permissions.get_run(db, user, curve.test_run_id)  # 볼 권한이 있는가
+    # **보류 중인 시험으로는 카드를 못 만든다**(VOC 60) — 미리보기 · 저장이 같은 길을 탄다.
+    holds.require_usable(run, code="MNX-FITTING-0054")
     specimen = db.get(Specimen, run.specimen_id)
     sample = db.get(Sample, specimen.sample_id) if specimen else None
     material = db.get(Material, sample.material_id) if sample else None
@@ -2165,6 +2168,8 @@ def _from_group(db: Session, user: User, group_id: uuid.UUID) -> _ViscoelasticSo
     ]
     if not runs:
         raise NotFound("MNX-FITTING-0011", "묶음의 시험을 따라갈 수 없습니다.")
+    for run in runs:
+        holds.require_usable(run, code="MNX-FITTING-0054")
 
     specimens = [db.get(Specimen, run.specimen_id) for run in runs]
     if any(one is None for one in specimens):
@@ -2426,6 +2431,7 @@ def create_dma_temperature_card(
         if table is None:
             raise NotFound("MNX-FITTING-0011", "온도별 탄성률 표를 찾을 수 없습니다.")
         run = permissions.get_run(db, user, table.test_run_id)  # 볼 권한이 있는가
+        holds.require_usable(run, code="MNX-FITTING-0054")
         specimen = db.get(Specimen, run.specimen_id)
         sample = db.get(Sample, specimen.sample_id) if specimen else None
         if specimen is None or sample is None:
@@ -2586,6 +2592,8 @@ def _lineage_of_group(
     ]
     if not runs:
         raise NotFound("MNX-FITTING-0011", "묶음의 시험을 따라갈 수 없습니다.")
+    for run in runs:
+        holds.require_usable(run, code="MNX-FITTING-0054")
     specimens = [db.get(Specimen, run.specimen_id) for run in runs]
     if any(one is None for one in specimens):
         raise NotFound("MNX-FITTING-0011", "묶음의 시편을 따라갈 수 없습니다.")

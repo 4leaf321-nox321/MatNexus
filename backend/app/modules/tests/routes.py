@@ -24,6 +24,7 @@ from app.database import get_db
 from app.jobs import kinds, queue
 from app.modules.accounts.models import User
 from app.modules.commissions.models import Commission, CommissionItem
+from app.modules.fitting.models import PropertyCard, PropertyCardRemark
 from app.modules.materials.models import Material, Sample, Specimen
 from app.modules.processing.models import ProcessingResult
 from app.modules.tests import formats, importing, services
@@ -43,6 +44,7 @@ from app.modules.tests.schemas import (
     CurveOut,
     CurvePointsOut,
     DetectOut,
+    HoldRequest,
     InstrumentDimensionOut,
     InstrumentDimensionsOut,
     ParserOut,
@@ -682,7 +684,10 @@ def _context(db: Session, runs: list[TestRun]) -> dict[str, dict[uuid.UUID, Any]
         u.id: u
         for u in db.scalars(
             select(User).where(
-                User.id.in_([r.registered_by_id for r in runs if r.registered_by_id])
+                User.id.in_(
+                    [r.registered_by_id for r in runs if r.registered_by_id]
+                    + [r.held_by_id for r in runs if r.held_by_id]
+                )
             )
         )
     }
@@ -796,6 +801,13 @@ def _run_out(
             if one.get("replaced_at")
         ],
         note=run.note,
+        hold_reason=run.hold_reason,
+        held_at=run.held_at,
+        held_by=(
+            ctx["users"][run.held_by_id].display_name
+            if run.held_by_id and run.held_by_id in ctx["users"]
+            else None
+        ),
         row_count=curve.row_count if curve else None,
         channels=list(curve.channels) if curve else [],
         warnings=[w for w in warnings.split(" / ") if w],
@@ -1945,6 +1957,112 @@ def retype(
             + (f" 조건 {len(dropped)}칸은 새 종류에 없어 버렸습니다." if dropped else "")
         ),
     )
+
+
+@runs_router.post("/{run_id}/hold", response_model=TestRunOut)
+def hold_run(
+    run_id: uuid.UUID,
+    payload: HoldRequest,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> TestRunOut:
+    """**물성 사용 보류**를 건다(2026-11-14, VOC 60) — 자료 관리자만, 사유와 함께.
+
+    걸리면 채택 · 카드 생성이 막히고 통계 · 분석 · 글로벌 피팅에서 빠진다(`shared/holds.py`).
+    이미 만든 카드는 값이 불변이라 **비고**를 붙인다 — 「근거 시험 하나가 보류됐다」. 사유를
+    바꾸려면 다시 건다(덮어쓴다). 등록자가 아니라 자료 관리자가 푸는 이유: 스스로 풀 수 있으면
+    보류가 뜻이 없다.
+    """
+    permissions.require_steward(user, code="MNX-TESTS-0045", what="물성 사용 보류")
+    run = services.get_run(db, user, run_id)
+    reason = payload.reason.strip()
+    if not reason:
+        raise AppError("MNX-TESTS-0046", "보류 사유를 적으세요.", status=422)
+    before = run.hold_reason
+    run.hold_reason = reason
+    run.held_at = datetime.now(UTC)
+    run.held_by_id = user.id
+    _remark_cards(db, user, run, held=True)
+    audit.record(
+        db,
+        action=audit.TEST_RUN_HELD,
+        actor=user,
+        target_table="test_runs",
+        target_id=run.id,
+        target_label=run.record_name,
+        workspace_id=run.workspace_id,
+        changes={"reason": {"before": before, "after": reason}},
+    )
+    db.commit()
+    db.refresh(run)
+    return _run_out(run, _context(db, [run]), access=access_of(db, user, run))
+
+
+@runs_router.delete("/{run_id}/hold", response_model=TestRunOut)
+def release_run(
+    run_id: uuid.UUID,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> TestRunOut:
+    """물성 사용 보류를 푼다 — 자료 관리자만. 보류 중이 아니면 그대로 돌려준다."""
+    permissions.require_steward(user, code="MNX-TESTS-0045", what="물성 사용 보류 해제")
+    run = services.get_run(db, user, run_id)
+    if run.hold_reason is not None:
+        reason = run.hold_reason
+        run.hold_reason = None
+        run.held_at = None
+        run.held_by_id = None
+        _remark_cards(db, user, run, held=False, reason=reason)
+        audit.record(
+            db,
+            action=audit.TEST_RUN_RELEASED,
+            actor=user,
+            target_table="test_runs",
+            target_id=run.id,
+            target_label=run.record_name,
+            workspace_id=run.workspace_id,
+            changes={"reason": {"before": reason, "after": None}},
+        )
+        db.commit()
+        db.refresh(run)
+    return _run_out(run, _context(db, [run]), access=access_of(db, user, run))
+
+
+def _remark_cards(
+    db: Session, user: User, run: TestRun, *, held: bool, reason: str | None = None
+) -> None:
+    """이 시험을 **근거로 쓴** 카드(사용 중지 빼고)에 비고를 붙인다 — 카드의 값은 불변이다."""
+    material_id = db.scalar(
+        select(Sample.material_id)
+        .join(Specimen, Specimen.sample_id == Sample.id)
+        .where(Specimen.id == run.specimen_id)
+    )
+    if material_id is None:
+        return
+    wanted = str(run.id)
+    for card in db.scalars(
+        select(PropertyCard).where(
+            PropertyCard.material_id == material_id, PropertyCard.status != "deprecated"
+        )
+    ):
+        if wanted not in [str(one) for one in (card.source or {}).get("test_run_ids") or []]:
+            continue
+        db.add(
+            PropertyCardRemark(
+                card_id=card.id,
+                kind="held" if held else "hold_released",
+                message=(
+                    f"근거 시험 '{run.record_name}' 이 물성 사용 보류됐습니다 — "
+                    f"{run.hold_reason}. "
+                    "이 카드의 값은 그 시험을 포함해 계산된 것입니다."
+                    if held
+                    else f"근거 시험 '{run.record_name}' 의 물성 사용 보류가 풀렸습니다"
+                    f"(사유였던 것: {reason})."
+                ),
+                payload={"test_run_id": wanted, "test_run_name": run.record_name},
+                created_by_id=user.id,
+            )
+        )
 
 
 @runs_router.patch("/{run_id}", response_model=TestRunOut)

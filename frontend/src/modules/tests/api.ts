@@ -273,6 +273,12 @@ export const testsApi = {
 
   runs: (query: RunQuery = {}) => api.get<TestRunPage>(`/test-runs${search(query)}`),
   run: (id: string) => api.get<TestRunDetail>(`/test-runs/${id}`),
+  /**
+   * **물성 사용 보류**를 건다 · 푼다(2026-11-14, VOC 60) — 자료 관리자만. 걸리면 채택 · 카드에 못
+   * 쓰고 통계에서 빠진다. 사유가 곧 상태다.
+   */
+  hold: (id: string, reason: string) => api.post<TestRun>(`/test-runs/${id}/hold`, { reason }),
+  release: (id: string) => api.delete<TestRun>(`/test-runs/${id}/hold`),
   remove: (id: string) => api.delete<void>(`/test-runs/${id}`),
 
   /**

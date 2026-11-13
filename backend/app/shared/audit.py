@@ -38,6 +38,9 @@ CARD_DEPRECATED = "card.deprecated"
 CARD_REMARKED = "card.remarked"
 #: 시편을 다른 두께의 같은 재료로 옮겼다(2026-09-29) — 무엇이 어디서 어디로.
 SPECIMENS_RELOCATED = "specimens.relocated"
+#: 시험의 물성 사용 보류를 걸었다 · 풀었다(2026-11-14, VOC 60) — 사유와 함께.
+TEST_RUN_HELD = "test_run.held"
+TEST_RUN_RELEASED = "test_run.released"
 CARD_RESTORED = "card.restored"
 WORKSPACE_MERGED = "workspace.merged"
 CARD_DELETED = "card.deleted"

@@ -119,6 +119,12 @@ def _group_out(db: Session, group: services.Group, *, threshold: float) -> Group
             f"채택되지 않은 시험 {group.skipped_unadopted}건은 빠졌습니다. "
             f"처리한 뒤 결과 탭에서 채택하면 여기에 들어옵니다."
         )
+    if group.held:
+        notes.append(
+            f"물성 사용 보류 중인 시험 {group.held}건은 뺐습니다 — 자료 관리자가 보류를 풀면 "
+            "다시 "
+            "들어옵니다."
+        )
     if group.duplicates:
         # **같은 측정이 두 번 셀 수 있다**(VOC 54) — 막지 않고 말한다. 고르는 것은 사람이다.
         notes.append(

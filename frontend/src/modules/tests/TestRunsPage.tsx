@@ -777,6 +777,16 @@ export default function TestRunsPage() {
                   {run.warnings.length > 0 && (
                     <AlertTriangle className="ml-1 inline size-3 text-amber-500" />
                   )}
+                  {/* **물성 사용 보류**(VOC 60) — 채택 · 카드 · 통계에서 빠진 시험. */}
+                  {run.hold_reason && (
+                    <Badge
+                      variant="outline"
+                      className="border-destructive/50 text-destructive ml-1 text-xs"
+                      title={`물성 사용 보류 — ${run.hold_reason}`}
+                    >
+                      보류
+                    </Badge>
+                  )}
                   {/* 「비슷」 으로 찾았을 때만 — 뜻을 재는 것은 시험이 아니라 재료다. */}
                   <MatchBadge matched={run.matched} meaning="재료의 뜻이 가까움" />
                 </TableCell>
