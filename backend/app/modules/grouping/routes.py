@@ -82,6 +82,7 @@ def list_kinds(
             ),
             requires_channels=[list(one) for one in plugin.requires_channels],
             needs=services.member_needs(plugin.id),
+            min_members=groups.min_members(plugin),
             makes_card=callable(plugin.meta.get("card")),
             params=[
                 GroupingParamOut(

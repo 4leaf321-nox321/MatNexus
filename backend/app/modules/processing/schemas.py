@@ -186,8 +186,9 @@ class ProcessingRunRequest(BaseModel):
     test_run_id: uuid.UUID
     source_curve_key: str | None = None
     """어느 곡선인가. 비우면 첫 번째 — 표가 하나뿐인 파일이 대부분이다."""
-    steps: list[dict[str, Any]]
-    """`[{"plugin": ..., "options": {...}}]`. 저장된 레시피 없이도 돌린다."""
+    steps: list[dict[str, Any]] | None = None
+    """`[{"plugin": ..., "options": {...}}]`. 저장된 레시피 없이도 돌린다. **비우면
+    `recipe_key` 의 단계**(2026-11-14, VOC 45) — 둘 다 없으면 422."""
     recipe_key: str | None = None
     """저장된 레시피로 돌렸으면 그 키. 결과에 이름을 남기려고 받는다."""
 
@@ -258,6 +259,11 @@ class ProcessingResultOut(BaseModel):
     source_curve_key: str
     recipe_key: str | None
     recipe_label: str | None
+    recipe_revision: int | None = None
+    """그 레시피의 몇 번째 판으로 돌렸나(2026-11-14, VOC 45). 옛 결과 · 레시피 없이 돌린
+    것은 비어 있다."""
+    steps_hash: str | None = None
+    """돌린 단계의 지문(sha256). 같으면 단계가 같다 — 레시피가 지워져도 견줄 수 있다."""
     steps: list[dict[str, Any]]
     """**그때의 단계 그대로다.** 레시피가 나중에 바뀌어도 이 값은 안 바뀐다."""
     stages: list[ProcessingStageOut]
@@ -341,7 +347,10 @@ class BatchRequest(BaseModel):
     다온도 시험은 한 파일에 곡선이 여럿인데, 고를 길이 없어 첫 곡선 하나만 처리됐다
     (v1.285.0 보고). 곡선이 여럿이면 한 시험에 결과가 여럿 생기므로 **그 시험은 채택하지
     않는다** — 채택은 시험당 하나라 어느 곡선의 것인지는 사람이 검토대에서 고른다."""
-    steps: list[dict[str, Any]]
+    steps: list[dict[str, Any]] | None = None
+    """**비우면 `recipe_key` 의 단계**(2026-11-14, VOC 45). 전에는 필수라 레시피 키만 주면
+    422 였고, MCP 는 레시피를 읽어 단계를 직접 채워 보냈다. 사용 중지된 레시피로는 돌리지
+    않는다."""
     recipe_key: str | None = None
     adopt: bool = True
     """성공한 것을 바로 채택할지. **기본이 참인 이유:** 배치를 돌리는 사람은

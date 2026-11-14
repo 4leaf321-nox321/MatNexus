@@ -124,14 +124,28 @@ def typed_options(params: Sequence[ParamSpec], options: Mapping[str, Any]) -> di
     return out
 
 
+#: 묶음의 기본 최소 구성원 수. 묶음이 `register(..., min_members=1)` 로 낮출 수 있다.
+MIN_MEMBERS = 2
+
+
+def min_members(plugin: Plugin) -> int:
+    """이 묶음이 받는 최소 구성원 수 — 선언(`meta["min_members"]`)이 없으면 둘(2026-11-14,
+    VOC 51).
+
+    폼 압축 곡선은 시편 하나로도 카드가 된다(폼 블록 · 덱 머리말이 「시편 1개」 를 이미
+    적는다). 전에는 둘 규칙이 모든 묶음 공통이라 폼 시험 하나뿐이면 카드로 갈 길이 없었다.
+    """
+    return max(1, int(plugin.meta.get("min_members", MIN_MEMBERS)))
+
+
 def run_group(
     plugin_id: str, members: Sequence[Member], options: Mapping[str, Any] | None = None
 ) -> GroupOutcome:
     """묶음 하나를 돌린다.
 
-    **둘 미만이면 막는다.** 하나를 「묶었다」 고 부르면 그 결과가 묶음인지 한
+    **기본은 둘 미만이면 막는다.** 하나를 「묶었다」 고 부르면 그 결과가 묶음인지 한
     건인지 나중에 구별할 수 없다 — 대표 하나를 고르는 것도 후보가 여럿일 때
-    뜻이 있다.
+    뜻이 있다. 하나로도 뜻이 있는 묶음은 선언으로 낮춘다(`min_members`).
     """
     try:
         plugin = get(plugin_id)
@@ -142,9 +156,10 @@ def run_group(
             f"묶음 계산이 아닙니다: {plugin_id} 는 '{plugin.kind}' 입니다. "
             f"갈래를 안 보면 묶음 자리에 아무 계산이나 들어간다."
         )
-    if len(members) < 2:
+    least = min_members(plugin)
+    if len(members) < least:
         raise GroupError(
-            f"묶으려면 둘 이상이 필요합니다(지금 {len(members)}개). "
+            f"묶으려면 {least}개 이상이 필요합니다(지금 {len(members)}개). "
             f"하나뿐이면 그 시험의 결과를 그대로 쓰세요."
         )
     outcome = plugin.fn(list(members), **typed_options(plugin.params, options or {}))

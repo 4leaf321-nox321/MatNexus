@@ -297,22 +297,33 @@ async def _send(
     body: dict[str, Any] | None = None,
     *,
     files: dict[str, tuple[str, bytes, str]] | None = None,
+    params: dict[str, Any] | None = None,
 ) -> Any:
     """POST·PATCH 하나. **쓰기는 이 함수만 지난다** — 오류 모양을 한 곳에 둔다.
 
     `files` 를 주면 multipart 로 보낸다 — 그때 `body` 는 폼 칸(문자열)이다. 시험 파일
     올리기가 이 길을 쓴다. 따로 함수를 두지 않는 이유: 쓰기가 한 함수만 지나야
     `test_mcp_writes_audited` 가 감사 누락을 빠짐없이 본다.
+
+    `params` 는 쿼리 — `_get` 처럼 `None` 인 것은 안 보낸다(처리 미리보기의 `x` · `y` · `stage`).
+    **비면 `None` 으로 넘긴다** — httpx 는 빈 dict 를 받으면 경로에 붙여 둔 쿼리
+    (`/materials/preview-name?workspace_slug=…`)를 지운다(0.28.1 실측).
     """
+    query = {key: value for key, value in (params or {}).items() if value is not None} or None
     try:
         async with httpx.AsyncClient(base_url=API_BASE, timeout=120.0) as client:
             if files is not None:
                 got = await client.request(
-                    method, path, data=body or {}, files=files, headers=_headers(ctx)
+                    method,
+                    path,
+                    data=body or {},
+                    files=files,
+                    params=query,
+                    headers=_headers(ctx),
                 )
             else:
                 got = await client.request(
-                    method, path, json=body or {}, headers=_headers(ctx)
+                    method, path, json=body or {}, params=query, headers=_headers(ctx)
                 )
     except httpx.RequestError as failed:
         return {"error": f"백엔드에 닿지 못했습니다({API_BASE}): {failed}"}
@@ -2838,6 +2849,7 @@ async def build_deck(
     format: str | None = None,
     include_text: bool = False,
     synthesize_missing_curves: bool = False,
+    lit_format: str | None = None,
 ) -> dict[str, Any]:
     """재료 목록 → **해석용 덱 한 파일**. 재료 · 그 모델 안의 번호(MID) · 솔버만 있으면 된다.
 
@@ -2856,7 +2868,8 @@ async def build_deck(
     내려면 그 줄에 `"format"` 을 준다 — 같은 솔버 안에서만 된다(다른 솔버면 그 줄은
     `skipped` 에 이유와 함께). 문헌 재료(`catalog_material_id`)도 **이 파일의 솔버로**
     실린다 — 그 솔버의 선형 형식(탄성·밀도·열물성)으로, 어느 형식이었는지는
-    `literature_format` 에 온다.
+    `literature_format` 에 온다. 다른 형식으로 내려면 `lit_format`(같은 솔버의 문헌 형식 key —
+    틀리면 서버가 있는 것을 알려 준다).
 
     문헌 값은 **사내 물성 매핑을 거쳐** 실린다(기준정보의 「사내 물성 항목」 과 이어진
     것만). 안 이어진 값은 덱에 없고, 덱 머리 각주에 그 이름이 적힌다 — 사람에게 그대로
@@ -2910,6 +2923,8 @@ async def build_deck(
     }
     if format:
         payload["format"] = format
+    if lit_format:
+        payload["lit_format"] = lit_format
     got = await _send(ctx, "POST", "/fitting/decks/bom", payload)
     if "error" in got:
         return got
@@ -3280,6 +3295,9 @@ async def preview_card_fit(
     basis: str | None = None,
     basis_method: str | None = None,
     basis_k: float | None = None,
+    blend_primary: str | None = None,
+    blend_with: str | None = None,
+    blend_weight: float | None = None,
 ) -> dict[str, Any]:
     """시험 곡선에 **여러 경화식을 맞춰 견준다** — 저장하지 않는다.
 
@@ -3296,6 +3314,10 @@ async def preview_card_fit(
     `extrapolate_to` 로 그 구간 밖까지 늘려 그려 볼 수 있다 — 두 식이 얼마나
     갈리는지 숫자로 보여 줄 수 있다.
 
+    `blend_primary` · `blend_with` · `blend_weight`(0~1, primary 쪽 비중) 셋을 함께 주면
+    두 식을 섞은 곡선이 `fits` 에 하나 더 선다 — `create_card_from_tests` 의 혼합을 미리 본다.
+    비중은 데이터가 못 정한다 — 사람에게 물어라.
+
     `test_run_ids` 를 주면 **그 시험들만** 쓴다(이상치 하나를 빼고 다시 보는 것이
     실무의 정상 작업이다). 비우면 채택된 것 전부.
 
@@ -3303,20 +3325,24 @@ async def preview_card_fit(
     (`sd` 는 `basis_k` 필수 · `tolerance` · `envelope` · `specimen`)를 함께. **어느 것을 쓸지는
     해석 목적이 정한다(강도 평가는 하한 …) — 고르지 말고 사람에게 물어라.**
     """
-    answer = await _send(
-        ctx,
-        "POST",
-        "/fitting/preview",
-        {
-            "material_id": material_id,
-            "test_type_key": test_type,
-            "orientation": orientation,
-            "test_run_ids": test_run_ids,
-            "families": families or [],
-            "extrapolate_to": extrapolate_to,
-            "basis": _curve_basis(basis, basis_method, basis_k),
-        },
-    )
+    body: dict[str, Any] = {
+        "material_id": material_id,
+        "test_type_key": test_type,
+        "orientation": orientation,
+        "test_run_ids": test_run_ids,
+        "families": families or [],
+        "extrapolate_to": extrapolate_to,
+        "basis": _curve_basis(basis, basis_method, basis_k),
+    }
+    # 혼합은 **준 것만** 싣는다 — 안 주면 전과 같은 본문이다.
+    for name, value in (
+        ("blend_primary", blend_primary),
+        ("blend_with", blend_with),
+        ("blend_weight", blend_weight),
+    ):
+        if value is not None:
+            body[name] = value
+    answer = await _send(ctx, "POST", "/fitting/preview", body)
     if not isinstance(answer, dict):
         return {"error": "적합 응답을 읽지 못했습니다."}
     if "error" in answer:
@@ -3669,6 +3695,10 @@ async def create_card_from_tests(
     basis: str | None = None,
     basis_method: str | None = None,
     basis_k: float | None = None,
+    extrapolate_to: float | None = None,
+    blend_with: str | None = None,
+    blend_weight: float | None = None,
+    note: str | None = None,
     dry_run: bool = True,
 ) -> dict[str, Any]:
     """시험에서 나온 값으로 **물성 카드(초안)** 를 만든다.
@@ -3716,7 +3746,18 @@ async def create_card_from_tests(
     (`sd` 는 `basis_k` 필수 · `tolerance` · `envelope` · `specimen`)를 함께. **어느 것을 쓸지는
     해석 목적이 정한다(강도 평가는 하한 …) — 고르지 말고 사람에게 물어라.**
     미리보기(`preview_card_fit`)와 **같은 기준**을 넘겨라 — 기준은 카드 근거에 남는다.
+
+    `extrapolate_to`(진소성변형률, 무차원) — 소성 표를 그 변형률까지 식으로 늘린다. **기본값이
+    없다**(비우면 측정 구간 그대로) — 얼마까지인지는 해석이 정하니 사람에게 묻는다.
+    `blend_with` · `blend_weight`(0~1, `family` 쪽 비중)는 두 식을 섞는다. 셋 다 `family` 가
+    있어야 하고, `preview_card_fit` 에서 본 값 그대로 넘긴다. `note` 는 카드 메모.
     """
+    if not family and (extrapolate_to is not None or blend_with):
+        # 서버는 식 없는 외삽을 거절하고, 식 없는 혼합은 **조용히 뺀다** — 여기서 먼저 말한다.
+        return {
+            "error": "`extrapolate_to` · `blend_with` 는 식(`family`)을 골라야 건다 — "
+            "표만 저장하면 늘리거나 섞을 근거가 없습니다."
+        }
     body: dict[str, Any] = {
         "material_id": material_id,
         "test_type_key": test_type,
@@ -3728,6 +3769,15 @@ async def create_card_from_tests(
         "density": density,
         "basis": _curve_basis(basis, basis_method, basis_k),
     }
+    # **준 것만** 싣는다 — 안 주면 전과 같은 본문이다(서버 기본도 「없음」).
+    for name, value in (
+        ("extrapolate_to", extrapolate_to),
+        ("blend_with", blend_with),
+        ("blend_weight", blend_weight),
+        ("note", note),
+    ):
+        if value is not None:
+            body[name] = value
     if resample_points:
         # 소성 표를 만드는 식(hardening)일 때만 — 서버가 다른 블록에는 거절한다.
         block = "hardening"
@@ -3767,6 +3817,9 @@ async def create_declared_card(
     label: str,
     synthesize_plastic: bool = False,
     block_keys: list[str] | None = None,
+    poisson_ratio: float | None = None,
+    density: float | None = None,
+    parameter_set_ids: list[str] | None = None,
     dry_run: bool = True,
 ) -> dict[str, Any]:
     """적어 둔 값만으로 **물성 카드(초안)** 를 만든다 — 시험이 없는 재료의 길.
@@ -3791,6 +3844,10 @@ async def create_declared_card(
     `fillable` 에 없으면 그 항목란에 닿는 선언 값이 없는 것이다 — 선언 물성 항목이 그
     항목란 칸의 물성 키에 이어져 있는지(물성 매핑) 사람에게 확인하게 한다. 짐작으로 잇지
     않는다.
+
+    `poisson_ratio` · `density`(**SI kg/m³**)는 재료 값 대신 카드에 쓸 값 — 비우면 재료 값이고,
+    지어 넣지 않는다. `parameter_set_ids` 는 **이 재료의 모델 파라미터 벌**(`get_parameter_sets`
+    의 `sets[].id`)을 카드에 인용해 싣는다(단위는 그 항의 원래 단위 그대로).
     """
     preview = await _get(
         ctx,
@@ -3847,22 +3904,52 @@ async def create_declared_card(
             "points": synthetic.get("points"),
             "caveat": f"합성 — 실측이 아니다. {synthetic.get('note')}",
         }
+    # 미리보기의 `values` 는 재료 값이다 — 준 값은 카드에서 그것을 대신한다.
+    given = {
+        key: value
+        for key, value in (("poisson_ratio", poisson_ratio), ("density", density))
+        if value is not None
+    }
+    if given:
+        plan["given_si"] = given
+    if parameter_set_ids:
+        sets = await _get(ctx, f"/materials/{material_id}/parameter-sets")
+        if isinstance(sets, dict) and "error" in sets:
+            return sets
+        by_id = {str(one.get("id")): one for one in (sets if isinstance(sets, list) else [])}
+        missing = [one for one in parameter_set_ids if str(one).strip().lower() not in by_id]
+        if missing:
+            return {
+                "error": f"이 재료에 없는 파라미터 벌입니다: {', '.join(missing)}",
+                "sets": [
+                    {"id": key, "label": one.get("label"), "model": one.get("model")}
+                    for key, one in by_id.items()
+                ],
+                "hint": "문헌의 벌이면 `adopt_parameter_set` 으로 이 재료에 먼저 받아 온다.",
+            }
+        plan["parameter_sets"] = [
+            {
+                "id": one,
+                "label": by_id[str(one).strip().lower()].get("label"),
+                "model": by_id[str(one).strip().lower()].get("model"),
+            }
+            for one in parameter_set_ids
+        ]
     if dry_run:
         plan["dry_run"] = True
         plan["note"] = "이대로 만들려면 dry_run=False 로 다시 부르세요. 카드는 초안으로 생깁니다."
         return plan
 
-    made = await _send(
-        ctx,
-        "POST",
-        "/fitting/cards/declared",
-        {
-            "material_id": material_id,
-            "label": label,
-            "synthesize_plastic": synthesize_plastic,
-            "block_keys": block_keys or [],
-        },
-    )
+    body: dict[str, Any] = {
+        "material_id": material_id,
+        "label": label,
+        "synthesize_plastic": synthesize_plastic,
+        "block_keys": block_keys or [],
+        **given,
+    }
+    if parameter_set_ids:
+        body["parameter_set_ids"] = parameter_set_ids
+    made = await _send(ctx, "POST", "/fitting/cards/declared", body)
     if "error" in made:
         return made
     out = _card_summary(made)
@@ -4528,6 +4615,9 @@ async def list_cards(
     limit: int = 20,
     q: str | None = None,
     asked: bool = False,
+    test_type: str | None = None,
+    owner: str | None = None,
+    offset: int = 0,
 ) -> dict[str, Any]:
     """물성 카드 목록 — 재료를 안 거치고 카드를 찾는다. `q` 는 이름 · 카드 번호 · 재료 번호.
     `asked=True` 면 확정 요청이 와 있는 초안만.
@@ -4535,8 +4625,12 @@ async def list_cards(
     `status` 는 `published`(확정) · `draft`(초안) · `deprecated`(중지). **확정된
     카드만 해석에 쓴다** — 초안은 만들어 본 것이지 결론이 아니다.
 
+    `test_type` 은 시험 종류 key(`none` 이면 시험 없이 만든 카드), `owner` 는 재료의 소속 부서
+    id(`none` 이면 부서 없는 재료). 한 번에 50장까지 — 더 있으면 `next_offset` 을 `offset` 으로.
+
     `available_formats` 로 그 카드가 지금 낼 수 있는 덱 형식을 알 수 있다.
     """
+    start = max(0, offset)
     got = await _get(
         ctx,
         "/fitting/cards",
@@ -4544,18 +4638,26 @@ async def list_cards(
             "material_id": material_id,
             "status": status,
             "q": q,
+            "test_type_key": test_type,
+            "owner": owner,
             "asked": "true" if asked else None,
             "limit": max(1, min(limit, MAX_LIMIT)),
+            # 0 이면 안 보낸다 — 서버 기본과 같다.
+            "offset": start or None,
         },
     )
     if "error" in got:
         return got
-    out = {
+    items = got.get("items", [])
+    out: dict[str, Any] = {
         "total": got.get("total", 0),
         "cards": [_card_summary(one) | {"material": one.get("material_name")}
-                  for one in got.get("items", [])],
+                  for one in items],
     }
-    return _complete(out, whole=len(got.get("items", [])) >= int(got.get("total", 0) or 0))
+    whole = start + len(items) >= int(got.get("total", 0) or 0)
+    if not whole and items:
+        out["next_offset"] = start + len(items)
+    return _complete(out, whole=whole)
 
 
 @mcp.tool()
@@ -5608,8 +5710,15 @@ async def run_batch_processing(
     recipe_key: str | None = None,
     adopt: bool = False,
     dry_run: bool = True,
+    curves: str | list[str] = "first",
 ) -> dict[str, Any]:
     """여러 시험에 같은 처리를 돌리고 **왜 안 됐는지를 묶어 준다.**
+
+    `steps` 를 비우고 `recipe_key` 만 주면 **서버가 그 레시피의 지금 판으로** 돈다 — 결과에
+    판 번호(`recipe_revision`)와 단계 지문이 남는다. 사용 중지된 레시피는 서버가 막는다.
+    `curves` 는 `first`(시험마다 첫 곡선) · `all`(측정 곡선 전부) · 곡선 키 목록.
+    **미리보기(`dry_run=True`, 기본)도 서버가 실제로 돌려 본다** — 저장 · 채택 없이 건별 값과
+    막힌 사유가 나온다.
 
     이 도구의 값은 성공보다 **실패 쪽**에 있다. 50건을 돌리면 몇 건은 반드시
     실패하는데, 지금까지는 그것을 건별로 열어 봐야 했다. 여기서는 같은 사유끼리
@@ -5630,36 +5739,19 @@ async def run_batch_processing(
     """
     if not steps and not recipe_key:
         return {"error": "`steps` 또는 `recipe_key` 중 하나는 있어야 합니다."}
-    if recipe_key and not steps:
-        recipes = await _get(ctx, "/processing/recipes")
-        if isinstance(recipes, dict) and "error" in recipes:
-            return recipes
-        found = next((one for one in recipes if one.get("key") == recipe_key), None)
-        if found is None:
-            return {"error": f"'{recipe_key}' 레시피를 찾지 못했습니다."}
-        steps = found.get("steps") or []
 
-    if dry_run:
-        return {
-            "dry_run": True,
-            "will_run": {"count": len(test_run_ids), "recipe_key": recipe_key, "adopt": adopt},
-            "note": (
-                "이대로 돌리려면 dry_run=False 로 다시 부르세요. 결과는 불변으로 "
-                "쌓이므로 기존 것을 덮지 않습니다."
-            ),
-        }
-
-    answer = await _send(
-        ctx,
-        "POST",
-        "/processing/batch",
-        {
-            "test_run_ids": test_run_ids,
-            "steps": steps,
-            "recipe_key": recipe_key,
-            "adopt": adopt,
-        },
-    )
+    # **레시피의 단계는 서버가 채운다**(2026-11-14, VOC 45). 전에는 여기서 레시피를 읽어 단계를
+    # 채워 보냈다 — 그 사이에 레시피가 바뀌면 다른 판으로 돌았고, 미리보기는 건수만 셌다.
+    body: dict[str, Any] = {
+        "test_run_ids": test_run_ids,
+        "recipe_key": recipe_key,
+        "adopt": adopt,
+        "dry_run": dry_run,
+        "curves": curves,
+    }
+    if steps:
+        body["steps"] = steps
+    answer = await _send(ctx, "POST", "/processing/batch", body)
     if not isinstance(answer, dict) or "items" not in answer:
         if isinstance(answer, dict):
             return answer
@@ -5700,6 +5792,13 @@ async def run_batch_processing(
             + f" 확인할 경고가 있는 결과 {warned}건"
             + (" — 채택은 미뤘습니다" if adopt else "")
             + ". 경고를 사람에게 옮기고, 채택은 adopt_results 로 확인받아 하세요."
+        ).strip()
+    if dry_run:
+        answer["dry_run"] = True
+        answer["note"] = (
+            "미리보기입니다 — 저장 · 채택은 하지 않았습니다. 이대로 돌리려면 dry_run=False 로 "
+            "다시 부르세요(결과는 불변으로 쌓여 기존 것을 덮지 않습니다). "
+            + answer.get("note", "")
         ).strip()
     return answer
 
@@ -5840,6 +5939,7 @@ async def save_format_profile(
     definition: dict[str, Any],
     description: str | None = None,
     workspace: str | None = None,
+    priority: int | None = None,
     dry_run: bool = True,
 ) -> dict[str, Any]:
     """형식 프로파일을 저장한다 — **부서가 그 장비를 읽는 방법이 된다.**
@@ -5855,6 +5955,7 @@ async def save_format_profile(
     관리자가 고친다. `workspace` 는 **등록 부서**다(권한이 아니다): 안 주면 내 소속 부서.
     파일을 자동으로 읽을 때 올린 사람 부서의 것과 부서 없는 것만 대 보므로, 등록 부서가
     곧 「어느 부서 파일에 먼저 대 보나」 다. 부서 없이 올리는 것은 자료 관리자만 한다.
+    `priority`(정수, 서버 기본 0)는 같은 자리(내 부서 · 부서 없음) 안에서 큰 것부터 대 보는 차례다.
 
     ## 화면이 못 고치는 정의를 지을 수 있다
 
@@ -5876,6 +5977,8 @@ async def save_format_profile(
     # 없이, 자료 관리자만)을 가른다 — `None` 을 실어 보내면 평범한 사람의 저장이 403 이 된다.
     if workspace:
         body["owner_workspace_slug"] = workspace
+    if priority is not None:
+        body["priority"] = priority
     if dry_run:
         return {
             "dry_run": True,
@@ -6153,6 +6256,8 @@ async def render_card_deck(
     format: str,
     units: str = DEFAULT_DECK_UNITS,
     mid: int | None = None,
+    with_card: str | None = None,
+    fail_from_elongation: bool = False,
 ) -> dict[str, Any]:
     """물성 카드를 **덱 글자로 뽑는다** — 그대로 파일로 저장할 수 있는 본문.
 
@@ -6165,6 +6270,11 @@ async def render_card_deck(
 
     형식 목록은 `list_unit_systems` 가 아니라 `get_card` 의 `available_formats` 에
     있다.
+
+    `with_card` — 짝 카드(같은 재료의 카드 id). 이 카드에 없는 블록을 채운다 — r값 카드에 MD
+    카드의 경화 곡선 · 탄성을 붙여 Hill 재료를 낼 때. `fail_from_elongation=True` 면 파단
+    연신율로 추정한 ln(1+A) 를 파단 칸(LS-DYNA FAIL · Radioss Eps_p_max)에 넣는다 — 그 변형률에서
+    요소가 지워지므로 사람이 켜라고 할 때만. 기본은 덱 주석으로만 적는다.
 
     ## `units` 를 사용자에게 확인하고 넘겨라
 
@@ -6201,6 +6311,10 @@ async def render_card_deck(
     params: dict[str, Any] = {"format": format, "units": units}
     if mid is not None:
         params["mid"] = mid
+    if with_card:
+        params["with_card"] = with_card
+    if fail_from_elongation:
+        params["fail_from_elongation"] = "true"
     deck = await _get_text(ctx, f"/fitting/cards/{card_id}/export", params)
     if isinstance(deck, dict):
         return deck  # 오류 봉투
@@ -7552,6 +7666,9 @@ async def run_processing(
     source_curve_key: str | None = None,
     save: bool = False,
     retry: bool = False,
+    x: str | None = None,
+    y: str | None = None,
+    stage: int | None = None,
 ) -> dict[str, Any]:
     """시험 곡선에 처리를 돌린다. **기본은 저장하지 않는 미리보기다.**
 
@@ -7594,6 +7711,12 @@ async def run_processing(
     인장강도)는 건너뛰고 계속, 곡선을 바꾸는 단계는 거기서 멈춘다. `save=True` 면 나온 값을
     **부분 결과**로 저장하고 실패가 함께 남는다 — 무엇이 빠졌는지 사람에게 옮겨라. `notes`
     의 경고는 값은 나왔지만 사람이 봐야 한다는 뜻이다.
+
+    ## 곡선을 보려면 `x` · `y`
+
+    미리보기에만 쓴다. 열 이름(응답의 `columns`)을 둘 다 주면 그 곡선 점(`points`, 600점까지)이
+    온다 — 비우면 점 없이 값만. `stage`(0부터)는 몇 번째 단계가 끝난 곡선인가(비우면 마지막).
+    단계마다의 곡선(`stage_points`)은 그때 싣지 않는다 — 단계는 `stage` 로 하나씩 본다.
     """
     if not steps and not recipe_key:
         return {
@@ -7618,14 +7741,16 @@ async def run_processing(
         "recipe_key": recipe_key,
         "source_curve_key": source_curve_key,
     }
+    # 미리보기의 쿼리 — 안 준 것은 안 보낸다(`_send` 가 `None` 을 뺀다).
+    view = {"x": x, "y": y, "stage": stage}
     attempts: list[dict[str, Any]] = []
-    answer = await _send(ctx, "POST", "/processing/preview", body)
+    answer = await _send(ctx, "POST", "/processing/preview", body, params=view)
     attempts.append({"steps": steps, "problem": (answer or {}).get("problem")})
 
     if retry and isinstance(answer, dict) and answer.get("problem"):
         for widened in retry_plan.widen(steps or []):
             body["steps"] = widened
-            answer = await _send(ctx, "POST", "/processing/preview", body)
+            answer = await _send(ctx, "POST", "/processing/preview", body, params=view)
             attempts.append({"steps": widened, "problem": (answer or {}).get("problem")})
             if not (isinstance(answer, dict) and answer.get("problem")):
                 break
@@ -7636,6 +7761,9 @@ async def run_processing(
         return {"error": "처리 응답을 읽지 못했습니다."}
 
     answer = dict(answer)
+    if x and y:
+        # 단계마다 300점씩이라 그것만으로 대화가 찬다 — 고른 단계의 `points` 로 충분하다.
+        answer.pop("stage_points", None)
     if len(attempts) > 1:
         answer["attempts"] = attempts
         answer["note"] = (
@@ -7674,6 +7802,8 @@ async def save_recipe(
     test_type: str,
     steps: list[dict[str, Any]],
     description: str | None = None,
+    key: str | None = None,
+    workspace: str | None = None,
     dry_run: bool = True,
 ) -> dict[str, Any]:
     """처리 레시피를 저장한다 — **부서가 함께 쓰는 단계 묶음이 된다.**
@@ -7683,17 +7813,25 @@ async def save_recipe(
 
     토큰의 주인이 등록자가 되고, 등록 부서는 그 사람의 소속이다(ADR 0035 3단계). 부서
     사람이 함께 고치게 하려면 사용자가 화면의 「권한」 에서 부서에 편집을 준다.
+    `workspace`(부서 slug)를 주면 그 부서로 등록한다(권한이 아니다). `key` 는 비우면 서버가
+    짓는다(`rcp_…`, 전사에서 하나) — 같은 key 를 지켜야 할 때만 영문 소문자 · 숫자 · `_` 로.
 
     새로 짓기 전에 `list_recipes` 로 이미 있는 것을 본다 — 비슷한 것이 있으면 그것을
     쓰는 편이 낫다. 레시피가 갈리면 같은 시험의 결과를 서로 못 견준다.
     """
-    body = {
+    body: dict[str, Any] = {
         "label": label,
         "test_type_key": test_type,
         "steps": steps,
         "description": description,
         "is_active": True,
     }
+    if key:
+        body["key"] = key
+    # **안 줬으면 안 보낸다** — 서버는 「안 보낸 것」(= 내 소속)과 「비워 보낸 것」(= 부서 없이,
+    # 자료 관리자만)을 가른다. `save_format_profile` 과 같은 규칙.
+    if workspace:
+        body["owner_workspace_slug"] = workspace
     if dry_run:
         return {
             "dry_run": True,
@@ -7820,6 +7958,7 @@ async def adopt_parameter_set(
     model: str = "",
     set_id: str = "",
     variant: str = "",
+    notes: str | None = None,
     dry_run: bool = True,
 ) -> dict[str, Any]:
     """문헌의 파라미터 한 벌을 **사내 재료로 받아 온다.**
@@ -7846,6 +7985,8 @@ async def adopt_parameter_set(
     물어라** — 200℃ 상수로 상온 해석을 돌리면 그 결과는 조용히 틀린다.
 
     담긴 값은 그 재료의 물성 탭에 서고, 카드를 만들 때 인용할 수 있다.
+
+    `notes` 는 그 벌에 남길 메모 — 안 주면 다시 받을 때 있던 메모를 그대로 두고, `""` 면 지운다.
     """
     sets = await _get(ctx, f"/catalog/materials/{catalog_material_id}/parameter-sets")
     if isinstance(sets, dict) and "error" in sets:
@@ -7899,6 +8040,7 @@ async def adopt_parameter_set(
                 "quality_tier": chosen.get("quality_tier"),
                 "source": chosen.get("source_detail"),
                 "terms": chosen.get("terms"),
+                **({"notes": notes} if notes is not None else {}),
             },
             "note": (
                 "이대로 담으려면 dry_run=False 로 다시 부르세요. 같은 벌이 이미 "
@@ -7906,18 +8048,17 @@ async def adopt_parameter_set(
             ),
         }
 
-    return await _send(
-        ctx,
-        "POST",
-        f"/materials/{material_id}/parameter-sets",
-        {
-            "property_key": property_key,
-            "catalog_material_id": catalog_material_id,
-            "model": chosen.get("model") or "",
-            "set_id": chosen.get("set_id") or "",
-            "variant": chosen.get("variant") or "",
-        },
-    )
+    body: dict[str, Any] = {
+        "property_key": property_key,
+        "catalog_material_id": catalog_material_id,
+        "model": chosen.get("model") or "",
+        "set_id": chosen.get("set_id") or "",
+        "variant": chosen.get("variant") or "",
+    }
+    # **안 보낸 것과 비운 것을 가른다** — 서버는 `None` 이면 있던 메모를 두고 `""` 면 지운다.
+    if notes is not None:
+        body["notes"] = notes
+    return await _send(ctx, "POST", f"/materials/{material_id}/parameter-sets", body)
 
 
 @mcp.tool()

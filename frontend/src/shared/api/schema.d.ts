@@ -9905,9 +9905,9 @@ export interface components {
             /** Source Curve Key */
             source_curve_key?: string | null;
             /** Steps */
-            steps: {
+            steps?: {
                 [key: string]: unknown;
-            }[];
+            }[] | null;
             /** Test Run Ids */
             test_run_ids: string[];
         };
@@ -15583,6 +15583,11 @@ export interface components {
             /** Makes Values */
             makes_values: components["schemas"]["GroupingProducedOut"][];
             /**
+             * Min Members
+             * @default 2
+             */
+            min_members: number;
+            /**
              * Needs
              * @default master_curve
              */
@@ -18421,6 +18426,8 @@ export interface components {
             recipe_key: string | null;
             /** Recipe Label */
             recipe_label: string | null;
+            /** Recipe Revision */
+            recipe_revision?: number | null;
             /** Row Count */
             row_count: number;
             /**
@@ -18445,6 +18452,8 @@ export interface components {
             steps: {
                 [key: string]: unknown;
             }[];
+            /** Steps Hash */
+            steps_hash?: string | null;
             /**
              * Test Run Id
              * Format: uuid
@@ -18463,9 +18472,9 @@ export interface components {
             /** Source Curve Key */
             source_curve_key?: string | null;
             /** Steps */
-            steps: {
+            steps?: {
                 [key: string]: unknown;
-            }[];
+            }[] | null;
             /**
              * Test Run Id
              * Format: uuid

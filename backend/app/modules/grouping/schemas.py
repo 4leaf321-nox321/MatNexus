@@ -61,6 +61,9 @@ class GroupingSpecOut(BaseModel):
     고쳐야 한다."""
     params: list[GroupingParamOut]
     makes_values: list[GroupingProducedOut]
+    min_members: int = 2
+    """이 묶음이 받는 최소 시험 수(2026-11-14, VOC 51). 화면이 「묶기」 단추를 이것으로
+    연다."""
     makes_card: bool = False
     """이 묶음 결과로 카드를 만들 수 있는가 — 플러그인이 `card=` 로 블록을 선언했으면.
     화면은 이것을 보고 「카드 생성」 을 세운다(`/fitting/cards/from-group`). 속도·점탄성
@@ -75,9 +78,10 @@ class GroupNoteRequest(BaseModel):
 
 class GroupCreateRequest(BaseModel):
     plugin_id: str
-    run_ids: list[uuid.UUID] = Field(min_length=2, max_length=MAX_MEMBERS)
-    """**둘 이상이다.** 하나를 「묶었다」 고 부르면 그 결과가 묶음인지 한 건인지
-    나중에 구별할 수 없다."""
+    run_ids: list[uuid.UUID] = Field(min_length=1, max_length=MAX_MEMBERS)
+    """**기본은 둘 이상이다.** 하나를 「묶었다」 고 부르면 그 결과가 묶음인지 한 건인지
+    나중에 구별할 수 없다. 묶음마다 선언으로 낮출 수 있어(폼 압축 곡선은 하나) 건수는 계산이
+    본다(`matcore.groups.min_members`, 2026-11-14 VOC 51)."""
     options: dict[str, Any] = Field(default_factory=dict)
     note: str | None = None
 

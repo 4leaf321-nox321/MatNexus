@@ -177,6 +177,15 @@ class ProcessingResult(Base):
     — 전에는 결과가 키를 안 남겨 늘 빈 값이었다. 불러온 레시피의 단계를 고쳐서 저장했으면
     비우고 이름에 「(단계 고침)」 을 붙인다(`routes._recipe_link`): 고친 단계를 그 레시피의
     결과라고 적으면 「이 레시피로 낸 결과」 를 셀 때 섞인다."""
+    recipe_revision: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    """**그 레시피의 몇 번째 판으로 돌렸나**(2026-11-14, VOC 45). `recipe_key` 와 같이 그
+    레시피 그대로 돌렸을 때만 적는다. 레시피는 고칠 때마다 판이 오르는데, 전에는 결과가 판을 안
+    남겨 「같은 레시피로 돌린 결과들」 을 견줄 때 중간에 레시피가 바뀌었는지 알 수 없었다. 옛
+    결과는 비어 있다(모름)."""
+    steps_hash: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    """돌린 단계의 지문(sha256, 빈 옵션은 뺀다 — `routes._comparable`). 레시피를 지우거나
+    키를 다시 써도 「단계가 정말 같은가」 를 기계적으로 견줄 수 있다(VOC 45). 옛 결과는 비어
+    있다."""
     steps_snapshot: Mapped[list[dict[str, Any]]] = mapped_column(
         JSONB, default=list, server_default="[]"
     )

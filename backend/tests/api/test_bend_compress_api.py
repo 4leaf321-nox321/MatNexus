@@ -675,6 +675,52 @@ class TestChain:
             )
             assert got.status_code == 200, (key, got.text)
 
+    def test_폼은_시편_하나로도_묶어_카드가_된다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str], seeded: None
+    ) -> None:
+        """VOC 51(2026-11-14) — 둘 규칙이 모든 묶음 공통이라 폼 시험이 하나뿐이면 카드로 갈
+        길이 없었다(인장 카드는 1건으로 된다). 묶음마다 선언(`min_members`)으로 낮춘다."""
+        _import(client, admin_headers, "iso_7743_a")
+        (run_id,) = _runs(
+            client,
+            db,
+            admin_headers,
+            standard="ISO 7743 시험편 A (고무 압축)",
+            test_type="compression",
+            filename="raw.csv",
+            data=_instron_compression(),
+            count=1,
+        )
+        _process(
+            client,
+            admin_headers,
+            run_id,
+            [
+                {
+                    "plugin": "compression.engineering",
+                    "options": {"height": "@specimen_height", "area": "@specimen_area"},
+                }
+            ],
+        )
+        kinds = {
+            one["id"]: one
+            for one in client.get("/api/groups/kinds", headers=admin_headers).json()
+        }
+        assert kinds["compression.foam"]["min_members"] == 1
+        group = client.post(
+            "/api/groups",
+            json={"plugin_id": "compression.foam", "run_ids": [run_id]},
+            headers=admin_headers,
+        )
+        assert group.status_code == 201, group.text
+        assert group.json()["values"]["sample_count"] == 1
+        card = client.post(
+            "/api/fitting/cards/from-group",
+            json={"group_result_id": group.json()["id"], "label": "폼 1건", "density": 45.0},
+            headers=admin_headers,
+        )
+        assert card.status_code == 201, card.text
+
     def test_압축에서_폼_카드와_LS_DYNA_까지(
         self, client: TestClient, db: Session, admin_headers: dict[str, str], seeded: None
     ) -> None:

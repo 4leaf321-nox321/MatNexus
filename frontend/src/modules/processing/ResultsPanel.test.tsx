@@ -97,6 +97,18 @@ describe('진응력이 없을 때', () => {
   })
 })
 
+describe('레시피 판', () => {
+  it('레시피 그대로 돌린 결과는 몇 번째 판인지 함께 적는다', async () => {
+    // VOC 45(2026-11-14) — 같은 레시피로 돌린 결과끼리 견줄 때 중간에 레시피가 바뀌었는지
+    // 알 수 없었다. 옛 결과(판 모름)는 이름만.
+    results.mockResolvedValue([
+      { ...RESULT, recipe_key: 'tensile_std', recipe_label: '표준 인장', recipe_revision: 2 },
+    ])
+    render(<ResultsPanel testRunId="t1" />)
+    expect(await screen.findByText('표준 인장 · 2판')).toBeInTheDocument()
+  })
+})
+
 describe('시도 지우기', () => {
   // 지울 길이 없어서 잘못 돌린 것까지 영원히 남았다(2026-09-11 지적).
   it('확인을 거쳐 지운다', async () => {

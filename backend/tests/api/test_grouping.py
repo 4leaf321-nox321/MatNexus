@@ -276,15 +276,18 @@ class Test묶어서_남긴다:
         assert len(body["members"]) == 2
         assert len(body["used"]) == 1
 
-    def test_하나만_주면_스키마가_막는다(
+    def test_하나만_주면_막는다(
         self, client: TestClient, admin_headers: dict[str, str], two_runs: dict[str, Any]
     ) -> None:
+        """묶음은 기본이 둘부터다. 하나로도 뜻이 있는 묶음(폼 압축 곡선)만 선언으로 낮춘다 —
+        그래서 건수는 스키마가 아니라 계산이 본다(2026-11-14, VOC 51)."""
         response = client.post(
             "/api/groups",
             json={"plugin_id": PLUGIN, "run_ids": [two_runs["runs"][0]["id"]]},
             headers=admin_headers,
         )
         assert response.status_code == 422, response.text
+        assert "2개 이상" in response.json()["error"]["message"], response.text
 
 
 class Test자동_등록된_것으로도_묶인다:

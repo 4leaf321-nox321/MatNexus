@@ -138,8 +138,9 @@ ms)를 알린다 — 「관리 → 사용 현황」 의 MCP 숫자가 여기서 
     get_material(material_id)          기본 칸·선언 물성·카드·문헌 연결
     list_material_parts(material_id, q?)  이 재료가 쓰인 부품 — 제품 · 사업부별 수
     get_parameter_sets(material_id)    모델 파라미터 벌 (Anand·Prony·Ogden)
-    list_cards(material_id?, status?, q?, asked?)  물성 카드 목록 — q 는 이름 · 카드 번호 · 재료
-                                       번호, asked 면 확정 요청 온 초안만
+    list_cards(material_id?, status?,  물성 카드 목록 — q 는 이름 · 카드 번호 · 재료 번호,
+               q?, asked?, test_type?, asked 면 확정 요청 온 초안만, test_type · owner 로 거른다.
+               owner?, offset?)        50장이 넘으면 next_offset 을 offset 으로
     list_card_blocks()                 카드가 담을 수 있는 갈래 — 「점탄성은 어디에」
     get_card(card_id)                  카드 하나 — 덱에 실릴 값 그대로. 번호(C-000038) · 이름도 받는다
     list_samples(material_id)          시료 — 로트·업체·시편 수·시험 수
@@ -208,7 +209,8 @@ Family·Category·Grade·제조사·유통사·시편 규격은 **기준정보**
 
     preview_card_fit(...)              경화식들을 견준다 — **RMSE 로 고르지 마라**
     ★ create_card_from_tests(...)      시험에서 나온 값으로 카드 초안
-                                       (둘 다 `basis` — 대표 곡선 평균 · 중앙값 · 상한 · 하한, ADR 0041)
+                                       (둘 다 `basis` — 대표 곡선 평균 · 중앙값 · 상한 · 하한, ADR 0041 ·
+                                       외삽 `extrapolate_to` · 두 식 혼합 `blend_*`, VOC 42)
     ★ create_card_from_group(...)      묶음에서 — 속도 의존·점탄성·확장 묶음을 한 길로
     ★ create_viscoelastic_card(...)    Prony 적합 하나에서 점탄성 카드 초안
     ★ create_lve_card(...)             DMA 변형률 스윕의 선형 탄성률 카드 초안
@@ -247,6 +249,7 @@ AI 가 상태를 바꾸면 자료 관리자에게 알림이 간다(채택도, 20
     ★ assign_inbox_item(...)           인박스 파일 → 어느 시편의 어느 시험
     ★ run_processing(...)              곡선에 처리를 돌린다 (미리보기가 기본)
     ★ run_batch_processing(...)        여럿에 같은 처리 — **실패를 사유별로 묶는다**
+                                       레시피 키만 주면 서버가 지금 판으로, 미리보기도 서버가 돌린다
     ★ save_recipe(...)                 레시피 저장 — 부서가 함께 쓴다
     ★ update_recipe(key, label?, ...)  레시피 이름 · 설명만 — 단계는 그대로
     ★ adopt_results(items)             채택 · 채택 거두기(result_id=null) — 최대 50건, 미리보기가

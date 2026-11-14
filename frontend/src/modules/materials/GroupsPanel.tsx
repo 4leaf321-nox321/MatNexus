@@ -956,7 +956,11 @@ export function GroupsPanel({
             <Button variant="outline" onClick={() => setOpen(false)} disabled={busy}>
               취소
             </Button>
-            <Button onClick={() => void create()} disabled={busy || picked.size < 2}>
+            <Button
+              onClick={() => void create()}
+              // 묶음마다 받는 최소 수가 다르다(2026-11-14, VOC 51) — 폼 압축 곡선은 시편 하나.
+              disabled={busy || picked.size < (chosen?.min_members ?? 2)}
+            >
               {busy ? '적합 중…' : `시편 ${picked.size}건 적합`}
             </Button>
           </DialogFooter>

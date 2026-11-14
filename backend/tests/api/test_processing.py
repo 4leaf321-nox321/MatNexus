@@ -953,6 +953,119 @@ class Test레시피_계보:
         assert row.steps_snapshot[0]["options"]["gauge_length"] == 0.06
 
 
+class Test레시피_키만으로:
+    """VOC 45(2026-11-14) — `steps` 가 필수라 레시피 키만 주면 422 였고, MCP 는 레시피를
+    읽어 단계를 직접 채워 보냈다. 결과에는 레시피의 몇 번째 판이었는지가 없었다. 사용 중지된
+    레시피로도 일괄 처리가 돌았다."""
+
+    def _recipe(self, client: TestClient, headers: dict[str, str], active: bool = True) -> Any:
+        response = client.post(
+            "/api/processing/recipes",
+            json={
+                "key": "proc_only_key",
+                "label": "키만으로",
+                "description": None,
+                "test_type_key": "tensile",
+                "steps": STEPS,
+                "is_active": active,
+            },
+            headers=headers,
+        )
+        assert response.status_code == 201, response.text
+        return response.json()
+
+    def test_단계를_안_보내면_레시피의_단계로_돌고_판과_지문을_남긴다(
+        self, client: TestClient, admin_headers: dict[str, str], run_id: str
+    ) -> None:
+        recipe = self._recipe(client, admin_headers)
+        saved = client.post(
+            "/api/processing/results",
+            json={"test_run_id": run_id, "recipe_key": "proc_only_key"},
+            headers=admin_headers,
+        )
+        assert saved.status_code == 201, saved.text
+        body = saved.json()
+        assert body["steps"] == STEPS
+        assert body["recipe_key"] == "proc_only_key"
+        assert body["recipe_revision"] == recipe["revision"] == 1
+        # 같은 단계를 직접 보낸 결과와 지문이 같다 — 빈 옵션은 없는 것과 같다.
+        direct = client.post(
+            "/api/processing/results",
+            json={
+                "test_run_id": run_id,
+                "steps": [
+                    {**one, "options": {**one["options"], "unused": None}} for one in STEPS
+                ],
+            },
+            headers=admin_headers,
+        ).json()
+        assert direct["recipe_revision"] is None
+        assert direct["steps_hash"] == body["steps_hash"] and len(body["steps_hash"]) == 64
+
+        batch = client.post(
+            "/api/processing/batch",
+            json={"test_run_ids": [run_id], "recipe_key": "proc_only_key", "adopt": False},
+            headers=admin_headers,
+        )
+        assert batch.status_code == 200, batch.text
+        assert [one["status"] for one in batch.json()["items"]] == ["ok"]
+
+    def test_레시피를_고치면_판이_오르고_결과가_그_판을_든다(
+        self, client: TestClient, admin_headers: dict[str, str], run_id: str
+    ) -> None:
+        self._recipe(client, admin_headers)
+        changed = [
+            {**STEPS[0], "options": {**STEPS[0]["options"], "gauge_length": 0.06}},
+            *STEPS[1:],
+        ]
+        updated = client.put(
+            "/api/processing/recipes/proc_only_key",
+            json={
+                "key": "proc_only_key",
+                "label": "키만으로",
+                "description": None,
+                "test_type_key": "tensile",
+                "steps": changed,
+                "is_active": True,
+                "expected_revision": 1,
+            },
+            headers=admin_headers,
+        )
+        assert updated.status_code == 200, updated.text
+        saved = client.post(
+            "/api/processing/results",
+            json={"test_run_id": run_id, "recipe_key": "proc_only_key"},
+            headers=admin_headers,
+        ).json()
+        assert saved["recipe_revision"] == 2
+        assert saved["steps"][0]["options"]["gauge_length"] == 0.06
+
+    def test_둘_다_없으면_422_사용_중지된_레시피는_일괄로_안_돈다(
+        self, client: TestClient, admin_headers: dict[str, str], run_id: str
+    ) -> None:
+        empty = client.post(
+            "/api/processing/results", json={"test_run_id": run_id}, headers=admin_headers
+        )
+        assert empty.status_code == 422, empty.text
+        assert empty.json()["error"]["code"] == "MNX-PROCESSING-0023"
+
+        self._recipe(client, admin_headers, active=False)
+        refused = client.post(
+            "/api/processing/batch",
+            json={"test_run_ids": [run_id], "recipe_key": "proc_only_key", "dry_run": True},
+            headers=admin_headers,
+        )
+        assert refused.status_code == 409, refused.text
+        assert refused.json()["error"]["code"] == "MNX-PROCESSING-0022"
+        # 한 건 처리는 막지 않는다 — 옛 결과를 다시 내 보는 자리다.
+        one = client.post(
+            "/api/processing/results",
+            json={"test_run_id": run_id, "recipe_key": "proc_only_key"},
+            headers=admin_headers,
+        )
+        assert one.status_code == 201, one.text
+
+
 class Test결과는불변:
     def _save(self, client: TestClient, headers: dict[str, str], run_id: str) -> Any:
         response = client.post(

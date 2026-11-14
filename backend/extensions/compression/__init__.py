@@ -316,6 +316,9 @@ register(
     # 채택된 결과의 압축 곡선 두 열 — 「압축 응력-변형률」 단계를 거친 결과다.
     members={"from": "adopted_result", "columns": [compress.STRAIN, compress.STRESS]},
     card=foam.card_blocks,
+    # **시편 하나로도 카드가 된다**(2026-11-14, VOC 51) — 인장 카드와 같다. 폼 블록 · 덱
+    # 머리말이 「시편 1개」 를 이미 적는다. 다른 묶음은 둘 이상 그대로다.
+    min_members=1,
     order=40,
     version="1",
 )(foam.foam_curve)

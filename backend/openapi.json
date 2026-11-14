@@ -1595,12 +1595,19 @@
             "title": "Source Curve Key"
           },
           "steps": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "title": "Steps",
-            "type": "array"
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Steps"
           },
           "test_run_ids": {
             "items": {
@@ -1613,8 +1620,7 @@
           }
         },
         "required": [
-          "test_run_ids",
-          "steps"
+          "test_run_ids"
         ],
         "title": "BatchRequest",
         "type": "object"
@@ -16675,7 +16681,7 @@
               "type": "string"
             },
             "maxItems": 200,
-            "minItems": 2,
+            "minItems": 1,
             "title": "Run Ids",
             "type": "array"
           }
@@ -17022,6 +17028,11 @@
             },
             "title": "Makes Values",
             "type": "array"
+          },
+          "min_members": {
+            "default": 2,
+            "title": "Min Members",
+            "type": "integer"
           },
           "needs": {
             "default": "master_curve",
@@ -24666,6 +24677,17 @@
             ],
             "title": "Recipe Label"
           },
+          "recipe_revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recipe Revision"
+          },
           "row_count": {
             "title": "Row Count",
             "type": "integer"
@@ -24708,6 +24730,17 @@
             },
             "title": "Steps",
             "type": "array"
+          },
+          "steps_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Steps Hash"
           },
           "test_run_id": {
             "format": "uuid",
@@ -24764,12 +24797,19 @@
             "title": "Source Curve Key"
           },
           "steps": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "title": "Steps",
-            "type": "array"
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Steps"
           },
           "test_run_id": {
             "format": "uuid",
@@ -24778,8 +24818,7 @@
           }
         },
         "required": [
-          "test_run_id",
-          "steps"
+          "test_run_id"
         ],
         "title": "ProcessingRunRequest",
         "type": "object"

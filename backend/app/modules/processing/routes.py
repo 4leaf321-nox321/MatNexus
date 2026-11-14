@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import dataclasses
+import hashlib
 import json
 import uuid
 from collections.abc import Mapping
@@ -288,6 +289,45 @@ def _recipe_or_none(db: Session, key: str | None) -> ProcessingRecipe | None:
     return recipe
 
 
+def _steps_and_recipe(
+    db: Session,
+    recipe_key: str | None,
+    steps: list[dict[str, Any]] | None,
+    *,
+    batch: bool = False,
+) -> tuple[list[dict[str, Any]], ProcessingRecipe | None]:
+    """`(돌릴 단계, 레시피)`. **단계를 안 보내면 레시피의 단계**(2026-11-14, VOC 45).
+
+    전에는 `steps` 가 필수라 레시피 키만 주면 422 였고, MCP 는 레시피를 읽어 단계를 직접 채워
+    보냈다 — 그 사이에 레시피가 바뀌면 다른 판으로 돌았다. **사용 중지된 레시피로는 일괄 처리를
+    돌리지 않는다** — 쓰지 말라고 끈 것이다. 한 건 처리는 막지 않는다(옛 결과를 다시 내 보는
+    자리).
+    """
+    recipe = _recipe_or_none(db, recipe_key)
+    if batch and recipe is not None and not recipe.is_active:
+        raise AppError(
+            "MNX-PROCESSING-0022",
+            f"사용 중지된 레시피입니다: {recipe.label} — 일괄 처리에는 쓰지 않습니다. "
+            "레시피를 다시 켜거나 다른 레시피를 고르세요.",
+            status=409,
+        )
+    if steps is not None:
+        return steps, recipe
+    if recipe is None:
+        raise AppError(
+            "MNX-PROCESSING-0023",
+            "처리 단계가 없습니다 — `steps` 를 보내거나 `recipe_key` 로 레시피를 고르세요.",
+            status=422,
+        )
+    return list(recipe.steps), recipe
+
+
+def steps_hash(steps: list[dict[str, Any]] | None) -> str:
+    """단계의 지문 — 빈 옵션은 뺀 모양(`_comparable`)을 키 차례로 적어 sha256(VOC 45)."""
+    text = json.dumps(_comparable(steps), sort_keys=True, ensure_ascii=False, default=str)
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
 def _comparable(steps: list[dict[str, Any]] | None) -> list[tuple[str, dict[str, Any]]]:
     """단계를 견줄 모양으로 — **빈 옵션은 없는 것과 같다**(화면이 비운 칸을 null 로 보낸다)."""
     return [
@@ -372,6 +412,8 @@ def _store(
         recipe_id=linked.id if linked else None,
         recipe_key=linked.key if linked else None,
         recipe_label=label,
+        recipe_revision=linked.revision if linked else None,
+        steps_hash=steps_hash(steps),
         steps_snapshot=steps,
         stages=[
             {
@@ -646,18 +688,19 @@ def preview(
     말하는 것이라 고른 단계에 따라 달라지면 안 된다.
     """
     run = get_run(db, user, payload.test_run_id)
+    steps, _recipe = _steps_and_recipe(db, payload.recipe_key, payload.steps)
     # **미리보기는 멈춰도 여기까지를 보여 준다**(`_run_pipeline` 이 여기까지를 결과로 준다).
     # 실패한 단계는 `failures` 로 함께 나간다 — 저장하면 부분 결과가 된다.
-    result, curve = _run_pipeline(db, run, payload.source_curve_key, payload.steps)
+    result, curve = _run_pipeline(db, run, payload.source_curve_key, steps)
     problem = _problem(result)
 
     shown: int | None = None
     frame = result.frame
     if stage is not None:
-        if stage >= len(payload.steps):
+        if stage >= len(steps):
             raise AppError(
                 "MNX-PROCESSING-0009",
-                f"{stage}번째 단계가 없습니다 — 이 구성은 {len(payload.steps)}단계입니다.",
+                f"{stage}번째 단계가 없습니다 — 이 구성은 {len(steps)}단계입니다.",
                 status=422,
             )
         # **단계 번호로 찾는다** — 실패해 건너뛴 단계가 있으면 목록의 차례와 번호가 어긋난다.
@@ -714,14 +757,8 @@ def create_result(
     들어가 있다.
     """
     run = get_run(db, user, payload.test_run_id)
-    item = _store(
-        db,
-        run,
-        payload.source_curve_key,
-        payload.steps,
-        _recipe_or_none(db, payload.recipe_key),
-        user,
-    )
+    steps, recipe = _steps_and_recipe(db, payload.recipe_key, payload.steps)
+    item = _store(db, run, payload.source_curve_key, steps, recipe, user)
     # **「이 결과 누가 돌렸지」.** 사람이 화면에서 돌린 것은 안 남는다 — 결과 자체가
     # 단계·버전·실행 환경을 통째로 들고 있어 그걸로 충분하다. 빠진 것은 **길**
     # 하나였다: 같은 토큰으로 AI 가 돌린 것과 사람이 돌린 것이 구별되지 않았다.
@@ -733,7 +770,7 @@ def create_result(
         target_id=item.id,
         target_label=run.record_name,
         workspace_id=run.workspace_id,
-        changes={"steps": len(payload.steps), "recipe": payload.recipe_key},
+        changes={"steps": len(steps), "recipe": payload.recipe_key},
     )
     db.commit()
     db.refresh(item)
@@ -777,6 +814,8 @@ def _result_out(
         source_curve_key=item.source_curve_key,
         recipe_key=item.recipe_key,
         recipe_label=item.recipe_label,
+        recipe_revision=item.recipe_revision,
+        steps_hash=item.steps_hash,
         steps=item.steps_snapshot,
         stages=[
             ProcessingStageOut(
@@ -1746,7 +1785,7 @@ def run_batch(
                 f"시험을 나눠서 돌리세요.",
                 status=422,
             )
-    recipe = _recipe_or_none(db, payload.recipe_key)
+    steps, recipe = _steps_and_recipe(db, payload.recipe_key, payload.steps, batch=True)
     editor = permissions.editor(db, user)
 
     items: list[BatchItemOut] = []
@@ -1811,7 +1850,7 @@ def run_batch(
                 if payload.dry_run:
                     # **저장하지 않는다.** 파일도 행도 안 만들고 계산만 한다 —
                     # `_store` 와 같은 `_run_pipeline` 을 지나므로 값이 어긋날 수 없다.
-                    computed, curve = _run_pipeline(db, run, key, payload.steps)
+                    computed, curve = _run_pipeline(db, run, key, steps)
                     if computed.failures and not computed.scalars:
                         # 저장과 같은 판정 — 나온 값이 없으면 저장도 안 된다.
                         raise AppError(
@@ -1849,7 +1888,7 @@ def run_batch(
                         )
                     )
                     continue
-                stored = _store(db, run, key, payload.steps, recipe, user)
+                stored = _store(db, run, key, steps, recipe, user)
                 workspaces.append(run.workspace_id)
             except AppError as exc:
                 db.rollback()
@@ -1937,7 +1976,7 @@ def run_batch(
             changes={
                 "requested": len(items),
                 "succeeded": succeeded,
-                "steps": len(payload.steps),
+                "steps": len(steps),
                 "recipe": payload.recipe_key,
                 "adopt": payload.adopt,
             },

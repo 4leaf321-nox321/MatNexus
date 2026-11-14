@@ -251,8 +251,14 @@ export function ResultsPanel({ testRunId, onAdoptChange }: Props) {
                     </Badge>
                   )}
                   {item.recipe_label && (
-                    <Badge variant="outline" className="text-xs">
+                    <Badge
+                      variant="outline"
+                      className="text-xs"
+                      title={item.steps_hash ? `단계 지문 ${item.steps_hash.slice(0, 12)}` : undefined}
+                    >
                       {item.recipe_label}
+                      {/* 몇 번째 판으로 돌렸나(2026-11-14, VOC 45) — 옛 결과는 모름이라 안 적는다. */}
+                      {item.recipe_revision ? ` · ${item.recipe_revision}판` : ''}
                     </Badge>
                   )}
 
