@@ -534,6 +534,41 @@ describe('후보의 조건은 서버가 말한다', () => {
     expect(screen.queryByText(/마스터커브가 있는 시험만/)).not.toBeInTheDocument()
   })
 
+  it('종류마다 조건이 다른 묶음은 시험마다 그 종류의 조건으로 거른다', async () => {
+    // 2026-11-15(VOC 52) — 응력완화 + DMA 를 잇는 묶음: 응력완화는 채택된 결과, DMA 는 마스터커브.
+    kinds.mockResolvedValue([
+      {
+        ...RATE_SPEC,
+        id: 'relaxation.dma_coupled',
+        label: '응력완화 + DMA 마스터커브',
+        applies_to: ['stress_relaxation', 'dma_sweep'],
+        needs: 'adopted_result',
+        needs_by_type: { stress_relaxation: 'adopted_result', dma_sweep: 'master_curve' },
+        params: [],
+      },
+    ])
+    runs.mockResolvedValue({
+      items: [
+        { id: 's1', record_name: 'A_SRX_01', test_type_key: 'stress_relaxation', adopted_result_id: 'p1' },
+        { id: 's2', record_name: 'B_SRX_01', test_type_key: 'stress_relaxation', adopted_result_id: null },
+        { id: 'd1', record_name: 'C_DMA_01', test_type_key: 'dma_sweep', adopted_result_id: null, master_curve_count: 1 },
+        { id: 'd2', record_name: 'D_DMA_01', test_type_key: 'dma_sweep', adopted_result_id: 'p9', master_curve_count: 0 },
+      ],
+      total: 4,
+      limit: 200,
+      offset: 0,
+    })
+    show(<GroupsPanel materialId="m1" />)
+    await userEvent.click(await screen.findByRole('button', { name: '글로벌 피팅' }))
+
+    expect(await screen.findByLabelText('A_SRX_01 선택')).toBeInTheDocument()
+    expect(screen.getByLabelText('C_DMA_01 선택')).toBeInTheDocument()
+    expect(screen.queryByLabelText('B_SRX_01 선택')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('D_DMA_01 선택')).not.toBeInTheDocument()
+    expect(screen.getByText(/dma_sweep: 대표 마스터커브/)).toBeInTheDocument()
+    expect(screen.getByText(/2건은 조건이 없어 제외/)).toBeInTheDocument()
+  })
+
   it('채택하지 않은 결과도 쓰기를 켜면 미채택 시험이 뜨고, 고른 결과를 보낸다', async () => {
     // VOC 49(2026-11-14) — 등가 E 처럼 공식 물성으로 채택하지 않는 값도 카드로 가야 한다.
     kinds.mockResolvedValue([{ ...RATE_SPEC, min_members: 1 }])

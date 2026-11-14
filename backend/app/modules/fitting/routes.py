@@ -2697,7 +2697,12 @@ def _unadopted_note(row: GroupResult) -> str:
 
 
 def _lineage_of_group(
-    db: Session, user: User, row: GroupResult, *, mixed_orientation: bool = False
+    db: Session,
+    user: User,
+    row: GroupResult,
+    *,
+    mixed_orientation: bool = False,
+    card_test_type: str | None = None,
 ) -> _Lineage:
     """묶음의 구성원을 시험 → 시편 → 시료로 따라간다. 방향·종류가 섞이면 막는다 —
     한 카드는 방향 하나·종류 하나의 물성이다.
@@ -2705,7 +2710,13 @@ def _lineage_of_group(
     **예외가 하나 있다**(`mixed_orientation`). 세 방향을 함께 써야 나오는 값(이방성의
     r̄·Δr)은 애초에 방향이 없다. 그때는 섞인 것을 받고 방향을 **비운다** — 셋 중 하나를
     골라 적으면 그 카드가 그 방향의 물성인 것처럼 보인다. 그 예외를 켜는 것은 부르는
-    쪽의 판단이 아니라 **블록의 선언**이다(`meta["cross_orientation"]`)."""
+    쪽의 판단이 아니라 **블록의 선언**이다(`meta["cross_orientation"]`).
+
+    **시험 종류를 가로지르는 묶음**(`card_test_type`, 2026-11-15, VOC 52) — 응력완화와 DMA
+    마스터커브를 잇는 묶음은 두 종류를 함께 받는다. 그때 카드의 종류는 묶음이 선언한
+    것(응력완화)이고, 방향도 그 종류의 시험에서 본다 — DMA 는 짧은 시간을 메우는 근거다. 켜는
+    것은 **묶음의 선언**이다
+    (`meta["card_test_type"]`)."""
     material = db.scalar(
         permissions.visible_materials(db, user).where(Material.id == row.material_id)
     )
@@ -2726,7 +2737,22 @@ def _lineage_of_group(
         raise NotFound("MNX-FITTING-0011", "묶음의 시편을 따라갈 수 없습니다.")
     found = [one for one in specimens if one is not None]
     _refuse_moved_members(db, row, runs, found)
-    orientations = {one.orientation for one in found}
+    card_type_id: uuid.UUID | None = None
+    if card_test_type is not None:
+        card_type_id = db.scalar(select(TestType.id).where(TestType.key == card_test_type))
+        if card_type_id is None or card_type_id not in {run.test_type_id for run in runs}:
+            raise AppError(
+                "MNX-FITTING-0013",
+                f"이 묶음은 카드를 「{card_test_type}」 시험으로 만드는데 그 시험이 묶음에 "
+                "없습니다.",
+                status=422,
+            )
+    owned = [
+        specimen
+        for run, specimen in zip(runs, found, strict=True)
+        if card_type_id is None or run.test_type_id == card_type_id
+    ]
+    orientations = {one.orientation for one in owned}
     if len(orientations) != 1 and not mixed_orientation:
         raise AppError(
             "MNX-FITTING-0013",
@@ -2734,7 +2760,7 @@ def _lineage_of_group(
             f"({', '.join(sorted(orientations))}). 카드는 방향 하나의 물성입니다.",
             status=422,
         )
-    types = {run.test_type_id for run in runs}
+    types = {run.test_type_id for run in runs} if card_type_id is None else {card_type_id}
     if len(types) != 1:
         raise AppError("MNX-FITTING-0013", "시험 종류가 섞여 있습니다.", status=422)
     samples = [
@@ -2967,7 +2993,14 @@ def create_card_from_group(
     # **방향을 가로지르는 블록이 하나라도 있으면** 방향 검사를 면제한다. 위에서
     # 이미 「등록된 블록인가」 를 확인했으므로 여기서는 그 선언만 읽는다.
     crosses = any(bool(cards.block(key).meta.get("cross_orientation")) for key in blocks)
-    lineage = _lineage_of_group(db, user, row, mixed_orientation=crosses)
+    card_type = plugin.meta.get("card_test_type")
+    lineage = _lineage_of_group(
+        db,
+        user,
+        row,
+        mixed_orientation=crosses,
+        card_test_type=str(card_type) if card_type else None,
+    )
     material = lineage.material
     modulus, modulus_count = _mean_scalar_of_runs(db, lineage.runs, "youngs_modulus")
     modulus_source = "statistics"

@@ -20,6 +20,7 @@ from __future__ import annotations
 import uuid
 from collections.abc import Callable, Mapping, Sequence
 from contextvars import ContextVar
+from dataclasses import replace
 from typing import Any, Literal
 
 import numpy as np
@@ -30,9 +31,9 @@ from app.modules.accounts.models import User
 from app.modules.grouping.models import GroupResult
 from app.modules.materials.models import Material, Sample, Specimen
 from app.modules.processing.models import ProcessingResult
-from app.modules.tests.models import TestRun, TestSummary
+from app.modules.tests.models import TestRun, TestSummary, TestType
 from app.modules.viscoelastic.models import MasterCurve, PronyFit
-from app.shared import filestore, holds, permissions, specimen_size
+from app.shared import curvedata, filestore, holds, permissions, specimen_size
 from app.shared.errors import AppError, NotFound
 from matcore import curves as curvekit
 from matcore import groups, registry
@@ -96,6 +97,18 @@ def collector(
 #: 레지스트리로 옮길 때" 라고 적어 둔 것의 절반이다 — 선언으로 되는 것은 옮겼다.
 MEMBERS_META = "members"
 
+#: **시험 종류마다 다른 규칙**(2026-11-15, VOC 52) — 한 묶음이 두 종류의 시험을 받는다(응력완화
+#: + DMA 마스터커브). `{"by_test_type": {"stress_relaxation": {...}, "dma_sweep": {"from":
+#: "master_curve"}}}`. 구성원 `meta["test_type"]` 에 그 종류 키를 적는다 — 계산이 누가 누구인지
+#: 안다.
+BY_TEST_TYPE = "by_test_type"
+TEST_TYPE_META = "test_type"
+
+#: 구성원 규칙 `"material_scalars": ["lve_strain_limit"]` — **그 재료의 채택된 결과 어디에든**
+#: 있는 스칼라의 가장 작은 값을 구성원 값에 싣는다(2026-11-15). 응력완화의 유지 변형률을 같은
+#: 재료의 DMA 변형률 스윕이 낸 선형 한계와 견주는 자리다 — 그 스윕은 묶는 시험이 아니다.
+MATERIAL_SCALARS = "material_scalars"
+
 #: 이 묶음에서 **시험마다 쓸 결과**(시험 id → 결과 id) — 비면 채택된 결과(2026-11-14, VOC 49).
 #: 수집기들이 채택 결과를 읽는 자리가 여섯이라, 인자로 끌고 다니지 않고 `create` 가 이 묶음을
 #: 모으는 동안만 둔다.
@@ -138,6 +151,23 @@ def _declared_rule(plugin_id: str) -> dict[str, Any] | None:
         return None
     rule = plugin.meta.get(MEMBERS_META)
     return rule if isinstance(rule, dict) else None
+
+
+def needs_by_type(plugin_id: str) -> dict[str, Needs]:
+    """시험 종류마다 다른 규칙을 선언한 묶음이면 **종류마다의 조건**(2026-11-15). 아니면
+    비었다 — 화면은 비면 `member_needs` 하나로 거른다."""
+    rule = _declared_rule(plugin_id) or {}
+    found: dict[str, Needs] = {}
+    for key, sub in (rule.get(BY_TEST_TYPE) or {}).items():
+        origin = (sub or {}).get("from")
+        found[str(key)] = (
+            "master_curve"
+            if origin == "master_curve"
+            else "adopted_result"
+            if origin == "adopted_result"
+            else "summary"
+        )
+    return found
 
 
 def member_needs(plugin_id: str) -> Needs:
@@ -368,11 +398,83 @@ def _mixed_members(
     return members
 
 
+def _type_keys(db: Session, runs: Sequence[TestRun]) -> dict[uuid.UUID, str]:
+    """시험 → 시험 종류 키. 한 번에 읽는다."""
+    ids = {run.test_type_id for run in runs}
+    rows = db.execute(select(TestType.id, TestType.key).where(TestType.id.in_(ids)))
+    keys: dict[uuid.UUID, str] = {row[0]: str(row[1]) for row in rows}
+    return {run.id: str(keys.get(run.test_type_id, "")) for run in runs}
+
+
+def _by_type_members(
+    db: Session, runs: list[TestRun], rule: dict[str, Any], plugin_id: str
+) -> list[groups.Member]:
+    """시험 종류마다 그 규칙으로 모으고, 구성원에 종류를 적는다. **고른 차례를 지킨다.**"""
+    rules = rule.get(BY_TEST_TYPE) or {}
+    keys = _type_keys(db, runs)
+    unknown = sorted({keys[run.id] for run in runs if keys[run.id] not in rules})
+    if unknown:
+        raise AppError(
+            "MNX-GROUPING-0017",
+            f"이 묶음이 받지 않는 시험 종류입니다: {', '.join(unknown)} — "
+            f"{', '.join(sorted(rules))} 시험만 고르세요.",
+            status=422,
+        )
+    gathered: dict[uuid.UUID, groups.Member] = {}
+    for key, sub in rules.items():
+        mine = [run for run in runs if keys[run.id] == key]
+        if not mine:
+            continue
+        made = _declared_members(db, mine, dict(sub), plugin_id)
+        for run, member in zip(mine, made, strict=True):
+            gathered[run.id] = replace(member, meta={**member.meta, TEST_TYPE_META: key})
+    return [gathered[run.id] for run in runs]
+
+
+def _material_scalars(
+    db: Session, runs: Sequence[TestRun], names: Sequence[str]
+) -> dict[str, float]:
+    """그 재료의 **채택된 결과 전부**에서 그 스칼라의 가장 작은 값. 없으면 그 이름은 빠진다."""
+    if not runs or not names:
+        return {}
+    material = _material_of(db, runs)
+    scalars = db.scalars(
+        select(ProcessingResult.scalars)
+        .join(TestRun, TestRun.adopted_result_id == ProcessingResult.id)
+        .join(Specimen, Specimen.id == TestRun.specimen_id)
+        .join(Sample, Sample.id == Specimen.sample_id)
+        .where(Sample.material_id == material.id, TestRun.deleted_at.is_(None))
+    )
+    found: dict[str, float] = {}
+    for rows in scalars:
+        for one in rows or []:
+            if not isinstance(one, dict) or one.get("key") not in names:
+                continue
+            value = one.get("value")
+            if isinstance(value, int | float) and value > 0:
+                key = str(one["key"])
+                found[key] = min(found.get(key, float(value)), float(value))
+    return found
+
+
+def _master_curve_members(db: Session, runs: list[TestRun]) -> list[groups.Member]:
+    """대표 마스터커브와 그 온도 이동 · 맞춘 Prony · **전단으로 쟀는지**를 꺼낸다."""
+    shear = {run.id: curvedata.measures_shear_channels(db, run) for run in runs}
+    return [
+        replace(member, meta={**member.meta, "shear": shear[run.id]})
+        for run, member in zip(runs, _prony_members(db, runs), strict=True)
+    ]
+
+
 def _declared_members(
     db: Session, runs: list[TestRun], rule: dict[str, Any], plugin_id: str
 ) -> list[groups.Member]:
     """선언대로 채택된 결과에서 열·조건·스칼라를 꺼낸다. 없으면 **어느 시험이 무엇이
     없는지** 말한다 — 속도 가족 수집기와 같은 문장이다."""
+    if rule.get(BY_TEST_TYPE):
+        return _by_type_members(db, runs, rule, plugin_id)
+    if rule.get("from") == "master_curve":
+        return _master_curve_members(db, runs)
     if rule.get("from") == "summary":
         return _summary_members(db, runs, rule, plugin_id)
     if rule.get("from") == MEASURED_OR_STATED:
@@ -386,6 +488,9 @@ def _declared_members(
         )
     wanted_columns = [str(one) for one in rule.get("columns") or []]
     wanted_conditions = [str(one) for one in rule.get("conditions") or []]
+    from_material = _material_scalars(
+        db, runs, [str(one) for one in rule.get(MATERIAL_SCALARS) or []]
+    )
     required, optional = _wanted_values(rule)
     wanted_values = required + optional
     extra = _specimen_meta(db, runs, [str(one) for one in rule.get("specimen") or []])
@@ -434,6 +539,7 @@ def _declared_members(
             found = scalars.get(key)
             if isinstance(found, int | float):
                 values[key] = float(found)
+        values.update(from_material)
         members.append(
             groups.Member(
                 label=run.record_name,

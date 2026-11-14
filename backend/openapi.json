@@ -17267,6 +17267,14 @@
             "title": "Needs",
             "type": "string"
           },
+          "needs_by_type": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "default": {},
+            "title": "Needs By Type",
+            "type": "object"
+          },
           "params": {
             "items": {
               "$ref": "#/components/schemas/GroupingParamOut"

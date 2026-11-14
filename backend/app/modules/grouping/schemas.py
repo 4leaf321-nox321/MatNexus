@@ -59,6 +59,9 @@ class GroupingSpecOut(BaseModel):
     (곡선 없이 표로 넣은 시험 — 피로).
     화면이 후보 시험을 이것으로 거른다. 플러그인 id 로 알아맞히면 새 묶음마다 화면을
     고쳐야 한다."""
+    needs_by_type: dict[str, str] = {}
+    """**시험 종류마다 다른 조건**(2026-11-15, VOC 52) — 응력완화는 채택된 결과, DMA 는
+    마스터커브. 비면 `needs` 하나다."""
     params: list[GroupingParamOut]
     makes_values: list[GroupingProducedOut]
     min_members: int = 2

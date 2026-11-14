@@ -15715,6 +15715,13 @@ export interface components {
              * @default master_curve
              */
             needs: string;
+            /**
+             * Needs By Type
+             * @default {}
+             */
+            needs_by_type: {
+                [key: string]: string;
+            };
             /** Params */
             params: components["schemas"]["GroupingParamOut"][];
             /**

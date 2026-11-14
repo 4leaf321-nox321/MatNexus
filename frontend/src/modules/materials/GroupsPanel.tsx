@@ -47,6 +47,13 @@ import { groupsApi } from '@/modules/materials/api.groups'
 import { processingApi } from '@/modules/processing/api'
 import type { ProcessingResult } from '@/modules/processing/api'
 import { masterCurveGap } from '@/shared/masterCurveGap'
+
+/** 구성원 조건(`needs`)을 사람 말로 — 종류마다 조건이 다른 묶음의 안내에 쓴다. */
+const NEEDS_LABELS: Record<string, string> = {
+  adopted_result: '채택된 처리 결과',
+  master_curve: '대표 마스터커브',
+  summary: '표로 넣은 요약값',
+}
 import type { GroupResult, GroupingSpec } from '@/modules/materials/api.groups'
 import { testsApi } from '@/modules/tests/api'
 import { ConfirmDialog } from '@/shared/components/ConfirmDialog'
@@ -566,14 +573,21 @@ export function GroupsPanel({
   // 속도별 묶음은 채택된 처리 결과가 있어야 한다 — 화면이 플러그인 id 로
   // 알아맞히면 새 묶음마다 여기를 고쳐야 한다. 없으면 마스터커브로 본다(옛 응답).
   const needs = chosen?.needs ?? 'master_curve'
+  /**
+   * **시험 종류마다 조건이 다른 묶음**(2026-11-15, VOC 52) — 응력완화 + DMA 를 잇는 묶음은
+   * 응력완화에는 채택된 결과, DMA 에는 마스터커브가 있어야 한다. 비면 `needs` 하나다.
+   */
+  const byType: Record<string, string> = chosen?.needs_by_type ?? {}
+  const mixedNeeds = Object.keys(byType).length > 0
+  const needsOf = (run: { test_type_key: string }) => byType[run.test_type_key] ?? needs
   // `summary` 는 곡선 없이 표로 넣은 시험(피로) — 종류가 맞으면 전부 후보다. 요약값이
   // 빠진 시험은 서버가 묶을 때 이름을 대고 막는다.
-  const candidates =
-    needs === 'adopted_result'
-      ? kindMatched.filter((run) => anyResult || !!run.adopted_result_id)
-      : needs === 'summary'
-        ? kindMatched
-        : kindMatched.filter((run) => (run.master_curve_count ?? 0) > 0)
+  const candidates = kindMatched.filter((run) => {
+    const wanted = needsOf(run)
+    if (wanted === 'adopted_result') return anyResult || !!run.adopted_result_id
+    if (wanted === 'summary') return true
+    return (run.master_curve_count ?? 0) > 0
+  })
   const unadopted = kindMatched.length - candidates.length
   // **Shift 로 범위를 고른다.** 온도 여섯 단이면 여섯 번 누르게 된다.
   const selection = useRowSelection(candidates.map((run) => run.id))
@@ -739,7 +753,15 @@ export function GroupsPanel({
 
                 **명사형으로 적는다**(2026-09-05). 「~합니다」 로 풀어 쓴 설명은
                 길고 말투가 도드라져 읽히지 않았다 — 보고서처럼 끊는다. */}
-            {needs === 'summary' ? (
+            {mixedNeeds ? (
+              <DialogDescription>
+                <b>종류가 다른 시험을 함께 투입.</b> 시험 종류마다 필요한 것:{' '}
+                {Object.entries(byType)
+                  .map(([key, wanted]) => `${key} — ${NEEDS_LABELS[wanted] ?? wanted}`)
+                  .join(' · ')}
+                .
+              </DialogDescription>
+            ) : needs === 'summary' ? (
               <DialogDescription>
                 <b>표로 넣은 시험 여럿의 조건·요약값을 한 계산에 투입.</b>
                 <br />
@@ -978,7 +1000,15 @@ export function GroupsPanel({
               {/* **왜 이것만 뜨는지 말한다.** 아무 말 없이 걸러 두면 「내 시험이
                   왜 없지」 가 된다. 그리고 **몇 건이 왜 빠졌는지**가 다음 할 일을
                   가리킨다 — 마스터커브를 만들면 그것도 쓸 수 있다. */}
-              {needs === 'summary' ? (
+              {mixedNeeds ? (
+                <p className="text-muted-foreground text-xs">
+                  시험 종류마다 조건을 갖춘 시험만 표시(
+                  {Object.entries(byType)
+                    .map(([key, wanted]) => `${key}: ${NEEDS_LABELS[wanted] ?? wanted}`)
+                    .join(' · ')}
+                  ).{unadopted > 0 && ` ${unadopted}건은 조건이 없어 제외.`}
+                </p>
+              ) : needs === 'summary' ? (
                 <p className="text-muted-foreground text-xs">
                   이 종류의 시험 전부 표시 — 조건·요약값이 빠진 시험은 묶을 때 이름을 대고
                   막힘.

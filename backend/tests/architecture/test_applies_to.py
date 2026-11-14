@@ -152,6 +152,11 @@ def test_시험종류를_가리키면_채널도_함께_적는다() -> None:
         # 후보에서 빠져** 세 방향을 한 묶음에 못 넣는다.
         and (plugin.meta.get("members") or {}).get("from")
         not in ("summary", "measured_or_stated")
+        # **종류마다 규칙이 다른 묶음**(2026-11-15, VOC 52 — 응력완화 + DMA)은 채널 조건을
+        # 하나로 못 적는다(`requires_channels` 는 모두 갖춰야 하는데 두 종류의 채널이 다르다).
+        # 규칙이 종류 키로 갈리므로(`by_test_type`) 부서가 만든 종류는 묶을 때 이름을 대고
+        # 막힌다.
+        and not (plugin.meta.get("members") or {}).get("by_test_type")
     ]
     assert not naked, (
         "시험종류 키만 보고 거릅니다 — `requires_channels` 를 함께 적으세요: "

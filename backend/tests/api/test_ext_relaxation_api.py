@@ -14,6 +14,7 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
@@ -188,3 +189,172 @@ def test_시험_온도가_비면_온도_채널의_중앙값으로_채우고_점�
     assert run.conditions["temperature"] == pytest.approx(296.15)
     found = [one for one in run.checks if one["code"] == "condition_from_channel"]
     assert len(found) == 1 and "23.0 °C" in found[0]["message"]
+
+
+def _master_curve_for(db: Session, run_id: str, *, scale: float = 1.0) -> None:
+    """그 시험(DMA)에 **응력완화 고정물과 같은 재료**의 대표 마스터커브를 둔다 — 고정물의
+    E(t) = 1 + 2·e^(-t/10) + 1·e^(-t/1000) GPa 를 주파수 영역으로 옮긴 것(기준 23 °C, WLF)."""
+    from app.modules.viscoelastic.models import MasterCurve
+    from app.shared import filestore
+    from matcore import curves as curvekit
+    from matcore.parsers import Channel
+
+    frequency = np.geomspace(1e-3, 1e3, 120)
+    omega = 2 * np.pi * frequency
+    storage = np.full_like(omega, 1e9)
+    loss = np.zeros_like(omega)
+    for modulus, tau in ((2e9, 10.0), (1e9, 1000.0)):
+        wt = omega * tau
+        storage += modulus * wt**2 / (1 + wt**2)
+        loss += modulus * wt / (1 + wt**2)
+    channels = [
+        Channel(key="frequency", label="주파수", si_unit="Hz", values=tuple(frequency)),
+        Channel(
+            key="storage_modulus",
+            label="저장 탄성률",
+            si_unit="Pa",
+            values=tuple(storage * scale),
+        ),
+        Channel(
+            key="loss_modulus", label="손실 탄성률", si_unit="Pa", values=tuple(loss * scale)
+        ),
+    ]
+    stored = filestore.write_bytes(
+        curvekit.to_parquet(channels),
+        relative_dir=f"master-curves/{run_id}",
+        filename=f"{uuid.uuid4().hex}.parquet",
+    )
+    db.add(
+        MasterCurve(
+            test_run_id=uuid.UUID(run_id),
+            source_curve_keys=[],
+            reference_temperature_k=296.15,
+            method="wlf",
+            parameters={"c1": 8.86, "c2": 101.6},
+            shifts=[
+                {"temperature_k": t, "log10_a_t": -8.86 * (t - 296.15) / (101.6 + t - 296.15)}
+                for t in (276.15, 296.15, 316.15)
+            ],
+            notes=[],
+            storage_path=stored.relative_path,
+            point_count=len(frequency),
+            minimum_frequency_hz=float(frequency[0]),
+            maximum_frequency_hz=float(frequency[-1]),
+            is_primary=True,
+        )
+    )
+    db.commit()
+
+
+def _coupled_runs(
+    client: TestClient, db: Session, headers: dict[str, str], *, scale: float = 1.0
+) -> list[str]:
+    """같은 재료에 응력완화 시험 하나(채택) + DMA 시험 하나(대표 마스터커브)."""
+    material_id, (relaxation,) = _upload(
+        client,
+        db,
+        headers,
+        "stress_relaxation",
+        "relaxation_standard.csv",
+        '{"held_strain": 0.005, "temperature": 296.15}',
+    )
+    _adopt(client, headers, relaxation, "relaxation.modulus")
+    sample = client.post(f"/api/materials/{material_id}/samples", json={}, headers=headers)
+    specimen = client.post(
+        f"/api/samples/{sample.json()['id']}/specimens",
+        json={"orientation": "NA"},
+        headers=headers,
+    ).json()
+    dma = client.post(
+        "/api/test-runs",
+        data={"specimen_id": specimen["id"], "test_type": "dma_sweep", "conditions": "{}"},
+        files={"file": ("dma.csv", (FIXTURES / "dma_freq_temp.csv").read_bytes())},
+        headers=headers,
+    )
+    assert dma.status_code == 202, dma.text
+    _master_curve_for(db, dma.json()["id"], scale=scale)
+    return [relaxation, dma.json()["id"]]
+
+
+def test_응력완화와_DMA_마스터커브를_이어_카드를_만든다(
+    client: TestClient, db: Session, admin_headers: dict[str, str]
+) -> None:
+    """2026-11-15(VOC 52 · ADR 0087 1단계) — 묶음이 두 종류의 시험을 종류마다의 규칙으로
+    모으고,
+    카드는 응력완화 시험의 것으로 선다(`card_test_type`)."""
+    kinds = client.get(
+        "/api/groups/kinds", params={"applies_to": "stress_relaxation"}, headers=admin_headers
+    )
+    assert kinds.status_code == 200, kinds.text
+    coupled = next(one for one in kinds.json() if one["id"] == "relaxation.dma_coupled")
+    assert coupled["needs_by_type"] == {
+        "stress_relaxation": "adopted_result",
+        "dma_sweep": "master_curve",
+    }
+
+    run_ids = _coupled_runs(client, db, admin_headers)
+    group = client.post(
+        "/api/groups",
+        json={"plugin_id": "relaxation.dma_coupled", "run_ids": run_ids},
+        headers=admin_headers,
+    )
+    assert group.status_code == 201, group.text
+    values = group.json()["values"]
+    assert values["overlap_ratio"] == pytest.approx(1.0, abs=0.03)
+    assert values["instantaneous_pa"] == pytest.approx(4e9, rel=0.05)
+    assert values["time_min"] < 0.1  # 응력완화의 첫 측정(0.1 s)보다 짧은 시간까지
+    # 이 재료의 선형 한계가 없다 — 막지 않고 말한다.
+    assert any("선형 구간 근거가 없습니다" in one for one in group.json()["warnings"])
+
+    card = client.post(
+        "/api/fitting/cards/from-group",
+        json={
+            "group_result_id": group.json()["id"],
+            "label": "이은 Prony",
+            "poisson_ratio": 0.4,
+        },
+        headers=admin_headers,
+    )
+    assert card.status_code == 201, card.text
+    body = card.json()
+    # 카드의 시험 종류는 응력완화다 — DMA 는 짧은 시간을 메운 근거다.
+    assert body["test_type_key"] == "stress_relaxation"
+    shown = body["blocks"]["viscoelastic"]["values"]
+    assert shown["overlap_ratio"] == pytest.approx(values["overlap_ratio"])
+    assert shown["dma_join_time_s"] == pytest.approx(values["dma_join_time_s"])
+    assert body["blocks"]["elastic"]["values"]["youngs_modulus"] == pytest.approx(
+        values["instantaneous_pa"]
+    )
+
+
+def test_겹친_구간이_크게_다르면_이유를_대고_묶지_않는다(
+    client: TestClient, db: Session, admin_headers: dict[str, str]
+) -> None:
+    run_ids = _coupled_runs(client, db, admin_headers, scale=2.0)
+    group = client.post(
+        "/api/groups",
+        json={"plugin_id": "relaxation.dma_coupled", "run_ids": run_ids},
+        headers=admin_headers,
+    )
+    assert group.status_code == 422, group.text
+    assert "잇지 않습니다" in group.text
+
+
+def test_받지_않는_시험_종류는_이름을_대고_막는다(
+    client: TestClient, db: Session, admin_headers: dict[str, str]
+) -> None:
+    _, run_ids = _upload(
+        client,
+        db,
+        admin_headers,
+        "creep",
+        "creep_standard.csv",
+        '{"applied_stress": 20000000, "temperature": 398.15}',
+    )
+    group = client.post(
+        "/api/groups",
+        json={"plugin_id": "relaxation.dma_coupled", "run_ids": run_ids},
+        headers=admin_headers,
+    )
+    assert group.status_code == 422, group.text
+    assert "creep" in group.text
