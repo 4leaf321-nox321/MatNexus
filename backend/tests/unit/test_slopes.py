@@ -163,3 +163,76 @@ def test_변형률이_다_빈_칸이면_까닭을_말한다(method: str) -> None
     strain = np.full_like(stress, np.nan)
     with pytest.raises(slopes.SlopeError, match="숫자인 점이 0개"):
         slopes.measure(strain, stress, method=method)
+
+
+def _toe_then_line(points: int = 1000) -> tuple[np.ndarray, np.ndarray]:
+    """토우(최대의 5 % 까지) → 직선(60 % 까지) → 휘어 100 MPa 로. 참 E = 3 GPa."""
+    true_e, peak = 3.0e9, 100.0e6
+    strain = np.linspace(0, 0.08, points)
+    toe = 0.05 * peak / true_e * 2
+    line = np.where(strain < toe, true_e * strain**2 / (2 * toe), true_e * (strain - toe / 2))
+    knee = 0.6 * peak
+    over = np.maximum(line - knee, 0.0)
+    stress = np.where(line < knee, line, knee + (peak - knee) * np.tanh(over / (peak - knee)))
+    return strain, stress
+
+
+class Test응력_띠는_튄_점_하나에_안_끌려간다:
+    """2026-11-14(VOC 43 후속) — 「처음 닿음」 을 한 점으로 판정해, 위 끝 문턱 앞에서 한 점이
+    튀면 구간이 거기서 끊기고 그 점이 기울기를 끌어올렸다."""
+
+    def test_위_끝_문턱_앞에서_튄_점(self) -> None:
+        strain, stress = _toe_then_line(500)
+        clean = slopes.measure(strain, stress, method="stress_window")
+        peak = float(stress.max())
+        at = int(np.flatnonzero(stress >= 0.25 * peak)[0])
+        spiked = stress.copy()
+        spiked[at] += 0.2 * peak  # 25 % 자리에서 45 % 로 — 위 끝(40 %)을 넘는다
+        found = slopes.measure(strain, spiked, method="stress_window")
+        assert found.points > 0.9 * clean.points  # 구간이 거기서 끊기지 않는다
+        assert found.value == pytest.approx(clean.value, rel=0.05)
+
+    def test_오르는_곡선은_값이_그대로다(self) -> None:
+        strain, stress = _toe_then_line(500)
+        peak = float(stress.max())
+        first = int(np.flatnonzero(stress >= 0.1 * peak)[0])
+        last = int(np.flatnonzero(stress >= 0.4 * peak)[0])
+        found = slopes.measure(strain, stress, method="stress_window")
+        assert found.indices == (first, last + 1)
+
+    def test_연속이_없는_곡선_끝에서는_한_점_도달로(self) -> None:
+        values = np.array([0.0, 1.0, 2.0, 3.0, 4.0])
+        assert slopes.first_reach(values, 4.0) == 4
+        assert slopes.first_reach(values, 5.0) is None
+        assert slopes.first_reach(np.array([0, 9, 0, 2, 2, 2, 2, 2.0]), 2.0) == 3
+
+
+class Test접선은_잡음이_위로_튄_창을_고르지_않는다:
+    """2026-11-14(VOC 44 후속, ADR 0088) — 가장 가파른 창 하나의 기울기를 내, 잡음이 있으면 늘
+    위로 튄 창이 뽑혔다(D790 기본 창에서 잡음 0.25 % 에 +15 %)."""
+
+    def test_잡음이_있어도_참값_근처(self) -> None:
+        strain, stress = _toe_then_line(1000)
+        rng = np.random.default_rng(7)
+        errors = []
+        for _ in range(40):
+            noisy = stress + rng.normal(0, 0.0025 * stress.max(), len(stress))
+            found = slopes.measure(strain, noisy, method="tangent", tangent_width=0.001)
+            errors.append(found.value / 3.0e9 - 1)
+        assert abs(float(np.median(errors))) < 0.02  # 전에는 +15 %
+        assert max(abs(one) for one in errors) < 0.08  # 묶인 창이 하나뿐이던 꼬리(+30 % 이상)
+
+    def test_잡음이_없으면_직선_구간의_값이고_구간은_직선_전체(self) -> None:
+        strain, stress = _toe_then_line(1000)
+        found = slopes.measure(strain, stress, method="tangent", tangent_width=0.001)
+        assert found.value == pytest.approx(3.0e9, rel=1e-3)
+        assert found.points >= 3 * 12  # 창 하나(12~13점)가 아니라 묶인 구간
+
+    def test_튄_점_하나가_든_창에_안_끌려간다(self) -> None:
+        strain, stress = _toe_then_line(1000)
+        rng = np.random.default_rng(3)
+        noisy = stress + rng.normal(0, 0.001 * stress.max(), len(stress))
+        at = int(np.flatnonzero(stress >= 0.3 * stress.max())[0])
+        noisy[at] += 0.1 * stress.max()
+        found = slopes.measure(strain, noisy, method="tangent", tangent_width=0.001)
+        assert found.value == pytest.approx(3.0e9, rel=0.05)  # 전에는 +69 %

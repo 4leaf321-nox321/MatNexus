@@ -32,14 +32,14 @@ _METHOD_LABELS = {
     "chord": "현 (두 변형률 사이)",
     "regression": "회귀 (구간 최소제곱)",
     "secant": "할선 (원점에서 구간 끝)",
-    "tangent": "접선 (가장 가파른 처음 직선)",
+    "tangent": "접선 (가장 가파른 처음 직선 구간)",
     "stress_window": "응력 띠 (최대 응력의 비율)",
 }
 _METHOD_HELP = {
     "chord": "ISO 604: 변형률 0.05% · 0.25% 두 점의 응력을 잇는 기울기(플라스틱).",
     "regression": "구간 안 점들의 최소제곱 — 잡음이 많은 곡선.",
     "secant": "고무 · 폼: 원점에서 정한 변형률(예: 10%)까지의 할선 탄성률.",
-    "tangent": "ASTM D695 · D1621 · ISO 844: 처음 직선 구간의 가장 가파른 접선.",
+    "tangent": "ASTM D695 · D1621 · ISO 844: 가장 가파른 처음 직선 구간의 기울기.",
     "stress_window": "최대 응력의 비율 사이 회귀 — 변형률 구간을 정하기 어려울 때.",
 }
 
@@ -145,7 +145,8 @@ register(
     # 정렬(20) 뒤 · 탄성률(25) 앞(2026-11-14, VOC 44) — 굽힘과 같다.
     order=22,
     sorted_by="strain",
-    version="1",
+    # 2: 응력 기준 구간의 「닿음」 을 다섯 점 연속으로(2026-11-14).
+    version="2",
 )(toe_compensation_on(compress.STRAIN, compress.STRESS))
 
 register(
@@ -237,7 +238,8 @@ register(
     order=25,
     measures=True,
     # 2: 응력 띠를 첫 도달 사이 전부로 · 회귀 점 하한 5 · 못 내면 실패(VOC 43 · 44).
-    version="2",
+    # 3: 응력 띠의 「닿음」 을 다섯 점 연속으로 · 접선을 직선 구간 전체 회귀로(ADR 0088).
+    version="3",
 )(compress.modulus)
 
 register(

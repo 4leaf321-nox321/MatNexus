@@ -24,7 +24,7 @@ from typing import Any
 
 import numpy as np
 
-from matcore import ParamSpec, Produced, register
+from matcore import ParamSpec, Produced, register, slopes
 from matcore.processing import (
     Frame,
     ProcessingError,
@@ -294,7 +294,7 @@ def toe_params(
             default=0.1,
             unit="1",
             when={"window": ("stress",)},
-            help="최대 응력에 대한 비율 — 오르는 가지에서 처음 닿은 점부터.",
+            help="최대 응력에 대한 비율 — 오르는 가지에서 처음 닿은 점(다섯 점 연속)부터.",
         ),
         ParamSpec(
             name="band_high",
@@ -303,7 +303,7 @@ def toe_params(
             default=0.4,
             unit="1",
             when={"window": ("stress",)},
-            help="최대 응력에 대한 비율 — 처음 닿은 점까지.",
+            help="최대 응력에 대한 비율 — 처음 닿은 점(다섯 점 연속)까지.",
         ),
         ParamSpec(
             name="toe_points",
@@ -370,7 +370,8 @@ TOE_VALUES = (
     order=30,
     # 이 옵션이 가리키는 열로 정렬된 곡선을 받는다 — 화면이 정렬이 없으면 앞에 깐다(VOC 44).
     sorted_by="strain",
-    version="1",
+    # 2: 응력 기준 구간의 「닿음」 을 다섯 점 연속으로(2026-11-14) — 변형률 기준은 그대로다.
+    version="2",
 )
 def toe_compensation(frame: Frame, options: dict[str, Any]) -> StepResult:
     """초기 토우 구간만큼 변형률 원점을 옮긴다. **응력은 안 건드린다.**
@@ -520,8 +521,11 @@ def _toe_stress_band(
     if not peak > 0:
         raise ProcessingError("최대 응력이 0 이하라 응력 띠를 정할 수 없습니다.")
     rising = stress[:end]
-    first = int(np.flatnonzero(rising >= band_low * peak)[0])
-    last = int(np.flatnonzero(rising >= band_high * peak)[0])
+    # 「닿았다」 는 다섯 점 연속이다(2026-11-14) — 튄 점 하나가 구간을 끊지 않게.
+    first = slopes.first_reach(rising, band_low * peak) or 0
+    last = slopes.first_reach(rising, band_high * peak)
+    if last is None:
+        last = end - 1
     mask = np.zeros(len(strain), dtype=bool)
     mask[first : last + 1] = True
     return mask, float(strain[first]), float(strain[last])

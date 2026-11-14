@@ -287,7 +287,7 @@ def modulus(frame: Frame, options: dict[str, Any]) -> StepResult:
         "chord": "현",
         "regression": "회귀",
         "secant": "할선",
-        "tangent": "접선(가장 가파른 처음 직선)",
+        "tangent": "접선(가장 가파른 처음 직선 구간)",
         "stress_window": "응력 띠",
     }
     return StepResult(

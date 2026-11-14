@@ -28,14 +28,14 @@ _METHOD_LABELS = {
     "chord": "현 (두 변형률 사이)",
     "regression": "회귀 (구간 최소제곱)",
     "secant": "할선 (원점에서 구간 끝)",
-    "tangent": "접선 (가장 가파른 처음 직선)",
+    "tangent": "접선 (가장 가파른 처음 직선 구간)",
     "stress_window": "응력 띠 (최대 응력의 비율)",
 }
 _METHOD_HELP = {
     "chord": "ISO 178 · ISO 14125: 변형률 0.05% · 0.25% 두 점의 응력을 잇는 기울기.",
     "regression": "구간 안 점들의 최소제곱 — 잡음이 많은 곡선.",
     "secant": "원점에서 구간 끝까지 — 규격이 「몇 % 에서의 할선」 을 정할 때.",
-    "tangent": "ASTM D790 · D6272 · D7264: 처음 직선 구간의 가장 가파른 접선"
+    "tangent": "ASTM D790 · D6272 · D7264: 가장 가파른 처음 직선 구간의 기울기"
     "(토우를 건너뛴다).",
     "stress_window": "칩 · 모듈 · 세라믹처럼 변형률이 아주 작을 때 — "
     "최대 응력의 10~40% 사이 회귀.",
@@ -187,7 +187,8 @@ register(
     # 뒤로 들어가, 토우가 정렬 안 된 곡선 위에서 돌았다. 정렬이 없으면 화면이 앞에 깐다.
     order=22,
     sorted_by="strain",
-    version="1",
+    # 2: 응력 기준 구간의 「닿음」 을 다섯 점 연속으로(2026-11-14).
+    version="2",
 )(toe_compensation_on(bending.STRAIN, bending.STRESS))
 
 register(
@@ -249,7 +250,10 @@ register(
             dimension="strain",
             default=0.001,
             when={"method": ("tangent",)},
-            help="이 변형률 너비의 창을 밀며 가장 가파른 회귀 기울기를 고릅니다.",
+            help=(
+                "이 변형률 너비의 창을 밀어 가장 가파른 창을 찾고, 잡음 안에서 그와 구별 안 "
+                "되는 창들을 묶어 그 구간 전체를 회귀합니다."
+            ),
         ),
         ParamSpec(
             name="strain", label="변형률 열", type="str", role="column", default=bending.STRAIN
@@ -275,7 +279,8 @@ register(
     # 값만 잰다 — 못 내면 이 단계만 실패로 남고 강도는 계속 잰다(2026-11-14, VOC 44).
     measures=True,
     # 2: 응력 띠를 첫 도달 사이 전부로 · 회귀 점 하한 5 · 쓴 구간 · 점 수를 값으로(VOC 43).
-    version="2",
+    # 3: 응력 띠의 「닿음」 을 다섯 점 연속으로 · 접선을 직선 구간 전체 회귀로(ADR 0088).
+    version="3",
 )(bending.modulus)
 
 register(
