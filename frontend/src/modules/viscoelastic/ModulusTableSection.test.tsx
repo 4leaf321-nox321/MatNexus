@@ -18,6 +18,7 @@ const createModulusTable = vi.fn()
 const removeModulusTable = vi.fn()
 const createDmaTemperature = vi.fn()
 const companionTables = vi.fn()
+const previewDmaTemperature = vi.fn()
 
 vi.mock('@/modules/viscoelastic/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/modules/viscoelastic/api')>()),
@@ -31,7 +32,10 @@ vi.mock('@/modules/viscoelastic/api', async (importOriginal) => ({
 
 vi.mock('@/modules/fitting/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/modules/fitting/api')>()),
-  fittingApi: { createDmaTemperature: (...args: unknown[]) => createDmaTemperature(...args) },
+  fittingApi: {
+    createDmaTemperature: (...args: unknown[]) => createDmaTemperature(...args),
+    previewDmaTemperature: (...args: unknown[]) => previewDmaTemperature(...args),
+  },
 }))
 
 const TABLE = {
@@ -52,6 +56,21 @@ beforeEach(() => {
   vi.clearAllMocks()
   modulusTables.mockResolvedValue([])
   companionTables.mockResolvedValue([])
+  previewDmaTemperature.mockResolvedValue({
+    rows: [
+      { temperature: 253.15, storage_modulus: 2.1e9, sample_count: 2 },
+      { temperature: 293.15, storage_modulus: 1.1e9, sample_count: 1 },
+    ],
+    notes: ['시편 2개의 1 Hz 표를 온도마다 평균했습니다.', '잰 온도 사이의 줄은 보간한 값입니다.'],
+    cautions: ['잰 온도 사이의 줄은 보간한 값입니다.'],
+    sample_count: 2,
+    lot_count: 2,
+    rows_by_sample_count: { '2': 1, '1': 1 },
+    tables: [
+      { test_run_id: 'run-1', record_name: 'A', specimen_name: 'EPDM_01', points: [[253.15, 2e9]] },
+      { test_run_id: 'run-2', record_name: 'B', specimen_name: 'EPDM_02', points: [[253.15, 2.2e9]] },
+    ],
+  })
 })
 
 describe('주파수 지정 온도별 E′ 표', () => {
@@ -120,6 +139,23 @@ describe('주파수 지정 온도별 E′ 표', () => {
     render(<ModulusTableSection testRunId="run-1" />)
     await user.click(await screen.findByRole('checkbox', { name: /EPDM_02 · EPDM_02__DMA_01/ }))
     expect(companionTables).toHaveBeenCalledWith('table-1')
+    // **만들기 전에 평균을 본다**(2026-11-15, VOC 48) — 줄 수 · 시편 수 · 확정 전에 볼 것.
+    const preview = await screen.findByRole('region', { name: '평균 미리보기' })
+    expect(within(preview).getByText(/만들면 2줄\(시편 2개 1줄 · 시편 1개 1줄\) · 시료\(로트\) 2개/)).toBeInTheDocument()
+    expect(within(preview).getByText(/보간한 값입니다/)).toBeInTheDocument()
+    expect(previewDmaTemperature).toHaveBeenLastCalledWith({
+      modulus_table_ids: ['table-1', 'table-2'],
+      average: 'grid',
+      grid_step_k: 1,
+    })
+    expect(createDmaTemperature).not.toHaveBeenCalled()
+    // 방식을 바꾸면 다시 계산한다.
+    await user.selectOptions(screen.getByLabelText('평균 방식'), 'union')
+    await waitFor(() =>
+      expect(previewDmaTemperature).toHaveBeenLastCalledWith(expect.objectContaining({ average: 'union' }))
+    )
+    await user.selectOptions(screen.getByLabelText('평균 방식'), 'grid')
+    await screen.findByRole('region', { name: '평균 미리보기' })
     await user.click(screen.getByRole('button', { name: '시편 2개 평균으로 카드 만들기' }))
     await waitFor(() =>
       expect(createDmaTemperature).toHaveBeenCalledWith({

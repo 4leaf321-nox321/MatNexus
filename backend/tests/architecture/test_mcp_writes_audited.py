@@ -54,6 +54,10 @@ READS: dict[tuple[str, str], str] = {
     ("POST", "/catalog/deck/match"): "부품표 줄을 문헌 재료에 짝지어 보기만 한다",
     ("POST", "/fitting/decks/bom"): "덱을 만들어 돌려줄 뿐 저장하지 않는다",
     ("POST", "/fitting/preview"): "식을 견주기만 한다 — 카드는 안 만든다",
+    (
+        "POST",
+        "/fitting/cards/dma-temperature/preview",
+    ): "평균을 계산해 보기만 한다 — 카드는 안 만든다",
     ("POST", "/formulas/preview"): "식을 계산해 보기만 한다",
     ("POST", "/processing/preview"): "처리 결과를 미리 본다 — 저장하지 않는다",
     ("POST", "/formats/check"): "형식이 파일을 읽는지 검사만 한다",

@@ -2354,15 +2354,37 @@ export interface paths {
          * Create Dma Temperature Card
          * @description **온도별 저장 탄성률 카드** — 점탄성 탭의 표에서(2026-10-22, v1.285.0 보고).
          *
-         *     DMA 온도별 E′ 를 잰 물성으로 넘길 길이 없어, 재료에 적어 둔 값(출처 추정)으로만 넣고
-         *     있었다. **탄성 블록에 싣지 않는다** — 정적 탄성계수와 뜻이 다르다(사용자). 전단(G′)으로
-         *     잰 표는 점탄성 카드와 같은 규칙으로 E = 2(1+ν)G 로 옮긴다 — tan δ 는 그대로다.
-         *
          *     표가 여럿이면 **시편 평균**이다 — `average` 로 방식을 고른다(`grid` 온도 격자 · `union`
          *     온도 모으기 · `matched` 모든 시편에 있는 온도만). 줄마다 E′ 변동계수와 기여 시편 수를
          *     단다. 같은 재료 · 시험 종류 · 방향 · 주파수 · 잰 것이어야 하고 시험 하나에 표 하나다.
+         *     만들기 전에 `…/dma-temperature/preview` 로 같은 계산을 볼 수 있다.
          */
         post: operations["create_dma_temperature_card_api_fitting_cards_dma_temperature_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/fitting/cards/dma-temperature/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Preview Dma Temperature Card
+         * @description 온도별 저장 탄성률 카드를 **만들지 않고** 본다(2026-11-15, VOC 48).
+         *
+         *     전에는 카드를 만들어야(초안) 평균 결과가 보였다 — 초안마다 카드 번호가 쓰이고, 초안이 있는
+         *     동안 근거 표를 못 지웠다. 평균 방식을 시험 모양과 안 맞게 고르면 그럴듯하지만 틀린 줄이
+         *     생기는데(한 온도씩 잰 시험에 격자 → 보간 줄, 램프 시험에 모으기 → 한 시편뿐인 줄) 그것은
+         *     평균한 줄을 봐야만 안다. **만들기와 같은 함수**라 미리 본 것이 곧 만들어질 카드다.
+         */
+        post: operations["preview_dma_temperature_card_api_fitting_cards_dma_temperature_preview_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -14257,12 +14279,50 @@ export interface components {
             specimen_count: number;
         };
         /**
-         * DmaTemperatureCardSaveRequest
-         * @description 온도별 저장 탄성률 카드 — 점탄성 탭의 **온도별 탄성률 표에서**(2026-10-22).
+         * DmaPreviewTableOut
+         * @description 평균에 든 표 하나 — 화면이 평균 곡선 뒤에 시편마다의 곡선을 겹쳐 그린다.
+         */
+        DmaPreviewTableOut: {
+            /** Points */
+            points: number[][];
+            /** Record Name */
+            record_name: string;
+            /** Specimen Name */
+            specimen_name: string;
+            /**
+             * Test Run Id
+             * Format: uuid
+             */
+            test_run_id: string;
+        };
+        /**
+         * DmaTemperatureCardPreviewRequest
+         * @description 온도별 저장 탄성률 카드의 **계산에 드는 것** — 미리보기가 이것만 받는다(2026-11-15).
          *
          *     v1.285.0 보고: DMA 온도별 E′ 를 잰 물성으로 넘길 길이 없었다. 표가 재료 · 방향은 체인을
          *     따라간다(표 → 시험 → 시편 → 시료 → 재료). **표 여럿이면 시편 평균이다** — 같은 재료 ·
          *     시험 종류 · 방향 · 주파수 · 잰 것(E/G)이고 시험 하나에 표 하나여야 한다.
+         */
+        DmaTemperatureCardPreviewRequest: {
+            /**
+             * Average
+             * @default matched
+             * @enum {string}
+             */
+            average: "matched" | "grid" | "union";
+            /**
+             * Grid Step K
+             * @default 1
+             */
+            grid_step_k: number;
+            /** Modulus Table Ids */
+            modulus_table_ids: string[];
+            /** Poisson Ratio */
+            poisson_ratio?: number | null;
+        };
+        /**
+         * DmaTemperatureCardSaveRequest
+         * @description 온도별 저장 탄성률 카드 만들기 — 계산에 드는 것 + 이름 · 메모.
          */
         DmaTemperatureCardSaveRequest: {
             /**
@@ -14284,6 +14344,30 @@ export interface components {
             note?: string | null;
             /** Poisson Ratio */
             poisson_ratio?: number | null;
+        };
+        /**
+         * DmaTemperaturePreviewOut
+         * @description 온도별 저장 탄성률 카드를 만들면 **무엇이 나오는지**(2026-11-15, VOC 48).
+         */
+        DmaTemperaturePreviewOut: {
+            /** Cautions */
+            cautions: string[];
+            /** Lot Count */
+            lot_count: number;
+            /** Notes */
+            notes: string[];
+            /** Rows */
+            rows: {
+                [key: string]: number;
+            }[];
+            /** Rows By Sample Count */
+            rows_by_sample_count: {
+                [key: string]: number;
+            };
+            /** Sample Count */
+            sample_count: number;
+            /** Tables */
+            tables: components["schemas"]["DmaPreviewTableOut"][];
         };
         /** DocumentCreate */
         DocumentCreate: {
@@ -28225,6 +28309,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PropertyCardOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_dma_temperature_card_api_fitting_cards_dma_temperature_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DmaTemperatureCardPreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DmaTemperaturePreviewOut"];
                 };
             };
             /** @description Validation Error */

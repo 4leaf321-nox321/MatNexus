@@ -14,6 +14,7 @@
 import { useCallback, useEffect, useState } from 'react'
 
 import { fittingApi } from '@/modules/fitting/api'
+import type { components } from '@/shared/api/schema'
 import { CurveChart } from '@/modules/tests/CurveChart'
 import { viscoelasticApi } from '@/modules/viscoelastic/api'
 import type { ModulusCompanion, ModulusTable } from '@/modules/viscoelastic/api'
@@ -32,6 +33,8 @@ import {
   TableRow,
 } from '@/shared/components/ui/table'
 import { axisLabel, display, formatScalar, toDisplay } from '@/shared/units'
+
+type AveragePreview = components['schemas']['DmaTemperaturePreviewOut']
 
 /** 주파수 칸의 단위 — 표(`shared/units`)에서 읽는다. */
 const FREQUENCY_UNIT = display('Hz').unit
@@ -53,6 +56,13 @@ export function ModulusTableSection({ testRunId }: { testRunId: string }) {
   /** 같이 평균할 수 있는 다른 시험의 표와, 그중 고른 것. 표를 바꾸면 비운다. */
   const [companions, setCompanions] = useState<ModulusCompanion[]>([])
   const [picked, setPicked] = useState<string[]>([])
+  /**
+   * 시편 평균을 **만들기 전에** 본다(2026-11-15, VOC 48). 전에는 초안 카드를 만들어 다른 탭에서
+   * 펼쳐야 평균이 보였다 — 평균 방식을 시험 모양과 안 맞게 고르면 그럴듯하지만 틀린 줄이
+   * 생기는데, 그것은 평균한 줄을 봐야만 안다. 계산은 서버가 한다(카드 만들기와 같은 함수).
+   */
+  const [preview, setPreview] = useState<AveragePreview | null>(null)
+  const [previewError, setPreviewError] = useState<Error | null>(null)
 
   const reload = useCallback(async () => {
     const found = await viscoelasticApi.modulusTables(testRunId)
@@ -85,6 +95,31 @@ export function ModulusTableSection({ testRunId }: { testRunId: string }) {
       cancelled = true
     }
   }, [selectedId])
+
+  // 고른 표 · 방식이 바뀌면 다시 계산한다 — 누를 단추를 두면 옛 미리보기를 보고 만든다.
+  const pickedKey = picked.join(',')
+  useEffect(() => {
+    setPreview(null)
+    setPreviewError(null)
+    if (!selectedId || pickedKey === '') return
+    let cancelled = false
+    fittingApi
+      .previewDmaTemperature({
+        modulus_table_ids: [selectedId, ...pickedKey.split(',')],
+        average,
+        grid_step_k: 1,
+      })
+      .then((found) => {
+        if (!cancelled) setPreview(found)
+      })
+      .catch((caught: unknown) => {
+        if (!cancelled)
+          setPreviewError(caught instanceof Error ? caught : new Error('평균을 미리 보지 못했습니다.'))
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [selectedId, pickedKey, average])
 
   async function build() {
     const value = Number(frequency)
@@ -308,6 +343,9 @@ export function ModulusTableSection({ testRunId }: { testRunId: string }) {
               </>
             )}
           </fieldset>
+          {picked.length > 0 && (
+            <AveragePreviewView preview={preview} error={previewError} basis={selected.modulus_basis} />
+          )}
           <div className="flex flex-wrap items-end gap-2">
             <div className="space-y-1">
               <Label htmlFor="modulus-card-label" className="text-xs">
@@ -348,6 +386,80 @@ export function ModulusTableSection({ testRunId }: { testRunId: string }) {
         onConfirm={() => removing && void remove(removing)}
         onClose={() => setRemoving(null)}
       />
+    </section>
+  )
+}
+
+/**
+ * 시편 평균 미리보기 — 평균 곡선 뒤에 시편마다의 곡선을 깔고, 줄마다 몇 시편이 받치는지와 카드
+ * 근거에 실릴 메모를 보인다. **확정 전에 볼 것**(보간한 줄 · 로트 섞임)은 따로 세운다.
+ */
+function AveragePreviewView({
+  preview,
+  error,
+  basis,
+}: {
+  preview: AveragePreview | null
+  error: Error | null
+  basis: string
+}) {
+  if (error) {
+    return (
+      <div className="space-y-1 rounded-md border p-2">
+        <p className="text-xs font-medium">평균 미리보기</p>
+        <ErrorNotice error={error} />
+      </div>
+    )
+  }
+  if (!preview) {
+    return <p className="text-muted-foreground rounded-md border p-2 text-xs">평균을 계산하는 중입니다…</p>
+  }
+  const mean: [number, number][] = preview.rows.map((one) => [
+    toDisplay(one.temperature, 'K'),
+    toDisplay(one.storage_modulus, 'Pa'),
+  ])
+  const counts = Object.entries(preview.rows_by_sample_count)
+    .sort(([left], [right]) => Number(right) - Number(left))
+    .map(([count, rows]) => `시편 ${count}개 ${rows}줄`)
+    .join(' · ')
+  const cautions = new Set(preview.cautions)
+  const others = preview.notes.filter((note) => !cautions.has(note))
+  return (
+    <section aria-label="평균 미리보기" className="space-y-2 rounded-md border p-2">
+      <p className="text-xs">
+        <b>평균 미리보기</b> — 만들면 {preview.rows.length}줄({counts})
+        {preview.lot_count > 1 && ` · 시료(로트) ${preview.lot_count}개`}. 카드는 아직 만들지
+        않았습니다.
+      </p>
+      <CurveChart
+        points={mean}
+        pointsLabel="평균"
+        background={preview.tables.map((one) => ({
+          points: one.points.map(
+            ([temperature, storage]) =>
+              [toDisplay(temperature, 'K'), toDisplay(storage, 'Pa')] as [number, number]
+          ),
+          label: one.specimen_name,
+        }))}
+        xLabel={axisLabel('온도', 'K')}
+        yLabel={axisLabel(basis === 'G' ? '저장 탄성률 E′ (G′ 에서 옮김)' : '저장 탄성률 E′', 'Pa')}
+        logY
+        height={240}
+      />
+      {preview.cautions.length > 0 && (
+        <ul className="space-y-0.5 rounded-md border border-amber-500/40 bg-amber-500/5 p-2 text-xs">
+          {preview.cautions.map((note) => (
+            <li key={note}>· {note}</li>
+          ))}
+        </ul>
+      )}
+      {others.length > 0 && (
+        <ul className="space-y-0.5 text-xs">
+          {others.map((note) => (
+            <li key={note}>· {note}</li>
+          ))}
+        </ul>
+      )}
     </section>
   )
 }

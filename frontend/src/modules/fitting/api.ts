@@ -205,6 +205,13 @@ export const fittingApi = {
   createDmaTemperature: (body: components['schemas']['DmaTemperatureCardSaveRequest']) =>
     api.post<PropertyCard>('/fitting/cards/dma-temperature', body),
 
+  /** 같은 계산을 **만들지 않고** 본다 — 평균한 줄 · 근거 메모 · 시편마다의 곡선(2026-11-15). */
+  previewDmaTemperature: (body: components['schemas']['DmaTemperatureCardPreviewRequest']) =>
+    api.post<components['schemas']['DmaTemperaturePreviewOut']>(
+      '/fitting/cards/dma-temperature/preview',
+      body
+    ),
+
   /**
    * 속도별 묶음(`tensile.rate_family`)에서 속도 의존 소성 카드를 만든다.
    * `table` 에는 기준 속도의 곡선, `rate_table` 에는 속도 전부가 실린다.

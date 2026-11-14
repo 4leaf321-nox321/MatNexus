@@ -122,6 +122,7 @@ EXEMPT: dict[tuple[str, str], str] = {
     ("processing", "create_result"): _만들기 + " — 결과는 불변이다. 채택은 따로 막는다",
     ("processing", "create_recipe"): _정의,
     ("fitting", "preview"): _읽기,
+    ("fitting", "preview_dma_temperature_card"): _읽기,
     ("fitting", "create_card"): _만들기 + " — 카드는 초안으로 생긴다",
     ("fitting", "create_declared_card"): _만들기,
     ("fitting", "create_viscoelastic_card"): _만들기,

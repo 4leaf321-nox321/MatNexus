@@ -80,7 +80,10 @@ from app.modules.fitting.schemas import (
     DeclaredCardPreviewOut,
     DeclaredCardSaveRequest,
     DeclaredSlotOut,
+    DmaPreviewTableOut,
+    DmaTemperatureCardPreviewRequest,
     DmaTemperatureCardSaveRequest,
+    DmaTemperaturePreviewOut,
     ExportFormatOut,
     ExportProfileActiveRequest,
     ExportProfileCreateRequest,
@@ -124,6 +127,7 @@ from app.modules.viscoelastic.models import MasterCurve, ModulusTable, PronyFit
 from app.modules.workspaces.models import Workspace
 from app.shared import (
     audit,
+    card_notes,
     codes,
     conditions,
     curvedata,
@@ -2433,13 +2437,17 @@ def _table_rows(table: ModulusTable) -> list[viscoelastic.TableRow]:
     ]
 
 
-@router.post("/cards/dma-temperature", response_model=PropertyCardOut, status_code=201)
-def create_dma_temperature_card(
-    payload: DmaTemperatureCardSaveRequest,
-    user: User = Depends(current_user),
-    db: Session = Depends(get_db),
-) -> PropertyCardOut:
-    """**온도별 저장 탄성률 카드** — 점탄성 탭의 표에서(2026-10-22, v1.285.0 보고).
+def _dma_temperature_card(
+    db: Session,
+    user: User,
+    payload: DmaTemperatureCardPreviewRequest,
+    *,
+    label: str,
+    note: str | None,
+) -> tuple[PropertyCard, list[_DmaChain], float]:
+    """온도별 저장 탄성률 카드를 **만들기만** 한다(저장은 부르는 쪽) — `(카드, 표들, E 배수)`.
+
+    만들기와 미리보기가 같은 계산을 쓴다(2026-11-15, VOC 48) — 미리 본 것이 곧 만들어질 카드다.
 
     DMA 온도별 E′ 를 잰 물성으로 넘길 길이 없어, 재료에 적어 둔 값(출처 추정)으로만 넣고
     있었다. **탄성 블록에 싣지 않는다** — 정적 탄성계수와 뜻이 다르다(사용자). 전단(G′)으로
@@ -2541,7 +2549,7 @@ def create_dma_temperature_card(
         material_id=material.id,
         test_type_id=first_run.test_type_id,
         orientation=first_specimen.orientation,
-        label=payload.label,
+        label=label,
         status="draft",
         # 표를 외래키로 잡지 않는다 — 카드는 자기 근거를 든 스냅샷이다(점탄성 카드와 같다).
         source={
@@ -2564,10 +2572,71 @@ def create_dma_temperature_card(
             }
         },
         point_count=0,
-        note=payload.note,
+        note=note,
         created_by_id=user.id,
     )
+    return item, chain, factor
+
+
+@router.post("/cards/dma-temperature", response_model=PropertyCardOut, status_code=201)
+def create_dma_temperature_card(
+    payload: DmaTemperatureCardSaveRequest,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> PropertyCardOut:
+    """**온도별 저장 탄성률 카드** — 점탄성 탭의 표에서(2026-10-22, v1.285.0 보고).
+
+    표가 여럿이면 **시편 평균**이다 — `average` 로 방식을 고른다(`grid` 온도 격자 · `union`
+    온도 모으기 · `matched` 모든 시편에 있는 온도만). 줄마다 E′ 변동계수와 기여 시편 수를
+    단다. 같은 재료 · 시험 종류 · 방향 · 주파수 · 잰 것이어야 하고 시험 하나에 표 하나다.
+    만들기 전에 `…/dma-temperature/preview` 로 같은 계산을 볼 수 있다.
+    """
+    item, _, _ = _dma_temperature_card(
+        db, user, payload, label=payload.label, note=payload.note
+    )
     return _save_card(db, user, item)
+
+
+@router.post("/cards/dma-temperature/preview", response_model=DmaTemperaturePreviewOut)
+def preview_dma_temperature_card(
+    payload: DmaTemperatureCardPreviewRequest,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> DmaTemperaturePreviewOut:
+    """온도별 저장 탄성률 카드를 **만들지 않고** 본다(2026-11-15, VOC 48).
+
+    전에는 카드를 만들어야(초안) 평균 결과가 보였다 — 초안마다 카드 번호가 쓰이고, 초안이 있는
+    동안 근거 표를 못 지웠다. 평균 방식을 시험 모양과 안 맞게 고르면 그럴듯하지만 틀린 줄이
+    생기는데(한 온도씩 잰 시험에 격자 → 보간 줄, 램프 시험에 모으기 → 한 시편뿐인 줄) 그것은
+    평균한 줄을 봐야만 안다. **만들기와 같은 함수**라 미리 본 것이 곧 만들어질 카드다.
+    """
+    item, chain, factor = _dma_temperature_card(db, user, payload, label="미리보기", note=None)
+    notes = [str(one) for one in (item.source or {}).get("notes", [])]
+    rows = item.blocks["dma_temperature"]["rows"]
+    counts: dict[str, int] = {}
+    for row in rows:
+        key = str(int(row.get("sample_count", 1)))
+        counts[key] = counts.get(key, 0) + 1
+    return DmaTemperaturePreviewOut(
+        rows=rows,
+        notes=notes,
+        cautions=card_notes.cautions(notes),
+        sample_count=len(chain),
+        lot_count=len({sample.id for *_, sample in chain}),
+        rows_by_sample_count=counts,
+        tables=[
+            DmaPreviewTableOut(
+                test_run_id=run.id,
+                record_name=run.record_name,
+                specimen_name=specimen.record_name,
+                points=[
+                    [float(one["temperature_k"]), float(one["storage_pa"]) * factor]
+                    for one in table.rows
+                ],
+            )
+            for table, run, specimen, _ in chain
+        ],
+    )
 
 
 @dataclass(frozen=True)

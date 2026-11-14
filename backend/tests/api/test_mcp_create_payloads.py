@@ -511,3 +511,30 @@ def test_DMA_온도별_카드는_평균_방식을_보낸다_기본은_화면과_
     refused = _tool("create_dma_temperature_card", wrong)(**make, average="mean")
     assert "error" in refused
     assert not [one for one in wrong.calls if one["method"] == "POST"]
+
+
+def test_DMA_온도별_카드_미리보기는_평균한_결과를_서버에서_받는다() -> None:
+    """2026-11-15(VOC 48) — 미리보기가 표마다의 범위만 보여, 평균 방식이 시험 모양과 안 맞아도
+    만들어 봐야 알았다. 화면과 같은 서버 미리보기를 부르고, 아무것도 만들지 않는다."""
+    run = "11111111-1111-1111-1111-111111111111"
+    answers = {
+        f"/viscoelastic/runs/{run}/modulus-tables": [
+            {"id": "t-1", "frequency_hz": 1.0, "created_at": "2026-11-14", "rows": []}
+        ],
+        "/fitting/cards/dma-temperature/preview": {
+            "rows": [{"temperature": 300.0}, {"temperature": 301.0}],
+            "rows_by_sample_count": {"1": 2},
+            "lot_count": 1,
+            "cautions": ["잰 온도 사이의 줄은 보간한 값입니다."],
+            "notes": ["잰 온도 사이의 줄은 보간한 값입니다."],
+        },
+    }
+    given = _Backend(answers)
+    seen = _tool("create_dma_temperature_card", given)(
+        test_run_ids=[run], label="E′(T)", average="union"
+    )
+    sent = given.sent("/fitting/cards/dma-temperature/preview")["body"]
+    assert sent["modulus_table_ids"] == ["t-1"] and sent["average"] == "union"
+    assert seen["average_preview"]["rows"] == 2
+    assert seen["average_preview"]["cautions"] == ["잰 온도 사이의 줄은 보간한 값입니다."]
+    assert not [one for one in given.calls if one["path"] == "/fitting/cards/dma-temperature"]

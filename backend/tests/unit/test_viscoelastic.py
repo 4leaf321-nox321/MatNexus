@@ -427,6 +427,17 @@ class Test격자_합집합_평균:
         assert max(one.count for one in rows) == 2
         assert any("2개 미만" in one for one in notes)
 
+    def test_한_온도씩_잰_시험에_격자를_쓰면_보간한_줄이라고_말한다(self) -> None:
+        """2026-11-14 검토 — 20 K 간격으로 잰 표 셋을 1 K 격자로 평균하면 사이 줄이 보간으로
+        생기고 「시편 3」 이 찍힌다(전이 구간에서 참값의 0.70배). 촘촘한 램프에는 말하지
+        않는다."""
+        from matcore.viscoelastic import average_grid
+
+        _, sparse = average_grid([self._ramp(300.0, 20.0, 5), self._ramp(300.3, 20.0, 5)])
+        assert any("보간한 값" in one and "온도 모으기" in one for one in sparse)
+        _, dense = average_grid([self._ramp(300.0, 1.5, 40), self._ramp(300.7, 1.5, 40)])
+        assert not any("보간한 값" in one for one in dense)
+
     def test_한_온도씩_잰_시험을_합집합으로_모은다(self) -> None:
         from matcore.viscoelastic import TableRow, average_union
 

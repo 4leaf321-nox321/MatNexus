@@ -3747,7 +3747,8 @@ async def create_dma_temperature_card(
     시편에 ±0.5 K 로 있는 온도만 — 램프 시험은 0줄이 되기 쉽다). 같은 재료 ·
     시험 종류 · 방향이어야 한다. 표가 없는 시험은 넣을 때 그 주파수로 만든다 — 잰 범위 밖의 온도는
     외삽하지 않고 뺀다(미리보기의 `sweeps_outside` · `all_sweeps_reach_hz`). 정적 탄성계수와 뜻이 달라 탄성 블록에 안 싣는다. G′ 로 잰 표는
-    `poisson_ratio`(비우면 재료 값)로 E 로 옮긴다. 기본이 미리보기이고 만들어도 초안이다.
+    `poisson_ratio`(비우면 재료 값)로 E 로 옮긴다. 기본이 미리보기이고 만들어도 초안이다 —
+    표가 다 있으면 미리보기가 `average_preview`(줄 수 · 시편 수별 줄 · `cautions`)를 준다.
     """
     runs: list[str] = []
     for one in test_run_ids[:50]:
@@ -3825,11 +3826,38 @@ async def create_dma_temperature_card(
             for one in plan
             if one.get("sweeps") and one.get("sweeps_outside") == one.get("sweeps")
         ]
+        # **평균한 결과를 본다**(2026-11-15, VOC 48) — 화면의 미리보기와 같은 서버 계산이다.
+        # 전에는 표마다의 범위만 보여, 방식이 시험 모양과 안 맞아도(보간한 줄 · 한 시편뿐인 줄)
+        # 만들어 봐야 알았다. 표가 아직 없는 시험이 있으면 못 본다 — 표부터 만들어야 한다.
+        seen: dict[str, Any] | None = None
+        if not building:
+            got = await _send(
+                ctx,
+                "POST",
+                "/fitting/cards/dma-temperature/preview",
+                {
+                    "modulus_table_ids": [one["modulus_table_id"] for one in plan],
+                    "poisson_ratio": poisson_ratio,
+                    "average": average,
+                },
+            )
+            seen = (
+                {"error": got.get("error")}
+                if "error" in got
+                else {
+                    "rows": len(got.get("rows") or []),
+                    "rows_by_sample_count": got.get("rows_by_sample_count"),
+                    "lot_count": got.get("lot_count"),
+                    "cautions": got.get("cautions") or [],
+                    "notes": got.get("notes") or [],
+                }
+            )
         return {
             "dry_run": True,
             "frequency_hz": frequency_hz,
             "tables": plan,
             "will_create": body,
+            **({"average_preview": seen} if seen is not None else {}),
             "note": (
                 f"{frequency_hz:g} Hz 는 시험 {len(blocked)}건의 모든 스윕 범위 밖입니다 — 표를 못 "
                 "만듭니다. `all_sweeps_reach_hz` 안에서 고르세요."

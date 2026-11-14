@@ -1107,8 +1107,8 @@ class ViscoelasticCardSaveRequest(BaseModel):
     note: str | None = None
 
 
-class DmaTemperatureCardSaveRequest(BaseModel):
-    """온도별 저장 탄성률 카드 — 점탄성 탭의 **온도별 탄성률 표에서**(2026-10-22).
+class DmaTemperatureCardPreviewRequest(BaseModel):
+    """온도별 저장 탄성률 카드의 **계산에 드는 것** — 미리보기가 이것만 받는다(2026-11-15).
 
     v1.285.0 보고: DMA 온도별 E′ 를 잰 물성으로 넘길 길이 없었다. 표가 재료 · 방향은 체인을
     따라간다(표 → 시험 → 시편 → 시료 → 재료). **표 여럿이면 시편 평균이다** — 같은 재료 ·
@@ -1116,16 +1116,48 @@ class DmaTemperatureCardSaveRequest(BaseModel):
     """
 
     modulus_table_ids: list[uuid.UUID] = Field(min_length=1, max_length=50)
-    label: str = Field(min_length=1, max_length=120)
     poisson_ratio: float | None = Field(default=None, gt=0, lt=0.5)
     """전단(G′)으로 잰 표를 E 로 옮길 때만 쓴다. 비우면 재료에서 물려받는다."""
-    note: str | None = None
     average: Literal["matched", "grid", "union"] = "matched"
     """표 여럿을 어떻게 평균하나(2026-11-14, VOC 48). `matched` 모든 시편에 짝(±0.5 K)이 있는
     온도만(지금), `grid` 공통 온도 격자에서 log E′ 보간 평균(온도를 올리며 잰 시험), `union`
     시편마다 잰 온도를 모두 모은 표(한 온도씩 잰 시험)."""
     grid_step_k: float = Field(default=1.0, gt=0, le=50)
     """`grid` 의 격자 간격(K)."""
+
+
+class DmaTemperatureCardSaveRequest(DmaTemperatureCardPreviewRequest):
+    """온도별 저장 탄성률 카드 만들기 — 계산에 드는 것 + 이름 · 메모."""
+
+    label: str = Field(min_length=1, max_length=120)
+    note: str | None = None
+
+
+class DmaPreviewTableOut(BaseModel):
+    """평균에 든 표 하나 — 화면이 평균 곡선 뒤에 시편마다의 곡선을 겹쳐 그린다."""
+
+    test_run_id: uuid.UUID
+    record_name: str
+    specimen_name: str
+    points: list[list[float]]
+    """`[온도(K), 저장 탄성률(Pa)]` — 카드와 같이 G′ 는 E 로 옮긴 값이다."""
+
+
+class DmaTemperaturePreviewOut(BaseModel):
+    """온도별 저장 탄성률 카드를 만들면 **무엇이 나오는지**(2026-11-15, VOC 48)."""
+
+    rows: list[dict[str, float]]
+    """카드 블록의 줄 그대로 — `temperature` · `storage_modulus` · `storage_cv` ·
+    `sample_count` …."""
+    notes: list[str]
+    """카드 근거에 실릴 메모 — 평균에서 뺀 온도 · 한 시편뿐인 줄 · 로트 섞임."""
+    cautions: list[str]
+    """그중 **확정 전에 볼 것**(워크벤치가 경고로 세는 것)."""
+    sample_count: int
+    lot_count: int
+    rows_by_sample_count: dict[str, int]
+    """기여 시편 수 → 그런 줄의 수. `{"3": 198, "2": 49, "1": 4}`."""
+    tables: list[DmaPreviewTableOut]
 
 
 class PropertyCardUpdateRequest(BaseModel):

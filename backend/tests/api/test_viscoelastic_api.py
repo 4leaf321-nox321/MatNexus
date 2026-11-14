@@ -1927,6 +1927,41 @@ class Test시편_평균_카드:
                     first["rows"][0]["storage_pa"] * math.sqrt(1.2), rel=1e-6
                 )
 
+        # **미리보기는 만들지 않고 같은 계산을 보인다**(2026-11-15, VOC 48) — 전에는 초안을
+        # 만들어야 평균이 보였다. 만들기와 같은 함수라 줄이 카드와 같아야 한다.
+        def card_count() -> int:
+            listed = client.get("/api/fitting/cards", headers=admin_headers).json()
+            return int(listed["total"])
+
+        before = card_count()
+        ask = {"modulus_table_ids": [first["id"], second["id"]], "average": "union"}
+        preview = client.post(
+            "/api/fitting/cards/dma-temperature/preview", json=ask, headers=admin_headers
+        )
+        assert preview.status_code == 200, preview.text
+        seen = preview.json()
+        assert card_count() == before
+        created = client.post(
+            "/api/fitting/cards/dma-temperature",
+            json={**ask, "label": "미리 본 그대로"},
+            headers=admin_headers,
+        ).json()
+        assert seen["rows"] == created["blocks"]["dma_temperature"]["rows"]
+        assert seen["notes"] == created["source"]["notes"]
+        assert seen["sample_count"] == 2 and seen["lot_count"] >= 1
+        assert seen["rows_by_sample_count"] == {"2": len(seen["rows"])}
+        assert [one["specimen_name"] for one in seen["tables"]] and len(seen["tables"]) == 2
+        assert seen["tables"][1]["points"][0][1] == pytest.approx(
+            first["rows"][0]["storage_pa"] * 1.2
+        )
+        # 못 만드는 것은 미리보기도 같은 까닭으로 거절한다.
+        refused = client.post(
+            "/api/fitting/cards/dma-temperature/preview",
+            json={"modulus_table_ids": [first["id"], str(uuid.uuid4())]},
+            headers=admin_headers,
+        )
+        assert refused.status_code == 404, refused.text
+
         # 평균 카드가 든 **둘째** 표도 못 지운다 — 근거가 사라진다.
         refused = client.delete(
             f"/api/viscoelastic/modulus-tables/{second['id']}", headers=admin_headers

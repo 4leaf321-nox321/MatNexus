@@ -929,6 +929,8 @@ def average_tables(
 GRID_STEP_K = 1.0
 #: 합집합에서 같은 온도로 보는 폭(K).
 UNION_MATCH_K = 0.5
+#: 표의 점 간격이 격자의 이만큼(배) 넘게 넓으면 「잰 온도 사이는 보간」 이라고 말한다.
+GRID_SPARSE_RATIO = 5.0
 #: 평균하는 방식 — `matched`(지금 · 모든 시편에 짝이 있는 온도만) · `grid` · `union`.
 AVERAGE_METHODS = ("matched", "grid", "union")
 
@@ -1017,6 +1019,20 @@ def average_grid(
         f"{step_k:g} K 격자에서 시편마다 잰 범위 안에서만 log E′ 를 보간해 평균했습니다"
         "(로그 평균 · 잰 범위 밖으로 늘이지 않음)."
     ]
+    # **한 온도씩 잰 시험에 격자를 쓰면 줄을 지어낸다**(2026-11-14 검토) — 20 K 간격으로 잰 표
+    # 셋을 1 K 격자로 평균하면 잰 온도 사이 줄이 보간으로 생기고 「시편 3」 이 찍힌다. 전이
+    # 구간에서는 그 줄이 참값의 0.70배였다(실측). 막지 않고 말한다.
+    steps = [
+        float(np.median(np.diff([row.temperature_k for row in one])))
+        for one in usable
+        if len(one) >= 2
+    ]
+    widest = max(steps, default=0.0)
+    if widest > GRID_SPARSE_RATIO * step_k:
+        notes.append(
+            f"표의 점 간격이 {widest:.3g} K 로 격자({step_k:g} K)보다 훨씬 넓습니다 — 잰 온도 "
+            "사이의 줄은 보간한 값입니다. 한 온도씩 잰 시험이면 「온도 모으기」 로 평균하세요."
+        )
     return rows, [*notes, *_thin_rows_note(rows, len(tables))]
 
 
