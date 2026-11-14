@@ -332,3 +332,41 @@ class Test정의_줄과_덱_줄을_잇는다:
         }
         made = template.render(spec, deck(density=None, points=((0.0, 2.5e8), (0.1, 3.0e8))))
         assert made.spans == ((0, 0, 1), (1, 1, 2), (2, 2, 2), (3, 2, 4))
+
+
+#: 필수 요구 없이 유전율만 적는 사람 정의 — VOC 47 의 ADS · PowerSI 와 같은 꼴.
+ADS_LIKE: dict[str, Any] = {
+    "key": "deck_ads_like",
+    "label": "ADS 비슷한 정의",
+    "extension": "txt",
+    "describe": "유전율만 적는 사람 정의",
+    "lines": [{"text": "Er = {electrical.relative_permittivity}"}],
+}
+
+
+class Test필수_요구가_없는_정의:
+    """VOC 47(2026-11-14) — 사람이 만든 ADS · PowerSI 정의가 `needs` 없이 저장돼 모든 카드의
+    형식 목록에 떴고, 전기 블록이 없는 카드로 내면 빈 파일이 나왔다."""
+
+    def test_읽는_블록을_줄에서_모은다(self) -> None:
+        from matcore import cards
+
+        cards.load_builtin()
+        assert template.reads(ADS_LIKE) == ("electrical",)
+        assert template.reads(ABAQUS_DEFINITION)  # 씨앗 정의도 읽는 블록이 있다
+
+    def test_읽는_블록이_카드에_없으면_목록에_안_뜬다(self) -> None:
+        from matcore import cards
+
+        cards.load_builtin()
+        made = template.renderer_from_definition(ADS_LIKE)
+        missing = export.missing_for(deck(), made)
+        assert missing and "중 하나" in missing[0]
+        electrical = export.Deck(
+            name="CHIP",
+            solver_id=1,
+            blocks={"electrical": {"values": {"relative_permittivity": 4.2}}},
+        )
+        assert export.missing_for(electrical, made) == ()
+        # 읽는 블록을 모르는 형식(중립 JSON)은 그대로 — 무엇이든 싣는다.
+        assert export.missing_for(deck(), "json") == ()

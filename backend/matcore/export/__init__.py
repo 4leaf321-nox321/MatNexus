@@ -405,6 +405,13 @@ def missing_for(deck: Deck, format_key: str | Renderer) -> tuple[str, ...]:
             found = values.get(key)
             if found is None or float(found) < floor:
                 missing.append(f"{_label(need.block, key)} {floor:g} 이상")
+    # **필수 요구가 없어도 읽을 블록 하나는 있어야 한다**(2026-11-14, VOC 47). 요구가
+    # 선택뿐이거나 없는 정의가 모든 카드의 형식 목록에 떠, 그 블록이 없는 카드로 내면 빈 파일이
+    # 나왔다. 읽는 블록을 모르는 형식(중립 JSON)은 그대로 둔다 — 무엇이든 싣는다.
+    if not any(not need.optional for need in target.needs):
+        reads = tuple(dict.fromkeys([*(need.block for need in target.needs), *target.reads]))
+        if reads and not any(deck.has(block) for block in reads):
+            missing.append(f"{' · '.join(_label(block) for block in reads)} 중 하나")
     return tuple(missing)
 
 
@@ -481,6 +488,11 @@ class Renderer:
     **오류 없이** 들어간다. 그래서 이 형식은 늘 이 계의 덱을 받고(`render` 가 바꾼다), 파일
     이름도 이 계를 말한다(`effective_system`). 형식 고유의 단위(µm · GPa)로는 렌더러가
     `matcore.units` 로 옮긴다."""
+    reads: tuple[str, ...] = ()
+    """이 형식이 **읽는 카드 블록** — 정의판이 줄 · 표에서 모은다(`template.reads`).
+
+    필수 요구(`needs`)가 없는 형식은 이것 중 하나라도 카드에 있어야 목록에 뜬다(2026-11-14,
+    VOC 47) — 사람이 만든 ADS · PowerSI 정의가 모든 카드에서 떠 빈 파일을 냈다."""
 
 
 _RENDERERS: dict[str, Renderer] = {}

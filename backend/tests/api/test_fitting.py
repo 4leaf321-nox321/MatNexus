@@ -2911,6 +2911,50 @@ class Test뽑은_덱을_되읽어_대조한다:
         assert body["found"]["elastic.density"] == pytest.approx(7.85e-9)
         assert body["found"]["elastic.youngs_modulus"] == pytest.approx(200e9 / 1e6)
 
+    def test_실린_값은_흔들어_판정하고_총변형률_표도_끝까지_본다(
+        self, client: TestClient, admin_headers: dict[str, str], ready: dict[str, Any]
+    ) -> None:
+        """VOC 46 · 47(2026-11-14) — 숫자 덩어리의 부분 문자열을 읽어 우연히 맞으면
+        「찾음」 이었다(실리지 않은 값 76건). 표에 총변형률을 쓰는 Nastran 은 소성변형률을
+        못 찾아 「잘렸다」 고 했다. 이제 값을 흔들어 덱이 바뀌는지로 본다 — 칸 배치가 짚은 값과
+        같아야 한다."""
+        card = client.post(
+            "/api/fitting/cards",
+            json={
+                "material_id": ready["id"],
+                "test_type_key": "tensile",
+                "orientation": "MD",
+                "label": "흔들기",
+                "poisson_ratio": 0.3,
+                "density": 7850.0,
+            },
+            headers=admin_headers,
+        ).json()
+        for fmt in ("nastran_plastic", "optistruct_plastic", "dyna"):
+            checked = client.post(
+                f"/api/fitting/cards/{card['id']}/export/check",
+                json={"format": fmt, "units": "si"},
+                headers=admin_headers,
+            ).json()
+            checks = {one["name"]: one for one in checked["checks"]}
+            assert checks["표"]["ok"] is True, (fmt, checks["표"])
+            layout = client.get(
+                f"/api/fitting/cards/{card['id']}/export/layout",
+                params={"format": fmt, "units": "si"},
+                headers=admin_headers,
+            ).json()
+            unused = {one["name"] for one in layout["unused"]}
+            # 이 형식이 안 쓰는 값은 「찾음」 에 없다.
+            assert not unused & set(checked["found"]), (fmt, unused & set(checked["found"]))
+
+        elastic = client.post(
+            f"/api/fitting/cards/{card['id']}/export/check",
+            json={"format": "dyna_elastic", "units": "si"},
+            headers=admin_headers,
+        ).json()
+        # 표를 안 싣는 형식에는 「잘렸나」 를 묻지 않는다.
+        assert "표" not in {one["name"] for one in elastic["checks"]}
+
     def test_기대값이_다르면_짚는다(
         self, client: TestClient, admin_headers: dict[str, str], ready: dict[str, Any]
     ) -> None:

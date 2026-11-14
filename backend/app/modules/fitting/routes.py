@@ -13,11 +13,10 @@ from __future__ import annotations
 
 import io
 import math
-import re
 import uuid
 import zipfile
 from collections import Counter
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -4327,41 +4326,31 @@ def export_card_verify(
     )
 
 
-#: 덱 안에서 숫자로 읽힐 수 있는 글자. 붙어 있는 고정폭 필드를 갈라 보려고
-#: 덩어리째 잡은 다음 안에서 다시 잘라 본다.
-_TOKEN_RUN = re.compile(r"[0-9.eEdD+-]+")
-_NUMBER_ONLY = re.compile(r"^[-+]?(?:\d+\.?\d*|\.\d+)(?:[eEdD][-+]?\d+)?$")
+def _last_point_written(
+    draw: Callable[[export.Deck], export.Rendered],
+    deck: export.Deck,
+    text: str,
+    unstable: set[int],
+) -> bool:
+    """표의 **마지막 점**을 1 % 올려 다시 그렸을 때 덱이 바뀌나(2026-11-14, VOC 46).
 
-
-def _appears(text: str, value: float) -> bool:
-    """이 숫자가 덱에 **그대로 적혀 있나.**
-
-    ## 왜 `scan` 을 안 쓰나 (실측 2026-09-10)
-
-    `export.scan` 은 **예제 덱을 보고 칸 폭을 추측하는** 도구다. 우리 LS-DYNA
-    MAT 줄처럼 숫자가 구분자 없이 붙어 있고 그 모양의 줄이 하나뿐이면 폭을 못
-    정하고, 그러면 `17.8500E-092.0500E+05` 를 `1.785e-91` · `5e+50` 로 쪼갠다 —
-    **읽기는 읽었는데 값이 전부 엉터리**가 된다. 그 추측 위에서 검사하면 검사가
-    거짓말을 한다.
-
-    그래서 여기서는 구조를 읽지 않는다. 숫자 덩어리를 잡아 **그 안의 모든
-    조각**을 그대로 숫자로 읽어 보고, 찾는 값과 같은 것이 하나라도 있으면 있는
-    것으로 본다. 칸이 어디서 갈리는지 몰라도 되고, 형식이 늘어도 안 고친다.
+    올리는 쪽이라 단조 증가 검사를 안 건드린다. 그릴 때마다 바뀌는 줄(`unstable`)은 빼고 본다.
     """
-    for run in _TOKEN_RUN.finditer(text):
-        chunk = run.group()
-        for start in range(len(chunk)):
-            for end in range(start + 1, len(chunk) + 1):
-                piece = chunk[start:end]
-                if not _NUMBER_ONLY.match(piece):
-                    continue
-                try:
-                    got = float(piece.replace("d", "e").replace("D", "e"))
-                except ValueError:
-                    continue
-                if abs(got - value) <= abs(value) * scan.TOLERANCE:
-                    return True
-    return False
+    payload = dict(deck.blocks["table"])
+    rows = [dict(one) for one in payload.get("rows") or []]
+    for key in ("plastic_strain", "true_stress"):
+        value = rows[-1].get(key)
+        if isinstance(value, int | float) and value:
+            rows[-1][key] = float(value) * 1.01
+    try:
+        moved = draw(replace(deck, blocks={**deck.blocks, "table": {**payload, "rows": rows}}))
+    except export.ExportError:
+        return False
+    before = [line for index, line in enumerate(text.splitlines()) if index not in unstable]
+    after = [
+        line for index, line in enumerate(moved.text.splitlines()) if index not in unstable
+    ]
+    return before != after
 
 
 def _deck_known(moved: export.Deck) -> dict[str, float]:
@@ -4545,9 +4534,9 @@ def check_card_deck(
         표          점 수가 카드 표와 같나
         기대값       `expect` 를 주면 사람이 아는 값과 카드를 대조한다
 
-    값 대조는 덱을 **다시 읽어서** 한다(`scan`). 렌더러가 쓴 글자를 도로 파싱하므로,
-    고정폭 칸이 넘쳐 이웃과 붙었으면 그 숫자가 카드 값과 안 맞아 여기서 걸린다 —
-    눈으로는 거의 못 잡는 자리다.
+    값 대조는 **값을 흔들어** 한다(2026-11-14) — 카드 값을 조금 바꿔 다시 그렸을 때 덱이
+    바뀌면 그 값이 실린 것이다. 글자를 숫자로 되읽던 때는 부분 문자열이 우연히 맞아 실리지 않은
+    값이 「찾음」 이 됐다(VOC 46 · 47).
 
     ## 각주를 함께 낸다
 
@@ -4580,42 +4569,53 @@ def check_card_deck(
 
     moved = export.to_system(deck, system)
     known = _deck_known(moved)
-    named = {name: value for name, value in known.items() if _appears(rendered.text, value)}
+
+    # **값을 흔들어 판정한다**(2026-11-14, VOC 46 · 47). 전에는 숫자 덩어리의 **모든 부분
+    # 문자열**을 숫자로 읽어 찾는 값과 같으면 「있음」 으로 봤다 — 0.5 가 「1.52E-03」 의
+    # 「.5」 로도 잡혀 실리지 않은 값 76건이 「찾음」 이 됐고, 표에 총변형률을 쓰는 Nastran ·
+    # OptiStruct 는 소성변형률을 못 찾아 「잘렸다」 고 했다. 카드 값을 조금 흔들어 덱을 다시
+    # 그리고 글자가 바뀌면 실린 것이다 — 칸 배치 미리보기와 같은
+    # 판정(`export_layout.locate`)이라 형식이 어떤 축 · 단위 · 칸 폭으로 쓰든 맞고, 형식이
+    # 늘어도 고칠 데가 없다.
+    def draw(one: export.Deck) -> export.Rendered:
+        return export.render(target, one, system, check_folds=False)
+
+    located = export_layout.locate(draw, deck)
+    loaded = [one for one in located.placed if not one.column]
+    columns = [f"{one.block}.{one.key}" for one in located.placed if one.column]
+    named = {
+        name: known[name]
+        for name in (f"{one.block}.{one.key}" for one in loaded)
+        if name in known
+    }
+    listed = sorted({*named, *columns})
 
     # **덱에 안 실리는 값도 있다.** 카드는 열물성까지 들고 있는데 *MAT_024 는 그것을
     # 안 쓴다 — 안 실린 것을 「빠졌다」 고 하면 이 검사가 늘 실패하고, 그러면 아무도
-    # 안 본다. 그래서 **몇 개가 그대로 있었나**를 말하고, 하나도 없으면 실패로 본다.
+    # 안 본다. 그래서 **몇 개가 실렸나**를 말하고, 하나도 없으면 실패로 본다 — 빈 파일이
+    # 「통과」 로 나가던 자리다(VOC 47, ADS · PowerSI).
     checks.append(
         DeckCheckItemOut(
             name="값",
-            ok=bool(named),
+            ok=bool(listed),
             detail=(
-                f"카드 값 {len(named)}개가 이 계({system.key})의 숫자로 덱에 "
-                f"그대로 있습니다({', '.join(sorted(named)[:5])}"
-                f"{' 외' if len(named) > 5 else ''})."
-                if named
+                f"카드 값 {len(listed)}개가 덱에 실렸습니다 — 흔들면 덱이 바뀝니다"
+                f"({', '.join(listed[:5])}{' 외' if len(listed) > 5 else ''})."
+                if listed
                 else (
-                    f"덱에서 카드 값을 하나도 못 찾았습니다. 이 계({system.key})로 "
-                    f"환산한 수가 덱에 없습니다 — 환산이 어긋났거나 엉뚱한 카드입니다."
+                    "카드 값이 하나도 덱에 안 실렸습니다 — 어느 값을 흔들어도 덱이 "
+                    "그대로입니다. 이 형식이 이 카드의 블록을 읽지 않거나 엉뚱한 카드입니다."
                 )
             ),
         )
     )
 
-    # **잘렸는지는 끝점으로 본다.** 줄 수를 세면 형식마다 규칙을 알아야 하는데,
-    # 표의 마지막 점이 덱에 있으면 끝까지 실린 것이다.
+    # **잘렸는지는 끝점으로 본다.** 표의 마지막 점을 흔들어 덱이 바뀌면 끝까지 실린 것이다 —
+    # 형식이 그 점을 소성변형률로 적든 총변형률로 적든 같다. 표를 안 싣는 형식(탄성만)은
+    # 묻지 않는다.
     rows = moved.rows("table")
-    if rows:
-        last = rows[-1]
-        # **카드 표의 열 이름을 쓴다.** 처리 프레임의 이름(`strain_true_plastic`)이
-        # 아니다 — 카드는 블록 규약의 이름으로 담는다(ADR 0012). 섞으면 조용히
-        # 아무것도 못 찾고 「잘렸다」 고 말한다.
-        pair = [
-            value
-            for value in (last.get("plastic_strain"), last.get("true_stress"))
-            if isinstance(value, int | float)
-        ]
-        whole = bool(pair) and all(_appears(rendered.text, float(one)) for one in pair)
+    if rows and any(one.block == "table" and one.column for one in located.placed):
+        whole = _last_point_written(draw, deck, rendered.text, set(located.unstable))
         checks.append(
             DeckCheckItemOut(
                 name="표",

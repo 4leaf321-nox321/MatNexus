@@ -61,6 +61,7 @@
 
 from __future__ import annotations
 
+import json
 import math
 import re
 import string
@@ -930,6 +931,34 @@ def _check_tables(tables: Any) -> None:
             _fail(f"표 '{name}': x 와 y 는 함께 적습니다.")
 
 
+#: 정의가 카드 값을 부르는 모양 — `{elastic.youngs_modulus}` · `has(viscoelastic.x)`.
+_DOTTED = re.compile(r"\b([A-Za-z_]\w*)\.[A-Za-z_]\w*")
+
+
+def reads(definition: Mapping[str, Any]) -> tuple[str, ...]:
+    """정의가 **읽는 카드 블록** — 줄 · 조건 · 표(`of`) · 줄 블록(`{"block": ...}`)에서 모은다.
+
+    **필수 요구가 없는 정의도 아무 카드에서나 뜨면 안 된다**(2026-11-14, VOC 47). 사람이 만든
+    ADS · PowerSI 정의가 `needs` 없이 저장돼 모든 카드의 형식 목록에 떴고, 전기 블록이 없는
+    카드로 내면 빈 파일이 나왔다. 형식 목록은 이것 중 하나라도 카드에 있어야 그 정의를 띄운다
+    (`export.missing_for`). 블록으로 등록되지 않은 이름(`header` · 표 별칭)은 뺀다.
+    """
+    from matcore.export import block_spec
+
+    text = json.dumps(
+        {"lines": definition.get("lines"), "tables": definition.get("tables")},
+        ensure_ascii=False,
+    )
+    names = [found.group(1) for found in _DOTTED.finditer(text)]
+    for item in _walk(definition.get("lines")):
+        if isinstance(item.get("block"), str):
+            names.append(item["block"])
+    for table in (definition.get("tables") or {}).values():
+        if isinstance(table, Mapping) and isinstance(table.get("of"), str):
+            names.append(table["of"])
+    return tuple(name for name in dict.fromkeys(names) if block_spec(name) is not None)
+
+
 def renderer_from_definition(definition: Mapping[str, Any]) -> Any:
     """정의 한 벌을 렌더러로 만든다. **`matcore` 는 DB 를 모른다** — dict 로 받는다.
 
@@ -990,4 +1019,5 @@ def renderer_from_definition(definition: Mapping[str, Any]) -> Any:
         media_type=str(definition.get("media_type", "text/plain; charset=utf-8")),
         solver=str(definition.get("solver", "") or ""),
         fixed_units=fixed_units,
+        reads=reads(definition),
     )
