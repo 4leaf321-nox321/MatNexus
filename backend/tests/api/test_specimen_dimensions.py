@@ -302,6 +302,38 @@ class TestValues:
         assert read.json()["width"] == pytest.approx(0.0125)
         assert read.json()["length_unit"] == "m"
 
+    def test_시편_고치기도_치수_사전을_바꾼다(
+        self, client: TestClient, admin_headers: dict[str, str], seeded: None
+    ) -> None:
+        """VOC 41c(2026-11-14) — 시편 고치기(PATCH)가 옛 칸만 바꿔, 30 µm 로 잘못 든 두께를
+        3 mm 로 고쳐도 계산은 사전의 30 µm 를 계속 썼다(단면적 1000배)."""
+        make_standard(client, admin_headers, "ASTM E8", attributes={})
+        specimen = make_specimen(client, admin_headers, standard="ASTM E8")
+        client.put(
+            f"/api/specimens/{specimen['id']}/dimensions",
+            json={"dimensions": {"thickness": 3e-5, "width": 0.03}},
+            headers=admin_headers,
+        )
+        fixed = client.patch(
+            f"/api/specimens/{specimen['id']}",
+            json={"thickness": 3.0, "length_unit": "mm"},
+            headers=admin_headers,
+        )
+        assert fixed.status_code == 200, fixed.text
+        sizes = dimensions_of(client, admin_headers, specimen["id"])
+        assert field_named(sizes, "thickness")["measured"] == pytest.approx(0.003)
+        assert field_named(sizes, "width")["measured"] == pytest.approx(
+            0.03
+        )  # 안 보낸 칸은 그대로
+        assert sizes["area"] == pytest.approx(0.003 * 0.03)
+
+        cleared = client.patch(
+            f"/api/specimens/{specimen['id']}", json={"thickness": None}, headers=admin_headers
+        )
+        assert cleared.status_code == 200, cleared.text
+        sizes = dimensions_of(client, admin_headers, specimen["id"])
+        assert field_named(sizes, "thickness")["measured"] is None
+
     def test_규격에서_사라진_칸도_보인다(
         self, client: TestClient, admin_headers: dict[str, str], seeded: None
     ) -> None:
@@ -440,6 +472,26 @@ class Test시험이_자기_치수를_든다:
         # 두께 1.0 vs 파일 0.986(1.4 %)만 — 폭 12.5 vs 12.473(0.2 %)은 반올림이다.
         assert len(found) == 1, saved.checks
         assert "두께 1 mm" in found[0]["message"] and "0.986 mm" in found[0]["message"]
+
+    @pytest.mark.dimension_magnitude
+    def test_출처끼리_자릿수가_다르면_점검에_남긴다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str], seeded: None
+    ) -> None:
+        """VOC 41c(2026-11-14) — 시편 두께 30 µm 와 파일 두께 0.986 mm. 막지 않고 어느 출처를
+        쓰는지와 함께 말한다. 몇 % 차이는 말하지 않는다(폭 12.5 vs 12.473)."""
+        specimen = make_specimen(client, admin_headers)
+        stored = db.get(Specimen, uuid.UUID(specimen["id"]))
+        assert stored is not None
+        stored.dimensions = {"thickness": 3e-5, "width": 0.0125}
+        db.commit()
+
+        run = self.upload(client, admin_headers, db, specimen["id"])
+        saved = db.get(TestRun, uuid.UUID(run["id"]))
+        assert saved is not None
+        found = [one for one in saved.checks if one["code"] == "dimension_magnitude"]
+        assert len(found) == 1, saved.checks
+        assert "두께" in found[0]["message"] and "0.03 mm" in found[0]["message"]
+        assert "파일 값을 씁니다" in found[0]["message"]
 
     def test_시편에_적힌_값보다_먼저다(
         self, client: TestClient, db: Session, admin_headers: dict[str, str], seeded: None

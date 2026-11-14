@@ -13,8 +13,10 @@
 
 ## 순간 탄성률은 첫 측정까지만 안다
 
-하중을 거는 동안 풀린 몫은 파일에 없다. 그래서 가장 짧은 τ 는 첫 측정 시간의 자릿수이고, 그보다
-빠른 완화는 이 카드에 없다 — 그 사실을 경고로 남긴다. 카드의 탄성계수는 이 Prony 의 순간
+하중을 거는 동안 풀린 몫은 파일에 없다. 그래서 가장 짧은 τ 는 **첫 측정 시각**이고, 그보다
+빠른 완화는 이 카드에 없다 — 그 사실을 경고로 남긴다. 순간 탄성률이 첫 측정 때 강성의 몇 배인지
+(`instantaneous_ratio`)를 값으로 내고, 1.5배를 넘으면 카드 · 덱 머리말에 외삽이라고 적는다
+(2026-11-14, VOC 52). 카드의 탄성계수는 이 Prony 의 순간
 탄성률(E∞ + ΣEᵢ)이다 — 점탄성 덱이 E 를 순간 값으로 읽고 gᵢ 를 곱하기 때문에, 다른 E 가
 서면 장기 탄성률이 조용히 다른 배수가 된다.
 """
@@ -28,6 +30,7 @@ from typing import Any
 import numpy as np
 from scipy.optimize import nnls
 
+from matcore.cards.viscoelastic import INSTANTANEOUS_RATIO_WARN
 from matcore.groups import GroupError, GroupOutcome, Member
 from matcore.processing import Frame, ProcessingError, Scalar, StepResult
 
@@ -112,12 +115,24 @@ def relaxation_modulus(frame: Frame, options: dict[str, Any]) -> StepResult:
 
 
 def taus(time_min: float, time_max: float) -> np.ndarray:
-    """관측 범위의 자릿수마다 τ 하나 — 10^⌊log t_min⌋ … 10^⌈log t_max⌉."""
-    low = math.floor(math.log10(time_min))
+    """가장 짧은 τ 는 첫 측정 시각, 그 위로 자릿수마다 하나 — t_min, 10^k … 10^⌈log t_max⌉.
+
+    **첫 측정보다 짧은 τ 를 깔지 않는다**(2026-11-14, VOC 52). 전에는 10^⌊log t_min⌋ 부터라
+    측정 구간에서 거의 다 풀린 항이 생겼고, 그 크기를 데이터가 못 정해 적합이 마음대로 키웠다 —
+    첫 측정이 0.95 s 면 E₀ 1145 GPa, 1.0 s 면 2.19 GPa(539배)였다. 가장 짧은 τ 가 t_min
+    이상이면 E₀ / E(t_min) 은 e(≈2.7) 를 넘지 못하고, 첫 측정 시각이 조금 달라도 결과가 뛰지
+    않는다. t_min 에 너무 붙은 자릿수(2배 안)는 뺀다 — 거의 같은 두 항은 서로를 못 가른다.
+    """
     high = math.ceil(math.log10(time_max))
-    if high - low + 1 > MAX_TERMS:
-        low = high - MAX_TERMS + 1
-    return np.asarray([10.0**power for power in range(low, high + 1)], float)
+    decades = [
+        10.0**power
+        for power in range(math.ceil(math.log10(time_min)), high + 1)
+        if 10.0**power > 2 * time_min
+    ]
+    grid = [time_min, *decades]
+    if len(grid) > MAX_TERMS:
+        grid = grid[-MAX_TERMS:]
+    return np.asarray(grid, float)
 
 
 def fit(
@@ -168,11 +183,19 @@ def relaxation_prony(members: list[Member]) -> GroupOutcome:
     if not terms:
         raise GroupError("완화가 보이지 않습니다 — 응력이 시간에 따라 줄지 않습니다.")
     instantaneous = equilibrium + sum(e for _, e in terms)
+    earliest = float(time.min())
+    at_earliest = equilibrium + sum(e * math.exp(-earliest / tau) for tau, e in terms)
+    ratio = instantaneous / at_earliest if at_earliest > 0 else float("inf")
     warnings = [
-        f"순간 탄성률은 가장 이른 측정(t = {time.min():.3g} s)까지만 압니다 — 하중을 거는 "
-        "동안 "
-        "풀린 몫은 이 카드에 없습니다."
+        f"순간 탄성률은 가장 이른 측정(t = {earliest:.3g} s)까지만 압니다 — 하중을 거는 "
+        "동안 풀린 몫은 이 카드에 없습니다."
     ]
+    if ratio > INSTANTANEOUS_RATIO_WARN:
+        warnings.append(
+            f"순간 탄성률 E₀ 가 첫 측정(t = {earliest:.3g} s) 때 강성의 {ratio:.2f}배입니다 — "
+            "그 앞은 외삽입니다. 짧은 시간(충격) 해석에는 DMA 마스터커브로 짧은 시간을 메워야 "
+            "합니다."
+        )
     if temperatures and max(temperatures) - min(temperatures) > SAME_TEMPERATURE:
         warnings.append(
             f"시험 온도가 {min(temperatures):.5g}~{max(temperatures):.5g} K 로 섞여 "
@@ -194,6 +217,7 @@ def relaxation_prony(members: list[Member]) -> GroupOutcome:
         "point_count": float(len(time)),
         "time_min": float(time.min()),
         "time_max": float(time.max()),
+        "instantaneous_ratio": float(ratio),
     }
     if temperatures:
         values["reference_temperature_k"] = float(np.mean(temperatures))
@@ -217,9 +241,24 @@ def card_blocks(
     if not terms or not isinstance(instantaneous, int | float) or instantaneous <= 0:
         raise ValueError("이 묶음에 Prony 항이 없습니다.")
     kept = ("equilibrium_pa", "instantaneous_pa", "reference_temperature_k", "normalized_rmse")
+    # **잰 시간 범위와 외삽 배수를 카드에 둔다**(2026-11-14, VOC 52) — 묶음 값에만 있고
+    # 카드에서 버려져, 덱을 받은 사람은 이 Prony 가 몇 초부터 몇 초까지 잰 것인지 몰랐다.
+    renamed = {
+        "time_min": "time_min_s",
+        "time_max": "time_max_s",
+        "instantaneous_ratio": "instantaneous_ratio",
+    }
+    measured = {
+        new: float(values[old])
+        for old, new in renamed.items()
+        if isinstance(values.get(old), int | float)
+    }
     return {
         "viscoelastic": {
-            "values": {key: float(values[key]) for key in kept if key in values},
+            "values": {
+                **{key: float(values[key]) for key in kept if key in values},
+                **measured,
+            },
             "rows": [
                 {
                     "relaxation_time_s": float(one["relaxation_time_s"]),

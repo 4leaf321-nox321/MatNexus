@@ -325,6 +325,35 @@ export function insertionIndex(
   return at === -1 ? steps.length : at
 }
 
+/** 정렬 단계 — 정렬된 곡선을 받아야 하는 단계(`sorted_by`) 앞에 깐다. */
+export const SORT_STEP = 'curve.sort_unique'
+
+/**
+ * 단계를 **권장 자리에** 켠다. 그 단계가 정렬된 곡선을 받아야 하고(`sorted_by`) 순서도에 정렬이
+ * 아직 없으면, 정렬을 그 앞에 함께 깐다 — 기준 열은 그 단계가 쓰는 열이다(2026-11-14, VOC 44).
+ *
+ * 굽힘 · 압축의 토우 보정이 정렬 안 된 곡선 위에서 돌았다 — 정렬을 켜면 늘 토우 뒤로 들어갔다.
+ * 정렬이 이미 있으면(자리가 어긋나도) 하나 더 깔지 않는다 — 어긋난 순서는 `outOfOrder` 가 말한다.
+ */
+export function withStep(
+  steps: RecipeStep[],
+  pluginId: string,
+  catalog: Map<string, ProcessingStep>,
+  defaultsOf: (plugin: ProcessingStep | undefined) => Record<string, unknown>
+): RecipeStep[] {
+  const at = insertionIndex(steps, pluginId, catalog)
+  const plugin = catalog.get(pluginId)
+  const added: RecipeStep = { plugin: pluginId, options: defaultsOf(plugin) }
+  const column = plugin?.sorted_by ? added.options[plugin.sorted_by] : undefined
+  const sorter = catalog.get(SORT_STEP)
+  const sorted = steps.some((step) => step.plugin === SORT_STEP)
+  const before: RecipeStep[] =
+    typeof column === 'string' && column && sorter && !sorted
+      ? [{ plugin: SORT_STEP, options: { ...defaultsOf(sorter), x: column } }]
+      : []
+  return [...steps.slice(0, at), ...before, added, ...steps.slice(at)]
+}
+
 /** 순서도가 권장 순서와 어긋나 있는가. 사람이 손으로 옮겼을 수 있다. */
 export function outOfOrder(
   steps: RecipeStep[],

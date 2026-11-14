@@ -355,7 +355,7 @@ def render_ansys_viscoelastic(deck: Deck) -> Rendered:
         notes.extend(viscoelastic_shift_notes(deck, shift[0], "TB,SHIFT"))
     elif reference is not None:
         lines.append(
-            f"! Valid at {reference:.2f} K only - master curve reference temperature "
+            f"! Valid at {reference:.2f} K only - the temperature the Prony was fitted at "
             f"(no TB,SHIFT: the shift constants are not on the card)."
         )
         notes.append(

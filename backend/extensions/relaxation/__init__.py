@@ -86,6 +86,12 @@ register(
         Produced(key="point_count", label="점 수", si_unit="1"),
         Produced(key="time_min", label="가장 이른 측정", si_unit="s"),
         Produced(key="time_max", label="가장 늦은 측정", si_unit="s"),
+        Produced(
+            key="instantaneous_ratio",
+            label="순간 탄성률 외삽 배수",
+            si_unit="1",
+            help="E₀ / E(첫 측정). 1.5 를 넘으면 순간 탄성률은 대부분 외삽이다.",
+        ),
         Produced(key="reference_temperature_k", label="기준 온도", si_unit="K"),
     ),
     members={
@@ -95,5 +101,6 @@ register(
     },
     card=prony_time.card_blocks,
     order=40,
-    version="1",
+    # 2: 가장 짧은 τ 를 첫 측정 시각으로 묶음 · 외삽 배수를 냄(2026-11-14, VOC 52).
+    version="2",
 )(prony_time.relaxation_prony)

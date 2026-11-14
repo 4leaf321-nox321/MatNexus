@@ -3736,17 +3736,24 @@ def update_specimen(
     unit = data.get("length_unit") or SI_LENGTH
     lengths = [key for key in ("thickness", "width", "gauge_length") if key in data]
 
+    # **치수 사전도 함께 고친다**(2026-11-14, VOC 41c). 읽는 쪽(`specimen_size`)은 사전을 먼저
+    # 보고 옛 칸은 사전에 그 칸이 없을 때만 본다 — 전에는 옛 칸만 고쳐, 틀린 치수를 손으로
+    # 고쳐도 계산은 사전의 옛 값을 계속 썼다.
+    dimensions = dict(specimen.dimensions or {})
     for field, column, label in (
         ("thickness", "thickness_m", "두께"),
         ("width", "width_m", "폭"),
         ("gauge_length", "gauge_length_m", "게이지 길이"),
     ):
         if field in data:
-            setattr(
-                specimen,
-                column,
-                services.specimen_length_to_si(data[field], unit, field=label),
-            )
+            si = services.specimen_length_to_si(data[field], unit, field=label)
+            setattr(specimen, column, si)
+            if si is None:
+                dimensions.pop(field, None)
+            else:
+                dimensions[field] = si
+    if lengths:
+        specimen.dimensions = dimensions
     if lengths or "length_unit" in data:
         # 넣은 단위는 **치수를 넣었을 때만** 남긴다 — 메모만 고쳤는데 「m 로 넣었다」 가
         # 적히면 역추적할 기록이 거짓이 된다.

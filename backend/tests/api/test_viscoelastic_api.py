@@ -562,7 +562,7 @@ class Test점탄성카드:
         assert "*VISCOELASTIC" in deck.text
         assert "*ELASTIC" in deck.text
         # **기준 온도가 덱에 적혀 있어야 한다** — 다른 온도에 쓰면 안 된다.
-        assert "master curve reference temperature" in deck.text
+        assert "the temperature the Prony was fitted at" in deck.text
 
     def test_푸아송비가_없으면_그렇게_말한다(
         self, client: TestClient, admin_headers: dict[str, str], dma_run: dict[str, Any]

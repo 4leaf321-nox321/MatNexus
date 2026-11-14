@@ -156,6 +156,24 @@ def _reused_fixture_files_are_distinct_measurements(
     monkeypatch.setattr(test_services, "_duplicates", lambda db, run: [])
 
 
+@pytest.fixture(autouse=True)
+def _material_thickness_in_tests_is_not_a_unit_mistake(
+    request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """**시험이 만든 재료 두께는 단위 실수로 치지 않는다**(2026-11-14, VOC 41c).
+
+    시험들은 재료를 `spec_thickness: 1.0` 으로 만든다 — 단위 없이 보낸 값은 SI 라 1 m 다. 치수
+    자릿수 점검이 그것을 파일 두께 0.986 mm 와 견주면 결과에 경고가 붙고 채택이 확인을 요구해
+    181건이 이유 없이 멈췄다(개발 DB 에서는 143건 중 점검용 재료 2건뿐). 그 점검 자체를 보는
+    시험은 `@pytest.mark.dimension_magnitude` 를 달아 실제 판정을 돌린다.
+    """
+    if request.node.get_closest_marker("dimension_magnitude"):
+        return
+    from app.modules.tests import services as test_services
+
+    monkeypatch.setattr(test_services, "_magnitude_mismatch", lambda db, run: [])
+
+
 @pytest.fixture(scope="session")
 def engine():  # type: ignore[no-untyped-def]
     url = _test_url()

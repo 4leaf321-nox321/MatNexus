@@ -187,7 +187,7 @@
             "when": "has(viscoelastic.reference_temperature_k) and not ((has(viscoelastic.shift_c1) and has(viscoelastic.shift_c2)) or has(viscoelastic.shift_activation_energy))"
           },
           {
-            "text": "**   master curve reference temperature. Add *TRS for other temperatures.",
+            "text": "**   the temperature the Prony was fitted at. Add *TRS for other temperatures.",
             "when": "has(viscoelastic.reference_temperature_k) and not ((has(viscoelastic.shift_c1) and has(viscoelastic.shift_c2)) or has(viscoelastic.shift_activation_energy))",
             "note": "기준 온도 {viscoelastic.reference_temperature_k - 273.15:.1f} °C 에서만 유효하다는 사실을 덱 주석에 적었습니다 — 다른 온도로 해석하려면 *TRS 가 따로 필요합니다."
           },
@@ -2134,7 +2134,7 @@
             "text": "$ Gi = gi * G0,  BETAi = 1/tau_i   - shear ratios from tensile/flexural E"
           },
           {
-            "text": "$ Valid at {viscoelastic.reference_temperature_k:.2f} K only - master curve reference temperature.",
+            "text": "$ Valid at {viscoelastic.reference_temperature_k:.2f} K only - the temperature the Prony was fitted at.",
             "when": "has(viscoelastic.reference_temperature_k) and not (not (has(viscoelastic.shift_c1) and has(viscoelastic.shift_c2)) and has(viscoelastic.shift_activation_energy))",
             "note": "기준 온도 {viscoelastic.reference_temperature_k - 273.15:.1f} °C 에서만 유효하다는 사실을 덱 주석에 적었습니다."
           },
@@ -4873,7 +4873,7 @@
             "text": "! Bulk relaxation not measured by DMA - no TB,PRONY,BULK (elastic bulk)."
           },
           {
-            "text": "! Valid at {viscoelastic.reference_temperature_k:.2f} K only - master curve reference temperature (no TB,SHIFT: the shift constants are not on the card).",
+            "text": "! Valid at {viscoelastic.reference_temperature_k:.2f} K only - the temperature the Prony was fitted at (no TB,SHIFT: the shift constants are not on the card).",
             "when": "has(viscoelastic.reference_temperature_k) and not ((has(viscoelastic.shift_c1) and has(viscoelastic.shift_c2)) or has(viscoelastic.shift_activation_energy))",
             "note": "기준 온도 {viscoelastic.reference_temperature_k - 273.15:.1f} °C 에서만 유효하다는 사실을 덱 주석에 적었습니다 — 다른 온도로 해석하려면 TB,SHIFT 가 따로 필요합니다."
           },
@@ -8976,7 +8976,7 @@
             "text": "$ SOL 400 only, with the advanced solid (PSLDN1) - MATVE is ignored otherwise."
           },
           {
-            "text": "$ Valid at {viscoelastic.reference_temperature_k:.2f} K only - master curve reference temperature.",
+            "text": "$ Valid at {viscoelastic.reference_temperature_k:.2f} K only - the temperature the Prony was fitted at.",
             "when": "has(viscoelastic.reference_temperature_k) and not (has(viscoelastic.shift_c1) and has(viscoelastic.shift_c2))",
             "note": "기준 온도 {viscoelastic.reference_temperature_k - 273.15:.1f} °C 에서만 유효하다는 사실을 덱 주석에 적었습니다."
           },
@@ -9346,7 +9346,7 @@
             "text": "$ Relaxation runs only with a VISCO case control entry."
           },
           {
-            "text": "$ Valid at {viscoelastic.reference_temperature_k:.2f} K only - master curve reference temperature.",
+            "text": "$ Valid at {viscoelastic.reference_temperature_k:.2f} K only - the temperature the Prony was fitted at.",
             "when": "has(viscoelastic.reference_temperature_k) and not ((has(viscoelastic.shift_c1) and has(viscoelastic.shift_c2)) or has(viscoelastic.shift_activation_energy))",
             "note": "기준 온도 {viscoelastic.reference_temperature_k - 273.15:.1f} °C 에서만 유효하다는 사실을 덱 주석에 적었습니다."
           },
@@ -11357,7 +11357,7 @@
             "text": "# Neo-Hookean: equals linear viscoelasticity at small strain only."
           },
           {
-            "text": "# Valid at {viscoelastic.reference_temperature_k:.2f} K only - master curve reference temperature.",
+            "text": "# Valid at {viscoelastic.reference_temperature_k:.2f} K only - the temperature the Prony was fitted at.",
             "when": "viscoelastic.reference_temperature_k",
             "note": "기준 온도 {viscoelastic.reference_temperature_k - 273.15:.1f} °C 에서만 유효하다는 사실을 덱 주석에 적었습니다."
           },

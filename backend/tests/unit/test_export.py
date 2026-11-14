@@ -973,3 +973,18 @@ class Test파단_연신율:
 
     def test_연신율이_없으면_아무_말도_없다(self) -> None:
         assert "not set - estimate" not in export.render("dyna", CARD).text
+
+
+class Test한글_이름:
+    """VOC 47(2026-11-14) — 한글만 있는 이름이 모두 「MATERIAL」 이 되어 원래 이름이 사라지고
+    파일 이름이 겹쳤다. 독스트링은 「주석에 남긴다」 였지만 실제로는 안 남겼다."""
+
+    def test_영문_숫자가_없으면_넘겨준_번호를_쓴다(self) -> None:
+        assert export.sanitize_name("칩모듈", fallback="M-000123") == "M-000123"
+        assert export.sanitize_name("칩모듈 A1", fallback="M-000123") == "A1"
+
+    def test_글자를_잃었을_때만_원래_이름을_남긴다(self) -> None:
+        note = export.renamed_note("칩모듈", "M-000123")
+        assert note is not None and "「칩모듈」" in note and "M-000123" in note
+        # 점이 밑줄로 바뀐 것만으로는 적지 않는다 — 모든 덱에 같은 줄이 붙는다.
+        assert export.renamed_note("SECC_MDOI_1.0", "SECC_MDOI_1_0") is None

@@ -20,6 +20,8 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.modules.fitting import card_tiers
+from app.modules.fitting.models import PropertyCard
 from app.modules.tests import services as test_services
 from app.modules.tests.definitions import ensure_builtin_test_types
 from app.modules.tests.legacy_profiles import ensure_builtin_format_profiles
@@ -485,6 +487,22 @@ class TestChain:
         assert card.status_code == 201, card.text
         blocks = card.json()["blocks"]
         assert blocks["elastic"]["values"]["youngs_modulus"] == pytest.approx(E_FLEX, rel=1e-3)
+        # **등가 E 의 출처는 「3점 굽힘 등가」 · 등급 상한 3**(2026-11-14, VOC 49) — 전에는
+        # 출처 칸이 비거나 재료 선언값의 것(데이터시트 등급 1)을 물려받아 등급 1 로 찍혔다.
+        elastic = blocks["elastic"]["values"]
+        assert elastic["youngs_modulus_source"] == "equivalent:3점 굽힘"
+        assert "youngs_modulus_reference" not in elastic
+        assert elastic["poisson_ratio_source"] == "manual"  # 안 낸 칸은 물려받은 그대로
+        saved = db.get(PropertyCard, uuid.UUID(card.json()["id"]))
+        assert saved is not None
+        assert card_tiers.value_tiers(saved)["elastic.youngs_modulus"] == 3  # 표본과 상관없이
+        deck = client.get(
+            f"/api/fitting/cards/{card.json()['id']}/export",
+            params={"format": "abaqus_elastic", "units": "si"},
+            headers=admin_headers,
+        )
+        assert deck.status_code == 200, deck.text
+        assert "탄성계수: 3점 굽힘 등가값" in deck.text
         assert blocks["reference"]["values"]["flexural_modulus"] == pytest.approx(
             E_FLEX, rel=1e-3
         )
@@ -496,6 +514,63 @@ class TestChain:
         )
         assert stiffness["support_span"] == pytest.approx(0.064)
         assert stiffness["loading"] == "3점 굽힘"
+
+    def test_탄성률_칸을_비우면_기본값_못_내면_그_단계만_실패(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str], seeded: None
+    ) -> None:
+        """VOC 44(2026-11-14) — 칸을 비우면 `float(None)` 으로 500 이었고, 탄성률을 못 내도
+        노트만 남긴 채 성공이라 채택된 결과에서 굽힘 탄성률이 조용히 빠졌다."""
+        _import(client, admin_headers, "iso_178")
+        (run_id,) = _runs(
+            client,
+            db,
+            admin_headers,
+            standard="ISO 178 (플라스틱 3점 굽힘)",
+            test_type="flexural",
+            filename="bend.tra",
+            data=_zwick_flexural(),
+            count=1,
+        )
+        engineering = {
+            "plugin": "flexural.engineering",
+            "options": {
+                "support_span": "@specimen_span",
+                "width": "@specimen_width",
+                "thickness": "@specimen_thickness",
+            },
+        }
+
+        def run(modulus_options: dict[str, Any]) -> dict[str, Any]:
+            stored = client.post(
+                "/api/processing/results",
+                json={
+                    "test_run_id": run_id,
+                    "steps": [
+                        engineering,
+                        {"plugin": "flexural.modulus", "options": modulus_options},
+                        {"plugin": "flexural.strength", "options": {}},
+                    ],
+                },
+                headers=admin_headers,
+            )
+            assert stored.status_code == 201, stored.text
+            body: dict[str, Any] = stored.json()
+            return body
+
+        blank = run({"method": "chord", "minimum_strain": None, "maximum_strain": ""})
+        values = {one["key"]: one["value"] for one in blank["scalars"]}
+        assert values["flexural_modulus"] == pytest.approx(E_FLEX, rel=1e-3)
+        # 쓴 구간 · 점 수가 값으로 남는다(VOC 43).
+        assert values["flexural_modulus_from"] == pytest.approx(0.0005)
+        assert values["flexural_modulus_to"] == pytest.approx(0.0025)
+        assert values["flexural_modulus_points"] == 2
+
+        failed = run({"method": "chord", "maximum_strain": 0.9})  # 곡선이 안 가는 구간
+        assert [one["plugin"] for one in failed["failures"]] == ["flexural.modulus"]
+        assert "굽힘 탄성률을 내지 못했습니다" in failed["failures"][0]["message"]
+        keys = {one["key"] for one in failed["scalars"]}
+        assert "flexural_modulus" not in keys
+        assert "flexural_strength" in keys  # 값만 재는 단계라 뒤는 계속 돈다
 
     def test_Instron_압축에서_할선_탄성률과_25퍼센트_응력(
         self, client: TestClient, db: Session, admin_headers: dict[str, str], seeded: None
@@ -649,6 +724,8 @@ class TestChain:
             E_RUBBER, rel=1e-3
         )
         assert blocks["elastic"]["values"]["density"] == pytest.approx(45.0)
+        # 묶음이 낸 칸의 출처는 그 묶음이다(2026-11-14, VOC 51) — 안 적으면 중심이 적는다.
+        assert blocks["elastic"]["values"]["youngs_modulus_source"] == "group:compression.foam"
         deck = client.get(
             f"/api/fitting/cards/{card.json()['id']}/export",
             params={"format": "dyna_foam"},

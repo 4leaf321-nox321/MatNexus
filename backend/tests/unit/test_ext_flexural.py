@@ -20,7 +20,7 @@ from typing import Any
 import numpy as np
 import pytest
 
-from matcore import cards, extensions, processing
+from matcore import cards, extensions, processing, registry
 from matcore.groups import GroupError, Member
 from matcore.processing import Frame, ProcessingError, Scalar, Step
 
@@ -216,10 +216,18 @@ def test_응력_띠는_변형률을_몰라도_된다() -> None:
     assert found["flexural_modulus"] == pytest.approx(E, rel=0.01)
 
 
-def test_구간에_못_닿으면_실패하지_않고_까닭을_남긴다() -> None:
-    step = bending.modulus(_curve(), {"method": "chord", "maximum_strain": 0.5})
-    assert step.scalars == ()
-    assert any("안 갑니다" in one for one in step.notes)
+def test_구간에_못_닿으면_그_단계만_실패하고_까닭을_말한다() -> None:
+    """VOC 44(2026-11-14) — 전에는 노트만 남기고 성공이라, 채택된 결과에서 굽힘 탄성률이 조용히
+    빠졌다. 값만 재는 단계(`measures`)라 처리는 이 단계만 건너뛰고 계속한다."""
+    with pytest.raises(ProcessingError, match="안 갑니다"):
+        bending.modulus(_curve(), {"method": "chord", "maximum_strain": 0.5})
+    assert registry.get("flexural.modulus").measures
+
+
+def test_비운_칸은_기본값() -> None:
+    blank = bending.modulus(_curve(), {"method": "chord", "maximum_strain": None})
+    default = bending.modulus(_curve(), {"method": "chord"})
+    assert blank.scalars == default.scalars
 
 
 def test_강도_파단_규정_처짐_응력() -> None:
@@ -279,7 +287,12 @@ def test_카드는_탄성_블록의_E_와_참고_물성() -> None:
         [_member("S1", 3.0e9, 90e6), _member("S2", 3.2e9, 94e6)]
     )
     blocks = bending.card_blocks(outcome.values, outcome.detail, outcome.warnings)
-    assert blocks["elastic"]["values"] == {"youngs_modulus": pytest.approx(3.1e9)}
+    assert blocks["elastic"]["values"] == {
+        "youngs_modulus": pytest.approx(3.1e9),
+        # 등가값이라는 표지 — 등급 3 상한(2026-11-14, VOC 49). 구성원에 하중 스팬이 없으면
+        # 「굽힘」.
+        "youngs_modulus_source": "equivalent:굽힘",
+    }
     assert "등가 E" in blocks["elastic"]["notes"][0]
     assert blocks["reference"]["values"] == {
         "flexural_modulus": pytest.approx(3.1e9),
@@ -288,7 +301,7 @@ def test_카드는_탄성_블록의_E_와_참고_물성() -> None:
     # 블록 칸이 카드 정의에 있는 키인가 — 없는 칸은 카드가 조용히 버린다.
     for key, block in blocks.items():
         known = {made.key for made in cards.block(key).produces}
-        assert set(block["values"]) <= known, key
+        assert {one for one in block["values"] if not one.endswith("_source")} <= known, key
 
 
 # ── 하중 스팬은 「있으면 쓴다」(`@?`, 2026-10-16) ─────────────────────────────

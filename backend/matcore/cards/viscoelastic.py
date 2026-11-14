@@ -20,6 +20,10 @@ from __future__ import annotations
 from matcore.cards import BlockPlot, BlockSpec, register_block
 from matcore.registry import Produced
 
+#: 순간 탄성률이 첫 측정 때 강성의 이 배수를 넘으면 외삽이라고 카드 · 덱에 적는다(막지 않는다).
+#: 응력완화는 하중을 거는 동안 풀린 몫을 모른다(2026-11-14, VOC 52).
+INSTANTANEOUS_RATIO_WARN = 1.5
+
 VISCOELASTIC = register_block(
     BlockSpec(
         key="viscoelastic",
@@ -48,6 +52,26 @@ VISCOELASTIC = register_block(
                 label="기준 온도",
                 si_unit="K",
                 help="마스터커브를 겹친 온도. **이 카드가 유효한 온도다.**",
+            ),
+            # **잰 시간 범위**(2026-11-14, VOC 52) — 응력완화의 Prony 는 이 사이에서만 잰
+            # 것이다.
+            Produced(
+                key="time_min_s",
+                label="가장 이른 측정",
+                si_unit="s",
+                help="이보다 짧은 시간의 완화는 이 카드에 없다(순간 탄성률은 외삽).",
+            ),
+            Produced(
+                key="time_max_s",
+                label="가장 늦은 측정",
+                si_unit="s",
+                help="이보다 긴 시간(장기 탄성률)은 외삽이다.",
+            ),
+            Produced(
+                key="instantaneous_ratio",
+                label="순간 탄성률 외삽 배수",
+                si_unit="1",
+                help="E₀ / E(가장 이른 측정). 1.5 를 넘으면 순간 탄성률은 대부분 외삽이다.",
             ),
             # **무엇을 잰 것인가**(2026-10-20). 카드는 늘 E 로 담는다(ADR 0057) — 전단으로 잰
             # G′ 는 E = 2(1+ν)G 로 옮겨 담고, 덱이 같은 ν 로 G 를 다시 만든다. 그 사실이 칸에

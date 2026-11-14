@@ -181,8 +181,15 @@ def engineering(frame: Frame, options: dict[str, Any]) -> StepResult:
     )
 
 
+def _number(options: dict[str, Any], key: str, default: float) -> float:
+    """비운 칸(`None` · 빈 글자)은 기본값 — 전에는 `float(None)` 으로 500 이 났다(2026-11-14,
+    VOC 44). 글자가 숫자가 아니면 처리 오류로 까닭을 말한다."""
+    raw = options.get(key)
+    return option_float({key: default if raw is None or raw == "" else raw}, key)
+
+
 def modulus(frame: Frame, options: dict[str, Any]) -> StepResult:
-    """굽힘 탄성률(등가 E) — 고른 방법 · 구간. 못 내면 실패하지 않고 까닭을 남긴다."""
+    """굽힘 탄성률(등가 E) — 고른 방법 · 구간. 못 내면 이 단계만 실패로 남긴다(`measures`)."""
     strain = frame.require(str(options.get("strain") or STRAIN), what="굽힘 변형률")
     stress = frame.require(str(options.get("stress") or STRESS), what="굽힘 응력")
     method = str(options.get("method") or "chord")
@@ -191,16 +198,22 @@ def modulus(frame: Frame, options: dict[str, Any]) -> StepResult:
             strain,
             stress,
             method=method,
-            low=float(options.get("minimum_strain", 0.0005)),
-            high=float(options.get("maximum_strain", 0.0025)),
-            band_low=float(options.get("band_low", 0.1)),
-            band_high=float(options.get("band_high", 0.4)),
-            tangent_width=float(options.get("tangent_width", 0.001)),
+            low=_number(options, "minimum_strain", 0.0005),
+            high=_number(options, "maximum_strain", 0.0025),
+            band_low=_number(options, "band_low", 0.1),
+            band_high=_number(options, "band_high", 0.4),
+            tangent_width=_number(options, "tangent_width", 0.001),
         )
     except slopes.SlopeError as exc:
-        return StepResult(frame, notes=(f"굽힘 탄성률을 내지 않았습니다 — {exc}",))
+        # **못 내면 실패로 남긴다**(2026-11-14, VOC 44). 전에는 노트만 남기고 성공으로
+        # 끝나, 채택된 결과에 굽힘 탄성률이 없는데도 부분 결과 판정에 안 걸려 조용히 빠졌다.
+        # 값만 재는 단계라(`measures`) 뒤 단계는 같은 곡선 위에서 계속 돈다.
+        raise ProcessingError(f"굽힘 탄성률을 내지 못했습니다 — {exc}") from exc
     if found.value <= 0:
-        return StepResult(frame, notes=("기울기가 0 이하라 굽힘 탄성률을 내지 않았습니다.",))
+        raise ProcessingError(
+            f"기울기가 0 이하({found.value:.4g})라 굽힘 탄성률을 내지 못했습니다 — "
+            "구간 · 방법을 다시 보세요."
+        )
 
     scalars = [
         Scalar(
@@ -221,6 +234,33 @@ def modulus(frame: Frame, options: dict[str, Any]) -> StepResult:
                 dimension="dimensionless",
             )
         )
+    # **쓴 구간 · 점 수를 값으로 남긴다**(2026-11-14, VOC 43) — 노트의 글로만 있으면 결과끼리
+    # 견주거나 「점 몇 개로 잰 값인가」 를 거를 수 없다.
+    scalars.extend(
+        (
+            Scalar(
+                key="flexural_modulus_from",
+                label="굽힘 탄성률 구간 시작",
+                value=found.low,
+                si_unit="1",
+                dimension="strain",
+            ),
+            Scalar(
+                key="flexural_modulus_to",
+                label="굽힘 탄성률 구간 끝",
+                value=found.high,
+                si_unit="1",
+                dimension="strain",
+            ),
+            Scalar(
+                key="flexural_modulus_points",
+                label="굽힘 탄성률 점 수",
+                value=float(found.points),
+                si_unit="1",
+                dimension="dimensionless",
+            ),
+        )
+    )
     # 하중-처짐 기울기(강성) — 같은 구간에서. 등가 E 를 다른 단면으로 옮길 때 쓴다.
     start, end = found.indices
     if FORCE in frame.columns and USED in frame.columns and end - start >= slopes.MIN_POINTS:
@@ -353,11 +393,26 @@ def equivalent_modulus(members: list[Member]) -> GroupOutcome:
     return GroupOutcome(
         values=out,
         detail={
-            "members": [{"label": label, "flexural_modulus": value} for label, value in moduli]
+            "members": [
+                {"label": label, "flexural_modulus": value} for label, value in moduli
+            ],
+            "loading": _loading(members),
         },
         warnings=warnings,
         used=[label for label, _ in moduli],
     )
+
+
+def _loading(members: Sequence[Member]) -> str:
+    """구성원의 하중 방식 — 모두 3점이면 「3점 굽힘」, 모두 4점이면 「4점 굽힘」, 모르거나
+    섞이면 「굽힘」. 등가 E 의 출처(`equivalent:<이것>`)가 된다(2026-11-14, VOC 49)."""
+    spans = [one.values.get("load_span") for one in members]
+    if not spans or not all(isinstance(one, int | float) for one in spans):
+        return "굽힘"
+    four = [float(one) > 0 for one in spans if isinstance(one, int | float)]
+    if all(four):
+        return "4점 굽힘"
+    return "굽힘" if any(four) else "3점 굽힘"
 
 
 #: 구조 강성을 평균해도 되는 배치 차이 — 스팬 · 폭 · 두께가 이보다 다르면 강성이 다른 부품이다.
@@ -436,9 +491,15 @@ def card_blocks(
         "직사각형 단면을 균질한 보로 본 값이라 인장 탄성계수와 다를 수 있습니다"
         "(적층 · 이방성)."
     )
+    # **출처는 등가값이다**(2026-11-14, VOC 49) — 탄성 E 칸에 두지만 인장 E 가 아니라서, 표본이
+    # 많아도 등급 3 을 넘지 않는다(`matcore.cards` 의 `equivalent:` 규약).
+    loading = str(detail.get("loading") or "굽힘")
     blocks: dict[str, dict[str, Any]] = {
         "elastic": {
-            "values": {"youngs_modulus": float(modulus_value)},
+            "values": {
+                "youngs_modulus": float(modulus_value),
+                "youngs_modulus_source": f"equivalent:{loading}",
+            },
             "notes": [note, *warnings],
         },
         "reference": {"values": reference},

@@ -40,6 +40,8 @@ const SOURCE_LABELS: Record<string, string> = {
   material: '재료 공칭',
   manual: '직접 입력',
   prony: 'Prony 적합',
+  statistics: '시험 평균',
+  lve: '선형 점탄성 구간',
 }
 
 /**
@@ -85,6 +87,10 @@ function originOf(source: string): string {
       .filter(Boolean)
       .join(' · ')
   }
+  // **묶음이 낸 값 · 등가값**(2026-11-14, VOC 49). 등가값은 그 칸이 뜻하는 시험이 아니라는 표지다
+  // — 굽힘 등가 E 를 탄성 E 칸에 둘 때(등급 3 상한).
+  if (source.startsWith('equivalent:')) return `${source.slice('equivalent:'.length)} 등가`
+  if (source.startsWith('group:')) return '묶음'
   return SOURCE_LABELS[source] ?? ''
 }
 

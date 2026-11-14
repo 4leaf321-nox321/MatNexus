@@ -143,6 +143,19 @@ describe('물성 카드 내용', () => {
     expect(screen.getByText('(적은 값 · 문헌 · 문헌 1등급 · 승인)')).toBeInTheDocument()
   })
 
+  it('굽힘 등가값이면 그 칸의 시험이 아니라고 적는다', () => {
+    // VOC 49(2026-11-14) — 굽힘 등가 E 를 탄성 E 칸에 두되 인장 E 처럼 보이지 않게.
+    render(
+      <CardBlocks
+        specs={SPECS}
+        card={card({
+          imaginary: { values: { strength: 2e8, strength_source: 'equivalent:3점 굽힘' } },
+        })}
+      />
+    )
+    expect(screen.getByText('(3점 굽힘 등가)')).toBeInTheDocument()
+  })
+
   it('모르는 출처 코드는 조용히 지어내지 않는다', () => {
     // 아는 척하면 그 표시가 곧 거짓말이 된다.
     render(

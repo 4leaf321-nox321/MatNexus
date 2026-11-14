@@ -21,8 +21,9 @@ import numpy as np
 
 METHODS = ("chord", "regression", "secant", "tangent", "stress_window")
 
-#: 회귀에 쓰는 최소 점 수 — 둘이면 잔차가 늘 0 이라 맞았는지 알 수 없다.
-MIN_POINTS = 3
+#: 회귀에 쓰는 최소 점 수 — 인장 탄성률과 같다(2026-11-14, VOC 43). 셋이면 잡음 한 점이
+#: 기울기를 좌우하고, R² 도 거의 늘 높게 나와 맞았는지 알 수 없었다.
+MIN_POINTS = 5
 
 
 class SlopeError(ValueError):
@@ -59,10 +60,20 @@ def _interp(x: np.ndarray, y: np.ndarray, at: float) -> float:
 
 
 def _fit(x: np.ndarray, y: np.ndarray) -> tuple[float, float]:
+    """최소제곱 기울기와 R². **응력이 구간 안에서 안 변하면 못 잰다.**
+
+    전에는 분모(응력의 흩어짐)가 0 이면 R² 를 1.0 으로 돌려줘, 응력이 계단처럼 양자화된
+    곡선에서 ≈0 GPa 가 「R² 1.0」 으로 저장됐다(2026-11-14, VOC 43).
+    """
+    total = float(np.sum((y - np.mean(y)) ** 2))
+    if not total > 0 or float(np.ptp(x)) <= 0:
+        raise SlopeError(
+            "구간 안에서 응력(또는 변형률)이 변하지 않습니다 — 기울기를 잴 수 없습니다. "
+            "구간을 넓히거나 다른 방법을 고르세요."
+        )
     slope, intercept = np.polyfit(x, y, 1)
     predicted = slope * x + intercept
-    total = float(np.sum((y - np.mean(y)) ** 2))
-    r2 = 1.0 - float(np.sum((y - predicted) ** 2)) / total if total > 0 else 1.0
+    r2 = 1.0 - float(np.sum((y - predicted) ** 2)) / total
     return float(slope), r2
 
 
@@ -126,18 +137,22 @@ def measure(
         if not 0 <= band_low < band_high <= 1:
             raise SlopeError(f"응력 띠는 0~1 사이 비율이어야 합니다: {band_low} ~ {band_high}")
         peak = float(np.max(y))
-        inside = np.flatnonzero((y >= band_low * peak) & (y <= band_high * peak))
+        if not peak > 0:
+            raise SlopeError("최대 응력이 0 이하라 응력 띠를 정할 수 없습니다.")
+        # **띠 아래 끝에 처음 닿은 점 ~ 위 끝에 처음 닿은 점 사이를 전부** 쓴다(2026-11-14,
+        # VOC 43). 전에는 띠 안의 점을 골라 **처음 이어진 구간**만 썼다 — 잡음이 띠 경계를
+        # 넘나들면 그 구간이 서너 점으로 끊겨, 잡음 σ 0.2 MPa 에서 200번 중 117번 못 쟀다.
+        # 첫 도달로 정하면 경계 근처의 오르내림이 구간을 자르지 않는다.
+        lower = np.flatnonzero(y >= band_low * peak)
+        upper = np.flatnonzero(y >= band_high * peak)
+        first, last = int(lower[0]), int(upper[0])
+        inside = np.arange(first, last + 1)
         if len(inside) < MIN_POINTS:
             raise SlopeError(
-                f"최대 응력의 {band_low:.0%}~{band_high:.0%} 사이에 점이 "
-                f"{len(inside)}개뿐입니다."
+                f"최대 응력의 {band_low:.0%} 에 처음 닿은 점부터 {band_high:.0%} 에 처음 닿은 "
+                f"점까지가 {len(inside)}개뿐입니다 — {MIN_POINTS}개 이상이어야 합니다. 띠를 "
+                "넓히거나 다른 방법을 고르세요."
             )
-        # 띠 안의 **처음 이어진 구간**만 — 오르내림이 있는 곡선에서 뒤쪽 점이 섞이지 않게.
-        breaks = np.flatnonzero(np.diff(inside) > 1)
-        if len(breaks):
-            inside = inside[: breaks[0] + 1]
-        if len(inside) < MIN_POINTS:
-            raise SlopeError("응력 띠 안의 처음 이어진 구간에 점이 너무 적습니다.")
         value, r2 = _fit(x[inside], y[inside])
         return Slope(
             value=value,
@@ -163,7 +178,10 @@ def measure(
         inside = inside[inside < limit]
         if len(inside) < MIN_POINTS:
             continue
-        value, r2 = _fit(x[inside], y[inside])
+        try:
+            value, r2 = _fit(x[inside], y[inside])
+        except SlopeError:
+            continue  # 응력이 안 변하는 창 — 다음 창을 본다
         if best is None or value > best.value:
             best = Slope(
                 value=value,

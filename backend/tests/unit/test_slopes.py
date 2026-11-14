@@ -75,3 +75,41 @@ def test_못_재면_까닭을_말한다() -> None:
         slopes.measure(strain, stress, method="guess")
     with pytest.raises(slopes.SlopeError, match="창"):
         slopes.measure(strain, stress, method="tangent", tangent_width=1e-9)
+
+
+class Test응력_띠는_첫_도달_사이_전부:
+    """VOC 43(2026-11-14) — 띠 안의 「처음 이어진 구간」 만 쓰던 것이 잡음에 끊겼다."""
+
+    def test_잡음이_띠_경계를_넘나들어도_잰다(self) -> None:
+        # 칩 굽힘처럼 — 응력 60 MPa 까지 400점, 잡음 σ 0.2 MPa. 전에는 200번 중 117번 못 쟀다.
+        strain = np.linspace(0, 0.02, 400)
+        for seed in range(200):
+            noise = np.random.default_rng(seed).normal(0.0, 0.2e6, strain.size)
+            stress = 3.0e9 * strain + noise
+            found = slopes.measure(strain, stress, method="stress_window")
+            assert found.value == pytest.approx(3.0e9, rel=0.03), seed
+            assert found.points >= 100, seed  # 10 % ~ 40 % 사이 점이 전부 들어간다
+
+    def test_구간은_아래_끝_첫_도달부터_위_끝_첫_도달까지(self) -> None:
+        strain, stress = _linear()
+        found = slopes.measure(strain, stress, method="stress_window")
+        peak = float(np.max(stress))
+        first = int(np.flatnonzero(stress >= 0.1 * peak)[0])
+        last = int(np.flatnonzero(stress >= 0.4 * peak)[0])
+        assert found.indices == (first, last + 1)
+        assert found.points == last - first + 1
+
+    def test_응력이_안_변하면_R2_1_로_내지_않는다(self) -> None:
+        # 응력이 계단처럼 양자화돼 구간 안에서 한 값이면 — 전에는 ≈0 기울기가 R² 1.0 이었다.
+        strain = np.linspace(0, 0.01, 101)
+        stress = np.where(strain < 0.003, 0.0, 1.0e6)
+        stress[-1] = 2.0e6
+        with pytest.raises(slopes.SlopeError, match="변하지 않습니다"):
+            slopes.measure(strain, stress, method="regression", low=0.004, high=0.009)
+
+    def test_회귀는_다섯_점_이상(self) -> None:
+        strain, stress = _linear(points=201)  # 점 간격 5e-5
+        with pytest.raises(slopes.SlopeError, match="5개 이상"):
+            slopes.measure(strain, stress, method="regression", low=0.00099, high=0.00116)
+        found = slopes.measure(strain, stress, method="regression", low=0.00099, high=0.00121)
+        assert found.points == 5

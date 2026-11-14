@@ -77,3 +77,23 @@ def test_등급_줄이_덱_각주에_실린다(
         assert "값 등급(1 좋음 ~ 4 계산·추정" in got.text, fmt
         assert "등급 1 — " in got.text and "탄성계수" in got.text
         assert "등급 4 — " in got.text and "푸아송비" in got.text
+
+
+def test_한글_재료_이름은_번호로_원래_이름은_머리말에(
+    client: TestClient, db: Session, admin_headers: dict[str, str]
+) -> None:
+    """VOC 47(2026-11-14) — 「MATERIAL」 로 사라지던 것."""
+    card = _card(db, sample_count=3)
+    material = db.get(Material, card.material_id)
+    assert material is not None
+    material.record_name = "칩모듈"
+    db.commit()
+    db.refresh(material)
+    got = client.get(
+        f"/api/fitting/cards/{card.id}/export",
+        params={"format": "abaqus_elastic", "units": "si"},
+        headers=admin_headers,
+    )
+    assert got.status_code == 200, got.text
+    assert f"NAME={material.code}" in got.text
+    assert "원래 이름 「칩모듈」" in got.text

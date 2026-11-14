@@ -24963,6 +24963,17 @@
             "title": "Requires Channels",
             "type": "array"
           },
+          "sorted_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sorted By"
+          },
           "version": {
             "title": "Version",
             "type": "string"

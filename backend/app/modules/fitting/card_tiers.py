@@ -10,6 +10,7 @@
 않고 덱을 낼 때마다 센다 — 저장하면 규칙이 바뀌었을 때 옛 카드가 옛 등급을 든 채 남는다.
 
     시험에서 온 값       표본 3 이상 1 · 1~2 는 2         (`tiers.measured_tier`)
+    등가값(다른 시험)    3  (굽힘 등가 E 를 탄성 E 칸에 — 표본 수와 상관없이)
     적어 둔 값           출처로 — 밀시트·데이터시트 1 · 규격 2 · 문헌 3 · 추정 4
                          (자료 관리자가 승인한 값은 한 단계 위, 2 까지 — ADR 0049)
     재료에 적힌 공칭값    3  (어디서 왔는지 모르는 옮겨 적음)
@@ -30,7 +31,11 @@ _SOURCE_TIERS: dict[str, int] = {
     "material": 3,
     "manual": 4,
 }
-_MEASURED_SOURCES = ("measured", "sample", "prony")
+#: 시험에서 온 값의 출처 — 표본 수로 등급을 매긴다. `group:<묶음 id>` 는 묶음이 낸
+#: 값이다(2026-11-14).
+_MEASURED_SOURCES = ("measured", "sample", "prony", "statistics", "lve")
+#: `equivalent:<무엇>` 의 가장 좋은 등급 — 등가값은 그 칸의 시험이 아니다(VOC 49).
+EQUIVALENT_TIER = 3
 
 #: 시험에서 나오는 **내장** 블록 — 표본 수로 등급을 매긴다.
 _MEASURED_BLOCKS = ("table", "hardening", "hyperelastic", "viscoelastic", "lve", "rate_table")
@@ -80,7 +85,11 @@ def value_tiers(card: PropertyCard) -> dict[str, int]:
                 out[f"{block_key}.{key}"] = tiers.declared_tier(
                     where, approved=approved, catalog_tier=tiers.catalog_tier_in(mark)
                 )
-            elif source in _MEASURED_SOURCES:
+            elif source.startswith("equivalent:"):
+                # 다른 시험에서 옮겨 온 등가값(굽힘 등가 E 를 탄성 E 칸에) — 표본이 많아도 그
+                # 칸이 뜻하는 시험이 아니다(2026-11-14, VOC 49).
+                out[f"{block_key}.{key}"] = max(tiers.measured_tier(count), EQUIVALENT_TIER)
+            elif source in _MEASURED_SOURCES or source.startswith("group:"):
                 out[f"{block_key}.{key}"] = tiers.measured_tier(count)
             elif source in _SOURCE_TIERS:
                 out[f"{block_key}.{key}"] = _SOURCE_TIERS[source]

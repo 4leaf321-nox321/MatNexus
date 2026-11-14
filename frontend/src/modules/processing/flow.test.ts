@@ -19,6 +19,7 @@ import {
   stepIO,
   stepSummary,
   valuesAt,
+  withStep,
 } from '@/modules/processing/flow'
 import type { ProcessingStep, RecipeStep } from '@/modules/processing/api'
 
@@ -495,5 +496,56 @@ describe('stepIO — 단계 사이로 무엇이 흘러가나', () => {
     expect(E?.kind).toBe('scalar')
     expect(E?.present).toBe(true)
     expect(stepIO(steps[1], 0, steps, SOURCE, CATALOG).takes[0].present).toBe(false)
+  })
+})
+
+describe('정렬된 곡선을 받는 단계를 켜면', () => {
+  // 굽힘(2026-11-14, VOC 44) — 공칭(10) · 정렬(20) · 토우(22) · 탄성률(25).
+  const BEND = new Map<string, ProcessingStep>(
+    [
+      plugin({ id: 'flexural.engineering', order: 10 }),
+      plugin({
+        id: 'curve.sort_unique',
+        order: 20,
+        params: [column('x', '기준 열'), { ...column('duplicate_policy', '같은 x'), default: 'mean' }],
+      }),
+      plugin({
+        id: 'flexural.toe_compensation',
+        order: 22,
+        sorted_by: 'strain',
+        params: [column('strain', '변형률 열', 'flexural_strain')],
+      }),
+      plugin({ id: 'flexural.modulus', order: 25 }),
+    ].map((one) => [one.id, one])
+  )
+  const defaultsOf = (one: ProcessingStep | undefined) =>
+    Object.fromEntries(
+      (one?.params ?? [])
+        .filter((param) => param.default !== null)
+        .map((param) => [param.name, param.default])
+    )
+
+  it('정렬이 없으면 그 열로 정렬을 앞에 함께 깐다', () => {
+    const steps = [step('flexural.engineering'), step('flexural.modulus')]
+    const next = withStep(steps, 'flexural.toe_compensation', BEND, defaultsOf)
+    expect(next.map((one) => one.plugin)).toEqual([
+      'flexural.engineering',
+      'curve.sort_unique',
+      'flexural.toe_compensation',
+      'flexural.modulus',
+    ])
+    expect(next[1].options).toEqual({ x: 'flexural_strain', duplicate_policy: 'mean' })
+  })
+
+  it('정렬이 이미 있으면 하나 더 깔지 않는다', () => {
+    const steps = [step('flexural.engineering'), step('curve.sort_unique'), step('flexural.modulus')]
+    const next = withStep(steps, 'flexural.toe_compensation', BEND, defaultsOf)
+    expect(next.filter((one) => one.plugin === 'curve.sort_unique')).toHaveLength(1)
+    expect(next.map((one) => one.plugin).indexOf('flexural.toe_compensation')).toBe(2)
+  })
+
+  it('정렬을 나중에 켜도 토우 앞에 들어간다', () => {
+    const steps = [step('flexural.engineering'), step('flexural.toe_compensation')]
+    expect(insertionIndex(steps, 'curve.sort_unique', BEND)).toBe(1)
   })
 })

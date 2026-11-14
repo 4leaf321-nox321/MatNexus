@@ -159,6 +159,9 @@ def list_steps(
             makes_columns=[_produced(item) for item in plugin.makes_columns],
             makes_values=[_produced(item) for item in plugin.makes_values],
             order=plugin.order,
+            sorted_by=(
+                str(plugin.meta["sorted_by"]) if plugin.meta.get("sorted_by") else None
+            ),
         )
         for plugin in registry.list_plugins(
             kind="processing",

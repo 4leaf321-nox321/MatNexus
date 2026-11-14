@@ -18554,6 +18554,8 @@ export interface components {
              * @default []
              */
             requires_channels: string[][];
+            /** Sorted By */
+            sorted_by?: string | null;
             /** Version */
             version: string;
         };

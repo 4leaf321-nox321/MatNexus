@@ -142,7 +142,9 @@ register(
     applies_to=("compression",),
     params=toe_params(compress.STRAIN, compress.STRESS),
     makes_values=TOE_VALUES,
-    order=15,
+    # 정렬(20) 뒤 · 탄성률(25) 앞(2026-11-14, VOC 44) — 굽힘과 같다.
+    order=22,
+    sorted_by="strain",
     version="1",
 )(toe_compensation_on(compress.STRAIN, compress.STRESS))
 
@@ -228,9 +230,14 @@ register(
             property_key="mechanical.compressive_modulus",
         ),
         Produced(key="compressive_modulus_r2", label="압축 탄성률 회귀 R²", si_unit="1"),
+        Produced(key="compressive_modulus_from", label="압축 탄성률 구간 시작", si_unit="1"),
+        Produced(key="compressive_modulus_to", label="압축 탄성률 구간 끝", si_unit="1"),
+        Produced(key="compressive_modulus_points", label="압축 탄성률 점 수", si_unit="1"),
     ),
-    order=20,
-    version="1",
+    order=25,
+    measures=True,
+    # 2: 응력 띠를 첫 도달 사이 전부로 · 회귀 점 하한 5 · 못 내면 실패(VOC 43 · 44).
+    version="2",
 )(compress.modulus)
 
 register(

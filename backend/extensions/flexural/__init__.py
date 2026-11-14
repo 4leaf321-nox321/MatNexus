@@ -181,7 +181,10 @@ register(
     applies_to=("flexural",),
     params=toe_params(bending.STRAIN, bending.STRESS),
     makes_values=TOE_VALUES,
-    order=15,
+    # **정렬(20) 뒤 · 탄성률(25) 앞**(2026-11-14, VOC 44). 전에는 15 라 정렬을 켜면 늘 토우
+    # 뒤로 들어가, 토우가 정렬 안 된 곡선 위에서 돌았다. 정렬이 없으면 화면이 앞에 깐다.
+    order=22,
+    sorted_by="strain",
     version="1",
 )(toe_compensation_on(bending.STRAIN, bending.STRESS))
 
@@ -261,10 +264,16 @@ register(
             property_key="mechanical.flexural_modulus",
         ),
         Produced(key="flexural_modulus_r2", label="굽힘 탄성률 회귀 R²", si_unit="1"),
+        Produced(key="flexural_modulus_from", label="굽힘 탄성률 구간 시작", si_unit="1"),
+        Produced(key="flexural_modulus_to", label="굽힘 탄성률 구간 끝", si_unit="1"),
+        Produced(key="flexural_modulus_points", label="굽힘 탄성률 점 수", si_unit="1"),
         Produced(key="flexural_stiffness", label="굽힘 강성(하중/처짐)", si_unit="N/m"),
     ),
-    order=20,
-    version="1",
+    order=25,
+    # 값만 잰다 — 못 내면 이 단계만 실패로 남고 강도는 계속 잰다(2026-11-14, VOC 44).
+    measures=True,
+    # 2: 응력 띠를 첫 도달 사이 전부로 · 회귀 점 하한 5 · 쓴 구간 · 점 수를 값으로(VOC 43).
+    version="2",
 )(bending.modulus)
 
 register(
@@ -349,5 +358,6 @@ register(
     },
     card=bending.card_blocks,
     order=40,
-    version="1",
+    # 2: 하중 방식(3점 · 4점)을 남겨 등가 E 의 출처로 쓴다(2026-11-14, VOC 49).
+    version="2",
 )(bending.equivalent_modulus)

@@ -664,11 +664,15 @@ def literature_deck(
     made = assemble(db, material, synthesize=synthesize, target=target)
     if isinstance(made, str):
         return made
+    # 한글만 있는 이름은 덱 안 번호로(겹치지 않게), 원래 이름은 머리말에(2026-11-14, VOC 47).
+    raw = material.grade or material.name
+    name = export.sanitize_name(raw, fallback=f"MAT{mid}")
+    note = export.renamed_note(raw, name)
     return export.Deck(
-        name=export.sanitize_name(material.grade or material.name, fallback="MAT"),
+        name=name,
         solver_id=mid,
         blocks=made.blocks,
-        provenance=tuple(made.provenance),
+        provenance=(*((note,) if note else ()), *made.provenance),
     )
 
 

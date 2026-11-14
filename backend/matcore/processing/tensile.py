@@ -311,6 +311,8 @@ TOE_VALUES = (
     # 열을 새로 만들지 않는다 — **고른 변형률 열을 그 자리에서 민다.**
     makes_values=TOE_VALUES,
     order=30,
+    # 이 옵션이 가리키는 열로 정렬된 곡선을 받는다 — 화면이 정렬이 없으면 앞에 깐다(VOC 44).
+    sorted_by="strain",
     version="1",
 )
 def toe_compensation(frame: Frame, options: dict[str, Any]) -> StepResult:

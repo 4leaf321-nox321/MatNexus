@@ -196,8 +196,15 @@ def engineering(frame: Frame, options: dict[str, Any]) -> StepResult:
     )
 
 
+def _number(options: dict[str, Any], key: str, default: float) -> float:
+    """비운 칸(`None` · 빈 글자)은 기본값 — 전에는 `float(None)` 으로 500 이 났다(2026-11-14,
+    VOC 44). 글자가 숫자가 아니면 처리 오류로 까닭을 말한다."""
+    raw = options.get(key)
+    return option_float({key: default if raw is None or raw == "" else raw}, key)
+
+
 def modulus(frame: Frame, options: dict[str, Any]) -> StepResult:
-    """압축 탄성률 — 고른 방법 · 구간. 못 내면 까닭만 남긴다."""
+    """압축 탄성률 — 고른 방법 · 구간. 못 내면 이 단계만 실패로 남긴다(`measures`)."""
     strain = frame.require(str(options.get("strain") or STRAIN), what="압축 변형률")
     stress = frame.require(str(options.get("stress") or STRESS), what="압축 응력")
     method = str(options.get("method") or "secant")
@@ -206,16 +213,22 @@ def modulus(frame: Frame, options: dict[str, Any]) -> StepResult:
             strain,
             stress,
             method=method,
-            low=float(options.get("minimum_strain", 0.0005)),
-            high=float(options.get("maximum_strain", 0.1)),
-            band_low=float(options.get("band_low", 0.1)),
-            band_high=float(options.get("band_high", 0.4)),
-            tangent_width=float(options.get("tangent_width", 0.001)),
+            low=_number(options, "minimum_strain", 0.0005),
+            high=_number(options, "maximum_strain", 0.1),
+            band_low=_number(options, "band_low", 0.1),
+            band_high=_number(options, "band_high", 0.4),
+            tangent_width=_number(options, "tangent_width", 0.001),
         )
     except slopes.SlopeError as exc:
-        return StepResult(frame, notes=(f"압축 탄성률을 내지 않았습니다 — {exc}",))
+        # **못 내면 실패로 남긴다**(2026-11-14, VOC 44). 전에는 노트만 남기고 성공으로
+        # 끝나, 채택된 결과에 압축 탄성률이 없는데도 부분 결과 판정에 안 걸려 조용히 빠졌다.
+        # 값만 재는 단계라(`measures`) 뒤 단계는 같은 곡선 위에서 계속 돈다.
+        raise ProcessingError(f"압축 탄성률을 내지 못했습니다 — {exc}") from exc
     if found.value <= 0:
-        return StepResult(frame, notes=("기울기가 0 이하라 압축 탄성률을 내지 않았습니다.",))
+        raise ProcessingError(
+            f"기울기가 0 이하({found.value:.4g})라 압축 탄성률을 내지 못했습니다 — "
+            "구간 · 방법을 다시 보세요."
+        )
     scalars = [
         Scalar(
             key="compressive_modulus",
@@ -235,6 +248,33 @@ def modulus(frame: Frame, options: dict[str, Any]) -> StepResult:
                 dimension="dimensionless",
             )
         )
+    # **쓴 구간 · 점 수를 값으로 남긴다**(2026-11-14, VOC 43) — 노트의 글로만 있으면 결과끼리
+    # 견주거나 「점 몇 개로 잰 값인가」 를 거를 수 없다.
+    scalars.extend(
+        (
+            Scalar(
+                key="compressive_modulus_from",
+                label="압축 탄성률 구간 시작",
+                value=found.low,
+                si_unit="1",
+                dimension="strain",
+            ),
+            Scalar(
+                key="compressive_modulus_to",
+                label="압축 탄성률 구간 끝",
+                value=found.high,
+                si_unit="1",
+                dimension="strain",
+            ),
+            Scalar(
+                key="compressive_modulus_points",
+                label="압축 탄성률 점 수",
+                value=float(found.points),
+                si_unit="1",
+                dimension="dimensionless",
+            ),
+        )
+    )
     return StepResult(
         frame,
         notes=(

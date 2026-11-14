@@ -85,4 +85,5 @@ testpaths = ["tests"]
 addopts = "-q -n 4"
 markers = [
     "duplicates: 중복 점검(VOC 54)을 실제로 돌린다 — 안 달면 예제 파일 재사용을 다른 측정으로 친다",
+    "dimension_magnitude: 치수 자릿수 점검(VOC 41c)을 실제로 돌린다 — 안 달면 시험이 만든 재료 두께(1 m)를 단위 실수로 안 친다",
 ]

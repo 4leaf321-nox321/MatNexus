@@ -176,6 +176,7 @@ from matcore import (
     units,
     viscoelastic,
 )
+from matcore.cards import viscoelastic as card_viscoelastic
 from matcore.cards.hyperelastic import from_parameter_set
 from matcore.export import layout as export_layout
 from matcore.export import scan, template, verify
@@ -291,6 +292,8 @@ SOURCE_NOTES = {
     "material": "재료에 적힌 공칭값",
     "manual": "사람이 직접 넣은 값",
     "prony": "Prony 적합의 순간 탄성률",
+    "statistics": "채택한 시험 결과들의 평균",
+    "lve": "선형 점탄성 구간의 탄성률(시험 평균)",
 }
 
 
@@ -318,6 +321,16 @@ def _origin(source: str) -> str:
             if part
         ]
         return f"사람이 적은 값 ({' · '.join(parts)})" if parts else "사람이 적은 값"
+    if source.startswith("equivalent:"):
+        what = source.removeprefix("equivalent:")
+        return f"{what} 등가값 — 이 칸이 뜻하는 시험의 값이 아님(등급 3 상한)"
+    if source.startswith("group:"):
+        plugin_id = source.removeprefix("group:")
+        try:
+            label = registry.get(plugin_id).label
+        except KeyError:
+            label = plugin_id
+        return f"묶음 「{label}」 이 시험들에서 낸 값"
     return SOURCE_NOTES.get(source, "")
 
 
@@ -2874,6 +2887,16 @@ def create_card_from_group(
     given_elastic = dict((blocks.get("elastic") or {}).get("values") or {})
     if given_elastic:
         elastic_values.update(given_elastic)
+        # **묶음이 낸 칸의 출처는 그 묶음이다**(2026-11-14, VOC 49 · 51 · 52). 전에는 값만
+        # 덮고 출처 · 근거는 앞에서 물려받은 재료 선언값의 것을 그대로 남겨, 굽힘 등가 E 가
+        # 「제품 데이터시트 등급 1」 로 찍혔다(응력완화 E0 · 폼 E 도 같은 길). 묶음이 스스로
+        # 출처를 내면 그것을 쓴다.
+        marks = ("_source", "_reference")
+        for key in [one for one in given_elastic if not one.endswith(marks)]:
+            if f"{key}_source" not in given_elastic:
+                elastic_values[f"{key}_source"] = f"group:{row.plugin_id}"
+            if f"{key}_reference" not in given_elastic:
+                elastic_values.pop(f"{key}_reference", None)
         if "youngs_modulus" in given_elastic:
             notes = [
                 f"탄성계수: 묶음이 낸 값입니다({plugin.label})."
@@ -3974,6 +3997,23 @@ def _deck_for_card(
                 f"{slot.label}: {origin}{at}{f' — {reference}' if reference else ''}"
             )
 
+    # **점탄성의 잰 시간 범위 · 순간 탄성률 외삽**(2026-11-14, VOC 52) — 응력완화 Prony 의 E₀
+    # 는 첫 측정 앞을 외삽한 값이다. 덱의 순간 탄성률로 그대로 들어가므로 덱에 적는다.
+    viscous = cards.values_of(item.blocks.get("viscoelastic"))
+    earliest, latest = viscous.get("time_min_s"), viscous.get("time_max_s")
+    if isinstance(earliest, int | float) and isinstance(latest, int | float):
+        provenance.append(
+            f"점탄성: 시간 {earliest:.3g} ~ {latest:.3g} s 에서 잰 값 — 그 밖은 외삽"
+        )
+        ratio = viscous.get("instantaneous_ratio")
+        if (
+            isinstance(ratio, int | float)
+            and ratio > card_viscoelastic.INSTANTANEOUS_RATIO_WARN
+        ):
+            provenance.append(
+                f"순간 탄성률: t = {earliest:.3g} s 까지만 측정 — 그 앞은 외삽"
+                f"(E0 / E(t_min) = x{ratio:.2f})"
+            )
     if table.get("source") == "외삽":
         # **덱만 받은 사람이 알아야 한다.** 어디까지가 시험이고 어디부터가 식인지
         # 표만 봐서는 구별이 안 된다 — 점이 나란히 있을 뿐이다.
@@ -4009,7 +4049,13 @@ def _deck_for_card(
     # 문헌과 같은 1~4 척도, 카드가 자기 근거에서 산출한다.
     provenance.extend(card_tiers.summary_lines(item))
 
-    deck = _deck(item, name=export.sanitize_name(base), provenance=tuple(provenance))
+    # **한글만 있는 이름은 재료 번호로, 원래 이름은 머리말에**(2026-11-14, VOC 47) — 전에는
+    # 모두 「MATERIAL」 이 되어 원래 이름이 사라지고 파일 이름이 겹쳤다.
+    name = export.sanitize_name(base, fallback=material.code if material else "MATERIAL")
+    note = export.renamed_note(base, name)
+    if note:
+        provenance.insert(0, note)
+    deck = _deck(item, name=name, provenance=tuple(provenance))
     return deck if with_card is None else _paired(db, user, item, deck, with_card)
 
 

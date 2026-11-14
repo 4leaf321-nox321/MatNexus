@@ -86,6 +86,7 @@ import {
   insertionIndex,
   outOfOrder,
   vocabularyOf,
+  withStep,
 } from '@/modules/processing/flow'
 import type { Blocker, Carried, CarryKind, StepIO } from '@/modules/processing/flow'
 import { testsApi } from '@/modules/tests/api'
@@ -467,9 +468,7 @@ export function ProcessingPanel({
       if (current.some((step) => step.plugin === pluginId)) {
         return current.filter((step) => step.plugin !== pluginId)
       }
-      const at = insertionIndex(current, pluginId, byId)
-      const added = { plugin: pluginId, options: defaults(byId.get(pluginId)) }
-      return [...current.slice(0, at), added, ...current.slice(at)]
+      return withStep(current, pluginId, byId, defaults)
     })
   }
 

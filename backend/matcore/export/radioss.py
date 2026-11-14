@@ -345,7 +345,7 @@ def render_openradioss_viscoelastic(deck: Deck) -> Rendered:
     lines.append("# Neo-Hookean: equals linear viscoelasticity at small strain only.")
     if reference is not None:
         lines.append(
-            f"# Valid at {reference:.2f} K only - master curve reference temperature."
+            f"# Valid at {reference:.2f} K only - the temperature the Prony was fitted at."
         )
         notes.append(
             f"기준 온도 {reference - 273.15:.1f} °C 에서만 유효하다는 사실을 덱 주석에 "

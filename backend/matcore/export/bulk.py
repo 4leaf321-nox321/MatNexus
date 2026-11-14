@@ -470,7 +470,7 @@ def _reference_notes(deck: Deck, lines: list[str], notes: list[str]) -> None:
     reference = deck.number("viscoelastic", "reference_temperature_k")
     if reference is not None:
         lines.append(
-            f"$ Valid at {reference:.2f} K only - master curve reference temperature."
+            f"$ Valid at {reference:.2f} K only - the temperature the Prony was fitted at."
         )
         notes.append(
             f"기준 온도 {reference - 273.15:.1f} °C 에서만 유효하다는 사실을 덱 주석에 "

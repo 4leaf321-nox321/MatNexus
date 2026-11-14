@@ -21,6 +21,7 @@ from sqlalchemy.orm import Session
 from app.modules.tests import services as test_services
 from app.modules.tests.definitions import ensure_builtin_test_types
 from app.modules.tests.legacy_profiles import ensure_builtin_format_profiles
+from app.modules.tests.models import TestRun
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
 
@@ -154,6 +155,7 @@ def test_응력완화_곡선이_Prony_점탄성_카드와_덱이_된다(
         values["instantaneous_pa"]
     )
     assert blocks["elastic"]["values"]["poisson_ratio"] == 0.4
+    assert blocks["elastic"]["values"]["youngs_modulus_source"] == "group:relaxation.prony"
     assert blocks["viscoelastic"]["rows"]
     deck = client.get(
         f"/api/fitting/cards/{card.json()['id']}/export?format=abaqus_viscoelastic&units=si",
@@ -162,3 +164,27 @@ def test_응력완화_곡선이_Prony_점탄성_카드와_덱이_된다(
     assert deck.status_code == 200, deck.text
     assert "*VISCOELASTIC" in deck.text
     assert material_id
+    # **잰 시간 범위 · 맞춘 온도를 덱에**(2026-11-14, VOC 52) — 응력완화는 마스터커브가 아니다.
+    assert "점탄성: 시간 0.1 ~ 1e+04 s 에서 잰 값" in deck.text
+    assert "the temperature the Prony was fitted at" in deck.text
+    assert "master curve" not in deck.text
+
+
+def test_시험_온도가_비면_온도_채널의_중앙값으로_채우고_점검에_남긴다(
+    client: TestClient, db: Session, admin_headers: dict[str, str]
+) -> None:
+    """VOC 52(2026-11-14) — 조건이 비면 카드에 기준 온도가 안 서서 덱이 몇 도의 값인지
+    못 말했다."""
+    _, (run_id,) = _upload(
+        client,
+        db,
+        admin_headers,
+        "stress_relaxation",
+        "relaxation_standard.csv",
+        '{"held_strain": 0.005}',
+    )
+    run = db.get(TestRun, uuid.UUID(run_id))
+    assert run is not None
+    assert run.conditions["temperature"] == pytest.approx(296.15)
+    found = [one for one in run.checks if one["code"] == "condition_from_channel"]
+    assert len(found) == 1 and "23.0 °C" in found[0]["message"]

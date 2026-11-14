@@ -192,7 +192,10 @@ def sanitize_name(raw: str, *, fallback: str = "MATERIAL") -> str:
     """솔버가 읽을 수 있는 이름으로 만든다.
 
     한글 이름이 그대로 들어가면 솔버가 못 읽거나 말없이 잘라 버린다. 바꾼 사실은
-    카드 주석에 남는다 — 이름이 달라져 있으면 덱을 받은 사람이 혼란스럽다.
+    부르는 쪽이 `renamed_note` 로 덱 머리말에 남긴다 — 이름이 달라져 있으면 덱을 받은 사람이
+    혼란스럽다. **영문 · 숫자가 하나도 없으면 `fallback` 그대로**다 — 부르는 쪽이 재료 번호를
+    준다. 전에는 모두 「MATERIAL」 이 되어 원래 이름이 사라지고 파일 이름이 겹쳤다(2026-11-14,
+    VOC 47).
     """
     cleaned = re.sub(r"[^A-Za-z0-9_-]+", "_", raw).strip("_-")
     if not cleaned or not cleaned[0].isalpha():
@@ -204,6 +207,14 @@ def sanitize_name(raw: str, *, fallback: str = "MATERIAL") -> str:
             f"영문자로 시작하고 영문·숫자·밑줄·붙임표만 쓰는 이름을 카드에 지어 주세요."
         )
     return cleaned
+
+
+def renamed_note(raw: str, name: str) -> str | None:
+    """솔버 이름이 **글자를 잃었으면** 머리말에 남길 한 줄. ASCII 만 바뀌었으면(`.` → `_`)
+    없다 — 그것까지 적으면 모든 덱에 같은 줄이 붙는다."""
+    if raw == name or not re.search(r"[^\x00-\x7f]", raw):
+        return None
+    return f"덱 재료 이름 {name} — 원래 이름 「{raw}」(솔버가 못 읽는 글자를 바꿈)"
 
 
 def solver_id_from(value: str) -> int:
@@ -1160,7 +1171,7 @@ def render_abaqus_viscoelastic(deck: Deck) -> Rendered:
         celsius = reference - 273.15
         lines.append(f"** Valid at {reference:.2f} K ({celsius:.2f} C) only -")
         lines.append(
-            "**   master curve reference temperature. Add *TRS for other temperatures."
+            "**   the temperature the Prony was fitted at. Add *TRS for other temperatures."
         )
         notes.append(
             f"기준 온도 {celsius:.1f} °C 에서만 유효하다는 사실을 덱 주석에 적었습니다 — "
