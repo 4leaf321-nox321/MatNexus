@@ -40,6 +40,11 @@ export function ModulusTableSection({ testRunId }: { testRunId: string }) {
   const [selected, setSelected] = useState<ModulusTable | null>(null)
   const [frequency, setFrequency] = useState('1')
   const [label, setLabel] = useState('')
+  /**
+   * 표 여럿을 어떻게 평균하나(2026-11-14, VOC 48). 짝짓기(±0.5 K · 모든 시편에 짝)는 온도를 올리며
+   * 잰 시험이 거의 다 빠져 기본을 격자로 둔다 — 한 온도씩 잰 시험은 합집합.
+   */
+  const [average, setAverage] = useState<'grid' | 'union' | 'matched'>('grid')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<Error | null>(null)
   const [done, setDone] = useState<string | null>(null)
@@ -108,6 +113,8 @@ export function ModulusTableSection({ testRunId }: { testRunId: string }) {
       const card = await fittingApi.createDmaTemperature({
         modulus_table_ids: [table.id, ...picked],
         label: label.trim() || defaultLabel(table),
+        average,
+        grid_step_k: 1,
       })
       setDone(`카드 「${card.label}」 를 만들었습니다 — 재료의 CAE 카드 탭에 있습니다.`)
     } catch (caught) {
@@ -277,9 +284,26 @@ export function ModulusTableSection({ testRunId }: { testRunId: string }) {
                   </label>
                 ))}
                 <p className="text-muted-foreground text-xs">
-                  고르면 온도마다 평균한 카드가 됩니다. 모든 시편에 있는 온도(±0.5 K)만 남기고,
-                  줄마다 E′ 변동계수를 함께 둡니다.
+                  고르면 온도마다 평균한 카드가 됩니다. 줄마다 E′ 변동계수와 기여 시편 수를 함께
+                  둡니다.
                 </p>
+                <div className="space-y-1">
+                  <Label htmlFor="modulus-average" className="text-xs">
+                    평균 방식
+                  </Label>
+                  <select
+                    id="modulus-average"
+                    className="h-8 rounded border px-2 text-xs"
+                    value={average}
+                    onChange={(event) => setAverage(event.target.value as typeof average)}
+                  >
+                    <option value="grid">
+                      온도 격자(1 K) — 시편마다 잰 범위 안에서 log E′ 보간(온도를 올리며 잰 시험)
+                    </option>
+                    <option value="union">온도 모으기 — 한 온도씩 잰 시험(±0.5 K 를 같은 온도로)</option>
+                    <option value="matched">모든 시편에 있는 온도만(±0.5 K)</option>
+                  </select>
+                </div>
               </>
             )}
           </fieldset>

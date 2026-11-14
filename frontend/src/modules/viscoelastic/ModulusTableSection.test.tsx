@@ -82,6 +82,8 @@ describe('주파수 지정 온도별 E′ 표', () => {
       expect(createDmaTemperature).toHaveBeenCalledWith({
         modulus_table_ids: ['table-1'],
         label: '저장 탄성률 1 Hz',
+        average: 'grid',
+        grid_step_k: 1,
       })
     )
     expect(await screen.findByText(/카드 「저장 탄성률 1 Hz」 를 만들었습니다/)).toBeInTheDocument()
@@ -123,6 +125,9 @@ describe('주파수 지정 온도별 E′ 표', () => {
       expect(createDmaTemperature).toHaveBeenCalledWith({
         modulus_table_ids: ['table-1', 'table-2'],
         label: '저장 탄성률 1 Hz · 시편 2개 평균',
+        // 표 여럿이면 기본이 온도 격자 평균이다(2026-11-14, VOC 48).
+        average: 'grid',
+        grid_step_k: 1,
       })
     )
   })

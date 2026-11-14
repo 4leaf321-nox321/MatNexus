@@ -125,6 +125,9 @@ export default function TestRunDetailPage() {
   const item = run.data
   /** 장비 값과 우리 값을 같은 줄에. 짝이 있는 것이 위로 온다. */
   const pairs = useMemo(() => pairSummaries(item?.summary ?? []), [item?.summary])
+  /** 원본 탭 왼쪽 열(요약값 · 장비 시편 정보)에 그릴 것이 있나 — 없으면 곡선이 한 열을 다 쓴다. */
+  const hasSide =
+    !!item && (item.summary.length > 0 || Object.keys(item.source_metadata).length > 0)
   const pending = item ? isPending(item.status) : false
 
   // 읽는 중이면 스스로 따라간다 — 올린 직후 이 화면으로 오는 경우가 흔하다.
@@ -660,10 +663,15 @@ export default function TestRunDetailPage() {
                   양쪽 다 못 쓴다 — 안쪽은 `2xl`(1536) 부터 갈린다. 폭은
                   `minmax` 로 두어 요약값은 300~420 에 묶고 **남는 것은 전부
                   곡선**이 가져간다. */}
-              {/* **둘 다 늘어난다.** 왼쪽을 고정폭으로 묶으면 넓은 화면에서
-                  요약값 칸만 남고 곡선이 혼자 커진다 — 처리 탭과 같은 4:6 이다. */}
-              <div className="grid gap-6 2xl:grid-cols-[minmax(0,4fr)_minmax(0,6fr)] 2xl:items-start">
-                <div className="space-y-8 2xl:order-1">
+              {/* **왼쪽이 비면 한 열, 있으면 왼쪽은 300~420 px**(2026-11-14, VOC 41). 전에는
+                  내용과 상관없이 4:6 이라, 요약값이 짧은 굽힘 · 압축에서 40 % 가 비고 곡선은 남은
+                  폭의 60 % 만 썼다(사이드바까지 빼면 화면의 1/3). */}
+              <div
+                className={`grid gap-6 2xl:items-start ${
+                  hasSide ? '2xl:grid-cols-[minmax(300px,420px)_minmax(0,1fr)]' : ''
+                }`}
+              >
+                <div className={`order-2 space-y-8 2xl:order-1 ${hasSide ? '' : 'hidden'}`}>
                   {item && item.summary.length > 0 && (
                     <section className="mb-8">
                       <h2 className="mb-1 font-medium">요약값</h2>
@@ -761,7 +769,7 @@ export default function TestRunDetailPage() {
 
                 {/* **머리글이 맨 위를 차지한다.** `top-4` 로 두면 곡선 윗부분이
                     그 아래로 기어들어 축 라벨이 잘린다 — 머리글 높이만큼 내린다. */}
-                <div className="2xl:order-2 2xl:sticky 2xl:top-28">
+                <div className="order-1 2xl:order-2 2xl:sticky 2xl:top-28">
                   {item?.status === 'parsed' && (
                     <section className="mb-8">
                       <h2 className="mb-2 font-medium">곡선</h2>

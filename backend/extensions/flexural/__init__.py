@@ -179,7 +179,9 @@ register(
     kind="processing",
     label="토우 보정",
     applies_to=("flexural",),
-    params=toe_params(bending.STRAIN, bending.STRESS),
+    # 새로 깔면 토우 점을 접선값으로 — ASTM D790 부록 A1(2026-11-14, VOC 44). 옛 레시피는
+    # 그대로.
+    params=toe_params(bending.STRAIN, bending.STRESS, points_default="tangent"),
     makes_values=TOE_VALUES,
     # **정렬(20) 뒤 · 탄성률(25) 앞**(2026-11-14, VOC 44). 전에는 15 라 정렬을 켜면 늘 토우
     # 뒤로 들어가, 토우가 정렬 안 된 곡선 위에서 돌았다. 정렬이 없으면 화면이 앞에 깐다.

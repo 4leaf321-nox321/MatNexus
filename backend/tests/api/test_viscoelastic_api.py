@@ -1906,6 +1906,27 @@ class Test시편_평균_카드:
         assert body["source"]["modulus_table_ids"] == [first["id"], second["id"]]
         assert "평균" in body["source"]["notes"][0]
 
+        # **격자 · 합집합 평균**(2026-11-14, VOC 48) — 줄마다 기여 시편 수를 단다. 로그
+        # 평균이라 1 과 1.2 배의 평균은 √1.2 배다.
+        for method in ("grid", "union"):
+            other_card = client.post(
+                "/api/fitting/cards/dma-temperature",
+                json={
+                    "modulus_table_ids": [first["id"], second["id"]],
+                    "label": f"EPDM E′(T) {method}",
+                    "average": method,
+                    "grid_step_k": 1.0,
+                },
+                headers=admin_headers,
+            )
+            assert other_card.status_code == 201, (method, other_card.text)
+            made = other_card.json()["blocks"]["dma_temperature"]["rows"]
+            assert made and all(one["sample_count"] == 2 for one in made), method
+            if method == "union":
+                assert made[0]["storage_modulus"] == pytest.approx(
+                    first["rows"][0]["storage_pa"] * math.sqrt(1.2), rel=1e-6
+                )
+
         # 평균 카드가 든 **둘째** 표도 못 지운다 — 근거가 사라진다.
         refused = client.delete(
             f"/api/viscoelastic/modulus-tables/{second['id']}", headers=admin_headers

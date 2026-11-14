@@ -397,6 +397,61 @@ def test_토우_보정은_인장의_계산을_이_시험의_열로_쓴다() -> N
     )
 
 
+class Test토우_구간과_토우_점:
+    """VOC 44(2026-11-14) — 구간이 변형률뿐이라 토우가 긴 시편은 구간이 토우 안에 들었고,
+    옮기기만 해서 토우 점이 남아 탄성률이 낮게 나왔다(토우 0.9 % 시편에서 E 0.87 GPa, 참값
+    3 GPa)."""
+
+    @staticmethod
+    def run(
+        options: dict[str, Any], *, modulus: bool = True
+    ) -> tuple[dict[str, float], Frame]:
+        from matcore import processing
+
+        frame = _toe_curve("flexural_strain", "flexural_stress")
+        steps = [processing.Step("flexural.toe_compensation", options)]
+        if modulus:
+            steps.append(processing.Step("flexural.modulus", {"method": "chord"}))
+        out = processing.apply(steps, frame)
+        values = {one.key: one.value for stage in out.stages for one in stage.scalars}
+        return values, out.stages[0].frame
+
+    def test_변형률_구간이_토우_안이면_탄성률이_낮다(self) -> None:
+        values, _ = self.run({"minimum_strain": 0.001, "maximum_strain": 0.004})
+        assert values["flexural_modulus"] < 0.2e9  # 토우의 기울기(0.1 GPa)
+
+    def test_응력_구간과_접선값이면_참값이_나온다(self) -> None:
+        values, frame = self.run({"window": "stress", "toe_points": "tangent"})
+        assert values["toe_strain_offset"] == pytest.approx(0.019, rel=1e-3)
+        assert values["flexural_modulus"] == pytest.approx(2.0e9, rel=1e-3)
+        stress = frame.columns["flexural_stress"]
+        strain = frame.columns["flexural_strain"]
+        # 음의 변형률(시편이 닿기 전)은 0, 구간 앞의 토우 점은 직선 위.
+        assert np.all(stress[strain < 0] == 0.0)
+        inside = (strain > 0) & (strain < 0.001)
+        assert stress[inside] == pytest.approx(2.0e9 * strain[inside])
+
+    def test_토우_점_지우기는_점을_뺀다(self) -> None:
+        _, frame = self.run({"window": "stress", "toe_points": "remove"}, modulus=False)
+        assert float(np.min(frame.columns["flexural_strain"])) >= 0.0
+        assert len(frame.columns["flexural_strain"]) < 401
+
+    def test_옛_레시피는_옮기기만이고_굽힘은_새로_깔_때_접선값(self) -> None:
+        from matcore import registry
+
+        _, frame = self.run({"minimum_strain": 0.05, "maximum_strain": 0.1}, modulus=False)
+        before = _toe_curve("flexural_strain", "flexural_stress").columns["flexural_stress"]
+        assert np.array_equal(frame.columns["flexural_stress"], before)  # 응력 그대로
+        defaults = {
+            one.name: one.default for one in registry.get("flexural.toe_compensation").params
+        }
+        assert defaults["toe_points"] == "tangent"
+        tensile = {
+            one.name: one.default for one in registry.get("tensile.toe_compensation").params
+        }
+        assert tensile["toe_points"] == "shift"
+
+
 class Test구조_강성:
     """카드 부품용 구조 강성 블록(2026-10-20) — 강성은 **그 배치**의 값이라 배치와 함께 싣고,
     배치가 다른 시편끼리는 평균하지 않는다."""

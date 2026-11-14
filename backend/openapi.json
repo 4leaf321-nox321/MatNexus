@@ -13523,6 +13523,23 @@
       "DmaTemperatureCardSaveRequest": {
         "description": "온도별 저장 탄성률 카드 — 점탄성 탭의 **온도별 탄성률 표에서**(2026-10-22).\n\nv1.285.0 보고: DMA 온도별 E′ 를 잰 물성으로 넘길 길이 없었다. 표가 재료 · 방향은 체인을\n따라간다(표 → 시험 → 시편 → 시료 → 재료). **표 여럿이면 시편 평균이다** — 같은 재료 ·\n시험 종류 · 방향 · 주파수 · 잰 것(E/G)이고 시험 하나에 표 하나여야 한다.",
         "properties": {
+          "average": {
+            "default": "matched",
+            "enum": [
+              "matched",
+              "grid",
+              "union"
+            ],
+            "title": "Average",
+            "type": "string"
+          },
+          "grid_step_k": {
+            "default": 1.0,
+            "exclusiveMinimum": 0.0,
+            "maximum": 50.0,
+            "title": "Grid Step K",
+            "type": "number"
+          },
           "label": {
             "maxLength": 120,
             "minLength": 1,

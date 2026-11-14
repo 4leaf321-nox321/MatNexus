@@ -14258,6 +14258,17 @@ export interface components {
          *     시험 종류 · 방향 · 주파수 · 잰 것(E/G)이고 시험 하나에 표 하나여야 한다.
          */
         DmaTemperatureCardSaveRequest: {
+            /**
+             * Average
+             * @default matched
+             * @enum {string}
+             */
+            average: "matched" | "grid" | "union";
+            /**
+             * Grid Step K
+             * @default 1
+             */
+            grid_step_k: number;
             /** Label */
             label: string;
             /** Modulus Table Ids */

@@ -384,3 +384,56 @@ class Test시편_평균:
         assert [one.storage_pa for one in rows] == [1.0e9, 5.0e8]
         assert all(one.storage_cv is None and one.count == 1 for one in rows)
         assert notes == []
+
+
+class Test격자_합집합_평균:
+    """VOC 48(2026-11-14) — 짝짓기(±0.5 K · 모든 시편에 짝)는 온도를 올리며 잰 시험이 거의 다
+    빠지고(간격 1.5 K 이상이면 0줄), 한 온도씩 잰 시험은 한 표로 못 합쳤다."""
+
+    @staticmethod
+    def _ramp(start: float, step: float, count: int) -> list[Any]:
+        from matcore.viscoelastic import TableRow
+
+        # log E′ 가 온도에 선형인 곡선 — 보간이 정확해야 하는 모양이다.
+        return [
+            TableRow(
+                start + i * step, 1e9 * 10 ** (-(start + i * step - 300.0) / 50.0), None, None
+            )
+            for i in range(count)
+        ]
+
+    def test_짝짓기로는_0줄인_램프도_격자로는_평균된다(self) -> None:
+        from matcore.viscoelastic import average_grid, average_tables
+
+        tables = [self._ramp(300.0, 1.5, 40), self._ramp(300.7, 1.5, 40)]
+        matched, _ = average_tables(tables)
+        assert matched == []
+        rows, notes = average_grid(tables, step_k=1.0)
+        assert rows
+        at = next(one for one in rows if abs(one.temperature_k - 320.0) < 1e-9)
+        # 두 시편 모두 같은 곡선 — 로그 보간 평균이 그 곡선 값이다.
+        assert at.storage_pa == pytest.approx(1e9 * 10 ** (-20.0 / 50.0), rel=1e-9)
+        assert at.count == 2
+        assert any("외삽 없음" in one for one in notes)
+
+    def test_잰_범위_밖으로_늘이지_않고_한_시편_줄은_말한다(self) -> None:
+        from matcore.viscoelastic import average_grid
+
+        rows, notes = average_grid([self._ramp(300.0, 1.0, 11), self._ramp(305.0, 1.0, 11)])
+        first = rows[0]
+        assert first.temperature_k == pytest.approx(300.0) and first.count == 1
+        assert max(one.count for one in rows) == 2
+        assert any("2개 미만" in one for one in notes)
+
+    def test_한_온도씩_잰_시험을_합집합으로_모은다(self) -> None:
+        from matcore.viscoelastic import TableRow, average_union
+
+        rows, _ = average_union(
+            [
+                [TableRow(298.15, 2.0e9, None, None), TableRow(323.15, 1.0e9, None, None)],
+                [TableRow(298.40, 8.0e9, None, None), TableRow(348.15, 5.0e8, None, None)],
+            ]
+        )
+        assert [one.count for one in rows] == [2, 1, 1]
+        # 로그 평균(기하 평균) — 2 GPa 와 8 GPa 의 평균은 4 GPa.
+        assert rows[0].storage_pa == pytest.approx(4.0e9)

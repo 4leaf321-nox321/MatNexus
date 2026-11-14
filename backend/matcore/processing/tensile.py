@@ -234,14 +234,39 @@ TOE_MIN_POINTS = 5
 TOE_MIN_R_SQUARED = 0.995
 
 
-def toe_params(strain: str, stress: str) -> tuple[ParamSpec, ...]:
+#: 토우 점을 어떻게 하나(2026-11-14, VOC 44) — ASTM D790 부록 A1 은 토우를 접선으로 바꾼다.
+TOE_POINTS = {
+    "shift": "옮기기만",
+    "tangent": "토우 점을 접선값으로 (ASTM D790 A1)",
+    "remove": "토우 점 지우기",
+}
+
+
+def toe_params(
+    strain: str, stress: str, *, points_default: str = "shift"
+) -> tuple[ParamSpec, ...]:
     """토우 보정의 입력 — **열 이름만 시험마다 다르다**(2026-10-20).
 
     굽힘(`flexural_strain`) · 압축(`compressive_strain`)도 같은 계산을 쓴다(사용자 보고: 압축
     처리에 토우 보정이 없다 — 기존 단계 재사용). 계산은 하나이고, 확장이 자기 열 이름으로
     같은 함수를 등록한다 — 두 벌이면 한쪽만 고쳐진다.
+
+    `points_default` 는 **화면이 새로 깔 때의 값**이다(굽힘은 접선값 — D790 A1). 옵션에 그 칸이
+    없는 옛 레시피는 지금처럼 「옮기기만」 으로 돈다 — 저장된 결과가 조용히 바뀌지 않게.
     """
     return (
+        ParamSpec(
+            name="window",
+            label="구간 기준",
+            type="choice",
+            default="strain",
+            choices=("strain", "stress"),
+            choice_labels={"strain": "변형률", "stress": "최대 응력의 비율"},
+            help=(
+                "변형률로 잡으면 토우가 긴 시편에서 구간이 토우 안에 들어갑니다 — 그때는 최대 "
+                "응력의 비율로 잡으세요(2026-11-14)."
+            ),
+        ),
         ParamSpec(
             name="minimum_strain",
             dimension="strain",
@@ -249,6 +274,7 @@ def toe_params(strain: str, stress: str) -> tuple[ParamSpec, ...]:
             type="float",
             default=0.001,
             unit="1",
+            when={"window": ("strain",)},
             help="토우가 끝난 뒤의 직선 구간을 잡습니다. 곡선을 보고 정하세요.",
         ),
         ParamSpec(
@@ -258,7 +284,38 @@ def toe_params(strain: str, stress: str) -> tuple[ParamSpec, ...]:
             type="float",
             default=0.004,
             unit="1",
+            when={"window": ("strain",)},
             help="**공칭 변형률**입니다. 토우가 끝난 뒤의 직선 구간을 잡습니다.",
+        ),
+        ParamSpec(
+            name="band_low",
+            label="응력 띠 아래끝",
+            type="float",
+            default=0.1,
+            unit="1",
+            when={"window": ("stress",)},
+            help="최대 응력에 대한 비율 — 오르는 가지에서 처음 닿은 점부터.",
+        ),
+        ParamSpec(
+            name="band_high",
+            label="응력 띠 위끝",
+            type="float",
+            default=0.4,
+            unit="1",
+            when={"window": ("stress",)},
+            help="최대 응력에 대한 비율 — 처음 닿은 점까지.",
+        ),
+        ParamSpec(
+            name="toe_points",
+            label="토우 점",
+            type="choice",
+            default=points_default,
+            choices=tuple(TOE_POINTS),
+            choice_labels=dict(TOE_POINTS),
+            help=(
+                "옮긴 뒤 구간 앞의 점(토우)을 어떻게 할지. 남겨 두면 탄성률이 토우만큼 낮게 "
+                "나옵니다 — 접선값으로 바꾸면 그 점들이 구간의 직선 위로 갑니다."
+            ),
         ),
         ParamSpec(name="strain", label="변형률 열", type="str", role="column", default=strain),
         ParamSpec(name="stress", label="응력 열", type="str", role="column", default=stress),
@@ -362,15 +419,25 @@ def toe_compensation(frame: Frame, options: dict[str, Any]) -> StepResult:
     빠뜨리면 보정을 넣었는데 아무 일도 안 일어난다 — 이 도메인에서 가장 나쁜
     실패다. 전/후 비교는 파이프라인이 단계마다의 `Frame` 을 들고 있어서 그대로 된다.
     """
-    strain, stress, strain_key, _stress_key = _pair(frame, options)
+    strain, stress, strain_key, stress_key = _pair(frame, options)
     require_increasing(strain, what=f"'{strain_key}'")
 
-    low = option_float(options, "minimum_strain", 0.001)
-    high = option_float(options, "maximum_strain", 0.004)
-    if low >= high:
-        raise ProcessingError(f"구간 시작({low})이 끝({high}) 이상입니다.")
-
-    mask = (strain >= low) & (strain <= high)
+    window = str(options.get("window") or "strain")
+    if window == "stress":
+        mask, low, high = _toe_stress_band(strain, stress, options)
+    elif window == "strain":
+        low = option_float(options, "minimum_strain", 0.001)
+        high = option_float(options, "maximum_strain", 0.004)
+        if low >= high:
+            raise ProcessingError(f"구간 시작({low})이 끝({high}) 이상입니다.")
+        mask = (strain >= low) & (strain <= high)
+    else:
+        raise ProcessingError(f"구간 기준은 strain · stress 중 하나입니다: {window}")
+    # **옛 레시피는 옮기기만**(2026-11-14) — 칸이 없으면 지금처럼. 새로 깔 때의 값은 등록이
+    # 정한다.
+    points = str(options.get("toe_points") or "shift")
+    if points not in TOE_POINTS:
+        raise ProcessingError(f"토우 점은 {', '.join(TOE_POINTS)} 중 하나입니다: {points}")
     count = int(np.sum(mask))
     if count < TOE_MIN_POINTS:
         raise ProcessingError(
@@ -413,11 +480,51 @@ def toe_compensation(frame: Frame, options: dict[str, Any]) -> StepResult:
             f"보정량이 음수({offset:.6g})입니다 — 원점을 오른쪽으로 옮깁니다. "
             f"토우 보정이 기대하는 방향이 아니니 구간이 맞는지 확인하세요."
         )
-    return StepResult(
-        frame.with_columns({strain_key: strain - offset}, {strain_key: "1"}),
-        notes=tuple(notes),
-        scalars=tuple(scalars),
-    )
+    shifted = strain - offset
+    out = frame.with_columns({strain_key: shifted}, {strain_key: "1"})
+    # **토우 점**(2026-11-14, VOC 44) — 옮기기만 하면 구간 앞의 눕은 점이 남아 그 뒤 탄성률 ·
+    # 항복이 토우를 함께 본다(굽힘 토우 0.9 % 시편에서 E 0.87 GPa, 참값 3 GPa).
+    start = float(np.min(shifted[mask]))
+    toe = shifted < start
+    if points == "tangent" and np.any(toe):
+        replaced = np.where(toe, np.maximum(slope * shifted, 0.0), stress)
+        out = out.with_columns(
+            {stress_key: replaced}, {stress_key: frame.units.get(stress_key, "Pa")}
+        )
+        notes.append(
+            f"토우 점 {int(np.sum(toe))}개의 응력을 구간 직선의 값으로 바꿨습니다"
+            "(ASTM D790 A1) — "
+            "그 앞(음의 변형률)은 0 입니다."
+        )
+    elif points == "remove" and np.any(toe):
+        out = out.select(~toe)
+        notes.append(
+            f"토우 점 {int(np.sum(toe))}개를 지웠습니다 — 곡선은 구간 시작에서 시작합니다."
+        )
+    return StepResult(out, notes=tuple(notes), scalars=tuple(scalars))
+
+
+def _toe_stress_band(
+    strain: np.ndarray, stress: np.ndarray, options: dict[str, Any]
+) -> tuple[np.ndarray, float, float]:
+    """최대 응력의 a ~ b 비율 — 오르는 가지에서 **처음 닿은 점 사이 전부**(굽힘 응력 띠와 같은
+    규칙, `matcore.slopes`). 토우가 긴 시편에서 변형률 구간이 토우 안에 들던 것(VOC 44)."""
+    band_low = option_float(options, "band_low", 0.1)
+    band_high = option_float(options, "band_high", 0.4)
+    if not 0 <= band_low < band_high <= 1:
+        raise ProcessingError(
+            f"응력 띠는 0~1 사이 비율이어야 합니다: {band_low} ~ {band_high}"
+        )
+    end = int(np.argmax(stress)) + 1
+    peak = float(stress[end - 1])
+    if not peak > 0:
+        raise ProcessingError("최대 응력이 0 이하라 응력 띠를 정할 수 없습니다.")
+    rising = stress[:end]
+    first = int(np.flatnonzero(rising >= band_low * peak)[0])
+    last = int(np.flatnonzero(rising >= band_high * peak)[0])
+    mask = np.zeros(len(strain), dtype=bool)
+    mask[first : last + 1] = True
+    return mask, float(strain[first]), float(strain[last])
 
 
 #: `auto` 가 볼 응력 띠 — **그 곡선 자신의 최대응력에 대한 비율.**

@@ -1116,6 +1116,12 @@ class DmaTemperatureCardSaveRequest(BaseModel):
     poisson_ratio: float | None = Field(default=None, gt=0, lt=0.5)
     """전단(G′)으로 잰 표를 E 로 옮길 때만 쓴다. 비우면 재료에서 물려받는다."""
     note: str | None = None
+    average: Literal["matched", "grid", "union"] = "matched"
+    """표 여럿을 어떻게 평균하나(2026-11-14, VOC 48). `matched` 모든 시편에 짝(±0.5 K)이 있는
+    온도만(지금), `grid` 공통 온도 격자에서 log E′ 보간 평균(온도를 올리며 잰 시험), `union`
+    시편마다 잰 온도를 모두 모은 표(한 온도씩 잰 시험)."""
+    grid_step_k: float = Field(default=1.0, gt=0, le=50)
+    """`grid` 의 격자 간격(K)."""
 
 
 class PropertyCardUpdateRequest(BaseModel):

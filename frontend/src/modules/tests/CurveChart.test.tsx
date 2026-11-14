@@ -416,6 +416,21 @@ describe('영역 확대 · 이동 (2026-10-20)', () => {
     expect(screen.queryByRole('button', { name: '전체 보기' })).toBeNull()
   })
 
+  it('오른쪽 버튼으로 끌면 「영역 확대」 모드에서도 옮기고, 판 위 메뉴는 막는다', () => {
+    // VOC 41(2026-11-14) — 확대한 채 모드 단추를 오가지 않고 옮기게.
+    const { container } = render(<CurveChart points={MEAN} xLabel="변형률" yLabel="응력" />)
+    const svg = sized(container)
+    dragOn(svg, [200, 50], [400, 300])
+    const [before, end] = xRange()
+    fireEvent.mouseDown(svg, { button: 2, clientX: 400, clientY: 200 })
+    fireEvent.mouseMove(svg, { clientX: 500, clientY: 200 })
+    fireEvent.mouseUp(svg, { button: 2, clientX: 500, clientY: 200 })
+    expect(xRange()[0]).toBeCloseTo(before - (100 / 672) * (end - before), 2)
+    const menu = new MouseEvent('contextmenu', { bubbles: true, cancelable: true })
+    svg.dispatchEvent(menu)
+    expect(menu.defaultPrevented).toBe(true)
+  })
+
   it('Shift+휠은 가로만 당긴다', () => {
     const { container } = render(<CurveChart points={MEAN} xLabel="변형률" yLabel="응력" />)
     fireEvent.wheel(sized(container), { deltaY: -100, shiftKey: true, clientX: 400, clientY: 200 })

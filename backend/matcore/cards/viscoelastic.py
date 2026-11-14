@@ -267,6 +267,13 @@ DMA_TEMPERATURE = register_block(
                 si_unit="1",
                 help="시편 여럿을 평균한 카드에서만 — 그 온도 E′ 의 표준편차 ÷ 평균.",
             ),
+            Produced(
+                key="sample_count",
+                label="시편 수",
+                si_unit="1",
+                help="그 온도에 기여한 시편 수(2026-11-14) — 격자 · 합집합 평균에서 줄마다 "
+                "다르다.",
+            ),
         ),
         order=47,
         kind_priority=6,

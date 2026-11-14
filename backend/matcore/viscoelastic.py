@@ -37,7 +37,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 import numpy as np
@@ -923,3 +923,137 @@ def average_tables(
     if extra:
         notes.append(f"다른 시편의 줄 중 모든 시편과 짝이 맞지 않은 {extra}개도 뺐습니다.")
     return rows, notes
+
+
+#: 격자 평균의 기본 간격(K) — 2026-11-14, VOC 48.
+GRID_STEP_K = 1.0
+#: 합집합에서 같은 온도로 보는 폭(K).
+UNION_MATCH_K = 0.5
+#: 평균하는 방식 — `matched`(지금 · 모든 시편에 짝이 있는 온도만) · `grid` · `union`.
+AVERAGE_METHODS = ("matched", "grid", "union")
+
+
+def _log_mean(values: Sequence[float]) -> float:
+    """로그 평균(기하 평균). E′ 는 전이 구간에서 몇 자릿수가 바뀌어, 그냥 평균하면 큰 값 쪽으로
+    쏠리고 전이가 넓어진다."""
+    return float(np.exp(np.mean(np.log(np.asarray(values, dtype=float)))))
+
+
+def _merged(temperature: float, bunch: Sequence[TableRow]) -> AveragedRow:
+    storage = [one.storage_pa for one in bunch]
+    losses = [one.loss_pa for one in bunch if one.loss_pa is not None and one.loss_pa > 0]
+    loss = _log_mean(losses) if len(losses) == len(bunch) else None
+    mean_storage = _log_mean(storage)
+    return AveragedRow(
+        temperature_k=temperature,
+        storage_pa=mean_storage,
+        loss_pa=loss,
+        tan_delta=loss / mean_storage if loss is not None else None,
+        storage_cv=(
+            float(np.std(storage, ddof=1) / np.mean(storage)) if len(bunch) > 1 else None
+        ),
+        count=len(bunch),
+    )
+
+
+def _thin_rows_note(rows: Sequence[AveragedRow], tables: int) -> list[str]:
+    thin = [one for one in rows if one.count < 2]
+    if tables < 2 or not thin:
+        return []
+    return [
+        f"기여 시편이 2개 미만인 온도 {len(thin)}개가 있습니다 — 그 줄은 한 시편의 값입니다"
+        "(줄마다 「시편 수」 를 보세요)."
+    ]
+
+
+def average_grid(
+    tables: Sequence[Sequence[TableRow]], *, step_k: float = GRID_STEP_K
+) -> tuple[list[AveragedRow], list[str]]:
+    """**공통 온도 격자**에서 평균한다(2026-11-14, VOC 48). `(줄, 메모)`.
+
+    시편마다 **자기가 잰 온도 범위 안에서만** log E′ · log E″ 를 선형 보간하고(잰 범위 밖으로
+    늘이지 않는다), 격자 온도마다 기여한 시편으로 로그 평균한다. 온도를 올리며 잰 시험은
+    시편마다 점이 찍힌 온도가 조금씩 달라 짝짓기(`average_tables`)로는 거의 다 빠졌다(간격 1.5
+    K 이상이면 0줄). 줄마다 기여 시편 수(`count`)를 단다.
+    """
+    if not tables:
+        raise ViscoelasticError("평균할 표가 없습니다.")
+    if not step_k > 0:
+        raise ViscoelasticError("격자 간격은 0 보다 커야 합니다.")
+    usable = [
+        sorted((row for row in one if row.storage_pa > 0), key=lambda row: row.temperature_k)
+        for one in tables
+    ]
+    usable = [one for one in usable if len(one) >= 2]
+    if not usable:
+        raise ViscoelasticError("보간할 표가 없습니다 — 표마다 온도가 둘 이상이어야 합니다.")
+    low = min(one[0].temperature_k for one in usable)
+    high = max(one[-1].temperature_k for one in usable)
+    grid = np.arange(np.ceil(low / step_k) * step_k, high + 1e-9, step_k)
+    rows: list[AveragedRow] = []
+    for temperature in grid:
+        bunch: list[TableRow] = []
+        for table in usable:
+            xs = np.array([row.temperature_k for row in table])
+            if not xs[0] <= temperature <= xs[-1]:
+                continue  # 이 시편이 안 잰 온도 — 늘이지 않는다
+            storage = float(
+                np.exp(np.interp(temperature, xs, np.log([r.storage_pa for r in table])))
+            )
+            losses = [
+                row.loss_pa for row in table if row.loss_pa is not None and row.loss_pa > 0
+            ]
+            loss = (
+                float(np.exp(np.interp(temperature, xs, np.log(losses))))
+                if len(losses) == len(table)
+                else None
+            )
+            bunch.append(_row(float(temperature), storage, loss))
+        if bunch:
+            rows.append(_merged(float(temperature), bunch))
+    notes = [
+        f"{step_k:g} K 격자에서 시편마다 잰 범위 안에서만 log E′ 를 보간해 평균했습니다"
+        "(로그 평균 · 범위 밖 외삽 없음)."
+    ]
+    return rows, [*notes, *_thin_rows_note(rows, len(tables))]
+
+
+def average_union(
+    tables: Sequence[Sequence[TableRow]], *, match_k: float = UNION_MATCH_K
+) -> tuple[list[AveragedRow], list[str]]:
+    """시편마다 잰 온도를 **모두 모은 표**(2026-11-14, VOC 48). `(줄, 메모)`.
+
+    한 온도씩 잰 시험(25 · 50 · 75 °C 를 시편마다 따로)은 짝짓기로는 한 표로 못 합쳤다. 온도
+    차례로 늘어놓고 ±`match_k` 안의 줄을 같은 온도로 보아 로그 평균한다. 줄마다 기여 시편 수를
+    단다.
+    """
+    if not tables:
+        raise ViscoelasticError("평균할 표가 없습니다.")
+    pooled = sorted(
+        (
+            (row.temperature_k, index, row)
+            for index, one in enumerate(tables)
+            for row in one
+            if row.storage_pa > 0
+        ),
+        key=lambda one: one[0],
+    )
+    rows: list[AveragedRow] = []
+    bunch: list[tuple[float, int, TableRow]] = []
+
+    def flush() -> None:
+        if not bunch:
+            return
+        merged = _merged(float(np.mean([one[0] for one in bunch])), [one[2] for one in bunch])
+        rows.append(replace(merged, count=len({one[1] for one in bunch})))
+        bunch.clear()
+
+    for item in pooled:
+        if bunch and item[0] - bunch[0][0] > match_k:
+            flush()
+        bunch.append(item)
+    flush()
+    notes = [
+        f"시편마다 잰 온도를 모두 모아 ±{match_k:g} K 안을 같은 온도로 보고 로그 평균했습니다."
+    ]
+    return rows, [*notes, *_thin_rows_note(rows, len(tables))]

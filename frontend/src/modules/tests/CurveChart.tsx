@@ -503,7 +503,8 @@ export function CurveChart({
       <div className="text-muted-foreground mb-1 flex flex-wrap items-center gap-2 px-1 text-xs">
         <span title="Shift+휠은 가로만 확대합니다. 두 번 누르면 전체 보기로 돌아갑니다.">
           휠로 확대 ·{' '}
-          {tool === 'zoom' ? '끌어서 영역 확대(옆으로만 끌면 가로만)' : '끌어서 이동'}
+          {tool === 'zoom' ? '끌어서 영역 확대(옆으로만 끌면 가로만)' : '끌어서 이동'} · 오른쪽
+          버튼으로 끌어 이동
         </span>
         {/* **끌기가 하는 일을 고른다.** 영역 확대와 이동은 같은 손짓이라 한쪽만 줄 수 있다. */}
         <span className="inline-flex items-center gap-1" role="group" aria-label="끌기">
@@ -575,7 +576,14 @@ export function CurveChart({
           // 판 밖에서 놓으면 놓은 줄 모른다 — 고르던 것은 버린다.
           setPick(null)
         }}
+        // **오른쪽 버튼으로 끌면 늘 옮긴다**(2026-11-14, VOC 41) — 확대한 채 모드 단추를 오가지 않게.
+        // 판 위에서는 브라우저 메뉴를 막는다(판 밖은 그대로).
+        onContextMenu={(event) => event.preventDefault()}
         onMouseDown={(event) => {
+          if (event.button === 2) {
+            if (zoomed) drag.current = { x: event.clientX, y: event.clientY, box: scale.box }
+            return
+          }
           if (event.button !== 0) return
           if (tool === 'zoom') {
             const rect = event.currentTarget.getBoundingClientRect()

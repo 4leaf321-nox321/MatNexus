@@ -2487,9 +2487,21 @@ def create_dma_temperature_card(
             f"전단(G′)으로 잰 값을 E = 2(1+ν)G 로 옮겼습니다(ν = {poisson.value:g}, "
             f"{poisson.detail or '입력'})."
         )
-    averaged, average_notes = viscoelastic.average_tables(
-        [_table_rows(table) for table, *_ in chain]
-    )
+    tables = [_table_rows(table) for table, *_ in chain]
+    if payload.average == "grid" and len(chain) > 1:
+        averaged, average_notes = viscoelastic.average_grid(tables, step_k=payload.grid_step_k)
+    elif payload.average == "union" and len(chain) > 1:
+        averaged, average_notes = viscoelastic.average_union(tables)
+    else:
+        averaged, average_notes = viscoelastic.average_tables(tables)
+    # **로트가 섞이면 말한다**(2026-11-14, VOC 48) — 막지 않는다. 운영 메모: 「일부 시험이 다른
+    # 묶음일 수 있음」.
+    lots = {sample.id for *_, sample in chain}
+    if len(lots) > 1:
+        average_notes = [
+            *average_notes,
+            f"시료(로트) {len(lots)}개의 시편을 평균했습니다 — 로트가 섞였는지 확인하세요.",
+        ]
     if not averaged:
         raise AppError(
             "MNX-FITTING-0053",
@@ -2504,6 +2516,7 @@ def create_dma_temperature_card(
             **({"tan_delta": one.tan_delta} if one.tan_delta is not None else {}),
             # 변동계수는 배수에 무관하다 — G′ 를 E 로 옮겨도 그대로다.
             **({"storage_cv": one.storage_cv} if one.storage_cv is not None else {}),
+            **({"sample_count": float(one.count)} if len(chain) > 1 else {}),
         }
         for one in averaged
     ]

@@ -8,7 +8,7 @@
  * 화면을 덮는 것에는 **늘 손쉬운 출구**가 있어야 한다 — 못 걷으면 갇힌 것처럼 느낀다.
  */
 
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -131,5 +131,40 @@ describe('주소로 탭을 연다', () => {
       'aria-selected',
       'true'
     )
+  })
+})
+
+describe('원본 탭 배치', () => {
+  // VOC 41(2026-11-14) — 내용과 상관없이 4:6 이라 왼쪽이 비어도 곡선이 60 % 만 썼다.
+  function grid(container: HTMLElement): HTMLElement {
+    // 원본 탭 안쪽의 그리드 — 바깥(사이드 · 본문)이 아니다.
+    return container.querySelector('[class~="2xl:items-start"]') as HTMLElement
+  }
+
+  it('왼쪽에 그릴 것이 없으면 곡선이 한 열을 다 쓴다', async () => {
+    const { container } = render(
+      <MemoryRouter>
+        <TestRunDetailPage />
+      </MemoryRouter>
+    )
+    await screen.findByRole('tab', { name: '원본' })
+    await waitFor(() => expect(grid(container)).not.toBeNull())
+    expect(grid(container).className).not.toContain('grid-cols')
+  })
+
+  it('요약값이 있으면 왼쪽은 300~420 px 에 묶는다', async () => {
+    run.mockResolvedValue({
+      ...DETAIL,
+      summary: [
+        { key: 'tensile_strength', label: '인장강도', value: 3.1e8, si_unit: 'Pa', source: 'instrument' },
+      ],
+    })
+    const { container } = render(
+      <MemoryRouter>
+        <TestRunDetailPage />
+      </MemoryRouter>
+    )
+    expect(await screen.findByText('요약값')).toBeInTheDocument()
+    expect(grid(container).className).toContain('minmax(300px,420px)')
   })
 })
