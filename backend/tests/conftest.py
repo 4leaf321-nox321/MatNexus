@@ -169,9 +169,10 @@ def _material_thickness_in_tests_is_not_a_unit_mistake(
     """
     if request.node.get_closest_marker("dimension_magnitude"):
         return
-    from app.modules.tests import services as test_services
+    # 판정 하나를 끈다 — 시험 점검과 시편 치수 화면이 같이 쓴다(`magnitude_gaps`).
+    from app.shared import specimen_size
 
-    monkeypatch.setattr(test_services, "_magnitude_mismatch", lambda db, run: [])
+    monkeypatch.setattr(specimen_size, "magnitude_gaps", lambda sizes: [])
 
 
 @pytest.fixture(scope="session")

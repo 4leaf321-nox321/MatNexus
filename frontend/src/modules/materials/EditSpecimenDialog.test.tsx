@@ -145,6 +145,69 @@ describe('시편 치수', () => {
     expect(saveDimensions.mock.calls[0][1].gauge_length).toBeCloseTo(0.0498, 10)
   })
 
+  it('단위가 의심되면 저장 뒤에도 창을 닫지 않고 그 경고를 비율 경고와 따로 보인다', async () => {
+    // 2026-11-14(VOC 41c) — 두께 30 µm 를 넣고 저장하면 창이 닫혀 경고를 못 봤고, 다시 열면
+    // 「규격 비율 위반 — 보고서에 적으라」 상자에 섞여 고칠 일로 안 읽혔다.
+    const saved = vi.fn()
+    saveDimensions.mockResolvedValue({
+      fields: [],
+      area: null,
+      warnings: [
+        {
+          condition: '두께 — 출처마다 자릿수가 다름(시편 0.03 mm · 규격 공칭 1 mm)',
+          actual: 33.33,
+          help: '단위를 확인하세요.',
+          kind: 'magnitude',
+        },
+      ],
+    })
+    const user = userEvent.setup()
+    render(<EditSpecimenDialog specimen={SPECIMEN} open onClose={() => {}} onSaved={saved} />)
+    await screen.findByLabelText(/직경/)
+    await user.click(screen.getByRole('button', { name: '저장' }))
+    expect(await screen.findByText(/단위를 확인하세요\. 같은 치수가/)).toBeInTheDocument()
+    expect(screen.getByText(/33\.3배/)).toBeInTheDocument()
+    expect(screen.queryByText(/규격이 요구하는 비율을 벗어났습니다/)).toBeNull()
+    expect(saved).not.toHaveBeenCalled()
+    await user.click(screen.getByRole('button', { name: '닫기' }))
+    expect(saved).toHaveBeenCalled()
+  })
+
+  it('경고와 함께 저장한 뒤에는 저장한 것을 두고 「저장하면 …」 을 또 말하지 않는다', async () => {
+    // 2026-11-14 검토 — 창을 닫기 전까지 `specimen` 은 옛 값이라, 방향을 바꿔 저장해도
+    // 「저장하면 이름과 번호가 다시 매겨집니다」 가 남았다. 더 고친 뒤에도 「저장했습니다」 였다.
+    const saved = vi.fn()
+    saveDimensions.mockResolvedValue({
+      fields: [],
+      area: null,
+      warnings: [
+        {
+          condition: '두께 — 출처마다 자릿수가 다름(시편 0.001 mm · 재료 두께 1 mm)',
+          actual: 1000,
+          help: null,
+          kind: 'magnitude',
+        },
+      ],
+    })
+    const user = userEvent.setup()
+    render(<EditSpecimenDialog specimen={SPECIMEN} open onClose={() => {}} onSaved={saved} />)
+    await screen.findByLabelText(/직경/)
+    await user.click(screen.getByRole('button', { name: 'TD' }))
+    expect(screen.getByText(/이름과 번호가 다시 매겨집니다/)).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '저장' }))
+
+    expect(await screen.findByText(/저장했습니다 — 단위를 확인하세요/)).toBeInTheDocument()
+    expect(screen.getByText(/1000배/)).toBeInTheDocument()
+    expect(screen.queryByText(/e\+3/)).toBeNull()
+    expect(screen.queryByText(/이름과 번호가 다시 매겨집니다/)).toBeNull()
+
+    await user.type(screen.getByLabelText('메모'), '다시 잼')
+    expect(screen.getByText(/단위를 확인하세요/)).toBeInTheDocument()
+    expect(screen.queryByText(/저장했습니다/)).toBeNull()
+    await user.click(screen.getByRole('button', { name: '닫기' }))
+    expect(saved).toHaveBeenCalled()
+  })
+
   it('단면적을 못 내면 이유를 말한다', async () => {
     // **처리 화면에서 만나면 어디를 채울지 모른 채 되돌아온다.**
     dimensions.mockResolvedValue({

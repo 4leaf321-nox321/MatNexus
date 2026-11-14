@@ -74,6 +74,19 @@ function placeholderOf(field: SpecimenSize): string {
   return ''
 }
 
+/** 출처끼리의 배수. 1000배가 「1.00e+3배」 로 찍히지 않게 100배부터는 정수로 적는다. */
+function ratioText(ratio: number): string {
+  return ratio >= 100 ? String(Math.round(ratio)) : ratio.toPrecision(3)
+}
+
+/** 저장한 순간의 입력 — 그 뒤에 고쳤는지 보려고 든다. */
+interface SavedInputs {
+  orientation: string
+  standard: string
+  note: string
+  measured: Record<string, string>
+}
+
 export function EditSpecimenDialog({ specimen, open, onClose, onSaved }: Props) {
   const [standard, setStandard] = useState(specimen.standard ?? '')
   const [note, setNote] = useState(specimen.note ?? '')
@@ -86,6 +99,13 @@ export function EditSpecimenDialog({ specimen, open, onClose, onSaved }: Props) 
   const [measured, setMeasured] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState(false)
   const [failure, setFailure] = useState<string | null>(null)
+  /**
+   * 저장은 됐는데 단위를 확인할 것이 있다(2026-11-14) — 창을 닫지 않고 그 경고를 바로 보인다.
+   * 닫을 때 저장된 것으로 알린다(`onSaved`). **저장한 입력을 든다** — 그 뒤에 더 고치면
+   * 「저장했습니다」 는 거짓이 되고, 「저장하면 …」 안내는 이미 저장한 것을 두고 또 말한다.
+   */
+  const [savedAs, setSavedAs] = useState<SavedInputs | null>(null)
+  const savedWithWarning = savedAs !== null
 
   useEffect(() => {
     if (!open) return
@@ -93,6 +113,7 @@ export function EditSpecimenDialog({ specimen, open, onClose, onSaved }: Props) 
     setNote(specimen.note ?? '')
     setOrientation(specimen.orientation)
     setFailure(null)
+    setSavedAs(null)
     // **앞에 연 시편의 칸을 들고 있지 않는다**(2026-10-04) — 새 값이 오기 전에 저장하면
     // 앞 시편의 잰 값이 이 시편에 통째로 들어간다.
     setSizes(null)
@@ -144,7 +165,19 @@ export function EditSpecimenDialog({ specimen, open, onClose, onSaved }: Props) 
           const value = fromDisplay(Number(text), field.si_unit, field.dimension)
           if (Number.isFinite(value)) values[field.key] = value
         }
-        await materialsApi.saveDimensions(specimen.id, values)
+        const saved = await materialsApi.saveDimensions(specimen.id, values)
+        // **자릿수가 다른 치수가 있으면 닫지 않는다**(2026-11-14, VOC 41c) — 두께 30 µm 를 넣고
+        // 저장하면 창이 그대로 닫혀, 경고는 창을 다시 열어야 보였다.
+        if ((saved.warnings ?? []).some((one) => one.kind === 'magnitude')) {
+          // 칸은 서버가 돌려준 것으로 맞춘다 — 규격을 바꿨으면 칸이 새 규격의 것이다.
+          const shown = Object.fromEntries(
+            saved.fields.map((field) => [field.key, shownValue(field.measured, field)])
+          )
+          setSizes(saved)
+          setMeasured(shown)
+          setSavedAs({ orientation, standard, note, measured: shown })
+          return
+        }
       }
       onSaved()
     } catch (error) {
@@ -155,10 +188,22 @@ export function EditSpecimenDialog({ specimen, open, onClose, onSaved }: Props) 
   }
 
   const fields = sizes?.fields ?? []
-  const changedStandard = sizes !== null && standard !== (specimen.standard ?? '')
+  // 「저장하면 …」 은 **마지막으로 저장한 것**과 견준다 — 창을 닫기 전까지 `specimen` 은 옛 값이다.
+  const baseOrientation = savedAs?.orientation ?? specimen.orientation
+  const baseStandard = savedAs?.standard ?? specimen.standard ?? ''
+  const changedStandard = sizes !== null && standard !== baseStandard
+  const justSaved =
+    savedAs !== null &&
+    savedAs.orientation === orientation &&
+    savedAs.standard === standard &&
+    savedAs.note === note &&
+    fields.every((field) => (measured[field.key] ?? '') === (savedAs.measured[field.key] ?? ''))
 
   return (
-    <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
+    <Dialog
+      open={open}
+      onOpenChange={(next) => !next && (savedWithWarning ? onSaved() : onClose())}
+    >
       <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>시편 수정</DialogTitle>
@@ -188,7 +233,7 @@ export function EditSpecimenDialog({ specimen, open, onClose, onSaved }: Props) 
             </div>
             {/* **저장 전에 말한다.** 방향만 골랐는데 번호까지 달라지는 것은
                 사람이 예상 못 하는 일이다. */}
-            {orientation !== specimen.orientation && (
+            {orientation !== baseOrientation && (
               <p className="text-xs text-amber-700 dark:text-amber-500">
                 저장하면 <b>이름과 번호가 다시 매겨집니다</b> — 번호는 {orientation}{' '}
                 에서 새로 받고, 이 시편의 <b>시험 이름도 함께</b> 바뀝니다.
@@ -263,16 +308,36 @@ export function EditSpecimenDialog({ specimen, open, onClose, onSaved }: Props) 
               권장값을 주는데 장비가 못 맞추는 일이 실제로 있다(ISO 6721-4 는
               클램프 간 50~100 mm 를 권하는데 어느 DMA 장비도 그 값을 못 준다).
               막으면 실제로 잰 데이터를 못 넣고, 사람은 시스템 밖에서 일한다. */}
-          {(sizes?.warnings ?? []).length > 0 && (
+          {/* **단위를 잘못 넣은 것 같다**(2026-11-14, VOC 41c) — 규격 비율과 다른 일이라 다른
+              말로 보인다. 비율 경고 상자에 섞이면 「보고서에 적으라」 로 읽혔다. */}
+          {(sizes?.warnings ?? []).some((one) => one.kind === 'magnitude') && (
+            <div className="border-destructive/40 bg-destructive/5 rounded-md border p-2.5 text-xs">
+              <b>
+                {justSaved ? '저장했습니다 — ' : ''}단위를 확인하세요. 같은 치수가 출처마다
+                자릿수가 다릅니다.
+              </b>
+              {(sizes?.warnings ?? [])
+                .filter((one) => one.kind === 'magnitude')
+                .map((warning, index) => (
+                  <p key={index} className="mt-1">
+                    {warning.condition} — <b>{ratioText(warning.actual)}배</b> 차이
+                    {warning.help && <span className="text-muted-foreground"> · {warning.help}</span>}
+                  </p>
+                ))}
+            </div>
+          )}
+          {(sizes?.warnings ?? []).some((one) => one.kind !== 'magnitude') && (
             <div className="rounded-md border border-amber-500/40 bg-amber-500/5 p-2.5 text-xs">
               <b>규격이 요구하는 비율을 벗어났습니다.</b> 저장은 됩니다 — 다만 이 조건을
               어긴 채로 쟀다는 것을 시험 보고서에 함께 적어야 재현이 됩니다.
-              {(sizes?.warnings ?? []).map((warning, index) => (
-                <p key={index} className="mt-1">
-                  {warning.condition} — 지금 <b>{warning.actual.toPrecision(3)}</b>
-                  {warning.help && <span className="text-muted-foreground"> · {warning.help}</span>}
-                </p>
-              ))}
+              {(sizes?.warnings ?? [])
+                .filter((one) => one.kind !== 'magnitude')
+                .map((warning, index) => (
+                  <p key={index} className="mt-1">
+                    {warning.condition} — 지금 <b>{warning.actual.toPrecision(3)}</b>
+                    {warning.help && <span className="text-muted-foreground"> · {warning.help}</span>}
+                  </p>
+                ))}
             </div>
           )}
 
@@ -310,8 +375,13 @@ export function EditSpecimenDialog({ specimen, open, onClose, onSaved }: Props) 
           {failure && <p className="text-destructive text-sm">{failure}</p>}
 
           <DialogFooter>
-            <Button type="button" variant="ghost" onClick={onClose} disabled={busy}>
-              취소
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={savedWithWarning ? onSaved : onClose}
+              disabled={busy}
+            >
+              {savedWithWarning ? '닫기' : '취소'}
             </Button>
             <Button type="submit" disabled={busy}>
               저장

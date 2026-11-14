@@ -32,6 +32,7 @@ DB 도 HTTP 도 모른다. `tests/architecture` 가 검사한다.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
 from typing import Any
@@ -39,6 +40,8 @@ from typing import Any
 import numpy as np
 
 from matcore import registry
+
+logger = logging.getLogger(__name__)
 
 
 class ProcessingError(Exception):
@@ -267,6 +270,16 @@ def apply(
                 result = plugin.fn(current, options)
             except ProcessingError as exc:
                 raise ProcessingError(f"{index + 1}단계 '{plugin.label}': {exc}") from exc
+            except Exception as exc:
+                # **예상 못 한 예외도 그 단계의 실패다**(2026-11-14, VOC 44). 전에는 처리
+                # 오류만 실패로 기록하고 나머지(빈 칸의 `float(None)` 같은 것)는 서버 오류 500
+                # 으로 흘러, 일괄 처리면 요청 전체가 죽고 사유가 안 남았다. 로그에는 자취를
+                # 남긴다.
+                logger.exception("처리 단계 %s 에서 예상 못 한 예외", plugin.id)
+                raise ProcessingError(
+                    f"{index + 1}단계 '{plugin.label}': 계산 중 예상 못 한 오류가 났습니다 "
+                    f"({type(exc).__name__}: {exc}) — 그 단계의 옵션을 확인하세요."
+                ) from exc
         except ProcessingError as exc:
             failure = Failure(
                 index=index,

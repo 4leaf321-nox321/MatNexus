@@ -1052,7 +1052,7 @@ def export_materials(
     counts = services.sample_counts(db, [one.id for one in rows])
     names = services.workspace_names(db, [one.owner_workspace_id for one in rows])
     uses = services.uses_of(db, [one.id for one in rows])
-    counts = services.part_counts(db, [one.id for one in rows])
+    parts = services.part_counts(db, [one.id for one in rows])  # 시료 수를 덮지 않게
     sets: dict[uuid.UUID, list[MaterialParameterSet]] = {}
     for row in db.scalars(
         select(MaterialParameterSet).where(
@@ -1085,7 +1085,7 @@ def export_materials(
                             else None
                         ),
                         uses=uses.get(one.id),
-                        part_count=counts.get(one.id, 0),
+                        part_count=parts.get(one.id, 0),
                     ).model_dump(mode="json", exclude={"access"}),
                     system,
                     kept,
@@ -1396,7 +1396,10 @@ def list_materials(
     names = services.workspace_names(db, [m.owner_workspace_id for m in rows])
     # **한 번에 읽는다.** 재료마다 물으면 200건짜리 화면에서 200번이 된다.
     uses = services.uses_of(db, [m.id for m in rows])
-    counts = services.part_counts(db, [m.id for m in rows])
+    # **시료 수와 부품 수는 다른 이름에 받는다**(2026-11-14 검토) — 같은 `counts` 에 다시
+    # 받아 시료 수 칸이 부품 수로 덮였다(시료 3 · 부품 0 이면 「시료 0」, MCP search_materials
+    # 도 그대로 옮겼다).
+    parts = services.part_counts(db, [m.id for m in rows])
     book = AccessBook(db, user).prime(rows)
     return Page(
         items=[
@@ -1407,7 +1410,7 @@ def list_materials(
                     names.get(m.owner_workspace_id) if m.owner_workspace_id else None
                 ),
                 uses=uses.get(m.id),
-                part_count=counts.get(m.id, 0),
+                part_count=parts.get(m.id, 0),
                 access=book.of(m),
                 matched=reasons.get(m.id),
             )
@@ -3894,6 +3897,20 @@ def get_specimen_dimensions(
                 help=item.check.help,
             )
             for item in sizes.violations()
+        ]
+        # **자릿수가 다른 치수도 말한다**(2026-11-14, VOC 41c) — 두께 30 µm 가 실측 30 mm 를
+        # 이겨 단면적이 1000배 작게 나왔다. 시험 점검과 같은 판정이다. 막지 않는다.
+        + [
+            SpecimenWarningOut(
+                condition=f"{gap.label} — 출처마다 자릿수가 다름({gap.listed()})",
+                actual=max(one for _, one in gap.seen) / min(one for _, one in gap.seen),
+                help=(
+                    "단위(µm · mm · m)를 잘못 넣었는지 확인하세요. 시험은 파일 치수가 있으면 "
+                    "그것을, 없으면 앞에 적힌 출처의 값을 씁니다."
+                ),
+                kind="magnitude",
+            )
+            for gap in specimen_size.magnitude_gaps(sizes)
         ],
         standard=sizes.standard,
         cross_section=sizes.cross_section,

@@ -227,11 +227,24 @@ def _complete(out: dict[str, Any], *, whole: bool) -> dict[str, Any]:
     `count`) 그중 무엇을 믿어야 하는지 규칙이 없었기 때문이다.
 
     이제 목록을 주는 도구는 전부 `complete` 를 단다 — 참이면 **이 조건에 맞는 것은
-    이것이 전부**다(빈 목록이면 없는 것이다). 거짓이면 `limit` 에 잘린 것이라 limit 을
-    올려 **같은 도구를** 한 번 더 부른다 — 창을 좁히거나 다른 도구로 가지 않는다.
+    여기까지가 끝**이다(첫 쪽이면 이것이 전부 · 빈 목록이면 없는 것). 거짓이면 더 있으니
+    `next_offset` 이 있으면 그것을 `offset` 으로(`_paged`), 없으면 limit 을 올려 **같은
+    도구를** 다시 부른다 — 창을 좁히거나 다른 도구로 가지 않는다(2026-11-14, VOC 42).
     """
     out["complete"] = bool(whole)
     return out
+
+
+def _paged(out: dict[str, Any], *, start: int, shown: int, total: Any) -> dict[str, Any]:
+    """쪽 넘김 — 더 있으면 `next_offset`(그 값을 `offset` 으로 다시 부른다)과 `complete`.
+
+    `limit` 은 도구마다 상한에서 막히므로(대개 `MAX_LIMIT` 50) 올려 부르는 것만으로는 그
+    너머에 못 닿는다(VOC 42). 0 쪽에서는 전과 같은 판정이다 — `shown >= total`.
+    """
+    whole = start + shown >= int(total or 0)
+    if not whole and shown:
+        out["next_offset"] = start + shown
+    return _complete(out, whole=whole)
 
 
 def _listed(payload: object, key: str) -> dict[str, object]:
@@ -491,14 +504,31 @@ async def search_materials(
     family: str | None = None,
     category: str | None = None,
     limit: int = 20,
+    mode: str | None = None,
+    workspace: str | None = None,
+    test_type: str | None = None,
+    card: str | None = None,
+    thickness_min_mm: float | None = None,
+    thickness_max_mm: float | None = None,
+    registered_from: str | None = None,
+    registered_to: str | None = None,
+    sort: str | None = None,
+    desc: bool = True,
+    offset: int = 0,
 ) -> dict[str, Any]:
     """사내 재료를 찾는다 — 이름·별칭·분류·**재료 번호**로.
 
     `query` 는 낱말마다 나눠 AND 로 찾는다(`SECC 1.0` 처럼 순서와 무관). 재료
-    번호는 `M-000123` 도 `M-123` 도 닿는다.
+    번호는 `M-000123` 도 `M-123` 도 닿는다. `mode` 는 `search_all` 과 같다.
+
+    `workspace`(부서 slug) · `test_type`(그 시험이 있는 재료) · `card`(published · any · none) ·
+    스펙 두께(mm) · 등록일(YYYY-MM-DD)로 거르고 `sort`(열 이름) · `desc` 로 세운다.
+    더 있으면 `next_offset` 을 `offset` 으로.
 
     돌려주는 것은 목록이라 값은 안 실린다 — 물성은 `get_material(material_id)` 로 본다.
     """
+    start = max(0, offset)
+    thick = thickness_min_mm is not None or thickness_max_mm is not None
     got = await _get(
         ctx,
         "/materials",
@@ -507,6 +537,20 @@ async def search_materials(
             "family": family,
             "category": category,
             "limit": max(1, min(limit, MAX_LIMIT)),
+            # 아래는 **준 것만** 간다 — 안 주면 전과 같은 요청이다(VOC 42).
+            "mode": mode,
+            "workspace": workspace,
+            "test_type": test_type,
+            "card": card,
+            "thickness_min": thickness_min_mm,
+            "thickness_max": thickness_max_mm,
+            # 범위를 줬을 때만 — 서버 기본은 SI(m)다.
+            "thickness_unit": "mm" if thick else None,
+            "registered_from": registered_from,
+            "registered_to": registered_to,
+            "sort": sort,
+            "desc": None if desc else "false",
+            "offset": start or None,
         },
     )
     if "error" in got:
@@ -530,11 +574,13 @@ async def search_materials(
                 # 고 판단했다(2026-09-24). 공식인지는 카드 확정으로 본다(ADR 0035).
                 "workspace": one.get("owner_workspace_name"),
                 "sample_count": one.get("sample_count"),
+                # `similar` 로 찾았을 때 왜 걸렸나(`search_all` 의 `matched` 와 같다).
+                **({"matched": one["matched"]} if one.get("matched") else {}),
             }
             for one in got.get("items", [])
         ],
     }
-    return _complete(out, whole=len(got.get("items", [])) >= int(got.get("total", 0) or 0))
+    return _paged(out, start=start, shown=len(got.get("items", [])), total=got.get("total"))
 
 
 def _looks_like_uuid(value: str) -> bool:
@@ -747,15 +793,18 @@ async def list_material_parts(
     product: str | None = None,
     division: str | None = None,
     limit: int = 30,
+    offset: int = 0,
 ) -> dict[str, Any]:
     """사내 재료가 **쓰인 부품** — 파트명 · 부품코드 · 제품 · 사업부(BOM 에서 들인 것 · 적은 것).
 
     「이 재료가 어느 제품에 쓰이나」 는 `products`(제품마다 부품 수, 거르기 전 전체)로 답한다.
     `q` 는 파트명 · 부품코드 · 제품 · 비고의 글자. 반대로 부품표로 재료를 찾는 것은 `match_bom`.
+    더 있으면 `next_offset` 을 `offset` 으로.
     """
     resolved = await _resolve_material(ctx, material_id)
     if isinstance(resolved, dict):
         return resolved
+    start = max(0, offset)
     got = await _get(
         ctx,
         f"/materials/{resolved}/parts",
@@ -764,6 +813,7 @@ async def list_material_parts(
             "product": product,
             "division": division,
             "limit": max(1, min(limit, MAX_LIMIT)),
+            "offset": start or None,
         },
     )
     if "error" in got:
@@ -793,7 +843,7 @@ async def list_material_parts(
             for one in items
         ],
     }
-    return _complete(out, whole=len(items) >= total)
+    return _paged(out, start=start, shown=len(items), total=total)
 
 
 @mcp.tool()
@@ -999,7 +1049,14 @@ def _catalog_value(row: dict[str, Any]) -> dict[str, Any]:
 
 @mcp.tool()
 async def search_catalog(
-    ctx: Context, query: str, category: str | None = None, limit: int = 10
+    ctx: Context,
+    query: str,
+    category: str | None = None,
+    limit: int = 10,
+    subsystem: str | None = None,
+    manufacturer: str | None = None,
+    domain: str | None = None,
+    offset: int = 0,
 ) -> dict[str, Any]:
     """**문헌 물성 카탈로그**에서 재료를 찾는다(42,209건 · 출처와 등급이 붙어 있다).
 
@@ -1007,11 +1064,22 @@ async def search_catalog(
     데이터시트에서 채굴한 값이고, 사내 재료와는 연결·채택으로 만난다.
 
     값은 안 실린다(재료마다 수십 건이다) — `get_catalog_material(catalog_material_id)` 로 본다.
+    `domain` 은 그 분야의 값이 있는 재료만. 더 있으면 `next_offset` 을 `offset` 으로.
     """
+    start = max(0, offset)
     got = await _get(
         ctx,
         "/catalog/materials",
-        {"q": query, "category": category, "limit": max(1, min(limit, MAX_LIMIT))},
+        {
+            "q": query,
+            "category": category,
+            "limit": max(1, min(limit, MAX_LIMIT)),
+            # **준 것만** 간다 — 안 주면 전과 같은 요청이다(VOC 42).
+            "subsystem": subsystem,
+            "manufacturer": manufacturer,
+            "domain": domain,
+            "offset": start or None,
+        },
     )
     if "error" in got:
         return got
@@ -1031,7 +1099,7 @@ async def search_catalog(
         ],
         "hint": "값이 많은 재료가 먼저 온다 — 쓸 것이 많다는 뜻이다.",
     }
-    return _complete(out, whole=len(got.get("items", [])) >= int(got.get("total", 0) or 0))
+    return _paged(out, start=start, shown=len(got.get("items", [])), total=got.get("total"))
 
 
 @mcp.tool()
@@ -1337,16 +1405,67 @@ async def list_test_runs(
     material_id: str | None = None,
     query: str | None = None,
     limit: int = 20,
+    mode: str | None = None,
+    specimen_id: str | None = None,
+    test_type: str | None = None,
+    orientation: str | None = None,
+    status: str | None = None,
+    adopted: bool | None = None,
+    processing: str | None = None,
+    step: str | None = None,
+    step_missing: str | None = None,
+    workspace: str | None = None,
+    commission_id: str | None = None,
+    tested_from: str | None = None,
+    tested_to: str | None = None,
+    condition: str | None = None,
+    condition_unit: str | None = None,
+    condition_min: float | None = None,
+    condition_max: float | None = None,
+    sort: str | None = None,
+    desc: bool = True,
+    offset: int = 0,
 ) -> dict[str, Any]:
     """시험 목록 — 재료로 좁히거나 이름으로 찾는다.
 
     `adopted` 가 참인 시험만 「그 시험의 물성이 정해진」 것이다(ADR 0007) —
     채택 안 된 결과를 물성으로 옮기지 않는다.
+
+    `status` 는 uploaded · parsing · parsed · failed · imported. `processing` 은 none · results(결과만,
+    채택 전) · adopted, `step` · `step_missing` 은 채택 결과가 그 단계(플러그인 id)를 거쳤나 · 안
+    거쳤나. 조건 범위는 `find_by_property` 처럼 단위가 필수다. 시험일은 YYYY-MM-DD, `sort` 는 열
+    이름(tested_at …). 더 있으면 `next_offset` 을 `offset` 으로.
     """
+    start = max(0, offset)
     got = await _get(
         ctx,
         "/test-runs",
-        {"material_id": material_id, "q": query, "limit": max(1, min(limit, MAX_LIMIT))},
+        {
+            "material_id": material_id,
+            "q": query,
+            "limit": max(1, min(limit, MAX_LIMIT)),
+            # 아래는 **준 것만** 간다 — 안 주면 전과 같은 요청이다(VOC 42).
+            "mode": mode,
+            "specimen_id": specimen_id,
+            "test_type_key": test_type,
+            "orientation": orientation,
+            "status": status,
+            "adopted": None if adopted is None else ("true" if adopted else "false"),
+            "processing": processing,
+            "step": step,
+            "step_missing": step_missing,
+            "workspace": workspace,
+            "commission": commission_id,
+            "tested_from": tested_from,
+            "tested_to": tested_to,
+            "condition": condition,
+            "condition_unit": condition_unit,
+            "condition_min": condition_min,
+            "condition_max": condition_max,
+            "sort": sort,
+            "desc": None if desc else "false",
+            "offset": start or None,
+        },
     )
     if "error" in got:
         return got
@@ -1369,11 +1488,13 @@ async def list_test_runs(
                     if one.get("status") == "failed"
                     else {}
                 ),
+                # `similar` 로 찾았을 때 왜 걸렸나.
+                **({"matched": one["matched"]} if one.get("matched") else {}),
             }
             for one in got.get("items", [])
         ],
     }
-    return _complete(out, whole=len(got.get("items", [])) >= int(got.get("total", 0) or 0))
+    return _paged(out, start=start, shown=len(got.get("items", [])), total=got.get("total"))
 
 
 def _specimen_brief(one: Any) -> dict[str, Any] | None:
@@ -1812,6 +1933,12 @@ async def list_specimens(
     standard: str | None = None,
     orientation: str | None = None,
     limit: int = 20,
+    material_id: str | None = None,
+    lot: str | None = None,
+    thickness_gap: float | None = None,
+    sort: str | None = None,
+    desc: bool = True,
+    offset: int = 0,
 ) -> dict[str, Any]:
     """시편을 **재료를 거치지 않고** 찾는다 — 규격·방향으로도 좁힌다.
 
@@ -1820,8 +1947,10 @@ async def list_specimens(
 
     `material` 은 재료 이름의 일부, `q` 는 시편 이름·규격, `orientation` 은
     `MD`·`TD`·`DD`·`NA` 중 **정확히** 하나다(부분 일치로 두면 `D` 가 셋을 함께
-    문다).
+    문다). `lot` 은 로트의 일부, `thickness_gap=0.1` 은 재료 기준 두께와 10% 이상 다른 시편.
+    더 있으면 `next_offset` 을 `offset` 으로.
     """
+    start = max(0, offset)
     got = await _get(
         ctx,
         "/specimens",
@@ -1831,6 +1960,13 @@ async def list_specimens(
             "standard": standard,
             "orientation": orientation,
             "limit": max(1, min(limit, MAX_LIMIT)),
+            # 아래는 **준 것만** 간다 — 안 주면 전과 같은 요청이다(VOC 42).
+            "material_id": material_id,
+            "lot": lot,
+            "thickness_gap": thickness_gap,
+            "sort": sort,
+            "desc": None if desc else "false",
+            "offset": start or None,
         },
     )
     if isinstance(got, dict) and "error" in got:
@@ -1848,7 +1984,7 @@ async def list_specimens(
             for one in rows
         ],
     }
-    return _complete(out, whole=len(rows) >= int(out["total"] or 0))
+    return _paged(out, start=start, shown=len(rows), total=out["total"])
 
 
 # ── 만들기 — 재료 · 시료 · 시편 ───────────────────────────────────────────────
@@ -2115,7 +2251,8 @@ async def create_specimen(
         thickness_mm ·
         width_mm ·
         gauge_length_mm   **mm 다.** 규격이 정하는 값이면 규격에서 온다 —
-                          `list_specimens(standard=…)` 로 같은 규격의 시편을 먼저 보라
+                          `list_specimens(standard=…)` 로 같은 규격의 시편을 먼저 보라.
+                          **조회 응답(`sizes_si`)은 m 다** — 옮길 때 1000 을 곱한다
 
     번호(`MD_03` 의 03)는 **방향별로 서버가 이어서 매긴다.** 손으로 적는 칸이 아니다.
     시료 id 는 `list_samples(material_id)` · `get_sample` 에서 온다.
@@ -2133,6 +2270,15 @@ async def create_specimen(
         "length_unit": "mm",
         "note": note,
     }
+    # **막지 않고 말한다** — 얇은 필름은 정말 µm 다. 보내는 본문은 그대로다.
+    warnings = _mm_warnings(
+        {
+            "thickness_mm": thickness_mm,
+            "width_mm": width_mm,
+            "gauge_length_mm": gauge_length_mm,
+        }
+    )
+    warned = {"warnings": warnings} if warnings else {}
 
     if dry_run:
         seen = await _get(ctx, f"/samples/{sample_id}/specimens")
@@ -2143,6 +2289,7 @@ async def create_specimen(
             "dry_run": True,
             "sample_id": sample_id,
             "will_create": body,
+            **warned,
             "existing_specimens": [
                 {
                     "id": one.get("id"),
@@ -2162,8 +2309,30 @@ async def create_specimen(
     return {
         **(_specimen_brief(made) or {}),
         "sample_id": sample_id,
+        **warned,
         "note": "만들었습니다. 시험 파일은 upload_test_run 으로 이 시편에 올립니다.",
     }
+
+
+#: 이 아래(mm)면 m 값을 옮긴 것 같다 — 칸마다 다르다. 두께는 필름이 µm 라 0.1, 폭 · 게이지
+#: 길이는 1 mm 아래인 시편이 사실상 없어 1(게이지 200 mm 를 `0.2` 로 옮긴 것을 잡는다).
+_MM_FLOOR = {"thickness_mm": 0.1}
+_MM_FLOOR_DEFAULT = 1.0
+
+
+def _mm_warnings(sizes: dict[str, float | None]) -> list[str]:
+    """mm 로 받는 치수 중 **m 값을 옮긴 것 같은 것**(칸마다 문턱 `_MM_FLOOR`).
+
+    조회 응답은 SI(m)라 30 mm 시편이 `0.03` 으로 보인다 — 그것을 `thickness_mm=0.03` 으로
+    옮기면 30 µm 가 되어 한 칸만으로도 단면적이 1000 배 작다(VOC 41c 와 같은 꼴, 2026-11-14).
+    얇은 필름은 정말 µm 일 수 있어 막지 않는다.
+    """
+    return [
+        f"{name}={value} 은 {value} mm({value * 1000:g} µm)입니다 — 조회 응답의 m 값을 옮긴 "
+        "것이면 1000 을 곱하세요."
+        for name, value in sizes.items()
+        if value is not None and 0 < value < _MM_FLOOR.get(name, _MM_FLOOR_DEFAULT)
+    ]
 
 
 async def _vocabulary(ctx: Context, vocabulary: str) -> dict[str, Any]:
@@ -3825,6 +3994,7 @@ async def create_declared_card(
     poisson_ratio: float | None = None,
     density: float | None = None,
     parameter_set_ids: list[str] | None = None,
+    note: str | None = None,
     dry_run: bool = True,
 ) -> dict[str, Any]:
     """적어 둔 값만으로 **물성 카드(초안)** 를 만든다 — 시험이 없는 재료의 길.
@@ -3852,7 +4022,7 @@ async def create_declared_card(
 
     `poisson_ratio` · `density`(**SI kg/m³**)는 재료 값 대신 카드에 쓸 값 — 비우면 재료 값이고,
     지어 넣지 않는다. `parameter_set_ids` 는 **이 재료의 모델 파라미터 벌**(`get_parameter_sets`
-    의 `sets[].id`)을 카드에 인용해 싣는다(단위는 그 항의 원래 단위 그대로).
+    의 `sets[].id`)을 카드에 인용해 싣는다(단위는 그 항의 원래 단위 그대로). `note` 는 카드 메모.
     """
     preview = await _get(
         ctx,
@@ -3917,6 +4087,9 @@ async def create_declared_card(
     }
     if given:
         plan["given_si"] = given
+    if note is not None:
+        # `note` 칸은 아래의 안내문이 쓴다 — 카드에 붙을 메모는 이름을 달리한다.
+        plan["card_note"] = note
     if parameter_set_ids:
         sets = await _get(ctx, f"/materials/{material_id}/parameter-sets")
         if isinstance(sets, dict) and "error" in sets:
@@ -3954,6 +4127,9 @@ async def create_declared_card(
     }
     if parameter_set_ids:
         body["parameter_set_ids"] = parameter_set_ids
+    # **준 것만** 싣는다 — 안 주면 전과 같은 본문이다(VOC 42).
+    if note is not None:
+        body["note"] = note
     made = await _send(ctx, "POST", "/fitting/cards/declared", body)
     if "error" in made:
         return made
@@ -4659,10 +4835,7 @@ async def list_cards(
         "cards": [_card_summary(one) | {"material": one.get("material_name")}
                   for one in items],
     }
-    whole = start + len(items) >= int(got.get("total", 0) or 0)
-    if not whole and items:
-        out["next_offset"] = start + len(items)
-    return _complete(out, whole=whole)
+    return _paged(out, start=start, shown=len(items), total=got.get("total"))
 
 
 @mcp.tool()
@@ -5520,18 +5693,31 @@ async def find_sp_core_objects(
     key: str | None = None,
     include_deleted: bool = False,
     limit: int = 30,
+    offset: int = 0,
 ) -> dict[str, Any]:
     """받은 SP 코어 객체를 찾는다 — `type`(slug) · `q`(이름 · key 의 글자). `type` 과 `key` 를
-    함께 주면 그 하나를 선(관계) · 연결과 함께 준다."""
+    함께 주면 그 하나를 선(관계) · 연결과 함께 준다. 더 있으면 `next_offset` 을 `offset` 으로."""
     if key:
         if not type:
             return {"error": "key 를 주면 type(SP 타입 slug)도 주세요."}
         return await _get(ctx, f"/sp-core/objects/{quote(type, safe='')}/{quote(key, safe='')}")
-    return await _get(
+    start = max(0, offset)
+    got = await _get(
         ctx,
         "/sp-core/objects",
-        {"type": type, "q": q, "include_deleted": include_deleted, "limit": min(max(limit, 1), 200)},
+        {
+            "type": type,
+            "q": q,
+            "include_deleted": include_deleted,
+            "limit": min(max(limit, 1), 200),
+            # 0 이면 안 보낸다 — 전과 같은 요청이다(VOC 42).
+            "offset": start or None,
+        },
     )
+    # 다른 목록 도구와 같이 `complete` · `next_offset` 을 단다(2026-11-14 검토).
+    if isinstance(got, dict) and "error" not in got:
+        return _paged(got, start=start, shown=len(got.get("items") or []), total=got.get("total"))
+    return got
 
 
 @mcp.tool()
@@ -5612,6 +5798,7 @@ async def find_by_property(
     condition_max: float | None = None,
     min_tier: int | None = None,
     origins: str | None = None,
+    condition_tol: float | None = None,
 ) -> dict[str, Any]:
     """**값으로 재료를 찾는다** — 「항복응력이 200MPa 근처인 재료」.
 
@@ -5621,8 +5808,8 @@ async def find_by_property(
         「믿을 만한 것만」     min_tier=2      (1 이 가장 좋다 — 아래 표)
         「사내 실측만」        origins="measured"   (catalog · internal · measured 를 쉼표로)
 
-    조건 키는 `get_ontology().conditions` 에 있다(`temperature` · `strain_rate` · `frequency`
-    …). **조건 값도 단위가 필수다** — 「80」 만으로는 °C 인지 K 인지 모른다. 조건을 적지
+    조건 키는 `get_ontology().conditions` 에, 근처의 폭은 `condition_tol`(조건 단위, 온도 기본
+    ±5 K). **조건 값도 단위가 필수다** — 「80」 만으로는 °C 인지 K 인지 모른다. 조건을 적지
     않은 값은 **그 조건에서 잰 것이 아니라 안 걸린다** — 상온 값을 80 °C 의 답으로 내지
     않는다. 조건을 걸었는데 빈손이면 「그 조건의 값이 없다」 고 말하고, 조건을 빼고 다시
     찾아 「상온 값은 있다」 를 덧붙여라.
@@ -5695,6 +5882,7 @@ async def find_by_property(
         ("condition_near", condition_near),
         ("condition_min", condition_min),
         ("condition_max", condition_max),
+        ("condition_tol", condition_tol),
         ("min_tier", min_tier),
         ("origins", origins),
     ):
@@ -5810,19 +5998,41 @@ async def run_batch_processing(
 
 @mcp.tool()
 async def list_inbox(
-    ctx: Context, status: str | None = None, limit: int = 20
+    ctx: Context,
+    status: str | None = None,
+    limit: int = 20,
+    scope: str | None = None,
+    connector_id: str | None = None,
+    offset: int = 0,
 ) -> dict[str, Any]:
-    """장비가 떨어뜨린 **아직 안 붙은 파일들** — 시험으로 등록할 후보.
+    """장비가 떨어뜨린 파일들 — 시험으로 등록할 후보는 **아직 안 붙은 것**(`status` 를 비우면
+    이미 등록된 것 · 버린 것도 섞인다 — 후보만 보려면 received · parsed · suggested ·
+    needs_specimen 으로 거른다. `status` 는 한 번에 하나다).
 
     파일을 대화로 나르지 않아도 되는 길이다. 장비 PC 의 수집 에이전트가 파일을
     서버에 올려 두면, **어디에 붙일지만** 정하면 된다 — 사람이 화면에서 하는 일과
     같은 판단이다.
 
-    `status` 로 좁힌다: `pending`(아직 안 붙음) · `assigned` · `approved`.
+    `status`: received · parsed · suggested · needs_specimen · registered · failed · discarded.
+    `scope` 는 mine(내 부서 커넥터, 기본) · all(전사), `connector_id` 는 커넥터 하나.
+    더 있으면 `next_offset` 을 `offset` 으로.
     """
-    got = await _get(ctx, "/pipelines/inbox", {"status": status, "limit": max_limit(limit)})
+    start = max(0, offset)
+    got = await _get(
+        ctx,
+        "/pipelines/inbox",
+        {
+            "status": status,
+            "limit": max_limit(limit),
+            # **준 것만** 간다 — 안 주면 전과 같은 요청이다(VOC 42).
+            "scope": scope,
+            "connector_id": connector_id,
+            "offset": start or None,
+        },
+    )
     if isinstance(got, dict) and "error" not in got:
-        return _complete(got, whole=len(got.get("items", [])) >= int(got.get("total", 0) or 0))
+        shown = len(got.get("items", []))
+        return _paged(got, start=start, shown=shown, total=got.get("total"))
     return got
 
 
@@ -6347,8 +6557,11 @@ async def check_card_deck(
     format: str,
     units: str = DEFAULT_DECK_UNITS,
     expect: dict[str, float] | None = None,
+    with_card: str | None = None,
+    fail_from_elongation: bool = False,
 ) -> dict[str, Any]:
-    """뽑은 덱을 **되읽어 카드와 대조한다** — 건네기 전에.
+    """뽑은 덱을 **되읽어 카드와 대조한다** — 건네기 전에. `with_card` ·
+    `fail_from_elongation` 은 `render_card_deck` 과 같다 — 그렇게 뽑은 덱을 점검한다.
 
     「돌아는 갔다」 와 「맞게 나왔다」 는 다르다. 덱은 **틀려도 오류 없이 돈다** —
     단위계를 잘못 고르거나 엉뚱한 카드를 집어도 파일은 멀쩡히 나온다.
@@ -6370,12 +6583,13 @@ async def check_card_deck(
     그대로 쓰면 안 되는 경우가 있다** — 「첫 점이 항복점 값이 아닐 수 있습니다」 가
     그 예다. 그 문장을 사람에게 옮겨라.
     """
-    return await _send(
-        ctx,
-        "POST",
-        f"/fitting/cards/{card_id}/export/check",
-        {"format": format, "units": units, "expect": expect or {}},
-    )
+    body: dict[str, Any] = {"format": format, "units": units, "expect": expect or {}}
+    # **준 것만** 싣는다 — 안 주면 전과 같은 본문이다(VOC 42, 서버 기본도 「없음」 · 거짓).
+    if with_card:
+        body["with_card"] = with_card
+    if fail_from_elongation:
+        body["fail_from_elongation"] = True
+    return await _send(ctx, "POST", f"/fitting/cards/{card_id}/export/check", body)
 
 
 #: 검증 키트 파일 하나에서 돌려줄 글자 수. 덱 본문(소성 표)이 길 수 있다 — 넘으면 자른다.
@@ -7038,6 +7252,7 @@ async def list_commissions(
     status: str | None = None,
     q: str | None = None,
     limit: int = 20,
+    offset: int = 0,
 ) -> dict[str, Any]:
     """측정 의뢰 목록 — 「누가 무엇을 왜 재 달라고 했고 어디까지 됐나」(v1.234).
 
@@ -7045,6 +7260,7 @@ async def list_commissions(
                 received(우리 부서가 받은 것) · all(전사)
         status  draft · submitted(접수 대기) · accepted · in_progress · on_hold ·
                 delivered(결과 전달) · closed · rejected
+        offset  더 있으면 `next_offset` 을 여기로
 
     **낸 것은 전원이 본다**(ADR 0035 3단계) — 작성 중인 것만 낸 사람의 것이다. 다만
     **움직이고 말을 보태는 것은 낸 쪽과 받는 쪽**이다: 남의 부서 의뢰는 읽기만 된다.
@@ -7056,9 +7272,13 @@ async def list_commissions(
         params["status"] = status
     if q:
         params["q"] = q
+    start = max(0, offset)
+    if start:
+        params["offset"] = start
     got = await _get(ctx, "/commissions", params)
     if isinstance(got, dict) and "error" not in got:
-        return _complete(got, whole=len(got.get("items", [])) >= int(got.get("total", 0) or 0))
+        shown = len(got.get("items", []))
+        return _paged(got, start=start, shown=shown, total=got.get("total"))
     return got
 
 

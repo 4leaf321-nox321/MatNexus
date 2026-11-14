@@ -120,4 +120,22 @@ describe('계층 요약', () => {
     expect(await screen.findByText('1 mm')).toBeInTheDocument()
     expect(await screen.findByText('7.850e-9 tonne/mm³')).toBeInTheDocument()
   })
+
+  it('밀도 · 푸아송비 옆에 근거를 적는다 — 없으면 「출처 모름」', async () => {
+    // VOC 50(2026-11-14) — 문헌에서 받아 온 값은 출처 · 문헌 등급을 든다. 근거 문서는 마우스를 대면.
+    show(
+      { sample_count: 0, specimen_count: 0, run_count: 0, specimens_without_run: 0 },
+      {
+        ...MATERIAL,
+        density: 1360,
+        poisson_ratio: 0.35,
+        column_sources: {
+          density: { source: 'estimate', reference: 'Plastics Handbook', catalog_tier: 4 },
+        },
+      }
+    )
+    const density = await screen.findByText('(추정 · 문헌 4등급)')
+    expect(density).toHaveAttribute('title', 'Plastics Handbook')
+    expect(screen.getByText('(출처 모름)')).toBeInTheDocument()
+  })
 })

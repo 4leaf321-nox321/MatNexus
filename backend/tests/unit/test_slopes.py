@@ -113,3 +113,53 @@ class Test응력_띠는_첫_도달_사이_전부:
             slopes.measure(strain, stress, method="regression", low=0.00099, high=0.00116)
         found = slopes.measure(strain, stress, method="regression", low=0.00099, high=0.00121)
         assert found.points == 5
+
+
+def test_사실상_0_인_기울기는_내지_않는다() -> None:
+    """VOC 43(2026-11-14) — 응력이 양자화된 곡선에서 5.7e-5 Pa(R² 1.0)가 탄성률로 저장됐다.
+    인장 `_fit_line` 과 같은 eps 바닥으로 막는다."""
+    strain = np.linspace(0.001, 0.003, 50)
+    stress = 2.0e8 + 5e-4 * strain  # 200 MPa 에서 5e-4 Pa 기울기 — 부동소수로는 오른다
+    with pytest.raises(slopes.SlopeError, match="사실상 0"):
+        slopes.measure(strain, stress, method="regression", low=0.001, high=0.003)
+
+
+def test_빈_칸이_섞여도_응력_띠는_그_점을_빼고_잰다() -> None:
+    """2026-11-14 검토 — 응력 띠는 구간을 연속 번호로 잡아 그 사이의 빈 칸(NaN)이 회귀에 들어가
+    「예상 못 한 오류(LinAlgError)」 가 됐다. 현 · 회귀는 같은 곡선을 재는데 응력 띠만 못 쟀다.
+    최대 응력 찾기도 첫 NaN 을 최대로 쳐 곡선을 거기서 잘랐다."""
+    strain, stress = _linear()
+    strain = strain.copy()
+    stress = stress.copy()
+    strain[40] = np.nan  # 띠(10~40 %) 안의 변형률 빈 칸
+    stress[10] = np.nan  # 띠 아래의 응력 빈 칸 — 최대 응력 찾기를 흔든다
+    for method in ("stress_window", "regression"):
+        found = slopes.measure(strain, stress, method=method, high=0.005)
+        assert found.value == pytest.approx(E, rel=1e-6), method
+    assert slopes.rising(strain, stress) == len(stress)
+
+
+def test_접선은_끝_점이_빈_칸이어도_창을_다_본다() -> None:
+    """2026-11-14 검토 — 창 자리를 첫 · 끝 변형률로 잡아, 최대 응력 50% 자리의 변형률이
+    빈 칸이면 격자가 `[처음, NaN, …]` 이 되어 토우 안의 창 하나만 보고 그 기울기를 냈다
+    (조용히 틀림)."""
+    strain = np.linspace(0, 0.02, 401)
+    toe = 0.002
+    stress = np.where(strain < toe, E * strain**2 / (2 * toe), E * (strain - toe / 2))
+    limit = int(np.flatnonzero(stress <= 0.5 * stress.max())[-1]) + 1
+    strain[limit - 1] = np.nan
+    found = slopes.measure(strain, stress, method="tangent", tangent_width=0.002)
+    assert found.value == pytest.approx(E, rel=0.01)
+    assert found.low >= toe * 0.9
+
+
+@pytest.mark.parametrize(
+    "method", ["chord", "secant", "regression", "stress_window", "tangent"]
+)
+def test_변형률이_다_빈_칸이면_까닭을_말한다(method: str) -> None:
+    """2026-11-14 검토 — 현 · 할선이 빈 배열을 보간하다 ValueError 로 터졌다(「예상 못 한
+    오류」). 다섯 방법이 같은 말로 멈춘다."""
+    _, stress = _linear()
+    strain = np.full_like(stress, np.nan)
+    with pytest.raises(slopes.SlopeError, match="숫자인 점이 0개"):
+        slopes.measure(strain, stress, method=method)

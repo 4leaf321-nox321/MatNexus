@@ -43,6 +43,7 @@ from sqlalchemy import (
     SmallInteger,
     String,
     Text,
+    UniqueConstraint,
     func,
     text,
 )
@@ -184,6 +185,11 @@ class CatalogLink(Base):
     """
 
     __tablename__ = "catalog_links"
+    # **제약 이름은 DB 의 것 그대로**(2026-11-14). 열에 `unique=True` 를 두면 명명 규칙이 다른
+    # 이름을 기대해, autogenerate 가 마이그레이션마다 「지우고 다시 만들기」 를
+    # 잡았다(`fc0ec59d424a` · `7c51b72321d5` 가 손으로 뺐다). 이름을 맞춰 `alembic check` 를
+    # 조용하게 한다.
+    __table_args__ = (UniqueConstraint("material_id", name="uq_catalog_links_material"),)
 
     id: Mapped[uuid.UUID] = mapped_column(
         PgUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
@@ -191,7 +197,6 @@ class CatalogLink(Base):
     material_id: Mapped[uuid.UUID] = mapped_column(
         PgUUID(as_uuid=True),
         ForeignKey("materials.id", ondelete="CASCADE"),
-        unique=True,
     )
     catalog_material_id: Mapped[uuid.UUID] = mapped_column(
         PgUUID(as_uuid=True),

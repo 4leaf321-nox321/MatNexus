@@ -554,6 +554,10 @@ class DeckCheckRequest(BaseModel):
     expect: dict[str, float] = {}
     """사람이 아는 값. `{"youngs_modulus": 205000000000.0}` 처럼 **SI 로** 준다 —
     덱의 단위계로 환산하는 일은 서버가 한다(그 환산이 검사 대상이기도 하다)."""
+    with_card: uuid.UUID | None = None
+    """짝 카드와 합쳐 낸 덱을 점검한다 — 내려받기의 `with_card` 와 같다(2026-11-14, VOC 42)."""
+    fail_from_elongation: bool = False
+    """추정 파단 변형률을 파단 칸에 넣은 덱을 점검한다 — 내려받기의 그 선택과 같다."""
 
 
 class DeckCheckItemOut(BaseModel):

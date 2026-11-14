@@ -918,10 +918,14 @@ MatNexus 는 SP(Standard Platform)의 코어 온톨로지(부서 · 기관 · �
 
 목록을 주는 도구는 전부 `complete` 를 단다.
 
-    complete: true    이 조건에 맞는 것은 **이것이 전부**다. 목록이 비었으면 **없는 것**이다.
+    complete: true    이 조건에 맞는 것은 **여기까지가 끝**이다. offset 없이(첫 쪽) 받았으면 이것이
+                      전부이고, 비었으면 **없는 것**이다. offset 으로 넘겨 왔으면 앞 쪽들과 합친
+                      것이 전부다(끝을 넘긴 offset 의 빈 목록은 「없다」 가 아니다).
                       다른 도구로 「정말 없나」 를 확인하지 마라 — 같은 답이 나온다.
-    complete: false   limit 에 잘렸다. **같은 도구를 limit 을 올려** 한 번 더 부른다.
-                      창을 좁히거나(min/max) 다른 도구로 가지 않는다.
+    complete: false   더 있다. **`next_offset` 이 있으면 그 값을 `offset` 으로** 같은 도구를 다시
+                      부른다 — limit 은 도구마다 상한(대개 50)에서 막혀 올려도 못 닿는다. `next_offset` 이
+                      없는 도구(쪽 넘김이 없는 것)만 limit 을 올린다. 창을 좁히거나(min/max) 다른
+                      도구로 가지 않는다.
 
 같은 뜻을 예전 이름으로도 볼 수 있다 — `omitted: 0` · `truncated: false` · `counts` 의
 0 · `shown == total`. 전부 `complete` 로 모았으니 그것만 보면 된다.

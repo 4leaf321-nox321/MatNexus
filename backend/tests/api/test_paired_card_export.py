@@ -139,3 +139,40 @@ def test_다른_재료의_카드는_짝이_못_된다(
         )
         assert answer.status_code == 422, answer.text
         assert "같은 재료" in answer.text
+
+
+def test_짝과_합친_덱도_점검하고_짝의_경고를_싣는다(
+    client: TestClient, db: Session, admin_headers: dict[str, str]
+) -> None:
+    """2026-11-14 검토(VOC 42) — 덱 점검에 짝 카드 칸이 없어 합쳐 낸 덱은 점검할 길이 없었다.
+    열고 보니 짝 덱의 근거 줄이 들여 쓰여 짝의 네킹 경고가 점검 결과에서 빠졌다. 두 카드가
+    같은 경고를 들면 한 줄로 낸다."""
+    material = _material(client, admin_headers)
+    necking = "네킹을 안 자른 곡선이 1건 있습니다 — 확인하세요."
+    aniso = _card(db, material, "이방성 r", ANISOTROPY, source={"notes": [necking]})
+    md = _card(db, material, "인장 MD", PLASTIC, orientation="MD", source={"notes": [necking]})
+    alone = client.post(
+        f"/api/fitting/cards/{aniso}/export/check",
+        json={"format": "dyna_hill", "units": "mm_n_tonne"},
+        headers=admin_headers,
+    ).json()
+    assert alone["ok"] is False  # 혼자서는 Hill 덱이 안 나온다
+    paired = client.post(
+        f"/api/fitting/cards/{aniso}/export/check",
+        json={"format": "dyna_hill", "units": "mm_n_tonne", "with_card": md},
+        headers=admin_headers,
+    )
+    assert paired.status_code == 200, paired.text
+    body = paired.json()
+    assert {one["name"]: one["ok"] for one in body["checks"]}["읽기"] is True
+    assert body["notes"].count(necking) == 1, body["notes"]
+
+    stranger = _card(
+        db, _material(client, admin_headers), "남의 MD", PLASTIC, orientation="MD"
+    )
+    refused = client.post(
+        f"/api/fitting/cards/{aniso}/export/check",
+        json={"format": "dyna_hill", "units": "mm_n_tonne", "with_card": stranger},
+        headers=admin_headers,
+    )
+    assert refused.status_code == 422, refused.text

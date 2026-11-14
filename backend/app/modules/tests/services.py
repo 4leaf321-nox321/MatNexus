@@ -864,51 +864,22 @@ def _nominal_as_measured(db: Session, run: TestRun) -> list[dict[str, str]]:
     return found
 
 
-#: 치수 출처끼리 이만큼(배) 다르면 단위를 잘못 넣은 것으로 본다 — 실측과 공칭은 몇 % 갈려도
-#: 열 배는 안 갈린다.
-MAGNITUDE_RATIO = 10.0
-
-
 def _magnitude_mismatch(db: Session, run: TestRun) -> list[dict[str, str]]:
     """같은 치수가 **출처마다 자릿수가 다르다** — 단위를 잘못 넣은 것(2026-11-14, VOC 41c).
-
-    30 x 30 mm 시편의 단면적이 0.9021 mm²(1000배 작게)로 계산됐다. 환산 길은 정상이었고, 두께
-    30 µm(3e-5 m)가 우선순위에서 이겼다. 검사가 「0 < 값 < 1 m」 뿐이라 µm 를 못 막는다. 막지
-    않는다 — 얇은 필름은 정말 µm 이다. 어느 출처가 이겼는지와 함께 말한다.
-    """
+    판정은 시편 치수 화면과 같다(`specimen_size.magnitude_gaps`)."""
     specimen = db.get(Specimen, run.specimen_id)
     if specimen is None:
         return []
     sizes = specimen_size.sizes_of(db, specimen, run.dimensions or None)
-    sources = (
-        ("파일", sizes.from_run),
-        ("시편", sizes.measured),
-        ("규격 공칭", sizes.nominal),
-        ("재료 두께", sizes.from_material),
-    )
-    found = []
-    for key in dict.fromkeys(k for _, values in sources for k in values):
-        seen = [
-            (name, float(values[key]))
-            for name, values in sources
-            if isinstance(values.get(key), int | float) and float(values[key]) > 0
-        ]
-        if len(seen) < 2:
-            continue
-        top, bottom = max(value for _, value in seen), min(value for _, value in seen)
-        if top / bottom < MAGNITUDE_RATIO:
-            continue
-        label = sizes.label_of(key)
-        label = specimen_size.LEGACY_LABELS.get(key, label) if label == key else label
-        listed = " · ".join(f"{name} {value * 1000:.4g} mm" for name, value in seen)
-        found.append(
-            {
-                "code": "dimension_magnitude",
-                "message": f"{label} 이 출처마다 자릿수가 다릅니다({listed}) — 단위(µm · mm · "
-                f"m)를 잘못 넣었을 수 있습니다. 이 시험은 {seen[0][0]} 값을 씁니다.",
-            }
-        )
-    return found
+    return [
+        {
+            "code": "dimension_magnitude",
+            "message": f"{gap.label} 이 출처마다 자릿수가 다릅니다({gap.listed()}) — "
+            f"단위(µm · mm · m)를 잘못 넣었을 수 있습니다. 이 시험은 {gap.seen[0][0]} 값을 "
+            "씁니다.",
+        }
+        for gap in specimen_size.magnitude_gaps(sizes)
+    ]
 
 
 def _condition_mismatch(

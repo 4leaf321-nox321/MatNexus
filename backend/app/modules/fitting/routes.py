@@ -4611,7 +4611,11 @@ def check_card_deck(
     네킹·첫 점·합성 같은 경고는 **검사 결과와 함께 읽어야 한다.** 검사가 다
     통과해도 그 덱을 그대로 쓰면 안 되는 경우가 있다.
     """
-    deck = _deck_for_card(db, user, card_id)
+    # **내려받기와 같은 덱을 점검한다**(2026-11-14, VOC 42) — 짝 카드 · 파단 칸 선택까지.
+    # 전에는 고를 칸이 없어 짝으로 합쳐 낸 덱은 점검할 길이 없었다.
+    deck = _with_choices(
+        _deck_for_card(db, user, card_id, payload.with_card), payload.fail_from_elongation
+    )
     system = _unit_system(db, payload.units)
     try:
         target = renderers.renderer_for(db, payload.format)
@@ -4747,10 +4751,22 @@ def check_card_deck(
         # **경고는 두 군데서 온다.** 내보내며 한 말(`rendered.notes` — 첫 점·표
         # 정리)과 카드가 이미 들고 있던 것(네킹·합성)이다. 검사만 보고 「다
         # 통과했으니 쓰면 된다」 로 읽지 않도록 함께 낸다.
-        notes=[
-            *(one for one in deck.provenance if one.startswith(("네킹을 안 자른", "합성"))),
-            *rendered.notes,
-        ],
+        # **짝 카드의 경고도** — 짝 덱의 근거 줄은 두 칸 들여 쓰여(`_paired`) 그대로는
+        # 거르기에 안 걸렸다(2026-11-14 검토). 이방성 카드에 MD 카드의 경화 표를 붙이면 정작 그
+        # 표의 네킹 · 합성 경고가 점검에서 빠졌다. 미채택 결과로 만든 카드(VOC 49)도 같이
+        # 알린다. 두 카드가 같은 경고를 들면 한 줄로(`dict.fromkeys` — 차례는 그대로).
+        notes=list(
+            dict.fromkeys(
+                [
+                    *(
+                        one.strip()
+                        for one in deck.provenance
+                        if one.lstrip().startswith(("네킹을 안 자른", "합성", "미채택 결과로"))
+                    ),
+                    *rendered.notes,
+                ]
+            )
+        ),
     )
 
 

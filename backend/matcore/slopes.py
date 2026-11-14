@@ -51,12 +51,18 @@ def rising(strain: np.ndarray, stress: np.ndarray) -> int:
     섞이면 응력 띠 · 접선이 엉뚱한 자리를 고른다."""
     if len(stress) == 0:
         return 0
-    return int(np.argmax(stress)) + 1
+    # **빈 칸(NaN)은 최대가 아니다**(2026-11-14 검토) — `np.argmax` 는 첫 NaN 을 최대로 쳐
+    # 곡선을 거기서 잘랐다. 인장 `_peak_index` 와 같은 처리다.
+    finite = np.isfinite(stress)
+    if not finite.any():
+        return 0
+    return int(np.argmax(np.where(finite, stress, -np.inf))) + 1
 
 
 def _interp(x: np.ndarray, y: np.ndarray, at: float) -> float:
-    order = np.argsort(x, kind="stable")
-    return float(np.interp(at, x[order], y[order]))
+    keep = np.isfinite(x) & np.isfinite(y)  # 빈 칸은 보간에서 뺀다(2026-11-14 검토)
+    order = np.argsort(x[keep], kind="stable")
+    return float(np.interp(at, x[keep][order], y[keep][order]))
 
 
 def _fit(x: np.ndarray, y: np.ndarray) -> tuple[float, float]:
@@ -65,13 +71,34 @@ def _fit(x: np.ndarray, y: np.ndarray) -> tuple[float, float]:
     전에는 분모(응력의 흩어짐)가 0 이면 R² 를 1.0 으로 돌려줘, 응력이 계단처럼 양자화된
     곡선에서 ≈0 GPa 가 「R² 1.0」 으로 저장됐다(2026-11-14, VOC 43).
     """
+    if not (np.all(np.isfinite(x)) and np.all(np.isfinite(y))):
+        raise SlopeError(
+            "구간 안에 빈 칸(숫자가 아닌 값)이 있습니다 — 그 점을 빼고 다시 재세요."
+        )
     total = float(np.sum((y - np.mean(y)) ** 2))
-    if not total > 0 or float(np.ptp(x)) <= 0:
+    span = float(np.ptp(x))
+    eps = float(np.finfo(np.float64).eps)
+    count = int(x.size)
+    # **퇴화한 구간은 숫자를 내기 전에 막는다** — 인장 `_fit_line` 과 같은 바닥이다(2026-11-14,
+    # VOC 43). 절대값으로는 못 막는다(고무는 MPa · 금속은 GPa) — eps 에 데이터 크기를 곱한다.
+    x_scale = max(float(np.max(np.abs(x))), span)
+    centered = x - float(np.mean(x))
+    if (
+        not total > 0
+        or span <= 0
+        or float(np.dot(centered, centered)) <= eps * count * max(x_scale**2, 1e-300)
+    ):
         raise SlopeError(
             "구간 안에서 응력(또는 변형률)이 변하지 않습니다 — 기울기를 잴 수 없습니다. "
             "구간을 넓히거나 다른 방법을 고르세요."
         )
     slope, intercept = np.polyfit(x, y, 1)
+    y_scale = max(float(np.max(np.abs(y))), 1.0)
+    if not np.isfinite(slope) or abs(float(slope)) <= eps * count * y_scale / span:
+        raise SlopeError(
+            f"기울기가 사실상 0 입니다({float(slope):.3g}) — 응력이 구간 안에서 거의 안 "
+            "오릅니다. 구간을 넓히거나 다른 방법을 고르세요."
+        )
     predicted = slope * x + intercept
     r2 = 1.0 - float(np.sum((y - predicted) ** 2)) / total
     return float(slope), r2
@@ -99,14 +126,22 @@ def measure(
     x, y = strain[:end], stress[:end]
     if len(x) < MIN_POINTS:
         raise SlopeError(f"최대 응력까지 점이 {len(x)}개뿐입니다 — 기울기를 잴 수 없습니다.")
+    # **숫자인 점을 센다**(2026-11-14 검토) — 변형률 칸이 통째로 비면(NaN) 현 · 할선이 빈
+    # 배열을 보간하다 「예상 못 한 오류(ValueError)」 가 됐다.
+    usable = int(np.count_nonzero(np.isfinite(x) & np.isfinite(y)))
+    if usable < MIN_POINTS:
+        raise SlopeError(
+            f"최대 응력까지 숫자인 점이 {usable}개뿐입니다(나머지는 빈 칸) — 기울기를 잴 수 "
+            "없습니다."
+        )
 
     if method in ("chord", "secant"):
         if high <= (0.0 if method == "secant" else low):
             raise SlopeError(f"구간이 거꾸로입니다: {low} ~ {high}")
-        if float(np.max(x)) < high:
+        if float(np.nanmax(x)) < high:
             raise SlopeError(
                 f"곡선이 구간 끝 변형률 {high:.4g} 까지 안 갑니다"
-                f"(최대 {float(np.max(x)):.4g}) — "
+                f"(최대 {float(np.nanmax(x)):.4g}) — "
                 "구간을 줄이거나 다른 방법을 고르세요."
             )
         start = 0.0 if method == "secant" else low
@@ -117,7 +152,7 @@ def measure(
         return Slope(value=value, low=start, high=high, points=2, indices=span)
 
     if method == "regression":
-        inside = np.flatnonzero((x >= low) & (x <= high))
+        inside = np.flatnonzero((x >= low) & (x <= high) & np.isfinite(y))
         if len(inside) < MIN_POINTS:
             raise SlopeError(
                 f"변형률 {low:.4g} ~ {high:.4g} 사이에 점이 {len(inside)}개뿐입니다 — "
@@ -136,7 +171,7 @@ def measure(
     if method == "stress_window":
         if not 0 <= band_low < band_high <= 1:
             raise SlopeError(f"응력 띠는 0~1 사이 비율이어야 합니다: {band_low} ~ {band_high}")
-        peak = float(np.max(y))
+        peak = float(np.nanmax(y))
         if not peak > 0:
             raise SlopeError("최대 응력이 0 이하라 응력 띠를 정할 수 없습니다.")
         # **띠 아래 끝에 처음 닿은 점 ~ 위 끝에 처음 닿은 점 사이를 전부** 쓴다(2026-11-14,
@@ -147,6 +182,10 @@ def measure(
         upper = np.flatnonzero(y >= band_high * peak)
         first, last = int(lower[0]), int(upper[0])
         inside = np.arange(first, last + 1)
+        # **빈 칸(NaN)은 뺀다**(2026-11-14 검토) — 구간을 연속 번호로 잡아 그 사이의 빈 칸이
+        # 회귀에 들어가 「예상 못 한 오류(LinAlgError)」 가 됐다. 다른 방법(현 · 회귀)은 비교로
+        # 골라 빈 칸이 저절로 빠진다 — 같은 곡선에서 응력 띠만 못 재던 것.
+        inside = inside[np.isfinite(x[inside]) & np.isfinite(y[inside])]
         if len(inside) < MIN_POINTS:
             raise SlopeError(
                 f"최대 응력의 {band_low:.0%} 에 처음 닿은 점부터 {band_high:.0%} 에 처음 닿은 "
@@ -167,14 +206,20 @@ def measure(
     # 가파른 회귀 기울기. 토우(처음 눕는 구간)를 건너뛰고 직선 구간을 찾는다(D790 의 「접선」).
     if tangent_width <= 0:
         raise SlopeError("접선 창 너비는 0 보다 커야 합니다.")
-    reach = np.flatnonzero(y <= 0.5 * float(np.max(y)))
+    reach = np.flatnonzero(y <= 0.5 * float(np.nanmax(y)))
     limit = int(reach[-1]) + 1 if len(reach) else len(x)
     best: Slope | None = None
-    starts = np.linspace(
-        float(x[0]), max(float(x[limit - 1]) - tangent_width, float(x[0])), 40
-    )
+    # **창을 놓을 자리는 숫자인 변형률에서 잡는다**(2026-11-14 검토) — 첫 · 끝 점으로 잡아,
+    # 끝 점이 빈 칸이면 격자가 `[처음, NaN, …]` 이 되어 창 하나만 보고 그 값을 냈다.
+    reached = x[:limit][np.isfinite(x[:limit])]
+    if not len(reached):
+        raise SlopeError(
+            "최대 응력의 50% 까지 변형률이 모두 빈 칸입니다 — 접선을 잴 수 없습니다."
+        )
+    lowest = float(reached.min())
+    starts = np.linspace(lowest, max(float(reached.max()) - tangent_width, lowest), 40)
     for start in starts:
-        inside = np.flatnonzero((x >= start) & (x <= start + tangent_width))
+        inside = np.flatnonzero((x >= start) & (x <= start + tangent_width) & np.isfinite(y))
         inside = inside[inside < limit]
         if len(inside) < MIN_POINTS:
             continue

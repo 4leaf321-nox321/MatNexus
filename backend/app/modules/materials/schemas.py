@@ -965,7 +965,8 @@ class SpecimenSizeOut(BaseModel):
 
 
 class SpecimenWarningOut(BaseModel):
-    """규격이 요구하는 비율을 어겼다 — **막지는 않는다.**
+    """규격이 요구하는 비율을 어겼거나(`kind=ratio`) 쓰이는 치수가 다른 출처와 자릿수가
+    다르다(`kind=magnitude`, 2026-11-14) — **막지는 않는다.**
 
     규격이 권장값을 주는데 장비가 못 맞추는 일이 실제로 있다. ISO 6721-4 는
     클램프 간 50~100 mm 를 권하지만 어느 DMA 장비도 그 값을 못 준다(Netzsch 15 ·
@@ -979,6 +980,10 @@ class SpecimenWarningOut(BaseModel):
     actual: float
     """실제 비. **값이 없으면 무엇을 고쳐야 할지 모른다.**"""
     help: str | None = None
+    kind: Literal["ratio", "magnitude"] = "ratio"
+    """`ratio` 규격 비율을 어김(보고서에 적을 일) · `magnitude` 같은 치수가 출처마다 자릿수가
+    다름(단위 오입력 의심 — 고칠 일, `actual` 은 몇 배인지). 화면이 둘을 다른 말로 보인다
+    (2026-11-14 검토 — 자릿수 경고가 「규격 비율 위반, 보고서에 적으라」 로 읽혔다)."""
 
 
 class SpecimenSizesOut(BaseModel):

@@ -264,8 +264,15 @@ def modulus(frame: Frame, options: dict[str, Any]) -> StepResult:
     # 하중-처짐 기울기(강성) — 같은 구간에서. 등가 E 를 다른 단면으로 옮길 때 쓴다.
     start, end = found.indices
     if FORCE in frame.columns and USED in frame.columns and end - start >= slopes.MIN_POINTS:
-        stiffness = float(
-            np.polyfit(frame.columns[USED][start:end], frame.columns[FORCE][start:end], 1)[0]
+        # 빈 칸은 뺀다(2026-11-14 검토) — 탄성률이 빈 칸을 빼고 쟀는데 강성 회귀가 그 칸에서
+        # 터졌다.
+        used = np.asarray(frame.columns[USED][start:end], dtype=float)
+        force = np.asarray(frame.columns[FORCE][start:end], dtype=float)
+        keep = np.isfinite(used) & np.isfinite(force)
+        stiffness = (
+            float(np.polyfit(used[keep], force[keep], 1)[0])
+            if int(keep.sum()) >= slopes.MIN_POINTS and float(np.ptp(used[keep])) > 0
+            else 0.0
         )
         if stiffness > 0:
             scalars.append(

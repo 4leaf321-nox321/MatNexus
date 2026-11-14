@@ -1504,6 +1504,22 @@ class Test방향_바꾸기:
 
 
 class TestListing:
+    def test_시료_수가_부품_수로_덮이지_않는다(
+        self, client: TestClient, admin_headers: dict[str, str]
+    ) -> None:
+        """2026-11-14 검토 — 목록 · 내보내기가 시료 수와 부품 수를 같은 이름에 받아, 시료 2 ·
+        부품 0 인 재료가 「시료 0」 으로 나왔다(MCP search_materials 도 그대로 옮겼다)."""
+        made = _create_material(client, admin_headers)
+        for _ in range(2):
+            client.post(f"/api/materials/{made['id']}/samples", json={}, headers=admin_headers)
+        listed = client.get("/api/materials", headers=admin_headers).json()["items"]
+        row = next(one for one in listed if one["id"] == made["id"])
+        assert row["sample_count"] == 2 and row["part_count"] == 0
+        exported = client.get("/api/materials/export", headers=admin_headers)
+        assert exported.status_code == 200, exported.text
+        one = next(item for item in exported.json()["materials"] if item["id"] == made["id"])
+        assert one["sample_count"] == 2
+
     def test_상한을_서버가_강제한다(
         self, client: TestClient, admin_headers: dict[str, str]
     ) -> None:

@@ -143,14 +143,23 @@ def test_부서를_지정한_미리보기도_같은_길로_간다(
 # API 는 `extrapolate_to` 를 받는데 `create_card_from_tests` 가 그 인자를 안 받아, 외삽 카드를
 # MCP 로 못 만들었다. 같은 꼴이 카드 · 처리 · 덱 쪽에 14곳 있었다. 위처럼 본문을 손으로 적으면
 # 도구가 인자를 빠뜨려도 안 문다 — 여기서는 **도구의 진짜 코드**를 돌린다. 준 인자는 실리고, 안
-# 준 인자는 **안 실린다**(전과 같은 요청이다).
+# 준 인자는 **안 실린다**(전과 같은 요청이다). 2차분은 목록 · 검색 도구의 거르기 · 쪽 넘김과 덱
+# 점검의 짝 카드 · 파단, 선언 카드의 메모다.
 
 SERVER = Path(__file__).resolve().parents[3] / "mcp_server" / "server.py"
 
 #: 도구와 함께 떼어 오는 순수 도우미.
-_HELPERS = ("_curve_basis", "_complete")
+_HELPERS = (
+    "_curve_basis",
+    "_complete",
+    "_paged",
+    "_card_summary",
+    "_specimen_brief",
+    "_mm_warnings",
+    "max_limit",
+)
 #: 함께 읽는 상수 — 인자 기본값이 정의할 때 읽힌다(`units=DEFAULT_DECK_UNITS`).
-_CONSTANTS = ("DEFAULT_DECK_UNITS", "MAX_LIMIT")
+_CONSTANTS = ("DEFAULT_DECK_UNITS", "MAX_LIMIT", "_MM_FLOOR", "_MM_FLOOR_DEFAULT")
 
 
 @cache
@@ -192,6 +201,11 @@ class _Backend:
         return found[-1]
 
 
+async def _no_new_terms(ctx: object, values: dict[str, Any]) -> None:
+    """기준정보 문은 지난 것으로 둔다 — 그 판단은 `test_mcp_term_gate.py` 가 본다."""
+    return None
+
+
 def _tool(name: str, backend: _Backend) -> Callable[..., Any]:
     """`server.py` 에서 그 도구만 떼어(데코레이터는 뗀다) 가짜 백엔드 위에 올린다."""
     tree = _server()
@@ -221,6 +235,7 @@ def _tool(name: str, backend: _Backend) -> Callable[..., Any]:
         "_get": backend.get,
         "_get_text": backend.get,
         "_send": backend.send,
+        "_new_terms": _no_new_terms,
     }
     exec(compile(module, str(SERVER), "exec"), scope)
     tool = scope[name]
@@ -334,3 +349,134 @@ def test_일괄_처리는_레시피_키만_보내_서버가_단계를_채우고_
     run(test_run_ids=["t1"], steps=steps, dry_run=False)
     sent = backend.sent("/processing/batch")["body"]
     assert sent["steps"] and sent["dry_run"] is False
+
+
+def test_덱_점검은_짝_카드와_파단을_준_때만_싣는다() -> None:
+    """내려받기(`render_card_deck`)와 **같은 덱**을 점검한다 — 짝으로 합친 덱도."""
+    path = "/fitting/cards/c-1/export/check"
+    given = _Backend({})
+    _tool("check_card_deck", given)(
+        card_id="c-1", format="dyna", with_card="c-2", fail_from_elongation=True
+    )
+    body = given.sent(path)["body"]
+    assert (body["with_card"], body["fail_from_elongation"]) == ("c-2", True)
+
+    omitted = _Backend({})
+    _tool("check_card_deck", omitted)(card_id="c-1", format="dyna")
+    # **전과 같은 본문** — 단위계 기본(mm·N·tonne)까지.
+    assert omitted.sent(path)["body"] == {
+        "format": "dyna",
+        "units": "mm_n_tonne",
+        "expect": {},
+    }
+
+
+def test_선언_카드는_메모를_준_때만_싣는다() -> None:
+    answers = {
+        "/fitting/cards/declared/preview": {"material_name": "SECC", "blocks": ["elastic"]},
+        "/fitting/cards/declared": {"id": "c-9", "status": "draft"},
+    }
+    make = {"material_id": "m-1", "label": "열해석용"}
+    given = _Backend(answers)
+    preview = _tool("create_declared_card", given)(**make, note="데이터시트 값")
+    # 미리보기의 `note` 는 안내문이다 — 카드 메모는 이름을 달리해 보인다.
+    assert preview["card_note"] == "데이터시트 값"
+    _tool("create_declared_card", given)(**make, note="데이터시트 값", dry_run=False)
+    assert given.sent("/fitting/cards/declared")["body"]["note"] == "데이터시트 값"
+
+    omitted = _Backend(answers)
+    _tool("create_declared_card", omitted)(**make, dry_run=False)
+    assert "note" not in omitted.sent("/fitting/cards/declared")["body"]
+
+
+def test_재료_찾기는_쪽과_거르기를_준_때만_싣는다() -> None:
+    """50건 상한 너머로 가는 길은 `offset` 뿐이다 — 더 있으면 `next_offset` 이 그 값을 준다."""
+    answers = {"/materials": {"items": [{"id": "m"}] * 20, "total": 120}}
+    given = _Backend(answers)
+    got = _tool("search_materials", given)(
+        offset=40,
+        test_type="tensile",
+        card="published",
+        thickness_min_mm=1.0,
+        sort="spec_thickness",
+        desc=False,
+    )
+    query = given.sent("/materials")["query"]
+    assert query["offset"] == 40 and query["test_type"] == "tensile"
+    assert query["card"] == "published"
+    # 두께는 **mm 로 적어 보낸다** — 서버 기본은 SI(m)라 단위를 빼면 1 m 가 된다.
+    assert (query["thickness_min"], query["thickness_unit"]) == (1.0, "mm")
+    assert (query["sort"], query["desc"]) == ("spec_thickness", "false")
+    assert got["next_offset"] == 60 and got["complete"] is False
+
+    omitted = _Backend(answers)
+    got = _tool("search_materials", omitted)()
+    assert omitted.sent("/materials")["query"] == {"limit": 20}
+    assert got["next_offset"] == 20
+
+
+def test_시험_목록은_쪽과_거르기를_준_때만_싣는다() -> None:
+    answers = {"/test-runs": {"items": [], "total": 0}}
+    given = _Backend(answers)
+    got = _tool("list_test_runs", given)(
+        offset=20,
+        test_type="tensile",
+        adopted=False,
+        commission_id="k-1",
+        condition="temperature",
+        condition_unit="degC",
+        condition_min=20.0,
+        condition_max=30.0,
+    )
+    query = given.sent("/test-runs")["query"]
+    # 이름은 MCP 관례대로 — `test_type` → `test_type_key`, `commission_id` → `commission`.
+    assert (query["test_type_key"], query["commission"]) == ("tensile", "k-1")
+    # 「채택 안 된 것만」 은 거짓을 **보내야** 걸린다 — 빼면 전부다.
+    assert query["adopted"] == "false" and query["offset"] == 20
+    assert (query["condition"], query["condition_unit"]) == ("temperature", "degC")
+    assert got["complete"] is True and "next_offset" not in got
+
+    omitted = _Backend(answers)
+    _tool("list_test_runs", omitted)()
+    assert omitted.sent("/test-runs")["query"] == {"limit": 20}
+
+
+def test_시편_치수가_m_값을_옮긴_것_같으면_막지_않고_경고한다() -> None:
+    """조회 응답은 m, 이 도구는 mm — 0.03(m)을 그대로 옮기면 30 µm 다(VOC 41c 와 같은 꼴)."""
+    path = "/samples/s-1/specimens"
+    for dry_run in (True, False):
+        backend = _Backend({})
+        got = _tool("create_specimen", backend)(
+            sample_id="s-1", thickness_mm=0.03, width_mm=30.0, dry_run=dry_run
+        )
+        assert [line.split(" ")[0] for line in got["warnings"]] == ["thickness_mm=0.03"]
+        assert "30 µm" in got["warnings"][0] and "1000" in got["warnings"][0]
+        if not dry_run:
+            # 얇은 필름은 정말 µm 일 수 있다 — **보내기는 그대로** 한다.
+            assert backend.sent(path)["body"]["thickness"] == 0.03
+
+    backend = _Backend({})
+    got = _tool("create_specimen", backend)(
+        sample_id="s-1", thickness_mm=1.2, width_mm=12.5, dry_run=False
+    )
+    assert "warnings" not in got
+    assert backend.sent(path)["body"]["thickness"] == 1.2
+
+    # 칸마다 문턱이 다르다(2026-11-14 검토) — 게이지 200 mm 를 `0.2` 로 옮긴 것도 잡는다.
+    # 두께는 필름이 µm 라 0.1 mm 미만만.
+    got = _tool("create_specimen", _Backend({}))(
+        sample_id="s-1", thickness_mm=0.15, gauge_length_mm=0.2, dry_run=True
+    )
+    assert [line.split(" ")[0] for line in got["warnings"]] == ["gauge_length_mm=0.2"]
+
+
+def test_SP_객체_찾기도_쪽_넘김을_단다() -> None:
+    """2026-11-14 검토 — 목록 도구 가운데 이것만 `complete` · `next_offset` 이 없어, 다음
+    쪽을 AI 가 셈해야 했고 설명의 「offset(응답의 total)」 은 total 을 offset 으로 넣으라고
+    읽혔다."""
+    backend = _Backend(
+        {"/sp-core/objects": {"items": [{"key": "a"}, {"key": "b"}], "total": 5}}
+    )
+    got = _tool("find_sp_core_objects", backend)(type="part", limit=2, offset=2)
+    assert backend.sent("/sp-core/objects")["query"]["offset"] == 2
+    assert got["complete"] is False and got["next_offset"] == 4

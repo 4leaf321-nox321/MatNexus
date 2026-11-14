@@ -13381,6 +13381,11 @@ export interface components {
             expect: {
                 [key: string]: number;
             };
+            /**
+             * Fail From Elongation
+             * @default false
+             */
+            fail_from_elongation: boolean;
             /** Format */
             format: string;
             /**
@@ -13388,6 +13393,8 @@ export interface components {
              * @default mm_n_tonne
              */
             units: string;
+            /** With Card */
+            with_card?: string | null;
         };
         /**
          * DeckFormatOut
@@ -22213,7 +22220,8 @@ export interface components {
         };
         /**
          * SpecimenWarningOut
-         * @description 규격이 요구하는 비율을 어겼다 — **막지는 않는다.**
+         * @description 규격이 요구하는 비율을 어겼거나(`kind=ratio`) 쓰이는 치수가 다른 출처와 자릿수가
+         *     다르다(`kind=magnitude`, 2026-11-14) — **막지는 않는다.**
          *
          *     규격이 권장값을 주는데 장비가 못 맞추는 일이 실제로 있다. ISO 6721-4 는
          *     클램프 간 50~100 mm 를 권하지만 어느 DMA 장비도 그 값을 못 준다(Netzsch 15 ·
@@ -22228,6 +22236,12 @@ export interface components {
             condition: string;
             /** Help */
             help?: string | null;
+            /**
+             * Kind
+             * @default ratio
+             * @enum {string}
+             */
+            kind: "ratio" | "magnitude";
         };
         /**
          * SpreadOut

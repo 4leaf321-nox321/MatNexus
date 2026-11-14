@@ -22,7 +22,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
-from app.modules.materials.models import Specimen
+from app.modules.materials.models import Material, Sample, Specimen
 from app.modules.tests import services as test_services
 from app.modules.tests.definitions import ensure_builtin_test_types
 from app.modules.tests.models import TestRun
@@ -334,6 +334,33 @@ class TestValues:
         sizes = dimensions_of(client, admin_headers, specimen["id"])
         assert field_named(sizes, "thickness")["measured"] is None
 
+    @pytest.mark.dimension_magnitude
+    def test_자릿수가_다른_치수는_시편_화면도_경고한다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str], seeded: None
+    ) -> None:
+        """VOC 41c(2026-11-14) — 시험 점검만 있으면 시편 화면에서 30 µm 를 넣은 순간에는
+        모른다."""
+        made = make_standard(client, admin_headers, "공칭 1 mm", attributes={})
+        term = db.get(VocabularyTerm, uuid.UUID(made["id"]))
+        assert term is not None
+        term.attributes = {**(term.attributes or {}), "thickness": 0.001}
+        db.commit()
+        specimen = make_specimen(client, admin_headers, standard="공칭 1 mm")
+        saved = client.put(
+            f"/api/specimens/{specimen['id']}/dimensions",
+            json={"dimensions": {"thickness": 3e-5}},
+            headers=admin_headers,
+        )
+        assert saved.status_code == 200, saved.text
+        warned = [one for one in saved.json()["warnings"] if "자릿수" in one["condition"]]
+        assert len(warned) == 1 and warned[0]["actual"] == pytest.approx(1000 / 30)
+        # 화면은 `kind` 로 규격 비율 경고와 따로 보이고, 이것이 있으면 저장 뒤 창을 닫지
+        # 않는다.
+        assert warned[0]["kind"] == "magnitude"
+        assert all(
+            one["kind"] == "ratio" for one in saved.json()["warnings"] if one not in warned
+        )
+
     def test_규격에서_사라진_칸도_보인다(
         self, client: TestClient, admin_headers: dict[str, str], seeded: None
     ) -> None:
@@ -478,11 +505,17 @@ class Test시험이_자기_치수를_든다:
         self, client: TestClient, db: Session, admin_headers: dict[str, str], seeded: None
     ) -> None:
         """VOC 41c(2026-11-14) — 시편 두께 30 µm 와 파일 두께 0.986 mm. 막지 않고 어느 출처를
-        쓰는지와 함께 말한다. 몇 % 차이는 말하지 않는다(폭 12.5 vs 12.473)."""
+        쓰는지와 함께 말한다. 몇 % 차이는 말하지 않는다(폭 12.5 vs 12.473). 출처가 둘뿐이라
+        어느 쪽이 틀렸는지 모른다 — 재료 두께를 비운다."""
         specimen = make_specimen(client, admin_headers)
         stored = db.get(Specimen, uuid.UUID(specimen["id"]))
         assert stored is not None
         stored.dimensions = {"thickness": 3e-5, "width": 0.0125}
+        sample = db.get(Sample, stored.sample_id)
+        assert sample is not None
+        material = db.get(Material, sample.material_id)
+        assert material is not None
+        material.spec_thickness_m = None
         db.commit()
 
         run = self.upload(client, admin_headers, db, specimen["id"])
@@ -492,6 +525,24 @@ class Test시험이_자기_치수를_든다:
         assert len(found) == 1, saved.checks
         assert "두께" in found[0]["message"] and "0.03 mm" in found[0]["message"]
         assert "파일 값을 씁니다" in found[0]["message"]
+
+    @pytest.mark.dimension_magnitude
+    def test_쓰이는_값이_다른_출처와_맞으면_말하지_않는다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str], seeded: None
+    ) -> None:
+        """2026-11-14 검토 — 파일 0.986 mm 가 재료 두께 1 mm 와 맞으면, 틀린 시편 30 µm 는
+        이 시험에 쓰이지 않는다. 처음엔 출처 전체의 최대 · 최소를 견줘 맞게 계산된 시험에도
+        걸렸다."""
+        specimen = make_specimen(client, admin_headers)
+        stored = db.get(Specimen, uuid.UUID(specimen["id"]))
+        assert stored is not None
+        stored.dimensions = {"thickness": 3e-5, "width": 0.0125}
+        db.commit()
+
+        run = self.upload(client, admin_headers, db, specimen["id"])
+        saved = db.get(TestRun, uuid.UUID(run["id"]))
+        assert saved is not None
+        assert not [one for one in saved.checks if one["code"] == "dimension_magnitude"]
 
     def test_시편에_적힌_값보다_먼저다(
         self, client: TestClient, db: Session, admin_headers: dict[str, str], seeded: None

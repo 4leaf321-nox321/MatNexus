@@ -386,6 +386,60 @@ def _sizes(
     )
 
 
+#: 치수 출처끼리 이만큼(배) 다르면 단위를 잘못 넣은 것으로 본다 — 실측과 공칭은 몇 % 갈려도
+#: 열 배는 안 갈린다(2026-11-14, VOC 41c).
+MAGNITUDE_RATIO = 10.0
+
+
+@dataclass(frozen=True)
+class MagnitudeGap:
+    """같은 치수가 출처마다 자릿수가 다르다. `seen` 은 쓰는 차례(앞이 이긴다)."""
+
+    key: str
+    label: str
+    seen: tuple[tuple[str, float], ...]
+
+    def listed(self) -> str:
+        return " · ".join(f"{name} {value * 1000:.4g} mm" for name, value in self.seen)
+
+
+def magnitude_gaps(sizes: Sizes) -> list[MagnitudeGap]:
+    """**쓰이는 값이 다른 출처 모두와** `MAGNITUDE_RATIO` 배 넘게 다른 치수.
+
+    30 x 30 mm 시편의 단면적이 0.9021 mm²(1000배 작게)로 계산됐다 — 두께 30 µm 가 우선순위에서
+    이겼다. 검사가 「0 < 값 < 1 m」 뿐이라 µm 를 못 막는다. **막지 않는다** — 얇은 필름은 정말
+    µm 다. 시험 점검(`tests.services`)과 시편 치수 화면이 같은 판정을 쓴다.
+
+    **쓰이는 값(앞의 출처)이 외톨이일 때만** 말한다(2026-11-14 검토). 처음엔 출처 전체의 최대 ·
+    최소를 견줘, 실측 4 mm · 공칭 4 mm · 재료 두께 40 mm(두꺼운 판에서 깎은 막대)처럼 맞는
+    시편도 저장할 때마다 걸렸다 — 쓰이지 않는 약한 출처의 차이다. 출처가 둘뿐이면 어느 쪽이
+    틀렸는지 모르므로 말한다.
+    """
+    sources = (
+        ("파일", sizes.from_run),
+        ("시편", sizes.measured),
+        ("규격 공칭", sizes.nominal),
+        ("재료 두께", sizes.from_material),
+    )
+    found: list[MagnitudeGap] = []
+    for key in dict.fromkeys(k for _, values in sources for k in values):
+        seen = tuple(
+            (name, float(values[key]))
+            for name, values in sources
+            if isinstance(values.get(key), int | float) and float(values[key]) > 0
+        )
+        if len(seen) < 2:
+            continue
+        used = seen[0][1]
+        if any(max(used, one) / min(used, one) < MAGNITUDE_RATIO for _, one in seen[1:]):
+            continue  # 쓰이는 값이 다른 출처 하나와는 맞는다 — 틀린 것은 쓰이지 않는 쪽이다
+        label = sizes.label_of(key)
+        found.append(
+            MagnitudeGap(key, LEGACY_LABELS.get(key, label) if label == key else label, seen)
+        )
+    return found
+
+
 @dataclass(frozen=True)
 class Area:
     """단면적과, 못 냈다면 **그 이유.**

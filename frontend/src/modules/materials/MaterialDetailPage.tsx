@@ -224,10 +224,29 @@ export default function MaterialDetailPage() {
           <Field
             label="밀도"
             value={
-              item.density == null ? '—' : formatScalar(item.density, item.density_unit, 'density')
+              item.density == null ? (
+                '—'
+              ) : (
+                <>
+                  {formatScalar(item.density, item.density_unit, 'density')}
+                  <ColumnSource source={item.column_sources?.density} />
+                </>
+              )
             }
           />
-          <Field label="푸아송비" value={item.poisson_ratio == null ? '—' : String(item.poisson_ratio)} />
+          <Field
+            label="푸아송비"
+            value={
+              item.poisson_ratio == null ? (
+                '—'
+              ) : (
+                <>
+                  {String(item.poisson_ratio)}
+                  <ColumnSource source={item.column_sources?.poisson_ratio} />
+                </>
+              )
+            }
+          />
           {/* 등록한 부서 — 권한이 아니다(ADR 0035). 누가 고치는지는 머리의 한 줄이 말한다. */}
           <Field label="소속" value={item.owner_workspace_name ?? '—'} />
           <Field label="시료" value={`${item.sample_count}건`} />
@@ -510,6 +529,38 @@ export function Uses({ items, max = 8 }: { items?: string[] | null; max?: number
           외 {rest}개
         </Badge>
       )}
+    </span>
+  )
+}
+
+/** 출처 이름 — 선언 물성과 같은 목록(`materials.declared.SOURCES`). */
+const COLUMN_SOURCE_LABELS: Record<string, string> = {
+  literature: '문헌',
+  standard: '규격',
+  datasheet: '제품 데이터시트',
+  millsheet: '밀시트',
+  estimate: '추정',
+}
+
+/**
+ * 기본 칸의 근거(2026-11-14, VOC 50) — 문헌에서 받아 온 값이면 출처 · 문헌 등급, 근거 문서는 마우스를
+ * 대면. 근거가 없으면 「출처 모름」 — 카드가 그 값을 재료 공칭(등급 3)으로 본다.
+ */
+function ColumnSource({
+  source,
+}: {
+  source?: { source: string; reference: string; catalog_tier?: number | null } | null
+}) {
+  if (!source) {
+    return <span className="text-muted-foreground ml-1 text-xs">(출처 모름)</span>
+  }
+  const parts = [
+    COLUMN_SOURCE_LABELS[source.source] ?? source.source,
+    source.catalog_tier ? `문헌 ${source.catalog_tier}등급` : null,
+  ].filter(Boolean)
+  return (
+    <span className="text-muted-foreground ml-1 text-xs" title={source.reference}>
+      ({parts.join(' · ')})
     </span>
   )
 }

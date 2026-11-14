@@ -1933,3 +1933,55 @@ class Test실패한_단계:
             keep_going=True,
         )
         assert result.failures == ()
+
+
+class Test예상_못_한_예외:
+    """VOC 44(2026-11-14) — 처리 오류가 아닌 예외(빈 칸의 `float(None)` 같은 것)는 서버 오류
+    500 으로 흘러, 일괄 처리면 요청 전체가 죽고 사유가 안 남았다. 이제 그 단계의 실패다."""
+
+    @staticmethod
+    def _boom(frame: Frame, options: dict[str, Any]) -> StepResult:
+        raise TypeError("float() argument must be a string or a real number, not 'NoneType'")
+
+    def test_값만_재는_단계면_그_단계만_실패하고_뒤는_돈다(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import dataclasses
+
+        plugin = registry.get("tensile.strength")
+        monkeypatch.setitem(
+            registry._REGISTRY, plugin.id, dataclasses.replace(plugin, fn=self._boom)
+        )
+        strain = np.linspace(0, 0.02, 200)
+        frame = Frame(
+            {"strain_engineering": strain, "stress_engineering": 2e11 * strain},
+            {"strain_engineering": "1", "stress_engineering": "Pa"},
+        )
+        out = processing.apply(
+            [
+                Step("tensile.strength", {}),
+                Step(
+                    "tensile.elastic_modulus",
+                    {"method": "manual", "manual_modulus": 200e9},
+                ),
+            ],
+            frame,
+            keep_going=True,
+        )
+        assert [one.plugin for one in out.failures] == ["tensile.strength"]
+        assert "예상 못 한 오류" in out.failures[0].message
+        assert "TypeError" in out.failures[0].message
+        assert any(one.key == "youngs_modulus" for one in out.stages[-1].scalars)
+
+    def test_곡선을_바꾸는_단계면_처리_오류로_멈춘다(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import dataclasses
+
+        plugin = registry.get("curve.sort_unique")
+        monkeypatch.setitem(
+            registry._REGISTRY, plugin.id, dataclasses.replace(plugin, fn=self._boom)
+        )
+        frame = Frame({"x": np.arange(5.0)}, {"x": "1"})
+        with pytest.raises(ProcessingError, match="예상 못 한 오류"):
+            processing.apply([Step("curve.sort_unique", {"x": "x"})], frame)

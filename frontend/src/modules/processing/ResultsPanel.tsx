@@ -298,7 +298,9 @@ export function ResultsPanel({ testRunId, onAdoptChange }: Props) {
                 </div>
 
                 {expanded && (
-                  <div className="grid gap-4 border-t px-3 py-3 2xl:grid-cols-[minmax(0,4fr)_minmax(0,6fr)] 2xl:items-start">
+                  // 왼쪽(읽는 값)은 300~420 px, 나머지는 곡선(2026-11-14, VOC 41) — 4:6 이면 값
+                  // 몇 개에 40 % 를 내주고 곡선이 좁았다. 시험 상세 원본 탭과 같다.
+                  <div className="grid gap-4 border-t px-3 py-3 2xl:grid-cols-[minmax(300px,420px)_minmax(0,1fr)] 2xl:items-start">
                     {/* **곡선을 오른쪽에, 읽는 값을 왼쪽에.** 채택은 이 곡선을
                         물성으로 삼는 결정인데, 세로로 쌓으면 곡선을 보고 스크롤을
                         내려 숫자를 보고 다시 올라와야 한다 — 「이 곡선에서 이 값이
@@ -306,7 +308,7 @@ export function ResultsPanel({ testRunId, onAdoptChange }: Props) {
 
                         좁은 화면에서는 한 열로 돌아가고 그때는 **곡선이 먼저다**
                         (`order`) — 무엇을 계산했는지 보고 나서 숫자를 본다. */}
-                    <div className="space-y-3 2xl:order-1">
+                    <div className="order-2 space-y-3 2xl:order-1">
                       {/* 칸이 좁아 두 열이면 한 줄에 하나꼴로 늘어졌다. 값은
                           짧고(숫자+단위) 이름도 짧아 셋이 들어간다. */}
                       {item.scalars.length > 0 && (
@@ -345,7 +347,7 @@ export function ResultsPanel({ testRunId, onAdoptChange }: Props) {
                       </ol>
                     </div>
 
-                    <div className="2xl:order-2 2xl:sticky 2xl:top-28">
+                    <div className="order-1 2xl:order-2 2xl:sticky 2xl:top-28">
                       <ResultCurve resultId={item.id} />
                     </div>
                   </div>

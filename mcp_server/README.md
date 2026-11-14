@@ -136,7 +136,7 @@ ms)를 알린다 — 「관리 → 사용 현황」 의 MCP 숫자가 여기서 
 ### 사내 재료
 
     get_material(material_id)          기본 칸·선언 물성·카드·문헌 연결
-    list_material_parts(material_id, q?)  이 재료가 쓰인 부품 — 제품 · 사업부별 수
+    list_material_parts(material_id, q?, ...)  이 재료가 쓰인 부품 — 제품 · 사업부별 수
     get_parameter_sets(material_id)    모델 파라미터 벌 (Anand·Prony·Ogden)
     list_cards(material_id?, status?,  물성 카드 목록 — q 는 이름 · 카드 번호 · 재료 번호,
                q?, asked?, test_type?, asked 면 확정 요청 온 초안만, test_type · owner 로 거른다.
@@ -152,7 +152,9 @@ ms)를 알린다 — 「관리 → 사용 현황」 의 MCP 숫자가 여기서 
     ★ create_material(family, category, 재료 하나. 미리보기가 **지어질 이름**과
                       grade, ...)        **비슷한 이름**을 준다
     ★ create_sample(material_id, ...)   로트 하나. 미리보기가 **같은 로트**를 짚는다
-    ★ create_specimen(sample_id, ...)   자른 조각 하나. 번호는 서버가 방향별로 매긴다
+    ★ create_specimen(sample_id, ...)   자른 조각 하나. 번호는 서버가 방향별로 매긴다.
+                                       치수는 mm(조회 응답은 m) — 두께 0.1 mm · 폭 · 게이지
+                                       1 mm 아래면 경고만 싣는다
 
 Family·Category·Grade·제조사·유통사·시편 규격은 **기준정보**라, 목록에 없는 값이면
 도구가 아무것도 안 만들고 비슷한 값을 후보로 준다(ADR 0032). 정말 새 등급이면 사람이
@@ -176,7 +178,8 @@ Family·Category·Grade·제조사·유통사·시편 규격은 **기준정보**
 
 ### 문헌 카탈로그 → 사내로 받아 오기
 
-    search_catalog(query, category?)   문헌 재료 찾기 (출처·등급이 붙는다)
+    search_catalog(query, category?,   문헌 재료 찾기 (출처·등급이 붙는다) — subsystem ·
+                   domain?, offset?)   manufacturer 로도 좁힌다
     get_catalog_material(id, domain?)  물성 전부 — 값·조건·등급·출처. 곡선 · 산점은 벌 머리만,
                                        계수 묶음 항은 property_keys 로 콕 집을 때만, 관리 표지는 뺀다
     get_catalog_series(series_id)      곡선 · 산점 한 벌의 점(ADR 0072 — 상세에는 안 실린다)
@@ -233,7 +236,8 @@ AI 가 상태를 바꾸면 자료 관리자에게 알림이 간다(채택도, 20
                                        arrhenius · manual, 장비가 겹친 표는 import_curve_key
     ★ fit_prony(master_curve_id)      Prony 벌을 맞춘다 — terms 를 비우면 BIC 로 고른다
 
-    list_inbox(status?)                장비가 떨어뜨린, 아직 안 붙은 파일들
+    list_inbox(status?, scope?,        장비가 떨어뜨린 파일들 — status 를 비우면 등록된 것도 섞인다,
+               connector_id?, offset?) scope=all 이면 전사
     list_test_runs(material_id?, ...)  시험 목록
     get_test_run(test_run_id)          조건·시편·채택된 처리 결과
     list_specimens(material?, q?, ...) 시편을 재료를 거치지 않고 — 규격·방향으로
@@ -292,7 +296,8 @@ SP(Standard Platform)의 코어(부서 · 기관 · 장비 · PLM · 물성 …)
 연결은 기록일 뿐 아직 값을 잠그거나 덮지 않는다.
 
     sp_core_status()                   받아 둔 타입 · 건수 · 칸 · 연결 수, 최근 받기의 오류 · 경고
-    find_sp_core_objects(type?, q?)    받은 객체 찾기. type + key 면 하나를 선 · 연결과 함께
+    find_sp_core_objects(type?, q?,    받은 객체 찾기. type + key 면 하나를 선 · 연결과 함께
+                         offset?)
     match_sp_core(sp_type, target)     SP 타입 ↔ 기준정보 축(term + vocabulary) · 물성 · 물성군 ·
                                        분야 대조 — 후보(하나에만 맞음) · 애매함 · SP 에만 있는 것
     ★ link_sp_core(items)              잇기 — 미리보기 기본, 오류 한 줄이면 하나도 안 잇는다 (자료 관리자)
@@ -304,8 +309,8 @@ SP(Standard Platform)의 코어(부서 · 기관 · 장비 · PLM · 물성 …)
     list_unit_systems()                낼 수 있는 단위계 — 뽑기 전에 고른다
     render_card_deck(card, fmt,        카드 하나 → 덱 본문. **units 를 꼭 넘겨라**
                      units)
-    check_card_deck(card, fmt, units,  뽑은 덱을 되읽어 카드와 대조 — 건네기 전에
-                    expect?)
+    check_card_deck(card, fmt, units,  뽑은 덱을 되읽어 카드와 대조 — 건네기 전에. 짝 카드 ·
+                    expect?, ...)      파단 칸(with_card · fail_from_elongation)도 뽑을 때와 같게
     build_deck(rows, units,            부품 여럿 → 덱 한 파일. 파일로 건네려면
                include_text)           include_text=True (500줄 넘으면 잘린다)
     get_verify_kit(card, fmt)          1요소 검증 모델 — 모델 · 재료 덱 · 기대 응답(README)을
@@ -323,7 +328,8 @@ SP(Standard Platform)의 코어(부서 · 기관 · 장비 · PLM · 물성 …)
 
 ### 측정 의뢰 — 「이 물성이 없다」 의 끝
 
-    list_commissions(scope?, status?)  누가 무엇을 왜 재 달라고 했고 어디까지 됐나
+    list_commissions(scope?, status?,  누가 무엇을 왜 재 달라고 했고 어디까지 됐나
+                     q?, offset?)
     get_commission(commission_id)      항목·붙은 시험·진행률·이력
     ★ create_commission(...)           작성 중으로 짓는다. submit=True 면 바로 낸다 (미리보기 기본)
                                        lab 을 비우면 TestScope 기준 받는 부서 추천(lab_suggestions)
