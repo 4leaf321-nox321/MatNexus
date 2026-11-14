@@ -971,6 +971,7 @@ def ashby(
                 group=group,
                 x=x_rep.value_num,
                 y=y_rep.value_num,
+                tier=max(x_rep.quality_tier, y_rep.quality_tier),
             )
         )
     return AshbyOut(

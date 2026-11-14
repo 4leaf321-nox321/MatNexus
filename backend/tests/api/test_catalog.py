@@ -583,6 +583,8 @@ class Test활용_화면_API:
         assert point["name"] == "SUS304"
         assert point["x"] == 193e9 and point["y"] == 7930
         assert point["group"] == "metal"
+        # 두 축 대표값의 문헌 등급 중 나쁜 쪽 — 지도가 추정값(4)을 빈 점으로 그린다.
+        assert point["tier"] in (1, 2, 3, 4)
 
     def test_커버리지_격자가_계통과_도메인으로_센다(
         self, client: TestClient, db: Session, admin_headers: dict[str, str], tmp_path: Path

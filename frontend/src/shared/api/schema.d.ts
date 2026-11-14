@@ -9702,6 +9702,11 @@ export interface components {
             id: string;
             /** Name */
             name: string;
+            /**
+             * Tier
+             * @default 3
+             */
+            tier: number;
             /** X */
             x: number;
             /** Y */

@@ -129,6 +129,80 @@ describe('Ashby', () => {
     expect(screen.getByText(/0·음수 1점 제외/)).toBeInTheDocument()
   })
 
+  it('같은 자리에 포개진 재료를 묶어 말하고, 누르면 근처 재료를 목록으로 고르게 한다', async () => {
+    // 2026-11-15 — 값이 똑같은 재료가 한 자리에 포개져(최대 51종) 맨 위 하나만 눌렸다. 확대로도
+    // 안 풀린다. 추정값(문헌 4등급)은 빈 점으로 구별한다.
+    axes.mockResolvedValue([
+      { key: 'mechanical.youngs_modulus', name: '영률', domain: 'mechanical', unit: 'Pa', material_count: 9 },
+      { key: 'physical.density', name: '밀도', domain: 'physical', unit: 'kg/m^3', material_count: 9 },
+    ])
+    ashby.mockResolvedValue({
+      x_unit: 'Pa',
+      y_unit: 'kg/m^3',
+      points: [
+        { id: A, name: 'SUS304', group: 'metal', x: 1.93e11, y: 7930, tier: 1 },
+        { id: B, name: '추정 분자 가', group: 'polymer', x: 3e9, y: 1200, tier: 4 },
+        { id: 'c-3', name: '추정 분자 나', group: 'polymer', x: 3e9, y: 1200, tier: 4 },
+        { id: 'c-4', name: '잰 고분자', group: 'polymer', x: 3e9, y: 1200, tier: 2 },
+      ],
+    })
+    const { container } = render(
+      <MemoryRouter
+        initialEntries={['/catalog/ashby?x=mechanical.youngs_modulus&y=physical.density']}
+      >
+        <CatalogAshbyPage />
+      </MemoryRouter>
+    )
+    expect(await screen.findByText(/4종 표시 · 같은 자리 1곳에 3종/)).toBeInTheDocument()
+    expect(screen.getByText(/빈 점 = 추정값\(문헌 4등급\) 2종/)).toBeInTheDocument()
+    // 포개진 자리는 한 점 — 잰 값이 위에 와 채운 점으로 그린다.
+    const titles = [...container.querySelectorAll('circle title')].map((one) => one.textContent)
+    expect(titles).toContain('같은 자리 3종 — 잰 고분자 외')
+    expect(container.querySelectorAll('circle[data-estimated="true"]')).toHaveLength(0)
+
+    const { fireEvent } = await import('@testing-library/react')
+    const stack = [...container.querySelectorAll('circle title')].find((one) =>
+      one.textContent?.startsWith('같은 자리')
+    )!
+    fireEvent.click(stack.parentElement!)
+    const list = await screen.findByRole('region', { name: '겹친 재료' })
+    expect(list).toHaveTextContent('이 자리 근처 3종')
+    expect(list).toHaveTextContent('추정 분자 가')
+    expect(list).toHaveTextContent('추정 분자 나')
+    expect(list).toHaveTextContent('잰 고분자')
+    expect(list).not.toHaveTextContent('SUS304')
+  })
+
+  it('휠로 확대하면 「전체 보기」 가 서고 누르면 돌아간다', async () => {
+    axes.mockResolvedValue([
+      { key: 'mechanical.youngs_modulus', name: '영률', domain: 'mechanical', unit: 'Pa', material_count: 9 },
+      { key: 'physical.density', name: '밀도', domain: 'physical', unit: 'kg/m^3', material_count: 9 },
+    ])
+    ashby.mockResolvedValue({
+      x_unit: 'Pa',
+      y_unit: 'kg/m^3',
+      points: [
+        { id: A, name: 'SUS304', group: 'metal', x: 1.93e11, y: 7930, tier: 1 },
+        { id: B, name: 'PC', group: 'polymer', x: 2.4e9, y: 1200, tier: 2 },
+      ],
+    })
+    const { container } = render(
+      <MemoryRouter
+        initialEntries={['/catalog/ashby?x=mechanical.youngs_modulus&y=physical.density']}
+      >
+        <CatalogAshbyPage />
+      </MemoryRouter>
+    )
+    await screen.findByText(/2종 표시/)
+    const svg = container.querySelector('svg')!
+    svg.getBoundingClientRect = () => ({ left: 0, top: 0, width: 860, height: 480 }) as DOMRect
+    expect(screen.queryByRole('button', { name: '전체 보기' })).toBeNull()
+    const { fireEvent } = await import('@testing-library/react')
+    fireEvent.wheel(svg, { deltaY: -100, clientX: 400, clientY: 200 })
+    fireEvent.click(await screen.findByRole('button', { name: '전체 보기' }))
+    expect(screen.queryByRole('button', { name: '전체 보기' })).toBeNull()
+  })
+
   it('양 축에 물성 이름과 단위가 적힌다', async () => {
     axes.mockResolvedValue([
       {

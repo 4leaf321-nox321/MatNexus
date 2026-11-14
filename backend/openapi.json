@@ -1014,6 +1014,11 @@
             "title": "Name",
             "type": "string"
           },
+          "tier": {
+            "default": 3,
+            "title": "Tier",
+            "type": "integer"
+          },
           "x": {
             "title": "X",
             "type": "number"

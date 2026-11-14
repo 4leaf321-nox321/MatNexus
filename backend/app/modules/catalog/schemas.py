@@ -318,6 +318,10 @@ class AshbyPointOut(BaseModel):
     group: str
     x: float
     y: float
+    tier: int = 3
+    """두 축 대표값의 문헌 등급 중 **나쁜 쪽**(숫자가 큰 쪽 — 1 실측 … 4 추정). 지도가 추정값을
+    빈 점으로 그린다(2026-11-15) — 같은 자리에 포개진 점의 절반 넘게가 계열 추정값이라, 잰 값과
+    구별이 안 됐다."""
 
 
 class AshbyOut(BaseModel):
