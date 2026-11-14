@@ -12404,6 +12404,18 @@ export interface components {
             retention_days?: number | null;
         };
         /**
+         * ColumnSourceOut
+         * @description 기본 칸 하나의 근거 — 출처 · 근거 문서 · 받아 온 문헌 등급(지금 값에 유효할 때만).
+         */
+        ColumnSourceOut: {
+            /** Catalog Tier */
+            catalog_tier?: number | null;
+            /** Reference */
+            reference: string;
+            /** Source */
+            source: string;
+        };
+        /**
          * CommissionCreateRequest
          * @description **시료 또는 새 재료 설명** 중 하나는 있어야 한다 — 등록된 시료가 없는 새 재료도
          *     의뢰한다. 그때는 받는 쪽이 재료·시료를 등록한 뒤 잇는다.
@@ -15422,6 +15434,10 @@ export interface components {
             };
             /** Plugin Id */
             plugin_id: string;
+            /** Results */
+            results?: {
+                [key: string]: string;
+            };
             /** Run Ids */
             run_ids: string[];
         };
@@ -16788,6 +16804,13 @@ export interface components {
             /** Code */
             code: string;
             /**
+             * Column Sources
+             * @default {}
+             */
+            column_sources: {
+                [key: string]: components["schemas"]["ColumnSourceOut"];
+            };
+            /**
              * Created At
              * Format: date-time
              */
@@ -17039,6 +17062,12 @@ export interface components {
             declared_properties?: components["schemas"]["DeclaredPropertyIn"][] | null;
             /** Density */
             density?: number | null;
+            /** Density Catalog Value Ids */
+            density_catalog_value_ids?: string[] | null;
+            /** Density Reference */
+            density_reference?: string | null;
+            /** Density Source */
+            density_source?: string | null;
             /** Density Unit */
             density_unit?: string | null;
             /** Details */
@@ -17051,6 +17080,12 @@ export interface components {
             note?: string | null;
             /** Poisson Ratio */
             poisson_ratio?: number | null;
+            /** Poisson Ratio Catalog Value Ids */
+            poisson_ratio_catalog_value_ids?: string[] | null;
+            /** Poisson Ratio Reference */
+            poisson_ratio_reference?: string | null;
+            /** Poisson Ratio Source */
+            poisson_ratio_source?: string | null;
             /** Spec Thickness */
             spec_thickness?: number | null;
             /** Spec Thickness Unit */

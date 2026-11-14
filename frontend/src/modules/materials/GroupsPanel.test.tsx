@@ -57,6 +57,12 @@ vi.mock('@/modules/tests/api', () => ({
   testsApi: { runs: (...args: unknown[]) => runs(...args) },
 }))
 
+const processingResults = vi.fn()
+vi.mock('@/modules/processing/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/modules/processing/api')>()),
+  processingApi: { results: (...args: unknown[]) => processingResults(...args) },
+}))
+
 const SPEC = {
   id: 'viscoelastic.prony_group',
   label: '묶음 Prony',
@@ -526,6 +532,37 @@ describe('후보의 조건은 서버가 말한다', () => {
     expect(screen.getByText(/채택된 처리 결과가 있는 시험만 표시/)).toBeInTheDocument()
     expect(screen.getByText(/1건은 미채택으로 제외/)).toBeInTheDocument()
     expect(screen.queryByText(/마스터커브가 있는 시험만/)).not.toBeInTheDocument()
+  })
+
+  it('채택하지 않은 결과도 쓰기를 켜면 미채택 시험이 뜨고, 고른 결과를 보낸다', async () => {
+    // VOC 49(2026-11-14) — 등가 E 처럼 공식 물성으로 채택하지 않는 값도 카드로 가야 한다.
+    kinds.mockResolvedValue([{ ...RATE_SPEC, min_members: 1 }])
+    runs.mockResolvedValue({
+      items: [
+        { id: 'r2', record_name: 'B_TEN_01', test_type_key: 'tensile', adopted_result_id: null },
+      ],
+      total: 1,
+      limit: 200,
+      offset: 0,
+    })
+    processingResults.mockResolvedValue([
+      { id: 'p9', is_adopted: false, recipe_label: '등가 E', created_at: '2026-11-14T01:00:00Z' },
+    ])
+    create.mockResolvedValue({})
+    show(<GroupsPanel materialId="m1" />)
+    await userEvent.click(await screen.findByRole('button', { name: '글로벌 피팅' }))
+    expect(screen.queryByLabelText('B_TEN_01 선택')).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByLabelText(/채택하지 않은 결과도 쓰기/))
+    await userEvent.click(await screen.findByLabelText('B_TEN_01 선택'))
+    const choose = await screen.findByLabelText('B_TEN_01 쓸 결과')
+    choose.focus()
+    expect(await screen.findByRole('option', { name: /미채택 · 등가 E/ })).toBeInTheDocument()
+    await userEvent.selectOptions(choose, 'p9')
+    await userEvent.click(screen.getByRole('button', { name: /시편 1건 적합/ }))
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({ run_ids: ['r2'], results: { r2: 'p9' } })
+    )
   })
 
   it('표로 넣은 시험(imported)도 요약값 묶음의 후보다', async () => {

@@ -122,6 +122,7 @@ def create_group(
         run_ids=payload.run_ids,
         options=payload.options,
         note=payload.note,
+        results=payload.results,
     )
     db.commit()
     return _out(row, access=access_of(db, user, row))

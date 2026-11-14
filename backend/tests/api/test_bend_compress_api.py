@@ -515,6 +515,86 @@ class TestChain:
         assert stiffness["support_span"] == pytest.approx(0.064)
         assert stiffness["loading"] == "3점 굽힘"
 
+    def test_채택하지_않은_결과로도_등가_E_카드를_만들고_그렇다고_적는다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str], seeded: None
+    ) -> None:
+        """VOC 49(2026-11-14) — 부품 · 적층판의 등가 E 는 공식 물성으로 채택하지 않지만 해석용
+        선형 카드는 필요하다. 묶음은 채택 결과만 써서 그 값을 카드로 만들 길이 없었다."""
+        _import(client, admin_headers, "iso_178")
+        run_ids = _runs(
+            client,
+            db,
+            admin_headers,
+            standard="ISO 178 (플라스틱 3점 굽힘)",
+            test_type="flexural",
+            filename="bend.tra",
+            data=_zwick_flexural(),
+            count=2,
+        )
+        steps = [
+            {
+                "plugin": "flexural.engineering",
+                "options": {
+                    "support_span": "@specimen_span",
+                    "width": "@specimen_width",
+                    "thickness": "@specimen_thickness",
+                },
+            },
+            {"plugin": "flexural.modulus", "options": {}},
+        ]
+        chosen: dict[str, str] = {}
+        for run_id in run_ids:
+            stored = client.post(
+                "/api/processing/results",
+                json={"test_run_id": run_id, "steps": steps},
+                headers=admin_headers,
+            )
+            assert stored.status_code == 201, stored.text
+            chosen[run_id] = stored.json()["id"]  # 채택하지 않는다
+
+        group = client.post(
+            "/api/groups",
+            json={"plugin_id": "flexural.equivalent", "run_ids": run_ids, "results": chosen},
+            headers=admin_headers,
+        )
+        assert group.status_code == 201, group.text
+        assert group.json()["values"]["flexural_modulus"] == pytest.approx(E_FLEX, rel=1e-3)
+        card = client.post(
+            "/api/fitting/cards/from-group",
+            json={
+                "group_result_id": group.json()["id"],
+                "label": "미채택 등가 E",
+                "poisson_ratio": 0.3,
+                "density": 2300.0,
+            },
+            headers=admin_headers,
+        )
+        assert card.status_code == 201, card.text
+        source = card.json()["source"]
+        assert len(source["unadopted"]) == 2
+        assert any(str(line).startswith("미채택 결과로 만든 카드") for line in source["notes"])
+        deck = client.get(
+            f"/api/fitting/cards/{card.json()['id']}/export",
+            params={"format": "abaqus_elastic", "units": "si"},
+            headers=admin_headers,
+        )
+        assert deck.status_code == 200, deck.text
+        assert "미채택 결과로 만든 카드" in deck.text
+        # 채택은 그대로다 — 재료 통계에 안 섞인다.
+        for run_id in run_ids:
+            got = client.get(f"/api/test-runs/{run_id}", headers=admin_headers).json()
+            assert got["adopted_result_id"] is None
+
+        # 남의 시험 결과는 끼워 넣지 못한다.
+        swapped = {run_ids[0]: chosen[run_ids[1]], run_ids[1]: chosen[run_ids[1]]}
+        refused = client.post(
+            "/api/groups",
+            json={"plugin_id": "flexural.equivalent", "run_ids": run_ids, "results": swapped},
+            headers=admin_headers,
+        )
+        assert refused.status_code == 422, refused.text
+        assert refused.json()["error"]["code"] == "MNX-GROUPING-0016"
+
     def test_탄성률_칸을_비우면_기본값_못_내면_그_단계만_실패(
         self, client: TestClient, db: Session, admin_headers: dict[str, str], seeded: None
     ) -> None:

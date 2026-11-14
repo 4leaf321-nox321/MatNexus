@@ -202,6 +202,12 @@ describe('병합이 정확해야 한다', () => {
     // 밀도는 기본 칸으로, SI 단위 명시.
     expect(body.density).toBe(7930)
     expect(body.density_unit).toBe('kg/m3')
+    // 기본 칸에도 근거가 간다(2026-11-14, VOC 50) — 숫자만 가면 카드가 「재료 공칭(3)」 으로 본다.
+    expect(body.density_source).toBe('literature')
+    expect(String(body.density_reference)).toContain('어느 논문')
+    expect(body.density_catalog_value_ids).toEqual(
+      DETAIL.values.filter((one) => one.property_key === 'physical.density').map((one) => one.id)
+    )
     // 음의 포아송비는 애초에 목록에 없었으니 patch 에도 없다.
     expect(body.poisson_ratio).toBeUndefined()
   })

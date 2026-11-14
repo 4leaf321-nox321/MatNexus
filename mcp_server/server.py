@@ -3105,6 +3105,11 @@ async def adopt_catalog_values(
             else:
                 planned.append({"property": name, "skipped": "서버 제약 밖의 값(0 ≤ ν < 0.5)"})
                 continue
+            # **기본 칸에도 근거를 함께**(2026-11-14, VOC 50) — 숫자만 보내면 카드가 「재료
+            # 공칭(등급 3)」 으로 봐 추정(4)이 올라가 보였다. 서버가 그 문헌 값과 대 보고 등급을 잇는다.
+            patch[f"{name}_source"] = origin
+            patch[f"{name}_reference"] = reference
+            patch[f"{name}_catalog_value_ids"] = [row["id"]]
         else:
             point: dict[str, Any] = {
                 "value": row["value_num"],

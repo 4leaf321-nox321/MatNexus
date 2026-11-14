@@ -18,7 +18,8 @@ Prony 묶음은 마스터커브가 필요하고, 나중에 올 S-N 묶음은 채
 from __future__ import annotations
 
 import uuid
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
+from contextvars import ContextVar
 from typing import Any, Literal
 
 import numpy as np
@@ -94,6 +95,40 @@ def collector(
 #: 그 길로. `matcore/groups/__init__.py` 가 "다음 물성을 붙일 때 그 한 줄이 거슬리면
 #: 레지스트리로 옮길 때" 라고 적어 둔 것의 절반이다 — 선언으로 되는 것은 옮겼다.
 MEMBERS_META = "members"
+
+#: 이 묶음에서 **시험마다 쓸 결과**(시험 id → 결과 id) — 비면 채택된 결과(2026-11-14, VOC 49).
+#: 수집기들이 채택 결과를 읽는 자리가 여섯이라, 인자로 끌고 다니지 않고 `create` 가 이 묶음을
+#: 모으는 동안만 둔다.
+_CHOSEN: ContextVar[Mapping[uuid.UUID, uuid.UUID] | None] = ContextVar(
+    "grouping_chosen_results", default=None
+)
+
+
+def result_id_of(run: TestRun) -> uuid.UUID | None:
+    """이 묶음이 이 시험에서 쓸 결과 — 고른 것이 있으면 그것, 없으면 채택된 것."""
+    chosen = _CHOSEN.get() or {}
+    return chosen.get(run.id, run.adopted_result_id)
+
+
+def _check_chosen(
+    db: Session, runs: Sequence[TestRun], chosen: Mapping[uuid.UUID, uuid.UUID]
+) -> None:
+    """고른 결과가 **그 시험의 것**인지 본다 — 남의 시험 결과를 끼워 넣지 못하게(VOC 49)."""
+    ids = {run.id for run in runs}
+    for run_id, result_id in chosen.items():
+        if run_id not in ids:
+            raise AppError(
+                "MNX-GROUPING-0016",
+                f"쓸 결과를 고른 시험({run_id})이 묶을 시험에 없습니다.",
+                status=422,
+            )
+        result = db.get(ProcessingResult, result_id)
+        if result is None or result.test_run_id != run_id:
+            raise AppError(
+                "MNX-GROUPING-0016",
+                f"고른 결과({result_id})가 그 시험의 처리 결과가 아닙니다.",
+                status=422,
+            )
 
 
 def _declared_rule(plugin_id: str) -> dict[str, Any] | None:
@@ -274,7 +309,7 @@ def _mixed_members(
         for one in db.scalars(
             select(ProcessingResult).where(
                 ProcessingResult.id.in_(
-                    {run.adopted_result_id for run in runs if run.adopted_result_id}
+                    {result_id_of(run) for run in runs if result_id_of(run)}
                 )
             )
         )
@@ -288,7 +323,7 @@ def _mixed_members(
             found = conditions.get(key)
             if isinstance(found, int | float):
                 values[key] = float(found)
-        result = results.get(run.adopted_result_id) if run.adopted_result_id else None
+        result = results.get(chosen) if (chosen := result_id_of(run)) else None
         scalars = {
             str(one.get("key")): one.get("value")
             for one in ((result.scalars if result else None) or [])
@@ -359,14 +394,14 @@ def _declared_members(
         for one in db.scalars(
             select(ProcessingResult).where(
                 ProcessingResult.id.in_(
-                    {run.adopted_result_id for run in runs if run.adopted_result_id}
+                    {result_id_of(run) for run in runs if result_id_of(run)}
                 )
             )
         )
     }
     members: list[groups.Member] = []
     for run in runs:
-        result = results.get(run.adopted_result_id) if run.adopted_result_id else None
+        result = results.get(chosen) if (chosen := result_id_of(run)) else None
         if result is None:
             raise AppError(
                 "MNX-GROUPING-0009",
@@ -586,14 +621,14 @@ def _rate_members(db: Session, runs: list[TestRun]) -> list[groups.Member]:
         for one in db.scalars(
             select(ProcessingResult).where(
                 ProcessingResult.id.in_(
-                    {run.adopted_result_id for run in runs if run.adopted_result_id}
+                    {result_id_of(run) for run in runs if result_id_of(run)}
                 )
             )
         )
     }
     members: list[groups.Member] = []
     for run in runs:
-        result = results.get(run.adopted_result_id) if run.adopted_result_id else None
+        result = results.get(chosen) if (chosen := result_id_of(run)) else None
         if result is None:
             raise AppError(
                 "MNX-GROUPING-0009",
@@ -675,8 +710,15 @@ def create(
     run_ids: Sequence[uuid.UUID],
     options: dict[str, Any] | None = None,
     note: str | None = None,
+    results: Mapping[uuid.UUID, uuid.UUID] | None = None,
 ) -> GroupResult:
-    """묶어서 **행으로 남긴다.** 커밋은 부르는 쪽이 한다."""
+    """묶어서 **행으로 남긴다.** 커밋은 부르는 쪽이 한다.
+
+    `results` 는 시험마다 **채택 대신 쓸 결과**다(2026-11-14, VOC 49). 부품 · 적층판의 3점 굽힘
+    등가 E 처럼 공식 물성으로 채택하지는 않지만 해석용 선형 카드는 필요한 값이 있다 — 채택은
+    그대로라 재료 통계에는 안 섞인다. 구성원에 「미채택 결과」 표지가 남고 카드 · 덱이 그것을
+    적는다.
+    """
     collect = _COLLECTORS.get(plugin_id)
     rule = _declared_rule(plugin_id) if collect is None else None
     if collect is None and rule is None:
@@ -692,11 +734,17 @@ def create(
     for run in runs:
         holds.require_usable(run, code="MNX-GROUPING-0015")
     material = _material_of(db, runs)
-    members = (
-        collect(db, runs)
-        if collect is not None
-        else _declared_members(db, runs, rule or {}, plugin_id)
-    )
+    chosen = dict(results or {})
+    _check_chosen(db, runs, chosen)
+    token = _CHOSEN.set(chosen)
+    try:
+        members = (
+            collect(db, runs)
+            if collect is not None
+            else _declared_members(db, runs, rule or {}, plugin_id)
+        )
+    finally:
+        _CHOSEN.reset(token)
 
     try:
         outcome = groups.run_group(plugin_id, members, options or {})
@@ -713,7 +761,20 @@ def create(
         plugin_id=plugin_id,
         plugin_version=version,
         options=dict(options or {}),
-        members=[{"test_run_id": str(run.id), "label": run.record_name} for run in runs],
+        members=[
+            {
+                "test_run_id": str(run.id),
+                "label": run.record_name,
+                # **채택 대신 고른 결과면 그렇다고 남긴다**(VOC 49) — 카드 · 덱이 「미채택
+                # 결과로 만든 카드」 를 적는다.
+                **(
+                    {"result_id": str(chosen[run.id]), "unadopted": True}
+                    if run.id in chosen and chosen[run.id] != run.adopted_result_id
+                    else {}
+                ),
+            }
+            for run in runs
+        ],
         used=list(outcome.used),
         values={key: float(value) for key, value in outcome.values.items()},
         detail=dict(outcome.detail),

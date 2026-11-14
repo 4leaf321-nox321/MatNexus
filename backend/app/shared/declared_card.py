@@ -38,6 +38,55 @@ class Inherited:
     """`sample` | `material` | `manual` | `measured` | `conflict` | `missing`."""
     detail: str | None = None
     """사람이 읽는 한 줄. 갈렸으면 무엇과 무엇이 갈렸는지 여기 적는다."""
+    reference: str | None = None
+    """근거 문서 — 재료 칸이 문헌 근거를 들고 있을 때(VOC 50). 카드의 `<키>_reference` 가
+    된다."""
+
+    def reference_of(self, key: str) -> dict[str, str]:
+        """블록 값에 덧붙일 근거 칸 — 없으면 빈 것."""
+        return {f"{key}_reference": self.reference} if self.reference else {}
+
+
+#: 재료 칸 이름 → 그 칸의 열(`materials.column_evidence.FIELDS` 와 같다 — 쓰는 쪽이 그쪽이다).
+_COLUMNS = {"density": "density_si", "poisson_ratio": "poisson_ratio"}
+
+
+def column_row(material: Material, field: str) -> dict[str, Any] | None:
+    """재료 기본 칸의 근거 줄 — **지금 값의 것일 때만**(2026-11-14, VOC 50).
+
+    근거는 선언 물성 줄과 같은 모양이라 값이 다른 길로 바뀌면 지문이 갈린다. 여기서는 값을 직접
+    견준다 — 다르면 근거가 없는 것이다(출처를 모르는 재료 칸 값, 등급 3).
+    """
+    row = (material.column_evidence or {}).get(field)
+    value = getattr(material, _COLUMNS[field], None)
+    if not isinstance(row, dict) or value is None:
+        return None
+    points = row.get("points") or []
+    first = points[0].get("value_si") if points and isinstance(points[0], dict) else None
+    if not isinstance(first, int | float) or abs(float(first) - float(value)) > 1e-12 * max(
+        abs(float(value)), 1.0
+    ):
+        return None
+    return row
+
+
+def _from_column(material: Material, field: str, value: float, label: str) -> Inherited:
+    """재료 칸의 값 — 근거가 있으면 선언 물성처럼 `declared:<출처>`, 없으면
+    `material`(등급 3)."""
+    row = column_row(material, field)
+    if row is None:
+        return Inherited(value, "material", label)
+    reference = str(row.get("reference") or "").strip() or None
+    return Inherited(
+        value,
+        tiers.declared_origin(
+            str(row.get("source") or ""),
+            approved=False,
+            catalog_tier=declared_approval.catalog_tier(row),
+        ),
+        f"{label[:-1]} — {reference or '근거 문서 없음'}.",
+        reference,
+    )
 
 
 def inherit_density(
@@ -67,9 +116,10 @@ def inherit_density(
             f"시료마다 밀도가 다릅니다({joined}) — 쓸 값을 직접 넣으세요.",
         )
     if material.density_si is not None:
-        return Inherited(
+        return _from_column(
+            material,
+            "density",
             material.density_si,
-            "material",
             f"재료의 공칭값입니다 ({display.density_text(material.density_si)}).",
         )
     return Inherited(None, "missing", "재료에도 시료에도 밀도가 없습니다.")
@@ -329,12 +379,20 @@ def declared_blocks(
             else {}
         ),
         **(
-            {"poisson_ratio": poisson.value, "poisson_ratio_source": poisson.source}
+            {
+                "poisson_ratio": poisson.value,
+                "poisson_ratio_source": poisson.source,
+                **poisson.reference_of("poisson_ratio"),
+            }
             if poisson.value is not None
             else {}
         ),
         **(
-            {"density": density.value, "density_source": density.source}
+            {
+                "density": density.value,
+                "density_source": density.source,
+                **density.reference_of("density"),
+            }
             if density.value is not None
             else {}
         ),
@@ -485,7 +543,9 @@ def inherit_poisson(material: Material, override: float | None) -> Inherited:
     if override is not None:
         return Inherited(override, "manual", "직접 입력한 값입니다.")
     if material.poisson_ratio is not None:
-        return Inherited(material.poisson_ratio, "material", "재료에 적힌 값입니다.")
+        return _from_column(
+            material, "poisson_ratio", material.poisson_ratio, "재료에 적힌 값입니다."
+        )
     return Inherited(
         None,
         "missing",

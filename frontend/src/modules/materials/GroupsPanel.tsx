@@ -44,6 +44,8 @@ import { fittingApi } from '@/modules/fitting/api'
 import type { BlockSpec } from '@/modules/fitting/api'
 
 import { groupsApi } from '@/modules/materials/api.groups'
+import { processingApi } from '@/modules/processing/api'
+import type { ProcessingResult } from '@/modules/processing/api'
 import { masterCurveGap } from '@/shared/masterCurveGap'
 import type { GroupResult, GroupingSpec } from '@/modules/materials/api.groups'
 import { testsApi } from '@/modules/tests/api'
@@ -510,6 +512,14 @@ export function GroupsPanel({
   const [open, setOpen] = useState(false)
   const [kind, setKind] = useState('')
   const [options, setOptions] = useState<Record<string, string>>({})
+  /**
+   * **채택하지 않은 결과도 쓴다**(2026-11-14, VOC 49). 부품 · 적층판의 등가 E 처럼 공식 물성으로
+   * 채택하지는 않지만 해석용 선형 카드는 필요한 값이 있다. 켜면 미채택 시험도 후보에 뜨고, 고른
+   * 시험마다 쓸 결과를 고른다 — 채택은 그대로라 재료 통계에는 안 섞인다.
+   */
+  const [anyResult, setAnyResult] = useState(false)
+  const [resultsOf, setResultsOf] = useState<Record<string, ProcessingResult[]>>({})
+  const [useResult, setUseResult] = useState<Record<string, string>>({})
   /** 어느 결과의 설정을 채워 열었나. 모달 머리에 적는다 — 빈 손으로 연 것과 다르다. */
   const [basedOn, setBasedOn] = useState<GroupResult | null>(null)
   const [busy, setBusy] = useState(false)
@@ -560,7 +570,7 @@ export function GroupsPanel({
   // 빠진 시험은 서버가 묶을 때 이름을 대고 막는다.
   const candidates =
     needs === 'adopted_result'
-      ? kindMatched.filter((run) => !!run.adopted_result_id)
+      ? kindMatched.filter((run) => anyResult || !!run.adopted_result_id)
       : needs === 'summary'
         ? kindMatched
         : kindMatched.filter((run) => (run.master_curve_count ?? 0) > 0)
@@ -594,14 +604,29 @@ export function GroupsPanel({
     setOpen(true)
   }
 
+  /** 그 시험의 처리 결과 목록 — 고르기 칸을 열 때 한 번만 읽는다. */
+  async function loadResults(runId: string) {
+    if (resultsOf[runId]) return
+    const found = await processingApi.results(runId)
+    setResultsOf((now) => ({ ...now, [runId]: found }))
+  }
+
   async function create() {
     if (!chosen) return
     setBusy(true)
     setFailed(null)
     try {
+      // 채택과 다른 결과를 고른 시험만 보낸다 — 나머지는 서버가 채택 결과를 쓴다.
+      const results = Object.fromEntries(
+        [...picked]
+          .filter((id) => anyResult && useResult[id])
+          .filter((id) => useResult[id] !== kindMatched.find((run) => run.id === id)?.adopted_result_id)
+          .map((id) => [id, useResult[id]])
+      )
       await groupsApi.create({
         plugin_id: chosen.id,
         run_ids: [...picked],
+        ...(Object.keys(results).length > 0 ? { results } : {}),
         options: Object.fromEntries(
           Object.entries(options)
             .filter(([, value]) => value !== '')
@@ -916,6 +941,30 @@ export function GroupsPanel({
                     />
                     <span className="font-mono text-xs">{run.record_name}</span>
                     <span className="text-muted-foreground text-xs">{run.orientation}</span>
+                    {anyResult && picked.has(run.id) && (
+                      <select
+                        aria-label={`${run.record_name} 쓸 결과`}
+                        className="ml-auto rounded border px-1 text-xs"
+                        value={useResult[run.id] ?? run.adopted_result_id ?? ''}
+                        onFocus={() => void loadResults(run.id)}
+                        onChange={(event) =>
+                          setUseResult((now) => ({ ...now, [run.id]: event.target.value }))
+                        }
+                      >
+                        {!run.adopted_result_id && !useResult[run.id] && (
+                          <option value="">쓸 결과 고르기</option>
+                        )}
+                        {run.adopted_result_id && !resultsOf[run.id] && (
+                          <option value={run.adopted_result_id}>채택된 결과</option>
+                        )}
+                        {(resultsOf[run.id] ?? []).map((one) => (
+                          <option key={one.id} value={one.id}>
+                            {one.is_adopted ? '채택 · ' : '미채택 · '}
+                            {(one.recipe_label ?? '레시피 없이') + ' · ' + one.created_at.slice(0, 16)}
+                          </option>
+                        ))}
+                      </select>
+                    )}
                   </label>
                 ))}
                 {candidates.length === 0 && (
@@ -935,11 +984,24 @@ export function GroupsPanel({
                   막힘.
                 </p>
               ) : needs === 'adopted_result' ? (
-                <p className="text-muted-foreground text-xs">
-                  채택된 처리 결과가 있는 시험만 표시.
-                  {unadopted > 0 &&
-                    ` ${unadopted}건은 미채택으로 제외 — 그 시험의 「결과」 탭에서 채택 후 사용 가능.`}
-                </p>
+                <div className="space-y-1">
+                  <p className="text-muted-foreground text-xs">
+                    {anyResult
+                      ? '처리 결과가 있는 시험 전부 표시 — 고른 시험마다 쓸 결과 선택(기본은 채택된 결과).'
+                      : '채택된 처리 결과가 있는 시험만 표시.'}
+                    {!anyResult &&
+                      unadopted > 0 &&
+                      ` ${unadopted}건은 미채택으로 제외 — 그 시험의 「결과」 탭에서 채택 후 사용 가능.`}
+                  </p>
+                  <label className="flex items-center gap-2 text-xs">
+                    <input
+                      type="checkbox"
+                      checked={anyResult}
+                      onChange={(event) => setAnyResult(event.target.checked)}
+                    />
+                    채택하지 않은 결과도 쓰기 — 카드 · 덱에 「미채택 결과로 만든 카드」 기재
+                  </label>
+                </div>
               ) : (
                 <p className="text-muted-foreground text-xs">
                   마스터커브가 있는 시험만 표시.

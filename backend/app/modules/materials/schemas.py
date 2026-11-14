@@ -351,6 +351,14 @@ class CoverageSeriesPointsOut(BaseModel):
     properties: list[CoveragePropertyOut]
 
 
+class ColumnSourceOut(BaseModel):
+    """기본 칸 하나의 근거 — 출처 · 근거 문서 · 받아 온 문헌 등급(지금 값에 유효할 때만)."""
+
+    source: str
+    reference: str
+    catalog_tier: int | None = None
+
+
 class MaterialOut(BaseModel):
     id: uuid.UUID
     code: str
@@ -388,6 +396,9 @@ class MaterialOut(BaseModel):
     density_unit: str = SI_DENSITY
     poisson_ratio: float | None
     """인장시험이 주지 않는 값이다 — 대개 문헌값이고 재료 등급에 붙는다."""
+    column_sources: dict[str, ColumnSourceOut] = {}
+    """기본 칸(`density` · `poisson_ratio`)의 근거 — 있는 칸만(2026-11-14, VOC 50). 없으면
+    출처를 모르는 값이다."""
 
     declared_properties: list[DeclaredPropertyOut] = []
     """**시험이 주지 않는 물성.** 탄성계수·선팽창계수(CTE)·비열·열전도율처럼 핸드북·
@@ -504,6 +515,16 @@ class MaterialUpdateRequest(BaseModel):
     density: float | None = Field(default=None, gt=0)
     density_unit: str | None = None
     poisson_ratio: float | None = Field(default=None, ge=0, lt=0.5)
+    density_source: str | None = None
+    """밀도의 출처(선언 물성과 같은 목록 — `literature` 등, 2026-11-14 VOC 50). 안 보내고 값만
+    바꾸면 옛 근거를 지운다. 같은 값을 되보내면 근거는 그대로다."""
+    density_reference: str | None = Field(default=None, max_length=500)
+    density_catalog_value_ids: list[uuid.UUID] | None = None
+    """문헌 카탈로그에서 받아 온 값이면 그 값 id — 서버가 대 보고 그 문헌 등급을 근거로
+    붙인다."""
+    poisson_ratio_source: str | None = None
+    poisson_ratio_reference: str | None = Field(default=None, max_length=500)
+    poisson_ratio_catalog_value_ids: list[uuid.UUID] | None = None
     declared_properties: list[DeclaredPropertyIn] | None = None
     """**통째로 갈아 끼운다.** 줄 하나만 고치는 길을 두면 "어느 줄인가" 를
     가리킬 열쇠가 필요한데, 항목 이름이 그 열쇠다 — 이름을 고치는 것과 값을

@@ -1514,12 +1514,20 @@ def create_card(
             )
         ),
         **(
-            {"poisson_ratio": poisson.value, "poisson_ratio_source": poisson.source}
+            {
+                "poisson_ratio": poisson.value,
+                "poisson_ratio_source": poisson.source,
+                **poisson.reference_of("poisson_ratio"),
+            }
             if poisson.value is not None
             else {}
         ),
         **(
-            {"density": density.value, "density_source": density.source}
+            {
+                "density": density.value,
+                "density_source": density.source,
+                **density.reference_of("density"),
+            }
             if density.value is not None
             else {}
         ),
@@ -2336,12 +2344,17 @@ def create_viscoelastic_card(
                         {
                             "poisson_ratio": poisson.value,
                             "poisson_ratio_source": poisson.source,
+                            **poisson.reference_of("poisson_ratio"),
                         }
                         if poisson.value is not None
                         else {}
                     ),
                     **(
-                        {"density": density.value, "density_source": density.source}
+                        {
+                            "density": density.value,
+                            "density_source": density.source,
+                            **density.reference_of("density"),
+                        }
                         if density.value is not None
                         else {}
                     ),
@@ -2581,6 +2594,26 @@ def _refuse_moved_members(
         )
 
 
+def _unadopted(row: GroupResult) -> list[str]:
+    """채택 대신 고른 결과를 쓴 구성원 이름(2026-11-14, VOC 49) — 없으면 빈 것."""
+    return [
+        str(one.get("label") or one.get("test_run_id"))
+        for one in (row.members or [])
+        if isinstance(one, dict) and one.get("unadopted")
+    ]
+
+
+def _unadopted_note(row: GroupResult) -> str:
+    """카드 근거 한 줄 — 「미채택 결과로 만든 카드」. 다 채택 결과면 빈 글자."""
+    names = _unadopted(row)
+    if not names:
+        return ""
+    return (
+        f"미채택 결과로 만든 카드 — 시험 {len(names)}건은 채택(공식 물성)이 아닌 처리 결과를 "
+        f"썼습니다({', '.join(names[:3])}{' 외' if len(names) > 3 else ''})."
+    )
+
+
 def _lineage_of_group(
     db: Session, user: User, row: GroupResult, *, mixed_orientation: bool = False
 ) -> _Lineage:
@@ -2738,7 +2771,8 @@ def create_rate_card(
             "record_names": [run.record_name for run in lineage.runs],
             "group_result_id": str(row.id),
             "plugin_id": row.plugin_id,
-            "notes": [line for line in notes if line],
+            "notes": [line for line in [*notes, _unadopted_note(row)] if line],
+            "unadopted": _unadopted(row),
             "runtime": runtime.manifest(),
         },
         blocks={
@@ -2753,12 +2787,17 @@ def create_rate_card(
                         {
                             "poisson_ratio": poisson.value,
                             "poisson_ratio_source": poisson.source,
+                            **poisson.reference_of("poisson_ratio"),
                         }
                         if poisson.value is not None
                         else {}
                     ),
                     **(
-                        {"density": density.value, "density_source": density.source}
+                        {
+                            "density": density.value,
+                            "density_source": density.source,
+                            **density.reference_of("density"),
+                        }
                         if density.value is not None
                         else {}
                     ),
@@ -2874,10 +2913,20 @@ def create_card_from_group(
         )
     if poisson.value is not None:
         elastic_values.update(
-            {"poisson_ratio": poisson.value, "poisson_ratio_source": poisson.source}
+            {
+                "poisson_ratio": poisson.value,
+                "poisson_ratio_source": poisson.source,
+                **poisson.reference_of("poisson_ratio"),
+            }
         )
     if density.value is not None:
-        elastic_values.update({"density": density.value, "density_source": density.source})
+        elastic_values.update(
+            {
+                "density": density.value,
+                "density_source": density.source,
+                **density.reference_of("density"),
+            }
+        )
 
     # **묶음이 탄성을 내면 그 칸이 이기고, 안 낸 칸은 물려받는다**(2026-10-12). 응력완화 묶음이
     # Prony 의 순간 탄성률을 E 로 낸다 — 점탄성 덱은 E 를 순간 값으로 읽고 gᵢ 를 그것에 곱해서,
@@ -2917,7 +2966,8 @@ def create_card_from_group(
             "record_names": [run.record_name for run in lineage.runs],
             "group_result_id": str(row.id),
             "plugin_id": row.plugin_id,
-            "notes": [line for line in notes if line],
+            "notes": [line for line in [*notes, _unadopted_note(row)] if line],
+            "unadopted": _unadopted(row),
             "runtime": runtime.manifest(),
         },
         # 확장이 낸 블록이 먼저, 탄성은 확장이 안 냈을 때만 물려받은 것으로 채운다.
@@ -3062,12 +3112,17 @@ def create_lve_card(
                         {
                             "poisson_ratio": poisson.value,
                             "poisson_ratio_source": poisson.source,
+                            **poisson.reference_of("poisson_ratio"),
                         }
                         if poisson.value is not None
                         else {}
                     ),
                     **(
-                        {"density": density.value, "density_source": density.source}
+                        {
+                            "density": density.value,
+                            "density_source": density.source,
+                            **density.reference_of("density"),
+                        }
                         if density.value is not None
                         else {}
                     ),
@@ -3962,8 +4017,8 @@ def _deck_for_card(
         line
         for line in item.source.get("notes", [])
         # 합성 소성 표라는 사실도 덱까지 따라가야 한다 — 표만 봐서는 실측과
-        # 구별이 안 된다(점이 나란히 있을 뿐이다).
-        if str(line).startswith(("네킹을 안 자른", "합성"))
+        # 구별이 안 된다(점이 나란히 있을 뿐이다). 미채택 결과로 만든 카드도 그렇다(VOC 49).
+        if str(line).startswith(("네킹을 안 자른", "합성", "미채택 결과로"))
     )
     # 값마다 어디서 왔는지 한 줄씩. 없는 값은 애초에 카드에 없다.
     thermal = cards.values_of(item.blocks.get("thermal"))

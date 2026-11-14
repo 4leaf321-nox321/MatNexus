@@ -208,6 +208,13 @@ class Material(Base):
     전에는 시료에 있었다. 로트 5개에 0.3 을 다섯 번 적어야 했고, 그중 하나를
     0.28 로 고치면 같은 재료가 두 값을 갖게 됐다."""
 
+    column_evidence: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, default=dict, server_default="{}"
+    )
+    """기본 칸(`density` · `poisson_ratio`)의 **근거** — 선언 물성 줄과 같은 모양(2026-11-14,
+    VOC 50). 문헌에서 받아 온 값이면 출처 · 근거 문서 · 문헌 등급을 든다. 없으면 출처를 모르는
+    값이다(카드 등급 3). `materials/column_evidence.py` 가 쓴다."""
+
     declared_properties: Mapped[list[dict[str, Any]]] = mapped_column(
         JSONB, default=list, server_default="[]"
     )

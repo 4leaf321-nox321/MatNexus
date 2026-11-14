@@ -28,6 +28,8 @@ export const groupsApi = {
     run_ids: string[]
     options?: Record<string, unknown>
     note?: string
+    /** 시험마다 채택 대신 쓸 처리 결과(시험 id → 결과 id, VOC 49). */
+    results?: Record<string, string>
   }) => api.post<GroupResult>('/groups', input),
 
   /** 메모만. 값·멤버·옵션은 그때 계산의 스냅샷이라 안 바뀐다. */

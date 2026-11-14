@@ -84,6 +84,10 @@ class GroupCreateRequest(BaseModel):
     본다(`matcore.groups.min_members`, 2026-11-14 VOC 51)."""
     options: dict[str, Any] = Field(default_factory=dict)
     note: str | None = None
+    results: dict[uuid.UUID, uuid.UUID] = Field(default_factory=dict)
+    """시험마다 **채택 대신 쓸 처리 결과**(시험 id → 결과 id, 2026-11-14 VOC 49). 안 적은
+    시험은 채택된 결과를 쓴다. 고른 결과는 그 시험의 것이어야 한다. 채택은 그대로라 재료
+    통계에는 안 섞이고, 구성원 · 카드 · 덱에 「미채택 결과」 가 적힌다."""
 
 
 class GroupResultOut(BaseModel):

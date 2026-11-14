@@ -8881,6 +8881,36 @@
         "title": "CleanupRequest",
         "type": "object"
       },
+      "ColumnSourceOut": {
+        "description": "기본 칸 하나의 근거 — 출처 · 근거 문서 · 받아 온 문헌 등급(지금 값에 유효할 때만).",
+        "properties": {
+          "catalog_tier": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Catalog Tier"
+          },
+          "reference": {
+            "title": "Reference",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "reference"
+        ],
+        "title": "ColumnSourceOut",
+        "type": "object"
+      },
       "CommissionCreateRequest": {
         "description": "**시료 또는 새 재료 설명** 중 하나는 있어야 한다 — 등록된 시료가 없는 새 재료도\n의뢰한다. 그때는 받는 쪽이 재료·시료를 등록한 뒤 잇는다.",
         "properties": {
@@ -16675,6 +16705,17 @@
             "title": "Plugin Id",
             "type": "string"
           },
+          "results": {
+            "additionalProperties": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "propertyNames": {
+              "format": "uuid"
+            },
+            "title": "Results",
+            "type": "object"
+          },
           "run_ids": {
             "items": {
               "format": "uuid",
@@ -20339,6 +20380,14 @@
             "title": "Code",
             "type": "string"
           },
+          "column_sources": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/ColumnSourceOut"
+            },
+            "default": {},
+            "title": "Column Sources",
+            "type": "object"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -21165,6 +21214,44 @@
             ],
             "title": "Density"
           },
+          "density_catalog_value_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Density Catalog Value Ids"
+          },
+          "density_reference": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Density Reference"
+          },
+          "density_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Density Source"
+          },
           "density_unit": {
             "anyOf": [
               {
@@ -21237,6 +21324,44 @@
               }
             ],
             "title": "Poisson Ratio"
+          },
+          "poisson_ratio_catalog_value_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Poisson Ratio Catalog Value Ids"
+          },
+          "poisson_ratio_reference": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Poisson Ratio Reference"
+          },
+          "poisson_ratio_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Poisson Ratio Source"
           },
           "spec_thickness": {
             "anyOf": [

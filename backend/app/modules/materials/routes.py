@@ -25,7 +25,13 @@ from app.modules.accounts.models import User
 from app.modules.catalog import parameters as catalog_parameters
 from app.modules.catalog.models import CatalogDefinition
 from app.modules.fitting.models import PropertyCard
-from app.modules.materials import declared, relocation, services, thickness_gap
+from app.modules.materials import (
+    column_evidence,
+    declared,
+    relocation,
+    services,
+    thickness_gap,
+)
 from app.modules.materials.models import (
     ORIENTATIONS,
     Material,
@@ -52,6 +58,7 @@ from app.modules.materials.schemas import (
     CascadeDeleteOut,
     CascadeDeleteRequest,
     ClassificationOut,
+    ColumnSourceOut,
     ConditionUnitOut,
     CoverageSeriesPointsOut,
     DeclaredApprovalOut,
@@ -119,6 +126,7 @@ from app.shared import (
     contention,
     coverage,
     declared_approval,
+    declared_card,
     declared_catalog,
     declared_conditions,
     display,
@@ -191,6 +199,7 @@ def _material_out(
         density=material.density_si,
         density_unit=SI_DENSITY,
         poisson_ratio=material.poisson_ratio,
+        column_sources=_column_sources(material),
         declared_properties=[
             _declared_out(row) for row in (material.declared_properties or [])
         ],
@@ -221,6 +230,21 @@ def _why_not_compared(compared: bool, spec: dict[str, Any], key: str) -> str | N
             "'우리가 재는 값' 을 고르면 여기서 견줍니다."
         )
     return "이 시료에 채택된 처리 결과가 없습니다."
+
+
+def _column_sources(material: Material) -> dict[str, ColumnSourceOut]:
+    """기본 칸의 근거 — 지금 값의 것만(값이 바뀌었으면 없는 것으로 본다)."""
+    out: dict[str, ColumnSourceOut] = {}
+    for field in column_evidence.FIELDS:
+        row = declared_card.column_row(material, field)
+        if row is None:
+            continue
+        out[field] = ColumnSourceOut(
+            source=str(row.get("source") or ""),
+            reference=str(row.get("reference") or ""),
+            catalog_tier=declared_approval.catalog_tier(row),
+        )
+    return out
 
 
 def _declared_out(row: dict[str, Any]) -> DeclaredPropertyOut:
@@ -1976,6 +2000,10 @@ def update_material(
     permissions.require_edit(db, user, material, code="MNX-MATERIALS-0008")
 
     data = payload.model_dump(exclude_unset=True)
+    #: 기본 칸의 고치기 전 값 — 같은 값을 되보내면 근거를 지우지 않는다(VOC 50).
+    before = {
+        column: getattr(material, column) for column, _ in column_evidence.FIELDS.values()
+    }
     for field in ("details", "alias", "note", "poisson_ratio"):
         if field in data:
             setattr(material, field, data[field])
@@ -2014,6 +2042,10 @@ def update_material(
         )
         material.density_si = services.density_to_si(value, unit)
         material.input_units = {**material.input_units, "density": unit}
+
+    # **기본 칸의 근거**(2026-11-14, VOC 50) — 문헌에서 받아 온 밀도 · 푸아송비는 출처 · 근거 ·
+    # 문헌 등급을 든다. 값만 바꾸면 옛 근거를 지운다(선언 물성과 같은 규칙).
+    column_evidence.apply(db, material, data, before)
 
     if "spec_thickness" in data or "spec_thickness_unit" in data:
         # 밀도와 같은 규칙 — 단위를 안 적으면 응답과 같은 SI(m) 로 읽는다.

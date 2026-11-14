@@ -290,12 +290,14 @@ export function AdoptDialog({
         const slot = slots[value.property_key]
         if (!slot) continue
         if (slot.place === 'column') {
-          if (slot.field === 'density') {
-            patch.density = value.value_num
-            patch.density_unit = 'kg/m3'
-          } else {
-            patch.poisson_ratio = value.value_num
-          }
+          // **기본 칸에도 근거를 함께 보낸다**(2026-11-14, VOC 50) — 전에는 숫자만 써져, 카드가
+          // 문헌 등급 4(추정)를 「재료 공칭(3)」 으로 봤다. 서버가 그 문헌 값과 대 보고 등급을 붙인다.
+          const field = slot.field === 'density' ? 'density' : 'poisson_ratio'
+          patch[field] = value.value_num
+          if (field === 'density') patch.density_unit = 'kg/m3'
+          patch[`${field}_source`] = adoptionSource(value)
+          patch[`${field}_reference`] = adoptionReference(value)
+          patch[`${field}_catalog_value_ids`] = [value.id]
           continue
         }
         if (!slot.item) continue
