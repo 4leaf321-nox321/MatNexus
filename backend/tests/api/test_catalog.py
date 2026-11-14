@@ -13,6 +13,7 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -185,6 +186,53 @@ class Test무손실:
         assert again.tables["값"].updated == 1 and again.tables["값"].added == 0
         row = db.scalar(select(CatalogValue).where(CatalogValue.mt_id == 1))
         assert row is not None and row.value_num == 195e9
+
+    def test_알려진_오기는_바로잡고_원본이_고쳐지면_비켜선다(
+        self, db: Session, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """2026-11-15 — 원본 탄성률 하나가 노트(144.79 GPa)와 1000배 달랐다. 씨앗을 손으로
+        고치면 다시 깎는 날 사라지므로 이관이 바로잡는다 — 원본 값이 적힌 틀린 값일 때만."""
+        snapshot = make_snapshot(tmp_path)
+        con = sqlite3.connect(snapshot)
+        wrong = con.execute("select value_num from property_value where id = 1").fetchone()[0]
+        con.close()
+        monkeypatch.setitem(importer.KNOWN_ERRATA, 1, (wrong, wrong * 1000, "시험"))
+        importer.run(db, snapshot)
+        db.flush()
+        row = db.scalar(select(CatalogValue).where(CatalogValue.mt_id == 1))
+        assert row is not None and row.value_num == wrong * 1000
+        assert "이관에서 바로잡음" in (row.notes or "")
+        # 다시 돌려도 같다(동일).
+        again = importer.run(db, snapshot)
+        assert again.tables["값"].updated == 0
+        # 원본이 고쳐지면 원본을 따른다 — 적힌 틀린 값이 아니므로 건드리지 않는다.
+        con = sqlite3.connect(snapshot)
+        con.execute("update property_value set value_num = ? where id = 1", (wrong * 999,))
+        con.commit()
+        con.close()
+        importer.run(db, snapshot)
+        db.flush()
+        db.refresh(row)
+        assert row.value_num == wrong * 999 and "바로잡음" not in (row.notes or "")
+
+    def test_씨앗의_알려진_오기는_적힌_틀린_값_그대로다(self, tmp_path: Path) -> None:
+        """씨앗을 다시 깎아 원본 값이 바뀌면 이 표가 낡는다 — 그때 이 시험이 알린다."""
+        import gzip
+        import shutil
+
+        seed = Path(__file__).resolve().parents[2] / "seeds" / "catalog" / "materialtwin.db.gz"
+        copy = tmp_path / "seed.db"
+        with gzip.open(seed, "rb") as source, open(copy, "wb") as target:
+            shutil.copyfileobj(source, target)
+        con = sqlite3.connect(copy)
+        try:
+            for mt_id, (wrong, _, _) in importer.KNOWN_ERRATA.items():
+                found = con.execute(
+                    "select value_num from property_value where id = ?", (mt_id,)
+                ).fetchone()
+                assert found is not None and found[0] == wrong, mt_id
+        finally:
+            con.close()
 
 
 class Test모르면_멈춘다:

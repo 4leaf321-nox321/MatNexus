@@ -124,6 +124,35 @@ EXPECTED_COLUMNS: dict[str, frozenset[str]] = {
     ),
 }
 
+#: 원본의 **알려진 오기** — 원본(MaterialTwin)이 고쳐지기 전까지 이관이 바로잡는다(2026-11-15).
+#:
+#: `{mt_id: (원본의 틀린 value_num, 바른 value_num, 까닭)}`. **원본 값이 적힌 틀린 값과 같을
+#: 때만** 바꾼다 — 원본이 고쳐졌거나 다른 값이 되면 저절로 비켜선다. 바꾼 줄은 노트에 그 사실을
+#: 붙인다. 씨앗 파일을 직접 고치지 않는 까닭: 씨앗은 원본에서 다시
+#: 깎으므로(`make_catalog_seed.py`) 다음에 깎는 날 고친 것이 사라진다.
+KNOWN_ERRATA: dict[int, tuple[float, float, str]] = {
+    # 1Cr-1Mo-1/4V 터빈 로터강 538 °C(Leven 1973) 탄성률 — 노트가 「21.0e3 ksi * 6.894757 =
+    # 144.79 GPa」 인데 값은 1.448e8 Pa(0.145 GPa, 1000배 작게)였다. 탄성률 범위 조사 중 발견.
+    35339: (
+        144789897.0,
+        144789897000.0,
+        "노트의 21.0e3 ksi = 144.79 GPa 와 1000배 달랐다",
+    ),
+}
+
+
+def _corrected(
+    mt_id: int, value: float | None, notes: str | None
+) -> tuple[float | None, str | None]:
+    """알려진 오기면 바른 값과, 그 사실을 붙인 노트. 아니면 그대로."""
+    known = KNOWN_ERRATA.get(mt_id)
+    if known is None or value is None or value != known[0]:
+        return value, notes
+    wrong, right, why = known
+    said = f"[MatNexus 이관에서 바로잡음] 원본 값 {wrong:g} → {right:g} — {why}."
+    return right, "\n".join(one for one in (notes, said) if one)
+
+
 #: attributes 에서 검색용으로 발췌하는 키. 정본은 attributes 쪽이다.
 FACET_KEYS = ("subsystem", "role", "manufacturer", "material_class", "grade")
 
@@ -283,6 +312,7 @@ def run(db: Session, sqlite_path: str | Path) -> Report:
                     f"물성값 #{row['id']} 의 quality_tier={row['quality_tier']!r} 는 "
                     "아는 등급(1~4)이 아닙니다."
                 )
+            value_num, value_notes = _corrected(row["id"], row["value_num"], row["notes"])
             upsert(
                 db,
                 value_cache,
@@ -291,7 +321,7 @@ def run(db: Session, sqlite_path: str | Path) -> Report:
                 {
                     "material_id": material_ids[row["material_id"]].id,
                     "property_key": row["property_key"],
-                    "value_num": row["value_num"],
+                    "value_num": value_num,
                     "value_text": row["value_text"],
                     "unit": row["unit"],
                     "uncertainty": row["uncertainty"],
@@ -304,7 +334,7 @@ def run(db: Session, sqlite_path: str | Path) -> Report:
                         else None
                     ),
                     "source_detail": row["source_detail"],
-                    "notes": row["notes"],
+                    "notes": value_notes,
                     "source_created_at": parse_dt(row["created_at"]),
                 },
                 values,

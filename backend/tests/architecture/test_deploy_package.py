@@ -123,3 +123,21 @@ def test_pgvector_산출물이_패키지에_들어간다() -> None:
     assert "scripts\\deploy\\pgvector" in copied, (
         "package_deploy.ps1 이 pgvector 폴더를 안 담습니다."
     )
+
+
+def test_배포가_부르는_백엔드_스크립트가_전부_있다() -> None:
+    """`deploy.ps1` 이 `scripts\\<이름>.py` 로 부르는 것은 저장소에 있어야 한다(2026-11-15).
+
+    배포는 이 단계들의 실패를 「배포는 계속합니다」 로 넘기므로, 이름을 틀리게 적거나
+    스크립트를 지우면 **아무도 모른 채** 채우기 · 보고서가 안 돈다.
+    """
+    import re
+
+    text = (DEPLOY_SCRIPTS / "deploy.ps1").read_text(encoding="utf-8-sig")
+    called = set(re.findall(r"scripts\\([A-Za-z_]+\.py)", text))
+    called |= set(re.findall(r"'([a-z_]+\.py)'", text))
+    assert {"ops_report.py", "backfill_run_dimensions.py"} <= called, called
+    missing = sorted(
+        name for name in called if not (ROOT / "backend" / "scripts" / name).exists()
+    )
+    assert not missing, missing

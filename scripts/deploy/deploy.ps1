@@ -551,6 +551,25 @@ if ($SkipMigrations) {
     } catch {
         Write-Log "받아 온 문헌 등급 되살리기 실패 (배포는 계속합니다): $_"
     }
+    # **옛 데이터의 빈 칸을 채운다**(2026-11-15). 새 칸이 생기기 전에 들어온 행은 비어 있는데, 채우는
+    # 스크립트를 사람이 기억해 돌려야 했다. 셋 다 **빈 칸만** 채우고 이미 찬 칸은 건너뛰어 몇 번
+    # 돌아도 같다 — 값을 고치지 않는다(채택된 결과를 다시 처리하는 것은 사람이 정한다, 아래 보고서).
+    #   backfill_column_evidence    밀도 · 푸아송비에 문헌 근거(VOC 50 — 숫자를 대 본 줄에만)
+    #   backfill_run_dimensions     시험에 파일 헤더의 실측 치수(VOC 56 — 다시 읽지 않는다)
+    #   backfill_curve_fingerprints 곡선에 값 지문(VOC 54 — 중복 점검 · 통계의 「하나로」)
+    foreach ($fill in @(
+        @('backfill_column_evidence.py', '밀도 · 푸아송비 근거 채우기'),
+        @('backfill_run_dimensions.py', '시험 실측 치수 채우기'),
+        @('backfill_curve_fingerprints.py', '곡선 지문 채우기')
+    )) {
+        try {
+            Invoke-Native "$($fill[1]) 실패" {
+                & $backendPython "scripts\$($fill[0])" --apply | Select-Object -Last 3
+            }
+        } catch {
+            Write-Log "$($fill[1]) 실패 (배포는 계속합니다): $_"
+        }
+    }
     # **알림 규칙을 활성 계정 전부에 맞춘다**(2026-10-04). 규칙은 승인 · 부서 이동 · 알림 설정
     # 화면을 열 때만 만들어져서, 새 사건 종류(측정 의뢰 `commission.*`)가 코드에 들어와도 그 전에
     # 승인된 사람은 그 화면을 열기 전까지 알림을 못 받았다 — 오류도 없이. 스크립트는 계정마다
@@ -699,6 +718,27 @@ if ($SkipMigrations) {
         Invoke-Native '의미 검색 표 준비 실패' { & $backendPython scripts\ensure_semantic_schema.py }
     } catch {
         Write-Log "의미 검색 표 준비 실패 (배포는 계속합니다): $_"
+    }
+    Pop-Location
+}
+
+# --- 운영 점검 보고서 ---------------------------------------------------------
+#
+# 옛 규칙으로 남은 것(치수가 바뀐 채택 결과 · 단위 실수로 보이는 탄성률 · 옛 카드 · 경고 빈도 …)을
+# **읽기만** 해 한 파일로 남긴다(2026-11-15, scripts\ops_report.py). 사람이 스크립트 일곱을 기억해
+# 돌리지 않게 — 다시 처리할지는 이 보고서를 보고 사람이 정한다. 고치지 않으므로 실패해도 배포는
+# 세우지 않는다.
+if ($SkipMigrations) {
+    Write-Log '운영 점검 보고서 건너뜀 (마이그레이션과 함께)'
+} else {
+    $reportPath = Join-Path "$($AppPath)_data\logs" ("ops-report-" + (Get-Date -Format 'yyyyMMdd-HHmm') + '.txt')
+    Push-Location (Join-Path $AppPath 'backend')
+    try {
+        Invoke-Native '운영 점검 보고서 실패' { & $backendPython scripts\ops_report.py --out $reportPath }
+        Write-Log "운영 점검 보고서: $reportPath"
+    } catch {
+        Write-Log "운영 점검 보고서 실패 (배포는 계속합니다): $_"
+        Write-Host "  서버에서 직접:  & '$backendPython' scripts\ops_report.py"
     }
     Pop-Location
 }

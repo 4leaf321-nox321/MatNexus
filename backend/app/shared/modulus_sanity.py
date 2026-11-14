@@ -29,6 +29,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -167,31 +168,27 @@ def _modulus_scalars(result: processing.PipelineResult) -> list[tuple[str, proce
     """`(단계 이름, 탄성률 값)` — 단계가 탄성률 물성 키로 선언한 값만."""
     found: list[tuple[str, processing.Scalar]] = []
     for stage in result.stages:
-        try:
-            plugin = registry.get(stage.plugin)
-        except KeyError:
-            continue
-        keys = {
-            made.key
-            for made in plugin.makes_values
-            if made.property_key in MODULUS_PROPERTY_KEYS
-        }
+        keys = modulus_keys(stage.plugin)
         found.extend((stage.label, one) for one in stage.scalars if one.key in keys)
     return found
 
 
-def warnings_for(
-    db: Session, run: TestRun, result: processing.PipelineResult
-) -> list[dict[str, str]]:
-    """이 결과의 탄성률 경고 — 처리 결과의 경고 목록에 그대로 싣는 꼴."""
-    scalars = _modulus_scalars(result)
-    if not scalars:
-        return []
+@dataclass(frozen=True)
+class Context:
+    """한 시험의 탄성률을 견줄 것 — 재료군 · 그 항목의 칸 · 재료에 적어 둔 탄성계수."""
+
+    family: str | None
+    attributes: Mapping[str, Any] | None
+    declared: float | None
+
+
+def context_of(db: Session, run: TestRun) -> Context | None:
+    """그 시험의 재료에서 견줄 것을 읽는다. 재료를 못 따라가면 `None`."""
     specimen = db.get(Specimen, run.specimen_id)
     sample = db.get(Sample, specimen.sample_id) if specimen else None
     material = db.get(Material, sample.material_id) if sample else None
     if material is None:
-        return []
+        return None
     term = db.get(VocabularyTerm, material.family_term_id) if material.family_term_id else None
     temperature = (run.conditions or {}).get("temperature")
     temperature_k = float(temperature) if isinstance(temperature, int | float) else 293.15
@@ -204,14 +201,38 @@ def warnings_for(
         if found is not None and found.key == "youngs_modulus":
             declared = nearest_declared(row.get("points") or [], temperature_k)
             break
+    return Context(material.family, term.attributes if term else None, declared)
+
+
+def modulus_keys(plugin_id: str) -> set[str]:
+    """그 단계가 탄성률 물성 키로 선언한 값 이름. 모르는 단계면 비었다."""
+    try:
+        plugin = registry.get(plugin_id)
+    except KeyError:
+        return set()
+    return {
+        made.key for made in plugin.makes_values if made.property_key in MODULUS_PROPERTY_KEYS
+    }
+
+
+def warnings_for(
+    db: Session, run: TestRun, result: processing.PipelineResult
+) -> list[dict[str, str]]:
+    """이 결과의 탄성률 경고 — 처리 결과의 경고 목록에 그대로 싣는 꼴."""
+    scalars = _modulus_scalars(result)
+    if not scalars:
+        return []
+    context = context_of(db, run)
+    if context is None:
+        return []
     return [
         {"source": "step", "label": label, "message": message}
         for label, scalar in scalars
         for message in judge(
             float(scalar.value),
             scalar.label,
-            family=material.family,
-            attributes=term.attributes if term else None,
-            declared=declared,
+            family=context.family,
+            attributes=context.attributes,
+            declared=context.declared,
         )
     ]
