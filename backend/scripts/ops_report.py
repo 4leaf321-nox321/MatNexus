@@ -10,7 +10,8 @@ VOC 41~61 을 고치며 「운영에서 한 번 볼 것」 이 VOC 마다 하나
 ## 무엇을 보나
 
     1 다시 처리할 후보      채택 결과가 쓴 시편 치수 · 단면적이 지금 값과 다른 시험(VOC 56)
-    2 채택된 탄성률        재료군 범위 · 적어 둔 값과 견줘 단위 실수로 보이는 것(VOC 43)
+    2 채택된 탄성률        재료군 범위 · 적어 둔 값과 어긋나는 것 — 단위 · 시편 치수 ·
+                         붙인 재료를 확인할 것(VOC 43)
     3 처리 경고 빈도        탄성률 · 직선성 경고가 결과의 몇 건에 붙나 — 기준값(잠정) 확인용
     4 옛 카드             묶음 E 출처가 재료 선언값인 카드 · 옛 τ 규칙의 응력완화 카드 ·
                          어느 카드에도 안 뜨는 사람이 만든 덱 정의(VOC 49 · 52 · 47)
@@ -166,7 +167,10 @@ def adopted_moduli(db: object) -> tuple[str, list[str]]:
                 declared=context.declared,
             ):
                 lines.append(f"  {run.record_name}: {message}")
-    head = f"채택된 탄성률 {looked}건 중 확인할 것 {len(lines)}건(범위 숫자는 잠정값)."
+    head = (
+        f"채택된 탄성률 {looked}건 중 재료군 범위 · 적어 둔 값과 어긋나는 것 {len(lines)}건 — "
+        "단위 · 시편 치수 · 시험을 붙인 재료를 확인하세요(범위 숫자는 잠정값)."
+    )
     return head, _listed(lines)
 
 
@@ -259,7 +263,7 @@ def _script(name: str, *arguments: str) -> Callable[[object], tuple[str, list[st
 
 SECTIONS: list[tuple[str, Callable[[object], tuple[str, list[str]]]]] = [
     ("1. 다시 처리할 후보(시편 치수가 바뀐 채택 결과)", reprocess_candidates),
-    ("2. 채택된 탄성률 — 단위 실수로 보이는 것", adopted_moduli),
+    ("2. 채택된 탄성률 — 단위 · 시편 치수 · 붙인 재료를 확인할 것", adopted_moduli),
     ("3. 처리 경고 빈도(탄성률 · 직선성)", warning_rates),
     ("4. 옛 규칙으로 남은 카드 · 덱 정의", old_cards),
     ("5. 조건 이중 환산 의심", _script("find_double_converted_conditions.py")),

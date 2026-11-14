@@ -130,6 +130,10 @@ def nearest_declared(
     return float(best["value_si"])
 
 
+#: **단위 실수로 단정하지 않는다**(2026-11-15). 개발 DB 에서 처음 걸린 것은 단위가 아니라
+#: 강판 시험 파일(DEMO_DP590)이 고분자 예제 재료에 붙은 것이었다 — 값(206 GPa)은 강판으로
+#: 맞았다. 범위 · 적어 둔 값과 어긋나는 까닭은 단위 · 시편 치수 · 붙인 재료 셋 중 하나라 셋을
+#: 다 말한다.
 def judge(
     value: float,
     label: str,
@@ -152,14 +156,16 @@ def judge(
         if bounds is not None and not bounds[0] <= value <= bounds[1]:
             found.append(
                 f"{label} {_gpa(value)} 가 재료군 「{family}」 의 범위({_gpa(bounds[0])} ~ "
-                f"{_gpa(bounds[1])}) 밖입니다 — 단위(N · kN, mm · m)와 시편 치수를 확인하세요."
+                f"{_gpa(bounds[1])}) 밖입니다 — 단위(N · kN, mm · m) · 시편 치수 · "
+                "시험을 붙인 재료를 확인하세요."
             )
     if declared is not None and declared > 0:
         ratio = max(value, declared) / min(value, declared)
         if ratio >= DECLARED_RATIO:
             found.append(
                 f"{label} {_gpa(value)} 가 재료에 적어 둔 탄성률 {_gpa(declared)} 와 "
-                f"{ratio:.3g}배 다릅니다 — 단위 · 시편 치수 · 적어 둔 값을 확인하세요."
+                f"{ratio:.3g}배 다릅니다 — 단위 · 시편 치수 · 시험을 붙인 재료 · 적어 둔 값을 "
+                "확인하세요."
             )
     return found
 
