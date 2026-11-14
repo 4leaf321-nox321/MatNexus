@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import ast
 import asyncio
+import uuid
 from collections.abc import Callable
 from functools import cache
 from pathlib import Path
@@ -157,6 +158,9 @@ _HELPERS = (
     "_specimen_brief",
     "_mm_warnings",
     "max_limit",
+    "_looks_like_uuid",
+    "_resolve_run",
+    "_same_frequency",
 )
 #: 함께 읽는 상수 — 인자 기본값이 정의할 때 읽힌다(`units=DEFAULT_DECK_UNITS`).
 _CONSTANTS = ("DEFAULT_DECK_UNITS", "MAX_LIMIT", "_MM_FLOOR", "_MM_FLOOR_DEFAULT")
@@ -231,6 +235,7 @@ def _tool(name: str, backend: _Backend) -> Callable[..., Any]:
     module = ast.fix_missing_locations(ast.Module(body=[future, *nodes], type_ignores=[]))
     scope: dict[str, Any] = {
         "Any": Any,
+        "uuid": uuid,
         **constants,
         "_get": backend.get,
         "_get_text": backend.get,
@@ -480,3 +485,29 @@ def test_SP_객체_찾기도_쪽_넘김을_단다() -> None:
     got = _tool("find_sp_core_objects", backend)(type="part", limit=2, offset=2)
     assert backend.sent("/sp-core/objects")["query"]["offset"] == 2
     assert got["complete"] is False and got["next_offset"] == 4
+
+
+def test_DMA_온도별_카드는_평균_방식을_보낸다_기본은_화면과_같은_격자() -> None:
+    """2026-11-14 검토 — 평균 방식을 안 보내 서버의 하위 호환 기본값(matched)으로 평균했다.
+    온도를 올리며 잰 시험 셋이면 0줄이라 거절됐다(v1.321 의 VOC 48 수정이 AI 경로에 안
+    닿음)."""
+    run = "11111111-1111-1111-1111-111111111111"
+    answers = {
+        f"/viscoelastic/runs/{run}/modulus-tables": [
+            {"id": "t-1", "frequency_hz": 1.0, "created_at": "2026-11-14", "rows": []}
+        ],
+        "/fitting/cards/dma-temperature": {"id": "c-1", "status": "draft"},
+    }
+    given = _Backend(answers)
+    make = {"test_run_ids": [run], "label": "E′(T)", "dry_run": False}
+    _tool("create_dma_temperature_card", given)(**make)
+    assert given.sent("/fitting/cards/dma-temperature")["body"]["average"] == "grid"
+
+    chosen = _Backend(answers)
+    _tool("create_dma_temperature_card", chosen)(**make, average="union")
+    assert chosen.sent("/fitting/cards/dma-temperature")["body"]["average"] == "union"
+
+    wrong = _Backend(answers)
+    refused = _tool("create_dma_temperature_card", wrong)(**make, average="mean")
+    assert "error" in refused
+    assert not [one for one in wrong.calls if one["method"] == "POST"]

@@ -37,7 +37,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from typing import Any
 
 import numpy as np
@@ -1011,9 +1011,11 @@ def average_grid(
             bunch.append(_row(float(temperature), storage, loss))
         if bunch:
             rows.append(_merged(float(temperature), bunch))
+    # 「외삽 없음」 이라 쓰면 카드 각주 판정(`app.shared.card_notes`)이 「외삽」 표지로 경고로
+    # 셌다 — 시편 평균 격자 카드가 전부 워크벤치 경고 카드로 섰다(2026-11-14 검토).
     notes = [
         f"{step_k:g} K 격자에서 시편마다 잰 범위 안에서만 log E′ 를 보간해 평균했습니다"
-        "(로그 평균 · 범위 밖 외삽 없음)."
+        "(로그 평균 · 잰 범위 밖으로 늘이지 않음)."
     ]
     return rows, [*notes, *_thin_rows_note(rows, len(tables))]
 
@@ -1026,6 +1028,10 @@ def average_union(
     한 온도씩 잰 시험(25 · 50 · 75 °C 를 시편마다 따로)은 짝짓기로는 한 표로 못 합쳤다. 온도
     차례로 늘어놓고 ±`match_k` 안의 줄을 같은 온도로 보아 로그 평균한다. 줄마다 기여 시편 수를
     단다.
+
+    **시편마다 먼저 평균한 뒤 시편끼리 평균한다**(2026-11-14 검토). 묶인 점을 모두 한데 로그
+    평균했더니 촘촘하게 잰 시편 하나가 평균을 끌었다 — E′ 가 20 % 낮은 시편이 0.3 K 간격으로
+    세 점을 넣자 0.928 이어야 할 평균이 0.898 이 됐고, 변동계수도 시편이 아니라 점으로 셌다.
     """
     if not tables:
         raise ViscoelasticError("평균할 표가 없습니다.")
@@ -1044,8 +1050,19 @@ def average_union(
     def flush() -> None:
         if not bunch:
             return
-        merged = _merged(float(np.mean([one[0] for one in bunch])), [one[2] for one in bunch])
-        rows.append(replace(merged, count=len({one[1] for one in bunch})))
+        per_specimen: list[TableRow] = []
+        for index in dict.fromkeys(one[1] for one in bunch):
+            mine = [one[2] for one in bunch if one[1] == index]
+            losses = [r.loss_pa for r in mine if r.loss_pa is not None and r.loss_pa > 0]
+            per_specimen.append(
+                _row(
+                    float(np.mean([r.temperature_k for r in mine])),
+                    _log_mean([r.storage_pa for r in mine]),
+                    _log_mean(losses) if len(losses) == len(mine) else None,
+                )
+            )
+        temperature = float(np.mean([one.temperature_k for one in per_specimen]))
+        rows.append(_merged(temperature, per_specimen))
         bunch.clear()
 
     for item in pooled:

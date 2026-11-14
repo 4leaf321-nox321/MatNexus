@@ -217,7 +217,8 @@ Family·Category·Grade·제조사·유통사·시편 규격은 **기준정보**
     ★ create_card_from_group(...)      묶음에서 — 속도 의존·점탄성·확장 묶음을 한 길로
     ★ create_viscoelastic_card(...)    Prony 적합 하나에서 점탄성 카드 초안
     ★ create_lve_card(...)             DMA 변형률 스윕의 선형 탄성률 카드 초안
-    ★ create_dma_temperature_card(...) DMA 온도별 저장 탄성률 카드 초안 — 시험마다 그 주파수의 표(시편 평균)
+    ★ create_dma_temperature_card(...) DMA 온도별 저장 탄성률 카드 초안 — 시험마다 그 주파수의 표(시편 평균,
+                                       average=grid · union · matched — 기본은 화면과 같은 grid)
 
     ★ set_card_status(card, action)    publish(초안 → 확정) · deprecate(사용 중지) ·
                                        restore(사용 중지 → 초안) — 자료 관리자만

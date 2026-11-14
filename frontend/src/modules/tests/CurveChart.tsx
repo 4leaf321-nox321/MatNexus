@@ -126,12 +126,12 @@ const PAD = { top: 16, right: 20, bottom: 44, left: 68 }
 const WIDTH = 760
 
 /** 화면 비율을 **판(plot) 안의 비율**로. 축 여백만큼 어긋나는 것을 걷는다. */
-function plotShare(share: number, axis: 'x' | 'y'): number {
+function plotShare(share: number, axis: 'x' | 'y', height: number): number {
   const before = axis === 'x' ? PAD.left : PAD.top
   const after = axis === 'x' ? PAD.right : PAD.bottom
-  const total = axis === 'x' ? WIDTH : 1
-  // y 는 높이를 모르므로 비율만 쓴다 — 여백 비중이 작아 실사용에서 티가 안 난다.
-  if (axis === 'y') return Math.min(Math.max(share, 0), 1)
+  // **세로도 여백을 뺀다**(2026-11-14 검토). 전에는 「높이를 모른다」 며 비율을 그대로 써서,
+  // 판 아래쪽에서 휠을 다섯 번 굴리면 가리키던 값이 판 밖으로 나갔다(아래 여백이 44/380).
+  const total = axis === 'x' ? WIDTH : height
   const inside = (share * total - before) / (total - before - after)
   return Math.min(Math.max(inside, 0), 1)
 }
@@ -157,11 +157,20 @@ function clamp(box: Box, whole: Box | null): Box {
     yMin = mid - minY / 2
     yMax = mid + minY / 2
   }
-  // 전체보다 넓어지면 전체로 돌린다.
-  if (xMax - xMin >= whole.xMax - whole.xMin && yMax - yMin >= whole.yMax - whole.yMin) {
-    return { ...whole }
-  }
+  // **자리도 막는다**(2026-11-14 검토) — 전에는 크기만 막아, 확대한 채 끌면 보는 범위가
+  // 데이터 밖으로 나가 빈 판이 됐다(위 주석과 달랐다). 축마다: 전체보다 넓으면 전체, 밖으로
+  // 나갔으면 폭을 지킨 채 안으로 민다.
+  ;[xMin, xMax] = within(xMin, xMax, whole.xMin, whole.xMax)
+  ;[yMin, yMax] = within(yMin, yMax, whole.yMin, whole.yMax)
   return { xMin, xMax, yMin, yMax }
+}
+
+function within(low: number, high: number, floor: number, ceiling: number): [number, number] {
+  const span = high - low
+  if (span >= ceiling - floor) return [floor, ceiling]
+  if (low < floor) return [floor, floor + span]
+  if (high > ceiling) return [ceiling - span, ceiling]
+  return [low, high]
 }
 
 /** 끌어 그린 사각형 — 판(viewBox) 좌표. */
@@ -368,8 +377,8 @@ export function CurveChart({
         // 당기면 보고 있던 곳이 화면 밖으로 밀려난다.
         const ax = (event.clientX - rect.left) / rect.width
         const ay = (event.clientY - rect.top) / rect.height
-        const anchorX = box.xMin + (box.xMax - box.xMin) * plotShare(ax, 'x')
-        const anchorY = box.yMax - (box.yMax - box.yMin) * plotShare(ay, 'y')
+        const anchorX = box.xMin + (box.xMax - box.xMin) * plotShare(ax, 'x', height)
+        const anchorY = box.yMax - (box.yMax - box.yMin) * plotShare(ay, 'y', height)
         const factor = delta < 0 ? WHEEL_STEP : 1 / WHEEL_STEP
         const yFactor = onlyX ? 1 : factor
         return clamp(
@@ -385,7 +394,7 @@ export function CurveChart({
     }
     node.addEventListener('wheel', wheel, { passive: false })
     return () => node.removeEventListener('wheel', wheel)
-  }, [empty])
+  }, [empty, height])
 
   const scale = useMemo(() => {
     const dotted = (dots ?? []).flatMap((one) => one.points)

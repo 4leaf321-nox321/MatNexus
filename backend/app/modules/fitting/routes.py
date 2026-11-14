@@ -2445,9 +2445,9 @@ def create_dma_temperature_card(
     있었다. **탄성 블록에 싣지 않는다** — 정적 탄성계수와 뜻이 다르다(사용자). 전단(G′)으로
     잰 표는 점탄성 카드와 같은 규칙으로 E = 2(1+ν)G 로 옮긴다 — tan δ 는 그대로다.
 
-    표가 여럿이면 **시편 평균**이다(`viscoelastic.average_tables`) — 모든 시편에 있는 온도만
-    남기고 줄마다 E′ 변동계수를 단다. 같은 재료 · 시험 종류 · 방향 · 주파수 · 잰 것이어야 하고
-    시험 하나에 표 하나다.
+    표가 여럿이면 **시편 평균**이다 — `average` 로 방식을 고른다(`grid` 온도 격자 · `union`
+    온도 모으기 · `matched` 모든 시편에 있는 온도만). 줄마다 E′ 변동계수와 기여 시편 수를
+    단다. 같은 재료 · 시험 종류 · 방향 · 주파수 · 잰 것이어야 하고 시험 하나에 표 하나다.
     """
     cards.load_builtin()
     chain: list[_DmaChain] = []
@@ -2505,7 +2505,7 @@ def create_dma_temperature_card(
     if not averaged:
         raise AppError(
             "MNX-FITTING-0053",
-            "모든 시편에 있는 온도가 하나도 없습니다. " + " ".join(average_notes),
+            "평균할 온도가 하나도 없습니다. " + " ".join(average_notes),
             status=422,
         )
     rows = [

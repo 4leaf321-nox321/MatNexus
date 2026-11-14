@@ -208,6 +208,22 @@ describe('물성 카드 내용', () => {
     render(<CardBlocks specs={SPECS} card={card({}, '모르는 물성 블록입니다: ogden')} />)
     expect(screen.getByText(/모르는 물성 블록입니다/)).toBeInTheDocument()
   })
+
+  it('카드 근거 메모를 보이고, 블록이 이미 보인 문장은 두 번 적지 않는다', () => {
+    // 2026-11-14 검토 — 평균에서 뺀 온도 · 로트 섞임 메모가 저장만 되고 화면에 없었다.
+    const one = card({ imaginary: { values: { strength: 1 }, notes: ['블록이 보이는 말'] } })
+    ;(one as unknown as { source: unknown }).source = {
+      notes: ['시료(로트) 2개의 시편을 평균했습니다 — 로트가 섞였는지 확인하세요.', '블록이 보이는 말'],
+    }
+    render(<CardBlocks specs={SPECS} card={one} />)
+    expect(screen.getByText(/로트가 섞였는지 확인하세요/)).toBeInTheDocument()
+    expect(screen.getAllByText('블록이 보이는 말')).toHaveLength(1)
+  })
+
+  it('근거 메모가 없으면 그 제목도 없다', () => {
+    render(<CardBlocks specs={SPECS} card={card({ imaginary: { values: { strength: 1 } } })} />)
+    expect(screen.queryByText('카드 근거')).toBeNull()
+  })
 })
 
 describe('블록 그래프 — 선언대로 그린다', () => {

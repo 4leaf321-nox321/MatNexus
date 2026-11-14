@@ -414,7 +414,9 @@ class Test격자_합집합_평균:
         # 두 시편 모두 같은 곡선 — 로그 보간 평균이 그 곡선 값이다.
         assert at.storage_pa == pytest.approx(1e9 * 10 ** (-20.0 / 50.0), rel=1e-9)
         assert at.count == 2
-        assert any("외삽 없음" in one for one in notes)
+        assert any("늘이지 않음" in one for one in notes)
+        # 「외삽」 이라 쓰면 카드 각주 판정이 경고로 센다(2026-11-14 검토).
+        assert not any("외삽" in one for one in notes)
 
     def test_잰_범위_밖으로_늘이지_않고_한_시편_줄은_말한다(self) -> None:
         from matcore.viscoelastic import average_grid
@@ -437,3 +439,23 @@ class Test격자_합집합_평균:
         assert [one.count for one in rows] == [2, 1, 1]
         # 로그 평균(기하 평균) — 2 GPa 와 8 GPa 의 평균은 4 GPa.
         assert rows[0].storage_pa == pytest.approx(4.0e9)
+
+    def test_합집합은_시편마다_먼저_평균해_촘촘한_시편이_끌지_않는다(self) -> None:
+        """2026-11-14 검토 — 묶인 점을 한데 로그 평균해, E′ 가 20 % 낮은 시편이 점 셋을
+        넣자 평균이 0.928 이 아니라 0.875 로 끌렸다. 변동계수도 점으로 셌다."""
+        from matcore.viscoelastic import TableRow, average_union
+
+        dense = [TableRow(298.0 + 0.2 * i, 0.8e9, None, None) for i in range(3)]
+        rows, _ = average_union(
+            [
+                dense,
+                [TableRow(298.1, 1.0e9, None, None)],
+                [TableRow(298.3, 1.0e9, None, None)],
+            ]
+        )
+        assert len(rows) == 1 and rows[0].count == 3
+        assert rows[0].storage_pa == pytest.approx(1e9 * 0.8 ** (1 / 3))
+        per_specimen = np.array([0.8e9, 1.0e9, 1.0e9])
+        assert rows[0].storage_cv == pytest.approx(
+            np.std(per_specimen, ddof=1) / np.mean(per_specimen)
+        )

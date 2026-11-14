@@ -437,4 +437,28 @@ describe('영역 확대 · 이동 (2026-10-20)', () => {
     expect(xRange()[1]).toBeLessThan(2)
     expect(yTicks(container)).toContain('200')
   })
+
+  it('확대한 채 멀리 끌어도 데이터 밖으로 안 나간다', () => {
+    // 2026-11-14 검토 — 크기만 막고 자리는 안 막아, 판 폭의 세 배를 끌면 빈 판이 됐다.
+    const { container } = render(<CurveChart points={MEAN} xLabel="변형률" yLabel="응력" />)
+    const svg = sized(container)
+    for (let i = 0; i < 5; i += 1) fireEvent.wheel(svg, { deltaY: -100, clientX: 400, clientY: 200 })
+    const [from, to] = xRange()
+    fireEvent.mouseDown(svg, { button: 2, clientX: 600, clientY: 200 })
+    fireEvent.mouseMove(svg, { clientX: -2400, clientY: 200 })
+    fireEvent.mouseUp(svg, { button: 2, clientX: -2400, clientY: 200 })
+    const [left, right] = xRange()
+    expect(right).toBeCloseTo(2, 2) // 오른쪽 끝에 붙는다
+    expect(right - left).toBeCloseTo(to - from, 2) // 폭은 그대로
+  })
+
+  it('휠은 세로로도 커서 자리를 지킨다', () => {
+    // 2026-11-14 검토 — 세로는 위 · 아래 여백을 안 빼, 판 맨 아래(값 0)를 가리키고 다섯 번
+    // 굴리면 0 이 판 밖으로 나갔다. 판 아래 끝은 y = 380 − 44 = 336.
+    const { container } = render(<CurveChart points={MEAN} xLabel="변형률" yLabel="응력" />)
+    const svg = sized(container)
+    for (let i = 0; i < 5; i += 1) fireEvent.wheel(svg, { deltaY: -100, clientX: 400, clientY: 336 })
+    expect(yTicks(container)).toContain('0')
+    expect(yTicks(container)).not.toContain('200')
+  })
 })

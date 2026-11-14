@@ -290,6 +290,9 @@ export function CardBlocks({
         className="text-xs"
         items={((card.source as { warnings?: WarningItem[] } | null)?.warnings ?? []) as WarningItem[]}
       />
+      {/* **카드 근거 메모**(2026-11-14 검토) — 평균에서 뺀 온도 · 한 시편뿐인 줄 · 로트 섞임 ·
+          값이 어디서 왔는지. 저장만 되고 그리는 화면이 없어 사람은 못 봤다(AI 는 봤다). */}
+      <SourceNotes card={card} />
 
       {present.map((spec) => {
         const payload = blocks[spec.key]
@@ -322,6 +325,31 @@ export function CardBlocks({
         )
       })}
     </div>
+  )
+}
+
+/** 카드의 근거 메모(`source.notes`) — 문장 그대로, 차례대로. 없으면 아무것도 안 그린다. */
+function SourceNotes({ card }: { card: PropertyCard }) {
+  const raw = (card.source as { notes?: unknown } | null)?.notes
+  // 블록이 제 메모로 이미 보이는 문장은 두 번 적지 않는다(묶음 경고가 양쪽에 실린다).
+  const shown = new Set(
+    Object.values((card.blocks ?? {}) as Record<string, { notes?: unknown }>).flatMap((block) =>
+      Array.isArray(block?.notes) ? block.notes.map(String) : []
+    )
+  )
+  const notes = Array.isArray(raw)
+    ? [...new Set(raw.map(String))].filter((one) => one.trim() !== '' && !shown.has(one))
+    : []
+  if (notes.length === 0) return null
+  return (
+    <section aria-label="카드 근거">
+      <h4 className="mb-1 text-sm font-medium">카드 근거</h4>
+      <ul className="list-disc space-y-0.5 pl-5 text-xs">
+        {notes.map((note, index) => (
+          <li key={index}>{note}</li>
+        ))}
+      </ul>
+    </section>
   )
 }
 

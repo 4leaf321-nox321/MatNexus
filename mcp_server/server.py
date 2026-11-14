@@ -3738,10 +3738,13 @@ async def create_dma_temperature_card(
     poisson_ratio: float | None = None,
     note: str | None = None,
     dry_run: bool = True,
+    average: str = "grid",
 ) -> dict[str, Any]:
     """DMA 의 **온도별 저장 탄성률(E′ · E″ · tan δ) 카드** 초안 — 시험마다 그 주파수의 표에서.
 
-    시험이 여럿이면 **시편 평균**이다(모든 시편에 있는 온도만, 줄마다 변동계수). 같은 재료 ·
+    시험이 여럿이면 **시편 평균**이다(줄마다 변동계수 · 시편 수) — `average`: grid(1 K 격자
+    보간, 온도를 올리며 잰 시험) · union(잰 온도 모으기, 한 온도씩 잰 시험) · matched(모든
+    시편에 ±0.5 K 로 있는 온도만 — 램프 시험은 0줄이 되기 쉽다). 같은 재료 ·
     시험 종류 · 방향이어야 한다. 표가 없는 시험은 넣을 때 그 주파수로 만든다 — 잰 범위 밖의 온도는
     외삽하지 않고 뺀다(미리보기의 `sweeps_outside` · `all_sweeps_reach_hz`). 정적 탄성계수와 뜻이 달라 탄성 블록에 안 싣는다. G′ 로 잰 표는
     `poisson_ratio`(비우면 재료 값)로 E 로 옮긴다. 기본이 미리보기이고 만들어도 초안이다.
@@ -3804,7 +3807,16 @@ async def create_dma_temperature_card(
                 ),
             }
         )
-    body: dict[str, Any] = {"label": label, "poisson_ratio": poisson_ratio, "note": note}
+    if average not in ("grid", "union", "matched"):
+        return {"error": "average 는 grid · union · matched 중 하나입니다."}
+    # **화면과 같은 기본값(grid)을 보낸다**(2026-11-14 검토) — 안 보내면 서버의 하위 호환
+    # 기본값 matched 로 평균해, 온도를 올리며 잰 시험 셋이 0줄로 거절됐다.
+    body: dict[str, Any] = {
+        "label": label,
+        "poisson_ratio": poisson_ratio,
+        "note": note,
+        "average": average,
+    }
     if dry_run:
         building = sum(1 for one in plan if one["will_build"])
         # 모든 스윕의 범위 밖이면 표가 한 줄도 안 나온다 — 넣으면 거절된다(외삽하지 않는다).
