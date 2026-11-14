@@ -423,11 +423,18 @@ describe('요약 + 탭 (2026-10-22)', () => {
     show('curves')
     expect(await screen.findByText('DMA 1 Hz 표')).toBeInTheDocument()
     expect(screen.getByText('조건별 값을 이어 그림 (자동)')).toBeInTheDocument()
-    // 점은 상세가 아니라 그 벌에서 받는다 — 받은 점으로 표가 선다.
-    expect(seriesPoints).toHaveBeenCalledWith('ssssssss-0000-0000-0000-000000000001')
+    // 점은 상세가 아니라 그 벌에서 받는다 — 받은 점으로 표가 선다. **받은 점으로 그려진 표를
+    // 기다린다**(2026-11-14) — 제목(틀)이 선 뒤 곧바로 「불렸나」 를 보면 느린 CI 에서 점을 받기
+    // 전 화면을 봤다(v1.320.0 CI).
+    await waitFor(() =>
+      expect(seriesPoints).toHaveBeenCalledWith('ssssssss-0000-0000-0000-000000000001')
+    )
     fireEvent.click(await screen.findByRole('button', { name: '표 보기' }))
-    const rows = within(screen.getAllByRole('table').at(-1) as HTMLElement).getAllByRole('row')
-    expect(rows).toHaveLength(3)
+    await waitFor(() =>
+      expect(
+        within(screen.getAllByRole('table').at(-1) as HTMLElement).getAllByRole('row')
+      ).toHaveLength(3)
+    )
     // 열전도율 세 점(같은 출처 · 온도만 다름)이 화면이 이은 선 하나다.
     expect(screen.getByText('축 온도 · 선 1')).toBeInTheDocument()
     vi.spyOn(window, 'confirm').mockReturnValue(true)
