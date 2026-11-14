@@ -15,7 +15,7 @@ ISO 844 · D1621)이 탄성률을 재는 방법이 저마다 다르다. 같은 �
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import numpy as np
 
@@ -53,6 +53,14 @@ class Slope:
     """회귀일 때의 결정계수. 현 · 할선은 없다."""
     indices: tuple[int, int] = (0, 0)
     """원래 배열에서 쓴 점의 [시작, 끝) — 같은 구간으로 다른 열(하중-처짐)의 기울기를 낼 때."""
+    rse: float | None = None
+    """기울기의 상대 표준오차(회귀 방법) — 「잡음으로 ±몇 % 흔들리나」. R² 와 점 수에서 나오는
+    값이라, 좁은 구간의 R² 가 낮아도 점이 많으면 작다."""
+    curvature: float | None = None
+    """구간 뒤 절반 기울기 ÷ 앞 절반 기울기(회귀 방법) — 1 에서 멀면 구간이 휘었다."""
+    window_r2: float | None = None
+    """현 방법에서 **구간 안 점들**의 회귀 R² — 값은 두 점으로 내지만, 그 사이에 신호가
+    있는지."""
 
 
 def rising(strain: np.ndarray, stress: np.ndarray) -> int:
@@ -147,7 +155,117 @@ def _fit(x: np.ndarray, y: np.ndarray) -> tuple[float, float]:
     return float(slope), r2
 
 
+#: 기울기가 이만큼(상대 표준오차) 넘게 흔들리면 말한다 — **잠정값**(합성 곡선 실험).
+RSE_WARN = 0.03
+#: 구간 앞뒤 절반의 기울기가 이만큼 넘게 다르면 휘었다고 본다 — **잠정값**.
+CURVATURE_WARN = 0.15
+#: 현 구간 안 점들의 R² 가 이 아래면 「신호가 없다」 — 정상 곡선은 잡음이 최대 응력의 2 % 여도
+#: 0.47 쯤이고, 하중이 늦게 걸린 곡선은 0.003~0.006 이었다(실측).
+CHORD_SIGNAL_R2 = 0.1
+
+
+def _halves(x: np.ndarray, y: np.ndarray) -> float | None:
+    """뒤 절반 기울기 ÷ 앞 절반 기울기. 절반에 점이 셋이 안 되거나 못 맞추면 `None`."""
+    middle = (float(np.min(x)) + float(np.max(x))) / 2
+    found: list[float] = []
+    for part in (x <= middle, x > middle):
+        if int(part.sum()) < 3 or not float(np.ptp(x[part])) > 0:
+            return None
+        found.append(float(np.polyfit(x[part], y[part], 1)[0]))
+    return found[1] / found[0] if found[0] > 0 else None
+
+
+def _quality(x: np.ndarray, y: np.ndarray, found: Slope, method: str) -> Slope:
+    """그 값을 **믿어도 되는지 볼 숫자**를 단다 — 값은 건드리지 않는다."""
+    if method == "secant":
+        return found  # 원점에서 긋는 값이다 — 구간이 휘는 것이 정상이다(고무 · 폼)
+    keep = np.isfinite(x) & np.isfinite(y)
+    if method == "chord":
+        inside = keep & (x >= found.low) & (x <= found.high)
+        if int(inside.sum()) < MIN_POINTS:
+            return found
+        try:
+            _, r2 = _fit(x[inside], y[inside])
+        except SlopeError:
+            r2 = 0.0  # 구간 안에서 응력이 안 변한다 — 신호가 없다
+        return replace(found, window_r2=max(r2, 0.0))
+    start, end = found.indices
+    used = np.flatnonzero(keep[start:end]) + start
+    if len(used) < MIN_POINTS or not found.value > 0:
+        return found
+    return replace(
+        found,
+        rse=_slope_error(x[used], y[used], found.value) / found.value,
+        curvature=_halves(x[used], y[used]),
+    )
+
+
+def concerns(found: Slope) -> list[str]:
+    """이 기울기를 물성으로 삼기 전에 **사람이 볼 것** — 막지 않는다(2026-11-14, VOC 43).
+
+    R² 하한(인장의 0.98)을 그대로 가져오지 않았다. R² 는 「곡선이 휘었나」 보다 「구간 안 응력
+    폭에 비해 잡음이 얼마나 큰가」 를 재서, 좁은 구간(ISO 178 의 0.05~0.25 %)에서는 E 가 ±6 %
+    안으로 맞는 정상 곡선을 전부 떨어뜨리고, 항복을 넘긴 넓은 구간(E 가 19 % 낮음)은 0.992 로
+    통과시켰다(실측). 그래서 **흔들림**(점 수를 반영한 기울기 불확도)과 **휨**(앞뒤 절반의
+    기울기 비)을 따로 본다 — 무엇을 고칠지가 다르다.
+    """
+    if found.window_r2 is not None:
+        if found.window_r2 < CHORD_SIGNAL_R2:
+            return [
+                f"구간(변형률 {found.low:.4g} ~ {found.high:.4g}) 안에서 응력이 변형률을 거의 "
+                f"따라가지 않습니다(구간 점의 R² {found.window_r2:.2f}) — 하중이 늦게 "
+                "걸렸거나 구간이 곡선과 안 맞습니다. 영점 · 구간을 확인하세요."
+            ]
+        return []
+    told: list[str] = []
+    noise = found.rse or 0.0
+    if noise > RSE_WARN:
+        told.append(
+            f"기울기가 ±{noise:.1%} 흔들립니다(구간 안 잡음이 큽니다) — 구간을 넓히거나 "
+            "점이 더 많은 구간을 쓰세요."
+        )
+    if found.curvature is not None and abs(found.curvature - 1) > max(
+        CURVATURE_WARN, 3 * noise
+    ):
+        told.append(
+            f"구간 뒤 절반의 기울기가 앞 절반의 {found.curvature:.2f}배입니다(구간이 "
+            "휘었습니다) — 구간이 토우나 항복에 걸쳤는지 확인하세요."
+        )
+    return told
+
+
 def measure(
+    strain: np.ndarray,
+    stress: np.ndarray,
+    *,
+    method: str,
+    low: float = 0.0005,
+    high: float = 0.0025,
+    band_low: float = 0.1,
+    band_high: float = 0.4,
+    tangent_width: float = 0.001,
+) -> Slope:
+    """오르는 가지에서 고른 방법으로 기울기를 잰다. 못 내면 `SlopeError`.
+
+    값과 함께 그 값을 믿어도 되는지 볼 숫자(`rse` · `curvature` · `window_r2`)를 단다.
+    """
+    found = _measure(
+        strain,
+        stress,
+        method=method,
+        low=low,
+        high=high,
+        band_low=band_low,
+        band_high=band_high,
+        tangent_width=tangent_width,
+    )
+    x = np.asarray(strain, dtype=np.float64)
+    y = np.asarray(stress, dtype=np.float64)
+    end = rising(x, y)
+    return _quality(x[:end], y[:end], found, method)
+
+
+def _measure(
     strain: np.ndarray,
     stress: np.ndarray,
     *,

@@ -211,6 +211,24 @@ def test_회귀는_R2_를_함께_낸다() -> None:
     assert found["flexural_modulus_r2"] == pytest.approx(1.0, abs=1e-6)
 
 
+def test_구간이_휘면_값은_내고_경고로_남긴다() -> None:
+    """2026-11-14(VOC 43) — 값을 믿기 전에 볼 것은 노트가 아니라 경고다(채택할 때 확인을
+    받는다). 깨끗한 구간에는 없다."""
+    clean = bending.modulus(_curve(), {"method": "regression", "maximum_strain": 0.01})
+    assert clean.warnings == ()
+    strain = np.linspace(0, 0.06, 600)
+    bent = Frame(
+        {bending.STRAIN: strain, bending.STRESS: 60e6 * np.tanh(E * strain / 60e6)},
+        {bending.STRAIN: "1", bending.STRESS: "Pa"},
+    )
+    step = bending.modulus(
+        bent, {"method": "regression", "minimum_strain": 0.0005, "maximum_strain": 0.03}
+    )
+    assert any(one.key == "flexural_modulus" for one in step.scalars)
+    assert len(step.warnings) == 1
+    assert step.warnings[0].startswith("굽힘 탄성률:") and "휘었습니다" in step.warnings[0]
+
+
 def test_응력_띠는_변형률을_몰라도_된다() -> None:
     found = _modulus(_curve(), method="stress_window", band_low=0.1, band_high=0.4)
     assert found["flexural_modulus"] == pytest.approx(E, rel=0.01)

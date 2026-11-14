@@ -80,6 +80,7 @@ from app.shared import (
     definition_keys,
     filestore,
     holds,
+    modulus_sanity,
     permissions,
     revision,
     specimen_size,
@@ -448,7 +449,7 @@ def _store(
             }
             for one in result.failures
         ],
-        warnings=_warnings_of(run, result),
+        warnings=_warnings_of(db, run, result),
         # **계산이 무엇 위에서 돌았는지.** 플러그인 버전이 "어느 계산" 이라면
         # 이것은 "그 계산이 무엇 위에서" 다 — 둘 다 있어야 재현이 닫힌다.
         runtime=runtime.manifest(),
@@ -524,8 +525,11 @@ def _stage_out(stage: processing.Stage) -> ProcessingStageOut:
     )
 
 
-def _warnings_of(run: TestRun, result: processing.PipelineResult) -> list[dict[str, str]]:
-    """이 결과와 함께 남길 경고 — **시험 점검 + 단계 경고**(2026-11-14, VOC 53~58).
+def _warnings_of(
+    db: Session, run: TestRun, result: processing.PipelineResult
+) -> list[dict[str, str]]:
+    """이 결과와 함께 남길 경고 — **시험 점검 + 단계 경고 + 탄성률이 말이 되는가**(2026-11-14,
+    VOC 53~58 · 43).
 
     시험 점검(`run.checks`)은 처리한 그때의 것을 적는다 — 결과는 불변이고 시험은 다시 읽힐 수
     있다. 노트와 따로 두는 이유: 노트는 「무엇을 했나」 이고 경고는 「물성으로 삼기 전에 볼
@@ -541,6 +545,8 @@ def _warnings_of(run: TestRun, result: processing.PipelineResult) -> list[dict[s
             for stage in result.stages
             for message in stage.warnings
         ),
+        # 재료군 범위 · 재료에 적어 둔 값과 견준다 — 단계는 재료를 모른다(`modulus_sanity`).
+        *modulus_sanity.warnings_for(db, run, result),
     ]
 
 
@@ -740,7 +746,7 @@ def preview(
         stage_index=shown,
         problem=problem,
         failures=[_failure_out(one) for one in result.failures],
-        warnings=_warning_out(_warnings_of(run, result)),
+        warnings=_warning_out(_warnings_of(db, run, result)),
     )
 
 
@@ -1859,7 +1865,7 @@ def run_batch(
                             status=422,
                         )
                     lost = _lost_on_adopt(before, computed.scalars, computed.failures)
-                    found = _warnings_of(run, computed)
+                    found = _warnings_of(db, run, computed)
                     items.append(
                         BatchItemOut(
                             test_run_id=run.id,

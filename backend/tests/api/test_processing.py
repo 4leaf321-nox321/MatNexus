@@ -791,6 +791,61 @@ class Test경고는_채택에서_확인을_받는다:
         assert saved.status_code == 201, saved.text
         return saved.json()
 
+    @pytest.mark.modulus_sanity
+    def test_자릿수가_틀린_탄성률은_재료군_범위와_적어_둔_값으로_경고한다(
+        self, run_id: str, db: Session
+    ) -> None:
+        """2026-11-14(VOC 43) — 단면적 · 하중 단위가 틀리면 강판의 탄성계수가 200 MPa 로
+        나오는데 「0 이하」 만 거절해 그대로 저장됐다. 재료군(Metal)과 재료에 적어 둔 값을 DB
+        에서 읽어 견준다 — 막지 않는다. 이 픽스처 곡선은 18점이라 탄성계수가 안 나와, 단계
+        결과를 직접 넣는다."""
+        from app.modules.materials.models import Material
+        from app.shared import modulus_sanity
+        from matcore import processing
+
+        processing.load_builtin()
+        run = db.get(TestRun, uuid.UUID(run_id))
+        assert run is not None
+
+        def result(value: float, plugin: str = "tensile.elastic_modulus") -> Any:
+            frame = processing.Frame(columns={}, units={})
+            scalar = processing.Scalar("youngs_modulus", "탄성계수", value, "Pa")
+            stage = processing.Stage(0, plugin, "탄성계수", "1", {}, frame, (), (scalar,))
+            return processing.PipelineResult(stages=(stage,))
+
+        assert modulus_sanity.warnings_for(db, run, result(205e9)) == []
+        found = modulus_sanity.warnings_for(db, run, result(205e6))
+        assert [one["source"] for one in found] == ["step"]
+        assert "재료군 「Metal」" in found[0]["message"]
+        # 처리 결과의 경고 목록에 실린다 — 채택 확인 · 일괄 보류 · 카드 근거가 이것을 본다.
+        from app.modules.processing import routes as processing_routes
+
+        listed = processing_routes._warnings_of(db, run, result(205e6))
+        assert [one["message"] for one in listed] == [found[0]["message"]]
+        # 탄성률 물성 키로 선언한 단계의 값만 본다 — 이름이 같아도 다른 단계의 값은 아니다.
+        assert modulus_sanity.warnings_for(db, run, result(205e6, "tensile.strength")) == []
+
+        specimen = db.get(Specimen, run.specimen_id)
+        assert specimen is not None
+        sample = db.get(Sample, specimen.sample_id)
+        assert sample is not None
+        material = db.get(Material, sample.material_id)
+        assert material is not None
+        material.declared_properties = [
+            {
+                "item": "탄성계수",
+                "points": [
+                    {"temperature_k": 293.15, "value_si": 70e9},
+                    {"temperature_k": 573.15, "value_si": 20e9},
+                ],
+            }
+        ]
+        db.commit()
+        # 범위 안(알루미늄쯤)이어도 적어 둔 값과 3배 넘게 다르면 말한다.
+        apart = modulus_sanity.warnings_for(db, run, result(250e9))
+        assert len(apart) == 1 and "적어 둔 탄성률 70 GPa" in apart[0]["message"]
+        assert modulus_sanity.warnings_for(db, run, result(75e9)) == []
+
     def test_결과가_처리한_그때의_시험_점검을_든다(
         self, client: TestClient, admin_headers: dict[str, str], checked: str, db: Session
     ) -> None:

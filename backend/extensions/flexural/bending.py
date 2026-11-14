@@ -297,6 +297,8 @@ def modulus(frame: Frame, options: dict[str, Any]) -> StepResult:
             f"(점 {found.points}개)에서 굽힘 탄성률 {found.value / 1e9:.4g} GPa.",
         ),
         scalars=tuple(scalars),
+        # 값은 그대로 내고 **볼 것만 말한다**(2026-11-14, VOC 43) — 채택할 때 확인을 받는다.
+        warnings=tuple(f"굽힘 탄성률: {one}" for one in slopes.concerns(found)),
     )
 
 

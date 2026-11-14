@@ -175,6 +175,23 @@ def _material_thickness_in_tests_is_not_a_unit_mistake(
     monkeypatch.setattr(specimen_size, "magnitude_gaps", lambda sizes: [])
 
 
+@pytest.fixture(autouse=True)
+def _material_family_in_tests_is_arbitrary(
+    request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """**시험이 만든 재료의 재료군은 아무렇게나다**(2026-11-14, VOC 43).
+
+    세라믹 칩 굽힘(300 GPa)을 `Polymer` 재료에, 고무 인장을 `Metal` 재료에 붙여 만든 시험이
+    여럿이다 — 탄성률 범위 경고가 붙으면 채택이 확인을 요구해 8건이 이유 없이 멈췄다. 그 판정
+    자체를 보는 시험은 `@pytest.mark.modulus_sanity` 를 달아 실제로 돌린다.
+    """
+    if request.node.get_closest_marker("modulus_sanity"):
+        return
+    from app.shared import modulus_sanity
+
+    monkeypatch.setattr(modulus_sanity, "warnings_for", lambda db, run, result: [])
+
+
 @pytest.fixture(scope="session")
 def engine():  # type: ignore[no-untyped-def]
     url = _test_url()

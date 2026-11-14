@@ -155,6 +155,25 @@ def _field(
 #: **왜 분류가 아니라 축인가:** 분류마다 적으면 새 분류에서 빠뜨린다. 판은
 #: 인장이든 DMA 든 모든 규격이 갖는다.
 BUILTIN_AXIS_FIELDS: dict[str, list[dict[str, Any]]] = {
+    # **재료군의 탄성률 범위**(2026-11-14, VOC 43) — 처리 결과의 탄성률이 이 밖이면 채택할 때
+    # 확인을 받는다(`app.shared.modulus_sanity`). 비우면 이름으로 고른 잠정 범위를 쓴다.
+    "family": [
+        _field(
+            "modulus_min",
+            "탄성률 하한",
+            dimension="stress",
+            si_unit="Pa",
+            help="이 재료군에서 나올 수 있는 가장 작은 탄성률. 처리 결과가 이보다 작으면 "
+            "단위 실수일 수 있다고 경고합니다(막지 않습니다). 비우면 기본 범위를 씁니다.",
+        ),
+        _field(
+            "modulus_max",
+            "탄성률 상한",
+            dimension="stress",
+            si_unit="Pa",
+            help="이 재료군에서 나올 수 있는 가장 큰 탄성률. 비우면 기본 범위를 씁니다.",
+        ),
+    ],
     "specimen_standard": [
         _field(
             "edition",

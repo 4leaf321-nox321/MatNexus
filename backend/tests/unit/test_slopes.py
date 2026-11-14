@@ -236,3 +236,55 @@ class Test접선은_잡음이_위로_튄_창을_고르지_않는다:
         noisy[at] += 0.1 * stress.max()
         found = slopes.measure(strain, noisy, method="tangent", tangent_width=0.001)
         assert found.value == pytest.approx(3.0e9, rel=0.05)  # 전에는 +69 %
+
+
+class Test믿어도_되는지_볼_것을_말한다:
+    """2026-11-14(VOC 43) — R² 하한(인장의 0.98)을 가져오지 않고 흔들림과 휨을 따로 본다. 값은
+    그대로 내고 경고만 한다. 기준값은 잠정이라, **뚜렷한 경우**만 묶는다."""
+
+    def test_깨끗한_직선은_아무_말도_없다(self) -> None:
+        strain, stress = _linear()
+        for method in ("chord", "regression", "stress_window", "tangent", "secant"):
+            found = slopes.measure(strain, stress, method=method)
+            assert slopes.concerns(found) == [], method
+
+    def test_좁은_구간의_잡음은_R2_가_낮아도_점이_많으면_말하지_않는다(self) -> None:
+        """ISO 178 구간(0.05~0.25 %)에서 R² 0.98 하한이면 E 가 맞는 곡선이 전부 떨어졌다."""
+        strain, stress = _toe_then_line(4000)
+        rng = np.random.default_rng(1)
+        noisy = stress + rng.normal(0, 0.005 * stress.max(), len(stress))
+        found = slopes.measure(strain, noisy, method="stress_window")
+        assert found.r2 is not None and found.rse is not None and found.rse < 0.03
+        assert slopes.concerns(found) == []
+
+    def test_항복을_넘긴_구간은_R2_가_높아도_휘었다고_말한다(self) -> None:
+        strain, stress = _toe_then_line(1000)
+        found = slopes.measure(strain, stress, method="regression", low=0.0005, high=0.04)
+        assert found.r2 is not None and found.r2 > 0.98  # R² 하한으로는 못 잡는다
+        told = slopes.concerns(found)
+        assert len(told) == 1 and "휘었습니다" in told[0]
+
+    def test_점이_적고_잡음이_크면_흔들린다고_말한다(self) -> None:
+        strain, stress = _toe_then_line(300)
+        rng = np.random.default_rng(2)
+        noisy = stress + rng.normal(0, 0.02 * stress.max(), len(stress))
+        found = slopes.measure(strain, noisy, method="regression", low=0.004, high=0.008)
+        assert any("흔들립니다" in one for one in slopes.concerns(found))
+
+    def test_현은_하중이_늦게_걸린_곡선에서_신호가_없다고_말한다(self) -> None:
+        """접촉이 늦으면 ISO 178 현이 E 를 참값의 몇 % 로 조용히 냈다 — 현에는 R² 가 없었다."""
+        strain = np.linspace(0, 0.02, 2001)
+        rng = np.random.default_rng(4)
+        stress = 3.0e9 * np.maximum(strain - 0.004, 0.0) + rng.normal(0, 5e4, len(strain))
+        found = slopes.measure(strain, stress, method="chord")
+        if found.value > 0:  # 절반쯤은 기울기 0 이하로 확장이 거절한다
+            assert found.window_r2 is not None and found.window_r2 < 0.1
+            assert any("늦게 걸렸거나" in one for one in slopes.concerns(found))
+
+    def test_할선은_휘어도_말하지_않는다(self) -> None:
+        """고무 · 폼의 할선 10 % 는 구간이 휘는 것이 정상이다 — 걸면 정상 곡선이 전부
+        걸렸다."""
+        strain = np.linspace(0, 0.3, 600)
+        stress = 1.0e6 * np.tanh(strain / 0.05)
+        found = slopes.measure(strain, stress, method="secant", high=0.1)
+        assert slopes.concerns(found) == []
