@@ -6832,8 +6832,8 @@ async def get_prony_fits(ctx: Context, master_curve_id: str) -> dict[str, Any]:
     ## 읽는 법
 
     **`at_bound` 가 비어 있지 않으면 관측 밖을 외삽하고 있다** — 그 완화시간은 데이터가
-    정한 것이 아니다. 항 수는 BIC 가 골랐지만 `candidates` 를 함께 준 이유는 **사람이 다시
-    고를 수 있게**다: 항을 늘리면 잔차는 언제나 줄지만 계수도 는다. 값은 SI(Pa·s)다 —
+    정한 것이 아니다. 기본은 완화시간을 자릿수마다 못 박은 적합이고, `candidates` 를 함께 준
+    이유는 **사람이 다시 고를 수 있게**다(완화시간도 맞춘 후보는 BIC 로 견준다). 값은 SI(Pa·s)다 —
     덱에 넣을 때는 `render_card_deck(units=…)` 이 바꾼다, 여기서 옮기지 마라.
     """
     got = await _get(ctx, f"/viscoelastic/master-curves/{master_curve_id}/prony")
@@ -6880,7 +6880,8 @@ async def fit_prony(
 ) -> dict[str, Any]:
     """마스터커브에 **Prony 벌(일반화 Maxwell)을 맞춘다** — 점탄성 카드의 계수.
 
-    `terms` 를 비우면 후보 항 수를 재고 BIC 로 고른다(재 본 후보가 전부 남는다). 기본이
+    `terms` 를 비우면 완화시간을 자릿수마다 못 박아 맞춘다(낮은 주파수 끝까지 고르게 — 완화시간도
+    맞춘 후보는 견주게 남는다). `terms` 를 주면 그 항 수로 완화시간도 맞춘다. 기본이
     미리보기(이미 맞춘 것 수) — 확인받은 뒤 `dry_run=False`. 결과의 `at_bound` 가 비어 있지
     않으면 **관측 밖을 외삽**하는 완화시간이다 — 사람에게 반드시 말한다. 카드는
     `create_viscoelastic_card` 로 짓는다.
@@ -6889,12 +6890,12 @@ async def fit_prony(
     if isinstance(existing, dict) and "error" in existing:
         return existing
     if terms is not None and not 1 <= terms <= 12:
-        return {"error": "terms 는 1~12 입니다 — 비우면 BIC 로 고릅니다."}
+        return {"error": "terms 는 1~12 입니다 — 비우면 완화시간을 자릿수마다 둡니다."}
     if dry_run:
         return {
             "dry_run": True,
             "master_curve_id": master_curve_id,
-            "terms": terms if terms is not None else "BIC 로 고름",
+            "terms": terms if terms is not None else "완화시간을 자릿수마다",
             "existing_fits": len(existing) if isinstance(existing, list) else 0,
             "note": "확인받은 뒤 dry_run=False 로 다시 부르세요.",
         }

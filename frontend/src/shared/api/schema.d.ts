@@ -18916,6 +18916,11 @@ export interface components {
             equilibrium_pa: number;
             /** Instantaneous Pa */
             instantaneous_pa: number;
+            /**
+             * Method
+             * @default free
+             */
+            method: string;
             /** Normalized Rmse */
             normalized_rmse: number;
             /** Term Count */

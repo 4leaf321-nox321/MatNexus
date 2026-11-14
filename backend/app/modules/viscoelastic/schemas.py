@@ -115,6 +115,9 @@ class PronyTermOut(BaseModel):
 
 
 class PronyCandidateOut(BaseModel):
+    method: str = "free"
+    """`decades` 완화시간을 자릿수마다 못 박고 탄성률만 맞춘 것(기본으로 고른다) · `free`
+    완화시간도 맞춘 것. 옛 적합에는 없다(전부 `free`)."""
     term_count: int
     equilibrium_pa: float
     instantaneous_pa: float
@@ -127,7 +130,8 @@ class PronyCandidateOut(BaseModel):
 
 class PronyRequest(BaseModel):
     terms: int | None = Field(default=None, ge=1, le=12)
-    """정하면 그 항 수로 한 벌만. 안 주면 후보를 재고 BIC 로 고른다."""
+    """정하면 그 항 수로(완화시간도 맞춰) 한 벌만. 안 주면 완화시간을 자릿수마다 못 박은
+    적합을 고르고, 완화시간도 맞춘 후보를 견주게 함께 남긴다."""
 
 
 class PronyFitOut(BaseModel):

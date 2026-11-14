@@ -102,5 +102,6 @@ register(
     card=prony_time.card_blocks,
     order=40,
     # 2: 가장 짧은 τ 를 첫 측정 시각으로 묶음 · 외삽 배수를 냄(2026-11-14, VOC 52).
-    version="2",
+    # 3: 온도가 2 K 넘게 섞이면 묶지 않는다(2026-11-15) — 전에는 경고만.
+    version="3",
 )(prony_time.relaxation_prony)

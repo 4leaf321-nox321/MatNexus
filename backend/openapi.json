@@ -25698,6 +25698,11 @@
             "title": "Instantaneous Pa",
             "type": "number"
           },
+          "method": {
+            "default": "free",
+            "title": "Method",
+            "type": "string"
+          },
           "normalized_rmse": {
             "title": "Normalized Rmse",
             "type": "number"

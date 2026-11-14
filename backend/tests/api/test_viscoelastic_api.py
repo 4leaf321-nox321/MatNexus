@@ -352,7 +352,15 @@ class TestProny:
         fit = response.json()
         # **고른 것만 주지 않는다.** 사람이 다시 고를 수 있어야 한다.
         assert len(fit["candidates"]) > 1
-        assert fit["bic"] == min(item["bic"] for item in fit["candidates"])
+        # **완화시간을 자릿수마다 못 박은 적합을 고른다**(2026-11-15, VOC 52) — 완화시간도 맞춘
+        # 후보(BIC)는 견주게 남는다. 전에는 BIC 가 가장 작은 것을 골랐다.
+        chosen = fit["candidates"][0]
+        assert chosen["method"] == "decades" and fit["bic"] == chosen["bic"]
+        taus = [term["relaxation_time_s"] for term in fit["terms"]]
+        assert all(abs(math.log10(tau) - round(math.log10(tau))) < 1e-9 for tau in taus)
+        assert fit["at_bound"] == []
+        free = [one for one in fit["candidates"] if one["method"] == "free"]
+        assert free and all(one["term_count"] >= 2 for one in free)
         assert fit["instantaneous_pa"] > fit["equilibrium_pa"]
 
     def test_항_수를_정해_줄_수_있다(

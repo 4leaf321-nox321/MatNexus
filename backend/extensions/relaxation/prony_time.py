@@ -44,7 +44,7 @@ TEMPERATURE = "temperature"
 #: 자릿수마다 τ 하나. 항이 이보다 많으면 점이 모자라기 시작한다.
 MAX_TERMS = 12
 MIN_POINTS = 8
-#: 같은 온도로 보는 폭(K) — 넘으면 섞었다고 말한다.
+#: 같은 온도로 보는 폭(K) — 넘으면 **묶지 않는다**(2026-11-15).
 SAME_TEMPERATURE = 2.0
 #: 가장 긴 τ 의 몫이 이보다 크면 「아직 다 안 풀렸다」 — 장기 탄성률이 외삽이다.
 LONG_TAIL = 0.05
@@ -171,6 +171,15 @@ def relaxation_prony(members: list[Member]) -> GroupOutcome:
         if isinstance(found, int | float):
             temperatures.append(float(found))
         used.append(member.label)
+    # **온도가 섞이면 묶지 않는다**(2026-11-15, VOC 52). 전에는 옮기지 않은 채 한데 맞추고
+    # 경고만 달아 카드까지 냈다 — 20 · 40 · 60 °C 를 넣으면 40 °C 로 적힌 카드가 그 온도의
+    # 참값과 1.72배 틀렸다(합성 실측, 상대 RMSE 37 %). DMA 묶음은 0.5 K 만 달라도 막는다.
+    if temperatures and max(temperatures) - min(temperatures) > SAME_TEMPERATURE:
+        raise GroupError(
+            f"시험 온도가 {min(temperatures):.5g}~{max(temperatures):.5g} K 로 섞여 "
+            f"있습니다({SAME_TEMPERATURE:g} K 넘게 다름) — 한 Prony 는 한 온도의 것입니다. "
+            "온도마다 따로 묶으세요."
+        )
     time = np.concatenate(times)
     modulus = np.concatenate(moduli)
     if len(time) < MIN_POINTS:
@@ -195,12 +204,6 @@ def relaxation_prony(members: list[Member]) -> GroupOutcome:
             f"순간 탄성률 E₀ 가 첫 측정(t = {earliest:.3g} s) 때 강성의 {ratio:.2f}배입니다 — "
             "그 앞은 외삽입니다. 짧은 시간(충격) 해석에는 DMA 마스터커브로 짧은 시간을 메워야 "
             "합니다."
-        )
-    if temperatures and max(temperatures) - min(temperatures) > SAME_TEMPERATURE:
-        warnings.append(
-            f"시험 온도가 {min(temperatures):.5g}~{max(temperatures):.5g} K 로 섞여 "
-            "있습니다 — "
-            "한 Prony 는 한 온도의 것입니다."
         )
     longest_tau, longest = max(terms)
     if longest_tau >= float(time.max()) and longest / instantaneous > LONG_TAIL:

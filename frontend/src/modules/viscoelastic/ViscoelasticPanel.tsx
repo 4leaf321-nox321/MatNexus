@@ -911,11 +911,20 @@ function PronyView({
   fit: PronyFit
   materialId?: string
   busy: boolean
-  onPick: (terms: number) => void
+  /** 항 수를 주면 완화시간도 맞춘 그 항 수로, 안 주면 기본(완화시간을 자릿수마다)으로 다시. */
+  onPick: (terms?: number) => void
   /** 카드 이름의 첫 제안. 재료·시편에서 온다. */
   cardLabel: string
 }) {
   const best = fit.terms.length
+  // **고른 후보는 계수로 알아본다**(2026-11-15) — 「자릿수마다」 와 「완화시간도 맞춤」 이 같은
+  // 항 수일 수 있어 항 수로는 못 가른다.
+  const chosen = (item: PronyCandidate) =>
+    item.terms.length === fit.terms.length &&
+    item.terms.every(
+      (term, index) => term.relaxation_time_s === fit.terms[index].relaxation_time_s
+    )
+  const decades = (item: PronyCandidate) => item.method === 'decades'
   const [making, setMaking] = useState(false)
   const [made, setMade] = useState(false)
   return (
@@ -940,10 +949,18 @@ function PronyView({
         </p>
       )}
 
+      {/* **기본은 완화시간을 자릿수마다 못 박은 적합이다**(2026-11-15, VOC 52). 완화시간도 맞춘
+          적합은 잔차를 가장 큰 탄성률로 나눠 작은 값 쪽 — 긴 시간 · 낮은 주파수 — 의 오차가
+          숫자에 안 드러났다(잔차 0.4 % 인데 저주파 끝 E′ 가 40 % 틀렸다). */}
+      <p className="text-muted-foreground text-xs">
+        「자릿수마다」 는 완화시간을 10의 거듭제곱마다 두고 탄성률만 맞춘 것 — 긴 시간(낮은 주파수)
+        쪽까지 고르게 맞습니다. 「맞춤」 은 완화시간도 맞춘 것이라 항이 적지만 낮은 주파수 끝이
+        어긋날 수 있습니다.
+      </p>
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>항 수</TableHead>
+            <TableHead>완화시간 · 항 수</TableHead>
             <TableHead className="text-right">BIC</TableHead>
             <TableHead className="text-right">잔차</TableHead>
             <TableHead className="text-right">순간 탄성률</TableHead>
@@ -953,15 +970,16 @@ function PronyView({
         </TableHeader>
         <TableBody>
           {[...fit.candidates]
-            .sort((a, b) => a.term_count - b.term_count)
+            // 「자릿수마다」 가 맨 위 — 기본으로 고르는 것이다.
+            .sort((a, b) => Number(decades(b)) - Number(decades(a)) || a.term_count - b.term_count)
             .map((item: PronyCandidate) => (
               <TableRow
-                key={item.term_count}
-                className={item.term_count === best ? 'bg-muted/40' : ''}
+                key={`${item.method ?? 'free'}-${item.term_count}`}
+                className={chosen(item) ? 'bg-muted/40' : ''}
               >
                 <TableCell className="font-medium">
-                  {item.term_count}
-                  {item.term_count === best && (
+                  {decades(item) ? `자릿수마다 · ${item.term_count}항` : `맞춤 · ${item.term_count}항`}
+                  {chosen(item) && (
                     <Badge variant="secondary" className="ml-1.5 text-xs">
                       고름
                     </Badge>
@@ -980,13 +998,13 @@ function PronyView({
                   {si(item.equilibrium_pa)}
                 </TableCell>
                 <TableCell className="text-right">
-                  {item.term_count !== best && (
+                  {!chosen(item) && (
                     <Button
                       size="sm"
                       variant="ghost"
                       className="h-6 text-xs"
                       disabled={busy}
-                      onClick={() => onPick(item.term_count)}
+                      onClick={() => onPick(decades(item) ? undefined : item.term_count)}
                     >
                       이걸로
                     </Button>

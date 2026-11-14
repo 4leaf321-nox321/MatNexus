@@ -350,6 +350,64 @@ def fit_prony(
     )
 
 
+def decade_taus(frequency_hz: np.ndarray) -> np.ndarray:
+    """관측 창 **안쪽**의 자릿수마다 하나 — 10^k, `1/ω_max ≤ τ ≤ 1/ω_min`.
+
+    창의 끝(가장 낮은 주파수보다 느린 완화)을 τ 로 두면 그 항이 평형 탄성률이 할 일을 대신해
+    E∞ 가 0 으로 밀린다(`matcore/groups/prony.py` 의 실측). 자릿수를 창 안으로 잘라(위는
+    내림 · 아래는 올림) 그 자리를 피한다.
+    """
+    omega = 2.0 * math.pi * np.asarray(frequency_hz, dtype=float)
+    low, high = 1.0 / float(np.max(omega)), 1.0 / float(np.min(omega))
+    first, last = math.ceil(math.log10(low)), math.floor(math.log10(high))
+    return 10.0 ** np.arange(first, last + 1, dtype=float)
+
+
+def fit_decades(
+    frequency_hz: np.ndarray, storage_pa: np.ndarray, loss_pa: np.ndarray
+) -> PronySeries | None:
+    """τ 를 **자릿수마다 못 박고** 탄성률만 맞춘다(2026-11-15, VOC 52). 못 쓰면 `None`.
+
+    τ 를 자유롭게 두고 BIC 로 항 수를 고른 적합(`choose_prony`)은 잔차를 저장 탄성률의
+    최댓값으로 나누어, 작은 값 쪽 — 마스터커브의 저주파 끝 — 의 오차가 숫자에 드러나지 않았다.
+    답을 아는 합성 재료(14항, E₀ 3 GPa · E∞ 30 MPa)에서 잔차는 0.4 % 인데 저주파 끝의 E′ 가
+    +40 % 틀렸고, 시간 영역으로 옮기면 덮는 끝에서 1.6배였다. 자릿수마다 τ 를 두면 스펙트럼이
+    창 전체에 깔려 E′ 최대 오차가 3.8 % 로 준다.
+
+    `None` 인 경우: 창이 좁아 자릿수가 둘이 안 되거나, 적합이 수렴하지 않거나, 평형 탄성률이
+    하한까지 무너졌을 때 — 그때는 부르는 쪽이 자유 τ 적합으로 물러선다.
+    """
+    frequency_hz = np.asarray(frequency_hz, dtype=float)
+    storage_pa = np.asarray(storage_pa, dtype=float)
+    loss_pa = np.asarray(loss_pa, dtype=float)
+    _check(frequency_hz, storage_pa, loss_pa)
+    taus = decade_taus(frequency_hz)
+    if len(taus) < 2:
+        return None
+    try:
+        found = fit_prony(
+            frequency_hz, storage_pa, loss_pa, terms=len(taus), fixed_taus_s=tuple(taus)
+        )
+    except PronyError:
+        return None
+    # 평형 탄성률이 하한에 붙었으면 τ 하나가 그 일을 대신한 것이다 — 그 값은 못 쓴다.
+    if found.equilibrium_pa <= 1e-6 * float(np.min(storage_pa)):
+        return None
+    # 탄성률이 0 인 항은 뺀다 — 덱에 실리는 항 수가 준다. 완화시간 · 나머지 계수는 그대로다.
+    kept = tuple(
+        term for term in found.terms if term.modulus_pa > 1e-9 * found.instantaneous_pa
+    )
+    if not kept:
+        return None
+    return PronySeries(
+        equilibrium_pa=found.equilibrium_pa,
+        terms=kept,
+        normalized_rmse=found.normalized_rmse,
+        bic=found.bic,
+        at_bound=(),
+    )
+
+
 def choose_prony(
     frequency_hz: np.ndarray,
     storage_pa: np.ndarray,

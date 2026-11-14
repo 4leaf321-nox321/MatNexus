@@ -57,9 +57,14 @@ def test_카드의_탄성계수는_순간_탄성률이고_g_의_합은_1_빼기_
     assert all(row["relaxation_time_s"] > 0 and row["modulus_pa"] > 0 for row in rows)
 
 
-def test_온도가_섞이면_말한다() -> None:
-    outcome = prony_time.relaxation_prony([_member("R1", 296.15), _member("R2", 323.15)])
-    assert any("섞여" in one for one in outcome.warnings)
+def test_온도가_섞이면_묶지_않는다() -> None:
+    """2026-11-15(VOC 52) — 전에는 옮기지 않은 채 한데 맞추고 경고만 달아 카드까지 냈다. 20 ·
+    40 · 60 °C 를 넣으면 40 °C 로 적힌 카드가 그 온도의 참값과 1.72배 틀렸다(합성 실측)."""
+    with pytest.raises(GroupError, match="섞여"):
+        prony_time.relaxation_prony([_member("R1", 296.15), _member("R2", 323.15)])
+    # 2 K 안은 같은 온도다 — 기록의 반올림 차이.
+    near = prony_time.relaxation_prony([_member("R1", 296.15), _member("R2", 297.65)])
+    assert near.values["reference_temperature_k"] == pytest.approx(296.9)
 
 
 def test_관측_시간이_짧으면_멈춘다() -> None:

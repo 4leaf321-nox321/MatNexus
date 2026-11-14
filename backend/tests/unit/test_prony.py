@@ -273,3 +273,62 @@ class Test완화시간을_못_박기:
         )
         assert fit.equilibrium_pa > 0
         assert all(term.modulus_pa >= 0 for term in fit.terms)
+
+
+class Test자릿수마다_못_박은_적합:
+    """2026-11-15(VOC 52) — τ 를 자유롭게 두고 BIC 로 고른 적합은 잔차를 저장 탄성률의
+    최댓값으로 나누어, 작은 값 쪽(저주파 끝)의 오차가 숫자에 안 드러났다. 넓은 스펙트럼에서
+    잔차는 0.4 % 인데 저주파 끝 E′ 가 +40 % 틀렸다."""
+
+    @staticmethod
+    def _broad() -> tuple[np.ndarray, np.ndarray, np.ndarray, PronySeries]:
+        """자릿수마다 한 항, 로그 정규 스펙트럼 — E₀ 3 GPa · E∞ 30 MPa."""
+        taus = 10.0 ** np.arange(-8, 5)
+        weights = np.exp(-0.5 * ((np.log10(taus) + 2) / 2.0) ** 2)
+        moduli = (3.0e9 - 3.0e7) * weights / weights.sum()
+        truth = PronySeries(
+            equilibrium_pa=3.0e7,
+            terms=tuple(
+                PronyTerm(float(m), float(t)) for m, t in zip(moduli, taus, strict=True)
+            ),
+            normalized_rmse=0.0,
+            bic=0.0,
+        )
+        frequency = np.geomspace(3e-4, 2e6, 160)
+        storage, loss = storage_loss(truth, frequency)
+        return frequency, storage, loss, truth
+
+    def test_완화시간은_관측_창_안쪽의_자릿수다(self) -> None:
+        from matcore.prony import decade_taus
+
+        taus = decade_taus(np.geomspace(3e-4, 2e6, 50))
+        omega_low, omega_high = 2 * math.pi * 3e-4, 2 * math.pi * 2e6
+        assert taus[0] >= 1 / omega_high and taus[-1] <= 1 / omega_low
+        assert np.allclose(np.log10(taus), np.round(np.log10(taus)))
+        assert np.allclose(np.diff(np.log10(taus)), 1.0)
+
+    def test_저주파_끝까지_맞춘다(self) -> None:
+        from matcore.prony import choose_prony, fit_decades
+
+        frequency, storage, loss, _ = self._broad()
+        fixed = fit_decades(frequency, storage, loss)
+        assert fixed is not None and fixed.at_bound == ()
+        free, _ = choose_prony(frequency, storage, loss)
+
+        def worst(series: PronySeries) -> float:
+            again, _ = storage_loss(series, frequency)
+            return float(np.max(np.abs(again / storage - 1)))
+
+        assert worst(fixed) < 0.05
+        # 자유 τ 는 잔차(최댓값 기준)는 작아도 작은 값 쪽을 놓친다 — 고정 쪽이 낫다.
+        assert worst(fixed) < worst(free)
+        # 평형 탄성률이 τ 하나에 먹혀 0 으로 무너지지 않는다.
+        assert fixed.equilibrium_pa > 0.1 * float(storage.min())
+
+    def test_창이_좁으면_안_쓴다(self) -> None:
+        from matcore.prony import fit_decades
+
+        frequency = np.geomspace(1.0, 5.0, 12)  # 1/ω 가 한 자릿수 안
+        truth = PronySeries(1e6, (PronyTerm(1e6, 0.1),), 0.0, 0.0)
+        storage, loss = storage_loss(truth, frequency)
+        assert fit_decades(frequency, storage, loss) is None

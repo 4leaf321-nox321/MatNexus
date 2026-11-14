@@ -236,7 +236,7 @@ AI 가 상태를 바꾸면 자료 관리자에게 알림이 간다(채택도, 20
     get_prony_fits(master_curve_id)   Prony 벌 — at_bound 가 있으면 외삽 중
     ★ build_master_curve(run, T_ref)  스윕을 기준 온도(잰 온도 중 하나, K)로 겹친다 — wlf ·
                                        arrhenius · manual, 장비가 겹친 표는 import_curve_key
-    ★ fit_prony(master_curve_id)      Prony 벌을 맞춘다 — terms 를 비우면 BIC 로 고른다
+    ★ fit_prony(master_curve_id)      Prony 벌을 맞춘다 — terms 를 비우면 완화시간을 자릿수마다 둔다
 
     list_inbox(status?, scope?,        장비가 떨어뜨린 파일들 — status 를 비우면 등록된 것도 섞인다,
                connector_id?, offset?) scope=all 이면 전사

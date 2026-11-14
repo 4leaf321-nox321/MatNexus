@@ -300,8 +300,10 @@ def read_master_curve(row: MasterCurve) -> dict[str, np.ndarray]:
     }
 
 
-def _as_dict(series: pronykit.PronySeries) -> dict[str, Any]:
+def _as_dict(series: pronykit.PronySeries, method: str = "free") -> dict[str, Any]:
     return {
+        # `decades` τ 를 자릿수마다 못 박은 것 · `free` τ 도 맞춘 것(BIC 로 견준다).
+        "method": method,
         "term_count": len(series.terms),
         "equilibrium_pa": series.equilibrium_pa,
         "instantaneous_pa": series.instantaneous_pa,
@@ -325,7 +327,10 @@ def fit_prony(
 ) -> PronyFit:
     """계수를 맞춰 저장한다.
 
-    `terms` 를 주면 그 항 수로 한 벌만, 안 주면 후보를 재고 BIC 로 고른다.
+    `terms` 를 주면 그 항 수로(τ 도 맞춰) 한 벌만. 안 주면 **τ 를 자릿수마다 못 박은 적합**을
+    고르고(2026-11-15, VOC 52 — `pronykit.fit_decades`), 견줄 수 있게 τ 도 맞춘 후보(BIC)를
+    함께 남긴다. 자릿수 적합을 못 쓰면(창이 좁다 · 평형 탄성률이 무너졌다) 전처럼 BIC 로
+    고른다.
     **어느 쪽이든 재 본 것을 전부 남긴다** — 사람이 다시 고를 수 있어야 한다.
     """
     columns = read_master_curve(master)
@@ -342,13 +347,22 @@ def fit_prony(
 
     try:
         everything: tuple[pronykit.PronySeries, ...]
+        decades: pronykit.PronySeries | None = None
         if terms is not None:
             best = pronykit.fit_prony(frequency, storage, loss, terms=terms)
             everything = (best,)
         else:
-            best, everything = pronykit.choose_prony(
-                frequency, storage, loss, candidates=candidates
-            )
+            decades = pronykit.fit_decades(frequency, storage, loss)
+            try:
+                best, everything = pronykit.choose_prony(
+                    frequency, storage, loss, candidates=candidates
+                )
+            except pronykit.PronyError:
+                if decades is None:
+                    raise
+                everything = ()
+            if decades is not None:
+                best = decades
     except pronykit.PronyError as exc:
         raise AppError("MNX-VISCOELASTIC-0006", str(exc), status=422) from exc
 
@@ -362,7 +376,10 @@ def fit_prony(
         normalized_rmse=best.normalized_rmse,
         bic=best.bic,
         at_bound=list(best.at_bound),
-        candidates=[_as_dict(item) for item in everything],
+        candidates=[
+            *([_as_dict(decades, "decades")] if decades is not None else []),
+            *(_as_dict(item) for item in everything),
+        ],
         created_by_id=created_by_id,
     )
     db.add(row)
