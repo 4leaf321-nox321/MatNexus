@@ -43,7 +43,7 @@ import {
 } from '@/modules/catalog/catalogShape'
 import { UnitModeToggle, useUnitMode } from '@/modules/catalog/unitMode'
 import { useAuth } from '@/shared/auth/AuthContext'
-import { isSystemAdmin } from '@/shared/auth/roles'
+import { isDataSteward } from '@/shared/auth/roles'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { PageHeader } from '@/shared/components/PageHeader'
 import { Badge } from '@/shared/components/ui/badge'
@@ -112,11 +112,13 @@ export default function CatalogMaterialPage() {
    *  낱개로 안 지운다(벌째 지운다). */
   function canRemove(value: CatalogValue): boolean {
     if (value.origin !== 'local' || value.series_id) return false
-    return isSystemAdmin(user) || (value.created_by != null && value.created_by === user?.display_name)
+    // **자료 관리자도 지운다**(2026-11-15 전반 점검) — 서버(`require_contributor`)는 자료 관리자를
+    // 받는데 화면은 시스템 관리자만 봐서, 권한이 있는 사람에게 단추가 없었다.
+    return isDataSteward(user) || (value.created_by != null && value.created_by === user?.display_name)
   }
 
   function canRemoveSeries(one: CatalogSeries): boolean {
-    return isSystemAdmin(user) || (one.created_by != null && one.created_by === user?.display_name)
+    return isDataSteward(user) || (one.created_by != null && one.created_by === user?.display_name)
   }
 
   async function remove(value: CatalogValue) {

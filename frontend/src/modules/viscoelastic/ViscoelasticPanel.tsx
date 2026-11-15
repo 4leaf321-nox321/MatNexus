@@ -193,6 +193,24 @@ export function ViscoelasticPanel({
 
   async function build() {
     if (reference === null) return
+    if (method === 'manual') {
+      // **숫자가 아닌 입력을 0 으로 바꿔 보내지 않는다**(2026-11-15 전반 점검). 「1,5」 나 유니코드
+      // 빼기(−)를 치면 그 온도는 log a_T = 0 으로 겹쳐지고 오류가 없었다. 빈 칸은 그대로 0 이다.
+      const wrong = options.filter((item) => {
+        const raw = (manual[String(item.temperature_k)] ?? '').trim()
+        return item.temperature_k !== reference && raw !== '' && !Number.isFinite(Number(raw))
+      })
+      if (wrong.length > 0) {
+        setError(
+          new Error(
+            `이동인자가 숫자가 아닙니다 — ${wrong
+              .map((item) => formatScalar(item.temperature_k, 'K'))
+              .join(', ')}. 소수점은 마침표, 음수는 하이픈(-)으로 적으세요.`
+          )
+        )
+        return
+      }
+    }
     setBusy(true)
     setError(null)
     try {

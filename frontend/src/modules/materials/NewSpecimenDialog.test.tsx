@@ -67,6 +67,20 @@ describe('시편 추가', () => {
     expect(box).not.toHaveAttribute('open')
   })
 
+  it('다른 시료에서 다시 열면 앞에서 적다 만 값이 없다', async () => {
+    // 2026-11-15 전반 점검 — 이 창은 늘 살아 있어, 시료 A 에서 적다 취소한 두께가 시료 B 에서
+    // 열어도 채워져 있었다(저장에 성공했을 때만 비웠다).
+    const user = userEvent.setup()
+    const view = render(
+      <NewSpecimenDialog sampleId="s1" open onClose={() => {}} onDone={onDone} />
+    )
+    await user.type(await screen.findByLabelText(/^두께/), '1.25')
+    expect(screen.getByLabelText(/^두께/)).toHaveValue(1.25)
+    view.rerender(<NewSpecimenDialog sampleId="s1" open={false} onClose={() => {}} onDone={onDone} />)
+    view.rerender(<NewSpecimenDialog sampleId="s2" open onClose={() => {}} onDone={onDone} />)
+    expect(await screen.findByLabelText(/^두께/)).toHaveValue(null)
+  })
+
   it('「실측」 이라고 부르지 않는다', async () => {
     // 실측은 **시험이 잰 값**이다. 시편 칸을 그렇게 부르면 둘이 뒤섞인다.
     open()

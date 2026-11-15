@@ -20,7 +20,7 @@
  * 끝나야 한다는 원칙(D7)이 프론트에서 깨지는 자리가 정확히 여기다.
  */
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   BookMarked,
   ChevronDown,
@@ -380,14 +380,28 @@ export function ProcessingPanel({
   /** 겹쳐 볼 단계들. 비면 처리 결과 하나만 그린다. */
   const [compared, setCompared] = useState<number[]>([])
 
+  /**
+   * **가장 마지막에 보낸 요청의 답만 받는다**(2026-11-15 전반 점검).
+   *
+   * 「미리보기」 를 누르고 답이 오기 전에 옵션을 고치면 결과는 비워지는데, 늦게 온 옛 답이 다시
+   * 채웠다 — 화면에는 옛 옵션의 값이 서고 「결과 저장」 은 지금의 단계로 나가, 본 값과 저장된
+   * 값이 달랐다. 요청마다 번호를 매기고, 단계 · 곡선이 바뀌면 번호를 올려 앞의 답을 버린다.
+   */
+  const asked = useRef(0)
+  useEffect(() => {
+    asked.current += 1
+  }, [steps, curveKey, testRunId])
+
   /** 그림만 다시 받는다. 단계 구성은 그대로다. */
   async function draw(next: { x: string; y: string }, stage: number | null) {
+    const mine = ++asked.current
     try {
-      setResult(await processingApi.preview(
+      const drawn = await processingApi.preview(
         { test_run_id: testRunId, source_curve_key: curveKey, steps },
         next,
         stage
-      ))
+      )
+      if (mine === asked.current) setResult(drawn)
     } catch {
       // 그림을 못 바꿔도 **지금 보고 있는 것을 지우지 않는다** — 축을 잘못
       // 고른 순간 화면이 비면 되돌릴 자리도 사라진다.
@@ -406,10 +420,13 @@ export function ProcessingPanel({
       // **다시 돌리면 마지막으로 되돌린다.** 단계를 더하거나 지운 뒤라
       // 3번이 아까 그 3번이 아니다.
       setStageShown(null)
+      const mine = ++asked.current
       const preview = await processingApi.preview(
         { test_run_id: testRunId, source_curve_key: curveKey, steps },
         axes
       )
+      // 그 사이 단계를 고쳤으면 이 답은 지금 단계의 것이 아니다 — 버린다.
+      if (mine !== asked.current) return null
       setResult(preview)
       return preview
     } catch (caught) {

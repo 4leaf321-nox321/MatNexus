@@ -84,6 +84,15 @@ export function DistributionPanel({
   const [error, setError] = useState<Error | null>(null)
   const [open, setOpen] = useState(false)
 
+  // **재료 · 묶음이 바뀌면 앞의 것을 버린다**(2026-11-15 전반 점검) — 재료 화면은 주소의 id 만
+  // 바뀌면 다시 마운트되지 않아, 재료 A 의 적합 결과와 n 이 재료 B 의 것처럼 서 있었다.
+  useEffect(() => {
+    setKeys([])
+    setChosen(null)
+    setReport(null)
+    setError(null)
+  }, [materialId, testTypeKey, orientation])
+
   useEffect(() => {
     if (!open || keys.length > 0) return
     statisticsApi

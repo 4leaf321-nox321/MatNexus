@@ -320,6 +320,15 @@ describe('CatalogMaterialPage — 후보를 가르는 조건', () => {
     await screen.findByText(/직접 넣음 · 홍길동/)
     expect(screen.queryByRole('button', { name: '열전도율 값 삭제' })).toBeNull()
   })
+
+  it('자료 관리자는 남이 넣은 값도 지운다', async () => {
+    // 2026-11-15 전반 점검 — 서버는 자료 관리자를 받는데 화면은 시스템 관리자만 봐서, 권한이
+    // 있는 사람에게 단추가 없었다.
+    me = { ...me, display_name: '김철수', is_data_manager: true } as typeof me
+    show()
+    await screen.findByText(/직접 넣음 · 홍길동/)
+    expect(await screen.findByRole('button', { name: '열전도율 값 삭제' })).toBeInTheDocument()
+  })
 })
 
 describe('요약 + 탭 (2026-10-22)', () => {

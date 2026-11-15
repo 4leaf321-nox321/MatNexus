@@ -15,6 +15,7 @@ import { Link } from 'react-router-dom'
 import { groupsApi } from '@/modules/materials/api.groups'
 import { masterCurveGap } from '@/shared/masterCurveGap'
 import { testsApi } from '@/modules/tests/api'
+import { fetchAll } from '@/shared/api/paging'
 import { Button } from '@/shared/components/ui/button'
 import { useResource } from '@/shared/hooks/useResource'
 
@@ -26,8 +27,12 @@ export function MasterCurveNotice({
   // **쓸 수 있는 시험종류는 서버가 푼다.** 선언에 적힌 키만 보면 부서가 만든
   // DMA 종류가 빠진다(`registry.fits`).
   const kinds = useResource(() => groupsApi.kinds(), [])
+  // 전부 이어 받는다 — 200건에서 자르면 현황 건수가 실제보다 적다(2026-11-15 전반 점검).
   const runs = useResource(
-    () => testsApi.runs({ material_id: materialId, status: 'parsed', limit: 200 }),
+    () =>
+      fetchAll((limit, offset) =>
+        testsApi.runs({ material_id: materialId, status: 'parsed', limit, offset })
+      ),
     [materialId]
   )
 

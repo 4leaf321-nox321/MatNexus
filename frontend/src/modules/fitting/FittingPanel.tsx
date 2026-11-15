@@ -16,7 +16,7 @@
  * 모양으로 보인다.
  */
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertTriangle,
   Blend,
@@ -297,15 +297,23 @@ export function FittingPanel({ materialId }: Props) {
   // **묶음이 바뀌면 고른 시험도 버린다.** 남겨 두면 다른 묶음의 id 를 보내게
   // 되고, 서버가 「이 묶음에 채택돼 있지 않다」 로 막는다 — 사람은 왜 막혔는지
   // 알 수 없다.
+  /**
+   * **가장 마지막에 보낸 요청의 답만 받는다**(2026-11-15 전반 점검). MD 로 「맞춰 보기」 를 누르고
+   * 답이 오기 전에 TD 를 누르면 TD 가 켜진 채 MD 의 그림이 섰고 「생성」 은 TD 로 나갔다. 설정을
+   * 연달아 바꿀 때도 재요청 둘의 답이 뒤집혀 오면 옛 설정의 그림이 남았다.
+   */
+  const asked = useRef(0)
   useEffect(() => {
     setUsedRuns(null)
-  }, [group?.test_type_key, group?.orientation])
+    asked.current += 1
+  }, [group?.test_type_key, group?.orientation, materialId])
 
   useEffect(() => {
     if (!group && fittableGroups.length > 0) setGroup(fittableGroups[0])
   }, [group, fittableGroups])
 
   async function run(target: GroupKey, keep = false) {
+    const mine = ++asked.current
     setBusy(true)
     setError(null)
     if (!keep) {
@@ -330,6 +338,7 @@ export function FittingPanel({ materialId }: Props) {
         blend_with: blendWith || null,
         blend_weight: blendWith ? blendWeight : null,
       })
+      if (mine !== asked.current) return // 그 사이 묶음 · 설정이 바뀌었다 — 옛 답이다
       setPreview(result)
       if (!keep) {
         // 가장 잘 맞는 것을 **미리 켜 두기만** 한다. 고른 것은 아니다 — 바꿀 수
@@ -337,9 +346,10 @@ export function FittingPanel({ materialId }: Props) {
         setChosen(result.fits[0]?.family ?? null)
       }
     } catch (caught) {
-      setError(caught instanceof Error ? caught : new Error('적합에 실패했습니다.'))
+      if (mine === asked.current)
+        setError(caught instanceof Error ? caught : new Error('적합에 실패했습니다.'))
     } finally {
-      setBusy(false)
+      if (mine === asked.current) setBusy(false)
     }
   }
 
@@ -443,6 +453,13 @@ export function FittingPanel({ materialId }: Props) {
                 setFitBlock(block)
                 setPreview(null)
                 setChosen(null)
+                // **앞 카드의 조정값을 물려받지 않는다**(2026-11-15 전반 점검) — 탄소성에서 정한
+                // 늘릴 한계 · 혼합 상대가 다른 블록 · 다른 방향의 맞춰 보기에 그대로 실렸다.
+                setExtrapolate('')
+                setBlendWith('')
+                setBlendWeight(0.5)
+                setBusy(false)
+                setError(null)
                 setFitting(true)
               }}
               title={`${item.test_type_label} 채택 곡선의 대표 곡선에 ${label} 식을 맞춰 카드로 만듭니다.`}
@@ -1614,6 +1631,16 @@ function SaveDialog({
         `${group.test_type_label} ${group.orientation}${basisSuffix(basis ?? { kind: 'mean' })}`
       )
   }, [open, group, basis])
+  // **열 때 앞 카드의 값을 비운다**(2026-11-15 전반 점검). 이 창은 묶음이 있는 동안 계속 살아
+  // 있어, 앞 카드에 적은 푸아송비 · 밀도 · 메모가 다음 카드(다른 방향 · 다른 블록)에 채워져
+  // 있었다 — 빈칸이 「재료에서 물려받음」 이라 못 보고 누르면 앞 카드의 값이 덮어 실렸다.
+  useEffect(() => {
+    if (!open) return
+    setPoisson('')
+    setDensity('')
+    setNote('')
+    setError(null)
+  }, [open, group.test_type_key, group.orientation, block])
 
   async function submit() {
     setBusy(true)

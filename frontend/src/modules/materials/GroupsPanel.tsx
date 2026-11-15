@@ -46,6 +46,7 @@ import type { BlockSpec } from '@/modules/fitting/api'
 import { groupsApi } from '@/modules/materials/api.groups'
 import { processingApi } from '@/modules/processing/api'
 import type { ProcessingResult } from '@/modules/processing/api'
+import { fetchAll } from '@/shared/api/paging'
 import { masterCurveGap } from '@/shared/masterCurveGap'
 
 /** 구성원 조건(`needs`)을 사람 말로 — 종류마다 조건이 다른 묶음의 안내에 쓴다. */
@@ -561,8 +562,14 @@ export function GroupsPanel({
   // 채택과 무관하게 만든다. **표로 넣은 시험(`imported`)도 읽힌 것이다** — 「완료」 만 받던
   // 때 피로 시험 26건이 S-N 후보에서 0건이었다(v1.285.0 보고). 곡선이 필요한 묶음은 아래
   // `needs` 가 거른다(마스터커브 수 · 채택 결과).
+  // **전부 이어 받는다**(2026-11-15 전반 점검). 200건 한 쪽만 받으면 시험이 많은 재료에서 후보가
+  // 말없이 잘렸다 — 종류를 가리지 않고 받은 뒤 화면에서 걸러, DMA 후보가 인장에 밀려 빠지고
+  // 옛 묶음을 「다시 맞추기」 로 열면 200건 밖 구성원이 선택에서 빠진 채 제출됐다.
   const runs = useResource(
-    () => testsApi.runs({ material_id: materialId, readable: true, limit: 200 }),
+    () =>
+      fetchAll((limit, offset) =>
+        testsApi.runs({ material_id: materialId, readable: true, limit, offset })
+      ),
     [materialId]
   )
 

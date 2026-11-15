@@ -27,6 +27,7 @@ import { Layers } from 'lucide-react'
 
 import { BatchDialog } from '@/modules/processing/BatchDialog'
 import { testsApi } from '@/modules/tests/api'
+import { fetchAll } from '@/shared/api/paging'
 import type { RecipeStep } from '@/modules/processing/api'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { Badge } from '@/shared/components/ui/badge'
@@ -63,13 +64,17 @@ export function BatchFromSteps({
 }: Props) {
   const siblings = useResource(
     () =>
+      // 전부 이어 받는다 — 200건에서 자르면 일부 시험만 보인다(2026-11-15 전반 점검).
       materialId
-        ? testsApi.runs({
-            material_id: materialId,
-            test_type_key: testTypeKey,
-            status: 'parsed',
-            limit: 200,
-          })
+        ? fetchAll((limit, offset) =>
+            testsApi.runs({
+              material_id: materialId,
+              test_type_key: testTypeKey,
+              status: 'parsed',
+              limit,
+              offset,
+            })
+          )
         : Promise.resolve({ items: [], total: 0, limit: 0, offset: 0 }),
     [materialId, testTypeKey]
   )

@@ -6,7 +6,7 @@
  * 규칙이 갈라진다.
  */
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 import { LENGTH_UNIT, ORIENTATIONS, materialsApi } from '@/modules/materials/api'
 import type { Specimen } from '@/modules/materials/api'
@@ -42,6 +42,15 @@ export function NewSpecimenDialog({
   const [form, setForm] = useState({ standard: '', thickness: '', width: '', gauge_length: '' })
   const [error, setError] = useState<Error | null>(null)
   const [saving, setSaving] = useState(false)
+
+  // **열 때마다 빈 폼으로**(2026-11-15 전반 점검). 이 창은 늘 살아 있어, 시료 A 에서 적다 취소한
+  // 두께 · 폭 · 방향 · 오류가 시료 B 에서 열어도 채워져 있었다(저장에 성공했을 때만 비웠다).
+  useEffect(() => {
+    if (!open) return
+    setOrientation('MD')
+    setForm({ standard: '', thickness: '', width: '', gauge_length: '' })
+    setError(null)
+  }, [open, sampleId])
 
   async function submit() {
     setSaving(true)

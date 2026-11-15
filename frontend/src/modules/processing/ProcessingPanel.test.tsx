@@ -434,6 +434,40 @@ describe('돌려 보기가 막힐 때', () => {
     })
   })
 
+  it('답이 오기 전에 단계를 고치면 늦게 온 옛 답을 버린다', async () => {
+    // 2026-11-15 전반 점검 — 옵션을 고치면 결과는 비워지는데 늦게 온 옛 답이 다시 채웠다.
+    // 화면에는 옛 단계의 값이 서고 「결과 저장」 은 지금의 단계로 나가, 본 값과 저장된 값이 달랐다.
+    let answer: (value: unknown) => void = () => {}
+    preview.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          answer = resolve
+        })
+    )
+    const user = userEvent.setup()
+    show()
+    await clickStep(user, '공칭 응력-변형률')
+    await user.click(screen.getByRole('button', { name: '미리보기' }))
+    await waitFor(() => expect(preview).toHaveBeenCalledTimes(1))
+    // 답이 오기 전에 단계를 하나 더 켠다 — 앞의 요청은 이제 옛 단계의 것이다.
+    await clickStep(user, '인장강도')
+    answer({
+      source_curve_key: 'curve-1',
+      source_row_count: 100,
+      row_count: 100,
+      columns: [],
+      units: {},
+      stages: [],
+      scalars: [{ key: 'old', label: '옛 단계의 값', value: 1, si_unit: '1' }],
+      notes: [],
+      points: [],
+    })
+    // 요청이 끝나 단추가 풀린 뒤에도 옛 값은 화면에 없고 저장도 못 한다.
+    await waitFor(() => expect(screen.getByRole('button', { name: '미리보기' })).toBeEnabled())
+    expect(screen.queryByText('옛 단계의 값')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '결과 저장' })).toBeDisabled()
+  })
+
   it('단계를 골라 겹쳐 본다 — 갈아 끼우는 것과 다르다', async () => {
     // **앞을 자르고 나면 그림이 남은 구간에 맞춰 다시 스케일된다** — 나란히
     // 놓기 전에는 무엇이 얼마나 잘렸는지 볼 수가 없다(실사용 2026-09-10).
