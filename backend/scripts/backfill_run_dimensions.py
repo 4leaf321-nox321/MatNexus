@@ -54,7 +54,14 @@ def main() -> None:
     db = SessionLocal()
     filled = changed_area = 0
     try:
-        runs = list(db.scalars(select(TestRun).where(TestRun.source_metadata.is_not(None))))
+        # 휴지통의 시험은 건드리지 않는다(2026-11-15 전반 점검 — 전에는 지운 시험에도 썼다).
+        runs = list(
+            db.scalars(
+                select(TestRun).where(
+                    TestRun.source_metadata.is_not(None), TestRun.deleted_at.is_(None)
+                )
+            )
+        )
         for run in runs:
             if run.dimensions:
                 continue

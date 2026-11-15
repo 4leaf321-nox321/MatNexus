@@ -16,6 +16,7 @@ from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.modules.trash import services
@@ -488,6 +489,58 @@ class TestPurgeMany:
         assert [
             row for row in _trash(client, admin_headers) if row["id"] == dead["specimen"]["id"]
         ], "터졌는데 앞엣것이 지워져 있다"
+
+    def test_파일은_커밋_뒤에만_지운다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin: Any,
+        admin_headers: dict[str, str],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """2026-11-15 전반 점검 — 영구 삭제가 파일을 그 자리에서 지워, 뒤에서 터져 롤백되면
+        행은 휴지통에 그대로인데 원본 · 곡선 파일은 없었다. 되살려도 곡선을 못 여는 시험이
+        된다."""
+        from app.modules.materials.models import Specimen
+        from app.modules.tests.definitions import ensure_builtin_test_types
+        from app.modules.tests.models import TestRun, TestType
+        from app.shared import filestore
+
+        ensure_builtin_test_types(db)
+        made = _tree(client, admin_headers)
+        tensile = db.scalar(select(TestType).where(TestType.key == "tensile"))
+        assert tensile is not None
+        specimen = db.get(Specimen, uuid.UUID(made["specimen"]["id"]))
+        assert specimen is not None
+        run = TestRun(
+            workspace_id=specimen.workspace_id,
+            specimen_id=specimen.id,
+            test_type_id=tensile.id,
+            seq_no=1,
+            record_name="PURGE_FILES",
+            source_path="2026/11/x/source/a.tra",
+            source_filename="a.tra",
+        )
+        db.add(run)
+        db.commit()
+        client.post(
+            f"/api/materials/{made['material']['id']}/delete-cascade",
+            json={"include_test_runs": True},
+            headers=admin_headers,
+        )
+        removed: list[str] = []
+        monkeypatch.setattr(filestore, "delete_dir", removed.append)
+
+        services.purge(db, "material", uuid.UUID(made["material"]["id"]), actor=admin)
+        assert removed == [], "커밋 전에 파일을 지웠다"
+        db.rollback()
+        services.remove_files(db)  # 롤백 뒤에는 적어 둔 것도 없어야 한다
+        assert removed == [], "롤백됐는데 파일을 지웠다"
+
+        services.purge(db, "material", uuid.UUID(made["material"]["id"]), actor=admin)
+        db.commit()
+        services.remove_files(db)
+        assert "2026/11/x/source" in removed
 
     def test_로그인_없이는_못_지운다(self, client: TestClient) -> None:
         response = client.post(

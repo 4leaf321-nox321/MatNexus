@@ -2740,7 +2740,11 @@ def _lineage_of_group(
     _refuse_moved_members(db, row, runs, found)
     card_type_id: uuid.UUID | None = None
     if card_test_type is not None:
-        card_type_id = db.scalar(select(TestType.id).where(TestType.key == card_test_type))
+        card_type_id = db.scalar(
+            select(TestType.id).where(
+                TestType.key == card_test_type, TestType.deleted_at.is_(None)
+            )
+        )
         if card_type_id is None or card_type_id not in {run.test_type_id for run in runs}:
             raise AppError(
                 "MNX-FITTING-0013",
@@ -3392,7 +3396,11 @@ def list_cards(
     if test_type_key == NO_TEST:
         query = query.where(PropertyCard.test_type_id.is_(None))
     elif test_type_key:
-        found = db.scalar(select(TestType).where(TestType.key == test_type_key))
+        found = db.scalar(
+            select(TestType).where(
+                TestType.key == test_type_key, TestType.deleted_at.is_(None)
+            )
+        )
         # **없는 종류를 물으면 0건이다.** 필터를 무시하고 전부 주면 화면이
         # 「이 종류에 이만큼 있다」고 말하게 된다.
         query = query.where(

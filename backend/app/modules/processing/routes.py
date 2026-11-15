@@ -936,7 +936,9 @@ def _recipe_out(
 
 
 def _resolve_type(db: Session, key: str) -> TestType:
-    test_type = db.scalar(select(TestType).where(TestType.key == key))
+    test_type = db.scalar(
+        select(TestType).where(TestType.key == key, TestType.deleted_at.is_(None))
+    )
     if test_type is None:
         raise NotFound("MNX-TESTS-0002", f"시험 종류를 찾을 수 없습니다: {key}")
     return test_type
@@ -1638,6 +1640,11 @@ def undo_batch(
 
             restored = False
             if run.adopted_result_id == item.id:
+                # **채택을 건드리는 것은 시험을 고치는 일이다**(2026-11-15 전반 점검). 지우기는
+                # 만든 사람이면 되지만(위), 채택을 거두거나 바꾸는 것은 `adopt` · 거두기와 같이
+                # 편집 권한이 있어야 한다 — 전에는 남의 시험에 결과를 만든 사람이, 등록자가
+                # 채택한 그 결과를 이 길로 되돌려 채택을 비우거나 다른 결과로 바꿀 수 있었다.
+                permissions.require_edit(db, user, run, code="MNX-PROCESSING-0017")
                 # **원래 채택으로 돌려놓는다.** 그 결과가 이 시험의 것이 아니면
                 # 안 받는다 — 남의 시험 결과를 채택하는 길이 되면 안 된다.
                 back = (
@@ -1650,6 +1657,8 @@ def undo_batch(
                         "MNX-PROCESSING-0016",
                         "되돌릴 채택 결과가 이 시험의 것이 아닙니다.",
                     )
+                if back is not None:
+                    _require_adoptable(back)  # 실패한 결과는 이 길로도 채택되지 않는다
                 run.adopted_result_id = back.id if back else None
                 _project_summaries(db, run, back)
                 restored = back is not None

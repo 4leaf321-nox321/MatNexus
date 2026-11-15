@@ -159,7 +159,9 @@ def _dimension(raw: str) -> str | None:
 
 
 def _resolve_type(db: Session, key: str) -> TestType:
-    test_type = db.scalar(select(TestType).where(TestType.key == key))
+    test_type = db.scalar(
+        select(TestType).where(TestType.key == key, TestType.deleted_at.is_(None))
+    )
     if test_type is None:
         raise NotFound("MNX-TESTS-0002", f"시험 종류를 찾을 수 없습니다: {key}")
     return test_type

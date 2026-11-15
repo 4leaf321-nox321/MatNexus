@@ -55,7 +55,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import delete, false, func, select, update
+from sqlalchemy import delete, event, false, func, select, update
 from sqlalchemy.orm import Session
 
 from app.modules.accounts.models import User
@@ -63,7 +63,7 @@ from app.modules.commissions.models import Commission
 from app.modules.fitting.models import ExportProfile, PropertyCard
 from app.modules.grouping.models import GroupResult
 from app.modules.guide.models import GuideAsset, GuideDocument, GuideRevision, GuideSection
-from app.modules.materials.models import Material, Sample, Specimen
+from app.modules.materials.models import Material, MaterialPart, Sample, Specimen
 from app.modules.pipelines.models import PipelineConnector, PipelineInboxItem
 from app.modules.processing.models import ProcessingRecipe, ProcessingResult
 from app.modules.statistics.models import EnsembleResult
@@ -150,6 +150,41 @@ _BINDINGS = {
     "specimen": vocabulary_services.SPECIMEN_BINDINGS,
     "test_run": vocabulary_services.TEST_RUN_BINDINGS,
 }
+
+#: 적용 부품 줄이 매달린 기준정보 열(파트 · 제품 · 사업부). 재료를 지울 때 `parts.release_all`
+#: 이 이 셋의 「쓰는 곳」 을 빼고 줄은 남긴다 — 되살릴 때 여기서 다시 더한다. 전에는 재료의
+#: 연결만 되돌려, 지웠다 되살린 재료의 부품 줄 수만큼 수가 작게 남았다(2026-11-15 전반 점검).
+_PART_TERMS = ("part_term_id", "product_term_id", "division_term_id")
+
+#: 커밋 뒤에 지울 폴더를 세션에 적어 두는 자리(`remove_files`).
+_FILES = "trash_files_to_remove"
+
+
+def _remove_later(db: Session, folder: str) -> None:
+    """그 폴더를 **커밋 뒤에** 지우게 적어 둔다.
+
+    영구 삭제가 파일을 그 자리에서 지우면, 뒤에서 터져 롤백됐을 때 행은 휴지통에 그대로인데
+    원본 · 처리 결과 · 마스터커브 파일은 없다 — 되살려도 곡선을 못 여는 시험이 된다(2026-11-15
+    전반 점검: 함께 고른 다른 줄이 `MNX-TRASH-0007` 로 막히거나 FK 위반이 나면 그랬다).
+    """
+    db.info.setdefault(_FILES, []).append(folder)
+
+
+@event.listens_for(Session, "after_rollback")
+def _forget_files(session: Session) -> None:
+    """롤백되면 적어 둔 폴더도 잊는다 — 행이 돌아왔는데 파일만 지우면 안 된다."""
+    session.info.pop(_FILES, None)
+
+
+def remove_files(db: Session) -> None:
+    """영구 삭제가 적어 둔 폴더를 지운다. **`db.commit()` 뒤에 부른다.**
+
+    파일 실패로 멈추지 않는다 — 이미 사라진 파일이 흔하고(정리 잡이 먼저 치웠을 수 있다), 남은
+    파일은 저장소 정리가 다시 잡는다.
+    """
+    for folder in db.info.pop(_FILES, []):
+        with contextlib.suppress(OSError):
+            filestore.delete_dir(folder)
 
 
 @dataclass(frozen=True)
@@ -542,6 +577,12 @@ def restore(db: Session, kind: str, item_id: uuid.UUID, *, actor: User) -> Done:
             # 지울 때 뺀 것을 그대로 되돌린다. **수집 체계 셋은 매달린 것이 없다.**
             for binding in _BINDINGS.get(one, ()):
                 vocabulary_services.bump_usage(db, getattr(target, binding.column), 1)
+            if one == "material":
+                for part in db.scalars(
+                    select(MaterialPart).where(MaterialPart.material_id == target.id)
+                ):
+                    for column in _PART_TERMS:
+                        vocabulary_services.bump_usage(db, getattr(part, column), 1)
 
     done = Done(name=_name(kind, row), counts=counts)
     audit.record(
@@ -642,8 +683,7 @@ def _purge_row(
                 )
             ):
                 if inbox.source_path:
-                    with contextlib.suppress(OSError):
-                        filestore.delete_dir(str(inbox.source_path).rsplit("/", 1)[0])
+                    _remove_later(db, str(inbox.source_path).rsplit("/", 1)[0])
                 db.delete(inbox)
             db.flush()
         if kind == "guide_document":
@@ -657,8 +697,7 @@ def _purge_row(
             for asset in list(
                 db.scalars(select(GuideAsset).where(GuideAsset.document_id == row.id))
             ):
-                with contextlib.suppress(OSError):
-                    filestore.delete_dir(str(asset.path).rsplit("/", 1)[0])
+                _remove_later(db, str(asset.path).rsplit("/", 1)[0])
                 db.delete(asset)
             db.flush()
         db.delete(row)
@@ -673,6 +712,15 @@ def _purge_row(
         for target in rows:
             db.delete(target)
         db.flush()
+    # **적용 부품 줄을 먼저 지운다**(2026-11-15 전반 점검). `material_parts.material_id` 에는
+    # ondelete 가 없고 소프트 삭제는 줄을 남긴다 — 부품이 달린 재료의 영구 삭제는 언제나 FK
+    # 위반으로 500 이었다. 「쓰는 곳」 수는 지울 때 이미 뺐다.
+    if tree["material"]:
+        db.execute(
+            delete(MaterialPart).where(
+                MaterialPart.material_id.in_([one.id for one in tree["material"]])
+            )
+        )
     for one in ("specimen", "sample", "material"):
         for target in tree[one]:
             db.delete(target)
@@ -784,16 +832,12 @@ def _purge_run(db: Session, run: Any) -> None:
         .values(test_run_id=None, status="discarded")
     )
     db.execute(delete(ProcessingResult).where(ProcessingResult.test_run_id == run.id))
-    # **파일 실패로 멈추지 않는다.** 이미 사라진 파일이 흔하다(정리 잡이 먼저
-    # 치웠을 수 있다). 행은 지워야 하고, 남은 파일은 저장소 정리가 다시 잡는다.
+    # **파일은 커밋 뒤에 지운다**(`_remove_later`) — 여기서 지우면 롤백돼도 파일은 안 돌아온다.
     source = getattr(run, "source_path", None)
     if source:
-        with contextlib.suppress(OSError):
-            filestore.delete_dir(str(source).rsplit("/", 1)[0])
+        _remove_later(db, str(source).rsplit("/", 1)[0])
     # 원본을 바꾼 시험은 판마다 `source/v2/…` 에 둔다 — 위는 지금 판의 폴더만 지운다.
-    with contextlib.suppress(OSError):
-        filestore.delete_dir(f"{filestore.run_dir(run.id, run.created_at)}/source")
+    _remove_later(db, f"{filestore.run_dir(run.id, run.created_at)}/source")
     for kind in filestore.SIDE_DIRS:
-        with contextlib.suppress(OSError):
-            filestore.delete_dir(filestore.side_dir(kind, run.id))
+        _remove_later(db, filestore.side_dir(kind, run.id))
     db.delete(run)

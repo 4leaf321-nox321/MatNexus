@@ -32,7 +32,9 @@ def channels_of(db: Session, key: str | None) -> list[str] | None:
     """
     if not key:
         return None
-    found = db.scalar(select(TestType).where(TestType.key == key))
+    found = db.scalar(
+        select(TestType).where(TestType.key == key, TestType.deleted_at.is_(None))
+    )
     if found is None:
         return None
     return list(
@@ -42,16 +44,18 @@ def channels_of(db: Session, key: str | None) -> list[str] | None:
 
 def channels_by_key(db: Session) -> dict[str, list[str]]:
     """모든 시험 종류의 채널. **한 번에 읽는다** — 종류마다 조회하면 N+1 이다."""
+    # **지운 종류는 뺀다**(2026-11-15 전반 점검) — 지웠다 같은 key 로 다시 만들면 두 행이 같은
+    # key 라, 안 거르면 옛 종류와 새 종류의 채널이 한 목록에 섞인다.
     rows = db.execute(
-        select(TestType.key, TestChannel.key).join(
-            TestChannel, TestChannel.test_type_id == TestType.id
-        )
+        select(TestType.key, TestChannel.key)
+        .join(TestChannel, TestChannel.test_type_id == TestType.id)
+        .where(TestType.deleted_at.is_(None))
     )
     found: dict[str, list[str]] = {}
     for type_key, channel_key in rows:
         found.setdefault(str(type_key), []).append(str(channel_key))
     # 채널이 하나도 없는 종류도 목록에는 있어야 한다 — 없으면 「모르는 종류」 로
     # 취급되어 채널 판별을 건너뛴다.
-    for type_key in db.scalars(select(TestType.key)):
+    for type_key in db.scalars(select(TestType.key).where(TestType.deleted_at.is_(None))):
         found.setdefault(str(type_key), [])
     return found

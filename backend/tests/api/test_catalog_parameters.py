@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Iterator
+from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
@@ -360,6 +361,48 @@ class Test한_이름_아래_여러_벌:
         assert len(rows) == 3
         assert all(one["variant"] for one in rows), rows
         assert all(one["duplicated"] == [] for one in rows)
+
+    def test_갈래를_차례로_받아도_앞의_벌이_덮이지_않는다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        aged: CatalogMaterial,
+    ) -> None:
+        """2026-11-15 전반 점검 — 저장 열쇠가 `set_id` 뿐이라 둘째 갈래가 첫 줄을 조용히 덮었고
+        (응답은 201), 어느 조건의 계수인지도 줄에 없었다."""
+        made = client.post(
+            "/api/materials",
+            json={"family": "Metal", "category": "Steel", "grade": "PVARIANT"},
+            headers=admin_headers,
+        )
+        material_id = made.json()["id"]
+
+        def adopt(variant: str) -> dict[str, Any]:
+            got = client.post(
+                f"/api/materials/{material_id}/parameter-sets",
+                json={
+                    "property_key": SPLIT_KEY,
+                    "catalog_material_id": str(aged.id),
+                    "set_id": "one_paper",
+                    "variant": variant,
+                },
+                headers=admin_headers,
+            )
+            assert got.status_code == 201, got.text
+            return dict(got.json())
+
+        first = adopt("aging_hours=10.0")
+        second = adopt("aging_hours=100.0")
+        assert first["id"] != second["id"]
+        assert first["source_ref"] == "one_paper[aging_hours=10.0]"
+        listed = client.get(
+            f"/api/materials/{material_id}/parameter-sets", headers=admin_headers
+        ).json()
+        mine = {one["source_ref"]: one["terms"] for one in listed}
+        assert set(mine) == {"one_paper[aging_hours=10.0]", "one_paper[aging_hours=100.0]"}
+        assert mine["one_paper[aging_hours=10.0]"] != mine["one_paper[aging_hours=100.0]"]
+        # 같은 갈래를 다시 받으면 갱신이다 — 줄이 늘지 않는다.
+        assert adopt("aging_hours=10.0")["id"] == first["id"]
 
     def test_채택은_갈린_벌_하나를_집는다(
         self,

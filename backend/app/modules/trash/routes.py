@@ -95,6 +95,7 @@ def purge(
         )
     done = services.purge(db, kind, item_id, actor=user)
     db.commit()
+    services.remove_files(db)  # 파일은 행이 정말 지워진 뒤에(롤백되면 남아야 한다)
     return TrashDoneOut(name=done.name, counts=done.counts, said=done.said)
 
 
@@ -119,6 +120,7 @@ def purge_many(
         )
     done = services.purge_many(db, [(one.kind, one.id) for one in payload.items], actor=user)
     db.commit()
+    services.remove_files(db)
     return TrashPurgedManyOut(
         requested=done.requested,
         purged=done.purged,

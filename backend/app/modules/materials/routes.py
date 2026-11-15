@@ -1317,7 +1317,11 @@ def _narrowed(
         if high is not None:
             query = query.where(Material.spec_thickness_m <= high * (1 + 1e-9))
     if filters.test_type:
-        kind = db.scalar(select(TestType.id).where(TestType.key == filters.test_type))
+        kind = db.scalar(
+            select(TestType.id).where(
+                TestType.key == filters.test_type, TestType.deleted_at.is_(None)
+            )
+        )
         query = query.where(
             Material.id.in_(
                 select(Sample.material_id)
@@ -4092,21 +4096,32 @@ def adopt_parameter_set(
 
     # **같은 벌을 두 번 담지 않는다.** 다시 채택하면 갱신이다 — 원본이 정정되면
     # 그것을 따라가야 하고, 줄이 둘로 늘면 카드가 어느 것을 쓸지 알 수 없다.
-    row = db.scalar(
-        select(MaterialParameterSet).where(
-            MaterialParameterSet.material_id == material_id,
-            MaterialParameterSet.model == chosen.model,
-            MaterialParameterSet.source_ref == chosen.set_id,
+    #
+    # **갈래(`variant`)가 열쇠에 든다**(2026-11-15 전반 점검). 한 `set_id` 아래 온도별 · 노화별
+    # 벌이 갈리는데 열쇠가 `set_id` 뿐이라, `aging_hours=0` 을 받은 뒤 `=840` 을 받으면 같은
+    # 줄이 조용히 덮였고 카드는 어느 조건의 계수인지 모른 채 인용했다. 갈래를 `set_id[갈래]`
+    # 로 적는다 — 카드 각주에도 그대로 선다. 전에 갈래 없이 적힌 줄이 있으면 그 줄을 이
+    # 갈래로 올린다(어느 갈래였는지 모르는 줄을 곁에 남기지 않는다).
+    ref = f"{chosen.set_id}[{chosen.variant}]"[:200] if chosen.variant else chosen.set_id
+    row = None
+    for known in dict.fromkeys((ref, chosen.set_id)):
+        row = db.scalar(
+            select(MaterialParameterSet).where(
+                MaterialParameterSet.material_id == material_id,
+                MaterialParameterSet.model == chosen.model,
+                MaterialParameterSet.source_ref == known,
+            )
         )
-    )
+        if row is not None:
+            break
     if row is None:
         row = MaterialParameterSet(
             material_id=material_id,
             model=chosen.model,
-            source_ref=chosen.set_id,
             created_by_id=user.id,
         )
         db.add(row)
+    row.source_ref = ref
     row.label = label
     row.property_key = payload.property_key
     row.origin = "catalog"

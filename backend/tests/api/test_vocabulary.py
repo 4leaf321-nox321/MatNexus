@@ -1845,6 +1845,41 @@ class Test여러_값_지우기:
         ).json()
         assert result["blocked"] == 1
 
+    def test_휴지통의_자료만_쓰는_값은_사유와_함께_남고_함께_고른_값은_지워진다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        db: Session,
+        material: dict[str, Any],
+    ) -> None:
+        """2026-11-15 전반 점검 — 산 자료만 세고 지워서, 휴지통의 시료 하나만 쓰는 값은
+        커밋에서 외래키 위반(500)이 났고 함께 고른 값까지 전부 되돌아갔다."""
+        sample = client.post(
+            f"/api/materials/{material['id']}/samples",
+            json={"manufacturer": "휴지통제철"},
+            headers=admin_headers,
+        ).json()
+        gone = client.delete(f"/api/samples/{sample['id']}", headers=admin_headers)
+        assert gone.status_code in (200, 204), gone.text
+        spare = client.post(
+            "/api/vocabularies/manufacturer/terms",
+            json={"value": "안쓰는제철"},
+            headers=admin_headers,
+        ).json()
+        term = db.scalar(select(VocabularyTerm).where(VocabularyTerm.value == "휴지통제철"))
+        assert term is not None
+
+        response = client.post(
+            "/api/vocabularies/manufacturer/terms/delete",
+            json={"ids": [str(term.id), spare["id"]]},
+            headers=admin_headers,
+        )
+        assert response.status_code == 200, response.text
+        by_id = {one["id"]: one for one in response.json()["items"]}
+        assert by_id[str(term.id)]["deleted"] is False
+        assert "휴지통" in by_id[str(term.id)]["reason"]
+        assert by_id[spare["id"]]["deleted"] is True
+
     def test_목록이_쪽으로_온다(
         self, client: TestClient, admin_headers: dict[str, str]
     ) -> None:

@@ -145,7 +145,11 @@ def detect(
         structure = None
 
     if preferred_type_key:
-        preferred = db.scalar(select(TestType).where(TestType.key == preferred_type_key))
+        preferred = db.scalar(
+            select(TestType).where(
+                TestType.key == preferred_type_key, TestType.deleted_at.is_(None)
+            )
+        )
         if preferred is not None:
             candidates.sort(key=lambda one: one.test_type_id != preferred.id)
 

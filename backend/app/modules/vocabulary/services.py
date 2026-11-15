@@ -1038,12 +1038,15 @@ def dismiss(
         )
 
 
-def references_to(db: Session, term: VocabularyTerm) -> int:
+def references_to(db: Session, term: VocabularyTerm, *, with_trash: bool = False) -> int:
     """이 값을 실제로 가리키는 행 수. **캐시를 안 믿는다.**
 
     `usage_count` 는 캐시고 어긋날 수 있다(실제로 3 대 5 로 벌어진 적이 있다).
     지우기는 되돌릴 수 없으므로 여기서는 세어 본다 — 캐시가 0 이라고 해서 지웠는데
     참조가 남아 있으면 외래키가 막고 요청 전체가 500 으로 죽는다.
+
+    `with_trash` 면 **휴지통의 자료까지** 센다 — 외래키는 휴지통을 모른다. 소프트 삭제는
+    `*_term_id` 를 비우지 않으므로(되살릴 수 있어야 한다), 지워도 되는지는 이쪽으로 판정한다.
     """
     slug = _slug_of(db, term)
     total = 0
@@ -1051,11 +1054,9 @@ def references_to(db: Session, term: VocabularyTerm) -> int:
         for binding in bindings:
             if binding.slug != slug:
                 continue
+            alive = "" if with_trash else deleted.format(t=table)
             found = db.execute(
-                text(
-                    f"SELECT count(*) FROM {table} WHERE {binding.column} = :term_id"
-                    f"{deleted.format(t=table)}"
-                ),
+                text(f"SELECT count(*) FROM {table} WHERE {binding.column} = :term_id{alive}"),
                 {"term_id": term.id},
             ).scalar()
             total += int(found or 0)
@@ -1088,6 +1089,16 @@ def delete_term(db: Session, term: VocabularyTerm) -> str | None:
     used = references_to(db, term)
     if used:
         return f"{used}곳에서 쓰고 있습니다. 감추기나 병합을 쓰세요."
+    # **휴지통의 자료도 이 값을 가리킨다**(2026-11-15 전반 점검). 위는 산 자료만 세는데
+    # 외래키는 휴지통을 모른다 — 휴지통의 시료 하나만 쓰는 값을 지우면 커밋에서 FK 위반으로
+    # 500 이었고,
+    # 함께 고른 다른 값까지 전부 되돌아갔다(「못 지운 것은 이유를 돌려준다」 가 깨졌다).
+    buried = references_to(db, term, with_trash=True)
+    if buried:
+        return (
+            f"휴지통의 자료 {buried}건이 이 값을 쓰고 있습니다. 그 자료를 영구 삭제하거나 "
+            "되살린 뒤 병합을 쓰세요."
+        )
     children = child_count(db, term)
     if children:
         return f"하위 값 {children}개가 이 값을 상위로 삼고 있습니다."

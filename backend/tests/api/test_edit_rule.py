@@ -488,6 +488,62 @@ class Test시험:
         assert out["deleted"] == 0
         assert "등록자 앨리스" in out["blocked"][0]
 
+    def test_결과를_만든_사람도_남의_시험의_채택은_되돌리기로_못_건드린다(
+        self,
+        client: TestClient,
+        db: Session,
+        people: dict[str, tuple[str, dict[str, str]]],
+    ) -> None:
+        """2026-11-15 전반 점검 — 「배치 되돌리기」 는 지우기 판정(만든 사람이면 통과)만 보고
+        채택 포인터까지 바꿨다. 채택 · 거두기는 편집 권한을 요구하는데 이 길만 빠져 있었다."""
+        from app.modules.tests import services as test_services
+
+        _, alice = people["alice"]
+        _, bora = people["bora"]
+        material = _material(client, alice)
+        sample = _sample(client, alice, material["id"])
+        specimen = _specimen(client, alice, sample["id"])
+        run = _run(client, db, alice, specimen["id"])
+        assert test_services.parse_run(db, uuid.UUID(run["id"])) == "parsed"
+        steps = [
+            {
+                "plugin": "tensile.engineering",
+                "options": {"gauge_length": 0.05, "area": 12.12e-6},
+            },
+            {"plugin": "curve.sort_unique", "options": {"x": "strain_engineering"}},
+            {"plugin": "tensile.strength", "options": {}},
+        ]
+        # 보라(다른 부서)가 앨리스의 시험에 결과를 만든다 — 만들기는 누구나.
+        made = client.post(
+            "/api/processing/results",
+            json={"test_run_id": run["id"], "steps": steps},
+            headers=bora,
+        )
+        assert made.status_code == 201, made.text
+        result_id = made.json()["id"]
+        # 등록자 앨리스가 그것을 채택한다.
+        adopted = client.post(
+            f"/api/processing/results/{result_id}/adopt?confirm_warnings=true", headers=alice
+        )
+        assert adopted.status_code == 200, adopted.text
+
+        undo = client.post(
+            "/api/processing/batch/undo",
+            json={"items": [{"result_id": result_id}]},
+            headers=bora,
+        )
+        assert undo.status_code == 200, undo.text
+        assert undo.json()["items"][0]["status"] == "failed"
+        detail = client.get(f"/api/test-runs/{run['id']}", headers=alice).json()
+        assert detail["adopted_result_id"] == result_id, "남이 채택을 거뒀다"
+        # 등록자는 되돌릴 수 있다.
+        mine = client.post(
+            "/api/processing/batch/undo",
+            json={"items": [{"result_id": result_id}]},
+            headers=alice,
+        )
+        assert mine.json()["items"][0]["status"] == "ok"
+
     def test_치수를_적는_것은_시편을_고치는_일이다(
         self, client: TestClient, people: dict[str, tuple[str, dict[str, str]]]
     ) -> None:

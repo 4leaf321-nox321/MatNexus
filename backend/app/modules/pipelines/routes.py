@@ -527,7 +527,11 @@ def assign_item(
     _manager_of_item(db, user, item)
     specimen = permissions.visible_specimen(db, user, body.specimen_id)
     if body.test_type:
-        test_type = db.scalar(select(TestType).where(TestType.key == body.test_type))
+        test_type = db.scalar(
+            select(TestType).where(
+                TestType.key == body.test_type, TestType.deleted_at.is_(None)
+            )
+        )
         if test_type is None or not test_type.is_active:
             raise NotFound("MNX-TESTS-0002", f"시험 종류를 찾을 수 없습니다: {body.test_type}")
     else:

@@ -459,6 +459,37 @@ class TestEditWithData:
         listed = client.get("/api/test-types", headers=admin_headers).json()
         assert "shear" not in {t["key"] for t in listed}
 
+    def test_지웠다_같은_key_로_다시_만들면_새_종류를_찾는다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str]
+    ) -> None:
+        """2026-11-15 전반 점검 — key 유니크는 산 행만 본다(지운 행과 산 행이 같은 key 로
+        함께 있다). key 로 찾는 자리 열 곳이 휴지통을 안 걸러, 옛 종류를 집으면 시험 목록
+        거르기가 0건이 되고 새 형식 정의 · 레시피가 지운 종류에 붙었다."""
+        from app.shared import test_type_channels
+
+        client.post("/api/test-types", json=SHEAR, headers=admin_headers)
+        assert client.delete("/api/test-types/shear", headers=admin_headers).status_code == 204
+        assert test_type_channels.channels_of(db, "shear") is None, "지운 종류를 찾았다"
+        wider = {
+            **SHEAR,
+            "channels": [
+                *SHEAR["channels"],
+                {"key": "strain", "label": "변형률", "dimension": "strain", "si_unit": "1"},
+            ],
+        }
+        again = client.post("/api/test-types", json=wider, headers=admin_headers)
+        assert again.status_code == 201, again.text
+        assert sorted(test_type_channels.channels_of(db, "shear") or []) == [
+            "displacement",
+            "force",
+            "strain",
+        ]
+        assert sorted(test_type_channels.channels_by_key(db)["shear"]) == [
+            "displacement",
+            "force",
+            "strain",
+        ]
+
 
 class TestPermissions:
     def test_일반_사용자는_남의_정의를_못_바꾸고_제_것은_만든다(

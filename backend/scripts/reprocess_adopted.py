@@ -42,6 +42,7 @@ from app.modules.accounts.models import User  # noqa: E402
 from app.modules.processing.models import ProcessingRecipe, ProcessingResult  # noqa: E402
 from app.modules.processing.routes import _store  # noqa: E402
 from app.modules.tests.models import TestRun  # noqa: E402
+from app.shared import filestore  # noqa: E402
 from app.shared.errors import AppError  # noqa: E402
 from matcore.processing import ProcessingError  # noqa: E402
 
@@ -137,9 +138,15 @@ def main() -> None:
                 for key in after
                 if key in before and abs(after[key] - before[key]) > abs(before[key]) * 1e-9
             ]
+            # **행을 되돌리면 파일도 치운다**(2026-11-15 전반 점검). `_store` 는 행보다 먼저
+            # 곡선 파일을 쓴다 — 되돌리기만 하면 미리보기를 돌릴 때마다 채택 시험 수만큼 주인
+            # 없는 파일이 쌓였다(`--apply` 없이도 디스크에 썼다). 살아 있는 시험의 폴더 안이라
+            # 저장소 정리도 못 찾는다.
+            stored = made.storage_path
             if not gone and not moved:
                 same += 1
                 db.rollback()  # 새 행을 남기지 않는다 — 바뀐 것이 없다
+                filestore.delete_file(stored)
                 continue
 
             changed += 1
@@ -161,6 +168,7 @@ def main() -> None:
                 db.commit()
             else:
                 db.rollback()
+                filestore.delete_file(stored)
 
     print()
     print(f"바뀜 {changed} · 그대로 {same} · 실패 {failed}")

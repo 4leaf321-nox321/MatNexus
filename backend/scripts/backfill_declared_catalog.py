@@ -116,7 +116,11 @@ def main() -> None:
         keys = linked_keys(db)
         fixed = 0
         reasons: dict[str, int] = {}
-        for owner in [*db.scalars(select(Material)), *db.scalars(select(Sample))]:
+        # 휴지통의 재료 · 시료는 건드리지 않는다(2026-11-15 전반 점검).
+        for owner in [
+            *db.scalars(select(Material).where(Material.deleted_at.is_(None))),
+            *db.scalars(select(Sample).where(Sample.deleted_at.is_(None))),
+        ]:
             rows = list(owner.declared_properties or [])
             changed = False
             for index, row in enumerate(rows):

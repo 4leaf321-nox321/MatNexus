@@ -462,7 +462,9 @@ def ensure_builtin_format_profiles(db: Session) -> list[str]:
             )
             continue
 
-        test_type = db.scalar(select(TestType).where(TestType.key == type_key))
+        test_type = db.scalar(
+            select(TestType).where(TestType.key == type_key, TestType.deleted_at.is_(None))
+        )
         if test_type is None:
             continue
 

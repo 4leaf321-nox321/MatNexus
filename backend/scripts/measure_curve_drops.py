@@ -91,7 +91,12 @@ def main() -> None:
         runs = db.scalars(
             select(TestRun)
             .join(TestType, TestType.id == TestRun.test_type_id)
-            .where(TestType.key == "tensile", TestRun.status == "parsed")
+            # 지운 시험은 분포에 넣지 않는다(2026-11-15 전반 점검).
+            .where(
+                TestType.key == "tensile",
+                TestRun.status == "parsed",
+                TestRun.deleted_at.is_(None),
+            )
         ).all()
         for run in runs:
             try:

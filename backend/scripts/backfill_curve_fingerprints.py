@@ -33,6 +33,7 @@ from _console import survive_cp949  # noqa: E402
 from app.database import SessionLocal  # noqa: E402
 from app.modules.tests.models import Curve, TestChannel, TestRun  # noqa: E402
 from app.shared import filestore  # noqa: E402
+from app.shared.errors import AppError  # noqa: E402
 from matcore import curves as curvekit  # noqa: E402
 
 survive_cp949()
@@ -60,7 +61,11 @@ def main() -> None:
         for curve, type_id in rows:
             try:
                 columns = curvekit.read_columns(filestore.read_bytes(curve.storage_path))
-            except (FileNotFoundError, OSError):
+            except (AppError, OSError, ValueError):
+                # **파일 하나가 전부를 세우지 않는다**(2026-11-15 전반 점검). 없는 파일은
+                # `filestore` 가 `AppError` 로, 깨진 Parquet 는 `ArrowInvalid`(ValueError)로
+                # 던지는데 여기는 `OSError` 만 잡았다 — 하나라도 있으면 스크립트가 통째로 죽어
+                # 아무것도 커밋되지 않았고, 배포마다 같은 자리에서 죽었다.
                 missing += 1
                 continue
             keys = defined.get(type_id) or set()
@@ -68,6 +73,9 @@ def main() -> None:
                 {key: values for key, values in columns.items() if not keys or key in keys}
             )
             filled += 1
+            # 수백 건마다 적는다 — 한 번에 올리면 중간에 죽을 때 전부 잃는다.
+            if args.apply and filled % 500 == 0:
+                db.commit()
         if args.apply:
             db.commit()
         else:

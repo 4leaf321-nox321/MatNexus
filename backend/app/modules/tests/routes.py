@@ -1336,7 +1336,11 @@ def list_runs(
     # 시험이 된다 — 목록이 조용히 잘리는 것이 가장 나쁘다(이 화면의 머리말이
     # 그 이야기다).
     if test_type_key:
-        found = db.scalar(select(TestType).where(TestType.key == test_type_key))
+        found = db.scalar(
+            select(TestType).where(
+                TestType.key == test_type_key, TestType.deleted_at.is_(None)
+            )
+        )
         query = query.where(
             TestRun.test_type_id == (found.id if found else None),
             TestRun.test_type_id.is_not(None),

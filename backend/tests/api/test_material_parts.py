@@ -13,7 +13,7 @@
 from __future__ import annotations
 
 import uuid
-from typing import Any
+from typing import Any, ClassVar
 
 from fastapi.testclient import TestClient
 from sqlalchemy import select
@@ -463,3 +463,58 @@ class Test기준정보:
             f"/api/materials/{material['id']}/parts", headers=admin_headers
         ).json()
         assert {one["division"] for one in rows["items"]} == {"가전", None}
+
+
+class Test휴지통을_거치는_재료:
+    """2026-11-15 전반 점검 — 지울 때는 줄을 남기고 「쓰는 곳」 만 뺀다. 그 뒤의 두 길이 모두
+    틀렸다."""
+
+    LINES: ClassVar[list[dict[str, Any]]] = [
+        {"part": "도어 이너", "product": "냉장고 A", "part_code": "P-100", "division": "가전"},
+        {
+            "part": "도어 아우터",
+            "product": "냉장고 A",
+            "part_code": "P-101",
+            "division": "가전",
+        },
+    ]
+
+    def _dead(self, client: TestClient, headers: dict[str, str]) -> dict[str, Any]:
+        material = _material(client, headers)
+        made = _add(client, headers, material["id"], self.LINES, dry_run=False)
+        assert made.status_code == 200, made.text
+        gone = client.post(
+            f"/api/materials/{material['id']}/delete-cascade",
+            json={"include_test_runs": True},
+            headers=headers,
+        )
+        assert gone.status_code == 200, gone.text
+        return material
+
+    def test_되살리면_부품_줄의_쓰는_곳_수도_돌아온다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str]
+    ) -> None:
+        """전에는 재료의 연결만 되돌려, 부품 줄 수만큼 수가 작게 남았다."""
+        material = self._dead(client, admin_headers)
+        assert _term(db, "division", "가전").usage_count == 0
+        back = client.post(
+            f"/api/trash/material/{material['id']}/restore", headers=admin_headers
+        )
+        assert back.status_code == 200, back.text
+        assert _term(db, "division", "가전").usage_count == 2
+        assert _term(db, "part", "도어 이너").usage_count == 1
+        assert _term(db, "product", "냉장고 A").usage_count == 2
+
+    def test_부품이_달린_재료도_영구_삭제된다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str]
+    ) -> None:
+        """`material_parts.material_id` 에 ondelete 가 없어 언제나 FK 위반(500)이었다."""
+        material = self._dead(client, admin_headers)
+        purged = client.delete(
+            f"/api/trash/material/{material['id']}?confirm=true", headers=admin_headers
+        )
+        assert purged.status_code == 200, purged.text
+        left = db.scalar(
+            select(MaterialPart).where(MaterialPart.material_id == uuid.UUID(material["id"]))
+        )
+        assert left is None
