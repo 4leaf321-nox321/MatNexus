@@ -156,6 +156,27 @@ describe('물성 카드 내용', () => {
     expect(screen.getByText('(3점 굽힘 등가)')).toBeInTheDocument()
   })
 
+  it('K 칸은 선언대로 — 절대온도는 섭씨로 옮기고 폭은 오프셋을 안 뺀다', () => {
+    // 2026-11-15 — 탄성 블록에 「적어 둔 E 의 온도」 칸(절대온도, K)이 생겼다. 화면은 이름을 모르고
+    // 선언(`si_unit` · `is_span`)만 읽는다: 811.15 K 는 538 °C, 폭 51.6 K 는 51.6 °C 다.
+    const specs: BlockSpec[] = [
+      {
+        key: 'heated',
+        label: '데운 것',
+        help: '온도 칸 둘.',
+        in_deck: true,
+        produces: [
+          { key: 'at', label: '잰 온도', si_unit: 'K', help: null, is_span: false },
+          { key: 'width', label: '온도 폭', si_unit: 'K', help: null, is_span: true },
+        ],
+        rows: [],
+      },
+    ]
+    render(<CardBlocks specs={specs} card={card({ heated: { values: { at: 811.15, width: 51.6 } } })} />)
+    expect(screen.getByText('잰 온도').nextElementSibling).toHaveTextContent('538 °C')
+    expect(screen.getByText('온도 폭').nextElementSibling).toHaveTextContent('51.6 °C')
+  })
+
   it('모르는 출처 코드는 조용히 지어내지 않는다', () => {
     // 아는 척하면 그 표시가 곧 거짓말이 된다.
     render(

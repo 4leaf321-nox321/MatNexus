@@ -2542,6 +2542,97 @@ class Test온도표:
         )
         assert refused.status_code == 422, refused.text
 
+    def _modulus_card(
+        self,
+        client: TestClient,
+        headers: dict[str, str],
+        material_id: str,
+        points: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        declare(
+            client,
+            headers,
+            material_id,
+            [
+                {
+                    "item": "탄성계수",
+                    "points": points,
+                    "input_unit": "GPa",
+                    "source": "literature",
+                    "reference": "ASM Handbook Vol.1",
+                }
+            ],
+        )
+        made = client.post(
+            "/api/fitting/cards/declared",
+            json={"material_id": material_id, "label": "한 점", "poisson_ratio": 0.3},
+            headers=headers,
+        )
+        assert made.status_code == 201, made.text
+        card: dict[str, Any] = made.json()
+        return card
+
+    def _notes(
+        self, client: TestClient, headers: dict[str, str], card: dict[str, Any]
+    ) -> list[str]:
+        checked = client.post(
+            f"/api/fitting/cards/{card['id']}/export/check",
+            json={"format": "abaqus_elastic", "units": "si"},
+            headers=headers,
+        )
+        assert checked.status_code == 200, checked.text
+        notes: list[str] = checked.json()["notes"]
+        return notes
+
+    def test_상온_밖의_한_점이면_그_온도를_싣고_덱이_말한다(
+        self, client: TestClient, admin_headers: dict[str, str], material: dict[str, Any]
+    ) -> None:
+        """538 °C 의 E 하나 — 덱은 그 값을 모든 온도에 쓴다(2026-11-15). 전에는 상온 값과 같은
+        모양으로 나갔고, 문헌 덱만 그 온도를 근거에 적었다."""
+        card = self._modulus_card(
+            client,
+            admin_headers,
+            material["id"],
+            [{"value": 150, "temperature_k": 811.15}],
+        )
+        elastic = values(card, "elastic")
+        assert elastic["youngs_modulus"] == pytest.approx(150e9)
+        # 절대온도(K) — 열물성 블록의 기준 온도와 같은 꼴이다.
+        assert elastic["youngs_modulus_temperature"] == pytest.approx(811.15)
+        assert "rows" not in card["blocks"]["elastic"]
+        said = [one for one in self._notes(client, admin_headers, card) if "탄성계수는" in one]
+        assert len(said) == 1 and "538 °C 의 값" in said[0], said
+        # **덱 파일 머리말에도** — 각주는 점검 · 미리보기에만 나가서, 덱만 받은 사람은 그 E 를
+        # 상온 값으로 읽었다(2026-11-15).
+        deck = client.get(
+            f"/api/fitting/cards/{card['id']}/export?format=abaqus_elastic",
+            headers=admin_headers,
+        )
+        assert deck.status_code == 200, deck.text
+        assert "538 °C 의 값(상온 아님)" in deck.text
+
+    @pytest.mark.parametrize(
+        "points",
+        [
+            # 상온(23 ± 5 °C) — 문헌 덱과 같은 잣대다.
+            [{"value": 206, "temperature_k": 298.15}],
+            [{"value": 206}],
+            # 온도별 표 — 표가 온도를 든다.
+            [{"value": 206, "temperature_k": 293.15}, {"value": 170, "temperature_k": 673.15}],
+        ],
+        ids=["상온", "온도없음", "온도표"],
+    )
+    def test_상온_온도없음_온도표면_지금대로다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        material: dict[str, Any],
+        points: list[dict[str, Any]],
+    ) -> None:
+        card = self._modulus_card(client, admin_headers, material["id"], points)
+        assert "youngs_modulus_temperature" not in values(card, "elastic")
+        assert not any("탄성계수는" in one for one in self._notes(client, admin_headers, card))
+
 
 class Test되짚어_찾은_것:
     """전체 훑기에서 나온 것들(2026-08-25). **넷 다 재현해서 고쳤다.**

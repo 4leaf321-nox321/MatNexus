@@ -19,7 +19,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.modules.materials.models import Material, Sample
-from app.shared import declared_approval, display, property_names, tiers
+from app.shared import declared_approval, display, property_names, representative, tiers
 from matcore import cards, synth
 
 
@@ -169,6 +169,22 @@ def celsius(kelvin: float | None) -> str:
     같은 부류를 다섯 군데 걷어냈다.
     """
     return "?" if kelvin is None else display.quantity(kelvin, "degC")
+
+
+def off_room(row: dict[str, Any] | None) -> float | None:
+    """한 줄이 **상온이 아닌 한 점**이면 그 온도(K). 상온 · 온도 미기재 · 표는 `None`.
+
+    상온의 잣대는 문헌 덱과 같다(`representative.off_room`, 23 ± 5 °C). 문헌 재료도 이
+    조립기를 지나므로(`shared/literature_material`) 잣대가 둘이면 같은 값이 문헌 각주에서는
+    「상온 밖」, 카드 블록에서는 「상온」 이 된다.
+    """
+    points = declared_points(row or {})
+    if len(points) != 1:
+        return None
+    kelvin = points[0].get("temperature_k")
+    if isinstance(kelvin, bool) or not isinstance(kelvin, int | float):
+        return None
+    return representative.off_room({"temperature_k": float(kelvin)})
 
 
 def declared_points(row: dict[str, Any]) -> list[dict[str, Any]]:
@@ -363,6 +379,11 @@ def declared_blocks(
         )
     )
     density = inherit_density(material, samples, density_override)
+    # **상온이 아닌 한 점이면 그 온도를 블록에 싣는다**(2026-11-15) — 열물성 블록이 값마다 자기
+    # 온도를 드는 것과 같은 꼴이다. 덱은 이 E 하나를 모든 온도에 쓰는데, 전에는 538 °C 의 E 가
+    # 상온 값과 같은 모양으로 나갔다(문헌 덱만 근거에 그 온도를 적었다). 상온 · 온도 미기재 ·
+    # 온도별 표(표가 온도를 든다)면 안 싣는다.
+    modulus_at = off_room(stated_row)
 
     elastic: dict[str, Any] = {
         **(
@@ -372,6 +393,11 @@ def declared_blocks(
                 **(
                     {"youngs_modulus_reference": str(stated_row["reference"])}
                     if stated_row and stated_row.get("reference")
+                    else {}
+                ),
+                **(
+                    {"youngs_modulus_temperature": modulus_at}
+                    if modulus_at is not None
                     else {}
                 ),
             }

@@ -1534,6 +1534,14 @@ def create_card(
                         if stated_row and stated_row.get("reference")
                         else {}
                     ),
+                    # 적은 값이 **상온이 아닌 한 점**이면 그 온도를 싣는다 — 선언 카드
+                    # (`declared_card.declared_blocks`)와 같은 칸(2026-11-15). 안 실으면
+                    # 이 카드의 E 가 상온 값으로 읽힌다.
+                    **(
+                        {"youngs_modulus_temperature": off}
+                        if (off := declared_card.off_room(stated_row)) is not None
+                        else {}
+                    ),
                 }
                 if stated.value is not None
                 else {}
@@ -4302,7 +4310,15 @@ def _deck_for_card(
         # **근거 문서까지 낸다.** 「사람이 적은 값」 만으로는 어느 핸드북 몇
         # 판인지 알 수 없고, 값이 의심스러울 때 확인할 길이 없다.
         reference = values.get(f"{key}_reference")
-        provenance.append(f"{label}: {origin}{f' — {reference}' if reference else ''}")
+        # 상온이 아닌 한 점의 E 면 **몇 도의 값인지** 덱 머리말에도(2026-11-15) — 각주는 점검 ·
+        # 미리보기에만 나가서, 덱만 받은 사람은 그 E 를 상온 값으로 읽었다.
+        kelvin = values.get(f"{key}_temperature") if key == "youngs_modulus" else None
+        at = (
+            f" · {kelvin - 273.15:.0f} °C 의 값(상온 아님)"
+            if isinstance(kelvin, int | float) and not isinstance(kelvin, bool)
+            else ""
+        )
+        provenance.append(f"{label}: {origin}{at}{f' — {reference}' if reference else ''}")
     # 전기 · 광학 블록(ADR 0052) — 칸 이름은 블록 선언에서 읽는다. **어느 주파수 · 파장의
     # 값인지**도 함께 — 1 MHz 의 Dk 를 10 GHz 해석에 쓰는지 덱만 보고 알 수 있어야 한다.
     for block_key in ("electrical", "optical"):

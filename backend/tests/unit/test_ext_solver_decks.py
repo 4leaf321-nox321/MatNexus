@@ -166,6 +166,86 @@ class TestHill48:
         assert card[4][2] != "" and all(row[2] == "" for row in card[5:])  # TEMP 는 첫 줄만
 
 
+#: Hill 덱 → 덱이 곡선 하나를 싣는 카드 이름(`deck.RATE_HINTS`).
+HILL_CURVE = {
+    "abaqus_hill": "*PLASTIC",
+    "ansys_hill": "TB,PLASTIC",
+    "dyna_hill": "*MAT_036",
+    "openradioss_hill": "LAW43",
+    "nastran_hill": "MATEP",
+    "optistruct_hill": "PLASTIC",
+}
+
+
+def _rate_rows(rates: tuple[float, ...]) -> dict[str, Any]:
+    return {
+        "values": {"rate_count": len(rates), "reference_rate": rates[0], "model": "none"},
+        "rows": [
+            {"strain_rate": rate, "plastic_strain": x, "true_stress": y * (1 + rate / 1000)}
+            for rate in rates
+            for x, y in CURVE
+        ],
+    }
+
+
+def _hill(key: str, rates: tuple[float, ...] | None) -> export.Rendered:
+    blocks: dict[str, Any] = {"elastic": STEEL, "table": TABLE, "anisotropy": ANISOTROPY}
+    if rates is not None:
+        blocks["rate_table"] = _rate_rows(rates)
+    deck = export.Deck(name="DP600", solver_id=7, blocks=blocks, provenance=("시험",))
+    return export.render(key, deck, MM_N_TONNE)
+
+
+class TestHill48_속도별_표:
+    """짝 카드가 속도 카드면 Hill 덱은 그 곡선 하나(가장 느린 속도)만 싣는다(2026-11-15) —
+    중심의 단일 곡선 형식처럼 **덱 주석 셋과 각주로 말한다.** 전에는 덱에 말이 없고 `render`
+    의 안전망이 각주만 달았다."""
+
+    @pytest.mark.parametrize("key", sorted(HILL_CURVE))
+    def test_덱_주석과_각주가_한_번씩_서고_값은_그대로다(self, key: str) -> None:
+        made = _hill(key, (0.001, 1.0, 100.0))
+        said = [note for note in made.notes if "속도별 표(속도 3개)" in note]
+        # **두 번 안 붙는다** — 형식이 말했으니 안전망(`_rate_folded`)은 더하지 않는다.
+        assert len(said) == 1, made.notes
+        assert f"이 형식({HILL_CURVE[key]})은 곡선 하나만 받습니다" in said[0]
+        assert "가장 느린 속도의 곡선만 실었습니다" in said[0]
+        # 짝 카드 말은 그대로 맨 끝이다.
+        assert made.notes[-1].startswith("경화 곡선·탄성은 짝 카드에서 왔습니다")
+        lines = made.text.splitlines()
+        comments = [line for line in lines if "Rate-dependent card" in line]
+        assert len(comments) == 1 and "(3 strain rates)" in comments[0], made.text
+        assert f"{HILL_CURVE[key]} takes ONE curve" in comments[0]
+        assert any("only the slowest-rate curve is written here." in line for line in lines)
+        plain = _hill(key, None)
+        kept = [
+            line
+            for line in lines
+            if "Rate-dependent card" not in line
+            and "only the slowest-rate curve" not in line
+            and "All rates:" not in line
+        ]
+        assert kept == plain.text.splitlines()
+
+    @pytest.mark.parametrize("key", sorted(HILL_CURVE))
+    def test_속도가_하나면_말하지_않는다(self, key: str) -> None:
+        made = _hill(key, (0.001,))
+        assert "Rate-dependent card" not in made.text
+        assert not any("속도별 표(속도" in note for note in made.notes)
+
+    def test_속도_의존_형식이_등방이라고_말한다(self) -> None:
+        """같은 솔버의 속도 의존 형식으로 가면 항복응력비가 빠진다 — 그냥 안 가리킨다."""
+        for key in sorted(HILL_CURVE):
+            notes = " ".join(_hill(key, (0.001, 1.0, 100.0)).notes)
+            if key == "nastran_hill":
+                assert "속도별 표를 싣는 형식은 없습니다" in notes
+            else:
+                assert "등방이라 Hill48 은 안 실립니다" in notes, key
+
+    def test_LS_DYNA_는_80열_안이다(self) -> None:
+        lines = _hill("dyna_hill", (0.001, 1.0, 100.0)).text.splitlines()
+        assert all(len(line) <= 80 for line in lines if line.startswith("$")), lines
+
+
 class Test온도_의존:
     BLOCKS: ClassVar[dict[str, Any]] = {
         "elastic": STEEL,

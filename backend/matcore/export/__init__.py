@@ -2532,7 +2532,39 @@ def render(
     shear = _shear_mismatch(target, deck)
     if shear:
         result = replace(result, notes=(*result.notes, *shear))
+    measured_at = _elastic_temperature(target, deck)
+    if measured_at:
+        result = replace(result, notes=(*result.notes, *measured_at))
     return result
+
+
+def _elastic_temperature(target: Renderer, deck: Deck) -> list[str]:
+    """탄성계수가 **상온이 아닌 한 온도의 값**이면 그 온도를 각주로(2026-11-15). 아니면 빈 것.
+
+    재료에 538 °C 의 E 하나만 적어 둔 선언 카드는 블록에 그 온도를 든다
+    (`elastic.youngs_modulus_temperature`, `shared/declared_card`). 덱은 그 E 하나를 모든
+    온도에 쓰는데 숫자만으로는 상온 값과 구별이 안 된다 — 문헌 덱은 근거에 「(538 degC 에서
+    잰 값)」 을 적었지만 화면에서 반영한 선언 줄로 만든 카드는 아무 말이 없었다. **여기 한
+    곳에서** 단다 — 확장 · 화면에서 만든 정의까지 같은 그물에 걸린다(`_rate_folded` 와 같다).
+
+    E 를 읽는 형식만(`Need` 가 탄성계수를 요구) — 열 · 밀도만 쓰는 형식에는 안 단다. 온도별
+    표가 있으면 표가 온도를 말하므로 더하지 않는다(그때는 조립기가 온도를 안 싣는다).
+    """
+    if not any(
+        need.block == "elastic" and "youngs_modulus" in need.values for need in target.needs
+    ):
+        return []
+    kelvin = deck.number("elastic", "youngs_modulus_temperature")
+    if kelvin is None or deck.number("elastic", "youngs_modulus") is None:
+        return []
+    if len(deck.rows("elastic")) > 1:
+        return []
+    from matcore import units
+
+    return [
+        f"탄성계수는 {units.from_si(kelvin, 'degC'):.4g} °C 의 값입니다 — 그 온도의 값 "
+        "하나라 덱은 이 E 를 모든 온도에 씁니다(상온 값이 아닙니다)."
+    ]
 
 
 def failure_estimate(deck: Deck) -> tuple[float, float] | None:

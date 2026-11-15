@@ -3215,6 +3215,169 @@
      }
     ]
    }
+  },
+  "이방성_속도표": {
+   "elastic": {
+    "values": {
+     "youngs_modulus": 210000000000.0,
+     "poisson_ratio": 0.3,
+     "density": 7850.0
+    }
+   },
+   "table": {
+    "values": {},
+    "rows": [
+     {
+      "plastic_strain": 0.0,
+      "true_stress": 350000000.0
+     },
+     {
+      "plastic_strain": 0.02,
+      "true_stress": 420000000.0
+     },
+     {
+      "plastic_strain": 0.05,
+      "true_stress": 480000000.0
+     },
+     {
+      "plastic_strain": 0.1,
+      "true_stress": 540000000.0
+     },
+     {
+      "plastic_strain": 0.2,
+      "true_stress": 600000000.0
+     }
+    ]
+   },
+   "anisotropy": {
+    "values": {
+     "r_0": 1.8,
+     "r_45": 1.4,
+     "r_90": 2.1
+    }
+   },
+   "rate_table": {
+    "values": {
+     "rate_count": 3,
+     "model": "cowper_symonds",
+     "cs_d": 40.0,
+     "cs_p": 5.0,
+     "reference_rate": 0.001,
+     "jc_c": 0.02
+    },
+    "rows": [
+     {
+      "strain_rate": 0.001,
+      "plastic_strain": 0.0,
+      "true_stress": 350000000.0
+     },
+     {
+      "strain_rate": 0.001,
+      "plastic_strain": 0.02,
+      "true_stress": 420000000.0
+     },
+     {
+      "strain_rate": 0.001,
+      "plastic_strain": 0.05,
+      "true_stress": 480000000.0
+     },
+     {
+      "strain_rate": 0.001,
+      "plastic_strain": 0.1,
+      "true_stress": 540000000.0
+     },
+     {
+      "strain_rate": 0.001,
+      "plastic_strain": 0.2,
+      "true_stress": 600000000.0
+     },
+     {
+      "strain_rate": 0.1,
+      "plastic_strain": 0.0,
+      "true_stress": 378000000.0
+     },
+     {
+      "strain_rate": 0.1,
+      "plastic_strain": 0.02,
+      "true_stress": 453600000.00000006
+     },
+     {
+      "strain_rate": 0.1,
+      "plastic_strain": 0.05,
+      "true_stress": 518400000.00000006
+     },
+     {
+      "strain_rate": 0.1,
+      "plastic_strain": 0.1,
+      "true_stress": 583200000.0
+     },
+     {
+      "strain_rate": 0.1,
+      "plastic_strain": 0.2,
+      "true_stress": 648000000.0
+     },
+     {
+      "strain_rate": 100.0,
+      "plastic_strain": 0.0,
+      "true_stress": 420000000.0
+     },
+     {
+      "strain_rate": 100.0,
+      "plastic_strain": 0.02,
+      "true_stress": 504000000.0
+     },
+     {
+      "strain_rate": 100.0,
+      "plastic_strain": 0.05,
+      "true_stress": 576000000.0
+     },
+     {
+      "strain_rate": 100.0,
+      "plastic_strain": 0.1,
+      "true_stress": 648000000.0
+     },
+     {
+      "strain_rate": 100.0,
+      "plastic_strain": 0.2,
+      "true_stress": 720000000.0
+     }
+    ]
+   }
+  },
+  "탄성_상온밖_한점": {
+   "elastic": {
+    "values": {
+     "youngs_modulus": 150000000000.0,
+     "poisson_ratio": 0.3,
+     "density": 7850.0,
+     "youngs_modulus_temperature": 811.15
+    }
+   },
+   "table": {
+    "values": {},
+    "rows": [
+     {
+      "plastic_strain": 0.0,
+      "true_stress": 350000000.0
+     },
+     {
+      "plastic_strain": 0.02,
+      "true_stress": 420000000.0
+     },
+     {
+      "plastic_strain": 0.05,
+      "true_stress": 480000000.0
+     },
+     {
+      "plastic_strain": 0.1,
+      "true_stress": 540000000.0
+     },
+     {
+      "plastic_strain": 0.2,
+      "true_stress": 600000000.0
+     }
+    ]
+   }
   }
  }
 }

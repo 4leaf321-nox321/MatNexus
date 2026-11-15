@@ -52,6 +52,20 @@ ELASTIC = register_block(
                 ),
                 property_key="mechanical.shear_modulus",
             ),
+            # 2026-11-15 — 적어 둔 E 가 **상온이 아닌 한 온도**의 값이면 그 온도(열물성 블록의
+            # `reference_temperature` 와 같은 꼴, `shared/declared_card`). 덱은 E 하나를 모든
+            # 온도에 쓰므로 숫자만으로는 상온 값과 구별이 안 된다 — 내보낼 때 각주가 말한다.
+            # 물성 키는 안 단다: 값이 아니라 값의 조건이다(선언 칸 채우기가 이 칸을 안 본다).
+            Produced(
+                key="youngs_modulus_temperature",
+                label="탄성계수의 온도",
+                si_unit="K",
+                help=(
+                    "적어 둔 탄성계수가 상온(18~28 °C) 밖의 한 온도에서 잰 값일 때 그 "
+                    "온도. 덱은 그 E 하나를 모든 온도에 쓴다. 비면 상온 · 온도 미기재 · "
+                    "온도별 표다."
+                ),
+            ),
         ),
         rows=(
             Produced(

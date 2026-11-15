@@ -11671,6 +11671,18 @@
             "text": "** Hardening curve must be the rolling-direction (MD) one - R11=1 is that direction."
           },
           {
+            "text": "** Rate-dependent card ({distinct(rate_table, strain_rate)} strain rates): *PLASTIC takes ONE curve -",
+            "when": "distinct(rate_table, strain_rate) > 1"
+          },
+          {
+            "text": "**   only the slowest-rate curve is written here.",
+            "when": "distinct(rate_table, strain_rate) > 1"
+          },
+          {
+            "text": "**   All rates: the Abaqus rate-dependent deck (isotropic - no Hill48).",
+            "when": "distinct(rate_table, strain_rate) > 1"
+          },
+          {
             "text": "*MATERIAL, NAME={name}"
           },
           {
@@ -11742,6 +11754,10 @@
               }
             ],
             "join": ", "
+          },
+          {
+            "note": "카드에 속도별 표(속도 {distinct(rate_table, strain_rate)}개)가 있는데 이 형식(*PLASTIC)은 곡선 하나만 받습니다 — 가장 느린 속도의 곡선만 실었습니다. 속도별 곡선 전부는 「Abaqus (속도 의존)」 형식이 싣습니다 — 그 형식은 등방이라 Hill48 은 안 실립니다.",
+            "when": "distinct(rate_table, strain_rate) > 1"
           },
           {
             "note": "경화 곡선·탄성은 짝 카드에서 왔습니다 — 그 카드가 압연 방향(MD) 곡선이어야 항복응력비가 맞습니다(R11 = 1 이 그 방향입니다)."
@@ -12198,6 +12214,18 @@
             "when": "(count(s_kxx) > 0 or has(thermal.thermal_conductivity)) and count(s_kxx) <= 1"
           },
           {
+            "text": "! Rate-dependent card ({distinct(rate_table, strain_rate)} strain rates): TB,PLASTIC takes ONE curve -",
+            "when": "distinct(rate_table, strain_rate) > 1"
+          },
+          {
+            "text": "!   only the slowest-rate curve is written here.",
+            "when": "distinct(rate_table, strain_rate) > 1"
+          },
+          {
+            "text": "!   All rates: the ANSYS rate-dependent deck (Cowper-Symonds, isotropic - no Hill48).",
+            "when": "distinct(rate_table, strain_rate) > 1"
+          },
+          {
             "text": "! TB,PLASTIC + MISO takes (PLASTIC strain, true stress); first point (0, yield)."
           },
           {
@@ -12259,6 +12287,10 @@
             ],
             "join": ",",
             "prefix": "TBDATA,1,"
+          },
+          {
+            "note": "카드에 속도별 표(속도 {distinct(rate_table, strain_rate)}개)가 있는데 이 형식(TB,PLASTIC)은 곡선 하나만 받습니다 — 가장 느린 속도의 곡선만 실었습니다. 속도 효과는 「ANSYS (속도 의존)」 형식이 Cowper-Symonds 식으로 싣습니다 — 그 형식은 등방이라 Hill48 은 안 실립니다.",
+            "when": "distinct(rate_table, strain_rate) > 1"
           },
           {
             "note": "경화 곡선·탄성은 짝 카드에서 왔습니다 — 그 카드가 압연 방향(MD) 곡선이어야 항복응력비가 맞습니다(R11 = 1 이 그 방향입니다)."
@@ -12336,6 +12368,18 @@
           },
           {
             "text": "$ Hardening curve must be the rolling-direction (MD) one."
+          },
+          {
+            "text": "$ Rate-dependent card ({distinct(rate_table, strain_rate)} strain rates): *MAT_036 takes ONE curve -",
+            "when": "distinct(rate_table, strain_rate) > 1"
+          },
+          {
+            "text": "$   only the slowest-rate curve is written here.",
+            "when": "distinct(rate_table, strain_rate) > 1"
+          },
+          {
+            "text": "$   All rates: the LS-DYNA rate-dependent deck (isotropic - no Hill48).",
+            "when": "distinct(rate_table, strain_rate) > 1"
           },
           {
             "text": "$ *MAT_036 E and PR are temperature independent: lowest-temperature value.",
@@ -12496,6 +12540,10 @@
             "text": "*END"
           },
           {
+            "note": "카드에 속도별 표(속도 {distinct(rate_table, strain_rate)}개)가 있는데 이 형식(*MAT_036)은 곡선 하나만 받습니다 — 가장 느린 속도의 곡선만 실었습니다. 속도별 곡선 전부는 「LS-DYNA (속도 의존)」 형식이 싣습니다 — 그 형식은 등방이라 Hill48 은 안 실립니다.",
+            "when": "distinct(rate_table, strain_rate) > 1"
+          },
+          {
             "note": "경화 곡선·탄성은 짝 카드에서 왔습니다 — 그 카드가 압연 방향(MD) 곡선이어야 항복응력비가 맞습니다(R11 = 1 이 그 방향입니다)."
           }
         ]
@@ -12565,6 +12613,18 @@
           },
           {
             "text": "# Hardening curve must be the rolling-direction (MD) one."
+          },
+          {
+            "text": "# Rate-dependent card ({distinct(rate_table, strain_rate)} strain rates): LAW43 takes ONE curve -",
+            "when": "distinct(rate_table, strain_rate) > 1"
+          },
+          {
+            "text": "#   only the slowest-rate curve is written here.",
+            "when": "distinct(rate_table, strain_rate) > 1"
+          },
+          {
+            "text": "#   All rates: the Radioss rate-dependent deck (isotropic - no Hill48).",
+            "when": "distinct(rate_table, strain_rate) > 1"
           },
           {
             "text": "# LAW43 E and nu are temperature independent: lowest-temperature value.",
@@ -12703,6 +12763,10 @@
           },
           {
             "text": "/END"
+          },
+          {
+            "note": "카드에 속도별 표(속도 {distinct(rate_table, strain_rate)}개)가 있는데 이 형식(LAW43)은 곡선 하나만 받습니다 — 가장 느린 속도의 곡선만 실었습니다. 속도별 곡선 전부는 「Radioss (속도 의존)」 형식이 싣습니다 — 그 형식은 등방이라 Hill48 은 안 실립니다.",
+            "when": "distinct(rate_table, strain_rate) > 1"
           },
           {
             "note": "경화 곡선·탄성은 짝 카드에서 왔습니다 — 그 카드가 압연 방향(MD) 곡선이어야 항복응력비가 맞습니다(R11 = 1 이 그 방향입니다)."
@@ -12897,6 +12961,18 @@
             "rstrip": true
           },
           {
+            "text": "$ Rate-dependent card ({distinct(rate_table, strain_rate)} strain rates): MATEP takes ONE curve -",
+            "when": "distinct(rate_table, strain_rate) > 1"
+          },
+          {
+            "text": "$   only the slowest-rate curve is written here.",
+            "when": "distinct(rate_table, strain_rate) > 1"
+          },
+          {
+            "text": "$   All rates: not exported for Nastran (no rate-dependent deck).",
+            "when": "distinct(rate_table, strain_rate) > 1"
+          },
+          {
             "text": "$MATEP* MID             FORM            Y0              FID"
           },
           {
@@ -13072,6 +13148,10 @@
             "pad_to": 8,
             "pad": "                ",
             "rstrip": true
+          },
+          {
+            "note": "카드에 속도별 표(속도 {distinct(rate_table, strain_rate)}개)가 있는데 이 형식(MATEP)은 곡선 하나만 받습니다 — 가장 느린 속도의 곡선만 실었습니다. Nastran 으로 속도별 표를 싣는 형식은 없습니다.",
+            "when": "distinct(rate_table, strain_rate) > 1"
           },
           {
             "note": "경화 곡선·탄성은 짝 카드에서 왔습니다 — 그 카드가 압연 방향(MD) 곡선이어야 항복응력비가 맞습니다(R11 = 1 이 그 방향입니다)."
@@ -13268,6 +13348,18 @@
             "pad_to": 8,
             "pad": "                ",
             "rstrip": true
+          },
+          {
+            "text": "$ Rate-dependent card ({distinct(rate_table, strain_rate)} strain rates): PLASTIC takes ONE curve -",
+            "when": "distinct(rate_table, strain_rate) > 1"
+          },
+          {
+            "text": "$   only the slowest-rate curve is written here.",
+            "when": "distinct(rate_table, strain_rate) > 1"
+          },
+          {
+            "text": "$   All rates: the OptiStruct rate-dependent deck (isotropic - no Hill48).",
+            "when": "distinct(rate_table, strain_rate) > 1"
           },
           {
             "text": "$PLASTIC*MID"
@@ -13477,6 +13569,10 @@
             "pad_to": 8,
             "pad": "                ",
             "rstrip": true
+          },
+          {
+            "note": "카드에 속도별 표(속도 {distinct(rate_table, strain_rate)}개)가 있는데 이 형식(PLASTIC)은 곡선 하나만 받습니다 — 가장 느린 속도의 곡선만 실었습니다. 속도별 곡선 전부는 「OptiStruct (속도 의존)」 형식이 싣습니다 — 그 형식은 등방이라 Hill48 은 안 실립니다.",
+            "when": "distinct(rate_table, strain_rate) > 1"
           },
           {
             "note": "경화 곡선·탄성은 짝 카드에서 왔습니다 — 그 카드가 압연 방향(MD) 곡선이어야 항복응력비가 맞습니다(R11 = 1 이 그 방향입니다)."

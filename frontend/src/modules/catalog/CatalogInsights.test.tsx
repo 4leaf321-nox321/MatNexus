@@ -6,7 +6,7 @@
  *   커버리지의 빈 칸은 빈 칸으로 보인다
  */
 
-import { render, screen } from '@testing-library/react'
+import { configure, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -33,6 +33,11 @@ vi.mock('@/modules/catalog/api', async (importOriginal) => ({
 
 const A = '11111111-1111-1111-1111-111111111111'
 const B = '22222222-2222-2222-2222-222222222222'
+
+// **이 파일은 전체 실행의 부하에서 기다리기를 넉넉히**(2026-11-15). Ashby 산점도가 점 수백 개를
+// 그려 무거워, 클릭 · 휠 뒤에 서는 것(겹친 재료 목록 · 「전체 보기」)이 기본 1초를 두 번 넘겼다 —
+// 단독 실행은 매번 통과했다. 한 시험씩 고치지 않고 파일 하나에 둔다.
+configure({ asyncUtilTimeout: 5000 })
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -165,8 +170,7 @@ describe('Ashby', () => {
       one.textContent?.startsWith('같은 자리')
     )!
     fireEvent.click(stack.parentElement!)
-    // 전체 실행의 부하에서 한 번 기본 대기(1초)를 넘겨 졌다(2026-11-15) — 클릭 뒤 목록은 넉넉히 기다린다.
-    const list = await screen.findByRole('region', { name: '겹친 재료' }, { timeout: 5000 })
+    const list = await screen.findByRole('region', { name: '겹친 재료' })
     expect(list).toHaveTextContent('이 자리 근처 3종')
     expect(list).toHaveTextContent('추정 분자 가')
     expect(list).toHaveTextContent('추정 분자 나')

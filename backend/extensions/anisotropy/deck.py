@@ -47,6 +47,7 @@ from matcore.export import (
     flat_expansion_lines,
     prepare,
     register_renderer,
+    single_curve_rate_lines,
 )
 from matcore.export import ansys as _ansys
 from matcore.export import bulk as _bulk
@@ -60,6 +61,59 @@ _PAIR_NOTE = (
     "경화 곡선·탄성은 짝 카드에서 왔습니다 — 그 카드가 압연 방향(MD) 곡선이어야 항복응력비가 "
     "맞습니다(R11 = 1 이 그 방향입니다)."
 )
+
+#: 속도 카드(짝 카드에 속도별 표가 있는 것)를 Hill 덱으로 낼 때 — 솔버마다 `(카드, 영어 길,
+#: 한국어 길)`, `single_curve_rate_lines` 가 받는 꼴이다(2026-11-15). Hill 덱은 소성 곡선 하나
+#: (가장 느린 속도)만 싣는다. **Hill48 과 속도별 곡선을 함께 싣는 형식은 없다** — 같은 솔버의
+#: 속도 의존 형식은 등방이라 그쪽으로 가면 항복응력비가 빠진다. 그 사실을 길에 함께 적는다.
+RATE_HINTS: dict[str, tuple[str, str, str]] = {
+    "abaqus": (
+        "*PLASTIC",
+        "the Abaqus rate-dependent deck (isotropic - no Hill48)",
+        "속도별 곡선 전부는 「Abaqus (속도 의존)」 형식이 싣습니다 — 그 형식은 등방이라 "
+        "Hill48 은 안 실립니다.",
+    ),
+    "ansys": (
+        "TB,PLASTIC",
+        "the ANSYS rate-dependent deck (Cowper-Symonds, isotropic - no Hill48)",
+        "속도 효과는 「ANSYS (속도 의존)」 형식이 Cowper-Symonds 식으로 싣습니다 — 그 형식은 "
+        "등방이라 Hill48 은 안 실립니다.",
+    ),
+    "dyna": (
+        "*MAT_036",
+        "the LS-DYNA rate-dependent deck (isotropic - no Hill48)",
+        "속도별 곡선 전부는 「LS-DYNA (속도 의존)」 형식이 싣습니다 — 그 형식은 등방이라 "
+        "Hill48 은 안 실립니다.",
+    ),
+    "radioss": (
+        "LAW43",
+        "the Radioss rate-dependent deck (isotropic - no Hill48)",
+        "속도별 곡선 전부는 「Radioss (속도 의존)」 형식이 싣습니다 — 그 형식은 등방이라 "
+        "Hill48 은 안 실립니다.",
+    ),
+    "nastran": (
+        "MATEP",
+        "not exported for Nastran (no rate-dependent deck)",
+        "Nastran 으로 속도별 표를 싣는 형식은 없습니다.",
+    ),
+    "optistruct": (
+        "PLASTIC",
+        "the OptiStruct rate-dependent deck (isotropic - no Hill48)",
+        "속도별 곡선 전부는 「OptiStruct (속도 의존)」 형식이 싣습니다 — 그 형식은 등방이라 "
+        "Hill48 은 안 실립니다.",
+    ),
+}
+
+
+def _rate(deck: Deck, comment: str, solver: str) -> tuple[list[str], list[str]]:
+    """속도별 표가 있는 카드면 덱 주석 셋과 각주 — 중심 형식과 같은 말이다.
+
+    중심의 `single_curve_rate_lines` 를 이 확장의 길(`RATE_HINTS`)로 부른다.
+
+    각주에 「속도별」 이 서므로 `render` 의 안전망(`_rate_folded`)은 더하지 않는다 — 두 번 안
+    붙는다. 각주는 짝 카드 말(`_PAIR_NOTE`) 바로 앞에 둔다(정의판도 같은 자리).
+    """
+    return single_curve_rate_lines(deck, comment, *RATE_HINTS[solver])
 
 
 def _needs(*, density: bool) -> tuple[Need, ...]:
@@ -134,6 +188,8 @@ def render_abaqus_hill(deck: Deck) -> Rendered:
     lines = _header(deck, "**")
     lines.append(f"** Consistent units: {deck.units.declaration}")
     lines.extend(_ratio_comment("**", ratios, r))
+    rate, rate_said = _rate(deck, "**", "abaqus")
+    lines.extend(rate)
     lines.append(f"*MATERIAL, NAME={deck.name}")
     if density is not None:
         lines.append("*DENSITY")
@@ -154,7 +210,7 @@ def render_abaqus_hill(deck: Deck) -> Rendered:
     lines.append(
         ", ".join(_free(ratios[key]) for key in ("R11", "R22", "R33", "R12", "R13", "R23"))
     )
-    return Rendered(text="\n".join(lines) + "\n", notes=(*notes, _PAIR_NOTE))
+    return Rendered(text="\n".join(lines) + "\n", notes=(*notes, *rate_said, _PAIR_NOTE))
 
 
 @register_renderer(
@@ -175,14 +231,18 @@ def render_ansys_hill(deck: Deck) -> Rendered:
     ratios = hill_ratios(*r)
     lines, notes = _ansys._structural(deck)
     plastic, said = _ansys._plastic(deck)
-    lines.extend(plastic)
+    # 중심 `ansys_plastic` 과 같은 자리 — 소성 줄 바로 앞.
+    rate, rate_said = _rate(deck, "!", "ansys")
+    lines.extend([*rate, *plastic])
     lines.extend(_ratio_comment("!", ratios, r))
     lines.append(f"TB,HILL,{_ansys.MATERIAL}")
     lines.append(
         "TBDATA,1,"
         + ",".join(_free(ratios[key]) for key in ("R11", "R22", "R33", "R12", "R23", "R13"))
     )
-    return Rendered(text="\n".join(lines) + "\n", notes=(*said, *notes, _PAIR_NOTE))
+    return Rendered(
+        text="\n".join(lines) + "\n", notes=(*said, *notes, *rate_said, _PAIR_NOTE)
+    )
 
 
 @register_renderer(
@@ -218,6 +278,8 @@ def render_dyna_hill(deck: Deck) -> Rendered:
         "$ SHELLS ONLY. AOPT=0: material axis a = element node 1->2 - align with rolling."
     )
     lines.append("$ Hardening curve must be the rolling-direction (MD) one.")
+    rate, rate_said = _rate(deck, "$", "dyna")
+    lines.extend(rate)
     flat, said = flat_elastic_lines(deck, "$", "*MAT_036", ("E", "PR"))
     lines.extend(flat)
     lines.append("*MAT_3-PARAMETER_BARLAT")
@@ -241,7 +303,9 @@ def render_dyna_hill(deck: Deck) -> Rendered:
     lines.append(zeros())
     lines.extend(_dyna._curve(deck.solver_id, points))
     lines.append("*END")
-    return Rendered(text="\n".join(lines) + "\n", notes=(*notes, *said, _PAIR_NOTE))
+    return Rendered(
+        text="\n".join(lines) + "\n", notes=(*notes, *said, *rate_said, _PAIR_NOTE)
+    )
 
 
 @register_renderer(
@@ -280,6 +344,8 @@ def render_openradioss_hill(deck: Deck) -> Rendered:
         "# Hill48 from Lankford r00/r45/r90 as measured. SHELLS ONLY (/PROP/TYPE9 or 10)."
     )
     lines.append("# Hardening curve must be the rolling-direction (MD) one.")
+    rate, rate_said = _rate(deck, "#", "radioss")
+    lines.extend(rate)
     flat, said = flat_elastic_lines(deck, "#", "LAW43")
     lines.extend(flat)
     lines.append(f"/MAT/LAW43/{deck.solver_id}/1")
@@ -304,7 +370,9 @@ def render_openradioss_hill(deck: Deck) -> Rendered:
     lines.append(f"#{'X':>19}{'Y':>20}")
     lines.extend(f"{strain:>20.12E}{stress:>20.9E}" for strain, stress in points)
     lines.append("/END")
-    return Rendered(text="\n".join(lines) + "\n", notes=(*notes, *said, _PAIR_NOTE))
+    return Rendered(
+        text="\n".join(lines) + "\n", notes=(*notes, *said, *rate_said, _PAIR_NOTE)
+    )
 
 
 @register_renderer(
@@ -339,6 +407,9 @@ def render_nastran_hill(deck: Deck) -> Rendered:
     body, said = _bulk._mat1(deck, with_tables=False)
     said = [*folded, *folded_alpha, *said]
     lines.extend(body)
+    # 중심 `nastran_plastic` 과 같은 자리 — MAT1 뒤, 소성 항목 앞.
+    rate, rate_said = _rate(deck, "$", "nastran")
+    lines.extend(rate)
     lines.append("$MATEP* MID             FORM            Y0              FID")
     lines.append("$*      RYIELD          WKHARD                          H")
     lines.append("$*      Aniso           N/A             R11             R22")
@@ -359,7 +430,9 @@ def render_nastran_hill(deck: Deck) -> Rendered:
         body_table.extend((strain, stress))
     body_table.append("ENDT")
     lines.extend(_bulk._card("TABLES1", body_table))
-    return Rendered(text="\n".join(lines) + "\n", notes=(*notes, *said, _PAIR_NOTE))
+    return Rendered(
+        text="\n".join(lines) + "\n", notes=(*notes, *said, *rate_said, _PAIR_NOTE)
+    )
 
 
 #: OptiStruct PLASTIC 의 TEMP 칸 — 「기본 없음, 0 보다 큼」. 줄이 하나면 보간할 것이 없어 모든
@@ -413,6 +486,8 @@ def render_optistruct_hill(deck: Deck) -> Rendered:
     body, said = _bulk._mat1(deck, with_tables=False)
     said = [*folded, *folded_alpha, *said]
     lines.extend(body)
+    rate, rate_said = _rate(deck, "$", "optistruct")
+    lines.extend(rate)
     lines.append("$PLASTIC*MID")
     lines.append("$*      CRIT            HILL")
     lines.append("$*      R11             R22             R33             R12")
@@ -429,4 +504,6 @@ def render_optistruct_hill(deck: Deck) -> Rendered:
     for index, (strain, stress) in enumerate(points):
         fields.extend((stress, strain, _OS_TEMP if index == 0 else None, *[None] * 5))
     lines.extend(_bulk._card("PLASTIC", fields))
-    return Rendered(text="\n".join(lines) + "\n", notes=(*notes, *said, _PAIR_NOTE))
+    return Rendered(
+        text="\n".join(lines) + "\n", notes=(*notes, *said, *rate_said, _PAIR_NOTE)
+    )

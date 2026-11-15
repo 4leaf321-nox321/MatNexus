@@ -943,6 +943,56 @@ class Test전단탄성계수:
         assert not any("전단탄성계수" in one for one in notes)
 
 
+class Test탄성계수의_온도:
+    """상온 밖의 한 점에서 잰 E(2026-11-15) — 블록이 그 온도를 들면
+    (`youngs_modulus_temperature`) 덱 각주가 말한다. 덱은 그 E 하나를 모든 온도에 쓰는데
+    숫자만으로는 상온 값과 구별이 안 된다."""
+
+    HOT = _with(CARD, "elastic", youngs_modulus_temperature=811.15)
+
+    @pytest.mark.parametrize("key", ["abaqus", "dyna", "openradioss", "abaqus_elastic"])
+    def test_E_를_읽는_형식은_그_온도를_각주로_남긴다(self, key: str) -> None:
+        notes = export.render(key, self.HOT).notes
+        said = [one for one in notes if "탄성계수는" in one]
+        assert len(said) == 1, notes
+        assert "538 °C 의 값" in said[0] and "모든 온도" in said[0]
+
+    def test_덱_글자는_그대로다(self) -> None:
+        """값은 그대로 두고 말한다 — 온도 칸이 덱 줄을 바꾸지 않는다(단위계를 바꿔도)."""
+        plain = _with(CARD, "elastic")  # 같은 길로 만든 덱(근거 줄이 없다)
+        for system in export.SYSTEMS:
+            assert (
+                export.render("abaqus", self.HOT, system).text
+                == export.render("abaqus", plain, system).text
+            )
+
+    def test_온도가_없으면_조용하다(self) -> None:
+        assert not any("탄성계수는" in one for one in export.render("abaqus", CARD).notes)
+
+    def test_E_를_안_읽는_형식에는_안_단다(self) -> None:
+        """중립 JSON 은 블록을 그대로 싣는다 — 칸 이름과 단위가 파일 안에 있다."""
+        made = export.render("json", self.HOT)
+        assert not any("탄성계수는" in one for one in made.notes)
+        assert "탄성계수의 온도" in made.text
+
+    def test_온도별_표가_있으면_표가_말한다(self) -> None:
+        table = export.Deck(
+            name="T",
+            solver_id=1,
+            blocks={
+                **self.HOT.blocks,
+                "elastic": {
+                    **self.HOT.blocks["elastic"],
+                    "rows": [
+                        {"temperature": 293.15, "youngs_modulus": 200e9, "poisson_ratio": 0.3},
+                        {"temperature": 673.15, "youngs_modulus": 170e9, "poisson_ratio": 0.3},
+                    ],
+                },
+            },
+        )
+        assert not any("탄성계수는" in one for one in export.render("abaqus", table).notes)
+
+
 class Test파단_연신율:
     """ADR 0059 — ln(1+A) 를 **주석으로만** 적는다. 파단 칸을 켜면 요소가 지워진다."""
 
