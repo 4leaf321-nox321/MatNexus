@@ -280,7 +280,40 @@ def _select_tables(
             f"측정 또는 처리결과로 넣으세요."
         )
 
-    return picked[:1] if mode == "first" else picked
+    if mode == "first" and picked:
+        warnings.extend(_truncated(picked[0][0], structure))
+        return picked[:1]
+    return picked
+
+
+#: 「첫 표만 읽는 규칙에서 표가 중간에 끊겼다」 경고의 머리 — 시험 점검(`checks`)이 이 말로
+#: 골라 올린다(`app.modules.tests.services._truncated_tables`).
+TRUNCATED = "수치 표가 중간에 끊겼습니다"
+
+
+def _truncated(first: Table, structure: TabularFile) -> list[str]:
+    """첫 표만 읽는 규칙(`first`)인데 **같은 칸 수의 표가 뒤에 더 있으면** 끊긴 자리와 버린
+    줄 수를 말한다(2026-11-15). 막지 않는다 — 정말 다른 표일 수도 있다.
+
+    천 단위 쉼표(`"1,234.5"`) · `#DIV/0!` 한 칸이면 숫자 블록이 거기서 끊기고, 뒤의 줄은
+    「둘째 표」 가 되어 첫 표만 읽는 기본 규칙에 버려진다. 곡선이 잘린 채 「읽힘」 이 됐다 —
+    점이 몇 개 줄었을 뿐 모양이 멀쩡해서 아무도 못 본다.
+    """
+    width = first.column_count
+    later = [
+        table
+        for table in structure.tables
+        if table.index > first.index and table.column_count == width
+    ]
+    if not later or first.stop_line is None:
+        return []
+    rows = sum(table.row_count for table in later)
+    return [
+        f"{TRUNCATED} — {first.stop_line}행에서 끊겨 뒤의 {rows}행(같은 {width}칸 표 "
+        f"{len(later)}개)을 안 읽었습니다({first.stop_reason or '까닭 모름'}). 첫 표만 읽는 "
+        "규칙(first)이라 곡선이 그 앞에서 잘렸습니다 — 그 줄을 고쳐 다시 올리거나, 다른 표면 "
+        "프로파일의 표 규칙을 확인하세요."
+    ]
 
 
 def _build_curve(
@@ -294,6 +327,14 @@ def _build_curve(
 ) -> CurveData:
     channels: list[Channel] = []
     used: set[str] = set()
+    # **매핑한 열이 채널 키를 먼저 갖는다**(2026-11-15). 전에는 열 차례대로 키를 나눠서, 매핑
+    # 안 한 앞 열 `Strain`(% 공칭)이 `strain` 을 먼저 차지하고 매핑한 `Strain (ext)` 가
+    # `strain_1` 이 됐다 — 처리는 경고 없이 엉뚱한 열을 변형률로 썼다.
+    reserved = {
+        str(mapping["channel"])
+        for mapping in (columns.get(name) or {} for name in table.header)
+        if mapping.get("channel") and not mapping.get("skip")
+    }
 
     for index, name in enumerate(table.header):
         mapping = columns.get(name) or {}
@@ -305,7 +346,7 @@ def _build_curve(
             continue
         mapped = bool(mapping.get("channel"))
         key = str(mapping.get("channel") or "") or slug(name)
-        if key in used:
+        if key in used or (not mapped and key in reserved):
             key = f"{key}_{index}"
         used.add(key)
 

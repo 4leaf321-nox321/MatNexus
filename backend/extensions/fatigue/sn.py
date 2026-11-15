@@ -115,6 +115,7 @@ def sn_curve(
     }
     for level in levels:
         values[f"strength_at_{_level_key(level)}"] = float(a * level**b)
+    warnings.extend(extrapolation_warnings(levels, values["cycles_min"], values["cycles_max"]))
     # **수명의 흩어짐** — log N 잔차의 표준편차(자릿수). 같은 응력에서 수명이 열 배 갈리는 것이
     # 피로다. 전에는 log S 잔차라 이 값의 약 |b| 배(≈1/10)였다.
     if len(fitted) > 2:
@@ -192,6 +193,39 @@ def _levels(raw: str) -> tuple[float, ...]:
             raise GroupError(f"수명은 0 보다 커야 합니다: {value}")
         found.append(value)
     return tuple(sorted(set(found)))
+
+
+#: 범위 끝과 같은 수명을 「안」 으로 읽는 여유 — 1e5 회 파단점에서 읽은 1e5 강도는 외삽이
+#: 아니다.
+_EDGE = 1e-9
+
+
+def extrapolation_warnings(
+    levels: Sequence[float], cycles_min: float, cycles_max: float
+) -> list[str]:
+    """피로 강도를 읽은 수명이 **잰 파단 수명 범위 밖**이면 값마다 「외삽」 경고(2026-11-15).
+
+    값은 그대로 낸다 — 1e7 강도는 관례 수명이라 늘 읽고 싶은 값이다. 다만 파단점 넷(1e4~2e5
+    회)으로 1e7 강도를 읽으면 직선을 두 자릿수 늘린 것이다. 고주기 쪽은 꺾이거나(2구간) 피로
+    한도로 눕는 일이 흔해 범위 밖의 값은 어느 쪽으로든 틀릴 수 있다 — 그런데 전에는 경고 없이
+    범위 안의 값과 똑같이 나갔다. 경고는 묶음 → 카드 근거(`notes`)까지 간다.
+    """
+    found: list[str] = []
+    for level in levels:
+        if cycles_min * (1 - _EDGE) <= level <= cycles_max * (1 + _EDGE):
+            continue
+        side = "짧은" if level < cycles_min else "긴"
+        found.append(
+            f"피로 강도 @{_level_key(level)} 은 외삽입니다 — 수명 {_cycles(level)} 회가 "
+            f"잰 파단 수명 범위({_cycles(cycles_min)} ~ {_cycles(cycles_max)} 회)보다 "
+            f"{side} 쪽이라 곡선을 그 너머로 늘려 읽은 값입니다."
+        )
+    return found
+
+
+def _cycles(value: float) -> str:
+    """수명을 짧게 — `1e4` · `2.35e5` · `500`(`:.3g` 의 `e+04` 를 `e4` 로)."""
+    return f"{value:.3g}".replace("e+0", "e").replace("e+", "e")
 
 
 def _level_key(level: float) -> str:

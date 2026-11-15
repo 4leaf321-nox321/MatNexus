@@ -194,18 +194,30 @@ export function ViscoelasticPanel({
   async function build() {
     if (reference === null) return
     if (method === 'manual') {
-      // **숫자가 아닌 입력을 0 으로 바꿔 보내지 않는다**(2026-11-15 전반 점검). 「1,5」 나 유니코드
-      // 빼기(−)를 치면 그 온도는 log a_T = 0 으로 겹쳐지고 오류가 없었다. 빈 칸은 그대로 0 이다.
-      const wrong = options.filter((item) => {
-        const raw = (manual[String(item.temperature_k)] ?? '').trim()
-        return item.temperature_k !== reference && raw !== '' && !Number.isFinite(Number(raw))
-      })
-      if (wrong.length > 0) {
+      // **빈 칸도 숫자가 아닌 입력도 0 으로 바꿔 보내지 않는다**(2026-11-15 전반 점검 · 사용자
+      // 결정). 「1,5」 나 유니코드 빼기(−)를 치거나 칸을 비우면 그 온도는 log a_T = 0 — 기준
+      // 자리에 그대로 겹쳐지고 오류가 없었다. 기준 온도를 뺀 모든 온도에 적어야 겹친다.
+      const rest = options.filter((item) => item.temperature_k !== reference)
+      const typed = (item: Sweep) => (manual[String(item.temperature_k)] ?? '').trim()
+      // 입력칸 밑에 적힌 것과 같은 꼴(°C)로 짚는다 — 다른 꼴이면 어느 칸인지 다시 셈해야 한다.
+      const where = (items: Sweep[]) => items.map((item) => celsius(item.temperature_k)).join(', ')
+      const blank = rest.filter((item) => typed(item) === '')
+      const wrong = rest.filter(
+        (item) => typed(item) !== '' && !Number.isFinite(Number(typed(item)))
+      )
+      if (blank.length > 0 || wrong.length > 0) {
         setError(
           new Error(
-            `이동인자가 숫자가 아닙니다 — ${wrong
-              .map((item) => formatScalar(item.temperature_k, 'K'))
-              .join(', ')}. 소수점은 마침표, 음수는 하이픈(-)으로 적으세요.`
+            [
+              blank.length > 0
+                ? `이동인자를 적지 않은 온도가 있습니다 — ${where(blank)}. 기준 온도를 뺀 모든 온도에 log a_T 를 적으세요.`
+                : '',
+              wrong.length > 0
+                ? `이동인자가 숫자가 아닙니다 — ${where(wrong)}. 소수점은 마침표, 음수는 하이픈(-)으로 적으세요.`
+                : '',
+            ]
+              .filter(Boolean)
+              .join(' ')
           )
         )
         return
@@ -626,9 +638,9 @@ function ImportRow({
 /**
  * 장비가 준 이동인자를 받는 칸.
  *
- * **비워 두면 0 으로 보낸다** — 0 은 "안 민다" 는 뜻이라 그 온도의 스윕이 기준
- * 자리에 그대로 겹친다. 결과를 보면 안 채웠다는 것이 바로 보인다. 그럴듯한
- * 값을 대신 지어 넣는 것보다 이 편이 낫다.
+ * **기준 온도를 뺀 모든 온도에 적어야 겹친다**(2026-11-15 사용자 결정). 전에는 비워 두면
+ * 0 으로 보냈다 — 0 은 "안 민다" 는 뜻이라 그 온도의 스윕이 기준 자리에 그대로 겹쳤고,
+ * 오류 없이 틀린 마스터커브가 섰다. 이제 `build()` 가 빈 칸을 온도를 짚어 막는다.
  *
  * 기준 온도는 정의상 log a_T = 0 이라 고칠 수 없게 잠근다.
  */
@@ -672,7 +684,12 @@ function ManualShifts({
   )
 }
 
-/** 입력칸의 문자열을 서버가 받는 모양(온도 문자열 → 숫자)으로. */
+/**
+ * 입력칸의 문자열을 서버가 받는 모양(온도 문자열 → 숫자)으로.
+ *
+ * **빈 칸을 0 으로 메우지 않는다** — `build()` 가 빈 칸과 숫자가 아닌 입력을 먼저 막는다
+ * (2026-11-15). 기준 온도만 정의상 0 이다.
+ */
 function manualShifts(
   options: Sweep[],
   reference: number,
@@ -681,9 +698,7 @@ function manualShifts(
   const shifts: Record<string, number> = {}
   for (const item of options) {
     const key = String(item.temperature_k)
-    const raw = (item.temperature_k === reference ? '0' : (values[key] ?? '')).trim()
-    const parsed = Number(raw)
-    shifts[key] = raw === '' || !Number.isFinite(parsed) ? 0 : parsed
+    shifts[key] = item.temperature_k === reference ? 0 : Number((values[key] ?? '').trim())
   }
   return shifts
 }

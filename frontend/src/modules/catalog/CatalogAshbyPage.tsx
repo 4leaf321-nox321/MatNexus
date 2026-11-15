@@ -18,7 +18,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 
 import { CATEGORY_LABELS, DOMAIN_LABELS, catalogApi, systemUnit, unitLabelAs } from '@/modules/catalog/api'
 import type { AshbyResult } from '@/modules/catalog/api'
-import { panBy, toViewBox, zoomAt } from '@/modules/catalog/ashbyView'
+import { axisTicks, panBy, tickLabel, toViewBox, zoomAt } from '@/modules/catalog/ashbyView'
 import type { Box } from '@/modules/catalog/ashbyView'
 import { UnitModeToggle, useUnitMode } from '@/modules/catalog/unitMode'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
@@ -42,27 +42,6 @@ const PALETTE = [
   '#F0E442',
   '#999999',
 ]
-
-function ticksOf(min: number, max: number, log: boolean): number[] {
-  if (log) {
-    const lo = Math.floor(Math.log10(min))
-    const hi = Math.ceil(Math.log10(max))
-    return Array.from({ length: hi - lo + 1 }, (_, at) => 10 ** (lo + at))
-  }
-  const span = max - min || 1
-  const step = 10 ** Math.floor(Math.log10(span / 4))
-  const nice = [step, step * 2, step * 5, step * 10].find((one) => span / one <= 6) ?? step
-  const start = Math.ceil(min / nice) * nice
-  const out: number[] = []
-  for (let tick = start; tick <= max; tick += nice) out.push(tick)
-  return out
-}
-
-function fmtTick(value: number): string {
-  const magnitude = Math.abs(value)
-  if (magnitude !== 0 && (magnitude >= 1e4 || magnitude < 1e-2)) return value.toExponential(0)
-  return String(Number(value.toPrecision(3)))
-}
 
 /** 한 자리에 포개진 점들 — 값이 똑같아 아무리 당겨도 안 떨어진다. */
 interface Stack {
@@ -171,10 +150,10 @@ function Scatter({
 
   const groups = [...new Set(visible.map((point) => point.group))].sort()
   const colorOf = new Map(groups.map((group, at) => [group, PALETTE[at % PALETTE.length]]))
-  const xTicks = ticksOf(logX ? 10 ** box.x0 : box.x0, logX ? 10 ** box.x1 : box.x1, logX).filter(
+  const xTicks = axisTicks(logX ? 10 ** box.x0 : box.x0, logX ? 10 ** box.x1 : box.x1, logX).filter(
     (tick) => toX(tick) >= PAD.left - 1 && toX(tick) <= WIDTH - PAD.right + 1
   )
-  const yTicks = ticksOf(logY ? 10 ** box.y0 : box.y0, logY ? 10 ** box.y1 : box.y1, logY).filter(
+  const yTicks = axisTicks(logY ? 10 ** box.y0 : box.y0, logY ? 10 ** box.y1 : box.y1, logY).filter(
     (tick) => toY(tick) <= PAD.top + plotH + 1 && toY(tick) >= PAD.top - 1
   )
 
@@ -274,7 +253,7 @@ function Scatter({
                 fill="currentColor"
                 opacity={0.7}
               >
-                {fmtTick(tick)}
+                {tickLabel(tick)}
               </text>
             </g>
           ))}
@@ -296,7 +275,7 @@ function Scatter({
                 fill="currentColor"
                 opacity={0.7}
               >
-                {fmtTick(tick)}
+                {tickLabel(tick)}
               </text>
             </g>
           ))}
@@ -393,7 +372,7 @@ function Scatter({
                     {point.tier >= ESTIMATED_TIER && ' · 추정값'}
                   </span>
                   <span className="ml-auto font-mono text-xs tabular-nums">
-                    {fmtTick(point.x)} · {fmtTick(point.y)}
+                    {tickLabel(point.x)} · {tickLabel(point.y)}
                   </span>
                 </button>
               </li>

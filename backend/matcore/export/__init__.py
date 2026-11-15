@@ -874,6 +874,14 @@ def _thermal_lines(deck: Deck) -> list[str]:
     return lines
 
 
+#: 속도 카드를 Abaqus 단일 곡선(*PLASTIC 한 벌)으로 낼 때 — `(카드, 영어 길, 한국어 길)`.
+ABAQUS_RATE_HINT = (
+    "*PLASTIC",
+    "the Abaqus rate-dependent deck (*PLASTIC, RATE= per rate)",
+    "속도별 곡선 전부는 「Abaqus (속도 의존)」 형식(*PLASTIC, RATE=)이 싣습니다.",
+)
+
+
 @register_renderer(
     key="abaqus",
     label="Abaqus (탄소성)",
@@ -907,6 +915,9 @@ def render_abaqus(deck: Deck) -> Rendered:
 
     lines = _header(deck, "**")
     lines.append(f"** Consistent units: {deck.units.declaration}")
+    rate, said = single_curve_rate_lines(deck, "**", *ABAQUS_RATE_HINT)
+    lines.extend(rate)
+    notes.extend(said)
     if density is None:
         # *DENSITY 는 Abaqus 에서 선택이다. 빼되 **왜 뺐는지 적는다** — 동적
         # 해석을 돌리려던 사람이 덱만 보고 알 수 있어야 한다.
@@ -951,10 +962,50 @@ def render_abaqus(deck: Deck) -> Rendered:
 #: 정의판이 「속도별 표 없이 CS 요약만」 을 묻는 식 — `cowper_symonds_summary` 와 같은 뜻.
 CS_ONLY = "has(rate_table.cs_d) and has(rate_table.cs_p) and count(rate_table) == 0"
 
+#: 정의판이 「카드의 속도별 표에 든 속도 수」 를 묻는 식 — `rate_count_on_card` 와 같은 뜻.
+RATES_ON_CARD = "distinct(rate_table, strain_rate)"
+
+
+def single_curve_rate_template(
+    comment: str, card: str, hint: str, hint_ko: str
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """`single_curve_rate_lines` 를 정의판 줄로 — `(각주 줄, 덱 줄 셋)`.
+
+    둘을 가른 것은 **각주의 차례** 때문이다 — 정의판의 각주는 줄 차례로 쌓이는데, ANSYS ·
+    벌크 형식은 코드판이 소성 쪽 각주를 탄성 쪽보다 먼저 단다. 각주 줄은 그 자리에, 덱 줄은
+    덱 안의 자리에 따로 둔다. 씨앗(`기본-형식-정의.json`)의 여섯 형식이 이 줄을 그대로 든다.
+    """
+    when = f"{RATES_ON_CARD} > 1"
+    count = "{" + RATES_ON_CARD + "}"
+    note = {
+        "note": (
+            f"카드에 속도별 표(속도 {count}개)가 있는데 이 형식({card})은 곡선 하나만 "
+            f"받습니다 — 가장 느린 속도의 곡선만 실었습니다. {hint_ko}"
+        ),
+        "when": when,
+    }
+    text = [
+        {
+            "text": (
+                f"{comment} Rate-dependent card ({count} strain rates): "
+                f"{card} takes ONE curve -"
+            ),
+            "when": when,
+        },
+        {"text": f"{comment}   only the slowest-rate curve is written here.", "when": when},
+        {"text": f"{comment}   All rates: {hint}.", "when": when},
+    ]
+    return note, text
+
+
+_ABAQUS_RATE_NOTE, _ABAQUS_RATE_TEXT = single_curve_rate_template("**", *ABAQUS_RATE_HINT)
+
 ABAQUS_TEMPLATE: dict[str, Any] = {
     "lines": [
         {"block": "header"},
         {"text": "** Consistent units: {units}"},
+        _ABAQUS_RATE_NOTE,
+        *_ABAQUS_RATE_TEXT,
         {
             "when": "missing:elastic.density",
             "text": (
@@ -1407,6 +1458,14 @@ def render_abaqus_hyperelastic(deck: Deck) -> Rendered:
     return Rendered(text="\n".join(lines) + "\n", notes=tuple(notes))
 
 
+#: 속도 카드를 LAW36 곡선 하나로 낼 때 — `(카드, 영어 길, 한국어 길)`.
+RADIOSS_RATE_HINT = (
+    "LAW36",
+    "the Radioss rate-dependent deck (one /FUNCT per rate)",
+    "속도별 곡선 전부는 「Radioss (속도 의존)」 형식(속도마다 /FUNCT)이 싣습니다.",
+)
+
+
 @register_renderer(
     key="openradioss",
     label="Radioss (탄소성)",
@@ -1440,7 +1499,11 @@ def render_openradioss(deck: Deck) -> Rendered:
     lines.extend(fail)
     notes.extend(said)
     # 변형률 속도 하나짜리 표다. 속도 의존을 넣으려면 곡선이 여러 개 있어야 하고,
-    # 그것은 시험이 여러 속도로 있어야 한다는 뜻이다(`openradioss_rate`).
+    # 그것은 시험이 여러 속도로 있어야 한다는 뜻이다(`openradioss_rate`). 카드에 속도별
+    # 표가 있으면 그 사실을 적는다.
+    rate, said = single_curve_rate_lines(deck, "#", *RADIOSS_RATE_HINT)
+    lines.extend(rate)
+    notes.extend(said)
     lines.extend(
         law36_lines(deck, [(0.0, deck.solver_id, points)], eps_p_max=failure_value(deck))
     )
@@ -1519,6 +1582,73 @@ def cowper_symonds_summary(deck: Deck) -> tuple[float, float] | None:
     if d is None or p is None:
         return None
     return d, p
+
+
+def rate_count_on_card(deck: Deck) -> int:
+    """카드의 속도별 표(`rate_table` 행)에 든 **서로 다른 속도 수** — 행이 없으면 0.
+
+    요약값 `rate_count` 가 아니라 행에서 센다 — 덱이 무엇을 버리는지는 행이 말한다.
+    정의판의 `RATES_ON_CARD` 와 같은 뜻이다 — 속도가 빠진 줄이 하나라도 있으면 그 식이 멈춰
+    (조건에서는 거짓) 세지 않으므로 여기서도 0 이다.
+    """
+    rates: set[float] = set()
+    for row in deck.rows("rate_table"):
+        rate = row.get("strain_rate")
+        if isinstance(rate, bool) or not isinstance(rate, int | float):
+            return 0
+        rates.add(float(rate))
+    return len(rates)
+
+
+def single_curve_rate_lines(
+    deck: Deck, comment: str, card: str, hint: str, hint_ko: str
+) -> tuple[list[str], list[str]]:
+    """속도별 표가 있는 카드를 **곡선 하나**로 내는 형식의 덱 주석과 각주 — `(줄, 각주)`.
+
+    속도 카드의 `table` 은 기준 속도(가장 느린 묶음)의 곡선이다(`create_rate_card`). 단일 곡선
+    형식(*MAT_024 · Abaqus *PLASTIC · LAW36 · MATS1 · TB,PLASTIC)은 그것 하나만 싣는다 —
+    2026-11-15 점검 전에는 아무 말이 없어서, BOM 혼합 덱의 기본(`dyna`)으로 낸 속도 카드가
+    속도 효과 없이 해석에 들어갔다. 값은 그대로 두고 **덱과 각주로 말한다.** `hint` ·
+    `hint_ko` 는 속도별 곡선 전부를 싣는 길(같은 솔버의 속도 의존 형식)이다.
+    """
+    count = rate_count_on_card(deck)
+    if count < 2:
+        return [], []
+    return (
+        [
+            f"{comment} Rate-dependent card ({count} strain rates): {card} takes ONE curve -",
+            f"{comment}   only the slowest-rate curve is written here.",
+            f"{comment}   All rates: {hint}.",
+        ],
+        [
+            f"카드에 속도별 표(속도 {count}개)가 있는데 이 형식({card})은 곡선 하나만 "
+            f"받습니다 — 가장 느린 속도의 곡선만 실었습니다. {hint_ko}"
+        ],
+    )
+
+
+def _rate_folded(target: Renderer, deck: Deck, result: Rendered) -> list[str]:
+    """속도별 표를 **곡선 하나로** 내고 말하지 않은 형식 — 붙일 각주(2026-11-15).
+
+    코어의 단일 곡선 형식은 덱 주석과 각주로 스스로 말한다(`single_curve_rate_lines`). 확장
+    (Hill 같은 소성 표 형식) · 화면에서 만든 정의는 그 말을 모른다 — `_folded` 처럼 **여기 한
+    곳에서** 각주만 단다. 소성 표(`table`)를 요구하고 속도별 표의 행은 요구하지 않는 형식이
+    대상이고, 각주에 이미 「속도별」 이 있으면 더하지 않는다.
+    """
+    count = rate_count_on_card(deck)
+    if count < 2:
+        return []
+    if not any(need.block == "table" and not need.optional for need in target.needs):
+        return []
+    if any(need.block == "rate_table" and need.rows_min > 0 for need in target.needs):
+        return []
+    if any("속도별" in note for note in result.notes):
+        return []
+    return [
+        f"카드에 속도별 표(속도 {count}개)가 있는데 이 형식은 곡선 하나만 받습니다 — 가장 "
+        "느린 속도의 곡선(카드의 소성 표)만 실었습니다. 속도별 곡선 전부는 그 솔버의 속도 "
+        "의존 형식이 싣습니다."
+    ]
 
 
 def law36_flat_elastic(deck: Deck) -> tuple[list[str], list[str]]:
@@ -2396,6 +2526,9 @@ def render(
         extra = _folded(target, moved, result)
         if extra:
             result = replace(result, notes=(*result.notes, *extra))
+    rates = _rate_folded(target, moved, result)
+    if rates:
+        result = replace(result, notes=(*result.notes, *rates))
     shear = _shear_mismatch(target, deck)
     if shear:
         result = replace(result, notes=(*result.notes, *shear))

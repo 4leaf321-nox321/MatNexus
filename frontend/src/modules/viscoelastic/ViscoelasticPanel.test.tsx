@@ -345,3 +345,75 @@ describe('겹칠 곡선 고르기', () => {
     expect(createMasterCurve.mock.calls[0][1].curve_keys).toEqual(['k1', 'k2', 'k3'])
   })
 })
+
+describe('장비 값 이동인자', () => {
+  // 2026-11-15 사용자 결정: 기준 온도를 뺀 모든 온도에 이동인자를 적어야 한다. 전에는 빈 칸이
+  // 0(안 민다)으로 나가 그 온도의 스윕이 기준 자리에 그대로 겹쳤고 오류가 없었다.
+  const sweep = (key: string, celsius: number) => ({
+    curve_key: key,
+    label: `스윕 ${celsius}`,
+    temperature_k: celsius + 273.15,
+    point_count: 8,
+    minimum_frequency_hz: 0.1,
+    maximum_frequency_hz: 10,
+    temperature_spread_k: 0.3,
+    is_ramp: false,
+  })
+
+  beforeEach(() => {
+    // 기준은 가장 높은 온도(20 °C)가 먼저 잡힌다 — -40 · -20 °C 두 칸을 적어야 한다.
+    sweeps.mockResolvedValue({
+      items: [sweep('k1', -40), sweep('k2', -20), sweep('k3', 20)],
+      warnings: [],
+      modulus_basis: 'E',
+    })
+    createMasterCurve.mockResolvedValue(CURVE)
+  })
+
+  async function manualMode() {
+    const user = userEvent.setup()
+    show()
+    await screen.findByLabelText('겹칠 곡선')
+    await user.click(screen.getByRole('button', { name: '장비 값' }))
+    const inputs = screen.getAllByLabelText(/log a_T$/)
+    return { user, inputs }
+  }
+
+  it('빈 칸이 있으면 보내지 않고 어느 온도인지 짚는다', async () => {
+    const { user, inputs } = await manualMode()
+    // 차례는 온도 오름차순 — -40 · -20 · 20(기준, 잠김).
+    expect(inputs).toHaveLength(3)
+    expect(inputs[2]).toBeDisabled()
+    await user.type(inputs[0], '3.1')
+    await user.click(screen.getByRole('button', { name: '겹치기' }))
+    expect(await screen.findByText(/이동인자를 적지 않은 온도가 있습니다/)).toBeInTheDocument()
+    const said = screen.getByText(/이동인자를 적지 않은 온도가 있습니다/).textContent ?? ''
+    expect(said).toContain('-20')
+    expect(said).not.toContain('-40')
+    expect(createMasterCurve).not.toHaveBeenCalled()
+  })
+
+  it('빈 칸과 숫자가 아닌 칸을 함께 말한다', async () => {
+    const { user, inputs } = await manualMode()
+    await user.type(inputs[0], '1,5')
+    await user.click(screen.getByRole('button', { name: '겹치기' }))
+    const said = (await screen.findByText(/이동인자가 숫자가 아닙니다/)).textContent ?? ''
+    expect(said).toContain('이동인자를 적지 않은 온도가 있습니다')
+    expect(createMasterCurve).not.toHaveBeenCalled()
+  })
+
+  it('모두 적으면 적은 값을 그대로 보내고 기준은 0 이다', async () => {
+    const { user, inputs } = await manualMode()
+    await user.type(inputs[0], '3.1')
+    await user.type(inputs[1], '-0.5')
+    await user.click(screen.getByRole('button', { name: '겹치기' }))
+    await waitFor(() => expect(createMasterCurve).toHaveBeenCalledTimes(1))
+    const sent = createMasterCurve.mock.calls[0][1]
+    expect(sent.method).toBe('manual')
+    expect(sent.manual_shifts).toEqual({
+      [String(-40 + 273.15)]: 3.1,
+      [String(-20 + 273.15)]: -0.5,
+      [String(20 + 273.15)]: 0,
+    })
+  })
+})

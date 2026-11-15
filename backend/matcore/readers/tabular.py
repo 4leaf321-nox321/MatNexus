@@ -20,7 +20,7 @@ from __future__ import annotations
 import csv
 import io
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from matcore import units
 
@@ -56,6 +56,11 @@ class Table:
     여기서 바꾸면 유럽식 소수점 같은 것을 프로파일이 뒤집을 수 없다."""
     first_line: int
     """데이터가 시작하는 줄 번호(1부터). 사람이 파일을 열어 볼 때 쓴다."""
+    stop_line: int | None = None
+    """숫자 줄이 **끊긴 줄** 번호(1부터) — 파일 끝에서 끝났으면 `None`."""
+    stop_reason: str | None = None
+    """그 줄에서 끊긴 까닭 — `'1,234.5' 를 숫자로 못 읽음(천 단위 쉼표)` 같은 사람의 말.
+    첫 표만 읽는 프로파일이 뒤에 버린 줄을 말할 때 쓴다(`profile._select_tables`)."""
 
     @property
     def row_count(self) -> int:
@@ -348,6 +353,10 @@ def read(data: bytes, options: ReadOptions | None = None) -> TabularFile:
     tops: list[int] = []
     for index, (start, end) in enumerate(blocks):
         table, top = _build_table(index, rows, start, end, opts, warnings)
+        if end < len(rows):
+            table = replace(
+                table, stop_line=end + 1, stop_reason=_stop_reason(rows, start, end)
+            )
         tables.append(table)
         tops.append(top)
 
@@ -414,6 +423,39 @@ def _find_blocks(rows: list[list[str]]) -> list[tuple[int, int]]:
             blocks.append((index, end))
         index = max(end, index + 1)
     return blocks
+
+
+#: 천 단위 쉼표가 든 숫자 — `1,234.5` · `-12,000`. 따옴표로 싼 CSV 칸이면 한 칸으로 온다.
+_THOUSANDS = re.compile(r"^[-+]?\d{1,3}(,\d{3})+(\.\d*)?([eE][-+]?\d+)?$")
+#: 스프레드시트가 칸에 남기는 오류 값 — `#DIV/0!` · `#N/A` · `#VALUE!` · `#NAME?`.
+_SHEET_ERROR = re.compile(r"^#[A-Z0-9/]+[!?]?$", re.IGNORECASE)
+
+
+def _stop_reason(rows: list[list[str]], start: int, end: int) -> str:
+    """`rows[end]` 에서 숫자 블록이 끊긴 까닭 — 사람이 그 줄을 열어 고칠 수 있게.
+
+    2026-11-15 점검: 천 단위 쉼표(`"1,234.5"`) · `#DIV/0!` 한 칸에서 곡선이 잘렸는데, 첫 표만
+    읽는 기본 규칙이 뒤의 줄을 버린 채 「읽힘」 이 됐다. 무엇 때문인지를 경고에 싣는다.
+    """
+    width = len(rows[start])
+    row = rows[end]
+    cells = [cell for cell in row if cell.strip()]
+    if not cells:
+        return "빈 줄"
+    if len(row) != width and _numeric_row(row):
+        return (
+            f"칸 수가 {width}칸에서 {len(row)}칸으로 바뀜 — 숫자 안의 구분자(천 단위 쉼표 "
+            "등)일 수 있음"
+        )
+    bad = [cell for cell in cells if not _is_number(cell)]
+    shown = ", ".join(f"'{cell[:20]}'" for cell in bad[:3])
+    if any(_THOUSANDS.match(cell.strip()) for cell in bad):
+        return f"{shown} 를 숫자로 못 읽음 — 천 단위 쉼표"
+    if any(_SHEET_ERROR.match(cell.strip()) for cell in bad):
+        return f"{shown} 를 숫자로 못 읽음 — 스프레드시트 오류 값"
+    if len(bad) == len(cells):
+        return f"숫자가 아닌 줄({shown}) — 새 머리 줄이면 다른 표일 수 있음"
+    return f"{shown} 를 숫자로 못 읽음"
 
 
 def _build_table(

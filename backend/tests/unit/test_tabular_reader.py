@@ -457,3 +457,110 @@ rad/s,°C
         )
         assert dict(structure.meta)["Operator"] == "박용진"
         assert structure.tables[0].name == "Strain Sweep - 2"
+
+
+class Test매핑한_열이_채널_키를_먼저_갖는다:
+    """2026-11-15 점검: 매핑 안 한 앞 열 `Strain`(% 공칭)이 `strain` 키를 먼저 차지해 매핑한
+    `Strain (ext)` 가 `strain_1` 이 됐다 — 처리는 경고 없이 엉뚱한 열을 변형률로 썼다."""
+
+    RULE: ClassVar[dict[str, Any]] = {
+        "match": {"extensions": [".csv"]},
+        "columns": {
+            "Strain (ext)": {"channel": "strain", "unit": "1"},
+            "Stress": {"channel": "stress", "unit": "MPa"},
+        },
+    }
+    TEXT = """
+Strain,Strain (ext),Stress
+%,1,MPa
+0.5,0.004,100
+1.0,0.009,200
+"""
+
+    def test_앞의_매핑_안_한_열은_뒤로_비킨다(self) -> None:
+        parsed = profiles.apply(self.RULE, encode(self.TEXT))
+        channels = {c.key: c for c in parsed.all_curves[0].channels}
+        assert channels["strain"].label == "Strain (ext)"
+        assert channels["strain"].values == pytest.approx((0.004, 0.009))
+        # 매핑 안 한 열은 지워지지 않고 다른 키로 남는다.
+        assert channels["strain_0"].label == "Strain"
+        assert channels["strain_0"].values == pytest.approx((0.005, 0.01))
+
+    def test_같은_채널에_둘을_매핑하면_뒤의_것이_비킨다(self) -> None:
+        """전과 같다 — 둘 다 매핑한 열이면 열 차례가 이긴다."""
+        rule = {
+            **self.RULE,
+            "columns": {
+                **self.RULE["columns"],
+                "Strain": {"channel": "strain", "unit": "%"},
+            },
+        }
+        parsed = profiles.apply(rule, encode(self.TEXT))
+        channels = {c.key: c for c in parsed.all_curves[0].channels}
+        assert channels["strain"].label == "Strain"
+        assert channels["strain_1"].label == "Strain (ext)"
+
+
+class Test표가_중간에_끊기면_말한다:
+    """2026-11-15 점검: 천 단위 쉼표(`"1,234.5"`) · `#DIV/0!` 한 칸에서 숫자 블록이 끊기면
+    첫 표만 읽는 기본 규칙이 뒤의 줄을 버리고 곡선이 잘린 채 「읽힘」 이 됐다. 막지 않고
+    끊긴 줄 · 버린 줄 수 · 까닭을 경고로 남긴다."""
+
+    RULE: ClassVar[dict[str, Any]] = {
+        "match": {"extensions": [".csv"]},
+        "columns": {
+            "Strain": {"channel": "strain", "unit": "1"},
+            "Stress": {"channel": "stress", "unit": "MPa"},
+        },
+    }
+
+    @staticmethod
+    def _file(bad: str) -> bytes:
+        rows = ["Time,Strain,Stress"]
+        rows += [f"{i},{i / 1000},{100 + i}" for i in range(1, 6)]
+        rows.append(bad)
+        rows += [f"{i},{i / 1000},{100 + i}" for i in range(7, 11)]
+        return "\n".join(rows).encode("utf-8")
+
+    @pytest.mark.parametrize(
+        ("bad", "why"),
+        [
+            ('6,0.006,"1,234.5"', "천 단위 쉼표"),
+            ("6,0.006,#DIV/0!", "스프레드시트 오류 값"),
+            ("6,0.006,1,234.5", "칸 수가 3칸에서 4칸으로 바뀜"),
+        ],
+    )
+    def test_끊긴_줄과_버린_줄_수와_까닭을_말한다(self, bad: str, why: str) -> None:
+        parsed = profiles.apply(self.RULE, self._file(bad))
+        stress = next(c for c in parsed.all_curves[0].channels if c.key == "stress")
+        # **값은 그대로 · 막지 않는다** — 읽은 것은 끊긴 줄 앞의 다섯 줄이다.
+        assert len(stress.values) == 5
+        said = [one for one in parsed.warnings if one.startswith(profiles.TRUNCATED)]
+        assert len(said) == 1, parsed.warnings
+        assert "7행에서 끊겨 뒤의 4행(같은 3칸 표 1개)을 안 읽었습니다" in said[0]
+        assert why in said[0]
+
+    def test_모든_표를_읽는_규칙이나_끝까지_읽었으면_말하지_않는다(self) -> None:
+        bad = "6,0.006,#DIV/0!"
+        every = {**self.RULE, "tables": {"mode": "all"}}
+        parsed = profiles.apply(every, self._file(bad))
+        assert not any(one.startswith(profiles.TRUNCATED) for one in parsed.warnings)
+        whole = "\n".join(
+            ["Time,Strain,Stress", *(f"{i},{i / 1000},{100 + i}" for i in range(1, 6))]
+        )
+        parsed = profiles.apply(self.RULE, whole.encode("utf-8"))
+        assert not any(one.startswith(profiles.TRUNCATED) for one in parsed.warnings)
+
+    def test_뒤의_표가_칸_수가_다르면_다른_표다(self) -> None:
+        text = "\n".join(
+            [
+                "Time,Strain,Stress",
+                *(f"{i},{i / 1000},{100 + i}" for i in range(1, 6)),
+                "",
+                "Cycle,Peak",
+                "1,200",
+                "2,210",
+            ]
+        )
+        parsed = profiles.apply(self.RULE, text.encode("utf-8"))
+        assert not any(one.startswith(profiles.TRUNCATED) for one in parsed.warnings)

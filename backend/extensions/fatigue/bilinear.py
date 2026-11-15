@@ -238,6 +238,9 @@ def sn_bilinear(
     }
     for level in levels:
         values[f"strength_at_{sn._level_key(level)}"] = float(stress_at(level))
+    warnings.extend(
+        sn.extrapolation_warnings(levels, values["cycles_min"], values["cycles_max"])
+    )
 
     grid = np.logspace(
         math.log10(float(np.min(cycles_all))),

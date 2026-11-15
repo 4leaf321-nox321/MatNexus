@@ -165,7 +165,8 @@ describe('Ashby', () => {
       one.textContent?.startsWith('같은 자리')
     )!
     fireEvent.click(stack.parentElement!)
-    const list = await screen.findByRole('region', { name: '겹친 재료' })
+    // 전체 실행의 부하에서 한 번 기본 대기(1초)를 넘겨 졌다(2026-11-15) — 클릭 뒤 목록은 넉넉히 기다린다.
+    const list = await screen.findByRole('region', { name: '겹친 재료' }, { timeout: 5000 })
     expect(list).toHaveTextContent('이 자리 근처 3종')
     expect(list).toHaveTextContent('추정 분자 가')
     expect(list).toHaveTextContent('추정 분자 나')

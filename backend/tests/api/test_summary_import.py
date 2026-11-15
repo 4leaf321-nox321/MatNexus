@@ -219,6 +219,34 @@ class TestColumns:
         assert item["conditions"]  # 속도는 조건이다
         assert "n" in " ".join(item["summaries"])
 
+    def test_조건_열의_단위가_차원이_다르면_넣지_않고_말한다(
+        self, client: TestClient, admin_headers: dict[str, str], sample_id: str
+    ) -> None:
+        """2026-11-15 점검: 폼은 차원을 보는데(MNX-TESTS-0014) 표 입력은 계수만 바꿔 넣어
+        `속도 (mm)` 가 속도 칸에 m 로 조용히 들어갔다."""
+        made = send(
+            client,
+            admin_headers,
+            sample_id,
+            ["시편\t탄성역 속도 (mm)\tn값", "MD-1\t10\t0.21"],
+            preview=True,
+        )
+        (item,) = made.json()["items"]
+        assert item["status"] == "new"
+        assert item["conditions"] == {}
+        assert any("머리의 단위 mm" in one for one in item["warnings"]), item["warnings"]
+        # 같은 차원의 다른 단위는 그대로 받는다(mm/s → m/s).
+        fine = send(
+            client,
+            admin_headers,
+            sample_id,
+            ["시편\t탄성역 속도 (mm/s)", "MD-1\t10"],
+            preview=True,
+        )
+        (one,) = fine.json()["items"]
+        assert list(one["conditions"].values()) == [pytest.approx(0.01)]
+        assert not one["warnings"]
+
     def test_숫자가_아닌_값도_버리지_않는다(
         self, client: TestClient, admin_headers: dict[str, str], sample_id: str
     ) -> None:

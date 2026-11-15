@@ -40,6 +40,7 @@ from matcore.export import (
     prony_terms,
     rate_curves,
     register_renderer,
+    single_curve_rate_lines,
     viscoelastic_shift,
     viscoelastic_shift_notes,
 )
@@ -273,6 +274,22 @@ def _rendered(lines: list[str], notes: list[str]) -> Rendered:
 # ── 선형 · 탄소성 · 열 — 두 솔버가 같은 카드 ─────────────────────────────────────
 
 
+#: 속도 카드를 MATS1 곡선 하나로 낼 때 — 솔버마다 `(카드, 영어 길, 한국어 길)`. Nastran 에는
+#: 속도별 표를 싣는 우리 형식이 없다(OptiStruct 만 `optistruct_rate`).
+BULK_RATE_HINTS = {
+    "nastran": (
+        "MATS1",
+        "not exported for Nastran (no rate-dependent deck)",
+        "Nastran 으로 속도별 표를 싣는 형식은 없습니다.",
+    ),
+    "optistruct": (
+        "MATS1",
+        "the OptiStruct rate-dependent deck (MATS1 + TABLEMD)",
+        "속도별 곡선 전부는 「OptiStruct (속도 의존)」 형식(TABLEMD)이 싣습니다.",
+    ),
+}
+
+
 def _register_common(prefix: str, solver: str, extension: str) -> None:
     """두 솔버가 **같은 카드**를 쓰는 형식 셋을 등록한다."""
 
@@ -323,7 +340,11 @@ def _register_common(prefix: str, solver: str, extension: str) -> None:
     def render_plastic(deck: Deck) -> Rendered:
         plastic, said = _mats1(deck)
         body, notes = _mat1(deck)
-        return _rendered([*_head(deck, solver), *body, *plastic], [*said, *notes])
+        # 속도별 표가 있는 카드는 곡선 하나(가장 느린 속도)만 싣는다고 적는다(2026-11-15).
+        rate, rate_said = single_curve_rate_lines(deck, "$", *BULK_RATE_HINTS[prefix])
+        return _rendered(
+            [*_head(deck, solver), *body, *rate, *plastic], [*said, *rate_said, *notes]
+        )
 
     @register_renderer(
         key=f"{prefix}_thermal",

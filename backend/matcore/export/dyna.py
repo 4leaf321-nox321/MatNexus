@@ -44,6 +44,7 @@ from matcore.export import (
     prony_terms,
     rate_curves,
     register_renderer,
+    single_curve_rate_lines,
     viscoelastic_shift,
     viscoelastic_shift_notes,
 )
@@ -217,6 +218,14 @@ def _mat024_head(
     return lines
 
 
+#: 속도 카드를 *MAT_024 곡선 하나로 낼 때 — `(카드, 영어 길, 한국어 길)`.
+DYNA_RATE_HINT = (
+    "*MAT_024",
+    "the LS-DYNA rate-dependent deck (*DEFINE_TABLE, _rate)",
+    "속도별 곡선 전부는 「LS-DYNA (속도 의존)」 형식(*DEFINE_TABLE)이 싣습니다.",
+)
+
+
 @register_renderer(
     key="dyna",
     label="LS-DYNA (탄소성)",
@@ -257,6 +266,11 @@ def render_dyna(deck: Deck) -> Rendered:
             f"{summary[1]:.4g})만 있어 *MAT_024 의 C · P 칸에 실었습니다(VP=1) — 곡선 전체를 "
             "그 비로 늘립니다."
         )
+    # **속도별 표가 있는 카드** — LCSS 는 곡선 하나(가장 느린 속도)다. 값은 그대로 두고 말한다
+    # (2026-11-15 점검: BOM 혼합 덱의 기본이 이 형식이라 속도 카드가 늘 이 길로 나갔다).
+    rate, said = single_curve_rate_lines(deck, "$", *DYNA_RATE_HINT)
+    lines.extend(rate)
+    notes.extend(said)
     lines.extend(
         _mat024_head(
             deck,

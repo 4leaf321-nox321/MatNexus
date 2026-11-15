@@ -44,6 +44,7 @@ from matcore.export import (
     prepare,
     prony_terms,
     register_renderer,
+    single_curve_rate_lines,
     viscoelastic_shift,
     viscoelastic_shift_notes,
 )
@@ -221,6 +222,16 @@ def render_ansys_elastic(deck: Deck) -> Rendered:
     return Rendered(text="\n".join(lines) + "\n", notes=tuple(notes))
 
 
+#: 속도 카드를 TB,PLASTIC 곡선 하나로 낼 때 — `(카드, 영어 길, 한국어 길)`. ANSYS 는 속도별
+#: 표를 받지 않는다 — 속도 의존 형식이 Cowper-Symonds 식(Perzyna)으로 싣는다.
+ANSYS_RATE_HINT = (
+    "TB,PLASTIC",
+    "the ANSYS rate-dependent deck (TB,RATE PERZYNA, Cowper-Symonds)",
+    "속도 효과는 「ANSYS (속도 의존)」 형식이 Cowper-Symonds 식(TB,RATE PERZYNA)으로 "
+    "싣습니다 — ANSYS 는 속도별 표를 받지 않습니다.",
+)
+
+
 @register_renderer(
     key="ansys_plastic",
     label="ANSYS (탄소성)",
@@ -238,8 +249,11 @@ def render_ansys_elastic(deck: Deck) -> Rendered:
 def render_ansys_plastic(deck: Deck) -> Rendered:
     lines, notes = _structural(deck)
     plastic, said = _plastic(deck)
-    lines.extend(plastic)
-    return Rendered(text="\n".join(lines) + "\n", notes=tuple([*said, *notes]))
+    # 속도별 표가 있는 카드는 곡선 하나(가장 느린 속도)만 싣는다고 적는다(2026-11-15). 속도
+    # 의존 형식(`ansys_rate`)은 `_plastic` 을 같이 쓰므로 여기에만 둔다.
+    rate, rate_said = single_curve_rate_lines(deck, "!", *ANSYS_RATE_HINT)
+    lines.extend([*rate, *plastic])
+    return Rendered(text="\n".join(lines) + "\n", notes=tuple([*said, *rate_said, *notes]))
 
 
 @register_renderer(

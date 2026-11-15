@@ -82,7 +82,8 @@ register(
     order=30,
     # 2: 회귀를 log N ← log S(ASTM E739)로 · 흩어짐의 정의도 그쪽으로(2026-10-08 에 바꾸고
     # 판을 안 올려 옛 묶음과 구별이 안 됐다 — 2026-11-15 전반 점검).
-    version="2",
+    # 3: 잰 파단 수명 범위 밖에서 읽은 피로 강도에 「외삽」 경고(값은 같다, 2026-11-15).
+    version="3",
 )(sn.sn_curve)
 
 
@@ -169,5 +170,6 @@ register(
     },
     card=bilinear.card_blocks,
     order=31,
-    version="1",
+    # 2: 잰 파단 수명 범위 밖에서 읽은 피로 강도에 「외삽」 경고(값은 같다, 2026-11-15).
+    version="2",
 )(bilinear.sn_bilinear)

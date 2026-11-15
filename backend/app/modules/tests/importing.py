@@ -114,11 +114,15 @@ def read_header(header: list[str], conditions: list[TestConditionField]) -> list
     **조건은 시험 종류가 선언한 것만** 조건으로 본다. 나머지 숫자 열은 요약값이다 —
     표마다 열이 다르고, 그걸 미리 알 방법이 없다.
     """
-    by_name: dict[str, tuple[str, str]] = {}
+    by_name: dict[str, tuple[str, str, str | None]] = {}
     for spec in conditions:
         for name in (spec.label, spec.key):
             if name:
-                by_name[name.strip().casefold()] = (spec.key, spec.si_unit or "1")
+                by_name[name.strip().casefold()] = (
+                    spec.key,
+                    spec.si_unit or "1",
+                    spec.dimension,
+                )
 
     columns: list[Column] = []
     for raw in header:
@@ -143,6 +147,10 @@ def read_header(header: list[str], conditions: list[TestConditionField]) -> list
 
         condition = by_name.get(name.casefold())
         if condition is not None:
+            wrong = _wrong_dimension(name, unit, condition[2])
+            if wrong:
+                columns.append(Column("unknown", label=name, reason=wrong))
+                continue
             columns.append(
                 Column("condition", key=condition[0], label=name, unit=unit or condition[1])
             )
@@ -156,6 +164,28 @@ def read_header(header: list[str], conditions: list[TestConditionField]) -> list
             continue
         columns.append(Column("summary", key=key, label=name, unit=unit))
     return columns
+
+
+def _wrong_dimension(name: str, unit: str | None, dimension: str | None) -> str | None:
+    """조건 열 머리의 단위가 **그 조건의 차원과 다르면** 그 말 — 같거나 모르면 `None`.
+
+    2026-11-15 점검: 시험 등록 폼은 차원을 본다(`shared.conditions._to_si_checked`,
+    MNX-TESTS-0014). 표 입력은 계수만 바꿔 넣어서 `온도 (MPa)` 가 온도 칸에 Pa 로, `속도
+    (mm)` 가 속도 칸에 m 로 조용히 들어갔다. 이제 그 열을 조건으로 안 넣고 줄마다 말한다.
+    모르는 단위는 여기서 묻지 않는다 — 값을 읽을 때 「못 읽었습니다」 로 말한다.
+    """
+    if not unit or not dimension:
+        return None
+    try:
+        resolved = units.unit_of(units.canonical(unit) or unit)
+    except units.UnknownUnit:
+        return None
+    if units.same_dimension(resolved.dimension, dimension):
+        return None
+    return (
+        f"'{name}' 은 {dimension} 조건인데 머리의 단위 {unit} 은 {resolved.dimension} "
+        "입니다 — 이 열을 조건으로 넣지 않았습니다. 머리의 단위를 고쳐 다시 붙이세요."
+    )
 
 
 def _si(value: str, unit: str | None) -> tuple[float | None, str]:

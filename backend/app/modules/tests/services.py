@@ -670,14 +670,19 @@ def _read_and_store(db: Session, run: TestRun, test_type: TestType) -> str:
     # 장비가 겹쳐 준 표를 마스터커브로 등록하는 것이 여기 걸린다(`parse_hooks`).
     # 훅에서 난 오류는 경고가 될 뿐 읽기를 실패시키지 않는다.
     db.flush()
-    notes = [
-        *picked,
-        *parsed.warnings,
-        *renamed,
-        *(one["message"] for one in run.checks),
-        *filled,
-        *parse_hooks.fire_parsed(db, run),
-    ]
+    # 같은 말은 한 번 — 읽기 경고가 점검으로도 올라간다(`_truncated_tables`).
+    notes = list(
+        dict.fromkeys(
+            [
+                *picked,
+                *parsed.warnings,
+                *renamed,
+                *(one["message"] for one in run.checks),
+                *filled,
+                *parse_hooks.fire_parsed(db, run),
+            ]
+        )
+    )
     if notes:
         # 경고는 실패가 아니지만 사라지면 안 된다. 상세 화면이 그대로 보여 준다.
         run.source_metadata = {
@@ -761,8 +766,24 @@ def _checks(
     found += _condition_mismatch(db, run, test_type, parsed, typed)
     found += _orientation_mismatch(db, run, parsed)
     found += _dimensionless_suspects(parsed)
+    found += _truncated_tables(parsed)
     found += _duplicates(db, run)
     return found
+
+
+def _truncated_tables(parsed: ParsedTest) -> list[dict[str, str]]:
+    """**수치 표가 중간에 끊겨 뒤를 안 읽었다**(2026-11-15) — 읽기 경고를 점검으로 올린다.
+
+    천 단위 쉼표 · `#DIV/0!` 한 칸에서 숫자 블록이 끊기면 첫 표만 읽는 기본 규칙이 뒤의 줄을
+    버리고 곡선이 잘린 채 「읽힘」 이 됐다. 경고는 메모(`_warnings`)에만 섞여 처리 · 채택까지
+    안 갔다 — 점검이면 처리 결과로 옮겨 가 채택할 때 확인을 받는다. 막지는 않는다(정말 다른
+    표일 수 있다). 말은 읽는 쪽(`profiles._truncated`)이 만든다.
+    """
+    return [
+        {"code": "table_truncated", "message": one}
+        for one in parsed.warnings
+        if one.startswith(profiles.TRUNCATED)
+    ]
 
 
 #: 중복 점검에 이름을 적는 시험 수 — 나머지는 센다.
@@ -1692,6 +1713,11 @@ def cleanup_storage(
             run.source_path = None
             days = report["retention_days"]
             purged = f"※ 보존기간({days}일)이 지나 파일을 정리했습니다."
+            # **메모는 시험마다 한 번**(2026-11-15). 시험 하나가 폴더 셋(시험 · 처리 ·
+            # 마스터커브)으로 잡히면 이 말이 세 번 붙었다. 이미 있으면 — 같은 정리의 다른
+            # 폴더든, 지난 정리에서 지우다 남은 폴더를 이번에 지운 것이든 — 다시 붙이지 않는다.
+            if purged in (run.note or ""):
+                continue
             run.note = f"{run.note}\n{purged}" if run.note else purged
         db.commit()
 

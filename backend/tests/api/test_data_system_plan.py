@@ -157,6 +157,30 @@ class Test2_곁_폴더_파일:
             select(ProcessingResult).where(ProcessingResult.test_run_id == uuid.UUID(run_id))
         ).all()
 
+    def test_폴더가_여럿이어도_정리_메모는_한_번이다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str]
+    ) -> None:
+        """2026-11-15 점검: 시험 하나가 폴더 셋(시험 · 처리 · 마스터커브)으로 잡히면
+        「보존기간이 지나 파일을 정리했습니다」 가 폴더 수만큼 붙었다. 다시 정리해도 더 붙지
+        않는다."""
+        from app.modules.tests.models import TestRun
+
+        run_id = _processed_run(client, db, admin_headers)
+        client.delete(f"/api/test-runs/{run_id}", headers=admin_headers)
+        db.expire_all()
+        expired = test_services.storage_report(db, retention_days=0)["expired"]
+        mine = [item for item in expired if item["run_id"] == run_id]
+        assert len(mine) >= 2, mine  # 시험 폴더 + 처리 폴더
+        test_services.cleanup_storage(db, dry_run=False, retention_days=0)
+        run = db.get(TestRun, uuid.UUID(run_id))
+        assert run is not None
+        assert (run.note or "").count("보존기간(0일)이 지나 파일을 정리했습니다") == 1
+        test_services.cleanup_storage(db, dry_run=False, retention_days=0)
+        db.expire_all()
+        run = db.get(TestRun, uuid.UUID(run_id))
+        assert run is not None
+        assert (run.note or "").count("보존기간(0일)이 지나 파일을 정리했습니다") == 1
+
 
 class Test3_부서_합치기_이름_충돌:
     def _two(self, client: TestClient, headers: dict[str, str]) -> tuple[str, str]:

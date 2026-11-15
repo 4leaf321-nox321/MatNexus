@@ -135,6 +135,41 @@ class Test적합:
             A * 1e7**B, rel=1e-6
         )
 
+    def test_잰_수명_범위_밖의_피로_강도는_값마다_외삽_경고를_단다(self) -> None:
+        """2026-11-15 점검: 파단점 4개(1e4~2e5 회)인데 1e7 강도가 경고 없이 나왔다. 값은
+        그대로 내고 값마다 「외삽」 을 단다 — 묶음 경고가 카드 근거(`notes`)까지 간다."""
+        members = [
+            groups.Member(
+                label=f"S{i}",
+                columns={},
+                values={"stress_amplitude": A * n**B, "cycles_to_failure": n},
+            )
+            for i, n in enumerate((1e4, 3e4, 8e4, 2e5))
+        ]
+        out = groups.run_group("fatigue.sn_curve", members, {})
+        assert out.values["strength_at_1e7"] == pytest.approx(A * 1e7**B, rel=1e-9)
+        said = [one for one in out.warnings if "외삽" in one]
+        assert len(said) == 2, out.warnings
+        assert said[0].startswith("피로 강도 @1e6 은 외삽입니다")
+        assert said[1].startswith("피로 강도 @1e7 은 외삽입니다")
+        assert "잰 파단 수명 범위(1e4 ~ 2e5 회)보다 긴 쪽" in said[1]
+        blocks = registry.get("fatigue.sn_curve").meta["card"](
+            out.values, out.detail, out.warnings
+        )
+        assert [one for one in blocks["sn_curve"]["notes"] if "외삽" in one] == said
+
+    def test_범위_안이면_말하지_않고_짧은_쪽도_외삽이다(self) -> None:
+        members = [_point(f"F{i}", s) for i, s in enumerate(STRESSES)]
+        # STRESSES 의 수명은 약 1.7e2 ~ 7e5 회 — 1e5 는 안, 1e2 는 짧은 쪽 밖.
+        out = groups.run_group("fatigue.sn_curve", members, {"life_levels": "1e2, 1e5"})
+        said = [one for one in out.warnings if "외삽" in one]
+        assert len(said) == 1 and said[0].startswith("피로 강도 @1e2 은 외삽입니다")
+        assert "짧은 쪽" in said[0]
+        # 범위 끝과 같은 수명은 안이다.
+        edge = out.values["cycles_min"]
+        again = groups.run_group("fatigue.sn_curve", members, {"life_levels": f"{edge!r}"})
+        assert not any("외삽" in one for one in again.warnings)
+
 
 # ── 2구간 S-N (VOC 61, 2026-11-14) ───────────────────────────────────────────────────
 # 답을 아는 꺾인 곡선: A1 = 1000 MPa · b1 = -0.1 · 꺾임 수명 1e5 · b2 = -0.05. 꺾임 응력은
@@ -281,3 +316,23 @@ class Test2구간:
         assert "basquin_a" not in block["values"]
         assert block["values"]["sn_b2"] == pytest.approx(B2, rel=1e-5)
         assert len(block["rows"]) == 10 and sum(row["runout"] for row in block["rows"]) == 1
+
+    def test_잰_수명_범위_밖의_피로_강도는_외삽_경고를_단다(self) -> None:
+        """한 직선과 같은 규칙 — 꺾임 뒤 둘째 기울기를 범위 너머로 늘린 값도 외삽이다."""
+        members = [_bent(f"F{i}", s) for i, s in enumerate(BENT)]
+        out = groups.run_group("fatigue.sn_bilinear", members, {})
+        # BENT 의 수명은 약 1.7e2 ~ 2.5e7 회 — 기본(1e5 · 1e6 · 1e7)은 모두 안이다.
+        assert not any("외삽" in one for one in out.warnings)
+        wide = groups.run_group(
+            "fatigue.sn_bilinear", members, {"life_levels": "1e2, 1e5, 1e8"}
+        )
+        said = [one for one in wide.warnings if "외삽" in one]
+        assert [one.split(" 은 ")[0] for one in said] == ["피로 강도 @1e2", "피로 강도 @1e8"]
+        assert "짧은 쪽" in said[0] and "긴 쪽" in said[1]
+        assert wide.values["strength_at_1e8"] == pytest.approx(
+            KNEE_STRESS * (1e8 / KNEE) ** B2, rel=1e-4
+        )
+        blocks = registry.get("fatigue.sn_bilinear").meta["card"](
+            wide.values, wide.detail, wide.warnings
+        )
+        assert [one for one in blocks["sn_bilinear"]["notes"] if "외삽" in one] == said

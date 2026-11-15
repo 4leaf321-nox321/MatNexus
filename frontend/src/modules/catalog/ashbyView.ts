@@ -96,3 +96,56 @@ export function toViewBox(
   const offsetY = (rect.height - height * scale) / 2
   return [(clientX - rect.left - offsetX) / scale, (clientY - rect.top - offsetY) / scale]
 }
+
+/** 보는 범위 안에 이만큼은 눈금이 서야 값을 읽는다 — 하나면 어느 쪽으로 늘어나는지 모른다. */
+const MIN_TICKS = 3
+
+/** 로그축 한 자릿수 안의 눈금 — 10 배만 · 1·2·5 · 1~9. 차례대로 촘촘해진다. */
+const LOG_STEPS = [[1], [1, 2, 5], [1, 2, 3, 4, 5, 6, 7, 8, 9]]
+
+function linearTicks(min: number, max: number): number[] {
+  const span = max - min || 1
+  const step = 10 ** Math.floor(Math.log10(span / 4))
+  const nice = [step, step * 2, step * 5, step * 10].find((one) => span / one <= 6) ?? step
+  const start = Math.ceil(min / nice) * nice
+  const out: number[] = []
+  for (let tick = start; tick <= max; tick += nice) out.push(tick)
+  return out
+}
+
+/**
+ * 축 눈금 — `min` · `max` 는 **보는 범위의 값**(로그축이어도 값, log10 이 아니다).
+ *
+ * 로그축은 10 배마다 하나였다. 한 자릿수 안으로 당기면 눈금이 하나만 남았다(2026-11-15 점검:
+ * 3e-10 ~ 2e-9 에서 1e-9 하나) — 어느 쪽이 큰지조차 안 보인다. 그래서 범위 안에 `MIN_TICKS` 가
+ * 안 서면 2 · 5 를, 그래도 모자라면 1~9 를 더하고, 한 자릿수의 몇 분의 일까지 당기면(로그와
+ * 선형이 거의 같다) 선형 눈금으로 간다. 범위 밖 눈금도 돌려준다 — 그리는 쪽이 판 밖을 거른다.
+ */
+export function axisTicks(min: number, max: number, log: boolean): number[] {
+  if (!log) return linearTicks(min, max)
+  const lo = Math.floor(Math.log10(min))
+  const hi = Math.ceil(Math.log10(max))
+  const inside = (ticks: number[]) =>
+    ticks.filter((tick) => tick >= min * (1 - 1e-9) && tick <= max * (1 + 1e-9)).length
+  for (const steps of LOG_STEPS) {
+    const ticks: number[] = []
+    for (let exponent = lo; exponent <= hi; exponent += 1) {
+      // 곱한 끝자리 흔들림(3 × 1e-10 = 3.0000000000000004e-10)을 지운다 — 눈금 이름이 갈린다.
+      for (const step of steps) ticks.push(Number((step * 10 ** exponent).toPrecision(12)))
+    }
+    if (inside(ticks) >= MIN_TICKS) return ticks
+  }
+  return linearTicks(min, max)
+}
+
+/**
+ * 눈금 · 점의 값 글자. 아주 크거나 작으면 지수로 — **가려지는 만큼만 자릿수를 둔다**: 선형
+ * 눈금으로 넘어간 좁은 범위(3.1e-10 · 3.2e-10)가 전에는 둘 다 `3e-10` 이었다.
+ */
+export function tickLabel(value: number): string {
+  const magnitude = Math.abs(value)
+  if (magnitude !== 0 && (magnitude >= 1e4 || magnitude < 1e-2)) {
+    return Number(value.toPrecision(4)).toExponential()
+  }
+  return String(Number(value.toPrecision(3)))
+}

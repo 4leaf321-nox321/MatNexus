@@ -61,6 +61,22 @@
             "text": "** Consistent units: {units}"
           },
           {
+            "note": "카드에 속도별 표(속도 {distinct(rate_table, strain_rate)}개)가 있는데 이 형식(*PLASTIC)은 곡선 하나만 받습니다 — 가장 느린 속도의 곡선만 실었습니다. 속도별 곡선 전부는 「Abaqus (속도 의존)」 형식(*PLASTIC, RATE=)이 싣습니다.",
+            "when": "distinct(rate_table, strain_rate) > 1"
+          },
+          {
+            "text": "** Rate-dependent card ({distinct(rate_table, strain_rate)} strain rates): *PLASTIC takes ONE curve -",
+            "when": "distinct(rate_table, strain_rate) > 1"
+          },
+          {
+            "text": "**   only the slowest-rate curve is written here.",
+            "when": "distinct(rate_table, strain_rate) > 1"
+          },
+          {
+            "text": "**   All rates: the Abaqus rate-dependent deck (*PLASTIC, RATE= per rate).",
+            "when": "distinct(rate_table, strain_rate) > 1"
+          },
+          {
             "text": "** DENSITY: 측정값이 없어 비웠습니다. 동적 해석에는 이 덱이 그대로 쓰이지 못합니다.",
             "when": "missing:elastic.density",
             "note": "밀도가 카드에 없어 *DENSITY 를 빼고 그 사실을 덱 주석에 적었습니다."
@@ -667,6 +683,22 @@
           {
             "note": "파단 칸(Eps_p_max)을 켜라고 했지만 이 카드에 파단 연신율이 없어 비워 두었습니다.",
             "when": "has(options.fail_from_elongation) and (not has(table.elongation_at_break) or table.elongation_at_break <= 0)"
+          },
+          {
+            "note": "카드에 속도별 표(속도 {distinct(rate_table, strain_rate)}개)가 있는데 이 형식(LAW36)은 곡선 하나만 받습니다 — 가장 느린 속도의 곡선만 실었습니다. 속도별 곡선 전부는 「Radioss (속도 의존)」 형식(속도마다 /FUNCT)이 싣습니다.",
+            "when": "distinct(rate_table, strain_rate) > 1"
+          },
+          {
+            "text": "# Rate-dependent card ({distinct(rate_table, strain_rate)} strain rates): LAW36 takes ONE curve -",
+            "when": "distinct(rate_table, strain_rate) > 1"
+          },
+          {
+            "text": "#   only the slowest-rate curve is written here.",
+            "when": "distinct(rate_table, strain_rate) > 1"
+          },
+          {
+            "text": "#   All rates: the Radioss rate-dependent deck (one /FUNCT per rate).",
+            "when": "distinct(rate_table, strain_rate) > 1"
           },
           {
             "text": "/MAT/LAW36/{id}/1"
@@ -1556,6 +1588,22 @@
             "text": "$ Cowper-Symonds summary: C={rate_table.cs_d:.6g}, P={rate_table.cs_p:.6g} (no rate table) - the curve is scaled, VP=1.",
             "when": "has(rate_table.cs_d) and has(rate_table.cs_p) and count(rate_table) == 0",
             "note": "속도별 표 없이 Cowper-Symonds 요약(D = {rate_table.cs_d:.4g}, p = {rate_table.cs_p:.4g})만 있어 *MAT_024 의 C · P 칸에 실었습니다(VP=1) — 곡선 전체를 그 비로 늘립니다."
+          },
+          {
+            "note": "카드에 속도별 표(속도 {distinct(rate_table, strain_rate)}개)가 있는데 이 형식(*MAT_024)은 곡선 하나만 받습니다 — 가장 느린 속도의 곡선만 실었습니다. 속도별 곡선 전부는 「LS-DYNA (속도 의존)」 형식(*DEFINE_TABLE)이 싣습니다.",
+            "when": "distinct(rate_table, strain_rate) > 1"
+          },
+          {
+            "text": "$ Rate-dependent card ({distinct(rate_table, strain_rate)} strain rates): *MAT_024 takes ONE curve -",
+            "when": "distinct(rate_table, strain_rate) > 1"
+          },
+          {
+            "text": "$   only the slowest-rate curve is written here.",
+            "when": "distinct(rate_table, strain_rate) > 1"
+          },
+          {
+            "text": "$   All rates: the LS-DYNA rate-dependent deck (*DEFINE_TABLE, _rate).",
+            "when": "distinct(rate_table, strain_rate) > 1"
           },
           {
             "text": "*MAT_PIECEWISE_LINEAR_PLASTICITY"
@@ -3532,6 +3580,10 @@
             "when": "count(curve) > 100"
           },
           {
+            "note": "카드에 속도별 표(속도 {distinct(rate_table, strain_rate)}개)가 있는데 이 형식(TB,PLASTIC)은 곡선 하나만 받습니다 — 가장 느린 속도의 곡선만 실었습니다. 속도 효과는 「ANSYS (속도 의존)」 형식이 Cowper-Symonds 식(TB,RATE PERZYNA)으로 싣습니다 — ANSYS 는 속도별 표를 받지 않습니다.",
+            "when": "distinct(rate_table, strain_rate) > 1"
+          },
+          {
             "block": "header",
             "comment": "!"
           },
@@ -3884,6 +3936,18 @@
             "join": "",
             "prefix": "MP,KXX,MNX_MAT,",
             "when": "(count(s_kxx) > 0 or has(thermal.thermal_conductivity)) and count(s_kxx) <= 1"
+          },
+          {
+            "text": "! Rate-dependent card ({distinct(rate_table, strain_rate)} strain rates): TB,PLASTIC takes ONE curve -",
+            "when": "distinct(rate_table, strain_rate) > 1"
+          },
+          {
+            "text": "!   only the slowest-rate curve is written here.",
+            "when": "distinct(rate_table, strain_rate) > 1"
+          },
+          {
+            "text": "!   All rates: the ANSYS rate-dependent deck (TB,RATE PERZYNA, Cowper-Symonds).",
+            "when": "distinct(rate_table, strain_rate) > 1"
           },
           {
             "text": "! TB,PLASTIC + MISO takes (PLASTIC strain, true stress); first point (0, yield)."
@@ -6173,6 +6237,10 @@
             "when": "count(etab) > 1"
           },
           {
+            "note": "카드에 속도별 표(속도 {distinct(rate_table, strain_rate)}개)가 있는데 이 형식(MATS1)은 곡선 하나만 받습니다 — 가장 느린 속도의 곡선만 실었습니다. Nastran 으로 속도별 표를 싣는 형식은 없습니다.",
+            "when": "distinct(rate_table, strain_rate) > 1"
+          },
+          {
             "block": "header",
             "comment": "$"
           },
@@ -6512,6 +6580,18 @@
             "pad": "                ",
             "rstrip": true,
             "when": "count(alpha) > 1"
+          },
+          {
+            "text": "$ Rate-dependent card ({distinct(rate_table, strain_rate)} strain rates): MATS1 takes ONE curve -",
+            "when": "distinct(rate_table, strain_rate) > 1"
+          },
+          {
+            "text": "$   only the slowest-rate curve is written here.",
+            "when": "distinct(rate_table, strain_rate) > 1"
+          },
+          {
+            "text": "$   All rates: not exported for Nastran (no rate-dependent deck).",
+            "when": "distinct(rate_table, strain_rate) > 1"
           },
           {
             "text": "$ MATS1: TABLES1 is true stress vs TOTAL strain (eps = eps_p + sigma/E), first point"
@@ -7427,6 +7507,10 @@
             "when": "count(etab) > 1"
           },
           {
+            "note": "카드에 속도별 표(속도 {distinct(rate_table, strain_rate)}개)가 있는데 이 형식(MATS1)은 곡선 하나만 받습니다 — 가장 느린 속도의 곡선만 실었습니다. 속도별 곡선 전부는 「OptiStruct (속도 의존)」 형식(TABLEMD)이 싣습니다.",
+            "when": "distinct(rate_table, strain_rate) > 1"
+          },
+          {
             "block": "header",
             "comment": "$"
           },
@@ -7766,6 +7850,18 @@
             "pad": "                ",
             "rstrip": true,
             "when": "count(alpha) > 1"
+          },
+          {
+            "text": "$ Rate-dependent card ({distinct(rate_table, strain_rate)} strain rates): MATS1 takes ONE curve -",
+            "when": "distinct(rate_table, strain_rate) > 1"
+          },
+          {
+            "text": "$   only the slowest-rate curve is written here.",
+            "when": "distinct(rate_table, strain_rate) > 1"
+          },
+          {
+            "text": "$   All rates: the OptiStruct rate-dependent deck (MATS1 + TABLEMD).",
+            "when": "distinct(rate_table, strain_rate) > 1"
           },
           {
             "text": "$ MATS1: TABLES1 is true stress vs TOTAL strain (eps = eps_p + sigma/E), first point"

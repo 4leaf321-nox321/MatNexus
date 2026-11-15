@@ -7,7 +7,15 @@
 
 import { describe, expect, it } from 'vitest'
 
-import { MAX_ZOOM, panBy, settle, toViewBox, zoomAt } from '@/modules/catalog/ashbyView'
+import {
+  MAX_ZOOM,
+  axisTicks,
+  panBy,
+  settle,
+  tickLabel,
+  toViewBox,
+  zoomAt,
+} from '@/modules/catalog/ashbyView'
 
 const FULL = { x0: 0, x1: 10, y0: 0, y1: 4 }
 
@@ -67,5 +75,35 @@ describe('화면 좌표 → viewBox', () => {
 
   it('크기가 없으면 못 바꾼다', () => {
     expect(toViewBox(1, 1, { left: 0, top: 0, width: 0, height: 0 }, 860, 480)).toBeNull()
+  })
+})
+
+describe('로그축 눈금', () => {
+  // 2026-11-15 점검: 한 자릿수 안으로 당기면 가로축 눈금이 하나만 남았다(3e-10 ~ 2e-9 에서 1e-9).
+  const seen = (min: number, max: number) =>
+    axisTicks(min, max, true).filter((tick) => tick >= min && tick <= max)
+
+  it('넓으면 10 배마다 하나다', () => {
+    expect(seen(1e-12, 1e-6)).toEqual([1e-12, 1e-11, 1e-10, 1e-9, 1e-8, 1e-7, 1e-6])
+  })
+
+  it('한 자릿수 안이면 2 · 5 를 더한다', () => {
+    expect(seen(3e-10, 2e-9)).toEqual([5e-10, 1e-9, 2e-9])
+    expect(seen(3e-10, 2e-9).map(tickLabel)).toEqual(['5e-10', '1e-9', '2e-9'])
+  })
+
+  it('더 좁으면 1~9 를, 그보다 좁으면 선형 눈금을 쓴다', () => {
+    expect(seen(2.5e-10, 5.5e-10)).toEqual([3e-10, 4e-10, 5e-10])
+    const fine = seen(3.1e-10, 3.4e-10)
+    expect(fine.length).toBeGreaterThanOrEqual(3)
+    // 눈금 글자가 서로 갈린다 — 전에는 지수 0 자리라 모두 `3e-10` 이었다.
+    expect(new Set(fine.map(tickLabel)).size).toBe(fine.length)
+  })
+
+  it('곱한 끝자리가 흔들리지 않는다', () => {
+    expect(seen(2.5e-10, 5.5e-10)).toContain(3e-10)
+    expect(tickLabel(3e-10)).toBe('3e-10')
+    expect(tickLabel(2.05e11)).toBe('2.05e+11')
+    expect(tickLabel(1e5)).toBe('1e+5')
   })
 })
