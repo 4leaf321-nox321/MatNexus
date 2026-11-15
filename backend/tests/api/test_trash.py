@@ -253,6 +253,91 @@ class Test되살린다:
         assert response.status_code == 409, response.text
 
 
+class Test파일이_정리된_시험:
+    """보존기간이 지나 저장소 정리가 파일을 치운 시험 — **막지 않고 알린다**(2026-11-15).
+
+    정리 잡(`tests.services.cleanup_storage`)은 행을 남기고 `source_path` 를 비운다. 그 시험을
+    되살리면 곡선 없는 「읽힘」 시험이 돌아오는데, 휴지통은 아무 말이 없었다.
+    """
+
+    def _runs(
+        self, client: TestClient, db: Session, headers: dict[str, str]
+    ) -> tuple[dict[str, Any], Any, Any]:
+        """시편 하나에 시험 둘 — 하나는 파일이 그대로, 하나는 정리된 것(`source_path` 빔)."""
+        from app.modules.materials.models import Specimen
+        from app.modules.tests.definitions import ensure_builtin_test_types
+        from app.modules.tests.models import TestRun, TestType
+
+        ensure_builtin_test_types(db)
+        made = _tree(client, headers)
+        tensile = db.scalar(select(TestType).where(TestType.key == "tensile"))
+        assert tensile is not None
+        specimen = db.get(Specimen, uuid.UUID(made["specimen"]["id"]))
+        assert specimen is not None
+        kept, cleaned = (
+            TestRun(
+                workspace_id=specimen.workspace_id,
+                specimen_id=specimen.id,
+                test_type_id=tensile.id,
+                seq_no=seq,
+                record_name=f"CLEANED_{seq}",
+                source_path=path,
+                source_filename="a.tra",
+                status="parsed",
+            )
+            for seq, path in ((1, "2026/10/x/source/a.tra"), (2, None))
+        )
+        db.add_all([kept, cleaned])
+        db.commit()
+        return made, kept, cleaned
+
+    def test_목록과_되살리기가_정리된_시험_수를_말한다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str]
+    ) -> None:
+        made, _, _ = self._runs(client, db, admin_headers)
+        gone = client.post(
+            f"/api/materials/{made['material']['id']}/delete-cascade",
+            json={"include_test_runs": True},
+            headers=admin_headers,
+        )
+        assert gone.status_code == 200, gone.text
+
+        row = next(
+            one for one in _trash(client, admin_headers) if one["id"] == made["material"]["id"]
+        )
+        assert row["files_cleaned"] == 1
+        assert row["notice"] and "파일이 정리된 시험 1건" in row["notice"]
+        assert row["blocked"] is None, "막지 않는다 — 알리기만 한다"
+
+        back = client.post(
+            f"/api/trash/material/{made['material']['id']}/restore", headers=admin_headers
+        )
+        assert back.status_code == 200, back.text
+        assert back.json()["counts"].get("시험") == 2
+        assert back.json()["files_cleaned"] == 1
+        assert "곡선 없는 시험" in back.json()["notice"]
+
+    def test_시험_한_줄도_말하고_파일이_있으면_조용하다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str]
+    ) -> None:
+        from datetime import UTC, datetime
+
+        _, kept, cleaned = self._runs(client, db, admin_headers)
+        now = datetime.now(UTC)
+        kept.deleted_at = now
+        cleaned.deleted_at = now
+        db.commit()
+
+        rows = {one["id"]: one for one in _trash(client, admin_headers)}
+        assert rows[str(cleaned.id)]["files_cleaned"] == 1
+        assert rows[str(kept.id)]["files_cleaned"] == 0
+        assert rows[str(kept.id)]["notice"] is None
+
+        back = client.post(f"/api/trash/test_run/{kept.id}/restore", headers=admin_headers)
+        assert back.status_code == 200, back.text
+        assert back.json()["files_cleaned"] == 0 and back.json()["notice"] is None
+
+
 class Test영영_지운다:
     def test_확인_없이는_안_지운다(
         self, client: TestClient, admin_headers: dict[str, str]

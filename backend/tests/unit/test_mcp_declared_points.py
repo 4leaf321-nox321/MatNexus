@@ -61,6 +61,38 @@ def test_문헌_조건을_축의_SI_로() -> None:
     assert read(None, "frequency_hz") is None
 
 
+def test_단위가_이름에_박힌_주파수_키도_Hz_로() -> None:
+    """2026-11-15: `frequency_hz` 만 읽어, 씨앗의 `frequency_MHz` · `frequency_ghz` 값 약
+    300건이 주파수 없는 유전율로 담겼다 — 그런데도 문헌 등급을 달고 카드로 갔다."""
+    read = declared_points.catalog_condition
+    assert read({"frequency_MHz": 1}, "frequency_hz") == pytest.approx(1e6)
+    assert read({"frequency_ghz": 10}, "frequency_hz") == pytest.approx(1e10)
+    assert read({"frequency_GHz": 2.4}, "frequency_hz") == pytest.approx(2.4e9)
+    assert read({"temperature_f": 212}, "temperature_k") == pytest.approx(373.15)
+    assert read({"wavelength_um": 1.55}, "wavelength_m") == pytest.approx(1.55e-6)
+    assert read({"frequency_MHz": "1 MHz"}, "frequency_hz") is None, "글은 안 읽는다"
+
+
+def test_조건_키_표가_서버와_같다() -> None:
+    """MCP 는 서버를 import 하지 않는다(HTTP 로만 붙는다) — 표가 두 벌이라 여기서 맞대 본다."""
+    from app.shared import declared_conditions, standard_conditions
+
+    for point_key, quantity in (
+        (declared_conditions.TEMPERATURE.key, "temperature"),
+        (declared_conditions.FREQUENCY.key, "frequency"),
+        (declared_conditions.WAVELENGTH.key, "wavelength"),
+    ):
+        server = standard_conditions.catalog_keys(quantity)
+        mine = declared_points.CATALOG_KEYS[point_key]
+        assert [one[0] for one in mine] == [one[0] for one in server], point_key
+        for (_, factor, offset), (_, want_factor, want_offset) in zip(
+            mine, server, strict=True
+        ):
+            assert factor == pytest.approx(want_factor) and offset == pytest.approx(
+                want_offset
+            )
+
+
 def test_측정_온도가_점마다_다르면_비우고_적는다() -> None:
     row: dict[str, Any] = {
         "item": "비유전율",

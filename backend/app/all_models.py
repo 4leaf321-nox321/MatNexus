@@ -55,7 +55,7 @@ from app.modules.materials.models import (
     Specimen,
 )
 from app.modules.metrology.models import Instrument, InstrumentCapability
-from app.modules.notices.models import Notice, NoticeRead
+from app.modules.notices.models import Notice, NoticeRead, NoticeSeedKey
 from app.modules.notifications.models import (
     Notification,
     NotificationRule,
@@ -127,6 +127,7 @@ __all__ = [
     "McpToolDaily",
     "Notice",
     "NoticeRead",
+    "NoticeSeedKey",
     "Notification",
     "NotificationRule",
     "NotificationRuleState",

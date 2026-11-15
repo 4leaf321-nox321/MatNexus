@@ -171,6 +171,8 @@ EXCLUDED_TABLES: dict[str, str] = {
     "workspace_members": 사람,
     "notice_reads": 알림,
     "notices": 알림,
+    # 넣은 공지 씨앗 키의 기억(2026-11-15) — 배포가 같은 안내를 두 번 안 넣으려는 장부다.
+    "notice_seed_keys": 알림,
     "notification_rule_states": 알림,
     "notification_rules": 알림,
     "notifications": 알림,

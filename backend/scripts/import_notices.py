@@ -18,6 +18,9 @@
 
 - 파일 이름이 키다(`2026-09-12-물성-매핑.md` → `2026-09-12-물성-매핑`). **같은 키는
   두 번 안 들어온다** — 운영에서 고친 글을 덮지 않는다. 고쳐서 다시 내려면 새 파일.
+- **지운 초안도 다시 안 들어온다**(2026-11-15). 넣은 키는 `notice_seed_keys` 가 기억한다 —
+  전에는 공지 행의 `seed_key` 로만 봐서, 관리자가 초안을 지우면 다음 배포에 또 생겼다(씨앗 약
+  100개). 다시 받고 싶으면 그 키를 표에서 지우거나 새 파일로 낸다.
 - 첫 줄 `# 제목`, 나머지가 본문. 공지 본문은 그대로 보이므로(마크다운 아님) 줄바꿈과
   「-」 목록만 쓴다.
 - 실패해도 배포를 세우지 않는다(deploy.ps1) — 안내가 비는 것은 불편이지 장애가 아니다.
@@ -38,7 +41,7 @@ from sqlalchemy.orm import Session  # noqa: E402
 import app.all_models  # noqa: E402,F401
 from _console import survive_cp949  # noqa: E402
 from app.database import SessionLocal  # noqa: E402
-from app.modules.notices.models import Notice  # noqa: E402
+from app.modules.notices.models import Notice, NoticeSeedKey  # noqa: E402
 
 survive_cp949()
 
@@ -55,10 +58,15 @@ def read_seed(path: Path) -> tuple[str, str]:
 
 
 def plan(db: Session, seed_dir: Path = SEED_DIR) -> list[tuple[str, str, str]]:
-    """넣을 것 — `(키, 제목, 본문)`. 이미 있는 키는 뺀다."""
+    """넣을 것 — `(키, 제목, 본문)`. **넣은 적이 있는 키는 뺀다** — 그 공지를 지웠어도.
+
+    넣은 키의 기억(`notice_seed_keys`)이 정본이고, 공지 행의 `seed_key` 도 함께 본다 — 기억이
+    생기기 전에 손으로 넣은 줄이 있어도 두 번 넣지 않는다.
+    """
     if not seed_dir.exists():
         return []
-    have = set(db.scalars(select(Notice.seed_key).where(Notice.seed_key.is_not(None))))
+    have = set(db.scalars(select(NoticeSeedKey.key)))
+    have |= set(db.scalars(select(Notice.seed_key).where(Notice.seed_key.is_not(None))))
     out: list[tuple[str, str, str]] = []
     for path in sorted(seed_dir.glob("*.md")):
         key = path.stem
@@ -72,12 +80,15 @@ def plan(db: Session, seed_dir: Path = SEED_DIR) -> list[tuple[str, str, str]]:
 
 
 def run(db: Session, seed_dir: Path = SEED_DIR) -> list[str]:
-    """빠진 씨앗을 초안으로 넣는다. 넣은 키를 돌려준다."""
+    """빠진 씨앗을 초안으로 넣는다. 넣은 키를 돌려준다 — **키를 기억에 함께 적는다.**"""
     made: list[str] = []
     for key, title, body in plan(db, seed_dir):
         db.add(
             Notice(title=title, body=body, is_published=False, is_popup=False, seed_key=key)
         )
+        # 공지를 지워도 남는다 — 다음 배포가 이 키를 다시 넣지 않는다.
+        if db.get(NoticeSeedKey, key) is None:
+            db.add(NoticeSeedKey(key=key))
         made.append(key)
     if made:
         db.commit()

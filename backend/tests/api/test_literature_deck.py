@@ -276,6 +276,140 @@ class Test매핑을_거친다:
         assert made.material not in db
 
 
+class Test상온이_아닌_대표값과_정의의_단위:
+    """2026-11-15 결정 — 순위는 등급이 온도보다 앞이다(바꾸지 않는다). 그래서 상온이 아닌 값이
+    대표가 될 수 있다: 538 °C 탄성률 144.8 GPa 가 「출처 [tier 2]」 만 달고 `*ELASTIC` 상수로
+    나갔다. 그 온도를 덱 각주와 근거에 적는다. 직접 만든 정의(MPa)의 값은 SI 로 옮긴다."""
+
+    def _only_youngs(self, db: Session, sus: uuid.UUID) -> None:
+        db.execute(
+            delete(CatalogValue).where(
+                CatalogValue.material_id == sus,
+                CatalogValue.property_key == "mechanical.youngs_modulus",
+            )
+        )
+        db.commit()
+
+    def test_상온이_아닌_대표값은_각주와_근거에_그_온도를_적는다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str], tmp_path: Path
+    ) -> None:
+        sus, _ = load(db, tmp_path)
+        self._only_youngs(db, sus)
+        hot = CatalogValue(
+            mt_id=next(_NEXT),
+            material_id=sus,
+            property_key="mechanical.youngs_modulus",
+            value_num=144.8e9,
+            unit="Pa",
+            quality_tier=2,
+            conditions={"temperature_c": 538},
+        )
+        room = CatalogValue(
+            mt_id=next(_NEXT),
+            material_id=sus,
+            property_key="mechanical.youngs_modulus",
+            value_num=193e9,
+            unit="Pa",
+            quality_tier=3,
+            conditions={"temperature_k": 296.15},
+        )
+        db.add_all([hot, room])
+        db.commit()
+        material = db.get(CatalogMaterial, sus)
+        assert material is not None
+
+        made = literature_material.virtual(db, material)
+        row = next(
+            one for one in made.material.declared_properties or [] if one["item"] == "탄성계수"
+        )
+        # 등급이 앞이라 538 °C 값이 대표다 — 그것은 그대로, 대신 온도를 적는다.
+        assert row["points"][0]["value_si"] == 144.8e9
+        assert "538 degC 에서 잰 값" in row["reference"]
+        # 탄성 블록의 근거 칸도 그 온도를 든다 — 덱 말고 블록만 읽는 쪽(미리보기 · BOM)도 안다.
+        assembled = litdeck.assemble(db, material)
+        assert not isinstance(assembled, str)
+        elastic = assembled.blocks["elastic"]["values"]
+        assert "538 degC 에서 잰 값" in elastic["youngs_modulus_reference"]
+        built = build(client, admin_headers, "abaqus_elastic", [(1, sus)])
+        assert built.status_code == 200, built.text
+        assert "탄성계수 = 1.448000E+11 (538 degC 에서 잰 값)" in built.json()["text"]
+
+        # 상온 값이 이기면 아무 말도 안 붙는다.
+        hot.quality_tier = 4
+        db.commit()
+        plain = literature_material.virtual(db, material)
+        line = next(one for one in plain.provenance if one.startswith("탄성계수 ="))
+        assert "에서 잰 값" not in line
+
+    def test_글로_적힌_온도도_읽는다(self, db: Session, tmp_path: Path) -> None:
+        """「550 degC」 처럼 글로 적힌 온도(개발 DB 135건)는 「미기재」 가 아니다 — 순위도
+        각주도."""
+        sus, _ = load(db, tmp_path)
+        self._only_youngs(db, sus)
+        db.add(
+            CatalogValue(
+                mt_id=next(_NEXT),
+                material_id=sus,
+                property_key="mechanical.youngs_modulus",
+                value_num=150e9,
+                unit="Pa",
+                quality_tier=2,
+                conditions={"temperature": "550 degC"},
+            )
+        )
+        db.commit()
+        material = db.get(CatalogMaterial, sus)
+        assert material is not None
+        made = literature_material.virtual(db, material)
+        line = next(one for one in made.provenance if one.startswith("탄성계수 ="))
+        assert "(550 degC 에서 잰 값)" in line
+
+    def test_직접_만든_정의의_MPa_값은_SI_로_옮긴다(
+        self, client: TestClient, db: Session, admin_headers: dict[str, str], tmp_path: Path
+    ) -> None:
+        """단위 MPa 정의의 210000 이 덱에 210000 Pa 로 실렸다 — 차원만 보고 환산하지 않았다."""
+        from app.modules.vocabulary.models import Vocabulary, VocabularyTerm
+
+        _, fr4 = load(db, tmp_path)
+        db.add(
+            CatalogDefinition(
+                key="local.mechanical.e_mpa",
+                domain="mechanical",
+                name="시험용 MPa 탄성률",
+                si_unit="MPa",
+                value_type="numeric",
+            )
+        )
+        axis = db.scalar(select(Vocabulary).where(Vocabulary.slug == "property_item"))
+        assert axis is not None
+        term = db.scalar(
+            select(VocabularyTerm).where(
+                VocabularyTerm.vocabulary_id == axis.id, VocabularyTerm.value == "탄성계수"
+            )
+        )
+        assert term is not None
+        db.add(
+            PropertyLink(
+                property_key="local.mechanical.e_mpa", term_id=term.id, kind="same_as"
+            )
+        )
+        db.commit()
+        add_value(db, fr4, "local.mechanical.e_mpa", 210000.0, "MPa", tier=1)
+        add_value(db, fr4, "mechanical.poisson_ratio", 0.15, "1")
+        add_value(db, fr4, "physical.density", 1850.0, "kg/m^3")
+        material = db.get(CatalogMaterial, fr4)
+        assert material is not None
+
+        made = literature_material.virtual(db, material)
+        row = next(
+            one for one in made.material.declared_properties or [] if one["item"] == "탄성계수"
+        )
+        assert row["points"][0]["value_si"] == 2.1e11
+        built = build(client, admin_headers, "abaqus_elastic", [(1, fr4)])
+        assert built.status_code == 200, built.text
+        assert "*ELASTIC, TYPE=ISOTROPIC\n2.100000000000E+11," in built.json()["text"]
+
+
 class Test정의판도_같다:
     def test_정의판을_켜면_목록에_서고_코드판과_같은_글자다(
         self, client: TestClient, db: Session, admin_headers: dict[str, str], tmp_path: Path

@@ -4102,16 +4102,37 @@ def adopt_parameter_set(
     # 줄이 조용히 덮였고 카드는 어느 조건의 계수인지 모른 채 인용했다. 갈래를 `set_id[갈래]`
     # 로 적는다 — 카드 각주에도 그대로 선다. 전에 갈래 없이 적힌 줄이 있으면 그 줄을 이
     # 갈래로 올린다(어느 갈래였는지 모르는 줄을 곁에 남기지 않는다).
+    #
+    # **출처 문헌 재료도 열쇠에 든다**(2026-11-15). 출처 이름(`set_id`)이 빈 벌은 `ref` 가
+    # "" 라, 다른 문헌 재료에서 받은 같은 모델의 벌이 서로를 덮었다. 이 칸이 생기기 전의 줄
+    # (문헌 재료 비어 있음)은 같은 벌일 때만 이 문헌 재료로 올린다 — 출처 이름이 있거나 출처
+    # 글이 같을 때. 출처 이름도 없고 출처 글도 다르면 다른 문헌 재료의 벌일 수 있어 건드리지
+    # 않고 새 줄을 둔다.
     ref = f"{chosen.set_id}[{chosen.variant}]"[:200] if chosen.variant else chosen.set_id
     row = None
-    for known in dict.fromkeys((ref, chosen.set_id)):
-        row = db.scalar(
-            select(MaterialParameterSet).where(
-                MaterialParameterSet.material_id == material_id,
-                MaterialParameterSet.model == chosen.model,
-                MaterialParameterSet.source_ref == known,
+    for owner in (payload.catalog_material_id, None):
+        for known in dict.fromkeys((ref, chosen.set_id)):
+            row = db.scalar(
+                select(MaterialParameterSet).where(
+                    MaterialParameterSet.material_id == material_id,
+                    MaterialParameterSet.model == chosen.model,
+                    MaterialParameterSet.catalog_material_id.is_(None)
+                    if owner is None
+                    else MaterialParameterSet.catalog_material_id == owner,
+                    MaterialParameterSet.source_ref == known,
+                )
             )
-        )
+            if row is not None and owner is None and row.origin != "catalog":
+                row = None  # 손으로 적은 벌은 문헌 벌이 아니다
+            if (
+                row is not None
+                and owner is None
+                and not chosen.set_id
+                and row.source_detail != chosen.source
+            ):
+                row = None
+            if row is not None:
+                break
         if row is not None:
             break
     if row is None:
@@ -4121,6 +4142,7 @@ def adopt_parameter_set(
             created_by_id=user.id,
         )
         db.add(row)
+    row.catalog_material_id = payload.catalog_material_id
     row.source_ref = ref
     row.label = label
     row.property_key = payload.property_key

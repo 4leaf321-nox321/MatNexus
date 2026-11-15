@@ -23,6 +23,16 @@
 (문헌 3). 통째 교체(PATCH)로 같은 줄을 되보내면 **저장돼 있던 근거를 이어받는다**
 (`carry`) — 받는 쪽이 근거를 실어 나르게 하면 다른 항목을 고칠 때마다 등급이
 사라진다. 받은 줄에 근거 칸이 있어도 버린다 — 근거는 id 를 준 줄만 여기서 짓는다.
+
+## SI 로 대 본다 (2026-11-15)
+
+문헌 값은 **정의의 단위**로 저장돼 있다. 이관 정의는 거의 다 SI 지만, 직접 만든 정의는
+MPa · GPa · g/cm3 도 받고 값도 그 단위로 둔다(`catalog.contribute`). 선언 물성은 SI 다. 전에는
+화면 · MCP 가 「카탈로그 값은 SI」 로 알고 숫자를 그대로 보냈고, 여기도 그 숫자끼리 대 봤다 —
+단위 MPa 정의의 210000 이 선언값 210000 Pa 로 저장되면서 문헌 등급까지 달았다. 이제 후보를
+SI 로 바꿔(`si_number`) 대 본다. 받는 쪽이 저장된 숫자를 SI 인 줄 알고 보냈으면(옛 화면 ·
+MCP) 그 숫자가 SI 가 아닌 후보의 저장 숫자와 맞을 때 **그 후보의 SI 로 바로잡아** 저장한다 —
+받아 왔다는 id 가 그 숫자의 단위를 말해 준다.
 """
 
 from __future__ import annotations
@@ -38,6 +48,7 @@ from app.modules.catalog.models import CatalogValue
 from app.shared import declared_approval, representative
 from app.shared.errors import AppError
 from app.shared.text import compare_key
+from matcore import units
 
 KEY = declared_approval.CATALOG_KEY
 
@@ -50,15 +61,46 @@ def _key(value: float) -> float:
     return float(f"{float(value):.{declared_approval.DIGITS}g}")
 
 
-def candidates(db: Session, values: list[CatalogValue]) -> list[tuple[float, int, uuid.UUID]]:
-    """받아 온 값이 될 수 있는 숫자 — (숫자, 등급, 값 id).
+def si_number(number: float, unit: str | None) -> float:
+    """문헌 값의 숫자(정의의 단위)를 **SI 로.** 사내 항목으로 옮기는 자리는 모두 이것을 거친다.
+
+    눈금(HV · ShoreA …)과 단위표가 모르는 기호는 그대로 둔다 — 환산할 수 없는 것이고, 매핑이
+    그런 정의를 눈금 있는 항목에만 잇는다(`catalog.links.dimension_conflict`).
+    """
+    if not unit or units.scale(unit) is not None:
+        return float(number)
+    try:
+        return units.to_si(number, unit)
+    except units.UnknownUnit:
+        return float(number)
+
+
+def value_si(value: CatalogValue) -> float | None:
+    """문헌 값 하나의 SI 숫자. 수치가 없으면 `None`."""
+    if value.value_num is None:
+        return None
+    return si_number(float(value.value_num), value.unit)
+
+
+#: 받아 온 값이 될 수 있는 숫자 하나 — `(SI 숫자, 저장된 숫자, 등급, 값 id)`.
+Candidate = tuple[float, float, int, uuid.UUID]
+
+
+def candidates(db: Session, values: list[CatalogValue]) -> list[Candidate]:
+    """받아 온 값이 될 수 있는 숫자 — (SI 숫자, 저장된 숫자, 등급, 값 id).
 
     값 그대로가 기본이고, **조건이 같은 중복을 묶은 중앙값**도 든다 — 문헌 상세에서 그런 값이
     여럿이면 화면은 대표값 자리에서 그 중앙값을 받아 온다(`representative._summary`). 중앙값의
     등급은 묶인 값들 가운데 **가장 낮은 것**이다 — 3등급이 섞인 중앙값을 1등급이라 할 수 없다.
+    저장된 숫자는 정의의 단위다 — 옛 받는 쪽이 그것을 SI 인 줄 알고 보낸 것을 알아보는 데 쓴다.
     """
-    out = [
-        (float(one.value_num), int(one.quality_tier), one.id)
+    out: list[Candidate] = [
+        (
+            si_number(float(one.value_num), one.unit),
+            float(one.value_num),
+            int(one.quality_tier),
+            one.id,
+        )
         for one in values
         if one.value_num is not None
     ]
@@ -84,20 +126,24 @@ def candidates(db: Session, values: list[CatalogValue]) -> list[tuple[float, int
                 if representative.group(member) == representative.group(one)
             ]
             worst = max(int(member.quality_tier) for member in pooled)
-            out.append((float(mark.summary["median"]), worst, one.id))
+            median = float(mark.summary["median"])
+            out.append((si_number(median, one.unit), median, worst, one.id))
     return out
 
 
 def match(
-    row: dict[str, Any], found: list[tuple[float, int, uuid.UUID]]
-) -> tuple[int, list[str]] | None:
-    """줄의 점이 **전부** 후보에 맞으면 (줄의 등급, 맞은 값 id) — 하나라도 안 맞으면 None.
+    row: dict[str, Any], found: list[Candidate]
+) -> tuple[int, list[str], list[float]] | None:
+    """줄의 점이 **전부** 후보에 맞으면 (줄의 등급, 맞은 값 id, 점마다 SI 값) — 하나라도 안
+    맞으면 None.
 
     점마다 맞은 후보 가운데 가장 좋은 등급을 그 점의 근거로 삼고, 줄의 등급은 점들 가운데 가장
-    낮은 것이다.
+    낮은 것이다. SI 로 먼저 대 보고, 안 맞으면 **SI 가 아닌 후보의 저장된 숫자**와 대 본다 —
+    맞으면 그 점의 SI 값은 후보의 SI 다(머리말 「SI 로 대 본다」).
     """
     worst = 0
     used: set[str] = set()
+    fixed: list[float] = []
     points = [point for point in row.get("points") or [] if isinstance(point, dict)]
     if not points:
         return None
@@ -107,11 +153,18 @@ def match(
             return None
         hits = [one for one in found if _key(one[0]) == _key(value)]
         if not hits:
+            hits = [
+                one
+                for one in found
+                if _key(one[0]) != _key(one[1]) and _key(one[1]) == _key(value)
+            ]
+        if not hits:
             return None
-        best = min(hits, key=lambda one: one[1])
-        worst = max(worst, best[1])
-        used.add(str(best[2]))
-    return worst, sorted(used)
+        best = min(hits, key=lambda one: one[2])
+        worst = max(worst, best[2])
+        used.add(str(best[3]))
+        fixed.append(float(value) if _key(best[0]) == _key(value) else best[0])
+    return worst, sorted(used), fixed
 
 
 def evidence(row: dict[str, Any], tier: int, value_ids: list[str]) -> dict[str, Any]:
@@ -164,7 +217,16 @@ def stamp(
             "등급은 출처로 정해집니다.",
             status=422,
         )
-    tier, used = found
+    tier, used, fixed = found
+    points = [point for point in row.get("points") or [] if isinstance(point, dict)]
+    if any(point.get("value_si") != si for point, si in zip(points, fixed, strict=True)):
+        # 정의의 단위로 저장된 숫자를 SI 인 줄 알고 보냈다 — 그 문헌 값의 SI 로 바로잡는다.
+        row = {
+            **row,
+            "points": [
+                {**point, "value_si": si} for point, si in zip(points, fixed, strict=True)
+            ],
+        }
     return evidence(row, tier, used)
 
 

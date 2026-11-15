@@ -202,6 +202,101 @@ class TestAdopt:
         )
         assert len(listed.json()) == 1
 
+    def test_출처_이름_빈_벌은_문헌_재료가_다르면_따로_남는다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        literature: tuple[CatalogMaterial, CatalogMaterial],
+    ) -> None:
+        """2026-11-15: 열쇠가 (재료, 모델, source_ref) 라 `set_id` 가 빈 벌은 source_ref
+        가 둘 다 "" 였다 — 다른 문헌 재료에서 받은 Anand 벌이 앞엣것을 **조용히 덮었다**. 문헌
+        재료가
+        열쇠에 든다. 이 칸이 생기기 전의 줄(문헌 재료 빔)은 같은 벌일 때만 올린다."""
+        from sqlalchemy import select
+
+        from app.modules.materials.models import MaterialParameterSet
+
+        owners = [
+            CatalogMaterial(mt_id=991004 + n, name=f"이름 없는 벌 {n}", category="metal")
+            for n in range(2)
+        ]
+        db.add_all(owners)
+        db.flush()
+        for n, owner in enumerate(owners):
+            for k, (term, value, unit) in enumerate(TERMS):
+                db.add(
+                    CatalogValue(
+                        mt_id=991200 + 10 * n + k,
+                        material_id=owner.id,
+                        property_key=KEY,
+                        value_num=value * (n + 2),
+                        unit="1",
+                        quality_tier=2,
+                        source_detail=f"논문 {n}",
+                        conditions={"term": term, "unit_of_term": unit, "model": "anand"},
+                    )
+                )
+        db.commit()
+        parameters.forget()
+        material_id = _material(client, admin_headers)
+
+        # 이 칸이 생기기 전에 받아 둔 줄 — 문헌 재료가 비어 있다. 출처 글이 첫 문헌 재료와
+        # 같다.
+        legacy = MaterialParameterSet(
+            material_id=uuid.UUID(material_id),
+            model="anand",
+            label="옛 줄",
+            origin="catalog",
+            source_ref="",
+            source_detail="논문 0",
+            terms=[],
+        )
+        db.add(legacy)
+        db.commit()
+
+        made = [
+            client.post(
+                f"/api/materials/{material_id}/parameter-sets",
+                json={"property_key": KEY, "catalog_material_id": str(owner.id)},
+                headers=admin_headers,
+            )
+            for owner in owners
+        ]
+        assert all(one.status_code == 201 for one in made), [one.text for one in made]
+        # 첫 문헌 재료는 옛 줄을 이어받고(같은 출처 글), 둘째는 덮지 않고 새 줄이다.
+        assert made[0].json()["id"] == str(legacy.id)
+        assert made[1].json()["id"] != made[0].json()["id"]
+
+        db.expire_all()
+        rows = {
+            row.catalog_material_id: row
+            for row in db.scalars(
+                select(MaterialParameterSet).where(
+                    MaterialParameterSet.material_id == uuid.UUID(material_id)
+                )
+            )
+        }
+        assert set(rows) == {owners[0].id, owners[1].id}
+        values = {
+            owner_id: {one["term"]: one["value"] for one in row.terms}
+            for owner_id, row in rows.items()
+        }
+        assert values[owners[0].id]["a"] == pytest.approx(1.34 * 2)
+        assert values[owners[1].id]["a"] == pytest.approx(1.34 * 3), "둘째가 첫째를 덮었다"
+
+        # 다시 받으면 그 문헌 재료의 줄을 갱신한다 — 늘지 않는다.
+        again = client.post(
+            f"/api/materials/{material_id}/parameter-sets",
+            json={"property_key": KEY, "catalog_material_id": str(owners[1].id)},
+            headers=admin_headers,
+        )
+        assert again.json()["id"] == made[1].json()["id"]
+        listed = client.get(
+            f"/api/materials/{material_id}/parameter-sets", headers=admin_headers
+        )
+        assert len(listed.json()) == 2
+
     def test_없는_벌은_404다(self, client: TestClient, admin_headers: dict[str, str]) -> None:
         material_id = _material(client, admin_headers)
         answer = client.post(

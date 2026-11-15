@@ -183,6 +183,10 @@ def create_property(
         # 단위표에는 없고, 그 기호 그대로 둔다(값도 그 눈금으로만 받는다 —
         # `_to_definition_unit`). 원본의 쇼어 경도는 그렇게 들어와 있는데 새로 만들 길이
         # 없었다.
+        #
+        # **SI 가 아닌 단위(MPa · GPa · g/cm3)도 받고, 값도 그 단위로 저장한다.** 그래서 사내
+        # 항목(SI)으로 옮기는 자리는 언제나 `shared/declared_catalog.si_number` 를 거친다 —
+        # 안 거치면 단위 MPa 정의의 210000 이 선언값 210000 Pa 가 된다(2026-11-15).
         found = units.canonical(si_unit) or units.scale(si_unit)
         if found is None:
             raise AppError(

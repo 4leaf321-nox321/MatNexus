@@ -27,6 +27,14 @@ class TrashItemOut(BaseModel):
     """되살릴 수 없으면 그 이유. **버튼을 그냥 끄지 않는다** — 왜 안 되는지가
     안 보이면 사람은 그 자리에서 막힌다(처리 화면에서 같은 실패를 했다)."""
 
+    files_cleaned: int = 0
+    """함께 돌아올 시험 가운데 **보존기간이 지나 파일이 정리된** 것의 수. 되살리기를 막지는
+    않는다 — 그 시험은 곡선 없이 돌아온다(`services` 머리말)."""
+
+    notice: str | None = None
+    """그 안내 한 줄(「파일이 정리된 시험 N건 — …」). 없으면 비운다. 화면이 되살리기 전에
+    묻는다."""
+
 
 class TrashDoneOut(BaseModel):
     """되살렸거나 영영 지운 결과."""
@@ -35,6 +43,10 @@ class TrashDoneOut(BaseModel):
     counts: dict[str, int]
     said: str
     """`시료 2건, 시편 6건` — 화면이 그대로 보여 준다."""
+    files_cleaned: int = 0
+    """되살린 시험 가운데 파일이 정리돼 **곡선 없이 돌아온** 것. 영구 삭제는 0."""
+    notice: str | None = None
+    """그 안내 한 줄 — 되살리고 나서도 화면이 그대로 보여 준다."""
 
 
 class TrashRef(BaseModel):

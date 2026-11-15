@@ -13,6 +13,7 @@
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping, Sequence
 from typing import Any
 
@@ -28,32 +29,58 @@ def resent_points(points: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
     ]
 
 
+#: 점의 조건 칸 → 문헌 `conditions` 에서 그 축을 읽는 키와 환산 `(키, 배수, 더할 값)` — **앞이
+#: 이긴다.** SI = 값 * 배수 + 더할 값. 서버 `standard_conditions.catalog_keys` 와 같은 표다 —
+#: 단위가 이름에 박힌 키(`UNIT_KEYS`)가 먼저, 그다음 표준 조건의 이름 · 별칭.
+#: `tests/unit/test_mcp_declared_points.py` 가 서버 표와 맞대 본다.
+#:
+#: **주파수는 일곱 가지로 적혀 있다**(2026-11-15). 전에는 `frequency_hz` 만 읽어 씨앗의
+#: `frequency_MHz` · `frequency_ghz` 같은 값 약 300건이 반영하면 주파수 없는 유전율이 됐다 —
+#: 그런데도 문헌 등급을 달고 카드로 갔다.
+CATALOG_KEYS: dict[str, tuple[tuple[str, float, float], ...]] = {
+    "temperature_k": (
+        ("temperature_k", 1.0, 0.0),
+        ("temperature_c", 1.0, 273.15),
+        ("temperature_f", 5 / 9, 459.67 * 5 / 9),
+        ("temperature", 1.0, 0.0),
+        ("temp", 1.0, 0.0),
+        ("t", 1.0, 0.0),
+    ),
+    "frequency_hz": (
+        ("frequency_hz", 1.0, 0.0),
+        ("frequency_Hz", 1.0, 0.0),
+        ("freq_Hz", 1.0, 0.0),
+        ("frequency_MHz", 1e6, 0.0),
+        ("frequency_ghz", 1e9, 0.0),
+        ("frequency_GHz", 1e9, 0.0),
+        # 각주파수(rad/s)와 분당 사이클 — Hz 는 초당 사이클이다.
+        ("frequency_rad_per_s", 1 / (2 * math.pi), 0.0),
+        ("frequency_rad_s", 1 / (2 * math.pi), 0.0),
+        ("frequency_cpm", 1 / 60, 0.0),
+        ("frequency", 1.0, 0.0),
+        ("freq", 1.0, 0.0),
+    ),
+    "wavelength_m": (
+        ("wavelength_m", 1.0, 0.0),
+        ("wavelength_um", 1e-6, 0.0),
+        ("wavelength_nm", 1e-9, 0.0),
+    ),
+}
+
+
 def catalog_condition(conditions: Mapping[str, Any] | None, key: str) -> float | None:
     """문헌 값의 조건에서 **그 축의 SI 값.** 서버 `declared_conditions.from_catalog` 와 같은 규칙.
 
-    카탈로그는 온도를 `temperature_k` · `temperature_c` 둘로, 파장을 `wavelength_nm` 로 든다 —
-    `temperature_k` 만 읽으면 섭씨로 적힌 값의 온도가 빠진다.
+    카탈로그는 온도를 `temperature_k` · `temperature_c` 둘로, 주파수를 `frequency_MHz` ·
+    `frequency_ghz` …로, 파장을 `wavelength_nm` 로 든다(`CATALOG_KEYS`) — 한 이름만 읽으면 다른
+    이름으로 적힌 값의 조건이 빠진다. 숫자로 적힌 것만 읽는다(글은 짐작이 섞인다).
     """
     found = conditions or {}
-
-    def number(name: str) -> float | None:
+    for name, factor, offset in CATALOG_KEYS.get(key, ()):
         value = found.get(name)
         if isinstance(value, bool) or not isinstance(value, int | float):
-            return None
-        return float(value)
-
-    if key == "temperature_k":
-        kelvin, celsius = number("temperature_k"), number("temperature_c")
-        if kelvin is not None:
-            return kelvin
-        return celsius + 273.15 if celsius is not None else None
-    if key == "frequency_hz":
-        return number("frequency_hz")
-    if key == "wavelength_m":
-        metre, nano = number("wavelength_m"), number("wavelength_nm")
-        if metre is not None:
-            return metre
-        return nano * 1e-9 if nano is not None else None
+            continue
+        return float(value) * factor + offset
     return None
 
 

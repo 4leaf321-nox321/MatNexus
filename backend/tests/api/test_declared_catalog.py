@@ -228,6 +228,99 @@ class Test받아_온_등급:
         assert row["quality_tier"] == 2
 
 
+class Test정의의_단위:
+    """직접 만든 정의는 값을 **그 정의의 단위**(MPa)로 저장한다 — 받아 올 때 SI 로(2026-11-15).
+
+    화면 · MCP 는 「카탈로그 값은 SI」 로 알고 저장된 숫자를 그대로 보냈다. 서버도 그 숫자끼리
+    대 봐서, 단위 MPa 정의의 210000 이 선언값 210000 Pa 로 저장되면서 문헌 등급까지 달았다.
+    """
+
+    def _mpa(self, db: Session, number: float) -> CatalogValue:
+        db.add(
+            CatalogDefinition(
+                key="local.mechanical.e_mpa",
+                domain="mechanical",
+                name="시험용 MPa 탄성률",
+                si_unit="MPa",
+                value_type="numeric",
+            )
+        )
+        owner = CatalogMaterial(name="MPa 강", category="metal")
+        paper = CatalogSource(kind="journal", title="MPa 로 적은 논문")
+        db.add_all([owner, paper])
+        db.flush()
+        value = CatalogValue(
+            material_id=owner.id,
+            property_key="local.mechanical.e_mpa",
+            value_num=number,
+            unit="MPa",
+            quality_tier=2,
+            source_id=paper.id,
+            method="measured",
+        )
+        db.add(value)
+        db.commit()
+        return value
+
+    def test_저장된_숫자를_보내면_그_값의_SI_로_바로잡는다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        material: Material,
+    ) -> None:
+        value = self._mpa(db, 210000.0)
+        row = _stored(
+            _save(
+                client,
+                admin_headers,
+                material,
+                _row(points=[{"value": 210000.0}], catalog_value_ids=[str(value.id)]),
+            )
+        )
+        assert row["points"][0]["value_si"] == pytest.approx(2.1e11)
+        assert row["quality_tier"] == 2 and row["catalog"]["tier"] == 2
+
+        # 그대로 되보내면(화면 · MCP 가 다른 항목을 고칠 때) 근거를 이어받는다 — 지문이 SI
+        # 값이다.
+        kept = _stored(
+            _save(
+                client,
+                admin_headers,
+                material,
+                _row(points=[{"value": row["points"][0]["value"]}]),
+            )
+        )
+        assert kept["points"][0]["value_si"] == pytest.approx(2.1e11)
+        assert kept["quality_tier"] == 2
+
+    def test_SI_로_보내도_맞고_id_없는_숫자는_적은_그대로다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        material: Material,
+    ) -> None:
+        value = self._mpa(db, 210000.0)
+        row = _stored(
+            _save(
+                client,
+                admin_headers,
+                material,
+                _row(points=[{"value": 2.1e11}], catalog_value_ids=[str(value.id)]),
+            )
+        )
+        assert row["points"][0]["value_si"] == pytest.approx(2.1e11)
+        assert row["quality_tier"] == 2
+        # 받아 왔다는 id 가 없으면 단위를 짐작하지 않는다 — 사람이 적은 그대로(SI), 출처의
+        # 등급.
+        typed = _stored(
+            _save(client, admin_headers, material, _row(points=[{"value": 210000.0}]))
+        )
+        assert typed["points"][0]["value_si"] == pytest.approx(210000.0)
+        assert typed["quality_tier"] == 3
+
+
 class Test퍼짐:
     def test_카드_표지와_카드_등급과_덱_각주가_받아_온_등급을_안다(self) -> None:
         row = {

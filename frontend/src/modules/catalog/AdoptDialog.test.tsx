@@ -410,6 +410,54 @@ describe('주파수를 타는 항목', () => {
     expect(dk.points.every((point) => point.temperature_k === null)).toBe(true)
     expect(dk.note).toContain('측정 온도가 달라')
   })
+
+  it('단위가 이름에 박힌 주파수 키(MHz · GHz)도 Hz 로 읽는다', async () => {
+    /**
+     * 2026-11-15: `frequency_hz` 만 읽어, 씨앗의 `frequency_MHz` · `frequency_ghz` 값 약 300건이
+     * 주파수 없는 유전율로 담겼다 — 그런데도 문헌 등급을 달고 카드로 갔다. 서버 표와 같은지는
+     * 백엔드 `tests/unit/test_adopt_condition_keys.py` 가 본다.
+     */
+    mockWith([TARGET])
+    const withDk = {
+      ...DETAIL,
+      values: [
+        value({
+          property_key: 'electrical.dielectric_constant',
+          domain: 'electrical',
+          unit: '1',
+          value_num: 3.6,
+          conditions: { frequency_ghz: 10, temperature_f: 73.4 },
+        }),
+        value({
+          property_key: 'electrical.dielectric_constant',
+          domain: 'electrical',
+          unit: '1',
+          value_num: 3.8,
+          conditions: { frequency_MHz: 1, temperature_f: 73.4 },
+          representative: false,
+          separated_by: '주파수',
+          n_candidates: 2,
+        }),
+      ],
+    } as unknown as CatalogMaterialDetail
+    render(<AdoptDialog detail={withDk} open onClose={() => {}} />)
+    await userEvent.click(await screen.findByRole('button', { name: /SGARC440/ }))
+    await waitFor(() => expect(screen.getAllByRole('checkbox')).toHaveLength(2))
+    for (const box of screen.getAllByRole('checkbox')) {
+      if (!(box as HTMLInputElement).checked) await userEvent.click(box)
+    }
+    await userEvent.click(screen.getByRole('button', { name: /추가/ }))
+
+    await waitFor(() => expect(patch).toHaveBeenCalledTimes(1))
+    const rows = (patch.mock.calls[0][1] as { declared_properties: Array<Record<string, unknown>> })
+      .declared_properties
+    const dk = rows.find((row) => row.item === '비유전율') as {
+      points: Array<{ frequency_hz: number; temperature_k: number | null }>
+    }
+    expect(dk.points.map((point) => point.frequency_hz)).toEqual([1e6, 1e10])
+    // 73.4 °F = 23 °C — 두 값이 같은 온도라 남는다.
+    expect(dk.points[0].temperature_k).toBeCloseTo(296.15, 6)
+  })
 })
 
 describe('식의 변수 값', () => {

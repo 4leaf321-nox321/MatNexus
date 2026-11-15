@@ -88,6 +88,38 @@ def test_씨앗이_초안으로_한_번만_들어오고_관리자만_본다(
     assert kept is not None and kept.title == "새로 생긴 것"
 
 
+def test_지운_초안은_다음_배포에_되살아나지_않는다(
+    client: TestClient,
+    db: Session,
+    admin_headers: dict[str, str],
+    tmp_path: Path,
+) -> None:
+    """2026-11-15: 「넣었나」 를 공지 행으로만 봐서, 관리자가 초안을 지우면 다음 배포에 또
+    생겼다(씨앗 약 100개). 넣은 키는 공지와 따로 기억한다(`notice_seed_keys`)."""
+    from app.modules.notices.models import NoticeSeedKey
+
+    script = _script()
+    (tmp_path / "2026-11-15-지울-것.md").write_text("# 지울 것\n\n- 본문\n", encoding="utf-8")
+    assert script.run(db, tmp_path) == ["2026-11-15-지울-것"]
+    assert db.get(NoticeSeedKey, "2026-11-15-지울-것") is not None
+
+    notice = db.scalar(select(Notice).where(Notice.seed_key == "2026-11-15-지울-것"))
+    assert notice is not None
+    gone = client.delete(f"/api/notices/{notice.id}", headers=admin_headers)
+    assert gone.status_code == 204, gone.text
+    db.expire_all()
+
+    assert script.plan(db, tmp_path) == []
+    assert script.run(db, tmp_path) == []
+    assert db.scalar(select(Notice).where(Notice.seed_key == "2026-11-15-지울-것")) is None
+
+    # 기억이 생기기 전에 들어온 줄(공지 행만 있다)도 두 번 넣지 않는다.
+    db.add(Notice(title="옛 것", body="본문", seed_key="2026-11-15-옛-것"))
+    db.commit()
+    (tmp_path / "2026-11-15-옛-것.md").write_text("# 옛 것\n\n본문\n", encoding="utf-8")
+    assert script.plan(db, tmp_path) == []
+
+
 def test_실린_씨앗은_전부_읽힌다() -> None:
     """저장소의 씨앗 파일이 제목·본문을 갖는다 — 배포에서 처음 터지면 늦다."""
     script = _script()

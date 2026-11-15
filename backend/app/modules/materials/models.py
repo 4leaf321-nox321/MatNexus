@@ -671,8 +671,18 @@ class MaterialParameterSet(Base):
     __table_args__ = (
         # 같은 재료에 같은 출처의 같은 벌을 두 번 담지 않는다. 논문이 다르면
         # `source_ref` 가 달라 둘 다 남는다 — **후보를 여럿 두는 것이 목적이다.**
+        #
+        # **출처 문헌 재료가 열쇠에 든다**(2026-11-15). 출처 이름(`set_id`)이 빈 벌은
+        # `source_ref` 가 둘 다 "" 라, 다른 문헌 재료에서 받은 같은 모델의 벌이 서로를 조용히
+        # 덮었다. 손으로 적은 벌(`catalog_material_id` 없음)끼리도 같은 규칙이어야 해서 NULL 을
+        # 같은 값으로 본다(`nulls_not_distinct`).
         UniqueConstraint(
-            "material_id", "model", "source_ref", name="uq_material_parameter_sets"
+            "material_id",
+            "model",
+            "catalog_material_id",
+            "source_ref",
+            name="uq_material_parameter_sets",
+            postgresql_nulls_not_distinct=True,
         ),
     )
 
@@ -698,6 +708,12 @@ class MaterialParameterSet(Base):
     source_ref: Mapped[str] = mapped_column(String(200), default="")
     """출처를 가리키는 손잡이 — 문헌이면 `set_id`, 손으로 적었으면 사람이 준 이름.
     **같은 재료의 두 벌을 가르는 열쇠**라 빈 문자열도 값으로 쓴다."""
+    catalog_material_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), index=True, nullable=True
+    )
+    """어느 **문헌 재료**에서 받아 왔나(2026-11-15). `source_ref` 와 함께 열쇠다 — 출처 이름이
+    빈 벌끼리 문헌 재료가 다르면 다른 벌이다. 손으로 적은 벌 · 이 칸이 생기기 전의 줄은 비어
+    있다. **FK 를 안 건다** — `property_key` 와 같은 판단(이관이 문헌 재료를 지웠다 넣는다)."""
     source_detail: Mapped[str | None] = mapped_column(Text)
     """어느 논문·데이터시트인가. 값만 있고 근거가 없으면 나중에 되짚을 수 없다."""
     quality_tier: Mapped[int | None] = mapped_column()

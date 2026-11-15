@@ -220,6 +220,48 @@ class Test계획과_옮기기:
             is not None
         )
 
+    def test_문헌_재료만_다른_계수_벌_둘이_있어도_옮겨진다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        db: Session,
+    ) -> None:
+        """2026-11-15 — 계수 벌 저장 열쇠에 출처 문헌 재료가 들어갔는데 이관이 그 칸을 안 옮겨,
+        문헌 재료만 다른 두 벌이 새 재료에서 같은 열쇠가 되어 유일 제약에 걸렸다."""
+        from app.modules.materials.models import MaterialParameterSet
+
+        material, _first, pair, _, _ = _setup(client, admin_headers)
+        for _ in range(2):
+            db.add(
+                MaterialParameterSet(
+                    material_id=uuid.UUID(material["id"]),
+                    model="mooney_rivlin",
+                    label="Mooney-Rivlin",
+                    origin="catalog",
+                    catalog_material_id=uuid.uuid4(),
+                    source_ref="",
+                    terms=[{"term": "C10", "value": 1e5, "text": None, "unit": "Pa"}],
+                )
+            )
+        db.commit()
+
+        done = client.post(
+            "/api/specimens/relocate",
+            json=_ask([one["id"] for one in pair]),
+            headers=admin_headers,
+        )
+        assert done.status_code == 200, done.text
+        target = client.get(
+            "/api/materials", params={"q": "SECC_MDOI_1.2"}, headers=admin_headers
+        ).json()["items"][0]
+        copied = db.scalars(
+            select(MaterialParameterSet).where(
+                MaterialParameterSet.material_id == uuid.UUID(target["id"])
+            )
+        ).all()
+        assert len(copied) == 2
+        assert len({one.catalog_material_id for one in copied}) == 2
+
     def test_일부만_옮기면_같은_로트로_새_시료를_만든다(
         self, client: TestClient, admin_headers: dict[str, str], db: Session
     ) -> None:

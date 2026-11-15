@@ -13,7 +13,13 @@
     ② 등급(tier) 낮은 것   실측 > 핸드북 > 2차 인용 > 추정
     ③ 수치 있는 것
     ④ 기준 온도 근접    23℃(296.15K) 에 가까운 것. 온도 미기재는 벌점 —
-                       「25℃ 실측」 이 「온도 없는 시트값」 을 이긴다
+                       「25℃ 실측」 이 「온도 없는 시트값」 을 이긴다. 온도는
+                       `standard_conditions.read_catalog` 로 읽는다
+                       (°F 칸 · 「550 degC」 같은 글도)
+
+**등급이 온도보다 앞이다**(의도, 2026-11-15 확인). 그래서 상온이 아닌 값이 대표가 될 수 있다 —
+등급이 더 좋은 538 °C 값이 상온 값을 이긴다. 덱 · 카드는 그때 그 온도를 함께 적는다
+(`off_room` → `shared/literature_material` 의 각주 · 근거).
     ⑤ 조건 적은 것      (관리 표지 제외) 조건이 적을수록 일반적인 값
     ⑥ 입력 순서        mt_id — 마지막 동률 깨기
 """
@@ -26,6 +32,8 @@ from functools import cache
 from typing import Any
 
 from sqlalchemy import or_
+
+from app.shared import standard_conditions
 
 #: 조건이 아니라 관리 기록인 키 — 순위·조건 수에 안 센다 (원본 `_NOT_A_CONDITION`).
 _BOOKKEEPING_KEYS = frozenset(
@@ -46,6 +54,8 @@ _NOT_SOLID = ("melt", "molten", "liquid", "용융", "액체")
 _REFERENCE_K = 296.15
 #: 온도 미기재 벌점(K 환산 거리). 원본과 같은 5.0 — 이보다 가까운 실측만 이긴다.
 _UNKNOWN_TEMPERATURE_PENALTY = 5.0
+#: 「상온」 의 폭(±K) — 이 밖의 대표값은 덱 · 카드가 그 온도를 적는다(18 ~ 28 °C 가 상온).
+ROOM_BAND_K = 5.0
 
 #: 순위 자리 이름 — `separated_by` 가 이 말로 밀린 이유를 말한다.
 _SLOTS = ("원본에서 빠짐", "산점의 점", "상태", "등급", "수치", "온도", "조건 수", "입력 순서")
@@ -73,12 +83,30 @@ def temperature_distance(conditions: dict[str, Any]) -> float:
     return _temperature_distance(conditions)
 
 
+def temperature_of(conditions: dict[str, Any] | None) -> float | None:
+    """값의 측정 온도(K). 안 적혔으면 `None` — 순위와 각주가 **같은 읽기**를 쓴다.
+
+    전에는 순위가 `temperature_k` · `temperature_c` 둘만 읽었다(2026-11-15). °F 칸
+    (`temperature_f`)과 글로 적힌 온도(「550 degC」 135건)는 「미기재」 가 되어 벌점 5 K 만
+    받았고, 그래서 550 °C 값이 상온 실측과 거의 같은 자리에 섰다. 이제 값 검색 · 반영과 같은
+    표(`standard_conditions.UNIT_KEYS`)에 글 읽기를 더한 것으로 읽는다.
+    """
+    return standard_conditions.read_catalog(conditions, "temperature", text=True)
+
+
+def off_room(conditions: dict[str, Any] | None) -> float | None:
+    """상온(23 ± 5 °C)이 **아닌** 측정 온도(K). 상온이거나 안 적혔으면 `None`."""
+    kelvin = temperature_of(conditions)
+    if kelvin is None or abs(kelvin - _REFERENCE_K) <= ROOM_BAND_K:
+        return None
+    return kelvin
+
+
 def _temperature_distance(conditions: dict[str, Any]) -> float:
-    for key, offset in (("temperature_k", 0.0), ("temperature_c", 273.15)):
-        raw = conditions.get(key)
-        if isinstance(raw, (int, float)) and not isinstance(raw, bool):
-            return abs(float(raw) + offset - _REFERENCE_K)
-    return _UNKNOWN_TEMPERATURE_PENALTY
+    kelvin = temperature_of(conditions)
+    if kelvin is None:
+        return _UNKNOWN_TEMPERATURE_PENALTY
+    return abs(kelvin - _REFERENCE_K)
 
 
 @dataclass(frozen=True)

@@ -46,7 +46,25 @@ class Notice(Base):
     """**배포에 실려 온 안내**면 그 파일 이름(2026-09-12). 새 기능은 코드와 함께 도착하는데
     그것을 알리는 글은 사람이 따로 써야 했고, 그러면 언젠가 아무도 안 쓴다. 이제
     `seeds/notices/*.md` 가 배포마다 **초안**으로 들어오고(`import_notices.py`), 관리자가
-    읽고 발행한다. 같은 키는 두 번 안 들어온다 — 운영에서 고친 글을 덮지 않는다."""
+    읽고 발행한다. 같은 키는 두 번 안 들어온다 — 운영에서 고친 글을 덮지 않는다. 지운 글도
+    다시 안 들어온다 — 넣은 키는 `NoticeSeedKey` 가 따로 기억한다."""
+
+
+class NoticeSeedKey(Base):
+    """**넣은 적이 있는 씨앗 키**(2026-11-15) — 공지를 지워도 남는다.
+
+    `import_notices.py` 는 「넣었나」 를 `notices.seed_key` 행으로만 봤다. 관리자가 초안을
+    지우면 행이 사라지니 다음 배포가 그 씨앗을 또 초안으로 넣었다(씨앗 약 100개 — 지운 것이
+    배포마다 되살아났다). 넣을 때 키를 여기 적고, 넣을지는 여기를 본다. 공지 행과 묶지
+    않는다(FK 없음) — 공지가 사라져도 「넣었다」 는 사실은 남아야 한다.
+    """
+
+    __tablename__ = "notice_seed_keys"
+
+    key: Mapped[str] = mapped_column(String(100), primary_key=True)
+    imported_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
 
 
 class NoticeRead(Base):

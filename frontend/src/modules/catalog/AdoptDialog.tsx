@@ -5,10 +5,13 @@
  * 카탈로그를 재이관해도 조용히 바뀌지 않고, 출처·등급이 참고문헌 문자열로
  * 따라간다. tier4(추정·가정)도 똑같이 담을 수 있다 — 배지로 구별만 한다.
  *
- * ## 단위 변환이 없다
+ * ## 단위 환산은 서버가 한다
  *
- * 카탈로그 값은 SI 로 저장돼 있고, 선언 물성은 `input_unit` 을 비우면 정본 SI 로
- * 받는다. 숫자가 그대로 흐르고, 표기 등가는 백엔드 계약 테스트가 지킨다.
+ * 카탈로그 값은 **정의의 단위**로 저장돼 있다 — 이관 정의는 거의 SI 지만, 직접 만든 정의는
+ * MPa · GPa · g/cm3 도 받는다. 여기서는 숫자를 그대로 보내고(`input_unit` 비움) 어느 문헌
+ * 값인지(`catalog_value_ids`)를 함께 준다 — 서버가 그 값의 단위로 SI 로 바로잡아 저장한다
+ * (`shared/declared_catalog`, 2026-11-15). 전에는 그 숫자가 SI 인 줄 알고 저장돼 MPa 정의의
+ * 210000 이 210000 Pa 가 됐다.
  *
  * ## 선언 물성은 통째 교체라 여기서 병합한다
  *
@@ -61,28 +64,63 @@ type PropertyItem = components['schemas']['PropertyItemOut']
 type ConditionKey = 'temperature_k' | 'frequency_hz' | 'wavelength_m'
 
 /**
+ * 점의 조건 칸 → 문헌 `conditions` 에서 그 축을 읽는 키와 환산 `[키, 배수, 더할 값]` — **앞이
+ * 이긴다.** SI = 값 × 배수 + 더할 값. 서버 `standard_conditions.catalog_keys` 와 같은 표이고,
+ * 백엔드 시험(`tests/unit/test_adopt_condition_keys.py`)이 서버 표와 맞대 본다 — 손으로 고치면
+ * 거기서 멈춘다.
+ *
+ * **주파수는 일곱 가지로 적혀 있다**(2026-11-15). 전에는 `frequency_hz` 만 읽어 씨앗의
+ * `frequency_MHz` · `frequency_ghz` 같은 값 약 300건이 주파수 없는 유전율로 담겼다 — 그런데도
+ * 문헌 등급을 달고 카드로 갔다.
+ *
+ * 섭씨 · 화씨의 0 점은 단위 표(`shared/units.ts`)에서 읽는다(`CELSIUS_ZERO_K`) — 손으로 적으면 표
+ * 바깥에 정본이 하나 더 생긴다.
+ */
+const CELSIUS_ZERO_K = fromDisplay(0, 'K', 'temperature')
+const CATALOG_KEYS: Record<ConditionKey, ReadonlyArray<readonly [string, number, number]>> = {
+  temperature_k: [
+    ['temperature_k', 1, 0],
+    ['temperature_c', 1, CELSIUS_ZERO_K],
+    ['temperature_f', 5 / 9, CELSIUS_ZERO_K - (32 * 5) / 9],
+    ['temperature', 1, 0],
+    ['temp', 1, 0],
+    ['t', 1, 0],
+  ],
+  frequency_hz: [
+    ['frequency_hz', 1, 0],
+    ['frequency_Hz', 1, 0],
+    ['freq_Hz', 1, 0],
+    ['frequency_MHz', 1e6, 0],
+    ['frequency_ghz', 1e9, 0],
+    ['frequency_GHz', 1e9, 0],
+    ['frequency_rad_per_s', 1 / (2 * Math.PI), 0],
+    ['frequency_rad_s', 1 / (2 * Math.PI), 0],
+    ['frequency_cpm', 1 / 60, 0],
+    ['frequency', 1, 0],
+    ['freq', 1, 0],
+  ],
+  wavelength_m: [
+    ['wavelength_m', 1, 0],
+    ['wavelength_um', 1e-6, 0],
+    ['wavelength_nm', 1e-9, 0],
+  ],
+}
+
+/**
  * 문헌 값의 조건에서 **그 축의 SI 값.** 서버의 `shared/declared_conditions.from_catalog` 와
- * 같은 규칙이다 — 카탈로그는 온도를 `temperature_k` · `temperature_c` 둘로, 파장을
- * `wavelength_nm` 로 든다. 전에는 `temperature_k` 만 읽어 섭씨로 적힌 값의 온도가 빠졌다.
+ * 같은 규칙이다(`CATALOG_KEYS`) — 카탈로그는 온도를 `temperature_k` · `temperature_c` 둘로,
+ * 주파수를 `frequency_MHz` · `frequency_ghz` …로, 파장을 `wavelength_nm` 로 든다. 한 이름만
+ * 읽으면 다른 이름으로 적힌 값의 조건이 빠진다. 숫자로 적힌 것만 읽는다.
  */
 function catalogCondition(
   conditions: Record<string, unknown> | null | undefined,
   key: ConditionKey
 ): number | null {
-  const number = (name: string) => {
+  for (const [name, factor, offset] of CATALOG_KEYS[key]) {
     const value = conditions?.[name]
-    return typeof value === 'number' ? value : null
+    if (typeof value === 'number') return value * factor + offset
   }
-  if (key === 'temperature_k') {
-    const kelvin = number('temperature_k')
-    const celsius = number('temperature_c')
-    // 섭씨 → K 는 표가 한다 — 손으로 더하면 표 바깥에 정본이 하나 더 생긴다.
-    return kelvin ?? (celsius === null ? null : fromDisplay(celsius, 'K', 'temperature'))
-  }
-  if (key === 'frequency_hz') return number('frequency_hz')
-  const metre = number('wavelength_m')
-  const nano = number('wavelength_nm')
-  return metre ?? (nano === null ? null : nano * 1e-9)
+  return null
 }
 
 type Slots = Record<string, AdoptableSlot>
@@ -339,7 +377,8 @@ export function AdoptDialog({
           return {
             item,
             points,
-            // input_unit 비움 = 정본 SI — 카탈로그 값이 이미 SI 라 변환이 없다.
+            // input_unit 비움 — 숫자는 정의의 단위 그대로다. 서버가 받아 왔다는 문헌 값
+            // (`catalog_value_ids`)의 단위로 SI 로 바로잡는다(머리말).
             scale: scaleOf.get(item) ?? null,
             source: adoptionSource(values[0]),
             // **어느 문헌 값에서 왔는지** — 서버가 그 값들과 숫자를 대 보고 그 등급을 근거로 붙인다

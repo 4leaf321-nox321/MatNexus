@@ -39,6 +39,16 @@
 목록도 사람마다 다르다 — **내가 되살릴 수 있는 것만** 보인다(관리자는 전부). 남의
 지운 것을 늘어놓으면 누를 수 없는 단추가 목록을 채운다.
 
+## 파일이 정리된 시험 — 막지 않고 알린다 (2026-11-15)
+
+보존기간(기본 30일)이 지나면 저장소 정리(`tests.services.cleanup_storage`)가 지운 시험의
+원본 · 곡선 · 처리 결과 파일을 치우고 **행은 남긴다**(`source_path` 를 비운다). 그 시험을
+되살리면 곡선 없는 「읽힘」 시험이 돌아온다 — 이름과 계보는 있는데 열면 빈 화면이다.
+되살리기를 막지는 않는다(이름 · 계보를 되찾는 것도 쓸모다). 대신 목록 줄 · 되살리기 응답이
+「파일이 정리된 시험 N건」 을 말하고(`files_cleaned` · `notice`), 화면은 되살리기 전에 그
+말로 한 번 묻는다. 시험은 모두 원본과 함께 만들어지므로(`shared/ingest`) 원본 경로가 빈
+시험은 정리된 것이다.
+
 ## 영영 지우기 — 되돌릴 수 없다
 
 행을 진짜로 지우고 곡선 파일까지 치운다. **이 길에는 자동이 없다** — 오래된 것을
@@ -201,6 +211,27 @@ class Item:
     below: dict[str, int]
     #: 되살릴 수 있나. 아니면 그 이유.
     blocked: str | None
+    #: 함께 돌아올 시험 가운데 **보존기간이 지나 파일이 정리된** 것의 수(머리말).
+    files_cleaned: int = 0
+
+    @property
+    def notice(self) -> str | None:
+        return cleaned_notice(self.files_cleaned)
+
+
+def cleaned_notice(count: int) -> str | None:
+    """「파일이 정리된 시험 N건」 안내. 없으면 `None` — 목록 · 되살리기가 같은 말을 쓴다."""
+    if count <= 0:
+        return None
+    return (
+        f"파일이 정리된 시험 {count}건 — 보존기간이 지나 원본 · 곡선 파일을 치웠습니다. "
+        "되살리면 곡선 없는 시험으로 돌아옵니다."
+    )
+
+
+def _cleaned(tree: dict[str, list[Any]]) -> int:
+    """함께 돌아올 시험 가운데 **원본 경로가 빈** 것 — 저장소 정리가 파일을 치운 시험이다."""
+    return sum(1 for run in tree.get("test_run", ()) if not getattr(run, "source_path", None))
 
 
 def _name(kind: str, row: Any) -> str:
@@ -395,6 +426,9 @@ def listing(db: Session, *, kind: str | None, limit: int, user: User) -> list[It
         if one not in _MODELS:
             raise AppError("MNX-TRASH-0001", f"모르는 종류입니다: {one}", status=422)
         for row in _rows(db, one, limit=limit, user=user):
+            # 함께 돌아올 나무는 한 번만 짓는다 — 남의 자료 판정과 「파일이 정리된 시험」 이
+            # 같이 쓴다.
+            tree = _tree(db, one, row, together=True) if one in TREE_KINDS else None
             items.append(
                 Item(
                     kind=one,
@@ -405,7 +439,9 @@ def listing(db: Session, *, kind: str | None, limit: int, user: User) -> list[It
                     workspace_id=getattr(row, "workspace_id", None)
                     or getattr(row, "owner_workspace_id", None),
                     below=_below(db, one, row),
-                    blocked=_blocker(db, one, row) or _foreign(db, editor, one, row),
+                    blocked=_blocker(db, one, row)
+                    or _foreign(db, editor, one, row, tree=tree),
+                    files_cleaned=_cleaned(tree) if tree is not None else 0,
                 )
             )
     items.sort(key=lambda item: item.deleted_at, reverse=True)
@@ -415,16 +451,24 @@ def listing(db: Session, *, kind: str | None, limit: int, user: User) -> list[It
 # --- 누가 되살리나 ------------------------------------------------------------
 
 
-def _foreign(db: Session, editor: permissions.Editor, kind: str, row: Any) -> str | None:
+def _foreign(
+    db: Session,
+    editor: permissions.Editor,
+    kind: str,
+    row: Any,
+    *,
+    tree: dict[str, list[Any]] | None = None,
+) -> str | None:
     """함께 돌아올 것 중 **이 사람이 못 고치는 것** — 있으면 그 까닭.
 
     지우기가 남의 것이 딸린 재료를 막는 것(`materials.services.foreign_descendants`)과
     같은 규칙이다. 되살리기가 더 넓으면, 지울 수 없던 남의 시험을 되살리기로 건드리게
-    된다.
+    된다. `tree` 를 주면 그 나무(`_tree(together=True)`)를 쓴다 — 목록이 한 번만 짓는다.
     """
     if kind not in TREE_KINDS:
         return None
-    tree = _tree(db, kind, row, together=True)
+    if tree is None:
+        tree = _tree(db, kind, row, together=True)
     counts: dict[tuple[str, uuid.UUID | None], int] = {}
     for one in TREE_KINDS:
         for target in tree[one]:
@@ -547,11 +591,17 @@ class Done:
 
     name: str
     counts: dict[str, int]
+    #: 되살린 시험 가운데 파일이 정리돼 곡선 없이 돌아온 것(머리말). 영구 삭제는 0.
+    files_cleaned: int = 0
 
     @property
     def said(self) -> str:
         parts = [f"{label} {count}건" for label, count in self.counts.items() if count]
         return ", ".join(parts) if parts else "없음"
+
+    @property
+    def notice(self) -> str | None:
+        return cleaned_notice(self.files_cleaned)
 
 
 def restore(db: Session, kind: str, item_id: uuid.UUID, *, actor: User) -> Done:
@@ -584,7 +634,8 @@ def restore(db: Session, kind: str, item_id: uuid.UUID, *, actor: User) -> Done:
                     for column in _PART_TERMS:
                         vocabulary_services.bump_usage(db, getattr(part, column), 1)
 
-    done = Done(name=_name(kind, row), counts=counts)
+    # 막지 않고 알린다 — 곡선 없는 시험으로 돌아온다는 것을 응답이 말한다(머리말).
+    done = Done(name=_name(kind, row), counts=counts, files_cleaned=_cleaned(tree))
     audit.record(
         db,
         action=audit.TRASH_RESTORED,

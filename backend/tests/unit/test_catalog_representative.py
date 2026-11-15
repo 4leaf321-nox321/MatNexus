@@ -14,7 +14,10 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any
 
-from app.shared.representative import annotate, is_term, semantic_conditions
+import pytest
+
+from app.shared import standard_conditions
+from app.shared.representative import annotate, is_term, off_room, semantic_conditions
 
 
 @dataclass
@@ -141,3 +144,70 @@ class Test변수_값:
         marks = annotate([worse, better])
         assert marks[better.id].representative
         assert marks[worse.id].separated_by == "등급"
+
+
+class Test온도_읽기:
+    """순위의 온도는 `standard_conditions.read_catalog` 로 읽는다(2026-11-15).
+
+    전에는 `temperature_k` · `temperature_c` 둘만 읽어 °F 칸과 글로 적힌 온도(「550 degC」
+    135건)가 「미기재」 가 됐다 — 벌점 5 K 만 받아 550 °C 값이 상온 값과 거의 같은 자리에 섰다.
+    아래 둘은 전에는 온도 쪽 값이 **조건 수로 이겼다**(둘 다 벌점 5 K, 조건 1개 < 2개).
+    """
+
+    def test_글로_적힌_550_도는_미기재가_아니다(self) -> None:
+        hot = Value("k", 2, conditions={"temperature": "550 degC"}, mt_id=1)
+        bare = Value("k", 2, conditions={"specimen": "bar", "method_detail": "x"}, mt_id=2)
+        marks = annotate([hot, bare])
+        assert marks[bare.id].representative
+        assert marks[hot.id].separated_by == "온도"
+
+    def test_화씨_칸도_읽는다(self) -> None:
+        hot = Value("k", 2, conditions={"temperature_f": 1000}, mt_id=1)
+        bare = Value("k", 2, conditions={"specimen": "bar", "method_detail": "x"}, mt_id=2)
+        marks = annotate([hot, bare])
+        assert marks[bare.id].representative
+        assert marks[hot.id].separated_by == "온도"
+
+    def test_등급은_여전히_온도보다_앞이다(self) -> None:
+        """의도다(사용자 결정) — 상온이 아닌 대표는 덱이 그 온도를 적는다(`off_room`)."""
+        hot = Value("k", 1, conditions={"temperature_c": 538}, mt_id=1)
+        room = Value("k", 2, conditions={"temperature_k": 296.15}, mt_id=2)
+        marks = annotate([hot, room])
+        assert marks[hot.id].representative
+        assert off_room(hot.conditions) == pytest.approx(811.15)
+        assert off_room(room.conditions) is None
+        assert off_room({"temperature_c": 27}) is None, "23 ± 5 °C 는 상온이다"
+        assert off_room({"temperature": "room temperature"}) is None
+        assert off_room(None) is None
+
+    @pytest.mark.parametrize(
+        ("text", "kelvin"),
+        [
+            ("550 degC", 823.15),
+            ("90 C", 363.15),
+            ("573 K", 573.0),
+            ("25 °C", 298.15),
+            ("50C", 323.15),
+            ("200 degC, held 30 min", 473.15),
+            ("23 C / 50 %RH", 296.15),
+            ("212 F", 373.15),
+        ],
+    )
+    def test_숫자와_단위로_시작하는_글만_읽는다(self, text: str, kelvin: float) -> None:
+        read = standard_conditions.read_catalog
+        assert read({"temperature": text}, "temperature", text=True) == pytest.approx(kelvin)
+        # 끄면(값 검색 · 커버리지 · 반영) 전처럼 글을 안 읽는다 — SQL 길과 같은 답.
+        assert read({"temperature": text}, "temperature") is None
+
+    @pytest.mark.parametrize(
+        "text",
+        ["room temperature", "RT", "20-22", "-40 to 200", "23 +/- 2", "not printed", "180"],
+    )
+    def test_범위_오차_말은_안_읽는다(self, text: str) -> None:
+        read = standard_conditions.read_catalog
+        assert read({"temperature": text}, "temperature", text=True) is None
+
+    def test_숫자가_글보다_앞이다(self) -> None:
+        read = standard_conditions.read_catalog
+        both = {"temperature": "550 degC", "temperature_c": 25}
+        assert read(both, "temperature", text=True) == pytest.approx(298.15)

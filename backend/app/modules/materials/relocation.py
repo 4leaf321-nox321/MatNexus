@@ -630,6 +630,9 @@ def _copy_material(db: Session, user: User, target: Target, plan: Plan) -> Mater
                 label=one.label,
                 property_key=one.property_key,
                 origin=one.origin,
+                # 저장 열쇠의 일부다(2026-11-15) — 안 옮기면 문헌 재료만 다른 두 벌이
+                # 새 재료에서 같은 열쇠가 되어 이관이 유일 제약에 걸려 실패한다.
+                catalog_material_id=one.catalog_material_id,
                 source_ref=one.source_ref,
                 source_detail=one.source_detail,
                 quality_tier=one.quality_tier,

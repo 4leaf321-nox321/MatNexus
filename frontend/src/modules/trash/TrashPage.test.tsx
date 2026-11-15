@@ -125,6 +125,54 @@ describe('복원', () => {
   })
 })
 
+describe('파일이 정리된 시험', () => {
+  /**
+   * 보존기간이 지나 저장소 정리가 원본 · 곡선 파일을 치운 시험은 되살려도 곡선 없이 돌아온다
+   * (2026-11-15). **막지 않고** 줄에 적고, 복원을 누르면 그 말로 한 번 묻는다.
+   */
+  const CLEANED = {
+    ...FREE,
+    id: 's9',
+    name: 'SECC__01_MD_09',
+    files_cleaned: 2,
+    notice: '파일이 정리된 시험 2건 — 보존기간이 지나 원본 · 곡선 파일을 치웠습니다.',
+  }
+
+  it('줄에 적고, 묻기 전에는 안 부르고, 확인하면 되살리고 그 말을 남긴다', async () => {
+    list.mockResolvedValue([CLEANED])
+    restore.mockResolvedValue({
+      name: 'x',
+      counts: { 시편: 1, 시험: 2 },
+      said: '시편 1건, 시험 2건',
+      files_cleaned: 2,
+      notice: '파일이 정리된 시험 2건 — 되살리면 곡선 없는 시험으로 돌아옵니다.',
+    })
+    render(<MemoryRouter initialEntries={['/admin/trash']}><TrashPage /></MemoryRouter>)
+    // 데이터로 그려진 것을 기다린다 — 줄의 안내 글자가 서야 그 줄이 그려진 것이다.
+    expect(await screen.findByText(/파일이 정리된 시험 2건/)).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: '복원' }))
+    const dialog = await screen.findByRole('dialog')
+    expect(dialog).toHaveTextContent('SECC__01_MD_09')
+    expect(dialog).toHaveTextContent('파일이 정리된 시험 2건')
+    expect(restore).not.toHaveBeenCalled()
+
+    await userEvent.click(within(dialog).getByRole('button', { name: '그래도 되살리기' }))
+    await waitFor(() => expect(restore).toHaveBeenCalledWith('specimen', 's9'))
+    expect(await screen.findByText(/곡선 없는 시험으로 돌아옵니다/)).toBeInTheDocument()
+  })
+
+  it('파일이 그대로인 줄은 전처럼 바로 되살린다', async () => {
+    list.mockResolvedValue([{ ...FREE, files_cleaned: 0, notice: null }])
+    render(<MemoryRouter initialEntries={['/admin/trash']}><TrashPage /></MemoryRouter>)
+    await screen.findByText('SECC__01_MD_01')
+
+    await userEvent.click(screen.getByRole('button', { name: '복원' }))
+    await waitFor(() => expect(restore).toHaveBeenCalledWith('specimen', 's1'))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+})
+
 describe('영구 삭제', () => {
   it('묻기 전에는 안 부른다', async () => {
     /** **되돌릴 수 없다.** 단추 한 번에 나가면 안 된다. */

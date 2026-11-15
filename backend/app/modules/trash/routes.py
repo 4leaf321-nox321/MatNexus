@@ -55,6 +55,8 @@ def list_trash(
             workspace_id=item.workspace_id,
             below=item.below,
             blocked=item.blocked,
+            files_cleaned=item.files_cleaned,
+            notice=item.notice,
         )
         for item in services.listing(db, kind=kind, limit=clamp_limit(limit), user=user)
     ]
@@ -67,10 +69,20 @@ def restore(
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> TrashDoneOut:
-    """되살린다 — 이 행과 그 아래 **함께 지워진** 것 전부. 그 전부를 고칠 수 있어야 한다."""
+    """되살린다 — 이 행과 그 아래 **함께 지워진** 것 전부. 그 전부를 고칠 수 있어야 한다.
+
+    보존기간이 지나 파일이 정리된 시험이 끼어 있어도 막지 않는다 — 응답의 `notice` 가 「곡선
+    없이 돌아온다」 를 말한다.
+    """
     done = services.restore(db, kind, item_id, actor=user)
     db.commit()
-    return TrashDoneOut(name=done.name, counts=done.counts, said=done.said)
+    return TrashDoneOut(
+        name=done.name,
+        counts=done.counts,
+        said=done.said,
+        files_cleaned=done.files_cleaned,
+        notice=done.notice,
+    )
 
 
 @router.delete("/{kind}/{item_id}", response_model=TrashDoneOut)

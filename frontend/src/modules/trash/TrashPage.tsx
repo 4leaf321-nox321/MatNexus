@@ -35,6 +35,13 @@
  * 누른 사람이 제 손으로 되돌릴 길이 없었다. 이제 **지울 수 있는 사람이 되살린다** —
  * 목록도 서버가 그 사람 것으로 거른다. **영구 삭제는 그대로 시스템 관리자다** — 되돌릴
  * 수 없고 디스크를 치우는 일이다. 관리 › 서버 › 휴지통은 같은 화면이다(탭이 붙는다).
+ *
+ * ## 파일이 정리된 시험은 되살리기 전에 한 번 묻는다 (2026-11-15)
+ *
+ * 보존기간이 지나 저장소 정리가 원본 · 곡선 파일을 치운 시험은 되살려도 **곡선 없는 시험**으로
+ * 돌아온다. 막지 않는다 — 이름 · 계보를 되찾는 것도 쓸모다. 서버가 세어 준 「파일이 정리된 시험
+ * N건」(`notice`)을 줄에 적고, 그런 줄은 복원을 누르면 그 말로 한 번 묻는다. 파일이 그대로인
+ * 줄은 전처럼 바로 되살린다 — 늘 묻는 확인은 진짜 경고 앞에서도 안 읽힌다.
  */
 
 import { useState } from 'react'
@@ -79,6 +86,10 @@ export default function TrashPage() {
   const [kind, setKind] = useState('')
   const [busy, setBusy] = useState<string | null>(null)
   const [said, setSaid] = useState<string | null>(null)
+  /** 되살리기 응답이 남긴 안내 — 곡선 없이 돌아온 시험이 있으면 서버가 그 말을 준다. */
+  const [notice, setNotice] = useState<string | null>(null)
+  /** 파일이 정리된 시험이 낀 줄 — 되살리기 전에 묻는다. */
+  const [restoring, setRestoring] = useState<TrashItem | null>(null)
   const [failed, setFailed] = useState<Error | null>(null)
   const [purging, setPurging] = useState<TrashItem | null>(null)
   const [purgingMany, setPurgingMany] = useState(false)
@@ -95,12 +106,16 @@ export default function TrashPage() {
   const byKey = new Map(rows.map((row) => [keyOf(row), row]))
   const chosen = selection.chosen.map((key) => byKey.get(key)!).filter(Boolean)
 
-  async function run(job: () => Promise<{ said: string }>, what: string) {
+  async function run(
+    job: () => Promise<{ said: string; notice?: string | null }>,
+    what: string
+  ) {
     setBusy(what)
     setFailed(null)
     try {
       const done = await job()
       setSaid(done.said)
+      setNotice(done.notice ?? null)
       items.reload()
     } catch (error) {
       setFailed(error as Error)
@@ -118,6 +133,7 @@ export default function TrashPage() {
       const done = await trashApi.purgeMany(targets)
       // **건너뛴 것을 말한다.** 다섯을 골랐는데 「셋 지움」 만 뜨면 나머지가 어떻게
       // 됐는지 사람이 모른다 — 겹쳐 고른 것은 사고가 아니라 정상이다.
+      setNotice(null)
       setSaid(
         done.skipped > 0
           ? `${done.purged}건을 지웠습니다 (${done.skipped}건은 함께 사라져 건너뜀) — ${done.said}`
@@ -160,6 +176,7 @@ export default function TrashPage() {
       {said && (
         <div className="rounded-md border border-emerald-500/40 bg-emerald-500/5 p-3 text-sm">
           끝났습니다 — <b>{said}</b>
+          {notice && <p className="mt-1 text-amber-700 dark:text-amber-500">{notice}</p>}
         </div>
       )}
 
@@ -299,6 +316,12 @@ export default function TrashPage() {
                         {row.blocked}
                       </p>
                     )}
+                    {/* **막지는 않고 알린다** — 되살려도 곡선 없는 시험으로 돌아온다. */}
+                    {row.notice && (
+                      <p className="mt-0.5 text-xs text-amber-700 dark:text-amber-500">
+                        {row.notice}
+                      </p>
+                    )}
                   </TableCell>
                   <TableCell>
                     {below(row.below) || '—'}
@@ -310,7 +333,9 @@ export default function TrashPage() {
                       className="h-7 text-xs"
                       disabled={!!row.blocked || busy !== null}
                       onClick={() =>
-                        run(() => trashApi.restore(row.kind, row.id), `restore-${row.id}`)
+                        row.notice
+                          ? setRestoring(row)
+                          : run(() => trashApi.restore(row.kind, row.id), `restore-${row.id}`)
                       }
                     >
                       {busy === `restore-${row.id}` ? '되살리는 중…' : '복원'}
@@ -333,6 +358,41 @@ export default function TrashPage() {
           </Table>
         </div>
       )}
+
+      {/* **곡선 없이 돌아오는 것을 알고 누르게 한다.** 되돌릴 수 있는 일이라(다시 지우면
+          된다) 삭제의 빨간 경고를 달지 않는다. */}
+      <ConfirmDialog
+        open={restoring !== null}
+        title="되살리기 — 파일이 정리된 시험이 있습니다"
+        confirmLabel="그래도 되살리기"
+        undoable="되살린 것은 다시 지울 수 있습니다."
+        busy={busy !== null}
+        body={
+          restoring && (
+            <>
+              <p>
+                <b>
+                  {restoring.kind_label} {restoring.name || '(이름 없음)'}
+                </b>
+                {below(restoring.below) && <> 와 그 아래 {below(restoring.below)}</>} 를
+                되살립니다.
+              </p>
+              <p className="mt-2 text-amber-700 dark:text-amber-500">{restoring.notice}</p>
+              <p className="text-muted-foreground mt-1">
+                이름 · 계보는 돌아오지만 곡선은 돌아오지 않습니다 — 그 시험은 곡선을 열거나 다시
+                처리할 수 없습니다.
+              </p>
+            </>
+          )
+        }
+        onClose={() => setRestoring(null)}
+        onConfirm={() => {
+          const target = restoring
+          if (!target) return
+          setRestoring(null)
+          void run(() => trashApi.restore(target.kind, target.id), `restore-${target.id}`)
+        }}
+      />
 
       {/* **무엇이 사라지는지 이름과 수로 적는다.** 「정말 지울까요?」 만으로는
           사람이 무엇에 동의하는지 모른다. */}

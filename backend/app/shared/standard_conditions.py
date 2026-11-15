@@ -23,6 +23,7 @@
 from __future__ import annotations
 
 import math
+import re
 from dataclasses import dataclass
 from functools import cache
 from typing import Any
@@ -145,7 +146,9 @@ def resolve(key: str | None, *, si_unit: str | None = None) -> str | None:
 #: 주파수는 일곱 가지로 적혀 있어서(`frequency_MHz` 194 · `frequency_ghz` 68 ·
 #: `frequency_Hz` 18 …) 반영하면 그 값들의 주파수가 빠졌다. 이제 셋 다 이 표를 읽는다.
 #:
-#: **글은 읽지 않는다** — 「5 Hz」 · 「room temperature」 를 숫자로 풀면 짐작이 섞인다.
+#: **글은 읽지 않는다** — 「5 Hz」 · 「room temperature」 를 숫자로 풀면 짐작이 섞인다. 예외
+#: 하나: 대표값 순위 · 덱 각주는 「550 degC」 처럼 숫자와 단위로 시작하는 온도 글을 읽는다
+#: (`read_catalog(text=True)`).
 #: 키는 대소문자를 가린다 — SQL 의 JSON 키가 그렇고, 두 길(SQL · 파이썬)은 같은 답을 내야 한다.
 UNIT_KEYS: dict[str, tuple[str, float, float]] = {
     "temperature_k": ("temperature", 1.0, 0.0),
@@ -198,12 +201,56 @@ def catalog_keys(quantity: str) -> tuple[tuple[str, float, float], ...]:
     return tuple(named + plain)
 
 
-def read_catalog(conditions: dict[str, Any] | None, quantity: str) -> float | None:
-    """문헌 값의 조건에서 이 양을 SI 로. **숫자로 적힌 것만** — 없으면 `None`."""
-    for key, factor, offset in catalog_keys(quantity):
-        raw = (conditions or {}).get(key)
+#: **글로 적힌 온도** — 「550 degC」 · 「90 C」 · 「573 K」 · 「25 °C」 ·
+#: 「200 degC, held 30 min」. 숫자 하나에 단위 하나가 **바로 붙어 시작하는** 것만 읽는다.
+#: 범위(「20-22」 · 「-40 to 200」) · 오차(「23 +/- 2」) · 말(「room temperature」 · 「RT」)은
+#: 안 읽는다 — 숫자로 풀면 짐작이 섞인다.
+#: 단위의 C · F 는 온도 칸 안에서만 섭씨 · 화씨다(바깥에서는 C 가 쿨롱일 수도 있어 단위표가
+#: 안 받는다). 환산은 `UNIT_KEYS` 의 `temperature_c` · `temperature_f` 와 같은 수다.
+_TEMPERATURE_TEXT = re.compile(
+    r"^\s*([-+]?\d+(?:\.\d+)?)\s*(°\s*[CF]|℃|deg\s*[CF]|[CFK])(?![A-Za-z0-9])", re.IGNORECASE
+)
+_TEMPERATURE_TEXT_UNITS: dict[str, tuple[float, float]] = {
+    "c": UNIT_KEYS["temperature_c"][1:],
+    "f": UNIT_KEYS["temperature_f"][1:],
+    "k": UNIT_KEYS["temperature_k"][1:],
+}
+
+
+@cache
+def _temperature_text(text: str) -> float | None:
+    """글 하나 → K. 못 읽으면 `None`. 같은 글이 순위 비교마다 다시 오므로 기억해 둔다."""
+    found = _TEMPERATURE_TEXT.match(text)
+    if found is None:
+        return None
+    letter = found.group(2)[-1].lower()
+    factor, offset = _TEMPERATURE_TEXT_UNITS[letter]
+    return float(found.group(1)) * factor + offset
+
+
+def read_catalog(
+    conditions: dict[str, Any] | None, quantity: str, *, text: bool = False
+) -> float | None:
+    """문헌 값의 조건에서 이 양을 SI 로. **숫자로 적힌 것만** — 없으면 `None`.
+
+    `text` 를 켜면 숫자가 하나도 없을 때 **글로 적힌 온도**(「550 degC」)도 읽는다 — 온도만.
+    대표값 순위와 덱 각주가 켠다(2026-11-15): 글로 적힌 538 °C 값을 「온도 미기재」 로 쳐서
+    벌점 5 K 만 주면 상온 값 대신 대표가 됐다. 값 검색 · 커버리지 · 반영은 끈 채다 — SQL 길과
+    같은 답을 내야 한다(머리말의 `UNIT_KEYS`).
+    """
+    found = conditions or {}
+    keys = catalog_keys(quantity)
+    for key, factor, offset in keys:
+        raw = found.get(key)
         if isinstance(raw, int | float) and not isinstance(raw, bool):
             return float(raw) * factor + offset
+    if text and quantity == "temperature":
+        for key, _, _ in keys:
+            raw = found.get(key)
+            if isinstance(raw, str):
+                kelvin = _temperature_text(raw)
+                if kelvin is not None:
+                    return kelvin
     return None
 
 

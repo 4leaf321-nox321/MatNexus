@@ -44,6 +44,17 @@
 있는 PCB 적층판을 LS-DYNA 탄성 덱으로 내면서 덱 머리에 「유전율 = …」 이 서면, 덱만 받은
 사람은 그것이 덱에 들어간 줄 안다.
 
+## 숫자는 SI 로, 상온이 아니면 온도를 적는다 (2026-11-15)
+
+문헌 값은 정의의 단위로 저장돼 있다 — 직접 만든 정의는 MPa · GPa · g/cm3 도 받는다. 사내
+항목은 SI 라 옮길 때 환산한다(`declared_catalog.si_number`). 전에는 숫자를 그대로 옮겨, 단위
+MPa 정의의 210000 이 덱에 210000 Pa 로 실렸다.
+
+대표값 순위는 등급이 온도보다 앞이라(`representative`) 상온이 아닌 값이 뽑힐 수 있다 —
+538 °C 탄성률 144.8 GPa 가 「출처 [tier 2]」 만 달고 `*ELASTIC` 상수로 나갔다. 뽑힌 값이
+상온(23 ± 5 °C) 밖이면 덱 각주와 근거 문자열(카드 블록의 `…_reference`)에 그 온도를
+적는다.
+
 ## 합성 곡선의 입력은 정합한 짝으로
 
 항복강도·인장강도의 대표값은 물성마다 따로 뽑혀 서로 다른 출처에서 올 수 있다. 그대로
@@ -72,7 +83,7 @@ from app.modules.catalog.models import (
 from app.modules.catalog.ontology_models import PropertyLink
 from app.modules.materials.models import Material
 from app.modules.vocabulary.models import VocabularyTerm
-from app.shared import declared_conditions, representative
+from app.shared import declared_catalog, declared_conditions, display, representative
 from matcore import cards
 
 #: 합성 곡선의 두 입력 — 모순(항복 > 인장)이면 정합한 짝으로 바꾼다.
@@ -188,6 +199,19 @@ def reference_of(value: CatalogValue, source: CatalogSource | None) -> str:
     return f"{cite_of(value, source) or '카탈로그'} (문헌 물성 카탈로그, {tier})"
 
 
+def si_of(value: CatalogValue) -> float:
+    """문헌 값의 숫자를 SI 로 — 정의의 단위로 저장돼 있다(머리말). 수치가 없으면 0."""
+    return declared_catalog.value_si(value) or 0.0
+
+
+def measured_at(value: CatalogValue) -> str:
+    """상온이 아니면 「 (538 degC 에서 잰 값)」 — 상온이거나 온도가 안 적혔으면 빈 글자."""
+    kelvin = representative.off_room(value.conditions)
+    if kelvin is None:
+        return ""
+    return f" ({display.quantity(kelvin, 'degC')} 에서 잰 값)"
+
+
 def _consistent(
     rows: list[tuple[CatalogValue, CatalogSource | None]],
     chosen: dict[str, tuple[CatalogValue, CatalogSource | None]],
@@ -195,8 +219,8 @@ def _consistent(
     """항복 > 인장이면 등급 합이 가장 좋은 정합 짝으로 바꾼다. 바꿨으면 그 말을 돌려준다."""
     if YIELD not in chosen or TENSILE not in chosen:
         return None
-    sigy = float(chosen[YIELD][0].value_num or 0.0)
-    uts = float(chosen[TENSILE][0].value_num or 0.0)
+    sigy = si_of(chosen[YIELD][0])
+    uts = si_of(chosen[TENSILE][0])
     if sigy <= uts:
         return None
     yields = [pair for pair in rows if pair[0].property_key == YIELD]
@@ -204,7 +228,7 @@ def _consistent(
     best: tuple[tuple[int, int, int], Any, Any] | None = None
     for one in yields:
         for two in tensiles:
-            if float(one[0].value_num or 0.0) <= float(two[0].value_num or 0.0):
+            if si_of(one[0]) <= si_of(two[0]):
                 score = (
                     one[0].quality_tier + two[0].quality_tier,
                     one[0].quality_tier,
@@ -223,8 +247,8 @@ def _consistent(
     return (
         f"대표값 조합이 물리적으로 모순(항복 {sigy / 1e6:.0f} > 인장 {uts / 1e6:.0f} MPa)"
         "이라, "
-        f"정합한 조합(항복 {float(one[0].value_num) / 1e6:.0f} / 인장 "
-        f"{float(two[0].value_num) / 1e6:.0f} MPa)을 담았습니다."
+        f"정합한 조합(항복 {si_of(one[0]) / 1e6:.0f} / 인장 "
+        f"{si_of(two[0]) / 1e6:.0f} MPa)을 담았습니다."
     )
 
 
@@ -311,7 +335,7 @@ def _series_row(
             {
                 condition.key: at,
                 "temperature_k": kelvin,
-                "value_si": float(value.value_num or 0.0),
+                "value_si": si_of(value),
             }
             for at, kelvin, value, _ in series
         ],
@@ -369,14 +393,17 @@ def virtual(
     )
     declared_rows: list[dict[str, Any]] = []
     for key, (value, source) in chosen.items():
-        number = float(value.value_num or 0.0)
+        # **SI 로 옮긴다** — 값은 정의의 단위로 저장돼 있다(머리말).
+        number = si_of(value)
         place = places.get(key)
         if place is None:
             if key in usable:
                 out.unmapped.append(usable[key])
             continue
         kind, name = place
-        reference = reference_of(value, source)
+        # 상온이 아닌 대표값은 근거에 그 온도를 적는다 — 카드 블록의 `…_reference` 로 간다.
+        when = measured_at(value)
+        reference = reference_of(value, source) + when
         if kind == "column":
             # 기본 칸의 서버 제약 — 화면의 반영과 같다(음의 푸아송비는 못 담는다).
             if name == "poisson_ratio" and not 0.0 <= number < 0.5:
@@ -397,7 +424,7 @@ def virtual(
                         for at, _, one, cited in series:
                             where = f" ({condition.label} {at:.4g} {condition.si_unit})"
                             out.provenance.append(
-                                _footnote(name, float(one.value_num or 0.0), one, cited, where)
+                                _footnote(name, si_of(one), one, cited, where)
                             )
                         if dropped:
                             out.provenance.append(
@@ -428,8 +455,9 @@ def virtual(
         if key not in slots:
             # 옮기되(반영과 같다) 각주는 안 단다 — 블록에 안 실리는 값이다(머리말).
             continue
-        # 덱 각주는 전과 같은 모양 — 이름만 사내 항목 이름이 됐다.
-        line = _footnote(label, number, value, source)
+        # 덱 각주는 전과 같은 모양 — 이름만 사내 항목 이름이 됐다. 상온이 아니면 그 온도를
+        # 단다.
+        line = _footnote(label, number, value, source, when)
         if marks[value.id].n_candidates > 1:
             line += f" (후보 {marks[value.id].n_candidates}개 중 대표값)"
         out.provenance.append(line)
