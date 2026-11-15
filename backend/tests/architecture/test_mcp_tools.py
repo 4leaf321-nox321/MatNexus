@@ -344,6 +344,26 @@ def test_지우기_폐기_도구는_미리보기가_기본이다() -> None:
     assert seen == dict.fromkeys(wanted, True), seen
 
 
+def test_dry_run_을_받는_도구는_전부_미리보기가_기본이다() -> None:
+    """2026-11-15 — 묶음을 만드는 `create_group` 을 더하며 넓혔다. 위 시험은 지우기 셋만
+    이름으로 보는데, 쓰기 도구가 늘 때마다 그 목록에 더하는 것을 잊으면 새 도구가 부르는 즉시
+    쓴다.
+    **`dry_run` 을 받는다는 것 자체가 쓰기 도구라는 선언**이라 이름 없이 전부 본다."""
+    bad = []
+    checked = set()
+    for tool in _tools():
+        names = [one.arg for one in tool.args.args]
+        if "dry_run" not in names:
+            continue
+        defaults = dict(zip(reversed(names), reversed(tool.args.defaults), strict=False))
+        default = defaults.get("dry_run")
+        checked.add(tool.name)
+        if not (isinstance(default, ast.Constant) and default.value is True):
+            bad.append(tool.name)
+    assert {"create_group", "create_card_from_group"} <= checked, sorted(checked)
+    assert not bad, f"dry_run 기본이 True 가 아닌 쓰기 도구: {bad}"
+
+
 def test_쓰기_도구는_이름을_쓰기로_해소한다() -> None:
     """2026-11-15 전반 점검 — 이름 해소가 포함 검색에 하나만 걸리면 이름을 안 견주고 그
     id 를 썼다. 「SUS304」 에 `SUS304L 0.5t` 하나만 걸리면 묻지 않고 그 재료에 적었다. 해소

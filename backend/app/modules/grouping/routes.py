@@ -35,6 +35,11 @@ from matcore import groups, registry
 
 router = APIRouter(prefix="/groups", tags=["grouping"])
 
+#: **AI(MCP)가 묶음을 만든 일**(2026-11-15) — 묶음 결과는 카드의 근거다. MCP 에 묶음을 만드는
+#: 도구(`create_group`)가 생겨, 화면 밖 길로 만든 묶음을 셀 자리가 필요해졌다. 화면에서 만든
+#: 것은 전처럼 안 남는다(`audit.record_by_client`).
+GROUP_RESULT_CREATED_BY_CLIENT = "group_result.created_by_client"
+
 
 def _out(row: GroupResult, *, access: EditAccessOut | None = None) -> GroupResultOut:
     return GroupResultOut(
@@ -117,7 +122,7 @@ def create_group(
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> GroupResultOut:
-    """묶어서 행으로 남긴다."""
+    """묶어서 행으로 남긴다. AI(MCP)가 만들었으면 감사에 남긴다."""
     row = services.create(
         db,
         user,
@@ -126,6 +131,21 @@ def create_group(
         options=payload.options,
         note=payload.note,
         results=payload.results,
+    )
+    audit.record_by_client(
+        db,
+        action=GROUP_RESULT_CREATED_BY_CLIENT,
+        actor=user,
+        target_table="group_results",
+        target_id=row.id,
+        target_label=f"{row.plugin_id} · {len(row.members)}건",
+        workspace_id=row.workspace_id,
+        changes={
+            "plugin_id": row.plugin_id,
+            "plugin_version": row.plugin_version,
+            "test_run_ids": [str(one["test_run_id"]) for one in row.members],
+            "options": dict(row.options or {}),
+        },
     )
     db.commit()
     return _out(row, access=access_of(db, user, row))

@@ -33344,7 +33344,7 @@
         "type": "object"
       },
       "SpecGapOut": {
-        "description": "선언한 값과 잰 값. **차이가 큰 것이 위로 온다.**",
+        "description": "선언한 값과 **같은 온도에서** 잰 값. **차이가 큰 것이 위로 온다.**\n\n잰 값은 견준 선언 점의 온도 ±2 K 안의 것만이다(2026-11-15) — 전에는 그 재료의 모든 온도의\n잰 값 평균과 견줘, 차이가 재료가 아니라 온도의 것이 될 수 있었다.\n\n같은 항목의 잰 값은 있는데 **그 온도의 것이 하나도 없으면** 줄은 남되 `measured_mean` ·\n`gap_ratio` 가 `null` 이고 `measured_count` 가 0 이다(「견줄 잰 값 없음」 — 맨 아래로\n간다). 잰 값이 아예 없는 항목은 줄이 아니라 `unmatched_items` 에 선다.",
         "properties": {
           "declared_reference": {
             "anyOf": [
@@ -33373,8 +33373,15 @@
             "title": "Declared Source"
           },
           "gap_ratio": {
-            "title": "Gap Ratio",
-            "type": "number"
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gap Ratio"
           },
           "item": {
             "title": "Item",
@@ -33394,12 +33401,40 @@
             "type": "integer"
           },
           "measured_mean": {
-            "title": "Measured Mean",
-            "type": "number"
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Measured Mean"
+          },
+          "measured_other_temperature": {
+            "default": 0,
+            "title": "Measured Other Temperature",
+            "type": "integer"
+          },
+          "measured_unknown_temperature": {
+            "default": 0,
+            "title": "Measured Unknown Temperature",
+            "type": "integer"
           },
           "si_unit": {
             "title": "Si Unit",
             "type": "string"
+          },
+          "temperature_k": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Temperature K"
           }
         },
         "required": [
@@ -33409,6 +33444,7 @@
           "declared_si",
           "declared_source",
           "declared_reference",
+          "temperature_k",
           "measured_mean",
           "measured_count",
           "si_unit",
@@ -49422,7 +49458,7 @@
     },
     "/api/groups": {
       "post": {
-        "description": "묶어서 행으로 남긴다.",
+        "description": "묶어서 행으로 남긴다. AI(MCP)가 만들었으면 감사에 남긴다.",
         "operationId": "create_group_api_groups_post",
         "requestBody": {
           "content": {
@@ -58402,7 +58438,7 @@
     },
     "/api/statistics/analysis/spec-gap": {
       "get": {
-        "description": "선언한 값 vs 잰 값. **차이가 큰 것이 위로 온다.**\n\n잇는 열쇠는 기준정보 항목의 `measured_key` 다 — 선언은 항목 이름(`탄성계수`)이고\n잰 값은 처리 결과의 스칼라 키(`youngs_modulus`)라, 항목이 「우리가 재는 값」 으로\n그 키를 들고 있다. 전에는 라벨 문자열로 이었는데(2026-09-05 점검) 용어를 개명하거나\n플러그인이 라벨을 바꾸면 오류 없이 「매칭 안 됨」 으로 빠졌다. 키가 없는 항목은\n전처럼 라벨로 잇는다 — 못 견주는 항목은 `unmatched_items` 로 돌려준다.",
+        "description": "선언한 값 vs **같은 온도에서** 잰 값. **차이가 큰 것이 위로 온다.**\n\n잇는 열쇠는 기준정보 항목의 `measured_key` 다 — 선언은 항목 이름(`탄성계수`)이고\n잰 값은 처리 결과의 스칼라 키(`youngs_modulus`)라, 항목이 「우리가 재는 값」 으로\n그 키를 들고 있다. 전에는 라벨 문자열로 이었는데(2026-09-05 점검) 용어를 개명하거나\n플러그인이 라벨을 바꾸면 오류 없이 「매칭 안 됨」 으로 빠졌다. 키가 없는 항목은\n전처럼 라벨로 잇는다 — 못 견주는 항목은 `unmatched_items` 로 돌려준다.\n\n**온도를 맞춘다**(2026-11-15, `analysis.match_declared`). 선언 점의 온도 ±2 K 안의 잰 값만\n견주고, 상온 선언이면 시험 온도 미기재 값도 넣어 그 수를 센다. 전에는 그 재료의 모든\n온도의 잰 값 평균과 견줘, 23 ℃ · 80 ℃ 가 섞인 평균이 선언과의 차이로 섰다. 그 온도의 잰\n값이 없으면 줄은 「견줄 잰 값 없음」(평균 · 차이 `null`)으로 맨 아래에 남는다.",
         "operationId": "analysis_spec_gap_api_statistics_analysis_spec_gap_get",
         "responses": {
           "200": {

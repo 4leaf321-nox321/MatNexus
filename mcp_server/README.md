@@ -102,7 +102,7 @@ ms)를 알린다 — 「관리 → 사용 현황」 의 MCP 숫자가 여기서 
 도구의 답은 그대로 나간다. 도구 하나가 백엔드를 여러 번 부르므로 API 요청 수(`X-Client: mcp`)와
 도구 수는 다르다 — 둘 다 그 화면에 있다.
 
-## 5. 지금 있는 것 (도구 129개)
+## 5. 지금 있는 것 (도구 130개)
 
 **전부 한 번에 불러 보려면 `probe.py` 를 돌린다** — 진짜 MCP 클라이언트로 한 바퀴
 돈다(아래 「실측으로 잡은 것」 참조). 화면이나 curl 로는 안 보이는 층이 있다.
@@ -151,7 +151,7 @@ ms)를 알린다 — 「관리 → 사용 현황」 의 MCP 숫자가 여기서 
     get_card(card_id)                  카드 하나 — 덱에 실릴 값 그대로. 번호(C-000038) · 이름도 받는다
     list_samples(material_id)          시료 — 로트·업체·시편 수·시험 수
     get_sample(sample_id)              시료 하나 — 시편 목록과 **밀시트 대조**
-    list_groups(material_id)           묶음 결과 — 속도별·Prony·확장 묶음
+    list_groups(material_id)           묶음 결과 — 속도별·Prony·확장 묶음(없으면 create_group)
 
 ### 등록 — 재료 · 시료 · 시편 (**새 낱말은 안 만든다**)
 
@@ -221,6 +221,10 @@ Family·Category·Grade·제조사·유통사·시편 규격은 **기준정보**
     ★ create_card_from_tests(...)      시험에서 나온 값으로 카드 초안
                                        (둘 다 `basis` — 대표 곡선 평균 · 중앙값 · 상한 · 하한, ADR 0041 ·
                                        외삽 `extrapolate_to` · 두 식 혼합 `blend_*`, VOC 42)
+    ★ create_group(plugin_id, test_run_ids, options?)  묶음(글로벌 피팅)을 만든다 — 속도별 · Prony 여럿 ·
+                                       응력완화 + DMA 마스터커브 등. 미리보기는 계산하지 않고 시험마다 종류 ·
+                                       채택 결과 · 대표 마스터커브 · 보류 · 재료 하나를 본다(`problems`). 모르는
+                                       plugin_id 면 고를 수 있는 묶음(`kinds` — needs · needs_by_type · params)
     ★ create_card_from_group(...)      묶음에서 — 속도 의존·점탄성·확장 묶음을 한 길로
     ★ create_viscoelastic_card(...)    Prony 적합 하나에서 점탄성 카드 초안
     ★ create_lve_card(...)             DMA 변형률 스윕의 선형 탄성률 카드 초안

@@ -681,6 +681,20 @@ async def sweep(session: ClientSession) -> None:
                     "create_viscoelastic_card",
                     {"prony_fit_id": listed_fits[0]["id"], "label": "점검용", "dry_run": True},
                 )
+        # 묶음 만들기(2026-11-15) — 미리보기는 계산 없이 구성원 조건만 본다. 시험 하나라 `problems`
+        # (최소 시험 수)가 나와도 미리보기 자체는 성공이다.
+        await call(
+            session,
+            "create_group",
+            {"plugin_id": "relaxation.dma_coupled", "test_run_ids": [dma], "dry_run": True},
+        )
+    # 모르는 묶음이면 고를 수 있는 묶음(`kinds`)을 대며 거절한다 — 거절이 맞다.
+    await call(
+        session,
+        "create_group",
+        {"plugin_id": "probe.no_such_group", "test_run_ids": ["x"], "dry_run": True},
+        expect_error=True,
+    )
     await call(
         session,
         "create_card_from_group",

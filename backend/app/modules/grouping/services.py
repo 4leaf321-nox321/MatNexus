@@ -36,7 +36,7 @@ from app.modules.viscoelastic.models import MasterCurve, PronyFit
 from app.shared import curvedata, filestore, holds, permissions, specimen_size
 from app.shared.errors import AppError, NotFound
 from matcore import curves as curvekit
-from matcore import groups, registry
+from matcore import groups, registry, viscoelastic
 from matcore import prony as pronykit
 from matcore.groups import prony as _prony_group  # noqa: F401  (등록시킨다)
 from matcore.groups import rate as rate_group
@@ -108,6 +108,20 @@ TEST_TYPE_META = "test_type"
 #: 있는 스칼라의 가장 작은 값을 구성원 값에 싣는다(2026-11-15). 응력완화의 유지 변형률을 같은
 #: 재료의 DMA 변형률 스윕이 낸 선형 한계와 견주는 자리다 — 그 스윕은 묶는 시험이 아니다.
 MATERIAL_SCALARS = "material_scalars"
+
+#: 구성원 규칙 `"material_fields": ["poisson_ratio"]` — **재료의 기본 칸**(재료 화면에 적는
+#: 값)을 구성원 값에 싣는다(2026-11-15). `material_scalars` 가 그 재료의 채택된 결과에서
+#: 모은다면 이쪽은 재료 행에 사람이 적어 둔 값이다 — 전단(G′) 마스터커브를 E 로 옮길 푸아송비가
+#: 그렇다(시험이 주지 않는다). 비어 있으면 그 이름이 빠질 뿐 막지 않는다 — 없을 때 어떻게
+#: 할지는 계산이 정한다. 실은 이름은 구성원 `meta["from_material"]` 에 남는다.
+MATERIAL_FIELDS = "material_fields"
+FROM_MATERIAL_META = "from_material"
+#: 실을 수 있는 재료의 기본 칸 — 규칙의 이름 → `Material` 의 칸(SI).
+_MATERIAL_FIELDS = {"poisson_ratio": "poisson_ratio", "density": "density_si"}
+
+#: DMA 시험의 변형 모드 조건(`tests/definitions.py` 의 dma_sweep) — 카드의 판정
+#: (`fitting._modulus_basis`)과 같은 근거로 전단을 가른다.
+_DEFORMATION_MODE = "deformation_mode"
 
 #: 이 묶음에서 **시험마다 쓸 결과**(시험 id → 결과 id) — 비면 채택된 결과(2026-11-14, VOC 49).
 #: 수집기들이 채택 결과를 읽는 자리가 여섯이라, 인자로 끌고 다니지 않고 `create` 가 이 묶음을
@@ -469,9 +483,58 @@ def _material_scalars(
     return found
 
 
+def _material_fields(
+    db: Session,
+    runs: Sequence[TestRun],
+    members: list[groups.Member],
+    rule: dict[str, Any],
+    plugin_id: str,
+) -> list[groups.Member]:
+    """규칙이 바라는 **재료의 기본 칸**을 구성원 값에 싣는다(`MATERIAL_FIELDS`). 빈 칸은
+    뺀다."""
+    names = [str(one) for one in rule.get(MATERIAL_FIELDS) or []]
+    if not names or not members:
+        return members
+    unknown = sorted(set(names) - set(_MATERIAL_FIELDS))
+    if unknown:
+        raise AppError(
+            "MNX-GROUPING-0001",
+            f"{plugin_id}: 재료의 기본 칸이 아닙니다: {', '.join(unknown)} — "
+            f"`{MATERIAL_FIELDS}` 는 {', '.join(_MATERIAL_FIELDS)} 만 받습니다.",
+            status=422,
+        )
+    material = _material_of(db, runs)
+    found: dict[str, float] = {}
+    for name in names:
+        value = getattr(material, _MATERIAL_FIELDS[name], None)
+        if (
+            isinstance(value, int | float)
+            and not isinstance(value, bool)
+            and np.isfinite(value)
+        ):
+            found[name] = float(value)
+    return [
+        replace(
+            member,
+            values={**member.values, **found},
+            meta={**member.meta, FROM_MATERIAL_META: sorted(found)},
+        )
+        for member in members
+    ]
+
+
 def _master_curve_members(db: Session, runs: list[TestRun]) -> list[groups.Member]:
-    """대표 마스터커브와 그 온도 이동 · 맞춘 Prony · **전단으로 쟀는지**를 꺼낸다."""
-    shear = {run.id: curvedata.measures_shear_channels(db, run) for run in runs}
+    """대표 마스터커브와 그 온도 이동 · 맞춘 Prony · **전단으로 쟀는지**를 꺼낸다.
+
+    전단은 측정 채널이 G′ 이거나 시험 조건의 변형 모드가 전단 계열(전단 샌드위치 · 비틀림 ·
+    평행판)일 때다 — 카드의 판정(`fitting._modulus_basis`)과 같은 근거(2026-11-15). 전에는
+    채널만 봐서, 변형 모드를 「비틀림」 으로 적고 저장 탄성률 채널로 올린 시험이 E′ 로 읽혔다.
+    """
+    shear = {
+        run.id: curvedata.measures_shear_channels(db, run)
+        or viscoelastic.measures_shear((run.conditions or {}).get(_DEFORMATION_MODE)) is True
+        for run in runs
+    }
     return [
         replace(member, meta={**member.meta, "shear": shear[run.id]})
         for run, member in zip(runs, _prony_members(db, runs), strict=True)
@@ -479,6 +542,14 @@ def _master_curve_members(db: Session, runs: list[TestRun]) -> list[groups.Membe
 
 
 def _declared_members(
+    db: Session, runs: list[TestRun], rule: dict[str, Any], plugin_id: str
+) -> list[groups.Member]:
+    """선언된 규칙으로 구성원을 모으고, 규칙이 바라면 **재료의 기본 칸**을 싣는다."""
+    members = _rule_members(db, runs, rule, plugin_id)
+    return _material_fields(db, runs, members, rule, plugin_id)
+
+
+def _rule_members(
     db: Session, runs: list[TestRun], rule: dict[str, Any], plugin_id: str
 ) -> list[groups.Member]:
     """선언대로 채택된 결과에서 열·조건·스칼라를 꺼낸다. 없으면 **어느 시험이 무엇이

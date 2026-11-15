@@ -162,6 +162,15 @@ def run_group(
             f"묶으려면 {least}개 이상이 필요합니다(지금 {len(members)}개). "
             f"하나뿐이면 그 시험의 결과를 그대로 쓰세요."
         )
+    # **모르는 옵션은 이름을 대고 막는다**(2026-11-15). 그대로 넘기면 계산 함수가 TypeError 를
+    # 내 API 가 500 이었다 — MCP 가 먼저 막고 있었지만 화면 · API 는 그대로였다.
+    known = {spec.name for spec in plugin.params}
+    unknown = sorted(set(options or {}) - known)
+    if unknown:
+        raise GroupError(
+            f"{plugin_id} 가 모르는 설정입니다: {', '.join(unknown)} — 받는 설정: "
+            f"{', '.join(sorted(known)) or '없음'}"
+        )
     outcome = plugin.fn(list(members), **typed_options(plugin.params, options or {}))
     if not isinstance(outcome, GroupOutcome):
         raise GroupError(f"{plugin_id} 가 GroupOutcome 을 안 돌려줬습니다.")

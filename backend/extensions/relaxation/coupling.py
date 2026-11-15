@@ -13,7 +13,9 @@
 
 1. 응력완화 시험들은 **한 온도**(±2 K)여야 한다 — T_R. DMA 는 대표 마스터커브 **하나**.
 2. 마스터커브를 T_R 로 옮긴다 — 이동 상수(WLF · Arrhenius, 수동이면 잰 이동인자 보간)로
-   a_T(T_R). 맞춘 온도 범위 밖이면 외삽이라 막는다. 전단(G′) 마스터커브는 1단계에서 안 받는다.
+   a_T(T_R). 맞춘 온도 범위 밖이면 외삽이라 막는다. 전단(G′) 마스터커브는 E = 2(1+ν)G 로 옮긴
+   뒤 같은 길로 잇는다 — ν 는 묶음 옵션 → 재료의 푸아송비 → 둘 다 없으면 막는다(2026-11-15,
+   `dma.to_shear` · DMA 온도별 카드와 같은 규칙 — 값을 지어내지 않는다).
 3. DMA Prony 는 **완화시간을 자릿수마다 못 박아** 다시 맞춘다(`pronykit.fit_decades`) — 자유
    τ 적합은 저주파 끝(긴 시간 — 바로 겹치는 쪽)에서 E′ 가 +40 % 틀렸다(VOC 52 조사).
    E_DMA(t, T_R) = E∞ + Σ Eᵢ · exp(-t / (τᵢ · a_T)).
@@ -38,6 +40,7 @@ import numpy as np
 from scipy.optimize import nnls
 
 from matcore import prony as pronykit
+from matcore import viscoelastic as viscokit
 from matcore.groups import GroupError, GroupOutcome, Member
 
 from . import prony_time
@@ -54,6 +57,12 @@ SHEAR_META = "shear"
 #: 재료에서 모은 선형점탄성 한계 변형률(가장 작은 것) — 중심이 응력완화 구성원 값에 싣는다.
 LVE_LIMIT = "lve_strain_limit"
 HELD_STRAIN = "held_strain_used"
+#: 전단 마스터커브를 E 로 옮길 푸아송비 — 묶음 옵션의 이름이자, 중심이 재료의 기본 칸을 실어
+#: 주는 값 이름(`material_fields`). 실렸으면 구성원 `meta["from_material"]` 에 이름이 있다.
+POISSON = "poisson_ratio"
+#: ν 가 이 위면(고무 쪽) 전단 → E 변환의 오차를 따로 말한다.
+NEAR_INCOMPRESSIBLE = 0.45
+_POISSON_SOURCES = {"option": "묶음 옵션", "material": "재료에 적힌 값"}
 
 #: 겹친 구간 비의 중앙값이 1 에서 이만큼 넘게 벗어나면 잇되 말한다 — **잠정값**.
 OVERLAP_WARN = 0.05
@@ -185,14 +194,79 @@ def _relaxation_points(relaxation: Sequence[Member]) -> tuple[float, np.ndarray,
     return float(np.mean(temperatures)), time[order], modulus[order]
 
 
-def _master_curve(
-    curve: Member, warnings: list[str]
-) -> tuple[pronykit.PronySeries, float, float, float, Mapping[str, Any]]:
-    """`(자릿수마다 맞춘 Prony, 기준 온도, 최저 · 최고 주파수, 이동)`."""
-    if curve.meta.get(SHEAR_META):
+def _given_poisson(raw: Any) -> float | None:
+    """묶음 옵션의 푸아송비. 비면 `None` — 글자로 온 숫자(MCP)도 읽고, 못 읽으면 막는다."""
+    if raw is None or (isinstance(raw, str) and not raw.strip()):
+        return None
+    value: Any = raw
+    if isinstance(raw, str):
+        try:
+            value = float(raw)
+        except ValueError:
+            value = None
+    found = _number(value)
+    if found is None:
+        raise GroupError(f"푸아송비 옵션을 숫자로 읽을 수 없습니다: {raw!r}")
+    return found
+
+
+def _shear_to_e(curve: Member, option: float | None) -> tuple[float, float, str]:
+    """전단 마스터커브를 E 로 옮길 `(배수 2(1+ν), ν, 출처)` — 옵션 → 재료 → 없으면 막는다."""
+    found = _number(curve.values.get(POISSON))
+    if option is not None:
+        poisson, source = option, "option"
+    elif found is not None:
+        poisson, source = found, "material"
+    else:
         raise GroupError(
-            f"{curve.label} 의 마스터커브는 전단(G′)으로 잰 것입니다 — 1단계는 인장 · 굽힘 "
-            "DMA(E′)와만 잇습니다."
+            f"{curve.label} 의 마스터커브는 전단(G′)으로 잰 것입니다 — E = 2(1+ν)G 로 "
+            "옮기려면 푸아송비가 필요합니다. 묶음 옵션 「푸아송비」 에 넣거나 재료에 적으세요"
+            "(값을 지어 넣지 않습니다)."
+        )
+    try:
+        factor = viscokit.youngs_from_shear(poisson)
+    except viscokit.ViscoelasticError as exc:
+        raise GroupError(str(exc)) from exc
+    return factor, poisson, source
+
+
+def _master_curve(
+    curve: Member, warnings: list[str], poisson_option: float | None = None
+) -> tuple[pronykit.PronySeries, float, float, float, Mapping[str, Any], dict[str, Any]]:
+    """`(자릿수마다 맞춘 Prony, 기준 온도, 최저 · 최고 주파수, 이동, 잰 탄성률)`.
+
+    전단(G′)이면 저장 · 손실 탄성률에 2(1+ν) 를 곱해 E′ · E″ 로 옮긴 뒤 맞춘다 — 그 뒤는 인장 ·
+    굽힘으로 잰 것과 같은 길이다. 잰 탄성률(`basis`)은 무엇을 어떻게 옮겼는지다.
+    """
+    basis: dict[str, Any] = {"shear": False, "label": "E′ (인장 · 굽힘 DMA)"}
+    factor = 1.0
+    if curve.meta.get(SHEAR_META):
+        factor, poisson, source = _shear_to_e(curve, poisson_option)
+        named = _POISSON_SOURCES[source]
+        basis = {
+            "shear": True,
+            "poisson_ratio": poisson,
+            "poisson_source": source,
+            "label": f"G′ (전단 DMA) → E = 2(1+ν)G, ν = {poisson:g}({named})",
+        }
+        warnings.append(
+            f"DMA 마스터커브({curve.label})는 전단(G′)으로 잰 것입니다 — E = 2(1+ν)G, "
+            f"ν = {poisson:g}({named}) 로 옮겨 이었습니다. 등방 · 선형 탄성을 가정하고 ν 를 "
+            "시간 · 온도에 상수로 둔 변환입니다. 카드를 만들 때 푸아송비를 같은 ν 로 두세요 "
+            "— 덱이 카드의 ν 로 G = E/2(1+ν) 를 다시 만들어, 다르면 짧은 시간의 전단 탄성률이 "
+            "잰 G′ 와 어긋납니다."
+        )
+        if poisson >= NEAR_INCOMPRESSIBLE:
+            warnings.append(
+                f"ν = {poisson:g} 는 0.5 에 가깝습니다(고무) — 이 변환의 오차가 커질 수 "
+                "있습니다. 점탄성 재료의 ν 는 짧은 시간(유리질, 0.35 안팎)에서 긴 시간"
+                "(고무질, 0.5 가까이)으로 변하는데 상수로 두었고, 덱이 E · ν 로 만드는 "
+                "체적 탄성률 K = E/3(1-2ν) 은 ν 의 작은 차에도 크게 달라집니다."
+            )
+    elif poisson_option is not None:
+        warnings.append(
+            f"푸아송비 옵션({poisson_option:g})은 쓰지 않았습니다 — {curve.label} 의 "
+            "마스터커브는 인장 · 굽힘(E′)으로 잰 것이라 E 로 옮길 것이 없습니다."
         )
     frequency = np.asarray(curve.columns.get(FREQUENCY, ()), float)
     storage = np.asarray(curve.columns.get(STORAGE, ()), float)
@@ -203,6 +277,7 @@ def _master_curve(
         raise GroupError(f"{curve.label} 의 마스터커브 점이 다섯이 안 됩니다.")
     order = np.argsort(frequency)
     frequency, storage, loss = frequency[order], storage[order], loss[order]
+    storage, loss = storage * factor, loss * factor
     reference_k = _number(curve.values.get(REFERENCE))
     shift = curve.meta.get(SHIFT_META)
     if reference_k is None or not isinstance(shift, Mapping):
@@ -219,7 +294,7 @@ def _master_curve(
         raise GroupError(
             f"{curve.label} 의 마스터커브에 Prony 를 맞추지 못했습니다: {exc}"
         ) from exc
-    return series, reference_k, float(frequency.min()), float(frequency.max()), shift
+    return series, reference_k, float(frequency.min()), float(frequency.max()), shift, basis
 
 
 def _linear_range(relaxation: Sequence[Member], warnings: list[str]) -> None:
@@ -245,12 +320,18 @@ def _linear_range(relaxation: Sequence[Member], warnings: list[str]) -> None:
         )
 
 
-def couple(members: list[Member]) -> GroupOutcome:
-    """응력완화 E(t) + DMA 마스터커브 → 짧은 시간부터 긴 시간까지 시간 영역 Prony 한 벌."""
+def couple(members: list[Member], poisson_ratio: Any = None) -> GroupOutcome:
+    """응력완화 E(t) + DMA 마스터커브 → 짧은 시간부터 긴 시간까지 시간 영역 Prony 한 벌.
+
+    `poisson_ratio` 는 전단(G′) 마스터커브를 E 로 옮길 ν — 비우면 재료에 적힌 값(중심이
+    `material_fields` 로 싣는다)이고, 둘 다 없으면 막는다.
+    """
     relaxation, curve = _split(members)
     warnings: list[str] = []
     target_k, relax_t, relax_e = _relaxation_points(relaxation)
-    series, reference_k, f_low, f_high, shift = _master_curve(curve, warnings)
+    series, reference_k, f_low, f_high, shift, measured = _master_curve(
+        curve, warnings, _given_poisson(poisson_ratio)
+    )
     log_a = log10_shift(shift, reference_k, target_k)
     a_t = 10.0**log_a
     dma_lo = a_t / (2 * math.pi * f_high)
@@ -354,12 +435,19 @@ def couple(members: list[Member]) -> GroupOutcome:
         "dma_reference_temperature_k": reference_k,
         "relaxation_only_instantaneous_pa": alone_instantaneous,
     }
+    # 전단에서 옮겼으면 쓴 ν 를 값으로, 그 출처(옵션 · 재료)를 상세로 남긴다.
+    if measured["shear"]:
+        values["dma_poisson_ratio"] = float(measured["poisson_ratio"])
     return GroupOutcome(
         values=values,
         detail={
             "terms": [{"relaxation_time_s": tau, "modulus_pa": e} for tau, e in terms],
             "short_time_source": curve.label,
             "long_time_sources": [one.label for one in relaxation],
+            "dma_modulus_basis": measured["label"],
+            **(
+                {"dma_poisson_source": measured["poisson_source"]} if measured["shear"] else {}
+            ),
         },
         warnings=warnings,
         used=[curve.label, *(one.label for one in relaxation)],
@@ -370,10 +458,14 @@ def card_blocks(
     values: Mapping[str, float], detail: Mapping[str, Any], warnings: Sequence[str]
 ) -> dict[str, dict[str, Any]]:
     """이은 결과 → 점탄성 블록 + 탄성계수(순간 탄성률). 응력완화 카드와 같은 모양에 이음 근거
-    두 칸(DMA 로 메운 시간 끝 · 겹친 구간 비)을 더한다."""
+    (DMA 로 메운 시간 끝 · 겹친 구간 비 · 잰 탄성률, 전단이면 쓴 ν)를 더한다."""
     blocks = prony_time.card_blocks(values, detail, warnings)
-    extra = ("dma_join_time_s", "overlap_ratio")
-    blocks["viscoelastic"]["values"].update(
+    extra = ("dma_join_time_s", "overlap_ratio", "dma_poisson_ratio")
+    shown = blocks["viscoelastic"]["values"]
+    shown.update(
         {key: float(values[key]) for key in extra if isinstance(values.get(key), int | float)}
     )
+    # **무엇을 잰 것인가** — 판 1 은 E′ 만 받았으므로 상세가 없으면 E′ 다.
+    dma_basis = str(detail.get("dma_modulus_basis") or "E′ (인장 · 굽힘 DMA)")
+    shown["modulus_basis"] = f"{dma_basis} · 긴 시간은 응력완화 E(t)"
     return blocks

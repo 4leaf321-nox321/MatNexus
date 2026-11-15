@@ -305,7 +305,12 @@ def _master_curve_for(db: Session, run_id: str, *, scale: float = 1.0) -> None:
 
 
 def _coupled_runs(
-    client: TestClient, db: Session, headers: dict[str, str], *, scale: float = 1.0
+    client: TestClient,
+    db: Session,
+    headers: dict[str, str],
+    *,
+    scale: float = 1.0,
+    dma_conditions: str = "{}",
 ) -> list[str]:
     """같은 재료에 응력완화 시험 하나(채택) + DMA 시험 하나(대표 마스터커브)."""
     material_id, (relaxation,) = _upload(
@@ -325,7 +330,11 @@ def _coupled_runs(
     ).json()
     dma = client.post(
         "/api/test-runs",
-        data={"specimen_id": specimen["id"], "test_type": "dma_sweep", "conditions": "{}"},
+        data={
+            "specimen_id": specimen["id"],
+            "test_type": "dma_sweep",
+            "conditions": dma_conditions,
+        },
         files={"file": ("dma.csv", (FIXTURES / "dma_freq_temp.csv").read_bytes())},
         headers=headers,
     )
@@ -383,6 +392,102 @@ def test_응력완화와_DMA_마스터커브를_이어_카드를_만든다(
     assert body["blocks"]["elastic"]["values"]["youngs_modulus"] == pytest.approx(
         values["instantaneous_pa"]
     )
+
+
+def test_전단_DMA_는_재료의_푸아송비로_E_로_옮겨_잇는다(
+    client: TestClient, db: Session, admin_headers: dict[str, str]
+) -> None:
+    """2026-11-15 — 변형 모드 「비틀림」 의 DMA 는 G′ 다(채널이 저장 탄성률이어도). 중심이
+    재료의 푸아송비를 구성원에 싣고(`material_fields`), 묶음이 E = 2(1+ν)G 로 옮겨 잇는다. ν 가
+    없으면 지어내지 않고 막는다."""
+    from app.modules.materials.models import Material
+
+    run_ids = _coupled_runs(
+        client,
+        db,
+        admin_headers,
+        scale=1 / (2 * (1 + 0.4)),
+        dma_conditions='{"deformation_mode": "비틀림"}',
+    )
+    refused = client.post(
+        "/api/groups",
+        json={"plugin_id": "relaxation.dma_coupled", "run_ids": run_ids},
+        headers=admin_headers,
+    )
+    assert refused.status_code == 422, refused.text
+    assert "푸아송비가 필요합니다" in refused.text
+
+    run = db.get(TestRun, uuid.UUID(run_ids[0]))
+    assert run is not None
+    material_id = client.get(f"/api/test-runs/{run.id}", headers=admin_headers).json()[
+        "material_id"
+    ]
+    material = db.get(Material, uuid.UUID(material_id))
+    assert material is not None
+    material.poisson_ratio = 0.4
+    db.commit()
+    group = client.post(
+        "/api/groups",
+        json={"plugin_id": "relaxation.dma_coupled", "run_ids": run_ids},
+        headers=admin_headers,
+    )
+    assert group.status_code == 201, group.text
+    body = group.json()
+    assert body["plugin_version"] == "2"
+    assert body["values"]["instantaneous_pa"] == pytest.approx(4e9, rel=0.05)
+    assert body["values"]["overlap_ratio"] == pytest.approx(1.0, abs=0.03)
+    assert body["values"]["dma_poisson_ratio"] == pytest.approx(0.4)
+    assert body["detail"]["dma_poisson_source"] == "material"
+    assert any("ν = 0.4(재료에 적힌 값)" in one for one in body["warnings"])
+
+    # 옵션이 재료보다 먼저다 — 다른 ν 면 E 가 그 배수만큼 바뀌고 겹친 구간 비가 따라 움직인다.
+    option = client.post(
+        "/api/groups",
+        json={
+            "plugin_id": "relaxation.dma_coupled",
+            "run_ids": run_ids,
+            "options": {"poisson_ratio": 0.3},
+        },
+        headers=admin_headers,
+    )
+    assert option.status_code == 201, option.text
+    assert option.json()["detail"]["dma_poisson_source"] == "option"
+    assert option.json()["values"]["overlap_ratio"] == pytest.approx(1.4 / 1.3, rel=0.03)
+
+    card = client.post(
+        "/api/fitting/cards/from-group",
+        json={"group_result_id": body["id"], "label": "전단 이은 Prony"},
+        headers=admin_headers,
+    )
+    assert card.status_code == 201, card.text
+    shown = card.json()["blocks"]["viscoelastic"]["values"]
+    assert shown["dma_poisson_ratio"] == pytest.approx(0.4)
+    assert shown["modulus_basis"].startswith("G′ (전단 DMA)")
+    # 카드는 재료의 ν 를 물려받는다 — 묶음이 옮긴 ν 와 같아 덱의 G 가 잰 G′ 그대로다.
+    assert card.json()["blocks"]["elastic"]["values"]["poisson_ratio"] == pytest.approx(0.4)
+
+
+def test_AI_가_만든_묶음은_감사에_남고_화면은_안_남는다(
+    client: TestClient, db: Session, admin_headers: dict[str, str]
+) -> None:
+    """2026-11-15 — MCP 에 묶음을 만드는 도구(`create_group`)가 생겼다. 묶음은 카드의
+    근거다."""
+    run_ids = _coupled_runs(client, db, admin_headers)
+    body = {"plugin_id": "relaxation.dma_coupled", "run_ids": run_ids}
+    by_hand = client.post("/api/groups", json=body, headers=admin_headers)
+    by_ai = client.post("/api/groups", json=body, headers={**admin_headers, "X-Client": "mcp"})
+    assert by_hand.status_code == 201 and by_ai.status_code == 201, by_ai.text
+    listed = client.get(
+        "/api/audit",
+        params={"action": "group_result.created_by_client", "limit": 200},
+        headers=admin_headers,
+    )
+    assert listed.status_code == 200, listed.text
+    made = (by_hand.json()["id"], by_ai.json()["id"])
+    mine = [one for one in listed.json() if one["target_id"] in made]
+    assert [one["target_id"] for one in mine] == [by_ai.json()["id"]]
+    assert mine[0]["changes"]["plugin_id"] == "relaxation.dma_coupled"
+    assert mine[0]["changes"]["test_run_ids"] == run_ids
 
 
 def test_겹친_구간이_크게_다르면_이유를_대고_묶지_않는다(

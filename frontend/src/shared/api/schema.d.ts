@@ -3692,7 +3692,7 @@ export interface paths {
         put?: never;
         /**
          * Create Group
-         * @description 묶어서 행으로 남긴다.
+         * @description 묶어서 행으로 남긴다. AI(MCP)가 만들었으면 감사에 남긴다.
          */
         post: operations["create_group_api_groups_post"];
         delete?: never;
@@ -6924,13 +6924,18 @@ export interface paths {
         };
         /**
          * Analysis Spec Gap
-         * @description 선언한 값 vs 잰 값. **차이가 큰 것이 위로 온다.**
+         * @description 선언한 값 vs **같은 온도에서** 잰 값. **차이가 큰 것이 위로 온다.**
          *
          *     잇는 열쇠는 기준정보 항목의 `measured_key` 다 — 선언은 항목 이름(`탄성계수`)이고
          *     잰 값은 처리 결과의 스칼라 키(`youngs_modulus`)라, 항목이 「우리가 재는 값」 으로
          *     그 키를 들고 있다. 전에는 라벨 문자열로 이었는데(2026-09-05 점검) 용어를 개명하거나
          *     플러그인이 라벨을 바꾸면 오류 없이 「매칭 안 됨」 으로 빠졌다. 키가 없는 항목은
          *     전처럼 라벨로 잇는다 — 못 견주는 항목은 `unmatched_items` 로 돌려준다.
+         *
+         *     **온도를 맞춘다**(2026-11-15, `analysis.match_declared`). 선언 점의 온도 ±2 K 안의 잰 값만
+         *     견주고, 상온 선언이면 시험 온도 미기재 값도 넣어 그 수를 센다. 전에는 그 재료의 모든
+         *     온도의 잰 값 평균과 견줘, 23 ℃ · 80 ℃ 가 섞인 평균이 선언과의 차이로 섰다. 그 온도의 잰
+         *     값이 없으면 줄은 「견줄 잰 값 없음」(평균 · 차이 `null`)으로 맨 아래에 남는다.
          */
         get: operations["analysis_spec_gap_api_statistics_analysis_spec_gap_get"];
         put?: never;
@@ -21810,7 +21815,14 @@ export interface components {
         };
         /**
          * SpecGapOut
-         * @description 선언한 값과 잰 값. **차이가 큰 것이 위로 온다.**
+         * @description 선언한 값과 **같은 온도에서** 잰 값. **차이가 큰 것이 위로 온다.**
+         *
+         *     잰 값은 견준 선언 점의 온도 ±2 K 안의 것만이다(2026-11-15) — 전에는 그 재료의 모든 온도의
+         *     잰 값 평균과 견줘, 차이가 재료가 아니라 온도의 것이 될 수 있었다.
+         *
+         *     같은 항목의 잰 값은 있는데 **그 온도의 것이 하나도 없으면** 줄은 남되 `measured_mean` ·
+         *     `gap_ratio` 가 `null` 이고 `measured_count` 가 0 이다(「견줄 잰 값 없음」 — 맨 아래로
+         *     간다). 잰 값이 아예 없는 항목은 줄이 아니라 `unmatched_items` 에 선다.
          */
         SpecGapOut: {
             /** Declared Reference */
@@ -21820,7 +21832,7 @@ export interface components {
             /** Declared Source */
             declared_source: string | null;
             /** Gap Ratio */
-            gap_ratio: number;
+            gap_ratio: number | null;
             /** Item */
             item: string;
             /**
@@ -21833,9 +21845,21 @@ export interface components {
             /** Measured Count */
             measured_count: number;
             /** Measured Mean */
-            measured_mean: number;
+            measured_mean: number | null;
+            /**
+             * Measured Other Temperature
+             * @default 0
+             */
+            measured_other_temperature: number;
+            /**
+             * Measured Unknown Temperature
+             * @default 0
+             */
+            measured_unknown_temperature: number;
             /** Si Unit */
             si_unit: string;
+            /** Temperature K */
+            temperature_k: number | null;
         };
         /**
          * SpecimenBriefSizeOut

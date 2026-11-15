@@ -1964,8 +1964,8 @@ async def spec_gap(
                  gap_ratio = (잰 값 − 선언) / 선언. +0.12 면 잰 값이 12 % 크다
         unmatched_items   선언은 있는데 잰 값과 못 이은 항목 — 없는 게 아니라 안 이어진 것
 
-    선언값이 여러 온도면 **상온에 가장 가까운 점**을 견준다. 시험은 대개 상온이라,
-    400 °C 값과 견주면 차이가 재료가 아니라 온도의 것이 된다.
+    **같은 온도(±2 K)의 잰 값끼리만 견준다** — `temperature_k`(선언 점, `null` 은 상온으로 봄).
+    `measured_mean_si` 가 `null` 이면 그 온도의 잰 값이 없다는 뜻이다(`unmatched` 와 다르다).
     """
     got = await _get(ctx, "/statistics/analysis/spec-gap")
     if isinstance(got, dict) and "error" in got:
@@ -1987,8 +1987,12 @@ async def spec_gap(
                 "declared_si": one.get("declared_si"),
                 "declared_source": one.get("declared_source"),
                 "declared_reference": one.get("declared_reference"),
+                "temperature_k": one.get("temperature_k"),
                 "measured_mean_si": one.get("measured_mean"),
                 "measured_count": one.get("measured_count"),
+                # 상온 선언에 넣은 「시험 온도 미기재」 잰 값 · 다른 온도라 뺀 잰 값의 수
+                "measured_unknown_temperature": one.get("measured_unknown_temperature", 0),
+                "measured_other_temperature": one.get("measured_other_temperature", 0),
                 "si_unit": one.get("si_unit"),
                 "gap_ratio": one.get("gap_ratio"),
             }
@@ -3891,6 +3895,7 @@ async def preview_card_fit(
 @mcp.tool()
 async def list_groups(ctx: Context, material_id: str) -> dict[str, Any]:
     """재료의 **묶음 결과** — 반복 시편·속도별·온도별·Prony 를 하나로 묶은 것(2026-09-20).
+    없으면 `create_group` 으로 만든다.
 
     카드의 세 갈래(속도 의존·점탄성·확장 묶음)가 이것을 받는다. `plugin_id` 가 어느
     갈래인지 말한다:
@@ -3930,6 +3935,170 @@ async def list_groups(ctx: Context, material_id: str) -> dict[str, Any]:
     return _complete(out, whole=True)
 
 
+def _group_kind(spec: dict[str, Any]) -> dict[str, Any]:
+    """고를 수 있는 묶음 하나(`GET /groups/kinds`) — 구성원 조건과 옵션만 추린다."""
+    wanted = ("name", "label", "type", "default", "choices", "help")
+    return {
+        "id": spec.get("id"),
+        "label": spec.get("label"),
+        "applies_to": spec.get("applies_to"),
+        "needs": spec.get("needs"),
+        **({"needs_by_type": spec["needs_by_type"]} if spec.get("needs_by_type") else {}),
+        "min_members": spec.get("min_members"),
+        "makes_card": spec.get("makes_card"),
+        "params": [
+            {key: one.get(key) for key in wanted if one.get(key) not in (None, [], "")}
+            for one in spec.get("params") or []
+        ],
+    }
+
+
+async def _group_member(ctx: Context, run_id: str, spec: dict[str, Any]) -> dict[str, Any]:
+    """미리보기의 구성원 한 줄 — **서버가 묶을 때 보는 조건**(종류 · 보류 · 채택 결과 · 대표
+    마스터커브)을 미리 본다. 계산은 안 한다(겹친 구간 · 외삽은 만들 때 서버가 본다)."""
+    run = await _get(ctx, f"/test-runs/{run_id}")
+    if "error" in run:
+        return {"test_run_id": run_id, "problem": run["error"]}
+    kind = run.get("test_type_key")
+    by_type = spec.get("needs_by_type") or {}
+    accepted = set(by_type) if by_type else set(spec.get("applies_to") or [])
+    need = by_type.get(kind, spec.get("needs")) if by_type else spec.get("needs")
+    conditions = run.get("conditions") or {}
+    problem = None
+    if accepted and kind not in accepted:
+        problem = f"이 묶음이 받지 않는 시험 종류입니다({kind}) — 받는 것: {', '.join(sorted(accepted))}"
+    elif run.get("hold_reason"):
+        problem = f"물성 사용 보류 — {run['hold_reason']}"
+    elif need == "adopted_result" and not run.get("adopted_result_id"):
+        problem = "채택된 처리 결과가 없습니다 — 처리하고 채택해야 묶입니다"
+    elif need == "master_curve":
+        curves = await _get(ctx, f"/viscoelastic/runs/{run_id}/master-curves")
+        rows = curves if isinstance(curves, list) else []
+        if not rows:
+            problem = "마스터커브가 없습니다 — 먼저 겹쳐야 묶입니다(build_master_curve)"
+        elif not any(one.get("is_primary") for one in rows):
+            problem = "대표 마스터커브가 없습니다 — 사람이 그 시험의 대표를 골라야 묶입니다"
+    temperature = conditions.get("temperature")
+    return {
+        "test_run_id": run_id,
+        "name": run.get("record_name"),
+        "test_type": kind,
+        "needs": need,
+        "material_id": run.get("material_id"),
+        **({"temperature_k": temperature} if isinstance(temperature, int | float) else {}),
+        **(
+            {"deformation_mode": conditions["deformation_mode"]}
+            if conditions.get("deformation_mode")
+            else {}
+        ),
+        **({"problem": problem} if problem else {}),
+    }
+
+
+@mcp.tool()
+async def create_group(
+    ctx: Context,
+    plugin_id: str,
+    test_run_ids: list[str],
+    options: dict[str, Any] | None = None,
+    note: str | None = None,
+    dry_run: bool = True,
+) -> dict[str, Any]:
+    """여러 시험을 **묶음**(글로벌 피팅)으로 — 속도별 · Prony 여럿 · 응력완화 + DMA 마스터커브 등.
+    카드는 그 뒤 `create_card_from_group`.
+
+    `plugin_id` 를 모르면 아무 값으로 부른다 — `kinds` 에 묶음마다 구성원 조건(`needs` · 시험
+    종류별 `needs_by_type`)과 옵션(`params`)이 온다. 미리보기(기본)는 **계산하지 않고** 시험마다
+    종류 · 채택 결과 · 대표 마스터커브 · 보류와 재료가 하나인지를 본다(`problems`). 계산의 거절
+    (겹친 구간 · 외삽)은 만들 때 까닭과 함께 오고 아무것도 안 남는다. `options` 의 값(푸아송비
+    등)은 지어 넣지 마라 — 비우면 서버가 재료에서 찾거나 거절한다. 안내 `cards`.
+    """
+    kinds = await _get(ctx, "/groups/kinds")
+    if isinstance(kinds, dict) and "error" in kinds:
+        return kinds
+    specs = [one for one in kinds if isinstance(one, dict)] if isinstance(kinds, list) else []
+    spec = next((one for one in specs if one.get("id") == plugin_id), None)
+    if spec is None:
+        return {
+            "error": f"그런 묶음이 없습니다: {plugin_id} — `kinds` 에서 고르세요.",
+            "kinds": [_group_kind(one) for one in specs],
+        }
+    if not test_run_ids or len(test_run_ids) > 50:
+        return {"error": f"시험은 1~50건입니다 — {len(test_run_ids)}건을 받았습니다."}
+    runs: list[str] = []
+    for one in test_run_ids:
+        resolved = await _resolve_run(ctx, one, write=True)
+        if isinstance(resolved, dict):
+            return resolved
+        runs.append(resolved)
+    runs = list(dict.fromkeys(runs))
+    members = [await _group_member(ctx, run, spec) for run in runs]
+    problems = [
+        f"{one.get('name') or one['test_run_id']}: {one['problem']}"
+        for one in members
+        if one.get("problem")
+    ]
+    materials = {one.get("material_id") for one in members if one.get("material_id")}
+    if len(materials) > 1:
+        problems.append(f"재료가 {len(materials)}가지 섞여 있습니다 — 묶음은 한 재료 안에서만 만듭니다.")
+    least = int(spec.get("min_members") or 2)
+    if len(runs) < least:
+        problems.append(f"시험이 {least}건 이상 필요합니다(지금 {len(runs)}건).")
+    known = {str(one.get("name")) for one in spec.get("params") or []}
+    unknown = sorted(set(options or {}) - known)
+    if unknown:
+        # 모르는 옵션은 서버가 계산 함수에 그대로 넘겨 500 이 된다 — 여기서 막는다.
+        problems.append(
+            f"이 묶음이 모르는 옵션입니다: {', '.join(unknown)} — 받는 것: "
+            f"{', '.join(sorted(known)) or '없음'}."
+        )
+    cautions: list[str] = []
+    by_type = spec.get("needs_by_type") or {}
+    absent = [key for key in by_type if key not in {one.get("test_type") for one in members}]
+    if by_type and absent:
+        cautions.append(
+            f"이 묶음은 {' · '.join(by_type)} 시험을 함께 받습니다 — 고른 것에 "
+            f"{', '.join(absent)} 이(가) 없습니다."
+        )
+    body = {"plugin_id": plugin_id, "run_ids": runs, "options": dict(options or {}), "note": note}
+    if dry_run:
+        return {
+            "dry_run": True,
+            "plugin": _group_kind(spec),
+            "members": members,
+            "problems": problems,
+            "cautions": cautions,
+            "will_create": body,
+            "note": (
+                "막히는 것이 있어 만들 수 없습니다 — `problems` 를 사람에게 옮기세요."
+                if problems
+                else "미리보기는 계산하지 않습니다 — 계산이 막으면 만들 때 까닭과 함께 거절되고 "
+                "아무것도 안 남습니다. 사람에게 보이고 확인받은 뒤 dry_run=False 로 다시 부르세요."
+            ),
+        }
+    if problems:
+        return {"error": "묶을 수 없습니다 — 미리보기의 problems 를 보세요.", "problems": problems}
+    made = await _send(ctx, "POST", "/groups", body)
+    if "error" in made:
+        return made
+    return {
+        "id": made.get("id"),
+        "plugin_id": made.get("plugin_id"),
+        "plugin_version": made.get("plugin_version"),
+        "member_count": len(made.get("members") or []),
+        "used": made.get("used"),
+        "values_si": made.get("values"),
+        "warnings": made.get("warnings"),
+        "next": (
+            f'카드는 create_card_from_group(group_result_id="{made.get("id")}", '
+            f'plugin_id="{plugin_id}", label=…) — 미리보기부터.'
+            if spec.get("makes_card")
+            else "이 묶음은 카드를 만들지 않습니다."
+        ),
+        "hint": "`warnings` 는 그대로 사람에게 옮겨라 — 막지는 않았지만 감수하고 묶은 것이다.",
+    }
+
+
 #: 묶음 플러그인 → 카드 경로. 속도·점탄성은 저마다 규칙이 있어 경로가 따로다.
 _GROUP_CARD_PATHS = {
     "tensile.rate_family": "/fitting/cards/rate-dependent",
@@ -3957,9 +4126,9 @@ async def create_card_from_group(
 
         poisson_ratio · density   시험이 주지 않는 값. 비우면 재료에서 물려받고, 없으면
                                   서버가 거절한다 — **지어 넣지 마라**, 사람에게 물어라.
-                                  density 는 **SI(kg/m³)** 다 — `get_material` 이 주는 값
-                                  그대로다. 화면에 보이는 숫자(tonne/mm³, 강판 7.85e-9)를
-                                  넣으면 범위 밖으로 거절된다.
+                                  density 는 **SI(kg/m³)** 다(화면의 tonne/mm³ 숫자가 아니다).
+
+    전단(G′) DMA 를 이은 묶음이면 `poisson_ratio` 를 묶음이 쓴 ν(`dma_poisson_ratio`)와 같게.
     """
     body = {
         "group_result_id": group_result_id,
@@ -4281,15 +4450,11 @@ async def create_card_from_tests(
     무엇으로 나왔는지 들고 있으므로(`source.test_run_ids`), 「10건짜리」와 「8건
     짜리」를 나란히 두고 견줄 수 있다.
 
-    ## 소성 표는 기본 **곡률 50점**으로 줄여 굳힌다
+    ## 소성 표는 기본 **곡률 50점**으로 줄여 굳힌다(까닭은 안내 `cards`)
 
-    처리 단계의 표는 300점 안팎이다 — 통계·적합의 입력이라 촘촘해야 한다. 그런데
-    솔버가 받는 표는 20~60점이 보통이고, 300점은 실측 잡음을 그대로 실어 접선계수가
-    뒤집히는 구간을 만든다. 그래서 카드에 굳힐 때 `resample_method`(기본 `curvature`,
-    무릎에 점을 몰아 줌; 그 밖에 `log`·`uniform`·`keep_source`)로 `resample_points`(기본 50)만
-    남긴다. 화면의 기본과 같다. **측정 그대로** 굳히려면 `resample_points=None`.
-    몇 점에서 몇 점으로 줄였는지는 카드 근거(`source.resample`)와 덱 머리글에 남는다.
-    소성 표가 없는 식(초탄성·유변)에는 걸지 않는다.
+    `resample_method`(기본 `curvature` · `log` · `uniform` · `keep_source`) · `resample_points`
+    (기본 50, 화면과 같다). **측정 그대로**는 `resample_points=None`. 줄인 것은 카드 근거
+    (`source.resample`)와 덱 머리글에 남는다. 소성 표가 없는 식(초탄성·유변)에는 걸지 않는다.
 
     `basis` — 대표 곡선: `mean`(기본) · `median` · `upper` · `lower`. 상·하한은 `basis_method`
     (`sd` 는 `basis_k` 필수 · `tolerance` · `envelope` · `specimen`)를 함께. **어느 것을 쓸지는
@@ -6915,15 +7080,9 @@ async def render_card_deck(
     ## `units` 를 사용자에게 확인하고 넘겨라
 
     `units` 는 `list_unit_systems()` 의 key 다. **기본은 `mm_n_tonne`(tonne · mm ·
-    s · MPa)이고 SI 가 아니다** — 판재 CAE 의 관행이고 화면도 그 단위계다. 전에는
-    안 주면 SI 로 나갔는데, 그 SI 덱을 mm 계 모델에 그대로 넣으면 오류 없이
-    돌면서 1000배 틀린다(2026-09-12 결정). 받는 쪽 모델이 다른 계(예: LS-DYNA
-    의 mm·ms·kg)면 그 key 를 넘긴다.
-
-    **네가 환산하지 마라.** 실측(2026-09-10): 이 인자가 없던 판에서 AI 가 SI 덱을
-    받아 Pa→MPa 를 직접 고쳐 넣었다. 고정폭 필드에 손을 대는 일이고, 한 칸만
-    어긋나도 솔버는 다른 값을 조용히 읽는다. 단위계는 여기서 넘겨 서버가 만들게
-    한다.
+    s · MPa)이고 SI 가 아니다** — 판재 CAE 의 관행이고 화면도 그 단위계다. 받는 쪽
+    모델이 다른 계(예: LS-DYNA 의 mm·ms·kg)면 그 key 를 넘긴다. **네가 환산하지 마라**
+    — 단위계를 넘겨 서버가 만들게 한다(까닭은 안내 `cards`).
 
     **단위가 정해진 형식은 `units` 를 안 쓴다**(2026-10-02) — AEDT · CST · Flotherm ·
     Zemax · CODE V · n·k 표 · ANSYS(전기)는 파일 형식이 SI(파장 µm · nm)를 정해 두어
@@ -6936,11 +7095,8 @@ async def render_card_deck(
     카드 UUID 에서 만든 것이라 전역으로 유일하지 않다. **덱 여럿을 손으로 합치면
     겹칠 수 있고, 솔버는 중복 MID 를 조용히 덮는다.**
 
-    그 수는 **돌려주는 덱 글자 안에 있다**(솔버 재료 카드의 첫 칸). 따로 실어
-    주지 않는 이유는 만드는 규칙이 백엔드에 있기 때문이다 — 여기서 다시 계산하면
-    규칙이 두 벌이 되고, 그러면 언젠가 서로 다른 수를 말한다.
-
-    덱을 건네줄 때 그것을 읽어 함께 말해라: 「이 덱의 MID 는 3847221 입니다.
+    그 수는 **돌려주는 덱 글자 안에 있다**(솔버 재료 카드의 첫 칸 — 만드는 규칙은
+    백엔드 하나다). 덱을 건네줄 때 그것을 읽어 함께 말해라: 「이 덱의 MID 는 3847221 입니다.
     다른 덱과 합치실 거면 겹치는지 확인하세요.」 여러 재료를 한 덱으로 묶는
     자리(BOM 혼합 덱)는 서버가 중복을 막지만, 낱개로 뽑아 합칠 때는 사람이 본다.
     """

@@ -185,3 +185,10 @@ class Test예_아니오_칸:
         assert groups.typed_options(params, {"flag": True}) == {"flag": True}
         with pytest.raises(groups.GroupError, match="예/아니오"):
             groups.typed_options(params, {"flag": "아마도"})
+
+
+def test_모르는_설정은_이름을_대고_막는다() -> None:
+    """2026-11-15 — 그대로 넘기면 계산 함수가 TypeError 를 내 API 가 500 이었다."""
+    members = [member("A", 0.001), member("B", 1.0)]
+    with pytest.raises(groups.GroupError, match="모르는 설정입니다: nonsense"):
+        groups.run_group("tensile.rate_family", members, {"nonsense": 1})

@@ -9,6 +9,8 @@
     겹친 구간        같은 재료면 비 ≈ 1, 25 % 넘게 다르면 막고 5 % 넘으면 말한다
     옮기기           이동을 맞춘 온도 범위 밖이면 외삽이라 막는다
     선형 구간        근거가 없으면 말하고, 유지 변형률이 한계를 넘으면 말한다
+    전단(G′)         E = 2(1+ν)G 로 옮기면 인장으로 넣은 것과 같은 E₀ — ν 는 옵션 → 재료,
+                     없으면 막는다(2026-11-15, 판 2)
 """
 
 from __future__ import annotations
@@ -150,11 +152,67 @@ def test_겹치는_시간대가_없으면_막는다() -> None:
         coupling.couple([_relax(), short])
 
 
-def test_전단_마스터커브는_1단계에서_받지_않는다() -> None:
+def _shear_master(poisson: float, **values: float) -> Member:
+    """같은 재료를 **전단으로 잰** 마스터커브 — G′ = E′ / 2(1+ν), G″ = E″ / 2(1+ν)."""
     curve = _master()
-    shear = Member(curve.label, curve.columns, curve.values, {**curve.meta, "shear": True})
-    with pytest.raises(GroupError, match="전단"):
-        coupling.couple([_relax(), shear])
+    factor = 2.0 * (1.0 + poisson)
+    columns = {
+        "frequency_hz": curve.columns["frequency_hz"],
+        "storage_pa": curve.columns["storage_pa"] / factor,
+        "loss_pa": curve.columns["loss_pa"] / factor,
+    }
+    return Member(
+        curve.label, columns, {**curve.values, **values}, {**curve.meta, "shear": True}
+    )
+
+
+@pytest.mark.parametrize(
+    ("option", "material", "source"),
+    [(0.4, None, "option"), (None, 0.4, "material"), (0.4, 0.3, "option")],
+)
+def test_전단으로_넣어도_인장으로_넣은_것과_같은_E0(
+    option: float | None, material: float | None, source: str
+) -> None:
+    """2026-11-15 — 전단(G′) 마스터커브를 E = 2(1+ν)G 로 옮겨 잇는다. ν 는 옵션 → 재료의 순."""
+    tensile = coupling.couple([_relax(), _master()])
+    given = {"poisson_ratio": material} if material is not None else {}
+    outcome = coupling.couple([_relax(), _shear_master(0.4, **given)], poisson_ratio=option)
+    values = outcome.values
+    assert values["instantaneous_pa"] == pytest.approx(
+        tensile.values["instantaneous_pa"], rel=1e-6
+    )
+    assert values["instantaneous_pa"] == pytest.approx(E0, rel=0.05)
+    assert values["overlap_ratio"] == pytest.approx(tensile.values["overlap_ratio"], rel=1e-6)
+    assert values["dma_poisson_ratio"] == pytest.approx(0.4)
+    assert outcome.detail["dma_poisson_source"] == source
+    assert "G′" in outcome.detail["dma_modulus_basis"]
+    named = "묶음 옵션" if source == "option" else "재료에 적힌 값"
+    converted = [one for one in outcome.warnings if "전단(G′)으로 잰 것" in one]
+    assert len(converted) == 1 and f"ν = 0.4({named})" in converted[0]
+    assert not any("0.5 에 가깝습니다" in one for one in outcome.warnings)
+    # 인장으로 넣은 것은 ν 를 안 남긴다.
+    assert "dma_poisson_ratio" not in tensile.values
+
+
+def test_전단인데_푸아송비가_없으면_지어내지_않고_막는다() -> None:
+    with pytest.raises(GroupError, match="푸아송비가 필요합니다"):
+        coupling.couple([_relax(), _shear_master(0.4)])
+    with pytest.raises(GroupError, match=r"-1 과 0\.5 사이"):
+        coupling.couple([_relax(), _shear_master(0.4)], poisson_ratio=0.7)
+    with pytest.raises(GroupError, match="숫자로 읽을 수 없습니다"):
+        coupling.couple([_relax(), _shear_master(0.4)], poisson_ratio="약 0.4")
+
+
+def test_고무에_가까운_푸아송비는_따로_말한다() -> None:
+    outcome = coupling.couple([_relax(), _shear_master(0.49)], poisson_ratio="0.49")
+    assert outcome.values["instantaneous_pa"] == pytest.approx(E0, rel=0.05)
+    assert any("0.5 에 가깝습니다(고무)" in one for one in outcome.warnings)
+
+
+def test_인장_마스터커브에_준_푸아송비는_안_썼다고_말한다() -> None:
+    outcome = coupling.couple([_relax(), _master()], poisson_ratio=0.4)
+    assert any("푸아송비 옵션(0.4)은 쓰지 않았습니다" in one for one in outcome.warnings)
+    assert "dma_poisson_ratio" not in outcome.values
 
 
 def test_마스터커브는_하나_응력완화는_하나_이상() -> None:
@@ -180,5 +238,15 @@ def test_카드는_점탄성_블록에_이음_근거를_싣는다() -> None:
     assert blocks["elastic"]["values"]["youngs_modulus"] == pytest.approx(
         outcome.values["instantaneous_pa"]
     )
+    assert shown["modulus_basis"].startswith("E′ (인장 · 굽힘 DMA)")
+    assert "dma_poisson_ratio" not in shown
     declared = {one.key for one in cards.block("viscoelastic").produces}
     assert set(shown) <= declared  # 선언된 칸만 — 화면은 선언한 값만 그린다
+
+    sheared = coupling.couple([_relax(), _shear_master(0.4)], poisson_ratio=0.4)
+    blocks = coupling.card_blocks(sheared.values, sheared.detail, sheared.warnings)
+    shown = blocks["viscoelastic"]["values"]
+    assert shown["dma_poisson_ratio"] == pytest.approx(0.4)
+    assert shown["modulus_basis"].startswith("G′ (전단 DMA) → E = 2(1+ν)G, ν = 0.4")
+    assert set(shown) <= declared
+    assert any("전단(G′)으로 잰 것" in one for one in blocks["viscoelastic"]["notes"])

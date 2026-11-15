@@ -757,9 +757,16 @@ ISO 178 은 현으로, ISO 7743 은 4번째 하중 구간. 단계를 짤 때 그
 **식을 안 고르면 표만 저장된다. 그것도 좋은 선택이다** — 많은 솔버가 식보다 표를
 그대로 받고, 식이 안 맞는 재료에서는 표가 더 정확하다.
 
+**소성 표는 카드에 굳힐 때 곡률 50점으로 줄인다**(`create_card_from_tests` 의 `resample_*`).
+처리 단계의 표는 300점 안팎이다 — 통계 · 적합의 입력이라 촘촘해야 한다. 그런데 솔버가 받는
+표는 20~60점이 보통이고, 300점은 실측 잡음을 그대로 실어 접선계수가 뒤집히는 구간을 만든다.
+`curvature` 는 무릎(항복 근처)에 점을 몰아 준다.
+
 ### 단위계는 사용자에게 확인한다 — 기본은 `mm_n_tonne`
 
-판재 CAE 의 관행은 `mm·N·tonne` 이라 덱 도구의 기본이 그것이다(SI 가 아니다).
+판재 CAE 의 관행은 `mm·N·tonne` 이라 덱 도구의 기본이 그것이다(SI 가 아니다). 전에는
+안 주면 SI 로 나갔는데, 그 SI 덱을 mm 계 모델에 그대로 넣으면 오류 없이 돌면서 1000배
+틀린다(2026-09-12 결정).
 받는 쪽 모델이 다른 계면 `list_unit_systems()` 에서 골라 `units` 로 넘겨라. **네가 환산하지 마라** — 실측(2026-09-10): 이 인자가 없던 판에서 AI 가 SI
 덱을 받아 Pa→MPa 를 손으로 고쳐 넣었다. 고정폭 필드라 한 칸만 어긋나도 솔버가
 다른 값을 조용히 읽는다.
@@ -807,7 +814,26 @@ README 의 기대값과 견주게 안내한다 — 덱 숫자가 맞아도 솔�
     점탄성(Prony 여럿)      list_groups → create_card_from_group(plugin_id=viscoelastic.prony_group)
     DMA 선형 탄성률         create_lve_card(material_id, test_type, orientation)
     DMA 온도별 E′ · tan δ   create_dma_temperature_card(test_run_ids, frequency_hz) — 시편 평균
+    응력완화 + DMA          create_group(plugin_id="relaxation.dma_coupled", test_run_ids=[…])
+                            → create_card_from_group(group_result_id, plugin_id=…)
     확장이 선언한 묶음      list_groups → create_card_from_group
+
+### 묶음이 없으면 만든다 — `create_group`
+
+`list_groups` 에 쓸 묶음이 없으면 `create_group(plugin_id, test_run_ids, options)` 로 만든다. 모르는
+`plugin_id` 로 부르면 고를 수 있는 묶음(`kinds`)이 온다 — 묶음마다 구성원 조건(`needs`, 시험 종류마다
+다르면 `needs_by_type`)과 옵션(`params`). **미리보기는 계산하지 않는다** — 시험마다 종류 · 채택 결과 ·
+대표 마스터커브 · 보류와 재료가 하나인지만 본다(`problems` · `cautions`). 겹친 구간 · 외삽 같은 계산의
+거절은 만들 때 까닭과 함께 오고 아무것도 남지 않는다 — 그 까닭을 사람에게 옮겨라. 묶음은 고칠 수 없다
+(그때 계산의 스냅샷) — 옵션을 바꾸려면 새로 만든다. 만든 것은 변경 이력에 「AI 가 만든 것」 으로 남는다.
+
+**응력완화 + DMA 마스터커브**(`relaxation.dma_coupled`) — 같은 재료 · 한 온도(±2 K)의 응력완화 시험
+(채택된 「완화 탄성률 E(t)」) 하나 이상과 대표 마스터커브가 있는 DMA 시험 **하나**. 짧은 시간은 DMA, 긴
+시간은 응력완화로 맞춘 시간 영역 Prony 다. DMA 가 전단(G′)이면 E = 2(1+ν)G 로 옮긴다 — ν 는
+`options={"poisson_ratio": …}` → 재료의 푸아송비 → 둘 다 없으면 거절. **ν 를 지어 넣지 마라** — 사람에게
+묻는다(고무는 0.5 에 가까울수록 이 변환의 오차가 커진다). 결과의 `warnings`(겹친 구간 비 · 선형 구간
+근거 · 전단 변환)는 그대로 옮기고, 카드를 만들 때 `poisson_ratio` 를 묶음이 쓴 ν
+(`values_si.dma_poisson_ratio`)와 같게 둔다 — 덱이 카드의 ν 로 G 를 다시 만든다.
 
 온도별 E′ 카드는 **정적 탄성계수가 아니다** — 탄성 블록에 안 실리고, 「영률을 달라」 는 물음에
 이 값을 주지 않는다. 문헌 재료의 덱 곡선이 궁금하면 `preview_synthetic_curve` — 스칼라로 지은

@@ -109,12 +109,26 @@ register(
 # **응력완화 + DMA 마스터커브**(2026-11-15, VOC 52 · ADR 0087 1단계) — 응력완화가 모르는
 # 짧은 시간(하중을 거는 동안)을 같은 재료의 DMA 로 메운다. 계산은 `coupling.py`. 두 종류의
 # 시험을 받으므로 구성원 규칙을 종류마다 적고(중심 `by_test_type`), 카드는 응력완화 시험의
-# 것으로 만든다(`card_test_type`).
+# 것으로 만든다(`card_test_type`). 전단(G′) 마스터커브는 E = 2(1+ν)G 로 옮겨 잇는다 — ν 는 옵션
+# → 재료의 푸아송비(중심 `material_fields`) → 없으면 막는다(판 2).
 register(
     id="relaxation.dma_coupled",
     kind="grouping",
     label="응력완화 + DMA 마스터커브(짧은 시간 메우기)",
     applies_to=(coupling.RELAXATION, "dma_sweep"),
+    params=(
+        ParamSpec(
+            name=coupling.POISSON,
+            label="푸아송비 (전단 DMA 일 때)",
+            type="float",
+            unit="1",
+            help=(
+                "DMA 마스터커브가 전단(G′)으로 잰 것이면 E = 2(1+ν)G 로 옮겨 잇습니다. 비우면 "
+                "재료에 적힌 값을 쓰고, 둘 다 없으면 묶지 않습니다(값을 지어 넣지 않습니다). "
+                "인장 · 굽힘(E′)이면 쓰지 않습니다."
+            ),
+        ),
+    ),
     makes_values=(
         Produced(key="equilibrium_pa", label="장기 탄성률 E∞", si_unit="Pa"),
         Produced(key="instantaneous_pa", label="순간 탄성률 E₀", si_unit="Pa"),
@@ -148,6 +162,12 @@ register(
             si_unit="Pa",
             help="잇지 않았다면의 E₀ — 잇는 것이 얼마나 바꿨는지 견준다.",
         ),
+        Produced(
+            key="dma_poisson_ratio",
+            label="전단 DMA 를 E 로 옮긴 푸아송비",
+            si_unit="1",
+            help="전단(G′) 마스터커브일 때만 — E = 2(1+ν)G 에 쓴 ν. 출처(옵션 · 재료)는 경고.",
+        ),
     ),
     members={
         "by_test_type": {
@@ -158,11 +178,13 @@ register(
                 "optional": [coupling.HELD_STRAIN],
                 "material_scalars": [coupling.LVE_LIMIT],
             },
-            "dma_sweep": {"from": "master_curve"},
+            "dma_sweep": {"from": "master_curve", "material_fields": [coupling.POISSON]},
         }
     },
     card=coupling.card_blocks,
     card_test_type=coupling.RELAXATION,
     order=41,
-    version="1",
+    # 2: 전단(G′) 마스터커브를 E = 2(1+ν)G 로 옮겨 잇는다(2026-11-15) — 전에는 막았다. 카드에
+    # 잰 탄성률(`modulus_basis`)을 싣는다.
+    version="2",
 )(coupling.couple)

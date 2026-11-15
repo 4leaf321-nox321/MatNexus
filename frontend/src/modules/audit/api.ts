@@ -75,6 +75,7 @@ export const ACTION_LABELS: Record<string, string> = {
   // 화면에서 같은 일을 해도 안 남는다 — 남길 이유가 「누가 했나」 하나뿐이라.
   'values.changed_by_client': 'AI 가 값 수정',
   'card.created_by_client': 'AI 가 물성 카드 생성',
+  'group_result.created_by_client': 'AI 가 글로벌 피팅 결과 생성',
   'processing.run_by_client': 'AI 가 처리 실행',
   'recipe.saved_by_client': 'AI 가 레시피 저장',
   'export_profile.saved_by_client': 'AI 가 해석용 물성 정의 저장',
