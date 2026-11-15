@@ -16,7 +16,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, func
+from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PgUUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -27,10 +27,10 @@ from app.database import Base
 class EnsembleResult(Base):
     """반복 시편 통계 한 벌.
 
-    **묶음 키는 재료 + 시험종류 + 방향이다.** 인장은 압연 방향에 따라 물성이
+    **묶음 키는 재료 + 시험종류 + 방향 + 시험 온도다.** 인장은 압연 방향에 따라 물성이
     다르다 — MD 5개와 TD 5개를 한 통계로 묶으면 CV 가 15% 로 나오는데, 그것은
-    산포가 아니라 다른 것을 섞은 것이다. 시료(lot)까지 나누지 않는 이유는 보통
-    같은 재료로 취급하기 때문이다.
+    산포가 아니라 다른 것을 섞은 것이다. 온도도 같다(2026-11-15). 시료(lot)까지 나누지
+    않는 이유는 보통 같은 재료로 취급하기 때문이다.
     """
 
     __tablename__ = "ensemble_results"
@@ -45,6 +45,13 @@ class EnsembleResult(Base):
         PgUUID(as_uuid=True), ForeignKey("test_types.id"), index=True
     )
     orientation: Mapped[str] = mapped_column(String(10), index=True)
+    temperature_k: Mapped[float | None] = mapped_column(Float, nullable=True)
+    """그 묶음의 시험 온도(K) — 구성원 온도의 중앙값(`services.Group.temperature_k`). `NULL` 은
+    **미기재** 묶음이거나, 온도로 묶음을 가르기 전(2026-11-15 전)에 남긴 통계다(모름).
+
+    처음(v1.337.0)에는 칸 없이 `curve` 안에 두었다 — 마이그레이션 `b8d4f2a6c913` 이 그 값을 이
+    칸으로 옮겨 담았고, 옛 행의 `curve` 에 남은 키는 지우지 않는다(불변). 읽을 때는 이 칸을
+    먼저 본다(`routes._ensemble_temperature`)."""
 
     sample_count: Mapped[int] = mapped_column(Integer)
     test_run_ids: Mapped[list[str]] = mapped_column(JSONB, default=list, server_default="[]")
@@ -60,9 +67,8 @@ class EnsembleResult(Base):
     """평균·중앙값 곡선과 점별 산포. 점 수가 많지 않아(재샘플 뒤) JSONB 로 둔다 —
     곡선 하나에 Parquet 파일을 만들 만큼 크지 않다.
 
-    `temperature_k` 도 여기 든다(2026-11-15) — 그 묶음의 시험 온도(K, `null` 은 미기재).
-    온도로 묶음을 가르기 전에 남긴 통계에는 키가 없다(모름). 칸을 새로 내지 않은 것은
-    마이그레이션 없이 근거를 남기려는 것이다."""
+    시험 온도는 여기 두지 않는다 — `temperature_k` 칸이다. v1.337.0 에서 남긴 행에만
+    `temperature_k` 키가 있다(그 값은 칸으로 옮겨 담았다)."""
     notes: Mapped[list[str]] = mapped_column(JSONB, default=list, server_default="[]")
 
     created_by_id: Mapped[uuid.UUID | None] = mapped_column(

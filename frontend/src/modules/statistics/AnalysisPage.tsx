@@ -27,7 +27,8 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { TABLE_PAD, show, showWithUnit } from '@/modules/statistics/analysisFormat'
 import { analysisApi } from '@/modules/statistics/analysisApi'
 import { CardItemsTab } from '@/modules/statistics/CardItemsTab'
-import type { AnalysisScalar, Spread } from '@/modules/statistics/analysisApi'
+import type { AnalysisScalar, SpecGapRow, Spread } from '@/modules/statistics/analysisApi'
+import { temperatureText } from '@/modules/statistics/temperature'
 import { AxisScaleToggle } from '@/shared/components/AxisScaleToggle'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
 import { PageHeader } from '@/shared/components/PageHeader'
@@ -51,7 +52,7 @@ import {
 } from '@/shared/components/ui/table'
 import { Tabs, TabsList, TabsTrigger } from '@/shared/components/ui/tabs'
 import { useResource } from '@/shared/hooks/useResource'
-import { axisLabel } from '@/shared/units'
+import { axisLabel, formatSpan } from '@/shared/units'
 
 const TABS = [
   { key: 'compare', label: '재료 비교' },
@@ -645,11 +646,20 @@ function BoxPlot({
 
 // --- ③ 사양 대비 --------------------------------------------------------------
 
+/** 온도가 안 적힌 선언 점을 서버가 이 온도(K)로 보고 견준다(`analysis.ROOM_TEMPERATURE_K`). */
+const ROOM_TEMPERATURE_K = 293.15
+/** 선언 점과 같은 온도로 보는 폭(K) — 서버의 묶음 폭과 같다(`services.TEMPERATURE_TOLERANCE_K`). */
+const TEMPERATURE_TOLERANCE_K = 2
+
 /**
- * 선언한 값 vs 잰 값. **이 화면 아니면 알 수 없는 숫자다** — 공급사와 이야기할 때
- * 그대로 쓴다.
+ * 선언한 값 vs **같은 온도에서** 잰 값. **이 화면 아니면 알 수 없는 숫자다** — 공급사와
+ * 이야기할 때 그대로 쓴다.
  *
  * 못 견준 항목을 숨기지 않는다. 「차이 없음」 과 「견줄 값이 없음」 은 다르다.
+ *
+ * 온도를 맞춘다(2026-11-15) — 전에는 80 °C 선언 · 상온 선언이 그 재료의 모든 온도의 잰 값
+ * 평균과 견줘졌다. 그 온도의 잰 값이 없는 줄은 「견줄 잰 값 없음」 으로 남고, 미기재를 넣은
+ * 수 · 다른 온도라 뺀 수가 잰 값 칸에 선다.
  */
 function SpecGapTab() {
   const report = useResource(() => analysisApi.specGap(), [])
@@ -665,23 +675,27 @@ function SpecGapTab() {
         </p>
       )}
       {data && data.rows.length > 0 && (
-        <div className={`overflow-x-auto rounded-md border ${TABLE_PAD}`}>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>재료</TableHead>
-                <TableHead>항목</TableHead>
-                <TableHead className="text-center">선언값</TableHead>
-                <TableHead className="text-center">잰 값</TableHead>
-                <TableHead className="text-center">차이</TableHead>
-                <TableHead>근거</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {data.rows.map((row) => {
-                const percent = row.gap_ratio * 100
-                const big = Math.abs(percent) >= 10
-                return (
+        <>
+          <p className="text-muted-foreground mb-2 text-xs">
+            잰 값은 선언 점과 같은 온도(±
+            {formatSpan(TEMPERATURE_TOLERANCE_K, 'K', 'temperature')})의 것만 견줍니다. 상온
+            선언에는 시험 온도가 안 적힌 값도 넣습니다.
+          </p>
+          <div className={`overflow-x-auto rounded-md border ${TABLE_PAD}`}>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>재료</TableHead>
+                  <TableHead>항목</TableHead>
+                  <TableHead className="text-center">온도</TableHead>
+                  <TableHead className="text-center">선언값</TableHead>
+                  <TableHead className="text-center">잰 값</TableHead>
+                  <TableHead className="text-center">차이</TableHead>
+                  <TableHead>근거</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {data.rows.map((row) => (
                   <TableRow key={`${row.material_id}-${row.item}`}>
                     <TableCell className="font-medium">
                       <Link
@@ -693,31 +707,35 @@ function SpecGapTab() {
                     </TableCell>
                     <TableCell>{row.item}</TableCell>
                     <TableCell className="text-center tabular-nums">
+                      {row.temperature_k != null ? (
+                        temperatureText(row.temperature_k)
+                      ) : (
+                        <span
+                          className="text-muted-foreground"
+                          title={`선언에 온도가 없어 상온(${temperatureText(ROOM_TEMPERATURE_K)})으로 보고 견줬습니다.`}
+                        >
+                          미기재 · 상온으로 봄
+                        </span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-center tabular-nums">
                       {showWithUnit(row.declared_si, row.si_unit)}
                     </TableCell>
                     <TableCell className="text-center tabular-nums">
-                      {showWithUnit(row.measured_mean, row.si_unit)}
-                      <span className="text-muted-foreground ml-1 text-xs">
-                        n={row.measured_count}
-                      </span>
+                      <MeasuredCell row={row} />
                     </TableCell>
                     <TableCell className="text-center tabular-nums">
-                      {/* **부호가 방향을 말한다.** 절댓값만 보이면 "우리가 더 센가"
-                          를 알 수 없다. 10% 를 넘으면 눈에 띄게. */}
-                      <span className={big ? 'font-medium text-amber-700' : ''}>
-                        {percent > 0 ? '+' : ''}
-                        {percent.toFixed(1)}%
-                      </span>
+                      <GapRatio ratio={row.gap_ratio} />
                     </TableCell>
                     <TableCell>
                       {row.declared_reference ?? row.declared_source ?? '—'}
                     </TableCell>
                   </TableRow>
-                )
-              })}
-            </TableBody>
-          </Table>
-        </div>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </>
       )}
       {data && data.unmatched_items.length > 0 && (
         <p className="text-muted-foreground mt-2 text-xs">
@@ -725,6 +743,50 @@ function SpecGapTab() {
         </p>
       )}
     </div>
+  )
+}
+
+/**
+ * 잰 값 칸 — 평균과 n, 그리고 **온도로 넣고 뺀 수.** 그 온도의 잰 값이 없으면 「견줄 잰 값
+ * 없음」(못 견준 항목과 다르다: 잰 값은 있는데 온도가 다르다).
+ */
+function MeasuredCell({ row }: { row: SpecGapRow }) {
+  return (
+    <>
+      {row.measured_mean != null ? (
+        <>
+          {showWithUnit(row.measured_mean, row.si_unit)}
+          <span className="text-muted-foreground ml-1 text-xs">n={row.measured_count}</span>
+        </>
+      ) : (
+        <span className="text-muted-foreground">견줄 잰 값 없음</span>
+      )}
+      {(row.measured_unknown_temperature > 0 || row.measured_other_temperature > 0) && (
+        <div className="text-muted-foreground text-xs">
+          {[
+            row.measured_unknown_temperature > 0 &&
+              `시험 온도 미기재 ${row.measured_unknown_temperature}건 포함`,
+            row.measured_other_temperature > 0 &&
+              `다른 온도 ${row.measured_other_temperature}건 뺌`,
+          ]
+            .filter(Boolean)
+            .join(' · ')}
+        </div>
+      )}
+    </>
+  )
+}
+
+/** 차이 — **부호가 방향을 말한다.** 절댓값만 보이면 "우리가 더 센가" 를 알 수 없다. 10% 를
+ *  넘으면 눈에 띄게. 견줄 잰 값이 없으면 「—」. */
+function GapRatio({ ratio }: { ratio: number | null }) {
+  if (ratio == null) return <span className="text-muted-foreground">—</span>
+  const percent = ratio * 100
+  return (
+    <span className={Math.abs(percent) >= 10 ? 'font-medium text-amber-700' : ''}>
+      {percent > 0 ? '+' : ''}
+      {percent.toFixed(1)}%
+    </span>
   )
 }
 

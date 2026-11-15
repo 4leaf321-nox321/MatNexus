@@ -338,7 +338,15 @@ class MaterialChoiceOut(BaseModel):
 
 
 class SpecGapOut(BaseModel):
-    """선언한 값과 잰 값. **차이가 큰 것이 위로 온다.**"""
+    """선언한 값과 **같은 온도에서** 잰 값. **차이가 큰 것이 위로 온다.**
+
+    잰 값은 견준 선언 점의 온도 ±2 K 안의 것만이다(2026-11-15) — 전에는 그 재료의 모든 온도의
+    잰 값 평균과 견줘, 차이가 재료가 아니라 온도의 것이 될 수 있었다.
+
+    같은 항목의 잰 값은 있는데 **그 온도의 것이 하나도 없으면** 줄은 남되 `measured_mean` ·
+    `gap_ratio` 가 `null` 이고 `measured_count` 가 0 이다(「견줄 잰 값 없음」 — 맨 아래로
+    간다). 잰 값이 아예 없는 항목은 줄이 아니라 `unmatched_items` 에 선다.
+    """
 
     material_id: uuid.UUID
     material_name: str
@@ -346,17 +354,30 @@ class SpecGapOut(BaseModel):
     declared_si: float
     declared_source: str | None
     declared_reference: str | None
-    measured_mean: float
+    temperature_k: float | None
+    """견준 선언 점의 온도(K) — 적힌 그대로. `null` 은 선언에 온도가 없어 **상온(293.15 K)으로
+    보고** 견준 것이다. 선언이 여러 온도면 상온에 가까운 점부터, 그 온도의 잰 값이 있는 점을
+    고른다."""
+    measured_mean: float | None
+    """견준 잰 값의 평균. `null` 이면 그 온도의 잰 값이 없다(다른 온도의 수는
+    `measured_other_temperature`)."""
     measured_count: int
+    measured_unknown_temperature: int = 0
+    """`measured_count` 가운데 **시험 온도 미기재** 값 — 선언 점이 상온(±5 K)이라 넣었다(시험은
+    대개 상온이다). 0 이 아니면 그만큼은 온도를 모르고 견준 것이다."""
+    measured_other_temperature: int = 0
+    """온도가 달라 **뺀** 잰 값 수. 상온이 아닌 선언 점에서는 시험 온도 미기재 값도 여기
+    센다."""
     si_unit: str
-    gap_ratio: float
-    """(잰 값 - 선언값) / 선언값. 부호가 방향을 말한다."""
+    gap_ratio: float | None
+    """(잰 값 - 선언값) / 선언값. 부호가 방향을 말한다. `null` 은 견줄 잰 값이 없는 줄."""
 
 
 class AnalysisSpecGapOut(BaseModel):
     rows: list[SpecGapOut]
     unmatched_items: list[str]
-    """선언은 있는데 잰 값이 없어 못 견준 항목. **숨기면 「없다」 로 읽힌다.**"""
+    """선언은 있는데 잰 값이 없어 못 견준 항목. **숨기면 「없다」 로 읽힌다.** 잰 값이 다른
+    온도에만 있는 것은 여기가 아니라 `rows` 에 「견줄 잰 값 없음」 줄로 선다."""
 
 
 class TrendPointOut(BaseModel):

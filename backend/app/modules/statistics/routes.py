@@ -304,21 +304,19 @@ def save_ensemble(
             status=422,
         )
 
-    out = _group_out(db, group, threshold=threshold)
+    # 화면과 같은 노트를 남긴다 — 같은 종류 · 방향에 다른 온도의 묶음이 있었다는 것까지.
+    out = _group_out(db, group, threshold=threshold, siblings=groups)
     item = EnsembleResult(
         material_id=material.id,
         test_type_id=group.test_type.id,
         orientation=group.orientation,
+        # **시험 온도는 묶음 열쇠라 칸에 둔다**(2026-11-15). v1.337.0 은 `curve` 안에 두었다.
+        temperature_k=group.temperature_k,
         sample_count=len(group.members),
         test_run_ids=[str(member.run.id) for member in group.members],
         result_ids=[str(member.result.id) for member in group.members],
         scalars=[row.model_dump(mode="json") for row in out.scalars],
-        # **시험 온도를 곡선 기록 곁에 남긴다**(2026-11-15) — 표에 온도 칸이 없어 새 칸 없이
-        # 둔다. 온도 구분 전의 통계에는 이 키가 없다(= 모름).
-        curve={
-            **(out.curve.model_dump(mode="json") if out.curve else {}),
-            "temperature_k": group.temperature_k,
-        },
+        curve=out.curve.model_dump(mode="json") if out.curve else {},
         notes=out.notes,
         created_by_id=user.id,
     )
@@ -330,7 +328,7 @@ def save_ensemble(
         material_id=item.material_id,
         test_type_key=group.test_type.key,
         orientation=item.orientation,
-        temperature_k=group.temperature_k,
+        temperature_k=_ensemble_temperature(item),
         sample_count=item.sample_count,
         test_run_ids=[uuid.UUID(value) for value in item.test_run_ids],
         created_at=item.created_at,
@@ -366,8 +364,14 @@ def list_ensembles(
 
 
 def _ensemble_temperature(item: EnsembleResult) -> float | None:
+    """남긴 통계의 시험 온도(K) — **칸을 먼저 본다.** 칸이 비었을 때만 v1.337.0 이 `curve` 안에
+    두던 키를 읽는다(마이그레이션 `b8d4f2a6c913` 이 옮겨 담았으니 대개 칸에 있다)."""
+    if item.temperature_k is not None:
+        return float(item.temperature_k)
     value = (item.curve or {}).get("temperature_k")
-    return float(value) if isinstance(value, int | float) else None
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        return None
+    return float(value)
 
 
 # --- 분포 ------------------------------------------------------------------
@@ -674,13 +678,18 @@ def analysis_spec_gap(
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> AnalysisSpecGapOut:
-    """선언한 값 vs 잰 값. **차이가 큰 것이 위로 온다.**
+    """선언한 값 vs **같은 온도에서** 잰 값. **차이가 큰 것이 위로 온다.**
 
     잇는 열쇠는 기준정보 항목의 `measured_key` 다 — 선언은 항목 이름(`탄성계수`)이고
     잰 값은 처리 결과의 스칼라 키(`youngs_modulus`)라, 항목이 「우리가 재는 값」 으로
     그 키를 들고 있다. 전에는 라벨 문자열로 이었는데(2026-09-05 점검) 용어를 개명하거나
     플러그인이 라벨을 바꾸면 오류 없이 「매칭 안 됨」 으로 빠졌다. 키가 없는 항목은
     전처럼 라벨로 잇는다 — 못 견주는 항목은 `unmatched_items` 로 돌려준다.
+
+    **온도를 맞춘다**(2026-11-15, `analysis.match_declared`). 선언 점의 온도 ±2 K 안의 잰 값만
+    견주고, 상온 선언이면 시험 온도 미기재 값도 넣어 그 수를 센다. 전에는 그 재료의 모든
+    온도의 잰 값 평균과 견줘, 23 ℃ · 80 ℃ 가 섞인 평균이 선언과의 차이로 섰다. 그 온도의 잰
+    값이 없으면 줄은 「견줄 잰 값 없음」(평균 · 차이 `null`)으로 맨 아래에 남는다.
     """
     collected = analysis.collect(db, user)
     measured: dict[tuple[uuid.UUID, str], list[analysis.Observation]] = {}
@@ -701,17 +710,8 @@ def analysis_spec_gap(
     for material in materials:
         for declared in material.declared_properties or []:
             item = str(declared.get("item") or "").strip()
-            points = declared.get("points") or []
+            points = [one for one in declared.get("points") or [] if isinstance(one, dict)]
             if not item or not points:
-                continue
-            # 온도가 여럿이면 **상온에 가장 가까운 점**을 견준다. 시험은 대개
-            # 상온이고, 400 도 값과 견주면 차이가 재료가 아니라 온도의 것이 된다.
-            point = min(
-                points,
-                key=lambda one: abs(float(one.get("temperature_k") or 293.15) - 293.15),
-            )
-            declared_si = point.get("value_si")
-            if not isinstance(declared_si, int | float) or declared_si == 0:
                 continue
             spec = keys.get(item)
             items = (
@@ -719,27 +719,44 @@ def analysis_spec_gap(
                 if spec and spec.measured_key
                 else by_label.get((material.id, item))
             )
+            # 견줄 선언값(숫자 · 0 아님)이 없으면 전처럼 줄을 안 세운다.
+            match = analysis.match_declared(points, items or [])
+            if match is None:
+                continue
             if not items:
                 unmatched.add(item)
                 continue
-            values = [one.value for one in items]
-            mean = fmean(values)
+            values = [one.value for one in match.measured]
+            mean = fmean(values) if values else None
             rows.append(
                 SpecGapOut(
                     material_id=material.id,
                     material_name=material.record_name,
                     item=item,
-                    declared_si=float(declared_si),
+                    declared_si=match.declared_si,
                     declared_source=declared.get("source"),
                     declared_reference=declared.get("reference"),
+                    temperature_k=match.temperature_k,
                     measured_mean=mean,
                     measured_count=len(values),
-                    si_unit=items[0].si_unit,
-                    gap_ratio=(mean - float(declared_si)) / float(declared_si),
+                    measured_unknown_temperature=match.unknown_temperature,
+                    measured_other_temperature=match.other_temperature,
+                    si_unit=(match.measured or items)[0].si_unit,
+                    gap_ratio=None
+                    if mean is None
+                    else (mean - match.declared_si) / match.declared_si,
                 )
             )
     return AnalysisSpecGapOut(
-        rows=sorted(rows, key=lambda one: -abs(one.gap_ratio)),
+        # 견준 줄은 차이가 큰 차례, 「견줄 잰 값 없음」 은 그 아래에 재료 · 항목 차례.
+        rows=sorted(
+            rows,
+            key=lambda one: (
+                (0, -abs(one.gap_ratio), "", "")
+                if one.gap_ratio is not None
+                else (1, 0.0, one.material_name, one.item)
+            ),
+        ),
         unmatched_items=sorted(unmatched),
     )
 

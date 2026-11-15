@@ -225,24 +225,24 @@ describe('분포', () => {
 })
 
 describe('사양 대비', () => {
+  const ROW = {
+    material_id: 'm1',
+    material_name: 'SECC_1.0',
+    item: '인장강도',
+    declared_si: 200e6,
+    declared_source: 'datasheet',
+    declared_reference: 'KS D 3512',
+    temperature_k: 293.15,
+    measured_mean: 310e6,
+    measured_count: 3,
+    measured_unknown_temperature: 0,
+    measured_other_temperature: 0,
+    si_unit: 'Pa',
+    gap_ratio: 0.55,
+  }
+
   it('부호로 방향을 말하고, 못 견준 항목을 숨기지 않는다', async () => {
-    specGap.mockResolvedValue({
-      rows: [
-        {
-          material_id: 'm1',
-          material_name: 'SECC_1.0',
-          item: '인장강도',
-          declared_si: 200e6,
-          declared_source: 'datasheet',
-          declared_reference: 'KS D 3512',
-          measured_mean: 310e6,
-          measured_count: 3,
-          si_unit: 'Pa',
-          gap_ratio: 0.55,
-        },
-      ],
-      unmatched_items: ['열전도율'],
-    })
+    specGap.mockResolvedValue({ rows: [ROW], unmatched_items: ['열전도율'] })
     mount('spec')
     expect(await screen.findByText('+55.0%')).toBeInTheDocument()
     expect(screen.getByText(/못 견준 항목: 열전도율/)).toBeInTheDocument()
@@ -250,6 +250,44 @@ describe('사양 대비', () => {
     // Pa 인지 MPa 인지 짐작해야 한다(2026-09-14 지적).
     expect(screen.getByText('200.0 MPa')).toBeInTheDocument()
     expect(screen.getByText(/310\.0 MPa/)).toBeInTheDocument()
+    // 온도도 표시 단위로 — K 를 그대로 적지 않는다.
+    expect(screen.getByText('20 °C')).toBeInTheDocument()
+  })
+
+  it('견준 온도와 미기재 · 다른 온도의 수를 보이고, 그 온도의 잰 값이 없는 줄을 「차이 없음」 과 가른다', async () => {
+    specGap.mockResolvedValue({
+      rows: [
+        { ...ROW, measured_count: 3, measured_unknown_temperature: 1, measured_other_temperature: 2 },
+        {
+          ...ROW,
+          material_id: 'm2',
+          material_name: 'SPCC_1.0',
+          temperature_k: 673.15,
+          measured_mean: null,
+          measured_count: 0,
+          measured_other_temperature: 4,
+          gap_ratio: null,
+        },
+        { ...ROW, material_id: 'm3', material_name: 'SGCC_1.0', temperature_k: null },
+      ],
+      unmatched_items: [],
+    })
+    mount('spec')
+    const hot = (await screen.findByRole('link', { name: 'SPCC_1.0' })).closest('tr')!
+    // **평균 · 차이를 지어 내지 않는다** — 0 % 로 적으면 「선언과 같다」 로 읽힌다.
+    expect(within(hot).getByText('견줄 잰 값 없음')).toBeInTheDocument()
+    expect(within(hot).getByText('—')).toBeInTheDocument()
+    expect(within(hot).queryByText(/%$/)).not.toBeInTheDocument()
+    expect(within(hot).getByText('400 °C')).toBeInTheDocument()
+    expect(within(hot).getByText('다른 온도 4건 뺌')).toBeInTheDocument()
+
+    const room = screen.getByRole('link', { name: 'SECC_1.0' }).closest('tr')!
+    // 미기재를 넣었으면 그렇게 말한다 — n=3 가운데 1건은 온도를 모르고 견준 것이다.
+    expect(within(room).getByText('시험 온도 미기재 1건 포함 · 다른 온도 2건 뺌')).toBeInTheDocument()
+
+    // 선언에 온도가 없으면 상온으로 봤다고 적는다 — 상온이라고 지어 적지 않는다.
+    const unknown = screen.getByRole('link', { name: 'SGCC_1.0' }).closest('tr')!
+    expect(within(unknown).getByText('미기재 · 상온으로 봄')).toBeInTheDocument()
   })
 })
 

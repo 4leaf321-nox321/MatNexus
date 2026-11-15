@@ -12,6 +12,8 @@ export type AnalysisScalar = components['schemas']['AnalysisScalarOut']
 export type Compare = components['schemas']['CompareOut']
 export type AnalysisDistribution = components['schemas']['AnalysisDistributionOut']
 export type SpecGap = components['schemas']['AnalysisSpecGapOut']
+/** 사양 대비 한 줄 — 견준 선언 점의 온도 · 미기재를 넣은 수 · 다른 온도라 뺀 수가 함께 온다. */
+export type SpecGapRow = components['schemas']['SpecGapOut']
 export type AnalysisTrend = components['schemas']['AnalysisTrendOut']
 export type Coverage = components['schemas']['AnalysisCoverageOut']
 export type Spread = components['schemas']['SpreadOut']

@@ -24,6 +24,7 @@
 
 from __future__ import annotations
 
+import math
 import statistics as stats
 import uuid
 from collections.abc import Iterable, Sequence
@@ -39,6 +40,7 @@ from app.modules.accounts.models import User
 from app.modules.fitting.models import PropertyCard
 from app.modules.materials.models import Material, Sample, Specimen
 from app.modules.processing.models import ProcessingResult
+from app.modules.statistics.services import TEMPERATURE_TOLERANCE_K, run_temperature
 from app.modules.tests.models import Curve, TestRun, TestType
 from app.shared import declared_slots, holds, permissions
 from app.shared import divisions as divisions_order
@@ -65,6 +67,9 @@ class Observation:
     scalar_label: str
     si_unit: str
     value: float
+    temperature_k: float | None = None
+    """그 시험의 온도(K, 시험 조건 `temperature`). `None` 은 **미기재** — 상온이라고 단정하지
+    않는다. 사양 대비가 선언 점의 온도와 견줄 때 쓴다(2026-11-15)."""
 
 
 @dataclass(frozen=True)
@@ -149,6 +154,7 @@ def collect(
         if holds.held(run):
             held += 1
             continue
+        temperature_k = run_temperature(run)
         for scalar in result.scalars:
             key = str(scalar.get("key", ""))
             value = scalar.get("value")
@@ -172,6 +178,7 @@ def collect(
                     scalar_label=str(scalar.get("label") or key),
                     si_unit=str(scalar.get("si_unit") or "1"),
                     value=float(value),
+                    temperature_k=temperature_k,
                 )
             )
     return Collected(out, skipped, len(doubled), held)
@@ -191,6 +198,105 @@ def _fingerprints(
         )
     ).all()
     return {run_id: print_ for run_id, key, print_ in rows if (run_id, key) in wanted}
+
+
+# --- 사양 대비 --------------------------------------------------------------------
+#
+# 선언 점 하나를 **같은 온도의 잰 값**과만 견준다(2026-11-15). 전에는 상온에 가까운 선언
+# 점을 그 재료의 모든 온도의 잰 값 평균과 견줘, 23 ℃ · 80 ℃ 시험이 섞인 평균이 선언과의
+# 차이로 섰다 — 그 차이는 재료가 아니라 온도의 것이다.
+
+#: 온도가 안 적힌 선언 점을 이 온도(K)로 본다 — 선언은 대개 상온 값이다.
+ROOM_TEMPERATURE_K = 293.15
+
+#: 선언 점이 상온에서 이만큼(K) 안이면 「상온 선언」 — 시험 온도 미기재 잰 값도 견준다(시험은
+#: 대개 상온이다). 그 밖의 온도에서는 미기재 값을 안 넣는다: 400 ℃ 선언을 상온일 법한 값과
+#: 견주면 차이가 온도의 것이 된다.
+ROOM_TOLERANCE_K = 5.0
+
+
+def declared_temperature(point: dict[str, Any]) -> float | None:
+    """선언 점의 온도(K) — 적힌 그대로. 안 적혔거나 숫자가 아니면 `None`."""
+    value = point.get("temperature_k")
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        return None
+    number = float(value)
+    return number if math.isfinite(number) and number > 0 else None
+
+
+def _declared_value(point: dict[str, Any]) -> float | None:
+    """견줄 수 있는 선언값(SI) — 숫자이고 0 이 아니어야 한다(차이를 비율로 낸다)."""
+    value = point.get("value_si")
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        return None
+    number = float(value)
+    return number if math.isfinite(number) and number != 0 else None
+
+
+@dataclass(frozen=True)
+class SpecMatch:
+    """선언 점 하나와 그 온도에서 잰 값들."""
+
+    declared_si: float
+    temperature_k: float | None
+    """견준 선언 점의 온도(K) — 적힌 그대로. `None` 은 선언에 온도가 없어 상온으로 봤다."""
+    measured: list[Observation]
+    """견준 잰 값 — 선언 온도 ±2 K 안, 상온 선언이면 시험 온도 미기재 값까지. 비면 「견줄 잰
+    값 없음」(같은 항목의 잰 값은 있는데 온도가 다 다르다)."""
+    unknown_temperature: int
+    """`measured` 가운데 시험 온도 미기재(상온 선언이라 넣은 것)."""
+    other_temperature: int
+    """온도가 달라 뺀 잰 값 — 상온이 아닌 선언에서 뺀 미기재 값도 여기 센다(상온으로 본다)."""
+
+
+def match_declared(
+    points: Sequence[dict[str, Any]], observations: Sequence[Observation]
+) -> SpecMatch | None:
+    """선언 점 하나를 골라 **같은 온도의 잰 값**과 묶는다. 견줄 선언값이 없으면 `None`.
+
+    고르는 차례는 **상온에 가까운 점부터**(전과 같다 — 시험은 대개 상온이다). 다만 그 온도의 잰
+    값이 없으면 잰 값이 있는 다음 점으로 간다 — 20 ℃ · 80 ℃ 를 선언하고 80 ℃ 에서만 쟀으면 80 ℃
+    끼리 견준다. 어느 점에도 잰 값이 없으면 상온에 가장 가까운 점을 「견줄 잰 값 없음」 으로.
+
+    잰 값은 선언 온도 ±2 K(`services.TEMPERATURE_TOLERANCE_K`, 묶음과 같은 폭) 안의 것만
+    넣는다. 선언 점이 상온(±5 K)이면 시험 온도 미기재 값도 넣고 그 수를 센다.
+    """
+    usable = [
+        (value, point) for point in points if (value := _declared_value(point)) is not None
+    ]
+    if not usable:
+        return None
+    usable.sort(
+        key=lambda one: abs(
+            (declared_temperature(one[1]) or ROOM_TEMPERATURE_K) - ROOM_TEMPERATURE_K
+        )
+    )
+    found: list[SpecMatch] = []
+    for value, point in usable:
+        written = declared_temperature(point)
+        kelvin = ROOM_TEMPERATURE_K if written is None else written
+        same = [
+            one
+            for one in observations
+            if one.temperature_k is not None
+            and abs(one.temperature_k - kelvin) <= TEMPERATURE_TOLERANCE_K
+        ]
+        unknown = (
+            [one for one in observations if one.temperature_k is None]
+            if abs(kelvin - ROOM_TEMPERATURE_K) <= ROOM_TOLERANCE_K
+            else []
+        )
+        match = SpecMatch(
+            declared_si=value,
+            temperature_k=written,
+            measured=[*same, *unknown],
+            unknown_temperature=len(unknown),
+            other_temperature=len(observations) - len(same) - len(unknown),
+        )
+        if match.measured:
+            return match
+        found.append(match)
+    return found[0]
 
 
 # --- 요약 ------------------------------------------------------------------------
