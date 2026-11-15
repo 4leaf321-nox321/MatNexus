@@ -38,6 +38,7 @@ jobs:
       contents: write
     outputs:
       created: ${{ steps.tag.outputs.created }}
+      missing: ${{ steps.tag.outputs.missing }}
       value: ${{ steps.version.outputs.value }}
 
     steps:
@@ -56,10 +57,20 @@ jobs:
         id: tag
         env:
           TAG: v${{ steps.version.outputs.value }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           if git rev-parse "$TAG" >/dev/null 2>&1; then
-            echo "$TAG 태그가 이미 있습니다 — 넘어갑니다."
             echo "created=false" >> "$GITHUB_OUTPUT"
+            # **태그는 있는데 배포 패키지가 없으면 다시 만든다**(2026-11-15 전반 점검). 태그를 민 뒤
+            # 패키징이 실패하면 그 뒤의 초록 CI 는 전부 여기서 넘어가, 릴리스 없는 태그가 남았다 —
+            # 운영에서 태그 없이 배포하면 직전 릴리스가 말없이 다시 깔린다.
+            if gh release view "$TAG" --json assets -q '.assets[].name' 2>/dev/null | grep -q 'deploy_package.zip'; then
+              echo "$TAG 태그와 배포 패키지가 이미 있습니다 — 넘어갑니다."
+              echo "missing=false" >> "$GITHUB_OUTPUT"
+            else
+              echo "$TAG 태그는 있는데 배포 패키지가 없습니다 — 다시 만듭니다."
+              echo "missing=true" >> "$GITHUB_OUTPUT"
+            fi
             exit 0
           fi
           git config user.name  'github-actions[bot]'
@@ -70,7 +81,7 @@ jobs:
 
   release:
     needs: tag
-    if: needs.tag.outputs.created == 'true'
+    if: needs.tag.outputs.created == 'true' || needs.tag.outputs.missing == 'true'
     permissions:
       contents: write
     uses: ./.github/workflows/release-windows.yml

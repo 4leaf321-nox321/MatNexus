@@ -418,7 +418,23 @@ if (-not $isFirstRun) {
             "`n  · 그 폴더에 들어가 있는 탐색기·터미널 창을 닫으세요."
         )
     }
-    if (Test-Path $prevPath) { Write-Log '이전 백업 삭제'; Remove-Item -Recurse -Force $prevPath }
+    if (Test-Path $prevPath) {
+        Write-Log '이전 백업 삭제'
+        # **실패하면 서비스를 되살리고 멈춘다**(2026-11-15 전반 점검). 누가 그 폴더에 탐색기를
+        # 열어 뒀거나 백신이 훑는 중이면 삭제가 중간에 멈추는데, 전에는 그대로 예외로 끝나
+        # 운영 폴더는 멀쩡한데 서비스 셋이 멈춘 채였다(위아래의 다른 실패는 되살린다).
+        try {
+            Remove-Item -Recurse -Force $prevPath -ErrorAction Stop
+        } catch {
+            Start-KnownServices $runningServices
+            Abort-Staging (
+                "이전 백업 폴더 $prevPath 를 지울 수 없습니다 — 운영 폴더는 그대로이고 서비스도 다시 띄웠습니다.`n" +
+                "  · $_`n" +
+                "  · 그 폴더에 들어가 있는 탐색기·터미널 창을 닫고 다시 시도하세요.`n" +
+                "  · 이전 백업은 일부만 지워졌을 수 있습니다 — 롤백 대상으로 쓰지 마세요."
+            )
+        }
+    }
     Write-Log "현재 설치를 $prevPath 로 이동"
     [System.IO.Directory]::Move($AppPath, $prevPath)
 }
@@ -483,20 +499,44 @@ if (-not $isFirstRun -or $interrupted) {
     $assetsFrom = Join-Path $prevPath 'frontend\dist\assets'
     $assetsTo = Join-Path $AppPath 'frontend\dist\assets'
     if ((Test-Path $assetsFrom) -and (Test-Path $assetsTo)) {
-        $carried = 0
-        foreach ($one in Get-ChildItem -File $assetsFrom) {
-            $target = Join-Path $assetsTo $one.Name
-            if (-not (Test-Path $target)) { Copy-Item $one.FullName $target; $carried++ }
+        # **정말로 한 세대만**(2026-11-15 전반 점검). 직전 폴더에는 그 전 배포가 이어받은 것도
+        # 들어 있어, 그대로 다 복사하면 지난 모든 판의 청크가 끝없이 쌓였다(한 판 23MB, 릴리스는
+        # 매일). 이어받은 이름을 `.carried` 에 적어 두고, 다음 배포는 그 이름을 건너뛴다.
+        $listName = '.carried'
+        $inherited = @{}
+        $oldList = Join-Path $assetsFrom $listName
+        if (Test-Path $oldList) {
+            foreach ($name in Get-Content -Encoding utf8 $oldList) { $inherited[$name.Trim()] = $true }
         }
-        Write-Log "직전 버전의 프론트 자산 $carried 개 이어받기(열어 둔 화면이 배포 중에도 열리게)"
+        $carried = @()
+        foreach ($one in Get-ChildItem -File $assetsFrom) {
+            if ($one.Name -eq $listName -or $inherited.ContainsKey($one.Name)) { continue }
+            $target = Join-Path $assetsTo $one.Name
+            if (-not (Test-Path $target)) { Copy-Item $one.FullName $target; $carried += $one.Name }
+        }
+        Set-Content -Encoding utf8 -Path (Join-Path $assetsTo $listName) -Value $carried
+        Write-Log "직전 버전의 프론트 자산 $($carried.Count) 개 이어받기(열어 둔 화면이 배포 중에도 열리게)"
     }
 }
 
 # --- 가상환경 -----------------------------------------------------------------
 $syncScript = Join-Path $AppPath 'venv_sync.ps1'
 if (-not (Test-Path $syncScript)) { throw "패키지에 venv_sync.ps1 이 없습니다 ($syncScript)." }
-& $syncScript -AppPath $AppPath -PythonExe $interpreter
-if ($LASTEXITCODE -ne 0 -and $null -ne $LASTEXITCODE) { throw "가상환경 준비 실패 (exit $LASTEXITCODE)" }
+# **여기서 실패하면 새 코드는 배치됐고 서비스는 멈춘 채다**(2026-11-15 전반 점검) — 마이그레이션
+# 실패와 같은 자리인데 복구 안내가 없었다. 같은 안내를 내고 끝낸다.
+try {
+    & $syncScript -AppPath $AppPath -PythonExe $interpreter
+    if ($LASTEXITCODE -ne 0 -and $null -ne $LASTEXITCODE) { throw "가상환경 준비 실패 (exit $LASTEXITCODE)" }
+} catch {
+    Write-Host "가상환경 준비 실패: $_" -ForegroundColor Red
+    Write-Host ''
+    Write-Host '새 코드는 배치됐지만 의존성 설치가 끝나지 않았습니다(마이그레이션은 아직 안 돌았습니다).'
+    if ($runningServices.Count -gt 0) {
+        Write-Host "서비스($($runningServices -join ', '))는 멈춘 채입니다 — 롤백 뒤 .\service.ps1 -Action Start 로 띄우세요."
+    }
+    Write-Host "파일만 되돌리려면:  .\rollback.ps1 -AppPath '$AppPath'"
+    exit 11
+}
 
 $backendPython = Join-Path ($AppPath + '_venvs') 'backend\Scripts\python.exe'
 

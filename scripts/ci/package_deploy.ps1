@@ -62,6 +62,35 @@ if (-not (Test-Path .\frontend\dist\index.html)) {
     exit 1
 }
 
+# **이 번들은 CI 가 브라우저로 본 번들이 아니다**(2026-11-15 전반 점검) — 릴리스 잡이 새로 빌드한다.
+# 그날 로컬에서 같은 소스의 빌드 14번 중 한 번이 로그인 화면부터 죽는 번들을 냈다(react-dom 청크가
+# 다르게 갈렸다). 브라우저 없이 볼 수 있는 둘을 본다.
+#   1) index.html 이 가리키는 자산이 다 있고 비어 있지 않다.
+#   2) 한 번 더 빌드해도 자산 이름이 같다 — 이름의 해시가 곧 내용이라, 다르면 빌드가 흔들린 것이다.
+function Get-BundleNames {
+    (Get-ChildItem .\frontend\dist\assets -File | Sort-Object Name | ForEach-Object { $_.Name }) -join "`n"
+}
+$index = Get-Content -Raw -Encoding utf8 .\frontend\dist\index.html
+$refs = [regex]::Matches($index, '(?:src|href)="/assets/([^"]+)"') | ForEach-Object { $_.Groups[1].Value }
+if (-not $refs) { Write-Error 'dist\index.html 이 가리키는 자산이 없습니다.'; exit 1 }
+foreach ($ref in $refs) {
+    $file = Join-Path .\frontend\dist\assets $ref
+    if (-not (Test-Path $file) -or (Get-Item $file).Length -eq 0) {
+        Write-Error "dist\index.html 이 가리키는 자산이 없거나 비었습니다: $ref"
+        exit 1
+    }
+}
+$firstBuild = Get-BundleNames
+Push-Location .\frontend
+npx vite build
+if ($LASTEXITCODE -ne 0) { Pop-Location; Write-Error "두 번째 빌드 실패 (exit $LASTEXITCODE)"; exit 1 }
+Pop-Location
+if ((Get-BundleNames) -ne $firstBuild) {
+    Write-Error '같은 소스를 두 번 빌드했는데 번들이 다릅니다 — 빌드가 흔들렸습니다. 다시 돌리세요.'
+    exit 1
+}
+Write-Host "프론트엔드 번들 검사 통과 (가리키는 자산 $(@($refs).Count)개 · 다시 빌드해도 같음)"
+
 # 프론트는 API 절대주소를 굽지 않는다(항상 상대경로 /api). 굽는 방식이면 값이
 # 빠졌을 때 사용자 브라우저가 자기 PC를 부르게 되므로, 그런 흔적이 남아 있지
 # 않은지 확인한다.

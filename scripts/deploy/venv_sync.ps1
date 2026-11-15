@@ -39,6 +39,10 @@ $components = @('backend', 'mcp_server')
 $synced = @()
 
 foreach ($component in $components) {
+  # **MCP 의 실패는 앱 배포를 세우지 않는다**(2026-11-15 전반 점검). 패키징은 MCP wheel 실패를
+  # 경고로 넘기는데(「앱은 정상」) 여기는 throw 했다 — 이 시점은 서비스를 멈추고 폴더를 바꾼 뒤,
+  # 마이그레이션 전이라 배포가 서비스 내린 채로 끝났다. backend 의 실패는 그대로 멈춘다.
+  try {
     $componentDir = Join-Path $AppPath $component
     $req = Join-Path $componentDir 'requirements.txt'
     if (-not (Test-Path $req)) {
@@ -86,6 +90,10 @@ foreach ($component in $components) {
     Set-Content -Encoding ascii -Path $stampFile -Value $wanted
     Write-Log "$component : 가상환경 준비 완료"
     $synced += $component
+  } catch {
+    if ($component -ne 'mcp_server') { throw }
+    Write-Warning "mcp_server 가상환경을 준비하지 못했습니다 — 앱 배포는 계속합니다(AI 연결만 안 뜹니다): $_"
+  }
 }
 
 Write-Log ('동기화: ' + ($synced -join ', '))
