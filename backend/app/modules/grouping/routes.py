@@ -99,7 +99,9 @@ def list_kinds(
                 for item in plugin.params
             ],
             makes_values=[
-                GroupingProducedOut(key=item.key, label=item.label, si_unit=item.si_unit)
+                GroupingProducedOut(
+                    key=item.key, label=item.label, si_unit=item.si_unit, is_span=item.is_span
+                )
                 for item in plugin.makes_values
             ],
         )

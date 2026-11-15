@@ -131,6 +131,7 @@ VISCOELASTIC = register_block(
                 label="WLF C2",
                 si_unit="K",
                 help="온도 **차**다 — K 와 °C 가 같은 수다.",
+                is_span=True,
             ),
             Produced(
                 key="shift_activation_energy",

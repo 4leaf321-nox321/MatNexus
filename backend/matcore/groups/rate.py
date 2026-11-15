@@ -134,7 +134,9 @@ MIN_CURVE_POINTS = 3
         Produced(key="model_r_squared", label="식의 R²", si_unit="1"),
     ),
     order=20,
-    version="1",
+    # 2: 같은 소성변형률의 점은 마지막 것(항복점)을 남긴다 — 기준 곡선의 항복이 달라진다
+    # (2026-10-04 에 바꾸고 판을 안 올렸다 — 2026-11-15 전반 점검).
+    version="2",
 )
 def rate_family(
     members: list[Member],

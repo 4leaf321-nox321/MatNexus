@@ -144,3 +144,28 @@ class Test순간_탄성률은_첫_측정_안으로_묶는다:
         outcome = prony_time.relaxation_prony([_member()])
         assert outcome.values["instantaneous_ratio"] < 1.5
         assert not any("강성의" in one for one in outcome.warnings)
+
+
+def test_변형률_열의_빈_칸_하나로_전부_NaN_이_되지_않는다() -> None:
+    """2026-11-15 전반 점검 — 평균이 NaN 이 되고 `strain <= 0` 검사를 통과해, 유지 변형률 ·
+    E(t) 가 전부 NaN 으로 저장됐다."""
+    time = np.linspace(0, 100, 11)
+    stress = np.linspace(10e6, 8e6, 11)
+    strain = np.full(11, 0.005)
+    strain[4] = np.nan
+    step = prony_time.relaxation_modulus(
+        Frame({"time": time, "stress": stress, "strain": strain}, {}), {}
+    )
+    assert step.frame.columns["relaxation_modulus"][0] == pytest.approx(10e6 / 0.005)
+    assert all(np.isfinite(one.value) for one in step.scalars)
+    assert any("빈 칸 1개" in one for one in step.notes)
+    with pytest.raises(ProcessingError, match="비어"):
+        prony_time.relaxation_modulus(
+            Frame({"time": time, "stress": stress, "strain": np.full(11, np.nan)}, {}), {}
+        )
+    holed = stress.copy()
+    holed[0] = np.nan
+    with pytest.raises(ProcessingError, match="첫 응력이 비어"):
+        prony_time.relaxation_modulus(
+            Frame({"time": time, "stress": holed, "strain": np.full(11, 0.005)}, {}), {}
+        )

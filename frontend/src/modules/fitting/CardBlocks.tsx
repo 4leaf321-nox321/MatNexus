@@ -94,9 +94,10 @@ function originOf(source: string): string {
   return SOURCE_LABELS[source] ?? ''
 }
 
-function cell(value: unknown, siUnit: string | null | undefined): string {
+function cell(value: unknown, siUnit: string | null | undefined, span = false): string {
   if (value === null || value === undefined) return '—'
-  if (typeof value === 'number') return formatScalar(value, siUnit)
+  // 폭(`is_span`)은 오프셋을 빼지 않는다 — WLF C2 51.6 K 가 -221.6 °C 로 섰다(2026-11-15).
+  if (typeof value === 'number') return formatScalar(value, siUnit, undefined, span)
   if (typeof value === 'boolean') return value ? '예' : '아니오'
   return String(value)
 }
@@ -117,7 +118,7 @@ function Values({ spec, values }: { spec: BlockSpec; values: Record<string, unkn
               {one.label}
             </dt>
             <dd className="tabular-nums">
-              {cell(values[one.key], one.si_unit)}
+              {cell(values[one.key], one.si_unit, one.is_span ?? false)}
               {/* **값과 함께 출처를 보인다.** 나중에 "이 물성 어디서 났나" 를
                   묻는 자리에서 그 오해가 제일 비싸다. */}
               {origin && (

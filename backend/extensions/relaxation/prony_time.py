@@ -65,8 +65,17 @@ def relaxation_modulus(frame: Frame, options: dict[str, Any]) -> StepResult:
     held = options.get("held_strain")
     measured = frame.columns.get(str(options.get("strain") or STRAIN))
     if measured is not None and len(measured):
-        strain = float(np.mean(np.asarray(measured, float)))
+        # 빈 칸(NaN)은 평균에서 뺀다 — 한 칸에 유지 변형률 · E(t) 가 전부 NaN 으로
+        # 저장됐다(`strain <= 0` 은 NaN 을 통과시킨다, 2026-11-15 전반 점검).
+        column = np.asarray(measured, float)
+        usable = column[np.isfinite(column)]
+        if len(usable) == 0:
+            raise ProcessingError("변형률 열이 모두 비어 있습니다(NaN).")
+        strain = float(np.mean(usable))
         notes.append(f"유지 변형률은 변형률 열의 평균 {strain:.5g} 입니다.")
+        if len(usable) < len(column):
+            empty = len(column) - len(usable)
+            notes.append(f"변형률 열의 빈 칸 {empty}개는 평균에서 뺐습니다.")
         if isinstance(held, int | float) and held > 0 and abs(strain - held) > 0.05 * held:
             notes.append(
                 f"조건의 유지 변형률 {held:.5g} 과 5% 넘게 다릅니다 — 잰 값(열)을 썼습니다."
@@ -79,8 +88,12 @@ def relaxation_modulus(frame: Frame, options: dict[str, Any]) -> StepResult:
             "유지 변형률을 모릅니다 — 변형률 열이 없으면 시험 조건 「유지 변형률」 을 "
             "적으세요."
         )
-    if strain <= 0:
+    if not np.isfinite(strain) or strain <= 0:
         raise ProcessingError(f"유지 변형률이 {strain:g} 입니다 — 0 보다 커야 합니다.")
+    if not np.isfinite(stress[0]):
+        raise ProcessingError(
+            "첫 응력이 비어 있습니다(NaN) — 완화가 시작되는 점을 찾을 수 없습니다."
+        )
     if stress[0] <= 0:
         raise ProcessingError(
             "첫 응력이 0 이하입니다 — 완화가 시작되는 점을 찾을 수 없습니다."

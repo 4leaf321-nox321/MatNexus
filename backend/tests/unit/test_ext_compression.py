@@ -394,3 +394,20 @@ class Test폼_카드:
         ]
         with pytest.raises(ExportError, match="내려가는"):
             render("dyna_foam", self.deck(rows))
+
+
+def test_뒤_사이클처럼_0_에서_시작하지_않는_곡선() -> None:
+    """2026-11-15 전반 점검 — 뒤 사이클은 잔류 변형에서 시작한다. 시작이 10 % 뒤면 강도 창이
+    비어 「예상 못 한 오류」 로 죽었고, 시작점 앞의 고정 변형률 응력은 첫 점 값이 됐다."""
+    strain = np.linspace(0.15, 0.6, 451)
+    found = _indices(strain, 1e6 * strain)  # 전에는 ValueError(빈 배열의 argmax)
+    assert "compressive_stress_at_10pct" not in found
+    assert found["compressive_strength"] == pytest.approx(0.6e6)
+    assert found["compressive_stress_at_25pct"] == pytest.approx(0.25e6)
+
+    frame = Frame(
+        {compress.STRAIN: strain, compress.STRESS: 1e6 * strain},
+        {compress.STRAIN: "1", compress.STRESS: "Pa"},
+    )
+    notes = " ".join(compress.indices(frame, {}).notes)
+    assert "15.0% 에서 시작" in notes and "0 부터가 아닙니다" in notes

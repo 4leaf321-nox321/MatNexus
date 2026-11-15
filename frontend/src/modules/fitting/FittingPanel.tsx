@@ -270,12 +270,18 @@ export function FittingPanel({ materialId }: Props) {
   // 글로벌 피팅과 그 결과, 결과마다 카드 만들기가 있다.
   const groupKinds = useResource(() => groupsApi.kinds(), [])
   const testTypeKeys = new Set((stats.data?.groups ?? []).map((item) => item.test_type_key))
+  // **시험 종류를 여럿 함께 받는 묶음은 그 종류가 다 있을 때만**(2026-11-15). 응력완화 + DMA
+  // 를 잇는 묶음이 DMA 만 있는 재료에도 서서, 눌러도 응력완화 후보가 없는 창이 열렸다.
   const groupWays = (groupKinds.data ?? [])
     .map((spec) => ({
       spec,
       appliesTo: spec.applies_to.find((key) => testTypeKeys.has(key)) ?? null,
     }))
-    .filter((one) => one.appliesTo !== null)
+    .filter(
+      (one) =>
+        one.appliesTo !== null &&
+        Object.keys(one.spec.needs_by_type ?? {}).every((key) => testTypeKeys.has(key))
+    )
   const [groupsFor, setGroupsFor] = useState<(typeof groupWays)[number] | null>(null)
   const [showingKinds, setShowingKinds] = useState(false)
 
@@ -543,6 +549,7 @@ export function FittingPanel({ materialId }: Props) {
             <GroupsPanel
               materialId={materialId}
               appliesTo={groupsFor.appliesTo ?? undefined}
+              only={groupsFor.spec.id}
               onCardMade={() => {
                 setGroupsFor(null)
                 void cards.reload()

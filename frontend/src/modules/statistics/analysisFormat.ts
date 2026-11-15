@@ -5,11 +5,16 @@
  * 탄성계수가 탭마다 다른 값으로 읽힌다.
  */
 
-import { display, toDisplay } from '@/shared/units'
+import { display, spanToDisplay, toDisplay } from '@/shared/units'
 
-/** SI 값을 표시 단위로. **자릿수는 크기에 맞춘다** — 0.0000002 도 200000 도 안 읽힌다. */
-export function show(value: number, siUnit: string): string {
-  const shown = toDisplay(value, siUnit)
+/**
+ * SI 값을 표시 단위로. **자릿수는 크기에 맞춘다** — 0.0000002 도 200000 도 안 읽힌다.
+ *
+ * `span` 은 차이(표준편차)다 — 오프셋을 빼지 않는다. 안 가르면 Tg 의 표준편차 2 K 가
+ * -271 로 선다(2026-11-15 전반 점검).
+ */
+export function show(value: number, siUnit: string, span = false): string {
+  const shown = span ? spanToDisplay(value, siUnit) : toDisplay(value, siUnit)
   const size = Math.abs(shown)
   if (size === 0) return '0'
   if (size >= 1000) return shown.toFixed(0)

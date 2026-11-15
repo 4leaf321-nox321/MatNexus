@@ -19,12 +19,12 @@ const SPECS: BlockSpec[] = [
     help: '이 파일이 이름을 모른다는 것을 보이려고 지어냈다.',
     in_deck: true,
     produces: [
-      { key: 'strength', label: '세기', si_unit: 'Pa', help: null },
-      { key: 'ratio', label: '비', si_unit: '1', help: null },
+      { key: 'strength', label: '세기', si_unit: 'Pa', help: null, is_span: false },
+      { key: 'ratio', label: '비', si_unit: '1', help: null, is_span: false },
     ],
     rows: [
-      { key: 'name', label: '이름', si_unit: '1', help: null },
-      { key: 'value', label: '값', si_unit: '1', help: null },
+      { key: 'name', label: '이름', si_unit: '1', help: null, is_span: false },
+      { key: 'value', label: '값', si_unit: '1', help: null, is_span: false },
     ],
   },
   {
@@ -32,7 +32,7 @@ const SPECS: BlockSpec[] = [
     label: '덱에 안 가는 것',
     help: '실리는 자리가 다르다.',
     in_deck: false,
-    produces: [{ key: 'note_value', label: '참고값', si_unit: '1', help: null }],
+    produces: [{ key: 'note_value', label: '참고값', si_unit: '1', help: null, is_span: false }],
     rows: [],
   },
 ]
@@ -235,13 +235,13 @@ describe('블록 그래프 — 선언대로 그린다', () => {
     help: '점과 멱법칙 계수.',
     in_deck: true,
     produces: [
-      { key: 'coef', label: '계수', si_unit: 'Pa', help: null },
-      { key: 'power', label: '지수', si_unit: '1', help: null },
+      { key: 'coef', label: '계수', si_unit: 'Pa', help: null, is_span: false },
+      { key: 'power', label: '지수', si_unit: '1', help: null, is_span: false },
     ],
     rows: [
-      { key: 'life', label: '수명', si_unit: '1', help: null },
-      { key: 'level', label: '진폭', si_unit: 'Pa', help: null },
-      { key: 'stopped', label: '멈춤', si_unit: '1', help: null },
+      { key: 'life', label: '수명', si_unit: '1', help: null, is_span: false },
+      { key: 'level', label: '진폭', si_unit: 'Pa', help: null, is_span: false },
+      { key: 'stopped', label: '멈춤', si_unit: '1', help: null, is_span: false },
     ],
     plot: {
       x: 'life',

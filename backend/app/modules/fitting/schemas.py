@@ -750,6 +750,8 @@ class CardValueOut(BaseModel):
     help: str | None = None
     property_key: str | None = None
     """이 값이 문헌 물성으로 치면 무엇인가. `ProducedOut.property_key` 와 같다."""
+    is_span: bool = False
+    """차이(폭)인 값 — 화면이 표시 단위의 오프셋을 빼지 않는다(WLF C2)."""
 
 
 class PowerLineOut(BaseModel):

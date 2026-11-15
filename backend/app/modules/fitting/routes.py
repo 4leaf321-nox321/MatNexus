@@ -235,6 +235,7 @@ def _produced(item: Produced) -> CardValueOut:
         si_unit=item.si_unit,
         help=item.help,
         property_key=item.property_key,
+        is_span=item.is_span,
     )
 
 

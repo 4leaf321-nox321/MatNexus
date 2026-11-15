@@ -363,3 +363,25 @@ class Test선형점탄성_탄성률:
         narrow = {one.key: one.value for one in self._run(tolerance=0.05).scalars}
         wide = {one.key: one.value for one in self._run(tolerance=0.30).scalars}
         assert wide["lve_point_count"] > narrow["lve_point_count"]
+
+
+class Test낙폭_Tg_는_점_순서를_타지_않는다:
+    """2026-11-15 전반 점검 — 「떨어진 첫 온도」 를 배열의 첫 점으로 잡아, 높은 온도부터 적힌
+    파일(냉각 스캔)에서는 스윕의 최고 온도가 Tg 가 됐다."""
+
+    HEATING: ClassVar[dict[str, list[float]]] = dict(
+        temperature=[300.0, 320.0, 340.0, 360.0, 380.0, 400.0],
+        storage_modulus=[1000.0, 950.0, 800.0, 400.0, 60.0, 50.0],
+        loss_modulus=[10.0, 30.0, 90.0, 150.0, 55.0, 8.0],
+        tan_delta=[0.01, 0.03, 0.11, 0.38, 0.92, 0.16],
+    )
+
+    @staticmethod
+    def _onset(columns: dict[str, list[float]]) -> float:
+        result = run("dma.glass_transition", frame(**columns), method="storage_onset")
+        return next(s.value for s in result.scalars if s.key == "glass_transition")
+
+    def test_가열_순서와_냉각_순서가_같은_값을_낸다(self) -> None:
+        cooling = {key: values[::-1] for key, values in self.HEATING.items()}
+        assert self._onset(self.HEATING) == 360.0
+        assert self._onset(cooling) == 360.0

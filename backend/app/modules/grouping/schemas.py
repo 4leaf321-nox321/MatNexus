@@ -39,6 +39,8 @@ class GroupingProducedOut(BaseModel):
     key: str
     label: str
     si_unit: str
+    is_span: bool = False
+    """차이(폭)인 값 — 화면이 표시 단위의 오프셋을 빼지 않는다(WLF C2)."""
 
 
 class GroupingSpecOut(BaseModel):

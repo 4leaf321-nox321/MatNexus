@@ -350,7 +350,8 @@ def _tangent_onset(
         ),
     ),
     order=60,
-    version="1",
+    # 2: 낙폭 지점을 낮은 온도 쪽에서 찾는다(전에는 파일의 점 순서를 탔다, 2026-11-15).
+    version="2",
 )
 def glass_transition(frame: Frame, options: dict[str, Any]) -> StepResult:
     """온도 스윕에서 Tg 를 잡는다. 곡선은 안 바뀐다.
@@ -415,7 +416,9 @@ def glass_transition(frame: Frame, options: dict[str, Any]) -> StepResult:
                 f"저장 탄성률이 {drop:.0%} 만큼 떨어지는 지점이 없습니다. "
                 f"스윕이 전이를 다 지나지 않았을 수 있습니다."
             )
-        index = int(below[0])
+        # **낮은 온도 쪽에서 처음 넘는 점**(2026-11-15 전반 점검). 배열의 첫 점을 잡으면
+        # 높은 온도부터 적힌 파일(냉각 스캔)에서 스윕의 최고 온도가 Tg 가 됐다(361 K → 420 K).
+        index = int(below[np.argmin(np.asarray(temperature, dtype=float)[below])])
         value = float(series[index])
     else:
         index = int(np.argmax(series))

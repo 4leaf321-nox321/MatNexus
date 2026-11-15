@@ -303,11 +303,15 @@ def indices(frame: Frame, options: dict[str, Any]) -> StepResult:
     order = np.argsort(strain, kind="stable")
     x, y = strain[order], stress[order]
     reached = float(np.max(x))
+    # **곡선이 0 에서 시작한다고 전제하지 않는다**(2026-11-15 전반 점검). 뒤 사이클을 고르면
+    # 잔류 변형에서 시작하는데, 시작점 앞의 변형률은 보간이 첫 점 응력으로 채웠고 10 % 강도
+    # 창이 비어 「예상 못 한 오류」 로 죽었다. 시작점 앞은 「닿지 않음」 과 같이 뺀다.
+    began = float(np.min(x))
     scalars: list[Scalar] = []
     notes: list[str] = []
 
     for key, at, label in STRAIN_POINTS:
-        if reached >= at:
+        if began <= at <= reached:
             scalars.append(
                 Scalar(
                     key=key,
@@ -322,11 +326,17 @@ def indices(frame: Frame, options: dict[str, Any]) -> StepResult:
         notes.append(
             f"최대 압축 변형 {reached:.0%} — {', '.join(missing)} 은 닿지 않아 안 냈습니다."
         )
+    before = [label for key, at, label in STRAIN_POINTS if at < began]
+    if before:
+        notes.append(
+            f"곡선이 압축 변형 {began:.1%} 에서 시작합니다(뒤 사이클 · 잔류 변형) — "
+            f"{', '.join(before)} 은 그 앞이라 안 냈습니다."
+        )
 
     # 압축 강도(ISO 844 · D1621 · D695): 10% 전에 최대(항복 봉우리)가 있으면 그 최대, 없으면
     # 10% 응력. **곡선 전체의 최대가 아니다** — 경질 폼은 치밀화 뒤 응력이 항복 봉우리보다
     # 커서, 전체 최대를 보면 늘 10% 응력이 된다.
-    if reached >= 0.10:
+    if began <= 0.10 <= reached:
         at_ten = float(np.interp(0.10, x, y))
         window = x <= 0.10
         top = int(np.argmax(y[window]))
@@ -335,6 +345,8 @@ def indices(frame: Frame, options: dict[str, Any]) -> StepResult:
             strength, how = peak_value, f"변형률 {peak_strain:.3g} 의 최대 응력(10% 전)"
         else:
             strength, how = at_ten, "10% 압축 응력(그 전에 최대가 없음)"
+    elif began > 0.10:
+        strength, how = float(np.max(y)), "곡선의 최대 응력(곡선이 10% 뒤에서 시작)"
     else:
         strength, how = float(np.max(y)), "곡선의 최대 응력(10% 에 닿지 않음)"
     scalars.append(
@@ -379,6 +391,11 @@ def indices(frame: Frame, options: dict[str, Any]) -> StepResult:
         xs = np.append(x[upto], 0.50)
         ys = np.append(y[upto], float(np.interp(0.50, x, y)))
         energy = float(np.sum((ys[1:] + ys[:-1]) / 2.0 * np.diff(xs)))
+        if began > 0.01:
+            notes.append(
+                f"흡수 에너지는 곡선이 시작하는 {began:.1%} 부터 50% 까지 적분한 값입니다 — "
+                "0 부터가 아닙니다."
+            )
         scalars.append(
             Scalar(
                 key="energy_absorption_50pct",

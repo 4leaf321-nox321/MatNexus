@@ -480,3 +480,27 @@ class Test피로_2구간:
         broken = self.block(knee_stress=self.STRESS * 1.1)
         with pytest.raises(export.ExportError, match="이어지지"):
             mm("dyna_fatigue_bilinear", sn_bilinear=broken)
+
+
+def test_LS_DYNA_온도별_탄성의_곡선_번호는_재료_번호가_커도_그대로다() -> None:
+    """2026-11-15 전반 점검 — 곡선 번호를 실수 칸 서식으로 적어, 10칸에 안 드는 번호가 지수
+    표기로 반올림됐다(-452311790 → -4.5231E+8). `*DEFINE_CURVE` 쪽은 정수라 덱이 없는 곡선을
+    가리켰다."""
+    blocks = {
+        "elastic": {
+            **STEEL,
+            "rows": [
+                {"temperature": 293.15, "youngs_modulus": 210e9, "poisson_ratio": 0.3},
+                {"temperature": 473.15, "youngs_modulus": 198e9, "poisson_ratio": 0.3},
+            ],
+        },
+        "table": TABLE,
+        "temperature_table": TEMPERATURE,
+    }
+    deck = export.Deck(name="X", solver_id=4_523_117, blocks=blocks)
+    lines = export.render("dyna_temperature", deck, MM_N_TONNE).text.splitlines()
+    card1 = after(lines, "mid")
+    assert cols(card1, 10, 10, 10, 10)[2:] == ["-452311790", "-452311791"]
+    # 가리킨 번호의 곡선이 덱 안에 정수 그대로 정의돼 있다.
+    defined = {line.split()[0] for line in lines if line.strip() and line.split()[0].isdigit()}
+    assert {"452311790", "452311791"} <= defined

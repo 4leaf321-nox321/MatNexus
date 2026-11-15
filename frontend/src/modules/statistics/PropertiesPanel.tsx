@@ -50,7 +50,14 @@ import {
 import type { components } from '@/shared/api/schema'
 import { cn } from '@/shared/lib/utils'
 import { useResource } from '@/shared/hooks/useResource'
-import { axisLabel, formatCondition, formatScalar, significant, toDisplay } from '@/shared/units'
+import {
+  axisLabel,
+  formatCondition,
+  formatScalar,
+  formatSpan,
+  significant,
+  toDisplay,
+} from '@/shared/units'
 
 /** 이 이상이면 흩어짐이 크다고 눈에 띄게 한다. **버리거나 고치지는 않는다.** */
 const NOTABLE_CV = 0.05
@@ -390,6 +397,8 @@ function PropertySummary({
     stats: ScalarStats | null
     /** 통계가 아닌 값(묶음·선언)이면 적을 글자. */
     stated?: string
+    /** 그 값의 SI 숫자 — 「크게 다르다」 를 견줄 때 쓴다. 글자를 다시 읽지 않는다. */
+    si?: number
     kind: '통계' | '피팅' | '선언' | '문헌 묶음'
     /** 적어 둔 값의 등급과 승인(ADR 0049) — 서버가 센 것. 선언 줄에만 있다. */
     grade?: Pick<DeclaredProperty, 'quality_tier' | 'approval'>
@@ -423,8 +432,9 @@ function PropertySummary({
         stats: null,
         kind: '피팅',
         stated: produced?.si_unit
-          ? formatScalar(value, produced.si_unit, null)
+          ? formatScalar(value, produced.si_unit, null, produced.is_span ?? false)
           : String(significant(value)),
+        si: value,
       })
     }
   }
@@ -465,6 +475,7 @@ function PropertySummary({
       stats: null,
       kind: '선언',
       grade: row,
+      si: Number(first.value_si),
       // 무차원(`1`)은 단위를 안 적는다 — 「3.8 1」 로 읽힌다.
       stated: `${significant(Number(first.value))} ${
         row.input_unit === '1' ? '' : (row.input_unit ?? row.scale ?? '')
@@ -581,7 +592,7 @@ function Spread({ row }: { row: ScalarStats }) {
   return (
     <>
       {row.sample_sd !== null
-        ? `± ${formatScalar(row.sample_sd, row.si_unit, row.dimension).split(' ')[0]} · `
+        ? `± ${formatSpan(row.sample_sd, row.si_unit, row.dimension).split(' ')[0]} · `
         : ''}
       n={row.count}
     </>
@@ -606,10 +617,16 @@ function speaks(group: StatisticsGroup): boolean {
   )
 }
 
-/** 한 항목의 값들이 서로 두 배 넘게 벌어지는가. */
-function apart(lines: { stats: ScalarStats | null; stated?: string }[]): boolean {
+/**
+ * 한 항목의 값들이 서로 두 배 넘게 벌어지는가. **SI 숫자끼리 견준다.**
+ *
+ * 전에는 통계 줄의 SI 평균(206e9 Pa)과 선언 줄의 입력 단위 숫자(GPa 의 210) · 피팅 줄의 표시
+ * 글자 첫 토막을 그대로 나눠, 같은 값이어도 비율이 1e9 라 늘 경고가 떴다(2026-11-15 전반
+ * 점검) — 늘 뜨는 경고는 진짜 두 배 차이를 가린다. SI 숫자가 없는 줄(문헌 묶음)은 뺀다.
+ */
+function apart(lines: { stats: ScalarStats | null; si?: number }[]): boolean {
   const values = lines
-    .map((one) => (one.stats ? one.stats.mean : Number(one.stated?.split(' ')[0])))
+    .map((one) => (one.stats ? one.stats.mean : (one.si ?? Number.NaN)))
     .filter((one) => Number.isFinite(one) && one !== 0)
   if (values.length < 2) return false
   return Math.max(...values) / Math.min(...values) >= 2
@@ -770,7 +787,12 @@ function ScalarRow({ row }: { row: ScalarStats }) {
       <TableCell className="text-right tabular-nums">
         {value(row.median)}
       </TableCell>
-      <TableCell className="text-right tabular-nums">{value(row.sample_sd)}</TableCell>
+      {/* 표준편차는 차이다 — 오프셋을 빼지 않는다(Tg 의 SD 2 K 가 -271 °C 로 섰다). */}
+      <TableCell className="text-right tabular-nums">
+        {row.sample_sd === null
+          ? '—'
+          : formatSpan(row.sample_sd, row.si_unit, row.dimension)}
+      </TableCell>
       <TableCell className="text-right tabular-nums">
         {row.coefficient_of_variation === null ? (
           '—'

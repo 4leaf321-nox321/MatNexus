@@ -107,7 +107,9 @@ async def call(
     else:
         body = " ".join(getattr(one, "text", str(one)) for one in out.content or [])
     took = round((time.perf_counter() - started) * 1000)
-    refused = bool(out.is_error) or '"error"' in body[:400]
+    # 항목마다 `"error": null` 을 싣는 응답(일괄 처리)이 있다 — 빈 칸은 거절이 아니다.
+    # 전에는 그것까지 셌다(2026-11-15: 1건 성공 · 0건 실패인 `run_batch_processing` 이 「문제」).
+    refused = bool(out.is_error) or '"error"' in body[:400].replace('"error": null', "")
     bad = not refused if expect_error else refused
     results.append({"tool": name, "ok": not bad, "ms": took, "excerpt": body[:220]})
     mark = "!! " if bad else ("OK(거절) " if expect_error else "OK ")
@@ -307,6 +309,14 @@ async def sweep(session: ClientSession) -> None:
         rows = (samples or {}).get("samples") if isinstance(samples, dict) else None
         if rows:
             await call(session, "get_sample", {"sample_id": rows[0]["id"]})
+            # 시료째 옮기기 — **미리보기만**, 받을 재료는 지금 재료. 서버가 「이미 그 재료의
+            # 시료」 를 `blocked` 로 세운 계획을 준다(쓰지 않는다). v1.316.0 에 도구가 생긴 뒤
+            # 프로브가 한 번도 안 불렀다(2026-11-15 「부르지 못한 도구」).
+            await call(
+                session,
+                "move_samples",
+                {"sample_ids": [rows[0]["id"]], "target_material_id": material_id},
+            )
             # 등록 — **미리보기로만.** 기존 재료의 분류를 그대로 되돌려 넣어
             # 기준정보 문(ADR 0032)에 안 걸리게 한다. 지어낸 등급을 넣으면
             # 프로브가 매번 「막혔다」 만 확인하게 된다.

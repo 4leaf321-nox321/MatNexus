@@ -11113,6 +11113,11 @@ export interface components {
         CardValueOut: {
             /** Help */
             help?: string | null;
+            /**
+             * Is Span
+             * @default false
+             */
+            is_span: boolean;
             /** Key */
             key: string;
             /** Label */
@@ -15680,6 +15685,11 @@ export interface components {
          * @description 묶음이 내는 값 하나. **단위를 함께 준다** — 라벨에 손으로 안 적는다.
          */
         GroupingProducedOut: {
+            /**
+             * Is Span
+             * @default false
+             */
+            is_span: boolean;
             /** Key */
             key: string;
             /** Label */

@@ -262,7 +262,7 @@ def _outcome(
         Produced(key="normalized_rmse", label="정규화 잔차", si_unit="1"),
         # 온도 이동(2026-10-07) — 쓴 시편들의 이동을 모은 것. 방법은 `detail.shift_method`.
         Produced(key="shift_c1", label="WLF C1", si_unit="1"),
-        Produced(key="shift_c2", label="WLF C2", si_unit="K"),
+        Produced(key="shift_c2", label="WLF C2", si_unit="K", is_span=True),
         Produced(
             key="shift_activation_energy", label="Arrhenius 활성화 에너지", si_unit="J/mol"
         ),

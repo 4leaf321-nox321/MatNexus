@@ -271,7 +271,7 @@ function CompareTab() {
                               n={cell.count}
                               {/* **1건이면 흩어짐이 없다** — 0 은 「일정하다」 로 읽힌다. */}
                               {cell.sample_sd != null
-                                ? ` · ±${show(cell.sample_sd, cell.si_unit)}`
+                                ? ` · ±${show(cell.sample_sd, cell.si_unit, true)}`
                                 : ''}
                             </div>
                           </>

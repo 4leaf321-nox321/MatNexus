@@ -90,7 +90,8 @@ register(
         Produced(key="garofalo_c1", label="Garofalo C1", si_unit="1/s"),
         Produced(key="garofalo_c2", label="Garofalo C2", si_unit="1/Pa"),
         Produced(key="garofalo_c3", label="Garofalo C3", si_unit="1"),
-        Produced(key="garofalo_c4", label="Garofalo C4 (Q/R)", si_unit="K"),
+        # Q/R 은 온도가 아니라 K 차원의 상수다 — 화면이 273.15 를 빼면 안 된다.
+        Produced(key="garofalo_c4", label="Garofalo C4 (Q/R)", si_unit="K", is_span=True),
         Produced(key="garofalo_r_squared", label="Garofalo R² (ln ε̇)", si_unit="1"),
         Produced(key="point_count", label="점 수", si_unit="1"),
         Produced(key="temperature_count", label="온도 수", si_unit="1"),

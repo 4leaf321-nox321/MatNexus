@@ -7,7 +7,7 @@
 
 import { describe, expect, it } from 'vitest'
 
-import { DIMENSIONS, SIGNIFICANT_DIGITS, SI_BY_DIMENSION, UNITS_BY_DIMENSION, axisLabel, conditionUnits, display, formatCondition, formatScalar, formatValue, fromDisplay, significant, spanToDisplay, toDisplay } from '@/shared/units'
+import { DIMENSIONS, SIGNIFICANT_DIGITS, SI_BY_DIMENSION, UNITS_BY_DIMENSION, axisLabel, conditionUnits, display, formatCondition, formatScalar, formatSpan, formatValue, fromDisplay, significant, spanToDisplay, toDisplay } from '@/shared/units'
 
 describe('저장 단위와 표시 단위', () => {
   it('저장은 SI, 표시는 실무 단위', () => {
@@ -152,6 +152,15 @@ describe('온도 — 원점이 다른 유일한 단위', () => {
     expect(toDisplay(0.05, 'm')).toBeCloseTo(50, 10)
     expect(fromDisplay(50, 'm')).toBeCloseTo(0.05, 10)
     expect(spanToDisplay(0.05, 'm')).toBeCloseTo(50, 10)
+  })
+})
+
+describe('차이(폭)의 표시', () => {
+  it('온도 폭은 오프셋을 빼지 않는다 — 표준편차 · WLF C2', () => {
+    // 2026-11-15 전반 점검: 51.6 K 가 「-221.6 °C」 로 섰다.
+    expect(formatSpan(51.6, 'K')).toBe('51.6 °C')
+    expect(formatScalar(324.75, 'K')).toBe('51.6 °C') // 절대온도는 그대로 뺀다
+    expect(formatSpan(3e6, 'Pa')).toBe('3 MPa') // 오프셋이 없는 단위는 같다
   })
 })
 

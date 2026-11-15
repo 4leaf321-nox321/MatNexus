@@ -227,8 +227,11 @@ def render_dyna_temperature(deck: Deck) -> Rendered:
     lines.append(
         i10(deck.solver_id)
         + f10(density)
-        + (f10(-float(e_curve)) if e_curve else f10(youngs))
-        + (f10(-float(nu_curve)) if nu_curve else f10(poisson))
+        # **곡선 번호는 정수 그대로**(2026-11-15 전반 점검). 실수 칸 서식(`f10`)은 10칸에 안
+        # 드는 번호를 지수 표기로 반올림한다(-452311790 → -4.5231E+8) — `*DEFINE_CURVE` 쪽은
+        # 정수라 덱이 없는 곡선을 가리켰다. 재료 번호 상한(9,999,999)에서 부호까지 딱 10칸이다.
+        + (i10(-e_curve) if e_curve else f10(youngs))
+        + (i10(-nu_curve) if nu_curve else f10(poisson))
     )
     lines.append("$   tabidc    tabidt    lalpha                  vp")
     lines.append(i10(table_id) + i10(table_id))

@@ -525,3 +525,20 @@ class Test구조_강성:
         assert "structural_stiffness" not in blocks
         # 등가 E 는 배치를 걷어 낸 값이라 그대로 평균한다.
         assert blocks["elastic"]["values"]["youngs_modulus"] == pytest.approx(E)
+
+
+def test_굽힘_강도는_빈_칸을_최대로_치지_않는다() -> None:
+    """2026-11-15 전반 점검 — `np.argmax` 는 첫 NaN 을 최대로 친다. 빈 칸 하나에 굽힘 강도가
+    NaN 으로 저장됐다."""
+    frame = _curve()
+    stress = np.array(frame.columns[bending.STRESS], dtype=float)
+    expected = float(np.max(stress))
+    stress[20] = np.nan
+    holed = Frame({**frame.columns, bending.STRESS: stress}, dict(frame.units))
+    found = {one.key: one.value for one in bending.strength(holed, {}).scalars}
+    assert found["flexural_strength"] == pytest.approx(expected)
+    empty = Frame(
+        {**frame.columns, bending.STRESS: np.full(len(stress), np.nan)}, dict(frame.units)
+    )
+    with pytest.raises(ProcessingError, match="비어"):
+        bending.strength(empty, {})

@@ -717,8 +717,11 @@ def _apply_dimensions(db: Session, run: TestRun, parsed: ParsedTest) -> list[str
     specimen = db.get(Specimen, run.specimen_id)
     fields = specimen_size.dimension_fields(db, specimen)
     found = curvedata.instrument_dimensions(parsed.metadata, fields)
-    if found:
-        run.dimensions = found
+    # **없으면 비운다**(2026-11-15 전반 점검). 이 칸을 쓰는 곳은 여기뿐이다 — 사람이 적는
+    # 값이 아니다. 전에는 있을 때만 바꿔서, 잘못 올린 파일(두께 0.986 mm)을 치수 머리말이 없는
+    # 파일로 바꾸면 곡선은 새 파일인데 단면적은 옛 파일의 두께로 났고, 가장 앞선 출처
+    # 「이 시험이 잰 값」 으로 표시됐다.
+    run.dimensions = found or {}
     missed = curvedata.unread_dimensions(parsed.metadata, fields)
     if not missed:
         return []
@@ -1120,7 +1123,9 @@ def _temperature_from_channel(
         if curve.kind != "measured":
             continue
         for channel in curve.channels:
-            if channel.key == "temperature":
+            # **K 로 읽힌 채널만**(2026-11-15 전반 점검). 단위 칸이 빈 `Temperature` 열은
+            # 환산 없이 들어와 23(℃)이 23 K 로 조건에 저장됐다.
+            if channel.key == "temperature" and channel.si_unit == "K":
                 found += [float(one) for one in channel.values if one is not None]
                 break
     found = [one for one in found if one == one]  # NaN 을 뺀다

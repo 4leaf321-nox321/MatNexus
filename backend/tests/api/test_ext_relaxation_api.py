@@ -191,6 +191,64 @@ def test_시험_온도가_비면_온도_채널의_중앙값으로_채우고_점�
     assert len(found) == 1 and "23.0 °C" in found[0]["message"]
 
 
+def test_단위를_모르는_온도_열은_시험_온도로_채우지_않는다(
+    client: TestClient, db: Session, admin_headers: dict[str, str]
+) -> None:
+    """2026-11-15 전반 점검 — 단위 칸이 빈 `Temperature` 열은 환산 없이 들어온다. 전에는 그
+    값(23)을 K 로 조건에 저장했다."""
+    from types import SimpleNamespace
+
+    from app.modules.tests.models import TestType
+    from matcore.parsers import Channel
+
+    _, (run_id,) = _upload(
+        client,
+        db,
+        admin_headers,
+        "stress_relaxation",
+        "relaxation_standard.csv",
+        '{"held_strain": 0.005}',
+    )
+    run = db.get(TestRun, uuid.UUID(run_id))
+    assert run is not None
+    test_type = db.get(TestType, run.test_type_id)
+    assert test_type is not None
+
+    def parsed(unit: str, value: float) -> Any:
+        channel = Channel(key="temperature", label="온도", si_unit=unit, values=(value,) * 20)
+        return SimpleNamespace(
+            all_curves=[SimpleNamespace(kind="measured", channels=[channel])]
+        )
+
+    run.conditions = {k: v for k, v in run.conditions.items() if k != "temperature"}
+    assert test_services._temperature_from_channel(db, run, test_type, parsed("1", 23.0)) == []
+    assert "temperature" not in run.conditions
+    filled = test_services._temperature_from_channel(db, run, test_type, parsed("K", 296.15))
+    assert len(filled) == 1 and run.conditions["temperature"] == pytest.approx(296.15)
+
+
+def test_다시_읽을_때_파일에_치수가_없으면_옛_치수를_남기지_않는다(
+    client: TestClient, db: Session, admin_headers: dict[str, str]
+) -> None:
+    """2026-11-15 전반 점검 — 잘못 올린 파일의 두께가 치수 머리말이 없는 파일로 바꾼 뒤에도
+    남아, 새 곡선의 단면적이 옛 파일의 두께로 났다(「이 시험이 잰 값」 으로 표시)."""
+    _, (run_id,) = _upload(
+        client,
+        db,
+        admin_headers,
+        "stress_relaxation",
+        "relaxation_standard.csv",
+        '{"held_strain": 0.005}',
+    )
+    run = db.get(TestRun, uuid.UUID(run_id))
+    assert run is not None
+    run.dimensions = {"thickness": 0.986e-3}  # 옛 파일이 들고 온 값
+    db.commit()
+    assert test_services.parse_run(db, run.id) == "parsed"
+    db.refresh(run)
+    assert run.dimensions == {}
+
+
 def _master_curve_for(db: Session, run_id: str, *, scale: float = 1.0) -> None:
     """그 시험(DMA)에 **응력완화 고정물과 같은 재료**의 대표 마스터커브를 둔다 — 고정물의
     E(t) = 1 + 2·e^(-t/10) + 1·e^(-t/1000) GPa 를 주파수 영역으로 옮긴 것(기준 23 °C, WLF)."""

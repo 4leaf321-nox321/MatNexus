@@ -747,6 +747,51 @@ describe('시험 종류에 맞는 길만 연다', () => {
     expect(screen.queryByRole('button', { name: /^점탄성 카드$/ })).not.toBeInTheDocument()
   })
 
+  it('시험 종류를 여럿 받는 묶음은 그 종류가 다 있을 때만 서고, 단추는 누른 방법의 창을 연다', async () => {
+    // 2026-11-15 실측: 「응력완화 + DMA」 단추가 DMA 만 있는 재료에도 섰고, 누르면 DMA Prony 를
+    // 기본으로 고른 창이 열렸다. 거꾸로 「점탄성 카드」 창의 방법 목록에 잇는 묶음이 끼었다.
+    const coupled = {
+      id: 'relaxation.dma_coupled',
+      label: '응력완화 + DMA 마스터커브',
+      applies_to: ['stress_relaxation', 'dma_sweep'],
+      params: [],
+      makes_values: [],
+      needs: 'adopted_result',
+      needs_by_type: { stress_relaxation: 'adopted_result', dma_sweep: 'master_curve' },
+    }
+    groupKinds.mockResolvedValue([PRONY_WAY, coupled])
+    forMaterial.mockResolvedValue({ material_id: 'm1', material_name: 'X', groups: [dma()] })
+    const first = panel()
+    expect(await screen.findByRole('button', { name: /^점탄성 카드$/ })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /응력완화 \+ DMA/ })).not.toBeInTheDocument()
+    first.unmount()
+
+    const relaxation = { ...dma(), test_type_key: 'stress_relaxation', test_type_label: '응력완화' }
+    forMaterial.mockResolvedValue({
+      material_id: 'm1',
+      material_name: 'X',
+      groups: [dma(), relaxation],
+    })
+    panel()
+    await userEvent.click(await screen.findByRole('button', { name: /응력완화 \+ DMA/ }))
+    let dialog = await screen.findByRole('dialog')
+    await userEvent.click(await within(dialog).findByRole('button', { name: /^글로벌 피팅$/ }))
+    let methods = await screen.findByLabelText('적합 계산')
+    expect(within(methods).getAllByRole('option').map((one) => one.textContent)).toEqual([
+      '응력완화 + DMA 마스터커브',
+    ])
+    await userEvent.keyboard('{Escape}')
+    await userEvent.keyboard('{Escape}')
+
+    await userEvent.click(await screen.findByRole('button', { name: /^점탄성 카드$/ }))
+    dialog = await screen.findByRole('dialog')
+    await userEvent.click(await within(dialog).findByRole('button', { name: /^글로벌 피팅$/ }))
+    methods = await screen.findByLabelText('적합 계산')
+    expect(within(methods).getAllByRole('option').map((one) => one.textContent)).toEqual([
+      'Prony 글로벌 피팅',
+    ])
+  })
+
   it('「정보」 가 카드 종류의 입력과 결과를 표로 보인다', async () => {
     panel()
     await userEvent.click(await screen.findByRole('button', { name: '카드 종류 설명' }))

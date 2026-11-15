@@ -130,6 +130,10 @@ class Produced:
     """**저장 단위(SI)** 다. 화면은 실무 단위로 바꿔 보여 준다."""
     help: str | None = None
     """무엇인지·어떻게 만들어졌는지 한 줄. 화면의 변수 목록에 그대로 뜬다."""
+    is_span: bool = False
+    """**차이(폭)인 값** — 표시 단위로 옮길 때 오프셋을 빼지 않는다(2026-11-15 전반 점검).
+    WLF C2 = 51.6 K 는 51.6 °C 이지 -221.6 °C 가 아니다. 단위(`K`)만으로는 절대온도와 구별이
+    안 돼 화면이 그렇게 적었다. 문헌 정의의 `is_span` 과 같은 뜻이다."""
     property_key: str | None = None
     """이 값이 **문헌 물성으로 치면 무엇인가** — `mechanical.yield_strength` 처럼
     `catalog_definitions.key`(MaterialTwin 네임스페이스)를 적는다.

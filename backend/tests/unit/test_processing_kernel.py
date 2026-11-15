@@ -1985,3 +1985,40 @@ class Test예상_못_한_예외:
         frame = Frame({"x": np.arange(5.0)}, {"x": "1"})
         with pytest.raises(ProcessingError, match="예상 못 한 오류"):
             processing.apply([Step("curve.sort_unique", {"x": "x"})], frame)
+
+
+class Test현과_할선은_끝점에_닿아야_한다:
+    """2026-11-15 전반 점검 — `np.interp` 는 잰 범위 밖을 끝점 값으로 채운다. 분모는 요청한
+    구간 폭 그대로라 0.2 % 에서 끝난 70 GPa 직선이 현 0.05~0.25 % 에서 52.5 GPa 로 나왔다."""
+
+    @staticmethod
+    def _line(start: float, end: float) -> Frame:
+        strain = np.linspace(start, end, 60)
+        return Frame(
+            {"strain_engineering": strain, "stress_engineering": 70e9 * strain},
+            {"strain_engineering": "1", "stress_engineering": "Pa"},
+        )
+
+    @staticmethod
+    def _step(method: str) -> Step:
+        return Step(
+            "tensile.elastic_modulus",
+            {"method": method, "minimum_strain": 0.0005, "maximum_strain": 0.0025},
+        )
+
+    @pytest.mark.parametrize("method", ["chord", "secant"])
+    def test_구간_끝_전에_끝난_곡선은_거절한다(self, method: str) -> None:
+        with pytest.raises(ProcessingError, match="끝점에 닿지"):
+            processing.apply([self._step(method)], self._line(0.0, 0.002))
+
+    def test_구간_시작_뒤에서_시작한_곡선은_현만_거절한다(self) -> None:
+        late = self._line(0.001, 0.005)
+        with pytest.raises(ProcessingError, match="끝점에 닿지"):
+            processing.apply([self._step("chord")], late)
+        secant = processing.apply([self._step("secant")], late)
+        assert scalar(secant, "youngs_modulus") == pytest.approx(70e9, rel=1e-6)
+
+    @pytest.mark.parametrize("method", ["chord", "secant", "linear_regression"])
+    def test_구간을_다_덮는_곡선은_그대로_잰다(self, method: str) -> None:
+        result = processing.apply([self._step(method)], self._line(0.0, 0.005))
+        assert scalar(result, "youngs_modulus") == pytest.approx(70e9, rel=1e-6)

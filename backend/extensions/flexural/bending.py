@@ -310,7 +310,12 @@ def strength(frame: Frame, options: dict[str, Any]) -> StepResult:
     stress = np.asarray(frame.require(str(options.get("stress") or STRESS), what="굽힘 응력"))
     if len(stress) == 0:
         raise ProcessingError("굽힘 응력 열이 비었습니다.")
-    peak = int(np.argmax(stress))
+    # `np.argmax` 는 첫 NaN 을 최대로 친다 — 빈 칸 하나에 굽힘 강도가 NaN 으로 저장됐다
+    # (2026-11-15 전반 점검. 인장 · `slopes.rising` 은 11-14 에 고쳤고 여기가 남았다).
+    finite = np.isfinite(stress)
+    if not finite.any():
+        raise ProcessingError("굽힘 응력 값이 모두 비어 있습니다(NaN).")
+    peak = int(np.argmax(np.where(finite, stress, -np.inf)))
     scalars = [
         Scalar(
             key="flexural_strength",

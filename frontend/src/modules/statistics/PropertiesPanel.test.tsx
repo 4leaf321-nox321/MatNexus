@@ -221,11 +221,47 @@ describe('요약', () => {
       <PropertiesPanel
         materialId="m1"
         declared={
-          [{ item: '탄성계수', input_unit: 'GPa', points: [{ value: 20 }] }] as never
+          [
+            { item: '탄성계수', input_unit: 'GPa', points: [{ value: 20, value_si: 20e9 }] },
+          ] as never
         }
       />
     )
     expect(await screen.findByText(/값이 크게 다릅니다/)).toBeInTheDocument()
+  })
+
+  it('단위만 다른 같은 값은 어긋났다고 하지 않는다', async () => {
+    // 2026-11-15 전반 점검 — 통계 줄은 SI(206e9 Pa), 선언 줄은 입력 단위 숫자(GPa 의 210)를
+    // 그대로 나눠 비율이 1e9 였다. 같은 값인데 늘 경고가 떴고, 위 시험도 틀린 이유로 통과했다.
+    forMaterial.mockResolvedValue({
+      groups: [
+        group('MD', 285, { scalars: [scalar('elastic_modulus', '탄성계수', 206e9, 3e9)] }),
+      ],
+    })
+    mount(
+      <PropertiesPanel
+        materialId="m1"
+        declared={
+          [
+            { item: '탄성계수', input_unit: 'GPa', points: [{ value: 210, value_si: 210e9 }] },
+          ] as never
+        }
+      />
+    )
+    // 두 줄이 다 그려진 뒤에 「없다」 를 본다.
+    expect(await screen.findByText('210 GPa')).toBeInTheDocument()
+    expect((await screen.findAllByText('206 GPa')).length).toBeGreaterThan(0)
+    expect(screen.queryByText(/값이 크게 다릅니다/)).not.toBeInTheDocument()
+  })
+
+  it('온도의 표준편차는 오프셋을 빼지 않는다', async () => {
+    // 2026-11-15 전반 점검 — Tg 의 표준편차 2 K 가 「± -271.1」 로 섰다(차이에 −273.15).
+    const tg = { ...scalar('glass_transition', '유리전이온도', 378.15, 2), si_unit: 'K', dimension: 'temperature' }
+    forMaterial.mockResolvedValue({ groups: [group('MD', 285, { scalars: [tg] })] })
+    mount(<PropertiesPanel materialId="m1" declared={[]} />)
+    const one = await card('유리전이온도')
+    expect(await one.findByText(/± 2 ·/)).toBeInTheDocument()
+    expect(one.queryByText(/-271/)).not.toBeInTheDocument()
   })
 })
 

@@ -4772,6 +4772,11 @@
             ],
             "title": "Help"
           },
+          "is_span": {
+            "default": false,
+            "title": "Is Span",
+            "type": "boolean"
+          },
           "key": {
             "title": "Key",
             "type": "string"
@@ -17206,6 +17211,11 @@
       "GroupingProducedOut": {
         "description": "묶음이 내는 값 하나. **단위를 함께 준다** — 라벨에 손으로 안 적는다.",
         "properties": {
+          "is_span": {
+            "default": false,
+            "title": "Is Span",
+            "type": "boolean"
+          },
           "key": {
             "title": "Key",
             "type": "string"

@@ -571,7 +571,9 @@ export function formatCondition(point: {
 export function formatScalar(
   value: number,
   siUnit: string | null | undefined,
-  dimension?: string | null
+  dimension?: string | null,
+  /** 차이(폭)인 값 — 오프셋을 빼지 않는다. 표준편차 · WLF C2 가 이쪽이다(`formatSpan`). */
+  span = false
 ): string {
   // 응력만 예외다. GPa 까지 올라가는 것은 탄성계수뿐이고, 그 값을 MPa 로 적으면
   // 205000 이 된다.
@@ -579,7 +581,7 @@ export function formatScalar(
     return `${significant(value / 1e9)} GPa`
   }
   const { unit, factor, offset } = display(siUnit, dimension)
-  const shown = value * factor + offset
+  const shown = value * factor + (span ? 0 : offset)
   const magnitude = Math.abs(shown)
   const text =
     magnitude === 0
@@ -588,4 +590,18 @@ export function formatScalar(
         ? shown.toExponential(3)
         : String(significant(shown))
   return unit ? `${text} ${unit}` : text
+}
+
+/**
+ * **차이(폭)를 사람이 읽는 글자로** — 표준편차 · 온도 폭(WLF C2).
+ *
+ * 실측(2026-11-15 전반 점검): 유리전이온도의 표준편차 2 K 가 「± -271.1」 로, WLF C2
+ * 51.6 K 가 「-221.6 °C」 로 섰다 — 절대값용 서식이 오프셋(−273.15)을 뺐다.
+ */
+export function formatSpan(
+  value: number,
+  siUnit: string | null | undefined,
+  dimension?: string | null
+): string {
+  return formatScalar(value, siUnit, dimension, true)
 }

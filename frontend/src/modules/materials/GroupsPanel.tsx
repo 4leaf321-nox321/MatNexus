@@ -75,12 +75,23 @@ import { useRowSelection } from '@/shared/hooks/useRowSelection'
 import { formatScalar } from '@/shared/units'
 
 /** 값 한 줄. 단위는 **서버가 준 것**을 쓴다(라벨에 손으로 안 적는다). */
-function Value({ label, value, unit }: { label: string; value: number; unit: string }) {
+function Value({
+  label,
+  value,
+  unit,
+  span = false,
+}: {
+  label: string
+  value: number
+  unit: string
+  /** 차이(폭)인 값 — 오프셋을 빼지 않는다(WLF C2 51.6 K 가 -221.6 °C 로 섰다). */
+  span?: boolean
+}) {
   return (
     <div>
       <dt className="text-muted-foreground text-xs">{label}</dt>
       <dd className="font-mono text-sm tabular-nums">
-        {unit === '1' ? value.toPrecision(4) : formatScalar(value, unit, undefined)}
+        {unit === '1' ? value.toPrecision(4) : formatScalar(value, unit, undefined, span)}
       </dd>
     </div>
   )
@@ -429,6 +440,7 @@ function GroupCard({
             label={units.get(key)?.label ?? key}
             value={value}
             unit={units.get(key)?.si_unit ?? '1'}
+            span={units.get(key)?.is_span ?? false}
           />
         ))}
       </dl>
@@ -493,6 +505,7 @@ function GroupCard({
 export function GroupsPanel({
   materialId,
   appliesTo,
+  only,
   list = true,
   onCardMade,
 }: {
@@ -506,6 +519,13 @@ export function GroupsPanel({
    * 붙고 인장에는 쓸 방법이 아예 없다.
    */
   appliesTo?: string
+  /**
+   * **이 방법 하나만**(묶음 플러그인 id). CAE 카드 탭의 단추는 방법마다 하나라, 누른 방법의
+   * 창이어야 한다 — 시험종류(`appliesTo`)로만 거르면 같은 종류를 받는 다른 방법이 섞인다.
+   * 실측(2026-11-15): 「응력완화 + DMA」 단추가 DMA Prony 를 기본으로 골라 열렸고 목록에도 DMA
+   * Prony 묶음이 섰다. 거꾸로 DMA 의 「점탄성 카드」 창에는 잇는 묶음이 끼었다.
+   */
+  only?: string
   /**
    * 만든 결과 목록도 여기서 보일까.
    *
@@ -546,12 +566,14 @@ export function GroupsPanel({
     [materialId]
   )
 
-  const specs = kinds.data ?? []
+  const specs = (kinds.data ?? []).filter((one) => !only || one.id === only)
   const chosen = specs.find((one) => one.id === kind) ?? specs[0]
   // **시험종류로 열었으면 결과도 그 방법의 것만.** 점탄성 창에 속도별 묶음이 섞여 서면
   // 무엇을 보는 창인지 흐려진다. `kinds` 가 아직 안 왔으면 전부 — 비워 두면 「없다」 로 읽힌다.
   const shownRows = (rows.data ?? []).filter(
-    (row) => !appliesTo || !kinds.data || specs.some((one) => one.id === row.plugin_id)
+    (row) =>
+      (!only || row.plugin_id === only) &&
+      (!appliesTo || !kinds.data || specs.some((one) => one.id === row.plugin_id))
   )
 
   /**

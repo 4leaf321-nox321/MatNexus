@@ -288,3 +288,17 @@ class Test믿어도_되는지_볼_것을_말한다:
         stress = 1.0e6 * np.tanh(strain / 0.05)
         found = slopes.measure(strain, stress, method="secant", high=0.1)
         assert slopes.concerns(found) == []
+
+
+def test_현은_곡선이_구간_시작보다_뒤에서_시작하면_못_잰다() -> None:
+    """2026-11-15 전반 점검 — 토우 점을 지운 곡선 · 뒤 사이클은 첫 점이 구간 시작보다 뒤다.
+    전에는 보간이 첫 점 응력으로 채워 E 가 조용히 낮았다(30 GPa → 23 GPa)."""
+    strain = np.linspace(0.001, 0.01, 181)  # 0.1 % 에서 시작
+    stress = E * strain
+    with pytest.raises(slopes.SlopeError, match="뒤에서 시작"):
+        slopes.measure(strain, stress, method="chord", low=0.0005, high=0.0025)
+    # 구간이 곡선 안이면 그대로 잰다 · 할선은 원점에서 재므로 해당 없다.
+    inside = slopes.measure(strain, stress, method="chord", low=0.0015, high=0.0035)
+    assert inside.value == pytest.approx(E, rel=1e-6)
+    secant = slopes.measure(strain, stress, method="secant", high=0.0025)
+    assert secant.value == pytest.approx(E, rel=1e-6)

@@ -15610,18 +15610,36 @@
                 ]
               },
               {
-                "expr": "-(_id * 100 + 90) if count(etab) >= 2 else elastic.youngs_modulus",
+                "expr": "-(_id * 100 + 90)",
                 "format": [
-                  "fit",
-                  10
-                ]
+                  "spec",
+                  ">10d"
+                ],
+                "when": "count(etab) >= 2"
               },
               {
-                "expr": "-(_id * 100 + 91) if count(etab) >= 2 else elastic.poisson_ratio",
+                "value": "elastic.youngs_modulus",
                 "format": [
                   "fit",
                   10
-                ]
+                ],
+                "when": "not (count(etab) >= 2)"
+              },
+              {
+                "expr": "-(_id * 100 + 91)",
+                "format": [
+                  "spec",
+                  ">10d"
+                ],
+                "when": "count(etab) >= 2"
+              },
+              {
+                "value": "elastic.poisson_ratio",
+                "format": [
+                  "fit",
+                  10
+                ],
+                "when": "not (count(etab) >= 2)"
               }
             ],
             "join": ""

@@ -305,6 +305,15 @@ def _measure(
                 f"(최대 {float(np.nanmax(x)):.4g}) — "
                 "구간을 줄이거나 다른 방법을 고르세요."
             )
+        # **현은 시작점에도 닿아야 한다**(2026-11-15 전반 점검). 토우 점을 지운 곡선 · 뒤
+        # 사이클(잔류 변형에서 시작)은 첫 점이 구간 시작보다 뒤다 — 보간이 첫 점 응력으로
+        # 채워 30 GPa 가 23 GPa 로 나왔고 경고도 없었다. 할선은 원점에서 재므로 해당 없다.
+        if method == "chord" and float(np.nanmin(x)) > low:
+            raise SlopeError(
+                f"곡선이 구간 시작 변형률 {low:.4g} 보다 뒤에서 시작합니다"
+                f"(최소 {float(np.nanmin(x)):.4g}) — "
+                "구간을 곡선 안으로 옮기거나 다른 방법을 고르세요."
+            )
         start = 0.0 if method == "secant" else low
         y_low = 0.0 if method == "secant" else _interp(x, y, low)
         value = (_interp(x, y, high) - y_low) / (high - start)

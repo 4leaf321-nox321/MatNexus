@@ -516,7 +516,7 @@ def _toe_stress_band(
         raise ProcessingError(
             f"응력 띠는 0~1 사이 비율이어야 합니다: {band_low} ~ {band_high}"
         )
-    end = int(np.argmax(stress)) + 1
+    end = _peak_index(stress) + 1  # 빈 칸(NaN)을 최대로 치지 않는다
     peak = float(stress[end - 1])
     if not peak > 0:
         raise ProcessingError("최대 응력이 0 이하라 응력 띠를 정할 수 없습니다.")
@@ -617,7 +617,7 @@ def _reference_slope(
     if int(np.sum(mask)) < 2:
         # 띠가 너무 좁으면 상승 구간 앞쪽으로 넓혀 본다 — **참고값이라** 구간이
         # 넓어도 되고, 아무 숫자도 없는 것보다 낫다.
-        rising = int(np.argmax(stress)) + 1
+        rising = _peak_index(stress) + 1
         mask = np.zeros_like(stress, dtype=bool)
         mask[: max(2, min(rising, 5))] = True
     x, y = strain[mask], stress[mask]
@@ -708,7 +708,9 @@ def _auto_window(
     「띠가 항복 뒤였다」 는 고칠 데가 다르고, 수가 없으면 사람이 곡선을 직접
     열어 보는 수밖에 없다(실측 2026-08-31: 18점 발췌본에서 그 일을 했다).
     """
-    peak = int(np.argmax(stress))
+    # 빈 칸(NaN)은 최대가 아니다 — `np.argmax` 는 첫 NaN 을 최대로 친다.
+    finite = np.isfinite(stress)
+    peak = int(np.argmax(np.where(finite, stress, -np.inf))) if finite.any() else 0
     x = np.asarray(strain[: peak + 1], dtype=float)
     y = np.asarray(stress[: peak + 1], dtype=float)
     rising = int(y.size)
@@ -910,7 +912,9 @@ def _auto_window(
     measures=True,
     # 2 — 할선 · 현을 직선 검사로 거르지 않고, 그 R² 를 구간 점들의 회귀 R² 로
     # 낸다(2026-10-22).
-    version="2",
+    # 3 — 현 · 할선은 곡선이 구간 끝점에 닿아야 한다(전에는 끝점 값으로 채워 낮게 나왔다,
+    # 2026-11-15).
+    version="3",
 )
 def elastic_modulus(frame: Frame, options: dict[str, Any]) -> StepResult:
     """지정 구간에서 탄성계수를 잰다. 곡선은 안 바뀐다.
@@ -1000,6 +1004,18 @@ def elastic_modulus(frame: Frame, options: dict[str, Any]) -> StepResult:
                 f"관측 범위는 [{float(strain.min()):.6g}, {float(strain.max()):.6g}] 입니다."
             )
         selected_x, selected_y = strain[mask], stress[mask]
+        if method in ("chord", "secant"):
+            # **두 끝점으로 기울기를 정하는 방법은 곡선이 그 끝에 닿아야 한다**(2026-11-15 전반
+            # 점검). `np.interp` 는 잰 범위 밖을 끝점 값으로 채우는데 분모는 요청한 구간 폭
+            # 그대로라, 0.2 % 에서 끝난 70 GPa 직선이 현 0.05~0.25 % 에서 52.5 GPa 로 나왔다 —
+            # 경고 없이, 그 E 로 항복강도와 소성 표까지 갔다. 할선은 원점에서 재므로 끝만 본다.
+            lowest, highest = float(np.nanmin(strain)), float(np.nanmax(strain))
+            if highest < high or (method == "chord" and lowest > low):
+                raise ProcessingError(
+                    f"곡선이 구간 [{low:.6g}, {high:.6g}] 의 끝점에 닿지 않습니다"
+                    f"(관측 범위 [{lowest:.6g}, {highest:.6g}]) — 구간을 관측 범위 안으로 "
+                    "줄이거나 「선형 회귀」 를 고르세요."
+                )
         if method == "linear_regression":
             modulus, intercept = _fit_line(selected_x, selected_y, what="탄성계수")
         elif method == "chord":
