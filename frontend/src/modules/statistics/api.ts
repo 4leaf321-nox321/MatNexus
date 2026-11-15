@@ -22,6 +22,15 @@ export type DistributionReport = components['schemas']['DistributionReportOut']
 export type DistributionCandidate = components['schemas']['DistributionCandidateOut']
 export type DistributableKey = components['schemas']['DistributableKeyOut']
 
+/**
+ * 쿼리에 싣는 시험 온도 — **`null` 은 미기재 묶음이라 `none`**(쿼리로는 `null` 을 못 보낸다).
+ * `undefined` 면 안 싣는다 — 그 방향의 묶음이 하나일 때만 서버가 받는다.
+ */
+function temperatureQuery(kelvin: number | null | undefined): string {
+  if (kelvin === undefined) return ''
+  return `&temperature_k=${kelvin === null ? 'none' : encodeURIComponent(String(kelvin))}`
+}
+
 export const statisticsApi = {
   /**
    * 홈에 뿌리는 요약. **세는 일을 서버가 한다** — 재료 94개를 세려고 94행을
@@ -43,9 +52,16 @@ export const statisticsApi = {
     )
   },
 
-  /** 이 묶음의 통계를 남긴다. 불변 — 다시 저장하면 새 행이 생긴다. */
-  save: (body: { material_id: string; test_type_key: string; orientation: string }) =>
-    api.post<EnsembleResult>('/statistics/ensembles', body),
+  /**
+   * 이 묶음의 통계를 남긴다. 불변 — 다시 저장하면 새 행이 생긴다. `temperature_k` 는 묶음의
+   * 시험 온도(K, `null` 은 미기재) — 묶음이 시험 종류 · 방향 · 온도로 갈린다(2026-11-15).
+   */
+  save: (body: {
+    material_id: string
+    test_type_key: string
+    orientation: string
+    temperature_k?: number | null
+  }) => api.post<EnsembleResult>('/statistics/ensembles', body),
 
   ensembles: (materialId: string) =>
     api.get<EnsembleResult[]>(`/statistics/ensembles?material_id=${materialId}`),
@@ -54,11 +70,17 @@ export const statisticsApi = {
    * 분포를 물어볼 수 있는 항목. **값이 몇 개인지 함께 준다** — 화면이 미리
    * "이 항목은 5개뿐입니다" 를 말할 수 있어야 한다.
    */
-  distributable: (materialId: string, testTypeKey: string, orientation: string) =>
+  distributable: (
+    materialId: string,
+    testTypeKey: string,
+    orientation: string,
+    temperatureK?: number | null
+  ) =>
     api.get<DistributableKey[]>(
       `/statistics/materials/${materialId}/distributable` +
         `?test_type_key=${encodeURIComponent(testTypeKey)}` +
-        `&orientation=${encodeURIComponent(orientation)}`
+        `&orientation=${encodeURIComponent(orientation)}` +
+        temperatureQuery(temperatureK)
     ),
 
   /**
@@ -72,13 +94,15 @@ export const statisticsApi = {
     testTypeKey: string,
     orientation: string,
     scalarKey: string,
-    bootstrap?: number
+    bootstrap?: number,
+    temperatureK?: number | null
   ) =>
     api.get<DistributionReport>(
       `/statistics/materials/${materialId}/distributions` +
         `?test_type_key=${encodeURIComponent(testTypeKey)}` +
         `&orientation=${encodeURIComponent(orientation)}` +
         `&scalar_key=${encodeURIComponent(scalarKey)}` +
-        (bootstrap === undefined ? '' : `&bootstrap=${bootstrap}`)
+        (bootstrap === undefined ? '' : `&bootstrap=${bootstrap}`) +
+        temperatureQuery(temperatureK)
     ),
 }

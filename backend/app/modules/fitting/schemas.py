@@ -106,6 +106,12 @@ class FitPreviewRequest(BaseModel):
     material_id: uuid.UUID
     test_type_key: str
     orientation: str
+    temperature_k: float | None = None
+    """어느 **시험 온도** 묶음인가(K, ±2 K 로 맞춘다 — 통계 묶음의 `temperature_k`).
+
+    2026-11-15: 묶음이 시험 종류 · 방향 · 온도로 갈린다. **안 보내면** 그 방향의 묶음이 하나일
+    때만 받고(옛 화면 · MCP 그대로), 둘 이상이면 422(`MNX-STATISTICS-0007`, 있는 온도를 댄다).
+    `null` 을 보내면 온도 미기재 묶음이다."""
     test_run_ids: list[uuid.UUID] | None = None
     """**이 시험들만 쓴다.** 비우면 채택된 것 전부.
 
@@ -212,6 +218,9 @@ class FitPreviewOut(BaseModel):
     short_runs: list[ShortRunOut] = []
     """유난히 짧은 시편들. 비면 없다."""
     sample_count: int
+    temperature_k: float | None = None
+    """맞춰 본 묶음의 시험 온도(K). `null` 은 미기재 — 저장하면 카드 근거
+    (`source.temperature_k`)에 같은 값이 남는다."""
     fits: list[FitOut]
     elastic: list[InheritedValueOut] = []
     """비워 두면 카드에 들어갈 값들. 사람이 모달에서 덮어쓸 수 있다."""
@@ -224,6 +233,12 @@ class PropertyCardSaveRequest(BaseModel):
     material_id: uuid.UUID
     test_type_key: str
     orientation: str
+    temperature_k: float | None = None
+    """어느 **시험 온도** 묶음인가(K, ±2 K 로 맞춘다 — 통계 묶음의 `temperature_k`).
+
+    2026-11-15: 묶음이 시험 종류 · 방향 · 온도로 갈린다. **안 보내면** 그 방향의 묶음이 하나일
+    때만 받고(옛 화면 · MCP 그대로), 둘 이상이면 422(`MNX-STATISTICS-0007`, 있는 온도를 댄다).
+    `null` 을 보내면 온도 미기재 묶음이다."""
     test_run_ids: list[uuid.UUID] | None = None
     """**이 시험들만 쓴다.** 비우면 채택된 것 전부.
 
@@ -1061,6 +1076,12 @@ class LveCardSaveRequest(BaseModel):
     material_id: uuid.UUID
     test_type_key: str
     orientation: str
+    temperature_k: float | None = None
+    """어느 **시험 온도** 묶음인가(K, ±2 K 로 맞춘다 — 통계 묶음의 `temperature_k`).
+
+    2026-11-15: 묶음이 시험 종류 · 방향 · 온도로 갈린다. **안 보내면** 그 방향의 묶음이 하나일
+    때만 받고(옛 화면 · MCP 그대로), 둘 이상이면 422(`MNX-STATISTICS-0007`, 있는 온도를 댄다).
+    `null` 을 보내면 온도 미기재 묶음이다."""
     label: str = Field(default="", max_length=200)
     poisson_ratio: float | None = Field(default=None, gt=-1, lt=0.5)
     density: float | None = Field(default=None, gt=0)

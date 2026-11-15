@@ -141,6 +141,7 @@ from app.shared import (
     litdeck,
     pagination,
     permissions,
+    result_staleness,
     steward_notice,
     tiers,
     unit_systems,
@@ -592,14 +593,11 @@ def _chosen(
 def _available_columns(db: Session, user: User, payload: FitPreviewRequest) -> set[str]:
     """이 묶음의 채택 결과가 가진 열 — 어느 식을 물릴 수 있는지 가르는 근거."""
     _, groups = statistics_services.groups_for_material(db, user, payload.material_id)
-    group = next(
-        (
-            item
-            for item in groups
-            if item.test_type.key == payload.test_type_key
-            and item.orientation == payload.orientation
-        ),
-        None,
+    group = statistics_services.pick_group(
+        groups,
+        payload.test_type_key,
+        payload.orientation,
+        statistics_services.requested_temperature(payload),
     )
     if group is None:
         return set()
@@ -639,6 +637,7 @@ def _representative(
     family: fitting.Family | None = None,
     test_run_ids: list[uuid.UUID] | None = None,
     basis: statistics.CurveBasis | None = None,
+    temperature: statistics_services.TemperatureChoice = statistics_services.ANY_TEMPERATURE,
 ) -> _Represented:
     """대표 곡선에서 **그 식이 쓰는 축**을 꺼낸다.
 
@@ -652,16 +651,12 @@ def _representative(
     막으면 사람은 시스템 밖에서 계산해 카드 없이 덱을 만든다 — 그러면 근거가
     아무 데도 안 남는다. 대신 표본 수를 카드에 박고(`source.sample_count`),
     1건이면 그 사실을 근거에 문장으로 남긴다.
+
+    **시험 온도도 묶음의 열쇠다**(2026-11-15, `temperature`). 그 방향에 온도 묶음이 둘 이상인데
+    온도를 안 주면 422 — 있는 온도를 댄다(`statistics_services.pick_group`).
     """
     _, groups = statistics_services.groups_for_material(db, user, material_id)
-    group = next(
-        (
-            item
-            for item in groups
-            if item.test_type.key == test_type_key and item.orientation == orientation
-        ),
-        None,
-    )
+    group = statistics_services.pick_group(groups, test_type_key, orientation, temperature)
     if group is None:
         raise NotFound("MNX-FITTING-0001", "그 묶음을 찾을 수 없습니다.")
     if not group.members:
@@ -758,6 +753,8 @@ def _card_warnings(db: Session, group: statistics_services.Group) -> list[dict[s
     - 채택된 처리 결과가 든 경고(시험 점검 · 단계 경고) — 채택할 때 확인한 그것이다.
     - **속도가 시편마다 다르면**(VOC 55) — 속도에 민감한 재료면 대표 곡선이 섞인 속도의 평균이
       된다. 1 % 안은 같은 속도로 본다.
+    - **낡은 채택 결과**(2026-11-15) — 그 결과를 낸 뒤 시편 치수 · 원본이 바뀌었다
+      (`shared/result_staleness`). 옛 치수로 낸 응력 · 탄성률이 카드에 들어간다.
     """
     found = [
         {
@@ -769,6 +766,9 @@ def _card_warnings(db: Session, group: statistics_services.Group) -> list[dict[s
         for one in member.result.warnings or []
         if isinstance(one, dict)
     ]
+    found.extend(
+        _stale_warnings(db, [(member.run, member.result) for member in group.members])
+    )
     fields = {one.key: one for one in conditions.condition_fields(db, group.test_type.id)}
     for key in SPEED_KEYS:
         values = [
@@ -800,6 +800,17 @@ def _card_warnings(db: Session, group: statistics_services.Group) -> list[dict[s
             }
         )
     return found
+
+
+def _stale_warnings(
+    db: Session, used: Sequence[tuple[TestRun, ProcessingResult]]
+) -> list[dict[str, str]]:
+    """카드 근거의 「낡은 결과」 줄 — 시험마다(`shared/result_staleness`). 없으면 빈 것."""
+    return [
+        {"record_name": run.record_name, "label": result_staleness.LABEL, "message": message}
+        for run, result in used
+        for message in result_staleness.reasons(db, run, result)
+    ]
 
 
 def _fit_out(
@@ -981,6 +992,7 @@ def preview(
             same[0],
             payload.test_run_ids,
             _basis(payload.basis),
+            statistics_services.requested_temperature(payload),
         )
         x, y = found.x, found.y
         if group is None:
@@ -1053,14 +1065,14 @@ def preview(
     samples = _samples_of(db, group)
     # **묶음 전체에서 본다** — 고른 것만 보면 짧은 시편을 뺀 순간 표시가 사라진다.
     _, all_groups = statistics_services.groups_for_material(db, user, payload.material_id)
-    whole = next(
-        (
-            item
-            for item in all_groups
-            if item.test_type.key == payload.test_type_key
-            and item.orientation == payload.orientation
-        ),
-        group,
+    whole = (
+        statistics_services.pick_group(
+            all_groups,
+            payload.test_type_key,
+            payload.orientation,
+            statistics_services.requested_temperature(payload),
+        )
+        or group
     )
     short_runs = [
         ShortRunOut(
@@ -1080,6 +1092,7 @@ def preview(
         members=drawn_members,
         short_runs=short_runs,
         sample_count=len(group.members),
+        temperature_k=group.temperature_k,
         warnings=[CardWarningOut(**one) for one in _card_warnings(db, group)],
         fits=[_fit_out(item, extrapolate_to=payload.extrapolate_to) for item in drawn],
         elastic=[
@@ -1100,8 +1113,15 @@ def preview(
     )
 
 
-def _deck(item: PropertyCard, *, name: str, provenance: tuple[str, ...] = ()) -> export.Deck:
-    """카드 행을 솔버 덱으로. **블록을 그대로 넘긴다.**
+def _deck(
+    item: PropertyCard,
+    *,
+    name: str,
+    provenance: tuple[str, ...] = (),
+    blocks: dict[str, Any] | None = None,
+) -> export.Deck:
+    """카드 행을 솔버 덱으로. **블록을 그대로 넘긴다.** `blocks` 를 주면 그것으로(짝과 낼 때
+    뺀 블록이 있을 때).
 
     전에는 여기서 `card_kwargs` 로 블록을 "카드 양식" 의 칸에 옮겨 담았다. 그
     양식이 없어졌으므로 옮길 일도 없다 — 무엇이 필요한지는 렌더러가 안다.
@@ -1109,7 +1129,7 @@ def _deck(item: PropertyCard, *, name: str, provenance: tuple[str, ...] = ()) ->
     return export.Deck(
         name=name,
         solver_id=export.solver_id_from(str(item.id)),
-        blocks=item.blocks,
+        blocks=item.blocks if blocks is None else blocks,
         provenance=provenance,
     )
 
@@ -1271,6 +1291,7 @@ def create_card(
         spec,
         payload.test_run_ids,
         basis,
+        statistics_services.requested_temperature(payload),
     )
     group, strain, stress, notes = (
         represented.group,
@@ -1540,9 +1561,29 @@ def create_card(
 
     # 온도를 타면 표가 붙는다. **격자가 어긋나면 여기서 멈춘다** — 조용히 한쪽을
     # 버리면 덱은 나가고 재료만 딴판이 된다.
+    #
+    # **잰 E 가 있으면 적어 둔 E(T) 표를 안 붙인다**(2026-11-15). 전에는 값 칸은 잰 E(195 GPa),
+    # 표는 적어 둔 206/170 GPa 라, 표를 받는 솔버(Abaqus · Ansys · Nastran)와 안 받는 솔버
+    # (LS-DYNA)가 다른 E 로 돌았다. 시험 온도 하나의 잰 값이 그 카드의 E 다.
+    elastic_columns = _table_items("elastic")
+    if modulus is not None:
+        elastic_columns = {
+            column: item
+            for column, item in elastic_columns.items()
+            if column != "youngs_modulus"
+        }
     elastic_rows = _declared_table(
-        group.material, _table_items("elastic"), constants=_constants(elastic)
+        group.material, elastic_columns, constants=_constants(elastic)
     )
+    if (
+        modulus is not None
+        and stated.value is not None
+        and len(declared_card.declared_points(stated_row or {})) > 1
+    ):
+        notes.append(
+            "탄성계수: 시험으로 잰 값을 썼습니다 — 재료에 적어 둔 온도별 탄성계수 표는 싣지 "
+            "않았습니다(잰 E 와 적은 E(T) 가 한 카드에 서면 솔버마다 다른 E 로 돕니다)."
+        )
 
     item = PropertyCard(
         material_id=group.material.id,
@@ -1554,6 +1595,8 @@ def create_card(
             "sample_count": len(group.members),
             "test_run_ids": [str(member.run.id) for member in group.members],
             "record_names": [member.run.record_name for member in group.members],
+            # **어느 시험 온도의 카드인가**(2026-11-15) — `null` 은 미기재.
+            "temperature_k": group.temperature_k,
             "strain_min": float(strain[0]),
             "strain_max": float(strain[-1]),
             "notes": [*notes, *[line for line in inherited_notes if line]],
@@ -2783,16 +2826,80 @@ def _lineage_of_group(
     )
 
 
-def _mean_scalar_of_runs(
-    db: Session, runs: list[TestRun], key: str
+#: 묶음 카드 근거 경고의 이름 — 묶을 때의 결과와 지금이 다른 구성원.
+GROUP_BASIS_LABEL = "묶음 근거"
+
+
+def _member_results(
+    db: Session, row: GroupResult, runs: list[TestRun]
+) -> tuple[list[tuple[TestRun, ProcessingResult]], list[dict[str, str]]]:
+    """묶음이 시험마다 **쓴** 처리 결과와 근거 경고(2026-11-15).
+
+    구성원 기록의 `result_id` 가 그 결과다 — 묶을 때 남긴다(채택이든 고른 미채택이든). 기록이
+    없는 옛 묶음은 지금 채택으로 본다(전과 같다). **전에는 늘 지금 채택을 읽어**, 미채택 결과로
+    묶은 카드의 E 가 묶음 값과 다른 결과(채택)에서 나왔고, 묶은 뒤 채택을 옮기면 카드의 E 만
+    조용히 새 결과를 따랐다.
+
+    경고: 기록한 결과가 지금 채택과 다르면(미채택으로 고른 것은 빼고 — 그쪽은 `_unadopted_note`
+    가 말한다) · 기록한 결과가 없어졌으면.
+    """
+    recorded = {
+        str(one.get("test_run_id")): one for one in row.members or [] if isinstance(one, dict)
+    }
+    wanted: dict[uuid.UUID, uuid.UUID] = {}
+    notes: list[dict[str, str]] = []
+    for run in runs:
+        entry = recorded.get(str(run.id)) or {}
+        raw = entry.get("result_id")
+        if not raw:
+            if run.adopted_result_id:
+                wanted[run.id] = run.adopted_result_id
+            continue
+        result_id = uuid.UUID(str(raw))
+        wanted[run.id] = result_id
+        if not entry.get("unadopted") and result_id != run.adopted_result_id:
+            notes.append(
+                {
+                    "record_name": run.record_name,
+                    "label": GROUP_BASIS_LABEL,
+                    "message": "묶은 뒤 채택이 바뀌었습니다 — 이 카드의 값은 묶을 때 쓴 "
+                    "결과에서 나왔습니다(묶음 값 · 탄성계수 모두). 지금 채택으로 만들려면 "
+                    "다시 묶으세요.",
+                }
+            )
+    results = {
+        item.id: item
+        for item in db.scalars(
+            select(ProcessingResult).where(ProcessingResult.id.in_(list(wanted.values())))
+        )
+    }
+    used: list[tuple[TestRun, ProcessingResult]] = []
+    for run in runs:
+        chosen = wanted.get(run.id)
+        if chosen is None:
+            continue
+        found = results.get(chosen)
+        if found is None:
+            notes.append(
+                {
+                    "record_name": run.record_name,
+                    "label": GROUP_BASIS_LABEL,
+                    "message": "묶을 때 쓴 처리 결과가 없어졌습니다 — 탄성계수 평균에서 "
+                    "뺐습니다.",
+                }
+            )
+            continue
+        used.append((run, found))
+    return used, notes
+
+
+def _mean_scalar_of_results(
+    used: Sequence[tuple[TestRun, ProcessingResult]], key: str
 ) -> tuple[float | None, int]:
-    """구성원의 채택 결과에서 스칼라 하나의 평균과 그 수. **없는 시험은 센 수에서 뺀다.**"""
-    ids = [run.adopted_result_id for run in runs if run.adopted_result_id]
-    if not ids:
-        return None, 0
+    """묶음이 쓴 결과에서 스칼라 하나의 평균과 그 수. **없는 시험은 센 수에서 뺀다.**"""
     found: list[float] = []
-    for result in db.scalars(select(ProcessingResult).where(ProcessingResult.id.in_(ids))):
-        for scalar in result.scalars:
+    for _, result in used:
+        for scalar in result.scalars or []:
             if str(scalar.get("key")) == key and isinstance(scalar.get("value"), int | float):
                 found.append(float(scalar["value"]))
                 break
@@ -2834,7 +2941,8 @@ def create_rate_card(
 
     lineage = _lineage_of_group(db, user, row)
     material = lineage.material
-    modulus, modulus_count = _mean_scalar_of_runs(db, lineage.runs, "youngs_modulus")
+    used, basis_warnings = _member_results(db, row, lineage.runs)
+    modulus, modulus_count = _mean_scalar_of_results(used, "youngs_modulus")
     modulus_source = "statistics"
     if modulus is None:
         stated = _declared(material, _item_of("elastic", "youngs_modulus"))
@@ -2863,7 +2971,7 @@ def create_rate_card(
         f"속도별 묶음 {len(bins)}개 · 시편 {len(lineage.runs)}건에서 만들었습니다. "
         f"`table` 은 기준 속도 {float(bins[0]['rate']):.3g} 1/s 의 곡선입니다.",
         (
-            f"탄성계수: 채택 결과 {modulus_count}건의 평균입니다."
+            f"탄성계수: 묶음이 쓴 결과 {modulus_count}건의 평균입니다."
             if modulus_source == "statistics"
             else f"탄성계수: 재료에 적어 둔 값입니다({modulus_source})."
         ),
@@ -2886,6 +2994,8 @@ def create_rate_card(
             "plugin_id": row.plugin_id,
             "notes": [line for line in [*notes, _unadopted_note(row)] if line],
             "unadopted": _unadopted(row),
+            # 묶은 뒤 채택이 바뀐 구성원 · 낡은 결과(옛 치수 · 옛 원본) — 2026-11-15.
+            "warnings": [*basis_warnings, *_stale_warnings(db, used)],
             "runtime": runtime.manifest(),
         },
         blocks={
@@ -3007,23 +3117,43 @@ def create_card_from_group(
         card_test_type=str(card_type) if card_type else None,
     )
     material = lineage.material
-    modulus, modulus_count = _mean_scalar_of_runs(db, lineage.runs, "youngs_modulus")
+    used, basis_warnings = _member_results(db, row, lineage.runs)
+    modulus, modulus_count = _mean_scalar_of_results(used, "youngs_modulus")
     modulus_source = "statistics"
     if modulus is None:
         stated = _declared(material, _item_of("elastic", "youngs_modulus"))
         modulus, modulus_source = stated.value, stated.source
     poisson = _inherit_poisson(material, payload.poisson_ratio)
     density = _inherit_density(material, lineage.samples, payload.density)
+    # **방향을 가로지르는 카드는 탄성을 물려받지 않는다**(2026-11-15). 이방성(r값) 카드의 E 는
+    # 세 방향 시험의 평균이라 어느 방향의 물성도 아니고, Hill 덱은 탄성을 짝 카드(기준 방향 MD)
+    # 에서 받는다 — 전에는 이 블록이 있어 블록 단위 병합(`_paired`)에서 짝의 탄성이 안 쓰였고,
+    # 덱 각주는 「탄성은 짝 카드에서」 라고 적었다. 묶음이 스스로 탄성을 내면 그것은 싣는다.
+    borrow_elastic = crosses and "elastic" not in blocks
 
     notes = [
         f"「{plugin.label}」 묶음 · 시편 {len(lineage.runs)}건에서 만들었습니다.",
-        (
-            f"탄성계수: 채택 결과 {modulus_count}건의 평균입니다."
-            if modulus_source == "statistics"
-            else f"탄성계수: 재료에 적어 둔 값입니다({modulus_source})."
+        *(
+            [
+                "탄성: 방향을 가로지르는 카드라 탄성 블록을 싣지 않았습니다 — 덱을 낼 때 짝 "
+                "카드(기준 방향)의 탄성 · 경화 곡선이 쓰입니다."
+                + (
+                    " 넣은 푸아송비 · 밀도도 싣지 않았습니다(짝 카드의 값이 쓰입니다)."
+                    if payload.poisson_ratio is not None or payload.density is not None
+                    else ""
+                )
+            ]
+            if borrow_elastic
+            else [
+                (
+                    f"탄성계수: 묶음이 쓴 결과 {modulus_count}건의 평균입니다."
+                    if modulus_source == "statistics"
+                    else f"탄성계수: 재료에 적어 둔 값입니다({modulus_source})."
+                ),
+                f"푸아송비: {poisson.detail}" if poisson.detail else "",
+                f"밀도: {density.detail}" if density.detail else "",
+            ]
         ),
-        f"푸아송비: {poisson.detail}" if poisson.detail else "",
-        f"밀도: {density.detail}" if density.detail else "",
         *row.warnings,
     ]
     elastic_values: dict[str, Any] = {}
@@ -3088,10 +3218,13 @@ def create_card_from_group(
             "plugin_id": row.plugin_id,
             "notes": [line for line in [*notes, _unadopted_note(row)] if line],
             "unadopted": _unadopted(row),
+            # 묶은 뒤 채택이 바뀐 구성원 · 낡은 결과(옛 치수 · 옛 원본) — 2026-11-15.
+            "warnings": [*basis_warnings, *_stale_warnings(db, used)],
             "runtime": runtime.manifest(),
         },
-        # 확장이 낸 블록이 먼저, 탄성은 확장이 안 냈을 때만 물려받은 것으로 채운다.
-        blocks={"elastic": {"values": elastic_values}, **blocks},
+        # 확장이 낸 블록이 먼저, 탄성은 확장이 안 냈을 때만 물려받은 것으로 채운다 — 방향을
+        # 가로지르는 카드는 물려받지 않는다(짝 카드의 탄성이 쓰인다).
+        blocks=blocks if borrow_elastic else {"elastic": {"values": elastic_values}, **blocks},
         point_count=len(table_rows),
         note=payload.note,
         created_by_id=user.id,
@@ -3116,14 +3249,11 @@ def create_lve_card(
     """
     cards.load_builtin()
     _, groups = statistics_services.groups_for_material(db, user, payload.material_id)
-    group = next(
-        (
-            one
-            for one in groups
-            if one.test_type.key == payload.test_type_key
-            and one.orientation == payload.orientation
-        ),
-        None,
+    group = statistics_services.pick_group(
+        groups,
+        payload.test_type_key,
+        payload.orientation,
+        statistics_services.requested_temperature(payload),
     )
     if group is None or not group.members:
         raise NotFound(
@@ -3218,7 +3348,10 @@ def create_lve_card(
             "sample_count": len(kept),
             "test_run_ids": [str(m.run.id) for m in group.members],
             "record_names": [m.run.record_name for m in group.members],
+            "temperature_k": group.temperature_k,
             "notes": [line for line in notes if line],
+            # 낡은 채택 결과(옛 치수 · 옛 원본)로 낸 값이면 그렇다고(2026-11-15).
+            "warnings": _stale_warnings(db, [(m.run, m.result) for m in group.members]),
             "runtime": runtime.manifest(),
             "include_declared": payload.include_declared,
         },
@@ -4093,6 +4226,16 @@ def _deck_for_card(
     item = _visible_card(db, user, card_id)
     material = db.get(Material, item.material_id)
     test_type = db.get(TestType, item.test_type_id) if item.test_type_id else None
+    cards.load_builtin()
+    # **짝과 낼 때 방향을 가로지르는 카드의 탄성은 안 싣는다**(2026-11-15). 이방성(r값) 카드에
+    # 묶음이 물려준 탄성은 세 방향 시험의 평균이다 — 블록 단위 병합에서 그것이 이겨 짝 카드
+    # (MD)의 탄성이 안 쓰였다. 그 전에 만든 카드(탄성이 실린 것)도 여기서 바로잡힌다.
+    blocks = dict(item.blocks or {})
+    dropped_elastic = (
+        with_card is not None and _crosses_orientation(blocks) and "elastic" in blocks
+    )
+    if dropped_elastic:
+        blocks.pop("elastic")
 
     # 솔버 덱의 이름은 재료 이름에서 만든다. 카드 이름은 한국어일 때가 많고,
     # 그러면 이름이 통째로 사라진다.
@@ -4104,8 +4247,7 @@ def _deck_for_card(
         for part in (material.record_name if material else item.label, item.orientation)
         if part
     )
-    cards.load_builtin()
-    elastic = cards.values_of(item.blocks.get("elastic"))
+    elastic = cards.values_of(blocks.get("elastic"))
     hardening = cards.values_of(item.blocks.get("hardening"))
     hyper = cards.values_of(item.blocks.get("hyperelastic"))
     table = cards.values_of(item.blocks.get("table"))
@@ -4233,8 +4375,21 @@ def _deck_for_card(
     note = export.renamed_note(base, name)
     if note:
         provenance.insert(0, note)
-    deck = _deck(item, name=name, provenance=tuple(provenance))
+    if dropped_elastic:
+        provenance.append(
+            "탄성: 이 카드의 탄성(방향을 가로지른 시험들의 값)은 싣지 않았습니다 — 짝 카드의 "
+            "탄성을 씁니다."
+        )
+    deck = _deck(item, name=name, provenance=tuple(provenance), blocks=blocks)
     return deck if with_card is None else _paired(db, user, item, deck, with_card)
+
+
+def _crosses_orientation(blocks: dict[str, Any]) -> bool:
+    """방향을 가로지르는 블록(`meta["cross_orientation"]`)이 있는 카드인가 — 이방성(r값) 등."""
+    known = {spec.key: spec for spec in cards.list_blocks()}
+    return any(
+        bool(known[key].meta.get("cross_orientation")) for key in blocks if key in known
+    )
 
 
 def _paired(

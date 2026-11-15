@@ -867,3 +867,31 @@ describe('같은 지문은 하나로', () => {
     expect(screen.queryByRole('button', { name: '같은 지문은 하나로' })).toBeNull()
   })
 })
+
+describe('시험 온도가 다른 묶음 (2026-11-15)', () => {
+  it('온도마다 따로 서고, 머리에 온도가 보이고, 남기기가 그 온도를 싣는다', async () => {
+    const { statisticsApi } = await import('@/modules/statistics/api')
+    const save = vi.spyOn(statisticsApi, 'save').mockResolvedValue({} as never)
+    forMaterial.mockResolvedValue({
+      material_id: 'm1',
+      material_name: 'DP600',
+      groups: [
+        group('MD', 300, { temperature_k: 296.15 }),
+        group('MD', 250, { temperature_k: 353.15 }),
+      ],
+    })
+    show()
+    // 같은 종류 · 방향이라도 묶음이 둘 — 열쇠가 겹치면 하나로 그려지거나 펼침이 섞인다.
+    const buttons = await screen.findAllByRole('button', { name: /이 통계 저장/ })
+    expect(buttons).toHaveLength(2)
+    expect(screen.getAllByText('23 °C').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('80 °C').length).toBeGreaterThan(0)
+    await userEvent.click(buttons[1])
+    await waitFor(() =>
+      expect(save).toHaveBeenCalledWith(
+        expect.objectContaining({ orientation: 'MD', temperature_k: 353.15 })
+      )
+    )
+    save.mockRestore()
+  })
+})

@@ -1108,3 +1108,54 @@ describe('대표 곡선 — 평균만이 아니라 하한·상한으로도 (2026
     expect(within(kinds).getByRole('button', { name: '평균' })).toBeEnabled()
   })
 })
+
+describe('시험 온도가 다른 묶음 (2026-11-15)', () => {
+  /** 같은 인장 · MD 에 23 °C · 80 °C 두 묶음 — 전에는 한 평균 · 한 카드였다. */
+  function twoTemperatures() {
+    const group = (temperature_k: number, ids: string[]) => ({
+      test_type_key: 'tensile',
+      test_type_label: '인장',
+      orientation: 'MD',
+      temperature_k,
+      sample_count: ids.length,
+      test_run_ids: ids,
+      record_names: ids,
+      scalars: [],
+      curve: null,
+      notes: [],
+      skipped_unadopted: 0,
+    })
+    forMaterial.mockResolvedValue({
+      material_id: 'm1',
+      material_name: 'DP600',
+      groups: [group(296.15, ['r-1', 'r-2']), group(353.15, ['h-1', 'h-2', 'h-3'])],
+    })
+  }
+
+  it('카드 단추에 온도가 서고, 맞춰 보기와 저장이 그 온도를 싣는다', async () => {
+    twoTemperatures()
+    preview.mockResolvedValue(body([fit()]))
+    create.mockResolvedValue({})
+    panel()
+    expect(await screen.findByRole('button', { name: /^탄소성 카드 · 23 °C$/ })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: /^탄소성 카드 · 80 °C$/ }))
+    await userEvent.click(await screen.findByRole('button', { name: /경화식 맞춰 보기/ }))
+    await waitFor(() =>
+      expect(preview).toHaveBeenLastCalledWith(
+        expect.objectContaining({ orientation: 'MD', temperature_k: 353.15 })
+      )
+    )
+    await userEvent.click(await screen.findByRole('button', { name: /이 값으로 카드 생성/ }))
+    // 이름 기본값에 온도가 붙는다 — 「인장 MD · 80 °C」.
+    expect(await screen.findByDisplayValue('인장 MD · 80 °C')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: '초안으로 저장' }))
+    await waitFor(() => expect(create).toHaveBeenCalled())
+    expect(create.mock.calls[0][0]).toMatchObject({ temperature_k: 353.15, label: '인장 MD · 80 °C' })
+  })
+
+  it('온도가 하나면 단추는 전과 같다', async () => {
+    panel()
+    expect(await screen.findByRole('button', { name: /^탄소성 카드$/ })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /°C/ })).toBeNull()
+  })
+})

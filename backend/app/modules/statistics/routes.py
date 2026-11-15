@@ -89,8 +89,35 @@ from matcore import cards, distributions, fitting, statistics
 router = APIRouter(prefix="/statistics", tags=["statistics"])
 
 
-def _group_out(db: Session, group: services.Group, *, threshold: float) -> GroupOut:
+def _group_out(
+    db: Session,
+    group: services.Group,
+    *,
+    threshold: float,
+    siblings: Sequence[services.Group] = (),
+) -> GroupOut:
+    """묶음 하나의 응답. `siblings` 는 같은 재료의 다른 묶음들 — 같은 시험 종류 · 방향에 다른
+    온도의 묶음이 있으면 노트가 그것을 말한다."""
     notes = [*services.setting_warnings(group), *services.sample_warnings(db, group)]
+    others = [
+        one.temperature_k
+        for one in siblings
+        if one is not group
+        and one.test_type.id == group.test_type.id
+        and one.orientation == group.orientation
+    ]
+    if others:
+        # **온도가 다른 시험은 따로 묶었다**(2026-11-15) — 한 평균에 섞지 않는다. 다른 묶음이
+        # 있다는 것을 말하지 않으면 n 이 왜 줄었는지 모른다.
+        notes.append(
+            f"시험 온도가 다른 시험은 따로 묶었습니다 — 이 묶음: "
+            f"{services.temperature_text(group.temperature_k)}, 다른 묶음: "
+            + ", ".join(services.temperature_text(one) for one in others)
+            + "."
+        )
+    stale = services.stale_note(db, group)
+    if stale:
+        notes.append(stale)
     curve = None
     # **1건이어도 곡선은 낸다.** 그 한 곡선이 곧 대표다 — 평균을 낼 상대가
     # 없다는 것과 그릴 곡선이 없다는 것은 다르다. `curve_table` 이 1건을
@@ -185,6 +212,7 @@ def _group_out(db: Session, group: services.Group, *, threshold: float) -> Group
         test_type_key=group.test_type.key,
         test_type_label=group.test_type.label,
         orientation=group.orientation,
+        temperature_k=group.temperature_k,
         fittable=fittable,
         fit_blocks=fit_blocks,
         sample_count=len(group.members),
@@ -231,16 +259,18 @@ def material_statistics(
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> MaterialStatisticsOut:
-    """이 재료의 물성. **묶음은 시험종류 + 방향이다.**
+    """이 재료의 물성. **묶음은 시험종류 + 방향 + 시험 온도다.**
 
     인장은 압연 방향에 따라 물성이 다르다 — MD 와 TD 를 한 통계로 묶으면 CV 가
-    크게 나오는데 그것은 산포가 아니라 다른 것을 섞은 것이다.
+    크게 나오는데 그것은 산포가 아니라 다른 것을 섞은 것이다. 온도도 같다(2026-11-15).
     """
     material, groups = services.groups_for_material(db, user, material_id, unique=unique)
     return MaterialStatisticsOut(
         material_id=material.id,
         material_name=material.record_name,
-        groups=[_group_out(db, group, threshold=threshold) for group in groups],
+        groups=[
+            _group_out(db, group, threshold=threshold, siblings=groups) for group in groups
+        ],
     )
 
 
@@ -258,14 +288,11 @@ def save_ensemble(
     없고, 그 숫자는 근거가 없다.
     """
     material, groups = services.groups_for_material(db, user, payload.material_id)
-    group = next(
-        (
-            item
-            for item in groups
-            if item.test_type.key == payload.test_type_key
-            and item.orientation == payload.orientation
-        ),
-        None,
+    group = services.pick_group(
+        groups,
+        payload.test_type_key,
+        payload.orientation,
+        services.requested_temperature(payload),
     )
     if group is None:
         raise NotFound("MNX-STATISTICS-0001", "그 묶음을 찾을 수 없습니다.")
@@ -286,7 +313,12 @@ def save_ensemble(
         test_run_ids=[str(member.run.id) for member in group.members],
         result_ids=[str(member.result.id) for member in group.members],
         scalars=[row.model_dump(mode="json") for row in out.scalars],
-        curve=out.curve.model_dump(mode="json") if out.curve else {},
+        # **시험 온도를 곡선 기록 곁에 남긴다**(2026-11-15) — 표에 온도 칸이 없어 새 칸 없이
+        # 둔다. 온도 구분 전의 통계에는 이 키가 없다(= 모름).
+        curve={
+            **(out.curve.model_dump(mode="json") if out.curve else {}),
+            "temperature_k": group.temperature_k,
+        },
         notes=out.notes,
         created_by_id=user.id,
     )
@@ -298,6 +330,7 @@ def save_ensemble(
         material_id=item.material_id,
         test_type_key=group.test_type.key,
         orientation=item.orientation,
+        temperature_k=group.temperature_k,
         sample_count=item.sample_count,
         test_run_ids=[uuid.UUID(value) for value in item.test_run_ids],
         created_at=item.created_at,
@@ -323,12 +356,18 @@ def list_ensembles(
             material_id=item.material_id,
             test_type_key=types[item.test_type_id].key if item.test_type_id in types else "?",
             orientation=item.orientation,
+            temperature_k=_ensemble_temperature(item),
             sample_count=item.sample_count,
             test_run_ids=[uuid.UUID(value) for value in item.test_run_ids],
             created_at=item.created_at,
         )
         for item in items
     ]
+
+
+def _ensemble_temperature(item: EnsembleResult) -> float | None:
+    value = (item.curve or {}).get("temperature_k")
+    return float(value) if isinstance(value, int | float) else None
 
 
 # --- 분포 ------------------------------------------------------------------
@@ -339,16 +378,16 @@ def list_ensembles(
 
 
 def _find_group(
-    db: Session, user: User, material_id: uuid.UUID, test_type_key: str, orientation: str
+    db: Session,
+    user: User,
+    material_id: uuid.UUID,
+    test_type_key: str,
+    orientation: str,
+    temperature: str | None = None,
 ) -> tuple[object, services.Group]:
     material, groups = services.groups_for_material(db, user, material_id)
-    group = next(
-        (
-            item
-            for item in groups
-            if item.test_type.key == test_type_key and item.orientation == orientation
-        ),
-        None,
+    group = services.pick_group(
+        groups, test_type_key, orientation, services.temperature_query(temperature)
     )
     if group is None:
         raise NotFound("MNX-STATISTICS-0001", "그 묶음을 찾을 수 없습니다.")
@@ -360,6 +399,11 @@ def distributable(
     material_id: uuid.UUID,
     test_type_key: str = Query(...),
     orientation: str = Query(...),
+    temperature_k: str | None = Query(
+        default=None,
+        description="어느 온도 묶음인가(K, ±2 K). 'none' 이면 온도 미기재 묶음. 안 주면 "
+        "그 방향의 묶음이 하나일 때만 받는다(둘 이상이면 422).",
+    ),
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> list[DistributableKeyOut]:
@@ -369,7 +413,9 @@ def distributable(
     있어야 한다 — 눌러 보고 나서 "모자랍니다" 를 받으면 무엇이 문제인지 알기
     어렵다(잠그는 이유를 함께 보이는 것, 시험 종류 편집과 같은 태도다).
     """
-    _material, group = _find_group(db, user, material_id, test_type_key, orientation)
+    _material, group = _find_group(
+        db, user, material_id, test_type_key, orientation, temperature_k
+    )
     out: list[DistributableKeyOut] = []
     for key in services.distributable_keys(group):
         values, _labels, label, unit = services.scalar_values(group, key)
@@ -390,6 +436,11 @@ def distribution_report(
     test_type_key: str = Query(...),
     orientation: str = Query(...),
     scalar_key: str = Query(...),
+    temperature_k: str | None = Query(
+        default=None,
+        description="어느 온도 묶음인가(K, ±2 K). 'none' 이면 온도 미기재 묶음. 안 주면 "
+        "그 방향의 묶음이 하나일 때만 받는다(둘 이상이면 422).",
+    ),
     bootstrap: int = Query(default=distributions.BOOTSTRAP, ge=0, le=2000),
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
@@ -402,7 +453,9 @@ def distribution_report(
     `bootstrap` 을 낮추면 빨라지는 대신 p 값이 거칠어진다. 0 이면 p 를 안 낸다 —
     **화면을 넘기며 훑을 때** 쓰라고 열어 둔다. 기본값은 999 다.
     """
-    _material, group = _find_group(db, user, material_id, test_type_key, orientation)
+    _material, group = _find_group(
+        db, user, material_id, test_type_key, orientation, temperature_k
+    )
     values, labels, label, unit = services.scalar_values(group, scalar_key)
     if not any(value is not None for value in values):
         raise NotFound(
@@ -419,6 +472,7 @@ def distribution_report(
         material_id=material_id,
         test_type_key=test_type_key,
         orientation=orientation,
+        temperature_k=group.temperature_k,
         scalar_key=scalar_key,
         scalar_label=label,
         si_unit=unit,

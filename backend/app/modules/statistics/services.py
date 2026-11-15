@@ -6,10 +6,11 @@
 
 from __future__ import annotations
 
+import math
 import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Final
 
 import numpy as np
 from sqlalchemy import select
@@ -18,10 +19,30 @@ from sqlalchemy.orm import Session
 from app.modules.materials.models import Material, Sample, Specimen
 from app.modules.processing.models import ProcessingResult
 from app.modules.tests.models import Curve, TestRun, TestType
-from app.shared import curvedata, filestore, holds, permissions
-from app.shared.errors import NotFound
+from app.shared import curvedata, display, filestore, holds, permissions, result_staleness
+from app.shared.errors import AppError, NotFound
 from matcore import curves, statistics
 from matcore.processing import tensile
+
+#: 시험 조건의 온도 칸 — SI(K)로 저장된다(`run.conditions["temperature"]`).
+TEMPERATURE = "temperature"
+
+#: 같은 온도 그룹으로 보는 폭(K). **응력완화 묶음의 ±2 K 와 같은 폭이다**(VOC 52) — 온도 기록
+#: 2 K 오차가 완화 탄성률을 12 % 흔든 실측이 그 폭의 근거다. 한 그룹 안에서 첫 값과 이만큼까지.
+TEMPERATURE_TOLERANCE_K = 2.0
+
+
+class _AnyTemperature:
+    """「온도를 안 골랐다」 — 미기재(`None`)와 다르다. 묶음 고르기의 기본값."""
+
+    def __repr__(self) -> str:
+        return "ANY_TEMPERATURE"
+
+
+#: 요청이 온도를 **안 보냈다**. `None` 은 「미기재 그룹을 골랐다」 이다 — 둘을 섞으면 온도
+#: 그룹이 둘인 재료에서 안 보낸 요청이 조용히 미기재 그룹으로 간다(AGENTS.md 「안 보낸 것과
+#: 비운 것」).
+ANY_TEMPERATURE: Final = _AnyTemperature()
 
 #: 평균이 뜻이 없는 값. **차원으로 거르고 남는 예외들이다.**
 #:
@@ -56,7 +77,7 @@ class Member:
 
 @dataclass(frozen=True)
 class Group:
-    """통계 한 묶음 — **재료 + 시험종류 + 방향.**"""
+    """통계 한 묶음 — **재료 + 시험종류 + 방향 + 시험 온도.**"""
 
     material: Material
     test_type: TestType
@@ -71,12 +92,149 @@ class Group:
     """「같은 지문은 하나로」 로 셌나."""
     held: int = 0
     """**물성 사용 보류** 중이라 뺀 채택 시험 수(VOC 60) — 보류는 자료 관리자가 건다."""
+    temperature_k: float | None = None
+    """이 묶음의 시험 온도(K) — 구성원 온도의 중앙값. `None` 은 **미기재**다(상온이라고
+    단정하지 않는다). 2026-11-15: 전에는 23 ℃ 5건과 80 ℃ 3건이 한 평균 · 대표 곡선 · 카드가
+    됐다."""
+
+
+def run_temperature(run: TestRun) -> float | None:
+    """시험 조건의 온도(K). 안 적혔거나 숫자가 아니면 `None`(미기재)."""
+    value = (run.conditions or {}).get(TEMPERATURE)
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        return None
+    return float(value) if math.isfinite(float(value)) else None
+
+
+def temperature_bins(
+    temperatures: Sequence[float | None],
+) -> list[tuple[float | None, list[int]]]:
+    """온도들을 그룹으로 — `(대표 온도, 자리 목록)`. **미기재는 따로 한 그룹**(맨 뒤).
+
+    온도로 정렬해 **그룹 첫 값과 2 K 이내**면 같은 그룹이다(`TEMPERATURE_TOLERANCE_K`).
+    이웃끼리 견주면 22 · 23.9 · 25.8 … 이 사슬로 한 그룹이 되어 폭이 끝없이 늘어난다 — 첫 값에
+    묶는다.
+    대표 온도는 구성원의 중앙값이다.
+    """
+    known = sorted(
+        (value, index) for index, value in enumerate(temperatures) if value is not None
+    )
+    bins: list[tuple[float | None, list[int]]] = []
+    start: float | None = None
+    current: list[tuple[float, int]] = []
+    for value, index in known:
+        if start is not None and value - start > TEMPERATURE_TOLERANCE_K:
+            bins.append(
+                (float(np.median([one for one, _ in current])), [i for _, i in current])
+            )
+            current = []
+            start = None
+        if start is None:
+            start = value
+        current.append((value, index))
+    if current:
+        bins.append((float(np.median([one for one, _ in current])), [i for _, i in current]))
+    missing = [index for index, value in enumerate(temperatures) if value is None]
+    if missing:
+        bins.append((None, missing))
+    return bins
+
+
+def temperature_text(kelvin: float | None) -> str:
+    """사람이 읽는 시험 온도 — `80 °C`, 미기재면 「온도 미기재」."""
+    if kelvin is None:
+        return "온도 미기재"
+    # 환산은 단위 표를 거친다(`- 273.15` 를 손으로 적지 않는다). 기호만 사람이 읽는 꼴로.
+    return display.quantity(kelvin, "degC", digits=4).replace("degC", "°C")
+
+
+#: 묶음을 고르는 온도 — 숫자(K) · `None`(미기재) · `ANY_TEMPERATURE`(안 보냄).
+TemperatureChoice = float | None | _AnyTemperature
+
+
+def requested_temperature(payload: Any) -> TemperatureChoice:
+    """JSON 요청의 `temperature_k` — **안 보냈으면 `ANY_TEMPERATURE`**, `null` 이면 미기재
+    묶음."""
+    if "temperature_k" not in getattr(payload, "model_fields_set", set()):
+        return ANY_TEMPERATURE
+    value = payload.temperature_k
+    return None if value is None else float(value)
+
+
+def temperature_query(raw: str | None) -> TemperatureChoice:
+    """쿼리의 `temperature_k` — 안 주면 `ANY_TEMPERATURE`, **`none` 이면 미기재 묶음**(쿼리로는
+    `null` 을 못 보낸다 — 카드 목록의 `test_type=none` 과 같은 꼴), 그 밖에는 K 숫자."""
+    if raw is None:
+        return ANY_TEMPERATURE
+    text = raw.strip().lower()
+    if text in ("", "none", "null"):
+        return None
+    try:
+        value = float(text)
+    except ValueError:
+        value = math.nan
+    if not math.isfinite(value) or value <= 0:
+        raise AppError(
+            "MNX-STATISTICS-0008",
+            f"시험 온도 '{raw}' 를 읽을 수 없습니다 — K 숫자나 'none'(온도 미기재)을 주세요.",
+            status=422,
+        )
+    return value
+
+
+def pick_group(
+    groups: Sequence[Group],
+    test_type_key: str,
+    orientation: str,
+    temperature_k: TemperatureChoice = ANY_TEMPERATURE,
+) -> Group | None:
+    """요청이 가리키는 묶음 하나 — **시험 종류 · 방향 · 온도로.** 없으면 `None`.
+
+    온도를 안 보냈으면(`ANY_TEMPERATURE`) 그 방향의 묶음이 하나일 때만 그것이다 — 옛 화면 ·
+    MCP 가 그대로 돈다. **둘 이상이면 422** 로 있는 온도를 댄다: 하나를 골라 주면 사람은 어느
+    온도의 카드인지 모른 채 받는다. `None` 은 미기재 묶음, 숫자는 ±2 K 안의 가장 가까운
+    묶음이다.
+    """
+    same = [
+        one
+        for one in groups
+        if one.test_type.key == test_type_key and one.orientation == orientation
+    ]
+    if not same:
+        return None
+    if isinstance(temperature_k, _AnyTemperature):
+        if len(same) == 1:
+            return same[0]
+        raise AppError(
+            "MNX-STATISTICS-0007",
+            f"온도를 고르세요 — 이 시험 종류 · 방향({orientation})에 시험 온도가 "
+            f"{len(same)}가지입니다. 있는 온도: "
+            + ", ".join(temperature_text(one.temperature_k) for one in same)
+            + ". 온도가 다른 시험은 한 평균 · 대표 곡선 · 카드로 섞지 않습니다.",
+            status=422,
+        )
+    if temperature_k is None:
+        return next((one for one in same if one.temperature_k is None), None)
+    near = [
+        one
+        for one in same
+        if one.temperature_k is not None
+        and abs(one.temperature_k - float(temperature_k)) <= TEMPERATURE_TOLERANCE_K
+    ]
+    if not near:
+        return None
+    return min(
+        near, key=lambda one: abs(float(one.temperature_k or 0.0) - float(temperature_k))
+    )
 
 
 def groups_for_material(
     db: Session, user: object, material_id: uuid.UUID, *, unique: bool = False
 ) -> tuple[Material, list[Group]]:
-    """재료 하나의 묶음들. 방향마다 따로 나온다.
+    """재료 하나의 묶음들. 방향마다, **시험 온도마다** 따로 나온다.
+
+    온도는 시험 조건 `temperature`(K)다. 정렬해 첫 값과 2 K 이내면 한 묶음(`temperature_bins`),
+    미기재는 따로 한 묶음이다 — 온도가 하나뿐이거나 전부 미기재면 전과 같다.
 
     `unique` 면 **같은 지문은 하나로** 센다(2026-11-14, VOC 54) — 채택 결과가 처리한 곡선의 값
     지문(`Curve.fingerprint`)이 앞 시험(먼저 등록한 것)과 같으면 뺀다. 기본은 전처럼 다 센다 —
@@ -124,33 +282,40 @@ def groups_for_material(
     }
 
     groups: list[Group] = []
-    for (type_id, orientation), items in sorted(
+    for (type_id, orientation), bucket in sorted(
         buckets.items(), key=lambda entry: (str(entry[0][0]), entry[0][1])
     ):
-        every = [
-            Member(run=run, result=adopted[run.adopted_result_id], specimen=specimen)
-            for run, specimen in items
-            if run.adopted_result_id and run.adopted_result_id in adopted
-        ]
-        # **보류 중인 시험은 통계 · 카드에 안 들어간다**(VOC 60) — 몇 건 뺐는지는 말한다.
-        members = [one for one in every if holds.usable(one.run)]
         test_type = types.get(type_id)
         if test_type is None:
             continue
-        adopted_count = len(every)
-        kept, doubled = _unique_members(db, members)
-        groups.append(
-            Group(
-                material=material,
-                test_type=test_type,
-                orientation=orientation,
-                members=kept if unique else members,
-                skipped_unadopted=len(items) - adopted_count,
-                duplicates=doubled,
-                unique=unique,
-                held=len(every) - len(members),
+        # **온도마다 따로 묶는다**(2026-11-15). 온도는 채택 여부와 상관없이 시험 전부로
+        # 가른다 — 채택 안 된 시험이 어느 온도에서 빠졌는지도 그 묶음이 센다.
+        for temperature_k, places in temperature_bins(
+            [run_temperature(run) for run, _ in bucket]
+        ):
+            items = [bucket[index] for index in sorted(places)]
+            every = [
+                Member(run=run, result=adopted[run.adopted_result_id], specimen=specimen)
+                for run, specimen in items
+                if run.adopted_result_id and run.adopted_result_id in adopted
+            ]
+            # **보류 중인 시험은 통계 · 카드에 안 들어간다**(VOC 60) — 몇 건 뺐는지는 말한다.
+            members = [one for one in every if holds.usable(one.run)]
+            adopted_count = len(every)
+            kept, doubled = _unique_members(db, members)
+            groups.append(
+                Group(
+                    material=material,
+                    test_type=test_type,
+                    orientation=orientation,
+                    members=kept if unique else members,
+                    skipped_unadopted=len(items) - adopted_count,
+                    duplicates=doubled,
+                    unique=unique,
+                    held=len(every) - len(members),
+                    temperature_k=temperature_k,
+                )
             )
-        )
     return material, groups
 
 
@@ -299,6 +464,35 @@ def setting_warnings(group: Group) -> list[str]:
         for key, values in seen.items()
         if len(values) > 1
     ]
+
+
+def stale_members(db: Session, group: Group) -> list[tuple[Member, list[str]]]:
+    """채택 결과가 **낡은** 구성원과 그 까닭(`shared/result_staleness`) — 옛 치수 · 옛 원본."""
+    found: list[tuple[Member, list[str]]] = []
+    for member in group.members:
+        why = result_staleness.reasons(db, member.run, member.result)
+        if why:
+            found.append((member, why))
+    return found
+
+
+def stale_note(db: Session, group: Group) -> str:
+    """통계 노트 한 줄 — 낡은 채택 결과가 섞였으면. 없으면 빈 글자.
+
+    **빼지 않는다.** 다시 처리할지는 사람이 정한다 — 다만 이 평균의 몇 건이 옛 치수로 낸
+    값인지는 통계 화면에서 보여야 한다(전에는 운영 점검 보고서만 셌다).
+    """
+    found = stale_members(db, group)
+    if not found:
+        return ""
+    names = ", ".join(member.run.record_name for member, _ in found[:3])
+    more = f" 외 {len(found) - 3}건" if len(found) > 3 else ""
+    # 까닭은 첫 시험의 것을 든다 — 시험마다 다른 숫자를 다 적으면 노트가 표가 된다(시험별
+    # 까닭은 그 시험의 「결과」 탭 · 카드 근거 경고에 있다).
+    return (
+        f"채택 결과가 낡은 시험 {len(found)}건이 들어 있습니다({names}{more}) — "
+        f"'{found[0][0].run.record_name}': {found[0][1][0]}"
+    )
 
 
 def sample_warnings(db: Session, group: Group) -> list[str]:

@@ -58,7 +58,11 @@ class EnsembleResult(Base):
     """항목별 n·평균·SD·중앙값·MAD·IQR·min·max·CV·95%CI 와 이상치 후보."""
     curve: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, server_default="{}")
     """평균·중앙값 곡선과 점별 산포. 점 수가 많지 않아(재샘플 뒤) JSONB 로 둔다 —
-    곡선 하나에 Parquet 파일을 만들 만큼 크지 않다."""
+    곡선 하나에 Parquet 파일을 만들 만큼 크지 않다.
+
+    `temperature_k` 도 여기 든다(2026-11-15) — 그 묶음의 시험 온도(K, `null` 은 미기재).
+    온도로 묶음을 가르기 전에 남긴 통계에는 키가 없다(모름). 칸을 새로 내지 않은 것은
+    마이그레이션 없이 근거를 남기려는 것이다."""
     notes: Mapped[list[str]] = mapped_column(JSONB, default=list, server_default="[]")
 
     created_by_id: Mapped[uuid.UUID | None] = mapped_column(

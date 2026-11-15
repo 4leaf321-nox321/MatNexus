@@ -40,6 +40,9 @@ import {
 } from '@/shared/components/ui/select'
 import { useResource } from '@/shared/hooks/useResource'
 
+/** 서버가 낡은 까닭을 싣는 경고 줄의 이름(`shared/result_staleness.LABEL`). */
+const STALE_LABEL = '낡은 결과'
+
 const when = (iso: string) =>
   new Date(iso).toLocaleString('ko-KR', {
     month: 'numeric',
@@ -206,15 +209,23 @@ export function ResultsPanel({ testRunId, onAdoptChange }: Props) {
                       채택됨
                     </Badge>
                   )}
-                  {/* **원본이 바뀐 뒤의 결과가 아니다.** 옛 곡선으로 돈 것 — 결과는
-                      불변이라 지우지 않고 표시만 한다. 다시 돌릴지는 사람이 정한다. */}
+                  {/* **낡은 결과** — 원본을 바꾼 뒤의 결과가 아니거나, 처리할 때 쓴 시편 치수가
+                      지금과 다르다(2026-11-15). 결과는 불변이라 지우지 않고 표시만 한다. 다시
+                      돌릴지는 사람이 정하고, 채택할 때는 확인을 받는다. 까닭은 서버가 경고 줄
+                      (「낡은 결과」)로 준다. */}
                   {item.stale && (
                     <Badge
                       variant="outline"
                       className="border-amber-500/60 text-amber-700 dark:text-amber-400"
-                      title="이 결과를 만든 뒤 원본 파일이 바뀌었습니다. 새 원본으로 다시 돌리세요."
+                      title={
+                        (item.warnings ?? [])
+                          .filter((one) => one.label === STALE_LABEL)
+                          .map((one) => one.message)
+                          .join('\n') ||
+                        '이 결과를 만든 뒤 원본 파일이나 시편 치수가 바뀌었습니다. 다시 처리하세요.'
+                      }
                     >
-                      옛 원본의 결과
+                      낡은 결과
                     </Badge>
                   )}
                   {/* **부분 결과**(2026-10-22) — 실패한 단계가 있었다. 나온 값은 맞지만 다 나오지는
@@ -363,7 +374,7 @@ export function ResultsPanel({ testRunId, onAdoptChange }: Props) {
         예전 결과는 그때의 단계를 그대로 갖고 있습니다. <b>채택</b>은 그중 무엇이
         이 시험의 물성인지를 정하는 것이고, 채택된 값만 요약값 표·통계·내보내기로
         갑니다. 견주려고 돌린 시도는 <b>지울 수 있습니다</b> — 채택된 것과 반복
-        시편 통계의 근거로 실린 것은 지워지지 않습니다.
+        시편 통계 · 묶음(글로벌 피팅)의 근거로 실린 것은 지워지지 않습니다.
       </p>
 
       <ConfirmDialog

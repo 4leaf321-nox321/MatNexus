@@ -34,6 +34,12 @@ import {
 import { DistributionPanel } from '@/modules/statistics/DistributionPanel'
 import { statisticsApi } from '@/modules/statistics/api'
 import type { ScalarStats, StatisticsGroup } from '@/modules/statistics/api'
+import {
+  groupKey,
+  hasTemperatureSiblings,
+  temperatureSuffix,
+  temperatureText,
+} from '@/modules/statistics/temperature'
 import { CurveChart } from '@/modules/tests/CurveChart'
 import { DeclaredGrade } from '@/shared/components/DeclaredGrade'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
@@ -175,7 +181,8 @@ export function PropertiesPanel({
    * 통계가 늦게 온 묶음이 그 판정을 못 받아 늘 접힌 채로 뜬다.
    */
   const [toggled, setToggled] = useState<Record<string, boolean>>({})
-  const keyOf = (one: StatisticsGroup) => `${one.test_type_key}-${one.orientation}`
+  // **온도까지 넣는다**(2026-11-15) — 같은 종류 · 방향에 온도 묶음이 둘이면 펼침 상태가 섞인다.
+  const keyOf = (one: StatisticsGroup) => groupKey(one)
   const isOpen = (one: StatisticsGroup) => toggled[keyOf(one)] ?? speaks(one)
   // 하나라도 펴져 있으면 접는 쪽이 다음 할 일이다.
   const anyOpen = shown.some(isOpen)
@@ -192,8 +199,11 @@ export function PropertiesPanel({
         material_id: materialId,
         test_type_key: group.test_type_key,
         orientation: group.orientation,
+        temperature_k: group.temperature_k ?? null,
       })
-      setSaved(`${group.test_type_label} · ${group.orientation}`)
+      setSaved(
+        `${group.test_type_label} · ${group.orientation}${temperatureSuffix(group.temperature_k)}`
+      )
     } catch (caught) {
       setError(caught instanceof Error ? caught : new Error('남기지 못했습니다.'))
     }
@@ -338,9 +348,10 @@ export function PropertiesPanel({
       <div className="min-h-0 flex-1 space-y-6 overflow-y-auto pr-2">
         {shown.map((group) => (
           <GroupCard
-            key={`${group.test_type_key}-${group.orientation}`}
+            key={groupKey(group)}
             materialId={materialId}
             group={group}
+            siblings={hasTemperatureSiblings(group, groups)}
             onSave={() => save(group)}
             open={isOpen(group)}
             onToggle={() =>
@@ -414,7 +425,13 @@ function PropertySummary({
   for (const group of groups) {
     for (const scalar of group.scalars) {
       push(scalar.label, {
-        where: [group.test_type_label, group.orientation].filter(Boolean).join(' · '),
+        where: [
+          group.test_type_label,
+          group.orientation,
+          group.temperature_k != null ? temperatureText(group.temperature_k) : null,
+        ]
+          .filter(Boolean)
+          .join(' · '),
         stats: scalar,
         kind: '통계',
       })
@@ -638,9 +655,12 @@ function GroupCard({
   onSave,
   open,
   onToggle,
+  siblings = false,
 }: {
   group: StatisticsGroup
   materialId: string
+  /** 같은 종류 · 방향에 **다른 온도의 묶음**이 있나 — 있으면 「온도 미기재」 도 머리에 선다. */
+  siblings?: boolean
   onSave: () => void
   /** **상태를 부모가 든다** — 「전체 접기」 가 그것을 한꺼번에 바꾼다. */
   open: boolean
@@ -672,6 +692,13 @@ function GroupCard({
         <h3 className="font-medium">{group.test_type_label}</h3>
         {/* **방향을 섞지 않는다.** 압연 방향에 따라 물성이 다르다. */}
         <Badge variant="secondary">{group.orientation}</Badge>
+        {/* **시험 온도도 묶음의 열쇠다**(2026-11-15). 온도를 적은 묶음은 늘 보이고, 미기재는 다른
+            온도의 묶음이 곁에 있을 때만 — 전부 미기재인 재료는 전과 같다. */}
+        {(group.temperature_k != null || siblings) && (
+          <Badge variant="outline" title="시험 조건의 온도 — 첫 값과 2 K 안의 시험을 한 묶음으로 봅니다.">
+            {temperatureText(group.temperature_k)}
+          </Badge>
+        )}
         <span className="text-muted-foreground text-sm">채택 {group.sample_count}건</span>
         {group.skipped_unadopted > 0 && (
           <Badge variant="outline" className="text-xs">
@@ -761,6 +788,7 @@ function GroupCard({
             materialId={materialId}
             testTypeKey={group.test_type_key}
             orientation={group.orientation}
+            temperatureK={group.temperature_k ?? null}
           />
         )}
         </div>

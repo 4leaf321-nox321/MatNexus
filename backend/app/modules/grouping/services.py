@@ -116,11 +116,23 @@ _CHOSEN: ContextVar[Mapping[uuid.UUID, uuid.UUID] | None] = ContextVar(
     "grouping_chosen_results", default=None
 )
 
+#: 이 묶음이 시험마다 **실제로 읽은 결과**(시험 id → 결과 id) — `create` 가 모으는 동안만
+#: 둔다(2026-11-15). 구성원 기록의 `result_id` 가 된다: 카드가 E 를 그 결과에서 읽고, 그
+#: 결과는 묶음이 쓰는 동안 못 지운다. 처리 결과를 안 읽는 묶음(마스터커브 · 표로 적은 값만)은
+#: 비어 남는다 — 안 쓴 결과를 쓴 것으로 적으면 지우기 가드가 엉뚱한 결과를 막는다.
+_USED: ContextVar[dict[uuid.UUID, uuid.UUID] | None] = ContextVar(
+    "grouping_used_results", default=None
+)
+
 
 def result_id_of(run: TestRun) -> uuid.UUID | None:
     """이 묶음이 이 시험에서 쓸 결과 — 고른 것이 있으면 그것, 없으면 채택된 것."""
     chosen = _CHOSEN.get() or {}
-    return chosen.get(run.id, run.adopted_result_id)
+    found = chosen.get(run.id, run.adopted_result_id)
+    used = _USED.get()
+    if used is not None and found is not None:
+        used[run.id] = found
+    return found
 
 
 def _check_chosen(
@@ -842,7 +854,9 @@ def create(
     material = _material_of(db, runs)
     chosen = dict(results or {})
     _check_chosen(db, runs, chosen)
+    read: dict[uuid.UUID, uuid.UUID] = {}
     token = _CHOSEN.set(chosen)
+    read_token = _USED.set(read)
     try:
         members = (
             collect(db, runs)
@@ -850,6 +864,7 @@ def create(
             else _declared_members(db, runs, rule or {}, plugin_id)
         )
     finally:
+        _USED.reset(read_token)
         _CHOSEN.reset(token)
 
     try:
@@ -871,6 +886,10 @@ def create(
             {
                 "test_run_id": str(run.id),
                 "label": run.record_name,
+                # **쓴 결과를 늘 남긴다**(2026-11-15) — 카드가 E 를 그 결과에서 읽는다. 전에는
+                # 미채택으로 고른 것만 남겨, 카드가 지금 채택을 읽었다(묶은 뒤 채택을 옮기면
+                # 카드의 E 만 조용히 따라갔다).
+                **({"result_id": str(read[run.id])} if run.id in read else {}),
                 # **채택 대신 고른 결과면 그렇다고 남긴다**(VOC 49) — 카드 · 덱이 「미채택
                 # 결과로 만든 카드」 를 적는다.
                 **(

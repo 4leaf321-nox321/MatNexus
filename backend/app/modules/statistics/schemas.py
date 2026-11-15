@@ -77,11 +77,19 @@ class CurveStatsOut(BaseModel):
 
 
 class GroupOut(BaseModel):
-    """묶음 하나 — **재료 + 시험종류 + 방향.**"""
+    """묶음 하나 — **재료 + 시험종류 + 방향 + 시험 온도.**"""
 
     test_type_key: str
     test_type_label: str
     orientation: str
+    temperature_k: float | None = None
+    """이 묶음의 시험 온도(K, 구성원 중앙값). **`null` 은 미기재**다 — 상온이라고 단정하지
+    않는다.
+
+    2026-11-15: 묶음 열쇠가 (시험 종류, 방향)뿐이라 23 ℃ 5건과 80 ℃ 3건이 한 평균 · 대표
+    곡선 · 카드가 됐다. 시험 조건 `temperature` 로 가르고(첫 값과 2 K 이내면 한 묶음), 그
+    방향에 묶음이 둘 이상이면 카드 · 맞춰 보기 · 분포 요청에 이 값을 `temperature_k` 로 함께
+    보낸다."""
     sample_count: int
     skipped_unadopted: int
     """채택되지 않아 빠진 시험 수. **조용히 빼면 n 이 왜 이 수인지 모른다.**"""
@@ -120,6 +128,9 @@ class EnsembleSaveRequest(BaseModel):
     material_id: uuid.UUID
     test_type_key: str
     orientation: str
+    temperature_k: float | None = None
+    """어느 온도 묶음인가(K, ±2 K 로 맞춘다). **안 보내면** 그 방향의 묶음이 하나일 때만 받고,
+    둘 이상이면 422(`MNX-STATISTICS-0007`). `null` 을 보내면 온도 미기재 묶음이다."""
 
 
 class EnsembleResultOut(BaseModel):
@@ -127,6 +138,8 @@ class EnsembleResultOut(BaseModel):
     material_id: uuid.UUID
     test_type_key: str
     orientation: str
+    temperature_k: float | None = None
+    """그 통계의 시험 온도(K). 미기재 · 온도 구분 전(2026-11-15)에 남긴 것은 `null`."""
     sample_count: int
     test_run_ids: list[uuid.UUID]
     created_at: datetime
@@ -203,6 +216,8 @@ class DistributionReportOut(BaseModel):
     material_id: uuid.UUID
     test_type_key: str
     orientation: str
+    temperature_k: float | None = None
+    """그 묶음의 시험 온도(K). `null` 은 미기재."""
     scalar_key: str
     scalar_label: str
     si_unit: str

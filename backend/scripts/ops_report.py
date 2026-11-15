@@ -51,7 +51,7 @@ from app.database import SessionLocal  # noqa: E402
 from app.modules.fitting.models import ExportProfile, PropertyCard  # noqa: E402
 from app.modules.processing.models import ProcessingResult  # noqa: E402
 from app.modules.tests.models import TestRun, TestType  # noqa: E402
-from app.shared import curvedata, modulus_sanity  # noqa: E402
+from app.shared import modulus_sanity, result_staleness  # noqa: E402
 from matcore import extensions, processing  # noqa: E402
 from matcore.export import template  # noqa: E402
 
@@ -59,8 +59,6 @@ survive_cp949()
 
 #: 한 절에 이름을 적는 건수 — 나머지는 센다.
 LIST_LIMIT = 30
-#: 이만큼 넘게 다르면 「치수가 바뀌었다」 고 본다(상대).
-AREA_TOLERANCE = 1e-6
 #: 처리 경고의 갈래 — 문장의 표지로 센다(`modulus_sanity` · `slopes.concerns`).
 WARNING_KINDS = {
     "재료군 범위 밖": "재료군",
@@ -99,33 +97,18 @@ def reprocess_candidates(db: object) -> tuple[str, list[str]]:
     """채택 결과의 단계가 `@specimen_…` 으로 받은 값이 **지금 이 시험에 주어질 값**과 다른 것.
 
     파일 실측 치수를 채운 시험(`backfill_run_dimensions`) · 시편 치수를 고친 시험이 여기 선다 —
-    채택된 응력 · 탄성률은 옛 치수로 낸 값이다.
+    채택된 응력 · 탄성률은 옛 치수로 낸 값이다. **판정은 `shared/result_staleness` 하나다**
+    (2026-11-15) — 통계 노트 · 카드 근거 경고 · 채택 확인이 같은 함수를 쓴다.
     """
     lines: list[str] = []
     for run, result in _adopted(db):
-        now = {one.key: float(one.value) for one in curvedata.specimen_scalars(db, run)}  # type: ignore[arg-type]
-        changed: list[str] = []
-        for step, stage in zip(result.steps_snapshot or [], result.stages or [], strict=False):
-            for name, given in (step.get("options") or {}).items():
-                if not isinstance(given, str) or not given.startswith(
-                    processing.REFERENCE_PREFIX
-                ):
-                    continue
-                key = given.removeprefix(processing.OPTIONAL_PREFIX).removeprefix(
-                    processing.REFERENCE_PREFIX
-                )
-                used = (stage.get("options") or {}).get(name)
-                if not key.startswith("specimen_") or not isinstance(used, int | float):
-                    continue
-                if key not in now:
-                    continue
-                if abs(now[key] - float(used)) > AREA_TOLERANCE * max(abs(float(used)), 1e-30):
-                    change = (now[key] / float(used) - 1) * 100 if used else float("inf")
-                    changed.append(
-                        f"{key} {float(used):.5g} → {now[key]:.5g}({change:+.2f} %)"
-                    )
+        now = result_staleness.current(db, run)  # type: ignore[arg-type]
+        changed = [
+            f"{one.key} {one.used:.5g} → {one.now:.5g}({one.percent:+.2f} %)"
+            for one in result_staleness.dimension_changes(result, now)
+        ]
         if changed:
-            lines.append(f"  {run.record_name}: {', '.join(dict.fromkeys(changed))}")
+            lines.append(f"  {run.record_name}: {', '.join(changed)}")
     head = (
         f"채택 결과가 쓴 시편 치수가 지금 값과 다른 시험 {len(lines)}건 — "
         "`python scripts/reprocess_adopted.py` 로 무엇이 바뀌는지 본 뒤 `--apply`."

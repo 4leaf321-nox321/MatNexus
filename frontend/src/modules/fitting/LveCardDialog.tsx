@@ -10,6 +10,7 @@ import { useMemo } from 'react'
 import { CardFromDialog } from '@/modules/fitting/CardFromDialog'
 import { fittingApi } from '@/modules/fitting/api'
 import type { PropertyCard } from '@/modules/fitting/api'
+import { temperatureSuffix } from '@/modules/statistics/temperature'
 import type { components } from '@/shared/api/schema'
 import { Badge } from '@/shared/components/ui/badge'
 import { useResource } from '@/shared/hooks/useResource'
@@ -72,11 +73,12 @@ export function LveCardDialog({
             ) : null
           })}
           <li>
-            {group.test_type_label} · {group.orientation} · 채택 {group.sample_count}건
+            {group.test_type_label} · {group.orientation}
+            {temperatureSuffix(group.temperature_k)} · 채택 {group.sample_count}건
           </li>
         </ul>
       }
-      suggestedLabel={`${group.test_type_label} 선형탄성구간(LVE) · ${group.orientation}`}
+      suggestedLabel={`${group.test_type_label} 선형탄성구간(LVE) · ${group.orientation}${temperatureSuffix(group.temperature_k)}`}
       declaredOption={{
         label: '재료 기본 정보 함께 포함',
         help: '재료에 적어 둔 선팽창계수(CTE)·열전도율·비열이 열물성 블록으로 따라옵니다. 저장 탄성률은 잰 값 그대로입니다.',
@@ -104,6 +106,8 @@ export function LveCardDialog({
           material_id: materialId,
           test_type_key: group.test_type_key,
           orientation: group.orientation,
+          // 어느 시험 온도 묶음인가(2026-11-15) — `null` 은 미기재 묶음.
+          temperature_k: group.temperature_k ?? null,
           ...values,
           include_declared: values.include_declared ?? false,
         })

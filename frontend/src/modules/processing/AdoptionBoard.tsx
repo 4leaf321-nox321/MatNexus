@@ -86,7 +86,8 @@ function resultName(result: ResultBrief): string {
   if ((result.failures?.length ?? 0) > 0) parts.push(`부분 결과(실패 ${result.failures?.length})`)
   // 사람이 확인할 경고가 있는 결과 — 채택할 때 확인을 받는다(2026-11-14).
   if ((result.warnings?.length ?? 0) > 0) parts.push(`경고 ${result.warnings?.length}`)
-  if (result.stale) parts.push('옛 원본')
+  // 원본 교체 뒤 · 옛 시편 치수로 낸 결과(2026-11-15) — 까닭은 경고 줄에 있고, 채택은 확인을 받는다.
+  if (result.stale) parts.push('낡은 결과')
   if (result.is_adopted) parts.push('지금 채택')
   return parts.join(' · ')
 }

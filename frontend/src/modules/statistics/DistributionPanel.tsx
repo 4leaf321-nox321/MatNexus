@@ -72,10 +72,13 @@ export function DistributionPanel({
   materialId,
   testTypeKey,
   orientation,
+  temperatureK,
 }: {
   materialId: string
   testTypeKey: string
   orientation: string
+  /** 묶음의 시험 온도(K, `null` 은 미기재) — 묶음이 온도로도 갈린다(2026-11-15). */
+  temperatureK?: number | null
 }) {
   const [keys, setKeys] = useState<{ key: string; label: string; count: number }[]>([])
   const [chosen, setChosen] = useState<string | null>(null)
@@ -91,17 +94,17 @@ export function DistributionPanel({
     setChosen(null)
     setReport(null)
     setError(null)
-  }, [materialId, testTypeKey, orientation])
+  }, [materialId, testTypeKey, orientation, temperatureK])
 
   useEffect(() => {
     if (!open || keys.length > 0) return
     statisticsApi
-      .distributable(materialId, testTypeKey, orientation)
+      .distributable(materialId, testTypeKey, orientation, temperatureK)
       .then((rows) => setKeys(rows.map((r) => ({ key: r.key, label: r.label, count: r.count }))))
       .catch((caught: unknown) =>
         setError(caught instanceof Error ? caught : new Error('항목을 읽지 못했습니다.'))
       )
-  }, [open, keys.length, materialId, testTypeKey, orientation])
+  }, [open, keys.length, materialId, testTypeKey, orientation, temperatureK])
 
   async function run(key: string) {
     setChosen(key)
@@ -109,7 +112,16 @@ export function DistributionPanel({
     setError(null)
     setReport(null)
     try {
-      setReport(await statisticsApi.distributions(materialId, testTypeKey, orientation, key))
+      setReport(
+        await statisticsApi.distributions(
+          materialId,
+          testTypeKey,
+          orientation,
+          key,
+          undefined,
+          temperatureK
+        )
+      )
     } catch (caught) {
       setError(caught instanceof Error ? caught : new Error('분포를 맞추지 못했습니다.'))
     } finally {

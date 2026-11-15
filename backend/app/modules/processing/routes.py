@@ -30,6 +30,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.modules.accounts.models import User
 from app.modules.formulas.models import Formula
+from app.modules.grouping.models import GroupResult
 from app.modules.materials.models import Material, Sample, Specimen
 from app.modules.processing.models import (
     ProcessingRecipe,
@@ -82,6 +83,7 @@ from app.shared import (
     holds,
     modulus_sanity,
     permissions,
+    result_staleness,
     revision,
     specimen_size,
     steward_notice,
@@ -796,6 +798,28 @@ def _require_result_removal(
     permissions.require_edit(db, user, run, code="MNX-PROCESSING-0015")
 
 
+def _refuse_grouped(db: Session, item: ProcessingResult) -> None:
+    """**묶음이 쓰는 결과는 못 지운다**(2026-11-15) — 반복 시편 통계와 같은 판단.
+
+    묶음(글로벌 피팅)은 구성원마다 쓴 결과를 `members[].result_id` 로 든다 — 미채택 결과로
+    묶은 것도(VOC 49). FK 가 아니라 JSONB 라 의존성 레지스트리가 못 잡고, 전에는 반복 시편
+    통계만 봐서 미채택으로 고른 결과를 지울 수 있었다 — 그러면 묶음 값 · 카드의 근거가
+    사라진다.
+    """
+    used = db.scalar(
+        select(func.count())
+        .select_from(GroupResult)
+        .where(GroupResult.members.contains([{"result_id": str(item.id)}]))
+    )
+    if used:
+        raise Conflict(
+            "MNX-PROCESSING-0024",
+            f"묶음 {used}건이 이 결과를 근거로 쓰고 있어 지울 수 없습니다 — 지우면 그 "
+            f"묶음 값과 거기서 만든 카드가 무엇으로 나왔는지 알 수 없게 됩니다. 묶음을 먼저 "
+            f"지우세요.",
+        )
+
+
 def _jsonable(options: dict[str, Any]) -> dict[str, Any]:
     """numpy 스칼라를 파이썬 값으로. JSONB 가 numpy 를 모른다."""
     return {
@@ -804,18 +828,33 @@ def _jsonable(options: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _stale(item: ProcessingResult, run: TestRun) -> bool:
-    """원본을 바꾼 뒤에 만든 결과가 아니면 옛 곡선의 것이다."""
-    return run.source_replaced_at is not None and item.created_at < run.source_replaced_at
+def _staleness(
+    db: Session,
+    run: TestRun,
+    item: ProcessingResult,
+    now: result_staleness.Current | None = None,
+) -> list[dict[str, str]]:
+    """이 결과가 **낡은** 까닭을 경고 줄 모양으로(`shared/result_staleness`) — 원본 교체 뒤 ·
+    처리할 때 쓴 시편 치수가 지금과 다름(2026-11-15). 없으면 빈 것.
+
+    전에는 `stale` 이 원본 교체만 봤다. 시편 · 시험 치수 · 규격 공칭 · 재료 스펙 두께를 고친
+    뒤에도 옛 치수로 낸 결과가 낡았다는 말 없이 채택됐다(운영 점검 보고서 1절만 셌다).
+    """
+    return result_staleness.warnings(db, run, item, now=now)
 
 
 def _result_out(
-    item: ProcessingResult, *, adopted: bool = False, stale: bool = False
+    item: ProcessingResult,
+    *,
+    adopted: bool = False,
+    stale: list[dict[str, str]] | None = None,
 ) -> ProcessingResultOut:
+    """응답 모양. `stale` 은 낡은 까닭(`_staleness`) — **경고 목록 끝에 함께 싣는다**: 채택
+    확인 대화가 경고를 보이는 자리라, 따로 두면 화면이 낡은 까닭을 못 보인 채 확인을 받는다."""
     return ProcessingResultOut(
         id=item.id,
         is_adopted=adopted,
-        stale=stale,
+        stale=bool(stale),
         test_run_id=item.test_run_id,
         source_curve_key=item.source_curve_key,
         recipe_key=item.recipe_key,
@@ -851,7 +890,7 @@ def _result_out(
             for s in item.scalars
         ],
         failures=_stored_failures(item.failures),
-        warnings=_warning_out(item.warnings),
+        warnings=_warning_out([*(item.warnings or []), *(stale or [])]),
         row_count=item.row_count,
         columns=item.columns,
         runtime={str(k): str(v) for k, v in (item.runtime or {}).items()},
@@ -871,8 +910,14 @@ def list_results(
         .where(ProcessingResult.test_run_id == run.id)
         .order_by(ProcessingResult.created_at.desc())
     )
+    # 지금 치수는 시험 하나에 한 번 읽는다 — 결과마다 읽으면 결과 수만큼 같은 질의를 한다.
+    now = result_staleness.current(db, run)
     return [
-        _result_out(item, adopted=item.id == run.adopted_result_id, stale=_stale(item, run))
+        _result_out(
+            item,
+            adopted=item.id == run.adopted_result_id,
+            stale=_staleness(db, run, item, now),
+        )
         for item in items
     ]
 
@@ -1171,7 +1216,8 @@ def adopt(
     앞의 것은 시도 목록에 그대로 남는다(지워지지 않는다).
 
     **경고가 있으면 확인을 받는다**(2026-11-14, VOC 53~58) — `confirm_warnings` 없이 부르면
-    409 와 함께 무엇을 확인할지 돌려준다. 사람과 AI 에 같은 규칙이다.
+    409 와 함께 무엇을 확인할지 돌려준다. 사람과 AI 에 같은 규칙이다. **낡은 결과**(원본
+    교체 뒤 · 옛 시편 치수로 낸 것, 2026-11-15)도 같은 확인을 받는다.
     """
     item = db.get(ProcessingResult, result_id)
     if item is None:
@@ -1184,21 +1230,30 @@ def adopt(
     # 푼다.
     holds.require_usable(run, code="MNX-PROCESSING-0021")
     _require_adoptable(item)
-    _require_confirmed(item, confirm_warnings)
+    stale = _staleness(db, run, item)
+    _require_confirmed(item, confirm_warnings, stale)
     run.adopted_result_id = item.id
     _project_summaries(db, run, item)
     db.commit()
     db.refresh(item)
-    return _result_out(item, adopted=True, stale=_stale(item, run))
+    return _result_out(item, adopted=True, stale=stale)
 
 
-def _require_confirmed(item: ProcessingResult, confirmed: bool) -> None:
-    """경고가 있는 결과는 **본 사람이** 채택한다 — 한 건 · 여러 건이 같은 판정."""
-    if item.warnings and not confirmed:
+def _require_confirmed(
+    item: ProcessingResult, confirmed: bool, stale: list[dict[str, str]] | None = None
+) -> None:
+    """경고가 있는 결과 · **낡은 결과**는 본 사람이 채택한다 — 한 건 · 여러 건이 같은 판정.
+
+    낡은 까닭(`stale`)은 결과에 저장된 경고가 아니라 지금 견준 것이다 — 결과는 불변이고 치수 ·
+    원본은 나중에 바뀐다. 확인은 같은 `confirm_warnings` 로 받는다(화면 · MCP 가 이미 그 꼴로
+    확인을 묻는다).
+    """
+    rows = [*(item.warnings or []), *(stale or [])]
+    if rows and not confirmed:
         raise Conflict(
             "MNX-PROCESSING-0020",
-            f"이 결과에는 확인할 경고가 {len(item.warnings)}건 있습니다 — "
-            f"{_warning_text(item.warnings)}. 보고 나서 채택을 확인하세요.",
+            f"이 결과에는 확인할 경고가 {len(rows)}건 있습니다 — "
+            f"{_warning_text(rows)}. 보고 나서 채택을 확인하세요.",
         )
 
 
@@ -1516,6 +1571,7 @@ def delete_result(
             f"지우면 그 평균이 무엇으로 나왔는지 알 수 없게 됩니다. "
             f"묶음을 먼저 지우거나 다시 내세요.",
         )
+    _refuse_grouped(db, item)
 
     audit.record(
         db,
@@ -1637,6 +1693,7 @@ def undo_batch(
                     "MNX-PROCESSING-0014",
                     f"반복 시편 통계 {used}건이 이 결과를 근거로 싣고 있어 지울 수 없습니다.",
                 )
+            _refuse_grouped(db, item)
 
             restored = False
             if run.adopted_result_id == item.id:
@@ -2014,7 +2071,10 @@ def run_batch(
 # 스무 번 부르는 것이 화면 쪽의 N+1 이다.
 
 
-def _brief(item: ProcessingResult, run: TestRun) -> ResultBriefOut:
+def _brief(
+    item: ProcessingResult, run: TestRun, stale: list[dict[str, str]] | None = None
+) -> ResultBriefOut:
+    """견주는 화면의 한 줄. `stale` 은 낡은 까닭(`_staleness`) — 경고 끝에 함께 싣는다."""
     return ResultBriefOut(
         id=item.id,
         created_at=item.created_at,
@@ -2023,11 +2083,11 @@ def _brief(item: ProcessingResult, run: TestRun) -> ResultBriefOut:
         step_count=len(item.steps_snapshot or []),
         row_count=item.row_count,
         has_true_stress="stress_true" in (item.columns or []),
-        stale=_stale(item, run),
+        stale=bool(stale),
         is_adopted=item.id == run.adopted_result_id,
         scalars=_batch_scalars(item.scalars),
         failures=_stored_failures(item.failures),
-        warnings=_warning_out(item.warnings),
+        warnings=_warning_out([*(item.warnings or []), *(stale or [])]),
     )
 
 
@@ -2076,6 +2136,13 @@ def overview(
         for curve in db.scalars(select(Curve).where(Curve.test_run_id.in_(list(runs)))):
             curve_rows.setdefault(curve.test_run_id, []).append(curve)
     book = AccessBook(db, user).prime(runs.values())
+    # 지금 치수는 시험마다 한 번 — 결과가 열이어도 같은 시험이면 한 번 읽는다.
+    nows: dict[uuid.UUID, result_staleness.Current] = {}
+
+    def now_of(run: TestRun) -> result_staleness.Current:
+        if run.id not in nows:
+            nows[run.id] = result_staleness.current(db, run)
+        return nows[run.id]
 
     out: list[RunOverviewOut] = []
     for run_id in asked:
@@ -2108,7 +2175,10 @@ def overview(
                     )
                     for curve in sorted(curve_rows.get(run.id, []), key=curvedata.curve_order)
                 ],
-                results=[_brief(item, run) for item in results.get(run.id, [])],
+                results=[
+                    _brief(item, run, _staleness(db, run, item, now_of(run)))
+                    for item in results.get(run.id, [])
+                ],
             )
         )
     return out
@@ -2257,7 +2327,9 @@ def adopt_many(
                 # 되돌리기(옛 채택으로 돌려보내기)도 이 길이라 같은 판정을 받는다 — 옛 채택이
                 # 경고 기능 전의 것일 수 있다. 화면의 「되돌리기」 는 사람이 누른 복원이라
                 # 확인으로 보낸다.
-                _require_confirmed(target, payload.confirm_warnings)
+                _require_confirmed(
+                    target, payload.confirm_warnings, _staleness(db, run, target)
+                )
             run.adopted_result_id = target.id if target else None
             _project_summaries(db, run, target)
             db.commit()

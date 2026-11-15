@@ -253,8 +253,10 @@ class ProcessingResultOut(BaseModel):
     is_adopted: bool = False
     """**이 시험의 물성으로 삼은 것인가.** 시험당 하나뿐이다(ADR 0007)."""
     stale: bool = False
-    """**원본이 바뀐 뒤의 결과가 아니다.** 시험의 원본 파일을 바꾼 시각보다 먼저
-    만든 결과 — 옛 곡선으로 돈 것이다. 결과 행은 불변이라 표시만 한다."""
+    """**낡은 결과다** — 시험의 원본 파일을 바꾼 시각보다 먼저 만들었거나(옛 곡선으로 돈
+    것), **결과가 쓴 시편 치수가 지금과 다르다**(시편 · 시험 치수, 규격 공칭, 재료 스펙 두께를
+    고친 뒤 · 2026-11-15). 까닭은 `warnings` 에 「낡은 결과」 로 실리고, 채택하려면 확인이
+    필요하다. 결과 행은 불변이라 표시만 한다."""
     test_run_id: uuid.UUID
     source_curve_key: str
     recipe_key: str | None
@@ -515,7 +517,8 @@ class ResultBriefOut(BaseModel):
     has_true_stress: bool
     """진응력 열이 있나 — 없으면 이 결과로는 CAE 카드를 못 만든다(결과 탭과 같은 말)."""
     stale: bool
-    """원본을 바꾸기 전의 결과인가."""
+    """낡은 결과인가 — 원본을 바꾸기 전이거나 쓴 시편 치수가 지금과 다르다
+    (`ProcessingResultOut`)."""
     is_adopted: bool
     scalars: list[ProcessingScalarOut]
     failures: list[StepFailureOut] = []

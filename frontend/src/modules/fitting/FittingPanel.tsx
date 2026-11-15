@@ -54,6 +54,13 @@ import type {
 } from '@/modules/fitting/api'
 import { statisticsApi } from '@/modules/statistics/api'
 import type { StatisticsGroup } from '@/modules/statistics/api'
+import {
+  groupKey,
+  hasTemperatureSiblings,
+  sameGroup,
+  temperatureSuffix,
+  temperatureText,
+} from '@/modules/statistics/temperature'
 import { CurveChart } from '@/modules/tests/CurveChart'
 import { ApiError } from '@/shared/api/client'
 import { CreatedOn } from '@/shared/components/CreatedOn'
@@ -101,6 +108,8 @@ interface GroupKey {
   /** 이 묶음의 곡선에 맞출 수 있는 식이 담기는 블록 — 단추 이름의 근거. */
   fit_blocks: string[]
   orientation: string
+  /** 묶음의 시험 온도(K, `null` 은 미기재) — 묶음은 종류 · 방향 · 온도다(2026-11-15). 요청에 싣는다. */
+  temperature_k: number | null
   sample_count: number
 }
 
@@ -245,6 +254,7 @@ export function FittingPanel({ materialId }: Props) {
       test_type_key: item.test_type_key,
       test_type_label: item.test_type_label,
       orientation: item.orientation,
+      temperature_k: item.temperature_k ?? null,
       sample_count: item.sample_count,
       // 옛 응답(칸이 없음)은 된다고 본다 — 서버가 늘 보내므로 실제로는 안 걸린다.
       fittable: item.fittable ?? true,
@@ -258,7 +268,19 @@ export function FittingPanel({ materialId }: Props) {
   const fitButtons = fittableGroups.flatMap((item) =>
     item.fit_blocks.map((block) => ({ item, block }))
   )
-  const blockCount = (block: string) => fitButtons.filter((one) => one.block === block).length
+  /**
+   * 단추 꼬리 — 같은 블록의 단추가 여럿일 때 **무엇이 갈리는지만** 붙인다. 방향이 갈리면 방향,
+   * 같은 종류 · 방향에 온도 묶음이 둘 이상이면 온도(2026-11-15). 하나뿐이면 전과 같다.
+   */
+  const fitSuffix = (item: GroupKey, block: string) => {
+    const same = fitButtons.filter((one) => one.block === block).map((one) => one.item)
+    const orientations = new Set(same.map((one) => one.orientation))
+    const parts = [
+      orientations.size > 1 ? item.orientation : null,
+      hasTemperatureSiblings(item, same) ? temperatureText(item.temperature_k) : null,
+    ].filter(Boolean)
+    return parts.length > 0 ? ` · ${parts.join(' · ')}` : ''
+  }
   // 선형탄성구간(LVE) 길 — 선형 한계 변형률을 낸 DMA 묶음.
   const lveGroups = (stats.data?.groups ?? []).filter(
     (item) => item.sample_count >= 1 && hasLve(item)
@@ -306,7 +328,7 @@ export function FittingPanel({ materialId }: Props) {
   useEffect(() => {
     setUsedRuns(null)
     asked.current += 1
-  }, [group?.test_type_key, group?.orientation, materialId])
+  }, [group?.test_type_key, group?.orientation, group?.temperature_k, materialId])
 
   useEffect(() => {
     if (!group && fittableGroups.length > 0) setGroup(fittableGroups[0])
@@ -325,6 +347,8 @@ export function FittingPanel({ materialId }: Props) {
         material_id: materialId,
         test_type_key: target.test_type_key,
         orientation: target.orientation,
+        // **어느 온도 묶음인가**(2026-11-15). `null` 은 미기재 묶음 — 서버가 그대로 고른다.
+        temperature_k: target.temperature_k,
         // 연 단추의 블록에 담기는 식만 — 비우면 이 묶음의 열에 맞는 식 전부를 견준다.
         families: familiesOf(fitBlock),
         // **저장하고 나서야 알면 늦다.** 뺀 것과 안 뺀 것의 적합이 어떻게
@@ -386,11 +410,7 @@ export function FittingPanel({ materialId }: Props) {
    * 정하면 나머지의 뒤쪽이 통째로 잘린다 — 빼는 것은 여기서 사람이 정한다.
    */
   const runChoices: RunChoice[] = useMemo(() => {
-    const found = (stats.data?.groups ?? []).find(
-      (item) =>
-        item.test_type_key === group?.test_type_key &&
-        item.orientation === group?.orientation
-    )
+    const found = (stats.data?.groups ?? []).find((item) => sameGroup(item, group))
     if (!found) return []
     const flagged = new Map<string, string[]>()
     for (const scalar of found.scalars ?? []) {
@@ -408,7 +428,7 @@ export function FittingPanel({ materialId }: Props) {
       name: found.record_names?.[at] ?? String(id),
       flags: flagged.get(String(id)) ?? [],
     }))
-  }, [stats.data, group?.test_type_key, group?.orientation, preview?.short_runs])
+  }, [stats.data, group, preview?.short_runs])
 
   // 묶음도 없고 카드도 없다 — 무엇을 하라고 할지가 갈리는 자리다.
   const nothing = !stats.loading && groups.length === 0 && cardRows.length === 0
@@ -445,7 +465,7 @@ export function FittingPanel({ materialId }: Props) {
           const label = kindLabel(block, blockSpecs.data ?? [])
           return (
             <Button
-              key={`${block}-${item.test_type_key}-${item.orientation}`}
+              key={`${block}-${groupKey(item)}`}
               size="sm"
               variant="outline"
               onClick={() => {
@@ -466,13 +486,13 @@ export function FittingPanel({ materialId }: Props) {
             >
               <FileDown className="size-3.5" />
               {label} 카드
-              {blockCount(block) > 1 && ` · ${item.orientation}`}
+              {fitSuffix(item, block)}
             </Button>
           )
         })}
         {lveGroups.map((item) => (
           <Button
-            key={`${item.test_type_key}-${item.orientation}`}
+            key={groupKey(item)}
             size="sm"
             variant="outline"
             onClick={() => setLveFor(item)}
@@ -480,6 +500,7 @@ export function FittingPanel({ materialId }: Props) {
           >
             <FileDown className="size-3.5" />
             선형탄성구간(LVE) 카드 · {item.orientation}
+            {hasTemperatureSiblings(item, lveGroups) && ` · ${temperatureText(item.temperature_k)}`}
           </Button>
         ))}
         {groupWays.map((way) => (
@@ -617,10 +638,8 @@ export function FittingPanel({ materialId }: Props) {
                 {fittableGroups
                   .filter((item) => !fitBlock || item.fit_blocks.includes(fitBlock))
                   .map((item) => {
-                  const key = `${item.test_type_key}-${item.orientation}`
-                  const active =
-                    group?.test_type_key === item.test_type_key &&
-                    group?.orientation === item.orientation
+                  const key = groupKey(item)
+                  const active = sameGroup(group, item)
                   return (
                     <Button
                       key={key}
@@ -633,6 +652,8 @@ export function FittingPanel({ materialId }: Props) {
                       }}
                     >
                       {item.test_type_label} · {item.orientation}
+                      {hasTemperatureSiblings(item, fittableGroups) &&
+                        ` · ${temperatureText(item.temperature_k)}`}
                       <span className="opacity-70">n={item.sample_count}</span>
                     </Button>
                   )
@@ -1393,8 +1414,11 @@ function CardList({
                 </span>
               ) : (
                 <>
-                  {card.test_type_key} · {card.orientation} · 시편{' '}
-                  {String(card.source.sample_count ?? '?')}개 · {card.point_count}점
+                  {card.test_type_key} · {card.orientation}
+                  {/* 어느 시험 온도의 카드인가(2026-11-15) — 근거에 적힌 것만. */}
+                  {typeof card.source.temperature_k === 'number' &&
+                    ` · ${temperatureText(card.source.temperature_k)}`}{' '}
+                  · 시편 {String(card.source.sample_count ?? '?')}개 · {card.point_count}점
                 </>
               )}
             </span>
@@ -1627,8 +1651,9 @@ function SaveDialog({
   useEffect(() => {
     // **이름에 기준을 붙여 둔다** — 「인장 MD」 두 장이 평균과 하한이면 목록에서 못 가른다.
     if (open)
+      // **시험 온도도 이름에**(2026-11-15) — 「인장시험 MD · 80 °C」. 미기재면 안 붙인다.
       setLabel(
-        `${group.test_type_label} ${group.orientation}${basisSuffix(basis ?? { kind: 'mean' })}`
+        `${group.test_type_label} ${group.orientation}${temperatureSuffix(group.temperature_k)}${basisSuffix(basis ?? { kind: 'mean' })}`
       )
   }, [open, group, basis])
   // **열 때 앞 카드의 값을 비운다**(2026-11-15 전반 점검). 이 창은 묶음이 있는 동안 계속 살아
@@ -1640,7 +1665,7 @@ function SaveDialog({
     setDensity('')
     setNote('')
     setError(null)
-  }, [open, group.test_type_key, group.orientation, block])
+  }, [open, group.test_type_key, group.orientation, group.temperature_k, block])
 
   async function submit() {
     setBusy(true)
@@ -1650,6 +1675,7 @@ function SaveDialog({
         material_id: materialId,
         test_type_key: group.test_type_key,
         orientation: group.orientation,
+        temperature_k: group.temperature_k,
         label,
         family,
         // 비우면 채택된 전부. 뺀 것이 있으면 그 사실이 카드 근거에 남는다.

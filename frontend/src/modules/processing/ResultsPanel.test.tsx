@@ -296,3 +296,26 @@ describe('경고가 있는 결과', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 })
+
+describe('낡은 결과 (2026-11-15)', () => {
+  // 옛 시편 치수 · 옛 원본으로 낸 결과 — 서버가 까닭을 「낡은 결과」 경고 줄로 싣고, 채택은 같은
+  // 확인을 받는다. 전에는 표지가 원본 교체만 말했다(치수를 고친 뒤의 결과도 「옛 원본」 으로 읽혔다).
+  it('「낡은 결과」 표지에 까닭이 서고, 채택은 확인을 거친다', async () => {
+    const { processingApi } = await import('@/modules/processing/api')
+    const why = '처리할 때 쓴 시편 치수가 지금 값과 다릅니다 — 시편 초기 단면적 12.5 mm2 → 15 mm2(+20.00 %).'
+    results.mockResolvedValue([
+      { ...RESULT, stale: true, warnings: [{ source: 'test', label: '낡은 결과', message: why }] },
+    ])
+    const user = userEvent.setup()
+    render(<ResultsPanel testRunId="run-1" />)
+    const badge = await screen.findByText('낡은 결과')
+    expect(badge).toHaveAttribute('title', why)
+
+    await user.click(screen.getByRole('button', { name: /채택/ }))
+    const dialog = within(await screen.findByRole('dialog'))
+    expect(dialog.getByText(/시편 초기 단면적/)).toBeInTheDocument()
+    expect(processingApi.adopt).not.toHaveBeenCalled()
+    await user.click(dialog.getByRole('button', { name: '확인하고 채택' }))
+    await waitFor(() => expect(processingApi.adopt).toHaveBeenCalledWith('r1', true))
+  })
+})
