@@ -27,6 +27,8 @@ from __future__ import annotations
 
 import base64
 import binascii
+import contextvars
+import functools
 import io
 import json
 import os
@@ -141,15 +143,56 @@ async def _report_call(ctx: Context, tool: str, ok: bool, elapsed_ms: int) -> No
 
 _register_tool = mcp.tool
 
+#: 이 도구 호출에서 **이름이 정확히 같지 않은 것으로** 본 대상들 — `_noting` 이 답에 붙인다.
+_RESOLVED: contextvars.ContextVar[list[dict[str, Any]] | None] = contextvars.ContextVar(
+    "matnexus_resolved", default=None
+)
+
+
+def _with_resolution(result: Any, notes: list[dict[str, Any]]) -> Any:
+    """답에 「무엇을 무엇으로 봤나」 를 붙인다 — `resolved_from`(받은 글자) · `matched`(본 대상).
+
+    여럿이면 목록이다. 도구가 이미 같은 이름의 칸을 쓰면 `resolution` 한 칸에 담는다.
+    """
+    if not notes or not isinstance(result, dict):
+        return result
+    one = len(notes) == 1
+    said = {
+        "resolved_from": notes[0]["resolved_from"] if one else [n["resolved_from"] for n in notes],
+        "matched": notes[0]["matched"] if one else [n["matched"] for n in notes],
+    }
+    if "resolved_from" in result or "matched" in result:
+        return {"resolution": said, **result}
+    return {**said, **result}
+
+
+def _noting(fn: Any) -> Any:
+    """도구 하나의 호출 동안 이름 해소의 메모를 모았다가 답에 붙인다(2026-11-15 전반 점검).
+
+    해소 함수(`_resolve_material` · `_resolve_run`)는 id 문자열만 돌려주므로 도구마다 답을 고치지
+    않고 여기서 한 번에 붙인다 — 새 도구도 빠지지 않는다."""
+
+    @functools.wraps(fn)
+    async def wrapper(*args: Any, **kwargs: Any) -> Any:
+        token = _RESOLVED.set([])
+        try:
+            result = await fn(*args, **kwargs)
+            notes = list(_RESOLVED.get() or [])
+        finally:
+            _RESOLVED.reset(token)
+        return _with_resolution(result, notes)
+
+    return wrapper
+
 
 def _counted_tool(*args: Any, **kwargs: Any) -> Any:
     """`@mcp.tool()` 과 같되 **도구가 끝날 때마다 센다.** 도구를 하나하나 고치지 않는다 —
-    새 도구도 이 데코레이터로 등록되므로 빠지지 않는다."""
+    새 도구도 이 데코레이터로 등록되므로 빠지지 않는다. 이름 해소의 메모(`_noting`)도 여기서 단다."""
     register = _register_tool(*args, **kwargs)
 
     def decorate(fn: Any) -> Any:
         return register(
-            usage_report.counted(fn, _report_call, lambda one: isinstance(one, Context))
+            usage_report.counted(_noting(fn), _report_call, lambda one: isinstance(one, Context))
         )
 
     return decorate
@@ -432,6 +475,40 @@ def _declared_value(row: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _basic_value(
+    field: str, value: Any, unit: Any, sources: Any, *, note: str | None = None
+) -> dict[str, Any]:
+    """재료 기본 칸(밀도 · 푸아송비) 하나 → **근거가 붙은 값** — 선언 물성(`_declared_value`)과 같은 꼴.
+
+    서버는 칸의 근거를 `column_sources` 에 준다(출처 · 근거 문서 · 받아 온 문헌 등급, VOC 50). 전에는
+    그것을 버리고 `declared:material` 만 붙여, 문헌 등급 4(추정)의 밀도가 등급 없이 나갔다(2026-11-15
+    전반 점검). 근거가 없으면 「출처 모름」 이다 — 카드는 그 값을 재료 공칭(등급 3)으로 본다.
+    """
+    row = sources.get(field) if isinstance(sources, dict) else None
+    source = str(row.get("source") or "") if isinstance(row, dict) else ""
+    out: dict[str, Any] = {"value": value, "unit": unit}
+    caveats: list[str] = []
+    if isinstance(row, dict) and source:
+        tier = row.get("catalog_tier")
+        out["origin"] = f"declared:{source}" + (f"+catalog{tier}" if tier is not None else "")
+        out["source_document"] = row.get("reference") or None
+        if tier is not None:
+            out["catalog_tier"] = tier
+        # 받아 온 문헌 등급이 있으면 그것이 등급이다(출처보다 먼저 — 백엔드 `tiers.declared_tier`).
+        if tier == 4 or (tier is None and source == "estimate"):
+            caveats.append("tier 4 — 계산·추정·가정이다. 실측이 아니다")
+        if source == "millsheet":
+            caveats.append("밀시트 — 그 로트의 값이다")
+    else:
+        out["origin"] = "declared:material"
+        out["source_document"] = None
+        caveats.append("출처 모름 — 재료 칸에 적힌 값이고 근거가 남아 있지 않다")
+    if note:
+        caveats.append(note)
+    out["caveat"] = " · ".join(caveats)
+    return out
+
+
 def _source_warnings(card: dict[str, Any]) -> list[str]:
     """카드 근거의 말 전부 — 지을 때 남긴 노트와 **근거 시험의 경고**(처리 경고 · 시편마다 다른
     속도, `source.warnings`). 확정 미리보기가 노트만 실어, 사람은 경고 없는 카드로 보고 확정했다
@@ -617,68 +694,176 @@ def _looks_like_uuid(value: str) -> bool:
     return True
 
 
-async def _resolve_material(ctx: Context, material_id: str) -> str | dict[str, Any]:
-    """재료 식별자 — **이름·번호를 줘도 받아 준다.**
+#: 번호 꼴 — 재료 `M` · 시료 `S` · 시편 `P` · 시험 `T` · 카드 `C`. `M-000123` · `M-123` · `m123` 은
+#: 같은 번호다(백엔드 `shared/codes.py` 와 같은 꼴).
+_CODE_SHAPE = re.compile(r"([MSPTCmsptc])-?(\d{1,6})")
+
+#: 이름 해소가 포함 검색에 **하나만 걸린 것**으로 봤을 때 답의 `matched` 에 다는 말.
+_NEAR_NOTE = (
+    "이름이 정확히 같지 않다 — 포함 검색에 이것 하나만 걸려 이것으로 봤다. "
+    "사람에게 이 대상으로 봤다고 함께 말해라"
+)
+
+#: 해소가 검색에서 받아 보는 줄 수 · 후보로 돌려주는 줄 수. 정확히 같은 것이 검색 순서의 앞 다섯
+#: 밖에 서면 「여럿」 으로 되물었다 — 받아 보는 것은 넉넉히, 돌려주는 것은 짧게.
+_RESOLVE_LIMIT = 20
+_RESOLVE_SHOWN = 10
+
+
+def _code_form(text: str) -> str | None:
+    """번호 꼴이면 맞춘 꼴(`M-000123`), 아니면 `None`."""
+    shape = _CODE_SHAPE.fullmatch(str(text).strip())
+    return f"{shape.group(1).upper()}-{int(shape.group(2)):06d}" if shape else None
+
+
+def _exact_rows(
+    asked: str, rows: list[dict[str, Any]], fields: tuple[str, ...]
+) -> list[dict[str, Any]]:
+    """이름 · 별칭(`fields`) · 번호가 **정확히 같은** 줄 — 대소문자 · 앞뒤 공백만 무시한다."""
+    needle = str(asked).strip().casefold()
+    code = _code_form(asked)
+    if not needle:
+        return []
+    return [
+        one
+        for one in rows
+        if (code is not None and str(one.get("code") or "").upper() == code)
+        or any(str(one.get(key) or "").strip().casefold() == needle for key in fields)
+    ]
+
+
+def _name_choice(
+    asked: str, rows: list[dict[str, Any]], fields: tuple[str, ...], *, write: bool
+) -> tuple[str, list[dict[str, Any]]]:
+    """포함 검색이 준 줄에서 고른다 → (판정, 줄).
+
+        exact   이름 · 별칭 · 번호가 정확히 같은 것 하나 — 그것으로 본다
+        near    정확히 같은 것은 없고 걸린 것이 하나 — **읽기만** 그것으로 보고 메모를 단다
+        ask     후보로 되묻는다 — 여럿이거나, **쓰기인데 정확히 같지 않다**
+        none    걸린 것이 없다
+
+    전에는 포함 검색에 하나만 걸리면 이름을 안 견주고 그것으로 봤다 — 「SUS304」 에
+    `SUS304L 0.5t` 하나만 걸리면 묻지 않고 그 재료에 적었다(2026-11-15 전반 점검).
+    """
+    exact = _exact_rows(asked, rows, fields)
+    if len(exact) == 1:
+        return "exact", exact
+    if exact:
+        return "ask", exact
+    if not rows:
+        return "none", []
+    if len(rows) == 1 and not write:
+        return "near", rows
+    return "ask", rows
+
+
+def _note_resolution(asked: str, matched: dict[str, Any]) -> None:
+    """이 도구 호출이 정확히 같지 않은 것으로 봤다고 적는다 — `_noting` 이 답에 붙인다."""
+    notes = _RESOLVED.get()
+    if notes is not None:
+        notes.append({"resolved_from": asked, "matched": matched | {"note": _NEAR_NOTE}})
+
+
+def _material_brief(one: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": one["id"],
+        "code": one.get("code"),
+        "name": one.get("record_name"),
+        **({"alias": one["alias"]} if one.get("alias") else {}),
+    }
+
+
+def _run_brief(one: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": one["id"],
+        "code": one.get("code"),
+        "name": one.get("record_name"),
+        "test_type": one.get("test_type_key"),
+    }
+
+
+async def _resolve_material(
+    ctx: Context, material_id: str, *, write: bool = False
+) -> str | dict[str, Any]:
+    """재료 식별자 — **이름·별칭·번호를 줘도 받아 준다.**
 
     기준선 3차(2026-09-18)에서 두 번 걸렸다: `deck_readiness("SCATTER_DP600_1.0")` ·
     `get_card("SCATTER_DP600_1.0")`. 사람은 이름으로 말하므로 AI 도 이름을 넣어 보고,
-    그때마다 검색 한 번이 더 든다. 딱 하나 맞으면 그것으로 보고, 여럿이면 **고르라고
+    그때마다 검색 한 번이 더 든다. 정확히 같은 것 하나면 그것으로 보고, 여럿이면 **고르라고
     후보를 준다** — 조용히 첫 번째를 집으면 엉뚱한 재료의 덱이 나간다.
+
+    **정확히 같지 않은 것 하나**는 읽기면 그것으로 보고 답에 `resolved_from` · `matched` 를 단다.
+    **쓰기(`write`, dry_run 을 받는 도구)면 후보로 되묻는다** — 짐작한 재료에 적으면 되돌릴 사람이
+    그 사실을 모른다(`_name_choice`).
     """
     if _looks_like_uuid(material_id):
         return material_id
-    found = await _get(ctx, "/materials", {"q": material_id, "limit": 5})
+    found = await _get(ctx, "/materials", {"q": material_id, "limit": _RESOLVE_LIMIT})
     if isinstance(found, dict) and "error" in found:
         return found
     items = found.get("items", []) if isinstance(found, dict) else []
-    if len(items) == 1:
-        return str(items[0]["id"])
-    if not items:
+    verdict, rows = _name_choice(material_id, items, ("record_name", "alias"), write=write)
+    if verdict == "exact":
+        return str(rows[0]["id"])
+    if verdict == "near":
+        _note_resolution(material_id, _material_brief(rows[0]))
+        return str(rows[0]["id"])
+    if verdict == "none":
         return {
             "error": f"그런 재료가 없습니다: {material_id}",
             "hint": "`search_materials(query=...)` 로 먼저 찾으세요 — 이름이 조금 달라도 걸립니다.",
         }
+    candidates = [_material_brief(one) for one in rows[:_RESOLVE_SHOWN]]
+    if len(rows) == 1:
+        return {
+            "error": f"'{material_id}' 와 이름 · 별칭 · 번호가 정확히 같은 재료가 없습니다 — 걸린 것은 "
+            "아래 하나입니다. 쓰기는 짐작한 대상에 하지 않으니, 이 재료가 맞는지 사람에게 확인하고 "
+            "id 로 다시 부르세요.",
+            "candidates": candidates,
+        }
     return {
         "error": f"'{material_id}' 로 재료가 여럿입니다 — 하나를 골라 id 로 다시 부르세요.",
-        "candidates": [
-            {"id": one["id"], "name": one.get("record_name"), "code": one.get("code")}
-            for one in items
-        ],
+        "candidates": candidates,
     }
 
 
-async def _resolve_run(ctx: Context, test_run_id: str) -> str | dict[str, Any]:
-    """시험 식별자 — **이름을 줘도 받아 준다.** 여럿이면 후보를 준다.
+async def _resolve_run(
+    ctx: Context, test_run_id: str, *, write: bool = False
+) -> str | dict[str, Any]:
+    """시험 식별자 — **이름 · 번호를 줘도 받아 준다.** 여럿이면 후보를 준다.
 
     기준선(visco-01, 2026-09-19)에서 AI 가 시험 **이름**을 넣고 거절당해 목록으로 한 번
-    더 돌았다 — 재료·카드에서 이미 고친 자리와 같은 구멍이다.
+    더 돌았다 — 재료·카드에서 이미 고친 자리와 같은 구멍이다. 정확히 같지 않은 것 하나는
+    재료와 같다 — 읽기는 메모를 달고, 쓰기는 되묻는다(`_resolve_material`).
     """
     if _looks_like_uuid(test_run_id):
         return test_run_id
-    found = await _get(ctx, "/test-runs", {"q": test_run_id, "limit": 5})
+    found = await _get(ctx, "/test-runs", {"q": test_run_id, "limit": _RESOLVE_LIMIT})
     if isinstance(found, dict) and "error" in found:
         return found
     items = found.get("items", []) if isinstance(found, dict) else []
-    needle = str(test_run_id).strip().lower()
-    exact = [one for one in items if str(one.get("record_name", "")).lower() == needle]
-    if len(exact) == 1 or len(items) == 1:
-        return str((exact or items)[0]["id"])
-    if not items:
+    verdict, rows = _name_choice(test_run_id, items, ("record_name",), write=write)
+    if verdict == "exact":
+        return str(rows[0]["id"])
+    if verdict == "near":
+        _note_resolution(test_run_id, _run_brief(rows[0]))
+        return str(rows[0]["id"])
+    if verdict == "none":
         return {
             "error": f"그런 시험이 없습니다: {test_run_id}",
             "hint": "`list_test_runs(query=...)` 로 먼저 찾으세요.",
         }
+    candidates = [_run_brief(one) for one in rows[:_RESOLVE_SHOWN]]
+    if len(rows) == 1:
+        return {
+            "error": f"'{test_run_id}' 와 이름 · 번호가 정확히 같은 시험이 없습니다 — 걸린 것은 아래 "
+            "하나입니다. 쓰기는 짐작한 대상에 하지 않으니, 이 시험이 맞는지 사람에게 확인하고 id 로 "
+            "다시 부르세요.",
+            "candidates": candidates,
+        }
     return {
         "error": f"'{test_run_id}' 로 시험이 여럿입니다 — 하나를 골라 id 로 다시 부르세요.",
-        "candidates": [
-            {
-                "id": one["id"],
-                "code": one.get("code"),
-                "name": one.get("record_name"),
-                "test_type": one.get("test_type_key"),
-            }
-            for one in items
-        ],
+        "candidates": candidates,
     }
 
 
@@ -686,9 +871,24 @@ async def _resolve_run(ctx: Context, test_run_id: str) -> str | dict[str, Any]:
 _CARD_CODE = re.compile(r"[Cc]-?(\d{1,6})")
 
 
-async def _resolve_card(ctx: Context, card_id: str) -> str | dict[str, Any]:
+def _temperature_field(value: float | str | None) -> dict[str, Any]:
+    """묶음의 시험 온도를 요청 칸으로 — **안 주면 칸을 뺀다**(2026-11-15). 서버는 「안 보냄」 과
+    `null`(미기재 묶음)을 가른다: 안 보내면 그 방향의 묶음이 하나일 때만 받고, 둘 이상이면
+    있는 온도를 대며 거절한다. 「none」 은 미기재 묶음, 숫자는 K."""
+    if value is None:
+        return {}
+    if isinstance(value, str) and value.strip().lower() in ("none", "null", "미기재"):
+        return {"temperature_k": None}
+    return {"temperature_k": float(value)}
+
+
+async def _resolve_card(
+    ctx: Context, card_id: str, *, write: bool = False
+) -> str | dict[str, Any]:
     """카드 식별자 — 번호(`C-000038`) · 이름(라벨) · 재료 이름을 줘도 받아 준다. 여럿이면
-    후보를 준다."""
+    후보를 준다. **정확히 같지 않은 것 하나**는 읽기면 그것으로 보고 메모를 달고, 쓰기면
+    되묻는다(`_resolve_material` 과 같은 규칙 — 전에는 라벨에 포함만 돼도 묻지 않고 그 카드에
+    코멘트 · 확정 요청을 했다, 2026-11-15)."""
     if _looks_like_uuid(card_id):
         return card_id
     shape = _CARD_CODE.fullmatch(str(card_id).strip())
@@ -720,8 +920,18 @@ async def _resolve_card(ctx: Context, card_id: str) -> str | dict[str, Any]:
         if needle in str(one.get("label", "")).lower()
         or needle in str(one.get("material_name", "")).lower()
     ]
-    if len(items) == 1:
-        return str(items[0]["id"])
+    verdict, rows = _name_choice(card_id, items, ("label",), write=write)
+    if verdict == "exact":
+        return str(rows[0]["id"])
+    if verdict == "near":
+        _note_resolution(card_id, _card_summary(rows[0]) | {"material": rows[0].get("material_name")})
+        return str(rows[0]["id"])
+    if verdict == "ask" and len(items) == 1:
+        return {
+            "error": f"'{card_id}' 와 라벨이 정확히 같은 카드가 없습니다 — 걸린 것은 아래 하나입니다. "
+            "쓰기는 짐작한 대상에 하지 않으니, 이 카드가 맞는지 사람에게 확인하고 id 로 다시 부르세요.",
+            "candidates": [_card_summary(one) | {"material": one.get("material_name")} for one in items],
+        }
     if not items:
         return {
             "error": f"그런 카드가 없습니다: {card_id}",
@@ -742,15 +952,14 @@ async def get_material(ctx: Context, material_id: str) -> dict[str, Any]:
     **「이 재료에 뭐가 있나 · 잰 값과 문헌값이 각각 뭐냐」 는 여기가 아니라
     `property_coverage(material_id)` 다** — 여기엔 시험으로 잰 값과 등급이 없다.
 
-    **모든 값에 `origin` 이 붙는다**(measured · declared:… · synthetic · catalog).
-    `caveat` 가 있으면 그대로 사람에게 전한다 — 초안 카드나 합성 표를 실측처럼
-    옮기면 그 값으로 해석이 돌아간다.
+    **모든 값에 `origin` 이 붙는다**(measured · declared:… · synthetic · catalog) — 기본 칸도
+    근거 문서(`source_document`)와. `caveat`(출처 모름 · 추정 · 초안)는 그대로 사람에게 전한다.
 
-    **값은 전부 정본 SI 다** — 선언 물성(`declared_properties`, 응력 Pa · 온도 K)도
-    기본 칸(`basics`, 밀도 kg/m3)도. 값에는 **단위가 함께** 오니 그 단위로 읽어라. 화면은
-    밀도를 tonne/mm3 로 보여 준다 — 사람이 화면 숫자(7.85e-9)를 말하면 같은 값이다.
+    **값은 전부 정본 SI 다** — 선언 물성(응력 Pa · 온도 K)도 기본 칸(`basics`, 밀도 kg/m3)도.
+    **단위가 함께** 오니 그 단위로 읽어라. 화면은 밀도를 tonne/mm3 로 보인다(7.85e-9 도 같은 값).
 
-    **이름이나 재료 번호를 줘도 된다** — 딱 하나 맞으면 그것으로 본다(여럿이면 후보를 준다).
+    **이름 · 재료 번호를 줘도 된다** — 정확히 같지 않은 하나로 봤으면 `resolved_from` · `matched`
+    가 붙는다. 여럿이면 후보를 준다.
     """
     resolved = await _resolve_material(ctx, material_id)
     if isinstance(resolved, dict):
@@ -764,23 +973,23 @@ async def get_material(ctx: Context, material_id: str) -> dict[str, Any]:
     link = await _get(ctx, f"/catalog/links/{material_id}")
 
     basics: dict[str, Any] = {}
+    sources = material.get("column_sources")
     density, density_unit = _density_si(material)
     if density is not None:
         # **단위를 이름에 박지 않는다** — 실측(2026-09-06)에서 2680 kg/m3 인 알루미늄이
         # `density_kg_m3: 2.68e-09` 로 나갔다. 값과 단위를 함께 싣고, 값은 SI 다
         # (`_density_si`) — 선언 물성과 한 응답에서 계가 갈리지 않게(2026-09-24).
-        basics["density"] = {
-            "value": density,
-            "unit": density_unit,
-            "origin": "declared:material",
-            "caveat": "재료의 공칭값 — 시료 실측이 있으면 카드는 그쪽을 먼저 쓴다",
-        }
+        basics["density"] = _basic_value(
+            "density",
+            density,
+            density_unit,
+            sources,
+            note="재료의 공칭값 — 시료 실측이 있으면 카드는 그쪽을 먼저 쓴다",
+        )
     if material.get("poisson_ratio") is not None:
-        basics["poisson_ratio"] = {
-            "value": material["poisson_ratio"],
-            "unit": "1",
-            "origin": "declared:material",
-        }
+        basics["poisson_ratio"] = _basic_value(
+            "poisson_ratio", material["poisson_ratio"], "1", sources
+        )
 
     out: dict[str, Any] = {
         "id": material["id"],
@@ -1575,14 +1784,11 @@ async def get_statistics(
 ) -> dict[str, Any]:
     """이 재료의 **산포** — 반복 시편을 묶어 낸 평균·표준편차·이상치.
 
-    실측(2026-09-11): 이 도구가 없어서 「이 재료 항복강도가 얼마나 흩어지나」 에
-    MCP 로는 답할 수 없었다. 사람은 화면에서 늘 보는 값이다.
+    ## 묶음은 **시험종류 + 방향 + 시험 온도**다
 
-    ## 묶음은 **시험종류 + 방향**이다
-
-    인장은 압연 방향에 따라 물성이 다르다 — MD 와 TD 를 한 통계로 묶으면 CV 가
-    크게 나오는데, 그것은 **산포가 아니라 다른 것을 섞은 것이다.** 그래서 답할
-    때도 방향을 함께 적어라.
+    MD 와 TD, 23 °C 와 80 °C 를 한 통계로 묶으면 CV 가 크게 나오는데 그것은 **산포가 아니라
+    다른 것을 섞은 것이다.** 온도는 ±2 K 로 묶고(`temperature_k`, `null` 은 미기재) 답할 때
+    방향 · 온도를 함께 적어라.
 
     ## 값 하나만 떼어 말하지 마라
 
@@ -1614,6 +1820,7 @@ async def get_statistics(
             {
                 "test_type": one.get("test_type_key"),
                 "orientation": one.get("orientation"),
+                "temperature_k": one.get("temperature_k"),
                 "sample_count": one.get("sample_count"),
                 "skipped_unadopted": one.get("skipped_unadopted"),
                 "duplicate_count": one.get("duplicate_count", 0),
@@ -1653,6 +1860,7 @@ async def get_distribution(
     orientation: str,
     scalar_key: str | None = None,
     bootstrap: int = 200,
+    temperature_k: float | str | None = None,
 ) -> dict[str, Any]:
     """한 항목의 **분포** — 정규·로그정규·와이블을 나란히 맞춘 것(2026-09-19).
 
@@ -1680,6 +1888,11 @@ async def get_distribution(
     if isinstance(resolved, dict):
         return resolved
     params: dict[str, Any] = {"test_type_key": test_type, "orientation": orientation}
+    # 그 방향에 시험 온도 묶음이 둘 이상이면 서버가 온도를 요구한다 — 쿼리는 K 숫자 또는 none.
+    picked = _temperature_field(temperature_k)
+    if picked:
+        value = picked["temperature_k"]
+        params["temperature_k"] = "none" if value is None else value
     if not scalar_key:
         keys = await _get(ctx, f"/statistics/materials/{resolved}/distributable", params)
         if isinstance(keys, dict) and "error" in keys:
@@ -2210,13 +2423,13 @@ async def create_sample(
     제조사·유통사·주 벤더·판매 유형은 **기준정보**라, 목록에 없는 값이면 만들지
     않고 후보를 준다(ADR 0032).
 
-        material_id      이름이나 재료 번호를 줘도 된다 — 딱 하나 맞으면 그것으로 본다
+        material_id      이름 · 재료 번호도 된다 — 정확히 같지 않으면 후보로 되묻는다
         production_date  YYYY-MM-DD
         density_kg_m3    **kg/m³ 다.** 강이면 7850 (화면은 tonne/mm³ 로 보여 준다)
 
     이미 있는 로트인지 먼저 본다: `list_samples(material_id)`.
     """
-    resolved = await _resolve_material(ctx, material_id)
+    resolved = await _resolve_material(ctx, material_id, write=True)
     if isinstance(resolved, dict):
         return resolved
 
@@ -3188,6 +3401,34 @@ async def build_deck(
 # 미리보기가 기본이고, 미리보기를 사람에게 보이고 「그대로」 를 들은 뒤에 실행한다.
 
 
+def _link_change(current: Any, catalog_material_id: str) -> dict[str, Any]:
+    """이으면 **지금 연결이 어떻게 되나** — `replaces`(갈아 끼울 연결 · 없으면 null) · `already_linked`.
+
+    `PUT /catalog/links/{id}` 는 재료당 하나라 다시 걸면 교체다(백엔드 `put_link`). 미리보기가 그것을
+    안 보여, 이미 다른 문헌 재료에 이어진 재료가 말없이 바뀔 수 있었다(2026-11-15 전반 점검). 지금
+    연결을 못 읽었으면 「없음」 으로 단정하지 않는다(`replaces_unknown`).
+    """
+    if not isinstance(current, dict) or "error" in current:
+        reason = current.get("error") if isinstance(current, dict) else None
+        return {
+            "replaces_unknown": "지금 연결을 읽지 못했다"
+            + (f"({reason})" if reason else "")
+            + " — 다른 문헌 재료에 이어져 있으면 갈아 끼운다."
+        }
+    linked = current.get("catalog_material_id")
+    if not linked:
+        return {"replaces": None}
+    if str(linked) == str(catalog_material_id).strip():
+        return {"replaces": None, "already_linked": True}
+    return {
+        "replaces": {
+            "catalog_material_id": linked,
+            "name": current.get("name"),
+            "value_count": current.get("value_count"),
+        }
+    }
+
+
 @mcp.tool()
 async def link_catalog_material(
     ctx: Context,
@@ -3200,9 +3441,10 @@ async def link_catalog_material(
     `catalog_material_id` 를 비우면 지금 연결과 **서버의 연결 후보**만 준다 — 등급 · 별칭이
     문헌 재료의 코드 · 이름과 같거나(`code` · `name`) 이름이 그것으로 시작하는 것(`prefix`).
     `prefix` 는 열처리 · 충전재가 다를 수 있으니 어느 것인지 사람에게 묻는다. 후보에 없는
-    문헌 재료면 같은 재료인 근거를 설명하고 확인받는다. 재료당 하나라 다시 이으면 바뀐다.
+    문헌 재료면 같은 재료인 근거를 설명하고 확인받는다. 재료당 하나라 다시 이으면 갈아 끼운다(`replaces`).
     """
-    resolved = await _resolve_material(ctx, material_id)
+    # 후보만 보는 길은 읽기다 — 잇는 길만 쓰기로 해소한다(정확히 같지 않으면 되묻는다).
+    resolved = await _resolve_material(ctx, material_id, write=catalog_material_id is not None)
     if isinstance(resolved, dict):
         return resolved
     material_id = resolved
@@ -3210,29 +3452,50 @@ async def link_catalog_material(
     if isinstance(found, dict) and "error" in found:
         return found
     candidates = found if isinstance(found, list) else []
+    current = await _get(ctx, f"/catalog/links/{material_id}")
     if catalog_material_id is None:
-        linked = await _get(ctx, f"/catalog/links/{material_id}")
-        return {"material_id": material_id, "linked": linked, "candidates": candidates}
+        return {"material_id": material_id, "linked": current, "candidates": candidates}
     suggested = next(
         (one for one in candidates if str(one.get("catalog_material_id")) == catalog_material_id),
         None,
     )
+    change = _link_change(current, catalog_material_id)
     if dry_run:
-        return {
-            "dry_run": True,
-            "will_link": {"material_id": material_id, "catalog_material_id": catalog_material_id},
-            "server_suggested": suggested is not None,
-            "matched_by": suggested.get("matched_by") if suggested else None,
-            "note": (
+        if change.get("already_linked"):
+            note = "이미 이 문헌 재료에 이어져 있다 — 실행해도 바뀌는 것이 없다."
+        else:
+            note = (
                 "서버의 연결 후보에 있다."
                 if suggested
                 else "서버의 연결 후보에 **없다** — 같은 재료인 근거를 사용자에게 설명하고 "
                 "확인받은 뒤 dry_run=False 로 부르세요."
-            ),
+            )
+            if change.get("replaces"):
+                note += (
+                    " **지금 연결(`replaces`)을 갈아 끼운다** — 무엇이 무엇으로 바뀌는지 사람에게 "
+                    "말하고 확인받는다. 이미 받아 온 문헌 값(선언 물성)은 그대로 남는다."
+                )
+            elif "replaces_unknown" in change:
+                note += " " + change["replaces_unknown"]
+        return {
+            "dry_run": True,
+            "will_link": {
+                "material_id": material_id,
+                "catalog_material_id": catalog_material_id,
+                **({"name": suggested.get("name")} if suggested else {}),
+            },
+            **change,
+            "server_suggested": suggested is not None,
+            "matched_by": suggested.get("matched_by") if suggested else None,
+            "note": note,
         }
-    return await _send(
+    done = await _send(
         ctx, "PUT", f"/catalog/links/{material_id}", {"catalog_material_id": catalog_material_id}
     )
+    # 무엇을 갈아 끼웠는지 실행 답에도 남긴다 — 되돌리려면 그 id 로 다시 잇는다.
+    if isinstance(done, dict) and "error" not in done and change.get("replaces"):
+        done = {**done, "replaced": change["replaces"]}
+    return done
 
 
 @mcp.tool()
@@ -3352,7 +3615,8 @@ async def adopt_catalog_values(
                 # **한 항목은 한 줄이다** — 같은 물성의 값이 여럿이면(1 MHz · 1 GHz) 점으로 모은다.
                 same["points"].append(point)
                 same["catalog_value_ids"].append(row["id"])
-                planned.append({"property": name, "value_si": row["value_num"], "added_to": name})
+                # 정의 단위가 SI 가 아니면 이 숫자는 SI 가 아니다 — 서버가 받아 올 때 SI 로 바꾼다.
+                planned.append({"property": name, "value": row["value_num"], "added_to": name})
                 continue
             declared.append(
                 {
@@ -3371,7 +3635,7 @@ async def adopt_catalog_values(
         planned.append(
             {
                 "property": name,
-                "value_si": row["value_num"],
+                "value": row["value_num"],
                 "unit": row.get("unit"),
                 "quality_tier": row.get("quality_tier"),
                 "source": reference,
@@ -3532,6 +3796,7 @@ async def preview_card_fit(
     blend_primary: str | None = None,
     blend_with: str | None = None,
     blend_weight: float | None = None,
+    temperature_k: float | str | None = None,
 ) -> dict[str, Any]:
     """시험 곡선에 **여러 경화식을 맞춰 견준다** — 저장하지 않는다.
 
@@ -3567,6 +3832,7 @@ async def preview_card_fit(
         "families": families or [],
         "extrapolate_to": extrapolate_to,
         "basis": _curve_basis(basis, basis_method, basis_k),
+        **_temperature_field(temperature_k),
     }
     # 혼합은 **준 것만** 싣는다 — 안 주면 전과 같은 본문이다.
     for name, value in (
@@ -3757,6 +4023,7 @@ async def create_lve_card(
     include_declared: bool = False,
     note: str | None = None,
     dry_run: bool = True,
+    temperature_k: float | str | None = None,
 ) -> dict[str, Any]:
     """DMA 변형률 스윕의 **선형 구간 탄성률** 카드 초안 — 통계 묶음(재료·종류·방향)에서.
 
@@ -3764,7 +4031,7 @@ async def create_lve_card(
     재료에 적어 둔 열물성을 `thermal` 블록으로 함께 싣는다. 기본이 미리보기이고 만들어도
     초안이다.
     """
-    resolved = await _resolve_material(ctx, material_id)
+    resolved = await _resolve_material(ctx, material_id, write=True)
     if isinstance(resolved, dict):
         return resolved
     body = {
@@ -3776,6 +4043,7 @@ async def create_lve_card(
         "density": density,
         "include_declared": include_declared,
         "note": note,
+        **_temperature_field(temperature_k),
     }
     if dry_run:
         return {
@@ -3818,7 +4086,7 @@ async def create_dma_temperature_card(
         return {"error": f"시험은 50건까지입니다 — {len(test_run_ids)}건을 받았습니다."}
     runs: list[str] = []
     for one in test_run_ids[:50]:
-        resolved = await _resolve_run(ctx, one)
+        resolved = await _resolve_run(ctx, one, write=True)
         if isinstance(resolved, dict):
             return resolved
         runs.append(resolved)
@@ -3980,6 +4248,7 @@ async def create_card_from_tests(
     blend_weight: float | None = None,
     note: str | None = None,
     dry_run: bool = True,
+    temperature_k: float | str | None = None,
 ) -> dict[str, Any]:
     """시험에서 나온 값으로 **물성 카드(초안)** 를 만든다.
 
@@ -4048,6 +4317,7 @@ async def create_card_from_tests(
         "poisson_ratio": poisson_ratio,
         "density": density,
         "basis": _curve_basis(basis, basis_method, basis_k),
+        **_temperature_field(temperature_k),
     }
     # **준 것만** 싣는다 — 안 주면 전과 같은 본문이다(서버 기본도 「없음」).
     for name, value in (
@@ -4276,7 +4546,7 @@ async def set_card_status(
     if move is None:
         return {"error": f"모르는 동작입니다: {action}", "allowed": list(_CARD_MOVES)}
     allowed_from, effect = move
-    resolved = await _resolve_card(ctx, card_id)
+    resolved = await _resolve_card(ctx, card_id, write=True)
     if isinstance(resolved, dict):
         return resolved
     card = await _get(ctx, f"/fitting/cards/{resolved}")
@@ -4340,7 +4610,7 @@ async def add_card_remark(
     text = (comment or "").strip()
     if not text:
         return {"error": "코멘트가 비었습니다."}
-    resolved = await _resolve_card(ctx, card_id)
+    resolved = await _resolve_card(ctx, card_id, write=True)
     if isinstance(resolved, dict):
         return resolved
     card = await _get(ctx, f"/fitting/cards/{resolved}")
@@ -4384,7 +4654,7 @@ async def request_review(
     )
     ask = "부탁할 내용을 사람에게 보이고 확인받은 뒤 dry_run=False 로 다시 부르세요."
     if card_id:
-        resolved = await _resolve_card(ctx, card_id)
+        resolved = await _resolve_card(ctx, card_id, write=True)
         if isinstance(resolved, dict):
             return resolved
         card = await _get(ctx, f"/fitting/cards/{resolved}")
@@ -4412,7 +4682,7 @@ async def request_review(
             "notified": done.get("notified"),
             "card": _card_summary(done.get("card") or card),
         }
-    found = await _resolve_material(ctx, str(material_id))
+    found = await _resolve_material(ctx, str(material_id), write=True)
     if isinstance(found, dict):
         return found
     if dry_run:
@@ -4714,7 +4984,7 @@ async def set_declared_values(
 
     같은 `item` 이 이미 있으면 **덮어쓴다** — 미리보기에서 무엇이 바뀌는지 먼저 본다.
     """
-    resolved = await _resolve_material(ctx, material_id)
+    resolved = await _resolve_material(ctx, material_id, write=True)
     if isinstance(resolved, dict):
         return resolved
     material_id = resolved
@@ -6866,7 +7136,7 @@ async def build_master_curve(
     기본이 미리보기(쓸 스윕 · 기준 온도) — 확인받은 뒤 `dry_run=False`. 만든 뒤 `shifts[].residual`
     이 벌어지면 그 이동 모델이 안 맞는 것이다 — 사람에게 말한다. 다음은 `fit_prony`.
     """
-    resolved = await _resolve_run(ctx, test_run_id)
+    resolved = await _resolve_run(ctx, test_run_id, write=True)
     if isinstance(resolved, dict):
         return resolved
     sweeps = await _get(ctx, f"/viscoelastic/runs/{resolved}/sweeps")
@@ -7737,7 +8007,7 @@ async def link_commission_run(
                 for one in item.get("items") or []
             ],
         }
-    resolved = await _resolve_run(ctx, test_run_id)
+    resolved = await _resolve_run(ctx, test_run_id, write=True)
     if isinstance(resolved, dict):
         return resolved
     if dry_run:
@@ -7897,9 +8167,13 @@ async def adopt_results(
     for one in items:
         asked_run = str(one.get("test_run_id") or "")
         result_id = one.get("result_id")
-        resolved = await _resolve_run(ctx, asked_run)
+        resolved = await _resolve_run(ctx, asked_run, write=True)
         if isinstance(resolved, dict):
-            plan.append({"test_run_id": asked_run, "error": resolved.get("error")})
+            # 후보도 함께 — 되묻는 줄에서 후보를 버리면 고를 근거가 사라진다.
+            plan.append(
+                {"test_run_id": asked_run, "error": resolved.get("error")}
+                | ({"candidates": resolved["candidates"]} if resolved.get("candidates") else {})
+            )
             continue
         payload.append({"test_run_id": resolved, "result_id": result_id})
         if not dry_run:

@@ -114,6 +114,11 @@ ms)를 알린다 — 「관리 → 사용 현황」 의 MCP 숫자가 여기서 
 사람이 「그대로」 라고 말한 뒤에 `dry_run=False` 로 다시 부른다. 아래 표에서
 ★ 가 붙은 것이 실제로 무언가를 바꾸는 도구다.
 
+**재료 · 시험은 이름 · 번호로도 받는다** — 정확히 같은(이름 · 별칭 · 번호) 것 하나면 그것으로
+본다. 정확히 같지 않은데 포함 검색에 하나만 걸리면 **읽기는 그것으로 보고 답에 `resolved_from` ·
+`matched` 를 달고, 쓰기(`dry_run` 을 받는 도구)는 후보로 되묻는다**(2026-11-15). 쓰기 도구가 해소
+함수에 `write=` 를 넘기는지는 `tests/architecture/test_mcp_tools.py` 가 본다.
+
 ### 먼저 읽는 것
 
     get_guide(topic?)                  규약 — 단위·값의 무게·층·흐름
@@ -135,7 +140,8 @@ ms)를 알린다 — 「관리 → 사용 현황」 의 MCP 숫자가 여기서 
 
 ### 사내 재료
 
-    get_material(material_id)          기본 칸·선언 물성·카드·문헌 연결
+    get_material(material_id)          기본 칸·선언 물성·카드·문헌 연결. 기본 칸(밀도 · 푸아송비)도
+                                       근거(출처 · 근거 문서 · 문헌 등급)를 싣는다 — 없으면 「출처 모름」
     list_material_parts(material_id, q?, ...)  이 재료가 쓰인 부품 — 제품 · 사업부별 수
     get_parameter_sets(material_id)    모델 파라미터 벌 (Anand·Prony·Ogden)
     list_cards(material_id?, status?,  물성 카드 목록 — q 는 이름 · 카드 번호 · 재료 번호,
@@ -190,7 +196,8 @@ Family·Category·Grade·제조사·유통사·시편 규격은 **기준정보**
     how_to_measure(property_key)       이 물성은 무엇으로 어떻게 재나 · 우리 장비(TestScope 에 물음)
     measurement_gaps()                 재는 법을 모르는 물성 — 측정 지식의 빈 칸
     ★ link_catalog_material(material_id, 사내 재료 ↔ 문헌 재료. id 를 비우면 지금 연결과
-        catalog_material_id?)          **서버의 연결 후보**(등급 · 별칭이 같은 것)만
+        catalog_material_id?)          **서버의 연결 후보**(등급 · 별칭이 같은 것)만. 재료당 하나라
+                                       다시 이으면 갈아 끼운다 — 미리보기의 `replaces` 가 지금 연결
     ★ adopt_catalog_values(...)        문헌 값 → 선언 물성 (스냅샷)
     ★ adopt_parameter_set(...)         파라미터 한 벌을 통째로
     ★ create_declared_card(...)        적어 둔 값만으로 카드 초안 — `block_keys` 로 항목란을 골라 싣는다
@@ -431,6 +438,15 @@ DB 가 바뀌는 것을 감수할 때만 시킨다.
 
 ## 실측으로 잡은 것
 
+- **「SUS304」 에 `SUS304L 0.5t` 하나만 걸리면 묻지 않고 그 재료에 적었다**(2026-11-15 전반 점검). 이름
+  해소(`_resolve_material` · `_resolve_run`)가 포함 검색 결과가 한 건이면 이름을 안 견줬다. 이제 정확히
+  같은 것만 말없이 받고, 아니면 읽기는 `resolved_from` · `matched` 를 달고 쓰기는 되묻는다. 같은 점검에서
+  `get_material` 의 기본 칸이 서버의 근거(`column_sources`)를 버려 **문헌 등급 4 의 밀도가 등급 없이** 나간
+  것, `link_catalog_material` 미리보기가 **지금 연결을 갈아 끼운다는 것**을 안 보인 것(`PUT` 은 교체다)도
+  고쳤다 — 판단은 `backend/tests/unit/test_mcp_server_pure.py` 가 `server.py` 에서 꺼내 문다.
+- **패키지마다 MCP SDK 판이 달랐다**(2026-11-15 전반 점검). `requirements.txt` 가 범위(`mcp>=2.1.0,<3`)라
+  패키징 날의 최신 판이 풀렸고(그날 색인 2.3.0 · 개발 2.1.1), 운영은 그 파일의 해시가 같으면 venv 를
+  재사용해 서버마다 처음 깐 판으로 돌았다. 이제 전이 의존성까지 `==` 로 고정한다(올리는 법은 그 파일 머리).
 - **「남겨 줘」 에 미리보기 뒤 확인 없이 실행했다**(2026-11-15 AI 평가 — `add_card_remark`). 지난번에는 멈춘
   물음이다. 같은 날 전반 점검에서 쓰기 도구 스물여섯의 미리보기 안내가 「이대로 …하려면 dry_run=False」
   뿐이고 확인을 말하지 않는 것, 문헌 값 · 곡선 지우기 · 키 폐기에 미리보기가 아예 없는 것이 드러났다.

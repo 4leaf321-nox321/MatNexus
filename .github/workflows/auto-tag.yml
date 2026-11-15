@@ -20,7 +20,10 @@ on:
   workflow_run:
     workflows: ['CI - Windows']
     types: [completed]
-    branches: [main, master]
+    # **main 하나뿐이다**(2026-11-15 전반 점검). 전에는 `master` 도 받아, 보호되지 않은 `master`
+    # 브랜치에 버전을 올려 푸시하면 PR · Code Owner 승인 없이 CI 만 통과해도 태그와 배포 패키지가
+    # 생길 수 있었다. 아래 `if` 가 브랜치를 한 번 더 본다 — 트리거의 거르기만 믿지 않는다.
+    branches: [main]
 
 # 초록 CI 둘이 겹쳐도 같은 태그를 두 번 밀지 않게 줄 세운다.
 concurrency:
@@ -30,9 +33,11 @@ concurrency:
 jobs:
   tag:
     # **main 푸시의 CI 가 통과했을 때만.** PR 의 CI 는 보지 않는다 — 합쳐지기 전 커밋이다.
+    # 브랜치도 여기서 본다 — `main` 은 보호되어 PR · CI · Code Owner 승인을 거친 커밋만 있다.
     if: >-
       github.event.workflow_run.conclusion == 'success'
       && github.event.workflow_run.event == 'push'
+      && github.event.workflow_run.head_branch == 'main'
     runs-on: ubuntu-latest
     permissions:
       contents: write

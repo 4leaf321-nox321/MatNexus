@@ -5898,7 +5898,8 @@ export interface paths {
          *     앞의 것은 시도 목록에 그대로 남는다(지워지지 않는다).
          *
          *     **경고가 있으면 확인을 받는다**(2026-11-14, VOC 53~58) — `confirm_warnings` 없이 부르면
-         *     409 와 함께 무엇을 확인할지 돌려준다. 사람과 AI 에 같은 규칙이다.
+         *     409 와 함께 무엇을 확인할지 돌려준다. 사람과 AI 에 같은 규칙이다. **낡은 결과**(원본
+         *     교체 뒤 · 옛 시편 치수로 낸 것, 2026-11-15)도 같은 확인을 받는다.
          */
         post: operations["adopt_api_processing_results__result_id__adopt_post"];
         /**
@@ -7018,10 +7019,10 @@ export interface paths {
         };
         /**
          * Material Statistics
-         * @description 이 재료의 물성. **묶음은 시험종류 + 방향이다.**
+         * @description 이 재료의 물성. **묶음은 시험종류 + 방향 + 시험 온도다.**
          *
          *     인장은 압연 방향에 따라 물성이 다르다 — MD 와 TD 를 한 통계로 묶으면 CV 가
-         *     크게 나오는데 그것은 산포가 아니라 다른 것을 섞은 것이다.
+         *     크게 나오는데 그것은 산포가 아니라 다른 것을 섞은 것이다. 온도도 같다(2026-11-15).
          */
         get: operations["material_statistics_api_statistics_materials__material_id__get"];
         put?: never;
@@ -7779,6 +7780,9 @@ export interface paths {
         /**
          * Restore
          * @description 되살린다 — 이 행과 그 아래 **함께 지워진** 것 전부. 그 전부를 고칠 수 있어야 한다.
+         *
+         *     보존기간이 지나 파일이 정리된 시험이 끼어 있어도 막지 않는다 — 응답의 `notice` 가 「곡선
+         *     없이 돌아온다」 를 말한다.
          */
         post: operations["restore_api_trash__kind___item_id__restore_post"];
         delete?: never;
@@ -14258,6 +14262,8 @@ export interface components {
             scalar_label: string;
             /** Si Unit */
             si_unit: string;
+            /** Temperature K */
+            temperature_k?: number | null;
             /** Test Type Key */
             test_type_key: string;
         };
@@ -14551,6 +14557,8 @@ export interface components {
             orientation: string;
             /** Sample Count */
             sample_count: number;
+            /** Temperature K */
+            temperature_k?: number | null;
             /** Test Run Ids */
             test_run_ids: string[];
             /** Test Type Key */
@@ -14565,6 +14573,8 @@ export interface components {
             material_id: string;
             /** Orientation */
             orientation: string;
+            /** Temperature K */
+            temperature_k?: number | null;
             /** Test Type Key */
             test_type_key: string;
         };
@@ -15058,6 +15068,8 @@ export interface components {
                 number,
                 number
             ][];
+            /** Temperature K */
+            temperature_k?: number | null;
             /**
              * Warnings
              * @default []
@@ -15087,6 +15099,8 @@ export interface components {
             material_id: string;
             /** Orientation */
             orientation: string;
+            /** Temperature K */
+            temperature_k?: number | null;
             /** Test Run Ids */
             test_run_ids?: string[] | null;
             /** Test Type Key */
@@ -15563,7 +15577,7 @@ export interface components {
         };
         /**
          * GroupOut
-         * @description 묶음 하나 — **재료 + 시험종류 + 방향.**
+         * @description 묶음 하나 — **재료 + 시험종류 + 방향 + 시험 온도.**
          */
         GroupOut: {
             curve: components["schemas"]["CurveStatsOut"] | null;
@@ -15594,6 +15608,8 @@ export interface components {
             scalars: components["schemas"]["ScalarStatsOut"][];
             /** Skipped Unadopted */
             skipped_unadopted: number;
+            /** Temperature K */
+            temperature_k?: number | null;
             /** Test Run Ids */
             test_run_ids: string[];
             /** Test Type Key */
@@ -16687,6 +16703,8 @@ export interface components {
             orientation: string;
             /** Poisson Ratio */
             poisson_ratio?: number | null;
+            /** Temperature K */
+            temperature_k?: number | null;
             /** Test Type Key */
             test_type_key: string;
         };
@@ -19183,6 +19201,8 @@ export interface components {
             resample_method?: string | null;
             /** Resample Points */
             resample_points?: number | null;
+            /** Temperature K */
+            temperature_k?: number | null;
             /** Test Run Ids */
             test_run_ids?: string[] | null;
             /** Test Type Key */
@@ -23616,8 +23636,15 @@ export interface components {
             counts: {
                 [key: string]: number;
             };
+            /**
+             * Files Cleaned
+             * @default 0
+             */
+            files_cleaned: number;
             /** Name */
             name: string;
+            /** Notice */
+            notice?: string | null;
             /** Said */
             said: string;
         };
@@ -23638,6 +23665,11 @@ export interface components {
              */
             deleted_at: string;
             /**
+             * Files Cleaned
+             * @default 0
+             */
+            files_cleaned: number;
+            /**
              * Id
              * Format: uuid
              */
@@ -23648,6 +23680,8 @@ export interface components {
             kind_label: string;
             /** Name */
             name: string;
+            /** Notice */
+            notice?: string | null;
             /** Workspace Id */
             workspace_id: string | null;
         };
@@ -35755,6 +35789,8 @@ export interface operations {
             query: {
                 test_type_key: string;
                 orientation: string;
+                /** @description 어느 온도 묶음인가(K, ±2 K). 'none' 이면 온도 미기재 묶음. 안 주면 그 방향의 묶음이 하나일 때만 받는다(둘 이상이면 422). */
+                temperature_k?: string | null;
             };
             header?: never;
             path: {
@@ -35790,6 +35826,8 @@ export interface operations {
                 test_type_key: string;
                 orientation: string;
                 scalar_key: string;
+                /** @description 어느 온도 묶음인가(K, ±2 K). 'none' 이면 온도 미기재 묶음. 안 주면 그 방향의 묶음이 하나일 때만 받는다(둘 이상이면 422). */
+                temperature_k?: string | null;
                 bootstrap?: number;
             };
             header?: never;

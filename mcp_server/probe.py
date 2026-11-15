@@ -290,6 +290,20 @@ async def sweep(session: ClientSession) -> None:
         name = (detail or {}).get("name") if isinstance(detail, dict) else None
         if name:
             await call(session, "get_material", {"material_id": name})
+        # 번호는 꼴이 달라도 정확히 같은 것이다(`M-000123` = `m123`) — `resolved_from` 없이 와야 맞다.
+        code = (detail or {}).get("code") if isinstance(detail, dict) else None
+        if isinstance(code, str) and code[2:].isdigit():
+            await call(session, "get_material", {"material_id": f"m{int(code[2:])}"})
+        # **정확히 같지 않은 이름으로는 쓰지 않는다**(2026-11-15) — 끝 글자를 뗀 이름으로 쓰기
+        # 미리보기를 부르면 후보로 되묻는 것(또는 「없다」)이 맞는 답이다. 뜻밖에 통과하면 그 글자와
+        # 정확히 같은 재료가 따로 있거나, 쓰기가 짐작한 재료로 간 것이다.
+        if name and len(name) > 3:
+            await call(
+                session,
+                "create_sample",
+                {"material_id": name[:-1], "lot_no": "PROBE-LOT", "dry_run": True},
+                expect_error=True,
+            )
         # 이 재료가 쓰인 부품(2026-10-25) — 없으면 빈 목록이 맞는 답이다.
         await call(session, "list_material_parts", {"material_id": material_id, "limit": 5})
         # 문헌 연결 — 후보를 보고, 있으면 첫 후보로 **미리보기만**(2026-10-08).

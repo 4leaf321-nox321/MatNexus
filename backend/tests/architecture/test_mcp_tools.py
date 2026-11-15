@@ -342,3 +342,25 @@ def test_지우기_폐기_도구는_미리보기가_기본이다() -> None:
             default = defaults.get("dry_run")
             seen[node.name] = isinstance(default, ast.Constant) and default.value is True
     assert seen == dict.fromkeys(wanted, True), seen
+
+
+def test_쓰기_도구는_이름을_쓰기로_해소한다() -> None:
+    """2026-11-15 전반 점검 — 이름 해소가 포함 검색에 하나만 걸리면 이름을 안 견주고 그
+    id 를 썼다. 「SUS304」 에 `SUS304L 0.5t` 하나만 걸리면 묻지 않고 그 재료에 적었다. 해소
+    함수는 `write` 를 받아 쓰기면 정확히 같지 않은 것을 후보로 되묻는다 — **쓰기 도구
+    (`dry_run` 을 받는 도구)가 그것을 안 넘기면** 다시 짐작한 재료에 쓴다."""
+    resolvers = {"_resolve_material", "_resolve_run", "_resolve_card"}
+    bare = []
+    for tool in _tools():
+        names = {one.arg for one in (*tool.args.args, *tool.args.kwonlyargs)}
+        if "dry_run" not in names:
+            continue
+        for inner in ast.walk(tool):
+            if (
+                isinstance(inner, ast.Call)
+                and isinstance(inner.func, ast.Name)
+                and inner.func.id in resolvers
+                and not any(keyword.arg == "write" for keyword in inner.keywords)
+            ):
+                bare.append(f"{tool.name}:{inner.lineno}")
+    assert not bare, f"쓰기 도구가 이름을 읽기로 해소한다(write= 없음): {bare}"

@@ -22,7 +22,9 @@ name: CI - Windows
 
 on:
   push:
-    branches: [main, master]
+    # `master` 는 뺐다(2026-11-15) — 이 저장소의 기본 브랜치는 `main` 이고, `master` 푸시의 초록
+    # CI 가 auto-tag 를 깨워 보호를 거치지 않은 커밋이 배포 패키지가 될 길이 있었다.
+    branches: [main]
   pull_request:
 
 env:

@@ -161,6 +161,7 @@ _HELPERS = (
     "_looks_like_uuid",
     "_resolve_run",
     "_same_frequency",
+    "_temperature_field",
 )
 #: 함께 읽는 상수 — 인자 기본값이 정의할 때 읽힌다(`units=DEFAULT_DECK_UNITS`).
 _CONSTANTS = ("DEFAULT_DECK_UNITS", "MAX_LIMIT", "_MM_FLOOR", "_MM_FLOOR_DEFAULT")

@@ -13467,6 +13467,17 @@
             "title": "Si Unit",
             "type": "string"
           },
+          "temperature_k": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Temperature K"
+          },
           "test_type_key": {
             "title": "Test Type Key",
             "type": "string"
@@ -14265,6 +14276,17 @@
             "title": "Sample Count",
             "type": "integer"
           },
+          "temperature_k": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Temperature K"
+          },
           "test_run_ids": {
             "items": {
               "format": "uuid",
@@ -14300,6 +14322,17 @@
           "orientation": {
             "title": "Orientation",
             "type": "string"
+          },
+          "temperature_k": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Temperature K"
           },
           "test_type_key": {
             "title": "Test Type Key",
@@ -15569,6 +15602,17 @@
             "title": "Source Points",
             "type": "array"
           },
+          "temperature_k": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Temperature K"
+          },
           "warnings": {
             "default": [],
             "items": {
@@ -15663,6 +15707,17 @@
           "orientation": {
             "title": "Orientation",
             "type": "string"
+          },
+          "temperature_k": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Temperature K"
           },
           "test_run_ids": {
             "anyOf": [
@@ -16946,7 +17001,7 @@
         "type": "object"
       },
       "GroupOut": {
-        "description": "묶음 하나 — **재료 + 시험종류 + 방향.**",
+        "description": "묶음 하나 — **재료 + 시험종류 + 방향 + 시험 온도.**",
         "properties": {
           "curve": {
             "anyOf": [
@@ -17008,6 +17063,17 @@
           "skipped_unadopted": {
             "title": "Skipped Unadopted",
             "type": "integer"
+          },
+          "temperature_k": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Temperature K"
           },
           "test_run_ids": {
             "items": {
@@ -20016,6 +20082,17 @@
               }
             ],
             "title": "Poisson Ratio"
+          },
+          "temperature_k": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Temperature K"
           },
           "test_type_key": {
             "title": "Test Type Key",
@@ -26419,6 +26496,17 @@
               }
             ],
             "title": "Resample Points"
+          },
+          "temperature_k": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Temperature K"
           },
           "test_run_ids": {
             "anyOf": [
@@ -38067,9 +38155,25 @@
             "title": "Counts",
             "type": "object"
           },
+          "files_cleaned": {
+            "default": 0,
+            "title": "Files Cleaned",
+            "type": "integer"
+          },
           "name": {
             "title": "Name",
             "type": "string"
+          },
+          "notice": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notice"
           },
           "said": {
             "title": "Said",
@@ -38110,6 +38214,11 @@
             "title": "Deleted At",
             "type": "string"
           },
+          "files_cleaned": {
+            "default": 0,
+            "title": "Files Cleaned",
+            "type": "integer"
+          },
           "id": {
             "format": "uuid",
             "title": "Id",
@@ -38126,6 +38235,17 @@
           "name": {
             "title": "Name",
             "type": "string"
+          },
+          "notice": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notice"
           },
           "workspace_id": {
             "anyOf": [
@@ -55630,7 +55750,7 @@
         ]
       },
       "post": {
-        "description": "이 결과를 **이 시험의 물성**으로 삼는다.\n\n시험당 하나뿐이다 — 포인터가 하나이므로 구조적으로 그렇다. 다른 것을 채택하면\n앞의 것은 시도 목록에 그대로 남는다(지워지지 않는다).\n\n**경고가 있으면 확인을 받는다**(2026-11-14, VOC 53~58) — `confirm_warnings` 없이 부르면\n409 와 함께 무엇을 확인할지 돌려준다. 사람과 AI 에 같은 규칙이다.",
+        "description": "이 결과를 **이 시험의 물성**으로 삼는다.\n\n시험당 하나뿐이다 — 포인터가 하나이므로 구조적으로 그렇다. 다른 것을 채택하면\n앞의 것은 시도 목록에 그대로 남는다(지워지지 않는다).\n\n**경고가 있으면 확인을 받는다**(2026-11-14, VOC 53~58) — `confirm_warnings` 없이 부르면\n409 와 함께 무엇을 확인할지 돌려준다. 사람과 AI 에 같은 규칙이다. **낡은 결과**(원본\n교체 뒤 · 옛 시편 치수로 낸 것, 2026-11-15)도 같은 확인을 받는다.",
         "operationId": "adopt_api_processing_results__result_id__adopt_post",
         "parameters": [
           {
@@ -58500,7 +58620,7 @@
     },
     "/api/statistics/materials/{material_id}": {
       "get": {
-        "description": "이 재료의 물성. **묶음은 시험종류 + 방향이다.**\n\n인장은 압연 방향에 따라 물성이 다르다 — MD 와 TD 를 한 통계로 묶으면 CV 가\n크게 나오는데 그것은 산포가 아니라 다른 것을 섞은 것이다.",
+        "description": "이 재료의 물성. **묶음은 시험종류 + 방향 + 시험 온도다.**\n\n인장은 압연 방향에 따라 물성이 다르다 — MD 와 TD 를 한 통계로 묶으면 CV 가\n크게 나오는데 그것은 산포가 아니라 다른 것을 섞은 것이다. 온도도 같다(2026-11-15).",
         "operationId": "material_statistics_api_statistics_materials__material_id__get",
         "parameters": [
           {
@@ -58598,6 +58718,24 @@
               "title": "Orientation",
               "type": "string"
             }
+          },
+          {
+            "description": "어느 온도 묶음인가(K, ±2 K). 'none' 이면 온도 미기재 묶음. 안 주면 그 방향의 묶음이 하나일 때만 받는다(둘 이상이면 422).",
+            "in": "query",
+            "name": "temperature_k",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "어느 온도 묶음인가(K, ±2 K). 'none' 이면 온도 미기재 묶음. 안 주면 그 방향의 묶음이 하나일 때만 받는다(둘 이상이면 422).",
+              "title": "Temperature K"
+            }
           }
         ],
         "responses": {
@@ -58672,6 +58810,24 @@
             "schema": {
               "title": "Scalar Key",
               "type": "string"
+            }
+          },
+          {
+            "description": "어느 온도 묶음인가(K, ±2 K). 'none' 이면 온도 미기재 묶음. 안 주면 그 방향의 묶음이 하나일 때만 받는다(둘 이상이면 422).",
+            "in": "query",
+            "name": "temperature_k",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "어느 온도 묶음인가(K, ±2 K). 'none' 이면 온도 미기재 묶음. 안 주면 그 방향의 묶음이 하나일 때만 받는다(둘 이상이면 422).",
+              "title": "Temperature K"
             }
           },
           {
@@ -60622,7 +60778,7 @@
     },
     "/api/trash/{kind}/{item_id}/restore": {
       "post": {
-        "description": "되살린다 — 이 행과 그 아래 **함께 지워진** 것 전부. 그 전부를 고칠 수 있어야 한다.",
+        "description": "되살린다 — 이 행과 그 아래 **함께 지워진** 것 전부. 그 전부를 고칠 수 있어야 한다.\n\n보존기간이 지나 파일이 정리된 시험이 끼어 있어도 막지 않는다 — 응답의 `notice` 가 「곡선\n없이 돌아온다」 를 말한다.",
         "operationId": "restore_api_trash__kind___item_id__restore_post",
         "parameters": [
           {

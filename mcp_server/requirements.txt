@@ -2,9 +2,49 @@
 # 올릴 수 있고(ReportArchive 는 그것으로 FastAPI 와 충돌했다), 그때 앱이 인질이
 # 되면 안 된다. 실측(2026-09-06): mcp 2.1.1 은 starlette 1.6.0 · pydantic 2.13.5 로
 # 우리 백엔드와 충돌하지 않는다 — 그래도 분리는 유지한다.
-# 상한을 둔다 — 2.2.0 까지는 `MCPServer.run(transport='streamable-http', host=, port=,
-# transport_security=)` 가 그대로다(실측 2026-09-15, 진짜 클라이언트로 initialize·
-# list_tools 57개). 3.x 가 나오면 그때 다시 본다 — 폐쇄망 zip 이 모르는 판을 실어 가면
-# 서버에서 처음 터진다.
-mcp>=2.1.0,<3
-httpx>=0.27.0
+#
+# **전이 의존성까지 `==` 로 고정한다**(2026-11-15 전반 점검 — 백엔드 requirements 와 같은 방식).
+# 전에는 `mcp>=2.1.0,<3` · `httpx>=0.27.0` 범위라 패키징(`package_deploy.ps1` 의 `pip wheel`)
+# 때마다 그날의 최신 판이 풀렸다 — 같은 날 색인의 mcp 는 2.3.0 인데 개발 venv 는 2.1.1 이었다.
+# 그런데 운영 서버는 이 파일의 해시가 같으면 venv 를 그대로 쓴다(`venv_sync.ps1`). 파일은 그대로인
+# 채 패키지만 새로 나가면 **언제 처음 깔았느냐에 따라 서버마다 SDK 판이 달랐다.** 판을 바꾸는 일이
+# 이 파일을 고치는 일이어야 해시가 갈리고 모든 서버가 같은 판으로 다시 깐다.
+#
+# 판은 개발 venv(`mcp_server/.venv`)의 것이다 — 그 판으로 `MCPServer.run(transport=
+# 'streamable-http', host=, port=, transport_security=)` 가 돌고 도구 129개가 등록된다.
+#
+# 올리는 법: `.venv` 에서 `pip install -U mcp httpx` → `probe.py` 로 진짜 클라이언트 한 바퀴
+# (README §6) → `pip freeze` 에서 `pip` 를 뺀 목록으로 아래를 바꾼다(`pywin32` 의 조건은 남긴다).
+# 3.x 는 그때 다시 본다 — 폐쇄망 zip 이 모르는 판을 실어 가면 서버에서 처음 터진다.
+annotated-types==0.8.0
+anyio==4.15.1
+attrs==26.1.0
+certifi==2026.7.22
+cffi==2.1.1
+click==8.5.0
+cryptography==50.0.1
+h11==0.16.0
+httpcore==1.0.9
+httpcore2==2.12.0
+httpx==0.28.1
+httpx2==2.12.0
+idna==3.19
+jsonschema==4.26.0
+jsonschema-specifications==2025.9.1
+mcp==2.1.1
+mcp-types==2.1.1
+opentelemetry-api==1.44.0
+pycparser==3.0
+pydantic==2.13.5
+pydantic_core==2.46.5
+PyJWT==2.13.0
+python-multipart==0.0.32
+pywin32==312; sys_platform == "win32"
+referencing==0.37.0
+rpds-py==2026.6.3
+sse-starlette==3.4.11
+starlette==1.6.0
+truststore==0.10.4
+typing-inspection==0.4.4
+typing_extensions==4.16.0
+uvicorn==0.52.4
