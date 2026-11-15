@@ -310,3 +310,35 @@ class Test지도의_길잡이:
         called = set(re.findall(r"\b([a-z][a-z_]{3,})\(", source))
         unknown = sorted(called - known)
         assert not unknown, f"없는 도구를 길잡이가 가리킨다: {unknown}"
+
+
+def test_미리보기_안내는_사람의_확인을_말한다() -> None:
+    """2026-11-15 — AI 평가에서 「코멘트 남겨 줘」 에 미리보기 직후 확인 없이 실행했다. 쓰기
+    도구 스물여섯의 안내가 「이대로 …하려면 dry_run=False 로 다시 부르세요」 뿐이었다 — 그
+    문장은 「바로 다시 부르라」 로 읽힌다."""
+    source = SERVER.read_text(encoding="utf-8")
+    marker = "dry_run=False 로 다시"
+    bare = []
+    start = 0
+    while (at := source.find(marker, start)) != -1:
+        before = source[max(0, at - 160) : at]
+        if not any(word in before for word in ("확인", "「그대로」")):
+            bare.append(source.count("\n", 0, at) + 1)
+        start = at + len(marker)
+    assert not bare, f"확인을 말하지 않는 미리보기 안내: server.py {bare} 줄"
+
+
+def test_지우기_폐기_도구는_미리보기가_기본이다() -> None:
+    """2026-11-15 — 문헌 값 · 곡선 지우기와 키 폐기는 부르는 즉시 썼다(되돌릴 수 없다)."""
+    import ast
+
+    tree = ast.parse(SERVER.read_text(encoding="utf-8"))
+    wanted = {"delete_catalog_value", "delete_catalog_series", "deprecate_catalog_property"}
+    seen = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.AsyncFunctionDef) and node.name in wanted:
+            names = [one.arg for one in node.args.args]
+            defaults = dict(zip(reversed(names), reversed(node.args.defaults), strict=False))
+            default = defaults.get("dry_run")
+            seen[node.name] = isinstance(default, ast.Constant) and default.value is True
+    assert seen == dict.fromkeys(wanted, True), seen

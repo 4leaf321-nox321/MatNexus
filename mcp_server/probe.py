@@ -500,7 +500,10 @@ async def sweep(session: ClientSession) -> None:
             },
         )
     await call(
-        session, "delete_catalog_series", {"series_id": str(uuid.uuid4())}, expect_error=True
+        session,
+        "delete_catalog_series",
+        {"series_id": str(uuid.uuid4()), "dry_run": False},
+        expect_error=True,
     )
     bundle = Path(os.environ.get("TEMP", ".")) / "matnexus_probe_bundle.json"
     bundle.write_text(
@@ -989,13 +992,20 @@ async def sweep(session: ClientSession) -> None:
     await call(
         session,
         "delete_catalog_value",
-        {"value_id": "00000000-0000-0000-0000-000000000000"},
+        {"value_id": "00000000-0000-0000-0000-000000000000", "dry_run": False},
         expect_error=True,
     )
+    # 지우기 · 폐기는 2026-11-15 부터 미리보기가 기본이다 — 미리보기도 한 번 부른다.
+    await call(
+        session,
+        "delete_catalog_value",
+        {"value_id": "00000000-0000-0000-0000-000000000000"},
+    )
+    await call(session, "deprecate_catalog_property", {"property_key": "local.probe.nothing"})
     await call(
         session,
         "deprecate_catalog_property",
-        {"property_key": "local.probe.nothing"},
+        {"property_key": "local.probe.nothing", "dry_run": False},
         expect_error=True,
     )
     await call(

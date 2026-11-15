@@ -109,6 +109,12 @@ mcp = MCPServer(
         " 말하지 않았으면 mm·N·tonne(해석의 관행)으로 답하고 SI 값을 괄호에 함께 적는다 —"
         " 환산은 convert_unit 에 시킨다. 먼저 get_guide() 를 읽어라 —"
         " 특히 tier 4(추정)와 synthetic(합성) 값을 실측처럼 옮기지 않는 규약이 있다."
+        # **쓰기의 규칙도 늘 실리는 자리에**(2026-11-15). 같은 날 AI 평가 두 번에서 「코멘트 남겨
+        # 줘」 · 「채택해 줘」 에 미리보기 직후 확인 없이 실행했다 — 도구마다의 안내는 그 도구를
+        # 부른 뒤에야 읽힌다.
+        " 쓰기(dry_run 을 받는 도구)는 미리보기를 사람에게 그대로 보이고 「그대로」 라는 답을"
+        " 들은 뒤에만 dry_run=False 로 부른다 — 「해 줘」 는 미리보기의 허락이지 실행의 허락이"
+        " 아니다. 같은 차례에 미리보기와 실행을 이어 부르지 마라."
     ),
 )
 
@@ -426,6 +432,22 @@ def _declared_value(row: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _source_warnings(card: dict[str, Any]) -> list[str]:
+    """카드 근거의 말 전부 — 지을 때 남긴 노트와 **근거 시험의 경고**(처리 경고 · 시편마다 다른
+    속도, `source.warnings`). 확정 미리보기가 노트만 실어, 사람은 경고 없는 카드로 보고 확정했다
+    (2026-11-15 전반 점검)."""
+    source = card.get("source") or {}
+    said = [str(one) for one in source.get("notes") or []]
+    for one in source.get("warnings") or []:
+        if isinstance(one, dict):
+            where = one.get("record_name") or one.get("label")
+            message = one.get("message") or ""
+            said.append(f"{where}: {message}" if where else str(message))
+        else:
+            said.append(str(one))
+    return said
+
+
 def _card_summary(card: dict[str, Any]) -> dict[str, Any]:
     """카드 한 장 요약 — **초안인지, 지어낸 표가 실렸는지**를 말한다."""
     source = card.get("source") or {}
@@ -446,7 +468,11 @@ def _card_summary(card: dict[str, Any]) -> dict[str, Any]:
         caveats.append("근거 시험 일부가 다른 두께의 재료로 옮겨졌다 — 값은 그 시험을 포함해 계산됐다")
     said = [one for one in remarks if one.get("kind") == "comment"]
     if said:
-        caveats.append(f"사람이 남긴 코멘트 {len(said)}건 — get_card 의 remarks 를 함께 전하라")
+        # **AI 가 남긴 것을 「사람이 남긴」 이라고 적지 않는다**(2026-11-15 전반 점검). 코멘트는
+        # 토큰 주인 이름으로 남아서, 다음 AI 가 사람의 검토 의견으로 전했다.
+        by_ai = sum(1 for one in said if one.get("via"))
+        tail = f"(그중 AI 경유 {by_ai}건 — 사람의 검토 의견이 아닐 수 있다)" if by_ai else ""
+        caveats.append(f"코멘트 {len(said)}건{tail} — get_card 의 remarks 를 함께 전하라")
     if card.get("status") == "draft" and any(
         one.get("kind") == "publish_requested" for one in remarks
     ):
@@ -681,7 +707,10 @@ async def _resolve_card(ctx: Context, card_id: str) -> str | dict[str, Any]:
             "이 토큰으로 볼 수 없는 카드입니다. 번호는 재사용하지 않으니 사람에게 어디서 본 "
             "번호인지 물어라."
         }
-    found = await _get(ctx, "/fitting/cards", {"limit": 200})
+    # **서버에 건다**(2026-11-15 전반 점검) — 전에는 최근 200장만 받아 손으로 걸러, 카드가
+    # 200장을 넘으면 옛 카드가 「없다」 가 되고 같은 이름이 안팎에 하나씩이면 묻지 않고 안쪽
+    # 것을 골랐다(쓰기 도구의 대상이 조용히 바뀐다).
+    found = await _get(ctx, "/fitting/cards", {"q": str(card_id).strip(), "limit": 200})
     if isinstance(found, dict) and "error" in found:
         return found
     needle = str(card_id).strip().lower()
@@ -775,6 +804,15 @@ async def get_material(ctx: Context, material_id: str) -> dict[str, Any]:
     }
     if isinstance(cards, dict) and "error" not in cards:
         out["cards"] = [_card_summary(one) for one in cards.get("items", [])]
+        # 20장에서 자른다 — 더 있으면 말한다(전에는 「카드는 이것뿐」 으로 읽혔다).
+        total = cards.get("total")
+        if isinstance(total, int) and total > len(out["cards"]):
+            out["cards_total"] = total
+            out["cards_note"] = (
+                f"최근 {len(out['cards'])}장만 실었다 — 전부는 list_cards(material_id=…)"
+            )
+    elif isinstance(cards, dict):
+        out["cards_error"] = cards["error"]  # 못 읽었다 — 「카드 없음」 이 아니다
     if isinstance(link, dict) and "error" not in link and link.get("catalog_material_id"):
         out["catalog_link"] = {
             "catalog_material_id": link["catalog_material_id"],
@@ -1516,7 +1554,10 @@ def _specimen_brief(one: Any) -> dict[str, Any] | None:
                 "key": item.get("key"),
                 "label": item.get("label"),
                 "value": item.get("value"),
-                "unit": "m",
+                # 치수 칸은 길이만이 아니다(탭 베벨각은 rad) — 전에는 전부 「m」 로 적어 0.122 rad
+                # 이 0.122 m 로 나갔다(2026-11-15 전반 점검).
+                "unit": item.get("si_unit") or "m",
+                "dimension": item.get("dimension"),
                 "source": item.get("source"),
             }
             for item in one.get("sizes") or []
@@ -1546,7 +1587,7 @@ async def get_statistics(
     ## 값 하나만 떼어 말하지 마라
 
         count        몇 건인가. **1건이면 산포가 아니라 값 하나다**
-        sample_sd    1건이면 `null` 이다 — 0 이 아니라 **없는 것**이다
+        sd           표본 표준편차. 1건이면 `null` 이다 — 0 이 아니라 **없는 것**이다
         cv           변동계수. 크면 시료가 섞였는지부터 본다
         outliers     이상치 후보. 지운 값이 아니라 **의심하는 값**이다
 
@@ -1876,6 +1917,13 @@ async def get_sample(ctx: Context, sample_id: str) -> dict[str, Any]:
             for s_ in (specimens if isinstance(specimens, list) else [])
         ],
         "mill_check": mill.get("rows") if isinstance(mill, dict) and "rows" in mill else [],
+        # 못 읽은 칸은 빈 목록이 아니라 오류로 말한다 — 「시편 0」 으로 단정하지 않게.
+        **(
+            {"specimens_error": specimens["error"]}
+            if isinstance(specimens, dict) and "error" in specimens
+            else {}
+        ),
+        **({"mill_check_error": mill["error"]} if isinstance(mill, dict) and "error" in mill else {}),
     }
 
 
@@ -2123,7 +2171,7 @@ async def create_material(
                     "비슷한 이름이 있습니다 — 사람에게 보여 주고 같은 것인지 물어본 "
                     "뒤에 만드세요."
                     if similar
-                    else "이대로 만들려면 dry_run=False 로 다시 부르세요."
+                    else "사람에게 보이고 확인받은 뒤 dry_run=False 로 다시 부르세요."
                 )
             ),
         }
@@ -2199,6 +2247,9 @@ async def create_sample(
 
     if dry_run:
         seen = await _get(ctx, f"/materials/{resolved}/samples")
+        if isinstance(seen, dict) and "error" in seen:
+            # 기존 시료를 못 읽으면 멈춘다 — 「같은 로트 없음」 으로 답하면 로트가 두 줄 된다.
+            return {"error": f"기존 시료를 읽지 못했습니다 — {seen['error']}"}
         rows = seen if isinstance(seen, list) else []
         same = [
             _sample_brief(one)
@@ -2214,7 +2265,7 @@ async def create_sample(
             "note": (
                 "**같은 로트번호의 시료가 이미 있습니다** — 그것을 쓰세요."
                 if same
-                else "이대로 만들려면 dry_run=False 로 다시 부르세요."
+                else "사람에게 보이고 확인받은 뒤 dry_run=False 로 다시 부르세요."
             ),
         }
 
@@ -2299,7 +2350,7 @@ async def create_specimen(
                 }
                 for one in rows
             ],
-            "note": "이대로 만들려면 dry_run=False 로 다시 부르세요. 번호는 서버가 "
+            "note": "사람에게 보이고 확인받은 뒤 dry_run=False 로 다시 부르세요. 번호는 서버가 "
             "이 방향의 다음 번호로 매깁니다.",
         }
 
@@ -2799,7 +2850,11 @@ async def get_test_run(ctx: Context, test_run_id: str) -> dict[str, Any]:
         "adopted_result_id": adopted_result_id,
         "measured_values_si": scalars,
         **(
-            {"caveat": "채택된 처리 결과가 없다 — 이 시험의 물성은 아직 정해지지 않았다"}
+            # **못 읽은 것과 없는 것은 다르다**(2026-11-15 전반 점검) — 결과 읽기가 실패해도
+            # 「채택 결과가 없다」 고 답했다.
+            {"results_error": results["error"], "caveat": "처리 결과를 읽지 못했다 — 「없다」 가 아니다"}
+            if isinstance(results, dict) and "error" in results
+            else {"caveat": "채택된 처리 결과가 없다 — 이 시험의 물성은 아직 정해지지 않았다"}
             if not scalars
             else {}
         ),
@@ -2845,6 +2900,9 @@ async def get_card(ctx: Context, card_id: str) -> dict[str, Any]:
     out["source"] = {
         "test_run_ids": (card.get("source") or {}).get("test_run_ids"),
         "notes": (card.get("source") or {}).get("notes"),
+        # 근거 시험의 처리 경고 · 시편마다 다른 속도(2026-11-14 에 생긴 칸) — 안내서는 「여기에
+        # 실린다」 고 말하는데 어느 도구도 안 읽었다(2026-11-15 전반 점검).
+        "warnings": (card.get("source") or {}).get("warnings") or [],
     }
     remarks = card.get("remarks") or []
     if remarks:
@@ -2854,6 +2912,8 @@ async def get_card(ctx: Context, card_id: str) -> dict[str, Any]:
                 "message": one.get("message"),
                 "comment": one.get("comment"),
                 "by": one.get("created_by_name"),
+                # 「AI(MCP)」 면 그 사람 이름으로 AI 가 남긴 것이다 — 사람의 검토 의견으로 전하지 마라.
+                "via": one.get("via"),
                 "at": one.get("created_at"),
             }
             for one in remarks
@@ -3336,7 +3396,7 @@ async def adopt_catalog_values(
             "material": material.get("record_name"),
             "will_adopt": planned,
             **({"approval_warnings": warnings} if warnings else {}),
-            "note": "이대로 담으려면 dry_run=False 로 다시 부르세요. 이미 있는 항목은 덮어씁니다.",
+            "note": "사람에게 보이고 확인받은 뒤 dry_run=False 로 다시 부르세요. 이미 있는 항목은 덮어씁니다.",
         }
 
     if declared:
@@ -3414,7 +3474,7 @@ async def relocate_specimens(
             plan = {
                 "dry_run": True,
                 **plan,
-                "note": "이대로 옮기려면 dry_run=False 로 다시 부르세요. 걸린 카드는 사람에게 보이세요.",
+                "note": "사람에게 보이고 확인받은 뒤 dry_run=False 로 다시 부르세요. 걸린 카드는 사람에게 보이세요.",
             }
         return plan
     return await _send(ctx, "POST", "/specimens/relocate", body)
@@ -3451,7 +3511,7 @@ async def move_samples(
             plan = {
                 "dry_run": True,
                 **plan,
-                "note": "이대로 옮기려면 dry_run=False 로 다시 부르세요. 걸린 카드는 사람에게 보이세요.",
+                "note": "사람에게 보이고 확인받은 뒤 dry_run=False 로 다시 부르세요. 걸린 카드는 사람에게 보이세요.",
             }
         return plan
     return await _send(ctx, "POST", "/samples/move", body)
@@ -3551,6 +3611,10 @@ async def preview_card_fit(
         "fits": fits,
         "inherited": answer.get("elastic") or [],
         "notes": answer.get("notes") or [],
+        # 대표를 만든 시험들의 경고와 구간이 짧은 시편 — 저장하면 카드 근거에 그대로 남는 것이라
+        # 고르기 전에 보여야 한다(2026-11-15 전반 점검: 전에는 버렸다).
+        "warnings": _source_warnings({"source": {"warnings": answer.get("warnings") or []}}),
+        "short_runs": answer.get("short_runs") or [],
         "hint": (
             "**RMSE 가 가장 낮은 것을 자동으로 고르지 마라.** 적합 구간 밖에서 식들이"
             " 갈린다 — 후보를 사람에게 보이고 어디까지 쓸 것인지 물어라."
@@ -3644,7 +3708,7 @@ async def create_card_from_group(
             "dry_run": True,
             "will_create": body,
             "path": path,
-            "note": "이대로 만들려면 dry_run=False 로 다시 부르세요. 만들어도 초안입니다.",
+            "note": "사람에게 보이고 확인받은 뒤 dry_run=False 로 다시 부르세요. 만들어도 초안입니다.",
         }
     return await _send(ctx, "POST", path, body)
 
@@ -3676,7 +3740,7 @@ async def create_viscoelastic_card(
         return {
             "dry_run": True,
             "will_create": body,
-            "note": "이대로 만들려면 dry_run=False 로 다시 부르세요. 만들어도 초안입니다.",
+            "note": "사람에게 보이고 확인받은 뒤 dry_run=False 로 다시 부르세요. 만들어도 초안입니다.",
         }
     return await _send(ctx, "POST", "/fitting/cards/viscoelastic", body)
 
@@ -3717,7 +3781,7 @@ async def create_lve_card(
         return {
             "dry_run": True,
             "will_create": body,
-            "note": "이대로 만들려면 dry_run=False 로 다시 부르세요. 만들어도 초안입니다.",
+            "note": "사람에게 보이고 확인받은 뒤 dry_run=False 로 다시 부르세요. 만들어도 초안입니다.",
         }
     return await _send(ctx, "POST", "/fitting/cards/lve", body)
 
@@ -3750,6 +3814,8 @@ async def create_dma_temperature_card(
     `poisson_ratio`(비우면 재료 값)로 E 로 옮긴다. 기본이 미리보기이고 만들어도 초안이다 —
     표가 다 있으면 미리보기가 `average_preview`(줄 수 · 시편 수별 줄 · `cautions`)를 준다.
     """
+    if len(test_run_ids) > 50:
+        return {"error": f"시험은 50건까지입니다 — {len(test_run_ids)}건을 받았습니다."}
     runs: list[str] = []
     for one in test_run_ids[:50]:
         resolved = await _resolve_run(ctx, one)
@@ -3867,7 +3933,7 @@ async def create_dma_temperature_card(
                     if building
                     else ""
                 )
-                + "이대로 만들려면 dry_run=False 로 다시 부르세요. 만들어도 초안입니다."
+                + "사람에게 보이고 확인받은 뒤 dry_run=False 로 다시 부르세요. 만들어도 초안입니다."
             ),
         }
     ids: list[str] = []
@@ -4008,7 +4074,7 @@ async def create_card_from_tests(
             "dry_run": True,
             "will_create": {key: value for key, value in body.items() if value is not None},
             "note": (
-                "이대로 만들려면 dry_run=False 로 다시 부르세요. **초안으로 생깁니다** —"
+                "사람에게 보이고 확인받은 뒤 dry_run=False 로 다시 부르세요. **초안으로 생깁니다** —"
                 " 확정은 set_card_status 로 따로 합니다."
                 + ("" if family else " 식을 안 골랐으므로 표만 저장됩니다.")
             ),
@@ -4155,7 +4221,7 @@ async def create_declared_card(
         ]
     if dry_run:
         plan["dry_run"] = True
-        plan["note"] = "이대로 만들려면 dry_run=False 로 다시 부르세요. 카드는 초안으로 생깁니다."
+        plan["note"] = "사람에게 보이고 확인받은 뒤 dry_run=False 로 다시 부르세요. 카드는 초안으로 생깁니다."
         return plan
 
     body: dict[str, Any] = {
@@ -4232,7 +4298,7 @@ async def set_card_status(
             "card": summary,
             "material": card.get("material_name"),
             # 카드를 지을 때 남긴 경고(외삽 · 네킹 · 합성 …)와 서버가 짚은 문제 — 빼지 말고 옮긴다.
-            "warnings": (card.get("source") or {}).get("notes") or [],
+            "warnings": _source_warnings(card),
             "problem": card.get("problem"),
             "will": f"{status} → {action}",
             "effect": effect,
@@ -4266,9 +4332,10 @@ async def _token_owner_is_steward(ctx: Context) -> bool:
 async def add_card_remark(
     ctx: Context, card_id: str, comment: str, dry_run: bool = True
 ) -> dict[str, Any]:
-    """카드에 코멘트를 남긴다 — 검토 의견 · 확정하지 않는 사유. 값은 안 바뀌고, 카드를 만든
-    사람과 확정을 요청한 사람에게 알림이 간다. 미리보기가 기본 — 문구를 사람에게 보이고 확인받은
-    뒤 `dry_run=False`.
+    """카드에 코멘트를 남긴다 — 검토 의견 · 확정하지 않는 사유. **알림이 바로 나가고 거둘 수
+    없다**(만든 사람 · 확정 요청자). 문구는 **사람이 불러 준 것만** — 미리보기를 **사람에게 그대로
+    보이고 「그대로」 를 들은 뒤** `dry_run=False`. 「남겨 줘」 는 미리보기의 허락이지 실행의
+    허락이 아니다.
     """
     text = (comment or "").strip()
     if not text:
@@ -4285,8 +4352,9 @@ async def add_card_remark(
             "card": _card_summary(card),
             "will_add": text,
             "notifies": "카드를 만든 사람 · 확정을 요청한 사람(토큰 주인 제외)",
-            "note": "문구를 사람에게 보이고 확인받은 뒤 dry_run=False 로 다시 부르세요. "
-            "카드에는 토큰 주인의 이름과 「AI(MCP) 경유」 가 함께 남는다.",
+            "note": "문구를 사람에게 그대로 보이고 「그대로」 를 들은 뒤 dry_run=False 로 다시 "
+            "부르세요 — 알림은 거둘 수 없다. 카드에는 토큰 주인의 이름과 「AI(MCP) 경유」 가 "
+            "함께 남는다.",
         }
     done = await _send(ctx, "POST", f"/fitting/cards/{resolved}/remarks", {"comment": text})
     if isinstance(done, dict) and "error" in done:
@@ -4328,10 +4396,11 @@ async def request_review(
             return {
                 "dry_run": True,
                 "card": _card_summary(card),
-                "warnings": (card.get("source") or {}).get("notes") or [],
+                "warnings": _source_warnings(card),
                 "will": "자료 관리자에게 확정 요청 알림 · 카드에 「확정 요청」 기록",
                 "token_owner_is_steward": steward,
-                "note": direct if steward else ask,
+                # 자료 관리자여도 확인 없이 보내지 않는다 — 전에는 이 가지에서 확인 문장이 빠졌다.
+                "note": f"{direct} {ask}" if steward else ask,
             }
         done = await _send(
             ctx, "POST", f"/fitting/cards/{resolved}/request-publish", {"note": note}
@@ -4468,7 +4537,7 @@ async def add_property_item(
         return {
             "dry_run": True,
             "will_create": {"name": name.strip(), "attributes": attributes},
-            "note": "이대로 만들려면 dry_run=False 로 다시 부르세요. 모든 재료의 피커에 선다.",
+            "note": "사람에게 보이고 확인받은 뒤 dry_run=False 로 다시 부르세요. 모든 재료의 피커에 선다.",
         }
     # 경로 인자를 변수로 둔다 — 감사 검사(`test_mcp_writes_audited`)가 백엔드 경로
     # `/vocabularies/{slug}/terms` 와 짝지을 수 있게.
@@ -4597,7 +4666,7 @@ async def save_card_block(
                 if existing is not None
                 else {}
             ),
-            "note": "이대로 저장하려면 dry_run=False 로 다시 부르세요. 전 부서 카드의 모양이 된다.",
+            "note": "사람에게 보이고 확인받은 뒤 dry_run=False 로 다시 부르세요. 전 부서 카드의 모양이 된다.",
         }
     if existing is not None:
         return await _send(ctx, "PATCH", f"/fitting/block-definitions/{existing['id']}", body)
@@ -4749,7 +4818,7 @@ async def set_declared_values(
             "dry_run": True,
             "material": material.get("record_name"),
             "will_write": plan,
-            "note": "이대로 적으려면 dry_run=False 로 다시 부르세요. `replaces` 가 참인 항목은 덮어쓴다.",
+            "note": "사람에게 보이고 확인받은 뒤 dry_run=False 로 다시 부르세요. `replaces` 가 참인 항목은 덮어쓴다.",
         }
     # **선언 물성은 통째 교체다** — 기존 줄을 되보내고 새것을 더한다(`adopt_catalog_values` 와 같다).
     kept = [
@@ -4930,7 +4999,7 @@ async def add_catalog_property(
         return {
             "dry_run": True,
             "will_create": checked,
-            "note": "만들 때와 같은 검사를 지났습니다. 이대로 만들려면 dry_run=False 로 다시 "
+            "note": "만들 때와 같은 검사를 지났습니다. 사람에게 보이고 확인받은 뒤 dry_run=False 로 다시 "
             "부르세요. slug 는 한 번 만들면 못 바꿉니다 — resolve_property 로 같은 물성이 없는지 "
             "먼저 봤는지 확인하세요.",
         }
@@ -5087,7 +5156,7 @@ async def add_catalog_value(
             "conditions": conditions,
             "source": body["source"],
             **_warned(checked),
-            "note": "이대로 넣으려면 dry_run=False 로 다시 부르세요.",
+            "note": "사람에게 보이고 확인받은 뒤 dry_run=False 로 다시 부르세요.",
         }
     got = await _send(ctx, "POST", f"/catalog/materials/{catalog_material_id}/values", body)
     if "error" in got:
@@ -5104,7 +5173,11 @@ async def add_catalog_value(
 
 @mcp.tool()
 async def deprecate_catalog_property(
-    ctx: Context, property_key: str, superseded_by: str | None = None, note: str | None = None
+    ctx: Context,
+    property_key: str,
+    superseded_by: str | None = None,
+    note: str | None = None,
+    dry_run: bool = True,
 ) -> dict[str, Any]:
     """물성 키를 **폐기한다 — 지우지 않는다.** 값·매핑이 걸렸거나 사전이 이미 나간 키를
     물리는 길이다(관리자만).
@@ -5113,9 +5186,17 @@ async def deprecate_catalog_property(
     후속 키를 함께 말한다. `superseded_by` 는 살아 있는 키여야 한다 — 폐기된 키를 후속으로
     못 둔다. 후속 없이 폐기하면 그 물성에 새 값을 달 곳이 없다는 뜻이다.
 
-    **사람에게 먼저 확인한다** — 폐기는 되돌릴 수 있지만, 사전을 받아 간 시스템은 그
-    사이에 옮겨 갔을 수 있다.
+    **기본이 미리보기** — 사람에게 보이고 확인받은 뒤 `dry_run=False`. 폐기는 되돌릴 수
+    있지만, 사전을 받아 간 시스템은 그 사이에 옮겨 갔을 수 있다.
     """
+    if dry_run:
+        return {
+            "dry_run": True,
+            "will_deprecate": property_key,
+            "superseded_by": superseded_by,
+            "note": "사람에게 보이고 확인받은 뒤 dry_run=False 로 다시 부르세요. "
+            + ("" if superseded_by else "후속 키가 없다 — 그 물성에 새 값을 달 곳이 없어진다."),
+        }
     got = await _send(
         ctx,
         "POST",
@@ -5165,16 +5246,26 @@ async def migrate_catalog_property(
                     if got.get("values_imported")
                     else "."
                 )
-                + " 이대로 옮기려면 dry_run=False 로 다시 부르세요."
+                + " 사람에게 보이고 확인받은 뒤 dry_run=False 로 다시 부르세요."
             ),
         }
     return {**got, "note": "옮겼습니다."}
 
 
 @mcp.tool()
-async def delete_catalog_value(ctx: Context, value_id: str) -> dict[str, Any]:
+async def delete_catalog_value(
+    ctx: Context, value_id: str, dry_run: bool = True
+) -> dict[str, Any]:
     """직접 넣은 문헌 값 하나를 지운다 — 넣은 사람이거나 관리자만. 이관해 온 값은
-    원본(MaterialTwin)이 정본이라 못 지운다."""
+    원본(MaterialTwin)이 정본이라 못 지운다. **되돌릴 수 없다** — 기본이 미리보기이고, 지울 값을
+    사람에게 보이고 확인받은 뒤 `dry_run=False`."""
+    if dry_run:
+        return {
+            "dry_run": True,
+            "will_delete": value_id,
+            "note": "되돌릴 수 없다 — 어느 재료의 무슨 값인지(get_catalog_material) 사람에게 보이고 "
+            "확인받은 뒤 dry_run=False 로 다시 부르세요.",
+        }
     got = await _send(ctx, "DELETE", f"/catalog/values/{value_id}")
     if "error" in got:
         return got
@@ -5260,7 +5351,7 @@ async def add_catalog_series(
             "point_count": len(shown.get("points") or []),
             "converted": shown.get("converted"),
             **_warned(shown),
-            "note": "이대로 넣으려면 dry_run=False 로 다시 부르세요.",
+            "note": "사람에게 보이고 확인받은 뒤 dry_run=False 로 다시 부르세요.",
         }
     got = await _send(ctx, "POST", f"/catalog/materials/{catalog_material_id}/series", body)
     if "error" in got:
@@ -5276,8 +5367,23 @@ async def add_catalog_series(
 
 
 @mcp.tool()
-async def delete_catalog_series(ctx: Context, series_id: str) -> dict[str, Any]:
-    """직접 넣은 이어진 값 한 벌을 점과 함께 지운다 — 넣은 사람이거나 관리자만."""
+async def delete_catalog_series(
+    ctx: Context, series_id: str, dry_run: bool = True
+) -> dict[str, Any]:
+    """직접 넣은 이어진 값 한 벌을 점과 함께 지운다 — 넣은 사람이거나 관리자만. **되돌릴 수
+    없다** — 기본이 미리보기이고, 사람에게 보이고 확인받은 뒤 `dry_run=False`."""
+    if dry_run:
+        points = await _get(ctx, f"/catalog/series/{series_id}/points")
+        if isinstance(points, dict) and "error" in points:
+            return points
+        count = len(points) if isinstance(points, list) else len((points or {}).get("items", []))
+        return {
+            "dry_run": True,
+            "will_delete": series_id,
+            "points": count,
+            "note": f"되돌릴 수 없다 — 점 {count}개가 함께 지워진다. 사람에게 보이고 확인받은 뒤 "
+            "dry_run=False 로 다시 부르세요.",
+        }
     got = await _send(ctx, "DELETE", f"/catalog/series/{series_id}")
     if "error" in got:
         return got
@@ -5321,7 +5427,7 @@ async def import_catalog_batch(ctx: Context, path: str, dry_run: bool = True) ->
         "problems": problems[:30],
         **({"more_problems": len(problems) - 30} if len(problems) > 30 else {}),
         "note": (
-            "미리보기입니다 — 문제가 없으면 dry_run=False 로 다시 부르세요."
+            "미리보기입니다 — 문제가 없으면 사람에게 보이고 확인받은 뒤 dry_run=False 로 다시 부르세요."
             if dry_run
             else "들였습니다. get_catalog_batch 로 줄 수 · 라이선스를 확인하세요."
         ),
@@ -5350,6 +5456,11 @@ async def compare_catalog_materials(
     """
     if not catalog_material_ids:
         return {"error": "재료 id 를 하나 이상 주세요."}
+    if len(catalog_material_ids) > 8:
+        # 말없이 자르면 8개만 온 표를 「전부」 로 옮긴다(2026-11-15 전반 점검).
+        return {
+            "error": f"한 번에 8개까지입니다 — {len(catalog_material_ids)}개를 받았습니다. 나눠 부르세요."
+        }
     got = await _get(ctx, "/catalog/compare", {"ids": ",".join(catalog_material_ids[:8])})
     if "error" in got:
         return got
@@ -6101,7 +6212,7 @@ async def assign_inbox_item(
             "item": detail,
             "will_assign": {"specimen_id": specimen_id, "test_type": test_type},
             "note": (
-                "이대로 붙이려면 dry_run=False 로 다시 부르세요. **시편이 맞는지 "
+                "사람에게 보이고 확인받은 뒤 dry_run=False 로 다시 부르세요. **시편이 맞는지 "
                 "사람에게 확인받으세요** — 잘못 붙이면 엉뚱한 재료의 물성이 됩니다."
             ),
         }
@@ -6239,7 +6350,7 @@ async def save_format_profile(
             "dry_run": True,
             "will_save": body,
             "note": (
-                "이대로 만들려면 dry_run=False 로 다시 부르세요. "
+                "사람에게 보이고 확인받은 뒤 dry_run=False 로 다시 부르세요. "
                 "먼저 check_format_profile 로 검사했는지 확인하세요."
             ),
         }
@@ -6455,7 +6566,7 @@ async def save_export_profile(
             "will": "update" if existing is not None else "create",
             "key": key,
             "will_save": body,
-            "note": "이대로 저장하려면 dry_run=False 로 다시 부르세요. "
+            "note": "사람에게 보이고 확인받은 뒤 dry_run=False 로 다시 부르세요. "
             "preview_export_profile 로 그려 본 덱을 사용자가 확인했는지 먼저 보세요.",
         }
     if existing is not None:
@@ -7457,7 +7568,7 @@ async def create_commission(
             "lab_suggestions": suggested,
             # TestScope 에 물을 수 있을 때만 참 · 거짓 — 못 물었으면 「모름」 이다(ADR 0069).
             "lab_is_suggested": lab_choice.is_suggested(resolved["slug"], suggested),
-            "note": "이대로 만들려면 dry_run=False 로 다시 부르세요. "
+            "note": "사람에게 보이고 확인받은 뒤 dry_run=False 로 다시 부르세요. "
             + (
                 "**만들면서 접수 대기로 냅니다** — 받는 부서에 알림이 갑니다."
                 if submit
@@ -7665,7 +7776,8 @@ async def list_recipes(ctx: Context, test_type: str | None = None) -> dict[str, 
     """저장된 처리 레시피들 — **사람이 이미 합의해 둔 단계 묶음.**
 
     새로 지어내기 전에 여기부터 본다. 부서가 쓰는 레시피가 있으면 그것이 그 부서의
-    합의이고, 다르게 돌린 결과는 견줄 수가 없다.
+    합의이고, 다르게 돌린 결과는 견줄 수가 없다. **그 레시피로 돌린 결과 수**는
+    `related(kind="recipe", id=<id>, relation="ran_with")` 의 `counts` — 시험마다 훑지 마라.
     """
     return _listed(await _get(ctx, "/processing/recipes", {"test_type": test_type}), "recipes")
 
@@ -7796,6 +7908,12 @@ async def adopt_results(
         results = await _get(ctx, "/processing/results", {"test_run_id": resolved})
         if isinstance(run, dict) and "error" in run:
             plan.append({"test_run_id": resolved, "error": run["error"]})
+            continue
+        if isinstance(results, dict) and "error" in results:
+            # 결과를 못 읽었는데 「이 시험의 것이 아니다」 로 답하지 않는다.
+            plan.append(
+                {"test_run_id": resolved, "error": f"처리 결과를 읽지 못했습니다 — {results['error']}"}
+            )
             continue
         listed = results if isinstance(results, list) else []
         chosen = next((r for r in listed if str(r.get("id")) == str(result_id)), None)
@@ -8102,7 +8220,7 @@ async def save_recipe(
         return {
             "dry_run": True,
             "will_save": body,
-            "note": "이대로 만들려면 dry_run=False 로 다시 부르세요.",
+            "note": "사람에게 보이고 확인받은 뒤 dry_run=False 로 다시 부르세요.",
         }
     return await _send(ctx, "POST", "/processing/recipes", body)
 
@@ -8179,7 +8297,7 @@ async def update_recipe(
             "key": found.get("key"),
             "before": before,
             "after": after,
-            "note": "단계는 그대로입니다. 이대로 고치려면 dry_run=False 로 다시 부르세요.",
+            "note": "단계는 그대로입니다. 사람에게 보이고 확인받은 뒤 dry_run=False 로 다시 부르세요.",
         }
     return await _send(ctx, "PUT", f"/processing/recipes/{found.get('key')}", body)
 
@@ -8309,7 +8427,7 @@ async def adopt_parameter_set(
                 **({"notes": notes} if notes is not None else {}),
             },
             "note": (
-                "이대로 담으려면 dry_run=False 로 다시 부르세요. 같은 벌이 이미 "
+                "사람에게 보이고 확인받은 뒤 dry_run=False 로 다시 부르세요. 같은 벌이 이미 "
                 "있으면 갱신됩니다. 단위는 환산하지 않고 그대로 담깁니다."
             ),
         }
