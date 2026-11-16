@@ -18,7 +18,9 @@ from __future__ import annotations
 import hashlib
 import io
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 
+import numpy as np
 import pyarrow as pa
 import pyarrow.parquet as pq
 
@@ -190,3 +192,202 @@ def fingerprint(columns: Mapping[str, Sequence[float | None]]) -> str | None:
                 digest.update(format(float(value), f".{FINGERPRINT_DIGITS}g").encode() + b";")
         digest.update(b"\x01")
     return digest.hexdigest()
+
+
+# ---------------------------------------------------------------------------
+# 근사 사본 — 자릿수 · 점 간격 · 단위 배수만 다른 곡선(2026-11-17, VOC 54 · ADR 0091)
+# ---------------------------------------------------------------------------
+
+#: 모양에 남기는 점 수 — 축 열의 [최소, 최대] 를 고르게 나눈 자리.
+SHAPE_POINTS = 64
+#: 모양에 적는 유효숫자 — 견줄 차이(0.4 %)보다 훨씬 잘다. JSON 크기를 줄인다.
+SHAPE_DIGITS = 7
+#: 「거의 같다」 의 기준 — 채널 폭 대비 차이의 95 번째 백분위. **잠정값**(개발 DB 실측,
+#: 2026-11-17): 같은 재료의 다른 시험끼리는 가장 가까운 쌍이 0.57 %(예제 파일을 늘려 만든
+#: 데모)였고, 따로 잰 시편은 1.4 % 넘게 달랐다. 유효숫자 4자리로 줄인 사본은 최악 0.28 %,
+#: 5 · 10점에 하나로 솎은 사본은 0.33 %, 단위 배수만 다른 사본은 0 이었다(원본 44개). 3자리로
+#: 줄인 사본은 절반만 잡힌다.
+NEAR_COPY = 0.004
+#: 단위를 잘못 적었을 때 생기는 배율 — SI 로 바꾼 뒤에도 이 배수만큼 어긋난다.
+UNIT_FACTORS: tuple[float, ...] = (
+    1.0,
+    9.80665,  # kgf · gf
+    25.4,  # in
+    6894.757,  # psi
+    4.448222,  # lbf
+    60.0,  # min
+    3600.0,  # h
+    *(10.0**power for power in range(-9, 10) if power),
+)
+#: 배율 · 축 범위를 견줄 때 남기는 여유 — 솎으면 양 끝 몇 점이 빠져 축 범위가 몇 % 준다.
+_SHAPE_SLACK = 0.05
+#: 폭이 크기의 이 비율 아래인 채널은 「거의 상수」 — 폭 대신 크기로 나눈다(시편 폭 열 등).
+_SHAPE_FLAT = 1e-3
+
+
+def _rises(values: np.ndarray) -> bool:
+    kept = values[np.isfinite(values)]
+    steps = np.diff(kept)
+    return len(steps) > 5 and bool(kept[-1] > kept[0]) and float(np.mean(steps >= 0)) >= 0.98
+
+
+def _rounded(values: np.ndarray) -> list[float]:
+    return [float(f"{one:.{SHAPE_DIGITS}g}") for one in values]
+
+
+def shape(columns: Mapping[str, Sequence[float | None]]) -> dict[str, object] | None:
+    """곡선의 **작은 모양** — 늘기만 하는 열(축)을 고르게 나눈 64 자리에서 다른 열의 값.
+
+    값 지문(`fingerprint`)은 정확히 같은 값만 알아본다. 자릿수를 줄여 저장한 사본 · 점을
+    솎은 사본 · 단위를 잘못 적어 한 열이 일정한 배수로 어긋난 사본은 지문이 달라 통계에 두 번
+    들어갔다. 모양은 축 위의 자리에서 재므로 솎아도 같고, 배율은 견줄 때(`near_copy`) 단위
+    상수로 맞춘다.
+
+    축은 이름순으로 처음 「늘기만 하는」 열(98 % 넘는 걸음이 0 이상)이다 — 인장은 변위, DMA
+    변형률 스윕은 진동 변형률. 그런 열이 없으면 행 차례(0~1)로 잰다. 값이 10개 미만인 열은
+    뺀다.
+    """
+    arrays: dict[str, np.ndarray] = {}
+    for key, values in columns.items():
+        row = np.array([np.nan if one is None else float(one) for one in values], dtype=float)
+        if int(np.isfinite(row).sum()) >= 10:
+            arrays[key] = row
+    if not arrays:
+        return None
+    lead = next((key for key in sorted(arrays) if _rises(arrays[key])), None)
+    if lead is None:
+        at = np.linspace(0.0, 1.0, SHAPE_POINTS)
+        grid: dict[str, list[float]] = {}
+        for key, row in arrays.items():
+            kept = row[np.isfinite(row)]
+            grid[key] = _rounded(np.interp(at, np.linspace(0.0, 1.0, len(kept)), kept))
+        return {"lead": None, "grid": grid}
+    axis = arrays[lead]
+    has_axis = np.isfinite(axis)
+    # 축이 잡음으로 잠깐 내려가도 차례를 지킨다 — 보간은 오르는 축이 필요하다.
+    running = np.maximum.accumulate(np.where(has_axis, axis, -np.inf))
+    low, high = float(np.nanmin(axis)), float(np.nanmax(axis))
+    spots = np.linspace(low, high, SHAPE_POINTS)
+    grid = {}
+    for key in sorted(arrays):
+        row = arrays[key]
+        # 축과 값을 **같은 행에서** 짝짓는다 — 빈 칸이 다른 자리에 있어도 어긋나지 않는다.
+        both = has_axis & np.isfinite(row) if key != lead else np.zeros(len(row), dtype=bool)
+        if int(both.sum()) >= 10:
+            grid[key] = _rounded(np.interp(spots, running[both], row[both]))
+    if not grid:
+        return None
+    return {"lead": lead, "low": low, "high": high, "grid": grid}
+
+
+_FACTOR_ARRAY = np.asarray(UNIT_FACTORS)
+
+
+@dataclass(frozen=True)
+class Shape:
+    """저장된 모양(`shape` 의 JSON)을 견주기 좋게 편 것 — 채널은 이름순, 채널마다 한 줄."""
+
+    lead: str | None
+    low: float
+    high: float
+    keys: tuple[str, ...]
+    grid: np.ndarray
+
+    @classmethod
+    def of(cls, stored: Mapping[str, object] | None) -> Shape | None:
+        """JSON 모양 → `Shape`. 모양이 아니면 `None`(옛 · 깨진 칸은 견주지 않는다)."""
+        if not stored or not isinstance(stored.get("grid"), dict):
+            return None
+        grid = stored["grid"]
+        assert isinstance(grid, dict)
+        keys = tuple(sorted(grid))
+        try:
+            values = np.asarray([grid[key] for key in keys], dtype=float)
+            low = float(stored.get("low") or 0.0)  # type: ignore[arg-type]
+            high = float(stored.get("high") or 0.0)  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            return None
+        if values.ndim != 2 or values.shape[1] != SHAPE_POINTS or not keys:
+            return None
+        lead = stored.get("lead")
+        return cls(lead if isinstance(lead, str) else None, low, high, keys, values)
+
+
+def _unit_factor(ratio: float) -> float | None:
+    if not ratio > 0 or ratio == float("inf"):
+        return None
+    best = min(UNIT_FACTORS, key=lambda one: abs(ratio / one - 1))
+    return best if abs(ratio / best - 1) <= _SHAPE_SLACK else None
+
+
+def near_copy(mine: Shape, other: Shape) -> tuple[float, dict[str, float]] | None:
+    """`other` 가 `mine` 의 근사 사본인가 — `(차이, 채널마다 배율)`. 견줄 수 없으면 `None`.
+
+    차이는 채널마다 「`other` 의 자리에서 본 `mine` 에 배율을 곱한 값과 `other` 의 차이」 를 그
+    채널의 폭으로 나눈 값의 95 번째 백분위 중 가장 큰 것이다 — `NEAR_COPY` 아래면 거의 같다.
+    배율은 단위 상수(`UNIT_FACTORS`) 중 가장 가까운 것이고, 5 % 넘게 어긋나면 견주지 않는다.
+    축이 다르거나 채널 목록이 다르면 견주지 않는다. 방향이 있다(겹친 축 구간을 `other` 의
+    자리로 잰다) — 두 방향 중 작은 쪽을 쓴다. 업로드마다 같은 재료의 곡선 수천 개와 견주므로
+    채널을 한꺼번에 계산한다.
+    """
+    if mine.lead != other.lead or mine.keys != other.keys:
+        return None
+    factors: dict[str, float] = {}
+    if mine.lead is None:
+        a, b = mine.grid, other.grid
+    else:
+        if not mine.high > mine.low or not other.high > other.low:
+            return None
+        lead_factor = _unit_factor((other.high - other.low) / (mine.high - mine.low))
+        if lead_factor is None:
+            return None
+        factors[mine.lead] = lead_factor
+        low_a, high_a = mine.low * lead_factor, mine.high * lead_factor
+        start, end = max(low_a, other.low), min(high_a, other.high)
+        # 겹친 축 구간이 양쪽 다 90 % 는 돼야 한다 — 잘린 곡선은 이 판정의 몫이 아니다.
+        if end - start < 0.9 * (high_a - low_a) or end - start < 0.9 * (
+            other.high - other.low
+        ):
+            return None
+        x_b = np.linspace(other.low, other.high, SHAPE_POINTS)
+        inside = (x_b >= start) & (x_b <= end)
+        # `mine` 의 자리는 고른 간격이라 보간 자리를 셈으로 낸다 — 모든 채널이 같은 자리를 쓴다
+        # (`np.interp` 와 같은 값).
+        place = (x_b[inside] - low_a) / (high_a - low_a) * (SHAPE_POINTS - 1)
+        left = np.clip(np.floor(place).astype(int), 0, SHAPE_POINTS - 2)
+        weight = np.clip(place - left, 0.0, 1.0)
+        a = mine.grid[:, left] * (1 - weight) + mine.grid[:, left + 1] * weight
+        b = other.grid[:, inside]
+    # 배율은 단위 상수 중 가장 가까운 것만 고르면 되므로 절댓값 평균의 비로 충분하다.
+    middle_a = np.mean(np.abs(a), axis=1)
+    middle_b = np.mean(np.abs(b), axis=1)
+    both_zero = (middle_a == 0) & (middle_b == 0)
+    if np.any((middle_a == 0) & ~both_zero):
+        return None
+    ratio = np.where(both_zero, 1.0, middle_b / np.where(middle_a == 0, 1.0, middle_a))
+    nearest = _FACTOR_ARRAY[
+        np.argmin(np.abs(ratio[:, None] / _FACTOR_ARRAY[None, :] - 1), axis=1)
+    ]
+    if np.any(np.abs(ratio / nearest - 1) > _SHAPE_SLACK):
+        return None
+    size = np.max(np.abs(b), axis=1)
+    span = np.max(b, axis=1) - np.min(b, axis=1)
+    scale = np.where(span > _SHAPE_FLAT * size, span, np.where(size > 0, size, 1.0))
+    # 95 번째 자리 — 정렬해 그 자리를 집는다(`np.percentile` 보다 몇 배 빠르고 판정은 같다).
+    ordered = np.sort(np.abs(a * nearest[:, None] - b), axis=1)
+    gaps = ordered[:, int(0.95 * (ordered.shape[1] - 1))] / scale
+    for key, factor in zip(mine.keys, nearest, strict=True):
+        factors[key] = float(factor)
+    return float(np.max(gaps)), factors
+
+
+def copy_gap(first: Shape, second: Shape) -> tuple[float, dict[str, float]] | None:
+    """두 모양의 차이 — `near_copy` 의 두 방향 중 작은 쪽. 견줄 수 없으면 `None`.
+
+    배율은 `second` 가 `first` 의 몇 배인가다(작은 쪽이 거꾸로 잰 방향이면 뒤집어 준다).
+    """
+    forward = near_copy(first, second)
+    backward = near_copy(second, first)
+    if backward is not None and (forward is None or backward[0] < forward[0]):
+        return backward[0], {key: 1.0 / value for key, value in backward[1].items()}
+    return forward

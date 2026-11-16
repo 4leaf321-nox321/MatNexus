@@ -27,7 +27,7 @@ from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.modules.accounts.models import User
 from app.modules.guide.models import GuideAsset
-from app.modules.materials.models import Specimen
+from app.modules.materials.models import Sample, Specimen
 from app.modules.processing.models import ProcessingResult
 from app.modules.tests.models import (
     Curve,
@@ -846,7 +846,91 @@ def _duplicates(db: Session, run: TestRun) -> list[dict[str, str]]:
                     f"— {_names(names)}. 형식 · 단위만 다른 사본일 수 있습니다(SI 로 견줌).",
                 }
             )
+    found += _near_copies(db, run, same_sha=run.source_sha256)
     return found
+
+
+#: 근사 사본을 견줄 이웃 곡선의 상한(최근 것부터) — 재료 하나에 시험이 아주 많아도 업로드가
+#: 느려지지 않게. 모양 비교는 쌍 하나에 0.3 ms 안팎(두 방향)이라 이 수면 곡선마다 1초 안이다.
+NEAR_COPY_NEIGHBOURS = 2000
+
+
+def _near_copies(db: Session, run: TestRun, *, same_sha: str | None) -> list[dict[str, str]]:
+    """**같은 재료 · 같은 시험 종류**의 다른 시험에 거의 같은 곡선이 있다(2026-11-17, VOC 54 ·
+    ADR 0091) — 막지 않고 말한다.
+
+    값 지문은 정확히 같은 값만 알아본다. 자릿수를 줄여 저장한 사본 · 점을 솎은 사본 · 단위를
+    잘못 적어 한 열이 배수로 어긋난 사본은 지문이 달라 통계에 두 번 들어갔다. 곡선의 작은
+    모양(`Curve.shape`)끼리 견준다(`matcore.curves.near_copy`, 기준 `NEAR_COPY`). **다른
+    재료와는 견주지 않는다** — 같은 공정의 다른 재료가 비슷한 곡선을 내는 것은 정상이다. 지문이
+    같은 곡선 · 같은 원본 파일은 앞에서 말했으므로 뺀다.
+    """
+    mine = [
+        (one, shaped)
+        for one in db.scalars(select(Curve).where(Curve.test_run_id == run.id))
+        if one.kind == "measured" and (shaped := curves.Shape.of(one.shape)) is not None
+    ]
+    specimen = db.get(Specimen, run.specimen_id)
+    if not mine or specimen is None:
+        return []
+    material_id = db.scalar(select(Sample.material_id).where(Sample.id == specimen.sample_id))
+    prints = {one.fingerprint for one, _ in mine if one.fingerprint}
+    neighbours = db.execute(
+        select(Curve.shape, Curve.fingerprint, TestRun.record_name, TestRun.source_sha256)
+        .join(TestRun, TestRun.id == Curve.test_run_id)
+        .join(Specimen, Specimen.id == TestRun.specimen_id)
+        .join(Sample, Sample.id == Specimen.sample_id)
+        .where(
+            Sample.material_id == material_id,
+            TestRun.test_type_id == run.test_type_id,
+            TestRun.id != run.id,
+            TestRun.deleted_at.is_(None),
+            Curve.kind == "measured",
+            Curve.shape.is_not(None),
+        )
+        .order_by(TestRun.created_at.desc())
+        .limit(NEAR_COPY_NEIGHBOURS)
+    ).all()
+    # 지문이 같은 곡선 · 같은 원본은 앞에서 말했다. 모양은 한 번만 편다.
+    others = [
+        (shaped, name)
+        for stored, print_, name, sha in neighbours
+        if not (print_ and print_ in prints)
+        and not (same_sha and sha == same_sha)
+        and (shaped := curves.Shape.of(stored)) is not None
+    ]
+    found: list[dict[str, str]] = []
+    for curve, shaped in mine:
+        hits: list[tuple[float, str, dict[str, float]]] = []
+        for other, name in others:
+            got = curves.copy_gap(other, shaped)
+            if got is not None and got[0] < curves.NEAR_COPY:
+                hits.append((got[0], name, got[1]))
+        if not hits:
+            continue
+        hits.sort(key=lambda one: one[0])
+        gap, _, factors = hits[0]
+        scaled = ", ".join(
+            f"{key} {_factor_text(value)}배"
+            for key, value in sorted(factors.items())
+            if value != 1.0
+        )
+        found.append(
+            {
+                "code": "near_duplicate_curve",
+                "message": f"곡선 '{curve.label or curve.key}' 이 같은 재료의 다른 시험 "
+                f"곡선과 거의 같습니다 — {_names([one[1] for one in hits])}"
+                f"(모양 차이 {gap:.2%}"
+                + (f", 배율 {scaled}" if scaled else "")
+                + "). 자릿수를 줄이거나 점을 솎거나 단위를 배수로 잘못 적은 사본이면 통계에 "
+                "두 번 들어갑니다.",
+            }
+        )
+    return found
+
+
+def _factor_text(value: float) -> str:
+    return f"{value:g}" if 1e-3 <= value <= 1e4 else f"{value:.0e}"
 
 
 def _names(names: Sequence[str]) -> str:
@@ -1508,6 +1592,14 @@ def _store_curves(db: Session, run: TestRun, parsed: ParsedTest, *, version: str
                 byte_size=stored.size,
                 channels=[channel.key for channel in curve.channels],
                 fingerprint=curves.fingerprint(
+                    {
+                        channel.key: channel.values
+                        for channel in curve.channels
+                        if not defined or channel.key in defined
+                    }
+                ),
+                # 근사 사본을 알아볼 작은 모양(2026-11-17, VOC 54) — 지문과 같은 채널로.
+                shape=curves.shape(
                     {
                         channel.key: channel.values
                         for channel in curve.channels

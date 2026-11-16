@@ -661,6 +661,118 @@ class Test같은_측정이_다시_들어올_때:
         curve = db.scalar(select(Curve).where(Curve.test_run_id == second.id))
         assert curve is not None and curve.fingerprint
 
+    # -- 근사 사본(2026-11-17, VOC 54 · ADR 0091) — 지문이 다른데 같은 측정 ----------------
+
+    @staticmethod
+    def _rounded(data: bytes, digits: int) -> bytes:
+        """수치 줄의 값을 유효숫자 `digits` 자리로 — 엑셀로 열었다 저장한 사본."""
+        lines = data.split(b"\n")
+        out = []
+        for line in lines:
+            parts = line.rstrip(b"\r").split(b",")
+            try:
+                numbers = [float(one) for one in parts]
+            except ValueError:
+                out.append(line)
+                continue
+            end = b"\r" if line.endswith(b"\r") else b""
+            out.append(b",".join(f"{one:.{digits}g}".encode() for one in numbers) + end)
+        return b"\n".join(out)
+
+    def _other_specimen(self, client: TestClient, headers: dict[str, str]) -> str:
+        material = client.post(
+            "/api/materials",
+            json={
+                "family": "Metal",
+                "category": "Steel",
+                "grade": "SPCC",
+                "details": "다른 재료",
+            },
+            headers=headers,
+        ).json()
+        sample = client.post(
+            f"/api/materials/{material['id']}/samples", json={}, headers=headers
+        ).json()
+        made = client.post(
+            f"/api/samples/{sample['id']}/specimens",
+            json={"orientation": "MD"},
+            headers=headers,
+        ).json()
+        return str(made["id"])
+
+    def test_단위를_잘못_적은_사본은_거의_같다고_말한다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        db: Session,
+        tensile: None,
+        specimen: dict[str, Any],
+    ) -> None:
+        """하중 단위를 kN 으로 잘못 적은 사본 — SI 로 바꾸면 1000배라 지문이 다르다."""
+        original = TRA.read_bytes()
+        first = self._parsed(client, admin_headers, db, specimen["id"], original)
+        wrong = original.replace(b'"mm","N","mm"', b'"mm","kN","mm"')
+        assert wrong != original
+        second = self._parsed(client, admin_headers, db, specimen["id"], wrong)
+        codes = [one["code"] for one in second.checks]
+        assert "near_duplicate_curve" in codes and "duplicate_curve" not in codes
+        message = next(
+            one["message"] for one in second.checks if one["code"] == "near_duplicate_curve"
+        )
+        assert first.record_name in message and "force 1000배" in message
+
+    def test_자릿수를_줄인_사본도_알아본다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        db: Session,
+        tensile: None,
+        specimen: dict[str, Any],
+    ) -> None:
+        original = TRA.read_bytes()
+        self._parsed(client, admin_headers, db, specimen["id"], original)
+        second = self._parsed(
+            client, admin_headers, db, specimen["id"], self._rounded(original, 4)
+        )
+        codes = [one["code"] for one in second.checks]
+        assert "near_duplicate_curve" in codes and "duplicate_curve" not in codes
+
+    def test_다른_재료_다른_시편은_말하지_않는다(
+        self,
+        client: TestClient,
+        admin_headers: dict[str, str],
+        db: Session,
+        tensile: None,
+        specimen: dict[str, Any],
+    ) -> None:
+        """다른 재료의 비슷한 곡선은 정상이다 — 같은 재료 안에서만 견준다. 하중이 2 % 다른
+        곡선은 같은 재료여도 다른 시편으로 본다(기준 0.4 %)."""
+        original = TRA.read_bytes()
+        self._parsed(client, admin_headers, db, specimen["id"], original)
+        elsewhere = self._parsed(
+            client,
+            admin_headers,
+            db,
+            self._other_specimen(client, admin_headers),
+            self._rounded(original, 4),
+        )
+        assert "near_duplicate_curve" not in [one["code"] for one in elsewhere.checks]
+
+        lines = original.split(b"\n")
+        stronger = []
+        for line in lines:
+            parts = line.rstrip(b"\r").split(b",")
+            try:
+                numbers = [float(one) for one in parts]
+            except ValueError:
+                stronger.append(line)
+                continue
+            numbers[1] *= 1.02
+            end = b"\r" if line.endswith(b"\r") else b""
+            stronger.append(b",".join(repr(one).encode() for one in numbers) + end)
+        other = self._parsed(client, admin_headers, db, specimen["id"], b"\n".join(stronger))
+        assert "near_duplicate_curve" not in [one["code"] for one in other.checks]
+
 
 class TestCurve:
     def test_축약해서_준다(

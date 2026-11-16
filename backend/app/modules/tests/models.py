@@ -583,6 +583,14 @@ class Curve(Base):
     같은 지문의 곡선이 다른 시험에 있으면 읽을 때 점검(경고)으로 남고 통계는 「같은 지문은
     하나로」 를 고를 수 있다. **막지 않는다** — 재시험 · 반복 측정이 정상인 자리다. 비어 있으면
     지문을 재기 전의 곡선이다(`scripts/backfill_curve_fingerprints.py`)."""
+    shape: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    """**작은 모양**(`matcore.curves.shape`) — 지문과 같은 채널을 늘기만 하는 열 위 64 자리로
+    (2026-11-17, VOC 54 · ADR 0091).
+
+    지문은 정확히 같은 값만 알아본다. 자릿수를 줄이거나 점을 솎거나 단위를 배수로 잘못 적은
+    사본은 같은 재료 · 같은 시험 종류의 곡선끼리 이 모양으로 견줘(`matcore.curves.near_copy`)
+    읽을 때 점검으로 남긴다. 곡선 파일을 다시 열지 않으려고 칸에 둔다. 비어 있으면 모양을 재기
+    전의 곡선이다(`scripts/backfill_curve_fingerprints.py`)."""
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
