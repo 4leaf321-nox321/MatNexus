@@ -57,6 +57,7 @@ export const ACTION_LABELS: Record<string, string> = {
   'card.remarked': '물성 카드 코멘트',
   'specimens.relocated': '시편을 다른 두께 재료로 옮김',
   'samples.moved': '시료를 고른 재료로 옮김',
+  'materials.merged': '재료를 합침',
   'test_run.held': '시험 물성 사용 보류',
   'test_run.released': '시험 물성 사용 보류 해제',
   'card.deleted': '물성 카드 삭제',

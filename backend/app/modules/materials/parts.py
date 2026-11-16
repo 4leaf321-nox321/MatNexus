@@ -61,6 +61,11 @@ def _row_key(row: MaterialPart) -> str:
     return _key(row.part_name, row.product_name, row.part_code, row.division_name)
 
 
+def row_key(row: MaterialPart) -> str:
+    """같은 줄을 가리는 열쇠 — 재료 합치기(`merge`)가 받는 재료에 없는 줄을 셀 때 쓴다."""
+    return _row_key(row)
+
+
 # ── 읽기 ────────────────────────────────────────────────────────────────────
 
 

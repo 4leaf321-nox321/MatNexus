@@ -11,6 +11,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ClipboardList,
+  Combine,
   ListTree,
   Pencil,
   Plus,
@@ -21,6 +22,7 @@ import { DeleteMaterialDialog } from '@/modules/materials/DeleteMaterialDialog'
 import { materialsApi } from '@/modules/materials/api'
 import { FittingPanel } from '@/modules/fitting/FittingPanel'
 import { EditMaterialDialog } from '@/modules/materials/EditMaterialDialog'
+import { MaterialMergeDialog } from '@/modules/materials/MaterialMergeDialog'
 import { MaterialListPanel } from '@/modules/materials/MaterialListPanel'
 import { MaterialPartsTab } from '@/modules/materials/MaterialPartsTab'
 import { SampleExplorer } from '@/modules/materials/SampleExplorer'
@@ -88,6 +90,8 @@ export default function MaterialDetailPage() {
   )
   const groupKinds = useResource(() => groupsApi.kinds(), [])
   const [removing, setRemoving] = useState(false)
+  /** 같은 재료를 두 번 등록한 것을 하나로(2026-11-17, VOC 59). */
+  const [merging, setMerging] = useState(false)
 
   const item = material.data
 
@@ -154,6 +158,17 @@ export default function MaterialDetailPage() {
             {/* **확인이 없었다.** 누르면 바로 지우려 들었고, 시료가 남아 있으면
                 그제서야 실패 이유가 떴다 — 그리고 거기서 할 수 있는 일이 없었다.
                 이제 무엇이 함께 사라지는지 먼저 보여 준다. */}
+            {/* **같은 재료를 두 번 등록했을 때**(VOC 59) — 시료 이동은 시료만 옮겨, 재료에 붙은
+                선언 물성 · 카드 · 기록이 빈 재료와 함께 휴지통으로 갔다. */}
+            <Button
+              variant="outline"
+              onClick={() => setMerging(true)}
+              disabled={!item || !canEdit(item.access)}
+              title={lockedTitle(item?.access)}
+            >
+              <Combine className="size-4" />
+              다른 재료와 합치기
+            </Button>
             <Button
               variant="outline"
               onClick={() => setRemoving(true)}
@@ -188,6 +203,16 @@ export default function MaterialDetailPage() {
       )}
 
       <ErrorNotice error={material.error} className="mb-4" />
+
+      {item && (
+        <MaterialMergeDialog
+          materialId={item.id}
+          materialName={item.record_name}
+          open={merging}
+          onClose={() => setMerging(false)}
+          onDone={(done) => navigate(`/materials/${done.target_id}`)}
+        />
+      )}
 
       {item && (
         <DeleteMaterialDialog

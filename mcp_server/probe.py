@@ -319,6 +319,13 @@ async def sweep(session: ClientSession) -> None:
                     "dry_run": True,
                 },
             )
+        # 재료 합치기(2026-11-17, VOC 59) — **미리보기만**, 받을 재료도 지금 재료. 서버가 「같은
+        # 재료끼리는 합치지 않습니다」 를 `blocked` 로 세운 계획을 준다(쓰지 않는다).
+        await call(
+            session,
+            "merge_materials",
+            {"material_id": material_id, "target_material_id": material_id},
+        )
         samples = await call(session, "list_samples", {"material_id": material_id})
         rows = (samples or {}).get("samples") if isinstance(samples, dict) else None
         if rows:

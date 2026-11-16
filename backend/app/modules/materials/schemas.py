@@ -1309,6 +1309,52 @@ class RelocateOut(BaseModel):
     blocked: list[str]
 
 
+class MaterialMergeRequest(BaseModel):
+    """이 재료를 **받을 재료로 합친다**(2026-11-17, VOC 59 · ADR 0092). 계획과 실행이 같은
+    본문이다."""
+
+    target_material_id: uuid.UUID
+    comment: str | None = Field(default=None, max_length=1000)
+    """카드 코멘트 · 변경 이력에 함께 남는다. 「같은 재료를 두 번 등록함」 같은 것."""
+
+
+class MaterialMergePlanOut(BaseModel):
+    """합치면 무엇이 어디로 가는지 — 쓰지 않는다. 받는 재료가 비어 있는 칸만 채운다."""
+
+    source_id: uuid.UUID
+    source_name: str
+    target_id: uuid.UUID
+    target_name: str
+    samples: int
+    """옮길 시료(휴지통의 것 포함)."""
+    specimens: int
+    test_runs: int
+    cards: int
+    groups: int
+    """묶음 기록 — 받는 재료로 옮긴다."""
+    ensembles: int
+    """저장한 대표 곡선 — 받는 재료로 옮긴다."""
+    parameter_sets: int
+    catalog_link: bool
+    """문헌 연결을 받는 재료로 옮기나(받는 재료에 없을 때만)."""
+    workbench_items: int
+    bom_aliases: int
+    parts: int
+    """받는 재료에 없는 적용 부품 줄(복사)."""
+    taken: list[str]
+    """받는 재료에 없어 가져오는 값."""
+    kept: list[str]
+    """두 재료의 값이 달라 받는 재료의 것을 둔 칸 — 두 값을 함께 적는다."""
+    left: list[str]
+    """받는 재료에 같은 자리가 이미 있어 옛 재료에 남는 것."""
+    blocked: list[str]
+    """하나라도 있으면 합치지 않는다."""
+
+
+class MaterialMergeOut(MaterialMergePlanOut):
+    merged: bool
+
+
 # --- 적용 부품 (ADR 0064) ---------------------------------------------------
 
 #: 한 번에 넣는 줄 수 — `parts.LINES_MAX` 와 같다. BOM 하나가 수백 줄이다.

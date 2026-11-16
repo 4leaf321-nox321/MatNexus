@@ -28,6 +28,7 @@ from app.modules.fitting.models import PropertyCard
 from app.modules.materials import (
     column_evidence,
     declared,
+    merge,
     relocation,
     services,
     thickness_gap,
@@ -72,6 +73,9 @@ from app.modules.materials.schemas import (
     MaterialCreateRequest,
     MaterialDeleteOut,
     MaterialDeleteRequest,
+    MaterialMergeOut,
+    MaterialMergePlanOut,
+    MaterialMergeRequest,
     MaterialOut,
     MaterialTreeSummaryOut,
     MaterialUpdateRequest,
@@ -3560,6 +3564,68 @@ def relocate(
         cards_deprecated=done.cards_deprecated,
         blocked=plan.blocked,
     )
+
+
+def _merge_out(plan: merge.MergePlan) -> MaterialMergePlanOut:
+    return MaterialMergePlanOut(
+        source_id=plan.source.id,
+        source_name=plan.source.record_name,
+        target_id=plan.target.id,
+        target_name=plan.target.record_name,
+        samples=len(plan.samples),
+        specimens=plan.specimens,
+        test_runs=plan.test_runs,
+        cards=len(plan.cards),
+        groups=len(plan.groups),
+        ensembles=len(plan.ensembles),
+        parameter_sets=len(plan.parameter_sets),
+        catalog_link=plan.catalog_link is not None,
+        workbench_items=len(plan.workbench_items),
+        bom_aliases=len(plan.bom_aliases),
+        parts=plan.parts,
+        taken=plan.taken,
+        kept=plan.kept,
+        left=plan.left,
+        blocked=plan.blocked,
+    )
+
+
+@router.post("/{material_id}/merge-plan", response_model=MaterialMergePlanOut)
+def merge_material_plan(
+    material_id: uuid.UUID,
+    payload: MaterialMergeRequest,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> MaterialMergePlanOut:
+    """이 재료를 받을 재료로 **합치면 무엇이 어디로 가는지** — 쓰지 않는다(VOC 59 · ADR 0092).
+
+    받는 재료가 비어 있는 칸만 채우고, 값이 다르면 받는 재료의 값을 둔다 — 그 칸을 두 값과 함께
+    `kept` 로 보인다. 막히는 까닭(`blocked`)이 하나라도 있으면 합치지 않는다.
+    """
+    return _merge_out(merge.make_plan(db, user, material_id, payload.target_material_id))
+
+
+@router.post("/{material_id}/merge", response_model=MaterialMergeOut)
+def merge_material(
+    material_id: uuid.UUID,
+    payload: MaterialMergeRequest,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> MaterialMergeOut:
+    """같은 재료를 두 번 등록한 것을 **하나로 합친다**(2026-11-17, VOC 59 · ADR 0092).
+
+    시료(시편 · 시험 · 처리 결과 · 채택이 따라감) · 카드 · 묶음 기록 · 대표 곡선 · 계수 묶음 ·
+    문헌 연결 · 워크벤치 줄 · BOM 매칭을 받는 재료로 옮기고, 받는 재료가 비어 있는 칸(밀도 ·
+    푸아송비 · 별칭 · 메모 · 선언 물성 항목 · 적용 부품)을 채운다. 이 재료는 휴지통으로 간다
+    (되살릴 수 있다). 두 재료와 이 재료의 시료 · 시편을 모두 고칠 수 있어야 한다(ADR 0035).
+    """
+    plan = merge.make_plan(db, user, material_id, payload.target_material_id)
+    permissions.require_edit(db, user, plan.source, code="MNX-MATERIALS-0072")
+    permissions.require_edit(db, user, plan.target, code="MNX-MATERIALS-0072")
+    out = _merge_out(plan)
+    merge.execute(db, user, plan, comment=payload.comment)
+    db.commit()
+    return MaterialMergeOut(**out.model_dump(), merged=True)
 
 
 @samples_router.post("/move-plan", response_model=RelocatePlanOut)

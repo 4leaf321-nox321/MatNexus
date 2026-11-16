@@ -3786,6 +3786,30 @@ async def move_samples(
 
 
 @mcp.tool()
+async def merge_materials(
+    ctx: Context,
+    material_id: str,
+    target_material_id: str,
+    comment: str | None = None,
+    dry_run: bool = True,
+) -> dict[str, Any]:
+    """두 번 등록한 재료를 하나로 — 시료 · 카드 · 기록을 받는 재료로, 빈 칸만 채운다(다르면 받는
+    재료 우선 `kept`). 옛 재료는 휴지통. **기본 미리보기** — `kept` · `left` 를 사람에게 보인 뒤."""
+    body: dict[str, Any] = {"target_material_id": target_material_id, "comment": comment}
+    if dry_run:
+        plan = await _send(ctx, "POST", f"/materials/{material_id}/merge-plan", body)
+        if isinstance(plan, dict) and "error" not in plan:
+            plan = {
+                "dry_run": True,
+                **plan,
+                "note": "값이 달라 받는 재료의 것을 두는 칸(kept)과 옛 재료에 남는 것(left)을 "
+                "사람에게 보이고 확인받은 뒤 dry_run=False 로 다시 부르세요.",
+            }
+        return plan
+    return await _send(ctx, "POST", f"/materials/{material_id}/merge", body)
+
+
+@mcp.tool()
 async def preview_card_fit(
     ctx: Context,
     material_id: str,

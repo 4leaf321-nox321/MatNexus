@@ -4567,6 +4567,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/materials/{material_id}/merge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Merge Material
+         * @description 같은 재료를 두 번 등록한 것을 **하나로 합친다**(2026-11-17, VOC 59 · ADR 0092).
+         *
+         *     시료(시편 · 시험 · 처리 결과 · 채택이 따라감) · 카드 · 묶음 기록 · 대표 곡선 · 계수 묶음 ·
+         *     문헌 연결 · 워크벤치 줄 · BOM 매칭을 받는 재료로 옮기고, 받는 재료가 비어 있는 칸(밀도 ·
+         *     푸아송비 · 별칭 · 메모 · 선언 물성 항목 · 적용 부품)을 채운다. 이 재료는 휴지통으로 간다
+         *     (되살릴 수 있다). 두 재료와 이 재료의 시료 · 시편을 모두 고칠 수 있어야 한다(ADR 0035).
+         */
+        post: operations["merge_material_api_materials__material_id__merge_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/materials/{material_id}/merge-plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Merge Material Plan
+         * @description 이 재료를 받을 재료로 **합치면 무엇이 어디로 가는지** — 쓰지 않는다(VOC 59 · ADR 0092).
+         *
+         *     받는 재료가 비어 있는 칸만 채우고, 값이 다르면 받는 재료의 값을 둔다 — 그 칸을 두 값과 함께
+         *     `kept` 로 보인다. 막히는 까닭(`blocked`)이 하나라도 있으면 합치지 않는다.
+         */
+        post: operations["merge_material_plan_api_materials__material_id__merge_plan_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/materials/{material_id}/parameter-sets": {
         parameters: {
             query?: never;
@@ -16936,6 +16984,119 @@ export interface components {
             material_id: string;
             /** Record Name */
             record_name: string;
+        };
+        /** MaterialMergeOut */
+        MaterialMergeOut: {
+            /** Blocked */
+            blocked: string[];
+            /** Bom Aliases */
+            bom_aliases: number;
+            /** Cards */
+            cards: number;
+            /** Catalog Link */
+            catalog_link: boolean;
+            /** Ensembles */
+            ensembles: number;
+            /** Groups */
+            groups: number;
+            /** Kept */
+            kept: string[];
+            /** Left */
+            left: string[];
+            /** Merged */
+            merged: boolean;
+            /** Parameter Sets */
+            parameter_sets: number;
+            /** Parts */
+            parts: number;
+            /** Samples */
+            samples: number;
+            /**
+             * Source Id
+             * Format: uuid
+             */
+            source_id: string;
+            /** Source Name */
+            source_name: string;
+            /** Specimens */
+            specimens: number;
+            /** Taken */
+            taken: string[];
+            /**
+             * Target Id
+             * Format: uuid
+             */
+            target_id: string;
+            /** Target Name */
+            target_name: string;
+            /** Test Runs */
+            test_runs: number;
+            /** Workbench Items */
+            workbench_items: number;
+        };
+        /**
+         * MaterialMergePlanOut
+         * @description 합치면 무엇이 어디로 가는지 — 쓰지 않는다. 받는 재료가 비어 있는 칸만 채운다.
+         */
+        MaterialMergePlanOut: {
+            /** Blocked */
+            blocked: string[];
+            /** Bom Aliases */
+            bom_aliases: number;
+            /** Cards */
+            cards: number;
+            /** Catalog Link */
+            catalog_link: boolean;
+            /** Ensembles */
+            ensembles: number;
+            /** Groups */
+            groups: number;
+            /** Kept */
+            kept: string[];
+            /** Left */
+            left: string[];
+            /** Parameter Sets */
+            parameter_sets: number;
+            /** Parts */
+            parts: number;
+            /** Samples */
+            samples: number;
+            /**
+             * Source Id
+             * Format: uuid
+             */
+            source_id: string;
+            /** Source Name */
+            source_name: string;
+            /** Specimens */
+            specimens: number;
+            /** Taken */
+            taken: string[];
+            /**
+             * Target Id
+             * Format: uuid
+             */
+            target_id: string;
+            /** Target Name */
+            target_name: string;
+            /** Test Runs */
+            test_runs: number;
+            /** Workbench Items */
+            workbench_items: number;
+        };
+        /**
+         * MaterialMergeRequest
+         * @description 이 재료를 **받을 재료로 합친다**(2026-11-17, VOC 59 · ADR 0092). 계획과 실행이 같은
+         *     본문이다.
+         */
+        MaterialMergeRequest: {
+            /** Comment */
+            comment?: string | null;
+            /**
+             * Target Material Id
+             * Format: uuid
+             */
+            target_material_id: string;
         };
         /** MaterialOut */
         MaterialOut: {
@@ -31891,6 +32052,76 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DeletePlanOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    merge_material_api_materials__material_id__merge_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                material_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MaterialMergeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MaterialMergeOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    merge_material_plan_api_materials__material_id__merge_plan_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                material_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MaterialMergeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MaterialMergePlanOut"];
                 };
             };
             /** @description Validation Error */

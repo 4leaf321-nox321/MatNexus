@@ -25,6 +25,8 @@ export type RelocateRequest = components['schemas']['SpecimenRelocateRequest']
 export type SampleMoveRequest = components['schemas']['SampleMoveRequest']
 export type RelocatePlan = components['schemas']['RelocatePlanOut']
 export type RelocateResult = components['schemas']['RelocateOut']
+export type MaterialMergePlan = components['schemas']['MaterialMergePlanOut']
+export type MaterialMergeResult = components['schemas']['MaterialMergeOut']
 /** 고친 시편과 **이름이 어떻게 바뀌었는지**. */
 export type SpecimenUpdated = components['schemas']['SpecimenUpdateOut']
 export type NamePreview = components['schemas']['NamePreviewOut']
@@ -281,6 +283,17 @@ export const materialsApi = {
    */
   movePlan: (body: SampleMoveRequest) => api.post<RelocatePlan>('/samples/move-plan', body),
   move: (body: SampleMoveRequest) => api.post<RelocateResult>('/samples/move', body),
+  /** 이 재료를 받을 재료로 합치면 무엇이 어디로 가는지 — 쓰지 않는다(2026-11-17, VOC 59). */
+  mergePlan: (materialId: string, targetMaterialId: string) =>
+    api.post<MaterialMergePlan>(`/materials/${materialId}/merge-plan`, {
+      target_material_id: targetMaterialId,
+    }),
+  /** 합친다 — 이 재료는 휴지통으로 간다(되살릴 수 있다). */
+  merge: (materialId: string, targetMaterialId: string, comment: string | null) =>
+    api.post<MaterialMergeResult>(`/materials/${materialId}/merge`, {
+      target_material_id: targetMaterialId,
+      comment,
+    }),
 
   /**
    * 실제로 쓰이고 있는 분류 조합. **고정 목록을 화면에 박지 않는다** — 부서가

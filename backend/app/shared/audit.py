@@ -40,6 +40,9 @@ CARD_REMARKED = "card.remarked"
 SPECIMENS_RELOCATED = "specimens.relocated"
 #: 시료째 사람이 고른 재료로 옮겼다(2026-11-14, VOC 59).
 SAMPLES_MOVED = "samples.moved"
+#: 같은 재료를 두 번 등록한 것을 하나로 합쳤다(2026-11-17, VOC 59 · ADR 0092) — 받는 재료에
+#: 남긴다. 보내는 재료에는 `material.deleted`(사유: 재료 합치기)가 함께 남는다.
+MATERIALS_MERGED = "materials.merged"
 #: 시험의 물성 사용 보류를 걸었다 · 풀었다(2026-11-14, VOC 60) — 사유와 함께.
 TEST_RUN_HELD = "test_run.held"
 TEST_RUN_RELEASED = "test_run.released"
