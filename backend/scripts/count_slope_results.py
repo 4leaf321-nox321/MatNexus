@@ -10,6 +10,11 @@ ADR 0088: 굽힘 · 압축 탄성률의 접선은 가장 가파른 창 하나에
 「다시 처리를 권할지」 를 정하기 전에 규모를 본다 — **채택된** 결과 중 그 방법 · 옛 버전으로 낸
 것이 시험 종류 · 방법마다 몇 건인지.
 
+2026-11-17(VOC 43 · `flexural.engineering` 버전 2): 굽힘은 노즈가 닿기 전 구간(하중이 거의
+0)을 버리고 닿은 자리를 처짐 0 으로 둔다. 전에는 첫 점이 영점이라 하중이 늦게 걸린 곡선의 현
+탄성률이 작게 나왔다. 그 앞 버전으로 낸 채택 굽힘 결과도 센다 — 대부분은 처음부터 닿아 있던
+곡선이라 다시 처리해도 같다. 바뀌는 것만 `reprocess_adopted.py`(미리보기)가 보인다.
+
 **고치지 않는다.** 다시 처리는 `scripts/reprocess_adopted.py` 가 한다.
 
 사용:
@@ -70,6 +75,19 @@ def old_slope_stage(stages: list[dict[str, object]]) -> tuple[str, str] | None:
     return None
 
 
+#: 굽힘 영점 — 이 버전부터 닿기 전 구간을 버린다(2026-11-17, VOC 43).
+CONTACT = ("flexural.engineering", 2)
+
+
+def before_contact(stages: list[dict[str, object]]) -> bool:
+    """굽힘 응력-변형률을 접촉점 처리 전 버전으로 낸 결과인가."""
+    plugin, version = CONTACT
+    return any(
+        str(stage.get("plugin") or "") == plugin and _version(stage) < version
+        for stage in stages or []
+    )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--all", action="store_true", help="채택 안 된 결과까지 센다")
@@ -79,6 +97,7 @@ def main() -> int:
     counts: Counter[tuple[str, str]] = Counter()
     names: list[str] = []
     looked = 0
+    zeroed = 0
     with SessionLocal() as db:
         query = select(ProcessingResult.stages, TestRun.record_name).join(
             TestRun,
@@ -88,6 +107,8 @@ def main() -> int:
         )
         for stages, name in db.execute(query.where(TestRun.deleted_at.is_(None))):
             looked += 1
+            if before_contact(stages):
+                zeroed += 1
             found = old_slope_stage(stages)
             if found is None:
                 continue
@@ -97,8 +118,16 @@ def main() -> int:
 
     scope = "모든 결과" if args.all else "채택된 결과"
     print(f"{scope} {looked}건을 봤습니다.")
+    if zeroed:
+        print(
+            f"접촉점 처리 전(첫 점을 영점으로) 낸 굽힘 결과 {zeroed}건 — 하중이 늦게 걸린 "
+            "곡선만 다시 처리하면 바뀝니다. `reprocess_adopted.py` 미리보기로 무엇이 바뀌는지 "
+            "보세요."
+        )
     if not counts:
         print("접선 · 응력 띠를 옛 버전으로 낸 탄성률 결과가 없습니다.")
+        if zeroed:
+            print(f"요약: {scope} {looked}건 중 접촉점 처리 전의 굽힘 {zeroed}건")
         return 0
     print("옛 규칙(버전 3 앞)으로 낸 탄성률 결과:")
     for (plugin, method), count in sorted(counts.items()):
@@ -113,6 +142,7 @@ def main() -> int:
     # 운영 점검 보고서가 이 줄을 7절 요약으로 싣는다(2026-11-16) — 끝 줄은 설명문이나 목록이다.
     print(
         f"요약: {scope} {looked}건 중 옛 규칙의 접선 · 응력 띠 탄성률 {sum(counts.values())}건"
+        + (f" · 접촉점 처리 전의 굽힘 {zeroed}건" if zeroed else "")
     )
     return 0
 

@@ -1766,6 +1766,24 @@ def _lost_on_adopt(
     return [one for one in before if one.key not in have]
 
 
+def _partial_problem(failures: list[StepFailureOut]) -> str | None:
+    """일괄 「바로 채택」 이 **부분 결과**를 미루는 까닭 — 실패한 단계가 없으면 `None`.
+
+    2026-11-17(VOC 58 · ADR 0089, ADR 0065 결정 4 를 고침): 처음 처리하는 시험은 잃을 값이
+    없다며 부분 결과도 바로 채택했다. 그런데 단계가 실패했다는 것은 그 곡선에 무언가 있다는
+    신호이고, 일괄 처리는 사람이 줄마다 볼 수 없어 그 신호를 아무도 안 본 채 나머지 값이 물성이
+    됐다. 결과는 그대로 저장하고 채택만 검토대로 미룬다 — 한 번 보고 누르면 인장강도는 선다.
+    """
+    if not failures:
+        return None
+    names = ", ".join(f"{one.label or one.plugin}: {one.message}" for one in failures[:3])
+    more = f" 외 {len(failures) - 3}단계" if len(failures) > 3 else ""
+    return (
+        f"실패한 단계가 {len(failures)}개 있는 부분 결과라 미뤘습니다 — {names}{more}. "
+        "채택 검토대에서 보고 고르세요"
+    )
+
+
 def _keep_adoption_note(lost: list[ProcessingScalarOut]) -> str:
     names = ", ".join(one.label or one.key for one in lost[:5])
     more = f" 외 {len(lost) - 5}개" if len(lost) > 5 else ""
@@ -1932,6 +1950,8 @@ def run_batch(
                         )
                     lost = _lost_on_adopt(before, computed.scalars, computed.failures)
                     found = _warnings_of(db, run, computed)
+                    failed = [_failure_out(one) for one in computed.failures]
+                    partial = _partial_problem(failed) if payload.adopt else None
                     items.append(
                         BatchItemOut(
                             test_run_id=run.id,
@@ -1943,7 +1963,7 @@ def run_batch(
                             scalars=[_scalar_out(one) for one in computed.scalars],
                             previous=before,
                             previous_adopted_id=was_adopted,
-                            failures=[_failure_out(one) for one in computed.failures],
+                            failures=failed,
                             warnings=_warning_out(found),
                             warning=_adoption_note(payload.adopt, several, lost)
                             or (
@@ -1956,7 +1976,8 @@ def run_batch(
                                 f"{_warning_text(found)}"
                                 if payload.adopt and found
                                 else None
-                            ),
+                            )
+                            or (f"저장하면 채택은 미룹니다 — {partial}" if partial else None),
                         )
                     )
                     continue
@@ -1994,9 +2015,12 @@ def run_batch(
                     f"확인할 경고가 {len(stored.warnings)}건 있어 미뤘습니다 — "
                     f"{_warning_text(stored.warnings)}. 채택 검토대에서 보고 고르세요"
                 )
-            # **부분 결과가 지금 채택된 값을 덮어 잃게 하지 않는다**(2026-10-22). 처음 처리하는
-            # 시험은 잃을 것이 없으니 채택한다 — 인장강도라도 물성으로 선다. 이미 채택된
-            # 값(항복강도 등)이 이 결과에 없으면 채택은 그대로 두고 결과만 쌓는다.
+            # **부분 결과는 바로 채택하지 않는다**(2026-11-17, VOC 58 · ADR 0089) — 처음
+            # 처리하는 시험도 그렇다. 결과는 쌓였으니 검토대에서 실패를 보고 고른다. 지금
+            # 채택된 값을 잃게 하는 부분 결과는 그 까닭(`_adoption_note`)이 먼저 나간다
+            # (2026-10-22).
+            if payload.adopt and not problem and not lost:
+                problem = _partial_problem(failures)
             if payload.adopt and not several and not lost and not problem:
                 run.adopted_result_id = stored.id
                 _project_summaries(db, run, stored)

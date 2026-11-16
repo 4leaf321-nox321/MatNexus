@@ -140,6 +140,27 @@ register(
             ),
         ),
         ParamSpec(
+            name="find_contact",
+            label="접촉점 찾기",
+            type="bool",
+            default=True,
+            help=(
+                "하중이 거의 0 인 채 처짐만 느는 앞부분(노즈가 닿기 전)을 버리고 닿은 "
+                "자리를 처짐 0 으로 둡니다. 끄면 첫 점을 영점으로 씁니다(전의 동작)."
+            ),
+        ),
+        ParamSpec(
+            name="contact_force",
+            label="접촉 문턱 하중",
+            type="float",
+            unit="N",
+            help=(
+                "이 하중을 처음 넘기 직전에 하중이 거의 0 이던 점을 접촉점으로 봅니다. "
+                "비우면 최대 하중의 0.5%. 처음부터 예하중이 걸려 있으면 아무것도 버리지 "
+                "않습니다."
+            ),
+        ),
+        ParamSpec(
             name="force", label="하중 열", type="str", role="column", default=bending.FORCE
         ),
     ),
@@ -169,7 +190,8 @@ register(
         Produced(key="beam_thickness", label="시편 두께", si_unit="m"),
     ),
     order=10,
-    version="1",
+    # 2(2026-11-17, VOC 43): 접촉 전 구간을 버린다 — 하중이 늦게 걸린 곡선의 영점.
+    version="2",
 )(bending.engineering)
 
 # **토우 보정은 인장의 것을 그대로 쓴다**(2026-10-20) — 열 이름만 굽힘의 것. ASTM D790 부록

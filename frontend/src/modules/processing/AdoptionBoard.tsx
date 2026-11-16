@@ -246,6 +246,8 @@ export function AdoptionBoard({ testRunIds, onChanged }: Props) {
   const moved = sending.filter((run) => run.adopted_result_id)
   const loud = sending.filter(over)
   const warned = sending.filter((run) => (choose(run)?.warnings?.length ?? 0) > 0)
+  // 실패한 단계가 있는 결과 — 일괄 「바로 채택」 이 여기로 미룬 것(2026-11-17, VOC 58).
+  const partial = sending.filter((run) => (choose(run)?.failures?.length ?? 0) > 0)
 
   return (
     <section aria-label="채택 검토대" className="space-y-3">
@@ -397,6 +399,22 @@ export function AdoptionBoard({ testRunIds, onChanged }: Props) {
               <span className="block text-amber-700 dark:text-amber-400">
                 중앙값에서 문턱({threshold}%)보다 먼 것이 {loud.length}건 들어 있습니다 — 그 곡선을
                 보셨는지 확인하세요.
+              </span>
+            )}
+            {partial.length > 0 && (
+              <span className="block text-amber-700 dark:text-amber-400">
+                실패한 단계가 있는 부분 결과 {partial.length}건 — 그 단계의 값은 빠진 채
+                채택됩니다:{' '}
+                {partial
+                  .slice(0, 5)
+                  .map(
+                    (run) =>
+                      `${run.record_name}(${(choose(run)?.failures ?? [])
+                        .map((one) => one.label || one.plugin)
+                        .join(', ')})`
+                  )
+                  .join(' · ')}
+                {partial.length > 5 ? ` 외 ${partial.length - 5}건` : ''}
               </span>
             )}
             {warned.length > 0 && (

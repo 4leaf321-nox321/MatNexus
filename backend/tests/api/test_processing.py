@@ -1370,15 +1370,42 @@ class Test배치_미리보기와_되돌리기:
         {"plugin": "tensile.strength", "options": {}},
     ]
 
-    def test_단계가_실패해도_인장강도는_저장되고_처음이면_채택된다(
+    def test_단계가_실패해도_인장강도는_저장되고_채택은_검토대로_미룬다(
         self, client: TestClient, admin_headers: dict[str, str], run_id: str
     ) -> None:
-        """잃을 값이 없으면 부분 결과도 채택한다 — 인장강도라도 물성으로 선다."""
+        """처음 처리하는 시험이어도 부분 결과는 바로 채택하지 않는다(2026-11-17, VOC 58 ·
+        ADR 0089). 결과는 저장되고, 사람이 한 번 채택하면 인장강도가 물성으로 선다 — 전에는
+        일괄 처리가 실패 단계를 아무도 안 본 채 채택했다."""
+        preview = self._batch(
+            client, admin_headers, run_id, steps=self.PARTIAL, adopt=True, dry_run=True
+        )
+        assert "부분 결과라 미뤘습니다" in preview["items"][0]["warning"], (
+            "미리보기가 먼저 말한다"
+        )
+
         got = self._batch(client, admin_headers, run_id, steps=self.PARTIAL, adopt=True)
         item = got["items"][0]
-        assert item["status"] == "ok" and item["adopted"] is True, item
+        assert item["status"] == "ok" and item["result_id"] and item["adopted"] is False, item
         assert any(one["key"] == "tensile_strength" for one in item["scalars"])
         assert [one["plugin"] for one in item["failures"]] == ["tensile.proof_stress"]
+        assert "실패한 단계가 1개 있는 부분 결과라 미뤘습니다" in item["warning"]
+        run = client.get(f"/api/test-runs/{run_id}", headers=admin_headers).json()
+        assert run["adopted_result_id"] is None
+
+        # 검토대에서 사람이 한 번 고르면 선다 — 부분 결과라는 것만으로 막지는 않는다.
+        took = client.post(
+            f"/api/processing/results/{item['result_id']}/adopt", headers=admin_headers
+        )
+        assert took.status_code == 200, took.text
+        run = client.get(f"/api/test-runs/{run_id}", headers=admin_headers).json()
+        assert run["adopted_result_id"] == item["result_id"]
+
+    def test_실패_없는_결과는_전처럼_바로_채택된다(
+        self, client: TestClient, admin_headers: dict[str, str], run_id: str
+    ) -> None:
+        got = self._batch(client, admin_headers, run_id, adopt=True)
+        item = got["items"][0]
+        assert item["failures"] == [] and item["adopted"] is True, item
         assert item["warning"] is None
 
     def test_부분_결과가_채택된_값을_잃게_하면_채택을_옮기지_않는다(

@@ -139,6 +139,61 @@ def test_처짐은_첫_점을_0_으로() -> None:
     assert _modulus(step.frame)["flexural_modulus"] == pytest.approx(E, rel=1e-6)
 
 
+class Test접촉점:
+    """VOC 43(2026-11-17) — 하중이 늦게 걸린 굽힘 곡선. 노즈가 닿기 전 처짐만 0.3 mm 느는
+    동안 하중은 잡음뿐이다. 첫 점을 영점으로 두면 현 구간(ISO 178 의 0.05~0.25 %)이 그
+    평평한 앞부분에 걸려 탄성률이 몇 분의 일로 나왔다 — 압축처럼 닿은 자리를 영점으로 둔다."""
+
+    GAP = 0.0003
+
+    @classmethod
+    def late(cls, preload: float = 0.0) -> Frame:
+        stiffness = 48 * E * INERTIA / SPAN**3
+        deflection = np.linspace(0.0, cls.GAP + 200.0 / stiffness, 400)
+        noise = 0.02 * np.sin(np.arange(400) * 1.7)  # 최대 하중의 0.01 % — 문턱의 2 %
+        force = np.where(deflection < cls.GAP, noise, stiffness * (deflection - cls.GAP))
+        return _frame(force=force + preload, deflection=deflection)
+
+    def test_닿기_전을_버리면_현_탄성률이_참값이다(self) -> None:
+        step = bending.engineering(self.late(), _options())
+        assert any("접촉 전" in one for one in step.notes)
+        assert step.frame.columns[bending.USED][0] == 0.0
+        assert _modulus(step.frame)["flexural_modulus"] == pytest.approx(E, rel=1e-3)
+
+    def test_끄면_전처럼_첫_점이_영점이고_탄성률이_작다(self) -> None:
+        step = bending.engineering(self.late(), _options(find_contact=False))
+        assert not any("접촉 전" in one for one in step.notes)
+        assert len(step.frame.columns[bending.USED]) == 400
+        assert _modulus(step.frame)["flexural_modulus"] < 0.5 * E
+
+    def test_깨끗한_곡선과_예하중은_아무것도_안_버린다(self) -> None:
+        """처음부터 닿아 있으면(하중 0 에서 바로 오름 · 예하중) 전과 비트 단위로 같다."""
+        force = _force()
+        clean = _frame(force=force, deflection=force * SPAN**3 / (48 * E * INERTIA))
+        preload = _frame(force=force + 2.0, deflection=force * SPAN**3 / (48 * E * INERTIA))
+        for frame in (clean, preload):
+            on = bending.engineering(frame, _options())
+            off = bending.engineering(frame, _options(find_contact=False))
+            for key in (bending.STRAIN, bending.STRESS, bending.USED):
+                assert np.array_equal(on.frame.columns[key], off.frame.columns[key])
+
+    def test_문턱을_한_번도_못_넘으면_멈춘다(self) -> None:
+        with pytest.raises(ProcessingError, match="접촉 문턱"):
+            bending.engineering(self.late(), _options(contact_force=1.0e4))
+
+    def test_로더를_거쳐도_기본으로_켜져_있다(self) -> None:
+        out = processing.apply(
+            [
+                Step("flexural.engineering", _options()),
+                Step("flexural.modulus", {"method": "chord"}),
+            ],
+            self.late(),
+        )
+        values = {one.key: one.value for stage in out.stages for one in stage.scalars}
+        assert values["flexural_modulus"] == pytest.approx(E, rel=1e-3)
+        assert registry.get("flexural.engineering").version == "2"
+
+
 def test_스팬이_두께의_16배보다_짧으면_말한다() -> None:
     force = _force()
     span = 0.030

@@ -234,6 +234,39 @@ def concerns(found: Slope) -> list[str]:
     return told
 
 
+def window_concerns(
+    strain: np.ndarray,
+    stress: np.ndarray,
+    *,
+    low: float,
+    high: float,
+    value: float,
+    method: str,
+) -> list[str]:
+    """정해 둔 구간 [`low`, `high`] 에서 **이미 잰** 기울기 `value` 의 `concerns`.
+
+    인장 탄성계수는 `measure` 를 안 쓰고 자기 계산(회귀의 R² 0.98 거르기 포함)을 해서, 굽힘 ·
+    압축에 붙은 「구간이 믿을 만한가」 경고가 인장에만 없었다(2026-11-17, VOC 43). 같은 판정을
+    받게 이 자리를 둔다 — 값은 건드리지 않고 볼 것만 돌려준다. `method` 는 이 모듈의 이름
+    (`regression` · `chord` · `secant`)이고 할선은 늘 빈 목록이다(`_quality`).
+    """
+    x = np.asarray(strain, dtype=np.float64)
+    y = np.asarray(stress, dtype=np.float64)
+    end = rising(x, y)
+    x, y = x[:end], y[:end]
+    inside = np.flatnonzero(np.isfinite(x) & np.isfinite(y) & (x >= low) & (x <= high))
+    if method == "secant" or len(inside) < MIN_POINTS or not value > 0:
+        return []
+    found = Slope(
+        value=float(value),
+        low=float(low),
+        high=float(high),
+        points=len(inside),
+        indices=(int(inside[0]), int(inside[-1]) + 1),
+    )
+    return concerns(_quality(x, y, found, method))
+
+
 def measure(
     strain: np.ndarray,
     stress: np.ndarray,

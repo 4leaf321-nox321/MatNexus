@@ -219,6 +219,31 @@ describe('경고가 있는 결과', () => {
     await waitFor(() => expect(adoptMany).toHaveBeenCalledTimes(1))
     expect(adoptMany.mock.calls[0][1]).toBe(true)
   })
+
+  // 2026-11-17(VOC 58): 일괄 「바로 채택」 이 부분 결과를 여기로 미룬다 — 누르기 전에 빠진 단계를 센다.
+  it('부분 결과는 확인 대화에 실패한 단계와 함께 센다', async () => {
+    overview.mockResolvedValue([
+      runOf('1', [
+        result('r1', 150, {
+          failures: [
+            { index: 2, plugin: 'tensile.proof_stress', label: '오프셋 항복강도', message: '탄성계수 없음', stopped: false },
+          ],
+        }),
+      ]),
+      runOf('2', [result('r2', 152)]),
+    ])
+    render(
+      <MemoryRouter>
+        <AdoptionBoard testRunIds={['1', '2']} />
+      </MemoryRouter>
+    )
+    await rowOf('시편-1')
+    // 줄 이름에 부분 결과가 서야 데이터로 그려진 것이다.
+    expect(await screen.findAllByText(/부분 결과\(실패 1\)/)).not.toHaveLength(0)
+    await userEvent.click(screen.getByRole('button', { name: '고른 2건 채택' }))
+    const dialog = within(await screen.findByRole('dialog'))
+    expect(dialog.getByText(/부분 결과 1건/)).toHaveTextContent('시편-1(오프셋 항복강도)')
+  })
 })
 
 describe('누르기 전에 세고, 누른 뒤 되돌린다', () => {

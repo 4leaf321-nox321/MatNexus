@@ -914,7 +914,9 @@ def _auto_window(
     # 낸다(2026-10-22).
     # 3 — 현 · 할선은 곡선이 구간 끝점에 닿아야 한다(전에는 끝점 값으로 채워 낮게 나왔다,
     # 2026-11-15).
-    version="3",
+    # 4 — 굽힘 · 압축과 같은 직선성 경고(흔들림 · 휨 · 현 구간에 신호 없음)를 낸다. 값은 그대로
+    # (2026-11-17, VOC 43).
+    version="4",
 )
 def elastic_modulus(frame: Frame, options: dict[str, Any]) -> StepResult:
     """지정 구간에서 탄성계수를 잰다. 곡선은 안 바뀐다.
@@ -1174,7 +1176,22 @@ def elastic_modulus(frame: Frame, options: dict[str, Any]) -> StepResult:
             f"R² 가 {r_squared:.4f} 입니다 — 초기 토우(시편 물림)가 조금 섞였는지 "
             f"확인하세요. 토우 보정 단계를 앞에 두면 좋아집니다."
         )
-    return StepResult(frame, notes=tuple(notes), scalars=tuple(scalars))
+    # **굽힘 · 압축과 같은 「구간이 믿을 만한가」 경고**(2026-11-17, VOC 43) — 흔들림 · 휨 · 현
+    # 구간에 신호 없음. R² 0.98 거르기는 그대로 두고 볼 것만 더한다(채택할 때 확인을 받는다).
+    concerns: tuple[str, ...] = ()
+    if method in ("linear_regression", "chord"):
+        concerns = tuple(
+            f"탄성계수: {one}"
+            for one in slopes.window_concerns(
+                strain,
+                stress,
+                low=low,
+                high=high,
+                value=modulus,
+                method="regression" if method == "linear_regression" else "chord",
+            )
+        )
+    return StepResult(frame, notes=tuple(notes), scalars=tuple(scalars), warnings=concerns)
 
 
 def _window_linearity(x: np.ndarray, y: np.ndarray) -> float:

@@ -79,8 +79,45 @@ def strain_factor(support: float, arm: float, point: str) -> float:
     return 12.0 / (3.0 * support**2 - 4.0 * arm**2)
 
 
+#: 접촉 문턱의 기본 — 최대 하중의 이 비율(압축 `contact_force` 의 기본과 같다).
+CONTACT_SHARE = 0.005
+#: 문턱의 이 비율 아래면 「하중이 거의 0」 — 닿기 전 구간이다.
+CONTACT_QUIET = 0.1
+
+
+def contact_index(force: np.ndarray, threshold: float | None = None) -> int:
+    """누르는 노즈가 시편에 **닿은 자리** — 그 앞(하중이 거의 0 인 채 처짐만 는 구간)은 버린다.
+
+    2026-11-17(VOC 43): 굽힘에는 이 처리가 없어, 하중이 늦게 걸린 곡선은 처짐이 0 이 아닌
+    자리에서 오르기 시작했다. 현(ISO 178 의 0.05~0.25 %) 구간이 평평한 앞부분에 걸려 굽힘
+    탄성률이 작게 나오고 「구간에 신호 없음」 경고만 남았다. 압축(`compress.engineering`)과
+    같은 규칙이다 — 문턱(기본 최대 하중의 0.5 %)을 처음 넘기 **직전에 하중이 거의 0 이던
+    마지막 점**.
+
+    압축과 다른 한 가지: 문턱을 넘기 전에 「거의 0」 인 점이 없으면(처음부터 예하중이 걸려
+    있으면) 이미 닿아 있던 것으로 보고 **아무것도 버리지 않는다**(0). 문턱 점을 0 으로 두면
+    오르는 앞부분을 잃고 변형률이 문턱만큼 밀린다.
+    """
+    finite = np.isfinite(force)
+    if not finite.any():
+        return 0
+    limit = (
+        threshold if threshold is not None else CONTACT_SHARE * float(np.max(force[finite]))
+    )
+    if not limit > 0:
+        return 0
+    above = np.flatnonzero(np.where(finite, force, -np.inf) >= limit)
+    if len(above) == 0:
+        raise ProcessingError(
+            f"하중이 접촉 문턱({limit:.4g} N)을 한 번도 넘지 않습니다 — 문턱을 낮추거나 "
+            "비우세요."
+        )
+    quiet = np.flatnonzero(force[: int(above[0])] <= CONTACT_QUIET * limit)
+    return int(quiet[-1]) if len(quiet) else 0
+
+
 def engineering(frame: Frame, options: dict[str, Any]) -> StepResult:
-    """하중 · 처짐 → 굽힘 응력 · 변형률."""
+    """하중 · 처짐 → 굽힘 응력 · 변형률. 접촉 전 구간은 버린다(`contact_index`)."""
     support = option_float(options, "support_span")
     width = option_float(options, "width")
     thickness = option_float(options, "thickness")
@@ -105,7 +142,24 @@ def engineering(frame: Frame, options: dict[str, Any]) -> StepResult:
             raise ProcessingError(f"'{key}' 는 {expected} 여야 하는데 '{unit}' 입니다.")
 
     notes: list[str] = []
-    used = np.asarray(deflection, dtype=np.float64) - float(deflection[0])
+    force = np.asarray(force, dtype=np.float64)
+    deflection = np.asarray(deflection, dtype=np.float64)
+    first = (
+        contact_index(force, _float_or_none(options, "contact_force"))
+        if bool(options.get("find_contact", True))
+        else 0
+    )
+    if first > 0:
+        notes.append(
+            f"접촉 전 {first}점(하중이 거의 0)을 버리고 그 자리를 처짐 0 으로 뒀습니다."
+        )
+        force = force[first:]
+        deflection = deflection[first:]
+        frame = Frame(
+            {key: np.asarray(value)[first:] for key, value in frame.columns.items()},
+            dict(frame.units),
+        )
+    used = deflection - float(deflection[0])
     if compliance > 0:
         used = used - compliance * np.asarray(force, dtype=np.float64)
         notes.append(f"장비 컴플라이언스 {compliance:.4g} m/N 로 장비 처짐(C·F)을 뺐습니다.")

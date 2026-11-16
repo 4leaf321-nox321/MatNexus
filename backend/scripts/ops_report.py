@@ -17,7 +17,7 @@ VOC 41~61 을 고치며 「운영에서 한 번 볼 것」 이 VOC 마다 하나
                          어느 카드에도 안 뜨는 사람이 만든 덱 정의(VOC 49 · 52 · 47)
     5 조건 이중 환산 의심    `find_double_converted_conditions.py`
     6 곡선 하강 분포        `measure_curve_drops.py`(VOC 57 기준값)
-    7 옛 규칙 기울기 결과    `count_slope_results.py`(ADR 0088)
+    7 옛 규칙 기울기 결과    `count_slope_results.py`(ADR 0088 · 굽힘 영점 0090)
 
 **고치지 않는다.** 다시 처리는 `reprocess_adopted.py`(미리보기 먼저)가 한다.
 
@@ -264,7 +264,7 @@ SECTIONS: list[tuple[str, Callable[[object], tuple[str, list[str]]]]] = [
     ("4. 옛 규칙으로 남은 카드 · 덱 정의", old_cards),
     ("5. 조건 이중 환산 의심", _script("find_double_converted_conditions.py")),
     ("6. 인장 곡선의 최대 응력 앞 하강 분포", _script("measure_curve_drops.py")),
-    ("7. 옛 규칙의 접선 · 응력 띠 탄성률", _script("count_slope_results.py")),
+    ("7. 옛 규칙의 탄성률(접선 · 응력 띠 · 굽힘 영점)", _script("count_slope_results.py")),
 ]
 
 

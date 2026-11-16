@@ -2022,3 +2022,60 @@ class Test현과_할선은_끝점에_닿아야_한다:
     def test_구간을_다_덮는_곡선은_그대로_잰다(self, method: str) -> None:
         result = processing.apply([self._step(method)], self._line(0.0, 0.005))
         assert scalar(result, "youngs_modulus") == pytest.approx(70e9, rel=1e-6)
+
+
+class Test인장_탄성계수의_직선성_경고:
+    """VOC 43(2026-11-17) — 굽힘 · 압축에 붙은 「구간이 믿을 만한가」 경고(`slopes.concerns`)가
+    인장에만 없었다. 회귀의 R² 0.98 거르기는 그대로 두고, 그것을 넘긴 값에 흔들림 · 휨을 말한다
+    (개발 DB 인장 73건 중 2건이 받았다 — 둘 다 기울기 ±5~6 % 흔들림)."""
+
+    WINDOW: ClassVar[dict[str, float]] = {"minimum_strain": 0.0005, "maximum_strain": 0.0025}
+
+    @staticmethod
+    def _frame(strain: np.ndarray, stress: np.ndarray) -> Frame:
+        return Frame(
+            {"strain_engineering": strain, "stress_engineering": stress},
+            {"strain_engineering": "1", "stress_engineering": "Pa"},
+        )
+
+    def _warned(self, frame: Frame, method: str) -> tuple[float | None, tuple[str, ...]]:
+        out = processing.apply(
+            [Step("tensile.elastic_modulus", {"method": method, **self.WINDOW})], frame
+        )
+        return scalar(out, "youngs_modulus"), out.stages[-1].warnings
+
+    @pytest.mark.parametrize("method", ["linear_regression", "chord", "secant"])
+    def test_곧은_곡선은_조용하다(self, method: str) -> None:
+        strain = np.linspace(0.0, 0.005, 200)
+        value, warned = self._warned(self._frame(strain, 70e9 * strain), method)
+        assert value == pytest.approx(70e9, rel=1e-6)
+        assert warned == ()
+
+    def test_점이_적고_흔들리면_값은_내고_말한다(self) -> None:
+        strain = np.linspace(0.0, 0.005, 26)
+        noise = 5e6 * (-1.0) ** np.arange(26)  # 구간 응력 폭(140 MPa)의 3.6 %
+        value, warned = self._warned(
+            self._frame(strain, 70e9 * strain + noise), "linear_regression"
+        )
+        assert value is not None, "R² 0.98 은 넘는다 — 거르지 않는다"
+        assert any(one.startswith("탄성계수:") and "흔들립니다" in one for one in warned), (
+            warned
+        )
+
+    def test_구간이_휘면_말한다(self) -> None:
+        strain = np.linspace(0.0, 0.005, 400)
+        value, warned = self._warned(
+            self._frame(strain, 70e9 * strain * (1 - 83 * strain)), "linear_regression"
+        )
+        assert value is not None
+        assert any("휘었습니다" in one for one in warned), warned
+
+    def test_할선과_직접_입력은_보지_않는다(self) -> None:
+        strain = np.linspace(0.0, 0.005, 400)
+        curved = self._frame(strain, 70e9 * strain * (1 - 83 * strain))
+        assert self._warned(curved, "secant")[1] == ()
+        out = processing.apply(
+            [Step("tensile.elastic_modulus", {"method": "manual", "manual_modulus": 70e9})],
+            curved,
+        )
+        assert out.stages[-1].warnings == ()

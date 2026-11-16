@@ -6564,6 +6564,15 @@ async def run_batch_processing(
             f"{answer.get('failed')}건이 안 됐습니다. **사유별로 묶어 뒀습니다** — "
             "구간을 넓혀 다시 돌리지 말고, 무엇이 왜 막혔는지 사람에게 옮기세요."
         )
+    # 부분 결과(2026-11-17, VOC 58) — 처음 처리하는 시험이어도 「바로 채택」 이 미룬다.
+    partial = sum(1 for item in answer["items"] if item.get("failures"))
+    if partial:
+        answer["note"] = (
+            answer.get("note", "")
+            + f" 실패한 단계가 있는 부분 결과 {partial}건"
+            + (" — 채택은 미뤘습니다" if adopt else "")
+            + ". 무엇이 빠졌는지 사람에게 옮기고, 채택은 사람이 보고 adopt_results 로 하세요."
+        ).strip()
     warned = sum(1 for item in answer["items"] if item.get("warnings"))
     if warned:
         answer["note"] = (
