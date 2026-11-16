@@ -123,33 +123,64 @@ def main() -> None:
         f"(잡음 σ 의 {NOISE_SIGMAS:g} 배가 더 크면 그것) · "
         f"상하항복 차이 ≥ {YIELD_POINT_WARN * 100:g} % · 요철 ≥ {YIELD_POINT_WARN * 100:g} %\n"
     )
-    families = sorted({row[1] for row in rows})
-    for family in families:
-        mine = [row for row in rows if row[1] == family]
-        drops = np.array([row[2] for row in mine])
-        gaps = np.array([row[3] for row in mine if row[3] is not None])
-        persistent = int(np.count_nonzero(gaps >= PRE_PEAK_DROP_WARN))
-        yield_point = int(np.count_nonzero(gaps >= YIELD_POINT_WARN))
-        rough = sum(1 for row in mine if row[3] is None and row[2] >= YIELD_POINT_WARN)
-        print(f"■ {family}: {len(mine)}건")
-        print(
-            "  최대 하강/인장강도 — "
-            + " · ".join(f"p{q} {np.percentile(drops, q) * 100:.2f} %" for q in (50, 90, 99))
-        )
-        if gaps.size:
-            print(
-                f"  다시 오르지 않는 하강 {gaps.size}건 — "
-                + " · ".join(f"p{q} {np.percentile(gaps, q) * 100:.2f} %" for q in (50, 90))
-            )
-        print(
-            f"  경고를 받을 곡선: 지속 하강 {persistent}건(그중 항복점 현상 {yield_point}건) "
-            f"· 큰 요철 {rough}건"
-        )
+    for line in by_family(rows):
+        print(line)
     if args.list:
         print("\n하강이 큰 곡선:")
         for name, family, drop, gap in sorted(rows, key=lambda row: -row[2])[: args.list]:
             shown = f"{gap * 100:.2f} %" if gap is not None else "없음(곧 다시 오름)"
             print(f"  {name} ({family}): 최대 하강 {drop * 100:.2f} % · 지속 하강 {shown}")
+    # **합계는 맨 끝, 「요약:」 으로**(2026-11-16). 운영 점검 보고서가 이 줄을 6절 요약으로
+    # 싣는다 — 전에는 마지막 줄을 요약으로 집어, 마지막 재료군의 「지속 하강 0건 · 큰
+    # 요철 0건」 이 전체인 것처럼 배포 로그에 찍혔다.
+    print(summary(rows))
+
+
+Row = tuple[str, str, float, float | None]
+
+
+def _counts(mine: list[Row]) -> tuple[int, int, int]:
+    """(지속 하강, 그중 항복점 현상, 큰 요철) — 경고와 같은 판정."""
+    gaps = np.array([row[3] for row in mine if row[3] is not None])
+    persistent = int(np.count_nonzero(gaps >= PRE_PEAK_DROP_WARN))
+    yield_point = int(np.count_nonzero(gaps >= YIELD_POINT_WARN))
+    rough = sum(1 for row in mine if row[3] is None and row[2] >= YIELD_POINT_WARN)
+    return persistent, yield_point, rough
+
+
+def by_family(rows: list[Row]) -> list[str]:
+    """재료군마다 분포와 경고를 받을 곡선 수."""
+    lines: list[str] = []
+    for family in sorted({row[1] for row in rows}):
+        mine = [row for row in rows if row[1] == family]
+        drops = np.array([row[2] for row in mine])
+        gaps = np.array([row[3] for row in mine if row[3] is not None])
+        persistent, yield_point, rough = _counts(mine)
+        lines.append(f"■ {family}: {len(mine)}건")
+        lines.append(
+            "  최대 하강/인장강도 — "
+            + " · ".join(f"p{q} {np.percentile(drops, q) * 100:.2f} %" for q in (50, 90, 99))
+        )
+        if gaps.size:
+            lines.append(
+                f"  다시 오르지 않는 하강 {gaps.size}건 — "
+                + " · ".join(f"p{q} {np.percentile(gaps, q) * 100:.2f} %" for q in (50, 90))
+            )
+        lines.append(
+            f"  경고를 받을 곡선: 지속 하강 {persistent}건(그중 항복점 현상 {yield_point}건) "
+            f"· 큰 요철 {rough}건"
+        )
+    return lines
+
+
+def summary(rows: list[Row]) -> str:
+    """**모든 재료군을 합친** 한 줄."""
+    persistent, yield_point, rough = _counts(rows)
+    families = len({row[1] for row in rows})
+    return (
+        f"요약: 인장 곡선 {len(rows)}건(재료군 {families}개) 중 경고를 받을 곡선 — "
+        f"지속 하강 {persistent}건(그중 항복점 현상 {yield_point}건) · 큰 요철 {rough}건"
+    )
 
 
 if __name__ == "__main__":

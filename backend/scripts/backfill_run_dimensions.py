@@ -49,6 +49,9 @@ def main() -> None:
     parser.add_argument(
         "--apply", action="store_true", help="실제로 채운다 (없으면 세어 보기만)"
     )
+    parser.add_argument(
+        "--brief", action="store_true", help="요약만(배포가 이렇게 부른다 — 시험 목록 없이)"
+    )
     args = parser.parse_args()
 
     db = SessionLocal()
@@ -86,7 +89,8 @@ def main() -> None:
                 line += f"({(after / before - 1) * 100:+.2f} %)"
                 if run.adopted_result_id:
                     line += " · 채택된 결과 있음(다시 처리 대상)"
-            print(line)
+            if not args.brief:
+                print(line)
             if args.apply:
                 run.dimensions = found
         if args.apply:
@@ -94,7 +98,10 @@ def main() -> None:
     finally:
         db.close()
     verb = "채웠습니다" if args.apply else "채울 수 있습니다(--apply 로 채움)"
-    print(f"\n{filled}건 {verb}. 그중 단면적이 바뀌는 시험 {changed_area}건.")
+    print(
+        ("" if args.brief else "\n")
+        + f"{filled}건 {verb}. 그중 단면적이 바뀌는 시험 {changed_area}건."
+    )
     if changed_area:
         print(
             "채택된 결과는 옛 단면적으로 낸 값입니다 — "

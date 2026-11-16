@@ -597,14 +597,19 @@ if ($SkipMigrations) {
     #   backfill_column_evidence    밀도 · 푸아송비에 문헌 근거(VOC 50 — 숫자를 대 본 줄에만)
     #   backfill_run_dimensions     시험에 파일 헤더의 실측 치수(VOC 56 — 다시 읽지 않는다)
     #   backfill_curve_fingerprints 곡선에 값 지문(VOC 54 — 중복 점검 · 통계의 「하나로」)
+    # **출력을 파이프로 자르지 않는다**(2026-11-16 운영 배포). `| Select-Object -Last 3` 은 끝 세 줄만
+    # 남겨 곡선 지문의 「몇 개 채웠나」 가 잘리고 중복 묶음 목록만 남았고, 파이프로 받는 순간 파이썬이
+    # CP949 로 써 「—」 가 「?」 로 찍혔다(콘솔에 바로 쓰면 멀쩡하다, scripts\_console.py). 요약만
+    # 찍는 것은 스크립트의 `--brief` 가 한다.
     foreach ($fill in @(
         @('backfill_column_evidence.py', '밀도 · 푸아송비 근거 채우기'),
         @('backfill_run_dimensions.py', '시험 실측 치수 채우기'),
         @('backfill_curve_fingerprints.py', '곡선 지문 채우기')
     )) {
         try {
+            Write-Log $fill[1]
             Invoke-Native "$($fill[1]) 실패" {
-                & $backendPython "scripts\$($fill[0])" --apply | Select-Object -Last 3
+                & $backendPython "scripts\$($fill[0])" --apply --brief
             }
         } catch {
             Write-Log "$($fill[1]) 실패 (배포는 계속합니다): $_"
@@ -768,10 +773,17 @@ if ($SkipMigrations) {
 # **읽기만** 해 한 파일로 남긴다(2026-11-15, scripts\ops_report.py). 사람이 스크립트 일곱을 기억해
 # 돌리지 않게 — 다시 처리할지는 이 보고서를 보고 사람이 정한다. 고치지 않으므로 실패해도 배포는
 # 세우지 않는다.
-if ($SkipMigrations) {
-    Write-Log '운영 점검 보고서 건너뜀 (마이그레이션과 함께)'
-} else {
+#
+# **서비스를 띄운 뒤에 돈다**(2026-11-16 운영 배포). 처음 판은 이 자리(서비스를 내린 채)에서 돌아,
+# 읽기만 하는 보고서를 기다리느라 서비스가 그만큼 더 내려가 있었다. 마이그레이션 · 씨앗 · 채우기가
+# 다 끝난 DB 를 읽으므로 서비스가 떠 있어도 같은 것을 본다. 그래서 여기서는 정의만 하고 맨 끝에서 부른다.
+function Invoke-OpsReport {
+    if ($SkipMigrations) {
+        Write-Log '운영 점검 보고서 건너뜀 (마이그레이션과 함께)'
+        return
+    }
     $reportPath = Join-Path "$($AppPath)_data\logs" ("ops-report-" + (Get-Date -Format 'yyyyMMdd-HHmm') + '.txt')
+    Write-Log '운영 점검 보고서 (읽기만)'
     Push-Location (Join-Path $AppPath 'backend')
     try {
         Invoke-Native '운영 점검 보고서 실패' { & $backendPython scripts\ops_report.py --out $reportPath }
@@ -779,8 +791,9 @@ if ($SkipMigrations) {
     } catch {
         Write-Log "운영 점검 보고서 실패 (배포는 계속합니다): $_"
         Write-Host "  서버에서 직접:  & '$backendPython' scripts\ops_report.py"
+    } finally {
+        Pop-Location
     }
-    Pop-Location
 }
 
 # **무엇이 깔렸는지 남긴다.** 태그를 지정하지 않고 배포하면 나중에 되짚을 방법이
@@ -813,6 +826,8 @@ if ($installedServices.Count -gt 0) {
             }
         }
     }
+    Invoke-OpsReport   # 서비스를 띄운 뒤 — 읽기만 한다
+    Write-Host ''
     Write-Host "  상태:  .\service.ps1 -AppPath '$AppPath' -Action Status"
     Write-Host "  로그:  $($AppPath)_data\logs\service-server.log · service-worker.log · service-mcp.log · watchdog.log"
     if ($installedServices -notcontains 'MatNexusWorker') {
@@ -836,3 +851,7 @@ Write-Host ''
 Write-Host "재부팅해도 저절로 뜨게 하려면(한 번):  .\service.ps1 -AppPath '$AppPath' -Action Install   (관리자 PowerShell)"
 Write-Host ''
 Write-Host "직전 버전은 $prevPath 에 있습니다 (롤백: .\rollback.ps1 -AppPath '$AppPath')"
+Write-Host ''
+# 서비스가 없으면 사람이 창으로 띄운다 — 안내를 먼저 보이고, 보고서를 만드는 동안 띄워도 된다(읽기만).
+Write-Host '이제 운영 점검 보고서를 만듭니다(읽기만) — 그동안 위 창들을 띄워도 됩니다.'
+Invoke-OpsReport

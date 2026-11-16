@@ -44,6 +44,9 @@ def main() -> None:
     parser.add_argument(
         "--apply", action="store_true", help="실제로 채운다 (없으면 세어 보기만)"
     )
+    parser.add_argument(
+        "--brief", action="store_true", help="요약만(배포가 이렇게 부른다 — 묶음 목록 없이)"
+    )
     args = parser.parse_args()
 
     db = SessionLocal()
@@ -57,7 +60,8 @@ def main() -> None:
             .join(TestRun, TestRun.id == Curve.test_run_id)
             .where(Curve.fingerprint.is_(None), TestRun.deleted_at.is_(None))
         ).all()
-        print(f"지문이 빈 곡선 {len(rows)}개를 봅니다.")
+        if not args.brief:
+            print(f"지문이 빈 곡선 {len(rows)}개를 봅니다.")
         for curve, type_id in rows:
             try:
                 columns = curvekit.read_columns(filestore.read_bytes(curve.storage_path))
@@ -98,6 +102,8 @@ def main() -> None:
     verb = "채웠습니다" if args.apply else "채울 수 있습니다(--apply 로 채움)"
     print(f"{filled}개 {verb}. 곡선 파일을 못 읽은 것 {missing}개.")
     print(f"같은 지문이 여러 시험에 있는 묶음 {len(doubled)}개.")
+    if args.brief:
+        return
     for names in list(doubled.values())[:10]:
         unique = list(dict.fromkeys(names))
         print(

@@ -141,3 +141,64 @@ def test_배포가_부르는_백엔드_스크립트가_전부_있다() -> None:
         name for name in called if not (ROOT / "backend" / "scripts" / name).exists()
     )
     assert not missing, missing
+
+
+def test_읽기만_하는_보고서는_서비스를_띄운_뒤에_돈다() -> None:
+    """서비스를 내린 채 보고서를 기다리지 않는다(2026-11-16 운영 배포).
+
+    처음 판은 마이그레이션 · 씨앗 · 채우기 다음 자리(서비스가 멈춘 채)에서 보고서를 돌렸다.
+    보고서는 읽기만 하니 서비스가 떠 있어도 같은 것을 본다.
+    """
+    lines = (DEPLOY_SCRIPTS / "deploy.ps1").read_text(encoding="utf-8-sig").splitlines()
+    calls = [
+        index
+        for index, line in enumerate(lines)
+        if line.strip().startswith("Invoke-OpsReport")
+    ]
+    assert calls, "deploy.ps1 이 운영 점검 보고서를 부르지 않습니다."
+    started = max(
+        index
+        for index, line in enumerate(lines)
+        if line.strip().startswith("Start-KnownServices $runningServices")
+    )
+    # 서비스로 띄우는 길: 띄운 뒤. 창으로 띄우는 길: 안내 뒤 맨 끝.
+    assert calls[0] > started, (calls, started)
+    defined = next(
+        index
+        for index, line in enumerate(lines)
+        if line.startswith("function Invoke-OpsReport")
+    )
+    body_end = next(index for index in range(defined, len(lines)) if lines[index] == "}")
+    reports = [
+        index
+        for index, line in enumerate(lines)
+        if "& $backendPython scripts\\ops_report.py" in line
+    ]
+    assert reports, "deploy.ps1 에서 ops_report.py 를 부르는 줄을 못 찾았습니다."
+    assert all(defined < index < body_end for index in reports), (
+        "ops_report.py 를 Invoke-OpsReport 밖에서 부릅니다 — 서비스를 띄우기 전에 돌 수 "
+        "있습니다."
+    )
+
+
+def test_배포는_파이썬_출력을_파이프로_자르지_않는다() -> None:
+    """`| Select-Object -Last 3` 이 요약 줄을 자르고, 파이프가 「—」 를 「?」 로
+    깨뜨렸다(2026-11-16).
+
+    파이썬은 콘솔에 바로 쓸 때만 유니코드로 쓴다 — 파이프로 받으면 CP949 로 떨어진다
+    (`scripts/_console.py`). 요약은 스크립트의 `--brief` 가 낸다.
+    """
+    text = (DEPLOY_SCRIPTS / "deploy.ps1").read_text(encoding="utf-8-sig")
+    cut = [
+        line.strip()
+        for line in text.splitlines()
+        if "$backendPython" in line and "| Select-Object" in line
+    ]
+    assert not cut, cut
+    for name in (
+        "backfill_column_evidence.py",
+        "backfill_run_dimensions.py",
+        "backfill_curve_fingerprints.py",
+    ):
+        assert f"'{name}'" in text, name
+    assert '"scripts\\$($fill[0])" --apply --brief' in text

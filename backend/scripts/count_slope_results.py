@@ -110,6 +110,10 @@ def main() -> int:
     )
     for line in names:
         print(f"    {line}")
+    # 운영 점검 보고서가 이 줄을 7절 요약으로 싣는다(2026-11-16) — 끝 줄은 설명문이나 목록이다.
+    print(
+        f"요약: {scope} {looked}건 중 옛 규칙의 접선 · 응력 띠 탄성률 {sum(counts.values())}건"
+    )
     return 0
 
 

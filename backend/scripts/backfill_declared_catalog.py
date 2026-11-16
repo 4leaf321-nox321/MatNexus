@@ -16,6 +16,11 @@
 등급은 거기서 읽는다 — 여러 값이면 가장 낮은 것(`declared_catalog.match`). 이미 근거가
 있는 줄은 건너뛰므로 몇 번 돌려도 같다.
 
+숫자가 **문헌 정의의 단위(MPa 등) 그대로** 맞는 줄은 근거를 붙이지 않고 이름을 댄다 —
+값을 SI 로 바로잡는 것은 받는 자리(`declared_catalog.stamp`)의 일이고, 배포가 도는 이
+보정은 값을 바꾸지 않는다(2026-11-16, `match` 가 SI 값을 함께 돌려주게 바뀐 뒤 이
+스크립트만 옛 두 칸으로 받아 터졌다).
+
 사용:
     python scripts/backfill_declared_catalog.py            # 세어 보기만
     python scripts/backfill_declared_catalog.py --apply    # 실제로 붙인다
@@ -51,6 +56,8 @@ survive_cp949()
 
 #: 받아 오기(화면 `AdoptDialog` · MCP `adopt_catalog_values`)가 줄의 비고에 적는 말의 앞머리.
 ADOPTED_NOTE = "문헌 물성 카탈로그에서 채택"
+#: 숫자가 문헌 정의의 단위(MPa 등) 그대로 저장된 줄 — 이름을 대고 건너뛴다.
+UNIT_SLIP = "값이 문헌 정의의 단위 숫자 그대로(SI 아님) — 문헌 상세에서 다시 받아 올 것"
 
 
 def linked_keys(db: Session) -> dict[str, set[str]]:
@@ -100,7 +107,15 @@ def evidence_for(
     )
     if found is None:
         return None, "숫자가 그 출처의 값과 다름"
-    tier, used = found
+    tier, used, fixed = found
+    points = [point for point in row.get("points") or [] if isinstance(point, dict)]
+    if any(point.get("value_si") != si for point, si in zip(points, fixed, strict=True)):
+        # **값을 바꾸지 않는다**(2026-11-16). 직접 만든 정의(MPa 등)의 저장 숫자를 옛 화면 ·
+        # MCP 가 SI 인 줄 알고 받아 온 줄이다 — 210000 MPa 가 210000 Pa 로 들어 있다. 받는 자리
+        # (`stamp`)는 그 자리에서 SI 로 바로잡지만, 배포마다 도는 이 보정이 선언값을 100만 배
+        # 바꾸면 감사 기록도 없이 물성이 바뀐다. 근거를 붙이면 틀린 값에 문헌 등급이 달린다.
+        # 사람이 그 줄을 문헌 상세에서 다시 받아 오면 SI 로 바로잡히고 등급도 붙는다.
+        return None, UNIT_SLIP
     return declared_catalog.evidence(row, tier, used), f"등급 {tier}"
 
 
@@ -134,6 +149,8 @@ def main() -> None:
                 if made is None:
                     if said != "받아 온 줄이 아님":
                         reasons[said] = reasons.get(said, 0) + 1
+                    if said == UNIT_SLIP:
+                        print(f"  ! {owner.record_name} · {item}: {said}")
                     continue
                 before = declared_approval.tier(row)
                 after = declared_approval.tier(made)

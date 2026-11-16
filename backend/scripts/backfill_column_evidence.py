@@ -91,10 +91,19 @@ def plan(db: Session) -> tuple[list[tuple[Material, str, dict[str, Any], str]], 
                 )
             )
             row = {"item": item, "points": [{"value_si": float(value)}]}
+            # **SI 로 맞는 값만**(2026-11-16). `match` 는 저장 숫자가 정의의 단위(MPa 등)로
+            # 맞아도 그 값의 SI 를 돌려준다 — 받는 자리는 그것으로 바로잡지만, 칸 값은 여기서
+            # 안 바뀌므로 근거만 SI 로 붙으면 칸(7.85)과 근거(7850)가 갈린다. 그런 칸은
+            # 단위부터 볼 일이다.
             hits = [
                 one
                 for one in found
-                if declared_catalog.match(row, declared_catalog.candidates(db, [one]))
+                if (
+                    matched := declared_catalog.match(
+                        row, declared_catalog.candidates(db, [one])
+                    )
+                )
+                and matched[2] == [float(value)]
             ]
             if not hits:
                 reasons["숫자가 이어진 문헌 값과 다름"] += 1
@@ -114,25 +123,36 @@ def main() -> int:
     parser.add_argument(
         "--apply", action="store_true", help="실제로 붙인다(없으면 세어 보기만)"
     )
+    parser.add_argument(
+        "--brief", action="store_true", help="요약 한 줄만(배포가 이렇게 부른다 — 목록 없이)"
+    )
     args = parser.parse_args()
     with SessionLocal() as db:
         found, reasons = plan(db)
-        for material, field, row, catalog in found:
-            tier = row[declared_catalog.KEY]["tier"]
-            print(
-                f"  {material.code} {material.record_name}: {field} → 등급 {tier} ({catalog})"
-            )
-        print(f"붙일 것 {len(found)}건")
-        for reason, count in reasons.most_common():
-            print(f"  건너뜀 — {reason}: {count}")
+        skipped = " · ".join(f"{reason} {count}" for reason, count in reasons.most_common())
+        if args.brief:
+            verb = "붙였습니다" if args.apply else "붙일 수 있습니다(--apply 로 붙임)"
+            print(f"{len(found)}건 {verb}." + (f" 건너뜀: {skipped}." if skipped else ""))
+        else:
+            for material, field, row, catalog in found:
+                tier = row[declared_catalog.KEY]["tier"]
+                print(
+                    f"  {material.code} {material.record_name}: {field} → 등급 {tier} "
+                    f"({catalog})"
+                )
+            print(f"붙일 것 {len(found)}건")
+            for reason, count in reasons.most_common():
+                print(f"  건너뜀 — {reason}: {count}")
         if not args.apply:
-            print("세어 보기만 했습니다 — 붙이려면 --apply")
+            if not args.brief:
+                print("세어 보기만 했습니다 — 붙이려면 --apply")
             return 0
         for material, field, row, _catalog in found:
             material.column_evidence = {**(material.column_evidence or {}), field: row}
             flag_modified(material, "column_evidence")
         db.commit()
-        print(f"붙였습니다 — {len(found)}건")
+        if not args.brief:
+            print(f"붙였습니다 — {len(found)}건")
     return 0
 
 

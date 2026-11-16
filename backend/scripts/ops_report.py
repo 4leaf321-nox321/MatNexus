@@ -59,6 +59,8 @@ survive_cp949()
 
 #: 한 절에 이름을 적는 건수 — 나머지는 센다.
 LIST_LIMIT = 30
+#: 다른 스크립트가 절의 요약으로 찍는 줄의 앞머리(`head_of`).
+SUMMARY_MARK = "요약:"
 #: 처리 경고의 갈래 — 문장의 표지로 센다(`modulus_sanity` · `slopes.concerns`).
 WARNING_KINDS = {
     "재료군 범위 밖": "재료군",
@@ -238,10 +240,21 @@ def _script(name: str, *arguments: str) -> Callable[[object], tuple[str, list[st
         if done.returncode != 0:
             tail = (done.stderr.strip().splitlines() or ["(출력 없음)"])[-1]
             return f"{name} 이 실패했습니다(종료 코드 {done.returncode}): {tail}", output
-        last = output[-1].strip() if output else "(출력 없음)"
-        return last, _listed(output)
+        return head_of(output), _listed(output)
 
     return run
+
+
+def head_of(output: list[str]) -> str:
+    """절의 요약 — 스크립트가 찍은 **「요약:」 줄**, 없으면 마지막 줄.
+
+    마지막 줄만 집으면 틀린다(2026-11-16 운영 배포): 곡선 하강 분포는 재료군마다 줄을 찍어
+    마지막 재료군의 「지속 하강 0건 · 큰 요철 0건」 이 전체 요약처럼 배포 로그에 찍혔다.
+    """
+    marked = [line.strip() for line in output if line.strip().startswith(SUMMARY_MARK)]
+    if marked:
+        return marked[-1][len(SUMMARY_MARK) :].strip()
+    return output[-1].strip() if output else "(출력 없음)"
 
 
 SECTIONS: list[tuple[str, Callable[[object], tuple[str, list[str]]]]] = [
