@@ -1259,6 +1259,11 @@ def _catalog_value(row: dict[str, Any]) -> dict[str, Any]:
         caveats.append("가정값으로 표시돼 있다")
     if not row.get("representative"):
         caveats.append(f"대표값이 아니다(밀린 자리: {row.get('separated_by')})")
+    bound = row.get("bound")
+    if bound:
+        # 하한 · 상한 줄이 대표로 서는 물성이 있다(범위 가운데 값이 없을 때) — 대표값처럼 옮기면
+        # 범위의 끝이 그 물성의 값이 된다(2026-11-17).
+        caveats.append(f"문헌 범위의 {'하한' if bound == 'lower' else '상한'}값이다 — 가운데 값이 아니다")
     return {
         # 넣은 것을 확인하고 지울 대상을 찾으려면 id 가 있어야 한다(ADR 0068).
         "id": row.get("id"),
@@ -1290,6 +1295,7 @@ def _catalog_value(row: dict[str, Any]) -> dict[str, Any]:
             else None
         ),
         "representative": row.get("representative"),
+        **({"bound": bound} if bound else {}),
         **({"caveat": " · ".join(caveats)} if caveats else {}),
     }
 
@@ -3113,6 +3119,7 @@ async def get_card(ctx: Context, card_id: str) -> dict[str, Any]:
         blocks[name] = one
     out = _card_summary(card)
     out["material"] = card.get("material_name")
+    out["material_id"] = card.get("material_id")
     out["blocks_detail"] = blocks
     out["source"] = {
         "test_run_ids": (card.get("source") or {}).get("test_run_ids"),
@@ -3181,6 +3188,64 @@ async def match_bom(ctx: Context, text: str) -> dict[str, Any]:
 #: 한 번에 나를 덱 줄 수. **넘으면 자르고 몇 줄이 남았는지 말한다** — 조용히
 #: 잘라 주면 받는 사람이 온전한 파일인 줄 알고 저장한다.
 MAX_DECK_LINES = 500
+
+
+#: 받는 쪽 덱에서 재료 카드만 뽑아 보낼 때의 상한(글자) — 백엔드의 `base_deck` 상한과 같다.
+BASE_DECK_MAX = 5_000_000
+
+
+def _material_cards(path: str) -> str | dict[str, Any]:
+    """받는 쪽 LS-DYNA 덱 파일에서 **재료 카드(`*MAT…`)만** 뽑는다 — 차 한 대 덱은 수백 MB 다.
+
+    칸을 읽지는 않는다(그것은 백엔드 `dyna_base` 하나다). `*KEYWORD` 줄은 남긴다 — `LONG=Y` 면 칸
+    폭이 다르다.
+    """
+    file = Path(path).expanduser()
+    if not file.is_file():
+        return {"error": f"덱 파일이 없습니다: {path}"}
+    kept: list[str] = []
+    inside = False
+    size = 0
+    try:
+        with file.open(encoding="utf-8", errors="replace") as handle:
+            for line in handle:
+                if line.startswith("*"):
+                    inside = line[1:4].upper() == "MAT"
+                    if line[1:8].upper() == "KEYWORD":
+                        kept.append(line)
+                        continue
+                if inside:
+                    kept.append(line)
+                    size += len(line)
+                    if size > BASE_DECK_MAX:
+                        return {"error": "덱의 재료 카드가 5백만 자를 넘습니다 — 재료 카드만 나눠 주세요."}
+    except OSError as exc:
+        return {"error": f"덱 파일을 읽지 못했습니다: {exc}"}
+    if not kept:
+        return {"error": f"재료 카드(*MAT…)가 없는 덱입니다: {path}"}
+    return "".join(kept)
+
+
+def _bom_row(one: dict[str, Any]) -> dict[str, Any]:
+    """BOM 덱 줄 하나의 계보 — 빈 칸은 뺀다(줄이 수백 개면 대화가 그것으로 찬다)."""
+    keys = (
+        "mid",
+        "name",
+        "status",
+        "format",
+        "source",
+        "card_code",
+        "card_status",
+        "material_code",
+        "material_name",
+        "test_run_codes",
+        "catalog_material_id",
+        "catalog_material_name",
+        "curve_origin",
+        "fallback",
+        "kept",
+    )
+    return {key: one[key] for key in keys if one.get(key) not in (None, [], {})}
 
 
 def _deck_body(text: str, include_text: bool) -> dict[str, Any]:
@@ -3296,6 +3361,10 @@ async def build_deck(
     include_text: bool = False,
     synthesize_missing_curves: bool = False,
     lit_format: str | None = None,
+    on_missing_yield: str = "elastic",
+    keep_deck_values: bool = False,
+    base_deck: str | None = None,
+    base_deck_path: str | None = None,
 ) -> dict[str, Any]:
     """재료 목록 → **해석용 덱 한 파일**. 재료 · 그 모델 안의 번호(MID) · 솔버만 있으면 된다.
 
@@ -3317,15 +3386,15 @@ async def build_deck(
     `literature_format` 에 온다. 다른 형식으로 내려면 `lit_format`(같은 솔버의 문헌 형식 key —
     틀리면 서버가 있는 것을 알려 준다).
 
-    문헌 값은 **사내 물성 매핑을 거쳐** 실린다(기준정보의 「사내 물성 항목」 과 이어진
-    것만). 안 이어진 값은 덱에 없고, 덱 머리 각주에 그 이름이 적힌다 — 사람에게 그대로
-    전해라. 매핑을 이으면 실린다.
-
     `mid` 는 **요청 쪽 모델의 번호 그대로** 덱에 박힌다(1~9,999,999, 파일 안에서
     유일). 돌아온 `format_family` 가 이 파일의 솔버다.
 
-    사내 카드가 있으면 **곡선 덱**으로, 문헌만 있으면 스칼라 덱으로 나가고 한
-    파일로 합쳐진다. 값마다 출처 각주가 파일 안에 들어간다.
+    ## 소성 없이 나간 줄 — `fallbacks` 를 반드시 사람에게 전해라
+
+    소성 표가 없으면 탄성 형식(*MAT_ELASTIC)으로 나가고 `fallbacks` 에 적힌다(항복 없이 인장강도로
+    지은 표도). 탄성 재료를 받지 않으려면 `on_missing_yield="reject"` — 그 줄은 `skipped` 로 간다.
+    `rows` 가 줄마다 고른 카드 · 재료 · 근거 시험(계보)이다. 받는 쪽 덱의 ro · e · pr 을 지키려면
+    `keep_deck_values=True` 와 그 덱(`base_deck` 글자 · `base_deck_path` 파일, LS-DYNA).
 
     `units` 는 `list_unit_systems()` 의 key 다. **기본은 `mm_n_tonne`(판재 CAE 의
     관행)이고 SI 가 아니다** — 받는 쪽 해석 모델의 계를 사용자에게 확인하고 넘겨라.
@@ -3339,14 +3408,8 @@ async def build_deck(
     초탄성). 그런 줄은 `synthetic_count` 가 아니라 `measured_curve_count` 로 온다 — 잰 곡선을
     「합성」 이라고 전하지 마라.
 
-    ## 파일을 건네려면 `include_text=True`
-
-    기본은 머리(출처 각주)와 개수만 온다 — 수백 줄이면 대화가 그것으로 찬다.
-    사람이 파일로 저장할 것이면 켜서 본문을 받아라. 500줄이 넘으면 잘리고 몇 줄이
-    남았는지 함께 온다 — **잘린 것을 저장하면 안 되는 파일이다.**
-
-    **본문을 손으로 고치지 마라.** 단위가 다르면 `units` 로 다시 뽑아라. 고정폭
-    필드에 손대는 일이고, 한 칸만 어긋나도 솔버는 다른 값을 조용히 읽는다.
+    파일로 건네려면 `include_text=True` — 500줄이 넘으면 잘리고, **잘린 것은 저장하면 안 되는
+    파일이다.** 본문을 손으로 고치지 마라(안내 `cards`).
     """
     payload: dict[str, Any] = {
         "rows": [
@@ -3366,15 +3429,26 @@ async def build_deck(
             for one in rows
         ],
         "units": units,
+        "on_missing_yield": on_missing_yield,
     }
     if format:
         payload["format"] = format
     if lit_format:
         payload["lit_format"] = lit_format
+    if keep_deck_values:
+        payload["keep_deck_values"] = True
+        if base_deck_path:
+            cards = _material_cards(base_deck_path)
+            if isinstance(cards, dict):
+                return cards
+            payload["base_deck"] = cards
+        elif base_deck:
+            payload["base_deck"] = base_deck
     got = await _send(ctx, "POST", "/fitting/decks/bom", payload)
     if "error" in got:
         return got
     text = got.get("text", "")
+    fallbacks = got.get("fallbacks") or []
     return {
         "filename": got.get("filename"),
         "format_family": got.get("format_family"),
@@ -3385,6 +3459,20 @@ async def build_deck(
         "synthetic_count": got.get("synthetic_count", 0),
         "measured_curve_count": got.get("measured_curve_count", 0),
         "skipped": got.get("skipped", []),
+        # **탄성으로 대체한 줄**(2026-11-17, HWAX 연결) — 전에는 말없이 *MAT_ELASTIC 으로 나갔다.
+        "fallbacks": fallbacks,
+        **(
+            {
+                "fallback_note": f"{len(fallbacks)}개 줄이 소성 없이 나갔다 — 사람에게 그대로 "
+                "전해라. 받지 않으려면 on_missing_yield='reject'."
+            }
+            if fallbacks
+            else {}
+        ),
+        # 줄마다 무엇으로 나갔고 어디서 왔나 — 덱 MID 에서 카드 · 재료 · 시험으로(계보).
+        "rows": [_bom_row(one) for one in got.get("rows") or []],
+        # 백엔드의 안내(네킹 · 합성 · 받은 덱 값 · 온도 표) — 전에는 버렸다.
+        "notes": (got.get("notes") or [])[:20],
         # **기본은 머리(출처 각주)만이다.** 수백 줄이면 대화가 그것으로 찬다.
         "header": "\n".join(
             line for line in text.splitlines()[:40] if line.startswith(("$", "*", "#", "/"))
@@ -7122,16 +7210,9 @@ async def render_card_deck(
     서버가 늘 그 계로 낸다. 돌려주는 `units` 가 **실제로 쓰인 계**다 — 사람에게는 그것을
     말해라(고른 계와 다르면 `units_note` 가 그렇다고 적는다).
 
-    ## MID(재료 번호)를 사람에게 말해라
-
-    `mid` 를 안 줬으면 덱 안의 재료 번호는 **그 파일 안에서만 뜻이 있는 수**다 —
-    카드 UUID 에서 만든 것이라 전역으로 유일하지 않다. **덱 여럿을 손으로 합치면
-    겹칠 수 있고, 솔버는 중복 MID 를 조용히 덮는다.**
-
-    그 수는 **돌려주는 덱 글자 안에 있다**(솔버 재료 카드의 첫 칸 — 만드는 규칙은
-    백엔드 하나다). 덱을 건네줄 때 그것을 읽어 함께 말해라: 「이 덱의 MID 는 3847221 입니다.
-    다른 덱과 합치실 거면 겹치는지 확인하세요.」 여러 재료를 한 덱으로 묶는
-    자리(BOM 혼합 덱)는 서버가 중복을 막지만, 낱개로 뽑아 합칠 때는 사람이 본다.
+    돌려주는 `mid` 가 덱에 실제로 박힌 번호다 — 안 줬으면 카드 id 에서 만든 수라 덱 여럿을 손으로
+    합치면 겹칠 수 있다(솔버는 조용히 덮는다). 사람에게 그 번호를 말해라. `lineage` 는 재료 ·
+    근거 시험이다(자세히는 `card_lineage`).
     """
     params: dict[str, Any] = {"format": format, "units": units}
     if mid is not None:
@@ -7151,13 +7232,60 @@ async def render_card_deck(
         if isinstance(formats, list)
         else None
     )
-    out: dict[str, Any] = {"format": format, "units": fixed or units, "mid": mid, "deck": deck}
+    # **실제로 쓴 MID**(2026-11-17) — 전에는 받은 인자를 되돌려 안 줬으면 null 이었다.
+    traced = await _get(ctx, f"/fitting/cards/{card_id}/lineage")
+    known = isinstance(traced, dict) and "error" not in traced
+    out: dict[str, Any] = {
+        "format": format,
+        "units": fixed or units,
+        "mid": mid if mid is not None else (traced.get("default_mid") if known else None),
+        "deck": deck,
+    }
+    if known:
+        out["lineage"] = {
+            "card_code": traced.get("card_code"),
+            "material_code": traced.get("material_code"),
+            "test_run_codes": [one.get("code") for one in traced.get("test_runs") or []],
+        }
     if fixed and fixed != units:
         out["units_note"] = (
             f"이 형식은 단위를 파일 형식이 정합니다 — 고른 계({units})가 아니라 {fixed} 로 "
             "나왔습니다. 사람에게 그렇게 말하세요."
         )
     return out
+
+
+@mcp.tool()
+async def card_lineage(
+    ctx: Context,
+    card_id: str | None = None,
+    deck: str | None = None,
+    deck_path: str | None = None,
+    mid: int | None = None,
+) -> dict[str, Any]:
+    """덱 값의 **출처를 거꾸로** — 카드 · 재료 · 근거 시험(채택 결과) · 값마다 출처.
+
+    `card_id`(번호 `C-…` · 이름도)를 주거나, MatNexus 가 낸 덱 글자(`deck`) · 파일(`deck_path`)을
+    준다 — 덱이면 머리 주석의 카드 · 문헌 재료를 MID 에 묶어 돌려준다(`mid` 로 하나만). MID 숫자만으로는
+    못 찾는다(해시다). 주석이 지워진 재료는 `note` 가 말한다.
+    """
+    if card_id:
+        resolved = await _resolve_card(ctx, card_id)
+        if isinstance(resolved, dict):
+            return resolved
+        return await _get(ctx, f"/fitting/cards/{resolved}/lineage")
+    text = deck
+    if deck_path:
+        file = Path(deck_path).expanduser()
+        if not file.is_file():
+            return {"error": f"덱 파일이 없습니다: {deck_path}"}
+        text = file.read_text(encoding="utf-8", errors="replace")
+    if not text:
+        return {"error": "card_id 나 deck · deck_path 중 하나를 주세요."}
+    body: dict[str, Any] = {"deck": text[:BASE_DECK_MAX]}
+    if mid is not None:
+        body["mid"] = mid
+    return await _send(ctx, "POST", "/fitting/decks/lineage", body)
 
 
 @mcp.tool()

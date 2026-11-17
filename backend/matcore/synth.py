@@ -81,6 +81,11 @@ def _plastic_table(
     return tuple(rows) if len(rows) >= 2 else ()
 
 
+#: 항복이 없어 인장강도를 평탄부로 둔 모델의 이름 — 덱의 대체 보고(`export.fallback`)가 이
+#: 이름으로 「항복 없이 지은 표」 를 알아본다. 바꾸면 그쪽이 못 알아본다.
+YIELD_FROM_UTS_MODEL = "elastic-perfectly plastic (yield unknown, capped at UTS)"
+
+
 def synthesize(
     youngs_modulus: float | None,
     yield_strength: float | None = None,
@@ -112,7 +117,7 @@ def synthesize(
             return SyntheticCurve(
                 strain=tuple(map(float, e)),
                 stress_pa=tuple(map(float, s)),
-                model="elastic-perfectly plastic (yield unknown, capped at UTS)",
+                model=YIELD_FROM_UTS_MODEL,
                 note=(
                     "항복강도 미공표 — UTS 를 소성 평탄부로 둔 보수적 근사. "
                     "실제 항복은 이보다 낮으므로 소성 개시를 과대평가한다."

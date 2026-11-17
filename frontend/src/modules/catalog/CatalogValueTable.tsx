@@ -101,13 +101,12 @@ export function MissingBadge({ at, what }: { at: string; what: string }) {
   )
 }
 
-/** `bound: lower/upper` 를 사람 말로. 원본이 긴 설명을 적어 둔 경우도 있어 앞만 본다. */
-function boundLabel(value: { distinguishing?: Record<string, unknown> | null }): string | null {
-  const raw = value.distinguishing?.['bound']
-  if (typeof raw !== 'string') return null
-  const head = raw.toLowerCase()
-  if (head.startsWith('lower') || head.startsWith('min')) return '범위 하한'
-  if (head.startsWith('upper') || head.startsWith('max')) return '범위 상한'
+/** 문헌 범위의 하한 · 상한 — **판정은 서버 하나다**(`value_bounds`, 2026-11-17). 전에는 여기서
+ *  갈리는 조건(`distinguishing.bound`)만 읽어, 하한 줄만 있는 물성(하한이 대표로 선다)에는 배지가
+ *  안 붙었고 `value_type` · `statistic` 의 보증 하한도 못 봤다. */
+function boundLabel(value: { bound?: string | null }): string | null {
+  if (value.bound === 'lower') return '범위 하한'
+  if (value.bound === 'upper') return '범위 상한'
   return null
 }
 
@@ -181,7 +180,18 @@ export function ValueRows({
                 <Badge variant="secondary">대표값 · 후보 {value.n_candidates}</Badge>
               )}
               {/* **범위의 한쪽이라는 것을 말한다.** 경쟁하는 두 측정이 아니라 한 범위의 양끝이다. */}
-              {boundLabel(value) && <Badge variant="outline">{boundLabel(value)}</Badge>}
+              {boundLabel(value) && (
+                <Badge
+                  variant="outline"
+                  title={
+                    value.representative
+                      ? '이 물성에는 범위 가운데 값이 없어 범위의 끝이 대표로 섰습니다'
+                      : undefined
+                  }
+                >
+                  {boundLabel(value)}
+                </Badge>
+              )}
               {/* 원본에서 빠진 값은 「대안」 이 아니다 — 대표 후보에서 아예 빠졌다. */}
               {value.source_missing_at ? (
                 <MissingBadge at={value.source_missing_at} what="값" />

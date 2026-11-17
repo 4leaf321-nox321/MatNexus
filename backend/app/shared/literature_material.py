@@ -83,7 +83,13 @@ from app.modules.catalog.models import (
 from app.modules.catalog.ontology_models import PropertyLink
 from app.modules.materials.models import Material
 from app.modules.vocabulary.models import VocabularyTerm
-from app.shared import declared_catalog, declared_conditions, display, representative
+from app.shared import (
+    declared_catalog,
+    declared_conditions,
+    display,
+    representative,
+    value_bounds,
+)
 from matcore import cards
 
 #: 합성 곡선의 두 입력 — 모순(항복 > 인장)이면 정합한 짝으로 바꾼다.
@@ -389,7 +395,11 @@ def virtual(
     usable = {**slots, **(SYNTH_INPUTS if synthesize else {})}
     out = Virtual(
         material=Material(record_name=material.name, declared_properties=[]),
-        provenance=[f"문헌 카탈로그: {material.name} — 사내 물성 매핑을 거쳐 실었습니다"],
+        # 문헌 재료 id 까지 — 덱 글자에서 거꾸로 찾는 길(`fitting.lineage.deck_sources`).
+        provenance=[
+            f"문헌 카탈로그: {material.name} · {material.id} — "
+            "사내 물성 매핑을 거쳐 실었습니다"
+        ],
     )
     declared_rows: list[dict[str, Any]] = []
     for key, (value, source) in chosen.items():
@@ -457,7 +467,10 @@ def virtual(
             continue
         # 덱 각주는 전과 같은 모양 — 이름만 사내 항목 이름이 됐다. 상온이 아니면 그 온도를
         # 단다.
-        line = _footnote(label, number, value, source, when)
+        # 하한 · 상한 줄이 대표로 섰으면 그렇다고(2026-11-17) — 범위 가운데 값이 없는 물성이다.
+        line = _footnote(label, number, value, source, when) + value_bounds.note(
+            value.conditions
+        )
         if marks[value.id].n_candidates > 1:
             line += f" (후보 {marks[value.id].n_candidates}개 중 대표값)"
         out.provenance.append(line)

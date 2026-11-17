@@ -370,6 +370,45 @@ class Test카드가_선다:
             TRUE_STRAIN_PLATEAU_PA * 2.9, rel=0.02
         )
 
+    def test_선형_구간을_못_낸_시편은_근거_시험에서도_빠진다(
+        self,
+        client: TestClient,
+        db: Session,
+        admin_headers: dict[str, str],
+        sample: dict[str, Any],
+    ) -> None:
+        """2026-11-17 — 시편 수는 뺀 뒤의 수인데 카드의 시험 목록에는 뺀 시편까지 들어 있었다.
+        덱에서 거꾸로 찾아간 사람(계보)이 쓰지 않은 시험을 근거로 읽는다."""
+        from app.modules.processing.models import ProcessingResult
+        from app.modules.tests.models import TestRun
+
+        used = _adopted_sweep(client, db, admin_headers, sample["id"])
+        dropped = _adopted_sweep(client, db, admin_headers, sample["id"])
+        # 둘째 시편의 채택 결과에서 선형 구간 값을 지운다 — 「선형 구간을 못 낸」 시편.
+        run = db.get(TestRun, uuid.UUID(dropped))
+        assert run is not None and run.adopted_result_id is not None
+        result = db.get(ProcessingResult, run.adopted_result_id)
+        assert result is not None
+        result.scalars = [
+            one
+            for one in result.scalars
+            if one.get("key") not in ("youngs_modulus", "lve_strain_limit")
+        ]
+        db.commit()
+        card = client.post(
+            "/api/fitting/cards/lve",
+            json={
+                "material_id": sample["material_id"],
+                "test_type_key": "dma_sweep",
+                "orientation": "NA",
+            },
+            headers=admin_headers,
+        )
+        assert card.status_code == 201, card.text
+        source = card.json()["source"]
+        assert source["sample_count"] == 1
+        assert source["test_run_ids"] == [used]
+
     def test_선형_구간을_안_낸_묶음이면_막는다(
         self,
         client: TestClient,

@@ -247,6 +247,43 @@ describe('BOM 혼합 덱', () => {
     expect(screen.queryByText(/합성 곡선 \d/)).toBeNull()
   })
 
+  it('소성 없이 나간 부품은 따로 보인다 — 말없이 탄성 재료로 실리지 않는다', async () => {
+    mockApis({ cards: [] })
+    const fallback = post.getMockImplementation()
+    post.mockImplementation((url: unknown, ...rest: unknown[]) =>
+      String(url).startsWith('/fitting/decks/bom')
+        ? Promise.resolve({
+            text: '*KEYWORD\n*MAT_ELASTIC\n*END\n',
+            filename: 'bom_deck_si.k',
+            format_family: 'dyna',
+            skipped: [],
+            notes: [],
+            card_count: 0,
+            literature_count: 1,
+            synthetic_count: 0,
+            measured_curve_count: 0,
+            fallbacks: [
+              {
+                mid: 2,
+                name: 'SUS304',
+                kind: 'elastic',
+                format: 'dyna_elastic',
+                why: '문헌 줄이라 탄성 형식으로 냈습니다 — 소성 표가 없습니다.',
+              },
+            ],
+          })
+        : fallback?.(url, ...rest)
+    )
+    const user = userEvent.setup()
+    await pasteAndMatch(user)
+    await user.selectOptions(screen.getAllByRole('combobox')[0], CATALOG_ID)
+    await user.click(screen.getByRole('button', { name: '덱 생성' }))
+
+    expect(await screen.findByText(/소성 없이 나간 부품/)).toBeInTheDocument()
+    expect(screen.getByText(/MID 2 · SUS304 — 문헌 줄이라 탄성 형식/)).toBeInTheDocument()
+    expect(screen.getByText(/소성 없이 1/)).toBeInTheDocument()
+  })
+
   it('엑셀 다열이면 열 매핑을 물어본다', async () => {
     const user = userEvent.setup()
     render(

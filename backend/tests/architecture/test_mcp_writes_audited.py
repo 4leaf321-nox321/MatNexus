@@ -54,6 +54,7 @@ READS: dict[tuple[str, str], str] = {
     ("POST", "/materials/{}/merge-plan"): "재료를 합치면 무엇이 어디로 가는지 — 쓰지 않는다",
     ("POST", "/catalog/deck/match"): "부품표 줄을 문헌 재료에 짝지어 보기만 한다",
     ("POST", "/fitting/decks/bom"): "덱을 만들어 돌려줄 뿐 저장하지 않는다",
+    ("POST", "/fitting/decks/lineage"): "덱 글자에서 출처를 읽기만 한다 — 저장하지 않는다",
     ("POST", "/fitting/preview"): "식을 견주기만 한다 — 카드는 안 만든다",
     (
         "POST",

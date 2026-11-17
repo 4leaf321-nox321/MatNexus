@@ -290,12 +290,11 @@ describe('CatalogMaterialPage — 후보를 가르는 조건', () => {
     expect(await screen.findByText(/alpha1 \(below Tg\)/)).toBeInTheDocument()
   })
 
-  it('범위의 한쪽이면 그렇다고 말한다', async () => {
+  it('범위의 한쪽이면 그렇다고 말한다 — 후보가 하나여도(서버의 bound)', async () => {
     material.mockResolvedValue({
       ...DETAIL,
-      values: [
-        { ...DETAIL.values[0], distinguishing: { bound: 'lower' }, n_candidates: 2 },
-      ],
+      // 하한 줄만 있는 물성 — 갈리는 조건이 없어도 배지가 선다(2026-11-17).
+      values: [{ ...DETAIL.values[0], bound: 'lower', distinguishing: {}, n_candidates: 1 }],
     })
     show()
     expect(await screen.findByText('범위 하한')).toBeInTheDocument()

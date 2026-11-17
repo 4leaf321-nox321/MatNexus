@@ -443,7 +443,14 @@ async def sweep(session: ClientSession) -> None:
         card = await call(session, "get_card", {"card_id": card_id})
         formats = card.get("available_formats") or [] if isinstance(card, dict) else []
         if formats:
-            await call(session, "render_card_deck", {"card_id": card_id, "format": formats[0]})
+            rendered = await call(
+                session, "render_card_deck", {"card_id": card_id, "format": formats[0]}
+            )
+            # 계보(2026-11-17) — 카드로 한 번, 뽑은 덱 글자로 한 번(머리 주석에서 MID 로).
+            await call(session, "card_lineage", {"card_id": card_id})
+            deck_text = rendered.get("deck") if isinstance(rendered, dict) else None
+            if isinstance(deck_text, str) and deck_text:
+                await call(session, "card_lineage", {"deck": deck_text})
             if unit_key:
                 await call(
                     session,

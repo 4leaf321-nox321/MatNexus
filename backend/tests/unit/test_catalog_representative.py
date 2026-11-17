@@ -211,3 +211,71 @@ class Test온도_읽기:
         read = standard_conditions.read_catalog
         both = {"temperature": "550 degC", "temperature_c": 25}
         assert read(both, "temperature", text=True) == pytest.approx(298.15)
+
+
+class Test범위의_끝:
+    """하한 · 상한 줄은 범위 가운데 값 뒤로(2026-11-17, `value_bounds`).
+
+    개발 DB: 하한 · 상한 줄만 있는 재료 · 물성 748쌍(영률 63 · 선팽창계수 214)에서 대표가 곧 그
+    끝이었고 표지가 없었다. 등급이 좋은 하한은 「typical」 도 이겼다.
+    """
+
+    def test_등급이_좋은_하한도_가운데_값에_진다(self) -> None:
+        lower = Value("k", 1, conditions={"bound": "lower"}, mt_id=1)
+        typical = Value("k", 3, conditions={"value_type": "typical"}, mt_id=2)
+        marks = annotate([lower, typical])
+        assert marks[typical.id].representative
+        assert marks[lower.id].separated_by == "범위의 끝"
+        assert marks[lower.id].bound == "lower"
+        assert marks[typical.id].bound is None
+
+    def test_끝만_있으면_끝이_대표로_서되_그렇다고_말한다(self) -> None:
+        lower = Value(
+            "k", 1, conditions={"bound": "lower — 원문은 `400 to 700` 구간이다"}, mt_id=1
+        )
+        upper = Value("k", 1, conditions={"bound": "upper"}, mt_id=2)
+        marks = annotate([lower, upper])
+        winner = next(one for one in (lower, upper) if marks[one.id].representative)
+        assert marks[winner.id].bound in ("lower", "upper")
+
+
+class Test범위의_끝_읽기:
+    @pytest.mark.parametrize(
+        ("conditions", "side"),
+        [
+            ({"bound": "lower"}, "lower"),
+            ({"bound": "min"}, "lower"),
+            ({"bound": "range_lower"}, "lower"),
+            ({"bound": "lower_limit"}, "lower"),
+            ({"bound": "lower bound of printed range"}, "lower"),
+            ({"bound": "upper — LONGEST-life boundary of the scatter band"}, "upper"),
+            ({"bound": "max"}, "upper"),
+            ({"value_type": "minimum (guaranteed spec floor)"}, "lower"),
+            ({"value_type": "guaranteed minimum (원문 '>=' 표기)"}, "lower"),
+            ({"value_type": "maximum (spec ceiling)"}, "upper"),
+            ({"statistic": "minimum of 8 measurements"}, "lower"),
+            ({"statistic": "maximum of the printed pair"}, "upper"),
+            ({"statistic": "maximum"}, "upper"),
+        ],
+    )
+    def test_끝(self, conditions: dict[str, Any], side: str) -> None:
+        from app.shared import value_bounds
+
+        assert value_bounds.side(conditions) == side
+
+    @pytest.mark.parametrize(
+        "conditions",
+        [
+            {"value_type": "typical"},
+            {"statistic": "mean of 5 specimens"},
+            # 곡선의 극값 · 분포의 모수는 측정값들의 최소가 아니다.
+            {"statistic": "minimum of the alpha_i vs T curve"},
+            {"statistic": "3P-Weibull minimum (safe) life parameter alpha"},
+            {"bound": "midpoint"},
+            None,
+        ],
+    )
+    def test_끝이_아니다(self, conditions: dict[str, Any] | None) -> None:
+        from app.shared import value_bounds
+
+        assert value_bounds.side(conditions) is None

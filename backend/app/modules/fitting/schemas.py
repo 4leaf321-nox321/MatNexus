@@ -1244,12 +1244,74 @@ class BomDeckIn(BaseModel):
     """문헌 재료에 쓸 형식(`GET /catalog/deck/formats` 의 key). **비우면 이 파일 솔버의
     기본** — LS-DYNA 면 `dyna_elastic`, Abaqus 면 `abaqus_elastic` 처럼 구조(선형) 형식.
     문헌 값은 사내 물성 매핑을 거쳐 실린다(2026-09-28 — 전에는 LS-DYNA 만 됐다)."""
+    on_missing_yield: Literal["elastic", "reject"] = "elastic"
+    """소성 표가 없는 줄(항복이 없거나 「곡선 합성」 을 안 켠 문헌 줄)을 어떻게
+    하나(2026-11-17).
+
+    `elastic` — 전처럼 탄성 형식으로 내되 **`fallbacks` 에 빠짐없이 적는다**. `reject` — 그
+    줄을 `skipped` 로 보내 덱에 탄성 재료가 하나도 안 들어간다. 항복 없이 인장강도를 평탄부로
+    지은 합성 표(`yield_from_uts`)도 같다. 사람이 탄성 형식을 직접 고른 줄(`format` ·
+    `lit_format`)은 대체가 아니다."""
+    base_deck: str | None = Field(default=None, max_length=5_000_000)
+    """받는 쪽 해석 모델의 LS-DYNA 덱(재료 카드만 있어도 된다) — `keep_deck_values` 가 읽는다.
+    """
+    keep_deck_values: bool = False
+    """켜면 `base_deck` 에 같은 MID 가 있는 줄은 **그 덱의 ro · e · pr 을 그대로** 두고 곡선 ·
+    그 밖의 값만 MatNexus 것을 싣는다(2026-11-17). 끄면 전처럼 MatNexus 값으로 나간다 — 재료를
+    통째로 바꿔 넣는 쪽에서는 모델이 쓰던 세 값이 말없이 바뀐다. 첫 카드가 `MID RO E PR` 인
+    키워드만 읽는다 (`matcore.export.dyna_base`)."""
 
 
 class BomDeckSkippedOut(BaseModel):
     mid: int
     name: str
     why: str
+
+
+class BomDeckFallbackOut(BaseModel):
+    """소성 없이 나간 줄 — **조용히 탄성으로 바꾸지 않았다는 증거**(2026-11-17)."""
+
+    mid: int
+    name: str
+    kind: Literal["elastic", "yield_from_uts"]
+    """`elastic` 소성 표 없이 탄성 형식 · `yield_from_uts` 항복 없이 인장강도를 평탄부로 지은
+    합성 표."""
+    format: str
+    """실제로 나간 형식의 key."""
+    why: str
+
+
+class BomDeckRowOut(BaseModel):
+    """줄 하나가 무엇으로 나갔나 — **덱의 MID 에서 카드 · 재료 · 시험으로 거꾸로 가는
+    길**(2026-11-17).
+
+    전에는 재료 id 만 준 줄에서 서버가 어느 카드를 골랐는지가 덱 글자 안의 주석뿐이었고, 그
+    주석에도 재료 · 시험 id 가 없었다. 그래서 덱 값의 출처를 되짚을 수 없었다(HWAX 연결)."""
+
+    mid: int
+    name: str
+    status: Literal["rendered", "skipped"]
+    format: str | None = None
+    source: Literal["card", "literature"] | None = None
+    card_id: uuid.UUID | None = None
+    card_code: str | None = None
+    card_status: str | None = None
+    material_id: uuid.UUID | None = None
+    material_code: str | None = None
+    material_name: str | None = None
+    test_run_ids: list[uuid.UUID] = []
+    test_run_codes: list[str] = []
+    """카드의 근거 시험 — 선언 물성 카드면 비어 있다(시험이 없다)."""
+    catalog_material_id: uuid.UUID | None = None
+    catalog_material_name: str | None = None
+    curve_origin: str | None = None
+    """문헌 줄의 곡선 출처 — `measured` · `fitted` · `synthetic` ·
+    없음(`litdeck.curve_origin`)."""
+    fallback: Literal["elastic", "yield_from_uts"] | None = None
+    kept: dict[str, float] = {}
+    """받은 덱에서 지킨 값(`ro` · `e` · `pr`, 덱의 단위) — `keep_deck_values`."""
+    why: str | None = None
+    """건너뛴 줄의 까닭(`skipped` 와 같다)."""
 
 
 class BomDeckOut(BaseModel):
@@ -1270,6 +1332,11 @@ class BomDeckOut(BaseModel):
     센다 — 합성으로 세면 사람은 실측을 지어낸 것으로 읽는다."""
     literature_format: str | None = None
     """문헌 줄에 쓴 형식 — 비워 보냈으면 서버가 고른 것이다."""
+    rows: list[BomDeckRowOut] = []
+    """요청 줄마다 — 무엇으로 나갔고 어디서 왔나(계보)."""
+    fallbacks: list[BomDeckFallbackOut] = []
+    """소성 없이 나간 줄 전부 — `on_missing_yield=elastic` 일 때. `reject` 면 그 줄은 `skipped`
+    에."""
 
 
 # ── 카드 항목란을 화면에서 정의한다 (ADR 0033) ────────────────────────────────
@@ -1347,3 +1414,73 @@ class CardBlockOut(BaseModel):
     """이 항목란을 담고 있는 카드 수. 0 이 아니면 못 지우고 끄기만 한다."""
     created_at: datetime
     updated_at: datetime
+
+
+# ── 계보 — 덱 값에서 재료 · 시험으로 거꾸로 (2026-11-17) ─────────────────────────
+
+
+class LineageRunOut(BaseModel):
+    id: uuid.UUID
+    code: str | None = None
+    name: str | None = None
+    adopted_result_id: uuid.UUID | None = None
+    """그 시험의 채택 결과 — 카드는 이 결과의 값으로 만들어졌다(만든 뒤 바뀌었을 수 있다)."""
+    deleted: bool = False
+    """지워졌거나 찾을 수 없는 시험 — 근거가 휴지통에 있다."""
+
+
+class LineageValueOut(BaseModel):
+    block: str
+    key: str
+    label: str
+    value_si: float
+    si_unit: str
+    origin: str
+    """사람이 읽는 출처 — 「이 시험들에서 잰 값」 · 「사람이 적은 값 (문헌)」 …"""
+    source: str
+    """출처 코드 그대로(`measured` · `declared:handbook` …)."""
+    reference: str | None = None
+
+
+class CardLineageOut(BaseModel):
+    """카드 하나의 계보 — 덱의 값이 어느 재료 · 시험 · 근거에서 왔나."""
+
+    card_id: uuid.UUID
+    card_code: str
+    card_status: str
+    label: str | None = None
+    test_type: str | None = None
+    orientation: str | None = None
+    default_mid: int
+    """`mid` 를 안 주고 낸 덱의 MID — 카드 id 에서 만든 수(`export.solver_id_from`)."""
+    material_id: uuid.UUID | None = None
+    material_code: str | None = None
+    material_name: str | None = None
+    test_runs: list[LineageRunOut] = []
+    sample_count: int | None = None
+    declared_only: bool = False
+    """시험 없이 재료에 적힌 값으로만 만든 카드."""
+    basis: dict[str, Any] = {}
+    """시험 말고 그 카드의 근거 — 묶음 결과 · 마스터 곡선 · Prony · 계수 묶음 id."""
+    values: list[LineageValueOut] = []
+
+
+class DeckLineageIn(BaseModel):
+    deck: str = Field(min_length=1, max_length=5_000_000)
+    """MatNexus 가 낸 덱 글자(손으로 합친 것도) — 머리 주석의 카드 · 문헌 재료 id 를 읽는다."""
+    mid: int | None = None
+    """주면 그 MID 의 재료만."""
+
+
+class DeckLineageItemOut(BaseModel):
+    mid: int | None = None
+    keyword: str | None = None
+    card: CardLineageOut | None = None
+    catalog_material_id: uuid.UUID | None = None
+    catalog_material_name: str | None = None
+    note: str | None = None
+    """출처를 못 찾은 까닭 — 머리 주석이 없다(손으로 고친 덱) · 볼 수 없거나 지워진 카드."""
+
+
+class DeckLineageOut(BaseModel):
+    materials: list[DeckLineageItemOut]

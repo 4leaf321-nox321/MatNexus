@@ -1178,6 +1178,7 @@ def _values_out(
             representative=marks[value.id].representative,
             n_candidates=marks[value.id].n_candidates,
             separated_by=marks[value.id].separated_by,
+            bound=marks[value.id].bound,
             distinguishing=marks[value.id].distinguishing,
             summary=marks[value.id].summary,
             origin=contribute.origin_of(value),

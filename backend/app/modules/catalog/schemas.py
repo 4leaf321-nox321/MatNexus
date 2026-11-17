@@ -159,7 +159,10 @@ class CatalogValueOut(BaseModel):
     이유와 같이 보여 준다."""
     n_candidates: int = 1
     separated_by: str | None = None
-    """대표에게 밀린 자리(상태·등급·수치·온도·조건 수·입력 순서). 대표는 None."""
+    """대표에게 밀린 자리(범위의 끝·상태·등급·수치·온도·조건 수·입력 순서). 대표는 None."""
+    bound: str | None = None
+    """문헌 범위의 하한(`lower`) · 상한(`upper`) 줄이면 그 끝(2026-11-17). 대표값인데 이것이 서
+    있으면 그 물성에는 범위 가운데 값이 없다 — 하한을 대표처럼 옮기면 안 된다."""
 
 
 class CatalogLinkIn(BaseModel):

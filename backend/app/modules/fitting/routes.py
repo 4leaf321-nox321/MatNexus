@@ -30,7 +30,7 @@ from app import version
 from app.database import get_db
 from app.modules.accounts.models import User
 from app.modules.catalog.models import CatalogMaterial
-from app.modules.fitting import blocks, bundle, card_tiers, readiness, renderers
+from app.modules.fitting import blocks, bundle, card_tiers, lineage, readiness, renderers
 from app.modules.fitting.models import (
     REMARK_COMMENT,
     REMARK_PUBLISH_REQUESTED,
@@ -44,8 +44,11 @@ from app.modules.fitting.models import (
 from app.modules.fitting.schemas import (
     BlockPlotOut,
     BlockSpecOut,
+    BomDeckFallbackOut,
     BomDeckIn,
     BomDeckOut,
+    BomDeckRowIn,
+    BomDeckRowOut,
     BomDeckSkippedOut,
     BuiltinFormatOut,
     CardBlockCreate,
@@ -54,6 +57,7 @@ from app.modules.fitting.schemas import (
     CardBundleRequest,
     CardFacetOut,
     CardFacetsOut,
+    CardLineageOut,
     CardRemarkIn,
     CardRemarkOut,
     CardSlotIn,
@@ -70,6 +74,9 @@ from app.modules.fitting.schemas import (
     DeckLayoutSkippedOut,
     DeckLayoutSpanOut,
     DeckLayoutValueOut,
+    DeckLineageIn,
+    DeckLineageItemOut,
+    DeckLineageOut,
     DeckPreviewIn,
     DeckPreviewOut,
     DeckReadinessOut,
@@ -98,6 +105,8 @@ from app.modules.fitting.schemas import (
     FormatHoldOut,
     GroupCardSaveRequest,
     InheritedValueOut,
+    LineageRunOut,
+    LineageValueOut,
     LveCardSaveRequest,
     MemberCurveOut,
     PairedFormatsOut,
@@ -182,8 +191,9 @@ from matcore import (
 )
 from matcore.cards import viscoelastic as card_viscoelastic
 from matcore.cards.hyperelastic import from_parameter_set
+from matcore.export import dyna_base, scan, template, verify
+from matcore.export import fallback as deck_fallback
 from matcore.export import layout as export_layout
-from matcore.export import scan, template, verify
 from matcore.export.systems import MM_N_TONNE, UnitSystem
 from matcore.fitting import hyperelastic
 from matcore.processing import dma
@@ -3288,6 +3298,15 @@ def create_lve_card(
         for label, e, g in zip(labels, moduli, limits, strict=True)
         if e is None or g is None
     ]
+    # **값을 낸 시편만 근거다**(2026-11-17) — 전에는 카드의 시험 목록에 선형 구간을 못 내 뺀
+    # 시편까지
+    # 들어가, 덱에서 거꾸로 찾아간 사람이 쓰지 않은 시험을 근거로 읽었다(시편 수는 뺀 뒤의
+    # 수였다).
+    used = [
+        member
+        for member, e, g in zip(group.members, moduli, limits, strict=True)
+        if e is not None and g is not None
+    ]
     material = group.material
     poisson = _inherit_poisson(material, payload.poisson_ratio)
     basis = _modulus_basis(db, [member.run for member in group.members], poisson)
@@ -3354,12 +3373,12 @@ def create_lve_card(
         status="draft",
         source={
             "sample_count": len(kept),
-            "test_run_ids": [str(m.run.id) for m in group.members],
-            "record_names": [m.run.record_name for m in group.members],
+            "test_run_ids": [str(m.run.id) for m in used],
+            "record_names": [m.run.record_name for m in used],
             "temperature_k": group.temperature_k,
             "notes": [line for line in notes if line],
             # 낡은 채택 결과(옛 치수 · 옛 원본)로 낸 값이면 그렇다고(2026-11-15).
-            "warnings": _stale_warnings(db, [(m.run, m.result) for m in group.members]),
+            "warnings": _stale_warnings(db, [(m.run, m.result) for m in used]),
             "runtime": runtime.manifest(),
             "include_declared": payload.include_declared,
         },
@@ -4284,6 +4303,10 @@ def _deck_for_card(
         ),
         # 번호를 앞에 — 덱을 받은 사람이 「C-000038 카드」 라고 되물을 수 있게(2026-10-16).
         f"카드 {item.code} · {item.id} ({STATUS_NOTES.get(item.status, item.status)})",
+        # **재료 번호와 근거 시험 코드**(2026-11-17) — 「이 시험들에서 잰 값」 의 「이
+        # 시험들」 이 덱 안에 있어야 덱만 받은 사람이 되짚는다(HWAX 연결: 덱 값의 출처를
+        # 거꾸로 못 찾았다).
+        lineage.header_line(lineage.card_origin(db, item)),
     ]
     # **네킹을 안 잘랐다는 사실은 덱까지 따라가야 한다.** 소성 표만 봐서는
     # 구별할 방법이 없다 — 점이 나란히 있을 뿐이다.
@@ -4630,6 +4653,111 @@ def export_card(
             )
         },
     )
+
+
+#: 계보에 싣는 블록 — 값마다 출처(`*_source`)를 드는 것들.
+_LINEAGE_BLOCKS = ("elastic", "thermal", "electrical", "optical")
+
+
+def _card_lineage(db: Session, user: User, card: PropertyCard) -> CardLineageOut:
+    """카드 하나의 계보 — 덱 머리 각주와 같은 출처 문구(`_origin`)를 값마다."""
+    cards.load_builtin()
+    made = lineage.describe(db, card)
+    origin = made["origin"]
+    test_type = db.get(TestType, card.test_type_id) if card.test_type_id else None
+    values: list[LineageValueOut] = []
+    for block_key in _LINEAGE_BLOCKS:
+        found = cards.values_of((card.blocks or {}).get(block_key))
+        if not found:
+            continue
+        for slot in cards.block(block_key).produces:
+            number = found.get(slot.key)
+            source = str(found.get(f"{slot.key}_source") or "")
+            if not isinstance(number, int | float) or isinstance(number, bool) or not source:
+                continue
+            reference = found.get(f"{slot.key}_reference")
+            values.append(
+                LineageValueOut(
+                    block=block_key,
+                    key=slot.key,
+                    label=slot.label,
+                    value_si=float(number),
+                    si_unit=slot.si_unit,
+                    origin=_origin(source) or source,
+                    source=source,
+                    reference=str(reference) if reference else None,
+                )
+            )
+    return CardLineageOut(
+        card_id=card.id,
+        card_code=card.code,
+        card_status=card.status,
+        label=card.label,
+        test_type=test_type.key if test_type else None,
+        orientation=card.orientation,
+        default_mid=export.solver_id_from(str(card.id)),
+        material_id=origin.material_id,
+        material_code=origin.material_code,
+        material_name=origin.material_name,
+        test_runs=[LineageRunOut(**one) for one in made["runs"]],
+        sample_count=made["sample_count"],
+        declared_only=made["declared_only"],
+        basis=made["basis"],
+        values=values,
+    )
+
+
+@router.get("/cards/{card_id}/lineage", response_model=CardLineageOut)
+def card_lineage(
+    card_id: uuid.UUID,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> CardLineageOut:
+    """카드의 **계보** — 재료 · 근거 시험(채택 결과) · 그 밖의 근거 · 값마다 출처(2026-11-17).
+
+    덱의 MID 는 카드 id 를 줄인 해시라 거꾸로 셀 수 없다. 덱 머리에 「카드 C-… · <id>」 가
+    있으니 그 카드로 여기를 부르거나, 덱 글자를 통째로 `POST /fitting/decks/lineage` 에 준다.
+    """
+    return _card_lineage(db, user, _visible_card(db, user, card_id))
+
+
+@router.post("/decks/lineage", response_model=DeckLineageOut)
+def deck_lineage(
+    payload: DeckLineageIn,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> DeckLineageOut:
+    """덱 글자 → 재료마다 계보. **읽기만 한다** — 덱을 저장하지 않는다.
+
+    MatNexus 가 낸 덱은 재료마다 머리 주석에 카드(`카드 C-… · <id>`) · 문헌 재료(`문헌
+    카탈로그: … · <id>`)를 적는다. LS-DYNA 면 그 주석을 바로 뒤 `*MAT` 카드의 MID 에 묶는다.
+    손으로 고쳐 주석이 빠진 재료는 MID 만 오고 `note` 가 그렇다고 말한다.
+    """
+    items: list[DeckLineageItemOut] = []
+    for found in lineage.deck_sources(payload.deck):
+        if payload.mid is not None and found.mid != payload.mid:
+            continue
+        item = DeckLineageItemOut(
+            mid=found.mid,
+            keyword=found.keyword,
+            catalog_material_id=found.catalog_material_id,
+            catalog_material_name=found.catalog_material_name,
+        )
+        if found.card_id is not None:
+            try:
+                item.card = _card_lineage(db, user, _visible_card(db, user, found.card_id))
+            except AppError:
+                item.note = (
+                    f"카드 {found.card_code} 를 볼 수 없습니다 — "
+                    "지워졌거나 볼 권한이 없습니다."
+                )
+        elif found.catalog_material_id is None:
+            item.note = (
+                "머리 주석에 출처가 없습니다 — MatNexus 가 낸 덱이 아니거나 주석이 "
+                "지워졌습니다."
+            )
+        items.append(item)
+    return DeckLineageOut(materials=items)
 
 
 @router.get("/cards/{card_id}/export/verify")
@@ -5571,24 +5699,79 @@ def _cards_for_material(db: Session, user: User, material_id: uuid.UUID) -> list
     return rows
 
 
+@dataclass(frozen=True)
+class _Picked:
+    card: PropertyCard
+    deck: export.Deck
+    target: export.Renderer
+    fallback: deck_fallback.Kind | None
+
+
 def _pick_card_deck(
     db: Session,
     user: User,
     cards_: list[PropertyCard],
     targets: Sequence[export.Renderer],
     mid: int,
-) -> tuple[export.Deck, export.Renderer] | tuple[None, str]:
-    """카드 중 **그 형식으로 나오는 첫 것**. 없으면 첫 카드에 무엇이 빠졌는지."""
+    *,
+    adjust: Callable[[export.Deck], export.Deck] = lambda deck: deck,
+    server_chose: bool = False,
+    reject_fallback: bool = False,
+) -> _Picked | str:
+    """카드 중 **그 형식으로 나오는 첫 것**. 없으면 첫 카드에 무엇이 빠졌는지(글자).
+
+    `adjust` 는 판정 전에 덱을 고치는 손이다(받은 덱의 ro · e · pr — 밀도가 없던 카드가 그
+    값으로 선다). `reject_fallback` 이면 소성 없이 나가는 짝은 건너뛴다 — 다른 카드에 소성 표가
+    있으면 그것을 고른다.
+    """
+    fallen: _Picked | None = None
     for item in cards_:
-        deck = replace(_deck_for_card(db, user, item.id), solver_id=mid)
+        deck = adjust(replace(_deck_for_card(db, user, item.id), solver_id=mid))
         for target in targets:
-            if not export.missing_for(deck, target):
-                return deck, target
+            if export.missing_for(deck, target):
+                continue
+            kind = deck_fallback.kind(target, deck, server_chose=server_chose)
+            if kind is not None and reject_fallback:
+                fallen = fallen or _Picked(item, deck, target, kind)
+                continue
+            return _Picked(item, deck, target, kind)
     if not cards_:
-        return None, "카드가 없는 재료입니다 — 문헌 재료면 catalog_material_id 로 주세요."
-    first = replace(_deck_for_card(db, user, cards_[0].id), solver_id=mid)
-    return None, "카드로 낼 수 있는 형식이 없습니다 — " + "; ".join(
+        return "카드가 없는 재료입니다 — 문헌 재료면 catalog_material_id 로 주세요."
+    if fallen is not None:
+        return (
+            f"소성 표가 없어 뺐습니다(on_missing_yield=reject) — 카드 {fallen.card.code} 는 "
+            f"{fallen.target.label} 로만 나옵니다"
+            + (
+                "(항복 없이 인장강도를 평탄부로 지은 합성 표)"
+                if fallen.fallback == "yield_from_uts"
+                else ""
+            )
+            + ". 그대로 받으려면 on_missing_yield=elastic."
+        )
+    first = adjust(replace(_deck_for_card(db, user, cards_[0].id), solver_id=mid))
+    return "카드로 낼 수 있는 형식이 없습니다 — " + "; ".join(
         export.missing_for(first, targets[0])
+    )
+
+
+def _fallback_why(
+    kind: deck_fallback.Kind, target: export.Renderer, *, literature: bool, missing: str = ""
+) -> str:
+    """대체 보고 한 줄 — 무엇 대신 무엇으로 나갔고, 어떻게 하면 소성까지 나오나."""
+    if kind == "yield_from_uts":
+        return (
+            "항복강도가 없어 인장강도를 소성 평탄부로 둔 완전소성 합성 표로 냈습니다"
+            f"({target.label}) — 소성 개시를 과대평가합니다."
+        )
+    if literature:
+        return (
+            f"문헌 줄이라 탄성 형식({target.label})으로 냈습니다 — 소성 표가 없습니다. "
+            "문헌 곡선 · 스칼라로 소성까지 내려면 「곡선 합성」(synthesize)을 켜세요."
+        )
+    return (
+        f"소성 표가 없어 탄성 형식({target.label})으로 냈습니다"
+        + (f" — 소성 형식에 빠진 것: {missing}" if missing else "")
+        + "."
     )
 
 
@@ -5677,10 +5860,56 @@ def build_bom_deck(
     rendered: list[str] = []
     skipped: list[BomDeckSkippedOut] = []
     notes: list[str] = []
+    out_rows: list[BomDeckRowOut] = []
+    fallbacks: list[BomDeckFallbackOut] = []
     card_count = 0
     literature_count = 0
     synthetic_count = 0
     measured_curve_count = 0
+    reject = payload.on_missing_yield == "reject"
+
+    # **받은 덱의 값을 지킨다**(keep_deck_values, 2026-11-17) — 같은 MID 의 ro · e · pr 은 그
+    # 덱의 것.
+    base: dyna_base.BaseDeck | None = None
+    if payload.keep_deck_values:
+        if family != "dyna":
+            raise AppError(
+                "MNX-FITTING-0055",
+                f"받은 덱의 값을 지키는 것은 LS-DYNA 덱만 됩니다 — 이 파일은 {family} 입니다.",
+                status=422,
+            )
+        if not payload.base_deck:
+            raise AppError(
+                "MNX-FITTING-0055",
+                "keep_deck_values 를 켰으면 base_deck 에 받는 쪽 덱(재료 카드)을 주세요.",
+                status=422,
+            )
+        base = dyna_base.read(payload.base_deck)
+        if base.skipped:
+            notes.append(
+                "받은 덱에서 칸 차례를 몰라 값을 안 읽은 재료 카드: " + ", ".join(base.skipped)
+            )
+    kept_by_mid: dict[int, dyna_base.Kept] = {}
+
+    def adjust_for(mid: int) -> Callable[[export.Deck], export.Deck]:
+        """그 MID 의 받은 덱 값을 넣는 손 — 없으면 그대로."""
+        found = base.materials.get(mid) if base is not None else None
+        if found is None:
+            return lambda deck: deck
+
+        def apply(deck: export.Deck) -> export.Deck:
+            made = dyna_base.keep(deck, found, system)
+            kept_by_mid[mid] = made
+            return made.deck
+
+        return apply
+
+    def skip(row: BomDeckRowIn, why: str, **known: Any) -> None:
+        skipped.append(BomDeckSkippedOut(mid=row.mid, name=row.name, why=why))
+        out_rows.append(
+            BomDeckRowOut(mid=row.mid, name=row.name, status="skipped", why=why, **known)
+        )
+
     for row in payload.rows:
         # 줄마다 다른 형식 — 같은 솔버 안에서만.
         row_targets = card_targets
@@ -5688,33 +5917,22 @@ def build_bom_deck(
             try:
                 override = renderers.renderer_for(db, row.format)
             except export.ExportError as refused:
-                skipped.append(BomDeckSkippedOut(mid=row.mid, name=row.name, why=str(refused)))
+                skip(row, str(refused))
                 continue
             fixed = export.effective_system(override, system)
             if fixed.key != system.key:
                 # 같은 솔버라도 단위가 정해진 형식(ANSYS 전기 — SI)을 다른 계의 파일에 섞으면
                 # 한 파일 안에서 숫자의 계가 갈린다. 솔버는 그것을 오류로 알려 주지 않는다.
-                skipped.append(
-                    BomDeckSkippedOut(
-                        mid=row.mid,
-                        name=row.name,
-                        why=(
-                            f"{override.label} 은 단위가 {fixed.label} 로 정해진 형식이라 "
-                            f"이 파일의 계({system.label})와 섞을 수 없습니다."
-                        ),
-                    )
+                skip(
+                    row,
+                    f"{override.label} 은 단위가 {fixed.label} 로 정해진 형식이라 "
+                    f"이 파일의 계({system.label})와 섞을 수 없습니다.",
                 )
                 continue
             if litdeck.solver_of(override) != family:
-                skipped.append(
-                    BomDeckSkippedOut(
-                        mid=row.mid,
-                        name=row.name,
-                        why=(
-                            f"{override.key} 는 다른 솔버의 형식입니다 — "
-                            f"이 파일은 {family} 입니다."
-                        ),
-                    )
+                skip(
+                    row,
+                    f"{override.key} 는 다른 솔버의 형식입니다 — 이 파일은 {family} 입니다.",
                 )
                 continue
             row_targets = [override]
@@ -5725,32 +5943,87 @@ def build_bom_deck(
             else:
                 assert row.material_id is not None
                 cards_ = _cards_for_material(db, user, row.material_id)
-            picked = _pick_card_deck(db, user, cards_, row_targets, row.mid)
-            if picked[0] is None:
-                skipped.append(
-                    BomDeckSkippedOut(mid=row.mid, name=row.name, why=str(picked[1]))
-                )
+            # 서버가 형식을 골랐는가 — 사람이 탄성 형식을 직접 고른 줄은 대체가 아니다.
+            server_chose = payload.format is None and row.format is None
+            picked = _pick_card_deck(
+                db,
+                user,
+                cards_,
+                row_targets,
+                row.mid,
+                adjust=adjust_for(row.mid),
+                server_chose=server_chose,
+                reject_fallback=reject,
+            )
+            if isinstance(picked, str):
+                skip(row, picked, source="card", material_id=row.material_id)
                 continue
-            deck, target = picked
+            origin = lineage.card_origin(db, picked.card)
+            known: dict[str, Any] = {
+                "source": "card",
+                "card_id": origin.card_id,
+                "card_code": origin.card_code,
+                "card_status": origin.card_status,
+                "material_id": origin.material_id,
+                "material_code": origin.material_code,
+                "material_name": origin.material_name,
+                "test_run_ids": origin.test_run_ids,
+                "test_run_codes": origin.test_run_codes,
+            }
             try:
-                made = export.render(target, deck, system)
+                made = export.render(picked.target, picked.deck, system)
             except export.ExportError as refused:
-                skipped.append(BomDeckSkippedOut(mid=row.mid, name=row.name, why=str(refused)))
+                skip(row, str(refused), **known)
                 continue
             rendered.append(made.text)
             notes.extend(made.notes)
             card_count += 1
+            kept = kept_by_mid.get(row.mid)
+            if kept is not None:
+                notes.extend(kept.notes)
+            if picked.fallback is not None:
+                plastic = next(
+                    (one for one in row_targets if deck_fallback.is_plastic(one)), None
+                )
+                fallbacks.append(
+                    BomDeckFallbackOut(
+                        mid=row.mid,
+                        name=row.name,
+                        kind=picked.fallback,
+                        format=picked.target.key,
+                        why=_fallback_why(
+                            picked.fallback,
+                            picked.target,
+                            literature=False,
+                            missing=", ".join(export.missing_for(picked.deck, plastic))
+                            if plastic is not None
+                            else "",
+                        ),
+                    )
+                )
+            out_rows.append(
+                BomDeckRowOut(
+                    mid=row.mid,
+                    name=row.name,
+                    status="rendered",
+                    format=picked.target.key,
+                    fallback=picked.fallback,
+                    kept=kept.values if kept is not None else {},
+                    **known,
+                )
+            )
             continue
 
         if row.catalog_material_id is not None:
             material = db.get(CatalogMaterial, row.catalog_material_id)
             if material is None:
-                skipped.append(
-                    BomDeckSkippedOut(
-                        mid=row.mid, name=row.name, why="카탈로그에 없는 재료입니다."
-                    )
-                )
+                skip(row, "카탈로그에 없는 재료입니다.", source="literature")
                 continue
+            lit_known: dict[str, Any] = {
+                "source": "literature",
+                "catalog_material_id": material.id,
+                "catalog_material_name": material.name,
+            }
             lit_row_target = curve_target if row.synthesize else lit_target
             # **고무는 곡선 대신 초탄성**(2026-10-13) — 항복 = 인장강도의 탄소성 곡선은 고무의
             # 물리가 아니다. 문헌 초탄성 벌이 있으면 그것, 없으면 E 에서 Neo-Hookean
@@ -5764,17 +6037,13 @@ def build_bom_deck(
                         "냈습니다."
                     )
             if lit_row_target is None:
-                skipped.append(
-                    BomDeckSkippedOut(
-                        mid=row.mid,
-                        name=row.name,
-                        why=(
-                            f"이 파일의 솔버({family})에는 "
-                            + ("곡선을 합성해 낼 " if row.synthesize else "문헌 재료를 낼 ")
-                            + "형식이 없습니다 — 문헌 값이 채울 수 있는 물성만 요구하는 "
-                            "형식이 있어야 합니다(사용 중단된 형식은 안 씁니다)."
-                        ),
-                    )
+                skip(
+                    row,
+                    f"이 파일의 솔버({family})에는 "
+                    + ("곡선을 합성해 낼 " if row.synthesize else "문헌 재료를 낼 ")
+                    + "형식이 없습니다 — 문헌 값이 채울 수 있는 물성만 요구하는 "
+                    "형식이 있어야 합니다(사용 중단된 형식은 안 씁니다).",
+                    **lit_known,
                 )
                 continue
             # **사내 물성 매핑을 거친다** — 반영했다면 적혔을 선언 물성을 선언 카드의
@@ -5783,39 +6052,72 @@ def build_bom_deck(
                 db, material, row.mid, synthesize=row.synthesize, target=lit_row_target
             )
             if isinstance(deck_or_why, str):
-                skipped.append(BomDeckSkippedOut(mid=row.mid, name=row.name, why=deck_or_why))
+                skip(row, deck_or_why, **lit_known)
                 continue
-            missing = export.missing_for(deck_or_why, lit_row_target)
+            lit_deck = adjust_for(row.mid)(deck_or_why)
+            missing = export.missing_for(lit_deck, lit_row_target)
             if missing:
-                skipped.append(
-                    BomDeckSkippedOut(
-                        mid=row.mid,
-                        name=row.name,
-                        why="문헌값이 모자랍니다: " + ", ".join(missing),
-                    )
+                skip(row, "문헌값이 모자랍니다: " + ", ".join(missing), **lit_known)
+                continue
+            # 문헌 줄의 형식은 사람이 `lit_format` 으로 주지 않았으면 서버가 고른 것이다.
+            lit_fallback = deck_fallback.kind(
+                lit_row_target,
+                lit_deck,
+                server_chose=payload.lit_format is None and not row.synthesize,
+            )
+            if lit_fallback is not None and reject:
+                skip(
+                    row,
+                    "소성 표가 없어 뺐습니다(on_missing_yield=reject) — "
+                    + _fallback_why(lit_fallback, lit_row_target, literature=True)
+                    + " 그대로 받으려면 on_missing_yield=elastic.",
+                    **lit_known,
                 )
                 continue
             try:
-                made = export.render(lit_row_target, deck_or_why, system)
+                made = export.render(lit_row_target, lit_deck, system)
             except export.ExportError as refused:
-                skipped.append(BomDeckSkippedOut(mid=row.mid, name=row.name, why=str(refused)))
+                skip(row, str(refused), **lit_known)
                 continue
             rendered.append(made.text)
             notes.extend(made.notes)
+            kept = kept_by_mid.get(row.mid)
+            if kept is not None:
+                notes.extend(kept.notes)
             # 곡선이 어디서 왔는지로 센다 — 「곡선 합성」 을 켠 줄이라도 문헌의 잰 곡선을
             # 썼으면 합성이 아니다(2026-11-08).
-            origin = litdeck.curve_origin(deck_or_why)
-            if origin == "synthetic":
+            curve = litdeck.curve_origin(lit_deck)
+            if curve == "synthetic":
                 synthetic_count += 1
-            elif origin in ("measured", "fitted"):
+            elif curve in ("measured", "fitted"):
                 measured_curve_count += 1
             else:
                 literature_count += 1
+            if lit_fallback is not None:
+                fallbacks.append(
+                    BomDeckFallbackOut(
+                        mid=row.mid,
+                        name=row.name,
+                        kind=lit_fallback,
+                        format=lit_row_target.key,
+                        why=_fallback_why(lit_fallback, lit_row_target, literature=True),
+                    )
+                )
+            out_rows.append(
+                BomDeckRowOut(
+                    mid=row.mid,
+                    name=row.name,
+                    status="rendered",
+                    format=lit_row_target.key,
+                    curve_origin=curve,
+                    fallback=lit_fallback,
+                    kept=kept.values if kept is not None else {},
+                    **lit_known,
+                )
+            )
             continue
 
-        skipped.append(
-            BomDeckSkippedOut(mid=row.mid, name=row.name, why="매칭이 확정되지 않았습니다.")
-        )
+        skip(row, "매칭이 확정되지 않았습니다.")
 
     if not rendered:
         # **이유를 함께 싣는다.** 「건너뛴 이유를 보세요」 라고 말하면서 그 이유를
@@ -5825,8 +6127,19 @@ def build_bom_deck(
             "MNX-FITTING-0034",
             "덱에 실을 수 있는 부품이 없습니다 — 건너뛴 이유를 보세요.",
             status=422,
-            details={"skipped": [one.model_dump(mode="json") for one in skipped]},
+            details={
+                "skipped": [one.model_dump(mode="json") for one in skipped],
+                "rows": [one.model_dump(mode="json") for one in out_rows],
+            },
         )
+    if base is not None:
+        # 받은 덱에 없는 MID — 그 줄은 MatNexus 값으로 나갔다. 말없이 두면 지켰다고 믿는다.
+        absent = [one.mid for one in out_rows if one.status == "rendered" and not one.kept]
+        if absent:
+            notes.append(
+                "받은 덱에 없거나 값을 못 읽은 MID 라 MatNexus 의 ro · e · pr 로 냈습니다: "
+                + ", ".join(str(one) for one in absent)
+            )
     return BomDeckOut(
         text=litdeck.combine_family(rendered, family),
         filename=f"bom_deck_{system.key}.{extension}",
@@ -5838,6 +6151,8 @@ def build_bom_deck(
         synthetic_count=synthetic_count,
         measured_curve_count=measured_curve_count,
         literature_format=lit_target.key if lit_target else None,
+        rows=out_rows,
+        fallbacks=fallbacks,
     )
 
 

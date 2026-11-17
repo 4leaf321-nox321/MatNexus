@@ -9,6 +9,9 @@
 
     ⓪ 원본에 있는 것    원본 스냅샷에서 빠진 값(`source_missing_at`)은 **대표가 못 된다** —
                        무리가 전부 빠진 값이면 그 물성의 대표가 없다(2026-10-04)
+    ⓪′ 범위의 끝이 아닌 것  하한 · 상한 줄(`value_bounds`)은 범위 가운데 값 뒤로(2026-11-17).
+                       그 줄만 있으면 하한 · 상한이 대표로 서되 `bound` 가 그렇다고 말한다 —
+                       전에는 등급이 좋은 하한이 「typical」 을 이겼고, 표지도 없었다
     ① 고체상 먼저      용융·액체 상태 값은 뒤로 (solder 용융 물성이 대표가 되면 안 된다)
     ② 등급(tier) 낮은 것   실측 > 핸드북 > 2차 인용 > 추정
     ③ 수치 있는 것
@@ -33,7 +36,7 @@ from typing import Any
 
 from sqlalchemy import or_
 
-from app.shared import standard_conditions
+from app.shared import standard_conditions, value_bounds
 
 #: 조건이 아니라 관리 기록인 키 — 순위·조건 수에 안 센다 (원본 `_NOT_A_CONDITION`).
 _BOOKKEEPING_KEYS = frozenset(
@@ -58,7 +61,17 @@ _UNKNOWN_TEMPERATURE_PENALTY = 5.0
 ROOM_BAND_K = 5.0
 
 #: 순위 자리 이름 — `separated_by` 가 이 말로 밀린 이유를 말한다.
-_SLOTS = ("원본에서 빠짐", "산점의 점", "상태", "등급", "수치", "온도", "조건 수", "입력 순서")
+_SLOTS = (
+    "원본에서 빠짐",
+    "산점의 점",
+    "범위의 끝",
+    "상태",
+    "등급",
+    "수치",
+    "온도",
+    "조건 수",
+    "입력 순서",
+)
 
 
 @cache
@@ -130,6 +143,10 @@ class Annotation:
     **평균이 아니라 중앙값이다.** 값이 서넛뿐이라 한쪽으로 튄 값 하나가 평균을
     끌고 간다."""
 
+    bound: str | None = None
+    """이 값이 문헌 범위의 **하한(`lower`) · 상한(`upper`)** 이면 그 끝(`value_bounds`). 대표가
+    하한이면 「대표값이 하한이다」 — 그 물성에 범위 가운데 값이 없다는 뜻이다."""
+
     distinguishing: dict[str, Any] = field(default_factory=dict)
     """**후보들 사이에서 실제로 값이 갈리는 조건**만. 이 값의 것을 담는다.
 
@@ -200,6 +217,7 @@ def _rank(value: Any) -> tuple[float, ...]:
     return (
         1.0 if is_missing(value) else 0.0,
         1.0 if is_scatter(value) else 0.0,
+        1.0 if value_bounds.side(value.conditions) else 0.0,
         1.0 if any(word in state for word in _NOT_SOLID) else 0.0,
         float(value.quality_tier),
         0.0 if value.value_num is not None else 1.0,
@@ -330,6 +348,7 @@ def annotate(values: list[Any]) -> dict[Any, Annotation]:
                     representative=False,
                     n_candidates=len(members),
                     separated_by=_SLOTS[0] if is_missing(one) else _SLOTS[1],
+                    bound=value_bounds.side(one.conditions),
                     distinguishing=varying.get(one.id, {}),
                 )
             continue
@@ -343,6 +362,7 @@ def annotate(values: list[Any]) -> dict[Any, Annotation]:
             representative=True,
             n_candidates=len(members),
             separated_by=None,
+            bound=value_bounds.side(winner.conditions),
             distinguishing=varying.get(winner.id, {}),
             summary=summary,
         )
@@ -356,6 +376,7 @@ def annotate(values: list[Any]) -> dict[Any, Annotation]:
                 representative=False,
                 n_candidates=len(members),
                 separated_by=slot,
+                bound=value_bounds.side(loser.conditions),
                 distinguishing=varying.get(loser.id, {}),
             )
     return out

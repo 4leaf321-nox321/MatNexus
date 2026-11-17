@@ -410,6 +410,7 @@ export function BomDeck() {
                   ` · 문헌 실측 곡선 ${built.measured_curve_count}`}
                 {built.synthetic_count > 0 && ` · 합성 곡선 ${built.synthetic_count}`}
                 {built.skipped.length > 0 && ` · 건너뜀 ${built.skipped.length}`}
+                {(built.fallbacks?.length ?? 0) > 0 && ` · 소성 없이 ${built.fallbacks?.length}`}
               </span>
             </>
           )}
@@ -421,6 +422,21 @@ export function BomDeck() {
           <div className="mb-1 font-medium">건너뛴 부품 — 조용히 빠지지 않습니다</div>
           <ul className="text-muted-foreground space-y-0.5 text-xs">
             {built.skipped.map((one) => (
+              <li key={one.mid}>
+                MID {one.mid} · {one.name} — {one.why}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* **소성 없이 나간 부품**(2026-11-17) — 전에는 소성 표가 없으면 말없이 탄성 재료로 나갔다.
+          받는 쪽은 곡선 재료인 줄 알고 해석을 돌린다. */}
+      {built && (built.fallbacks?.length ?? 0) > 0 && (
+        <div className="rounded-md border border-amber-300 p-3 text-sm">
+          <div className="mb-1 font-medium">소성 없이 나간 부품 — 탄성 재료로 실렸습니다</div>
+          <ul className="text-muted-foreground space-y-0.5 text-xs">
+            {built.fallbacks?.map((one) => (
               <li key={one.mid}>
                 MID {one.mid} · {one.name} — {one.why}
               </li>

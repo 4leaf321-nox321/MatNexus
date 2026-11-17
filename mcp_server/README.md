@@ -102,7 +102,7 @@ ms)를 알린다 — 「관리 → 사용 현황」 의 MCP 숫자가 여기서 
 도구의 답은 그대로 나간다. 도구 하나가 백엔드를 여러 번 부르므로 API 요청 수(`X-Client: mcp`)와
 도구 수는 다르다 — 둘 다 그 화면에 있다.
 
-## 5. 지금 있는 것 (도구 131개)
+## 5. 지금 있는 것 (도구 132개)
 
 **전부 한 번에 불러 보려면 `probe.py` 를 돌린다** — 진짜 MCP 클라이언트로 한 바퀴
 돈다(아래 「실측으로 잡은 것」 참조). 화면이나 curl 로는 안 보이는 층이 있다.
@@ -326,7 +326,11 @@ SP(Standard Platform)의 코어(부서 · 기관 · 장비 · PLM · 물성 …)
     check_card_deck(card, fmt, units,  뽑은 덱을 되읽어 카드와 대조 — 건네기 전에. 짝 카드 ·
                     expect?, ...)      파단 칸(with_card · fail_from_elongation)도 뽑을 때와 같게
     build_deck(rows, units,            부품 여럿 → 덱 한 파일. 파일로 건네려면
-               include_text)           include_text=True (500줄 넘으면 잘린다)
+               include_text)           include_text=True (500줄 넘으면 잘린다). 소성 없이 나간
+                                       줄은 fallbacks(on_missing_yield="reject" 면 뺀다), 줄마다
+                                       계보는 rows, 받는 쪽 덱의 ro · e · pr 은 keep_deck_values
+    ★ card_lineage(card | deck)        덱 값의 출처를 거꾸로 — 카드 · 재료 · 근거 시험 · 값마다
+                                       출처. 덱 글자면 머리 주석을 MID 에 묶는다
     get_verify_kit(card, fmt)          1요소 검증 모델 — 모델 · 재료 덱 · 기대 응답(README)을
                                        파일마다 글로. 늘 mm · N · tonne
 

@@ -2271,8 +2271,58 @@
         "title": "BomAliasOut",
         "type": "object"
       },
+      "BomDeckFallbackOut": {
+        "description": "소성 없이 나간 줄 — **조용히 탄성으로 바꾸지 않았다는 증거**(2026-11-17).",
+        "properties": {
+          "format": {
+            "title": "Format",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "elastic",
+              "yield_from_uts"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "mid": {
+            "title": "Mid",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "why": {
+            "title": "Why",
+            "type": "string"
+          }
+        },
+        "required": [
+          "mid",
+          "name",
+          "kind",
+          "format",
+          "why"
+        ],
+        "title": "BomDeckFallbackOut",
+        "type": "object"
+      },
       "BomDeckIn": {
         "properties": {
+          "base_deck": {
+            "anyOf": [
+              {
+                "maxLength": 5000000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Deck"
+          },
           "format": {
             "anyOf": [
               {
@@ -2284,6 +2334,11 @@
             ],
             "title": "Format"
           },
+          "keep_deck_values": {
+            "default": false,
+            "title": "Keep Deck Values",
+            "type": "boolean"
+          },
           "lit_format": {
             "anyOf": [
               {
@@ -2294,6 +2349,15 @@
               }
             ],
             "title": "Lit Format"
+          },
+          "on_missing_yield": {
+            "default": "elastic",
+            "enum": [
+              "elastic",
+              "reject"
+            ],
+            "title": "On Missing Yield",
+            "type": "string"
           },
           "rows": {
             "items": {
@@ -2328,6 +2392,14 @@
             "title": "Card Count",
             "type": "integer"
           },
+          "fallbacks": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/BomDeckFallbackOut"
+            },
+            "title": "Fallbacks",
+            "type": "array"
+          },
           "filename": {
             "title": "Filename",
             "type": "string"
@@ -2361,6 +2433,14 @@
               "type": "string"
             },
             "title": "Notes",
+            "type": "array"
+          },
+          "rows": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/BomDeckRowOut"
+            },
+            "title": "Rows",
             "type": "array"
           },
           "skipped": {
@@ -2463,6 +2543,213 @@
           "name"
         ],
         "title": "BomDeckRowIn",
+        "type": "object"
+      },
+      "BomDeckRowOut": {
+        "description": "줄 하나가 무엇으로 나갔나 — **덱의 MID 에서 카드 · 재료 · 시험으로 거꾸로 가는\n길**(2026-11-17).\n\n전에는 재료 id 만 준 줄에서 서버가 어느 카드를 골랐는지가 덱 글자 안의 주석뿐이었고, 그\n주석에도 재료 · 시험 id 가 없었다. 그래서 덱 값의 출처를 되짚을 수 없었다(HWAX 연결).",
+        "properties": {
+          "card_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Card Code"
+          },
+          "card_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Card Id"
+          },
+          "card_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Card Status"
+          },
+          "catalog_material_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Catalog Material Id"
+          },
+          "catalog_material_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Catalog Material Name"
+          },
+          "curve_origin": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Curve Origin"
+          },
+          "fallback": {
+            "anyOf": [
+              {
+                "enum": [
+                  "elastic",
+                  "yield_from_uts"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fallback"
+          },
+          "format": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Format"
+          },
+          "kept": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "default": {},
+            "title": "Kept",
+            "type": "object"
+          },
+          "material_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Material Code"
+          },
+          "material_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Material Id"
+          },
+          "material_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Material Name"
+          },
+          "mid": {
+            "title": "Mid",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "enum": [
+                  "card",
+                  "literature"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "status": {
+            "enum": [
+              "rendered",
+              "skipped"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "test_run_codes": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Test Run Codes",
+            "type": "array"
+          },
+          "test_run_ids": {
+            "default": [],
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Test Run Ids",
+            "type": "array"
+          },
+          "why": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Why"
+          }
+        },
+        "required": [
+          "mid",
+          "name",
+          "status"
+        ],
+        "title": "BomDeckRowOut",
         "type": "object"
       },
       "BomDeckSkippedOut": {
@@ -4611,6 +4898,141 @@
           "si_unit"
         ],
         "title": "CardItemValueOut",
+        "type": "object"
+      },
+      "CardLineageOut": {
+        "description": "카드 하나의 계보 — 덱의 값이 어느 재료 · 시험 · 근거에서 왔나.",
+        "properties": {
+          "basis": {
+            "additionalProperties": true,
+            "default": {},
+            "title": "Basis",
+            "type": "object"
+          },
+          "card_code": {
+            "title": "Card Code",
+            "type": "string"
+          },
+          "card_id": {
+            "format": "uuid",
+            "title": "Card Id",
+            "type": "string"
+          },
+          "card_status": {
+            "title": "Card Status",
+            "type": "string"
+          },
+          "declared_only": {
+            "default": false,
+            "title": "Declared Only",
+            "type": "boolean"
+          },
+          "default_mid": {
+            "title": "Default Mid",
+            "type": "integer"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "material_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Material Code"
+          },
+          "material_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Material Id"
+          },
+          "material_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Material Name"
+          },
+          "orientation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Orientation"
+          },
+          "sample_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sample Count"
+          },
+          "test_runs": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/LineageRunOut"
+            },
+            "title": "Test Runs",
+            "type": "array"
+          },
+          "test_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Test Type"
+          },
+          "values": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/LineageValueOut"
+            },
+            "title": "Values",
+            "type": "array"
+          }
+        },
+        "required": [
+          "card_id",
+          "card_code",
+          "card_status",
+          "default_mid"
+        ],
+        "title": "CardLineageOut",
         "type": "object"
       },
       "CardRemarkIn": {
@@ -8397,6 +8819,17 @@
       },
       "CatalogValueOut": {
         "properties": {
+          "bound": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bound"
+          },
           "conditions": {
             "anyOf": [
               {
@@ -11911,6 +12344,120 @@
           "spans"
         ],
         "title": "DeckLayoutValueOut",
+        "type": "object"
+      },
+      "DeckLineageIn": {
+        "properties": {
+          "deck": {
+            "maxLength": 5000000,
+            "minLength": 1,
+            "title": "Deck",
+            "type": "string"
+          },
+          "mid": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mid"
+          }
+        },
+        "required": [
+          "deck"
+        ],
+        "title": "DeckLineageIn",
+        "type": "object"
+      },
+      "DeckLineageItemOut": {
+        "properties": {
+          "card": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CardLineageOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "catalog_material_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Catalog Material Id"
+          },
+          "catalog_material_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Catalog Material Name"
+          },
+          "keyword": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Keyword"
+          },
+          "mid": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mid"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "title": "DeckLineageItemOut",
+        "type": "object"
+      },
+      "DeckLineageOut": {
+        "properties": {
+          "materials": {
+            "items": {
+              "$ref": "#/components/schemas/DeckLineageItemOut"
+            },
+            "title": "Materials",
+            "type": "array"
+          }
+        },
+        "required": [
+          "materials"
+        ],
+        "title": "DeckLineageOut",
         "type": "object"
       },
       "DeckMatchIn": {
@@ -19794,6 +20341,113 @@
           "reason"
         ],
         "title": "LabUnresolvedOut",
+        "type": "object"
+      },
+      "LineageRunOut": {
+        "properties": {
+          "adopted_result_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Adopted Result Id"
+          },
+          "code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Code"
+          },
+          "deleted": {
+            "default": false,
+            "title": "Deleted",
+            "type": "boolean"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "title": "LineageRunOut",
+        "type": "object"
+      },
+      "LineageValueOut": {
+        "properties": {
+          "block": {
+            "title": "Block",
+            "type": "string"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "origin": {
+            "title": "Origin",
+            "type": "string"
+          },
+          "reference": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reference"
+          },
+          "si_unit": {
+            "title": "Si Unit",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "value_si": {
+            "title": "Value Si",
+            "type": "number"
+          }
+        },
+        "required": [
+          "block",
+          "key",
+          "label",
+          "value_si",
+          "si_unit",
+          "origin",
+          "source"
+        ],
+        "title": "LineageValueOut",
         "type": "object"
       },
       "LinkCandidateOut": {
@@ -47742,6 +48396,50 @@
         ]
       }
     },
+    "/api/fitting/cards/{card_id}/lineage": {
+      "get": {
+        "description": "카드의 **계보** — 재료 · 근거 시험(채택 결과) · 그 밖의 근거 · 값마다 출처(2026-11-17).\n\n덱의 MID 는 카드 id 를 줄인 해시라 거꾸로 셀 수 없다. 덱 머리에 「카드 C-… · <id>」 가\n있으니 그 카드로 여기를 부르거나, 덱 글자를 통째로 `POST /fitting/decks/lineage` 에 준다.",
+        "operationId": "card_lineage_api_fitting_cards__card_id__lineage_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "card_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Card Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CardLineageOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Card Lineage",
+        "tags": [
+          "fitting"
+        ]
+      }
+    },
     "/api/fitting/cards/{card_id}/paired-formats": {
       "get": {
         "description": "짝 카드와 합치면 **새로 낼 수 있게 되는 형식** — 내려받기를 누르기 전에 말한다.\n\n카드 목록의 `available_formats` 는 카드 혼자의 판정이다. 이방성 카드는 혼자서는 Hill\n형식을 못 내므로, 짝을 고른 뒤의 판정을 따로 준다 — 판정은 렌더와 같은 규칙\n(`missing_for`)이다.",
@@ -48078,6 +48776,48 @@
           }
         },
         "summary": "Build Bom Deck",
+        "tags": [
+          "fitting"
+        ]
+      }
+    },
+    "/api/fitting/decks/lineage": {
+      "post": {
+        "description": "덱 글자 → 재료마다 계보. **읽기만 한다** — 덱을 저장하지 않는다.\n\nMatNexus 가 낸 덱은 재료마다 머리 주석에 카드(`카드 C-… · <id>`) · 문헌 재료(`문헌\n카탈로그: … · <id>`)를 적는다. LS-DYNA 면 그 주석을 바로 뒤 `*MAT` 카드의 MID 에 묶는다.\n손으로 고쳐 주석이 빠진 재료는 MID 만 오고 `note` 가 그렇다고 말한다.",
+        "operationId": "deck_lineage_api_fitting_decks_lineage_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeckLineageIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeckLineageOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Deck Lineage",
         "tags": [
           "fitting"
         ]

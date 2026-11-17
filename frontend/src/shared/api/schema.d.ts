@@ -2774,6 +2774,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/fitting/cards/{card_id}/lineage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Card Lineage
+         * @description 카드의 **계보** — 재료 · 근거 시험(채택 결과) · 그 밖의 근거 · 값마다 출처(2026-11-17).
+         *
+         *     덱의 MID 는 카드 id 를 줄인 해시라 거꾸로 셀 수 없다. 덱 머리에 「카드 C-… · <id>」 가
+         *     있으니 그 카드로 여기를 부르거나, 덱 글자를 통째로 `POST /fitting/decks/lineage` 에 준다.
+         */
+        get: operations["card_lineage_api_fitting_cards__card_id__lineage_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/fitting/cards/{card_id}/paired-formats": {
         parameters: {
             query?: never;
@@ -2956,6 +2979,30 @@ export interface paths {
          *     부품은 해석에서 갑자기 없는 재료다. MID 는 파일 안에서 유일해야 한다.
          */
         post: operations["build_bom_deck_api_fitting_decks_bom_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/fitting/decks/lineage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Deck Lineage
+         * @description 덱 글자 → 재료마다 계보. **읽기만 한다** — 덱을 저장하지 않는다.
+         *
+         *     MatNexus 가 낸 덱은 재료마다 머리 주석에 카드(`카드 C-… · <id>`) · 문헌 재료(`문헌
+         *     카탈로그: … · <id>`)를 적는다. LS-DYNA 면 그 주석을 바로 뒤 `*MAT` 카드의 MID 에 묶는다.
+         *     손으로 고쳐 주석이 빠진 재료는 MID 만 오고 `note` 가 그렇다고 말한다.
+         */
+        post: operations["deck_lineage_api_fitting_decks_lineage_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -10246,12 +10293,44 @@ export interface components {
             /** Query */
             query: string;
         };
+        /**
+         * BomDeckFallbackOut
+         * @description 소성 없이 나간 줄 — **조용히 탄성으로 바꾸지 않았다는 증거**(2026-11-17).
+         */
+        BomDeckFallbackOut: {
+            /** Format */
+            format: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "elastic" | "yield_from_uts";
+            /** Mid */
+            mid: number;
+            /** Name */
+            name: string;
+            /** Why */
+            why: string;
+        };
         /** BomDeckIn */
         BomDeckIn: {
+            /** Base Deck */
+            base_deck?: string | null;
             /** Format */
             format?: string | null;
+            /**
+             * Keep Deck Values
+             * @default false
+             */
+            keep_deck_values: boolean;
             /** Lit Format */
             lit_format?: string | null;
+            /**
+             * On Missing Yield
+             * @default elastic
+             * @enum {string}
+             */
+            on_missing_yield: "elastic" | "reject";
             /** Rows */
             rows: components["schemas"]["BomDeckRowIn"][];
             /** Units */
@@ -10261,6 +10340,11 @@ export interface components {
         BomDeckOut: {
             /** Card Count */
             card_count: number;
+            /**
+             * Fallbacks
+             * @default []
+             */
+            fallbacks: components["schemas"]["BomDeckFallbackOut"][];
             /** Filename */
             filename: string;
             /** Format Family */
@@ -10276,6 +10360,11 @@ export interface components {
             measured_curve_count: number;
             /** Notes */
             notes: string[];
+            /**
+             * Rows
+             * @default []
+             */
+            rows: components["schemas"]["BomDeckRowOut"][];
             /** Skipped */
             skipped: components["schemas"]["BomDeckSkippedOut"][];
             /**
@@ -10312,6 +10401,68 @@ export interface components {
              * @default false
              */
             synthesize: boolean;
+        };
+        /**
+         * BomDeckRowOut
+         * @description 줄 하나가 무엇으로 나갔나 — **덱의 MID 에서 카드 · 재료 · 시험으로 거꾸로 가는
+         *     길**(2026-11-17).
+         *
+         *     전에는 재료 id 만 준 줄에서 서버가 어느 카드를 골랐는지가 덱 글자 안의 주석뿐이었고, 그
+         *     주석에도 재료 · 시험 id 가 없었다. 그래서 덱 값의 출처를 되짚을 수 없었다(HWAX 연결).
+         */
+        BomDeckRowOut: {
+            /** Card Code */
+            card_code?: string | null;
+            /** Card Id */
+            card_id?: string | null;
+            /** Card Status */
+            card_status?: string | null;
+            /** Catalog Material Id */
+            catalog_material_id?: string | null;
+            /** Catalog Material Name */
+            catalog_material_name?: string | null;
+            /** Curve Origin */
+            curve_origin?: string | null;
+            /** Fallback */
+            fallback?: ("elastic" | "yield_from_uts") | null;
+            /** Format */
+            format?: string | null;
+            /**
+             * Kept
+             * @default {}
+             */
+            kept: {
+                [key: string]: number;
+            };
+            /** Material Code */
+            material_code?: string | null;
+            /** Material Id */
+            material_id?: string | null;
+            /** Material Name */
+            material_name?: string | null;
+            /** Mid */
+            mid: number;
+            /** Name */
+            name: string;
+            /** Source */
+            source?: ("card" | "literature") | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "rendered" | "skipped";
+            /**
+             * Test Run Codes
+             * @default []
+             */
+            test_run_codes: string[];
+            /**
+             * Test Run Ids
+             * @default []
+             */
+            test_run_ids: string[];
+            /** Why */
+            why?: string | null;
         };
         /** BomDeckSkippedOut */
         BomDeckSkippedOut: {
@@ -11103,6 +11254,59 @@ export interface components {
             si_unit: string;
             /** Value */
             value: number | string | null;
+        };
+        /**
+         * CardLineageOut
+         * @description 카드 하나의 계보 — 덱의 값이 어느 재료 · 시험 · 근거에서 왔나.
+         */
+        CardLineageOut: {
+            /**
+             * Basis
+             * @default {}
+             */
+            basis: {
+                [key: string]: unknown;
+            };
+            /** Card Code */
+            card_code: string;
+            /**
+             * Card Id
+             * Format: uuid
+             */
+            card_id: string;
+            /** Card Status */
+            card_status: string;
+            /**
+             * Declared Only
+             * @default false
+             */
+            declared_only: boolean;
+            /** Default Mid */
+            default_mid: number;
+            /** Label */
+            label?: string | null;
+            /** Material Code */
+            material_code?: string | null;
+            /** Material Id */
+            material_id?: string | null;
+            /** Material Name */
+            material_name?: string | null;
+            /** Orientation */
+            orientation?: string | null;
+            /** Sample Count */
+            sample_count?: number | null;
+            /**
+             * Test Runs
+             * @default []
+             */
+            test_runs: components["schemas"]["LineageRunOut"][];
+            /** Test Type */
+            test_type?: string | null;
+            /**
+             * Values
+             * @default []
+             */
+            values: components["schemas"]["LineageValueOut"][];
         };
         /**
          * CardRemarkIn
@@ -12326,6 +12530,8 @@ export interface components {
         };
         /** CatalogValueOut */
         CatalogValueOut: {
+            /** Bound */
+            bound?: string | null;
             /** Conditions */
             conditions: {
                 [key: string]: unknown;
@@ -13679,6 +13885,32 @@ export interface components {
             unit: string | null;
             /** Value */
             value: number | null;
+        };
+        /** DeckLineageIn */
+        DeckLineageIn: {
+            /** Deck */
+            deck: string;
+            /** Mid */
+            mid?: number | null;
+        };
+        /** DeckLineageItemOut */
+        DeckLineageItemOut: {
+            card?: components["schemas"]["CardLineageOut"] | null;
+            /** Catalog Material Id */
+            catalog_material_id?: string | null;
+            /** Catalog Material Name */
+            catalog_material_name?: string | null;
+            /** Keyword */
+            keyword?: string | null;
+            /** Mid */
+            mid?: number | null;
+            /** Note */
+            note?: string | null;
+        };
+        /** DeckLineageOut */
+        DeckLineageOut: {
+            /** Materials */
+            materials: components["schemas"]["DeckLineageItemOut"][];
         };
         /** DeckMatchIn */
         DeckMatchIn: {
@@ -16643,6 +16875,44 @@ export interface components {
             reason: string;
             /** Text */
             text: string;
+        };
+        /** LineageRunOut */
+        LineageRunOut: {
+            /** Adopted Result Id */
+            adopted_result_id?: string | null;
+            /** Code */
+            code?: string | null;
+            /**
+             * Deleted
+             * @default false
+             */
+            deleted: boolean;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name?: string | null;
+        };
+        /** LineageValueOut */
+        LineageValueOut: {
+            /** Block */
+            block: string;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Origin */
+            origin: string;
+            /** Reference */
+            reference?: string | null;
+            /** Si Unit */
+            si_unit: string;
+            /** Source */
+            source: string;
+            /** Value Si */
+            value_si: number;
         };
         /**
          * LinkCandidateOut
@@ -29101,6 +29371,37 @@ export interface operations {
             };
         };
     };
+    card_lineage_api_fitting_cards__card_id__lineage_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                card_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardLineageOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     paired_formats_api_fitting_cards__card_id__paired_formats_get: {
         parameters: {
             query: {
@@ -29317,6 +29618,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BomDeckOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    deck_lineage_api_fitting_decks_lineage_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeckLineageIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeckLineageOut"];
                 };
             };
             /** @description Validation Error */
