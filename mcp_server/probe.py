@@ -282,6 +282,9 @@ async def sweep(session: ClientSession) -> None:
     await call(
         session, "find_by_property", {"property": "yield_strength", "unit": "MPa", "min": 100}
     )
+    # 허용치(2026-11-17) — 어휘 한 번, 이름으로 재질을 주고 항복만 한 번.
+    await call(session, "get_criteria", {})
+    await call(session, "get_criteria", {"query": "steel", "failure_mode": "yield", "limit": 5})
 
     if material_id:
         detail = await call(session, "get_material", {"material_id": material_id})

@@ -736,6 +736,50 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/catalog/criteria": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Criteria
+         * @description **허용치** — 문헌 값을 재질 · 고장모드 · 지표 · 시험법으로 묶어 대표 · 하한 · 상한으로.
+         *
+         *     한 줄은 한 재료 · 한 물성 · 한 조건(범위 표지를 뺀 조건)이다. 하한 · 상한은 이관이 두 줄로
+         *     나눈 범위의 끝이고 (`value_bounds`), 대표는 범위의 끝이 아닌 값 중 대표값 순위가 가장 앞선
+         *     것이다. tier 4 도 뺀다고 하지 않으면 싣는다 — 줄마다 등급 · 출처 · 주의가 붙는다.
+         */
+        get: operations["get_criteria_api_catalog_criteria_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/catalog/criteria/modes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Criteria Modes
+         * @description 허용치로 읽는 물성과 고장모드 · 지표 · 하중 — `GET /catalog/criteria` 의 거르개 어휘.
+         */
+        get: operations["criteria_modes_api_catalog_criteria_modes_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/catalog/deck/build": {
         parameters: {
             query?: never;
@@ -13397,6 +13441,153 @@ export interface components {
             role: string;
             /** Workspace Slug */
             workspace_slug: string;
+        };
+        /** CriteriaMaterialOut */
+        CriteriaMaterialOut: {
+            /** Category */
+            category?: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+        };
+        /** CriteriaModeOut */
+        CriteriaModeOut: {
+            /** Failure Mode */
+            failure_mode: string;
+            /** Failure Mode Label */
+            failure_mode_label: string;
+            /** Loading */
+            loading?: string | null;
+            /** Metric */
+            metric: string;
+            /** Metric Label */
+            metric_label: string;
+            /** Property */
+            property?: string | null;
+            /** Property Key */
+            property_key: string;
+        };
+        /** CriteriaModesOut */
+        CriteriaModesOut: {
+            /** Failure Modes */
+            failure_modes: {
+                [key: string]: string;
+            };
+            /** Metrics */
+            metrics: {
+                [key: string]: string;
+            };
+            /** Properties */
+            properties: components["schemas"]["CriteriaModeOut"][];
+        };
+        /** CriteriaOut */
+        CriteriaOut: {
+            /** Materials */
+            materials: components["schemas"]["CriteriaMaterialOut"][];
+            /**
+             * Notes
+             * @default []
+             */
+            notes: string[];
+            /** Rows */
+            rows: components["schemas"]["CriteriaRowOut"][];
+            /** Total */
+            total: number;
+        };
+        /**
+         * CriteriaRowOut
+         * @description 한 재료 · 한 물성 · 한 조건의 허용치 — 대표(범위 가운데) · 하한 · 상한.
+         */
+        CriteriaRowOut: {
+            /**
+             * Catalog Material Id
+             * Format: uuid
+             */
+            catalog_material_id: string;
+            /** Category */
+            category?: string | null;
+            /** Caveat */
+            caveat?: string | null;
+            /**
+             * Conditions
+             * @default {}
+             */
+            conditions: {
+                [key: string]: unknown;
+            };
+            /** Failure Mode */
+            failure_mode: string;
+            /** Loading */
+            loading?: string | null;
+            lower?: components["schemas"]["CriteriaValueOut"] | null;
+            /** Material */
+            material?: string | null;
+            /** Metric */
+            metric: string;
+            /**
+             * Others
+             * @default 0
+             */
+            others: number;
+            /** Property */
+            property: string;
+            /** Property Key */
+            property_key: string;
+            representative?: components["schemas"]["CriteriaValueOut"] | null;
+            /** Si Unit */
+            si_unit?: string | null;
+            /**
+             * Stress Component
+             * @default {}
+             */
+            stress_component: {
+                [key: string]: unknown;
+            };
+            /** Temperature K */
+            temperature_k?: number | null;
+            /** Test Method */
+            test_method?: string | null;
+            upper?: components["schemas"]["CriteriaValueOut"] | null;
+        };
+        /** CriteriaSourceOut */
+        CriteriaSourceOut: {
+            /** Doi */
+            doi?: string | null;
+            /** Kind */
+            kind?: string | null;
+            /** Title */
+            title?: string | null;
+            /** Year */
+            year?: number | null;
+        };
+        /** CriteriaValueOut */
+        CriteriaValueOut: {
+            /** Caveat */
+            caveat?: string | null;
+            /** Method */
+            method?: string | null;
+            /** Quality Tier */
+            quality_tier: number;
+            source?: components["schemas"]["CriteriaSourceOut"] | null;
+            /** Source Detail */
+            source_detail?: string | null;
+            /** Tier */
+            tier: string;
+            /** Unit */
+            unit?: string | null;
+            /** Value */
+            value?: number | null;
+            /**
+             * Value Id
+             * Format: uuid
+             */
+            value_id: string;
+            /** Value Si */
+            value_si?: number | null;
         };
         /**
          * CrossSectionNeedOut
@@ -26203,6 +26394,68 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CatalogCoverageOut"];
+                };
+            };
+        };
+    };
+    get_criteria_api_catalog_criteria_get: {
+        parameters: {
+            query?: {
+                catalog_material_id?: string[];
+                /** @description 사내 재료 — 이어진 문헌 재료로 푼다. */
+                material_id?: string | null;
+                /** @description 문헌 재료 이름 · 분류(목록과 같은 검색). */
+                q?: string | null;
+                failure_mode?: string | null;
+                metric?: string | null;
+                property_key?: string[];
+                /** @description 시험규격 · 방법의 글자(포함). */
+                test_method?: string | null;
+                max_tier?: number | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CriteriaOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    criteria_modes_api_catalog_criteria_modes_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CriteriaModesOut"];
                 };
             };
         };

@@ -6478,6 +6478,103 @@ async def sync_sp_core(ctx: Context, full: bool = False, dry_run: bool = True) -
     return await _send(ctx, "POST", "/sp-core/sync", {"full": full})
 
 
+def _criterion_value(one: dict[str, Any] | None) -> dict[str, Any] | None:
+    """허용치 값 하나 — 출처 · 등급 · 주의만 남긴다(줄이 백 개면 대화가 그것으로 찬다)."""
+    if not one:
+        return None
+    source = one.get("source") or {}
+    return {
+        "value_si": one.get("value_si"),
+        "tier": one.get("quality_tier"),
+        "source": " · ".join(
+            str(part) for part in (source.get("title"), source.get("year"), source.get("doi")) if part
+        )
+        or None,
+        "value_id": one.get("value_id"),
+        **({"caveat": one["caveat"]} if one.get("caveat") else {}),
+    }
+
+
+@mcp.tool()
+async def get_criteria(
+    ctx: Context,
+    catalog_material_ids: list[str] | None = None,
+    query: str | None = None,
+    material: str | None = None,
+    failure_mode: str | None = None,
+    metric: str | None = None,
+    property_keys: list[str] | None = None,
+    test_method: str | None = None,
+    max_tier: int | None = None,
+    limit: int = 50,
+) -> dict[str, Any]:
+    """**허용치** — 문헌 값을 재질 · 고장모드 · 지표 · 시험법으로 묶어 줄마다 대표 · 하한 · 상한.
+
+    재질은 문헌 재료 id(`catalog_material_ids`) · 이름(`query`) · 사내 재료(`material`, 이어진 문헌
+    재료로) 중 하나. 재질 없이 부르면 고장모드 · 지표 어휘(`modes`)만 준다.
+
+        failure_mode   yield · ultimate · fracture_strain · fatigue · toughness · adhesion · impact
+        metric         stress · strain · stress_intensity · line_force · energy · energy_per_area
+
+    한 줄은 한 재료 · 물성 · 조건(온도 · 방향 · 시험규격)이다 — 평균하지 않는다. `value_si` 는 줄의
+    `si_unit` 으로 읽는다. `representative` 가 비고 `caveat` 이 서면 범위의 끝만 있다 — 하한을 대표처럼
+    옮기지 마라. tier 4 는 추정이다. 문헌만이다(사내 시험의 하위 5 % 는 `get_distribution`).
+    """
+    if not (catalog_material_ids or query or material):
+        return await _get(ctx, "/catalog/criteria/modes")
+    params: dict[str, Any] = {"limit": max_limit(limit)}
+    if catalog_material_ids:
+        params["catalog_material_id"] = list(catalog_material_ids)
+    if query:
+        params["q"] = query
+    if material:
+        resolved = await _resolve_material(ctx, material)
+        if isinstance(resolved, dict):
+            return resolved
+        params["material_id"] = resolved
+    for key, value in (
+        ("failure_mode", failure_mode),
+        ("metric", metric),
+        ("test_method", test_method),
+        ("max_tier", max_tier),
+    ):
+        if value is not None:
+            params[key] = value
+    if property_keys:
+        params["property_key"] = list(property_keys)
+    got = await _get(ctx, "/catalog/criteria", params)
+    if not isinstance(got, dict) or "error" in got:
+        return got
+    rows = got.get("rows") or []
+    return {
+        "materials": got.get("materials") or [],
+        "total": got.get("total"),
+        **({"truncated": True} if (got.get("total") or 0) > len(rows) else {}),
+        **({"notes": got["notes"]} if got.get("notes") else {}),
+        "rows": [
+            {
+                "material": row.get("material"),
+                "catalog_material_id": row.get("catalog_material_id"),
+                "property": row.get("property"),
+                "property_key": row.get("property_key"),
+                "failure_mode": row.get("failure_mode"),
+                "metric": row.get("metric"),
+                "si_unit": row.get("si_unit"),
+                "loading": row.get("loading"),
+                "stress_component": row.get("stress_component") or {},
+                "temperature_k": row.get("temperature_k"),
+                "test_method": row.get("test_method"),
+                "representative": _criterion_value(row.get("representative")),
+                "lower": _criterion_value(row.get("lower")),
+                "upper": _criterion_value(row.get("upper")),
+                **({"others": row["others"]} if row.get("others") else {}),
+                **({"caveat": row["caveat"]} if row.get("caveat") else {}),
+            }
+            for row in rows
+        ],
+    }
+
+
 @mcp.tool()
 async def find_by_property(
     ctx: Context,

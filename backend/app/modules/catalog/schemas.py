@@ -1239,3 +1239,87 @@ class CatalogConditionFieldOut(BaseModel):
     scale: str | None = None
     """`log` 면 자릿수로 펼쳐 보는 축(주파수 · 수명 · ΔK …). 화면의 축 이름표가 이 목록에서
     만들어진다(`frontend/scripts/axis_meta.mjs`)."""
+
+
+# ── 허용치 조회 (2026-11-17) ─────────────────────────────────────────────────
+
+
+class CriteriaSourceOut(BaseModel):
+    title: str | None = None
+    year: int | None = None
+    doi: str | None = None
+    kind: str | None = None
+
+
+class CriteriaValueOut(BaseModel):
+    value_id: uuid.UUID
+    value_si: float | None = None
+    """정본 SI — 줄의 `si_unit` 으로 읽는다."""
+    value: float | None = None
+    unit: str | None = None
+    """문헌에 저장된 단위 그대로(`value` 의 단위)."""
+    quality_tier: int
+    tier: str
+    method: str | None = None
+    source: CriteriaSourceOut | None = None
+    source_detail: str | None = None
+    caveat: str | None = None
+
+
+class CriteriaRowOut(BaseModel):
+    """한 재료 · 한 물성 · 한 조건의 허용치 — 대표(범위 가운데) · 하한 · 상한."""
+
+    catalog_material_id: uuid.UUID
+    material: str | None = None
+    category: str | None = None
+    property_key: str
+    property: str
+    failure_mode: str
+    metric: str
+    si_unit: str | None = None
+    loading: str | None = None
+    """하중 — 물성 키가 정하거나(굽힘강도 → bending) 조건(`loading` · `mode`)에서."""
+    stress_component: dict[str, Any] = {}
+    """응력 성분을 말하는 조건 — direction · loading · mode · component · stress_state."""
+    temperature_k: float | None = None
+    test_method: str | None = None
+    """시험규격 · 방법(조건의 `test_standard` · `test_method` …) — 비면 문헌이 안 적었다."""
+    conditions: dict[str, Any] = {}
+    """범위 표지 · 관리 기록을 뺀 조건 전부."""
+    representative: CriteriaValueOut | None = None
+    lower: CriteriaValueOut | None = None
+    upper: CriteriaValueOut | None = None
+    others: int = 0
+    """같은 조건의 값이 더 있다 — 출처가 다른 값(`get_catalog_material` 에서 본다)."""
+    caveat: str | None = None
+
+
+class CriteriaMaterialOut(BaseModel):
+    id: uuid.UUID
+    name: str
+    category: str | None = None
+
+
+class CriteriaOut(BaseModel):
+    materials: list[CriteriaMaterialOut]
+    """찾은 문헌 재료 — 줄이 없는 재료도(그 고장모드의 값이 없다는 답이다)."""
+    rows: list[CriteriaRowOut]
+    total: int
+    """자르기 전 줄 수 — `rows` 보다 크면 `limit` 에 걸린 것이다."""
+    notes: list[str] = []
+
+
+class CriteriaModeOut(BaseModel):
+    property_key: str
+    property: str | None = None
+    failure_mode: str
+    failure_mode_label: str
+    metric: str
+    metric_label: str
+    loading: str | None = None
+
+
+class CriteriaModesOut(BaseModel):
+    failure_modes: dict[str, str]
+    metrics: dict[str, str]
+    properties: list[CriteriaModeOut]

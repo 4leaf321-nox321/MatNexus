@@ -22,6 +22,7 @@ from app.modules.accounts.models import User
 from app.modules.catalog import (
     batches,
     contribute,
+    criteria,
     links,
     local_definitions,
     mapping,
@@ -92,6 +93,11 @@ from app.modules.catalog.schemas import (
     CatalogValueCreatedOut,
     CatalogValueOut,
     CatalogValuePreviewOut,
+    CriteriaMaterialOut,
+    CriteriaModeOut,
+    CriteriaModesOut,
+    CriteriaOut,
+    CriteriaRowOut,
     DeckBuildIn,
     DeckBuiltOut,
     DeckCandidateOut,
@@ -3064,3 +3070,140 @@ def catalog_parameter_sets(
                 )
             )
     return made
+
+
+# ── 허용치 조회 (2026-11-17, `criteria`) ─────────────────────────────────────
+
+
+@router.get("/criteria/modes", response_model=CriteriaModesOut)
+def criteria_modes(
+    _: User = Depends(current_user), db: Session = Depends(get_db)
+) -> CriteriaModesOut:
+    """허용치로 읽는 물성과 고장모드 · 지표 · 하중 — `GET /catalog/criteria` 의 거르개 어휘."""
+    names = dict(
+        db.execute(
+            select(CatalogDefinition.key, CatalogDefinition.name).where(
+                CatalogDefinition.key.in_(list(criteria.MODES))
+            )
+        )
+        .tuples()
+        .all()
+    )
+    return CriteriaModesOut(
+        failure_modes=criteria.FAILURE_MODES,
+        metrics=criteria.METRICS,
+        properties=[
+            CriteriaModeOut(
+                property_key=key,
+                property=names.get(key),
+                failure_mode=mode.failure_mode,
+                failure_mode_label=criteria.FAILURE_MODES[mode.failure_mode],
+                metric=mode.metric,
+                metric_label=criteria.METRICS[mode.metric],
+                loading=mode.loading,
+            )
+            for key, mode in criteria.MODES.items()
+        ],
+    )
+
+
+@router.get("/criteria", response_model=CriteriaOut)
+def get_criteria(
+    catalog_material_id: list[uuid.UUID] = Query(default=[]),
+    material_id: uuid.UUID | None = Query(
+        default=None, description="사내 재료 — 이어진 문헌 재료로 푼다."
+    ),
+    q: str | None = Query(
+        default=None, description="문헌 재료 이름 · 분류(목록과 같은 검색)."
+    ),
+    failure_mode: str | None = Query(default=None),
+    metric: str | None = Query(default=None),
+    property_key: list[str] = Query(default=[]),
+    test_method: str | None = Query(default=None, description="시험규격 · 방법의 글자(포함)."),
+    max_tier: int | None = Query(default=None, ge=1, le=4),
+    limit: int = Query(default=200, ge=1),
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> CriteriaOut:
+    """**허용치** — 문헌 값을 재질 · 고장모드 · 지표 · 시험법으로 묶어 대표 · 하한 · 상한으로.
+
+    한 줄은 한 재료 · 한 물성 · 한 조건(범위 표지를 뺀 조건)이다. 하한 · 상한은 이관이 두 줄로
+    나눈 범위의 끝이고 (`value_bounds`), 대표는 범위의 끝이 아닌 값 중 대표값 순위가 가장 앞선
+    것이다. tier 4 도 뺀다고 하지 않으면 싣는다 — 줄마다 등급 · 출처 · 주의가 붙는다.
+    """
+    if failure_mode is not None and failure_mode not in criteria.FAILURE_MODES:
+        raise AppError(
+            "MNX-CATALOG-0080",
+            f"모르는 고장모드입니다: {failure_mode} — "
+            f"있는 것: {', '.join(criteria.FAILURE_MODES)}",
+            status=422,
+        )
+    if metric is not None and metric not in criteria.METRICS:
+        raise AppError(
+            "MNX-CATALOG-0080",
+            f"모르는 지표입니다: {metric} — 있는 것: {', '.join(criteria.METRICS)}",
+            status=422,
+        )
+    unknown = [key for key in property_key if key not in criteria.MODES]
+    if unknown:
+        raise AppError(
+            "MNX-CATALOG-0080",
+            f"허용치로 읽지 않는 물성입니다: {', '.join(unknown)} — "
+            "GET /catalog/criteria/modes",
+            status=422,
+        )
+    notes: list[str] = []
+    ids = list(dict.fromkeys(catalog_material_id))
+    if material_id is not None:
+        own = _my_material(db, user, material_id)
+        linked = db.scalar(
+            select(CatalogLink.catalog_material_id).where(CatalogLink.material_id == own.id)
+        )
+        if linked is None:
+            notes.append(
+                f"사내 재료 {own.record_name} 에 이어진 문헌 재료가 없습니다 — "
+                "문헌 재료를 먼저 "
+                "연결하거나 catalog_material_id · q 로 주세요."
+            )
+        else:
+            ids.append(linked)
+    if q:
+        found = db.scalars(
+            select(CatalogMaterial.id)
+            .where(*_catalog_filters(q, None, None))
+            .order_by(CatalogMaterial.name)
+            .limit(criteria.MAX_MATERIALS + 1)
+        ).all()
+        if len(found) > criteria.MAX_MATERIALS:
+            notes.append(
+                f"「{q}」 에 걸린 문헌 재료가 {criteria.MAX_MATERIALS}개를 넘어 앞의 "
+                f"{criteria.MAX_MATERIALS}개만 봤습니다 — 좁혀 주세요."
+            )
+        ids.extend(found[: criteria.MAX_MATERIALS])
+    ids = list(dict.fromkeys(ids))[: criteria.MAX_MATERIALS]
+    if not ids and not notes:
+        raise AppError(
+            "MNX-CATALOG-0081",
+            "재질을 주세요 — catalog_material_id · material_id(사내) · q(이름) 중 하나.",
+            status=422,
+        )
+    rows, total = criteria.collect(
+        db,
+        ids,
+        failure_mode=failure_mode,
+        metric=metric,
+        property_keys=property_key or None,
+        test_method=test_method,
+        max_tier=max_tier,
+        limit=min(limit, criteria.MAX_ROWS),
+    )
+    materials = db.scalars(select(CatalogMaterial).where(CatalogMaterial.id.in_(ids))).all()
+    return CriteriaOut(
+        materials=[
+            CriteriaMaterialOut(id=one.id, name=one.name, category=one.category)
+            for one in materials
+        ],
+        rows=[CriteriaRowOut.model_validate(one) for one in rows],
+        total=total,
+        notes=notes,
+    )

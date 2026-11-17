@@ -958,6 +958,20 @@ REST 로 받는 쪽은 `GET /api/fitting/cards?status=published` 와
 **`quality_tier` 를 함께 넘긴다.** 4 는 계산·추정·가정이다 — 받는 쪽이 그것을 실측처럼
 쓰면 이 서버가 낼 수 있는 가장 큰 해가 된다(위 「값의 무게」).
 
+**허용치(파손 판정 값)는 `get_criteria`**(2026-11-17) — 재료마다 상세를 열어 손으로 모으지
+마라. 문헌 값을 재질 · 고장모드(`yield` · `ultimate` · `fracture_strain` · `fatigue` · `toughness`
+· `adhesion` · `impact`) · 지표 · 시험법으로 묶어 **줄마다 대표 · 하한 · 상한**을 준다.
+
+- 한 줄은 한 재료 · 물성 · **조건**(온도 · 방향 · 시험규격)이다. 방향이 다른 줄을 평균하지
+  마라 — 다른 것을 섞은 수가 된다.
+- 하한 · 상한은 원문이 범위로 적은 것을 이관이 나눈 끝이다. `representative` 가 비고
+  `caveat` 이 「범위의 끝만」 이면 **하한을 대표처럼 옮기지 마라** — 보수적으로 쓸 수는 있지만
+  그 사실을 사람에게 말한다.
+- 문헌만이다. 사내 시험의 하위 5 % 는 `get_distribution` 이고, 표본이 적으면 P5 를 말하지
+  않는다(ADR 0041).
+- 받는 쪽에는 줄의 `si_unit` · 등급 · 출처를 함께 넘긴다. REST: `GET /api/catalog/criteria`
+  (어휘는 `/api/catalog/criteria/modes`).
+
 **단위 — REST 로 받는 쪽에 알려라**(ADR 0036). 다른 시스템으로 나가는 파일(카드 덱·중립
 JSON `…/cards/{id}/export` · 문헌 내보내기 `GET /api/catalog/export` · 재료 내보내기
 `GET /api/materials/export`)은 `units` 를 받고, **안 주면 mm·N·tonne** 이다 — SI 는 `units=si`.

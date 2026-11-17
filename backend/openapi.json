@@ -11314,6 +11314,469 @@
         "title": "CreateAccountRequest",
         "type": "object"
       },
+      "CriteriaMaterialOut": {
+        "properties": {
+          "category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "CriteriaMaterialOut",
+        "type": "object"
+      },
+      "CriteriaModeOut": {
+        "properties": {
+          "failure_mode": {
+            "title": "Failure Mode",
+            "type": "string"
+          },
+          "failure_mode_label": {
+            "title": "Failure Mode Label",
+            "type": "string"
+          },
+          "loading": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Loading"
+          },
+          "metric": {
+            "title": "Metric",
+            "type": "string"
+          },
+          "metric_label": {
+            "title": "Metric Label",
+            "type": "string"
+          },
+          "property": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Property"
+          },
+          "property_key": {
+            "title": "Property Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "property_key",
+          "failure_mode",
+          "failure_mode_label",
+          "metric",
+          "metric_label"
+        ],
+        "title": "CriteriaModeOut",
+        "type": "object"
+      },
+      "CriteriaModesOut": {
+        "properties": {
+          "failure_modes": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Failure Modes",
+            "type": "object"
+          },
+          "metrics": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Metrics",
+            "type": "object"
+          },
+          "properties": {
+            "items": {
+              "$ref": "#/components/schemas/CriteriaModeOut"
+            },
+            "title": "Properties",
+            "type": "array"
+          }
+        },
+        "required": [
+          "failure_modes",
+          "metrics",
+          "properties"
+        ],
+        "title": "CriteriaModesOut",
+        "type": "object"
+      },
+      "CriteriaOut": {
+        "properties": {
+          "materials": {
+            "items": {
+              "$ref": "#/components/schemas/CriteriaMaterialOut"
+            },
+            "title": "Materials",
+            "type": "array"
+          },
+          "notes": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Notes",
+            "type": "array"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/CriteriaRowOut"
+            },
+            "title": "Rows",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "materials",
+          "rows",
+          "total"
+        ],
+        "title": "CriteriaOut",
+        "type": "object"
+      },
+      "CriteriaRowOut": {
+        "description": "한 재료 · 한 물성 · 한 조건의 허용치 — 대표(범위 가운데) · 하한 · 상한.",
+        "properties": {
+          "catalog_material_id": {
+            "format": "uuid",
+            "title": "Catalog Material Id",
+            "type": "string"
+          },
+          "category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          },
+          "caveat": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Caveat"
+          },
+          "conditions": {
+            "additionalProperties": true,
+            "default": {},
+            "title": "Conditions",
+            "type": "object"
+          },
+          "failure_mode": {
+            "title": "Failure Mode",
+            "type": "string"
+          },
+          "loading": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Loading"
+          },
+          "lower": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CriteriaValueOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "material": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Material"
+          },
+          "metric": {
+            "title": "Metric",
+            "type": "string"
+          },
+          "others": {
+            "default": 0,
+            "title": "Others",
+            "type": "integer"
+          },
+          "property": {
+            "title": "Property",
+            "type": "string"
+          },
+          "property_key": {
+            "title": "Property Key",
+            "type": "string"
+          },
+          "representative": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CriteriaValueOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "si_unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Si Unit"
+          },
+          "stress_component": {
+            "additionalProperties": true,
+            "default": {},
+            "title": "Stress Component",
+            "type": "object"
+          },
+          "temperature_k": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Temperature K"
+          },
+          "test_method": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Test Method"
+          },
+          "upper": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CriteriaValueOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "catalog_material_id",
+          "property_key",
+          "property",
+          "failure_mode",
+          "metric"
+        ],
+        "title": "CriteriaRowOut",
+        "type": "object"
+      },
+      "CriteriaSourceOut": {
+        "properties": {
+          "doi": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Doi"
+          },
+          "kind": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kind"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year"
+          }
+        },
+        "title": "CriteriaSourceOut",
+        "type": "object"
+      },
+      "CriteriaValueOut": {
+        "properties": {
+          "caveat": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Caveat"
+          },
+          "method": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Method"
+          },
+          "quality_tier": {
+            "title": "Quality Tier",
+            "type": "integer"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CriteriaSourceOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source_detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Detail"
+          },
+          "tier": {
+            "title": "Tier",
+            "type": "string"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          },
+          "value_id": {
+            "format": "uuid",
+            "title": "Value Id",
+            "type": "string"
+          },
+          "value_si": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value Si"
+          }
+        },
+        "required": [
+          "value_id",
+          "quality_tier",
+          "tier"
+        ],
+        "title": "CriteriaValueOut",
+        "type": "object"
+      },
       "CrossSectionNeedOut": {
         "description": "식이 요구하는 칸 하나. **화면이 이것으로 칸을 대신 만들어 준다.**",
         "properties": {
@@ -43117,6 +43580,205 @@
           }
         },
         "summary": "Coverage",
+        "tags": [
+          "catalog"
+        ]
+      }
+    },
+    "/api/catalog/criteria": {
+      "get": {
+        "description": "**허용치** — 문헌 값을 재질 · 고장모드 · 지표 · 시험법으로 묶어 대표 · 하한 · 상한으로.\n\n한 줄은 한 재료 · 한 물성 · 한 조건(범위 표지를 뺀 조건)이다. 하한 · 상한은 이관이 두 줄로\n나눈 범위의 끝이고 (`value_bounds`), 대표는 범위의 끝이 아닌 값 중 대표값 순위가 가장 앞선\n것이다. tier 4 도 뺀다고 하지 않으면 싣는다 — 줄마다 등급 · 출처 · 주의가 붙는다.",
+        "operationId": "get_criteria_api_catalog_criteria_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "catalog_material_id",
+            "required": false,
+            "schema": {
+              "default": [],
+              "items": {
+                "format": "uuid",
+                "type": "string"
+              },
+              "title": "Catalog Material Id",
+              "type": "array"
+            }
+          },
+          {
+            "description": "사내 재료 — 이어진 문헌 재료로 푼다.",
+            "in": "query",
+            "name": "material_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "사내 재료 — 이어진 문헌 재료로 푼다.",
+              "title": "Material Id"
+            }
+          },
+          {
+            "description": "문헌 재료 이름 · 분류(목록과 같은 검색).",
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "문헌 재료 이름 · 분류(목록과 같은 검색).",
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "failure_mode",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Failure Mode"
+            }
+          },
+          {
+            "in": "query",
+            "name": "metric",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Metric"
+            }
+          },
+          {
+            "in": "query",
+            "name": "property_key",
+            "required": false,
+            "schema": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "title": "Property Key",
+              "type": "array"
+            }
+          },
+          {
+            "description": "시험규격 · 방법의 글자(포함).",
+            "in": "query",
+            "name": "test_method",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "시험규격 · 방법의 글자(포함).",
+              "title": "Test Method"
+            }
+          },
+          {
+            "in": "query",
+            "name": "max_tier",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 4,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Max Tier"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CriteriaOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Criteria",
+        "tags": [
+          "catalog"
+        ]
+      }
+    },
+    "/api/catalog/criteria/modes": {
+      "get": {
+        "description": "허용치로 읽는 물성과 고장모드 · 지표 · 하중 — `GET /catalog/criteria` 의 거르개 어휘.",
+        "operationId": "criteria_modes_api_catalog_criteria_modes_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CriteriaModesOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Criteria Modes",
         "tags": [
           "catalog"
         ]

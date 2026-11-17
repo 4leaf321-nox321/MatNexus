@@ -228,6 +228,11 @@ def _rank(value: Any) -> tuple[float, ...]:
     )
 
 
+def rank(value: Any) -> tuple[float, ...]:
+    """대표값 순위 — 작을수록 앞선다. 무리를 따로 짓는 곳(허용치 조회)이 같은 잣대로 고르게."""
+    return _rank(value)
+
+
 def _summary(members: list[Any], varying: dict[Any, dict[str, Any]]) -> dict[str, Any] | None:
     """**조건이 완전히 같은 중복**이면 종합값을 낸다. 아니면 None.
 
