@@ -6099,6 +6099,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/processing/test-runs/{run_id}/curve-quality": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Curve Quality Of
+         * @description 시험 곡선이 **잰 곡선처럼 생겼나** — 출처 · 첫 점 응력 · 꺾임 · 기울기 대 영률.
+         *
+         *     덱 카드(소성 표)에서 복원한 곡선이 시험으로 올라와 실측처럼 쓰였다(HWAX 연결). 출처 칸
+         *     (`curve_origin`)은 사람이 적은 답이고, 이 점검은 곡선 모양이 말하는 것이다 — 둘이 어긋나면
+         *     `agreement` 가 그렇다고 말한다. **막지 않는다** — 판단은 사람이 한다.
+         */
+        get: operations["curve_quality_of_api_processing_test_runs__run_id__curve_quality_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/samples/move": {
         parameters: {
             query?: never;
@@ -10272,6 +10296,12 @@ export interface components {
              * @default {}
              */
             conditions: string;
+            /**
+             * Curve Origin
+             * @description 곡선 출처 — measured · digitized · deck_restored · synthetic (ADR 0096)
+             * @default measured
+             */
+            curve_origin: string;
             /** Division */
             division?: string | null;
             /** File */
@@ -13651,6 +13681,19 @@ export interface components {
             /** Method */
             method?: ("sd" | "tolerance" | "envelope" | "specimen") | null;
         };
+        /** CurveCheckOut */
+        CurveCheckOut: {
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Message */
+            message: string;
+            /** Value */
+            value?: number | null;
+            /** Verdict */
+            verdict: string;
+        };
         /**
          * CurveOut
          * @description 저장된 곡선 하나.
@@ -13686,6 +13729,62 @@ export interface components {
             x: string;
             /** Y */
             y: string;
+        };
+        /** CurveQualityOut */
+        CurveQualityOut: {
+            /**
+             * Adopted
+             * @default false
+             */
+            adopted: boolean;
+            /**
+             * Checks
+             * @default []
+             */
+            checks: components["schemas"]["CurveCheckOut"][];
+            /** Curve Origin */
+            curve_origin: string;
+            /** Curve Origin Label */
+            curve_origin_label: string;
+            /** Initial Slope */
+            initial_slope?: number | null;
+            /** Knee Strain */
+            knee_strain?: number | null;
+            /** Knee Stress */
+            knee_stress?: number | null;
+            /**
+             * Notes
+             * @default []
+             */
+            notes: string[];
+            /**
+             * Points
+             * @default 0
+             */
+            points: number;
+            /** Post Knee Slope */
+            post_knee_slope?: number | null;
+            /** Reference Modulus */
+            reference_modulus?: number | null;
+            /** Result Id */
+            result_id?: string | null;
+            /** Run Code */
+            run_code: string;
+            /**
+             * Run Id
+             * Format: uuid
+             */
+            run_id: string;
+            /**
+             * Shape
+             * @default unclear
+             */
+            shape: string;
+            /**
+             * Shape Label
+             * @default
+             */
+            shape_label: string;
         };
         /** CurveStatsOut */
         CurveStatsOut: {
@@ -23850,6 +23949,16 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /**
+             * Curve Origin
+             * @default measured
+             */
+            curve_origin: string;
+            /**
+             * Curve Origin Label
+             * @default 실측
+             */
+            curve_origin_label: string;
             /** Curves */
             curves: components["schemas"]["CurveOut"][];
             /** Division */
@@ -23967,6 +24076,16 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /**
+             * Curve Origin
+             * @default measured
+             */
+            curve_origin: string;
+            /**
+             * Curve Origin Label
+             * @default 실측
+             */
+            curve_origin_label: string;
             /** Division */
             division?: string | null;
             /** Held At */
@@ -24071,6 +24190,8 @@ export interface components {
             conditions?: {
                 [key: string]: unknown;
             } | null;
+            /** Curve Origin */
+            curve_origin?: string | null;
             /** Division */
             division?: string | null;
             /** Instrument */
@@ -34956,6 +35077,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProcessingStepOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    curve_quality_of_api_processing_test_runs__run_id__curve_quality_get: {
+        parameters: {
+            query?: {
+                result_id?: string | null;
+            };
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CurveQualityOut"];
                 };
             };
             /** @description Validation Error */

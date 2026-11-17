@@ -177,6 +177,8 @@ export interface UploadInput {
   note?: string
   /** 읽을 형식(프로파일) key. 비우면 서버가 지문으로 자동으로 고른다(2026-10-20). */
   profileKey?: string
+  /** 곡선 출처(ADR 0096) — 비우면 실측. */
+  curveOrigin?: string
 }
 
 export const testsApi = {
@@ -382,6 +384,7 @@ export const testsApi = {
     division,
     note,
     profileKey,
+    curveOrigin,
   }: UploadInput) => {
     const form = new FormData()
     form.set('specimen_id', specimenId)
@@ -393,6 +396,7 @@ export const testsApi = {
     if (division) form.set('division', division)
     if (note) form.set('note', note)
     if (profileKey) form.set('profile_key', profileKey)
+    if (curveOrigin && curveOrigin !== 'measured') form.set('curve_origin', curveOrigin)
     form.set('file', file)
     return api.postForm<TestRun>('/test-runs', form)
   },

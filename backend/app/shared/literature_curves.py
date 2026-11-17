@@ -92,6 +92,14 @@ class Curve:
     """공칭 변형률 — **비율**(저장은 %)."""
     stress: np.ndarray
     """공칭 응력(Pa). 압축도 양수로 적혀 있다."""
+    method: str = "measured"
+    """벌의 방법(`CatalogSeries.method`) — `digitized` 면 그림에서 읽은 곡선이다(2026-11-17).
+    전에는 안 읽어 디지타이즈 곡선도 덱 각주에 「문헌 실측 곡선」 으로 적혔다."""
+
+    @property
+    def kind_text(self) -> str:
+        """각주의 곡선 종류 — 「문헌 실측 곡선」 · 「문헌 곡선(그림에서 읽음)」."""
+        return "문헌 곡선(그림에서 읽음)" if self.method == "digitized" else "문헌 실측 곡선"
 
     @property
     def tier_text(self) -> str:
@@ -200,6 +208,7 @@ def curves(
                 or "출처 미상",
                 strain=np.asarray([x for x, _ in pairs], dtype=np.float64),
                 stress=np.asarray([y for _, y in pairs], dtype=np.float64),
+                method=one.method or "measured",
             )
         )
     return sorted(found, key=_rank)
@@ -333,7 +342,7 @@ def measured_plastic(
     if isinstance(made, str):
         return None, [f"문헌 곡선 「{chosen.label}」 을 소성 표로 옮기지 않았습니다 — {made}"]
     said = [
-        f"소성 표 = 문헌 실측 곡선 「{chosen.label}」({chosen.span}) — {chosen.cite} "
+        f"소성 표 = {chosen.kind_text} 「{chosen.label}」({chosen.span}) — {chosen.cite} "
         f"[{chosen.tier_text}]. 공칭 → 진응력 · 진소성변형률 {len(made.rows)}줄, "
         f"E = {float(youngs_modulus) / 1e9:.4g} GPa · 0.2 % 오프셋 항복 "
         f"{made.yield_stress / 1e6:.4g} MPa 부터.",
@@ -345,6 +354,12 @@ def measured_plastic(
             "네킹이라 진응력 변환식(균일 변형)이 성립하지 않습니다."
         )
     if made.first_is_yield:
-        said.append("곡선이 탄성 구간 없이 시작해 첫 점을 항복으로 봤습니다.")
+        # 탄성 구간 없이 시작하는 곡선은 이미 진응력 · 소성 표(덱 카드에서 복원한 것)일 수 있다
+        # — 그러면 공칭 → 진 변환이 두 번이다(2026-11-17, ADR 0096). 막지 않고 말한다.
+        said.append(
+            "곡선이 탄성 구간 없이 시작해 첫 점을 항복으로 봤습니다 — 이미 진응력 · "
+            "소성 표(덱 카드에서 복원한 곡선)라면 공칭 → 진응력 변환이 두 번 들어갑니다. "
+            "원문을 확인하세요."
+        )
     said.extend(_rest(found[1:]))
     return [dict(one) for one in made.rows], said

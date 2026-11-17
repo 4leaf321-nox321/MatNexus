@@ -18,6 +18,7 @@ import { Loader2, Upload } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 import { testsApi } from '@/modules/tests/api'
+import { CurveOriginSelect } from '@/modules/tests/CurveOriginSelect'
 import type { TestRunDetail, TestType } from '@/modules/tests/api'
 import { VocabularyField } from '@/modules/vocabulary/VocabularyField'
 import { ErrorNotice } from '@/shared/components/ErrorNotice'
@@ -74,6 +75,7 @@ export function EditRunDialog({ run, testType, onClose, onDone }: Props) {
   const [instrument, setInstrument] = useState(run.instrument ?? '')
   const [division, setDivision] = useState(run.division ?? '')
   const [note, setNote] = useState(run.note ?? '')
+  const [curveOrigin, setCurveOrigin] = useState(run.curve_origin ?? 'measured')
   const [conditions, setConditions] = useState<Record<string, string>>(() =>
     shownConditions(run, testType)
   )
@@ -115,6 +117,7 @@ export function EditRunDialog({ run, testType, onClose, onDone }: Props) {
         instrument: instrument || null,
         division: division || null,
         note: note || null,
+        curve_origin: curveOrigin,
         // 조건 정의를 못 읽었으면 조건은 안 보낸다 — 안 보낸 것은 그대로다.
         conditions: testType ? filled : null,
         condition_units: conditionUnits(fields),
@@ -216,6 +219,7 @@ export function EditRunDialog({ run, testType, onClose, onDone }: Props) {
           <Label htmlFor="edit-note">메모</Label>
           <Input id="edit-note" value={note} onChange={(event) => setNote(event.target.value)} />
         </div>
+        <CurveOriginSelect id="edit-origin" value={curveOrigin} onChange={setCurveOrigin} />
 
         <ErrorNotice error={error} />
 

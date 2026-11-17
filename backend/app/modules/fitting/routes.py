@@ -139,6 +139,7 @@ from app.shared import (
     card_notes,
     codes,
     conditions,
+    curve_origins,
     curvedata,
     deckmap,
     declared_card,
@@ -815,12 +816,23 @@ def _card_warnings(db: Session, group: statistics_services.Group) -> list[dict[s
 def _stale_warnings(
     db: Session, used: Sequence[tuple[TestRun, ProcessingResult]]
 ) -> list[dict[str, str]]:
-    """카드 근거의 「낡은 결과」 줄 — 시험마다(`shared/result_staleness`). 없으면 빈 것."""
-    return [
+    """카드 근거의 경고 줄 — 시험마다 「낡은 결과」(`shared/result_staleness`)와 「실측이 아닌
+    곡선」(`shared/curve_origins`, 2026-11-17). 없으면 빈 것. 막지 않는다 — 카드에 남긴다."""
+    stale = [
         {"record_name": run.record_name, "label": result_staleness.LABEL, "message": message}
         for run, result in used
         for message in result_staleness.reasons(db, run, result)
     ]
+    origin = [
+        {
+            "record_name": run.record_name,
+            "label": curve_origins.LABEL,
+            "message": curve_origins.warning(run.curve_origin),
+        }
+        for run in dict.fromkeys(run for run, _ in used)
+        if not curve_origins.is_measured(run.curve_origin)
+    ]
+    return [*stale, *origin]
 
 
 def _fit_out(
@@ -4316,6 +4328,14 @@ def _deck_for_card(
         # 합성 소성 표라는 사실도 덱까지 따라가야 한다 — 표만 봐서는 실측과
         # 구별이 안 된다(점이 나란히 있을 뿐이다). 미채택 결과로 만든 카드도 그렇다(VOC 49).
         if str(line).startswith(("네킹을 안 자른", "합성", "미채택 결과로"))
+    )
+    # **실측이 아닌 곡선의 시험**(2026-11-17, ADR 0096) — 덱만 받은 사람이
+    # 「이 시험들에서 잰 값」
+    # 을 실측으로 읽는다. 카드 근거의 경고를 덱 머리에도.
+    provenance.extend(
+        f"{curve_origins.LABEL}: {one.get('record_name')} — {one.get('message')}"
+        for one in item.source.get("warnings") or []
+        if isinstance(one, dict) and one.get("label") == curve_origins.LABEL
     )
     # 값마다 어디서 왔는지 한 줄씩. 없는 값은 애초에 카드에 없다.
     thermal = cards.values_of(item.blocks.get("thermal"))

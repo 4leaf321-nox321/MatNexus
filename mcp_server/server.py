@@ -2844,6 +2844,7 @@ async def upload_test_run(
     tested_at: str | None = None,
     note: str | None = None,
     profile_key: str | None = None,
+    curve_origin: str = "measured",
     dry_run: bool = True,
 ) -> dict[str, Any]:
     """장비 원본 파일 하나를 **시편에 시험으로 올린다** — 서버가 읽어 곡선을 만든다.
@@ -2852,7 +2853,8 @@ async def upload_test_run(
     `filename` 의 확장자를 지켜라 — 읽는 법이 그것으로 정해진다. 10MB 까지(더 크면 수집
     에이전트 → `assign_inbox_item`). **시편을 짐작하지 마라** — 확정 못 하면 사람에게 묻는다.
     `conditions` 키는 `list_condition_fields`, 단위는 `condition_units` 에(SI 로 바꾸지 마라).
-    `profile_key` 는 읽을 형식을 고정한다(비우면 지문으로 자동).
+    `profile_key` 는 읽을 형식을 고정한다(비우면 지문으로 자동). **잰 곡선이 아니면 `curve_origin`**
+    (`deck_restored` 덱 카드에서 복원 · `digitized` 그림에서 읽음 · `synthetic`) — 안 적으면 실측이 된다.
 
     기본이 미리보기(시편 · 종류 · 크기 · 첫 줄 · 빠진 필수 조건) — 사람에게 보이고 확인받은 뒤
     `dry_run=False`. 읽기는 뒤에서 돈다 — 잠시 뒤 `get_test_run` 의 상태(parsed · failed)를 본다.
@@ -2914,6 +2916,7 @@ async def upload_test_run(
         "tested_at": tested_at,
         "note": note,
         "profile_key": profile_key,
+        "curve_origin": curve_origin,
     }
     form = {key: value for key, value in form.items() if value is not None}
 
@@ -2929,6 +2932,7 @@ async def upload_test_run(
             "conditions": conditions or {},
             "condition_units": condition_units or {},
             "profile_key": profile_key or "자동",
+            "curve_origin": curve_origin,
             # 고를 수 있는 형식 — 둘 이상이면 자동이 그중 우선순위 높은 것을 고른다.
             "formats": formats,
             **({"missing_required_conditions": missing} if missing else {}),
@@ -3047,7 +3051,9 @@ async def get_test_run(ctx: Context, test_run_id: str) -> dict[str, Any]:
                         "label": value.get("label"),
                         "value": value.get("value"),
                         "unit": value.get("si_unit"),
-                        "origin": "measured",
+                        # **시험의 곡선 출처 그대로**(2026-11-17, ADR 0096) — 전에는 고정으로
+                        # measured 였다. 덱에서 복원한 곡선도 실측으로 나갔다.
+                        "origin": run.get("curve_origin") or "measured",
                     }
                 )
     return {
@@ -3068,6 +3074,15 @@ async def get_test_run(ctx: Context, test_run_id: str) -> dict[str, Any]:
         "conditions": run.get("conditions"),
         "material_id": run.get("material_id"),
         **({"specimen": specimen} if specimen else {}),
+        "curve_origin": run.get("curve_origin") or "measured",
+        **(
+            {
+                "origin_caveat": f"곡선 출처가 「{run.get('curve_origin_label')}」 다 — 이 시험의 "
+                "값은 실측이 아니다. 사람에게 그렇게 전해라(curve_quality 로 모양도 본다)."
+            }
+            if (run.get("curve_origin") or "measured") != "measured"
+            else {}
+        ),
         "adopted_recipe": adopted_label,
         # `preview_formula(result_id=…)` 가 받는 손잡이 — 식을 실제 곡선에 돌려 볼 때.
         "adopted_result_id": adopted_result_id,
@@ -3082,6 +3097,24 @@ async def get_test_run(ctx: Context, test_run_id: str) -> dict[str, Any]:
             else {}
         ),
     }
+
+
+@mcp.tool()
+async def curve_quality(
+    ctx: Context, test_run_id: str, result_id: str | None = None
+) -> dict[str, Any]:
+    """시험 곡선이 **잰 곡선처럼 생겼나** — 출처 · 첫 점 응력 · 꺾임 · 초기/꺾임 뒤 기울기 대 영률.
+
+    덱 카드(소성 표)에서 복원한 곡선이 시험으로 들어와 실측처럼 쓰인 일이 있다. `curve_origin` 은
+    사람이 적은 출처, `shape` 은 곡선 모양이 말하는 것이다(`nominal` 공칭 곡선 · `plastic_table`
+    항복에서 시작 · `rebuilt` 표에서 다시 만듦). 둘이 어긋나면 `agreement` 경고 — 사람에게 전하고
+    출처를 고칠지 묻는다. 막지 않는다. 기준값은 잠정이다.
+    """
+    resolved = await _resolve_run(ctx, test_run_id)
+    if isinstance(resolved, dict):
+        return resolved
+    params = {"result_id": result_id} if result_id else None
+    return await _get(ctx, f"/processing/test-runs/{resolved}/curve-quality", params)
 
 
 @mcp.tool()

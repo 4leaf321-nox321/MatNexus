@@ -51,7 +51,13 @@ from app.modules.processing.models import ProcessingResult
 from app.modules.tests.models import TestConditionField, TestRun
 from app.modules.viscoelastic.models import ModulusTable
 from app.modules.vocabulary.models import VocabularyTerm
-from app.shared import declared_approval, declared_conditions, standard_conditions, tiers
+from app.shared import (
+    curve_origins,
+    declared_approval,
+    declared_conditions,
+    standard_conditions,
+    tiers,
+)
 from matcore import registry
 
 
@@ -299,6 +305,10 @@ def _bucket_entries(bucket: _Bucket) -> dict[str, list[Entry]]:
             else None
         )
         first = values[0][1]
+        # **실측이 아닌 곡선의 시험**(ADR 0096)이 섞였으면 방법에 그렇다고 — 막지 않는다(잰
+        # 값의 수 · 등급은 그대로). 덱 복원 곡선을 실측으로 읽지 않게.
+        odd = sum(1 for _, run in values if not curve_origins.is_measured(run.curve_origin))
+        said = f"{curve_origins.LABEL} {odd}건" if odd else None
         made[property_key].append(
             Entry(
                 origin="measured",
@@ -307,7 +317,7 @@ def _bucket_entries(bucket: _Bucket) -> dict[str, list[Entry]]:
                 count=len(numbers),
                 spread_si=spread,
                 conditions=dict(cond_key),
-                method=method,
+                method=" · ".join(part for part in (method, said) if part) or None,
                 ref_kind="test_run",
                 ref_id=str(first.id),
                 ref_label=first.record_name,

@@ -16,6 +16,7 @@ import { SpecimenPicker } from '@/modules/materials/SpecimenPicker'
 import { LENGTH_UNIT, materialsApi } from '@/modules/materials/api'
 import type { Specimen } from '@/modules/materials/api'
 import { testsApi } from '@/modules/tests/api'
+import { CurveOriginSelect } from '@/modules/tests/CurveOriginSelect'
 import { FormatSelect, formatChoices } from '@/modules/tests/FormatSelect'
 import { VocabularyField } from '@/modules/vocabulary/VocabularyField'
 import type { TestRun, TestType } from '@/modules/tests/api'
@@ -74,6 +75,8 @@ export function UploadDialog({
   const [typeKey, setTypeKey] = useState('')
   /** 읽을 형식 — `null` 이면 자동(2026-10-20). */
   const [profileKey, setProfileKey] = useState<string | null>(null)
+  /** 곡선 출처 — 덱 카드에서 복원한 곡선을 실측과 가른다(ADR 0096). */
+  const [curveOrigin, setCurveOrigin] = useState('measured')
   const [file, setFile] = useState<File | null>(null)
   const [conditions, setConditions] = useState<Record<string, string>>({})
   const [operator, setOperator] = useState('')
@@ -116,6 +119,7 @@ export function UploadDialog({
       setError(null)
       setPicked(null)
       setProfileKey(null)
+      setCurveOrigin('measured')
       if (presetTestType) setTypeKey(presetTestType)
     }
   }, [open, presetTestType, presetConditions])
@@ -171,6 +175,7 @@ export function UploadDialog({
         instrument: instrument || undefined,
         division: division || undefined,
         profileKey: profileKey ?? undefined,
+        curveOrigin,
       })
       onUploaded?.(run)
       const said = run.note?.match(/※ 내용이 같은 파일이 이미 \d+건 등록돼 있습니다\./)?.[0]
@@ -285,6 +290,8 @@ export function UploadDialog({
             />
           </div>
         )}
+
+        <CurveOriginSelect id="upload-origin" value={curveOrigin} onChange={setCurveOrigin} />
 
         <div className="space-y-1.5">
           <Label htmlFor="file">

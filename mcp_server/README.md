@@ -102,7 +102,7 @@ ms)를 알린다 — 「관리 → 사용 현황」 의 MCP 숫자가 여기서 
 도구의 답은 그대로 나간다. 도구 하나가 백엔드를 여러 번 부르므로 API 요청 수(`X-Client: mcp`)와
 도구 수는 다르다 — 둘 다 그 화면에 있다.
 
-## 5. 지금 있는 것 (도구 133개)
+## 5. 지금 있는 것 (도구 134개)
 
 **전부 한 번에 불러 보려면 `probe.py` 를 돌린다** — 진짜 MCP 클라이언트로 한 바퀴
 돈다(아래 「실측으로 잡은 것」 참조). 화면이나 curl 로는 안 보이는 층이 있다.
@@ -178,7 +178,9 @@ Family·Category·Grade·제조사·유통사·시편 규격은 **기준정보**
     ★ add_vocabulary_alias(...)        같은 실물의 다른 표기 → 정본 값에 별칭 (시스템 관리자)
     ★ upload_test_run(specimen, ...)   시험 파일을 시편에 올린다 — 글은 content, 바이너리는
                                        content_base64(10MB 까지). 읽기는 뒤에서 돈다.
-                                       미리보기가 고를 수 있는 형식(`formats`)을 보인다
+                                       미리보기가 고를 수 있는 형식(`formats`)을 보인다.
+                                       잰 곡선이 아니면 curve_origin(deck_restored · digitized ·
+                                       synthetic) — 안 적으면 실측
     ★ reparse_test_run(run, key?)      원본에서 다시 읽는다 — 형식 고정 · "auto"(고정 풀기) ·
                                        안 주면 그대로. 미리보기가 형식 목록 · 읽기 오류
     ★ import_test_summaries(...)       곡선 없이 요약값 표로 시험을 넣는다(화면의 「표로 시험 입력」)
@@ -254,7 +256,9 @@ AI 가 상태를 바꾸면 자료 관리자에게 알림이 간다(채택도, 20
     list_inbox(status?, scope?,        장비가 떨어뜨린 파일들 — status 를 비우면 등록된 것도 섞인다,
                connector_id?, offset?) scope=all 이면 전사
     list_test_runs(material_id?, ...)  시험 목록
-    get_test_run(test_run_id)          조건·시편·채택된 처리 결과
+    get_test_run(test_run_id)          조건·시편·채택된 처리 결과 · 곡선 출처(curve_origin)
+    ★ curve_quality(test_run_id)       곡선이 잰 곡선처럼 생겼나 — 출처 · 첫 점 응력 · 꺾임 · 기울기
+                                       대 영률. 출처와 모양이 어긋나면 agreement 경고(ADR 0096)
     list_specimens(material?, q?, ...) 시편을 재료를 거치지 않고 — 규격·방향으로
     ★ relocate_specimens(ids, 두께)    다른 두께의 같은 재료로 — 걸린 카드는 미리보기가 보인다(ADR 0042)
     ★ move_samples(ids, 받을 재료)    시료째 고른 재료로(분류가 같아야) — 걸린 카드는 미리보기가 보인다(VOC 59)

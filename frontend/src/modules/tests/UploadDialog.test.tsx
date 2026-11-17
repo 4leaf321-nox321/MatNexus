@@ -152,6 +152,19 @@ describe('읽을 형식 (2026-10-20)', () => {
     expect(formats).toHaveBeenCalledWith('tensile')
   })
 
+  it('곡선 출처를 고르면 함께 보낸다 — 덱 카드에서 복원한 곡선을 실측과 가른다', async () => {
+    const user = await openWith()
+    await user.click(await screen.findByRole('combobox', { name: '곡선 출처' }))
+    await user.click(screen.getByRole('option', { name: '해석 덱 카드에서 복원' }))
+    // 실측이 아니면 그 자리에서 무엇이 달라지는지 말한다.
+    expect(screen.getByText(/잰 곡선이 아님/)).toBeInTheDocument()
+    await user.upload(screen.getByLabelText('원본 파일'), new File(['x'], 'run.csv'))
+    await user.click(screen.getByRole('button', { name: '업로드' }))
+    await waitFor(() => expect(upload).toHaveBeenCalled())
+    const [payload] = upload.mock.calls[0] as [Record<string, unknown>]
+    expect(payload.curveOrigin).toBe('deck_restored')
+  })
+
   it('안 고르면 자동이다 — 형식 key 를 안 보낸다', async () => {
     formats.mockResolvedValue([profile('zwick_a', 'Zwick 기본'), profile('zwick_b', 'Zwick 다단')])
     const user = await openWith()

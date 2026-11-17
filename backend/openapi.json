@@ -2057,6 +2057,12 @@
             "title": "Conditions",
             "type": "string"
           },
+          "curve_origin": {
+            "default": "measured",
+            "description": "곡선 출처 — measured · digitized · deck_restored · synthetic (ADR 0096)",
+            "title": "Curve Origin",
+            "type": "string"
+          },
           "division": {
             "anyOf": [
               {
@@ -11892,6 +11898,45 @@
         "title": "CurveBasisIn",
         "type": "object"
       },
+      "CurveCheckOut": {
+        "properties": {
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          },
+          "verdict": {
+            "title": "Verdict",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "verdict",
+          "message"
+        ],
+        "title": "CurveCheckOut",
+        "type": "object"
+      },
       "CurveOut": {
         "description": "저장된 곡선 하나.\n\n**여럿일 수 있다.** TA DMA850 주파수-온도 스윕은 `[step]` 마다 별개 측정이라\n곡선이 6벌 나온다. 하나만 보여 주면 나머지는 저장돼 있는데 화면에서 영원히\n안 보인다 — 실제로 그랬다.",
         "properties": {
@@ -11980,6 +12025,138 @@
           "points"
         ],
         "title": "CurvePointsOut",
+        "type": "object"
+      },
+      "CurveQualityOut": {
+        "properties": {
+          "adopted": {
+            "default": false,
+            "title": "Adopted",
+            "type": "boolean"
+          },
+          "checks": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/CurveCheckOut"
+            },
+            "title": "Checks",
+            "type": "array"
+          },
+          "curve_origin": {
+            "title": "Curve Origin",
+            "type": "string"
+          },
+          "curve_origin_label": {
+            "title": "Curve Origin Label",
+            "type": "string"
+          },
+          "initial_slope": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Initial Slope"
+          },
+          "knee_strain": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Knee Strain"
+          },
+          "knee_stress": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Knee Stress"
+          },
+          "notes": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Notes",
+            "type": "array"
+          },
+          "points": {
+            "default": 0,
+            "title": "Points",
+            "type": "integer"
+          },
+          "post_knee_slope": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Post Knee Slope"
+          },
+          "reference_modulus": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reference Modulus"
+          },
+          "result_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Result Id"
+          },
+          "run_code": {
+            "title": "Run Code",
+            "type": "string"
+          },
+          "run_id": {
+            "format": "uuid",
+            "title": "Run Id",
+            "type": "string"
+          },
+          "shape": {
+            "default": "unclear",
+            "title": "Shape",
+            "type": "string"
+          },
+          "shape_label": {
+            "default": "",
+            "title": "Shape Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "run_id",
+          "run_code",
+          "curve_origin",
+          "curve_origin_label"
+        ],
+        "title": "CurveQualityOut",
         "type": "object"
       },
       "CurveStatsOut": {
@@ -38179,6 +38356,16 @@
             "title": "Created At",
             "type": "string"
           },
+          "curve_origin": {
+            "default": "measured",
+            "title": "Curve Origin",
+            "type": "string"
+          },
+          "curve_origin_label": {
+            "default": "실측",
+            "title": "Curve Origin Label",
+            "type": "string"
+          },
           "curves": {
             "items": {
               "$ref": "#/components/schemas/CurveOut"
@@ -38608,6 +38795,16 @@
             "title": "Created At",
             "type": "string"
           },
+          "curve_origin": {
+            "default": "measured",
+            "title": "Curve Origin",
+            "type": "string"
+          },
+          "curve_origin_label": {
+            "default": "실측",
+            "title": "Curve Origin Label",
+            "type": "string"
+          },
           "division": {
             "anyOf": [
               {
@@ -38962,6 +39159,17 @@
               }
             ],
             "title": "Conditions"
+          },
+          "curve_origin": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Curve Origin"
           },
           "division": {
             "anyOf": [
@@ -57742,6 +57950,67 @@
           }
         },
         "summary": "List Steps",
+        "tags": [
+          "processing"
+        ]
+      }
+    },
+    "/api/processing/test-runs/{run_id}/curve-quality": {
+      "get": {
+        "description": "시험 곡선이 **잰 곡선처럼 생겼나** — 출처 · 첫 점 응력 · 꺾임 · 기울기 대 영률.\n\n덱 카드(소성 표)에서 복원한 곡선이 시험으로 올라와 실측처럼 쓰였다(HWAX 연결). 출처 칸\n(`curve_origin`)은 사람이 적은 답이고, 이 점검은 곡선 모양이 말하는 것이다 — 둘이 어긋나면\n`agreement` 가 그렇다고 말한다. **막지 않는다** — 판단은 사람이 한다.",
+        "operationId": "curve_quality_of_api_processing_test_runs__run_id__curve_quality_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "result_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Result Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CurveQualityOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Curve Quality Of",
         "tags": [
           "processing"
         ]

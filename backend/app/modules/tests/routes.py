@@ -84,6 +84,7 @@ from app.shared import (
     audit,
     codes,
     contention,
+    curve_origins,
     curvedata,
     facets,
     filestore,
@@ -747,6 +748,16 @@ def _context(db: Session, runs: list[TestRun]) -> dict[str, dict[uuid.UUID, Any]
     }
 
 
+def _check_origin(code: str) -> None:
+    """곡선 출처 코드 — 모르는 것은 거절한다(오타가 「실측 아님」 으로 조용히 남지 않게)."""
+    if code not in curve_origins.ORIGINS:
+        raise AppError(
+            "MNX-TESTS-0047",
+            f"모르는 곡선 출처입니다: {code} — 있는 것: {', '.join(curve_origins.ORIGINS)}",
+            status=422,
+        )
+
+
 def _run_out(
     run: TestRun,
     ctx: dict[str, dict[uuid.UUID, Any]],
@@ -771,6 +782,8 @@ def _run_out(
         seq_no=run.seq_no,
         status=run.status,
         parse_error=run.parse_error,
+        curve_origin=run.curve_origin,
+        curve_origin_label=curve_origins.label(run.curve_origin),
         specimen_id=run.specimen_id,
         specimen_name=specimen.record_name if specimen else None,
         orientation=specimen.orientation if specimen else None,
@@ -966,6 +979,10 @@ def upload_test_run(
         default=None,
         description="읽을 형식(프로파일) key. 비우면 지문으로 자동으로 고른다",
     ),
+    curve_origin: str = Form(
+        default=curve_origins.MEASURED,
+        description="곡선 출처 — measured · digitized · deck_restored · synthetic (ADR 0096)",
+    ),
     file: UploadFile = File(...),
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
@@ -978,6 +995,7 @@ def upload_test_run(
     """
     specimen = permissions.visible_specimen(db, user, specimen_id)
     definition = services.get_test_type(db, test_type)
+    _check_origin(curve_origin)
     # **파일을 저장하기 전에 본다** — 틀린 형식이면 시험도 파일도 남기지 않는다.
     pinned = formats.chosen_profile(db, definition.id, profile_key) if profile_key else None
     raw_conditions = _json_object(conditions, "조건")
@@ -1018,6 +1036,7 @@ def upload_test_run(
             status="uploaded",
             registered_by_id=user.id,
             parse_profile_id=pinned.id if pinned else None,
+            curve_origin=curve_origin,
         )
         # 장비 기준정보(ADR 0010). 'Zwick Z100' 과 'zwick z100' 이 갈리면 장비별
         # 비교가 무의미해진다.
@@ -2086,6 +2105,13 @@ def update_run(
     permissions.require_edit(db, user, run, code="MNX-TESTS-0042")
     data = payload.model_dump(exclude_unset=True)
     changes: dict[str, dict[str, Any]] = {}
+
+    # 곡선 출처(ADR 0096) — 비워 보내면(None) 그대로 둔다. 바뀌면 감사에 남는다.
+    wanted = data.get("curve_origin")
+    if wanted is not None and wanted != run.curve_origin:
+        _check_origin(wanted)
+        changes["curve_origin"] = {"before": run.curve_origin, "after": wanted}
+        run.curve_origin = wanted
 
     for field in ("tested_at", "operator", "note"):
         if field in data and getattr(run, field) != data[field]:

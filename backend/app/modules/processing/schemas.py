@@ -604,3 +604,40 @@ class AdoptManyOut(BaseModel):
     unchanged: int
     failed: int
     items: list[AdoptManyItemOut]
+
+
+# ── 곡선 점검 — 잰 곡선처럼 생겼나 (2026-11-17, ADR 0096) ───────────────────────
+
+
+class CurveCheckOut(BaseModel):
+    key: str
+    """`origin` · `agreement` · `first_point` · `knee` · `initial_slope` · `post_knee_slope` ·
+    `piecewise` · `points`."""
+    label: str
+    verdict: str
+    """`ok` · `info` · `warn` — 막지 않는다."""
+    message: str
+    value: float | None = None
+
+
+class CurveQualityOut(BaseModel):
+    run_id: uuid.UUID
+    run_code: str
+    curve_origin: str
+    curve_origin_label: str
+    result_id: uuid.UUID | None = None
+    """본 처리 결과 — 채택된 것, 없으면 공칭 응력-변형률 열이 있는 최근 것."""
+    adopted: bool = False
+    shape: str = "unclear"
+    """`nominal` 원점에서 꺾이는 공칭 곡선 · `plastic_table` 항복에서 시작하는 소성 표 모양 ·
+    `rebuilt` 표에서 다시 만든 곡선(점 사이가 정확히 직선) · `unclear`."""
+    shape_label: str = ""
+    points: int = 0
+    reference_modulus: float | None = None
+    """견준 영률(Pa) — 재료에 적어 둔 값. 없으면 기울기 대 영률은 안 본다."""
+    initial_slope: float | None = None
+    post_knee_slope: float | None = None
+    knee_strain: float | None = None
+    knee_stress: float | None = None
+    checks: list[CurveCheckOut] = []
+    notes: list[str] = []

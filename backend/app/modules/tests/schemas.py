@@ -320,6 +320,8 @@ class TestRunUpdateRequest(BaseModel):
     note: str | None = None
     conditions: dict[str, Any] | None = None
     condition_units: dict[str, str] = {}
+    curve_origin: str | None = None
+    """곡선 출처(measured · digitized · deck_restored · synthetic) — 안 보내면 그대로."""
 
 
 class SourceReplaceOut(BaseModel):
@@ -358,6 +360,9 @@ class TestRunOut(BaseModel):
     seq_no: int
     status: str
     parse_error: str | None
+    curve_origin: str = "measured"
+    """곡선 출처 — 실측이 아니면 이 시험의 값은 잰 값이 아니다(ADR 0096, 막지는 않는다)."""
+    curve_origin_label: str = "실측"
 
     specimen_id: uuid.UUID
     specimen_name: str | None

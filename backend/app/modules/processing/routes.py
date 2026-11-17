@@ -47,6 +47,8 @@ from app.modules.processing.schemas import (
     BatchUndoItemOut,
     BatchUndoOut,
     BatchUndoRequest,
+    CurveCheckOut,
+    CurveQualityOut,
     CurvesRequest,
     OverviewRequest,
     ProcessingDefaultsOut,
@@ -77,6 +79,7 @@ from app.modules.tests.models import Curve, TestRun, TestSummary, TestType
 from app.modules.workspaces.models import Workspace
 from app.shared import (
     audit,
+    curve_origins,
     curvedata,
     definition_keys,
     filestore,
@@ -94,9 +97,9 @@ from app.shared.auth import current_user
 from app.shared.errors import AppError, Conflict, NotFound
 from app.shared.permissions import get_run, visible_runs
 from app.shared.request_context import get_client
-from matcore import curves, processing, registry, runtime
+from matcore import curve_quality, curves, processing, registry, runtime
 from matcore.parsers import Channel
-from matcore.processing import SCALAR_KEY_MAX
+from matcore.processing import SCALAR_KEY_MAX, tensile
 
 router = APIRouter(prefix="/processing", tags=["processing"])
 
@@ -2416,3 +2419,137 @@ def adopt_many(
         failed=len(rows) - changed - unchanged,
         items=rows,
     )
+
+
+#: 곡선 모양 → 사람이 읽는 이름.
+_SHAPES = {
+    "nominal": "원점에서 시작해 꺾이는 공칭 곡선",
+    "plastic_table": "항복에서 시작하는 소성 표 모양",
+    "rebuilt": "표에서 다시 만든 곡선(점 사이가 정확히 직선)",
+    "unclear": "말할 수 없음",
+}
+
+
+def _quality_result(
+    db: Session, run: TestRun, result_id: uuid.UUID | None
+) -> ProcessingResult | None:
+    """볼 결과 — 준 것, 없으면 채택된 것, 그것도 없으면 공칭 응력-변형률 열이 있는 최근 것."""
+    if result_id is not None:
+        found = db.get(ProcessingResult, result_id)
+        if found is None or found.test_run_id != run.id:
+            raise NotFound("MNX-PROCESSING-0010", "이 시험의 처리 결과가 아닙니다.")
+        return found
+    if run.adopted_result_id is not None:
+        adopted = db.get(ProcessingResult, run.adopted_result_id)
+        if adopted is not None:
+            return adopted
+    for one in db.scalars(
+        select(ProcessingResult)
+        .where(ProcessingResult.test_run_id == run.id)
+        .order_by(ProcessingResult.created_at.desc())
+        .limit(20)
+    ):
+        names = curves.column_names(filestore.read_bytes(one.storage_path))
+        if tensile.STRAIN in names and tensile.STRESS in names:
+            return one
+    return None
+
+
+@router.get("/test-runs/{run_id}/curve-quality", response_model=CurveQualityOut)
+def curve_quality_of(
+    run_id: uuid.UUID,
+    result_id: uuid.UUID | None = Query(default=None),
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> CurveQualityOut:
+    """시험 곡선이 **잰 곡선처럼 생겼나** — 출처 · 첫 점 응력 · 꺾임 · 기울기 대 영률.
+
+    덱 카드(소성 표)에서 복원한 곡선이 시험으로 올라와 실측처럼 쓰였다(HWAX 연결). 출처 칸
+    (`curve_origin`)은 사람이 적은 답이고, 이 점검은 곡선 모양이 말하는 것이다 — 둘이 어긋나면
+    `agreement` 가 그렇다고 말한다. **막지 않는다** — 판단은 사람이 한다.
+    """
+    run = get_run(db, user, run_id)
+    origin_label = curve_origins.label(run.curve_origin)
+    checks: list[CurveCheckOut] = [
+        CurveCheckOut(
+            key="origin",
+            label="곡선 출처",
+            verdict="ok" if curve_origins.is_measured(run.curve_origin) else "warn",
+            message=(
+                "실측으로 적혀 있습니다."
+                if curve_origins.is_measured(run.curve_origin)
+                else curve_origins.warning(run.curve_origin)
+            ),
+        )
+    ]
+    out = CurveQualityOut(
+        run_id=run.id,
+        run_code=run.code,
+        curve_origin=run.curve_origin,
+        curve_origin_label=origin_label,
+        shape_label=_SHAPES["unclear"],
+        checks=checks,
+    )
+    result = _quality_result(db, run, result_id)
+    if result is None:
+        out.notes.append(
+            "공칭 응력-변형률 열이 있는 처리 결과가 없습니다 — 처리를 먼저 돌리면 "
+            "곡선 모양을 봅니다."
+        )
+        return out
+    data = filestore.read_bytes(result.storage_path)
+    names = curves.column_names(data)
+    if tensile.STRAIN not in names or tensile.STRESS not in names:
+        out.result_id = result.id
+        out.notes.append(
+            f"이 결과에는 {tensile.STRAIN} · {tensile.STRESS} 열이 없습니다 — "
+            "공칭 곡선을 내는 "
+            "처리 결과를 고르세요."
+        )
+        return out
+    raw = curves.read_columns(data, [tensile.STRAIN, tensile.STRESS])
+    context = modulus_sanity.context_of(db, run)
+    reference = context.declared if context is not None else None
+    if reference is None:
+        out.notes.append("재료에 적어 둔 탄성계수가 없어 기울기 대 영률은 보지 않았습니다.")
+    made = curve_quality.assess(
+        raw[tensile.STRAIN], raw[tensile.STRESS], reference_modulus=reference
+    )
+    if curve_origins.is_measured(run.curve_origin) and made.shape in (
+        "plastic_table",
+        "rebuilt",
+    ):
+        checks.append(
+            CurveCheckOut(
+                key="agreement",
+                label="출처와 모양",
+                verdict="warn",
+                message=(
+                    f"출처는 실측인데 곡선 모양은 「{_SHAPES[made.shape]}」 입니다 — "
+                    "덱 카드에서 "
+                    "복원했거나 그림에서 읽은 곡선이면 곡선 출처를 고치세요."
+                ),
+            )
+        )
+    checks.extend(
+        CurveCheckOut(
+            key=one.key,
+            label=one.label,
+            verdict=one.verdict,
+            message=one.message,
+            value=one.value,
+        )
+        for one in made.checks
+    )
+    out.result_id = result.id
+    out.adopted = result.id == run.adopted_result_id
+    out.shape = made.shape
+    out.shape_label = _SHAPES[made.shape]
+    out.points = made.points
+    out.reference_modulus = reference
+    out.initial_slope = made.initial_slope
+    out.post_knee_slope = made.post_knee_slope
+    out.knee_strain = made.knee_strain
+    out.knee_stress = made.knee_stress
+    out.checks = checks
+    return out

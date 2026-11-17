@@ -101,6 +101,17 @@ describe('EditRunDialog', () => {
     expect(onDone).toHaveBeenCalled()
   })
 
+  it('곡선 출처를 고쳐 보낸다', async () => {
+    const user = userEvent.setup()
+    render(<EditRunDialog run={RUN} testType={TYPE} onClose={vi.fn()} onDone={vi.fn()} />)
+    await user.click(screen.getByRole('combobox', { name: '곡선 출처' }))
+    await user.click(screen.getByRole('option', { name: '그림에서 읽음(디지타이즈)' }))
+    await user.click(screen.getByRole('button', { name: '저장' }))
+    await waitFor(() => expect(update).toHaveBeenCalled())
+    const [, payload] = update.mock.calls[0] as [string, Record<string, unknown>]
+    expect(payload.curve_origin).toBe('digitized')
+  })
+
   it('원본을 바꾸면 옛 결과가 옛 원본의 것이 된다고 먼저 말한다', async () => {
     render(<EditRunDialog run={RUN} testType={TYPE} onClose={vi.fn()} onDone={vi.fn()} />)
     expect(screen.getByText(/처리 결과 2건은 옛 원본의 것이 됩니다/)).toBeInTheDocument()

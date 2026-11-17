@@ -618,6 +618,8 @@ async def sweep(session: ClientSession) -> None:
     )
     if run_id:
         detail = await call(session, "get_test_run", {"test_run_id": run_id})
+        # 곡선 점검(2026-11-17, ADR 0096) — 읽기만. 채택 결과의 곡선 모양과 출처.
+        await call(session, "curve_quality", {"test_run_id": run_id})
         # 다시 읽기(2026-10-20) — 미리보기만. 없는 형식은 서버에 닿기 전에 거절해야 한다.
         await call(session, "reparse_test_run", {"test_run_id": run_id, "dry_run": True})
         await call(

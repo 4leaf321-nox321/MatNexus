@@ -507,6 +507,17 @@ export default function TestRunDetailPage() {
           <Badge variant={item.status === 'failed' ? 'destructive' : 'secondary'}>
             {RUN_STATUS_LABEL[item.status] ?? item.status}
           </Badge>
+          {/* **실측이 아닌 곡선**(ADR 0096) — 덱 카드에서 복원한 곡선이 실측처럼 쓰였다. 막지 않고
+              보인다. 고치기는 「시험 정보 고치기」 의 「곡선 출처」. */}
+          {item.curve_origin && item.curve_origin !== 'measured' && (
+            <Badge
+              variant="outline"
+              className="border-amber-500/60 text-amber-700 dark:text-amber-400"
+              title="이 시험의 값은 실측이 아닙니다 — 카드 근거 · 덱 머리에 표시됩니다"
+            >
+              곡선 출처 · {item.curve_origin_label}
+            </Badge>
+          )}
           {/* **이 시험이 어느 의뢰의 것인지.** 의뢰 상세에서는 보이는데 시험 쪽에서는 보이지
               않으면, 결과를 채택하는 사람이 「이게 그 의뢰 건이었나」 를 모른다(2단계). */}
           {item.commission && (

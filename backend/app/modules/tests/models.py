@@ -499,6 +499,12 @@ class TestRun(Base):
     status: Mapped[str] = mapped_column(
         String(20), default="uploaded", server_default="uploaded", index=True
     )
+    curve_origin: Mapped[str] = mapped_column(
+        String(20), default="measured", server_default="measured"
+    )
+    """곡선의 **출처**(`shared/curve_origins`) — 실측 · 디지타이즈 · 덱 복원 · 합성(2026-11-17,
+    ADR 0096). 실측이 아니어도 막지 않는다 — 카드 근거 · 덱 머리 · 시험 응답에 그렇다고 적는다.
+    """
     parse_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     """파서가 모르는 형식을 만나면 **명시적으로 실패**하고 이유를 여기 남긴다.
     조용히 잘못 읽는 것보다 낫다 — 잘못 읽힌 곡선은 나중에 찾아낼 수 없다."""
